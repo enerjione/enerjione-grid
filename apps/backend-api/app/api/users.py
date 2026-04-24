@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_role
+from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.enums import UserRole
 from app.models.user import User
@@ -12,22 +12,45 @@ from app.services.event_service import record_event
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+_INSTALLER_OR_ENGINEER = [UserRole.INSTALLER, UserRole.ENGINEER]
+
+
+def _assert_engineer_may_use_installer_role(
+    current_user: User, *, target: User | None, new_role: UserRole | None
+) -> None:
+    """Mühendis: kurulumcu hesabına müdahale edemez, kurulumcu rolü atayamaz."""
+    if current_user.role != UserRole.ENGINEER:
+        return
+    if target is not None and target.role == UserRole.INSTALLER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Kurulumcu hesaplarını yalnızca kurulumcu yönetebilir.",
+        )
+    if new_role == UserRole.INSTALLER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Kurulumcu rolü yalnızca kurulumcu tarafından atanabilir.",
+        )
+
 
 @router.get("", response_model=list[UserRead])
 def list_users(
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles(_INSTALLER_OR_ENGINEER)),
     db: Session = Depends(get_db),
 ):
     stmt = select(User).order_by(User.username.asc())
+    if current_user.role == UserRole.ENGINEER:
+        stmt = stmt.where(User.role.in_((UserRole.OPERATOR, UserRole.ENGINEER)))
     return list(db.scalars(stmt).all())
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles(_INSTALLER_OR_ENGINEER)),
     db: Session = Depends(get_db),
 ):
+    _assert_engineer_may_use_installer_role(current_user, target=None, new_role=payload.role)
     existing_username = db.scalar(select(User).where(User.username == payload.username))
     if existing_username:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
@@ -62,12 +85,13 @@ def create_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles(_INSTALLER_OR_ENGINEER)),
     db: Session = Depends(get_db),
 ):
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    _assert_engineer_may_use_installer_role(current_user, target=target, new_role=None)
     if target.id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete yourself")
 
@@ -90,12 +114,13 @@ def delete_user(
 def update_user(
     user_id: int,
     payload: UserUpdate,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles(_INSTALLER_OR_ENGINEER)),
     db: Session = Depends(get_db),
 ):
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    _assert_engineer_may_use_installer_role(current_user, target=target, new_role=payload.role)
 
     target.email = payload.email
     target.phone_number = payload.phone_number
@@ -119,12 +144,13 @@ def update_user(
 def reset_password(
     user_id: int,
     payload: ResetPasswordRequest,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles(_INSTALLER_OR_ENGINEER)),
     db: Session = Depends(get_db),
 ):
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    _assert_engineer_may_use_installer_role(current_user, target=target, new_role=None)
 
     target.hashed_password = get_password_hash(payload.new_password)
     record_event(

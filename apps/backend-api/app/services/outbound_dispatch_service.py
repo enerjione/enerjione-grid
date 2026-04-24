@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.outbound_target import OutboundTarget
 from app.services.event_service import record_event
+from app.services.iec104.server import manager as iec104_manager
 
 MAX_RETRY = 3
 BASE_BACKOFF_SECONDS = 0.7
@@ -22,6 +23,11 @@ def dispatch_event(db: Session, *, event_kind: str, payload: dict) -> None:
     targets = list(db.scalars(stmt).all())
     for target in targets:
         if target.event_filter not in {"all", event_kind}:
+            continue
+        # IEC 104: retry/backoff yok; server in-memory register gunceller,
+        # sonraki interrogation ya da spontaneous transmission otomatik devreye girer.
+        if target.protocol == "iec104":
+            _dispatch_iec104(db=db, target=target, event_kind=event_kind, payload=payload)
             continue
         _dispatch_with_retry(db=db, target=target, event_kind=event_kind, payload=payload)
 
@@ -114,4 +120,45 @@ def _send_mqtt(target: OutboundTarget, payload: dict) -> None:
         hostname=target.endpoint,
         qos=target.qos,
         retain=target.retain,
+    )
+
+
+def _dispatch_iec104(db: Session, *, target: OutboundTarget, event_kind: str, payload: dict) -> None:
+    """IEC 104 server'in in-memory nokta tablosunu gunceller.
+
+    Sadece `telemetry` kind'indaki event'ler gecerlidir (alarm'lar tag degeri
+    degildir). Server FastAPI startup'ta deploy edilmis olmali; degilse sessizce
+    dusturuluruz (degerli retry olmaz — bir sonraki interrogation'da SCADA zaten
+    tekrar ister).
+    """
+    if event_kind != "telemetry":
+        return
+    device_code = payload.get("device_code")
+    signal_key = payload.get("signal_key")
+    if not device_code or not signal_key:
+        return
+    value = payload.get("value")
+    quality = str(payload.get("quality", "good")).lower()
+    good = quality in ("good", "ok", "")
+    iec104_manager.update_point_threadsafe(
+        device_code=str(device_code),
+        signal_key=str(signal_key),
+        value=value,
+        good=good,
+    )
+    # Deliver olayini kuru kuruya loglamak yerine cok kisa bir bilgi birakiyoruz
+    # ki olay akisi bos kalmasin.
+    record_event(
+        db,
+        category="outbound",
+        event_type="iec104_point_updated",
+        severity="debug",
+        message=f"{target.name} -> {device_code}.{signal_key}",
+        metadata={
+            "target": target.name,
+            "protocol": "iec104",
+            "device_code": device_code,
+            "signal_key": signal_key,
+            "quality": quality,
+        },
     )

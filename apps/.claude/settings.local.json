@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/fikret.safak/OneDrive - Form Elektrik Ins.Muh.A.S/Belgeler/SoftwareFormElektrik/Horstmann Smart Logger DNP3 Gateway/tests/**)",
+      "Read(//c/Users/fikret.safak/OneDrive - Form Elektrik Ins.Muh.A.S/Belgeler/SoftwareFormElektrik/Horstmann Smart Logger DNP3 Gateway/scripts/**)"
+    ]
+  }
+}

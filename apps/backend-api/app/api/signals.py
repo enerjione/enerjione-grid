@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
@@ -15,6 +15,7 @@ from app.schemas.signal_catalog import (
     SignalCatalogUpdate,
     SignalLiveValue,
 )
+from app.services.signal_catalog_seed import load_default_signals, seed_default_signals
 
 router = APIRouter(prefix="/signals", tags=["signals"])
 
@@ -76,47 +77,117 @@ def delete_signal(
     return None
 
 
+@router.post("/reset-to-defaults")
+def reset_signals_to_defaults(
+    _: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Sinyal katalogunu Horstmann SN2 fabrika listesine dondurur.
+
+    - `horstmann_sn2_signals.json` icindeki key'ler disindaki TUM sinyaller silinir.
+    - Eksik kayitlar eklenir, mevcut alanlar JSON ile senkronize edilir.
+    """
+    defaults = load_default_signals()
+    if not defaults:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Horstmann SN2 seed dosyasi bulunamadi.",
+        )
+    stats = seed_default_signals(db, strict=True)
+    return {
+        "removed": stats.get("removed", 0),
+        "inserted": stats.get("inserted", 0),
+        "updated": stats.get("updated", 0),
+        "total_defaults": len(defaults),
+    }
+
+
 @router.get("/live", response_model=list[SignalLiveValue])
 def list_live_values(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Sinyal bazli canli degerler: her (cihaz, sinyal) icin son telemetri satiri."""
-    latest_stmt = (
-        select(Telemetry)
-        .order_by(Telemetry.device_id, Telemetry.signal_key, Telemetry.source_timestamp.desc())
-        .limit(2000)
+    """Aktif sinyal kataloğu × tüm cihazlar. Telemetri yoksa değer/kalite/zaman boş döner."""
+    device_rows: list[Device] = list(db.scalars(select(Device).order_by(Device.name.asc())).all())
+    catalog_rows: list[SignalCatalog] = list(
+        db.scalars(
+            select(SignalCatalog)
+            .where(SignalCatalog.is_active.is_(True))
+            .order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
+        ).all()
     )
-    telemetries = list(db.scalars(latest_stmt).all())
 
-    devices = {row.id: row for row in db.scalars(select(Device)).all()}
-    signals = {row.key: row for row in db.scalars(select(SignalCatalog)).all()}
+    # Cihaz varken katalog hic doldurulmadiysa (ilk kurulum, seed atlanmis vb.) self-heal.
+    if device_rows and not catalog_rows:
+        defaults = load_default_signals()
+        if defaults:
+            seed_default_signals(db, strict=False)
+            catalog_rows = list(
+                db.scalars(
+                    select(SignalCatalog)
+                    .where(SignalCatalog.is_active.is_(True))
+                    .order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
+                ).all()
+            )
 
+    if not device_rows or not catalog_rows:
+        return []
+
+    subq = (
+        select(
+            Telemetry.device_id,
+            Telemetry.signal_key,
+            func.max(Telemetry.source_timestamp).label("mx"),
+        )
+        .group_by(Telemetry.device_id, Telemetry.signal_key)
+        .subquery()
+    )
+    latest_telemetry_stmt = select(Telemetry).join(
+        subq,
+        and_(
+            Telemetry.device_id == subq.c.device_id,
+            Telemetry.signal_key == subq.c.signal_key,
+            Telemetry.source_timestamp == subq.c.mx,
+        ),
+    )
     latest_by_pair: dict[tuple[int, str], Telemetry] = {}
-    for row in telemetries:
-        pair = (row.device_id, row.signal_key)
-        if pair not in latest_by_pair:
-            latest_by_pair[pair] = row
+    for row in db.scalars(latest_telemetry_stmt).all():
+        latest_by_pair[(row.device_id, row.signal_key)] = row
 
     result: list[SignalLiveValue] = []
-    for (device_id, signal_key), row in latest_by_pair.items():
-        device = devices.get(device_id)
-        if device is None:
-            continue
-        signal = signals.get(signal_key)
-        result.append(
-            SignalLiveValue(
-                signal_key=signal_key,
-                signal_label=signal.label if signal else signal_key,
-                unit=signal.unit if signal else None,
-                source=signal.source if signal else "master",
-                device_id=device_id,
-                device_code=device.code,
-                device_name=device.name,
-                value=row.value,
-                quality=row.quality,
-                source_timestamp=row.source_timestamp.isoformat(),
-            )
-        )
+    for device in device_rows:
+        for signal in catalog_rows:
+            key = (device.id, signal.key)
+            row = latest_by_pair.get(key)
+            if row is not None:
+                result.append(
+                    SignalLiveValue(
+                        signal_key=signal.key,
+                        signal_label=signal.label,
+                        unit=signal.unit,
+                        source=signal.source,
+                        device_id=device.id,
+                        device_code=device.code,
+                        device_name=device.name,
+                        value=row.value,
+                        quality=row.quality,
+                        source_timestamp=row.source_timestamp.isoformat(),
+                    )
+                )
+            else:
+                result.append(
+                    SignalLiveValue(
+                        signal_key=signal.key,
+                        signal_label=signal.label,
+                        unit=signal.unit,
+                        source=signal.source,
+                        device_id=device.id,
+                        device_code=device.code,
+                        device_name=device.name,
+                        value=None,
+                        quality=None,
+                        source_timestamp=None,
+                    )
+                )
     result.sort(key=lambda item: (item.device_code, item.source, item.signal_key))
     return result

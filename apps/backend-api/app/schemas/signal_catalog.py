@@ -30,6 +30,9 @@ class SignalCatalogBase(BaseModel):
     supports_alarm: bool = False
     is_active: bool = True
     display_order: int = 0
+    # IEC 60870-5-104 adresleme — `string` ve desteklenmeyen tiplerde NULL.
+    iec104_type_id: int | None = Field(default=None, ge=0, le=255)
+    iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
 
 
 class SignalCatalogCreate(SignalCatalogBase):
@@ -50,6 +53,8 @@ class SignalCatalogUpdate(BaseModel):
     supports_alarm: bool | None = None
     is_active: bool | None = None
     display_order: int | None = None
+    iec104_type_id: int | None = Field(default=None, ge=0, le=255)
+    iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
 
 
 class SignalCatalogRead(SignalCatalogBase):
@@ -69,6 +74,6 @@ class SignalLiveValue(BaseModel):
     device_id: int
     device_code: str
     device_name: str
-    value: float
-    quality: str
-    source_timestamp: str
+    value: float | None = None
+    quality: str | None = None
+    source_timestamp: str | None = None

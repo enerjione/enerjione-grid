@@ -48,25 +48,36 @@ _MUTABLE_FIELDS = (
     "offset",
     "supports_alarm",
     "display_order",
+    "iec104_type_id",
+    "iec104_ioa_offset",
 )
 
 
-def seed_default_signals(db: Session) -> dict:
-    """Upsert: Horstmann SN2 standart sinyallerini ekler veya günceller.
+def seed_default_signals(db: Session, *, strict: bool = True) -> dict:
+    """Horstmann SN2 standart sinyal kataloğunu senkronize eder.
 
-    Dönüş: {"inserted": N, "updated": M, "total": T}
-    - Aynı `key` varsa alanları günceller (scale/dnp3_index vb. değişmişse).
-    - Yeni `key`'ler eklenir.
-    - Mevcut kayıtlardan seed listesinde olmayanlar **silinmez**
-      (kurulumcunun eklediği özel sinyaller korunur).
+    Dönüş: {"inserted": N, "updated": M, "removed": R, "total": T}
+
+    `strict=True` (varsayılan):
+      - Aynı `key` varsa alanları günceller.
+      - Yeni `key`'ler eklenir.
+      - JSON listesinde **olmayan** tüm sinyaller SİLİNİR (mock / test /
+        eski kayıtlar otomatik temizlenir). Bu mod; sinyal kataloğunu
+        standart fabrika listesi olarak tutmak için kullanılır.
+
+    `strict=False`:
+      - Yalnızca upsert yapılır; listede olmayan kayıtlar dokunulmaz
+        (kurulumcunun custom eklediği sinyaller korunur).
     """
     items = load_default_signals()
     if not items:
-        return {"inserted": 0, "updated": 0, "total": 0, "skipped": True}
+        return {"inserted": 0, "updated": 0, "removed": 0, "total": 0, "skipped": True}
 
     existing = {row.key: row for row in db.scalars(select(SignalCatalog)).all()}
+    default_keys = {item.get("key") for item in items if item.get("key")}
     inserted = 0
     updated = 0
+    removed = 0
 
     for data in items:
         key = data.get("key")
@@ -86,10 +97,17 @@ def seed_default_signals(db: Session) -> dict:
         if changed:
             updated += 1
 
+    if strict:
+        for key, row in existing.items():
+            if key not in default_keys:
+                db.delete(row)
+                removed += 1
+
     db.commit()
     return {
         "inserted": inserted,
         "updated": updated,
+        "removed": removed,
         "total": inserted + updated,
         "skipped": False,
     }

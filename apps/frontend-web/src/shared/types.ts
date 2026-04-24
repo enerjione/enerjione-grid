@@ -1,5 +1,46 @@
 export type CommunicationStatus = "online" | "offline" | "unknown";
 
+export type IpEndpointType = "initiating" | "listening";
+
+export type Dnp3ExtendedSettings = {
+  ip_endpoint_type: IpEndpointType;
+  master_ip_address: string;
+  master_ip_port: number;
+  master_address: number;
+  unsolicited_reporting: boolean;
+  unsolicited_on_startup: boolean;
+  unsolicited_class_mask_id: number;
+  link_status_period_min: number;
+  enable_self_address: boolean;
+  validate_source_address: boolean;
+  session_timeout_listening_sec: number;
+  socket_listening_timeout_sec: number;
+  tls_dnp3: boolean;
+};
+
+/** Backend ile aynı varsayılanlar (merge edilmemiş cevaplar için) */
+export const DEFAULT_DNP3_EXTENDED: Dnp3ExtendedSettings = {
+  ip_endpoint_type: "listening",
+  master_ip_address: "",
+  master_ip_port: 20002,
+  master_address: 100,
+  unsolicited_reporting: true,
+  unsolicited_on_startup: true,
+  unsolicited_class_mask_id: 7,
+  link_status_period_min: 0,
+  enable_self_address: false,
+  validate_source_address: false,
+  session_timeout_listening_sec: 60,
+  socket_listening_timeout_sec: 600,
+  tls_dnp3: true
+};
+
+export function mergeDnp3Extended(
+  raw: Partial<Dnp3ExtendedSettings> | undefined | null
+): Dnp3ExtendedSettings {
+  return { ...DEFAULT_DNP3_EXTENDED, ...raw, ip_endpoint_type: "listening" };
+}
+
 export type DeviceRow = {
   id: number;
   code: string;
@@ -7,7 +48,9 @@ export type DeviceRow = {
   description?: string;
   gatewayCode?: string;
   ipAddress?: string;
+  dnp3OutstationPort?: number;
   dnp3Address?: number;
+  dnp3Extended?: Dnp3ExtendedSettings;
   pollIntervalSec?: number;
   timeoutMs?: number;
   retryCount?: number;
@@ -18,14 +61,6 @@ export type DeviceRow = {
   lastUpdateAt?: string;
   latitude: number;
   longitude: number;
-};
-
-export type LiveValue = {
-  deviceName: string;
-  signalKey: string;
-  value: number;
-  quality: string;
-  sourceTimestamp: string;
 };
 
 export type UserRole = "operator" | "engineer" | "installer";
@@ -43,7 +78,9 @@ export type ApiDevice = {
   description?: string | null;
   gateway_code?: string | null;
   ip_address: string;
+  dnp3_outstation_port?: number;
   dnp3_address: number;
+  dnp3_extended?: Dnp3ExtendedSettings | null;
   poll_interval_sec: number;
   timeout_ms: number;
   retry_count: number;
@@ -54,15 +91,6 @@ export type ApiDevice = {
   communication_status: CommunicationStatus;
   alarm_active: boolean;
   last_update_at?: string | null;
-};
-
-export type ApiTelemetry = {
-  id: number;
-  device_id: number;
-  signal_key: string;
-  value: number;
-  quality: string;
-  source_timestamp: string;
 };
 
 export type UserRead = {
@@ -188,9 +216,9 @@ export type SignalLiveRow = {
   device_id: number;
   device_code: string;
   device_name: string;
-  value: number;
-  quality: string;
-  source_timestamp: string;
+  value: number | null;
+  quality: string | null;
+  source_timestamp: string | null;
 };
 
 export type AlarmLevel = "info" | "warning" | "critical";

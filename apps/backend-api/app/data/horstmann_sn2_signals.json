@@ -1,7 +1,7 @@
 [
   {
     "key": "master.test",
-    "label": "Test (MASTER)",
+    "label": "Test",
     "unit": null,
     "description": "Binary input — Master — index 0",
     "source": "master",
@@ -12,11 +12,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1000
+    "display_order": 1000,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 1
   },
   {
     "key": "master.overcurrent_tripped",
-    "label": "Overcurrent Tripped (MASTER)",
+    "label": "Overcurrent Tripped",
     "unit": null,
     "description": "Binary input — Master — index 3",
     "source": "master",
@@ -27,11 +29,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1003
+    "display_order": 1003,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 2
   },
   {
     "key": "master.delta_i_delta_t_tripped",
-    "label": "ΔI/ΔT Tripped (MASTER)",
+    "label": "ΔI/ΔT Tripped",
     "unit": null,
     "description": "Binary input — Master — index 6",
     "source": "master",
@@ -42,11 +46,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1006
+    "display_order": 1006,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3
   },
   {
     "key": "master.voltage_loss",
-    "label": "Voltage Loss (MASTER)",
+    "label": "Voltage Loss",
     "unit": null,
     "description": "Binary input — Master — index 9",
     "source": "master",
@@ -57,11 +63,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1009
+    "display_order": 1009,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 4
   },
   {
     "key": "master.current_loss",
-    "label": "Current Loss (MASTER)",
+    "label": "Current Loss",
     "unit": null,
     "description": "Binary input — Master — index 12",
     "source": "master",
@@ -72,11 +80,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1012
+    "display_order": 1012,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 5
   },
   {
     "key": "master.operation_mode",
-    "label": "Operation Mode (MASTER)",
+    "label": "Operation Mode",
     "unit": null,
     "description": "Binary input — Master — index 15",
     "source": "master",
@@ -87,11 +97,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1015
+    "display_order": 1015,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 6
   },
   {
     "key": "master.battery_status",
-    "label": "Battery Status (MASTER)",
+    "label": "Battery Status",
     "unit": null,
     "description": "Binary input — Master — index 18",
     "source": "master",
@@ -102,11 +114,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1018
+    "display_order": 1018,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 7
   },
   {
     "key": "master.delta_i_delta_t_pick_up",
-    "label": "ΔI/ΔT Pick-up (MASTER)",
+    "label": "ΔI/ΔT Pick-up",
     "unit": null,
     "description": "Binary input — Master — index 23",
     "source": "master",
@@ -117,11 +131,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1023
+    "display_order": 1023,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 8
   },
   {
     "key": "master.voltage_loss_all_units",
-    "label": "Voltage Loss All Units (MASTER)",
+    "label": "Voltage Loss All Units",
     "unit": null,
     "description": "Binary input — Master — index 26",
     "source": "master",
@@ -132,11 +148,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1026
+    "display_order": 1026,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 9
   },
   {
     "key": "master.permanent_fault",
-    "label": "Permanent Fault (MASTER)",
+    "label": "Permanent Fault",
     "unit": null,
     "description": "Binary input — Master — index 27",
     "source": "master",
@@ -147,11 +165,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1027
+    "display_order": 1027,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 10
   },
   {
     "key": "master.momentary_fault",
-    "label": "Momentary Fault (MASTER)",
+    "label": "Momentary Fault",
     "unit": null,
     "description": "Binary input — Master — index 30",
     "source": "master",
@@ -162,11 +182,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1030
+    "display_order": 1030,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 11
   },
   {
     "key": "master.load_flow_direction_green_a",
-    "label": "Load Flow Direction Green (A) (MASTER)",
+    "label": "Load Flow Direction Green (A)",
     "unit": null,
     "description": "Binary input — Master — index 33",
     "source": "master",
@@ -177,11 +199,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1033
+    "display_order": 1033,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 12
   },
   {
     "key": "master.load_flow_direction_red_b",
-    "label": "Load Flow Direction Red (B) (MASTER)",
+    "label": "Load Flow Direction Red (B)",
     "unit": null,
     "description": "Binary input — Master — index 36",
     "source": "master",
@@ -192,11 +216,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1036
+    "display_order": 1036,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 13
   },
   {
     "key": "master.overcurrent_fault_direction_green_a",
-    "label": "Overcurrent Fault Direction Green (A) (MASTER)",
+    "label": "Overcurrent Fault Direction Green (A)",
     "unit": null,
     "description": "Binary input — Master — index 39",
     "source": "master",
@@ -207,11 +233,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1039
+    "display_order": 1039,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 14
   },
   {
     "key": "master.overcurrent_fault_direction_red_b",
-    "label": "Overcurrent Fault Direction Red (B) (MASTER)",
+    "label": "Overcurrent Fault Direction Red (B)",
     "unit": null,
     "description": "Binary input — Master — index 42",
     "source": "master",
@@ -222,11 +250,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1042
+    "display_order": 1042,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 15
   },
   {
     "key": "master.tamper_detection",
-    "label": "Tamper Detection (MASTER)",
+    "label": "Tamper Detection",
     "unit": null,
     "description": "Binary input — Master — index 45",
     "source": "master",
@@ -237,11 +267,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1045
+    "display_order": 1045,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 16
   },
   {
     "key": "master.local_comm_enabled",
-    "label": "Local Comm Enabled (MASTER)",
+    "label": "Local Comm Enabled",
     "unit": null,
     "description": "Binary input — Master — index 48",
     "source": "master",
@@ -252,11 +284,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1048
+    "display_order": 1048,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 17
   },
   {
     "key": "master.password_enabled",
-    "label": "Password Enabled (MASTER)",
+    "label": "Password Enabled",
     "unit": null,
     "description": "Binary input — Master — index 51",
     "source": "master",
@@ -267,11 +301,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1051
+    "display_order": 1051,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 18
   },
   {
     "key": "master.delta_i_delta_t_fault_direction_green_a",
-    "label": "ΔI/ΔT Fault Direction Green (A) (MASTER)",
+    "label": "ΔI/ΔT Fault Direction Green (A)",
     "unit": null,
     "description": "Binary input — Master — index 57",
     "source": "master",
@@ -282,11 +318,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1057
+    "display_order": 1057,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 19
   },
   {
     "key": "master.delta_i_delta_t_fault_direction_red_b",
-    "label": "ΔI/ΔT Fault Direction Red (B) (MASTER)",
+    "label": "ΔI/ΔT Fault Direction Red (B)",
     "unit": null,
     "description": "Binary input — Master — index 60",
     "source": "master",
@@ -297,11 +335,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1060
+    "display_order": 1060,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 20
   },
   {
     "key": "master.boost_mode_enabled",
-    "label": "Boost Mode Enabled (MASTER)",
+    "label": "Boost Mode Enabled",
     "unit": null,
     "description": "Binary input — Master — index 63",
     "source": "master",
@@ -312,11 +352,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1063
+    "display_order": 1063,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 21
   },
   {
     "key": "master.conductor_temperature_alarm",
-    "label": "Conductor Temperature Alarm (MASTER)",
+    "label": "Conductor Temperature Alarm",
     "unit": null,
     "description": "Binary input — Master — index 64",
     "source": "master",
@@ -327,11 +369,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1064
+    "display_order": 1064,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 22
   },
   {
     "key": "master.cmd_configuration_update",
-    "label": "Configuration Update (komut)",
+    "label": "Configuration Update",
     "unit": null,
     "description": "Binary output — Master — index 0",
     "source": "master",
@@ -342,11 +386,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1100
+    "display_order": 1100,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3000
   },
   {
     "key": "master.cmd_dnp3_configuration_update",
-    "label": "DNP3 Configuration Update (komut)",
+    "label": "DNP3 Configuration Update",
     "unit": null,
     "description": "Binary output — Master — index 1",
     "source": "master",
@@ -357,11 +403,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1101
+    "display_order": 1101,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3001
   },
   {
     "key": "master.cmd_firmware_update",
-    "label": "Firmware Update (komut)",
+    "label": "Firmware Update",
     "unit": null,
     "description": "Binary output — Master — index 2",
     "source": "master",
@@ -372,11 +420,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1102
+    "display_order": 1102,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3002
   },
   {
     "key": "master.cmd_start_csv_file_upload",
-    "label": "Start CSV File Upload (komut)",
+    "label": "Start CSV File Upload",
     "unit": null,
     "description": "Binary output — Master — index 3",
     "source": "master",
@@ -387,11 +437,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1103
+    "display_order": 1103,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3003
   },
   {
     "key": "master.cmd_upload_debug_file",
-    "label": "Upload Debug File (komut)",
+    "label": "Upload Debug File",
     "unit": null,
     "description": "Binary output — Master — index 4",
     "source": "master",
@@ -402,11 +454,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1104
+    "display_order": 1104,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3004
   },
   {
     "key": "master.cmd_reset_all_fcis",
-    "label": "Reset all FCIs (komut)",
+    "label": "Reset all FCIs",
     "unit": null,
     "description": "Binary output — Master — index 7",
     "source": "master",
@@ -417,11 +471,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1107
+    "display_order": 1107,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3005
   },
   {
     "key": "master.cmd_trigger_configuration_download_bulk",
-    "label": "Trigger Configuration Download (Bulk) (komut)",
+    "label": "Trigger Configuration Download (Bulk)",
     "unit": null,
     "description": "Binary output — Master — index 10",
     "source": "master",
@@ -432,11 +488,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1110
+    "display_order": 1110,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3006
   },
   {
     "key": "master.cmd_trigger_dnp3_configuration_download_bulk",
-    "label": "Trigger DNP3 Configuration Download (Bulk) (komut)",
+    "label": "Trigger DNP3 Configuration Download (Bulk)",
     "unit": null,
     "description": "Binary output — Master — index 11",
     "source": "master",
@@ -447,11 +505,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1111
+    "display_order": 1111,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3007
   },
   {
     "key": "master.cmd_trigger_firmware_download_bulk",
-    "label": "Trigger Firmware Download (Bulk) (komut)",
+    "label": "Trigger Firmware Download (Bulk)",
     "unit": null,
     "description": "Binary output — Master — index 12",
     "source": "master",
@@ -462,11 +522,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1112
+    "display_order": 1112,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3008
   },
   {
     "key": "master.cmd_reset_tamper_alarm",
-    "label": "Reset Tamper Alarm (komut)",
+    "label": "Reset Tamper Alarm",
     "unit": null,
     "description": "Binary output — Master — index 19",
     "source": "master",
@@ -477,11 +539,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1119
+    "display_order": 1119,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3009
   },
   {
     "key": "master.cmd_enable_password",
-    "label": "Enable Password (komut)",
+    "label": "Enable Password",
     "unit": null,
     "description": "Binary output — Master — index 20",
     "source": "master",
@@ -492,11 +556,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1120
+    "display_order": 1120,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3010
   },
   {
     "key": "master.cmd_enable_local_communication",
-    "label": "Enable Local Communication (komut)",
+    "label": "Enable Local Communication",
     "unit": null,
     "description": "Binary output — Master — index 21",
     "source": "master",
@@ -507,11 +573,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1121
+    "display_order": 1121,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3011
   },
   {
     "key": "master.cmd_modem_firmware_update_over_the_air",
-    "label": "Modem Firmware Update Over The Air (komut)",
+    "label": "Modem Firmware Update Over The Air",
     "unit": null,
     "description": "Binary output — Master — index 22",
     "source": "master",
@@ -522,11 +590,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1122
+    "display_order": 1122,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3012
   },
   {
     "key": "master.cmd_software_reset",
-    "label": "Software Reset (komut)",
+    "label": "Software Reset",
     "unit": null,
     "description": "Binary output — Master — index 23",
     "source": "master",
@@ -537,11 +607,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1123
+    "display_order": 1123,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3013
   },
   {
     "key": "master.cmd_boost_mode",
-    "label": "Boost Mode (komut)",
+    "label": "Boost Mode",
     "unit": null,
     "description": "Binary output — Master — index 26",
     "source": "master",
@@ -552,11 +624,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1126
+    "display_order": 1126,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3014
   },
   {
     "key": "master.cmd_clear_momentary",
-    "label": "Clear Momentary (komut)",
+    "label": "Clear Momentary",
     "unit": null,
     "description": "Binary output — Master — index 27",
     "source": "master",
@@ -567,11 +641,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1127
+    "display_order": 1127,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3015
   },
   {
     "key": "master.cmd_clear_dnp3_buffer",
-    "label": "Clear DNP3 Buffer (komut)",
+    "label": "Clear DNP3 Buffer",
     "unit": null,
     "description": "Binary output — Master — index 28",
     "source": "master",
@@ -582,11 +658,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1128
+    "display_order": 1128,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3016
   },
   {
     "key": "master.cmd_auto_reset_fault_values",
-    "label": "Auto Reset Fault Values (komut)",
+    "label": "Auto Reset Fault Values",
     "unit": null,
     "description": "Binary output — Master — index 29",
     "source": "master",
@@ -597,11 +675,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1129
+    "display_order": 1129,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3017
   },
   {
     "key": "master.cmd_enable_fast_curve",
-    "label": "Enable Fast Curve (komut)",
+    "label": "Enable Fast Curve",
     "unit": null,
     "description": "Binary output — Master — index 43",
     "source": "master",
@@ -612,11 +692,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1143
+    "display_order": 1143,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 3018
   },
   {
     "key": "master.momentary_fault_counter",
-    "label": "Momentary Fault Counter (MASTER)",
+    "label": "Momentary Fault Counter",
     "unit": "adet",
     "description": "Counter — Master — index 0",
     "source": "master",
@@ -627,11 +709,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1200
+    "display_order": 1200,
+    "iec104_type_id": 15,
+    "iec104_ioa_offset": 2000
   },
   {
     "key": "master.permanent_fault_counter",
-    "label": "Permanent Fault Counter (MASTER)",
+    "label": "Permanent Fault Counter",
     "unit": "adet",
     "description": "Counter — Master — index 1",
     "source": "master",
@@ -642,11 +726,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1201
+    "display_order": 1201,
+    "iec104_type_id": 15,
+    "iec104_ioa_offset": 2001
   },
   {
     "key": "master.modem_rssi",
-    "label": "Modem RSSI (MASTER)",
+    "label": "Modem RSSI",
     "unit": "dBm",
     "description": "Analog input — Master — index 0",
     "source": "master",
@@ -657,11 +743,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1300
+    "display_order": 1300,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1000
   },
   {
     "key": "master.test_point_level",
-    "label": "Test Point Level (MASTER)",
+    "label": "Test Point Level",
     "unit": null,
     "description": "Analog input — Master — index 1",
     "source": "master",
@@ -672,11 +760,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1301
+    "display_order": 1301,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1001
   },
   {
     "key": "master.actual_current",
-    "label": "Actual Current (MASTER)",
+    "label": "Actual Current",
     "unit": "mA",
     "description": "Analog input — Master — index 4",
     "source": "master",
@@ -687,11 +777,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1304
+    "display_order": 1304,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1002
   },
   {
     "key": "master.minimum_voltage",
-    "label": "Minimum Voltage (MASTER)",
+    "label": "Minimum Voltage",
     "unit": "V",
     "description": "Analog input — Master — index 7",
     "source": "master",
@@ -702,11 +794,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1307
+    "display_order": 1307,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1003
   },
   {
     "key": "master.latitude_degrees",
-    "label": "Latitude Degrees (MASTER)",
+    "label": "Latitude Degrees",
     "unit": "°",
     "description": "Analog input — Master — index 108",
     "source": "master",
@@ -717,11 +811,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1308
+    "display_order": 1308,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1020
   },
   {
     "key": "master.latitude_minutes",
-    "label": "Latitude Minutes (MASTER)",
+    "label": "Latitude Minutes",
     "unit": "min",
     "description": "Analog input — Master — index 109",
     "source": "master",
@@ -732,11 +828,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1309
+    "display_order": 1309,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1021
   },
   {
     "key": "master.maximum_voltage",
-    "label": "Maximum Voltage (MASTER)",
+    "label": "Maximum Voltage",
     "unit": "V",
     "description": "Analog input — Master — index 10",
     "source": "master",
@@ -747,11 +845,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1310
+    "display_order": 1310,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1004
   },
   {
     "key": "master.latitude_seconds",
-    "label": "Latitude Seconds (MASTER)",
+    "label": "Latitude Seconds",
     "unit": "sec",
     "description": "Analog input — Master — index 110",
     "source": "master",
@@ -762,11 +862,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1310
+    "display_order": 1310,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1022
   },
   {
     "key": "master.longitude_degrees",
-    "label": "Longitude Degrees (MASTER)",
+    "label": "Longitude Degrees",
     "unit": "°",
     "description": "Analog input — Master — index 111",
     "source": "master",
@@ -777,11 +879,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1311
+    "display_order": 1311,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1023
   },
   {
     "key": "master.longitude_minutes",
-    "label": "Longitude Minutes (MASTER)",
+    "label": "Longitude Minutes",
     "unit": "min",
     "description": "Analog input — Master — index 112",
     "source": "master",
@@ -792,11 +896,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1312
+    "display_order": 1312,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1024
   },
   {
     "key": "master.battery_voltage_satellite",
-    "label": "Battery Voltage Satellite (MASTER)",
+    "label": "Battery Voltage Satellite",
     "unit": null,
     "description": "Analog input — Master — index 13",
     "source": "master",
@@ -807,11 +913,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1313
+    "display_order": 1313,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1005
   },
   {
     "key": "master.longitude_seconds",
-    "label": "Longitude Seconds (MASTER)",
+    "label": "Longitude Seconds",
     "unit": "sec",
     "description": "Analog input — Master — index 113",
     "source": "master",
@@ -822,11 +930,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1313
+    "display_order": 1313,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1025
   },
   {
     "key": "master.conductor_temperature_alarm_threshold",
-    "label": "Conductor Temperature Alarm Threshold (MASTER)",
+    "label": "Conductor Temperature Alarm Threshold",
     "unit": "°C",
     "description": "Analog input — Master — index 114",
     "source": "master",
@@ -837,11 +947,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1314
+    "display_order": 1314,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1026
   },
   {
     "key": "master.trip_level",
-    "label": "Trip Level (MASTER)",
+    "label": "Trip Level",
     "unit": "mA",
     "description": "Analog input — Master — index 16",
     "source": "master",
@@ -852,11 +964,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1316
+    "display_order": 1316,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1006
   },
   {
     "key": "master.nominal_voltage",
-    "label": "Nominal Voltage (MASTER)",
+    "label": "Nominal Voltage",
     "unit": "V",
     "description": "Analog input — Master — index 117",
     "source": "master",
@@ -867,11 +981,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1317
+    "display_order": 1317,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1027
   },
   {
     "key": "master.device_temperature",
-    "label": "Device Temperature (MASTER)",
+    "label": "Device Temperature",
     "unit": "°C",
     "description": "Analog input — Master — index 19",
     "source": "master",
@@ -882,11 +998,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1319
+    "display_order": 1319,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1007
   },
   {
     "key": "master.minimum_current",
-    "label": "Minimum Current (MASTER)",
+    "label": "Minimum Current",
     "unit": "mA",
     "description": "Analog input — Master — index 20",
     "source": "master",
@@ -897,11 +1015,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1320
+    "display_order": 1320,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1008
   },
   {
     "key": "master.pitch_angle",
-    "label": "Pitch Angle (MASTER)",
+    "label": "Pitch Angle",
     "unit": "°",
     "description": "Analog input — Master — index 120",
     "source": "master",
@@ -912,11 +1032,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1320
+    "display_order": 1320,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1028
   },
   {
     "key": "master.maximum_current",
-    "label": "Maximum Current (MASTER)",
+    "label": "Maximum Current",
     "unit": "mA",
     "description": "Analog input — Master — index 23",
     "source": "master",
@@ -927,11 +1049,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1323
+    "display_order": 1323,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1009
   },
   {
     "key": "master.average_current",
-    "label": "Average Current (MASTER)",
+    "label": "Average Current",
     "unit": "mA",
     "description": "Analog input — Master — index 26",
     "source": "master",
@@ -942,11 +1066,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1326
+    "display_order": 1326,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1010
   },
   {
     "key": "master.fault_current",
-    "label": "Fault Current (MASTER)",
+    "label": "Fault Current",
     "unit": "mA",
     "description": "Analog input — Master — index 29",
     "source": "master",
@@ -957,11 +1083,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1329
+    "display_order": 1329,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1011
   },
   {
     "key": "master.fault_duration",
-    "label": "Fault Duration (MASTER)",
+    "label": "Fault Duration",
     "unit": "ms",
     "description": "Analog input — Master — index 32",
     "source": "master",
@@ -972,11 +1100,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1332
+    "display_order": 1332,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1012
   },
   {
     "key": "master.last_good_known_current",
-    "label": "Last Good Known Current (MASTER)",
+    "label": "Last Good Known Current",
     "unit": "mA",
     "description": "Analog input — Master — index 35",
     "source": "master",
@@ -987,11 +1117,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1335
+    "display_order": 1335,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1013
   },
   {
     "key": "master.actual_voltage",
-    "label": "Actual Voltage (MASTER)",
+    "label": "Actual Voltage",
     "unit": "V",
     "description": "Analog input — Master — index 38",
     "source": "master",
@@ -1002,11 +1134,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1338
+    "display_order": 1338,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1014
   },
   {
     "key": "master.conductor_temperature",
-    "label": "Conductor Temperature (MASTER)",
+    "label": "Conductor Temperature",
     "unit": "°C",
     "description": "Analog input — Master — index 41",
     "source": "master",
@@ -1017,11 +1151,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1341
+    "display_order": 1341,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1015
   },
   {
     "key": "master.phase_angle",
-    "label": "Phase Angle (MASTER)",
+    "label": "Phase Angle",
     "unit": "°",
     "description": "Analog input — Master — index 44",
     "source": "master",
@@ -1032,11 +1168,13 @@
     "scale": 0.1,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1344
+    "display_order": 1344,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1016
   },
   {
     "key": "master.serial_number",
-    "label": "Serial Number (MASTER)",
+    "label": "Serial Number",
     "unit": null,
     "description": "Analog input — Master — index 59",
     "source": "master",
@@ -1047,11 +1185,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1359
+    "display_order": 1359,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1017
   },
   {
     "key": "master.firmware_version",
-    "label": "Firmware Version (MASTER)",
+    "label": "Firmware Version",
     "unit": null,
     "description": "Analog input — Master — index 62",
     "source": "master",
@@ -1062,11 +1202,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1362
+    "display_order": 1362,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1018
   },
   {
     "key": "master.hardware_revision",
-    "label": "Hardware Revision (MASTER)",
+    "label": "Hardware Revision",
     "unit": null,
     "description": "Analog input — Master — index 65",
     "source": "master",
@@ -1077,11 +1219,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 1365
+    "display_order": 1365,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1019
   },
   {
     "key": "master.setpoint_reporting_period",
-    "label": "Reporting Period (ayar)",
+    "label": "Reporting Period",
     "unit": "min",
     "description": "Analog output — Master — index 0",
     "source": "master",
@@ -1092,11 +1236,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1400
+    "display_order": 1400,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 4000
   },
   {
     "key": "master.setpoint_trip_current_minimum",
-    "label": "Trip Current Minimum (ayar)",
+    "label": "Trip Current Minimum",
     "unit": "A",
     "description": "Analog output — Master — index 1",
     "source": "master",
@@ -1107,11 +1253,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1401
+    "display_order": 1401,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 4001
   },
   {
     "key": "master.setpoint_trip_current_maximum",
-    "label": "Trip Current Maximum (ayar)",
+    "label": "Trip Current Maximum",
     "unit": "A",
     "description": "Analog output — Master — index 2",
     "source": "master",
@@ -1122,11 +1270,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1402
+    "display_order": 1402,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 4002
   },
   {
     "key": "master.setpoint_instantaneous_factor",
-    "label": "Instantaneous Factor (ayar)",
+    "label": "Instantaneous Factor",
     "unit": null,
     "description": "Analog output — Master — index 3",
     "source": "master",
@@ -1137,11 +1287,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1403
+    "display_order": 1403,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 4003
   },
   {
     "key": "master.setpoint_nominal_voltage",
-    "label": "Nominal Voltage (ayar)",
+    "label": "Nominal Voltage",
     "unit": "V",
     "description": "Analog output — Master — index 4",
     "source": "master",
@@ -1152,11 +1304,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1404
+    "display_order": 1404,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 4004
   },
   {
     "key": "master.setpoint_conductor_temperature_alarm",
-    "label": "Conductor Temperature Alarm (ayar)",
+    "label": "Conductor Temperature Alarm",
     "unit": "°C",
     "description": "Analog output — Master — index 5",
     "source": "master",
@@ -1167,11 +1321,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1405
+    "display_order": 1405,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 4005
   },
   {
     "key": "master.info_serial_number",
-    "label": "Serial Number (metin)",
+    "label": "Serial Number",
     "unit": null,
     "description": "String — Master — index 65000",
     "source": "master",
@@ -1182,11 +1338,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1500
+    "display_order": 1500,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_fw_version",
-    "label": "FW Version (metin)",
+    "label": "FW Version",
     "unit": null,
     "description": "String — Master — index 65001",
     "source": "master",
@@ -1197,11 +1355,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1501
+    "display_order": 1501,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_hardware_revision",
-    "label": "Hardware Revision (metin)",
+    "label": "Hardware Revision",
     "unit": null,
     "description": "String — Master — index 65002",
     "source": "master",
@@ -1212,11 +1372,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1502
+    "display_order": 1502,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_network_registration",
-    "label": "Network Registration (metin)",
+    "label": "Network Registration",
     "unit": null,
     "description": "String — Master — index 3",
     "source": "master",
@@ -1227,11 +1389,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1503
+    "display_order": 1503,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_part_no",
-    "label": "Part No. (metin)",
+    "label": "Part No.",
     "unit": null,
     "description": "String — Master — index 65003",
     "source": "master",
@@ -1242,11 +1406,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1503
+    "display_order": 1503,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_fw_version_satellite",
-    "label": "FW Version Satellite (metin)",
+    "label": "FW Version Satellite",
     "unit": null,
     "description": "String — Master — index 7",
     "source": "master",
@@ -1257,11 +1423,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1507
+    "display_order": 1507,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_modem_model_name",
-    "label": "Modem Model Name (metin)",
+    "label": "Modem Model Name",
     "unit": null,
     "description": "String — Master — index 65009",
     "source": "master",
@@ -1272,11 +1440,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1509
+    "display_order": 1509,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_last_configuration_update",
-    "label": "Last Configuration Update (metin)",
+    "label": "Last Configuration Update",
     "unit": null,
     "description": "String — Master — index 10",
     "source": "master",
@@ -1287,11 +1457,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1510
+    "display_order": 1510,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_modem_fw_version",
-    "label": "Modem FW Version (metin)",
+    "label": "Modem FW Version",
     "unit": null,
     "description": "String — Master — index 65010",
     "source": "master",
@@ -1302,11 +1474,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1510
+    "display_order": 1510,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_gps_latitude_longitude",
-    "label": "GPS Latitude / Longitude (metin)",
+    "label": "GPS Latitude / Longitude",
     "unit": null,
     "description": "String — Master — index 65011",
     "source": "master",
@@ -1317,11 +1491,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1511
+    "display_order": 1511,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_sim_serial_number_ccid",
-    "label": "SIM Serial Number (CCID) (metin)",
+    "label": "SIM Serial Number (CCID)",
     "unit": null,
     "description": "String — Master — index 65012",
     "source": "master",
@@ -1332,11 +1508,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1512
+    "display_order": 1512,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_network_operator",
-    "label": "Network Operator (metin)",
+    "label": "Network Operator",
     "unit": null,
     "description": "String — Master — index 65013",
     "source": "master",
@@ -1347,11 +1525,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1513
+    "display_order": 1513,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_rtu_status_text",
-    "label": "RTU Status Text (metin)",
+    "label": "RTU Status Text",
     "unit": null,
     "description": "String — Master — index 13",
     "source": "master",
@@ -1362,11 +1542,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1513
+    "display_order": 1513,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_network_type",
-    "label": "Network Type (metin)",
+    "label": "Network Type",
     "unit": null,
     "description": "String — Master — index 65014",
     "source": "master",
@@ -1377,11 +1559,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1514
+    "display_order": 1514,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_ipv4_address",
-    "label": "IPv4 Address (metin)",
+    "label": "IPv4 Address",
     "unit": null,
     "description": "String — Master — index 16",
     "source": "master",
@@ -1392,11 +1576,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1516
+    "display_order": 1516,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_comm_library_version",
-    "label": "Comm Library Version (metin)",
+    "label": "Comm Library Version",
     "unit": null,
     "description": "String — Master — index 17",
     "source": "master",
@@ -1407,11 +1593,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1517
+    "display_order": 1517,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_modem_imei",
-    "label": "Modem IMEI (metin)",
+    "label": "Modem IMEI",
     "unit": null,
     "description": "String — Master — index 19",
     "source": "master",
@@ -1422,11 +1610,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1519
+    "display_order": 1519,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_modem_dial_in_settings",
-    "label": "Modem Dial-In Settings (metin)",
+    "label": "Modem Dial-In Settings",
     "unit": null,
     "description": "String — Master — index 20",
     "source": "master",
@@ -1437,11 +1627,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1520
+    "display_order": 1520,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_modem_ip_address",
-    "label": "Modem IP Address (metin)",
+    "label": "Modem IP Address",
     "unit": null,
     "description": "String — Master — index 65020",
     "source": "master",
@@ -1452,11 +1644,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1520
+    "display_order": 1520,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_device_position_user_defined",
-    "label": "Device Position - User defined (metin)",
+    "label": "Device Position - User defined",
     "unit": null,
     "description": "String — Master — index 21",
     "source": "master",
@@ -1467,11 +1661,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1521
+    "display_order": 1521,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_network_rf_status_information",
-    "label": "Network RF Status Information (metin)",
+    "label": "Network RF Status Information",
     "unit": null,
     "description": "String — Master — index 22",
     "source": "master",
@@ -1482,11 +1678,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1522
+    "display_order": 1522,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "master.info_gps_string",
-    "label": "GPS String (metin)",
+    "label": "GPS String",
     "unit": null,
     "description": "String — Master — index 23",
     "source": "master",
@@ -1497,11 +1695,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 1523
+    "display_order": 1523,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat01.test",
-    "label": "Test (SAT01)",
+    "label": "Test",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 1",
     "source": "sat01",
@@ -1512,11 +1712,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2001
+    "display_order": 2001,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 100
   },
   {
     "key": "sat01.overcurrent_tripped",
-    "label": "Overcurrent Tripped (SAT01)",
+    "label": "Overcurrent Tripped",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 4",
     "source": "sat01",
@@ -1527,11 +1729,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2004
+    "display_order": 2004,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 101
   },
   {
     "key": "sat01.delta_i_delta_t_tripped",
-    "label": "ΔI/ΔT Tripped (SAT01)",
+    "label": "ΔI/ΔT Tripped",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 7",
     "source": "sat01",
@@ -1542,11 +1746,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2007
+    "display_order": 2007,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 102
   },
   {
     "key": "sat01.voltage_loss",
-    "label": "Voltage Loss (SAT01)",
+    "label": "Voltage Loss",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 10",
     "source": "sat01",
@@ -1557,11 +1763,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2010
+    "display_order": 2010,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 103
   },
   {
     "key": "sat01.current_loss",
-    "label": "Current Loss (SAT01)",
+    "label": "Current Loss",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 13",
     "source": "sat01",
@@ -1572,11 +1780,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2013
+    "display_order": 2013,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 104
   },
   {
     "key": "sat01.operation_mode",
-    "label": "Operation Mode (SAT01)",
+    "label": "Operation Mode",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 16",
     "source": "sat01",
@@ -1587,11 +1797,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2016
+    "display_order": 2016,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 105
   },
   {
     "key": "sat01.battery_status",
-    "label": "Battery Status (SAT01)",
+    "label": "Battery Status",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 19",
     "source": "sat01",
@@ -1602,11 +1814,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2019
+    "display_order": 2019,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 106
   },
   {
     "key": "sat01.communication_failure",
-    "label": "Communication Failure (SAT01)",
+    "label": "Communication Failure",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 21",
     "source": "sat01",
@@ -1617,11 +1831,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2021
+    "display_order": 2021,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 107
   },
   {
     "key": "sat01.delta_i_delta_t_pick_up",
-    "label": "ΔI/ΔT Pick-up (SAT01)",
+    "label": "ΔI/ΔT Pick-up",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 24",
     "source": "sat01",
@@ -1632,11 +1848,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2024
+    "display_order": 2024,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 108
   },
   {
     "key": "sat01.permanent_fault",
-    "label": "Permanent Fault (SAT01)",
+    "label": "Permanent Fault",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 28",
     "source": "sat01",
@@ -1647,11 +1865,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2028
+    "display_order": 2028,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 109
   },
   {
     "key": "sat01.momentary_fault",
-    "label": "Momentary Fault (SAT01)",
+    "label": "Momentary Fault",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 31",
     "source": "sat01",
@@ -1662,11 +1882,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2031
+    "display_order": 2031,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 110
   },
   {
     "key": "sat01.load_flow_direction_green_a",
-    "label": "Load Flow Direction Green (A) (SAT01)",
+    "label": "Load Flow Direction Green (A)",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 34",
     "source": "sat01",
@@ -1677,11 +1899,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2034
+    "display_order": 2034,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 111
   },
   {
     "key": "sat01.load_flow_direction_red_b",
-    "label": "Load Flow Direction Red (B) (SAT01)",
+    "label": "Load Flow Direction Red (B)",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 37",
     "source": "sat01",
@@ -1692,11 +1916,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2037
+    "display_order": 2037,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 112
   },
   {
     "key": "sat01.overcurrent_fault_direction_green_a",
-    "label": "Overcurrent Fault Direction Green (A) (SAT01)",
+    "label": "Overcurrent Fault Direction Green (A)",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 40",
     "source": "sat01",
@@ -1707,11 +1933,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2040
+    "display_order": 2040,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 113
   },
   {
     "key": "sat01.overcurrent_fault_direction_red_b",
-    "label": "Overcurrent Fault Direction Red (B) (SAT01)",
+    "label": "Overcurrent Fault Direction Red (B)",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 43",
     "source": "sat01",
@@ -1722,11 +1950,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2043
+    "display_order": 2043,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 114
   },
   {
     "key": "sat01.tamper_detection",
-    "label": "Tamper Detection (SAT01)",
+    "label": "Tamper Detection",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 46",
     "source": "sat01",
@@ -1737,11 +1967,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2046
+    "display_order": 2046,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 115
   },
   {
     "key": "sat01.local_comm_enabled",
-    "label": "Local Comm Enabled (SAT01)",
+    "label": "Local Comm Enabled",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 49",
     "source": "sat01",
@@ -1752,11 +1984,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2049
+    "display_order": 2049,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 116
   },
   {
     "key": "sat01.password_enabled",
-    "label": "Password Enabled (SAT01)",
+    "label": "Password Enabled",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 52",
     "source": "sat01",
@@ -1767,11 +2001,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2052
+    "display_order": 2052,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 117
   },
   {
     "key": "sat01.delta_i_delta_t_fault_direction_green_a",
-    "label": "ΔI/ΔT Fault Direction Green (A) (SAT01)",
+    "label": "ΔI/ΔT Fault Direction Green (A)",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 58",
     "source": "sat01",
@@ -1782,11 +2018,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2058
+    "display_order": 2058,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 118
   },
   {
     "key": "sat01.delta_i_delta_t_fault_direction_red_b",
-    "label": "ΔI/ΔT Fault Direction Red (B) (SAT01)",
+    "label": "ΔI/ΔT Fault Direction Red (B)",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 61",
     "source": "sat01",
@@ -1797,11 +2035,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2061
+    "display_order": 2061,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 119
   },
   {
     "key": "sat01.conductor_temperature_alarm",
-    "label": "Conductor Temperature Alarm (SAT01)",
+    "label": "Conductor Temperature Alarm",
     "unit": null,
     "description": "Binary input — Satellite 01 — index 65",
     "source": "sat01",
@@ -1812,11 +2052,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2065
+    "display_order": 2065,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 120
   },
   {
     "key": "sat01.momentary_fault_counter",
-    "label": "Momentary Fault Counter (SAT01)",
+    "label": "Momentary Fault Counter",
     "unit": "adet",
     "description": "Counter — Satellite 01 — index 2",
     "source": "sat01",
@@ -1827,11 +2069,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2202
+    "display_order": 2202,
+    "iec104_type_id": 15,
+    "iec104_ioa_offset": 2010
   },
   {
     "key": "sat01.permanent_fault_counter",
-    "label": "Permanent Fault Counter (SAT01)",
+    "label": "Permanent Fault Counter",
     "unit": "adet",
     "description": "Counter — Satellite 01 — index 3",
     "source": "sat01",
@@ -1842,11 +2086,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2203
+    "display_order": 2203,
+    "iec104_type_id": 15,
+    "iec104_ioa_offset": 2011
   },
   {
     "key": "sat01.test_point_level",
-    "label": "Test Point Level (SAT01)",
+    "label": "Test Point Level",
     "unit": null,
     "description": "Analog input — Satellite 01 — index 2",
     "source": "sat01",
@@ -1857,11 +2103,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2302
+    "display_order": 2302,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1100
   },
   {
     "key": "sat01.actual_current",
-    "label": "Actual Current (SAT01)",
+    "label": "Actual Current",
     "unit": "mA",
     "description": "Analog input — Satellite 01 — index 5",
     "source": "sat01",
@@ -1872,11 +2120,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2305
+    "display_order": 2305,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1101
   },
   {
     "key": "sat01.minimum_voltage",
-    "label": "Minimum Voltage (SAT01)",
+    "label": "Minimum Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 01 — index 8",
     "source": "sat01",
@@ -1887,11 +2137,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2308
+    "display_order": 2308,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1102
   },
   {
     "key": "sat01.maximum_voltage",
-    "label": "Maximum Voltage (SAT01)",
+    "label": "Maximum Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 01 — index 11",
     "source": "sat01",
@@ -1902,11 +2154,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2311
+    "display_order": 2311,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1103
   },
   {
     "key": "sat01.battery_voltage_satellite",
-    "label": "Battery Voltage Satellite (SAT01)",
+    "label": "Battery Voltage Satellite",
     "unit": null,
     "description": "Analog input — Satellite 01 — index 14",
     "source": "sat01",
@@ -1917,11 +2171,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2314
+    "display_order": 2314,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1104
   },
   {
     "key": "sat01.conductor_temperature_alarm_threshold",
-    "label": "Conductor Temperature Alarm Threshold (SAT01)",
+    "label": "Conductor Temperature Alarm Threshold",
     "unit": "°C",
     "description": "Analog input — Satellite 01 — index 115",
     "source": "sat01",
@@ -1932,11 +2188,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2315
+    "display_order": 2315,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1120
   },
   {
     "key": "sat01.trip_level",
-    "label": "Trip Level (SAT01)",
+    "label": "Trip Level",
     "unit": "mA",
     "description": "Analog input — Satellite 01 — index 17",
     "source": "sat01",
@@ -1947,11 +2205,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2317
+    "display_order": 2317,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1105
   },
   {
     "key": "sat01.nominal_voltage",
-    "label": "Nominal Voltage (SAT01)",
+    "label": "Nominal Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 01 — index 118",
     "source": "sat01",
@@ -1962,11 +2222,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2318
+    "display_order": 2318,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1121
   },
   {
     "key": "sat01.minimum_current",
-    "label": "Minimum Current (SAT01)",
+    "label": "Minimum Current",
     "unit": "mA",
     "description": "Analog input — Satellite 01 — index 21",
     "source": "sat01",
@@ -1977,11 +2239,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2321
+    "display_order": 2321,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1106
   },
   {
     "key": "sat01.pitch_angle",
-    "label": "Pitch Angle (SAT01)",
+    "label": "Pitch Angle",
     "unit": "°",
     "description": "Analog input — Satellite 01 — index 121",
     "source": "sat01",
@@ -1992,11 +2256,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2321
+    "display_order": 2321,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1122
   },
   {
     "key": "sat01.maximum_current",
-    "label": "Maximum Current (SAT01)",
+    "label": "Maximum Current",
     "unit": "mA",
     "description": "Analog input — Satellite 01 — index 24",
     "source": "sat01",
@@ -2007,11 +2273,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2324
+    "display_order": 2324,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1107
   },
   {
     "key": "sat01.average_current",
-    "label": "Average Current (SAT01)",
+    "label": "Average Current",
     "unit": "mA",
     "description": "Analog input — Satellite 01 — index 27",
     "source": "sat01",
@@ -2022,11 +2290,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2327
+    "display_order": 2327,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1108
   },
   {
     "key": "sat01.fault_current",
-    "label": "Fault Current (SAT01)",
+    "label": "Fault Current",
     "unit": "mA",
     "description": "Analog input — Satellite 01 — index 30",
     "source": "sat01",
@@ -2037,11 +2307,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2330
+    "display_order": 2330,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1109
   },
   {
     "key": "sat01.fault_duration",
-    "label": "Fault Duration (SAT01)",
+    "label": "Fault Duration",
     "unit": "ms",
     "description": "Analog input — Satellite 01 — index 33",
     "source": "sat01",
@@ -2052,11 +2324,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2333
+    "display_order": 2333,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1110
   },
   {
     "key": "sat01.last_good_known_current",
-    "label": "Last Good Known Current (SAT01)",
+    "label": "Last Good Known Current",
     "unit": "mA",
     "description": "Analog input — Satellite 01 — index 36",
     "source": "sat01",
@@ -2067,11 +2341,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2336
+    "display_order": 2336,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1111
   },
   {
     "key": "sat01.actual_voltage",
-    "label": "Actual Voltage (SAT01)",
+    "label": "Actual Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 01 — index 39",
     "source": "sat01",
@@ -2082,11 +2358,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2339
+    "display_order": 2339,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1112
   },
   {
     "key": "sat01.conductor_temperature",
-    "label": "Conductor Temperature (SAT01)",
+    "label": "Conductor Temperature",
     "unit": "°C",
     "description": "Analog input — Satellite 01 — index 42",
     "source": "sat01",
@@ -2097,11 +2375,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2342
+    "display_order": 2342,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1113
   },
   {
     "key": "sat01.phase_angle",
-    "label": "Phase Angle (SAT01)",
+    "label": "Phase Angle",
     "unit": "°",
     "description": "Analog input — Satellite 01 — index 45",
     "source": "sat01",
@@ -2112,11 +2392,13 @@
     "scale": 0.1,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2345
+    "display_order": 2345,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1114
   },
   {
     "key": "sat01.serial_number",
-    "label": "Serial Number (SAT01)",
+    "label": "Serial Number",
     "unit": null,
     "description": "Analog input — Satellite 01 — index 60",
     "source": "sat01",
@@ -2127,11 +2409,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2360
+    "display_order": 2360,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1115
   },
   {
     "key": "sat01.firmware_version",
-    "label": "Firmware Version (SAT01)",
+    "label": "Firmware Version",
     "unit": null,
     "description": "Analog input — Satellite 01 — index 63",
     "source": "sat01",
@@ -2142,11 +2426,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2363
+    "display_order": 2363,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1116
   },
   {
     "key": "sat01.hardware_revision",
-    "label": "Hardware Revision (SAT01)",
+    "label": "Hardware Revision",
     "unit": null,
     "description": "Analog input — Satellite 01 — index 66",
     "source": "sat01",
@@ -2157,11 +2443,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2366
+    "display_order": 2366,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1117
   },
   {
     "key": "sat01.rssi_satellite",
-    "label": "RSSI Satellite (SAT01)",
+    "label": "RSSI Satellite",
     "unit": "dBm",
     "description": "Analog input — Satellite 01 — index 68",
     "source": "sat01",
@@ -2172,11 +2460,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2368
+    "display_order": 2368,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1118
   },
   {
     "key": "sat01.device_temperature",
-    "label": "Device Temperature (SAT01)",
+    "label": "Device Temperature",
     "unit": "°C",
     "description": "Analog input — Satellite 01 — index 70",
     "source": "sat01",
@@ -2187,11 +2477,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 2370
+    "display_order": 2370,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1119
   },
   {
     "key": "sat01.info_serial_number",
-    "label": "Serial Number (metin)",
+    "label": "Serial Number",
     "unit": null,
     "description": "String — Satellite 01 — index 5",
     "source": "sat01",
@@ -2202,11 +2494,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2505
+    "display_order": 2505,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat01.info_fw_version_satellite",
-    "label": "FW Version Satellite (metin)",
+    "label": "FW Version Satellite",
     "unit": null,
     "description": "String — Satellite 01 — index 8",
     "source": "sat01",
@@ -2217,11 +2511,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2508
+    "display_order": 2508,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat01.info_last_configuration_update",
-    "label": "Last Configuration Update (metin)",
+    "label": "Last Configuration Update",
     "unit": null,
     "description": "String — Satellite 01 — index 11",
     "source": "sat01",
@@ -2232,11 +2528,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2511
+    "display_order": 2511,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat01.info_rtu_status_text",
-    "label": "RTU Status Text (metin)",
+    "label": "RTU Status Text",
     "unit": null,
     "description": "String — Satellite 01 — index 14",
     "source": "sat01",
@@ -2247,11 +2545,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 2514
+    "display_order": 2514,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat02.test",
-    "label": "Test (SAT02)",
+    "label": "Test",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 2",
     "source": "sat02",
@@ -2262,11 +2562,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3002
+    "display_order": 3002,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 200
   },
   {
     "key": "sat02.overcurrent_tripped",
-    "label": "Overcurrent Tripped (SAT02)",
+    "label": "Overcurrent Tripped",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 5",
     "source": "sat02",
@@ -2277,11 +2579,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3005
+    "display_order": 3005,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 201
   },
   {
     "key": "sat02.delta_i_delta_t_tripped",
-    "label": "ΔI/ΔT Tripped (SAT02)",
+    "label": "ΔI/ΔT Tripped",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 8",
     "source": "sat02",
@@ -2292,11 +2596,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3008
+    "display_order": 3008,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 202
   },
   {
     "key": "sat02.voltage_loss",
-    "label": "Voltage Loss (SAT02)",
+    "label": "Voltage Loss",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 11",
     "source": "sat02",
@@ -2307,11 +2613,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3011
+    "display_order": 3011,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 203
   },
   {
     "key": "sat02.current_loss",
-    "label": "Current Loss (SAT02)",
+    "label": "Current Loss",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 14",
     "source": "sat02",
@@ -2322,11 +2630,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3014
+    "display_order": 3014,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 204
   },
   {
     "key": "sat02.operation_mode",
-    "label": "Operation Mode (SAT02)",
+    "label": "Operation Mode",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 17",
     "source": "sat02",
@@ -2337,11 +2647,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3017
+    "display_order": 3017,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 205
   },
   {
     "key": "sat02.battery_status",
-    "label": "Battery Status (SAT02)",
+    "label": "Battery Status",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 20",
     "source": "sat02",
@@ -2352,11 +2664,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3020
+    "display_order": 3020,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 206
   },
   {
     "key": "sat02.communication_failure",
-    "label": "Communication Failure (SAT02)",
+    "label": "Communication Failure",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 22",
     "source": "sat02",
@@ -2367,11 +2681,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3022
+    "display_order": 3022,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 207
   },
   {
     "key": "sat02.delta_i_delta_t_pick_up",
-    "label": "ΔI/ΔT Pick-up (SAT02)",
+    "label": "ΔI/ΔT Pick-up",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 25",
     "source": "sat02",
@@ -2382,11 +2698,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3025
+    "display_order": 3025,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 208
   },
   {
     "key": "sat02.permanent_fault",
-    "label": "Permanent Fault (SAT02)",
+    "label": "Permanent Fault",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 29",
     "source": "sat02",
@@ -2397,11 +2715,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3029
+    "display_order": 3029,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 209
   },
   {
     "key": "sat02.momentary_fault",
-    "label": "Momentary Fault (SAT02)",
+    "label": "Momentary Fault",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 32",
     "source": "sat02",
@@ -2412,11 +2732,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3032
+    "display_order": 3032,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 210
   },
   {
     "key": "sat02.load_flow_direction_green_a",
-    "label": "Load Flow Direction Green (A) (SAT02)",
+    "label": "Load Flow Direction Green (A)",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 35",
     "source": "sat02",
@@ -2427,11 +2749,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3035
+    "display_order": 3035,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 211
   },
   {
     "key": "sat02.load_flow_direction_red_b",
-    "label": "Load Flow Direction Red (B) (SAT02)",
+    "label": "Load Flow Direction Red (B)",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 38",
     "source": "sat02",
@@ -2442,11 +2766,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3038
+    "display_order": 3038,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 212
   },
   {
     "key": "sat02.overcurrent_fault_direction_green_a",
-    "label": "Overcurrent Fault Direction Green (A) (SAT02)",
+    "label": "Overcurrent Fault Direction Green (A)",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 41",
     "source": "sat02",
@@ -2457,11 +2783,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3041
+    "display_order": 3041,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 213
   },
   {
     "key": "sat02.overcurrent_fault_direction_red_b",
-    "label": "Overcurrent Fault Direction Red (B) (SAT02)",
+    "label": "Overcurrent Fault Direction Red (B)",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 44",
     "source": "sat02",
@@ -2472,11 +2800,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3044
+    "display_order": 3044,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 214
   },
   {
     "key": "sat02.tamper_detection",
-    "label": "Tamper Detection (SAT02)",
+    "label": "Tamper Detection",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 47",
     "source": "sat02",
@@ -2487,11 +2817,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3047
+    "display_order": 3047,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 215
   },
   {
     "key": "sat02.local_comm_enabled",
-    "label": "Local Comm Enabled (SAT02)",
+    "label": "Local Comm Enabled",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 50",
     "source": "sat02",
@@ -2502,11 +2834,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3050
+    "display_order": 3050,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 216
   },
   {
     "key": "sat02.password_enabled",
-    "label": "Password Enabled (SAT02)",
+    "label": "Password Enabled",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 53",
     "source": "sat02",
@@ -2517,11 +2851,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3053
+    "display_order": 3053,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 217
   },
   {
     "key": "sat02.delta_i_delta_t_fault_direction_green_a",
-    "label": "ΔI/ΔT Fault Direction Green (A) (SAT02)",
+    "label": "ΔI/ΔT Fault Direction Green (A)",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 59",
     "source": "sat02",
@@ -2532,11 +2868,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3059
+    "display_order": 3059,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 218
   },
   {
     "key": "sat02.delta_i_delta_t_fault_direction_red_b",
-    "label": "ΔI/ΔT Fault Direction Red (B) (SAT02)",
+    "label": "ΔI/ΔT Fault Direction Red (B)",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 62",
     "source": "sat02",
@@ -2547,11 +2885,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3062
+    "display_order": 3062,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 219
   },
   {
     "key": "sat02.conductor_temperature_alarm",
-    "label": "Conductor Temperature Alarm (SAT02)",
+    "label": "Conductor Temperature Alarm",
     "unit": null,
     "description": "Binary input — Satellite 02 — index 66",
     "source": "sat02",
@@ -2562,11 +2902,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3066
+    "display_order": 3066,
+    "iec104_type_id": 1,
+    "iec104_ioa_offset": 220
   },
   {
     "key": "sat02.momentary_fault_counter",
-    "label": "Momentary Fault Counter (SAT02)",
+    "label": "Momentary Fault Counter",
     "unit": "adet",
     "description": "Counter — Satellite 02 — index 4",
     "source": "sat02",
@@ -2577,11 +2919,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3204
+    "display_order": 3204,
+    "iec104_type_id": 15,
+    "iec104_ioa_offset": 2020
   },
   {
     "key": "sat02.permanent_fault_counter",
-    "label": "Permanent Fault Counter (SAT02)",
+    "label": "Permanent Fault Counter",
     "unit": "adet",
     "description": "Counter — Satellite 02 — index 5",
     "source": "sat02",
@@ -2592,11 +2936,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3205
+    "display_order": 3205,
+    "iec104_type_id": 15,
+    "iec104_ioa_offset": 2021
   },
   {
     "key": "sat02.test_point_level",
-    "label": "Test Point Level (SAT02)",
+    "label": "Test Point Level",
     "unit": null,
     "description": "Analog input — Satellite 02 — index 3",
     "source": "sat02",
@@ -2607,11 +2953,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3303
+    "display_order": 3303,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1200
   },
   {
     "key": "sat02.actual_current",
-    "label": "Actual Current (SAT02)",
+    "label": "Actual Current",
     "unit": "mA",
     "description": "Analog input — Satellite 02 — index 6",
     "source": "sat02",
@@ -2622,11 +2970,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3306
+    "display_order": 3306,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1201
   },
   {
     "key": "sat02.minimum_voltage",
-    "label": "Minimum Voltage (SAT02)",
+    "label": "Minimum Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 02 — index 9",
     "source": "sat02",
@@ -2637,11 +2987,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3309
+    "display_order": 3309,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1202
   },
   {
     "key": "sat02.maximum_voltage",
-    "label": "Maximum Voltage (SAT02)",
+    "label": "Maximum Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 02 — index 12",
     "source": "sat02",
@@ -2652,11 +3004,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3312
+    "display_order": 3312,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1203
   },
   {
     "key": "sat02.battery_voltage_satellite",
-    "label": "Battery Voltage Satellite (SAT02)",
+    "label": "Battery Voltage Satellite",
     "unit": null,
     "description": "Analog input — Satellite 02 — index 15",
     "source": "sat02",
@@ -2667,11 +3021,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3315
+    "display_order": 3315,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1204
   },
   {
     "key": "sat02.conductor_temperature_alarm_threshold",
-    "label": "Conductor Temperature Alarm Threshold (SAT02)",
+    "label": "Conductor Temperature Alarm Threshold",
     "unit": "°C",
     "description": "Analog input — Satellite 02 — index 116",
     "source": "sat02",
@@ -2682,11 +3038,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3316
+    "display_order": 3316,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1220
   },
   {
     "key": "sat02.trip_level",
-    "label": "Trip Level (SAT02)",
+    "label": "Trip Level",
     "unit": "mA",
     "description": "Analog input — Satellite 02 — index 18",
     "source": "sat02",
@@ -2697,11 +3055,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3318
+    "display_order": 3318,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1205
   },
   {
     "key": "sat02.nominal_voltage",
-    "label": "Nominal Voltage (SAT02)",
+    "label": "Nominal Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 02 — index 119",
     "source": "sat02",
@@ -2712,11 +3072,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3319
+    "display_order": 3319,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1221
   },
   {
     "key": "sat02.minimum_current",
-    "label": "Minimum Current (SAT02)",
+    "label": "Minimum Current",
     "unit": "mA",
     "description": "Analog input — Satellite 02 — index 22",
     "source": "sat02",
@@ -2727,11 +3089,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3322
+    "display_order": 3322,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1206
   },
   {
     "key": "sat02.pitch_angle",
-    "label": "Pitch Angle (SAT02)",
+    "label": "Pitch Angle",
     "unit": "°",
     "description": "Analog input — Satellite 02 — index 122",
     "source": "sat02",
@@ -2742,11 +3106,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3322
+    "display_order": 3322,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1222
   },
   {
     "key": "sat02.maximum_current",
-    "label": "Maximum Current (SAT02)",
+    "label": "Maximum Current",
     "unit": "mA",
     "description": "Analog input — Satellite 02 — index 25",
     "source": "sat02",
@@ -2757,11 +3123,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3325
+    "display_order": 3325,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1207
   },
   {
     "key": "sat02.average_current",
-    "label": "Average Current (SAT02)",
+    "label": "Average Current",
     "unit": "mA",
     "description": "Analog input — Satellite 02 — index 28",
     "source": "sat02",
@@ -2772,11 +3140,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3328
+    "display_order": 3328,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1208
   },
   {
     "key": "sat02.fault_current",
-    "label": "Fault Current (SAT02)",
+    "label": "Fault Current",
     "unit": "mA",
     "description": "Analog input — Satellite 02 — index 31",
     "source": "sat02",
@@ -2787,11 +3157,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3331
+    "display_order": 3331,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1209
   },
   {
     "key": "sat02.fault_duration",
-    "label": "Fault Duration (SAT02)",
+    "label": "Fault Duration",
     "unit": "ms",
     "description": "Analog input — Satellite 02 — index 34",
     "source": "sat02",
@@ -2802,11 +3174,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3334
+    "display_order": 3334,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1210
   },
   {
     "key": "sat02.last_good_known_current",
-    "label": "Last Good Known Current (SAT02)",
+    "label": "Last Good Known Current",
     "unit": "mA",
     "description": "Analog input — Satellite 02 — index 37",
     "source": "sat02",
@@ -2817,11 +3191,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3337
+    "display_order": 3337,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1211
   },
   {
     "key": "sat02.actual_voltage",
-    "label": "Actual Voltage (SAT02)",
+    "label": "Actual Voltage",
     "unit": "V",
     "description": "Analog input — Satellite 02 — index 40",
     "source": "sat02",
@@ -2832,11 +3208,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3340
+    "display_order": 3340,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1212
   },
   {
     "key": "sat02.conductor_temperature",
-    "label": "Conductor Temperature (SAT02)",
+    "label": "Conductor Temperature",
     "unit": "°C",
     "description": "Analog input — Satellite 02 — index 43",
     "source": "sat02",
@@ -2847,11 +3225,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3343
+    "display_order": 3343,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1213
   },
   {
     "key": "sat02.phase_angle",
-    "label": "Phase Angle (SAT02)",
+    "label": "Phase Angle",
     "unit": "°",
     "description": "Analog input — Satellite 02 — index 46",
     "source": "sat02",
@@ -2862,11 +3242,13 @@
     "scale": 0.1,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3346
+    "display_order": 3346,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1214
   },
   {
     "key": "sat02.serial_number",
-    "label": "Serial Number (SAT02)",
+    "label": "Serial Number",
     "unit": null,
     "description": "Analog input — Satellite 02 — index 61",
     "source": "sat02",
@@ -2877,11 +3259,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3361
+    "display_order": 3361,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1215
   },
   {
     "key": "sat02.firmware_version",
-    "label": "Firmware Version (SAT02)",
+    "label": "Firmware Version",
     "unit": null,
     "description": "Analog input — Satellite 02 — index 64",
     "source": "sat02",
@@ -2892,11 +3276,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3364
+    "display_order": 3364,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1216
   },
   {
     "key": "sat02.hardware_revision",
-    "label": "Hardware Revision (SAT02)",
+    "label": "Hardware Revision",
     "unit": null,
     "description": "Analog input — Satellite 02 — index 67",
     "source": "sat02",
@@ -2907,11 +3293,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3367
+    "display_order": 3367,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1217
   },
   {
     "key": "sat02.rssi_satellite",
-    "label": "RSSI Satellite (SAT02)",
+    "label": "RSSI Satellite",
     "unit": "dBm",
     "description": "Analog input — Satellite 02 — index 69",
     "source": "sat02",
@@ -2922,11 +3310,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3369
+    "display_order": 3369,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1218
   },
   {
     "key": "sat02.device_temperature",
-    "label": "Device Temperature (SAT02)",
+    "label": "Device Temperature",
     "unit": "°C",
     "description": "Analog input — Satellite 02 — index 71",
     "source": "sat02",
@@ -2937,11 +3327,13 @@
     "scale": 0.01,
     "offset": 0.0,
     "supports_alarm": true,
-    "display_order": 3371
+    "display_order": 3371,
+    "iec104_type_id": 13,
+    "iec104_ioa_offset": 1219
   },
   {
     "key": "sat02.info_serial_number",
-    "label": "Serial Number (metin)",
+    "label": "Serial Number",
     "unit": null,
     "description": "String — Satellite 02 — index 6",
     "source": "sat02",
@@ -2952,11 +3344,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3506
+    "display_order": 3506,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat02.info_fw_version_satellite",
-    "label": "FW Version Satellite (metin)",
+    "label": "FW Version Satellite",
     "unit": null,
     "description": "String — Satellite 02 — index 9",
     "source": "sat02",
@@ -2967,11 +3361,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3509
+    "display_order": 3509,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat02.info_last_configuration_update",
-    "label": "Last Configuration Update (metin)",
+    "label": "Last Configuration Update",
     "unit": null,
     "description": "String — Satellite 02 — index 12",
     "source": "sat02",
@@ -2982,11 +3378,13 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3512
+    "display_order": 3512,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   },
   {
     "key": "sat02.info_rtu_status_text",
-    "label": "RTU Status Text (metin)",
+    "label": "RTU Status Text",
     "unit": null,
     "description": "String — Satellite 02 — index 15",
     "source": "sat02",
@@ -2997,6 +3395,8 @@
     "scale": 1.0,
     "offset": 0.0,
     "supports_alarm": false,
-    "display_order": 3515
+    "display_order": 3515,
+    "iec104_type_id": null,
+    "iec104_ioa_offset": null
   }
 ]

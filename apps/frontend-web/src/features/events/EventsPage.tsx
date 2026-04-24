@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
 
 import type { SystemEvent } from "../../shared/types";
+import {
+  categoryFilterLabel,
+  categoryLabelTr,
+  categoryPillClass,
+  severityLabelTr,
+  severityPillClass
+} from "./eventDisplayLabels";
 
 type Props = {
   events: SystemEvent[];
@@ -27,8 +34,8 @@ export function EventsPage({ events, loading }: Props) {
   }, [events, categoryFilter, severityFilter, search]);
 
   const exportRows = filteredEvents.map((item) => ({
-    oncelik: item.severity,
-    kategori: item.category,
+    oncelik: severityLabelTr(item.severity),
+    kategori: categoryLabelTr(item.category),
     mesaj: item.message,
     kullanici: item.actor_username ?? "-",
     cihaz: item.device_code ?? "-",
@@ -78,18 +85,19 @@ export function EventsPage({ events, loading }: Props) {
           />
           <div className="alarms-filter-row">
             <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-              <option value="all">Tüm Kategoriler</option>
+              <option value="all">Tüm kategoriler</option>
               {categories.map((category) => (
                 <option key={category} value={category}>
-                  {category}
+                  {categoryFilterLabel(category)}
                 </option>
               ))}
             </select>
             <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}>
-              <option value="all">Tüm Öncelikler</option>
-              <option value="info">Bilgi</option>
-              <option value="warning">Uyarı</option>
-              <option value="error">Hata</option>
+              <option value="all">Tüm öncelikler</option>
+              <option value="info">{severityLabelTr("info")}</option>
+              <option value="warning">{severityLabelTr("warning")}</option>
+              <option value="error">{severityLabelTr("error")}</option>
+              <option value="critical">{severityLabelTr("critical")}</option>
             </select>
             <button className="secondary-btn action-btn" type="button" onClick={() => setShowExportModal(true)}>
               Export
@@ -112,12 +120,16 @@ export function EventsPage({ events, loading }: Props) {
             <tbody>
               {filteredEvents.map((item) => (
                 <tr key={item.id}>
-                  <td>
-                    <span className={`alarm-state ${item.severity === "warning" ? "state-open" : "state-ack"}`}>
-                      {item.severity}
+                  <td className="event-col-priority">
+                    <span className={severityPillClass(item.severity)} title={item.severity}>
+                      {severityLabelTr(item.severity)}
                     </span>
                   </td>
-                  <td>{item.category}</td>
+                  <td className="event-col-category">
+                    <span className={categoryPillClass(item.category)} title={item.category}>
+                      {categoryLabelTr(item.category)}
+                    </span>
+                  </td>
                   <td>{item.message}</td>
                   <td>{item.actor_username ?? "-"}</td>
                   <td>{item.device_code ?? "-"}</td>

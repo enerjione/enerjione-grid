@@ -9,8 +9,10 @@ from app.db.session import get_db
 from app.models.alarm import AlarmEvent
 from app.models.alarm_rule import AlarmRule
 from app.models.device import Device
+from app.models.gateway import Gateway
 from app.models.signal_catalog import SignalCatalog
 from app.schemas.alarm_rule import AlarmRuleRead
+from app.schemas.gateway import GatewayRead
 from app.schemas.internal import InternalAlarmIngest
 from app.schemas.signal_catalog import SignalCatalogRead
 from app.services.event_service import record_event
@@ -83,3 +85,49 @@ def ingest_alarm(
     )
     db.commit()
     return {"status": "accepted"}
+
+
+@router.get("/gateways", response_model=list[GatewayRead])
+def list_gateways_internal(
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Kontrol paneli ve diger ic servislerin gateway listesini (is_active dahil)
+    cekebilmesi icin token korumali endpoint. Installer login'e gerek kalmaz."""
+    _require_service_token(x_service_token)
+    stmt = select(Gateway).order_by(Gateway.name.asc())
+    return list(db.scalars(stmt).all())
+
+
+@router.post("/gateways/{gateway_code}/enable", response_model=GatewayRead)
+def enable_gateway_internal(
+    gateway_code: str,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Kontrol panelinin uzak gateway'i aktiflestirmesi icin servis token'li endpoint."""
+    _require_service_token(x_service_token)
+    row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    row.is_active = True
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.post("/gateways/{gateway_code}/disable", response_model=GatewayRead)
+def disable_gateway_internal(
+    gateway_code: str,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Kontrol panelinin uzak gateway'i pasiflestirmesi icin servis token'li endpoint."""
+    _require_service_token(x_service_token)
+    row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    row.is_active = False
+    db.commit()
+    db.refresh(row)
+    return row

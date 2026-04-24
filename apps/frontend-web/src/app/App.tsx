@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../components/Header";
 import { LoginForm } from "../features/auth/LoginForm";
 import { UserManagementPanel } from "../features/auth/UserManagementPanel";
 import { AlarmsPage } from "../features/alarms/AlarmsPage";
 import { EventsPage } from "../features/events/EventsPage";
+import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
 import { NotificationSettingsPanel } from "../features/settings/NotificationSettingsPanel";
 import { DeviceSidebar } from "../features/devices/DeviceSidebar";
-import { LiveValuesTab } from "../features/live-values/LiveValuesTab";
+import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { SignalsPage } from "../features/signals/SignalsPage";
 import { AlarmRulesPage } from "../features/alarm-rules/AlarmRulesPage";
@@ -31,7 +32,6 @@ import {
   fetchDevices,
   fetchGateways,
   fetchSystemEvents,
-  fetchLiveValues,
   fetchMe,
   fetchNotificationSettings,
   fetchOutboundTargets,
@@ -67,9 +67,9 @@ import type {
   AlarmEvent,
   AlarmRuleRow,
   AuthSession,
+  Dnp3ExtendedSettings,
   DeviceRow,
   Gateway,
-  LiveValue,
   NotificationSettings,
   OutboundTarget,
   SignalCatalogRow,
@@ -80,18 +80,26 @@ import type {
 } from "../shared/types";
 
 type TabId = "map" | "values";
-type PageMode = "home" | "alarms" | "events" | "engineering";
-type EngineeringPage = "devices" | "signals" | "alarm-rules" | "users" | "outbound" | "notifications";
+type PageMode = "home" | "alarms" | "events" | "system-status" | "engineering";
+type EngineeringPage =
+  | "devices"
+  | "signals"
+  | "live-values"
+  | "alarm-rules"
+  | "users"
+  | "outbound"
+  | "notifications";
 
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
   const [devices, setDevices] = useState<DeviceRow[]>([]);
-  const [liveValues, setLiveValues] = useState<LiveValue[]>([]);
   const [users, setUsers] = useState<UserRead[]>([]);
   const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [devicesByGateway, setDevicesByGateway] = useState<DeviceRow[]>([]);
+  /** Cihazlar sekmesinde listelenen gateway (kapsam); yenileme ve yoklama bunu kullanır */
+  const [devicePanelGatewayCode, setDevicePanelGatewayCode] = useState<string>("");
   const [outboundTargets, setOutboundTargets] = useState<OutboundTarget[]>([]);
   const [alarmsLoading, setAlarmsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
@@ -118,13 +126,18 @@ export function App() {
   const [signalLoading, setSignalLoading] = useState(false);
   const [signalLiveLoading, setSignalLiveLoading] = useState(false);
   const [signalError, setSignalError] = useState("");
+  const [signalLiveError, setSignalLiveError] = useState("");
   const [alarmRules, setAlarmRules] = useState<AlarmRuleRow[]>([]);
   const [alarmRulesLoading, setAlarmRulesLoading] = useState(false);
   const [alarmRulesError, setAlarmRulesError] = useState("");
 
+  const signalLiveFetchIdRef = useRef(0);
+
   useEffect(() => {
     const load = async () => {
       if (!session) return;
+      setSignalLiveValues([]);
+      setSignalLiveError("");
       setLoadingData(true);
       try {
         const me = await fetchMe(session.accessToken);
@@ -133,30 +146,33 @@ export function App() {
         setSettingsEmail(me.email);
         const loadedDevices = await fetchDevices(session.accessToken);
         setDevices(loadedDevices);
-        setDevicesByGateway(loadedDevices);
-        const deviceNameMap = new Map<number, string>(loadedDevices.map((item) => [item.id, item.name]));
-        const telemetry = await fetchLiveValues(session.accessToken, deviceNameMap);
-        setLiveValues(telemetry);
         setAlarmsLoading(true);
         const alarmRows = await fetchAlarmEvents(session.accessToken);
         setAlarms(alarmRows);
         const eventRows = await fetchSystemEvents(session.accessToken);
         setEvents(eventRows);
-        if (session.role === "engineer" || session.role === "installer") {
-          const gatewayRows = await fetchGateways(session.accessToken);
-          setGateways(gatewayRows);
+        const gatewayRows = await fetchGateways(session.accessToken);
+        setGateways(gatewayRows);
+        if (gatewayRows.length > 0) {
+          const g0 = gatewayRows[0].code;
+          setDevicePanelGatewayCode(g0);
+          setDevicesByGateway(loadedDevices.filter((d) => d.gatewayCode === g0));
         } else {
-          setGateways([]);
+          setDevicePanelGatewayCode("");
+          setDevicesByGateway(loadedDevices);
         }
-        if (session.role === "installer") {
+        if (session.role === "engineer" || session.role === "installer") {
           const allUsers = await fetchUsers(session.accessToken);
           setUsers(allUsers);
+        } else {
+          setUsers([]);
+        }
+        if (session.role === "installer") {
           const outboundRows = await fetchOutboundTargets(session.accessToken);
           setOutboundTargets(outboundRows);
           const notificationRows = await fetchNotificationSettings(session.accessToken);
           setNotificationSettings(notificationRows);
         } else {
-          setUsers([]);
           setOutboundTargets([]);
           setNotificationSettings(null);
         }
@@ -215,16 +231,17 @@ export function App() {
     setSession(null);
     setCurrentUser(null);
     setDevices([]);
-    setLiveValues([]);
     setUsers([]);
     setAlarms([]);
     setEvents([]);
     setGateways([]);
     setDevicesByGateway([]);
+    setDevicePanelGatewayCode("");
     setOutboundTargets([]);
     setNotificationSettings(null);
     setSignalCatalog([]);
     setSignalLiveValues([]);
+    setSignalLiveError("");
     setAlarmRules([]);
     setEngineeringPage("devices");
     setPageMode("home");
@@ -265,18 +282,52 @@ export function App() {
     await reloadSignals();
   };
 
-  const handleRefreshSignalLive = async () => {
+  const handleRefreshSignalLive = useCallback(async () => {
     if (!session) return;
+    const id = ++signalLiveFetchIdRef.current;
     setSignalLiveLoading(true);
+    setSignalLiveError("");
     try {
       const rows = await fetchSignalLiveValues(session.accessToken);
+      if (id !== signalLiveFetchIdRef.current) {
+        return;
+      }
       setSignalLiveValues(rows);
-    } catch {
+    } catch (err) {
+      if (id !== signalLiveFetchIdRef.current) {
+        return;
+      }
       setSignalLiveValues([]);
+      setSignalLiveError(
+        err instanceof Error ? err.message : "Canlı değerler yüklenemedi."
+      );
     } finally {
-      setSignalLiveLoading(false);
+      if (id === signalLiveFetchIdRef.current) {
+        setSignalLiveLoading(false);
+      }
     }
-  };
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    if (pageMode === "engineering" && engineeringPage === "live-values") {
+      if (session.role !== "engineer" && session.role !== "installer") {
+        return;
+      }
+      void handleRefreshSignalLive();
+    }
+  }, [session, pageMode, engineeringPage, handleRefreshSignalLive]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    if (pageMode === "home" && activeTab === "values") {
+      void handleRefreshSignalLive();
+    }
+  }, [session, pageMode, activeTab, handleRefreshSignalLive]);
 
   const reloadAlarmRules = async () => {
     if (!session) return;
@@ -314,7 +365,8 @@ export function App() {
   };
 
   const reloadUsers = async () => {
-    if (!session || session.role !== "installer") return;
+    if (!session) return;
+    if (session.role !== "engineer" && session.role !== "installer") return;
     const allUsers = await fetchUsers(session.accessToken);
     setUsers(allUsers);
   };
@@ -397,6 +449,7 @@ export function App() {
     if (session.role !== "engineer" && session.role !== "installer") return;
     const rows = await fetchGateways(session.accessToken);
     setGateways(rows);
+    return rows;
   };
 
   const handleCreateGateway = async (payload: {
@@ -420,8 +473,34 @@ export function App() {
 
   const handleDeleteGateway = async (gatewayCode: string) => {
     if (!session) return;
+    const gateway = gateways.find((item) => item.code === gatewayCode);
+    const displayName = gateway?.name ?? gatewayCode;
+    const childCount = devices.filter((d) => d.gatewayCode === gatewayCode).length;
+    const message =
+      childCount > 0
+        ? [
+            `"${displayName}" gateway kalıcı olarak silinecek.`,
+            `Bu gatewaye bağlı ${childCount} cihaz, bu cihazlara ait telemetri ve alarm kayıtları da silinecek.`,
+            "Bu işlem geri alınamaz. Onaylıyor musunuz?"
+          ].join("\n\n")
+        : [
+            `"${displayName}" gateway kalıcı olarak silinecek.`,
+            "Bu işlem geri alınamaz. Onaylıyor musunuz?"
+          ].join("\n\n");
+    if (!window.confirm(message)) return;
     await deleteGateway(session.accessToken, gatewayCode);
-    await reloadGateways();
+    const nextGateways = await reloadGateways();
+    const all = await fetchDevices(session.accessToken);
+    setDevices(all);
+    if (nextGateways && nextGateways.length > 0) {
+      const firstCode = nextGateways[0].code;
+      setDevicePanelGatewayCode(firstCode);
+      const scoped = await fetchDevices(session.accessToken, firstCode);
+      setDevicesByGateway(scoped);
+    } else {
+      setDevicePanelGatewayCode("");
+      setDevicesByGateway([]);
+    }
   };
 
   const handleUpdateGateway = async (
@@ -433,11 +512,61 @@ export function App() {
     await reloadGateways();
   };
 
-  const handleSelectGatewayForDevices = async (gatewayCode: string) => {
+  const handleSelectGatewayForDevices = useCallback(
+    async (gatewayCode: string) => {
+      if (!session) return;
+      setDevicePanelGatewayCode(gatewayCode);
+      const scopedDevices = await fetchDevices(session.accessToken, gatewayCode);
+      setDevicesByGateway(scopedDevices);
+    },
+    [session]
+  );
+
+  const refreshDevicePanelData = useCallback(async () => {
     if (!session) return;
-    const scopedDevices = await fetchDevices(session.accessToken, gatewayCode);
-    setDevicesByGateway(scopedDevices);
-  };
+    if (session.role !== "engineer" && session.role !== "installer") return;
+    try {
+      const [gw, allDev] = await Promise.all([
+        fetchGateways(session.accessToken),
+        fetchDevices(session.accessToken)
+      ]);
+      setGateways(gw);
+      setDevices(allDev);
+      if (devicePanelGatewayCode) {
+        const still = gw.some((g) => g.code === devicePanelGatewayCode);
+        const code = still ? devicePanelGatewayCode : (gw[0]?.code ?? "");
+        if (code) {
+          if (!still) {
+            setDevicePanelGatewayCode(code);
+          }
+          setDevicesByGateway(allDev.filter((d) => d.gatewayCode === code));
+        } else {
+          setDevicePanelGatewayCode("");
+          setDevicesByGateway(allDev);
+        }
+      } else {
+        if (gw.length > 0) {
+          const c = gw[0].code;
+          setDevicePanelGatewayCode(c);
+          setDevicesByGateway(allDev.filter((d) => d.gatewayCode === c));
+        } else {
+          setDevicesByGateway(allDev);
+        }
+      }
+    } catch {
+      // API hatasi ust katmanda
+    }
+  }, [session, devicePanelGatewayCode]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (pageMode !== "engineering" || engineeringPage !== "devices") return;
+    if (session.role !== "engineer" && session.role !== "installer") return;
+    const id = window.setInterval(() => {
+      void refreshDevicePanelData();
+    }, 12000);
+    return () => window.clearInterval(id);
+  }, [pageMode, engineeringPage, session, refreshDevicePanelData]);
 
   const handleCreateDevice = async (payload: {
     code: string;
@@ -445,7 +574,9 @@ export function App() {
     description?: string | null;
     gateway_code?: string | null;
     ip_address: string;
+    dnp3_outstation_port: number;
     dnp3_address: number;
+    dnp3_extended?: Dnp3ExtendedSettings | null;
     poll_interval_sec: number;
     timeout_ms: number;
     retry_count: number;
@@ -458,11 +589,19 @@ export function App() {
     const all = await fetchDevices(session.accessToken);
     setDevices(all);
     if (payload.gateway_code) {
+      setDevicePanelGatewayCode(payload.gateway_code);
       const scoped = await fetchDevices(session.accessToken, payload.gateway_code);
       setDevicesByGateway(scoped);
     } else {
       setDevicesByGateway(all);
     }
+    try {
+      const signalsRows = await fetchSignals(session.accessToken);
+      setSignalCatalog(signalsRows);
+    } catch {
+      // sinyal listesi tazelense iyi, canlı matrisin etiketleriyle uyum kalsin
+    }
+    await handleRefreshSignalLive();
   };
 
   const handleUpdateDevice = async (
@@ -472,7 +611,9 @@ export function App() {
       description?: string | null;
       gateway_code?: string | null;
       ip_address?: string;
+      dnp3_outstation_port?: number;
       dnp3_address?: number;
+      dnp3_extended?: Dnp3ExtendedSettings;
       poll_interval_sec?: number;
       timeout_ms?: number;
       retry_count?: number;
@@ -498,6 +639,7 @@ export function App() {
     const all = await fetchDevices(session.accessToken);
     setDevices(all);
     setDevicesByGateway((prev) => prev.filter((item) => item.code !== deviceCode));
+    await handleRefreshSignalLive();
   };
 
   const reloadOutboundTargets = async () => {
@@ -634,6 +776,46 @@ export function App() {
     [devices, selectedDeviceId]
   );
 
+  const handleRefreshSystemStatus = async () => {
+    if (!session) return;
+    setLoadingData(true);
+    try {
+      const [dev, gw, al] = await Promise.all([
+        fetchDevices(session.accessToken),
+        fetchGateways(session.accessToken),
+        fetchAlarmEvents(session.accessToken)
+      ]);
+      setDevices(dev);
+      setGateways(gw);
+      setAlarms(al);
+      if (devicePanelGatewayCode) {
+        const still = gw.some((g) => g.code === devicePanelGatewayCode);
+        const code = still ? devicePanelGatewayCode : (gw[0]?.code ?? "");
+        if (code) {
+          if (!still) {
+            setDevicePanelGatewayCode(code);
+          }
+          setDevicesByGateway(dev.filter((d) => d.gatewayCode === code));
+        } else {
+          setDevicePanelGatewayCode("");
+          setDevicesByGateway(dev);
+        }
+      } else {
+        if (gw.length > 0) {
+          const c = gw[0].code;
+          setDevicePanelGatewayCode(c);
+          setDevicesByGateway(dev.filter((d) => d.gatewayCode === c));
+        } else {
+          setDevicesByGateway(dev);
+        }
+      }
+    } catch {
+      // Oturum hatasi ust seviyede yakala
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
   if (!session) {
     return <LoginForm onSubmit={handleLogin} loading={loadingLogin} error={authError} />;
   }
@@ -660,6 +842,25 @@ export function App() {
               >
                 Cihazlar
               </button>
+              {session.role === "engineer" || session.role === "installer" ? (
+                <button
+                  className={engineeringPage === "live-values" ? "active" : ""}
+                  onClick={() => setEngineeringPage("live-values")}
+                >
+                  Canlı Değerler
+                </button>
+              ) : null}
+              {session.role === "engineer" || session.role === "installer" ? (
+                <button
+                  className={engineeringPage === "users" ? "active" : ""}
+                  onClick={() => {
+                    setEngineeringPage("users");
+                    void reloadUsers();
+                  }}
+                >
+                  Kullanıcılar
+                </button>
+              ) : null}
               {session.role === "installer" ? (
                 <>
                   <button
@@ -680,12 +881,6 @@ export function App() {
                     }}
                   >
                     Alarm Yönetimi
-                  </button>
-                  <button
-                    className={engineeringPage === "users" ? "active" : ""}
-                    onClick={() => setEngineeringPage("users")}
-                  >
-                    Kullanıcılar
                   </button>
                   <button
                     className={engineeringPage === "outbound" ? "active" : ""}
@@ -733,14 +928,19 @@ export function App() {
               <SignalsPage
                 role={session.role}
                 signals={signalCatalog}
-                liveValues={signalLiveValues}
                 loading={signalLoading}
-                liveLoading={signalLiveLoading}
                 error={signalError}
-                onCreate={handleCreateSignal}
                 onUpdate={handleUpdateSignal}
-                onDelete={handleDeleteSignal}
-                onRefreshLive={handleRefreshSignalLive}
+              />
+            ) : null}
+            {engineeringPage === "live-values" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <LiveValuesPage
+                values={signalLiveValues}
+                signals={signalCatalog}
+                loading={signalLiveLoading}
+                error={signalLiveError}
+                onRefresh={handleRefreshSignalLive}
               />
             ) : null}
             {engineeringPage === "alarm-rules" && session.role === "installer" ? (
@@ -755,10 +955,11 @@ export function App() {
                 onDelete={handleDeleteAlarmRule}
               />
             ) : null}
-            {engineeringPage === "users" && session.role === "installer" ? (
+            {engineeringPage === "users" && (session.role === "engineer" || session.role === "installer") ? (
               <UserManagementPanel
                 users={users}
                 currentUserId={currentUser?.id}
+                allowInstallerRole={session.role === "installer"}
                 onCreate={handleCreateUser}
                 onDelete={handleDeleteUser}
                 onUpdate={handleUpdateUser}
@@ -804,6 +1005,15 @@ export function App() {
             {pageMode === "events" ? (
               <EventsPage events={events} loading={loadingData} />
             ) : null}
+            {pageMode === "system-status" ? (
+              <SystemStatusPage
+                devices={devices}
+                gateways={gateways}
+                alarms={alarms}
+                loading={loadingData}
+                onRefresh={handleRefreshSystemStatus}
+              />
+            ) : null}
           </main>
         ) : (
           <>
@@ -826,7 +1036,15 @@ export function App() {
                   onSelectDevice={setSelectedDeviceId}
                 />
               ) : null}
-              {activeTab === "values" ? <LiveValuesTab values={liveValues} /> : null}
+              {activeTab === "values" ? (
+                <LiveValuesPage
+                  values={signalLiveValues}
+                  signals={signalCatalog}
+                  loading={signalLiveLoading}
+                  error={signalLiveError}
+                  onRefresh={handleRefreshSignalLive}
+                />
+              ) : null}
             </main>
           </>
         )}

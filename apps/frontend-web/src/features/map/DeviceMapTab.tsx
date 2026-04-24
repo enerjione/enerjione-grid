@@ -26,7 +26,7 @@ function FlyToSelected({ selectedDevice }: { selectedDevice?: DeviceRow }) {
 }
 
 function markerIcon(status: DeviceRow["communicationStatus"]) {
-  const color = status === "online" ? "#10b981" : status === "offline" ? "#ef4444" : "#f59e0b";
+  const color = status === "online" ? "#10b981" : "#ef4444";
   return L.divIcon({
     className: "device-pin-wrapper",
     html: `<span class="device-pin" style="background:${color}"></span>`,

@@ -54,11 +54,15 @@ class ServiceConfig:
 
 @dataclass
 class BackendSettings:
-    """Kontrol panelinin backend API ile haberlesebilmesi icin gerekli ayarlar."""
+    """Kontrol panelinin backend API ile haberlesebilmesi icin gerekli ayarlar.
+
+    Panel artik installer hesabiyla JWT login yapmaz; backend'in
+    `internal_service_token` degeri ile `X-Service-Token` header'inin
+    alisveris etmesi yeterli. Boylece kisisel bir kullanici hesabina bagimli
+    kalmaz ve token backend .env'i ile senkronize edilir."""
 
     base_url: str = "http://127.0.0.1:8000/api/v1"
-    installer_email: str = "installer@horstman.local"
-    installer_password: str = "installer123"
+    service_token: str = "change-me-internal-token"
 
 
 @dataclass
@@ -90,6 +94,7 @@ class SetupTask:
 class ServiceRuntime:
     process: subprocess.Popen | None = None
     pending: bool = False  # start/stop sürüyor
+    pending_action: str | None = None  # "start" | "stop" — UI'da başlatılıyor / durduruluyor ayrımı
     logs: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_BUFFER_SIZE))
 
 
@@ -119,8 +124,7 @@ def read_config() -> tuple[list[ServiceConfig], list[ServiceConfig], BackendSett
     backend_raw = data.get("backend") or {}
     backend = BackendSettings(
         base_url=backend_raw.get("base_url", "http://127.0.0.1:8000/api/v1").rstrip("/"),
-        installer_email=backend_raw.get("installer_email", "installer@horstman.local"),
-        installer_password=backend_raw.get("installer_password", "installer123"),
+        service_token=backend_raw.get("service_token", "change-me-internal-token"),
     )
     return services, gateways, backend
 
@@ -296,15 +300,15 @@ class BackendApiError(RuntimeError):
 class BackendClient:
     """Backend API ile HTTP konusmasini saglayan kucuk istemci.
 
-    Panelin gateway listesini backend'den cekmesi, gateway'i aktif/pasife
-    alabilmesi ve silebilmesi icin kullanilir. JWT token'i login ile alir ve
-    401 olursa tekrar login dener."""
+    Panelin gateway listesini backend'den cekmesi ve gateway'i aktif/pasife
+    alabilmesi icin kullanilir. Kullanici oturumuna bagimli degildir; backend'in
+    `internal_service_token` degeri ile eslesen `X-Service-Token` header'i
+    gonderilir. `/internal/*` endpoint'leri bu sayede kisisel bir hesap
+    acilmadan da calisir."""
 
     def __init__(self, settings: BackendSettings, request_timeout: float = 6.0) -> None:
         self.settings = settings
         self.request_timeout = request_timeout
-        self._token: str | None = None
-        self._lock = threading.Lock()
 
     def _build_url(self, path: str) -> str:
         if path.startswith("http"):
@@ -314,78 +318,29 @@ class BackendClient:
             path = "/" + path
         return f"{base}{path}"
 
-    def _login(self) -> str:
-        url = self._build_url("/auth/login")
-        payload = json.dumps(
-            {
-                "email": self.settings.installer_email,
-                "password": self.settings.installer_password,
-            }
-        ).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            method="POST",
-            headers={"Content-Type": "application/json"},
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=self.request_timeout) as resp:
-                body = resp.read().decode("utf-8") if resp.length != 0 else resp.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:200]
-            raise BackendApiError(
-                f"Installer login basarisiz ({exc.code}): {detail}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise BackendApiError(f"Backend erisilemiyor: {exc.reason}") from exc
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError as exc:
-            raise BackendApiError("Backend gecerli bir JSON dondurmedi.") from exc
-        token = data.get("access_token") or data.get("accessToken")
-        if not token:
-            raise BackendApiError("Login yaniti access_token icermedi.")
-        return str(token)
-
-    def _ensure_token(self, force: bool = False) -> str:
-        with self._lock:
-            if force or not self._token:
-                self._token = self._login()
-            return self._token
-
     def _request(self, method: str, path: str, *, body: dict | None = None) -> dict | list | None:
-        token = self._ensure_token()
         url = self._build_url(path)
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"X-Service-Token": self.settings.service_token}
         if data is not None:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
-
-        def _do() -> dict | list | None:
+        try:
             with urllib.request.urlopen(req, timeout=self.request_timeout) as resp:
-                if resp.status == 204 or resp.length == 0:
+                if resp.status == 204:
                     return None
                 raw = resp.read().decode("utf-8")
                 if not raw:
                     return None
                 return json.loads(raw)
-
-        try:
-            return _do()
         except urllib.error.HTTPError as exc:
-            if exc.code == 401:
-                # Token suresi dolmus olabilir; yeniden login dene.
-                token = self._ensure_token(force=True)
-                req.add_header("Authorization", f"Bearer {token}")
-                try:
-                    return _do()
-                except urllib.error.HTTPError as exc2:
-                    detail = exc2.read().decode("utf-8", errors="replace")[:200]
-                    raise BackendApiError(
-                        f"{method} {path} basarisiz ({exc2.code}): {detail}"
-                    ) from exc2
             detail = exc.read().decode("utf-8", errors="replace")[:200]
+            if exc.code == 401:
+                raise BackendApiError(
+                    "Servis token'i reddedildi. `service_control_panel.config.json` "
+                    "icindeki `backend.service_token` degerinin backend .env "
+                    "`INTERNAL_SERVICE_TOKEN` ile ayni oldugundan emin ol."
+                ) from exc
             raise BackendApiError(
                 f"{method} {path} basarisiz ({exc.code}): {detail}"
             ) from exc
@@ -395,7 +350,7 @@ class BackendClient:
             ) from exc
 
     def list_gateways(self) -> list[RemoteGateway]:
-        data = self._request("GET", "/gateways") or []
+        data = self._request("GET", "/internal/gateways") or []
         result: list[RemoteGateway] = []
         if not isinstance(data, list):
             return result
@@ -420,13 +375,10 @@ class BackendClient:
         return result
 
     def enable_gateway(self, code: str) -> None:
-        self._request("POST", f"/gateways/{code}/enable")
+        self._request("POST", f"/internal/gateways/{code}/enable")
 
     def disable_gateway(self, code: str) -> None:
-        self._request("POST", f"/gateways/{code}/disable")
-
-    def delete_gateway(self, code: str) -> None:
-        self._request("DELETE", f"/gateways/{code}")
+        self._request("POST", f"/internal/gateways/{code}/disable")
 
 
 class ServiceControlPanel:
@@ -856,6 +808,7 @@ class ServiceControlPanel:
 
     def _start_service_sync(self, svc: ServiceConfig) -> None:
         rt = self.runtimes[svc.name]
+        rt.pending_action = "start"
         rt.pending = True
         try:
             if svc.service_type == "windows_service":
@@ -913,9 +866,11 @@ class ServiceControlPanel:
             ).start()
         finally:
             rt.pending = False
+            rt.pending_action = None
 
     def _stop_service_sync(self, svc: ServiceConfig) -> None:
         rt = self.runtimes[svc.name]
+        rt.pending_action = "stop"
         rt.pending = True
         try:
             if svc.service_type == "windows_service":
@@ -1007,6 +962,7 @@ class ServiceControlPanel:
             )
         finally:
             rt.pending = False
+            rt.pending_action = None
 
     def _restart_service_sync(self, svc: ServiceConfig) -> None:
         if svc.service_type == "windows_service":
@@ -1250,14 +1206,14 @@ class ServiceControlPanel:
         toolbar.pack(fill=tk.X, pady=(0, 8))
         ttk.Label(
             toolbar,
-            text="Uzak Gateway'ler",
+            text="Gateway'ler",
             font=("Segoe UI", 11, "bold"),
             foreground="#0f172a",
         ).pack(side=tk.LEFT)
         ttk.Label(
             toolbar,
-            text="  · backend kayıtlarından otomatik çekilir; farklı sunucularda olabilir.",
-            foreground="#475569",
+            text="  · Web uygulamasındaki liste ile aynıdır",
+            foreground="#64748b",
         ).pack(side=tk.LEFT)
 
         ttk.Button(
@@ -1268,25 +1224,22 @@ class ServiceControlPanel:
             width=10,
         ).pack(side=tk.RIGHT, padx=(8, 0))
 
-        self.remote_gw_status_var = tk.StringVar(value="Gateway listesi yükleniyor...")
+        self.remote_gw_status_var = tk.StringVar(value="Liste yükleniyor…")
         ttk.Label(
             parent,
             textvariable=self.remote_gw_status_var,
-            foreground="#475569",
+            foreground="#64748b",
         ).pack(anchor="w", pady=(0, 6))
 
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(fill=tk.BOTH, expand=True)
 
         columns = (
-            "code",
-            "name",
+            "gateway",
             "control",
-            "status",
-            "health",
+            "polling",
+            "reach",
             "last_seen",
-            "scope",
-            "actions",
         )
         tree = ttk.Treeview(
             tree_frame,
@@ -1295,22 +1248,16 @@ class ServiceControlPanel:
             height=10,
             selectmode="browse",
         )
-        tree.heading("code", text="Kod")
-        tree.heading("name", text="Ad")
-        tree.heading("control", text="Kontrol Adresi")
-        tree.heading("status", text="Backend Durumu")
-        tree.heading("health", text="TCP Sağlık")
-        tree.heading("last_seen", text="Son Görülme")
-        tree.heading("scope", text="Kapsam")
-        tree.heading("actions", text="")
-        tree.column("code", width=110, anchor="w", stretch=False)
-        tree.column("name", width=180, anchor="w", stretch=False)
-        tree.column("control", width=190, anchor="w", stretch=False)
-        tree.column("status", width=120, anchor="center", stretch=False)
-        tree.column("health", width=140, anchor="center", stretch=False)
-        tree.column("last_seen", width=160, anchor="w", stretch=False)
-        tree.column("scope", width=120, anchor="w", stretch=False)
-        tree.column("actions", width=120, anchor="center", stretch=True)
+        tree.heading("gateway", text="Gateway")
+        tree.heading("control", text="Uzak adres")
+        tree.heading("polling", text="Veri toplama")
+        tree.heading("reach", text="Uzak erişim")
+        tree.heading("last_seen", text="Son görülme")
+        tree.column("gateway", width=220, anchor="w", stretch=True)
+        tree.column("control", width=160, anchor="w", stretch=False)
+        tree.column("polling", width=100, anchor="center", stretch=False)
+        tree.column("reach", width=100, anchor="center", stretch=False)
+        tree.column("last_seen", width=150, anchor="w", stretch=False)
 
         tree.tag_configure("active", foreground="#15803d")
         tree.tag_configure("inactive", foreground="#b45309")
@@ -1329,22 +1276,22 @@ class ServiceControlPanel:
         action_bar.pack(fill=tk.X, pady=(8, 0))
         ttk.Label(
             action_bar,
-            text="Seçili gateway için:",
-            foreground="#475569",
+            text="Seçin ve:",
+            foreground="#64748b",
         ).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(
             action_bar,
-            text="Başlat (Aktifleştir)",
+            text="Başlat",
             style="Primary.TButton",
             command=lambda: self._remote_gateway_action("enable"),
-            width=18,
+            width=12,
         ).pack(side=tk.LEFT, padx=4)
         ttk.Button(
             action_bar,
-            text="Durdur (Pasifleştir)",
+            text="Durdur",
             style="Warn.TButton",
             command=lambda: self._remote_gateway_action("disable"),
-            width=18,
+            width=12,
         ).pack(side=tk.LEFT, padx=4)
         ttk.Button(
             action_bar,
@@ -1355,11 +1302,8 @@ class ServiceControlPanel:
         ).pack(side=tk.LEFT, padx=4)
         ttk.Label(
             action_bar,
-            text="  Başlat/Durdur komutları backend'deki `is_active` bayrağını değiştirir; "
-            "uzak collector bir sonraki konfig refresh'te bunu görüp polling'i "
-            "askıya alır ya da devam ettirir.",
-            foreground="#64748b",
-            wraplength=700,
+            text="  Uzak tarafta birkaç saniye içinde uygulanır.",
+            foreground="#94a3b8",
         ).pack(side=tk.LEFT, padx=(8, 0))
 
     def refresh_remote_gateways(self) -> None:
@@ -1396,43 +1340,36 @@ class ServiceControlPanel:
             tree.delete(item)
         if not self.remote_gateways:
             self.remote_gw_status_var.set(
-                "Backend'de kayıtlı gateway bulunamadı. Frontend > Mühendislik > "
-                "Gateway Yönetimi ekranından yeni gateway ekleyin."
+                "Henüz kayıtlı gateway yok. Web uygulamasında "
+                "Mühendislik → Cihazlar bölümünden ekleyebilirsiniz."
             )
             return
         for gw in self.remote_gateways:
-            control_str = (
-                f"{gw.control_host}:{gw.control_port}" if gw.control_port else f"{gw.control_host} (—)"
-            )
-            health_text, _ = self._format_health(
-                "UP" if is_port_open(gw.control_host, gw.control_port) else "DOWN",
-                gw.control_host,
-                gw.control_port,
-            )
-            status_text = "AKTİF" if gw.is_active else "PASİF"
+            label = f"{gw.name}  ({gw.code})"
+            if gw.control_port and int(gw.control_port) > 0:
+                control_str = f"{gw.control_host}:{gw.control_port}"
+                reach = "Evet" if is_port_open(gw.control_host, gw.control_port) else "Hayır"
+            else:
+                control_str = f"{gw.control_host}  (uzaktan izleme kapalı)"
+                reach = "—"
+            polling = "Açık" if gw.is_active else "Duraklatıldı"
             tag = "active" if gw.is_active else "inactive"
-            last_seen = gw.last_seen_at or "-"
-            scope = gw.device_code_prefix + "*" if gw.device_code_prefix else "Tümü"
+            last_seen = gw.last_seen_at or "—"
             tree.insert(
                 "",
                 "end",
                 iid=gw.code,
                 values=(
-                    gw.code,
-                    gw.name,
+                    label,
                     control_str,
-                    status_text,
-                    health_text,
+                    polling,
+                    reach,
                     last_seen,
-                    scope,
-                    "",
                 ),
                 tags=(tag,),
             )
-        self.remote_gw_status_var.set(
-            f"{len(self.remote_gateways)} gateway listelendi · "
-            f"backend: {self.backend_settings.base_url}"
-        )
+        n = len(self.remote_gateways)
+        self.remote_gw_status_var.set(f"{n} gateway listelendi.")
 
     def _apply_remote_gateway_error(self) -> None:
         tree = self.remote_gw_tree
@@ -1441,7 +1378,7 @@ class ServiceControlPanel:
         for item in tree.get_children(""):
             tree.delete(item)
         self.remote_gw_status_var.set(
-            f"Backend'e ulaşılamıyor: {self._remote_gw_last_error}"
+            f"Sunucuya ulaşılamıyor ({self._remote_gw_last_error})"
         )
 
     def _remote_gateway_action(self, action: str) -> None:
@@ -1451,7 +1388,7 @@ class ServiceControlPanel:
         selection = tree.selection()
         if not selection:
             self._set_action_info(
-                "Önce tablodan bir gateway satırı seçin.", is_error=True
+                "Önce listeden bir gateway seçin.", is_error=True
             )
             return
         gateway_code = selection[0]
@@ -1467,22 +1404,22 @@ class ServiceControlPanel:
                 if action == "enable":
                     self.backend_client.enable_gateway(gateway.code)
                     self._set_action_info_threadsafe(
-                        f"{gateway.code}: aktifleştirildi (is_active=true)."
+                        f"{gateway.name}: veri toplama açıldı."
                     )
                 elif action == "disable":
                     self.backend_client.disable_gateway(gateway.code)
                     self._set_action_info_threadsafe(
-                        f"{gateway.code}: pasifleştirildi (is_active=false)."
+                        f"{gateway.name}: veri toplama duraklatıldı."
                     )
                 elif action == "restart":
                     self.backend_client.disable_gateway(gateway.code)
                     self._set_action_info_threadsafe(
-                        f"{gateway.code}: yeniden başlatılıyor — önce pasifleştirildi."
+                        f"{gateway.name}: yeniden başlatılıyor…"
                     )
                     time.sleep(3.0)
                     self.backend_client.enable_gateway(gateway.code)
                     self._set_action_info_threadsafe(
-                        f"{gateway.code}: yeniden başlatıldı (aktifleştirildi)."
+                        f"{gateway.name}: yeniden başlatıldı."
                     )
             except BackendApiError as exc:
                 self._set_action_info_threadsafe(
@@ -1790,7 +1727,10 @@ class ServiceControlPanel:
                 process = rt.process if rt else None
                 pending = bool(rt and rt.pending)
                 if pending:
-                    state = "START_PENDING"
+                    if rt and getattr(rt, "pending_action", None) == "stop":
+                        state = "STOP_PENDING"
+                    else:
+                        state = "START_PENDING"
                 elif process is not None and process.poll() is None:
                     state = "RUNNING"
                 else:
@@ -1864,10 +1804,12 @@ class ServiceControlPanel:
             return "● ÇALIŞIYOR", "#15803d"
         if normalized == "RUNNING_EXTERNAL":
             return "● ÇALIŞIYOR (dış)", "#15803d"
-        if normalized in {"STOPPED", "STOP_PENDING"}:
+        if normalized == "STOPPED":
             return "● DURDU", "#b45309"
+        if normalized == "STOP_PENDING":
+            return "● DURDURULUYOR…", "#b45309"
         if normalized in {"START_PENDING", "CONTINUE_PENDING"}:
-            return "● BAŞLATILIYOR", "#1d4ed8"
+            return "● BAŞLATILIYOR…", "#1d4ed8"
         if normalized in {"PAUSED", "PAUSE_PENDING"}:
             return "● DURAKLATILDI", "#7c3aed"
         if normalized == "NOT_FOUND":

@@ -1,10 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class OutboundTargetCreate(BaseModel):
     name: str
+    # rest | mqtt | iec104 (ileride modbus/opcua)
     protocol: str
-    endpoint: str
+    endpoint: str = ""
     topic: str | None = None
     event_filter: str = "all"
     auth_header: str | None = None
@@ -12,6 +13,11 @@ class OutboundTargetCreate(BaseModel):
     qos: int = 0
     retain: bool = False
     is_active: bool = True
+    # IEC 104 server parametreleri (rest/mqtt icin bos birakilir):
+    listen_host: str | None = None
+    listen_port: int | None = Field(default=None, ge=1, le=65535)
+    iec104_common_address: int | None = Field(default=None, ge=0, le=65535)
+    iec104_ioa_device_stride: int | None = Field(default=None, ge=1, le=1_000_000)
 
 
 class OutboundTargetUpdate(BaseModel):
@@ -23,6 +29,10 @@ class OutboundTargetUpdate(BaseModel):
     qos: int | None = None
     retain: bool | None = None
     is_active: bool | None = None
+    listen_host: str | None = None
+    listen_port: int | None = Field(default=None, ge=1, le=65535)
+    iec104_common_address: int | None = Field(default=None, ge=0, le=65535)
+    iec104_ioa_device_stride: int | None = Field(default=None, ge=1, le=1_000_000)
 
 
 class OutboundTargetRead(BaseModel):
@@ -37,6 +47,10 @@ class OutboundTargetRead(BaseModel):
     qos: int
     retain: bool
     is_active: bool
+    listen_host: str | None = None
+    listen_port: int | None = None
+    iec104_common_address: int | None = None
+    iec104_ioa_device_stride: int | None = None
 
     class Config:
         from_attributes = True

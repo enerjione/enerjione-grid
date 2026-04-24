@@ -3,11 +3,10 @@ import type {
   AlarmEvent,
   AlarmRuleRow,
   ApiDevice,
-  ApiTelemetry,
   AuthSession,
   DeviceRow,
+  Dnp3ExtendedSettings,
   Gateway,
-  LiveValue,
   NotificationSettings,
   OutboundTarget,
   SignalCatalogRow,
@@ -16,6 +15,7 @@ import type {
   UserRead,
   UserRole
 } from "./types";
+import { mergeDnp3Extended } from "./types";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 const AUTH_STORAGE_KEY = "hsl-auth";
@@ -46,7 +46,25 @@ function authHeaders(token: string): HeadersInit {
   };
 }
 
+const SESSION_401_TURKISH =
+  "Oturum süresi doldu veya geçerli değil. Lütfen sağ üstten çıkış yapıp tekrar giriş yapın.";
+
 async function buildApiError(response: Response, fallbackMessage: string): Promise<Error> {
+  if (response.status === 401) {
+    try {
+      const data = (await response.json()) as ApiErrorResponse;
+      const detail = data.detail;
+      if (
+        typeof detail === "string" &&
+        (detail.includes("validate credentials") || detail.includes("Not authenticated"))
+      ) {
+        return new Error(SESSION_401_TURKISH);
+      }
+    } catch {
+      // gövde yok
+    }
+    return new Error(SESSION_401_TURKISH);
+  }
   try {
     const data = (await response.json()) as ApiErrorResponse;
     const detail = data.detail;
@@ -118,7 +136,7 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
   const response = await fetch(endpoint, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Cihaz listesi alınamadı.");
+  if (!response.ok) throw await buildApiError(response, "Cihaz listesi alınamadı.");
   const devices = (await response.json()) as ApiDevice[];
   return devices.map((item) => ({
     id: item.id,
@@ -127,7 +145,9 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     description: item.description ?? undefined,
     gatewayCode: item.gateway_code ?? undefined,
     ipAddress: item.ip_address,
+    dnp3OutstationPort: item.dnp3_outstation_port ?? 20001,
     dnp3Address: item.dnp3_address,
+    dnp3Extended: mergeDnp3Extended(item.dnp3_extended),
     pollIntervalSec: item.poll_interval_sec,
     timeoutMs: item.timeout_ms,
     retryCount: item.retry_count,
@@ -149,7 +169,9 @@ export async function createDevice(
     description?: string | null;
     gateway_code?: string | null;
     ip_address: string;
+    dnp3_outstation_port: number;
     dnp3_address: number;
+    dnp3_extended?: Dnp3ExtendedSettings | null;
     poll_interval_sec: number;
     timeout_ms: number;
     retry_count: number;
@@ -174,7 +196,9 @@ export async function updateDevice(
     description?: string | null;
     gateway_code?: string | null;
     ip_address?: string;
+    dnp3_outstation_port?: number;
     dnp3_address?: number;
+    dnp3_extended?: Dnp3ExtendedSettings;
     poll_interval_sec?: number;
     timeout_ms?: number;
     retry_count?: number;
@@ -198,26 +222,12 @@ export async function deleteDevice(token: string, deviceCode: string): Promise<v
   if (!response.ok) throw await buildApiError(response, "Cihaz silinemedi.");
 }
 
-export async function fetchLiveValues(token: string, deviceNames: Map<number, string>): Promise<LiveValue[]> {
-  const response = await fetch(`${API_BASE_URL}/telemetry/latest`, {
-    headers: authHeaders(token)
-  });
-  if (!response.ok) throw new Error("Canlı değerler alınamadı.");
-  const telemetry = (await response.json()) as ApiTelemetry[];
-  return telemetry.map((item) => ({
-    deviceName: deviceNames.get(item.device_id) ?? `Device-${item.device_id}`,
-    signalKey: item.signal_key,
-    value: item.value,
-    quality: item.quality,
-    sourceTimestamp: item.source_timestamp
-  }));
-}
 
 export async function fetchUsers(token: string): Promise<UserRead[]> {
   const response = await fetch(`${API_BASE_URL}/users`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Kullanıcılar alınamadı.");
+  if (!response.ok) throw await buildApiError(response, "Kullanıcılar alınamadı.");
   return (await response.json()) as UserRead[];
 }
 
@@ -225,7 +235,7 @@ export async function fetchMe(token: string): Promise<UserRead> {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Kullanıcı bilgisi alınamadı.");
+  if (!response.ok) throw await buildApiError(response, "Kullanıcı bilgisi alınamadı.");
   return (await response.json()) as UserRead;
 }
 
@@ -307,7 +317,7 @@ export async function fetchAlarmEvents(token: string): Promise<AlarmEvent[]> {
   const response = await fetch(`${API_BASE_URL}/alarms/events`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Alarmlar alınamadı.");
+  if (!response.ok) throw await buildApiError(response, "Alarmlar alınamadı.");
   return (await response.json()) as AlarmEvent[];
 }
 
@@ -619,6 +629,25 @@ export async function fetchSignalLiveValues(token: string): Promise<SignalLiveRo
   const response = await fetch(`${API_BASE_URL}/signals/live`, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Canlı sinyal değerleri alınamadı.");
   return (await response.json()) as SignalLiveRow[];
+}
+
+export async function resetSignalsToDefaults(token: string): Promise<{
+  removed: number;
+  inserted: number;
+  updated: number;
+  total_defaults: number;
+}> {
+  const response = await fetch(`${API_BASE_URL}/signals/reset-to-defaults`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sinyal kataloğu sıfırlanamadı.");
+  return (await response.json()) as {
+    removed: number;
+    inserted: number;
+    updated: number;
+    total_defaults: number;
+  };
 }
 
 // ----- Alarm Rules -----

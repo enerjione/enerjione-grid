@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
-    access_token_minutes: int = 30
+    # Uzun operatör oturumları (fabrika) için; .env: ACCESS_TOKEN_MINUTES=...
+    access_token_minutes: int = 720
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/horstman"
     cors_origins: str = "http://localhost:5173"
     event_bus_backend: str = "inprocess"

@@ -115,7 +115,6 @@
   "gateways": [],
   "backend": {
     "base_url": "http://127.0.0.1:8000/api/v1",
-    "installer_email": "installer@horstman.local",
-    "installer_password": "installer123"
+    "service_token": "change-me-internal-token"
   }
 }

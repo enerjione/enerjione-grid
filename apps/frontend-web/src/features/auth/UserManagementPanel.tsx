@@ -4,6 +4,8 @@ import type { UserRead, UserRole } from "../../shared/types";
 
 type Props = {
   users: UserRead[];
+  /** false: mühendis — sadece operatör/mühendis oluşturulabilir; kurulumcu rolü atanamaz */
+  allowInstallerRole?: boolean;
   currentUserId?: number;
   onCreate: (payload: {
     username: string;
@@ -30,6 +32,7 @@ const NOTIFICATION_PREFS_STORAGE_KEY = "hsl-user-notification-prefs";
 
 export function UserManagementPanel({
   users,
+  allowInstallerRole = true,
   currentUserId,
   onCreate,
   onDelete,
@@ -211,7 +214,16 @@ export function UserManagementPanel({
   return (
     <section className="tab-panel">
       <div className="panel-head">
-        <h3>Kullanıcı Yönetimi</h3>
+        <div>
+          <h3>Kullanıcı Yönetimi</h3>
+          {!allowInstallerRole ? (
+            <p className="helper-text" style={{ margin: "6px 0 0", maxWidth: "42rem" }}>
+              Bu ekranda yalnızca <strong>operatör</strong> ve <strong>mühendis</strong> hesapları listelenir ve
+              yönetilir. Kurulumcu hesapları yalnızca kurulumcu tarafından yönetilir; mühendis kurulumcu rolü
+              atayamaz.
+            </p>
+          ) : null}
+        </div>
         <button className="add-user-btn" onClick={() => setCreateModalOpen(true)}>
           + Kullanıcı Ekle
         </button>
@@ -252,7 +264,7 @@ export function UserManagementPanel({
               <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
                 <option value="operator">Operatör</option>
                 <option value="engineer">Mühendis</option>
-                <option value="installer">Kurulumcu (Süper Admin)</option>
+                {allowInstallerRole ? <option value="installer">Kurulumcu (Süper Admin)</option> : null}
               </select>
             </label>
             <fieldset className="notify-group">
@@ -306,7 +318,7 @@ export function UserManagementPanel({
               <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
                 <option value="operator">Operatör</option>
                 <option value="engineer">Mühendis</option>
-                <option value="installer">Kurulumcu (Süper Admin)</option>
+                {allowInstallerRole ? <option value="installer">Kurulumcu (Süper Admin)</option> : null}
               </select>
             </label>
             <fieldset className="notify-group">

@@ -13,8 +13,11 @@ Bu panel; altyapı servisleri + Python microservice'leri + gateway instance'lar�
 - Notification Service (process)
 - Frontend Web (Vite dev server)
 
-Gateway'ler ayrı "Gateway Yönetimi" sekmesinde tutulur ve birden fazla gateway
-tanımlanabilir.
+Gateway'ler ayrı **Gateway Yönetimi** sekmesinde tutulur ve **backend'deki
+kayıtlardan** otomatik listelenir. Gateway'in lokalde ya da farklı sunucuda
+olmasının bir önemi yoktur; kontrol paneli uzak gateway'leri `control_host` +
+`control_port` alanlarını kullanarak izler ve `is_active` bayrağı üzerinden
+uzaktan başlatır/durdurur.
 
 ## Dosyalar
 
@@ -47,8 +50,24 @@ Core microservice'ler. Her satırda `Başlat`, `Durdur` ve `Yeniden Başlat`
 butonları var.
 
 ### Gateway Yönetimi
-Collector-DNP3 instance'ları. Birden fazla gateway ekleyip her biri için
-`GATEWAY_CODE`, `GATEWAY_TOKEN` ve `WORKER_HEALTH_PORT` ile yönet.
+Web uygulamasındaki gateway listesinin aynısı backend üzerinden çekilir; yeni
+kayıt web arayüzünde eklenir. Tabloda sade sütunlar vardır:
+
+- **Gateway** — ad ve kod birlikte
+- **Uzak adres** — izleme/kontrol için IP:port (yoksa “uzaktan izleme kapalı”)
+- **Veri toplama** — açık / duraklatıldı
+- **Uzak erişim** — kontrol portuna erişim var mı (evet/hayır; port yoksa —)
+- **Son görülme** — son görülen zaman (veya —)
+
+**Başlat / Durdur / Yeniden Başlat** ile seçili kayıt uzak tarafta (birkaç
+saniye içinde) uygulanır. Panel, çalışan collector proseslerini açıp
+kapamaz; sadece web’le aynı “veri toplama açık mı” bilgisini değiştirir.
+
+> Durmuş bir collector’u makinede ayağa kaldırmak için ayrıca supervisor
+> veya servis yönetimi gerekir.
+
+Liste yaklaşık 15 sn’de bir yenilenir; **Yenile** ile de anlık
+yenilenebilir. Sunucuya ulaşılamazsa kısa bir hata metni üstte görünür.
 
 ### Kurulum
 CMD'e gerek kalmadan:
@@ -117,12 +136,14 @@ içindeki `windows_service_name` alanı bu kaydın adıdır (örn. `RabbitMQ`,
   - `ÇALIŞIYOR`: panel tarafından başlatılan process hâlâ açık.
   - `ÇALIŞIYOR (dış)`: servis ayakta ama bu process başka bir ortamdan (örn.
     el ile açılmış terminal, Windows Service Manager) başlatılmış.
-  - `BAŞLATILIYOR`: start komutu gönderildi, henüz yanıt alınmadı.
+  - `BAŞLATILIYOR…`: başlatma işlemi sürüyor (arka planda).
+  - `DURDURULUYOR…`: durdurma işlemi sürüyor — toplu durdur veya **Durdur**
+    sonrası; **başlatma ile karışmaz** (pending işlem tipi ayrı tutulur).
   - `DURDU` / `SERVİS BULUNAMADI`: port kapalı / Windows'ta servis kayıtlı değil.
 - **Sağlık** alanı: belirtilen host/port için TCP connect testi
   (`UP` / `ERİŞİLEMİYOR`).
 
-Health port'ları:
+Health port'ları (temel servisler):
 
 | Servis | Port |
 |---|---|
@@ -131,28 +152,57 @@ Health port'ları:
 | Alarm Service | 8012 |
 | Notification Service | 8013 |
 | Frontend Web | 5173 |
-| Collector DNP3 GW-001 | 8020 |
-| Collector DNP3 GW-002 | 8021 |
 
-## Yeni Gateway Eklemek
+Gateway'lerin kontrol portu (WORKER_HEALTH_PORT) her gateway için uzak sunucuda
+serbestçe seçilir ve frontend gateway ekleme formundaki `Kontrol Port` alanına
+girilir.
 
-`service_control_panel.config.json` → `gateways` listesine yeni blok ekle:
+## Yeni Gateway Eklemek (v2.20.0+)
+
+Lokal `config.json`'a artık gateway yazmıyorsun. Akış şu:
+
+1. **Frontend** (Mühendislik → Gateway Yönetimi) → *Gateway Ekle* ile yeni
+   kayıt oluştur. Doldurulacak kritik alanlar:
+   - `Kod`, `Gateway Adı`, `DNP3 Host/Port`, `Gateway Token`
+   - `Kontrol Host` → uzaktaki collector makinasının IP'si (örn. `10.10.10.30`)
+   - `Kontrol Port` → o makinadaki `WORKER_HEALTH_PORT` (örn. `8020`)
+
+2. **Uzak sunucuya** ayrı repo olan `Horstmann Smart Logger DNP3 Gateway` dağıt:
+   ```
+   GATEWAY_CODE=GW-003
+   GATEWAY_TOKEN=<frontend'de verdiğin token>
+   BACKEND_API_URL=http://<merkez-sunucu>:8000/api/v1
+   RABBITMQ_URL=amqp://guest:guest@<merkez-sunucu>:5672/
+   GATEWAY_MODE=dnp3
+   WORKER_HEALTH_HOST=0.0.0.0
+   WORKER_HEALTH_PORT=8020
+   ```
+   Sonra `py -3.10 -m dnp3_gateway` (veya `run_gateway.cmd`) ile ayağa kaldır
+   (ya da Windows servisi olarak kaydet ki reboot sonrası otomatik başlasın).
+
+3. **Kontrol Paneli** → *Gateway Yönetimi* sekmesini yenile. Yeni gateway
+   listede görünür; Başlat/Durdur/Yeniden Başlat butonları backend'in
+   `is_active` bayrağıyla uzaktan yönetilir.
+
+### Backend bağlantı ayarları (v2.20.1+)
+
+Panel artık kişisel bir kullanıcı hesabıyla login yapmaz; backend'in
+`INTERNAL_SERVICE_TOKEN` değeri ile eşleşen servis token'ı üzerinden
+`/internal/gateways` endpoint'lerine gider. Bu sayede:
+
+- Kurulumcu şifresi değişse bile panel etkilenmez.
+- Token backend `.env` dosyasında yönetildiği için production'da tek merkezden
+  değiştirilir.
+
+`service_control_panel.config.json` içindeki `backend` bloğu:
 
 ```json
-{
-  "name": "Collector DNP3 Gateway - GW-003",
-  "type": "process",
-  "working_dir": "C:/.../apps/collector-dnp3",
-  "command": ["py", "-3.10", "-m", "collector_dnp3.main"],
-  "env": {
-    "GATEWAY_CODE": "GW-003",
-    "GATEWAY_TOKEN": "gw-003-token",
-    "WORKER_HEALTH_PORT": "8022"
-  },
-  "health_host": "127.0.0.1",
-  "health_port": 8022
+"backend": {
+  "base_url": "http://127.0.0.1:8000/api/v1",
+  "service_token": "change-me-internal-token"
 }
 ```
 
-Aynı `GATEWAY_CODE`'un backend tarafında `gateways` tablosuna kayıtlı olmasına
-dikkat et (frontend > Mühendislik > Cihazlar sekmesinden kurulumcu ekleyebilir).
+> Backend tarafında `.env` dosyasına `INTERNAL_SERVICE_TOKEN=...` satırı ekle
+> ve bu değeri paneldeki `service_token` ile birebir aynı yap. Panel geçersiz
+> token durumunda "Servis token'ı reddedildi" uyarısı gösterir.

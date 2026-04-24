@@ -19,14 +19,14 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
       const matchFilter =
         filter === "all" ||
         (filter === "online" && device.communicationStatus === "online") ||
-        (filter === "offline" && device.communicationStatus === "offline") ||
+        (filter === "offline" && device.communicationStatus !== "online") ||
         (filter === "warning" && device.alarmActive);
       return matchSearch && matchFilter;
     });
   }, [devices, filter, search]);
 
   const onlineCount = devices.filter((item) => item.communicationStatus === "online").length;
-  const offlineCount = devices.filter((item) => item.communicationStatus === "offline").length;
+  const offlineCount = devices.filter((item) => item.communicationStatus !== "online").length;
   const warningCount = devices.filter((item) => item.alarmActive).length;
 
   return (
@@ -72,7 +72,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
           >
             <div className="device-row-top">
               <strong>{device.name}</strong>
-              <span className={`dot ${device.communicationStatus}`} />
+              <span className={`dot ${device.communicationStatus === "online" ? "online" : "offline"}`} />
             </div>
             <div className="device-row-meta">
               <span>Battery: {device.batteryPercent}%</span>

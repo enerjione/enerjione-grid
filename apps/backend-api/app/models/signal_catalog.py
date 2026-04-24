@@ -47,3 +47,13 @@ class SignalCatalog(Base):
     supports_alarm: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    # IEC 60870-5-104 adresleme.
+    #   iec104_type_id  : ASDU Type Identifier (1=M_SP_NA_1 binary,
+    #                     13=M_ME_NC_1 analog short float, 15=M_IT_NA_1 counter).
+    #                     string / desteklenmeyen tipler icin NULL.
+    #   iec104_ioa_offset: Cihaz bloku icindeki goreli IOA (Information Object Address).
+    #                     Server, cihaz index'ine `iec104_ioa_device_stride` carpar ve
+    #                     bu offseti ekleyerek mutlak IOA'yi hesaplar.
+    iec104_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    iec104_ioa_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)

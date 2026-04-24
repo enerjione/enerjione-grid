@@ -1,7 +1,47 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import type { DeviceRow, Gateway } from "../../shared/types";
+import type { DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
+import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
+import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
+
+/** Son sinyal bundan eskiyse yeşil değil, kırmızı (kapalı/erişilemez collector için pencere) */
+const GATEWAY_LIVE_SEC = 60;
+
+type GatewayLiveness = {
+  className: "inactive" | "never" | "online" | "offline";
+  title: string;
+};
+
+function formatTrRel(iso: string): string {
+  const d = new Date(iso);
+  const s = Math.round((Date.now() - d.getTime()) / 1000);
+  if (s < 5) return "şimdi";
+  if (s < 60) return `${s} sn önce`;
+  if (s < 3600) return `${Math.round(s / 60)} dk önce`;
+  if (s < 86400) return `${Math.round(s / 3600)} sa önce`;
+  return d.toLocaleString("tr-TR");
+}
+
+function getGatewayLiveness(gateway: Gateway): GatewayLiveness {
+  if (!gateway.is_active) {
+    return { className: "inactive", title: "Pasif (yayın kapalı)" };
+  }
+  if (!gateway.last_seen_at) {
+    return { className: "never", title: "Merkezle temas yok" };
+  }
+  const sec = (Date.now() - new Date(gateway.last_seen_at).getTime()) / 1000;
+  if (sec < GATEWAY_LIVE_SEC) {
+    return { className: "online", title: "Çevrimiçi" };
+  }
+  return { className: "offline", title: "Bağlı değil (son sinyal eski)" };
+}
+
+function deviceCommDotClass(status: DeviceRow["communicationStatus"]): "online" | "offline" {
+  return status === "online" ? "online" : "offline";
+}
+
+type DevicePropsTab = "system" | "comms";
 
 type Props = {
   role: "operator" | "engineer" | "installer";
@@ -19,6 +59,8 @@ type Props = {
     device_code_prefix?: string | null;
     token: string;
     is_active: boolean;
+    control_host: string;
+    control_port: number;
   }) => Promise<void>;
   onUpdateGateway: (
     gatewayCode: string,
@@ -31,7 +73,9 @@ type Props = {
     description?: string | null;
     gateway_code?: string | null;
     ip_address: string;
+    dnp3_outstation_port: number;
     dnp3_address: number;
+    dnp3_extended?: Dnp3ExtendedSettings | null;
     poll_interval_sec: number;
     timeout_ms: number;
     retry_count: number;
@@ -46,7 +90,9 @@ type Props = {
       description?: string | null;
       gateway_code?: string | null;
       ip_address?: string;
+      dnp3_outstation_port?: number;
       dnp3_address?: number;
+      dnp3_extended?: Dnp3ExtendedSettings;
       poll_interval_sec?: number;
       timeout_ms?: number;
       retry_count?: number;
@@ -80,7 +126,9 @@ export function DeviceManagementPanel({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [ipAddress, setIpAddress] = useState("");
+  const [dnp3OutstationPort, setDnp3OutstationPort] = useState("20001");
   const [dnp3Address, setDnp3Address] = useState("1");
+  const [dnp3Ext, setDnp3Ext] = useState<Dnp3ExtendedSettings>(() => ({ ...DEFAULT_DNP3_EXTENDED }));
   const [pollIntervalSec, setPollIntervalSec] = useState("5");
   const [timeoutMs, setTimeoutMs] = useState("3000");
   const [retryCount, setRetryCount] = useState("2");
@@ -91,7 +139,9 @@ export function DeviceManagementPanel({
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [createIpAddress, setCreateIpAddress] = useState("");
+  const [createDnp3OutstationPort, setCreateDnp3OutstationPort] = useState("20001");
   const [createDnp3Address, setCreateDnp3Address] = useState("1");
+  const [createDnp3Ext, setCreateDnp3Ext] = useState<Dnp3ExtendedSettings>(() => ({ ...DEFAULT_DNP3_EXTENDED }));
   const [createPollIntervalSec, setCreatePollIntervalSec] = useState("5");
   const [createTimeoutMs, setCreateTimeoutMs] = useState("3000");
   const [createRetryCount, setCreateRetryCount] = useState("2");
@@ -110,25 +160,51 @@ export function DeviceManagementPanel({
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [pickerLat, setPickerLat] = useState(39);
   const [pickerLon, setPickerLon] = useState(35);
+  const [devicePropsTab, setDevicePropsTab] = useState<DevicePropsTab>("system");
 
-  const selectedDevice = useMemo(
-    () => devices.find((item) => item.code === selectedDeviceCode) ?? null,
-    [devices, selectedDeviceCode]
+  const lastDeviceRef = useRef<DeviceRow | null>(null);
+
+  const selectedGateway = useMemo(
+    () => gateways.find((g) => g.code === selectedGatewayCode) ?? null,
+    [gateways, selectedGatewayCode]
   );
 
-  const isGatewayOnline = (gateway: Gateway) => {
-    if (!gateway.is_active || !gateway.last_seen_at) return false;
-    const diffMs = Date.now() - new Date(gateway.last_seen_at).getTime();
-    return diffMs <= 2 * 60 * 1000;
-  };
+  const selectedDevice = useMemo(() => {
+    if (!selectedDeviceCode) return null;
+    const inList = devices.find((item) => item.code === selectedDeviceCode);
+    if (inList) {
+      return inList;
+    }
+    if (lastDeviceRef.current && lastDeviceRef.current.code === selectedDeviceCode) {
+      return lastDeviceRef.current;
+    }
+    return null;
+  }, [devices, selectedDeviceCode]);
+
+  useEffect(() => {
+    if (!selectedDeviceCode) {
+      lastDeviceRef.current = null;
+      return;
+    }
+    const m = devices.find((d) => d.code === selectedDeviceCode);
+    if (m) {
+      lastDeviceRef.current = m;
+    }
+  }, [devices, selectedDeviceCode]);
+
+  useEffect(() => {
+    setDevicePropsTab("system");
+  }, [selectedDeviceCode]);
 
   useEffect(() => {
     if (!gateways.length) {
       setSelectedGatewayCode("");
+      setSelectedDeviceCode("");
       return;
     }
     const exists = gateways.some((item) => item.code === selectedGatewayCode);
     if (!selectedGatewayCode || !exists) {
+      setSelectedDeviceCode("");
       const nextGatewayCode = gateways[0].code;
       setSelectedGatewayCode(nextGatewayCode);
       void onSelectGateway(nextGatewayCode);
@@ -139,7 +215,9 @@ export function DeviceManagementPanel({
     setName(device.name);
     setDescription(device.description ?? "");
     setIpAddress(device.ipAddress ?? "");
+    setDnp3OutstationPort(String(device.dnp3OutstationPort ?? 20001));
     setDnp3Address(String(device.dnp3Address ?? 1));
+    setDnp3Ext(mergeDnp3Extended(device.dnp3Extended));
     setPollIntervalSec(String(device.pollIntervalSec ?? 5));
     setTimeoutMs(String(device.timeoutMs ?? 3000));
     setRetryCount(String(device.retryCount ?? 2));
@@ -150,12 +228,15 @@ export function DeviceManagementPanel({
   const handleGatewaySelect = async (gatewayCode: string) => {
     setSelectedGatewayCode(gatewayCode);
     setSelectedDeviceCode("");
+    lastDeviceRef.current = null;
     setError("");
     await onSelectGateway(gatewayCode);
   };
 
   const handleDeviceSelect = (device: DeviceRow) => {
+    lastDeviceRef.current = device;
     setSelectedDeviceCode(device.code);
+    setDevicePropsTab("system");
     applySelectedDeviceToForm(device);
   };
 
@@ -202,7 +283,9 @@ export function DeviceManagementPanel({
         description: createDescription.trim() || null,
         gateway_code: selectedGatewayCode || null,
         ip_address: createIpAddress,
+        dnp3_outstation_port: Number(createDnp3OutstationPort),
         dnp3_address: Number(createDnp3Address),
+        dnp3_extended: { ...createDnp3Ext },
         poll_interval_sec: Number(createPollIntervalSec),
         timeout_ms: Number(createTimeoutMs),
         retry_count: Number(createRetryCount),
@@ -215,7 +298,9 @@ export function DeviceManagementPanel({
       setCreateName("");
       setCreateDescription("");
       setCreateIpAddress("");
+      setCreateDnp3OutstationPort("20001");
       setCreateDnp3Address("1");
+      setCreateDnp3Ext({ ...DEFAULT_DNP3_EXTENDED });
       setCreatePollIntervalSec("5");
       setCreateTimeoutMs("3000");
       setCreateRetryCount("2");
@@ -240,7 +325,9 @@ export function DeviceManagementPanel({
         max_devices: 200,
         device_code_prefix: null,
         token: gatewayToken,
-        is_active: true
+        is_active: true,
+        control_host: "127.0.0.1",
+        control_port: 0
       });
       setShowGatewayCreateModal(false);
       setGatewayCode("");
@@ -258,7 +345,6 @@ export function DeviceManagementPanel({
     if (!codeToDelete) return;
     const gateway = gateways.find((item) => item.code === codeToDelete);
     if (!gateway) return;
-    if (!window.confirm(`"${gateway.name}" gateway silinsin mi?`)) return;
     setError("");
     try {
       await onDeleteGateway(codeToDelete);
@@ -343,56 +429,64 @@ export function DeviceManagementPanel({
             </div>
           ) : null}
           <div className="device-group-list">
-            {gateways.map((gateway) => (
+            {gateways.map((gateway) => {
+              const gLive = getGatewayLiveness(gateway);
+              return (
               <div
                 key={gateway.id}
                 className={`device-group-item gateway-item ${selectedGatewayCode === gateway.code ? "active" : ""}`}
               >
-                <button className="device-group-main" onClick={() => void handleGatewaySelect(gateway.code)}>
-                  <div className="gateway-title-row">
-                    <div className="gateway-name-with-status">
-                      <span className={`gateway-status ${isGatewayOnline(gateway) ? "online" : "offline"}`}>
-                        <span className="gateway-status-dot" />
-                      </span>
-                      <strong>{gateway.name}</strong>
-                    </div>
-                    {canManageGateways ? (
-                      <div className="item-actions inline-actions">
-                        <button
-                          type="button"
-                          className="secondary-btn action-btn"
-                          onClick={() => handleStartGatewayEdit(gateway)}
-                          title="Gateway Düzenle"
-                          aria-label="Gateway Düzenle"
-                        >
-                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                            <path
-                              fill="currentColor"
-                              d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.29a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          className="danger-btn action-btn"
-                          onClick={() => void handleDeleteGateway(gateway.code)}
-                          title="Gateway Sil"
-                          aria-label="Gateway Sil"
-                        >
-                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                            <path
-                              fill="currentColor"
-                              d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zm3.46-7.12 1.41-1.41L12 11.59l1.12-1.12 1.41 1.41L13.41 13l1.12 1.12-1.41 1.41L12 14.41l-1.12 1.12-1.41-1.41L10.59 13zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"
-                            />
-                          </svg>
-                        </button>
+                <div className="gateway-item-body">
+                  <button
+                    type="button"
+                    className="device-group-main gateway-select-main"
+                    onClick={() => void handleGatewaySelect(gateway.code)}
+                  >
+                    <div className="gateway-title-row">
+                      <div className="gateway-name-with-status">
+                        <span className={`gateway-status ${gLive.className}`} title={gLive.title}>
+                          <span className="gateway-status-dot" aria-hidden="true" />
+                        </span>
+                        <strong className="gateway-name-only">{gateway.name}</strong>
                       </div>
-                    ) : null}
-                  </div>
-                  <span>{gateway.host}</span>
-                </button>
+                    </div>
+                  </button>
+                  {canManageGateways ? (
+                    <div className="item-actions inline-actions gateway-item-actions">
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        onClick={() => handleStartGatewayEdit(gateway)}
+                        title="Gateway Düzenle"
+                        aria-label="Gateway Düzenle"
+                      >
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.29a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-btn action-btn"
+                        onClick={() => void handleDeleteGateway(gateway.code)}
+                        title="Gateway Sil"
+                        aria-label="Gateway Sil"
+                      >
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zm3.46-7.12 1.41-1.41L12 11.59l1.12-1.12 1.41 1.41L13.41 13l1.12 1.12-1.41 1.41L12 14.41l-1.12 1.12-1.41-1.41L10.59 13zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            ))}
+            );
+            })}
           </div>
 
         </div>
@@ -413,20 +507,18 @@ export function DeviceManagementPanel({
               >
                 <div className="device-title-row">
                   <div className="device-name-with-status">
-                    <span className={`device-status-dot ${device.communicationStatus}`} />
+                    <span className={`device-status-dot ${deviceCommDotClass(device.communicationStatus)}`} />
                     <strong>{device.name}</strong>
                   </div>
                   <span className="device-status-sr-only">
-                    {device.communicationStatus === "online"
-                      ? "Haberleşme Var"
-                      : device.communicationStatus === "offline"
-                        ? "Haberleşme Yok"
-                        : "Durum Belirsiz"}
+                    {device.communicationStatus === "online" ? "Haberleşme Var" : "Haberleşme Yok veya yoklama yok"}
                   </span>
                 </div>
                 <div className="device-meta-row">
                   <span>{device.code}</span>
-                  <span className="device-ip-text">{device.ipAddress ?? "-"}</span>
+                  <span className="device-ip-text">
+                    {device.ipAddress ?? "-"}:{device.dnp3OutstationPort ?? 20001}
+                  </span>
                 </div>
               </button>
             ))}
@@ -439,63 +531,162 @@ export function DeviceManagementPanel({
           {!selectedDevice ? (
             <p className="helper-text">Sağ panelde düzenlemek için soldan bir cihaz seçin.</p>
           ) : (
-            <div className="device-detail-form">
-              <label>
-                Cihaz Kodu
-                <input value={selectedDevice.code} disabled readOnly />
-              </label>
-              <label>
-                Sinyal Kaynağı
-                <input value="Standart Sinyal Kataloğu" disabled readOnly />
-              </label>
-              <label>
-                İsim
-                <input value={name} onChange={(event) => setName(event.target.value)} />
-              </label>
-              <label>
-                Açıklama
-                <input value={description} onChange={(event) => setDescription(event.target.value)} />
-              </label>
-              <label>
-                IP Adresi
-                <input value={ipAddress} onChange={(event) => setIpAddress(event.target.value)} />
-              </label>
-              <label>
-                DNP3 Adresi
-                <input type="number" value={dnp3Address} onChange={(event) => setDnp3Address(event.target.value)} />
-              </label>
-              <label>
-                Poll Aralığı (sn)
-                <input
-                  type="number"
-                  min={1}
-                  max={3600}
-                  value={pollIntervalSec}
-                  onChange={(event) => setPollIntervalSec(event.target.value)}
-                />
-              </label>
-              <label>
-                Timeout (ms)
-                <input
-                  type="number"
-                  min={100}
-                  max={60000}
-                  value={timeoutMs}
-                  onChange={(event) => setTimeoutMs(event.target.value)}
-                />
-              </label>
-              <label>
-                Retry
-                <input type="number" min={0} max={10} value={retryCount} onChange={(event) => setRetryCount(event.target.value)} />
-              </label>
-              <label>
-                Enlem
-                <input value={latitude} onChange={(event) => setLatitude(event.target.value)} />
-              </label>
-              <label>
-                Boylam
-                <input value={longitude} onChange={(event) => setLongitude(event.target.value)} />
-              </label>
+            <div className="device-detail-form device-detail-form--tabbed">
+              <div className="device-detail-form-fixed-header">
+                <div className="device-comms-readonly device-comms-readonly-compact">
+                  <p className="device-comms-readonly-p">
+                    <span
+                      className={`device-comms-pill device-comms-pill--${deviceCommDotClass(
+                        selectedDevice.communicationStatus
+                      )}`}
+                    >
+                      {selectedDevice.communicationStatus === "online" ? "OK" : "Kesik / bekleniyor"}
+                    </span>
+                    {selectedDevice.lastUpdateAt ? (
+                      <span className="device-comms-meta"> · Son veri: {formatTrRel(selectedDevice.lastUpdateAt)}</span>
+                    ) : null}
+                    {selectedGateway ? <span className="device-comms-meta"> · {selectedGateway.name}</span> : null}
+                  </p>
+                </div>
+                <div className="device-props-tabs" role="tablist" aria-label="Cihaz özellik sekmeleri">
+                  <button
+                    type="button"
+                    role="tab"
+                    id="device-tab-system"
+                    aria-selected={devicePropsTab === "system"}
+                    className={devicePropsTab === "system" ? "active" : ""}
+                    onClick={() => setDevicePropsTab("system")}
+                  >
+                    Sistem
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="device-tab-comms"
+                    aria-selected={devicePropsTab === "comms"}
+                    className={devicePropsTab === "comms" ? "active" : ""}
+                    onClick={() => setDevicePropsTab("comms")}
+                  >
+                    Haberleşme
+                  </button>
+                </div>
+              </div>
+
+              {devicePropsTab === "system" ? (
+                <div
+                  className="device-props-panel device-props-panel--system"
+                  role="tabpanel"
+                  id="device-panel-system"
+                  aria-labelledby="device-tab-system"
+                >
+                  <p className="device-props-panel-hint">
+                    Cihaz tanıtımı, görünen ad, konum: merkez listeleri ve harita bu bilgileri kullanır.
+                  </p>
+                  <div className="device-detail-form-grid">
+                    <label>
+                      Cihaz Kodu
+                      <input value={selectedDevice.code} disabled readOnly />
+                    </label>
+                    <label>
+                      Sinyal Kaynağı
+                      <input value="Standart Sinyal Kataloğu" disabled readOnly />
+                    </label>
+                    <label>
+                      İsim
+                      <input value={name} onChange={(event) => setName(event.target.value)} />
+                    </label>
+                    <label>
+                      Açıklama
+                      <input value={description} onChange={(event) => setDescription(event.target.value)} />
+                    </label>
+                    <label>
+                      Enlem
+                      <input value={latitude} onChange={(event) => setLatitude(event.target.value)} />
+                    </label>
+                    <label>
+                      Boylam
+                      <input value={longitude} onChange={(event) => setLongitude(event.target.value)} />
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="device-props-panel device-props-panel--comms"
+                  role="tabpanel"
+                  id="device-panel-comms"
+                  aria-labelledby="device-tab-comms"
+                >
+                  <div className="device-props-comms-scroll">
+                    <p className="device-outstation-summary">
+                      <strong>Okuma (Outstation):</strong> {ipAddress || "—"}:{dnp3OutstationPort} · DNP3 outstation
+                      adresi: {dnp3Address}
+                    </p>
+                    <div className="device-detail-form-grid">
+                      <label>
+                        Outstation IP <span className="field-hint">(okunacak cihaz)</span>
+                        <input
+                          value={ipAddress}
+                          onChange={(event) => setIpAddress(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        Outstation port
+                        <input
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={dnp3OutstationPort}
+                          onChange={(event) => setDnp3OutstationPort(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        DNP3 Outstation adresi
+                        <input
+                          type="number"
+                          value={dnp3Address}
+                          onChange={(event) => setDnp3Address(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Poll aralığı (sn)
+                        <input
+                          type="number"
+                          min={1}
+                          max={3600}
+                          value={pollIntervalSec}
+                          onChange={(event) => setPollIntervalSec(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Timeout (ms)
+                        <input
+                          type="number"
+                          min={100}
+                          max={60000}
+                          value={timeoutMs}
+                          onChange={(event) => setTimeoutMs(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Retry
+                        <input
+                          type="number"
+                          min={0}
+                          max={10}
+                          value={retryCount}
+                          onChange={(event) => setRetryCount(event.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <Dnp3SettingsForm
+                      value={dnp3Ext}
+                      onChange={(patch) => setDnp3Ext((prev) => ({ ...prev, ...patch }))}
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="device-form-actions">
                 <button type="button" className="secondary-btn" onClick={handleOpenMapPicker}>
                   Haritadan Seç
@@ -577,11 +768,22 @@ export function DeviceManagementPanel({
               <input value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} />
             </label>
             <label>
-              IP Adresi
+              Outstation IP (okunacak cihaz)
               <input value={createIpAddress} onChange={(event) => setCreateIpAddress(event.target.value)} required />
             </label>
             <label>
-              DNP3 Adresi
+              Outstation port
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={createDnp3OutstationPort}
+                onChange={(event) => setCreateDnp3OutstationPort(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              DNP3 Outstation adresi
               <input
                 type="number"
                 min={1}
@@ -590,8 +792,12 @@ export function DeviceManagementPanel({
                 required
               />
             </label>
+            <Dnp3SettingsForm
+              value={createDnp3Ext}
+              onChange={(patch) => setCreateDnp3Ext((prev) => ({ ...prev, ...patch }))}
+            />
             <label>
-              Poll Aralığı (sn)
+              Poll aralığı (sn)
               <input
                 type="number"
                 min={1}

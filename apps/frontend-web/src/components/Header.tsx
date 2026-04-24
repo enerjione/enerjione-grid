@@ -9,8 +9,8 @@ type Props = {
   onSettings?: () => void;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
-  activePage: "home" | "alarms" | "events" | "engineering";
-  onChangePage: (page: "home" | "alarms" | "events" | "engineering") => void;
+  activePage: "home" | "alarms" | "events" | "system-status" | "engineering";
+  onChangePage: (page: "home" | "alarms" | "events" | "system-status" | "engineering") => void;
 };
 
 export function Header({
@@ -72,6 +72,12 @@ export function Header({
           </button>
           <button className={activePage === "events" ? "active" : ""} onClick={() => onChangePage("events")}>
             Olaylar
+          </button>
+          <button
+            className={activePage === "system-status" ? "active" : ""}
+            onClick={() => onChangePage("system-status")}
+          >
+            Sistem durumu
           </button>
         </nav>
       </div>

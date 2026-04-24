@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Float, Integer, String
+from sqlalchemy import DateTime, Enum, Float, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -16,7 +16,9 @@ class Device(Base):
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     gateway_code: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     ip_address: Mapped[str] = mapped_column(String(120))
+    dnp3_outstation_port: Mapped[int] = mapped_column(Integer, default=20001)
     dnp3_address: Mapped[int] = mapped_column(Integer, default=1)
+    dnp3_extended: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     poll_interval_sec: Mapped[int] = mapped_column(Integer, default=5)
     timeout_ms: Mapped[int] = mapped_column(Integer, default=3000)
     retry_count: Mapped[int] = mapped_column(Integer, default=2)

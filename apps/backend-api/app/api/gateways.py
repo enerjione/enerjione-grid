@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role, require_roles
@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.device import Device
 from app.models.enums import UserRole
 from app.models.gateway import Gateway
+from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
@@ -27,7 +28,9 @@ router = APIRouter(prefix="/gateways", tags=["gateways"])
 
 @router.get("", response_model=list[GatewayRead])
 def list_gateways(
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    _: User = Depends(
+        require_roles([UserRole.OPERATOR, UserRole.ENGINEER, UserRole.INSTALLER])
+    ),
     db: Session = Depends(get_db),
 ):
     stmt = select(Gateway).order_by(Gateway.name.asc())
@@ -76,6 +79,9 @@ def delete_gateway(
     row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    repository = DeviceRepository(db)
+    repository.delete_all_for_gateway(gateway_code)
+    db.execute(delete(GatewayIngestBatch).where(GatewayIngestBatch.gateway_code == gateway_code))
     db.delete(row)
     db.commit()
     return None
@@ -119,12 +125,25 @@ def disable_gateway(
 def get_gateway_config(
     gateway_code: str,
     db: Session = Depends(get_db),
-    x_gateway_token: str | None = Header(default=None),
+    x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+    x_gateway_code: str | None = Header(default=None, alias="X-Gateway-Code"),
+    x_gateway_instance_id: str | None = Header(default=None, alias="X-Gateway-Instance-Id"),
+    x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
 ):
     """Collector/gateway servislerinin kendi konfig ve cihaz listesini çektiği endpoint.
 
     Auth: `X-Gateway-Token` header ile gateway token doğrulanır (operatör oturumu gerektirmez).
+
+    Opsiyonel: `X-Gateway-Code` gönderilirse **path'teki `gateway_code` ile aynı** olmalıdır
+    (yanlış yapılandırılmış istemcileri veya proxy hatalarını erken yakalar).
+    `X-Gateway-Instance-Id` / `X-Request-Id` audit ve korelasyon için kabul edilir.
     """
+    if x_gateway_code is not None and x_gateway_code.strip() != gateway_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Gateway-Code does not match route gateway_code",
+        )
+    _ = x_gateway_instance_id, x_request_id  # reserved: future audit log / tracing
     gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if gateway is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")

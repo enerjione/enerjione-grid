@@ -1,7 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.models.alarm import AlarmComment, AlarmEvent
 from app.models.device import Device
+from app.models.telemetry import Telemetry
 from app.schemas.device import DeviceCreate, DeviceUpdate
 
 
@@ -35,6 +37,29 @@ class DeviceRepository:
         self.db.refresh(device)
         return device
 
+    def _delete_telemetry_and_alarms_for_device(self, device_id: int) -> None:
+        event_ids = list(
+            self.db.scalars(select(AlarmEvent.id).where(AlarmEvent.device_id == device_id)).all()
+        )
+        if event_ids:
+            self.db.execute(delete(AlarmComment).where(AlarmComment.alarm_event_id.in_(event_ids)))
+        self.db.execute(delete(AlarmEvent).where(AlarmEvent.device_id == device_id))
+        self.db.execute(delete(Telemetry).where(Telemetry.device_id == device_id))
+
     def delete(self, device: Device) -> None:
+        self._delete_telemetry_and_alarms_for_device(device.id)
         self.db.delete(device)
         self.db.commit()
+
+    def delete_all_for_gateway(self, gateway_code: str) -> int:
+        """Gateway silinmeden önce: tüm cihazlar, telemetri, alarm/ yorum. Commit yok."""
+        devices = list(
+            self.db.scalars(
+                select(Device).where(Device.gateway_code == gateway_code).order_by(Device.id)
+            ).all()
+        )
+        for device in devices:
+            self._delete_telemetry_and_alarms_for_device(device.id)
+        for device in devices:
+            self.db.delete(device)
+        return len(devices)

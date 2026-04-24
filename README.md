@@ -1,6 +1,6 @@
 # Horstman Smart Logger Platform
 
-**Version:** 2.20.0
+**Version:** 2.24.2
 Windows-first, Docker-free industrial monitoring platform starter for Horstmann Smart Navigator 2.0 devices.
 
 ## Tek Tıkla Başlatma
@@ -33,38 +33,97 @@ Detay için bkz. `infra/scripts/windows/SERVICE_CONTROL_PANEL.md`.
 | Gateway ekle / düzenle / sil | — | — | ✓ |
 | Sinyal kataloğu (DNP3 adresleri, scale, supports_alarm) | — | — | ✓ |
 | Alarm kuralları (eşik / hysteresis / debounce) | — | — | ✓ |
-| Kullanıcı yönetimi | — | — | ✓ |
+| Kullanıcı yönetimi (operatör / mühendis) | — | ✓ | ✓ |
+| Kullanıcı yönetimi (kurulumcu atama) | — | — | ✓ |
 | Outbound hedefleri (REST / MQTT) | — | — | ✓ |
 | Bildirim ayarları (SMTP / SMS) | — | — | ✓ |
 
 - **operator**: yalnızca canlı izleme ve alarm ack/reset yapar.
-- **engineer**: sistemi basitçe genişletip daraltır; yeni cihaz ekler / silinenleri kaldırır. Gateway/sinyal/alarm/kullanıcı ayarlarını değiştiremez.
-- **installer** (süper admin): tüm altyapı, şablon ve parametre kurgusunu yönetir. **Tüm rollerde** (operator / engineer / installer) kullanıcı oluşturabilir; başka installer (süper admin) hesapları da ekleyip silebilir. Backend güvenlik gereği kullanıcı kendi hesabını silemez.
+- **engineer**: sistemi basitçe genişletip daraltır; cihaz ekler/kaldırır. **Operatör ve mühendis** kullanıcılarını yönetebilir; kurulumcu hesaplarını göremez/müdahale edemez ve kimseye kurulumcu rolü atayamaz. Gateway/sinyal kataloğu/alarm kuralları/bildirim ve outbound ayarlarını değiştiremez.
+- **installer** (süper admin): tüm altyapı, şablon ve parametre kurgusunu yönetir. Tüm rollerde (operator / engineer / installer) kullanıcı oluşturup silebilir. Backend güvenlik gereği kullanıcı kendi hesabını silemez.
 
 ## Structure
 
-- `apps/frontend-web`: React + TypeScript operator UI
-- `apps/backend-api`: FastAPI central backend (auth + signal catalog + alarm rules)
-- `apps/collector-dnp3`: DNP3 collector gateway service (standart sinyal listesini backend'den çeker)
-- `apps/tag-engine`: Tag processing microservice
+- `apps/frontend-web`: React + TypeScript operator UI (Anasayfa, Alarmlar, Olaylar, **Sistem durumu** özeti, mühendislik)
+- `apps/backend-api`: FastAPI central backend (auth + signal catalog + alarm rules + IEC 104 / outbound)
+- `apps/tag-engine`: Tag processing microservice (raw telemetri → normalize)
 - `apps/alarm-service`: Alarm evaluation microservice (kural bazlı eşik/debounce)
-- `apps/notification-worker`: Notification microservice
+- `apps/notification-worker`: Notification microservice (SMTP / Telegram / SMS)
 - `packages/shared-contracts`: shared payload contracts
 - `infra/scripts`: Windows/Linux service scripts
+- **DNP3 Gateway** ayrı repodadır: `Horstmann Smart Logger DNP3 Gateway/` — uzak sunucuda (şube/saha)
+  çalıştırılan standalone Python servisi. Backend'den `/gateways/{code}/config` ile cihaz + sinyal
+  listesini çeker, RabbitMQ `telemetry.raw_received` routing key'i ile yayın yapar.
 
 ## Veri akışı (özet)
 
 ```
-collector-dnp3  --(telemetry.received)-->  tag-engine  --(processed)-->  alarm-service
-       |                                                                         |
-       +--- GET /gateways/{code}/config (signal list + device list) --- backend-api
-                                                                                 |
-                                                          GET /internal/alarm-rules
+[Uzak] dnp3-gateway  --(telemetry.raw_received)-->  tag-engine  --(telemetry.received)-->  alarm-service
+       |                                                                                         |
+       +--- GET /gateways/{code}/config (signal list + device list) --- backend-api              |
+                                                                            ^                    |
+                                                                            +-- GET /internal/alarm-rules
+                                                                            |
+                                         IEC 104 / MQTT / REST / Modbus / OPC UA  <-- outbound dispatch
 ```
 
 - Sinyal kataloğu tüm cihazlar için ortaktır; cihaz eklendiğinde otomatik uygulanır.
 - Alarm kuralları `signal_key` bazlı template'dir; `supports_alarm=True` olan sinyalde değerlendirilir.
 - `device_code_filter` alanı virgülle ayrılmış cihaz kodları ile kuralın kapsamını daraltır (boş = tüm cihazlar).
+
+## Uzak Gateway Yönetimi
+
+Gateway'ler farklı sunucularda (şubelerde/sahalarda) çalıştırılmak üzere tasarlandı.
+Kontrol paneli artık lokal `config.json` yerine **backend'deki gateway kayıtlarını**
+kaynak alır:
+
+1. Frontend → *Mühendislik → Gateway Yönetimi* ekranından gateway eklenir. Yeni
+   alanlar: `Kontrol Host` ve `Kontrol Port` (uzak makinanın IP'si ve gateway'in
+   health portu).
+2. Uzak sunucuya **ayrı DNP3 Gateway repo'su** (`Horstmann Smart Logger DNP3 Gateway`)
+   kurulur; `.env`'de `GATEWAY_CODE`, `GATEWAY_TOKEN`, `BACKEND_API_URL`,
+   `WORKER_HEALTH_HOST`, `WORKER_HEALTH_PORT`, `RABBITMQ_URL`, `GATEWAY_MODE=dnp3`
+   ayarlanıp Windows Service veya systemd ile çalıştırılır.
+3. Kontrol Paneli → *Gateway Yönetimi* sekmesi backend'den listeyi çeker ve
+   her gateway için kontrol adresi, TCP sağlık durumu ve son görülme zamanını
+   gösterir. **Başlat / Durdur / Yeniden Başlat** butonları backend'in
+   `is_active` bayrağını değiştirir; uzak gateway bir sonraki konfig
+   refresh'te bu bilgiyi görüp polling'i askıya alır ya da devam ettirir
+   (proses ayakta kalır, komut kaybolmaz).
+
+Panel backend'e **kişisel kullanıcı login'i yapmadan** bağlanır; backend'in
+`INTERNAL_SERVICE_TOKEN` değeri ile eşleşen servis token'ını kullanır. Bu
+token `service_control_panel.config.json` içindeki `backend.service_token`
+alanında tutulur ve backend `.env` dosyasında da aynı değerle tanımlanmalıdır.
+
+> Not: Durmuş bir gateway prosesini **sıfırdan başlatmak** sunucu tarafında
+> kurulu bir supervisor (Windows Service / systemd) ister. Panel bu durumda
+> yalnızca `is_active` flag'ini `true` yapar; supervisor ayağa kalkınca
+> gateway zaten flag'i görüp yayına devam eder.
+
+## Sinyal Yönetimi ve Canlı Değerler (v2.21.0+)
+
+Mühendislik menüsü, sinyal ve telemetri verilerini net biçimde ayırır:
+
+- **Sinyaller** (yalnızca installer): Sinyal kataloğu sadece tanım/parametre
+  yönetimi içindir (etiket, DNP3 adres, scale, alarm desteği vb.). Canlı
+  değerler bu sayfada gösterilmez.
+  - Sayfa üst sekmeler ile veri tipine göre bölünmüştür:
+    `Analog Input`, `Analog Output`, `Binary Input`, `Binary Output`,
+    `Counter`, `String`. Her sekmede **tablo şeklinde liste** (etiket, kaynak,
+    tip, adres, birim, özellik sütunları) ve sağ tarafta **geniş düzenleme
+    paneli** bulunur. DNP3 adres ve ölçeklendirme alanları ayrı fieldset'lerde
+    gruplandı.
+  - Backend her başlangıçta **strict seed** yapar: JSON'da olmayan kayıtlar
+    (eski mock/test sinyalleri) otomatik temizlenir; listedeki tanımlarla
+    DB birebir eşitlenir. Bu nedenle kurulumcu UI'da ayrıca *Sinyal Ekle*
+    düğmesi yer almaz — tüm katalog `horstmann_sn2_signals.json` tarafından
+    yönetilir.
+- **Canlı Değerler** (engineer + installer): Her cihaz için **aktif sinyal
+  kataloğundaki** tüm sinyallere bir satır açılır; telemetri geldikçe değer
+  ve kalite dolar, gelmeden önce `—` gösterilir. Veri tipine göre sekmeler,
+  arama ve araç çubuğundaki "Yenile" vardır. Ana dashboard'un "Tablo" sekmesi
+  aynı sayfayı kullanır.
 
 ## First Run (Development)
 
@@ -84,8 +143,10 @@ collector-dnp3  --(telemetry.received)-->  tag-engine  --(processed)-->  alarm-s
 3. `npm install`
 4. `npm run dev`
 
-### Collector (Starter)
+### DNP3 Gateway (ayrı repo)
 
-1. `cd apps/collector-dnp3`
-2. Install Python 3.10 and dependencies
-3. Run as standalone process or Windows service
+1. `cd ../Horstmann\ Smart\ Logger\ DNP3\ Gateway`
+2. `py -3.10 -m venv .venv && .venv\Scripts\activate`
+3. `pip install -r requirements.txt` (+ `pip install nfm-dnp3` için gerçek cihaz modu)
+4. `.env` düzenle (`GATEWAY_CODE`, `GATEWAY_TOKEN`, `BACKEND_API_URL`, `RABBITMQ_URL`)
+5. `run_gateway.cmd` veya `python -m dnp3_gateway`

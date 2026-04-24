@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -7,6 +9,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, signal_catalog, system_event, telemetry as telemetry_model, user  # noqa: F401
+from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
 
@@ -75,6 +78,10 @@ def create_tables():
             text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS signal_profile VARCHAR(80) DEFAULT 'horstmann_sn2_fixed'")
         )
         connection.execute(
+            text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS dnp3_outstation_port INTEGER NOT NULL DEFAULT 20001")
+        )
+        connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS dnp3_extended JSONB"))
+        connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS gateway_ingest_batches ("
                 "id SERIAL PRIMARY KEY, "
@@ -107,7 +114,7 @@ def create_tables():
                 "id SERIAL PRIMARY KEY, "
                 "name VARCHAR(120) UNIQUE NOT NULL, "
                 "protocol VARCHAR(20) NOT NULL, "
-                "endpoint VARCHAR(500) NOT NULL, "
+                "endpoint VARCHAR(500) NOT NULL DEFAULT '', "
                 "topic VARCHAR(255), "
                 "event_filter VARCHAR(40) NOT NULL DEFAULT 'all', "
                 "auth_header VARCHAR(255), "
@@ -117,6 +124,13 @@ def create_tables():
                 "is_active BOOLEAN NOT NULL DEFAULT TRUE)"
             )
         )
+        # IEC 60870-5-104 sunucu alanlari (rest/mqtt icin NULL kalir).
+        connection.execute(text("ALTER TABLE outbound_targets ALTER COLUMN endpoint DROP NOT NULL"))
+        connection.execute(text("ALTER TABLE outbound_targets ALTER COLUMN endpoint SET DEFAULT ''"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS listen_host VARCHAR(255)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS listen_port INTEGER"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_common_address INTEGER"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_ioa_device_stride INTEGER"))
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS outbox_events ("
@@ -179,6 +193,14 @@ def create_tables():
         connection.execute(
             text("CREATE INDEX IF NOT EXISTS idx_signal_catalog_data_type ON signal_catalog (data_type)")
         )
+        # IEC 60870-5-104 adresleme sutunlari (TypeID + IOA offset). NULL = tip
+        # IEC 104 icin haritalanmaz (ornegin `string` sinyaller).
+        connection.execute(
+            text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_type_id INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_ioa_offset INTEGER")
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS alarm_rules ("
@@ -201,15 +223,52 @@ def create_tables():
         )
     db = SessionLocal()
     try:
-        result = seed_default_signals(db)
+        # strict=True: JSON listesi disindaki tum sinyalleri siler.
+        # Bu sayede baslangicta sadece Horstmann SN2 fabrika katalogu kalir.
+        result = seed_default_signals(db, strict=True)
         if not result.get("skipped"):
             import logging
 
             logging.getLogger(__name__).info(
-                "signal_catalog seed upsert -> inserted=%d updated=%d",
+                "signal_catalog seed sync -> inserted=%d updated=%d removed=%d",
                 result.get("inserted", 0),
                 result.get("updated", 0),
+                result.get("removed", 0),
             )
         flush_outbox(db)
     finally:
         db.close()
+
+
+@app.on_event("startup")
+async def start_iec104_servers():
+    """Aktif IEC 104 outbound target'lari icin TCP server'lari baslat.
+
+    `create_tables` tamamlandiktan sonra calisir (FastAPI startup event'lari
+    tanımlanma sirasina göre kosturulur). IEC 104 sunucularinin yaşam
+    dongusu FastAPI loop icindedir; thread dongusundeki
+    `outbound_dispatch_service._dispatch_iec104` `call_soon_threadsafe` ile
+    degerleri guvenli iletir.
+    """
+    import logging
+
+    loop = asyncio.get_running_loop()
+    db = SessionLocal()
+    try:
+        deployed = await deploy_all_active_targets(db, loop=loop)
+        if deployed:
+            logging.getLogger(__name__).info("iec104_servers_deployed count=%d", deployed)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("iec104_startup_failed")
+    finally:
+        db.close()
+
+
+@app.on_event("shutdown")
+async def stop_iec104_servers():
+    import logging
+
+    try:
+        await iec104_undeploy_all()
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("iec104_shutdown_failed")
