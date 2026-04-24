@@ -1,6 +1,6 @@
 # Horstman Smart Logger Platform
 
-**Version:** 2.24.2
+**Version:** 2.24.4
 Windows-first, Docker-free industrial monitoring platform starter for Horstmann Smart Navigator 2.0 devices.
 
 ## Tek Tıkla Başlatma

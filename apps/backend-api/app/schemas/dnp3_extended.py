@@ -20,7 +20,6 @@ class Dnp3ExtendedSettings(BaseModel):
     validate_source_address: bool = False
     session_timeout_listening_sec: int = Field(default=60, ge=1, le=86400)
     socket_listening_timeout_sec: int = Field(default=600, ge=1, le=86400)
-    tls_dnp3: bool = True
 
 
 def merge_dnp3_extended(stored: dict | None) -> Dnp3ExtendedSettings:
@@ -29,5 +28,7 @@ def merge_dnp3_extended(stored: dict | None) -> Dnp3ExtendedSettings:
         return Dnp3ExtendedSettings.model_validate(base)
     if not isinstance(stored, dict):
         return Dnp3ExtendedSettings.model_validate(base)
-    base.update({k: v for k, v in stored.items() if k in base})
+    clean = {k: v for k, v in stored.items() if k not in ("tls_dnp3",)}
+    base.update({k: v for k, v in clean.items() if k in base})
+    base["ip_endpoint_type"] = "listening"
     return Dnp3ExtendedSettings.model_validate(base)

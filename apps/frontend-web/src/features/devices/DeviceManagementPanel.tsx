@@ -249,7 +249,9 @@ export function DeviceManagementPanel({
         description: description.trim() || null,
         gateway_code: selectedGatewayCode || null,
         ip_address: ipAddress,
+        dnp3_outstation_port: Number(dnp3OutstationPort),
         dnp3_address: Number(dnp3Address),
+        dnp3_extended: { ...dnp3Ext, ip_endpoint_type: "listening" },
         poll_interval_sec: Number(pollIntervalSec),
         timeout_ms: Number(timeoutMs),
         retry_count: Number(retryCount),
@@ -285,7 +287,7 @@ export function DeviceManagementPanel({
         ip_address: createIpAddress,
         dnp3_outstation_port: Number(createDnp3OutstationPort),
         dnp3_address: Number(createDnp3Address),
-        dnp3_extended: { ...createDnp3Ext },
+        dnp3_extended: { ...createDnp3Ext, ip_endpoint_type: "listening" },
         poll_interval_sec: Number(createPollIntervalSec),
         timeout_ms: Number(createTimeoutMs),
         retry_count: Number(createRetryCount),
@@ -533,21 +535,6 @@ export function DeviceManagementPanel({
           ) : (
             <div className="device-detail-form device-detail-form--tabbed">
               <div className="device-detail-form-fixed-header">
-                <div className="device-comms-readonly device-comms-readonly-compact">
-                  <p className="device-comms-readonly-p">
-                    <span
-                      className={`device-comms-pill device-comms-pill--${deviceCommDotClass(
-                        selectedDevice.communicationStatus
-                      )}`}
-                    >
-                      {selectedDevice.communicationStatus === "online" ? "OK" : "Kesik / bekleniyor"}
-                    </span>
-                    {selectedDevice.lastUpdateAt ? (
-                      <span className="device-comms-meta"> · Son veri: {formatTrRel(selectedDevice.lastUpdateAt)}</span>
-                    ) : null}
-                    {selectedGateway ? <span className="device-comms-meta"> · {selectedGateway.name}</span> : null}
-                  </p>
-                </div>
                 <div className="device-props-tabs" role="tablist" aria-label="Cihaz özellik sekmeleri">
                   <button
                     type="button"
@@ -586,10 +573,6 @@ export function DeviceManagementPanel({
                     <label>
                       Cihaz Kodu
                       <input value={selectedDevice.code} disabled readOnly />
-                    </label>
-                    <label>
-                      Sinyal Kaynağı
-                      <input value="Standart Sinyal Kataloğu" disabled readOnly />
                     </label>
                     <label>
                       İsim
@@ -687,16 +670,31 @@ export function DeviceManagementPanel({
                 </div>
               )}
 
-              <div className="device-form-actions">
-                <button type="button" className="secondary-btn" onClick={handleOpenMapPicker}>
-                  Haritadan Seç
-                </button>
-                <button type="button" className="primary-btn" onClick={() => void handleSaveDevice()}>
-                  Kaydet
-                </button>
-                <button type="button" className="danger-btn" onClick={() => void handleDeleteDevice()}>
-                  Sil
-                </button>
+              <div className="device-form-footer-bar">
+                <div className="device-comms-footer-subtle">
+                  <span
+                    className={`device-comms-pill device-comms-pill--${deviceCommDotClass(
+                      selectedDevice.communicationStatus
+                    )}`}
+                  >
+                    {selectedDevice.communicationStatus === "online" ? "OK" : "Kesik / bekleniyor"}
+                  </span>
+                  {selectedDevice.lastUpdateAt ? (
+                    <span className="device-comms-meta"> · Son veri: {formatTrRel(selectedDevice.lastUpdateAt)}</span>
+                  ) : null}
+                  {selectedGateway ? <span className="device-comms-meta"> · {selectedGateway.name}</span> : null}
+                </div>
+                <div className="device-form-actions">
+                  <button type="button" className="secondary-btn" onClick={handleOpenMapPicker}>
+                    Haritadan Seç
+                  </button>
+                  <button type="button" className="primary-btn" onClick={() => void handleSaveDevice()}>
+                    Kaydet
+                  </button>
+                  <button type="button" className="danger-btn" onClick={() => void handleDeleteDevice()}>
+                    Sil
+                  </button>
+                </div>
               </div>
             </div>
           )}

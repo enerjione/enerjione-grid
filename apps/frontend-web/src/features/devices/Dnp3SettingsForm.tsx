@@ -1,4 +1,4 @@
-import type { Dnp3ExtendedSettings, IpEndpointType } from "../../shared/types";
+import type { Dnp3ExtendedSettings } from "../../shared/types";
 
 type Props = {
   value: Dnp3ExtendedSettings;
@@ -43,22 +43,10 @@ export function Dnp3SettingsForm({ value, onChange }: Props) {
     <div className="dnp3-settings-form">
       <h5 className="dnp3-settings-title">DNP3 oturum ayarları</h5>
       <p className="helper-text dnp3-settings-hint">
-        <Req /> ile işaretli alanlar referans cihaz şablonuna göre zorunlu kabul edilir; değerler merkezde saklanır ve
-        saha gateway&apos;ine elle veya senkron ile aktarılmalıdır.
+        Uç nokta tipi: <strong>Dinleyen uç nokta (Listening End Point)</strong> — değiştirilemez. <Req /> ile
+        işaretli alanlar referans şablona göre zorunlu kabul edilir; değerler merkezde saklanır.
       </p>
       <div className="dnp3-settings-grid">
-        <label className="dnp3-field">
-          <span className="dnp3-label">
-            IP uç nokta tipi <Req />
-          </span>
-          <select
-            value={v.ip_endpoint_type}
-            onChange={(e) => set({ ip_endpoint_type: e.target.value as IpEndpointType })}
-          >
-            <option value="initiating">Başlatan uç nokta (Initiating End Point)</option>
-            <option value="listening">Dinleyen uç nokta (Listening End Point)</option>
-          </select>
-        </label>
         <label className="dnp3-field">
           <span className="dnp3-label">
             Master IP adresi <Req />
@@ -167,7 +155,6 @@ export function Dnp3SettingsForm({ value, onChange }: Props) {
             <span className="dnp3-unit">s</span>
           </span>
         </label>
-        <BoolSelect id="dnp3-tls" label="TLS DNP3" value={v.tls_dnp3} onChange={(b) => set({ tls_dnp3: b })} />
       </div>
     </div>
   );

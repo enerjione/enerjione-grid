@@ -15,7 +15,6 @@ export type Dnp3ExtendedSettings = {
   validate_source_address: boolean;
   session_timeout_listening_sec: number;
   socket_listening_timeout_sec: number;
-  tls_dnp3: boolean;
 };
 
 /** Backend ile aynı varsayılanlar (merge edilmemiş cevaplar için) */
@@ -31,14 +30,15 @@ export const DEFAULT_DNP3_EXTENDED: Dnp3ExtendedSettings = {
   enable_self_address: false,
   validate_source_address: false,
   session_timeout_listening_sec: 60,
-  socket_listening_timeout_sec: 600,
-  tls_dnp3: true
+  socket_listening_timeout_sec: 600
 };
 
 export function mergeDnp3Extended(
   raw: Partial<Dnp3ExtendedSettings> | undefined | null
 ): Dnp3ExtendedSettings {
-  return { ...DEFAULT_DNP3_EXTENDED, ...raw, ip_endpoint_type: "listening" };
+  const rest = raw ? { ...raw } : {};
+  delete (rest as Record<string, unknown>).tls_dnp3;
+  return { ...DEFAULT_DNP3_EXTENDED, ...rest, ip_endpoint_type: "listening" };
 }
 
 export type DeviceRow = {

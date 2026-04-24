@@ -1,7 +1,7 @@
 import hashlib
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -124,19 +124,27 @@ def disable_gateway(
 @router.get("/{gateway_code}/config", response_model=GatewayConfigResponse)
 def get_gateway_config(
     gateway_code: str,
+    response: Response,
     db: Session = Depends(get_db),
     x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
     x_gateway_code: str | None = Header(default=None, alias="X-Gateway-Code"),
     x_gateway_instance_id: str | None = Header(default=None, alias="X-Gateway-Instance-Id"),
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
 ):
-    """Collector/gateway servislerinin kendi konfig ve cihaz listesini çektiği endpoint.
+    """Gateway servislerinin kendi konfig ve cihaz listesini çektiği endpoint.
 
     Auth: `X-Gateway-Token` header ile gateway token doğrulanır (operatör oturumu gerektirmez).
 
     Opsiyonel: `X-Gateway-Code` gönderilirse **path'teki `gateway_code` ile aynı** olmalıdır
     (yanlış yapılandırılmış istemcileri veya proxy hatalarını erken yakalar).
     `X-Gateway-Instance-Id` / `X-Request-Id` audit ve korelasyon için kabul edilir.
+
+    Performans: Response `ETag: "<config_version>"` doner. Gateway bir sonraki
+    istekte `If-None-Match` ile ayni ETag'i geri gonderirse **304 Not Modified**
+    doneriz ve signal/device listesini serialize etmeyiz. 6 gateway x 30s
+    refresh = dakika basina 12 cagri; konfig nadiren degistigi icin buyuk
+    cogunlukta 304 olur, DB ve network yuku dusurur.
     """
     if x_gateway_code is not None and x_gateway_code.strip() != gateway_code:
         raise HTTPException(
@@ -155,6 +163,42 @@ def get_gateway_config(
     # calisir ve collector ayakta kalip bir sonraki enable komutunu bekler.
 
     devices: list[Device] = DeviceRepository(db).list_devices_by_gateway(gateway_code)
+    signals_rows = list(
+        db.scalars(
+            select(SignalCatalog)
+            .where(SignalCatalog.is_active.is_(True))
+            .order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
+        ).all()
+    )
+
+    device_seed = "|".join(
+        f"{device.code}:{device.ip_address}:{device.dnp3_address}:{device.poll_interval_sec}"
+        for device in devices
+    )
+    signal_seed = "|".join(
+        f"{signal.source}:{signal.key}:{signal.data_type}:{signal.dnp3_object_group}:{signal.dnp3_index}:{signal.scale}"
+        for signal in signals_rows
+    )
+    config_version = hashlib.sha1(
+        f"{gateway.code}:{gateway.batch_interval_sec}:{device_seed}::{signal_seed}".encode("utf-8"),
+        usedforsecurity=False,
+    ).hexdigest()[:12]
+    etag = f'"{config_version}"'
+
+    # `last_seen_at` ETag eslese bile her istekte guncellenmeli — konfigiyuon
+    # degismemis bile olsa gateway canlilik sinyali veriyor.
+    gateway.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # ETag match -> 304 Not Modified. Signal/device Pydantic serialize yok,
+    # response body de yok. Body disindaki headerlari gateway yine kullanir.
+    normalized_inm = (if_none_match or "").strip()
+    if normalized_inm in (etag, config_version):
+        response.status_code = status.HTTP_304_NOT_MODIFIED
+        response.headers["ETag"] = etag
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+
+    response.headers["ETag"] = etag
 
     config_devices = [
         GatewayConfigDevice(
@@ -169,14 +213,6 @@ def get_gateway_config(
         )
         for device in devices
     ]
-
-    signals_rows = list(
-        db.scalars(
-            select(SignalCatalog)
-            .where(SignalCatalog.is_active.is_(True))
-            .order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
-        ).all()
-    )
     config_signals = [
         GatewayConfigSignal(
             key=signal.key,
@@ -193,22 +229,6 @@ def get_gateway_config(
         )
         for signal in signals_rows
     ]
-
-    device_seed = "|".join(
-        f"{device.code}:{device.ip_address}:{device.dnp3_address}:{device.poll_interval_sec}"
-        for device in devices
-    )
-    signal_seed = "|".join(
-        f"{signal.source}:{signal.key}:{signal.data_type}:{signal.dnp3_object_group}:{signal.dnp3_index}:{signal.scale}"
-        for signal in signals_rows
-    )
-    config_version = hashlib.sha1(
-        f"{gateway.code}:{gateway.batch_interval_sec}:{device_seed}::{signal_seed}".encode("utf-8"),
-        usedforsecurity=False,
-    ).hexdigest()[:12]
-
-    gateway.last_seen_at = datetime.now(timezone.utc)
-    db.commit()
 
     return GatewayConfigResponse(
         gateway_code=gateway.code,
