@@ -229,6 +229,35 @@ export type SignalLiveRow = {
   source_timestamp: string | null;
 };
 
+export type ResponsibilityAreaRow = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  created_at: string;
+  user_count: number;
+  device_count: number;
+};
+
+export type ResponsibilityAreaUser = {
+  id: number;
+  username: string;
+  full_name: string;
+  email: string;
+};
+
+export type ResponsibilityAreaDevice = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+export type ResponsibilityAreaDetail = ResponsibilityAreaRow & {
+  users: ResponsibilityAreaUser[];
+  devices: ResponsibilityAreaDevice[];
+};
+
 export type AlarmLevel = "info" | "warning" | "critical";
 export type AlarmComparator =
   | "gt"

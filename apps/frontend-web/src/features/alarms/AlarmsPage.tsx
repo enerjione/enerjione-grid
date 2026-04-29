@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { AlarmComment, AlarmEvent, UserRead } from "../../shared/types";
+import type { AlarmComment, AlarmEvent, DeviceRow, UserRead } from "../../shared/types";
 
 type Props = {
   alarms: AlarmEvent[];
   users: UserRead[];
+  devices: DeviceRow[];
   loading?: boolean;
   onAssign: (alarmId: number, assignedTo: string | null) => Promise<void>;
   onLoadComments: (alarmId: number) => Promise<AlarmComment[]>;
@@ -21,6 +22,7 @@ type DetailFocus = "assign" | "comments" | null;
 export function AlarmsPage({
   alarms,
   users,
+  devices,
   loading,
   onAssign,
   onLoadComments,
@@ -295,8 +297,8 @@ export function AlarmsPage({
                 <th>Alarm</th>
                 <th>Cihaz</th>
                 <th>Durum</th>
-                <th>İşlem</th>
                 <th>Atanan</th>
+                <th className="alarm-actions-th">İşlem</th>
               </tr>
             </thead>
             <tbody>
@@ -320,66 +322,76 @@ export function AlarmsPage({
                         {isReset ? "Normale döndü" : alarm.acknowledged ? "Onaylandı" : "Açık"}
                       </span>
                     </td>
-                    <td className="actions-cell">
+                    <td>{alarm.assigned_to ?? "-"}</td>
+                    <td className="actions-cell alarm-actions-cell">
                       <button
                         type="button"
-                        className="secondary-btn action-btn"
+                        className="icon-btn icon-btn-ack"
+                        title="Onayla"
+                        aria-label="Onayla"
                         disabled={saving || Boolean(alarm.acknowledged) || isReset}
                         onClick={(event) => {
                           event.stopPropagation();
                           void handleAcknowledge(alarm.id);
                         }}
                       >
-                        Onayla
+                        <span className="material-symbols-outlined">check</span>
                       </button>
                       <button
                         type="button"
-                        className="danger-btn action-btn"
+                        className="icon-btn icon-btn-reset"
+                        title="Resetle"
+                        aria-label="Resetle"
                         disabled={saving || isReset}
                         onClick={(event) => {
                           event.stopPropagation();
                           void handleReset(alarm.id);
                         }}
                       >
-                        Resetle
+                        <span className="material-symbols-outlined">restart_alt</span>
                       </button>
                       <button
                         type="button"
-                        className="secondary-btn action-btn"
+                        className="icon-btn icon-btn-assign"
+                        title="Atama"
+                        aria-label="Atama"
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
                           openDetail(alarm.id, "assign");
                         }}
                       >
-                        Atama
+                        <span className="material-symbols-outlined">person_add</span>
                       </button>
                       <button
                         type="button"
-                        className="secondary-btn action-btn"
+                        className="icon-btn icon-btn-comment"
+                        title="Yorum"
+                        aria-label="Yorum"
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
                           openDetail(alarm.id, "comments");
                         }}
                       >
-                        Yorum
+                        <span className="material-symbols-outlined">chat</span>
                       </button>
                       {isReset ? (
                         <button
                           type="button"
-                          className="danger-btn action-btn"
+                          className="icon-btn icon-btn-delete"
+                          title="Sil"
+                          aria-label="Sil"
                           disabled={saving}
                           onClick={(event) => {
                             event.stopPropagation();
                             void handleDelete(alarm.id);
                           }}
                         >
-                          Sil
+                          <span className="material-symbols-outlined">delete</span>
                         </button>
                       ) : null}
                     </td>
-                    <td>{alarm.assigned_to ?? "-"}</td>
                   </tr>
                 );
               })}

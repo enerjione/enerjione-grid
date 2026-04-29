@@ -3,6 +3,7 @@ import { Header } from "../components/Header";
 import { LoginForm } from "../features/auth/LoginForm";
 import { UserManagementPanel } from "../features/auth/UserManagementPanel";
 import { AlarmsPage } from "../features/alarms/AlarmsPage";
+import { ResponsibilityAreasPage } from "../features/responsibility-areas/ResponsibilityAreasPage";
 import { EventsPage } from "../features/events/EventsPage";
 import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
@@ -26,12 +27,21 @@ import {
   deleteGateway,
   deleteSignal,
   deleteUser,
+  addDeviceToArea,
+  addUserToArea,
+  createResponsibilityArea,
+  deleteResponsibilityArea,
   fetchAlarmComments,
   fetchAlarmEvents,
   fetchAlarmRules,
   fetchDeviceModels,
   fetchDevices,
   fetchGateways,
+  fetchResponsibilityAreaDetail,
+  fetchResponsibilityAreas,
+  removeDeviceFromArea,
+  removeUserFromArea,
+  updateResponsibilityArea,
   fetchSystemEvents,
   fetchMe,
   fetchNotificationSettings,
@@ -75,6 +85,7 @@ import type {
   Gateway,
   NotificationSettings,
   OutboundTarget,
+  ResponsibilityAreaRow,
   SignalCatalogRow,
   SignalLiveRow,
   SystemEvent,
@@ -90,6 +101,7 @@ type EngineeringPage =
   | "live-values"
   | "alarm-rules"
   | "users"
+  | "responsibility-areas"
   | "outbound"
   | "notifications";
 
@@ -126,6 +138,7 @@ export function App() {
   const [notificationSettingsError, setNotificationSettingsError] = useState("");
   const [signalCatalog, setSignalCatalog] = useState<SignalCatalogRow[]>([]);
   const [deviceModels, setDeviceModels] = useState<DeviceModelOption[]>([]);
+  const [responsibilityAreas, setResponsibilityAreas] = useState<ResponsibilityAreaRow[]>([]);
   const [signalLiveValues, setSignalLiveValues] = useState<SignalLiveRow[]>([]);
   const [signalLoading, setSignalLoading] = useState(false);
   const [signalLiveLoading, setSignalLiveLoading] = useState(false);
@@ -197,6 +210,12 @@ export function App() {
           setAlarmRules(ruleRows);
         } catch {
           setAlarmRules([]);
+        }
+        try {
+          const areaRows = await fetchResponsibilityAreas(session.accessToken);
+          setResponsibilityAreas(areaRows);
+        } catch {
+          setResponsibilityAreas([]);
         }
       } catch {
         setAuthError("Oturum geçersiz veya API erişilemiyor.");
@@ -458,6 +477,62 @@ export function App() {
     if (!session) return;
     const updated = await resetAllAlarms(session.accessToken);
     setAlarms(updated);
+  };
+
+  const reloadResponsibilityAreas = async () => {
+    if (!session) return;
+    const rows = await fetchResponsibilityAreas(session.accessToken);
+    setResponsibilityAreas(rows);
+  };
+
+  const handleLoadAreaDetail = async (areaId: number) => {
+    if (!session) throw new Error("Oturum yok");
+    return fetchResponsibilityAreaDetail(session.accessToken, areaId);
+  };
+
+  const handleCreateArea = async (payload: { code: string; name: string; description?: string | null }) => {
+    if (!session) return;
+    await createResponsibilityArea(session.accessToken, payload);
+    await reloadResponsibilityAreas();
+  };
+
+  const handleUpdateArea = async (
+    areaId: number,
+    payload: { name?: string; description?: string | null; is_active?: boolean }
+  ) => {
+    if (!session) return;
+    await updateResponsibilityArea(session.accessToken, areaId, payload);
+    await reloadResponsibilityAreas();
+  };
+
+  const handleDeleteArea = async (areaId: number) => {
+    if (!session) return;
+    await deleteResponsibilityArea(session.accessToken, areaId);
+    await reloadResponsibilityAreas();
+  };
+
+  const handleAddUserToArea = async (areaId: number, userId: number) => {
+    if (!session) return;
+    await addUserToArea(session.accessToken, areaId, userId);
+    await reloadResponsibilityAreas();
+  };
+
+  const handleRemoveUserFromArea = async (areaId: number, userId: number) => {
+    if (!session) return;
+    await removeUserFromArea(session.accessToken, areaId, userId);
+    await reloadResponsibilityAreas();
+  };
+
+  const handleAddDeviceToArea = async (areaId: number, deviceId: number) => {
+    if (!session) return;
+    await addDeviceToArea(session.accessToken, areaId, deviceId);
+    await reloadResponsibilityAreas();
+  };
+
+  const handleRemoveDeviceFromArea = async (areaId: number, deviceId: number) => {
+    if (!session) return;
+    await removeDeviceFromArea(session.accessToken, areaId, deviceId);
+    await reloadResponsibilityAreas();
   };
 
   const reloadGateways = async () => {
@@ -879,6 +954,17 @@ export function App() {
                   Kullanıcılar
                 </button>
               ) : null}
+              {session.role === "engineer" || session.role === "installer" ? (
+                <button
+                  className={engineeringPage === "responsibility-areas" ? "active" : ""}
+                  onClick={() => {
+                    setEngineeringPage("responsibility-areas");
+                    void reloadResponsibilityAreas();
+                  }}
+                >
+                  Sorumluluk Alanları
+                </button>
+              ) : null}
               {session.role === "installer" ? (
                 <>
                   <button
@@ -986,6 +1072,23 @@ export function App() {
                 onResetPassword={handleResetUserPassword}
               />
             ) : null}
+            {engineeringPage === "responsibility-areas" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <ResponsibilityAreasPage
+                role={session.role}
+                areas={responsibilityAreas}
+                users={users}
+                devices={devices}
+                onLoadDetail={handleLoadAreaDetail}
+                onCreate={handleCreateArea}
+                onUpdate={handleUpdateArea}
+                onDelete={handleDeleteArea}
+                onAddUser={handleAddUserToArea}
+                onRemoveUser={handleRemoveUserFromArea}
+                onAddDevice={handleAddDeviceToArea}
+                onRemoveDevice={handleRemoveDeviceFromArea}
+              />
+            ) : null}
             {engineeringPage === "outbound" && session.role === "installer" ? (
               <OutboundTargetsPanel
                 targets={outboundTargets}
@@ -1012,6 +1115,7 @@ export function App() {
               <AlarmsPage
                 alarms={alarms}
                 users={users}
+                devices={devices}
                 loading={alarmsLoading}
                 onAssign={handleAssignAlarm}
                 onLoadComments={handleLoadAlarmComments}

@@ -8,7 +8,7 @@ from app.api import alarm_rules, alarms, auth, device_models, devices, events, g
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, signal_catalog, system_event, telemetry as telemetry_model, user  # noqa: F401
+from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user  # noqa: F401
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
@@ -38,6 +38,7 @@ app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
 app.include_router(device_models.router, prefix=settings.api_prefix)
+app.include_router(responsibility_areas.router, prefix=settings.api_prefix)
 app.include_router(gateways.router, prefix=settings.api_prefix)
 app.include_router(telemetry.router, prefix=settings.api_prefix)
 app.include_router(alarms.router, prefix=settings.api_prefix)

@@ -10,6 +10,8 @@ import type {
   Gateway,
   NotificationSettings,
   OutboundTarget,
+  ResponsibilityAreaDetail,
+  ResponsibilityAreaRow,
   SignalCatalogRow,
   SignalLiveRow,
   SystemEvent,
@@ -713,4 +715,85 @@ export async function deleteAlarmRule(token: string, ruleId: number): Promise<vo
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Alarm kuralı silinemedi.");
+}
+
+
+// ----- Responsibility Areas -----
+export async function fetchResponsibilityAreas(token: string): Promise<ResponsibilityAreaRow[]> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas`, { headers: authHeaders(token) });
+  if (!response.ok) throw await buildApiError(response, "Sorumluluk alanları alınamadı.");
+  return (await response.json()) as ResponsibilityAreaRow[];
+}
+
+export async function fetchResponsibilityAreaDetail(token: string, areaId: number): Promise<ResponsibilityAreaDetail> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, { headers: authHeaders(token) });
+  if (!response.ok) throw await buildApiError(response, "Sorumluluk alanı detayı alınamadı.");
+  return (await response.json()) as ResponsibilityAreaDetail;
+}
+
+export async function createResponsibilityArea(
+  token: string,
+  payload: { code: string; name: string; description?: string | null; is_active?: boolean }
+): Promise<ResponsibilityAreaRow> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sorumluluk alanı oluşturulamadı.");
+  return (await response.json()) as ResponsibilityAreaRow;
+}
+
+export async function updateResponsibilityArea(
+  token: string,
+  areaId: number,
+  payload: { name?: string; description?: string | null; is_active?: boolean }
+): Promise<ResponsibilityAreaRow> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sorumluluk alanı güncellenemedi.");
+  return (await response.json()) as ResponsibilityAreaRow;
+}
+
+export async function deleteResponsibilityArea(token: string, areaId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sorumluluk alanı silinemedi.");
+}
+
+export async function addUserToArea(token: string, areaId: number, userId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/users/${userId}`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Kullanıcı alana eklenemedi.");
+}
+
+export async function removeUserFromArea(token: string, areaId: number, userId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/users/${userId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Kullanıcı alandan çıkarılamadı.");
+}
+
+export async function addDeviceToArea(token: string, areaId: number, deviceId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/devices/${deviceId}`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Cihaz alana eklenemedi.");
+}
+
+export async function removeDeviceFromArea(token: string, areaId: number, deviceId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/devices/${deviceId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Cihaz alandan çıkarılamadı.");
 }

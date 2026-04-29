@@ -1,7 +1,8 @@
 import hashlib
 from datetime import datetime, timezone
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,13 @@ from app.schemas.gateway import (
     GatewayCreate,
     GatewayRead,
     GatewayUpdate,
+)
+from app.services.gateway_compose import (
+    ComposeRenderError,
+    ComposeRenderInput,
+    filename_for,
+    render_compose,
+    render_env,
 )
 
 router = APIRouter(prefix="/gateways", tags=["gateways"])
@@ -119,6 +127,82 @@ def disable_gateway(
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.get("/{gateway_code}/docker-compose")
+def download_gateway_compose(
+    gateway_code: str,
+    backend_url: str = Query(
+        ...,
+        description="Gateway'in backend'e erisecegi public URL (orn. https://hsl.formelektrik.com/api/v1)",
+    ),
+    rabbitmq_url: str = Query(
+        ...,
+        description="Gateway'in publish yapacagi AMQP URL (orn. amqp://user:pass@rmq.hsl:5672/)",
+    ),
+    host_port: int = Query(
+        8020,
+        ge=1,
+        le=65535,
+        description="Host'ta health/metrics endpoint icin acilacak port (her instance icin farkli)",
+    ),
+    image: str = Query(
+        "hsl/dnp3-gateway:latest",
+        description="Docker image tag (registry/name:tag)",
+    ),
+    app_environment: Literal["development", "staging", "production"] = Query(
+        "production",
+        description="Hedef ortam (token uzunluk dogrulamasini etkiler)",
+    ),
+    fmt: Literal["compose", "env"] = Query(
+        "compose",
+        description="compose: docker-compose YAML (default) | env: Docker disinda dogrudan calistirma icin .env",
+    ),
+    _: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Frontend "Yeni gateway ekle" akisi: indirilebilir docker-compose / .env dosyasi.
+
+    Akis:
+        1. Operator/installer arayuzde gateway kaydi olusturur (POST /gateways).
+        2. Frontend bu endpoint'i cagirir, dosyayi indirir.
+        3. Dosya hedef sunucuya kopyalanir; ``docker compose -f hsl-gw-XXX.yml up -d``.
+
+    Donus: ``Content-Disposition: attachment`` ile dosya. Token gateway DB'den
+    cekilir, frontend'e ayrica gostermeye gerek yoktur (compose icinde gomulu gelir).
+    """
+
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    try:
+        render_input = ComposeRenderInput(
+            code=gateway.code,
+            token=gateway.token,
+            name=gateway.name,
+            backend_url=backend_url,
+            rabbitmq_url=rabbitmq_url,
+            host_port=host_port,
+            image=image,
+            app_environment=app_environment,
+        )
+    except (ComposeRenderError, TypeError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    try:
+        body = render_compose(render_input) if fmt == "compose" else render_env(render_input)
+    except ComposeRenderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    media_type = "application/x-yaml" if fmt == "compose" else "text/plain"
+    filename = filename_for(render_input, kind=fmt)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        # Frontend Axios/fetch akisinda dosya adini ekspoze etmek gerekir;
+        # CORS expose-headers backend tarafinda zaten "*" ise opsiyoneldir.
+        "X-Filename": filename,
+    }
+    return Response(content=body, media_type=media_type, headers=headers)
 
 
 @router.get("/{gateway_code}/config", response_model=GatewayConfigResponse)
