@@ -5,9 +5,7 @@ from pydantic import BaseModel, Field
 
 SignalDataType = Literal[
     "analog",
-    "analog_output",
     "binary",
-    "binary_output",
     "counter",
     "string",
 ]
@@ -17,6 +15,7 @@ SignalSource = Literal["master", "sat01", "sat02"]
 
 class SignalCatalogBase(BaseModel):
     key: str = Field(min_length=1, max_length=120)
+    model: str = Field(default="horstmann_sn_2_0", min_length=1, max_length=80)
     label: str = Field(min_length=1, max_length=200)
     unit: str | None = None
     description: str | None = None
@@ -40,6 +39,7 @@ class SignalCatalogCreate(SignalCatalogBase):
 
 
 class SignalCatalogUpdate(BaseModel):
+    model: str | None = Field(default=None, min_length=1, max_length=80)
     label: str | None = None
     unit: str | None = None
     description: str | None = None

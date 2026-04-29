@@ -14,6 +14,7 @@ class Device(Base):
     code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    model: Mapped[str] = mapped_column(String(80), default="horstmann_sn_2_0", index=True)
     gateway_code: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     ip_address: Mapped[str] = mapped_column(String(120))
     dnp3_outstation_port: Mapped[int] = mapped_column(Integer, default=20001)

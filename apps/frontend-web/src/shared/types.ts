@@ -41,11 +41,19 @@ export function mergeDnp3Extended(
   return { ...DEFAULT_DNP3_EXTENDED, ...rest, ip_endpoint_type: "listening" };
 }
 
+export type DeviceModelOption = {
+  code: string;
+  label: string;
+};
+
+export const DEFAULT_DEVICE_MODEL = "horstmann_sn_2_0";
+
 export type DeviceRow = {
   id: number;
   code: string;
   name: string;
   description?: string;
+  model: string;
   gatewayCode?: string;
   ipAddress?: string;
   dnp3OutstationPort?: number;
@@ -76,6 +84,7 @@ export type ApiDevice = {
   code: string;
   name: string;
   description?: string | null;
+  model?: string | null;
   gateway_code?: string | null;
   ip_address: string;
   dnp3_outstation_port?: number;
@@ -182,9 +191,7 @@ export type NotificationSettings = {
 
 export type SignalDataType =
   | "analog"
-  | "analog_output"
   | "binary"
-  | "binary_output"
   | "counter"
   | "string";
 
@@ -193,6 +200,7 @@ export type SignalSource = "master" | "sat01" | "sat02";
 export type SignalCatalogRow = {
   id: number;
   key: string;
+  model: string;
   label: string;
   unit?: string | null;
   description?: string | null;

@@ -150,6 +150,31 @@ def reset_all_alarms(db: Session, actor_username: str) -> list[AlarmEvent]:
     return alarms
 
 
+def delete_alarm(db: Session, alarm_id: int, actor_username: str) -> None:
+    """Reset edilmis (normal'e donmus) bir alarmi sil. Acik alarm silinemez."""
+    alarm = db.get(AlarmEvent, alarm_id)
+    if alarm is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
+    if not alarm.reset:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Sadece resetlenmis (normal'e donmus) alarmlar silinebilir.",
+        )
+    # Yorumlari da sil (FK guvenligi).
+    db.query(AlarmComment).filter(AlarmComment.alarm_event_id == alarm_id).delete(synchronize_session=False)
+    db.delete(alarm)
+    record_event(
+        db,
+        category="alarm",
+        event_type="alarm_deleted",
+        severity="info",
+        actor_username=actor_username,
+        message=f"Alarm #{alarm_id} silindi",
+        metadata={"alarm_id": alarm_id},
+    )
+    db.commit()
+
+
 def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
     quality = (payload.get("quality") or "good").lower()
     is_fault = quality in {"bad", "offline", "invalid"}

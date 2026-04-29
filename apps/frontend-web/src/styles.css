@@ -2565,17 +2565,9 @@ main.content.engineering-content:has(.device-management-panel) {
   background: #dbeafe;
   color: #1d4ed8;
 }
-.badge.badge-analog_output {
-  background: #c7d2fe;
-  color: #3730a3;
-}
 .badge.badge-binary {
   background: #fde68a;
   color: #92400e;
-}
-.badge.badge-binary_output {
-  background: #fecaca;
-  color: #991b1b;
 }
 .badge.badge-counter {
   background: #d1fae5;
@@ -2769,11 +2761,49 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 .signals-type-tab.stt-analog.active { border-color: #93c5fd; }
-.signals-type-tab.stt-analog_output.active { border-color: #a5b4fc; }
 .signals-type-tab.stt-binary.active { border-color: #fcd34d; }
-.signals-type-tab.stt-binary_output.active { border-color: #fca5a5; }
 .signals-type-tab.stt-counter.active { border-color: #6ee7b7; }
 .signals-type-tab.stt-string.active { border-color: #d8b4fe; }
+
+.signals-header-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.signals-type-tabs--inline {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.signals-model-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.signals-model-select {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  min-width: 240px;
+}
+
+.signals-model-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
 
 .signals-toolbar {
   display: flex;
@@ -3300,8 +3330,42 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 .live-values-refresh {
-  margin-left: auto;
   white-space: nowrap;
   font-size: 13px;
   padding: 8px 14px;
+}
+
+.values-table .cell-center {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.auto-refresh-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 13px;
+  color: #475569;
+}
+
+.auto-refresh-label {
+  white-space: nowrap;
+}
+
+.auto-refresh-select {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  min-width: 92px;
+}
+
+.auto-refresh-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }

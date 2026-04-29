@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
+from app.data.device_models import is_valid_model
 from app.models.device import Device
 from app.models.enums import UserRole
 from app.models.signal_catalog import SignalCatalog
@@ -22,11 +23,20 @@ router = APIRouter(prefix="/signals", tags=["signals"])
 
 @router.get("", response_model=list[SignalCatalogRead])
 def list_signals(
+    model: str | None = Query(default=None, description="Cihaz modeli koduna gore filtrele"),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Tum roller standart sinyal listesini okuyabilir."""
-    stmt = select(SignalCatalog).order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
+    """Tum roller standart sinyal listesini okuyabilir.
+
+    `model` query parametresi gonderilirse sadece o modele ait sinyaller doner.
+    """
+    stmt = select(SignalCatalog)
+    if model:
+        if not is_valid_model(model):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown device model")
+        stmt = stmt.where(SignalCatalog.model == model)
+    stmt = stmt.order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
     return list(db.scalars(stmt).all())
 
 
@@ -154,9 +164,15 @@ def list_live_values(
     for row in db.scalars(latest_telemetry_stmt).all():
         latest_by_pair[(row.device_id, row.signal_key)] = row
 
+    # Modele gore on-grupla, ki her cihaz icin sadece kendi modelinin sinyallerini iterate edelim.
+    catalog_by_model: dict[str, list[SignalCatalog]] = {}
+    for signal in catalog_rows:
+        catalog_by_model.setdefault(signal.model, []).append(signal)
+
     result: list[SignalLiveValue] = []
     for device in device_rows:
-        for signal in catalog_rows:
+        device_signals = catalog_by_model.get(device.model, [])
+        for signal in device_signals:
             key = (device.id, signal.key)
             row = latest_by_pair.get(key)
             if row is not None:

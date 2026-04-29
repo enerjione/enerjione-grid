@@ -62,6 +62,38 @@ def ingest_alarm(
     if device_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="device_id or valid device_code required")
 
+    # Dedup: ayni cihaz + ayni seviye + ayni baslik icin halen acik (reset edilmemis)
+    # bir alarm varsa yeni satir UPRETME. Bunun yerine mevcut alarmin description'unu
+    # gunceller (en son neden gelen mesajla yenilenir) ve event log'a "duplicate"
+    # kaydi atilir. Ayni hata sebebiyle 100 kez ayni alarm uretilmesini engeller.
+    existing = db.scalar(
+        select(AlarmEvent)
+        .where(AlarmEvent.device_id == device_id)
+        .where(AlarmEvent.level == payload.level)
+        .where(AlarmEvent.title == payload.title)
+        .where(AlarmEvent.reset.is_(False))
+        .order_by(AlarmEvent.created_at.desc())
+        .limit(1)
+    )
+    if existing is not None:
+        existing.description = payload.description
+        record_event(
+            db,
+            category="alarm",
+            event_type="alarm_duplicate_suppressed",
+            severity="info",
+            device_code=payload.device_code,
+            message=f"Acik alarm icin duplicate suppress: {payload.title}",
+            metadata={
+                "alarm_id": existing.id,
+                "message_id": payload.message_id,
+                "correlation_id": payload.correlation_id,
+                "source_gateway": payload.source_gateway,
+            },
+        )
+        db.commit()
+        return {"status": "deduplicated", "alarm_id": existing.id}
+
     alarm = AlarmEvent(
         device_id=device_id,
         level=payload.level,

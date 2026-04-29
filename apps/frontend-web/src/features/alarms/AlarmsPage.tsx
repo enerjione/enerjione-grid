@@ -11,9 +11,12 @@ type Props = {
   onAddComment: (alarmId: number, comment: string) => Promise<void>;
   onAcknowledge: (alarmId: number) => Promise<void>;
   onReset: (alarmId: number) => Promise<void>;
+  onDelete: (alarmId: number) => Promise<void>;
   onAcknowledgeAll: () => Promise<void>;
   onResetAll: () => Promise<void>;
 };
+
+type DetailFocus = "assign" | "comments" | null;
 
 export function AlarmsPage({
   alarms,
@@ -24,6 +27,7 @@ export function AlarmsPage({
   onAddComment,
   onAcknowledge,
   onReset,
+  onDelete,
   onAcknowledgeAll,
   onResetAll
 }: Props) {
@@ -32,6 +36,7 @@ export function AlarmsPage({
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned" | "unassigned">("all");
   const [selectedAlarmId, setSelectedAlarmId] = useState<number | null>(null);
   const [isDetailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailFocus, setDetailFocus] = useState<DetailFocus>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentsByAlarm, setCommentsByAlarm] = useState<Record<number, AlarmComment[]>>({});
   const [saving, setSaving] = useState(false);
@@ -130,6 +135,29 @@ export function AlarmsPage({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = async (alarmId: number) => {
+    if (!window.confirm("Bu alarm kalici olarak silinsin mi?")) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onDelete(alarmId);
+      if (selectedAlarmId === alarmId) {
+        setSelectedAlarmId(null);
+        setDetailModalOpen(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Alarm silinemedi.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openDetail = (alarmId: number, focus: DetailFocus) => {
+    setSelectedAlarmId(alarmId);
+    setDetailFocus(focus);
+    setDetailModalOpen(true);
   };
 
   const handleAcknowledgeAll = async () => {
@@ -262,64 +290,99 @@ export function AlarmsPage({
           <table className="values-table alarms-page-table">
             <thead>
               <tr>
+                <th>Tarih</th>
                 <th>Seviye</th>
                 <th>Alarm</th>
                 <th>Cihaz</th>
-                <th>Atanan</th>
                 <th>Durum</th>
-                <th>Tarih</th>
                 <th>İşlem</th>
+                <th>Atanan</th>
               </tr>
             </thead>
             <tbody>
-              {filteredAlarms.map((alarm) => (
-                <tr
-                  key={alarm.id}
-                  className={selectedAlarmId === alarm.id ? "alarm-row-active" : ""}
-                  onClick={() => setSelectedAlarmId(alarm.id)}
-                  onDoubleClick={() => {
-                    setSelectedAlarmId(alarm.id);
-                    setDetailModalOpen(true);
-                  }}
-                >
-                  <td>
-                    <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
-                  </td>
-                  <td>{alarm.title}</td>
-                  <td>#{alarm.device_id}</td>
-                  <td>{alarm.assigned_to ?? "-"}</td>
-                  <td>
-                    <span className={`alarm-state ${alarm.reset ? "state-reset" : alarm.acknowledged ? "state-ack" : "state-open"}`}>
-                      {alarm.reset ? "Reset" : alarm.acknowledged ? "Onaylandı" : "Açık"}
-                    </span>
-                  </td>
-                  <td>{new Date(alarm.created_at).toLocaleString("tr-TR")}</td>
-                  <td className="actions-cell">
-                    <button
-                      type="button"
-                      className="secondary-btn action-btn"
-                      disabled={saving || Boolean(alarm.acknowledged)}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleAcknowledge(alarm.id);
-                      }}
-                    >
-                      Onayla
-                    </button>
-                    <button
-                      type="button"
-                      className="danger-btn action-btn"
-                      disabled={saving || Boolean(alarm.reset)}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleReset(alarm.id);
-                      }}
-                    >
-                      Resetle
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredAlarms.map((alarm) => {
+                const isReset = Boolean(alarm.reset);
+                return (
+                  <tr
+                    key={alarm.id}
+                    className={selectedAlarmId === alarm.id ? "alarm-row-active" : ""}
+                    onClick={() => setSelectedAlarmId(alarm.id)}
+                    onDoubleClick={() => openDetail(alarm.id, "comments")}
+                  >
+                    <td>{new Date(alarm.created_at).toLocaleString("tr-TR")}</td>
+                    <td>
+                      <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
+                    </td>
+                    <td>{alarm.title}</td>
+                    <td>#{alarm.device_id}</td>
+                    <td>
+                      <span className={`alarm-state ${isReset ? "state-reset" : alarm.acknowledged ? "state-ack" : "state-open"}`}>
+                        {isReset ? "Normale döndü" : alarm.acknowledged ? "Onaylandı" : "Açık"}
+                      </span>
+                    </td>
+                    <td className="actions-cell">
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        disabled={saving || Boolean(alarm.acknowledged) || isReset}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleAcknowledge(alarm.id);
+                        }}
+                      >
+                        Onayla
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-btn action-btn"
+                        disabled={saving || isReset}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleReset(alarm.id);
+                        }}
+                      >
+                        Resetle
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        disabled={saving}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openDetail(alarm.id, "assign");
+                        }}
+                      >
+                        Atama
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        disabled={saving}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openDetail(alarm.id, "comments");
+                        }}
+                      >
+                        Yorum
+                      </button>
+                      {isReset ? (
+                        <button
+                          type="button"
+                          className="danger-btn action-btn"
+                          disabled={saving}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDelete(alarm.id);
+                          }}
+                        >
+                          Sil
+                        </button>
+                      ) : null}
+                    </td>
+                    <td>{alarm.assigned_to ?? "-"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

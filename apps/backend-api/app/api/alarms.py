@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -10,6 +10,7 @@ from app.services.alarm_engine_service import (
     acknowledge_all_alarms as acknowledge_all_alarms_service,
     assign_alarm as assign_alarm_service,
     create_alarm_comment as create_alarm_comment_service,
+    delete_alarm as delete_alarm_service,
     list_alarm_comments as list_alarm_comments_service,
     list_alarm_events as list_alarm_events_service,
     reset_alarm as reset_alarm_service,
@@ -67,3 +68,10 @@ def acknowledge_all_alarms(db: Session = Depends(get_db), _: User = Depends(get_
 @router.post("/events/reset-all", response_model=list[AlarmEventRead])
 def reset_all_alarms(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return reset_all_alarms_service(db, _.username)
+
+
+@router.delete("/events/{alarm_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_alarm(alarm_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Resetlenmis alarmi siler. Acik alarm icin 409 doner."""
+    delete_alarm_service(db, alarm_id, _.username)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

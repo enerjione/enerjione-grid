@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import type { SignalCatalogRow, SignalDataType, SignalSource, UserRole } from "../../shared/types";
+import type { DeviceModelOption, SignalCatalogRow, SignalDataType, SignalSource, UserRole } from "../../shared/types";
 
 type Props = {
   role: UserRole;
   signals: SignalCatalogRow[];
+  deviceModels: DeviceModelOption[];
   loading: boolean;
   error?: string;
   onUpdate: (signalKey: string, payload: Partial<Omit<SignalCatalogRow, "id" | "key">>) => Promise<void>;
@@ -14,9 +15,7 @@ type TabKey = "all" | SignalDataType;
 
 const DATA_TYPES: SignalDataType[] = [
   "analog",
-  "analog_output",
   "binary",
-  "binary_output",
   "counter",
   "string"
 ];
@@ -31,18 +30,14 @@ const SOURCE_LABEL: Record<SignalSource, string> = {
 
 const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
   analog: "Analog Input",
-  analog_output: "Analog Output",
   binary: "Binary Input",
-  binary_output: "Binary Output",
   counter: "Counter",
   string: "String"
 };
 
 const DATA_TYPE_SHORT: Record<SignalDataType, string> = {
   analog: "Analog",
-  analog_output: "Analog Out",
   binary: "Binary",
-  binary_output: "Binary Out",
   counter: "Counter",
   string: "String"
 };
@@ -51,9 +46,7 @@ const DATA_TYPE_SHORT: Record<SignalDataType, string> = {
 // Kullanici UI'da elle girmemeli, veri tipi seciminden otomatik turetilir.
 const DNP3_GROUP_BY_TYPE: Record<SignalDataType, number> = {
   analog: 30,
-  analog_output: 40,
   binary: 1,
-  binary_output: 10,
   counter: 20,
   string: 110
 };
@@ -61,6 +54,7 @@ const DNP3_GROUP_BY_TYPE: Record<SignalDataType, number> = {
 export function SignalsPage({
   role,
   signals,
+  deviceModels,
   loading,
   error,
   onUpdate
@@ -72,19 +66,34 @@ export function SignalsPage({
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [modelFilter, setModelFilter] = useState<string>(
+    () => deviceModels[0]?.code ?? "horstmann_sn_2_0"
+  );
+
+  useEffect(() => {
+    if (deviceModels.length === 0) return;
+    if (!deviceModels.some((m) => m.code === modelFilter)) {
+      setModelFilter(deviceModels[0].code);
+    }
+  }, [deviceModels, modelFilter]);
+
+  const signalsForModel = useMemo(
+    () => signals.filter((s) => s.model === modelFilter),
+    [signals, modelFilter]
+  );
 
   const countsByType = useMemo(() => {
     const map = new Map<SignalDataType, number>();
     DATA_TYPES.forEach((t) => map.set(t, 0));
-    for (const sig of signals) {
+    for (const sig of signalsForModel) {
       map.set(sig.data_type, (map.get(sig.data_type) ?? 0) + 1);
     }
     return map;
-  }, [signals]);
+  }, [signalsForModel]);
 
   const filteredSignals = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    return signals.filter((signal) => {
+    return signalsForModel.filter((signal) => {
       if (activeTab !== "all" && signal.data_type !== activeTab) return false;
       if (sourceFilter !== "all" && signal.source !== sourceFilter) return false;
       if (!q) return true;
@@ -94,11 +103,11 @@ export function SignalsPage({
         (signal.description ?? "").toLowerCase().includes(q)
       );
     });
-  }, [signals, activeTab, sourceFilter, searchTerm]);
+  }, [signalsForModel, activeTab, sourceFilter, searchTerm]);
 
   const selected = useMemo(
-    () => signals.find((signal) => signal.key === selectedKey) ?? null,
-    [signals, selectedKey]
+    () => signalsForModel.find((signal) => signal.key === selectedKey) ?? null,
+    [signalsForModel, selectedKey]
   );
 
   const [editLabel, setEditLabel] = useState("");
@@ -156,12 +165,34 @@ export function SignalsPage({
     }
   };
 
-  const totalCount = signals.length;
+  const totalCount = signalsForModel.length;
   const visibleCount = filteredSignals.length;
 
   return (
     <section className="tab-panel signals-panel signals-panel-modern">
-      <div className="signals-type-tabs">
+      <div className="signals-header-row">
+        <label className="signals-model-label">
+          Cihaz Modeli
+          <select
+            className="signals-model-select"
+            value={modelFilter}
+            onChange={(event) => {
+              setModelFilter(event.target.value);
+              setSelectedKey("");
+            }}
+          >
+            {deviceModels.length === 0 ? (
+              <option value={modelFilter}>{modelFilter}</option>
+            ) : (
+              deviceModels.map((opt) => (
+                <option key={opt.code} value={opt.code}>
+                  {opt.label}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        <div className="signals-type-tabs signals-type-tabs--inline">
         <button
           className={`signals-type-tab ${activeTab === "all" ? "active" : ""}`}
           onClick={() => setActiveTab("all")}
@@ -179,6 +210,7 @@ export function SignalsPage({
             <span className="stt-count">{countsByType.get(type) ?? 0}</span>
           </button>
         ))}
+        </div>
       </div>
 
       <div className="signals-toolbar">

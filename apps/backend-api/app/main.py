@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api import alarm_rules, alarms, auth, devices, events, gateways, health, internal, notification_settings, outbound_targets, signals, telemetry, users
+from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, health, internal, notification_settings, outbound_targets, responsibility_areas, signals, telemetry, users
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -12,20 +12,32 @@ from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch,
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
+from app.services import telemetry_consumer
 
 app = FastAPI(title=settings.app_name)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_origins = settings.cors_origin_list
+if "*" in _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
+app.include_router(device_models.router, prefix=settings.api_prefix)
 app.include_router(gateways.router, prefix=settings.api_prefix)
 app.include_router(telemetry.router, prefix=settings.api_prefix)
 app.include_router(alarms.router, prefix=settings.api_prefix)
@@ -70,6 +82,22 @@ def create_tables():
         )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS description VARCHAR(500)"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS gateway_code VARCHAR(50)"))
+        connection.execute(
+            text(
+                "ALTER TABLE devices ADD COLUMN IF NOT EXISTS model VARCHAR(80) "
+                "NOT NULL DEFAULT 'horstmann_sn_2_0'"
+            )
+        )
+        connection.execute(text("CREATE INDEX IF NOT EXISTS idx_devices_model ON devices (model)"))
+        connection.execute(
+            text(
+                "ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS model VARCHAR(80) "
+                "NOT NULL DEFAULT 'horstmann_sn_2_0'"
+            )
+        )
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_signal_catalog_model ON signal_catalog (model)")
+        )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS dnp3_address INTEGER DEFAULT 1"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS poll_interval_sec INTEGER DEFAULT 5"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS timeout_ms INTEGER DEFAULT 3000"))
@@ -272,3 +300,13 @@ async def stop_iec104_servers():
         await iec104_undeploy_all()
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception("iec104_shutdown_failed")
+
+
+@app.on_event("startup")
+def start_telemetry_consumer():
+    telemetry_consumer.start()
+
+
+@app.on_event("shutdown")
+def stop_telemetry_consumer():
+    telemetry_consumer.stop()

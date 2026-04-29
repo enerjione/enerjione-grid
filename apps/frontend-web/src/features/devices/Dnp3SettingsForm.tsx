@@ -42,10 +42,6 @@ export function Dnp3SettingsForm({ value, onChange }: Props) {
   return (
     <div className="dnp3-settings-form">
       <h5 className="dnp3-settings-title">DNP3 oturum ayarları</h5>
-      <p className="helper-text dnp3-settings-hint">
-        Uç nokta tipi: <strong>Dinleyen uç nokta (Listening End Point)</strong> — değiştirilemez. <Req /> ile
-        işaretli alanlar referans şablona göre zorunlu kabul edilir; değerler merkezde saklanır.
-      </p>
       <div className="dnp3-settings-grid">
         <label className="dnp3-field">
           <span className="dnp3-label">

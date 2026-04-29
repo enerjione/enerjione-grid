@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # Uzun operatör oturumları (fabrika) için; .env: ACCESS_TOKEN_MINUTES=...
     access_token_minutes: int = 720
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/horstman"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "*"
     event_bus_backend: str = "inprocess"
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
     rabbitmq_exchange: str = "hsl.events"

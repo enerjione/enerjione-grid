@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import type { DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
+import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
 
@@ -47,6 +47,7 @@ type Props = {
   role: "operator" | "engineer" | "installer";
   gateways: Gateway[];
   devices: DeviceRow[];
+  deviceModels: DeviceModelOption[];
   onSelectGateway: (gatewayCode: string) => Promise<void>;
   onCreateGateway: (payload: {
     code: string;
@@ -71,6 +72,7 @@ type Props = {
     code: string;
     name: string;
     description?: string | null;
+    model: string;
     gateway_code?: string | null;
     ip_address: string;
     dnp3_outstation_port: number;
@@ -88,6 +90,7 @@ type Props = {
     payload: {
       name?: string;
       description?: string | null;
+      model?: string;
       gateway_code?: string | null;
       ip_address?: string;
       dnp3_outstation_port?: number;
@@ -107,6 +110,7 @@ export function DeviceManagementPanel({
   role,
   gateways,
   devices,
+  deviceModels,
   onSelectGateway,
   onCreateGateway,
   onUpdateGateway,
@@ -125,6 +129,7 @@ export function DeviceManagementPanel({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [model, setModel] = useState("horstmann_sn_2_0");
   const [ipAddress, setIpAddress] = useState("");
   const [dnp3OutstationPort, setDnp3OutstationPort] = useState("20001");
   const [dnp3Address, setDnp3Address] = useState("1");
@@ -138,6 +143,7 @@ export function DeviceManagementPanel({
   const [createCode, setCreateCode] = useState("");
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
+  const [createModel, setCreateModel] = useState("horstmann_sn_2_0");
   const [createIpAddress, setCreateIpAddress] = useState("");
   const [createDnp3OutstationPort, setCreateDnp3OutstationPort] = useState("20001");
   const [createDnp3Address, setCreateDnp3Address] = useState("1");
@@ -214,6 +220,7 @@ export function DeviceManagementPanel({
   const applySelectedDeviceToForm = (device: DeviceRow) => {
     setName(device.name);
     setDescription(device.description ?? "");
+    setModel(device.model ?? "horstmann_sn_2_0");
     setIpAddress(device.ipAddress ?? "");
     setDnp3OutstationPort(String(device.dnp3OutstationPort ?? 20001));
     setDnp3Address(String(device.dnp3Address ?? 1));
@@ -247,6 +254,7 @@ export function DeviceManagementPanel({
       await onUpdate(selectedDevice.code, {
         name,
         description: description.trim() || null,
+        model,
         gateway_code: selectedGatewayCode || null,
         ip_address: ipAddress,
         dnp3_outstation_port: Number(dnp3OutstationPort),
@@ -283,6 +291,7 @@ export function DeviceManagementPanel({
         code: createCode,
         name: createName,
         description: createDescription.trim() || null,
+        model: createModel,
         gateway_code: selectedGatewayCode || null,
         ip_address: createIpAddress,
         dnp3_outstation_port: Number(createDnp3OutstationPort),
@@ -299,6 +308,7 @@ export function DeviceManagementPanel({
       setCreateCode("");
       setCreateName("");
       setCreateDescription("");
+      setCreateModel("horstmann_sn_2_0");
       setCreateIpAddress("");
       setCreateDnp3OutstationPort("20001");
       setCreateDnp3Address("1");
@@ -579,6 +589,20 @@ export function DeviceManagementPanel({
                       <input value={name} onChange={(event) => setName(event.target.value)} />
                     </label>
                     <label>
+                      Model
+                      <select value={model} onChange={(event) => setModel(event.target.value)}>
+                        {deviceModels.length === 0 ? (
+                          <option value={model}>{model}</option>
+                        ) : (
+                          deviceModels.map((opt) => (
+                            <option key={opt.code} value={opt.code}>
+                              {opt.label}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </label>
+                    <label>
                       Açıklama
                       <input value={description} onChange={(event) => setDescription(event.target.value)} />
                     </label>
@@ -600,13 +624,9 @@ export function DeviceManagementPanel({
                   aria-labelledby="device-tab-comms"
                 >
                   <div className="device-props-comms-scroll">
-                    <p className="device-outstation-summary">
-                      <strong>Okuma (Outstation):</strong> {ipAddress || "—"}:{dnp3OutstationPort} · DNP3 outstation
-                      adresi: {dnp3Address}
-                    </p>
                     <div className="device-detail-form-grid">
                       <label>
-                        Outstation IP <span className="field-hint">(okunacak cihaz)</span>
+                        Outstation IP
                         <input
                           value={ipAddress}
                           onChange={(event) => setIpAddress(event.target.value)}
@@ -762,11 +782,25 @@ export function DeviceManagementPanel({
               <input value={createName} onChange={(event) => setCreateName(event.target.value)} required />
             </label>
             <label>
+              Model
+              <select value={createModel} onChange={(event) => setCreateModel(event.target.value)} required>
+                {deviceModels.length === 0 ? (
+                  <option value={createModel}>{createModel}</option>
+                ) : (
+                  deviceModels.map((opt) => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label>
               Açıklama
               <input value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} />
             </label>
             <label>
-              Outstation IP (okunacak cihaz)
+              Outstation IP
               <input value={createIpAddress} onChange={(event) => setCreateIpAddress(event.target.value)} required />
             </label>
             <label>

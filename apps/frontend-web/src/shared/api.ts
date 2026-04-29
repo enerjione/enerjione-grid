@@ -4,6 +4,7 @@ import type {
   AlarmRuleRow,
   ApiDevice,
   AuthSession,
+  DeviceModelOption,
   DeviceRow,
   Dnp3ExtendedSettings,
   Gateway,
@@ -17,7 +18,7 @@ import type {
 } from "./types";
 import { mergeDnp3Extended } from "./types";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
 const AUTH_STORAGE_KEY = "hsl-auth";
 
 type LoginResponse = {
@@ -143,6 +144,7 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     code: item.code,
     name: item.name,
     description: item.description ?? undefined,
+    model: item.model ?? "horstmann_sn_2_0",
     gatewayCode: item.gateway_code ?? undefined,
     ipAddress: item.ip_address,
     dnp3OutstationPort: item.dnp3_outstation_port ?? 20001,
@@ -161,12 +163,21 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
   }));
 }
 
+export async function fetchDeviceModels(token: string): Promise<DeviceModelOption[]> {
+  const response = await fetch(`${API_BASE_URL}/device-models`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Cihaz modeli listesi alınamadı.");
+  return (await response.json()) as DeviceModelOption[];
+}
+
 export async function createDevice(
   token: string,
   payload: {
     code: string;
     name: string;
     description?: string | null;
+    model: string;
     gateway_code?: string | null;
     ip_address: string;
     dnp3_outstation_port: number;
@@ -194,6 +205,7 @@ export async function updateDevice(
   payload: {
     name?: string;
     description?: string | null;
+    model?: string;
     gateway_code?: string | null;
     ip_address?: string;
     dnp3_outstation_port?: number;
@@ -365,6 +377,14 @@ export async function resetAlarm(token: string, alarmId: number): Promise<AlarmE
   });
   if (!response.ok) throw await buildApiError(response, "Alarm resetlenemedi.");
   return (await response.json()) as AlarmEvent;
+}
+
+export async function deleteAlarm(token: string, alarmId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Alarm silinemedi.");
 }
 
 export async function acknowledgeAllAlarms(token: string): Promise<AlarmEvent[]> {
@@ -584,8 +604,11 @@ export async function testNotificationSms(
 }
 
 // ----- Signal Catalog -----
-export async function fetchSignals(token: string): Promise<SignalCatalogRow[]> {
-  const response = await fetch(`${API_BASE_URL}/signals`, { headers: authHeaders(token) });
+export async function fetchSignals(token: string, model?: string): Promise<SignalCatalogRow[]> {
+  const url = model
+    ? `${API_BASE_URL}/signals?model=${encodeURIComponent(model)}`
+    : `${API_BASE_URL}/signals`;
+  const response = await fetch(url, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Sinyal listesi alınamadı.");
   return (await response.json()) as SignalCatalogRow[];
 }

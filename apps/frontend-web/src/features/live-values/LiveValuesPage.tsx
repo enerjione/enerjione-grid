@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SignalCatalogRow, SignalDataType, SignalLiveRow } from "../../shared/types";
 
 type Props = {
@@ -13,18 +13,14 @@ type TabKey = "all" | SignalDataType;
 
 const DATA_TYPES: SignalDataType[] = [
   "analog",
-  "analog_output",
   "binary",
-  "binary_output",
   "counter",
   "string"
 ];
 
 const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
   analog: "Analog Input",
-  analog_output: "Analog Output",
   binary: "Binary Input",
-  binary_output: "Binary Output",
   counter: "Counter",
   string: "String"
 };
@@ -35,6 +31,27 @@ const SOURCE_LABEL: Record<string, string> = {
   sat02: "Satellite 02"
 };
 
+const AUTO_REFRESH_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "Kapalı" },
+  { value: 5, label: "5 sn" },
+  { value: 10, label: "10 sn" },
+  { value: 30, label: "30 sn" },
+  { value: 60, label: "1 dk" },
+  { value: 300, label: "5 dk" }
+];
+
+const AUTO_REFRESH_STORAGE_KEY = "hsl.live-values.auto-refresh-sec";
+const AUTO_REFRESH_DEFAULT_SEC = 10;
+
+function readStoredAutoRefresh(): number {
+  if (typeof window === "undefined") return AUTO_REFRESH_DEFAULT_SEC;
+  const raw = window.localStorage.getItem(AUTO_REFRESH_STORAGE_KEY);
+  if (raw === null) return AUTO_REFRESH_DEFAULT_SEC;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return AUTO_REFRESH_DEFAULT_SEC;
+  return AUTO_REFRESH_OPTIONS.some((opt) => opt.value === parsed) ? parsed : AUTO_REFRESH_DEFAULT_SEC;
+}
+
 function formatBinaryValue(value: number): string {
   return value ? "AKTİF (1)" : "PASİF (0)";
 }
@@ -43,7 +60,7 @@ function formatValue(value: number | null, dataType: SignalDataType | undefined,
   if (value === null || value === undefined) {
     return "—";
   }
-  if (dataType === "binary" || dataType === "binary_output") {
+  if (dataType === "binary") {
     return formatBinaryValue(value);
   }
   const text = Number.isFinite(value)
@@ -68,6 +85,29 @@ function formatTimestamp(ts: string | null): string {
 export function LiveValuesPage({ values, signals, loading, error, onRefresh }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
+  const [autoRefreshSec, setAutoRefreshSec] = useState<number>(() => readStoredAutoRefresh());
+
+  const onRefreshRef = useRef(onRefresh);
+  const loadingRef = useRef(loading);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  useEffect(() => {
+    window.localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, String(autoRefreshSec));
+  }, [autoRefreshSec]);
+
+  useEffect(() => {
+    if (autoRefreshSec <= 0) return;
+    const id = window.setInterval(() => {
+      if (loadingRef.current) return;
+      void onRefreshRef.current();
+    }, autoRefreshSec * 1000);
+    return () => window.clearInterval(id);
+  }, [autoRefreshSec]);
 
   const signalByKey = useMemo(() => {
     const map = new Map<string, SignalCatalogRow>();
@@ -139,6 +179,20 @@ export function LiveValuesPage({ values, signals, loading, error, onRefresh }: P
         <span className="signals-count-pill">
           {filtered.length} / {totalCount}
         </span>
+        <label className="auto-refresh-control">
+          <span className="auto-refresh-label">Otomatik yenile</span>
+          <select
+            className="auto-refresh-select"
+            value={autoRefreshSec}
+            onChange={(event) => setAutoRefreshSec(Number.parseInt(event.target.value, 10) || 0)}
+          >
+            {AUTO_REFRESH_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           className="primary-btn live-values-refresh"
@@ -156,11 +210,11 @@ export function LiveValuesPage({ values, signals, loading, error, onRefresh }: P
           <thead>
             <tr>
               <th>Cihaz</th>
-              <th>Kaynak</th>
+              <th className="cell-center">Kaynak</th>
               <th>Sinyal</th>
-              <th>Tip</th>
+              <th className="cell-center">Tip</th>
               <th>Değer</th>
-              <th>Kalite</th>
+              <th className="cell-center">Kalite</th>
               <th>Zaman</th>
             </tr>
           </thead>
@@ -174,7 +228,7 @@ export function LiveValuesPage({ values, signals, loading, error, onRefresh }: P
                     <div className="cell-strong">{row.device_name}</div>
                     <div className="cell-helper">{row.device_code}</div>
                   </td>
-                  <td>
+                  <td className="cell-center">
                     <span className={`badge badge-source badge-source-${row.source}`}>
                       {SOURCE_LABEL[row.source] ?? row.source}
                     </span>
@@ -183,7 +237,7 @@ export function LiveValuesPage({ values, signals, loading, error, onRefresh }: P
                     <div className="cell-strong">{row.signal_label}</div>
                     <div className="cell-helper">{row.signal_key}</div>
                   </td>
-                  <td>
+                  <td className="cell-center">
                     {dataType ? (
                       <span className={`badge badge-${dataType}`}>{DATA_TYPE_LABEL[dataType]}</span>
                     ) : (
@@ -193,7 +247,7 @@ export function LiveValuesPage({ values, signals, loading, error, onRefresh }: P
                   <td className={`cell-value ${row.value === null ? "cell-value-pending" : ""}`}>
                     {formatValue(row.value, dataType, row.unit)}
                   </td>
-                  <td>
+                  <td className="cell-center">
                     {row.quality ? (
                       <span className={`quality quality-${row.quality}`}>{row.quality}</span>
                     ) : (

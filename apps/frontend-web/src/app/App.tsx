@@ -29,6 +29,7 @@ import {
   fetchAlarmComments,
   fetchAlarmEvents,
   fetchAlarmRules,
+  fetchDeviceModels,
   fetchDevices,
   fetchGateways,
   fetchSystemEvents,
@@ -45,6 +46,7 @@ import {
   saveSession,
   addAlarmComment,
   acknowledgeAlarm,
+  deleteAlarm,
   acknowledgeAllAlarms,
   assignAlarm,
   resetAlarm,
@@ -67,6 +69,7 @@ import type {
   AlarmEvent,
   AlarmRuleRow,
   AuthSession,
+  DeviceModelOption,
   Dnp3ExtendedSettings,
   DeviceRow,
   Gateway,
@@ -122,6 +125,7 @@ export function App() {
   const [notificationSettingsSaving, setNotificationSettingsSaving] = useState(false);
   const [notificationSettingsError, setNotificationSettingsError] = useState("");
   const [signalCatalog, setSignalCatalog] = useState<SignalCatalogRow[]>([]);
+  const [deviceModels, setDeviceModels] = useState<DeviceModelOption[]>([]);
   const [signalLiveValues, setSignalLiveValues] = useState<SignalLiveRow[]>([]);
   const [signalLoading, setSignalLoading] = useState(false);
   const [signalLiveLoading, setSignalLiveLoading] = useState(false);
@@ -181,6 +185,12 @@ export function App() {
           setSignalCatalog(signalsRows);
         } catch {
           setSignalCatalog([]);
+        }
+        try {
+          const modelRows = await fetchDeviceModels(session.accessToken);
+          setDeviceModels(modelRows);
+        } catch {
+          setDeviceModels([]);
         }
         try {
           const ruleRows = await fetchAlarmRules(session.accessToken);
@@ -432,6 +442,12 @@ export function App() {
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
   };
 
+  const handleDeleteAlarm = async (alarmId: number) => {
+    if (!session) return;
+    await deleteAlarm(session.accessToken, alarmId);
+    setAlarms((prev) => prev.filter((item) => item.id !== alarmId));
+  };
+
   const handleAcknowledgeAllAlarms = async () => {
     if (!session) return;
     const updated = await acknowledgeAllAlarms(session.accessToken);
@@ -572,6 +588,7 @@ export function App() {
     code: string;
     name: string;
     description?: string | null;
+    model: string;
     gateway_code?: string | null;
     ip_address: string;
     dnp3_outstation_port: number;
@@ -609,6 +626,7 @@ export function App() {
     payload: {
       name?: string;
       description?: string | null;
+      model?: string;
       gateway_code?: string | null;
       ip_address?: string;
       dnp3_outstation_port?: number;
@@ -907,6 +925,7 @@ export function App() {
                 role={session.role}
                 gateways={gateways}
                 devices={devicesByGateway}
+                deviceModels={deviceModels}
                 onSelectGateway={handleSelectGatewayForDevices}
                 onCreateGateway={handleCreateGateway}
                 onUpdateGateway={handleUpdateGateway}
@@ -928,6 +947,7 @@ export function App() {
               <SignalsPage
                 role={session.role}
                 signals={signalCatalog}
+                deviceModels={deviceModels}
                 loading={signalLoading}
                 error={signalError}
                 onUpdate={handleUpdateSignal}
@@ -998,6 +1018,7 @@ export function App() {
                 onAddComment={handleAddAlarmComment}
                 onAcknowledge={handleAcknowledgeAlarm}
                 onReset={handleResetAlarm}
+                onDelete={handleDeleteAlarm}
                 onAcknowledgeAll={handleAcknowledgeAllAlarms}
                 onResetAll={handleResetAllAlarms}
               />

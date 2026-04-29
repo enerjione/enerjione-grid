@@ -24,6 +24,9 @@ class SignalCatalog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    # Sinyal hangi cihaz modeline ait. Kullanici (cihaz formundan) modeli sectiginde,
+    # bu cihaza ait okuma listesi sadece ayni `model` degerine sahip sinyallerden olur.
+    model: Mapped[str] = mapped_column(String(80), default="horstmann_sn_2_0", index=True)
     label: Mapped[str] = mapped_column(String(200))
     unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
