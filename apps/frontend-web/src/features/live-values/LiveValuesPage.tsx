@@ -1,13 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SignalCatalogRow, SignalDataType, SignalLiveRow } from "../../shared/types";
+import type {
+  DeviceRow,
+  Gateway,
+  SignalCatalogRow,
+  SignalDataType,
+  SignalLiveRow
+} from "../../shared/types";
 
 type Props = {
   values: SignalLiveRow[];
   signals: SignalCatalogRow[];
+  devices: DeviceRow[];
+  gateways: Gateway[];
   loading: boolean;
   error?: string;
   onRefresh: () => Promise<void>;
 };
+
+const GATEWAY_LIVE_SEC = 60;
+
+function isGatewayOnline(gw: Gateway | undefined): boolean {
+  if (!gw || !gw.is_active) return false;
+  if (!gw.last_seen_at) return false;
+  const sec = (Date.now() - new Date(gw.last_seen_at).getTime()) / 1000;
+  return sec < GATEWAY_LIVE_SEC;
+}
 
 type TabKey = "all" | SignalDataType;
 
@@ -82,7 +99,27 @@ function formatTimestamp(ts: string | null): string {
   }
 }
 
-export function LiveValuesPage({ values, signals, loading, error, onRefresh }: Props) {
+export function LiveValuesPage({ values, signals, devices, gateways, loading, error, onRefresh }: Props) {
+  // device_code -> gateway_code mapping (cihazdan gateway'e gitmek icin)
+  const deviceGwMap = useMemo(() => {
+    const m = new Map<string, string | undefined>();
+    for (const d of devices) m.set(d.code, d.gatewayCode);
+    return m;
+  }, [devices]);
+  const gwOnlineMap = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const g of gateways) m.set(g.code, isGatewayOnline(g));
+    return m;
+  }, [gateways]);
+
+  const effectiveQuality = (row: SignalLiveRow): string | null => {
+    const gwCode = deviceGwMap.get(row.device_code);
+    if (gwCode && gwOnlineMap.get(gwCode) === false) {
+      // Gateway offline -> bagli cihazin sinyali "bad" (kalite kotu) gozukur.
+      return "bad";
+    }
+    return row.quality;
+  };
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [autoRefreshSec, setAutoRefreshSec] = useState<number>(() => readStoredAutoRefresh());
@@ -248,11 +285,14 @@ export function LiveValuesPage({ values, signals, loading, error, onRefresh }: P
                     {formatValue(row.value, dataType, row.unit)}
                   </td>
                   <td className="cell-center">
-                    {row.quality ? (
-                      <span className={`quality quality-${row.quality}`}>{row.quality}</span>
-                    ) : (
-                      <span className="quality quality-pending">—</span>
-                    )}
+                    {(() => {
+                      const q = effectiveQuality(row);
+                      return q ? (
+                        <span className={`quality quality-${q}`}>{q}</span>
+                      ) : (
+                        <span className="quality quality-pending">—</span>
+                      );
+                    })()}
                   </td>
                   <td>{formatTimestamp(row.source_timestamp)}</td>
                 </tr>

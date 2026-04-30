@@ -81,6 +81,13 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS control_port INTEGER NOT NULL DEFAULT 0")
         )
+        # Per-gateway RabbitMQ cred (otomatik provisionlanir; manual rabbitmqctl gerek yok)
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS rabbitmq_username VARCHAR(120)")
+        )
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS rabbitmq_password VARCHAR(255)")
+        )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS description VARCHAR(500)"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS gateway_code VARCHAR(50)"))
         connection.execute(

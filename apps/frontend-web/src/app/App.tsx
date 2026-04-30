@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../components/Header";
+import { useToast } from "../components/ToastProvider";
 import { LoginForm } from "../features/auth/LoginForm";
 import { UserManagementPanel } from "../features/auth/UserManagementPanel";
 import { AlarmsPage } from "../features/alarms/AlarmsPage";
@@ -25,6 +26,7 @@ import {
   deleteAlarmRule,
   deleteDevice,
   deleteGateway,
+  downloadGatewayCompose,
   deleteSignal,
   deleteUser,
   addDeviceToArea,
@@ -105,6 +107,54 @@ type EngineeringPage =
   | "outbound"
   | "notifications";
 
+const ROUTE_STORAGE_KEY = "hsl.route.v1";
+const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "events", "system-status", "engineering"];
+const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
+  "devices",
+  "signals",
+  "live-values",
+  "alarm-rules",
+  "users",
+  "responsibility-areas",
+  "outbound",
+  "notifications"
+];
+const VALID_HOME_TABS: TabId[] = ["map", "values"];
+
+type PersistedRoute = {
+  pageMode: PageMode;
+  engineeringPage: EngineeringPage;
+  homeTab: TabId;
+};
+
+function loadPersistedRoute(): PersistedRoute {
+  const fallback: PersistedRoute = { pageMode: "home", engineeringPage: "devices", homeTab: "map" };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(ROUTE_STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<PersistedRoute>;
+    return {
+      pageMode: VALID_PAGE_MODES.includes(parsed.pageMode as PageMode) ? (parsed.pageMode as PageMode) : fallback.pageMode,
+      engineeringPage: VALID_ENGINEERING_PAGES.includes(parsed.engineeringPage as EngineeringPage)
+        ? (parsed.engineeringPage as EngineeringPage)
+        : fallback.engineeringPage,
+      homeTab: VALID_HOME_TABS.includes(parsed.homeTab as TabId) ? (parsed.homeTab as TabId) : fallback.homeTab
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function savePersistedRoute(route: PersistedRoute): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ROUTE_STORAGE_KEY, JSON.stringify(route));
+  } catch {
+    // sessizce yutuyoruz - localStorage devre dışı / quota dolmuş olabilir
+  }
+}
+
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
   const [devices, setDevices] = useState<DeviceRow[]>([]);
@@ -122,9 +172,17 @@ export function App() {
   const [loadingLogin, setLoadingLogin] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number>(0);
-  const [activeTab, setActiveTab] = useState<TabId>("map");
-  const [engineeringPage, setEngineeringPage] = useState<EngineeringPage>("devices");
-  const [pageMode, setPageMode] = useState<PageMode>("home");
+  const toast = useToast();
+  const persistedRouteRef = useRef<PersistedRoute>(loadPersistedRoute());
+  const [activeTab, setActiveTab] = useState<TabId>(() => persistedRouteRef.current.homeTab);
+  const [engineeringPage, setEngineeringPage] = useState<EngineeringPage>(
+    () => persistedRouteRef.current.engineeringPage
+  );
+  const [pageMode, setPageMode] = useState<PageMode>(() => persistedRouteRef.current.pageMode);
+
+  useEffect(() => {
+    savePersistedRoute({ pageMode, engineeringPage, homeTab: activeTab });
+  }, [pageMode, engineeringPage, activeTab]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsFullName, setSettingsFullName] = useState("");
   const [settingsEmail, setSettingsEmail] = useState("");
@@ -294,6 +352,7 @@ export function App() {
     if (!session) return;
     await createSignal(session.accessToken, payload);
     await reloadSignals();
+    toast.success("Sinyal eklendi.");
   };
 
   const handleUpdateSignal = async (
@@ -303,12 +362,14 @@ export function App() {
     if (!session) return;
     await updateSignal(session.accessToken, signalKey, payload);
     await reloadSignals();
+    toast.success("Sinyal güncellendi.");
   };
 
   const handleDeleteSignal = async (signalKey: string) => {
     if (!session) return;
     await deleteSignal(session.accessToken, signalKey);
     await reloadSignals();
+    toast.success("Sinyal silindi.");
   };
 
   const handleRefreshSignalLive = useCallback(async () => {
@@ -376,6 +437,7 @@ export function App() {
     if (!session) return;
     await createAlarmRule(session.accessToken, payload);
     await reloadAlarmRules();
+    toast.success("Alarm kuralı eklendi.");
   };
 
   const handleUpdateAlarmRule = async (
@@ -385,12 +447,14 @@ export function App() {
     if (!session) return;
     await updateAlarmRule(session.accessToken, ruleId, payload);
     await reloadAlarmRules();
+    toast.success("Alarm kuralı güncellendi.");
   };
 
   const handleDeleteAlarmRule = async (ruleId: number) => {
     if (!session) return;
     await deleteAlarmRule(session.accessToken, ruleId);
     await reloadAlarmRules();
+    toast.success("Alarm kuralı silindi.");
   };
 
   const reloadUsers = async () => {
@@ -411,12 +475,14 @@ export function App() {
     if (!session) return;
     await createUser(session.accessToken, payload);
     await reloadUsers();
+    toast.success(`Kullanıcı "${payload.username}" eklendi.`);
   };
 
   const handleDeleteUser = async (userId: number) => {
     if (!session) return;
     await deleteUser(session.accessToken, userId);
     await reloadUsers();
+    toast.success("Kullanıcı silindi.");
   };
 
   const handleUpdateUser = async (
@@ -426,17 +492,20 @@ export function App() {
     if (!session) return;
     await updateUser(session.accessToken, userId, payload);
     await reloadUsers();
+    toast.success("Kullanıcı güncellendi.");
   };
 
   const handleResetUserPassword = async (userId: number, newPassword: string) => {
     if (!session) return;
     await resetUserPassword(session.accessToken, userId, newPassword);
+    toast.success("Kullanıcı şifresi sıfırlandı.");
   };
 
   const handleAssignAlarm = async (alarmId: number, assignedTo: string | null) => {
     if (!session) return;
     const updated = await assignAlarm(session.accessToken, alarmId, assignedTo);
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    toast.success(assignedTo ? `Alarm ${assignedTo} kullanıcısına atandı.` : "Alarm ataması kaldırıldı.");
   };
 
   const handleLoadAlarmComments = async (alarmId: number): Promise<AlarmComment[]> => {
@@ -447,36 +516,42 @@ export function App() {
   const handleAddAlarmComment = async (alarmId: number, comment: string) => {
     if (!session) return;
     await addAlarmComment(session.accessToken, alarmId, comment);
+    toast.success("Yorum eklendi.");
   };
 
   const handleAcknowledgeAlarm = async (alarmId: number) => {
     if (!session) return;
     const updated = await acknowledgeAlarm(session.accessToken, alarmId);
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    toast.success("Alarm onaylandı.");
   };
 
   const handleResetAlarm = async (alarmId: number) => {
     if (!session) return;
     const updated = await resetAlarm(session.accessToken, alarmId);
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    toast.success("Alarm sıfırlandı.");
   };
 
   const handleDeleteAlarm = async (alarmId: number) => {
     if (!session) return;
     await deleteAlarm(session.accessToken, alarmId);
     setAlarms((prev) => prev.filter((item) => item.id !== alarmId));
+    toast.success("Alarm silindi.");
   };
 
   const handleAcknowledgeAllAlarms = async () => {
     if (!session) return;
     const updated = await acknowledgeAllAlarms(session.accessToken);
     setAlarms(updated);
+    toast.success("Tüm alarmlar onaylandı.");
   };
 
   const handleResetAllAlarms = async () => {
     if (!session) return;
     const updated = await resetAllAlarms(session.accessToken);
     setAlarms(updated);
+    toast.success("Tüm alarmlar sıfırlandı.");
   };
 
   const reloadResponsibilityAreas = async () => {
@@ -494,6 +569,7 @@ export function App() {
     if (!session) return;
     await createResponsibilityArea(session.accessToken, payload);
     await reloadResponsibilityAreas();
+    toast.success("Sorumluluk alanı oluşturuldu.");
   };
 
   const handleUpdateArea = async (
@@ -503,36 +579,42 @@ export function App() {
     if (!session) return;
     await updateResponsibilityArea(session.accessToken, areaId, payload);
     await reloadResponsibilityAreas();
+    toast.success("Sorumluluk alanı güncellendi.");
   };
 
   const handleDeleteArea = async (areaId: number) => {
     if (!session) return;
     await deleteResponsibilityArea(session.accessToken, areaId);
     await reloadResponsibilityAreas();
+    toast.success("Sorumluluk alanı silindi.");
   };
 
   const handleAddUserToArea = async (areaId: number, userId: number) => {
     if (!session) return;
     await addUserToArea(session.accessToken, areaId, userId);
     await reloadResponsibilityAreas();
+    toast.success("Kullanıcı alana eklendi.");
   };
 
   const handleRemoveUserFromArea = async (areaId: number, userId: number) => {
     if (!session) return;
     await removeUserFromArea(session.accessToken, areaId, userId);
     await reloadResponsibilityAreas();
+    toast.success("Kullanıcı alandan çıkarıldı.");
   };
 
   const handleAddDeviceToArea = async (areaId: number, deviceId: number) => {
     if (!session) return;
     await addDeviceToArea(session.accessToken, areaId, deviceId);
     await reloadResponsibilityAreas();
+    toast.success("Cihaz alana eklendi.");
   };
 
   const handleRemoveDeviceFromArea = async (areaId: number, deviceId: number) => {
     if (!session) return;
     await removeDeviceFromArea(session.accessToken, areaId, deviceId);
     await reloadResponsibilityAreas();
+    toast.success("Cihaz alandan çıkarıldı.");
   };
 
   const reloadGateways = async () => {
@@ -560,6 +642,28 @@ export function App() {
     if (!session) return;
     await createGateway(session.accessToken, payload);
     await reloadGateways();
+    toast.success(`Gateway "${payload.name}" eklendi.`);
+  };
+
+  const handleDownloadGatewayCompose = async (
+    gatewayCode: string,
+    params: { backendUrl: string; hostPort: number; fmt: "compose" | "env" }
+  ) => {
+    if (!session) return;
+    const { blob, filename } = await downloadGatewayCompose(session.accessToken, gatewayCode, {
+      backendUrl: params.backendUrl,
+      hostPort: params.hostPort,
+      fmt: params.fmt
+    });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    toast.success(`${filename} indirildi.`);
   };
 
   const handleDeleteGateway = async (gatewayCode: string) => {
@@ -592,6 +696,7 @@ export function App() {
       setDevicePanelGatewayCode("");
       setDevicesByGateway([]);
     }
+    toast.success(`Gateway "${displayName}" silindi.`);
   };
 
   const handleUpdateGateway = async (
@@ -601,6 +706,7 @@ export function App() {
     if (!session) return;
     await updateGateway(session.accessToken, gatewayCode, payload);
     await reloadGateways();
+    toast.success("Gateway güncellendi.");
   };
 
   const handleSelectGatewayForDevices = useCallback(
@@ -653,6 +759,9 @@ export function App() {
     if (!session) return;
     if (pageMode !== "engineering" || engineeringPage !== "devices") return;
     if (session.role !== "engineer" && session.role !== "installer") return;
+    // Sekme her acildiginda hemen taze veri cek - aksi halde stale gateway
+    // durumu (haberlesme yok gibi) gosterilebiliyor.
+    void refreshDevicePanelData();
     const id = window.setInterval(() => {
       void refreshDevicePanelData();
     }, 12000);
@@ -694,6 +803,7 @@ export function App() {
       // sinyal listesi tazelense iyi, canlı matrisin etiketleriyle uyum kalsin
     }
     await handleRefreshSignalLive();
+    toast.success(`Cihaz "${payload.name}" eklendi.`);
   };
 
   const handleUpdateDevice = async (
@@ -724,6 +834,7 @@ export function App() {
     } else {
       setDevicesByGateway(all);
     }
+    toast.success("Cihaz güncellendi.");
   };
 
   const handleDeleteDevice = async (deviceCode: string) => {
@@ -733,6 +844,7 @@ export function App() {
     setDevices(all);
     setDevicesByGateway((prev) => prev.filter((item) => item.code !== deviceCode));
     await handleRefreshSignalLive();
+    toast.success("Cihaz silindi.");
   };
 
   const reloadOutboundTargets = async () => {
@@ -756,6 +868,7 @@ export function App() {
     if (!session) return;
     await createOutboundTarget(session.accessToken, payload);
     await reloadOutboundTargets();
+    toast.success(`Outbound hedef "${payload.name}" eklendi.`);
   };
 
   const handleUpdateOutboundTarget = async (
@@ -774,12 +887,14 @@ export function App() {
     if (!session) return;
     await updateOutboundTarget(session.accessToken, targetId, payload);
     await reloadOutboundTargets();
+    toast.success("Outbound hedef güncellendi.");
   };
 
   const handleDeleteOutboundTarget = async (targetId: number) => {
     if (!session) return;
     await deleteOutboundTarget(session.accessToken, targetId);
     await reloadOutboundTargets();
+    toast.success("Outbound hedef silindi.");
   };
 
   const reloadNotificationSettings = async () => {
@@ -803,6 +918,7 @@ export function App() {
     try {
       const updated = await updateNotificationSettingsApi(session.accessToken, payload);
       setNotificationSettings(updated);
+      toast.success("Bildirim ayarları kaydedildi.");
     } catch (error) {
       setNotificationSettingsError(error instanceof Error ? error.message : "Bildirim ayarları kaydedilemedi.");
       throw error;
@@ -1016,6 +1132,7 @@ export function App() {
                 onCreateGateway={handleCreateGateway}
                 onUpdateGateway={handleUpdateGateway}
                 onDeleteGateway={handleDeleteGateway}
+                onDownloadCompose={handleDownloadGatewayCompose}
                 onCreate={handleCreateDevice}
                 onUpdate={handleUpdateDevice}
                 onDelete={handleDeleteDevice}
@@ -1044,6 +1161,8 @@ export function App() {
               <LiveValuesPage
                 values={signalLiveValues}
                 signals={signalCatalog}
+                devices={devices}
+                gateways={gateways}
                 loading={signalLiveLoading}
                 error={signalLiveError}
                 onRefresh={handleRefreshSignalLive}
@@ -1165,6 +1284,8 @@ export function App() {
                 <LiveValuesPage
                   values={signalLiveValues}
                   signals={signalCatalog}
+                  devices={devices}
+                  gateways={gateways}
                   loading={signalLiveLoading}
                   error={signalLiveError}
                   onRefresh={handleRefreshSignalLive}

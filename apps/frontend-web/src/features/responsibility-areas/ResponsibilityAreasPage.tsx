@@ -360,6 +360,20 @@ export function ResponsibilityAreasPage({
                 {activeTab === "general" ? (
                   <div className="responsibility-section">
                     <div className="responsibility-detail-fields">
+                      <label className="responsibility-toggle responsibility-toggle--card">
+                        <input
+                          type="checkbox"
+                          checked={editIsActive}
+                          onChange={(e) => setEditIsActive(e.target.checked)}
+                          disabled={!canEdit || busy}
+                        />
+                        <span className="responsibility-toggle-text">
+                          <span className="responsibility-toggle-title">Aktif</span>
+                          <span className="responsibility-toggle-hint">
+                            Pasif yapıldığında bu alan listelerde görünmeye devam eder ancak yeni atamalara kapatılır.
+                          </span>
+                        </span>
+                      </label>
                       <label className="responsibility-field">
                         <span>Alan Adı</span>
                         <input value={editName} onChange={(e) => setEditName(e.target.value)} disabled={!canEdit || busy} />
@@ -368,23 +382,16 @@ export function ResponsibilityAreasPage({
                         <span>Kod</span>
                         <input value={detail.code} disabled readOnly />
                       </label>
-                      <label className="responsibility-field responsibility-field--wide">
+                      <label className="responsibility-field responsibility-field--wide responsibility-field--description">
                         <span>Açıklama</span>
-                        <input
+                        <textarea
+                          className="responsibility-textarea"
                           value={editDescription}
                           onChange={(e) => setEditDescription(e.target.value)}
                           disabled={!canEdit || busy}
                           placeholder="Bu alanın amacını kısaca yazın..."
+                          rows={5}
                         />
-                      </label>
-                      <label className="responsibility-toggle">
-                        <input
-                          type="checkbox"
-                          checked={editIsActive}
-                          onChange={(e) => setEditIsActive(e.target.checked)}
-                          disabled={!canEdit || busy}
-                        />
-                        <span>Aktif</span>
                       </label>
                     </div>
                   </div>

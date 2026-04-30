@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type {
   AlarmComparator,
   AlarmLevel,
@@ -18,19 +18,42 @@ type Props = {
   onDelete: (ruleId: number) => Promise<void>;
 };
 
+type Mode = "view" | "edit" | "create";
+
 const LEVELS: AlarmLevel[] = ["info", "warning", "critical"];
-const COMPARATORS: Array<{ value: AlarmComparator; label: string }> = [
-  { value: "gt", label: "> (büyüktür)" },
-  { value: "gte", label: ">= (büyük-eşit)" },
-  { value: "lt", label: "< (küçüktür)" },
-  { value: "lte", label: "<= (küçük-eşit)" },
-  { value: "eq", label: "= (eşittir)" },
-  { value: "ne", label: "!= (eşit değil)" },
-  { value: "between", label: "arası (low..high)" },
-  { value: "outside", label: "dışı (low..high dışı)" },
-  { value: "boolean_true", label: "BOOL = TRUE" },
-  { value: "boolean_false", label: "BOOL = FALSE" }
+const LEVEL_LABEL: Record<AlarmLevel, string> = {
+  info: "Bilgi",
+  warning: "Uyarı",
+  critical: "Kritik"
+};
+
+const COMPARATORS: Array<{ value: AlarmComparator; label: string; symbol: string }> = [
+  { value: "gt", label: "Büyüktür", symbol: ">" },
+  { value: "gte", label: "Büyük-eşit", symbol: "≥" },
+  { value: "lt", label: "Küçüktür", symbol: "<" },
+  { value: "lte", label: "Küçük-eşit", symbol: "≤" },
+  { value: "eq", label: "Eşittir", symbol: "=" },
+  { value: "ne", label: "Eşit değil", symbol: "≠" },
+  { value: "between", label: "Aralıkta", symbol: "↔" },
+  { value: "outside", label: "Aralık dışı", symbol: "⇹" },
+  { value: "boolean_true", label: "BOOL = TRUE", symbol: "✓" },
+  { value: "boolean_false", label: "BOOL = FALSE", symbol: "✗" }
 ];
+
+const COMPARATOR_LABEL = COMPARATORS.reduce<Record<AlarmComparator, string>>(
+  (acc, item) => {
+    acc[item.value] = item.label;
+    return acc;
+  },
+  {} as Record<AlarmComparator, string>
+);
+const COMPARATOR_SYMBOL = COMPARATORS.reduce<Record<AlarmComparator, string>>(
+  (acc, item) => {
+    acc[item.value] = item.symbol;
+    return acc;
+  },
+  {} as Record<AlarmComparator, string>
+);
 
 const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   signal_key: "",
@@ -46,6 +69,14 @@ const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   is_active: true
 };
 
+function isBooleanComparator(comparator: AlarmComparator): boolean {
+  return comparator === "boolean_true" || comparator === "boolean_false";
+}
+
+function isRangeComparator(comparator: AlarmComparator): boolean {
+  return comparator === "between" || comparator === "outside";
+}
+
 export function AlarmRulesPage({
   role,
   rules,
@@ -58,38 +89,139 @@ export function AlarmRulesPage({
 }: Props) {
   const canEdit = role === "installer";
   const alarmableSignals = useMemo(() => signals.filter((signal) => signal.supports_alarm), [signals]);
-  const [showCreate, setShowCreate] = useState(false);
+  const signalByKey = useMemo(() => {
+    const map = new Map<string, SignalCatalogRow>();
+    for (const signal of signals) map.set(signal.key, signal);
+    return map;
+  }, [signals]);
+
+  const [search, setSearch] = useState("");
+  const [levelFilter, setLevelFilter] = useState<"all" | AlarmLevel>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>("view");
   const [form, setForm] = useState<Omit<AlarmRuleRow, "id">>({ ...EMPTY_FORM });
   const [localError, setLocalError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const signalLabel = (signalKey: string) => {
-    const signal = signals.find((item) => item.key === signalKey);
-    return signal ? `${signal.label} (${signal.key})` : signalKey;
+  const filteredRules = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rules.filter((rule) => {
+      if (levelFilter !== "all" && rule.level !== levelFilter) return false;
+      if (statusFilter === "active" && !rule.is_active) return false;
+      if (statusFilter === "inactive" && rule.is_active) return false;
+      if (!q) return true;
+      const sigLabel = signalByKey.get(rule.signal_key)?.label ?? "";
+      return (
+        rule.name.toLowerCase().includes(q) ||
+        rule.signal_key.toLowerCase().includes(q) ||
+        sigLabel.toLowerCase().includes(q) ||
+        (rule.description ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [rules, search, levelFilter, statusFilter, signalByKey]);
+
+  const selectedRule = useMemo(
+    () => rules.find((rule) => rule.id === selectedId) ?? null,
+    [rules, selectedId]
+  );
+
+  // Seçili kural değişince formu doldur
+  useEffect(() => {
+    if (mode === "create") return;
+    if (selectedRule) {
+      setForm({
+        signal_key: selectedRule.signal_key,
+        name: selectedRule.name,
+        description: selectedRule.description ?? "",
+        level: selectedRule.level,
+        comparator: selectedRule.comparator,
+        threshold: selectedRule.threshold,
+        threshold_high: selectedRule.threshold_high,
+        hysteresis: selectedRule.hysteresis,
+        debounce_sec: selectedRule.debounce_sec,
+        device_code_filter: selectedRule.device_code_filter ?? "",
+        is_active: selectedRule.is_active
+      });
+      setMode("view");
+      setLocalError("");
+    }
+  }, [selectedRule, mode]);
+
+  const startCreate = () => {
+    setSelectedId(null);
+    setForm({ ...EMPTY_FORM, signal_key: alarmableSignals[0]?.key ?? "" });
+    setMode("create");
+    setLocalError("");
   };
 
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+  const cancelCreate = () => {
+    setMode("view");
+    setForm({ ...EMPTY_FORM });
+    setLocalError("");
+  };
+
+  const startEdit = () => {
+    if (!selectedRule) return;
+    setMode("edit");
+    setLocalError("");
+  };
+
+  const cancelEdit = () => {
+    if (!selectedRule) return;
+    setForm({
+      signal_key: selectedRule.signal_key,
+      name: selectedRule.name,
+      description: selectedRule.description ?? "",
+      level: selectedRule.level,
+      comparator: selectedRule.comparator,
+      threshold: selectedRule.threshold,
+      threshold_high: selectedRule.threshold_high,
+      hysteresis: selectedRule.hysteresis,
+      debounce_sec: selectedRule.debounce_sec,
+      device_code_filter: selectedRule.device_code_filter ?? "",
+      is_active: selectedRule.is_active
+    });
+    setMode("view");
+    setLocalError("");
+  };
+
+  const buildPayload = (): Omit<AlarmRuleRow, "id"> => ({
+    ...form,
+    description: form.description?.toString().trim() || null,
+    device_code_filter: form.device_code_filter?.toString().trim() || null,
+    threshold: isBooleanComparator(form.comparator) ? 0 : Number(form.threshold),
+    threshold_high:
+      !isRangeComparator(form.comparator) || form.threshold_high === null || form.threshold_high === undefined
+        ? null
+        : Number(form.threshold_high),
+    hysteresis: isBooleanComparator(form.comparator) ? 0 : Number(form.hysteresis),
+    debounce_sec: Number(form.debounce_sec)
+  });
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLocalError("");
     if (!form.signal_key) {
       setLocalError("Bir sinyal seçin.");
       return;
     }
+    setSaving(true);
     try {
-      await onCreate({
-        ...form,
-        description: form.description?.toString().trim() || null,
-        device_code_filter: form.device_code_filter?.toString().trim() || null,
-        threshold: Number(form.threshold),
-        threshold_high: form.threshold_high === null || form.threshold_high === undefined
-          ? null
-          : Number(form.threshold_high),
-        hysteresis: Number(form.hysteresis),
-        debounce_sec: Number(form.debounce_sec)
-      });
-      setShowCreate(false);
-      setForm({ ...EMPTY_FORM });
+      const payload = buildPayload();
+      if (mode === "create") {
+        await onCreate(payload);
+        setForm({ ...EMPTY_FORM });
+        setMode("view");
+      } else if (mode === "edit" && selectedRule) {
+        const { signal_key: _ignored, ...rest } = payload;
+        await onUpdate(selectedRule.id, rest);
+        setMode("view");
+      }
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Alarm kuralı oluşturulamadı.");
+      setLocalError(err instanceof Error ? err.message : "Alarm kuralı kaydedilemedi.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -102,234 +234,395 @@ export function AlarmRulesPage({
     }
   };
 
-  const handleDelete = async (rule: AlarmRuleRow) => {
-    if (!window.confirm(`"${rule.name}" alarm kuralı silinsin mi?`)) return;
+  const handleDelete = async () => {
+    if (!selectedRule) return;
+    if (!window.confirm(`"${selectedRule.name}" alarm kuralı silinsin mi?`)) return;
     setLocalError("");
     try {
-      await onDelete(rule.id);
+      await onDelete(selectedRule.id);
+      setSelectedId(null);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Alarm kuralı silinemedi.");
     }
   };
 
+  const isEditing = mode === "edit" || mode === "create";
+  const formSignal = signalByKey.get(form.signal_key);
+  const formSignalUnit = formSignal?.unit ?? "";
+
+  // İnsan-okunaklı özet cümlesi
+  const previewSentence = useMemo(() => {
+    if (!form.signal_key) return "Sinyal seçilmedi";
+    const sig = signalByKey.get(form.signal_key);
+    const label = sig?.label ?? form.signal_key;
+    const unit = sig?.unit ? ` ${sig.unit}` : "";
+    if (form.comparator === "boolean_true") return `${label} = TRUE → ${LEVEL_LABEL[form.level]}`;
+    if (form.comparator === "boolean_false") return `${label} = FALSE → ${LEVEL_LABEL[form.level]}`;
+    if (isRangeComparator(form.comparator)) {
+      const low = form.threshold;
+      const high = form.threshold_high ?? "?";
+      const verb = form.comparator === "between" ? "arasında" : "dışında";
+      return `${label}, ${low}${unit} – ${high}${unit} ${verb} ise → ${LEVEL_LABEL[form.level]}`;
+    }
+    return `${label} ${COMPARATOR_SYMBOL[form.comparator]} ${form.threshold}${unit} ise → ${LEVEL_LABEL[form.level]}`;
+  }, [form, signalByKey]);
+
   return (
-    <section className="tab-panel alarm-rules-panel">
-      <div className="section-header">
-        <h4>Alarm Yönetimi</h4>
+    <section className="tab-panel alarm-rules-modern">
+      <div className="rules-toolbar">
+        <input
+          className="rules-search"
+          type="search"
+          placeholder="Kural ara (ad, sinyal, açıklama)..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="rules-filter-group">
+          <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value as typeof levelFilter)}>
+            <option value="all">Tüm seviyeler</option>
+            {LEVELS.map((lv) => (
+              <option key={lv} value={lv}>
+                {LEVEL_LABEL[lv]}
+              </option>
+            ))}
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
+            <option value="all">Tüm durumlar</option>
+            <option value="active">Sadece aktif</option>
+            <option value="inactive">Sadece pasif</option>
+          </select>
+        </div>
+        <span className="rules-count-pill">
+          {filteredRules.length} / {rules.length}
+        </span>
         {canEdit ? (
-          <button className="add-user-btn" onClick={() => setShowCreate(true)} disabled={alarmableSignals.length === 0}>
-            Yeni Alarm Kuralı
+          <button
+            type="button"
+            className="primary-btn rules-new-btn"
+            onClick={startCreate}
+            disabled={alarmableSignals.length === 0}
+          >
+            + Yeni Kural
           </button>
         ) : null}
       </div>
 
       {!canEdit ? (
-        <p className="helper-text">
-          Alarm kurallarını yalnızca <strong>kurulumcu</strong> (installer) rolü düzenleyebilir.
+        <p className="helper-text rules-readonly-hint">
+          Alarm kurallarını yalnızca <strong>kurulumcu</strong> rolü düzenleyebilir.
         </p>
       ) : null}
-      {alarmableSignals.length === 0 ? (
-        <p className="helper-text">
-          Hiçbir sinyal alarmı desteklemiyor. Sinyaller sekmesinden ilgili sinyallerde "Alarm destekli" seçeneğini aktifleştirin.
+      {alarmableSignals.length === 0 && canEdit ? (
+        <p className="helper-text rules-readonly-hint">
+          Hiçbir sinyal alarmı desteklemiyor. Sinyaller sekmesinden ilgili sinyallerde "Alarm destekli" seçeneğini açın.
         </p>
       ) : null}
 
-      {loading ? <p>Yükleniyor...</p> : null}
-
-      <div className="values-table-wrap">
-        <table className="values-table">
-          <thead>
-            <tr>
-              <th>Sinyal</th>
-              <th>Ad</th>
-              <th>Seviye</th>
-              <th>Koşul</th>
-              <th>Eşik</th>
-              <th>Histerezis</th>
-              <th>Debounce (sn)</th>
-              <th>Cihaz Filtresi</th>
-              <th>Durum</th>
-              {canEdit ? <th style={{ textAlign: "right" }}>İşlem</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map((rule) => (
-              <tr key={rule.id}>
-                <td>{signalLabel(rule.signal_key)}</td>
-                <td>{rule.name}</td>
-                <td>
-                  <span className={`badge level-${rule.level}`}>{rule.level}</span>
-                </td>
-                <td>{rule.comparator}</td>
-                <td>
-                  {rule.comparator === "between" || rule.comparator === "outside"
-                    ? `${rule.threshold} .. ${rule.threshold_high ?? "?"}`
-                    : rule.threshold}
-                </td>
-                <td>{rule.hysteresis}</td>
-                <td>{rule.debounce_sec}</td>
-                <td>{rule.device_code_filter || <span className="helper-text">tümü</span>}</td>
-                <td>{rule.is_active ? "Aktif" : "Pasif"}</td>
-                {canEdit ? (
-                  <td style={{ textAlign: "right" }}>
-                    <button
-                      className="secondary-btn action-btn"
-                      type="button"
-                      onClick={() => void handleToggle(rule)}
-                      title={rule.is_active ? "Pasif Yap" : "Aktif Yap"}
-                    >
-                      {rule.is_active ? "Pasifleştir" : "Aktifleştir"}
-                    </button>
-                    <button
-                      className="danger-btn action-btn"
-                      type="button"
-                      onClick={() => void handleDelete(rule)}
-                      style={{ marginLeft: 6 }}
-                    >
-                      Sil
-                    </button>
-                  </td>
-                ) : null}
-              </tr>
-            ))}
-            {rules.length === 0 && !loading ? (
-              <tr>
-                <td colSpan={canEdit ? 10 : 9} className="helper-text" style={{ textAlign: "center" }}>
-                  Henüz alarm kuralı tanımlı değil.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-
-      {(localError || error) ? <p className="error-text">{localError || error}</p> : null}
-
-      {showCreate ? (
-        <div className="settings-modal-backdrop">
-          <form className="settings-modal" onSubmit={handleCreate}>
-            <h3>Yeni Alarm Kuralı</h3>
-            <label>
-              Sinyal
-              <select
-                value={form.signal_key}
-                onChange={(event) => setForm({ ...form, signal_key: event.target.value })}
-                required
-              >
-                <option value="" disabled>
-                  Seçiniz
-                </option>
-                {alarmableSignals.map((signal) => (
-                  <option key={signal.key} value={signal.key}>
-                    {signal.label} ({signal.key})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Kural Adı
-              <input
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Açıklama
-              <input
-                value={form.description ?? ""}
-                onChange={(event) => setForm({ ...form, description: event.target.value })}
-              />
-            </label>
-            <label>
-              Seviye
-              <select
-                value={form.level}
-                onChange={(event) => setForm({ ...form, level: event.target.value as AlarmLevel })}
-              >
-                {LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Koşul
-              <select
-                value={form.comparator}
-                onChange={(event) => setForm({ ...form, comparator: event.target.value as AlarmComparator })}
-              >
-                {COMPARATORS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Eşik (low)
-              <input
-                type="number"
-                step="0.0001"
-                value={form.threshold}
-                onChange={(event) => setForm({ ...form, threshold: Number(event.target.value) })}
-              />
-            </label>
-            {form.comparator === "between" || form.comparator === "outside" ? (
-              <label>
-                Eşik (high)
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={form.threshold_high ?? 0}
-                  onChange={(event) => setForm({ ...form, threshold_high: Number(event.target.value) })}
-                />
-              </label>
-            ) : null}
-            <label>
-              Histerezis
-              <input
-                type="number"
-                step="0.0001"
-                value={form.hysteresis}
-                onChange={(event) => setForm({ ...form, hysteresis: Number(event.target.value) })}
-              />
-            </label>
-            <label>
-              Debounce (sn)
-              <input
-                type="number"
-                value={form.debounce_sec}
-                onChange={(event) => setForm({ ...form, debounce_sec: Number(event.target.value) })}
-              />
-            </label>
-            <label>
-              Cihaz Kodu Filtresi (virgülle ayrılmış, boş = tümü)
-              <input
-                value={form.device_code_filter ?? ""}
-                onChange={(event) => setForm({ ...form, device_code_filter: event.target.value })}
-              />
-            </label>
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={form.is_active}
-                onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
-              />
-              Aktif
-            </label>
-            <div className="modal-actions">
-              <button type="button" className="secondary-btn" onClick={() => setShowCreate(false)}>
-                İptal
-              </button>
-              <button type="submit" className="primary-btn">
-                Oluştur
-              </button>
+      <div className="rules-layout">
+        {/* SOL: Kural listesi */}
+        <aside className="rules-list-pane">
+          {loading ? <p className="helper-text">Yükleniyor...</p> : null}
+          {!loading && filteredRules.length === 0 ? (
+            <div className="rules-empty">
+              {rules.length === 0 ? "Henüz alarm kuralı tanımlı değil." : "Filtreye uygun kural bulunamadı."}
             </div>
-          </form>
+          ) : null}
+          <ul className="rules-list">
+            {filteredRules.map((rule) => {
+              const sig = signalByKey.get(rule.signal_key);
+              const isSelected = selectedId === rule.id && mode !== "create";
+              return (
+                <li
+                  key={rule.id}
+                  className={`rule-card ${isSelected ? "rule-card-active" : ""} ${rule.is_active ? "" : "rule-card-inactive"}`}
+                  onClick={() => {
+                    setSelectedId(rule.id);
+                    setMode("view");
+                  }}
+                >
+                  <div className="rule-card-top">
+                    <span className={`rule-level-badge level-${rule.level}`}>{LEVEL_LABEL[rule.level]}</span>
+                    <span className={`rule-status-dot ${rule.is_active ? "rule-status-active" : "rule-status-inactive"}`} title={rule.is_active ? "Aktif" : "Pasif"} />
+                  </div>
+                  <div className="rule-card-name">{rule.name || <em>İsimsiz kural</em>}</div>
+                  <div className="rule-card-signal">{sig ? sig.label : rule.signal_key}</div>
+                  <div className="rule-card-condition">
+                    <code>
+                      {isBooleanComparator(rule.comparator)
+                        ? rule.comparator === "boolean_true"
+                          ? "= TRUE"
+                          : "= FALSE"
+                        : isRangeComparator(rule.comparator)
+                          ? `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold} … ${rule.threshold_high ?? "?"}`
+                          : `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold}${sig?.unit ? ` ${sig.unit}` : ""}`}
+                    </code>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
+
+        {/* SAĞ: Detay / form */}
+        <div className="rules-detail-pane">
+          {mode === "create" || selectedRule ? (
+            <form className="rule-form" onSubmit={handleSubmit}>
+              <header className="rule-form-header">
+                <div className="rule-form-titlebar">
+                  <h3>
+                    {mode === "create"
+                      ? "Yeni Alarm Kuralı"
+                      : isEditing
+                        ? `Düzenle: ${selectedRule?.name}`
+                        : selectedRule?.name}
+                  </h3>
+                  {mode !== "create" && selectedRule ? (
+                    <span className={`rule-level-badge level-${selectedRule.level}`}>
+                      {LEVEL_LABEL[selectedRule.level]}
+                    </span>
+                  ) : null}
+                </div>
+                {canEdit ? (
+                  <div className="rule-form-actions">
+                    {mode === "view" && selectedRule ? (
+                      <>
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          onClick={() => void handleToggle(selectedRule)}
+                        >
+                          {selectedRule.is_active ? "Pasifleştir" : "Aktifleştir"}
+                        </button>
+                        <button type="button" className="primary-btn" onClick={startEdit}>
+                          Düzenle
+                        </button>
+                        <button type="button" className="danger-btn" onClick={() => void handleDelete()}>
+                          Sil
+                        </button>
+                      </>
+                    ) : null}
+                    {mode === "edit" ? (
+                      <>
+                        <button type="button" className="secondary-btn" onClick={cancelEdit} disabled={saving}>
+                          İptal
+                        </button>
+                        <button type="submit" className="primary-btn" disabled={saving}>
+                          {saving ? "Kaydediliyor..." : "Kaydet"}
+                        </button>
+                      </>
+                    ) : null}
+                    {mode === "create" ? (
+                      <>
+                        <button type="button" className="secondary-btn" onClick={cancelCreate} disabled={saving}>
+                          İptal
+                        </button>
+                        <button type="submit" className="primary-btn" disabled={saving}>
+                          {saving ? "Oluşturuluyor..." : "Oluştur"}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </header>
+
+              {/* Anlık özet */}
+              <div className="rule-preview">
+                <span className="rule-preview-label">Önizleme</span>
+                <span className="rule-preview-text">{previewSentence}</span>
+              </div>
+
+              <div className="rule-form-grid">
+                {/* TANIM */}
+                <fieldset className="rule-fieldset" disabled={!canEdit || !isEditing}>
+                  <legend>Tanım</legend>
+                  <div className="rule-grid-2">
+                    <label className="rule-field">
+                      <span>Sinyal</span>
+                      <select
+                        value={form.signal_key}
+                        onChange={(e) => setForm({ ...form, signal_key: e.target.value })}
+                        required
+                        disabled={!canEdit || mode === "edit" || mode === "view"}
+                      >
+                        <option value="" disabled>
+                          Seçiniz
+                        </option>
+                        {alarmableSignals.map((sig) => (
+                          <option key={sig.key} value={sig.key}>
+                            {sig.label} ({sig.key})
+                          </option>
+                        ))}
+                      </select>
+                      {mode === "edit" ? (
+                        <small className="rule-hint">Sinyal sonradan değiştirilemez.</small>
+                      ) : null}
+                    </label>
+                    <label className="rule-field">
+                      <span>Seviye</span>
+                      <div className="rule-level-picker">
+                        {LEVELS.map((lv) => (
+                          <button
+                            key={lv}
+                            type="button"
+                            className={`rule-level-option level-${lv} ${form.level === lv ? "rule-level-option-active" : ""}`}
+                            onClick={() => setForm({ ...form, level: lv })}
+                            disabled={!canEdit || !isEditing}
+                          >
+                            {LEVEL_LABEL[lv]}
+                          </button>
+                        ))}
+                      </div>
+                    </label>
+                  </div>
+                  <label className="rule-field">
+                    <span>Kural Adı</span>
+                    <input
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      required
+                      placeholder="Örn: Akım sınırı aşıldı"
+                    />
+                  </label>
+                  <label className="rule-field">
+                    <span>Açıklama</span>
+                    <textarea
+                      className="rule-textarea"
+                      rows={2}
+                      value={form.description ?? ""}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      placeholder="Bu alarmın amacını / aksiyonunu kısaca yazın..."
+                    />
+                  </label>
+                </fieldset>
+
+                {/* KOŞUL */}
+                <fieldset className="rule-fieldset" disabled={!canEdit || !isEditing}>
+                  <legend>Koşul</legend>
+                  <label className="rule-field">
+                    <span>Karşılaştırma</span>
+                    <select
+                      value={form.comparator}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          comparator: e.target.value as AlarmComparator
+                        })
+                      }
+                    >
+                      {COMPARATORS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.symbol}  {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {!isBooleanComparator(form.comparator) ? (
+                    <div className={isRangeComparator(form.comparator) ? "rule-grid-2" : ""}>
+                      <label className="rule-field">
+                        <span>{isRangeComparator(form.comparator) ? "Alt sınır" : "Eşik değer"}{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={form.threshold}
+                          onChange={(e) => setForm({ ...form, threshold: Number(e.target.value) })}
+                        />
+                      </label>
+                      {isRangeComparator(form.comparator) ? (
+                        <label className="rule-field">
+                          <span>Üst sınır{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={form.threshold_high ?? 0}
+                            onChange={(e) => setForm({ ...form, threshold_high: Number(e.target.value) })}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="rule-hint">
+                      Boolean koşul için eşik değeri gerekmez — sinyal {form.comparator === "boolean_true" ? "TRUE" : "FALSE"} olduğunda alarm tetiklenir.
+                    </p>
+                  )}
+                </fieldset>
+
+                {/* DAVRANIŞ */}
+                <fieldset className="rule-fieldset" disabled={!canEdit || !isEditing}>
+                  <legend>Davranış</legend>
+                  <div className="rule-grid-2">
+                    {!isBooleanComparator(form.comparator) ? (
+                      <label className="rule-field">
+                        <span>Histerezis{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={form.hysteresis}
+                          onChange={(e) => setForm({ ...form, hysteresis: Number(e.target.value) })}
+                        />
+                        <small className="rule-hint">Salınım engellemek için tampon — alarm sıfırlama eşiği.</small>
+                      </label>
+                    ) : null}
+                    <label className="rule-field">
+                      <span>Debounce (sn)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.debounce_sec}
+                        onChange={(e) => setForm({ ...form, debounce_sec: Number(e.target.value) })}
+                      />
+                      <small className="rule-hint">Koşul bu süre boyunca sürerse alarm üretilir.</small>
+                    </label>
+                  </div>
+                </fieldset>
+
+                {/* KAPSAM */}
+                <fieldset className="rule-fieldset" disabled={!canEdit || !isEditing}>
+                  <legend>Kapsam</legend>
+                  <label className="rule-field">
+                    <span>Cihaz Kodu Filtresi</span>
+                    <input
+                      value={form.device_code_filter ?? ""}
+                      onChange={(e) => setForm({ ...form, device_code_filter: e.target.value })}
+                      placeholder="örn: GW01-D1, GW01-D2  (boş = tüm cihazlar)"
+                    />
+                    <small className="rule-hint">Virgülle ayırın. Boş bırakırsanız kural tüm cihazlara uygulanır.</small>
+                  </label>
+                </fieldset>
+
+                {/* DURUM */}
+                <fieldset className="rule-fieldset" disabled={!canEdit || !isEditing}>
+                  <legend>Durum</legend>
+                  <label className={`rule-toggle-card ${form.is_active ? "rule-toggle-card-on" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={form.is_active}
+                      onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                    />
+                    <span className="rule-toggle-text">
+                      <span className="rule-toggle-title">{form.is_active ? "Aktif" : "Pasif"}</span>
+                      <span className="rule-toggle-hint">
+                        Pasif kurallar değerlendirilmez; tarihçe ve istatistiklerde kalır.
+                      </span>
+                    </span>
+                  </label>
+                </fieldset>
+              </div>
+
+              {(localError || error) ? <p className="error-text rule-form-error">{localError || error}</p> : null}
+            </form>
+          ) : (
+            <div className="rules-detail-empty">
+              <div className="rules-detail-empty-icon">⚙️</div>
+              <h3>Bir kural seçin</h3>
+              <p className="helper-text">
+                Soldaki listeden bir alarm kuralı seçerek görüntüleyebilir veya düzenleyebilirsiniz.
+                {canEdit && alarmableSignals.length > 0 ? " Yeni bir kural eklemek için sağ üstteki + butonunu kullanın." : ""}
+              </p>
+            </div>
+          )}
         </div>
-      ) : null}
+      </div>
     </section>
   );
 }

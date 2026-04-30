@@ -20,6 +20,10 @@ DLX_EXCHANGE = os.getenv("RABBITMQ_DLX_EXCHANGE", "hsl.events.dlx")
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8012"))
 BACKEND_INTERNAL_URL = os.getenv("BACKEND_INTERNAL_ALARM_URL", "http://127.0.0.1:8000/api/v1/internal/alarms")
+BACKEND_INTERNAL_CLEAR_URL = os.getenv(
+    "BACKEND_INTERNAL_ALARM_CLEAR_URL",
+    "http://127.0.0.1:8000/api/v1/internal/alarms/clear",
+)
 BACKEND_API_BASE = os.getenv("BACKEND_API_BASE", "http://127.0.0.1:8000/api/v1")
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "change-me-internal-token")
 RULES_REFRESH_SEC = int(os.getenv("ALARM_RULES_REFRESH_SEC", "30"))
@@ -57,6 +61,34 @@ class _RuleState:
 
 
 _STATE = _RuleState()
+
+
+# Kalite-bazli alarmlar (haberlesme / offline / invalid) icin device-bazli state.
+# Aktifken yeni kalite alarmi uretilmez (dedup); good'a donunce backend'e clear gider.
+class _QualityState:
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._bad: dict[str, bool] = {}
+
+    def is_bad(self, device_code: str) -> bool:
+        with self._lock:
+            return self._bad.get(device_code, False)
+
+    def mark_bad(self, device_code: str) -> None:
+        with self._lock:
+            self._bad[device_code] = True
+
+    def mark_good(self, device_code: str) -> bool:
+        """True doner ise daha once 'bad' idi - clear gonderilmesi gerekir."""
+        with self._lock:
+            was_bad = self._bad.get(device_code, False)
+            if was_bad:
+                self._bad[device_code] = False
+            return was_bad
+
+
+_QUALITY_STATE = _QualityState()
+
 _CACHE = AlarmRuleCache(
     base_url=BACKEND_API_BASE,
     service_token=INTERNAL_SERVICE_TOKEN,
@@ -149,6 +181,23 @@ def _notify_backend(payload: dict) -> None:
     response.raise_for_status()
 
 
+def _notify_backend_clear(rule_id: int, rule_title: str, device_code: str | None, source_gateway: str | None) -> None:
+    """Alarm sahada normale dondu - backend'deki acik kaydi reset=True yap.
+
+    Backend `/internal/alarms/clear` endpoint'ine POST atar; mevcut acik alarm
+    'Normale Donen - Onay Bekliyor' kismina geciyor."""
+    headers = {"X-Service-Token": INTERNAL_SERVICE_TOKEN}
+    body = {
+        "rule_id": rule_id,
+        "title": rule_title,
+        "device_code": device_code,
+        "source_gateway": source_gateway,
+        "source_timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    response = requests.post(BACKEND_INTERNAL_CLEAR_URL, json=body, headers=headers, timeout=8)
+    response.raise_for_status()
+
+
 def _publish_alarm(channel, alarm_payload: dict) -> None:
     channel.basic_publish(
         exchange=EXCHANGE,
@@ -213,6 +262,15 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
             )
         elif not should_be_active and prev_active:
             _STATE.set_active(key, False)
+            try:
+                _notify_backend_clear(
+                    rule_id=rule.id,
+                    rule_title=rule.name,
+                    device_code=str(device_code) if device_code else None,
+                    source_gateway=payload.get("source_gateway"),
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"alarm-service-clear-error rule_id={rule.id} error={exc}")
             print(f"alarm-service-cleared rule_id={rule.id} signal={rule.signal_key} dev={device_code}")
         elif not should_be_active:
             _STATE.clear_pending(key)
@@ -253,13 +311,36 @@ def main() -> None:
                 _ = properties
                 try:
                     payload = json.loads(body.decode("utf-8"))
+                    device_code = str(payload.get("device_code") or "")
                     if _quality_is_bad(payload):
-                        alarm_payload = _build_quality_alarm(payload)
-                        _publish_alarm(channel, alarm_payload)
-                        try:
-                            _notify_backend(alarm_payload)
-                        except Exception as exc:  # noqa: BLE001
-                            print(f"alarm-service-backend-error source=quality error={exc}")
+                        # Yeni alarm yalnizca daha once kotuye dusmemisse uretilir;
+                        # aksi halde zaten backend'de dedup ile baski uygulanir
+                        # ama gereksiz network trafigi olusur. Yine de alarm-service'in
+                        # kosul takibi icin state'i guncelleriz.
+                        was_bad = _QUALITY_STATE.is_bad(device_code) if device_code else False
+                        if device_code:
+                            _QUALITY_STATE.mark_bad(device_code)
+                        if not was_bad:
+                            alarm_payload = _build_quality_alarm(payload)
+                            _publish_alarm(channel, alarm_payload)
+                            try:
+                                _notify_backend(alarm_payload)
+                            except Exception as exc:  # noqa: BLE001
+                                print(f"alarm-service-backend-error source=quality error={exc}")
+                    else:
+                        # Quality good - daha once kotuye dustuyse backend'deki
+                        # acik alarmi reset et, boylece UI'da 'Normale Donen' bolumune dussun.
+                        if device_code and _QUALITY_STATE.mark_good(device_code):
+                            try:
+                                _notify_backend_clear(
+                                    rule_id=0,
+                                    rule_title=f"{device_code} haberlesme arizasi",
+                                    device_code=device_code,
+                                    source_gateway=payload.get("source_gateway"),
+                                )
+                                print(f"alarm-service-quality-cleared dev={device_code}")
+                            except Exception as exc:  # noqa: BLE001
+                                print(f"alarm-service-clear-error source=quality dev={device_code} error={exc}")
                     _process_rules_for_payload(channel, payload)
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                 except Exception as ex:  # noqa: BLE001

@@ -32,6 +32,10 @@ from typing import Callable
 
 
 CONFIG_FILE = Path(__file__).with_name("service_control_panel.config.json")
+# Proje kökü: infra/scripts/windows/service_control_panel.py → parents[3] = repo kökü.
+# working_dir göreli yazılırsa (örn. "apps/backend-api") bu köke göre çözülür; böylece
+# proje farklı bir dizine taşındığında config'i elle güncellemeye gerek kalmaz.
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REFRESH_MS = 1500
 LOG_BUFFER_SIZE = 500
 
@@ -98,6 +102,16 @@ class ServiceRuntime:
     logs: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_BUFFER_SIZE))
 
 
+def _resolve_working_dir(raw: str) -> str:
+    """Config'teki working_dir mutlaksa olduğu gibi, göreli ise PROJECT_ROOT'a göre çözülür."""
+    if not raw:
+        return ""
+    path = Path(raw)
+    if not path.is_absolute():
+        path = (PROJECT_ROOT / path).resolve()
+    return str(path)
+
+
 def _parse_services(rows: list[dict]) -> list[ServiceConfig]:
     items: list[ServiceConfig] = []
     for row in rows:
@@ -108,7 +122,7 @@ def _parse_services(rows: list[dict]) -> list[ServiceConfig]:
                 health_host=row.get("health_host", "127.0.0.1"),
                 health_port=int(row.get("health_port", 0)),
                 windows_service_name=row.get("windows_service_name", ""),
-                working_dir=row.get("working_dir", ""),
+                working_dir=_resolve_working_dir(row.get("working_dir", "")),
                 command=row.get("command"),
                 env=row.get("env", {}),
             )

@@ -497,6 +497,43 @@ export async function deleteGateway(token: string, gatewayCode: string): Promise
   if (!response.ok) throw await buildApiError(response, "Gateway silinemedi.");
 }
 
+export type GatewayComposeDownloadOptions = {
+  backendUrl: string;
+  hostPort?: number;
+  image?: string;
+  appEnvironment?: "development" | "staging" | "production";
+  fmt?: "compose" | "env";
+  rabbitmqUrl?: string;
+};
+
+export async function downloadGatewayCompose(
+  token: string,
+  gatewayCode: string,
+  opts: GatewayComposeDownloadOptions
+): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams();
+  params.set("backend_url", opts.backendUrl);
+  if (opts.hostPort != null && opts.hostPort > 0) params.set("host_port", String(opts.hostPort));
+  if (opts.image) params.set("image", opts.image);
+  if (opts.appEnvironment) params.set("app_environment", opts.appEnvironment);
+  if (opts.fmt) params.set("fmt", opts.fmt);
+  if (opts.rabbitmqUrl) params.set("rabbitmq_url", opts.rabbitmqUrl);
+
+  const response = await fetch(
+    `${API_BASE_URL}/gateways/${gatewayCode}/docker-compose?${params.toString()}`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Docker compose dosyası indirilemedi.");
+
+  const headerName = response.headers.get("X-Filename");
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const fallback = `hsl-gw-${gatewayCode.toLowerCase()}.${opts.fmt === "env" ? "env" : "yml"}`;
+  const filename = headerName || (match ? match[1] : fallback);
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
 export async function fetchOutboundTargets(token: string): Promise<OutboundTarget[]> {
   const response = await fetch(`${API_BASE_URL}/outbound-targets`, {
     headers: authHeaders(token)

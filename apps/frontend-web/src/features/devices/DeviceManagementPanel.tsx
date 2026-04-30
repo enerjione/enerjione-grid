@@ -41,6 +41,19 @@ function deviceCommDotClass(status: DeviceRow["communicationStatus"]): "online" 
   return status === "online" ? "online" : "offline";
 }
 
+/** Gateway down ise altindaki cihazlar da offline gozukmeli — collector ayakta
+ * degilken cihaz sinyali fiziksel olarak gelse bile platform tarafinda yoktur. */
+function effectiveCommStatus(
+  device: DeviceRow,
+  gateways: Gateway[]
+): DeviceRow["communicationStatus"] {
+  const gw = gateways.find((g) => g.code === device.gatewayCode);
+  if (gw && getGatewayLiveness(gw).className !== "online") {
+    return "offline";
+  }
+  return device.communicationStatus;
+}
+
 type DevicePropsTab = "system" | "comms";
 
 type Props = {
@@ -68,6 +81,10 @@ type Props = {
     payload: { name?: string; host?: string; listen_port?: number; token?: string }
   ) => Promise<void>;
   onDeleteGateway: (gatewayCode: string) => Promise<void>;
+  onDownloadCompose: (
+    gatewayCode: string,
+    params: { backendUrl: string; hostPort: number; fmt: "compose" | "env" }
+  ) => Promise<void>;
   onCreate: (payload: {
     code: string;
     name: string;
@@ -115,6 +132,7 @@ export function DeviceManagementPanel({
   onCreateGateway,
   onUpdateGateway,
   onDeleteGateway,
+  onDownloadCompose,
   onCreate,
   onUpdate,
   onDelete
@@ -126,6 +144,59 @@ export function DeviceManagementPanel({
   const [showGatewayCreateModal, setShowGatewayCreateModal] = useState(false);
   const [showGatewayEditModal, setShowGatewayEditModal] = useState(false);
   const [error, setError] = useState("");
+
+  const defaultBackendIp = (() => {
+    if (typeof window === "undefined") return "";
+    return window.location.hostname || "";
+  })();
+  const [composeFor, setComposeFor] = useState<string | null>(null);
+  const [composeBackendIp, setComposeBackendIp] = useState(defaultBackendIp);
+  const [composeFmt, setComposeFmt] = useState<"compose" | "env">("compose");
+  const [composeError, setComposeError] = useState("");
+  const [composeBusy, setComposeBusy] = useState(false);
+  const [composeCopied, setComposeCopied] = useState(false);
+
+  const openComposeModal = (gwCode: string) => {
+    setComposeFor(gwCode);
+    setComposeBackendIp(defaultBackendIp);
+    setComposeFmt("compose");
+    setComposeError("");
+  };
+
+  const handleDownloadComposeSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!composeFor) return;
+    setComposeError("");
+    setComposeBusy(true);
+    try {
+      const ip = composeBackendIp.trim();
+      // Kullanici sadece IP ya da hostname yazar; backend URL'i sabit sema +
+      // varsayilan port (8000) + /api/v1 ile tamamlanir. Boylece kullanici port
+      // ve path bilgileriyle ugrasmaz.
+      const backendUrl = `http://${ip}:8000/api/v1`;
+      await onDownloadCompose(composeFor, {
+        backendUrl,
+        // hostPort verilmezse backend gateway sirasina gore 8020/8021/... atar.
+        hostPort: 0,
+        fmt: composeFmt
+      });
+      setComposeFor(null);
+    } catch (err) {
+      setComposeError(err instanceof Error ? err.message : "Dosya indirilemedi.");
+    } finally {
+      setComposeBusy(false);
+    }
+  };
+
+  const generateGatewayToken = () => {
+    const len = 48;
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const arr = new Uint32Array(len);
+    window.crypto.getRandomValues(arr);
+    let out = "";
+    for (let i = 0; i < len; i += 1) out += chars.charAt(arr[i] % chars.length);
+    setGatewayToken(out);
+  };
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -154,9 +225,6 @@ export function DeviceManagementPanel({
   const [createLatitude, setCreateLatitude] = useState("0");
   const [createLongitude, setCreateLongitude] = useState("0");
   const [gatewayCode, setGatewayCode] = useState("");
-  const [gatewayName, setGatewayName] = useState("");
-  const [gatewayHost, setGatewayHost] = useState("");
-  const [gatewayPort, setGatewayPort] = useState("20000");
   const [gatewayToken, setGatewayToken] = useState("");
   const [editGatewayCode, setEditGatewayCode] = useState("");
   const [editGatewayName, setEditGatewayName] = useState("");
@@ -326,12 +394,17 @@ export function DeviceManagementPanel({
   const handleCreateGateway = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    const createdCode = gatewayCode.trim();
+    const autoName = `HSL DNP3 Gateway ${createdCode}`;
     try {
       await onCreateGateway({
-        code: gatewayCode,
-        name: gatewayName,
-        host: gatewayHost,
-        listen_port: Number(gatewayPort),
+        code: createdCode,
+        name: autoName,
+        // Host/listen_port artik anlamli degil — gateway DNP3 master rolünde,
+        // outstation cihazlari device.ip_address'ten okuyor. Backend sema'da
+        // alan zorunlu oldugu icin placeholder gonderiyoruz.
+        host: "auto",
+        listen_port: 0,
         upstream_url: "/api/v1/telemetry/gateway/{gateway_code}",
         batch_interval_sec: 5,
         max_devices: 200,
@@ -343,10 +416,8 @@ export function DeviceManagementPanel({
       });
       setShowGatewayCreateModal(false);
       setGatewayCode("");
-      setGatewayName("");
-      setGatewayHost("");
-      setGatewayPort("20000");
       setGatewayToken("");
+      openComposeModal(createdCode);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gateway oluşturulamadı.");
     }
@@ -468,6 +539,20 @@ export function DeviceManagementPanel({
                       <button
                         type="button"
                         className="secondary-btn action-btn"
+                        onClick={() => openComposeModal(gateway.code)}
+                        title="Docker Compose / .env indir"
+                        aria-label="Docker Compose indir"
+                      >
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
                         onClick={() => handleStartGatewayEdit(gateway)}
                         title="Gateway Düzenle"
                         aria-label="Gateway Düzenle"
@@ -511,7 +596,9 @@ export function DeviceManagementPanel({
             </button>
           </div>
           <div className="device-group-list">
-            {devices.map((device) => (
+            {devices.map((device) => {
+              const effStatus = effectiveCommStatus(device, gateways);
+              return (
               <button
                 key={device.id}
                 className={`device-group-item device-item ${selectedDeviceCode === device.code ? "active" : ""}`}
@@ -519,11 +606,11 @@ export function DeviceManagementPanel({
               >
                 <div className="device-title-row">
                   <div className="device-name-with-status">
-                    <span className={`device-status-dot ${deviceCommDotClass(device.communicationStatus)}`} />
+                    <span className={`device-status-dot ${deviceCommDotClass(effStatus)}`} />
                     <strong>{device.name}</strong>
                   </div>
                   <span className="device-status-sr-only">
-                    {device.communicationStatus === "online" ? "Haberleşme Var" : "Haberleşme Yok veya yoklama yok"}
+                    {effStatus === "online" ? "Haberleşme Var" : "Haberleşme Yok veya yoklama yok"}
                   </span>
                 </div>
                 <div className="device-meta-row">
@@ -533,7 +620,8 @@ export function DeviceManagementPanel({
                   </span>
                 </div>
               </button>
-            ))}
+              );
+            })}
             {devices.length === 0 ? <p className="helper-text">Bu gateway altında henüz cihaz yok.</p> : null}
           </div>
         </div>
@@ -692,13 +780,20 @@ export function DeviceManagementPanel({
 
               <div className="device-form-footer-bar">
                 <div className="device-comms-footer-subtle">
-                  <span
-                    className={`device-comms-pill device-comms-pill--${deviceCommDotClass(
-                      selectedDevice.communicationStatus
-                    )}`}
-                  >
-                    {selectedDevice.communicationStatus === "online" ? "OK" : "Kesik / bekleniyor"}
-                  </span>
+                  {(() => {
+                    const eff = effectiveCommStatus(selectedDevice, gateways);
+                    const gwOffline =
+                      eff === "offline" && selectedDevice.communicationStatus === "online";
+                    return (
+                      <span className={`device-comms-pill device-comms-pill--${deviceCommDotClass(eff)}`}>
+                        {eff === "online"
+                          ? "OK"
+                          : gwOffline
+                            ? "Gateway bağlı değil"
+                            : "Kesik / bekleniyor"}
+                      </span>
+                    );
+                  })()}
                   {selectedDevice.lastUpdateAt ? (
                     <span className="device-comms-meta"> · Son veri: {formatTrRel(selectedDevice.lastUpdateAt)}</span>
                   ) : null}
@@ -727,32 +822,35 @@ export function DeviceManagementPanel({
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleCreateGateway}>
             <h3>Yeni Gateway Ekle</h3>
+            <p className="helper-text">
+              Yalnızca <strong>Gateway Kodu</strong> ve <strong>Token</strong> yeterlidir. Cihaz
+              adresleri (IP, DNP3 portu 20000 vb.) cihaz bazında ayrıca tanımlanır. Kayıt sonrası
+              docker-compose dosyası otomatik olarak indirilebilir hale gelir.
+            </p>
             <label>
               Gateway Kodu
-              <input value={gatewayCode} onChange={(event) => setGatewayCode(event.target.value)} required />
-            </label>
-            <label>
-              Gateway Adı
-              <input value={gatewayName} onChange={(event) => setGatewayName(event.target.value)} required />
-            </label>
-            <label>
-              Host
-              <input value={gatewayHost} onChange={(event) => setGatewayHost(event.target.value)} required />
-            </label>
-            <label>
-              Port
               <input
-                type="number"
-                min={1}
-                max={65535}
-                value={gatewayPort}
-                onChange={(event) => setGatewayPort(event.target.value)}
+                value={gatewayCode}
+                onChange={(event) => setGatewayCode(event.target.value)}
                 required
+                placeholder="GW-001"
               />
             </label>
             <label>
               Token
-              <input value={gatewayToken} onChange={(event) => setGatewayToken(event.target.value)} required />
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  style={{ flex: 1 }}
+                  value={gatewayToken}
+                  onChange={(event) => setGatewayToken(event.target.value)}
+                  required
+                  minLength={16}
+                  placeholder="En az 16 karakter (Üret butonu rastgele 48 karakter üretir)"
+                />
+                <button type="button" className="secondary-btn" onClick={generateGatewayToken}>
+                  Üret
+                </button>
+              </div>
             </label>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowGatewayCreateModal(false)}>
@@ -765,6 +863,95 @@ export function DeviceManagementPanel({
           </form>
         </div>
       ) : null}
+
+      {composeFor
+        ? (() => {
+            const composeGw = gateways.find((g) => g.code === composeFor);
+            const composeLive = composeGw ? getGatewayLiveness(composeGw) : null;
+            const composeCmd = `docker compose -f hsl-gw-${composeFor.toLowerCase()}.yml up -d`;
+            const copyCmd = async () => {
+              try {
+                await navigator.clipboard.writeText(composeCmd);
+                setComposeCopied(true);
+                window.setTimeout(() => setComposeCopied(false), 1500);
+              } catch {
+                /* clipboard yoksa sessiz gec */
+              }
+            };
+            return (
+              <div className="settings-modal-backdrop">
+                <form className="settings-modal" onSubmit={handleDownloadComposeSubmit}>
+                  <h3>Docker Compose İndir — {composeFor}</h3>
+                  <div className="compose-cmd-row">
+                    <code className="compose-cmd-text">{composeCmd}</code>
+                    <button
+                      type="button"
+                      className="secondary-btn compose-cmd-copy"
+                      onClick={() => void copyCmd()}
+                    >
+                      {composeCopied ? "Kopyalandı" : "Kopyala"}
+                    </button>
+                  </div>
+                  <label>
+                    Çatı Yazılımın IP Adresi
+                    <input
+                      value={composeBackendIp}
+                      onChange={(event) => setComposeBackendIp(event.target.value)}
+                      placeholder="192.168.1.50"
+                      required
+                    />
+                    {/^(localhost|127\.0\.0\.1)$/i.test(composeBackendIp.trim()) ? (
+                      <small className="error-text">
+                        ⚠️ Gateway Docker container içinde çalışacağı için <code>localhost</code> /
+                        <code>127.0.0.1</code> kendisini gösterir, çatı yazılıma erişemez.
+                        Çatı yazılımın çalıştığı bilgisayarın <strong>LAN IP adresini</strong>{" "}
+                        yazın (örn. <code>192.168.1.50</code>). Aynı bilgisayarda çalışıyorsanız
+                        <code>ipconfig</code> (Windows) veya <code>ip a</code> (Linux) ile bulun.
+                      </small>
+                    ) : null}
+                  </label>
+                  <label>
+                    Format
+                    <select
+                      value={composeFmt}
+                      onChange={(event) => setComposeFmt(event.target.value as "compose" | "env")}
+                    >
+                      <option value="compose">docker-compose YAML (önerilen)</option>
+                      <option value="env">.env</option>
+                    </select>
+                  </label>
+                  {composeLive ? (
+                    <div className={`compose-gw-status compose-gw-status--${composeLive.className}`}>
+                      <span className="compose-gw-status-dot" aria-hidden="true" />
+                      <span>
+                        Gateway durumu: <strong>{composeLive.title}</strong>
+                        {composeGw?.last_seen_at ? (
+                          <span className="compose-gw-status-meta">
+                            {" "}· son sinyal {formatTrRel(composeGw.last_seen_at)}
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                  ) : null}
+                  {composeError ? <p className="error-text">{composeError}</p> : null}
+                  <div className="modal-actions">
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => setComposeFor(null)}
+                      disabled={composeBusy}
+                    >
+                      Kapat
+                    </button>
+                    <button type="submit" className="primary-btn" disabled={composeBusy}>
+                      {composeBusy ? "İndiriliyor..." : "İndir"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            );
+          })()
+        : null}
 
       {showCreateModal ? (
         <div className="settings-modal-backdrop">

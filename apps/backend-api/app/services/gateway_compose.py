@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import urlparse
 
 
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
@@ -71,6 +72,21 @@ services:
       SHOW_GATEWAY_TOKEN_ON_START: "false"
     ports:
       - "127.0.0.1:{{HOST_HEALTH_PORT}}:8020"
+    # Container icinden host'a (cati yazilim/RabbitMQ ayni makinada ise)
+    # erisim icin: host.docker.internal -> host-gateway. Linux Docker
+    # 20.10+ bu ozel ismi kabul eder, Windows/macOS Docker Desktop'ta
+    # zaten gomulu. BACKEND_API_URL "host.docker.internal" yazilirsa
+    # gateway DNS'i bu IP'ye cevirir; "localhost"/"127.0.0.1" yanlistir
+    # cunku container'in kendisini gosterir.
+    #
+    # network_mode: "host" YERINE extra_hosts kullanmak istenirse RabbitMQ
+    # IPv6'da dinlemiyorsa pika getaddrinfo'da AF_INET6 sonucu donunce
+    # "Network is unreachable" alir. Bu yuzden DNS'in IPv4 once cozumlemesini
+    # garanti edecegimiz tek yol: container'a host'un IPv4 adresini direkt
+    # extra_hosts ile mapping'i ile vermek. Burada "host-gateway" ozel
+    # token Docker tarafindan IPv4 host adresine cevrilir.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - state:/app/.gateway_state
     networks:
@@ -148,7 +164,7 @@ class ComposeRenderInput:
     backend_url: str
     rabbitmq_url: str
     host_port: int = 8020
-    image: str = "hsl/dnp3-gateway:latest"
+    image: str = "ghcr.io/fikretsafak/horstmann-dnp3-gateway:latest"
     app_environment: Literal["development", "staging", "production"] = "production"
 
 
@@ -209,3 +225,70 @@ def render_env(args: ComposeRenderInput) -> str:
 def filename_for(args: ComposeRenderInput, *, kind: Literal["compose", "env"]) -> str:
     suffix = "yml" if kind == "compose" else "env"
     return f"hsl-gw-{args.code.lower()}.{suffix}"
+
+
+_LOCALHOST_NAMES = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+def _container_host(host: str) -> str:
+    """Container icinden host makinaye erismek icin DNS adi.
+
+    Kullanici frontend'de "localhost" veya "127.0.0.1" yazarsa bu container
+    icinde container'in kendisini gosterir, host makinaya degil. Docker
+    Desktop (Windows/macOS) ve Linux Docker 20.10+ ``host.docker.internal``
+    ozel ismini destekler; compose template'inde ``extra_hosts: host-gateway``
+    ile bu Linux'ta da garantiye alindi.
+    """
+
+    h = (host or "").strip().lower()
+    if h in _LOCALHOST_NAMES:
+        return "host.docker.internal"
+    return host
+
+
+def normalize_backend_url_for_container(backend_url: str) -> str:
+    """backend_url'deki localhost/127.0.0.1'i host.docker.internal'a cevirir.
+
+    Saha kurulumunda kullanici cati yazilim ile ayni makinada gateway
+    calistiriyorsa (en yaygin senaryo) frontend "localhost" girer. Compose
+    icindeki gateway container'i bu ismi yanlis cozumler — bu yuzden URL'i
+    yazmadan once duzeltiyoruz.
+    """
+
+    parsed = urlparse(backend_url.strip())
+    if not parsed.hostname:
+        return backend_url
+    new_host = _container_host(parsed.hostname)
+    if new_host == parsed.hostname:
+        return backend_url
+    # urlunparse ile yeniden olustur (port + path + scheme korunur)
+    netloc = new_host
+    if parsed.port:
+        netloc = f"{new_host}:{parsed.port}"
+    if parsed.username:
+        userinfo = parsed.username
+        if parsed.password:
+            userinfo += f":{parsed.password}"
+        netloc = f"{userinfo}@{netloc}"
+    return parsed._replace(netloc=netloc).geturl()
+
+
+def derive_rabbitmq_url(backend_url: str) -> str:
+    """backend_url'in host kismindan varsayilan AMQP URL'i turetir.
+
+    Carı yazilim kurulumunda RabbitMQ varsayilan olarak ayni host'ta 5672
+    portunda calisiyor; kullanicinin frontend'de ayrica RabbitMQ adresi
+    girmesini onlemek icin backend host'u broker host'u olarak kullaniriz.
+    "localhost"/"127.0.0.1" yazilmissa container icinden erisim icin
+    host.docker.internal'a cevrilir. Kullanici farkli bir broker isterse
+    endpoint'e ``rabbitmq_url`` parametresi gecerek bu davranisi override
+    edebilir.
+    """
+
+    parsed = urlparse(backend_url.strip())
+    host = _container_host(parsed.hostname or "127.0.0.1")
+    # Cati yazilimdaki diger servisler (alarm-service, notification-worker,
+    # tag-engine, backend-api) ayni broker'a "guest:guest" ile baglaniyor;
+    # gateway de tutarli olsun. Ozel kullanici isteniyorsa frontend
+    # rabbitmq_url query param'i ile override edebilir.
+    return f"amqp://guest:guest@{host}:5672/"

@@ -17,7 +17,7 @@
     {
       "name": "Backend API",
       "type": "process",
-      "working_dir": "C:/Users/fikret.safak/OneDrive - Form Elektrik Ins.Muh.A.S/Belgeler/SoftwareFormElektrik/Horstman Smart Logger/apps/backend-api",
+      "working_dir": "apps/backend-api",
       "command": [
         "py",
         "-3.10",
@@ -39,7 +39,7 @@
     {
       "name": "Tag Engine Service",
       "type": "process",
-      "working_dir": "C:/Users/fikret.safak/OneDrive - Form Elektrik Ins.Muh.A.S/Belgeler/SoftwareFormElektrik/Horstman Smart Logger/apps/tag-engine",
+      "working_dir": "apps/tag-engine",
       "command": [
         "py",
         "-3.10",
@@ -57,7 +57,7 @@
     {
       "name": "Alarm Service",
       "type": "process",
-      "working_dir": "C:/Users/fikret.safak/OneDrive - Form Elektrik Ins.Muh.A.S/Belgeler/SoftwareFormElektrik/Horstman Smart Logger/apps/alarm-service",
+      "working_dir": "apps/alarm-service",
       "command": [
         "py",
         "-3.10",
@@ -79,7 +79,7 @@
     {
       "name": "Notification Service",
       "type": "process",
-      "working_dir": "C:/Users/fikret.safak/OneDrive - Form Elektrik Ins.Muh.A.S/Belgeler/SoftwareFormElektrik/Horstman Smart Logger/apps/notification-worker",
+      "working_dir": "apps/notification-worker",
       "command": [
         "py",
         "-3.10",
@@ -97,7 +97,7 @@
     {
       "name": "Frontend Web",
       "type": "process",
-      "working_dir": "C:/Users/fikret.safak/OneDrive - Form Elektrik Ins.Muh.A.S/Belgeler/SoftwareFormElektrik/Horstman Smart Logger/apps/frontend-web",
+      "working_dir": "apps/frontend-web",
       "command": [
         "npm",
         "run",

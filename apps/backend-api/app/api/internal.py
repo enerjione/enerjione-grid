@@ -13,7 +13,7 @@ from app.models.gateway import Gateway
 from app.models.signal_catalog import SignalCatalog
 from app.schemas.alarm_rule import AlarmRuleRead
 from app.schemas.gateway import GatewayRead
-from app.schemas.internal import InternalAlarmIngest
+from app.schemas.internal import InternalAlarmClear, InternalAlarmIngest
 from app.schemas.signal_catalog import SignalCatalogRead
 from app.services.event_service import record_event
 
@@ -117,6 +117,63 @@ def ingest_alarm(
     )
     db.commit()
     return {"status": "accepted"}
+
+
+@router.post("/alarms/clear", status_code=status.HTTP_202_ACCEPTED)
+def clear_alarm(
+    payload: InternalAlarmClear,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Alarm-service kosul artik karsilanmiyor dediginde acik alarmi reset=True yapar.
+
+    UI'da bu kayit 'Normale Donen - Onay Bekliyor' panelinde gozukmeye baslar;
+    kullanici onaylayinca tamamen gizlenir. Boylece `reset` ardisik tetiklerde
+    yeni alarm uretimi tekrar mumkun olur (alarm-service'in dedup state'i de
+    ayni anda False'a duser).
+    """
+    _require_service_token(x_service_token)
+
+    device_id = payload.device_id
+    if device_id is None and payload.device_code:
+        device = db.scalar(select(Device).where(Device.code == payload.device_code))
+        device_id = device.id if device else None
+    if device_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="device_id or valid device_code required")
+
+    # Eslesen acik alarmi bul: ayni cihaz + (rule_id varsa onunla, yoksa title ile)
+    stmt = (
+        select(AlarmEvent)
+        .where(AlarmEvent.device_id == device_id)
+        .where(AlarmEvent.reset.is_(False))
+        .order_by(AlarmEvent.created_at.desc())
+        .limit(1)
+    )
+    if payload.title:
+        stmt = stmt.where(AlarmEvent.title == payload.title)
+
+    existing = db.scalar(stmt)
+    if existing is None:
+        # Eslesen acik alarm yok - sessizce kabul et (idempotent)
+        return {"status": "no_match"}
+
+    existing.reset = True
+    existing.reset_at = datetime.now(timezone.utc)
+    record_event(
+        db,
+        category="alarm",
+        event_type="alarm_auto_cleared",
+        severity="info",
+        device_code=payload.device_code,
+        message=f"Alarm sahada normale dondu: {existing.title}",
+        metadata={
+            "alarm_id": existing.id,
+            "rule_id": payload.rule_id,
+            "source_gateway": payload.source_gateway,
+        },
+    )
+    db.commit()
+    return {"status": "cleared", "alarm_id": existing.id}
 
 
 @router.get("/gateways", response_model=list[GatewayRead])

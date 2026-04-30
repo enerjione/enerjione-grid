@@ -26,3 +26,10 @@ class Gateway(Base):
     # (health + gelecekte /control/* endpoint'leri icin).
     control_host: Mapped[str] = mapped_column(String(255), default="127.0.0.1", nullable=False)
     control_port: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # RabbitMQ icin gateway'e ozel olarak provisionlanmis kullanici/parola.
+    # Backend gateway create akisinda RabbitMQ Management API uzerinden
+    # otomatik yaratir; compose YAML'i indirilirken bu degerlerden AMQP URL
+    # uretilir. Bos gelirse fallback olarak global rabbitmq_url kullanilir.
+    rabbitmq_username: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    rabbitmq_password: Mapped[str | None] = mapped_column(String(255), nullable=True)

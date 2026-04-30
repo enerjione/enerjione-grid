@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { TablePagination } from "../../components/TablePagination";
 import type { SystemEvent } from "../../shared/types";
 import {
   categoryFilterLabel,
@@ -20,6 +21,8 @@ export function EventsPage({ events, loading }: Props) {
   const [severityFilter, setSeverityFilter] = useState("all");
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const categories = useMemo(() => Array.from(new Set(events.map((item) => item.category))).sort(), [events]);
 
@@ -32,6 +35,16 @@ export function EventsPage({ events, loading }: Props) {
       return categoryOk && severityOk && searchOk;
     });
   }, [events, categoryFilter, severityFilter, search]);
+
+  // Filtre/arama degisince ilk sayfaya don
+  useEffect(() => {
+    setPage(1);
+  }, [search, categoryFilter, severityFilter, pageSize]);
+
+  const pagedEvents = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredEvents.slice(start, start + pageSize);
+  }, [filteredEvents, page, pageSize]);
 
   const exportRows = filteredEvents.map((item) => ({
     oncelik: severityLabelTr(item.severity),
@@ -118,7 +131,7 @@ export function EventsPage({ events, loading }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map((item) => (
+              {pagedEvents.map((item) => (
                 <tr key={item.id}>
                   <td className="event-col-priority">
                     <span className={severityPillClass(item.severity)} title={item.severity}>
@@ -140,6 +153,16 @@ export function EventsPage({ events, loading }: Props) {
           </table>
         </div>
         {!loading && filteredEvents.length === 0 ? <p className="helper-text">Filtreye uygun olay bulunamadı.</p> : null}
+        {filteredEvents.length > 0 ? (
+          <TablePagination
+            totalItems={filteredEvents.length}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="olay"
+          />
+        ) : null}
       </div>
       {showExportModal ? (
         <div className="settings-modal-backdrop">

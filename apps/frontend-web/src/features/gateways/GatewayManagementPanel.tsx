@@ -2,6 +2,12 @@ import { useState, type FormEvent } from "react";
 
 import type { Gateway } from "../../shared/types";
 
+type DownloadParams = {
+  backendUrl: string;
+  hostPort: number;
+  fmt: "compose" | "env";
+};
+
 type Props = {
   gateways: Gateway[];
   onCreate: (payload: {
@@ -20,9 +26,22 @@ type Props = {
   }) => Promise<void>;
   onToggleActive: (gatewayCode: string, isActive: boolean) => Promise<void>;
   onDelete: (gatewayCode: string) => Promise<void>;
+  onDownloadCompose: (gatewayCode: string, params: DownloadParams) => Promise<void>;
 };
 
-export function GatewayManagementPanel({ gateways, onCreate, onToggleActive, onDelete }: Props) {
+function defaultBackendUrl(): string {
+  if (typeof window === "undefined") return "";
+  const origin = window.location.origin.replace(/\/$/, "");
+  return `${origin}/api/v1`;
+}
+
+export function GatewayManagementPanel({
+  gateways,
+  onCreate,
+  onToggleActive,
+  onDelete,
+  onDownloadCompose
+}: Props) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -37,9 +56,44 @@ export function GatewayManagementPanel({ gateways, onCreate, onToggleActive, onD
   const [controlPort, setControlPort] = useState("8020");
   const [error, setError] = useState("");
 
+  const [downloadFor, setDownloadFor] = useState<string | null>(null);
+  const [downloadBackendUrl, setDownloadBackendUrl] = useState(defaultBackendUrl());
+  const [downloadHostPort, setDownloadHostPort] = useState("8020");
+  const [downloadFmt, setDownloadFmt] = useState<"compose" | "env">("compose");
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadBusy, setDownloadBusy] = useState(false);
+
+  const openDownloadModal = (gatewayCode: string) => {
+    setDownloadFor(gatewayCode);
+    setDownloadBackendUrl(defaultBackendUrl());
+    setDownloadHostPort("8020");
+    setDownloadFmt("compose");
+    setDownloadError("");
+  };
+
+  const handleDownloadSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!downloadFor) return;
+    setDownloadError("");
+    setDownloadBusy(true);
+    try {
+      await onDownloadCompose(downloadFor, {
+        backendUrl: downloadBackendUrl.trim(),
+        hostPort: Number(downloadHostPort) || 8020,
+        fmt: downloadFmt
+      });
+      setDownloadFor(null);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Dosya indirilemedi.");
+    } finally {
+      setDownloadBusy(false);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    const createdCode = code;
     try {
       await onCreate({
         code,
@@ -67,9 +121,20 @@ export function GatewayManagementPanel({ gateways, onCreate, onToggleActive, onD
       setToken("");
       setControlHost("127.0.0.1");
       setControlPort("8020");
+      openDownloadModal(createdCode);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gateway oluşturulamadı.");
     }
+  };
+
+  const generateToken = () => {
+    const len = 48;
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const arr = new Uint32Array(len);
+    (window.crypto || (window as unknown as { msCrypto: Crypto }).msCrypto).getRandomValues(arr);
+    let out = "";
+    for (let i = 0; i < len; i += 1) out += chars.charAt(arr[i] % chars.length);
+    setToken(out);
   };
 
   return (
@@ -127,6 +192,13 @@ export function GatewayManagementPanel({ gateways, onCreate, onToggleActive, onD
               <td>{gateway.is_active ? "Aktif" : "Pasif"}</td>
               <td>{gateway.last_seen_at ? new Date(gateway.last_seen_at).toLocaleString("tr-TR") : "-"}</td>
               <td className="actions-cell">
+                <button
+                  className="secondary-btn action-btn"
+                  onClick={() => openDownloadModal(gateway.code)}
+                  title="Bu gateway icin docker-compose YAML / .env dosyasi indir"
+                >
+                  Compose İndir
+                </button>
                 <button
                   className="secondary-btn action-btn"
                   onClick={() => void onToggleActive(gateway.code, !gateway.is_active)}
@@ -205,7 +277,19 @@ export function GatewayManagementPanel({ gateways, onCreate, onToggleActive, onD
             </label>
             <label>
               Gateway Token
-              <input value={token} onChange={(event) => setToken(event.target.value)} required />
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  style={{ flex: 1 }}
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                  required
+                  minLength={16}
+                  placeholder="En az 16 karakter — 'Üret' butonu ile rastgele alabilirsiniz"
+                />
+                <button type="button" className="secondary-btn" onClick={generateToken}>
+                  Üret
+                </button>
+              </div>
             </label>
             <label>
               Kontrol Host (Uzak Makina)
@@ -232,6 +316,73 @@ export function GatewayManagementPanel({ gateways, onCreate, onToggleActive, onD
               </button>
               <button type="submit" className="primary-btn">
                 Oluştur
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {downloadFor ? (
+        <div className="settings-modal-backdrop">
+          <form className="settings-modal" onSubmit={handleDownloadSubmit}>
+            <h3>Docker Compose İndir — {downloadFor}</h3>
+            <p className="helper-text">
+              Bu dosyayı sunucuya kopyalayıp aşağıdaki komutla başlatın. Docker hem Linux hem
+              Windows&apos;ta (Docker Desktop) aynı şekilde çalışır:
+              <br />
+              <code>docker compose -f hsl-gw-{downloadFor.toLowerCase()}.yml up -d</code>
+            </p>
+            <label>
+              Çatı Yazılım Adresi (Backend URL)
+              <input
+                value={downloadBackendUrl}
+                onChange={(event) => setDownloadBackendUrl(event.target.value)}
+                placeholder="https://hsl.musteri.com/api/v1"
+                required
+              />
+              <small className="helper-text">
+                Gateway başka bir bilgisayarda çalışacaksa buraya çatı yazılımın dış adresini girin
+                (örn. <code>http://192.168.1.50:8000/api/v1</code>). Aynı makinada çalışacaksa
+                varsayılan değer (<code>{defaultBackendUrl()}</code>) yeterlidir. RabbitMQ adresi
+                otomatik olarak aynı host&apos;tan türetilir.
+              </small>
+            </label>
+            <label>
+              Host Sağlık Portu
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={downloadHostPort}
+                onChange={(event) => setDownloadHostPort(event.target.value)}
+                required
+              />
+              <small className="helper-text">
+                Aynı sunucuda birden fazla gateway varsa her biri için farklı port (8020, 8021, ...)
+              </small>
+            </label>
+            <label>
+              Format
+              <select
+                value={downloadFmt}
+                onChange={(event) => setDownloadFmt(event.target.value as "compose" | "env")}
+              >
+                <option value="compose">docker-compose YAML (önerilen)</option>
+                <option value="env">.env (Docker olmadan Python ile çalıştırma)</option>
+              </select>
+            </label>
+            {downloadError ? <p className="error-text">{downloadError}</p> : null}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setDownloadFor(null)}
+                disabled={downloadBusy}
+              >
+                Kapat
+              </button>
+              <button type="submit" className="primary-btn" disabled={downloadBusy}>
+                {downloadBusy ? "İndiriliyor..." : "İndir"}
               </button>
             </div>
           </form>

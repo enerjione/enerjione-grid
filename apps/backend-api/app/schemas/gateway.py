@@ -57,6 +57,8 @@ class GatewayConfigDevice(BaseModel):
     name: str
     ip_address: str
     dnp3_address: int
+    dnp3_tcp_port: int
+    master_address: int | None = None
     poll_interval_sec: int
     timeout_ms: int
     retry_count: int

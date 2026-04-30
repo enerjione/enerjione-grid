@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -7,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role, require_roles
+from app.core.config import Settings
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.enums import UserRole
@@ -26,10 +28,29 @@ from app.schemas.gateway import (
 from app.services.gateway_compose import (
     ComposeRenderError,
     ComposeRenderInput,
+    derive_rabbitmq_url,
     filename_for,
+    normalize_backend_url_for_container,
     render_compose,
     render_env,
 )
+from app.services.rabbitmq_admin import (
+    RabbitMqAdminClient,
+    RabbitMqAdminError,
+    RabbitMqUser,
+    build_amqp_url,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _rmq_admin() -> RabbitMqAdminClient:
+    s = Settings()
+    return RabbitMqAdminClient(
+        management_url=s.rabbitmq_management_url,
+        admin_username=s.rabbitmq_admin_username,
+        admin_password=s.rabbitmq_admin_password,
+    )
 
 router = APIRouter(prefix="/gateways", tags=["gateways"])
 
@@ -54,7 +75,27 @@ def create_gateway(
     existing = db.scalar(select(Gateway).where(Gateway.code == payload.code))
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Gateway code already exists")
-    row = Gateway(**payload.model_dump())
+    # RabbitMQ'da gateway icin ayri bir kullanici otomatik olusturulur. Bu
+    # sayede sahaya kurulum yapan kullanici bir manuel rabbitmqctl/admin
+    # paneli adimi yapmak zorunda kalmaz; compose dosyasi indirilir
+    # indirilmez "docker compose up -d" ile saglikli baglantiya gecer.
+    rmq_user: RabbitMqUser | None = None
+    try:
+        rmq_user = _rmq_admin().create_gateway_user(gateway_code=payload.code)
+    except RabbitMqAdminError as exc:
+        # RabbitMQ ulasilmiyorsa gateway yine de yaratilir; ama compose
+        # indirilirken fallback olarak global guest cred kullanilir ve
+        # uyari verilir. Production'da Management API up olmasi beklenir.
+        logger.warning(
+            "rabbitmq_admin_unavailable_at_create gateway=%s error=%s",
+            payload.code,
+            exc,
+        )
+    data = payload.model_dump()
+    if rmq_user is not None:
+        data["rabbitmq_username"] = rmq_user.username
+        data["rabbitmq_password"] = rmq_user.password
+    row = Gateway(**data)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -92,6 +133,11 @@ def delete_gateway(
     db.execute(delete(GatewayIngestBatch).where(GatewayIngestBatch.gateway_code == gateway_code))
     db.delete(row)
     db.commit()
+    # Best-effort temizlik: RabbitMQ'daki dedicated user'i sil (yoksa sessiz gec).
+    try:
+        _rmq_admin().delete_gateway_user(gateway_code=gateway_code)
+    except RabbitMqAdminError as exc:
+        logger.warning("rabbitmq_user_cleanup_failed gateway=%s error=%s", gateway_code, exc)
     return None
 
 
@@ -134,21 +180,21 @@ def download_gateway_compose(
     gateway_code: str,
     backend_url: str = Query(
         ...,
-        description="Gateway'in backend'e erisecegi public URL (orn. https://hsl.formelektrik.com/api/v1)",
+        description="Gateway'in backend'e erisecegi public URL (orn. https://hsl.formelektrik.com/api/v1 veya http://192.168.1.50:8000/api/v1)",
     ),
-    rabbitmq_url: str = Query(
-        ...,
-        description="Gateway'in publish yapacagi AMQP URL (orn. amqp://user:pass@rmq.hsl:5672/)",
+    rabbitmq_url: str | None = Query(
+        None,
+        description="(Opsiyonel) RabbitMQ AMQP URL. Verilmezse backend_url'in host kismindan otomatik turetilir (amqp://hsl:hsl@<host>:5672/).",
     ),
-    host_port: int = Query(
-        8020,
+    host_port: int | None = Query(
+        None,
         ge=1,
         le=65535,
-        description="Host'ta health/metrics endpoint icin acilacak port (her instance icin farkli)",
+        description="(Opsiyonel) Host'ta health/metrics endpoint icin acilacak port. Verilmezse gateway sirasina gore 8020/8021/... olarak otomatik atanir.",
     ),
     image: str = Query(
-        "hsl/dnp3-gateway:latest",
-        description="Docker image tag (registry/name:tag)",
+        "ghcr.io/fikretsafak/horstmann-dnp3-gateway:latest",
+        description="Docker image tag (registry/name:tag). Varsayilan GHCR public paketidir; ozel registry kullanilacaksa override edilir.",
     ),
     app_environment: Literal["development", "staging", "production"] = Query(
         "production",
@@ -175,14 +221,31 @@ def download_gateway_compose(
     gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if gateway is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    # Container icinden erisim icin localhost/127.0.0.1 -> host.docker.internal
+    effective_backend_url = normalize_backend_url_for_container(backend_url)
+    effective_rabbitmq_url = (rabbitmq_url or "").strip() or derive_rabbitmq_url(backend_url)
+    if host_port is None:
+        # Gateway'in olusturulma sirasina gore 8020 + index. Birden fazla gateway
+        # ayni host'ta calisirsa health portlari catismaz. Frontend kullanicisi
+        # explicit port istiyorsa query param ile override edebilir.
+        all_gw_codes = list(
+            db.scalars(select(Gateway.code).order_by(Gateway.id.asc())).all()
+        )
+        try:
+            index = all_gw_codes.index(gateway.code)
+        except ValueError:
+            index = 0
+        effective_host_port = 8020 + index
+    else:
+        effective_host_port = host_port
     try:
         render_input = ComposeRenderInput(
             code=gateway.code,
             token=gateway.token,
             name=gateway.name,
-            backend_url=backend_url,
-            rabbitmq_url=rabbitmq_url,
-            host_port=host_port,
+            backend_url=effective_backend_url,
+            rabbitmq_url=effective_rabbitmq_url,
+            host_port=effective_host_port,
             image=image,
             app_environment=app_environment,
         )
@@ -284,19 +347,34 @@ def get_gateway_config(
 
     response.headers["ETag"] = etag
 
-    config_devices = [
-        GatewayConfigDevice(
-            code=device.code,
-            name=device.name,
-            ip_address=device.ip_address,
-            dnp3_address=device.dnp3_address,
-            poll_interval_sec=device.poll_interval_sec,
-            timeout_ms=device.timeout_ms,
-            retry_count=device.retry_count,
-            signal_profile=device.signal_profile,
+    config_devices = []
+    for device in devices:
+        # Frontend'den gelen extended ayarlardaki master_address (DNP3 link layer
+        # local addr) — saha cihazi bu adresi bekler. Yoksa None birakiriz ve
+        # gateway kendi env DNP3_LOCAL_ADDRESS varsayilanini kullanir.
+        ext = device.dnp3_extended or {}
+        master_addr_raw = ext.get("master_address") if isinstance(ext, dict) else None
+        try:
+            master_address = int(master_addr_raw) if master_addr_raw is not None else None
+        except (TypeError, ValueError):
+            master_address = None
+        config_devices.append(
+            GatewayConfigDevice(
+                code=device.code,
+                name=device.name,
+                ip_address=device.ip_address,
+                dnp3_address=device.dnp3_address,
+                # Cihaz baglantisinin TCP portu — frontend'de cihaz basina ayarlanir
+                # (varsayilan 20001). Bu alan gonderilmezse gateway env varsayilani
+                # 20000'e baglanmaya calisir, bu da dogru olmaz.
+                dnp3_tcp_port=device.dnp3_outstation_port,
+                master_address=master_address,
+                poll_interval_sec=device.poll_interval_sec,
+                timeout_ms=device.timeout_ms,
+                retry_count=device.retry_count,
+                signal_profile=device.signal_profile,
+            )
         )
-        for device in devices
-    ]
     config_signals = [
         GatewayConfigSignal(
             key=signal.key,

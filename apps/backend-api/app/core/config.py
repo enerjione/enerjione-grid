@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     event_bus_backend: str = "inprocess"
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    # Management API: gateway eklendiginde otomatik dedicated user yaratmak
+    # icin kullanilir (manuel rabbitmqctl gerektirmez). Default Windows
+    # installer'inda 15672'de aciktir. Production'da ozel admin kullanicisi
+    # ile override edilebilir.
+    rabbitmq_management_url: str = "http://localhost:15672"
+    rabbitmq_admin_username: str = "guest"
+    rabbitmq_admin_password: str = "guest"
     rabbitmq_exchange: str = "hsl.events"
     rabbitmq_prefetch_count: int = 20
     rabbitmq_dlx_exchange: str = "hsl.events.dlx"
