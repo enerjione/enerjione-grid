@@ -248,69 +248,179 @@ export function AlarmsPage({
     }
   };
 
-  const renderAlarmDetail = (mode: "panel" | "modal") => (
-    <div className={mode === "modal" ? "alarm-detail-modal-body" : undefined}>
-      <h3>Alarm Detayı</h3>
-      {selectedAlarm ? (
-        <>
-          <p>
-            <strong>{selectedAlarm.title}</strong>
-          </p>
-          <p className="helper-text">{selectedAlarm.description}</p>
+  const renderAlarmDetail = (mode: "panel" | "modal") => {
+    if (!selectedAlarm) {
+      return (
+        <div className={mode === "modal" ? "alarm-detail-modal-body" : undefined}>
+          <h3>Alarm Detayı</h3>
+          <p className="helper-text">Detay için soldan bir alarm seçin.</p>
+          {error ? <p className="error-text">{error}</p> : null}
+        </div>
+      );
+    }
+    const created = new Date(selectedAlarm.created_at);
+    const deviceInfo = deviceLabelById.get(selectedAlarm.device_id);
+    const comments = commentsByAlarm[selectedAlarm.id] ?? [];
+    const stateLabel = selectedAlarm.reset
+      ? "Normale döndü"
+      : selectedAlarm.acknowledged
+        ? "Onaylandı"
+        : "Açık";
+    const stateClass = selectedAlarm.reset ? "state-reset" : selectedAlarm.acknowledged ? "state-ack" : "state-open";
+    return (
+      <div className={mode === "modal" ? "alarm-detail-modal-body alarm-detail-2col" : "alarm-detail-2col"}>
+        <header className="alarm-detail-header">
+          <div className="alarm-detail-titlebar">
+            <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{selectedAlarm.level}</span>
+            <h3>{selectedAlarm.title}</h3>
+            <span className={`alarm-state ${stateClass}`}>{stateLabel}</span>
+          </div>
+          {selectedAlarm.description ? (
+            <p className="alarm-detail-description">{selectedAlarm.description}</p>
+          ) : null}
+        </header>
 
-          <label>
-            Alarm Atama
-            <select
-              disabled={saving}
-              value={selectedAlarm.assigned_to ?? ""}
-              onChange={(event) => void handleAssign(selectedAlarm.id, event.target.value)}
-            >
-              <option value="">Atanmamış</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.username}>
-                  {user.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="alarm-detail-grid">
+          {/* SOL: Detaylar + atama */}
+          <section className="alarm-detail-info">
+            <h4 className="alarm-detail-section-title">Detaylar</h4>
+            <dl className="alarm-detail-dl">
+              <div className="alarm-detail-dl-row">
+                <dt>Cihaz</dt>
+                <dd>
+                  {deviceInfo ? (
+                    <>
+                      <span className="alarm-detail-strong">{deviceInfo.name}</span>
+                      <span className="alarm-detail-mono"> {deviceInfo.code}</span>
+                    </>
+                  ) : (
+                    <span className="alarm-detail-mono">#{selectedAlarm.device_id}</span>
+                  )}
+                </dd>
+              </div>
+              <div className="alarm-detail-dl-row">
+                <dt>Seviye</dt>
+                <dd>
+                  <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{selectedAlarm.level}</span>
+                </dd>
+              </div>
+              <div className="alarm-detail-dl-row">
+                <dt>Durum</dt>
+                <dd>
+                  <span className={`alarm-state ${stateClass}`}>{stateLabel}</span>
+                </dd>
+              </div>
+              <div className="alarm-detail-dl-row">
+                <dt>Oluşma</dt>
+                <dd>
+                  <span className="alarm-detail-strong">{created.toLocaleDateString("tr-TR")}</span>
+                  <span className="alarm-detail-mono"> {created.toLocaleTimeString("tr-TR")}</span>
+                </dd>
+              </div>
+              {selectedAlarm.reset && selectedAlarm.reset_at ? (
+                <div className="alarm-detail-dl-row">
+                  <dt>Normale Dönüş</dt>
+                  <dd>
+                    <span className="alarm-detail-strong">{new Date(selectedAlarm.reset_at).toLocaleDateString("tr-TR")}</span>
+                    <span className="alarm-detail-mono"> {new Date(selectedAlarm.reset_at).toLocaleTimeString("tr-TR")}</span>
+                  </dd>
+                </div>
+              ) : null}
+              {selectedAlarm.acknowledged && selectedAlarm.acknowledged_at ? (
+                <div className="alarm-detail-dl-row">
+                  <dt>Onay</dt>
+                  <dd>
+                    <span className="alarm-detail-strong">{new Date(selectedAlarm.acknowledged_at).toLocaleDateString("tr-TR")}</span>
+                    <span className="alarm-detail-mono"> {new Date(selectedAlarm.acknowledged_at).toLocaleTimeString("tr-TR")}</span>
+                    {selectedAlarm.acknowledged_by ? <span className="alarm-detail-by"> · {selectedAlarm.acknowledged_by}</span> : null}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
 
-          <div className="alarm-comments">
-            <h4>Yorumlar</h4>
-            <div className="alarm-comment-list">
-              {(commentsByAlarm[selectedAlarm.id] ?? []).map((comment) => (
-                <div key={comment.id} className="alarm-comment-item">
-                  <div className="alarm-comment-meta">
-                    <strong>{comment.author_username}</strong>
-                    <span>{new Date(comment.created_at).toLocaleString("tr-TR")}</span>
+            <div className="alarm-detail-assign-block">
+              <label className="alarm-detail-assign-label">
+                <span>Sorumluya Ata</span>
+                <select
+                  className="alarm-detail-select"
+                  disabled={saving}
+                  value={selectedAlarm.assigned_to ?? ""}
+                  onChange={(event) => void handleAssign(selectedAlarm.id, event.target.value)}
+                >
+                  <option value="">Atanmamış</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.username}>
+                      {user.full_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          {/* SAĞ: Yorumlar */}
+          <section className="alarm-detail-comments">
+            <div className="alarm-detail-comments-header">
+              <h4 className="alarm-detail-section-title">Yorumlar</h4>
+              <span className="alarm-detail-comments-count">{comments.length}</span>
+            </div>
+            <div className="alarm-detail-comments-list">
+              {comments.map((comment) => (
+                <div key={comment.id} className="alarm-comment-card">
+                  <div className="alarm-comment-card-meta">
+                    <span className="alarm-comment-card-avatar">
+                      {comment.author_username.slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="alarm-comment-card-meta-text">
+                      <strong>{comment.author_username}</strong>
+                      <span>{new Date(comment.created_at).toLocaleString("tr-TR")}</span>
+                    </div>
                   </div>
-                  <p>{comment.comment}</p>
+                  <p className="alarm-comment-card-body">{comment.comment}</p>
                 </div>
               ))}
-              {(commentsByAlarm[selectedAlarm.id] ?? []).length === 0 ? <p className="helper-text">Henüz yorum yok.</p> : null}
-            </div>
-            <textarea
-              placeholder="Alarma yorum yaz..."
-              value={commentDraft}
-              onChange={(event) => setCommentDraft(event.target.value)}
-            />
-            <div className="settings-actions">
-              {mode === "modal" ? (
-                <button type="button" onClick={() => setDetailModalOpen(false)}>
-                  Kapat
-                </button>
+              {comments.length === 0 ? (
+                <p className="alarm-detail-comments-empty">Henüz yorum yok. İlk yorumu ekleyin.</p>
               ) : null}
-              <button type="button" disabled={saving || !commentDraft.trim()} onClick={() => void handleAddComment()}>
-                Yorumu Kaydet
-              </button>
             </div>
-          </div>
-        </>
-      ) : (
-        <p className="helper-text">Detay için soldan bir alarm seçin.</p>
-      )}
-      {error ? <p className="error-text">{error}</p> : null}
-    </div>
-  );
+            <div className="alarm-detail-comment-form">
+              <textarea
+                className="alarm-detail-comment-textarea"
+                placeholder="Bu alarma bir yorum yazın... (örn. müşteri arandı, ekip yönlendirildi vs.)"
+                value={commentDraft}
+                onChange={(event) => setCommentDraft(event.target.value)}
+                rows={3}
+              />
+              <small className="alarm-detail-comment-hint">
+                Yorumlar olay kaydına da işlenir; süreç ekipçe takip edilebilir.
+              </small>
+              <div className="alarm-detail-comment-actions">
+                {mode === "modal" ? (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => setDetailModalOpen(false)}
+                  >
+                    Kapat
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={saving || !commentDraft.trim()}
+                  onClick={() => void handleAddComment()}
+                >
+                  {saving ? "Kaydediliyor..." : "Yorumu Kaydet"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {error ? <p className="error-text">{error}</p> : null}
+      </div>
+    );
+  };
 
   return (
     <section className="alarms-layout">
@@ -393,8 +503,9 @@ export function AlarmsPage({
                       <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
                     </td>
                     <td className="alarm-cell-title">
-                      <div className="alarm-title-text">{alarm.title}</div>
-                      {alarm.description ? <div className="alarm-desc-text">{alarm.description}</div> : null}
+                      <div className="alarm-title-text" title={alarm.description || alarm.title}>
+                        {alarm.title}
+                      </div>
                     </td>
                     <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
                     <td className="alarm-cell-state">
@@ -493,20 +604,29 @@ export function AlarmsPage({
                 </tr>
               </thead>
               <tbody>
-                {pagedPendingResetAlarms.map((alarm) => (
+                {pagedPendingResetAlarms.map((alarm) => {
+                  const created = new Date(alarm.created_at);
+                  return (
                   <tr
                     key={alarm.id}
-                    className={`alarm-row-resolved ${selectedAlarmId === alarm.id ? "alarm-row-active" : ""}`}
+                    className={`alarm-row alarm-row-resolved ${selectedAlarmId === alarm.id ? "alarm-row-active" : ""}`}
                     onClick={() => setSelectedAlarmId(alarm.id)}
                     onDoubleClick={() => openDetail(alarm.id, "comments")}
                   >
-                    <td>{new Date(alarm.created_at).toLocaleString("tr-TR")}</td>
-                    <td>
+                    <td className="alarm-cell-date">
+                      <div className="alarm-date">{created.toLocaleDateString("tr-TR")}</div>
+                      <div className="alarm-time">{created.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
+                    </td>
+                    <td className="alarm-cell-level">
                       <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
                     </td>
-                    <td>{alarm.title}</td>
+                    <td className="alarm-cell-title">
+                      <div className="alarm-title-text" title={alarm.description || alarm.title}>
+                        {alarm.title}
+                      </div>
+                    </td>
                     <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
-                    <td>{alarm.assigned_to ?? "-"}</td>
+                    <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
                     <td className="actions-cell alarm-actions-cell">
                       <button
                         type="button"
@@ -549,7 +669,8 @@ export function AlarmsPage({
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {pendingResetAlarms.length === 0 && !loading ? (
                   <tr>
                     <td colSpan={6} className="alarms-empty-cell">

@@ -155,13 +155,19 @@ class RabbitMqAdminClient:
         )
         # 2) permission ver — vhost path'inde "/" karakteri icin URL escape
         vhost_enc = "%2F" if vhost == "/" else vhost
+        # configure: pika BlockingConnection.publish() oncesi exchange_declare
+        # cagiriyor (idempotent passive declare bile "configure" izni ister).
+        # Bu yuzden gateway'in yayinlayacagi exchange'i configure etmesine
+        # izin veriyoruz — pratikte declare zaten backend tarafinda yapildigi
+        # icin bu sadece "exchange_declare(passive=False)" cagrisinin gecmesini
+        # saglar. Diger objelere (queue, binding, baska exchange) yetki yok.
         self._request(
             "PUT",
             f"/api/permissions/{vhost_enc}/{username}",
             json={
-                "configure": "",
-                "write": ".*",  # gateway sadece publish yapar
-                "read": "",
+                "configure": "^hsl\\.events$",  # sadece hsl.events exchange'i
+                "write": "^hsl\\.events$",      # sadece bu exchange'e publish
+                "read": "",                     # consume yok
             },
         )
         logger.info(

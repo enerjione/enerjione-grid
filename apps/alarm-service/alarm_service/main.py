@@ -157,17 +157,25 @@ def _build_alarm_from_rule(
 
 
 def _build_quality_alarm(payload: dict) -> dict:
+    quality = str(payload.get("quality", "")).lower()
+    if quality == "offline":
+        description = "Cihaz çevrimdışı, veri okunamıyor."
+    elif quality == "invalid":
+        description = "Cihazdan geçersiz veri alınıyor."
+    else:
+        description = "Cihaz haberleşmesinde sorun var."
+    # Title backend dedup/clear icin device_code'a bagli kalir; UI'da
+    # cihaz hucresi ayri gosterildigi icin baslikta sadece "Haberlesme arizasi"
+    # gorunecek sekilde kisa anahtar kullaniyoruz.
+    title = "Haberleşme arızası"
     return {
         "message_id": str(uuid4()),
         "correlation_id": payload.get("correlation_id") or payload.get("message_id") or str(uuid4()),
         "device_id": payload.get("device_id"),
         "device_code": payload.get("device_code"),
         "source_gateway": payload.get("source_gateway"),
-        "title": f"{payload.get('device_code', 'device')} haberlesme arizasi",
-        "description": (
-            f"gateway={payload.get('source_gateway')} signal={payload.get('signal_key')} "
-            f"quality={payload.get('quality')}"
-        ),
+        "title": title,
+        "description": description,
         "level": "critical",
         "source_timestamp": payload.get("source_timestamp") or datetime.now(timezone.utc).isoformat(),
         "rule_id": None,
@@ -334,7 +342,7 @@ def main() -> None:
                             try:
                                 _notify_backend_clear(
                                     rule_id=0,
-                                    rule_title=f"{device_code} haberlesme arizasi",
+                                    rule_title="Haberleşme arızası",
                                     device_code=device_code,
                                     source_gateway=payload.get("source_gateway"),
                                 )

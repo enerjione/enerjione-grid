@@ -151,7 +151,6 @@ export function DeviceManagementPanel({
   })();
   const [composeFor, setComposeFor] = useState<string | null>(null);
   const [composeBackendIp, setComposeBackendIp] = useState(defaultBackendIp);
-  const [composeFmt, setComposeFmt] = useState<"compose" | "env">("compose");
   const [composeError, setComposeError] = useState("");
   const [composeBusy, setComposeBusy] = useState(false);
   const [composeCopied, setComposeCopied] = useState(false);
@@ -159,7 +158,6 @@ export function DeviceManagementPanel({
   const openComposeModal = (gwCode: string) => {
     setComposeFor(gwCode);
     setComposeBackendIp(defaultBackendIp);
-    setComposeFmt("compose");
     setComposeError("");
   };
 
@@ -178,9 +176,9 @@ export function DeviceManagementPanel({
         backendUrl,
         // hostPort verilmezse backend gateway sirasina gore 8020/8021/... atar.
         hostPort: 0,
-        fmt: composeFmt
+        fmt: "compose"
       });
-      setComposeFor(null);
+      // Modal acik kalir — kullanici docker komutunu kopyalamak isteyebilir.
     } catch (err) {
       setComposeError(err instanceof Error ? err.message : "Dosya indirilemedi.");
     } finally {
@@ -210,6 +208,10 @@ export function DeviceManagementPanel({
   const [retryCount, setRetryCount] = useState("2");
   const [latitude, setLatitude] = useState("0");
   const [longitude, setLongitude] = useState("0");
+  // Cihazi baska gateway altina tasimak icin secili hedef gateway kodu.
+  // Initially seçili cihazın mevcut gateway'i; kullanıcı dropdown'dan farklı
+  // bir gateway seçerse Kaydet'te cihaz oraya tasinir.
+  const [deviceGatewayCode, setDeviceGatewayCode] = useState("");
 
   const [createCode, setCreateCode] = useState("");
   const [createName, setCreateName] = useState("");
@@ -225,6 +227,7 @@ export function DeviceManagementPanel({
   const [createLatitude, setCreateLatitude] = useState("0");
   const [createLongitude, setCreateLongitude] = useState("0");
   const [gatewayCode, setGatewayCode] = useState("");
+  const [gatewayName, setGatewayName] = useState("");
   const [gatewayToken, setGatewayToken] = useState("");
   const [editGatewayCode, setEditGatewayCode] = useState("");
   const [editGatewayName, setEditGatewayName] = useState("");
@@ -298,6 +301,7 @@ export function DeviceManagementPanel({
     setRetryCount(String(device.retryCount ?? 2));
     setLatitude(String(device.latitude ?? 0));
     setLongitude(String(device.longitude ?? 0));
+    setDeviceGatewayCode(device.gatewayCode ?? "");
   };
 
   const handleGatewaySelect = async (gatewayCode: string) => {
@@ -318,12 +322,15 @@ export function DeviceManagementPanel({
   const handleSaveDevice = async () => {
     if (!selectedDevice) return;
     setError("");
+    const targetGateway = deviceGatewayCode || null;
+    const movedToAnotherGateway =
+      targetGateway !== null && targetGateway !== (selectedDevice.gatewayCode ?? null);
     try {
       await onUpdate(selectedDevice.code, {
         name,
         description: description.trim() || null,
         model,
-        gateway_code: selectedGatewayCode || null,
+        gateway_code: targetGateway,
         ip_address: ipAddress,
         dnp3_outstation_port: Number(dnp3OutstationPort),
         dnp3_address: Number(dnp3Address),
@@ -334,6 +341,12 @@ export function DeviceManagementPanel({
         latitude: Number(latitude),
         longitude: Number(longitude)
       });
+      // Cihaz baska gateway altina tasindiysa, sol panelin secimini yeni
+      // gateway'e cevir ki kullanici tasidigi cihazi anlik olarak yerinde gorsun.
+      if (movedToAnotherGateway && targetGateway) {
+        setSelectedGatewayCode(targetGateway);
+        await onSelectGateway(targetGateway);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cihaz güncellenemedi.");
     }
@@ -361,7 +374,10 @@ export function DeviceManagementPanel({
         description: createDescription.trim() || null,
         model: createModel,
         gateway_code: selectedGatewayCode || null,
-        ip_address: createIpAddress,
+        // IP adresi UI'dan kaldirildi; outstation cihazlari ic agda DNP3 master
+        // (gateway) tarafindan adresleriyle yonetiliyor, backend semasi alani
+        // zorunlu istedigi icin guvenli default gonderiyoruz.
+        ip_address: createIpAddress || "0.0.0.0",
         dnp3_outstation_port: Number(createDnp3OutstationPort),
         dnp3_address: Number(createDnp3Address),
         dnp3_extended: { ...createDnp3Ext, ip_endpoint_type: "listening" },
@@ -395,11 +411,11 @@ export function DeviceManagementPanel({
     event.preventDefault();
     setError("");
     const createdCode = gatewayCode.trim();
-    const autoName = `HSL DNP3 Gateway ${createdCode}`;
+    const enteredName = gatewayName.trim() || createdCode;
     try {
       await onCreateGateway({
         code: createdCode,
-        name: autoName,
+        name: enteredName,
         // Host/listen_port artik anlamli degil — gateway DNP3 master rolünde,
         // outstation cihazlari device.ip_address'ten okuyor. Backend sema'da
         // alan zorunlu oldugu icin placeholder gonderiyoruz.
@@ -416,6 +432,7 @@ export function DeviceManagementPanel({
       });
       setShowGatewayCreateModal(false);
       setGatewayCode("");
+      setGatewayName("");
       setGatewayToken("");
       openComposeModal(createdCode);
     } catch (err) {
@@ -494,6 +511,20 @@ export function DeviceManagementPanel({
       }
     });
     return <Marker position={[pickerLat, pickerLon]} icon={mapPickerIcon} />;
+  }
+
+  // Yeni cihaz oluşturma modalındaki gömülü harita için: tıklama lat/lon
+  // string state'lerini doğrudan günceller.
+  function CreateModalLocationPicker() {
+    const lat = Number(createLatitude) || 0;
+    const lon = Number(createLongitude) || 0;
+    useMapEvents({
+      click(event) {
+        setCreateLatitude(event.latlng.lat.toFixed(6));
+        setCreateLongitude(event.latlng.lng.toFixed(6));
+      }
+    });
+    return <Marker position={[lat, lon]} icon={mapPickerIcon} />;
   }
 
   return (
@@ -677,6 +708,23 @@ export function DeviceManagementPanel({
                       <input value={name} onChange={(event) => setName(event.target.value)} />
                     </label>
                     <label>
+                      Gateway
+                      <select
+                        value={deviceGatewayCode}
+                        onChange={(event) => setDeviceGatewayCode(event.target.value)}
+                      >
+                        {gateways.length === 0 ? (
+                          <option value="">— Gateway yok —</option>
+                        ) : (
+                          gateways.map((gw) => (
+                            <option key={gw.code} value={gw.code}>
+                              {gw.name} ({gw.code})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </label>
+                    <label>
                       Model
                       <select value={model} onChange={(event) => setModel(event.target.value)}>
                         {deviceModels.length === 0 ? (
@@ -773,6 +821,14 @@ export function DeviceManagementPanel({
                     <Dnp3SettingsForm
                       value={dnp3Ext}
                       onChange={(patch) => setDnp3Ext((prev) => ({ ...prev, ...patch }))}
+                      usedMasterPorts={devices
+                        .filter(
+                          (x) =>
+                            x.code !== selectedDevice?.code &&
+                            x.dnp3Extended?.ip_endpoint_type === "initiating"
+                        )
+                        .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
+                        .filter((p) => p > 0)}
                     />
                   </div>
                 </div>
@@ -822,11 +878,6 @@ export function DeviceManagementPanel({
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleCreateGateway}>
             <h3>Yeni Gateway Ekle</h3>
-            <p className="helper-text">
-              Yalnızca <strong>Gateway Kodu</strong> ve <strong>Token</strong> yeterlidir. Cihaz
-              adresleri (IP, DNP3 portu 20000 vb.) cihaz bazında ayrıca tanımlanır. Kayıt sonrası
-              docker-compose dosyası otomatik olarak indirilebilir hale gelir.
-            </p>
             <label>
               Gateway Kodu
               <input
@@ -834,6 +885,15 @@ export function DeviceManagementPanel({
                 onChange={(event) => setGatewayCode(event.target.value)}
                 required
                 placeholder="GW-001"
+              />
+            </label>
+            <label>
+              Gateway Adı
+              <input
+                value={gatewayName}
+                onChange={(event) => setGatewayName(event.target.value)}
+                required
+                placeholder="Örn: Saha A SCADA"
               />
             </label>
             <label>
@@ -900,25 +960,6 @@ export function DeviceManagementPanel({
                       placeholder="192.168.1.50"
                       required
                     />
-                    {/^(localhost|127\.0\.0\.1)$/i.test(composeBackendIp.trim()) ? (
-                      <small className="error-text">
-                        ⚠️ Gateway Docker container içinde çalışacağı için <code>localhost</code> /
-                        <code>127.0.0.1</code> kendisini gösterir, çatı yazılıma erişemez.
-                        Çatı yazılımın çalıştığı bilgisayarın <strong>LAN IP adresini</strong>{" "}
-                        yazın (örn. <code>192.168.1.50</code>). Aynı bilgisayarda çalışıyorsanız
-                        <code>ipconfig</code> (Windows) veya <code>ip a</code> (Linux) ile bulun.
-                      </small>
-                    ) : null}
-                  </label>
-                  <label>
-                    Format
-                    <select
-                      value={composeFmt}
-                      onChange={(event) => setComposeFmt(event.target.value as "compose" | "env")}
-                    >
-                      <option value="compose">docker-compose YAML (önerilen)</option>
-                      <option value="env">.env</option>
-                    </select>
                   </label>
                   {composeLive ? (
                     <div className={`compose-gw-status compose-gw-status--${composeLive.className}`}>
@@ -987,10 +1028,6 @@ export function DeviceManagementPanel({
               <input value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} />
             </label>
             <label>
-              Outstation IP
-              <input value={createIpAddress} onChange={(event) => setCreateIpAddress(event.target.value)} required />
-            </label>
-            <label>
               Outstation port
               <input
                 type="number"
@@ -1014,6 +1051,10 @@ export function DeviceManagementPanel({
             <Dnp3SettingsForm
               value={createDnp3Ext}
               onChange={(patch) => setCreateDnp3Ext((prev) => ({ ...prev, ...patch }))}
+              usedMasterPorts={devices
+                .filter((x) => x.dnp3Extended?.ip_endpoint_type === "initiating")
+                .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
+                .filter((p) => p > 0)}
             />
             <label>
               Poll aralığı (sn)
@@ -1048,14 +1089,41 @@ export function DeviceManagementPanel({
                 required
               />
             </label>
-            <label>
-              Enlem
-              <input value={createLatitude} onChange={(event) => setCreateLatitude(event.target.value)} required />
-            </label>
-            <label>
-              Boylam
-              <input value={createLongitude} onChange={(event) => setCreateLongitude(event.target.value)} required />
-            </label>
+            <div className="device-create-location">
+              <div className="device-create-location-header">
+                <strong>Konum</strong>
+                <span className="helper-text">Haritaya tıklayarak veya değerleri elle girerek konumu belirleyin.</span>
+              </div>
+              <div className="device-create-location-coords">
+                <label>
+                  Enlem
+                  <input
+                    value={createLatitude}
+                    onChange={(event) => setCreateLatitude(event.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Boylam
+                  <input
+                    value={createLongitude}
+                    onChange={(event) => setCreateLongitude(event.target.value)}
+                    required
+                  />
+                </label>
+              </div>
+              <div className="device-create-location-map">
+                <MapContainer
+                  className="world-map"
+                  center={[Number(createLatitude) || 39, Number(createLongitude) || 35]}
+                  zoom={Number(createLatitude) && Number(createLongitude) ? 13 : 6}
+                  scrollWheelZoom
+                >
+                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  <CreateModalLocationPicker />
+                </MapContainer>
+              </div>
+            </div>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowCreateModal(false)}>
                 İptal

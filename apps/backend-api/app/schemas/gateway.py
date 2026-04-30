@@ -59,6 +59,13 @@ class GatewayConfigDevice(BaseModel):
     dnp3_address: int
     dnp3_tcp_port: int
     master_address: int | None = None
+    # Initiating (Direct/Initiating End Point): cihaz master'a outbound baglanir;
+    # gateway TCP server modunda dinler. Listening: cihaz dinler, gateway client
+    # olarak baglanir (default).
+    ip_endpoint_type: str = "listening"
+    # Initiating mode'da gateway'in dinleyecegi port. Backend cihaz basina
+    # otomatik atar (20100..20700). Listening mode'da kullanilmaz.
+    master_ip_port: int | None = None
     poll_interval_sec: int
     timeout_ms: int
     retry_count: int

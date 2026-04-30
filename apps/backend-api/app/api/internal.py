@@ -75,6 +75,19 @@ def ingest_alarm(
         .order_by(AlarmEvent.created_at.desc())
         .limit(1)
     )
+    # Title degisiklikleri (orn. eski "X haberlesme arizasi" vs yeni
+    # "Haberlesme arizasi") nedeniyle ayni cihazda mukerrer aciklamayi
+    # onlemek icin title benzerligine de bakariz.
+    if existing is None and "haber" in payload.title.lower():
+        existing = db.scalar(
+            select(AlarmEvent)
+            .where(AlarmEvent.device_id == device_id)
+            .where(AlarmEvent.level == payload.level)
+            .where(AlarmEvent.title.ilike("%haber%"))
+            .where(AlarmEvent.reset.is_(False))
+            .order_by(AlarmEvent.created_at.desc())
+            .limit(1)
+        )
     if existing is not None:
         existing.description = payload.description
         record_event(
@@ -141,18 +154,33 @@ def clear_alarm(
     if device_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="device_id or valid device_code required")
 
-    # Eslesen acik alarmi bul: ayni cihaz + (rule_id varsa onunla, yoksa title ile)
-    stmt = (
+    # Eslesen acik alarmi bul: ayni cihaz + reset=False.
+    # Title eslesmesi: kalite alarmlari icin "haberlesme" / "haberleşme" gibi
+    # eski/yeni format ayni anlamda kabul edilir. Once tam eslesme denenir,
+    # bulunmazsa title benzerligi (LIKE) ile geriye uyumlu eslesme yapilir.
+    base_stmt = (
         select(AlarmEvent)
         .where(AlarmEvent.device_id == device_id)
         .where(AlarmEvent.reset.is_(False))
         .order_by(AlarmEvent.created_at.desc())
-        .limit(1)
     )
-    if payload.title:
-        stmt = stmt.where(AlarmEvent.title == payload.title)
 
-    existing = db.scalar(stmt)
+    existing = None
+    if payload.title:
+        existing = db.scalar(base_stmt.where(AlarmEvent.title == payload.title).limit(1))
+        if existing is None:
+            # Geriye uyum: "Haberlesme arizasi" / "Haberleşme arızası" gibi
+            # eski/yeni formatlari ayni saymak icin substring eslesmesi.
+            normalized = payload.title.lower()
+            keyword = None
+            if "haber" in normalized:
+                keyword = "haber"
+            if keyword:
+                existing = db.scalar(
+                    base_stmt.where(AlarmEvent.title.ilike(f"%{keyword}%")).limit(1)
+                )
+    else:
+        existing = db.scalar(base_stmt.limit(1))
     if existing is None:
         # Eslesen acik alarm yok - sessizce kabul et (idempotent)
         return {"status": "no_match"}

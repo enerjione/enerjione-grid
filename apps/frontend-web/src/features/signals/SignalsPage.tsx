@@ -252,66 +252,45 @@ export function SignalsPage({
         <div className="signals-list-column">
           {loading ? <p className="helper-text">Yükleniyor...</p> : null}
           <div className="signals-list-wrap">
-            <table className="signals-list-table">
-              <thead>
-                <tr>
-                  <th className="col-source-first">Kaynak</th>
-                  <th className="col-label">Sinyal</th>
-                  <th className="col-type">Tip</th>
-                  <th className="col-addr">Adres</th>
-                  <th className="col-unit">Birim</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSignals.map((signal) => {
-                  const isActive = selectedKey === signal.key;
-                  return (
-                    <tr
-                      key={signal.key}
-                      className={`signal-row ${isActive ? "signal-row-active" : ""} ${
-                        signal.is_active ? "" : "signal-row-inactive"
-                      }`}
-                      onClick={() => setSelectedKey(signal.key)}
-                    >
-                      <td className="col-source-first">
-                        <span className={`badge badge-source badge-source-${signal.source}`}>
-                          {SOURCE_LABEL[signal.source]}
-                        </span>
-                      </td>
-                      <td className="col-label">
-                        <div className="cell-strong">{signal.label}</div>
-                        <div className="cell-helper">{signal.key}</div>
-                        {!signal.is_active ? (
-                          <div className="cell-inactive-hint" title="Pasif sinyal">
-                            pasif
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="col-type">
-                        <span className={`badge badge-${signal.data_type}`}>
-                          {DATA_TYPE_SHORT[signal.data_type]}
-                        </span>
-                      </td>
-                      <td className="col-addr">
-                        <span className="mono">
-                          G{signal.dnp3_object_group} · i{signal.dnp3_index}
-                        </span>
-                      </td>
-                      <td className="col-unit">{signal.unit ?? "-"}</td>
-                    </tr>
-                  );
-                })}
-                {filteredSignals.length === 0 && !loading ? (
-                  <tr>
-                    <td colSpan={5} className="signals-empty-cell">
-                      {totalCount === 0
-                        ? "Henüz sinyal tanımlı değil."
-                        : "Filtreye uygun sinyal bulunamadı."}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+            <ul className="signals-card-list">
+              {filteredSignals.map((signal) => {
+                const isActive = selectedKey === signal.key;
+                return (
+                  <li
+                    key={signal.key}
+                    className={`signal-card ${isActive ? "signal-card-active" : ""} ${
+                      signal.is_active ? "" : "signal-card-inactive"
+                    }`}
+                    onClick={() => setSelectedKey(signal.key)}
+                  >
+                    <div className="signal-card-top">
+                      <span className={`badge badge-source badge-source-${signal.source}`}>
+                        {SOURCE_LABEL[signal.source]}
+                      </span>
+                      <span className={`badge badge-${signal.data_type}`}>
+                        {DATA_TYPE_SHORT[signal.data_type]}
+                      </span>
+                      <span className="signal-card-addr">
+                        G{signal.dnp3_object_group} · i{signal.dnp3_index}
+                      </span>
+                      {signal.unit ? <span className="signal-card-unit">{signal.unit}</span> : null}
+                      {!signal.is_active ? (
+                        <span className="signal-card-inactive-flag">pasif</span>
+                      ) : null}
+                    </div>
+                    <div className="signal-card-name">{signal.label}</div>
+                    <div className="signal-card-key">{signal.key}</div>
+                  </li>
+                );
+              })}
+              {filteredSignals.length === 0 && !loading ? (
+                <li className="signals-empty-cell">
+                  {totalCount === 0
+                    ? "Henüz sinyal tanımlı değil."
+                    : "Filtreye uygun sinyal bulunamadı."}
+                </li>
+              ) : null}
+            </ul>
           </div>
         </div>
 
@@ -338,150 +317,141 @@ export function SignalsPage({
               <p className="helper-text signals-detail-empty">Listeden bir sinyal seçin; özellikler burada düzenlenir.</p>
             ) : (
               <div className="signals-detail-form-scroll">
-              <div className="device-detail-form detail-form-wide signals-detail-form">
-                <div className="form-row-2col">
-                  <label>
-                    Etiket
-                    <input
-                      value={editLabel}
-                      onChange={(event) => setEditLabel(event.target.value)}
-                      disabled={!canEdit}
-                    />
-                  </label>
-                  <label>
-                    Birim
-                    <input
-                      value={editUnit}
-                      onChange={(event) => setEditUnit(event.target.value)}
-                      disabled={!canEdit}
-                    />
-                  </label>
-                </div>
+                <div className="signals-detail-form-v2">
+                  <fieldset className="signal-fieldset" disabled={!canEdit}>
+                    <legend>Tanım</legend>
+                    <label className="signal-field signal-field--wide">
+                      <span>Etiket</span>
+                      <input
+                        value={editLabel}
+                        onChange={(event) => setEditLabel(event.target.value)}
+                      />
+                    </label>
+                    <label className="signal-field signal-field--wide">
+                      <span>Açıklama</span>
+                      <input
+                        value={editDescription}
+                        onChange={(event) => setEditDescription(event.target.value)}
+                        placeholder="Bu sinyalin amacını kısaca yazın..."
+                      />
+                    </label>
+                    <label className="signal-field">
+                      <span>Birim</span>
+                      <input
+                        value={editUnit}
+                        onChange={(event) => setEditUnit(event.target.value)}
+                        placeholder="V, A, °C..."
+                      />
+                    </label>
+                    <label className="signal-field">
+                      <span>Kaynak</span>
+                      <select
+                        value={editSource}
+                        onChange={(event) => setEditSource(event.target.value as SignalSource)}
+                      >
+                        {SOURCES.map((src) => (
+                          <option key={src} value={src}>
+                            {SOURCE_LABEL[src]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="signal-field signal-field--wide">
+                      <span>Veri Tipi</span>
+                      <select
+                        value={editDataType}
+                        onChange={(event) => setEditDataType(event.target.value as SignalDataType)}
+                      >
+                        {DATA_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {DATA_TYPE_LABEL[type]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </fieldset>
 
-                <label>
-                  Açıklama
-                  <input
-                    value={editDescription}
-                    onChange={(event) => setEditDescription(event.target.value)}
-                    disabled={!canEdit}
-                  />
-                </label>
-
-                <div className="form-row-2col">
-                  <label>
-                    Kaynak
-                    <select
-                      value={editSource}
-                      onChange={(event) => setEditSource(event.target.value as SignalSource)}
-                      disabled={!canEdit}
-                    >
-                      {SOURCES.map((src) => (
-                        <option key={src} value={src}>
-                          {SOURCE_LABEL[src]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Veri Tipi
-                    <select
-                      value={editDataType}
-                      onChange={(event) => setEditDataType(event.target.value as SignalDataType)}
-                      disabled={!canEdit}
-                    >
-                      {DATA_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {DATA_TYPE_LABEL[type]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <fieldset className="detail-fieldset">
-                  <legend>DNP3 Adres</legend>
-                  <div className="form-row-2col">
-                    <label>
-                      DNP3 Class
+                  <fieldset className="signal-fieldset" disabled={!canEdit}>
+                    <legend>DNP3 Adres</legend>
+                    <label className="signal-field">
+                      <span>DNP3 Class</span>
                       <input
                         value={editDnp3Class}
                         onChange={(event) => setEditDnp3Class(event.target.value)}
-                        disabled={!canEdit}
                         placeholder="Class 1 / 2 / 3"
                       />
                     </label>
-                    <label>
-                      Nokta (Index)
+                    <label className="signal-field">
+                      <span>Nokta (Index)</span>
                       <input
                         type="number"
                         value={editIndex}
                         onChange={(event) => setEditIndex(event.target.value)}
-                        disabled={!canEdit}
                       />
                     </label>
-                  </div>
-                  <p className="field-hint">
-                    DNP3 nesne grubu, seçilen veri tipine göre otomatik atanır
-                    (Analog=30, Analog Out=40, Binary=1, Binary Out=10, Counter=20, String=110).
-                  </p>
-                </fieldset>
+                    <p className="signal-fieldset-hint">
+                      DNP3 nesne grubu, seçilen veri tipine göre otomatik atanır
+                      (Analog=30, Binary=1, Counter=20, String=110).
+                    </p>
+                  </fieldset>
 
-                <fieldset className="detail-fieldset">
-                  <legend>Ölçeklendirme</legend>
-                  <div className="form-row-2col">
-                    <label>
-                      Scale
+                  <fieldset className="signal-fieldset" disabled={!canEdit}>
+                    <legend>Ölçeklendirme</legend>
+                    <label className="signal-field">
+                      <span>Scale</span>
                       <input
                         type="number"
                         step="0.0001"
                         value={editScale}
                         onChange={(event) => setEditScale(event.target.value)}
-                        disabled={!canEdit}
                       />
                     </label>
-                    <label>
-                      Offset
+                    <label className="signal-field">
+                      <span>Offset</span>
                       <input
                         type="number"
                         step="0.0001"
                         value={editOffset}
                         onChange={(event) => setEditOffset(event.target.value)}
-                        disabled={!canEdit}
                       />
                     </label>
-                  </div>
-                </fieldset>
+                    <p className="signal-fieldset-hint">
+                      Ham değer = scale × ham + offset. Birim sahaya göre uygulanır.
+                    </p>
+                  </fieldset>
 
-                <div className="detail-toggles">
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={editIsActive}
-                      onChange={(event) => setEditIsActive(event.target.checked)}
-                      disabled={!canEdit}
-                    />
-                    <span>
-                      <strong>Aktif</strong>
-                      <small className="field-hint-inline">
-                        Pasif sinyaller gateway tarafından okunmaz.
-                      </small>
-                    </span>
-                  </label>
-                </div>
-
-                {canEdit ? (
-                  <div className="device-form-actions">
-                    <button
-                      type="button"
-                      className="primary-btn"
-                      onClick={() => void handleSave()}
-                      disabled={savingEdit}
+                  <fieldset className="signal-fieldset" disabled={!canEdit}>
+                    <legend>Durum</legend>
+                    <label
+                      className={`signal-toggle-card ${editIsActive ? "signal-toggle-card-on" : ""}`}
                     >
-                      {savingEdit ? "Kaydediliyor..." : "Kaydet"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                      <input
+                        type="checkbox"
+                        checked={editIsActive}
+                        onChange={(event) => setEditIsActive(event.target.checked)}
+                      />
+                      <span className="signal-toggle-text">
+                        <span className="signal-toggle-title">{editIsActive ? "Aktif" : "Pasif"}</span>
+                        <span className="signal-toggle-hint">
+                          Pasif sinyaller gateway tarafından okunmaz; tarihçede kalır.
+                        </span>
+                      </span>
+                    </label>
+                  </fieldset>
+
+                  {canEdit ? (
+                    <div className="signal-form-actions">
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        onClick={() => void handleSave()}
+                        disabled={savingEdit}
+                      >
+                        {savingEdit ? "Kaydediliyor..." : "Kaydet"}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
           </div>

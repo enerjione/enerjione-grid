@@ -276,8 +276,61 @@ body {
 .device-create-modal h3,
 .device-create-modal .helper-text,
 .device-create-modal .modal-actions,
-.device-create-modal .dnp3-settings-form {
+.device-create-modal .dnp3-settings-form,
+.device-create-modal .device-create-location {
   grid-column: 1 / -1;
+}
+
+/* Yeni cihaz modali — gomulu harita konum secici */
+.device-create-location {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  margin-top: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+}
+
+.device-create-location-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.device-create-location-header strong {
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.device-create-location-header .helper-text {
+  font-size: 12px;
+  margin: 0;
+  color: #64748b;
+  grid-column: auto;
+}
+
+.device-create-location-coords {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.device-create-location-map {
+  height: 300px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+
+.device-create-location-map .world-map {
+  height: 100%;
+  width: 100%;
 }
 
 .settings-modal h3 {
@@ -2232,12 +2285,339 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 .alarm-detail-modal {
-  width: min(760px, 95vw);
+  width: min(1280px, 96vw);
+  height: min(820px, 92vh);
+  max-height: 92vh;
+  padding: 0 !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .alarm-detail-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Üst başlık şeridi: pill + title + state */
+.alarm-detail-2col .alarm-detail-header {
+  padding: 18px 22px 14px;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.alarm-detail-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.alarm-detail-titlebar h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a;
+  flex: 1;
+  min-width: 0;
+}
+
+.alarm-detail-description {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+/* 2 sütunlu grid */
+.alarm-detail-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 860px) {
+  .alarm-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.alarm-detail-info,
+.alarm-detail-comments {
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.alarm-detail-info {
+  border-right: 1px solid #e2e8f0;
+  background: #fafbff;
+}
+
+@media (max-width: 860px) {
+  .alarm-detail-info {
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+}
+
+.alarm-detail-section-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+/* SOL: Detay listesi */
+.alarm-detail-dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.alarm-detail-dl-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
   gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: center;
+}
+
+.alarm-detail-dl-row:last-child {
+  border-bottom: none;
+}
+
+.alarm-detail-dl-row dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0;
+}
+
+.alarm-detail-dl-row dd {
+  margin: 0;
+  font-size: 13px;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.alarm-detail-strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.alarm-detail-mono {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.alarm-detail-by {
+  color: #64748b;
+  font-size: 12px;
+}
+
+/* Atama bloğu */
+.alarm-detail-assign-block {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.alarm-detail-assign-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alarm-detail-assign-label > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.alarm-detail-select {
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.alarm-detail-select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* SAĞ: Yorumlar */
+.alarm-detail-comments {
+  background: #fff;
+}
+
+.alarm-detail-comments-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.alarm-detail-comments-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #e0e7ff;
+}
+
+.alarm-detail-comments-list {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.alarm-detail-comments-empty {
+  margin: auto;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.alarm-comment-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.alarm-comment-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.alarm-comment-card-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.alarm-comment-card-meta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  line-height: 1.2;
+}
+
+.alarm-comment-card-meta-text strong {
+  font-size: 12px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.alarm-comment-card-meta-text span {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.alarm-comment-card-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #1e293b;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.alarm-detail-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
+}
+
+.alarm-detail-comment-textarea {
+  width: 100%;
+  min-height: 90px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.4;
+  background: #fff;
+  color: #0f172a;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.alarm-detail-comment-textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.alarm-detail-comment-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.alarm-detail-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .alarms-detail-card h3 {
@@ -2311,6 +2691,533 @@ main.content.engineering-content:has(.device-management-panel) {
   flex: 1;
   min-height: 0;
   height: 100%;
+  gap: 10px;
+}
+
+/* ==========================================================
+   Sinyaller — modern kart liste + 4-fieldset edit panel
+   ========================================================== */
+.signals-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.signal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+
+.signal-card:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
+}
+
+.signal-card-active,
+.signal-card-active:hover {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff, #f5f7ff);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.18);
+}
+
+.signal-card-inactive {
+  opacity: 0.55;
+}
+
+.signal-card-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.signal-card-addr {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-left: auto;
+}
+
+.signal-card-unit {
+  font-size: 11px;
+  color: #475569;
+  font-weight: 600;
+  background: #f1f5f9;
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.signal-card-inactive-flag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+}
+
+.signal-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signal-card-key {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sağ panel — gruplandırılmış form */
+.signals-detail-form-v2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.signal-fieldset {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 14px 14px;
+  margin: 0;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.signal-fieldset:disabled {
+  background: #f8fafc;
+  opacity: 0.85;
+}
+
+.signal-fieldset legend {
+  padding: 2px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4f46e5;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+}
+
+.signal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 500;
+  min-width: 0;
+}
+
+.signal-field--wide {
+  grid-column: 1 / -1;
+}
+
+.signal-field > span {
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.02em;
+}
+
+.signal-field input,
+.signal-field select {
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #fff;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.signal-field input:focus,
+.signal-field select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.signal-fieldset-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.signal-toggle-card {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f8fafc, #fff);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.signal-toggle-card:hover {
+  border-color: #cbd5e1;
+}
+
+.signal-toggle-card-on {
+  border-color: #a7f3d0;
+  background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+}
+
+.signal-toggle-card input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.signal-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.signal-toggle-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.signal-toggle-card-on .signal-toggle-title {
+  color: #047857;
+}
+
+.signal-toggle-hint {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.signal-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 0 0;
+}
+
+/* Ana sayfa (dashboard) layout: filtre header + body (sidebar + harita/tablo) */
+.dashboard-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.dashboard-body {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Dashboard içindeki sidebar override — kart benzeri görünüm, boş çerçeve yok */
+.dashboard-body .sidebar.device-sidebar-modern {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  border-right: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: auto;
+}
+
+.dashboard-body .sidebar.device-sidebar-modern .device-row {
+  min-width: 0;
+}
+
+.dashboard-body.sidebar-collapsed {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-body {
+    grid-template-columns: 280px 1fr;
+  }
+}
+
+/* Üst filtre çubuğu — header görünümünde sabit yükseklik */
+.dashboard-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  flex-shrink: 0;
+}
+
+.dashboard-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 9px;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.dashboard-filter-toggle:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.dashboard-filter-toggle .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.dashboard-filter-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-filter-search:focus {
+  outline: none;
+  border-color: #6366f1;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.dashboard-filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+}
+
+.dashboard-filter-tab {
+  padding: 5px 16px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.dashboard-filter-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.7);
+  color: #0f172a;
+}
+
+.dashboard-filter-tab.active {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+}
+
+/* Harita üstündeki ince filtre çubuğu — ana sayfa harita sekmesi */
+.map-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  flex-shrink: 0;
+}
+
+.map-filter-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+}
+
+.map-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.map-filter-chip:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.7);
+  color: #0f172a;
+}
+
+.map-filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid #e2e8f0;
+}
+
+.map-filter-chip.active {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  border-color: #4f46e5;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
+}
+.map-filter-chip.active .map-filter-chip-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border-color: transparent;
+}
+
+.map-filter-chip--online.active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-color: #059669;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+}
+
+.map-filter-chip--offline.active {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  border-color: #64748b;
+}
+
+.map-filter-chip--alarm.active {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: #d97706;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.25);
+}
+
+.map-filter-divider {
+  width: 1px;
+  height: 22px;
+  background: #e2e8f0;
+}
+
+.map-filter-area {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.map-filter-area select {
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 160px;
+  max-width: 240px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.map-filter-area select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.map-filter-area select:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.map-filter-summary {
+  margin-left: auto;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.map-filter-clear {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.map-filter-error {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 .device-pin {
@@ -3577,6 +4484,10 @@ main.content.engineering-content:has(.device-management-panel) {
   white-space: nowrap;
   font-size: 13px;
   padding: 8px 14px;
+  /* Buton metni "Yenile" → "Yenileniyor..." değişiminde komşu filtreler kaymasın
+     diye sabit minimum genişlik ve sağ-yaslı içerik. */
+  min-width: 124px;
+  text-align: center;
 }
 
 .values-table .cell-center {
@@ -5079,6 +5990,237 @@ main.content.engineering-content:has(.device-management-panel) {
   border-radius: 10px;
 }
 
+/* Aktif/Pasif inline switch (alarm kuralı header) */
+.rule-active-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  margin-left: auto;
+}
+
+.rule-active-switch input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rule-active-switch-track {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  background: #cbd5e1;
+  border-radius: 999px;
+  transition: background 0.18s;
+}
+
+.rule-active-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.2);
+  transition: transform 0.18s;
+}
+
+.rule-active-switch-on .rule-active-switch-track {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.rule-active-switch-on .rule-active-switch-thumb {
+  transform: translateX(16px);
+}
+
+.rule-active-switch-on .rule-active-switch-label {
+  color: #047857;
+}
+
+/* Sinyal seçici (yeni alarm kuralı) */
+.signal-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signal-picker-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  flex-wrap: wrap;
+}
+
+.signal-picker-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.signal-picker-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.7);
+  color: #0f172a;
+}
+
+.signal-picker-tab.active {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
+}
+
+.signal-picker-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.signal-picker-tab.active .signal-picker-tab-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.signal-picker-search {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.signal-picker-search:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.signal-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fafbff;
+}
+
+.signal-picker-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.signal-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+
+.signal-picker-item:hover {
+  border-color: #c7d2fe;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.08);
+}
+
+.signal-picker-item.active {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff, #f5f7ff);
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.15);
+}
+
+.signal-picker-item-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.signal-picker-item-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signal-picker-item-text code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Düzenle/görüntüle modunda sinyal: değiştirilemez gösterim */
+.rule-signal-readonly {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  font-size: 13px;
+  min-height: 38px;
+}
+
+.rule-signal-readonly strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.rule-signal-readonly code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.rule-signal-readonly small {
+  flex-basis: 100%;
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: italic;
+}
+
 /* ==========================================================
    Toast bildirimleri (alt-sağ köşe)
    ========================================================== */
@@ -5339,8 +6481,36 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 /* ----- Alarm satırları: seviye + duruma göre renklendirme ----- */
+.alarms-section .alarms-page-table {
+  font-size: 13px;
+}
+
+.alarms-section .alarms-page-table thead th {
+  padding: 9px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.alarms-section .alarms-page-table tbody td {
+  padding: 8px 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f5f9;
+  border-right: none;
+}
+
+.alarms-section .alarms-page-table thead th {
+  border-right: none;
+}
+
 .alarm-row {
   position: relative;
+  cursor: pointer;
   transition: background 0.12s, box-shadow 0.12s;
 }
 
@@ -5348,75 +6518,220 @@ main.content.engineering-content:has(.device-management-panel) {
   transition: background 0.12s;
 }
 
-/* Seviyeye göre sol kenar şeridi (her satıra dikey çizgi) */
+/* Seviyeye göre sol kenar şeridi (sadece ilk hücrede 3px dikey çizgi) */
 .alarm-row td:first-child {
   position: relative;
+  border-left: 3px solid transparent;
 }
 
-.alarm-row td:first-child::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: transparent;
+.alarm-row-level-critical td:first-child {
+  border-left-color: #ef4444;
+}
+.alarm-row-level-warning td:first-child {
+  border-left-color: #f59e0b;
+}
+.alarm-row-level-info td:first-child {
+  border-left-color: #3b82f6;
 }
 
-.alarm-row-level-critical td:first-child::before {
-  background: linear-gradient(180deg, #ef4444, #dc2626);
-}
-.alarm-row-level-warning td:first-child::before {
-  background: linear-gradient(180deg, #f59e0b, #d97706);
-}
-.alarm-row-level-info td:first-child::before {
-  background: linear-gradient(180deg, #3b82f6, #2563eb);
+/* ----- Hücre içerikleri ----- */
+.alarm-cell-date {
+  width: 110px;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
-/* Açık (onaylanmamış) ve seviyeye göre arkaplan */
+.alarm-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.alarm-time {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  margin-top: 1px;
+}
+
+.alarm-cell-level {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.alarm-cell-title {
+  min-width: 0;
+  max-width: 360px;
+}
+
+.alarm-title-text {
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alarm-cell-device {
+  width: 1%;
+  white-space: nowrap;
+  min-width: 140px;
+}
+
+.alarm-device-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+.alarm-device-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.alarm-device-code {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.alarm-device-fallback {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.alarm-cell-state {
+  width: 1%;
+  white-space: nowrap;
+  min-width: 110px;
+}
+
+.alarm-cell-assignee {
+  font-size: 12px;
+  color: #475569;
+  white-space: nowrap;
+  width: 1%;
+  min-width: 130px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alarm-cell-empty {
+  color: #cbd5e1;
+}
+
+/* Pill'leri biraz daha sade */
+.alarms-section .alarm-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Açık (onaylanmamış) ve seviyeye göre çok hafif arkaplan
+   Tüm satırı doldurmak yerine subtle bir tint kullanıyoruz. */
 .alarm-row-open.alarm-row-level-critical td {
-  background: rgba(254, 226, 226, 0.55);
+  background: rgba(254, 242, 242, 0.6);
 }
 .alarm-row-open.alarm-row-level-warning td {
-  background: rgba(254, 243, 199, 0.55);
+  background: rgba(255, 251, 235, 0.6);
 }
 .alarm-row-open.alarm-row-level-info td {
-  background: rgba(219, 234, 254, 0.5);
+  background: rgba(239, 246, 255, 0.6);
 }
 
-/* Onaylanmış aktif alarmlar — soluk mavimsi tonda, "biliniyor" hissi */
+/* Onaylanmış aktif — soluk gri-mavi */
 .alarm-row-acked td {
-  background: rgba(241, 245, 249, 0.6);
-  color: #475569;
+  background: #f8fafc;
 }
-
+.alarm-row-acked .alarm-title-text {
+  color: #475569;
+  font-weight: 500;
+}
 .alarm-row-acked .alarm-pill {
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
 /* Hover */
 .alarm-row:hover td {
-  background: rgba(99, 102, 241, 0.06);
+  background: #eef2ff;
 }
 
 /* Seçili satır (her durumda baskın) */
 .alarm-row-active td,
 .alarm-row-active:hover td {
-  background: #eef2ff !important;
-  box-shadow: inset 3px 0 0 #4f46e5;
+  background: #e0e7ff !important;
+}
+.alarm-row-active td:first-child {
+  border-left-width: 4px;
 }
 
 /* Normale dönen satırlar (alt panel) — yeşilimsi */
 .alarm-row-resolved td {
-  background: rgba(240, 253, 244, 0.55);
+  background: rgba(240, 253, 244, 0.6);
 }
 
 .alarm-row-resolved .alarm-pill {
   opacity: 0.7;
 }
 
-.alarm-row-resolved td:first-child::before {
-  background: linear-gradient(180deg, #10b981, #059669);
+.alarm-row-resolved td:first-child {
+  border-left-color: #10b981 !important;
+}
+
+.alarm-row-resolved .alarm-title-text {
+  color: #334155;
+}
+
+/* İşlem butonları biraz daha kompakt */
+.alarm-actions-th {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.alarm-actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.alarm-actions-cell .icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-left: 4px;
+}
+
+.alarm-actions-cell .icon-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* Durum etiketi (açık / onaylandı) küçültüp soft tonla */
+.alarms-section .alarm-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.alarms-section .alarm-state.state-open {
+  background: #fef3c7;
+  color: #92400e;
+}
+.alarms-section .alarm-state.state-ack {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .alarms-section-overflow-hint {
@@ -5426,5 +6741,390 @@ main.content.engineering-content:has(.device-management-panel) {
   color: #64748b;
   border-top: 1px solid #f1f5f9;
   background: #f8fafc;
+}
+
+/* ==========================================================
+   Cihaz sidebar — modern kart tasarımı (sol panel)
+   ========================================================== */
+.device-sidebar-modern .device-search-input {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #fff;
+  font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.device-sidebar-modern .device-search-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.device-sidebar-modern .device-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow: visible;
+}
+
+.device-sidebar-modern .filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.device-sidebar-modern .filter-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.device-sidebar-modern .filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.device-sidebar-modern .filter-chip.active {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  border-color: #4f46e5;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
+}
+
+.device-sidebar-modern .filter-chip.active .filter-chip-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+.device-sidebar-modern .filter-chip--online.active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-color: #059669;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+}
+
+.device-sidebar-modern .filter-chip--offline.active {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  border-color: #64748b;
+  box-shadow: 0 1px 3px rgba(100, 116, 139, 0.25);
+}
+
+.device-sidebar-modern .filter-chip--warning.active {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: #d97706;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.25);
+}
+
+.device-sidebar-modern .device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+
+.device-sidebar-modern .device-list-empty {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+  padding: 24px 12px;
+}
+
+.device-sidebar-modern .device-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+
+.device-sidebar-modern .device-row:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
+}
+
+.device-sidebar-modern .device-row.selected {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff, #f5f7ff);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.18);
+}
+
+.device-sidebar-modern .device-row--alarm:not(.selected) {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fef2f2, #fff);
+}
+
+.device-sidebar-modern .device-row-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 78px;
+  align-items: center;
+  gap: 10px;
+}
+
+.device-sidebar-modern .device-row-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  /* Grid kolonu zaten 1fr — esneme grid kontrolünde */
+}
+
+.device-sidebar-modern .device-row-name strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-sidebar-modern .device-row-code {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.device-sidebar-modern .device-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.device-sidebar-modern .device-status-dot.online {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+.device-sidebar-modern .device-status-dot.offline {
+  background: #cbd5e1;
+}
+
+/* Batarya bar + yüzde (kompakt: kart başlığında sağ üst) */
+.device-battery,
+.device-battery-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.device-battery-mini {
+  white-space: nowrap;
+  justify-content: flex-end;
+  width: 78px;
+}
+
+.device-battery-mini .device-battery-text {
+  min-width: 36px;
+  text-align: right;
+}
+
+.device-battery-icon {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 13px;
+  border: 1.5px solid #94a3b8;
+  border-radius: 3px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.device-battery-icon::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: 3px;
+  width: 2px;
+  height: 6px;
+  background: #94a3b8;
+  border-radius: 0 1px 1px 0;
+}
+
+.device-battery-fill {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.3s ease, background 0.2s ease;
+}
+
+.device-battery--ok .device-battery-icon {
+  border-color: #10b981;
+}
+.device-battery--ok .device-battery-icon::after {
+  background: #10b981;
+}
+.device-battery--ok .device-battery-fill {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.device-battery--low .device-battery-icon {
+  border-color: #f59e0b;
+}
+.device-battery--low .device-battery-icon::after {
+  background: #f59e0b;
+}
+.device-battery--low .device-battery-fill {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.device-battery--critical .device-battery-icon {
+  border-color: #ef4444;
+}
+.device-battery--critical .device-battery-icon::after {
+  background: #ef4444;
+}
+.device-battery--critical .device-battery-fill {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.device-battery--unknown .device-battery-icon {
+  border-color: #cbd5e1;
+}
+.device-battery--unknown .device-battery-icon::after {
+  background: #cbd5e1;
+}
+
+.device-battery-text {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.device-battery--unknown .device-battery-text {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.device-row-alarm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 2px 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.device-row-alarm-badge .material-symbols-outlined {
+  font-size: 13px;
+}
+
+.device-sidebar-modern .device-row-foot {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #94a3b8;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 6px;
+}
+
+.device-sidebar-modern .device-row-last {
+  font-style: italic;
+}
+
+/* Canli Degerler — filtre dropdown grubu (cihaz / kaynak / kalite) */
+.live-values-toolbar .live-filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.live-values-toolbar .live-filter-select {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  min-width: 140px;
+  max-width: 220px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.live-values-toolbar .live-filter-select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.live-values-toolbar .live-filter-select:hover {
+  border-color: #cbd5e1;
+}
+
+.live-values-toolbar .live-filter-clear {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Login formu — "Beni hatırla" checkbox.
+ * .login-card label varsayılanı `display: grid` (etiket üstte, input altta);
+ * burada checkbox + yazı yan yana olsun diye flex'e zorluyoruz. */
+.login-card .login-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  margin: 4px 0 -2px;
+  width: fit-content;
+}
+
+.login-card .login-remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #4f46e5;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.login-card .login-remember > span {
+  font-size: 13px;
+  color: #334155;
+  font-weight: 500;
 }
 

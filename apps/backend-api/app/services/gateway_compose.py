@@ -72,6 +72,12 @@ services:
       SHOW_GATEWAY_TOKEN_ON_START: "false"
     ports:
       - "127.0.0.1:{{HOST_HEALTH_PORT}}:8020"
+      # Initiating mode'daki cihazlar buraya outbound TCP baglantisi acar.
+      # Backend cihaz basina 20100..20700 araliginda port atar; gateway her
+      # initiating cihaz icin ayri TCP server kanali acar (OpenDNP3 kanal-
+      # client 1-1 oldugu icin port mecbur). Saha cihazi frontend'deki
+      # "Master IP Port" alanini bu portla doldurmali.
+      - "20100-20700:20100-20700"
     # Container icinden host'a (cati yazilim/RabbitMQ ayni makinada ise)
     # erisim icin: host.docker.internal -> host-gateway. Linux Docker
     # 20.10+ bu ozel ismi kabul eder, Windows/macOS Docker Desktop'ta
@@ -111,6 +117,11 @@ networks:
   hsl:
     name: hsl
     external: false
+    # IPv4 zorla. Cati yazilimdaki RabbitMQ/PostgreSQL Windows host'unda
+    # genelde sadece IPv4 dinler; container Docker'in default IPv6 prefix'i
+    # uzerinden cozmeye calisirsa "Network is unreachable" alir. enable_ipv6
+    # kapali oldugu icin host.docker.internal her zaman IPv4'e cevrilir.
+    enable_ipv6: false
 """
 
 

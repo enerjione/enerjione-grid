@@ -95,6 +95,28 @@ export function AlarmRulesPage({
     return map;
   }, [signals]);
 
+  // Sinyal seciciye sunulacak — kaynak sekmesi + arama metnine gore
+  const filteredAlarmableSignals = useMemo(() => {
+    const q = signalPickerSearch.trim().toLowerCase();
+    return alarmableSignals.filter((sig) => {
+      if (signalPickerSource !== "all" && sig.source !== signalPickerSource) return false;
+      if (!q) return true;
+      return (
+        sig.label.toLowerCase().includes(q) ||
+        sig.key.toLowerCase().includes(q) ||
+        (sig.description ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [alarmableSignals, signalPickerSource, signalPickerSearch]);
+
+  const signalSourceCounts = useMemo(() => {
+    const map: Record<string, number> = { master: 0, sat01: 0, sat02: 0 };
+    for (const sig of alarmableSignals) {
+      if (sig.source in map) map[sig.source] += 1;
+    }
+    return map;
+  }, [alarmableSignals]);
+
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState<"all" | AlarmLevel>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
@@ -103,6 +125,9 @@ export function AlarmRulesPage({
   const [form, setForm] = useState<Omit<AlarmRuleRow, "id">>({ ...EMPTY_FORM });
   const [localError, setLocalError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Sinyal secici icin kaynak (master/sat01/sat02) sekmesi + arama
+  const [signalPickerSource, setSignalPickerSource] = useState<"all" | "master" | "sat01" | "sat02">("all");
+  const [signalPickerSearch, setSignalPickerSearch] = useState("");
 
   const filteredRules = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -381,6 +406,28 @@ export function AlarmRulesPage({
                       {LEVEL_LABEL[selectedRule.level]}
                     </span>
                   ) : null}
+                  {/* Aktif/Pasif inline switch — fieldset yerine başlık satırında küçük yer kaplar */}
+                  <label
+                    className={`rule-active-switch ${form.is_active ? "rule-active-switch-on" : ""}`}
+                    title={
+                      form.is_active
+                        ? "Kural aktif — değerlendirilir"
+                        : "Kural pasif — değerlendirilmez, tarihçede kalır"
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.is_active}
+                      onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                      disabled={!canEdit || !isEditing}
+                    />
+                    <span className="rule-active-switch-track">
+                      <span className="rule-active-switch-thumb" />
+                    </span>
+                    <span className="rule-active-switch-label">
+                      {form.is_active ? "Aktif" : "Pasif"}
+                    </span>
+                  </label>
                 </div>
                 {canEdit ? (
                   <div className="rule-form-actions">
@@ -436,27 +483,51 @@ export function AlarmRulesPage({
                 <fieldset className="rule-fieldset" disabled={!canEdit || !isEditing}>
                   <legend>Tanım</legend>
                   <div className="rule-grid-2">
-                    <label className="rule-field">
+                    <div className="rule-field">
                       <span>Sinyal</span>
-                      <select
-                        value={form.signal_key}
-                        onChange={(e) => setForm({ ...form, signal_key: e.target.value })}
-                        required
-                        disabled={!canEdit || mode === "edit" || mode === "view"}
-                      >
-                        <option value="" disabled>
-                          Seçiniz
-                        </option>
-                        {alarmableSignals.map((sig) => (
-                          <option key={sig.key} value={sig.key}>
-                            {sig.label} ({sig.key})
-                          </option>
-                        ))}
-                      </select>
-                      {mode === "edit" ? (
-                        <small className="rule-hint">Sinyal sonradan değiştirilemez.</small>
-                      ) : null}
-                    </label>
+                      {mode === "create" ? (
+                        <SignalPicker
+                          source={signalPickerSource}
+                          onSourceChange={setSignalPickerSource}
+                          search={signalPickerSearch}
+                          onSearchChange={setSignalPickerSearch}
+                          counts={{
+                            all: alarmableSignals.length,
+                            master: signalSourceCounts.master ?? 0,
+                            sat01: signalSourceCounts.sat01 ?? 0,
+                            sat02: signalSourceCounts.sat02 ?? 0
+                          }}
+                          options={filteredAlarmableSignals}
+                          selectedKey={form.signal_key}
+                          onSelect={(key) => setForm({ ...form, signal_key: key })}
+                        />
+                      ) : (
+                        <div className="rule-signal-readonly">
+                          {(() => {
+                            const sig = signalByKey.get(form.signal_key);
+                            if (!sig) return <span>{form.signal_key || "—"}</span>;
+                            return (
+                              <>
+                                <span className={`badge badge-source badge-source-${sig.source}`}>
+                                  {sig.source === "master"
+                                    ? "Master"
+                                    : sig.source === "sat01"
+                                      ? "Satellite 01"
+                                      : sig.source === "sat02"
+                                        ? "Satellite 02"
+                                        : sig.source}
+                                </span>
+                                <strong>{sig.label}</strong>
+                                <code>{sig.key}</code>
+                              </>
+                            );
+                          })()}
+                          {mode === "edit" ? (
+                            <small className="rule-hint">Sinyal sonradan değiştirilemez.</small>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
                     <label className="rule-field">
                       <span>Seviye</span>
                       <div className="rule-level-picker">
@@ -590,23 +661,6 @@ export function AlarmRulesPage({
                   </label>
                 </fieldset>
 
-                {/* DURUM */}
-                <fieldset className="rule-fieldset" disabled={!canEdit || !isEditing}>
-                  <legend>Durum</legend>
-                  <label className={`rule-toggle-card ${form.is_active ? "rule-toggle-card-on" : ""}`}>
-                    <input
-                      type="checkbox"
-                      checked={form.is_active}
-                      onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                    />
-                    <span className="rule-toggle-text">
-                      <span className="rule-toggle-title">{form.is_active ? "Aktif" : "Pasif"}</span>
-                      <span className="rule-toggle-hint">
-                        Pasif kurallar değerlendirilmez; tarihçe ve istatistiklerde kalır.
-                      </span>
-                    </span>
-                  </label>
-                </fieldset>
               </div>
 
               {(localError || error) ? <p className="error-text rule-form-error">{localError || error}</p> : null}
@@ -624,5 +678,102 @@ export function AlarmRulesPage({
         </div>
       </div>
     </section>
+  );
+}
+
+// =====================================================================
+// SignalPicker — alarm kuralında sinyal seçimi için kaynak sekmeleri +
+// arama + scrollable sinyal listesi.
+// =====================================================================
+type SignalPickerProps = {
+  source: "all" | "master" | "sat01" | "sat02";
+  onSourceChange: (s: "all" | "master" | "sat01" | "sat02") => void;
+  search: string;
+  onSearchChange: (s: string) => void;
+  counts: { all: number; master: number; sat01: number; sat02: number };
+  options: SignalCatalogRow[];
+  selectedKey: string;
+  onSelect: (key: string) => void;
+};
+
+function SignalPicker({
+  source,
+  onSourceChange,
+  search,
+  onSearchChange,
+  counts,
+  options,
+  selectedKey,
+  onSelect
+}: SignalPickerProps) {
+  const tabs: Array<{ key: "all" | "master" | "sat01" | "sat02"; label: string; count: number }> = [
+    { key: "all", label: "Tümü", count: counts.all },
+    { key: "master", label: "Master", count: counts.master },
+    { key: "sat01", label: "Satellite 01", count: counts.sat01 },
+    { key: "sat02", label: "Satellite 02", count: counts.sat02 }
+  ];
+  return (
+    <div className="signal-picker">
+      <div className="signal-picker-tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={`signal-picker-tab ${source === tab.key ? "active" : ""}`}
+            onClick={() => onSourceChange(tab.key)}
+          >
+            <span>{tab.label}</span>
+            <span className="signal-picker-tab-count">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+      <input
+        type="search"
+        className="signal-picker-search"
+        placeholder="Sinyal ara (ad, anahtar, açıklama)..."
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+      />
+      <div className="signal-picker-list" role="listbox">
+        {options.length === 0 ? (
+          <div className="signal-picker-empty">
+            {counts.all === 0
+              ? "Hiçbir sinyal alarmı desteklemiyor."
+              : "Aramaya uygun sinyal yok."}
+          </div>
+        ) : (
+          options.map((sig) => {
+            const isActive = sig.key === selectedKey;
+            return (
+              <button
+                key={sig.key}
+                type="button"
+                role="option"
+                aria-selected={isActive}
+                className={`signal-picker-item ${isActive ? "active" : ""}`}
+                onClick={() => onSelect(sig.key)}
+              >
+                <span className={`badge badge-source badge-source-${sig.source}`}>
+                  {sig.source === "master"
+                    ? "Master"
+                    : sig.source === "sat01"
+                      ? "Sat 01"
+                      : sig.source === "sat02"
+                        ? "Sat 02"
+                        : sig.source}
+                </span>
+                <div className="signal-picker-item-text">
+                  <strong>{sig.label}</strong>
+                  <code>{sig.key}</code>
+                </div>
+                <span className={`badge badge-${sig.data_type}`}>
+                  {sig.data_type}
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }

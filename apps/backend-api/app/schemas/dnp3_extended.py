@@ -30,5 +30,4 @@ def merge_dnp3_extended(stored: dict | None) -> Dnp3ExtendedSettings:
         return Dnp3ExtendedSettings.model_validate(base)
     clean = {k: v for k, v in stored.items() if k not in ("tls_dnp3",)}
     base.update({k: v for k, v in clean.items() if k in base})
-    base["ip_endpoint_type"] = "listening"
     return Dnp3ExtendedSettings.model_validate(base)

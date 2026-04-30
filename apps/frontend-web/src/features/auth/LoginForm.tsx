@@ -1,19 +1,31 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 type Props = {
-  onSubmit: (username: string, password: string) => Promise<void>;
+  onSubmit: (username: string, password: string, remember: boolean) => Promise<void>;
   loading: boolean;
   error?: string;
 };
+
+const REMEMBER_STORAGE_KEY = "hsl.login.remember";
 
 export function LoginForm({ onSubmit, loading, error }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const raw = window.localStorage.getItem(REMEMBER_STORAGE_KEY);
+    // Varsayılan: işaretli (kullanıcının çoğu zaman istediği davranış).
+    return raw === null ? true : raw === "1";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(REMEMBER_STORAGE_KEY, remember ? "1" : "0");
+  }, [remember]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await onSubmit(username, password);
+    await onSubmit(username, password, remember);
   };
 
   return (
@@ -73,6 +85,14 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
                   )}
                 </button>
               </div>
+            </label>
+            <label className="login-remember">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(event) => setRemember(event.target.checked)}
+              />
+              <span>Beni hatırla</span>
             </label>
             {error ? <p className="error-text">{error}</p> : null}
             <button type="submit" disabled={loading}>

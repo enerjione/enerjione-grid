@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import select as _select, text
 
 from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, health, internal, notification_settings, outbound_targets, responsibility_areas, signals, telemetry, users
 from app.core.config import settings
@@ -272,6 +272,49 @@ def create_tables():
                 result.get("removed", 0),
             )
         flush_outbox(db)
+    finally:
+        db.close()
+
+
+@app.on_event("startup")
+async def reapply_gateway_rabbitmq_permissions():
+    """Onceden olusturulmus gateway'lerin RabbitMQ izinlerini yeniden uygular.
+
+    Permission semasi degistirildiyse (orn. "configure" alani genisletildi)
+    DB'de saklanan eski parolayi koruyarak izinleri guncelleriz. Yeni bir
+    deploy/upgrade'de manuel rabbitmqctl cagrisi yapmaya gerek kalmaz.
+    Best-effort: RabbitMQ Management API ulasilamiyorsa sadece warn loglar.
+    """
+    import logging
+
+    from app.api.gateways import _rmq_admin
+    from app.models.gateway import Gateway as _Gateway
+    from app.services.rabbitmq_admin import RabbitMqAdminError
+
+    log = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        rows = list(db.scalars(_select(_Gateway)).all())
+        if not rows:
+            return
+        client = _rmq_admin()
+        if not client.ping():
+            log.warning("rabbitmq_management_unreachable_at_startup gateways=%d", len(rows))
+            return
+        for gw in rows:
+            if not gw.rabbitmq_username or not gw.rabbitmq_password:
+                continue
+            try:
+                # Mevcut parolayi koru, sadece kullanici/permission'i tazele
+                client.create_gateway_user(
+                    gateway_code=gw.code,
+                    existing_password=gw.rabbitmq_password,
+                )
+            except RabbitMqAdminError as exc:
+                log.warning("rabbitmq_reapply_failed gateway=%s error=%s", gw.code, exc)
+        log.info("rabbitmq_permissions_reapplied gateways=%d", len(rows))
+    except Exception:  # noqa: BLE001
+        log.exception("rabbitmq_reapply_startup_failed")
     finally:
         db.close()
 

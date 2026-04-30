@@ -1,9 +1,25 @@
+import { useEffect } from "react";
+
 import type { Dnp3ExtendedSettings } from "../../shared/types";
 
 type Props = {
   value: Dnp3ExtendedSettings;
   onChange: (patch: Partial<Dnp3ExtendedSettings>) => void;
+  /** Diger cihazlarda kullanilan master_ip_port'lar — initiating modunda
+   *  otomatik atama bunlari hariç tutar. */
+  usedMasterPorts?: number[];
 };
+
+const INITIATING_PORT_RANGE_START = 20100;
+const INITIATING_PORT_RANGE_END = 20700;
+
+function pickFreeInitiatingPort(used: number[]): number {
+  const taken = new Set(used);
+  for (let p = INITIATING_PORT_RANGE_START; p <= INITIATING_PORT_RANGE_END; p += 1) {
+    if (!taken.has(p)) return p;
+  }
+  return INITIATING_PORT_RANGE_START; // tüm range dolu (600 cihaz aşıldı) — fallback
+}
 
 function Req() {
   return <span className="field-req" aria-hidden="true">*</span>;
@@ -35,9 +51,32 @@ function BoolSelect({
   );
 }
 
-export function Dnp3SettingsForm({ value, onChange }: Props) {
+export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Props) {
   const v = value;
   const set = onChange;
+
+  const isInitiating = v.ip_endpoint_type === "initiating";
+
+  // Initiating moda gecildiginde veya port range disinda kalan bir deger
+  // varsa otomatik olarak ilk bos port'a sabitle. Boylece cihazi kaydeden
+  // kullanici manuel port girmek/sectigi sayiyi kontrol etmek zorunda kalmaz
+  // ve iki cihaz ayni port'u almaz.
+  useEffect(() => {
+    if (!isInitiating) return;
+    const current = Number(v.master_ip_port);
+    const inRange =
+      Number.isFinite(current) &&
+      current >= INITIATING_PORT_RANGE_START &&
+      current <= INITIATING_PORT_RANGE_END;
+    const conflicts = usedMasterPorts.includes(current);
+    if (!inRange || conflicts) {
+      const picked = pickFreeInitiatingPort(usedMasterPorts);
+      if (picked !== current) {
+        set({ master_ip_port: picked });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInitiating, v.master_ip_port, usedMasterPorts.join(",")]);
 
   return (
     <div className="dnp3-settings-form">
@@ -45,17 +84,29 @@ export function Dnp3SettingsForm({ value, onChange }: Props) {
       <div className="dnp3-settings-grid">
         <label className="dnp3-field">
           <span className="dnp3-label">
+            Bağlantı modu <Req />
+          </span>
+          <select
+            value={v.ip_endpoint_type}
+            onChange={(e) => set({ ip_endpoint_type: e.target.value as "listening" | "initiating" })}
+          >
+            <option value="listening">Listening (cihaz dinler, gateway bağlanır)</option>
+            <option value="initiating">Initiating (cihaz gateway'e bağlanır — 4G/SIM)</option>
+          </select>
+        </label>
+        <label className="dnp3-field">
+          <span className="dnp3-label">
             Master IP adresi <Req />
           </span>
           <input
             value={v.master_ip_address}
             onChange={(e) => set({ master_ip_address: e.target.value })}
-            placeholder="örn. ar01.ihost.zone"
+            placeholder={isInitiating ? "Çatı yazılım sunucu IP" : "0.0.0.0"}
           />
         </label>
         <label className="dnp3-field">
           <span className="dnp3-label">
-            Master IP portu <Req />
+            Master IP portu {isInitiating ? null : <Req />}
           </span>
           <input
             type="number"
@@ -63,6 +114,8 @@ export function Dnp3SettingsForm({ value, onChange }: Props) {
             max={65535}
             value={v.master_ip_port}
             onChange={(e) => set({ master_ip_port: Number(e.target.value) || 1 })}
+            disabled={isInitiating}
+            title={isInitiating ? "Initiating modunda port otomatik atanır" : undefined}
           />
         </label>
         <label className="dnp3-field">

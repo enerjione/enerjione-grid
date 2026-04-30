@@ -52,8 +52,19 @@ function authHeaders(token: string): HeadersInit {
 const SESSION_401_TURKISH =
   "Oturum süresi doldu veya geçerli değil. Lütfen sağ üstten çıkış yapıp tekrar giriş yapın.";
 
+/** 401 durumunda tüm uygulamaya "session expired" sinyali yayınla. App bu
+ * event'i dinleyip session'ı temizliyor ve kullaniciyi login ekranina dusuruyor.
+ * Bu sayede her API cagrisinin try/catch icine 401 mantigi koymaya gerek yok. */
+export const SESSION_EXPIRED_EVENT = "hsl:session-expired";
+
+function notifySessionExpired(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+}
+
 async function buildApiError(response: Response, fallbackMessage: string): Promise<Error> {
   if (response.status === 401) {
+    notifySessionExpired();
     try {
       const data = (await response.json()) as ApiErrorResponse;
       const detail = data.detail;
@@ -91,22 +102,39 @@ async function buildApiError(response: Response, fallbackMessage: string): Promi
   return new Error(fallbackMessage);
 }
 
+// "Beni hatırla" semantiği:
+//  - true   → kalıcı (localStorage). Tarayıcı kapansa bile gelecek açılışta session geri yüklenir.
+//  - false  → oturumluk (sessionStorage). Tarayıcı sekmesi kapanınca session silinir.
+// loadSession her iki kaynağı da kontrol eder, önce sessionStorage'a (daha
+// yeni / tek sekme tercihi) sonra localStorage'a bakar.
 export function loadSession(): AuthSession | null {
-  const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+  const fromSession = sessionStorage.getItem(AUTH_STORAGE_KEY);
+  const fromLocal = localStorage.getItem(AUTH_STORAGE_KEY);
+  const raw = fromSession ?? fromLocal;
   if (!raw) return null;
   try {
     return JSON.parse(raw) as AuthSession;
   } catch {
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     return null;
   }
 }
 
-export function saveSession(session: AuthSession): void {
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+export function saveSession(session: AuthSession, remember: boolean = true): void {
+  // Önce her iki depolamayı da temizle ki birden fazla kayıt birbirine karışmasın.
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  const payload = JSON.stringify(session);
+  if (remember) {
+    localStorage.setItem(AUTH_STORAGE_KEY, payload);
+  } else {
+    sessionStorage.setItem(AUTH_STORAGE_KEY, payload);
+  }
 }
 
 export function clearSession(): void {
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
   localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 

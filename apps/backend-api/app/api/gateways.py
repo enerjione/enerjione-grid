@@ -2,6 +2,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 from typing import Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import delete, select
@@ -223,7 +224,42 @@ def download_gateway_compose(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
     # Container icinden erisim icin localhost/127.0.0.1 -> host.docker.internal
     effective_backend_url = normalize_backend_url_for_container(backend_url)
-    effective_rabbitmq_url = (rabbitmq_url or "").strip() or derive_rabbitmq_url(backend_url)
+    # RabbitMQ URL onceligi:
+    #   1) caller endpoint'e ?rabbitmq_url= ile explicit override gondermisse
+    #   2) gateway icin DB'de saklanan dedicated cred (otomatik provisionlanmis)
+    #   3) global guest fallback (Management API erisilemediyse — saha kurulumu
+    #      icin uyari logu yazilir)
+    if (rabbitmq_url or "").strip():
+        effective_rabbitmq_url = rabbitmq_url.strip()
+    elif gateway.rabbitmq_username and gateway.rabbitmq_password:
+        parsed = urlparse(effective_backend_url)
+        host = parsed.hostname or "host.docker.internal"
+        rmq_user = RabbitMqUser(
+            username=gateway.rabbitmq_username,
+            password=gateway.rabbitmq_password,
+        )
+        effective_rabbitmq_url = build_amqp_url(host=host, user=rmq_user)
+    else:
+        # Cred yoksa (RabbitMQ Management API down idiyse veya eski kayit)
+        # son care: gateway'i simdi provisionlamayi bir kez daha denemek
+        try:
+            user = _rmq_admin().create_gateway_user(gateway_code=gateway.code)
+            gateway.rabbitmq_username = user.username
+            gateway.rabbitmq_password = user.password
+            db.commit()
+            from urllib.parse import urlparse as _urlparse
+
+            parsed = _urlparse(effective_backend_url)
+            host = parsed.hostname or "host.docker.internal"
+            effective_rabbitmq_url = build_amqp_url(host=host, user=user)
+        except RabbitMqAdminError as exc:
+            logger.warning(
+                "rabbitmq_admin_unavailable_at_compose_render gateway=%s error=%s "
+                "(falling back to guest cred — saha tarafinda calismayabilir)",
+                gateway.code,
+                exc,
+            )
+            effective_rabbitmq_url = derive_rabbitmq_url(backend_url)
     if host_port is None:
         # Gateway'in olusturulma sirasina gore 8020 + index. Birden fazla gateway
         # ayni host'ta calisirsa health portlari catismaz. Frontend kullanicisi
@@ -347,6 +383,21 @@ def get_gateway_config(
 
     response.headers["ETag"] = etag
 
+    # Initiating mode cihazlar icin host port range: gateway her cihaz icin
+    # ayri bir TCP server portu acar. OpenDNP3'un TCPServer kanali tek
+    # client kabul ettigi icin cihaz basina port mecbur. Backend cihaz
+    # sirasina gore deterministik atar (DB id'sine gore) — boylece compose
+    # YAML'i ayni port'lari expose eder ve cihaz config'inde port sabit kalir.
+    initiating_devices_sorted = sorted(
+        [d for d in devices if (d.dnp3_extended or {}).get("ip_endpoint_type") == "initiating"],
+        key=lambda d: d.id,
+    )
+    initiating_port_map: dict[str, int] = {}
+    for idx, d in enumerate(initiating_devices_sorted):
+        # 20100..20700 araligi - frontend'de bilgilendirme amacli compose template
+        # bu range'i acar, kullanici manuel port girmez.
+        initiating_port_map[d.code] = 20100 + idx
+
     config_devices = []
     for device in devices:
         # Frontend'den gelen extended ayarlardaki master_address (DNP3 link layer
@@ -358,6 +409,11 @@ def get_gateway_config(
             master_address = int(master_addr_raw) if master_addr_raw is not None else None
         except (TypeError, ValueError):
             master_address = None
+        endpoint_type = "listening"
+        if isinstance(ext, dict):
+            raw_endpoint = str(ext.get("ip_endpoint_type") or "listening").strip().lower()
+            if raw_endpoint in ("initiating", "listening"):
+                endpoint_type = raw_endpoint
         config_devices.append(
             GatewayConfigDevice(
                 code=device.code,
@@ -369,6 +425,12 @@ def get_gateway_config(
                 # 20000'e baglanmaya calisir, bu da dogru olmaz.
                 dnp3_tcp_port=device.dnp3_outstation_port,
                 master_address=master_address,
+                ip_endpoint_type=endpoint_type,
+                # Initiating mode -> gateway bu portta dinler; cihaz buraya baglanir.
+                # Listening mode -> alan kullanilmaz, None.
+                master_ip_port=(
+                    initiating_port_map.get(device.code) if endpoint_type == "initiating" else None
+                ),
                 poll_interval_sec=device.poll_interval_sec,
                 timeout_ms=device.timeout_ms,
                 retry_count=device.retry_count,

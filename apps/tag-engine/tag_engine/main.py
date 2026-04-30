@@ -56,7 +56,16 @@ def _build_processed_payload(payload: dict) -> dict:
         "signal_key": payload.get("signal_key"),
         "value": payload.get("value"),
         "quality": quality,
-        "status": "offline" if quality in {"bad", "offline", "invalid"} else "online",
+        # Gateway dnp3 adapter'leri "comm_lost" (TCP/link kopuk) ve "restart"
+        # (cihaz reboot etti, baseline bekleniyor) kalitelerini de yayinlar.
+        # Frontend'de cihazin "offline" gozukmesi icin bu kaliteler de
+        # offline olarak isaretlenmelidir; aksi halde gateway'in son iyi
+        # degeri tekrar yayinlanmadigi durumda cihaz hala "online" gorunur.
+        "status": (
+            "offline"
+            if quality in {"bad", "offline", "invalid", "comm_lost", "restart"}
+            else "online"
+        ),
         "source_timestamp": payload.get("source_timestamp") or now_iso,
         "processed_at": now_iso,
     }

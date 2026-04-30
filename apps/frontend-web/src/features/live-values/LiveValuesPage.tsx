@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { TablePagination } from "../../components/TablePagination";
 import type {
   DeviceRow,
   Gateway,
@@ -73,6 +74,15 @@ function formatBinaryValue(value: number): string {
   return value ? "AKTİF (1)" : "PASİF (0)";
 }
 
+// Sayisal degeri tr-TR locale ile (virgullu), max 6 ondalik basamak ve
+// gereksiz trailing-zero olmadan formatlar. Ornek: 216.87 -> "216,87",
+// 216.000 -> "216", 216.870000 -> "216,87" (anlamli digit korunur).
+const NUMBER_FORMATTER = new Intl.NumberFormat("tr-TR", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 6,
+  useGrouping: false
+});
+
 function formatValue(value: number | null, dataType: SignalDataType | undefined, unit?: string | null) {
   if (value === null || value === undefined) {
     return "—";
@@ -83,7 +93,7 @@ function formatValue(value: number | null, dataType: SignalDataType | undefined,
   const text = Number.isFinite(value)
     ? dataType === "counter"
       ? Math.round(value).toString()
-      : value.toFixed(3)
+      : NUMBER_FORMATTER.format(value)
     : String(value);
   return unit ? `${text} ${unit}` : text;
 }
@@ -123,6 +133,12 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [autoRefreshSec, setAutoRefreshSec] = useState<number>(() => readStoredAutoRefresh());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  // Yeni filtreler — cihaz, kaynak (Master/Sat01/Sat02), kalite
+  const [deviceFilter, setDeviceFilter] = useState<string>("all"); // device_code veya "all"
+  const [sourceFilter, setSourceFilter] = useState<string>("all"); // master/sat01/sat02 veya "all"
+  const [qualityFilter, setQualityFilter] = useState<string>("all"); // good/bad/comm_lost/pending/all
 
   const onRefreshRef = useRef(onRefresh);
   const loadingRef = useRef(loading);
@@ -164,12 +180,52 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     return map;
   }, [values, signalByKey]);
 
+  // Filtre dropdown'ları için mevcut canlı değerlerden çıkarılan benzersiz listeler
+  const deviceOptions = useMemo(() => {
+    const seen = new Map<string, string>(); // code -> name
+    for (const row of values) {
+      if (row.device_code && !seen.has(row.device_code)) {
+        seen.set(row.device_code, row.device_name || row.device_code);
+      }
+    }
+    return Array.from(seen, ([code, name]) => ({ code, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, "tr")
+    );
+  }, [values]);
+
+  const sourceOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of values) {
+      if (row.source) set.add(row.source);
+    }
+    // Tutarlı sıra: master, sat01, sat02, sonra diğerleri
+    const ordered: string[] = [];
+    ["master", "sat01", "sat02"].forEach((s) => {
+      if (set.has(s)) {
+        ordered.push(s);
+        set.delete(s);
+      }
+    });
+    Array.from(set).sort().forEach((s) => ordered.push(s));
+    return ordered;
+  }, [values]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return values.filter((row) => {
       const sig = signalByKey.get(row.signal_key);
       if (activeTab !== "all") {
         if (!sig || sig.data_type !== activeTab) return false;
+      }
+      if (deviceFilter !== "all" && row.device_code !== deviceFilter) return false;
+      if (sourceFilter !== "all" && row.source !== sourceFilter) return false;
+      if (qualityFilter !== "all") {
+        const eq = effectiveQuality(row);
+        if (qualityFilter === "pending") {
+          if (eq) return false;
+        } else if (eq !== qualityFilter) {
+          return false;
+        }
       }
       if (!q) return true;
       return (
@@ -179,7 +235,33 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         row.device_name.toLowerCase().includes(q)
       );
     });
-  }, [values, signalByKey, activeTab, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values, signalByKey, activeTab, search, deviceFilter, sourceFilter, qualityFilter]);
+
+  // Filtre/tab/sayfa boyutu degisince ilk sayfaya don
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, search, pageSize, deviceFilter, sourceFilter, qualityFilter]);
+
+  const hasActiveFilter =
+    deviceFilter !== "all" ||
+    sourceFilter !== "all" ||
+    qualityFilter !== "all" ||
+    activeTab !== "all" ||
+    search.trim().length > 0;
+
+  const handleClearFilters = () => {
+    setDeviceFilter("all");
+    setSourceFilter("all");
+    setQualityFilter("all");
+    setActiveTab("all");
+    setSearch("");
+  };
+
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   const totalCount = values.length;
 
@@ -205,7 +287,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         ))}
       </div>
 
-      <div className="signals-toolbar">
+      <div className="signals-toolbar live-values-toolbar">
         <input
           className="signals-search"
           type="search"
@@ -213,6 +295,56 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <div className="live-filter-group">
+          <select
+            className="live-filter-select"
+            value={deviceFilter}
+            onChange={(event) => setDeviceFilter(event.target.value)}
+            title="Cihaza göre filtrele"
+          >
+            <option value="all">Tüm cihazlar</option>
+            {deviceOptions.map((opt) => (
+              <option key={opt.code} value={opt.code}>
+                {opt.name} · {opt.code}
+              </option>
+            ))}
+          </select>
+          <select
+            className="live-filter-select"
+            value={sourceFilter}
+            onChange={(event) => setSourceFilter(event.target.value)}
+            title="Kaynağa göre filtrele (Master / Satellite)"
+          >
+            <option value="all">Tüm kaynaklar</option>
+            {sourceOptions.map((src) => (
+              <option key={src} value={src}>
+                {SOURCE_LABEL[src] ?? src}
+              </option>
+            ))}
+          </select>
+          <select
+            className="live-filter-select"
+            value={qualityFilter}
+            onChange={(event) => setQualityFilter(event.target.value)}
+            title="Kaliteye göre filtrele"
+          >
+            <option value="all">Tüm kaliteler</option>
+            <option value="good">İyi (good)</option>
+            <option value="bad">Kötü (bad)</option>
+            <option value="comm_lost">Haberleşme kayıp</option>
+            <option value="pending">Henüz veri yok</option>
+          </select>
+          {hasActiveFilter ? (
+            <button
+              type="button"
+              className="secondary-btn live-filter-clear"
+              onClick={handleClearFilters}
+              title="Tüm filtreleri temizle"
+            >
+              Temizle
+            </button>
+          ) : null}
+        </div>
         <span className="signals-count-pill">
           {filtered.length} / {totalCount}
         </span>
@@ -256,7 +388,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => {
+            {pagedRows.map((row) => {
               const sig = signalByKey.get(row.signal_key);
               const dataType = sig?.data_type;
               return (
@@ -310,6 +442,16 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           </tbody>
         </table>
       </div>
+      {filtered.length > 0 ? (
+        <TablePagination
+          totalItems={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="sinyal"
+        />
+      ) : null}
     </section>
   );
 }

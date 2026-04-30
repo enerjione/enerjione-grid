@@ -13,6 +13,7 @@ import { NotificationSettingsPanel } from "../features/settings/NotificationSett
 import { DeviceSidebar } from "../features/devices/DeviceSidebar";
 import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
+import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
 import { SignalsPage } from "../features/signals/SignalsPage";
 import { AlarmRulesPage } from "../features/alarm-rules/AlarmRulesPage";
 import {
@@ -56,6 +57,7 @@ import {
   logout,
   resetUserPassword,
   saveSession,
+  SESSION_EXPIRED_EVENT,
   addAlarmComment,
   acknowledgeAlarm,
   deleteAlarm,
@@ -183,6 +185,50 @@ export function App() {
   useEffect(() => {
     savePersistedRoute({ pageMode, engineeringPage, homeTab: activeTab });
   }, [pageMode, engineeringPage, activeTab]);
+
+  // Ana sayfa (dashboard) ortak filtre state'i — Harita ve Tablo aynı filtreyi paylaşır.
+  const [dashboardSearch, setDashboardSearch] = useState("");
+  const [dashboardStatusFilter, setDashboardStatusFilter] = useState<StatusFilter>("all");
+  const [dashboardAreaId, setDashboardAreaId] = useState<number | "all">("all");
+  const [dashboardAreaDeviceIds, setDashboardAreaDeviceIds] = useState<Set<number> | null>(null);
+  const [dashboardAreaLoading, setDashboardAreaLoading] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("hsl.dashboard.sidebar-collapsed") === "1";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "hsl.dashboard.sidebar-collapsed",
+      sidebarCollapsed ? "1" : "0"
+    );
+  }, [sidebarCollapsed]);
+
+  // Sorumluluk alani secimi degistiginde o alanin cihaz id setini cek.
+  useEffect(() => {
+    if (dashboardAreaId === "all" || !session) {
+      setDashboardAreaDeviceIds(null);
+      return;
+    }
+    let cancelled = false;
+    setDashboardAreaLoading(true);
+    void fetchResponsibilityAreaDetail(session.accessToken, dashboardAreaId)
+      .then((detail) => {
+        if (cancelled) return;
+        setDashboardAreaDeviceIds(new Set(detail.devices.map((d) => d.id)));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDashboardAreaDeviceIds(new Set());
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setDashboardAreaLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardAreaId, session]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsFullName, setSettingsFullName] = useState("");
   const [settingsEmail, setSettingsEmail] = useState("");
@@ -294,12 +340,12 @@ export function App() {
     }
   }, [session, pageMode]);
 
-  const handleLogin = async (username: string, password: string) => {
+  const handleLogin = async (username: string, password: string, remember: boolean) => {
     setLoadingLogin(true);
     setAuthError(undefined);
     try {
       const nextSession = await login(username, password);
-      saveSession(nextSession);
+      saveSession(nextSession, remember);
       setSession(nextSession);
       setPageMode("home");
       setEngineeringPage("devices");
@@ -310,7 +356,7 @@ export function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     if (session) {
       void logout(session.accessToken);
     }
@@ -332,7 +378,23 @@ export function App() {
     setAlarmRules([]);
     setEngineeringPage("devices");
     setPageMode("home");
-  };
+  }, [session]);
+
+  // Token suresi dolup 401 dondugunde otomatik login ekranina dus.
+  // api.ts buildApiError 401 yakaladiginda "hsl:session-expired" event'ini yayar;
+  // burada dinleyip session'i temizler ve uyari toast'u gosteririz.
+  useEffect(() => {
+    const onExpired = () => {
+      if (!session) return; // zaten login ekranindayiz
+      toast.warning("Oturum süresi doldu, lütfen tekrar giriş yapın.", {
+        title: "Oturum sona erdi"
+      });
+      handleLogout();
+      setAuthError("Oturum süresi doldu. Lütfen tekrar giriş yapın.");
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, [session, handleLogout, toast]);
 
   const reloadSignals = async () => {
     if (!session) return;
@@ -985,6 +1047,39 @@ export function App() {
     [devices, selectedDeviceId]
   );
 
+  // Dashboard ortak filtrelerine göre süzülmüş cihaz listesi.
+  // Harita marker'ları, sol sidebar listesi ve LiveValuesPage tablo satırları
+  // bu kaynağı paylaşır → kullanıcı üst çubuğa girdiği değer her yerde aynı
+  // anda etkili olur.
+  const filteredDashboardDevices = useMemo(() => {
+    const q = dashboardSearch.trim().toLowerCase();
+    return devices.filter((d) => {
+      if (dashboardStatusFilter === "online" && d.communicationStatus !== "online") return false;
+      if (dashboardStatusFilter === "offline" && d.communicationStatus === "online") return false;
+      if (dashboardStatusFilter === "alarm" && !d.alarmActive) return false;
+      if (dashboardAreaDeviceIds && !dashboardAreaDeviceIds.has(d.id)) return false;
+      if (q) {
+        const text = `${d.name} ${d.code}`.toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [devices, dashboardSearch, dashboardStatusFilter, dashboardAreaDeviceIds]);
+
+  // Filtre çubuğu için ham sayım rozetleri (filtre uygulanmamış toplam).
+  const dashboardCounts = useMemo(() => {
+    const total = devices.length;
+    const online = devices.filter((d) => d.communicationStatus === "online").length;
+    const alarm = devices.filter((d) => d.alarmActive).length;
+    return { total, online, offline: total - online, alarm };
+  }, [devices]);
+
+  // LiveValuesPage'e geçilecek filtrelenmiş canlı değer satırları.
+  const filteredDashboardLiveValues = useMemo(() => {
+    const allowedIds = new Set(filteredDashboardDevices.map((d) => d.id));
+    return signalLiveValues.filter((row) => allowedIds.has(row.device_id));
+  }, [signalLiveValues, filteredDashboardDevices]);
+
   const handleRefreshSystemStatus = async () => {
     if (!session) return;
     setLoadingData(true);
@@ -1260,39 +1355,54 @@ export function App() {
             ) : null}
           </main>
         ) : (
-          <>
-            <DeviceSidebar devices={devices} selectedId={selectedDeviceId} onSelect={setSelectedDeviceId} />
-            <main className={`content dashboard-content ${activeTab === "map" ? "map-active" : ""}`}>
-              <div className="tabs dashboard-tabs">
-                <button className={activeTab === "map" ? "active" : ""} onClick={() => setActiveTab("map")}>
-                  Harita
-                </button>
-                <button className={activeTab === "values" ? "active" : ""} onClick={() => setActiveTab("values")}>
-                  Tablo
-                </button>
-              </div>
-
-              {loadingData ? <p>Yükleniyor...</p> : null}
-              {activeTab === "map" ? (
-                <DeviceMapTab
-                  devices={devices}
-                  selectedDevice={selectedDevice}
-                  onSelectDevice={setSelectedDeviceId}
+          <div className="dashboard-shell">
+            <DashboardFilterBar
+              search={dashboardSearch}
+              onSearchChange={setDashboardSearch}
+              statusFilter={dashboardStatusFilter}
+              onStatusFilterChange={setDashboardStatusFilter}
+              areaId={dashboardAreaId}
+              onAreaIdChange={setDashboardAreaId}
+              responsibilityAreas={responsibilityAreas}
+              counts={dashboardCounts}
+              visibleCount={filteredDashboardDevices.length}
+              areaLoading={dashboardAreaLoading}
+              sidebarCollapsed={sidebarCollapsed}
+              onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
+              activeTab={activeTab}
+              onActiveTabChange={setActiveTab}
+            />
+            <div className={`dashboard-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+              {!sidebarCollapsed ? (
+                <DeviceSidebar
+                  devices={filteredDashboardDevices}
+                  selectedId={selectedDeviceId}
+                  onSelect={setSelectedDeviceId}
                 />
               ) : null}
-              {activeTab === "values" ? (
-                <LiveValuesPage
-                  values={signalLiveValues}
-                  signals={signalCatalog}
-                  devices={devices}
-                  gateways={gateways}
-                  loading={signalLiveLoading}
-                  error={signalLiveError}
-                  onRefresh={handleRefreshSignalLive}
-                />
-              ) : null}
-            </main>
-          </>
+              <main className={`content dashboard-content ${activeTab === "map" ? "map-active" : ""}`}>
+                {loadingData ? <p>Yükleniyor...</p> : null}
+                {activeTab === "map" ? (
+                  <DeviceMapTab
+                    devices={filteredDashboardDevices}
+                    selectedDevice={selectedDevice}
+                    onSelectDevice={setSelectedDeviceId}
+                  />
+                ) : null}
+                {activeTab === "values" ? (
+                  <LiveValuesPage
+                    values={filteredDashboardLiveValues}
+                    signals={signalCatalog}
+                    devices={filteredDashboardDevices}
+                    gateways={gateways}
+                    loading={signalLiveLoading}
+                    error={signalLiveError}
+                    onRefresh={handleRefreshSignalLive}
+                  />
+                ) : null}
+              </main>
+            </div>
+          </div>
         )}
       </div>
 
