@@ -7829,14 +7829,121 @@ main.content.engineering-content:has(.device-management-panel) {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 10px 12px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #fff;
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+  overflow: hidden;
+}
+
+/* Sağ üstte yanıp sönen alarm rozeti */
+.device-row-alarm-pulse {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  animation: device-alarm-pulse 1.4s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.device-row-alarm-pulse .material-symbols-outlined {
+  font-size: 12px;
+}
+
+@keyframes device-alarm-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    transform: scale(1.05);
+  }
+}
+
+/* Konum + batarya yan yana satırı */
+.device-sidebar-modern .device-row-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.device-sidebar-modern .device-row-meta-row .device-row-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #334155;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-sidebar-modern .device-row-meta-row .device-row-location .material-symbols-outlined {
+  font-size: 14px;
+  color: #6366f1;
+  flex-shrink: 0;
+}
+
+/* Batarya chip — meta-row içinde sağda */
+.device-battery-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f172a;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.device-battery-chip.device-battery--ok {
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.device-battery-chip.device-battery--low {
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.device-battery-chip.device-battery--critical {
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+.device-battery-chip.device-battery--unknown {
+  color: #94a3b8;
+}
+
+.device-battery-chip .device-battery-icon {
+  width: 22px;
+  height: 11px;
 }
 
 .device-sidebar-modern .device-row:hover {

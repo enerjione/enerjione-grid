@@ -121,6 +121,8 @@ export type AlarmEvent = {
   level: string;
   title: string;
   description: string;
+  /** Sinyal anahtarı (prefix master/sat01/sat02 → kaynak rozet türetir). */
+  signal_key?: string | null;
   assigned_to?: string | null;
   acknowledged?: boolean;
   reset?: boolean;

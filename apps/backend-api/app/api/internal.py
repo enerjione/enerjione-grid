@@ -132,6 +132,19 @@ def ingest_alarm(
         db.commit()
         return {"status": "deduplicated", "alarm_id": existing.id}
 
+    # Ayni cihaz + ayni baslik icin reset=true olup onaylanmamis "Normale Donen
+    # - Onay Bekliyor" kayitlari, alarm tekrar tetiklenince UI'da iki yerde
+    # gozukmesin diye otomatik temizlenir. Onaylanmis kayitlar zaten gizli.
+    stale_pending = db.scalars(
+        select(AlarmEvent)
+        .where(AlarmEvent.device_id == device_id)
+        .where(AlarmEvent.title == payload.title)
+        .where(AlarmEvent.reset.is_(True))
+        .where(AlarmEvent.acknowledged.is_(False))
+    ).all()
+    for stale in stale_pending:
+        db.delete(stale)
+
     alarm = AlarmEvent(
         device_id=device_id,
         level=payload.level,

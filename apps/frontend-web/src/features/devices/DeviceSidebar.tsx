@@ -45,6 +45,15 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
               } ${device.alarmActive ? "device-row--alarm" : ""}`}
               onClick={() => onSelect(device.id)}
             >
+              {/* Sağ üstte yanıp sönen alarm rozeti */}
+              {device.alarmActive ? (
+                <span className="device-row-alarm-pulse" title="Aktif alarm var">
+                  <span className="material-symbols-outlined">warning</span>
+                  Alarm
+                </span>
+              ) : null}
+
+              {/* Üst satır: durum noktası + cihaz adı */}
               <div className="device-row-top">
                 <span
                   className={`device-status-dot ${isOnline ? "online" : "offline"}`}
@@ -54,8 +63,16 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
                   <strong>{device.name}</strong>
                   <span className="device-row-code">{device.code}</span>
                 </div>
-                <div
-                  className={`device-battery-mini ${batteryClass(battPct)}`}
+              </div>
+
+              {/* Orta satır: konum + batarya yan yana */}
+              <div className="device-row-meta-row">
+                <span className="device-row-location" title={location.label}>
+                  <span className="material-symbols-outlined">place</span>
+                  {location.label}
+                </span>
+                <span
+                  className={`device-battery-chip ${batteryClass(battPct)}`}
                   title={battPct !== null ? `Batarya: %${Math.round(battPct)}` : "Batarya bilgisi yok"}
                 >
                   <span className="device-battery-icon" aria-hidden="true">
@@ -64,23 +81,14 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
                   <span className="device-battery-text">
                     {battPct !== null ? `%${Math.round(battPct)}` : "—"}
                   </span>
-                </div>
+                </span>
               </div>
 
+              {/* Alt satır: son veri zamanı */}
               <div className="device-row-foot">
-                <span className="device-row-location" title={location.label}>
-                  <span className="material-symbols-outlined">place</span>
-                  {location.label}
-                </span>
                 <span className="device-row-last">
-                  {device.lastUpdateAt ? formatRelative(device.lastUpdateAt) : "—"}
+                  {device.lastUpdateAt ? `Son veri: ${formatRelative(device.lastUpdateAt)}` : "Son veri: —"}
                 </span>
-                {device.alarmActive ? (
-                  <span className="device-row-alarm-badge" title="Aktif alarm var">
-                    <span className="material-symbols-outlined">warning</span>
-                    Alarm
-                  </span>
-                ) : null}
               </div>
             </button>
           );

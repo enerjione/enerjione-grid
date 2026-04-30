@@ -75,6 +75,35 @@ export function AlarmsPage({
     );
   };
 
+  /** Seviye kodundan Türkçe etiket. */
+  const levelLabelTr = (level: string): string => {
+    const k = level.toLowerCase();
+    if (k === "info") return "Bilgi";
+    if (k === "warning") return "Uyarı";
+    if (k === "critical") return "Kritik";
+    return level;
+  };
+
+  /** Sinyal anahtarının prefix'inden Master / Sat 01 / Sat 02 rozeti üretir. */
+  const renderSourceCell = (signalKey: string | null | undefined) => {
+    if (!signalKey) {
+      return <span className="alarm-cell-empty">—</span>;
+    }
+    const prefix = signalKey.split(".", 1)[0]?.toLowerCase() ?? "";
+    const sourceMap: Record<string, { label: string; klass: string }> = {
+      master: { label: "Master", klass: "master" },
+      sat01: { label: "Sat 01", klass: "sat01" },
+      sat02: { label: "Sat 02", klass: "sat02" }
+    };
+    const entry = sourceMap[prefix];
+    if (!entry) {
+      return <span className="alarm-cell-empty">{prefix || "—"}</span>;
+    }
+    return (
+      <span className={`badge badge-source badge-source-${entry.klass}`}>{entry.label}</span>
+    );
+  };
+
   // Genel filtre (arama / seviye / atama). Onaylanmis+resetli alarmlar ekrandan gizli.
   const filterPredicate = (alarm: AlarmEvent): boolean => {
     const level = alarm.level.toLowerCase();
@@ -441,8 +470,7 @@ export function AlarmsPage({
   };
 
   return (
-    <section className="alarms-layout">
-      <div className="alarms-list-card alarms-page-list-card">
+    <section className="alarms-layout alarms-layout-flat">
         <div className="alarms-toolbar alarms-page-toolbar">
           <input
             className="device-search-input"
@@ -494,6 +522,7 @@ export function AlarmsPage({
                   <th>Tarih</th>
                   <th>Seviye</th>
                   <th>Cihaz</th>
+                  <th>Kaynak</th>
                   <th>Alarm</th>
                   <th>Durum</th>
                   <th>Atanan</th>
@@ -518,9 +547,10 @@ export function AlarmsPage({
                       <div className="alarm-time">{created.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
                     </td>
                     <td className="alarm-cell-level">
-                      <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
+                      <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{levelLabelTr(alarm.level)}</span>
                     </td>
                     <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
+                    <td className="alarm-cell-source">{renderSourceCell(alarm.signal_key)}</td>
                     <td className="alarm-cell-title">
                       <div className="alarm-title-text" title={alarm.description || alarm.title}>
                         {alarm.title}
@@ -578,7 +608,7 @@ export function AlarmsPage({
                 })}
                 {activeAlarms.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={7} className="alarms-empty-cell">
+                    <td colSpan={8} className="alarms-empty-cell">
                       Aktif alarm yok.
                     </td>
                   </tr>
@@ -616,6 +646,7 @@ export function AlarmsPage({
                   <th>Tarih</th>
                   <th>Seviye</th>
                   <th>Cihaz</th>
+                  <th>Kaynak</th>
                   <th>Alarm</th>
                   <th>Atanan</th>
                   <th className="alarm-actions-th">İşlem</th>
@@ -636,9 +667,10 @@ export function AlarmsPage({
                       <div className="alarm-time">{created.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
                     </td>
                     <td className="alarm-cell-level">
-                      <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
+                      <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{levelLabelTr(alarm.level)}</span>
                     </td>
                     <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
+                    <td className="alarm-cell-source">{renderSourceCell(alarm.signal_key)}</td>
                     <td className="alarm-cell-title">
                       <div className="alarm-title-text" title={alarm.description || alarm.title}>
                         {alarm.title}
@@ -691,7 +723,7 @@ export function AlarmsPage({
                 })}
                 {pendingResetAlarms.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={6} className="alarms-empty-cell">
+                    <td colSpan={7} className="alarms-empty-cell">
                       Onay bekleyen normale dönmüş alarm yok.
                     </td>
                   </tr>
@@ -705,7 +737,6 @@ export function AlarmsPage({
             </p>
           ) : null}
         </div>
-      </div>
 
       {isDetailModalOpen ? (
         <div className="settings-modal-backdrop">

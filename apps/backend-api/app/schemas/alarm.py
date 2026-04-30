@@ -9,6 +9,8 @@ class AlarmEventRead(BaseModel):
     level: str
     title: str
     description: str
+    # Sinyal anahtari — kaynagi (master/sat01/sat02) frontend prefix'ten turetir.
+    signal_key: str | None = None
     assigned_to: str | None = None
     acknowledged: bool = False
     reset: bool = False
