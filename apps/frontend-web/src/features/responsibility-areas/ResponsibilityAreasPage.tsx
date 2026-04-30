@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type {
   DeviceRow,
   ResponsibilityAreaDetail,
@@ -290,7 +291,12 @@ export function ResponsibilityAreasPage({
 
         {/* Sağ: detay paneli */}
         <main className="responsibility-detail">
-          {detailLoading ? <p className="helper-text">Yükleniyor...</p> : null}
+          {detailLoading ? (
+            <div className="panel-loading-overlay" aria-live="polite">
+              <span className="panel-loading-spinner" aria-hidden="true" />
+              <span>Yükleniyor…</span>
+            </div>
+          ) : null}
           {localError ? <p className="error-text">{localError}</p> : null}
           {!detail && !detailLoading ? (
             <div className="responsibility-empty-detail">
@@ -308,12 +314,15 @@ export function ResponsibilityAreasPage({
                 <div className="responsibility-detail-titlebar">
                   <div className="responsibility-detail-title">
                     <h2>{detail.name || "Yeni Alan"}</h2>
-                    <span className={`responsibility-pill ${detail.is_active ? "responsibility-pill--on" : "responsibility-pill--off"}`}>
-                      {detail.is_active ? "Aktif" : "Pasif"}
-                    </span>
                   </div>
                   {canEdit ? (
                     <div className="responsibility-detail-actions">
+                      <ActiveSwitch
+                        checked={editIsActive}
+                        onChange={setEditIsActive}
+                        disabled={busy}
+                        title="Pasif yapıldığında bu alan listelerde görünmeye devam eder; yeni atamalara kapatılır."
+                      />
                       <button type="button" className="primary-btn" disabled={busy} onClick={() => void handleSaveEdits()}>
                         Kaydet
                       </button>
@@ -321,7 +330,11 @@ export function ResponsibilityAreasPage({
                         Sil
                       </button>
                     </div>
-                  ) : null}
+                  ) : (
+                    <span className={`responsibility-pill ${detail.is_active ? "responsibility-pill--on" : "responsibility-pill--off"}`}>
+                      {detail.is_active ? "Aktif" : "Pasif"}
+                    </span>
+                  )}
                 </div>
                 <nav className="responsibility-tabs" role="tablist">
                   <button
@@ -360,20 +373,6 @@ export function ResponsibilityAreasPage({
                 {activeTab === "general" ? (
                   <div className="responsibility-section">
                     <div className="responsibility-detail-fields">
-                      <label className="responsibility-toggle responsibility-toggle--card">
-                        <input
-                          type="checkbox"
-                          checked={editIsActive}
-                          onChange={(e) => setEditIsActive(e.target.checked)}
-                          disabled={!canEdit || busy}
-                        />
-                        <span className="responsibility-toggle-text">
-                          <span className="responsibility-toggle-title">Aktif</span>
-                          <span className="responsibility-toggle-hint">
-                            Pasif yapıldığında bu alan listelerde görünmeye devam eder ancak yeni atamalara kapatılır.
-                          </span>
-                        </span>
-                      </label>
                       <label className="responsibility-field">
                         <span>Alan Adı</span>
                         <input value={editName} onChange={(e) => setEditName(e.target.value)} disabled={!canEdit || busy} />

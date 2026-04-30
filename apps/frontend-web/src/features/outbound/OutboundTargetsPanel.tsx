@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 
+import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type { OutboundTarget } from "../../shared/types";
 
 type Props = {
@@ -195,10 +196,7 @@ export function OutboundTargetsPanel({ targets, onCreate, onUpdate, onDelete }: 
               <input type="checkbox" checked={retain} onChange={(event) => setRetain(event.target.checked)} />
               MQTT Retain
             </label>
-            <label className="notify-option">
-              <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
-              Aktif
-            </label>
+            <ActiveSwitch checked={isActive} onChange={setIsActive} />
             <div className="settings-actions">
               <button type="button" onClick={() => (editing ? setEditing(null) : setCreateOpen(false))}>
                 Vazgeç

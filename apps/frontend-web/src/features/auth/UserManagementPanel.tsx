@@ -224,11 +224,21 @@ export function UserManagementPanel({
             </p>
           ) : null}
         </div>
-        <button className="add-user-btn" onClick={() => setCreateModalOpen(true)}>
+        <button
+          className="add-user-btn"
+          onClick={() => {
+            setSubmitError("");
+            setCreateModalOpen(true);
+          }}
+        >
           + Kullanıcı Ekle
         </button>
       </div>
-      {submitError ? <p className="error-text">{submitError}</p> : null}
+      {/* Modal kapalıyken (toplu işlem hataları için) panelde gösterilir.
+          Modal açıkken modalin içinde de gösteriliyor. */}
+      {submitError && !isCreateModalOpen && editingUserId === null && !passwordResetUser ? (
+        <p className="error-text">{submitError}</p>
+      ) : null}
 
       {isCreateModalOpen ? (
         <div className="settings-modal-backdrop">
@@ -278,8 +288,15 @@ export function UserManagementPanel({
                 SMS bildirimi
               </label>
             </fieldset>
+            {submitError ? <p className="error-text modal-error">{submitError}</p> : null}
             <div className="settings-actions">
-              <button type="button" onClick={() => setCreateModalOpen(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateModalOpen(false);
+                  setSubmitError("");
+                }}
+              >
                 Vazgeç
               </button>
               <button type="submit">Kaydet</button>
@@ -332,6 +349,7 @@ export function UserManagementPanel({
                 SMS bildirimi
               </label>
             </fieldset>
+            {submitError ? <p className="error-text modal-error">{submitError}</p> : null}
             <div className="settings-actions">
               <button type="button" onClick={() => setEditingUserId(null)}>
                 Vazgeç
@@ -367,6 +385,7 @@ export function UserManagementPanel({
                 required
               />
             </label>
+            {submitError ? <p className="error-text modal-error">{submitError}</p> : null}
             <div className="settings-actions">
               <button type="button" onClick={() => setPasswordResetUser(null)}>
                 Vazgeç

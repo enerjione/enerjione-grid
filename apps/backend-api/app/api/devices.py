@@ -7,6 +7,7 @@ from app.models.enums import UserRole
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.device import DeviceCreate, DeviceRead, DeviceUpdate
+from app.services.scope_service import get_visible_device_ids
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -14,13 +15,20 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 @router.get("", response_model=list[DeviceRead])
 def list_devices(
     gateway_code: str | None = Query(default=None),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     repository = DeviceRepository(db)
     if gateway_code:
-        return repository.list_devices_by_gateway(gateway_code)
-    return repository.list_devices()
+        rows = repository.list_devices_by_gateway(gateway_code)
+    else:
+        rows = repository.list_devices()
+    # Operator scope: sadece kendi sorumluluk alanlarindaki cihazlari gosterir.
+    # Engineer/Installer icin scope None doner -> filtre uygulanmaz.
+    visible_ids = get_visible_device_ids(db, current_user)
+    if visible_ids is None:
+        return rows
+    return [d for d in rows if d.id in visible_ids]
 
 
 @router.post("", response_model=DeviceRead, status_code=status.HTTP_201_CREATED)

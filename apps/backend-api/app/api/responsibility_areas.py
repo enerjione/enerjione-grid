@@ -194,6 +194,14 @@ def add_user_to_area(
     user = db.get(User, user_id)
     if area is None or user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alan veya kullanici bulunamadi.")
+    # Sorumluluk alanlarına yalnızca operator rolündeki kullanıcılar atanabilir.
+    # Mühendis ve kurulumcunun zaten tüm cihazlara erişimi olduğundan kapsam
+    # tanımı anlam taşımaz; UI tarafında da bu kullanıcılar listede görünmez.
+    if user.role != UserRole.OPERATOR:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sorumluluk alanlarına yalnızca operatör hesapları atanabilir.",
+        )
     exists = db.execute(
         select(responsibility_area_users).where(
             responsibility_area_users.c.area_id == area_id,

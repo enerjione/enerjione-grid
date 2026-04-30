@@ -114,11 +114,19 @@ def reset_signals_to_defaults(
 
 @router.get("/live", response_model=list[SignalLiveValue])
 def list_live_values(
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Aktif sinyal kataloğu × tüm cihazlar. Telemetri yoksa değer/kalite/zaman boş döner."""
+    """Aktif sinyal kataloğu × tüm cihazlar. Telemetri yoksa değer/kalite/zaman boş döner.
+
+    Operator rolü için kapsam (scope) uygulanır: yalnızca kendi sorumluluk
+    alanlarındaki cihazların satırları döner."""
+    from app.services.scope_service import get_visible_device_ids
+
     device_rows: list[Device] = list(db.scalars(select(Device).order_by(Device.name.asc())).all())
+    visible_ids = get_visible_device_ids(db, current_user)
+    if visible_ids is not None:
+        device_rows = [d for d in device_rows if d.id in visible_ids]
     catalog_rows: list[SignalCatalog] = list(
         db.scalars(
             select(SignalCatalog)

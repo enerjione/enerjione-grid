@@ -3335,6 +3335,7 @@ main.content.engineering-content:has(.device-management-panel) {
   height: 100vh;
   display: grid;
   grid-template-columns: 1fr 3fr;
+  gap: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -3343,7 +3344,7 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .login-card {
   width: 100%;
-  border-right: 1px solid #d1d5db;
+  border-right: none;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(2px);
   padding: 38px 28px;
@@ -3544,6 +3545,302 @@ main.content.engineering-content:has(.device-management-panel) {
   color: #dc2626;
   font-size: 12px;
   margin: 0;
+}
+
+/* ==========================================================
+   Cihaz Özet sayfası (Dashboard → Tablo sekmesi)
+   ========================================================== */
+.device-summary-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.device-summary-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.device-summary-empty-card {
+  text-align: center;
+  padding: 40px 28px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  max-width: 420px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.device-summary-empty-icon {
+  font-size: 48px;
+  color: #c7d2fe;
+}
+
+.device-summary-empty-card h3 {
+  margin: 12px 0 8px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+/* Header */
+.device-summary-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.device-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.device-summary-title h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.device-summary-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.device-summary-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.device-summary-status.online {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.device-summary-status.offline {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.device-summary-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.device-summary-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f8fafc, #fff);
+}
+
+.device-summary-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.device-summary-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.device-summary-kpi--good {
+  background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+  border-color: #a7f3d0;
+}
+
+.device-summary-kpi--good .device-summary-kpi-value {
+  color: #047857;
+}
+
+.device-summary-kpi--bad {
+  background: linear-gradient(135deg, #fef2f2, #fff1f2);
+  border-color: #fecaca;
+}
+
+.device-summary-kpi--bad .device-summary-kpi-value {
+  color: #b91c1c;
+}
+
+.device-summary-kpi--pending {
+  background: linear-gradient(135deg, #fef3c7, #fffbeb);
+  border-color: #fde68a;
+}
+
+.device-summary-kpi--pending .device-summary-kpi-value {
+  color: #92400e;
+}
+
+.device-summary-kpi--battery {
+  background: linear-gradient(135deg, #eef2ff, #f5f7ff);
+  border-color: #c7d2fe;
+}
+
+.device-summary-kpi--battery .device-summary-kpi-value {
+  color: #4338ca;
+}
+
+.device-summary-kpi--alarm {
+  background: linear-gradient(135deg, #fef2f2, #fff7ed);
+  border-color: #fdba74;
+}
+
+/* Toolbar */
+.device-summary-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.device-summary-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+}
+
+.device-summary-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.device-summary-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.7);
+  color: #0f172a;
+}
+
+.device-summary-tab.active {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
+}
+
+.device-summary-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.device-summary-tab.active .device-summary-tab-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.device-summary-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.device-summary-search:focus {
+  outline: none;
+  border-color: #6366f1;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.device-summary-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.device-summary-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  z-index: 2;
+}
+
+.device-summary-empty-row {
+  padding: 32px 12px !important;
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* Modal içinde gözüken hata mesajı — backdrop arkasında kaybolmasın diye
+   belirgin bir kutu içinde. */
+.modal-error {
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .user-form {
@@ -4736,6 +5033,12 @@ main.content.engineering-content:has(.device-management-panel) {
 .responsibility-detail-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.responsibility-detail-actions .rule-active-switch {
+  margin-left: 0;
+  margin-right: 4px;
 }
 
 .responsibility-pill {
@@ -5772,15 +6075,15 @@ main.content.engineering-content:has(.device-management-panel) {
 .rule-form-grid {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 22px 22px;
+  padding: 12px 18px 14px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 10px 14px;
   min-height: 0;
   align-content: start;
 }
 
-@media (max-width: 1300px) {
+@media (max-width: 1100px) {
   .rule-form-grid {
     grid-template-columns: 1fr;
   }
@@ -5789,12 +6092,12 @@ main.content.engineering-content:has(.device-management-panel) {
 .rule-fieldset {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 14px 16px 16px;
+  padding: 10px 14px 12px;
   margin: 0;
   background: #fff;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   transition: border-color 0.15s, opacity 0.15s;
 }
 
@@ -5990,6 +6293,335 @@ main.content.engineering-content:has(.device-management-panel) {
   border-radius: 10px;
 }
 
+/* ==========================================================
+   Loading: panel içi overlay (layout itmez, üstüne biner)
+   ========================================================== */
+.panel-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4338ca;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+  z-index: 30;
+  pointer-events: all;
+}
+
+.panel-loading-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #e0e7ff;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: panel-spin 0.7s linear infinite;
+}
+
+@keyframes panel-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sorumluluk alani detay paneli relative olmali ki overlay üstüne binsin */
+.responsibility-detail {
+  position: relative;
+}
+
+/* Tam ekran loading overlay (uzun süren API geçişleri için) */
+.global-loading-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(3px);
+  z-index: 9999;
+  pointer-events: all;
+}
+
+.global-loading-overlay .panel-loading-spinner {
+  width: 44px;
+  height: 44px;
+  border-width: 4px;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+
+.global-loading-overlay .global-loading-text {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ==========================================================
+   Alarm Kuralları v2 — sinyal odaklı master/detail
+   ========================================================== */
+.alarm-rules-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.rules-v2-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (min-width: 1500px) {
+  .rules-v2-layout {
+    grid-template-columns: 420px 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .rules-v2-layout {
+    grid-template-columns: 320px 1fr;
+  }
+}
+
+@media (max-width: 880px) {
+  .rules-v2-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* SOL: Sinyal listesi paneli */
+.rules-v2-signals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-height: 0;
+}
+
+.rules-v2-signals-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.rules-v2-signal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.rules-v2-signal-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+
+.rules-v2-signal-item:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
+}
+
+.rules-v2-signal-item.active {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff, #f5f7ff);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.18);
+}
+
+.rules-v2-signal-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rules-v2-signal-item strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rules-v2-signal-item code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rules-v2-rule-pill {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.rules-v2-rule-pill--info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+.rules-v2-rule-pill--warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.rules-v2-rule-pill--critical {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* SAĞ: Detay/form */
+.rules-v2-detail {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.rules-v2-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.rules-v2-detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 22px 16px;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.rules-v2-detail-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.rules-v2-detail-title-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.rules-v2-new-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rules-v2-detail-title h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.rules-v2-detail-key {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.rules-v2-detail-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.rules-v2-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rules-v2-actions .rule-active-switch {
+  margin-left: 0;
+}
+
+/* Form gövdesi — fieldset'ler */
+.rules-v2-form-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
 /* Aktif/Pasif inline switch (alarm kuralı header) */
 .rule-active-switch {
   display: inline-flex;
@@ -6041,6 +6673,41 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .rule-active-switch-on .rule-active-switch-label {
   color: #047857;
+}
+
+.rule-active-switch-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rule-active-switch-disabled .rule-active-switch-track {
+  cursor: not-allowed;
+}
+
+/* ActiveSwitch — DashboardFilterBar gibi yerlerde stand-alone (margin-left:auto
+   yok) kullanım için override. */
+.signals-detail-badges .rule-active-switch,
+.alarm-detail-modal .rule-active-switch,
+.responsibility-active-row .rule-active-switch {
+  margin-left: 0;
+}
+
+/* Sorumluluk alanı genel sekmesinde switch + ipucu satırı */
+.responsibility-active-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+
+.responsibility-active-hint {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 200px;
 }
 
 /* Sinyal seçici (yeni alarm kuralı) */
@@ -6123,12 +6790,18 @@ main.content.engineering-content:has(.device-management-panel) {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 280px;
+  max-height: 220px;
   overflow-y: auto;
   padding: 4px;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #fafbff;
+}
+
+.signal-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .signal-picker-empty {
@@ -7050,14 +7723,36 @@ main.content.engineering-content:has(.device-management-panel) {
 .device-sidebar-modern .device-row-foot {
   display: flex;
   align-items: center;
+  gap: 8px;
   font-size: 11px;
   color: #94a3b8;
   border-top: 1px solid #f1f5f9;
   padding-top: 6px;
+  flex-wrap: wrap;
 }
 
 .device-sidebar-modern .device-row-last {
   font-style: italic;
+  margin-left: auto;
+}
+
+.device-sidebar-modern .device-row-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #475569;
+  font-weight: 500;
+  font-style: normal;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+.device-sidebar-modern .device-row-location .material-symbols-outlined {
+  font-size: 13px;
+  color: #64748b;
 }
 
 /* Canli Degerler — filtre dropdown grubu (cihaz / kaynak / kalite) */

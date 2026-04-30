@@ -14,6 +14,9 @@ import { DeviceSidebar } from "../features/devices/DeviceSidebar";
 import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
+import { DeviceSummaryPage } from "../features/device-summary/DeviceSummaryPage";
+import { GlobalLoading } from "../components/GlobalLoading";
+import { locateDevice } from "../shared/geoLookup";
 import { SignalsPage } from "../features/signals/SignalsPage";
 import { AlarmRulesPage } from "../features/alarm-rules/AlarmRulesPage";
 import {
@@ -121,16 +124,17 @@ const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "outbound",
   "notifications"
 ];
-const VALID_HOME_TABS: TabId[] = ["map", "values"];
-
 type PersistedRoute = {
   pageMode: PageMode;
   engineeringPage: EngineeringPage;
-  homeTab: TabId;
 };
 
+// Ana sayfa sekmesi (Harita / Tablo) kasten persist edilmez — kullanıcı her
+// oturumda haritayla başlasın; tabloya geçtikten sonra yenilemede yine harita
+// gelir. Sayfa modu (Anasayfa/Alarmlar/Olaylar/Mühendislik) ve engineering alt
+// sayfası persist olur — kullanıcı çalıştığı sayfada kalır.
 function loadPersistedRoute(): PersistedRoute {
-  const fallback: PersistedRoute = { pageMode: "home", engineeringPage: "devices", homeTab: "map" };
+  const fallback: PersistedRoute = { pageMode: "home", engineeringPage: "devices" };
   if (typeof window === "undefined") return fallback;
   try {
     const raw = window.localStorage.getItem(ROUTE_STORAGE_KEY);
@@ -140,8 +144,7 @@ function loadPersistedRoute(): PersistedRoute {
       pageMode: VALID_PAGE_MODES.includes(parsed.pageMode as PageMode) ? (parsed.pageMode as PageMode) : fallback.pageMode,
       engineeringPage: VALID_ENGINEERING_PAGES.includes(parsed.engineeringPage as EngineeringPage)
         ? (parsed.engineeringPage as EngineeringPage)
-        : fallback.engineeringPage,
-      homeTab: VALID_HOME_TABS.includes(parsed.homeTab as TabId) ? (parsed.homeTab as TabId) : fallback.homeTab
+        : fallback.engineeringPage
     };
   } catch {
     return fallback;
@@ -176,15 +179,16 @@ export function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<number>(0);
   const toast = useToast();
   const persistedRouteRef = useRef<PersistedRoute>(loadPersistedRoute());
-  const [activeTab, setActiveTab] = useState<TabId>(() => persistedRouteRef.current.homeTab);
+  // Harita ana sayfada her oturumda varsayılan olsun — persist edilmez.
+  const [activeTab, setActiveTab] = useState<TabId>("map");
   const [engineeringPage, setEngineeringPage] = useState<EngineeringPage>(
     () => persistedRouteRef.current.engineeringPage
   );
   const [pageMode, setPageMode] = useState<PageMode>(() => persistedRouteRef.current.pageMode);
 
   useEffect(() => {
-    savePersistedRoute({ pageMode, engineeringPage, homeTab: activeTab });
-  }, [pageMode, engineeringPage, activeTab]);
+    savePersistedRoute({ pageMode, engineeringPage });
+  }, [pageMode, engineeringPage]);
 
   // Ana sayfa (dashboard) ortak filtre state'i — Harita ve Tablo aynı filtreyi paylaşır.
   const [dashboardSearch, setDashboardSearch] = useState("");
@@ -192,6 +196,7 @@ export function App() {
   const [dashboardAreaId, setDashboardAreaId] = useState<number | "all">("all");
   const [dashboardAreaDeviceIds, setDashboardAreaDeviceIds] = useState<Set<number> | null>(null);
   const [dashboardAreaLoading, setDashboardAreaLoading] = useState(false);
+  const [dashboardLocationFilter, setDashboardLocationFilter] = useState<string>("all");
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("hsl.dashboard.sidebar-collapsed") === "1";
@@ -1047,6 +1052,24 @@ export function App() {
     [devices, selectedDeviceId]
   );
 
+  // Cihaz başına konum (il/ülke) etiketi — geo-lookup memo'ya alındı.
+  const deviceLocationLabel = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const d of devices) {
+      map.set(d.id, locateDevice(d.latitude, d.longitude).label);
+    }
+    return map;
+  }, [devices]);
+
+  // Filtre dropdown'ı için benzersiz konum listesi (Türkçe sıralı).
+  const dashboardLocationOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const label of deviceLocationLabel.values()) {
+      if (label && label !== "Konum yok") set.add(label);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "tr"));
+  }, [deviceLocationLabel]);
+
   // Dashboard ortak filtrelerine göre süzülmüş cihaz listesi.
   // Harita marker'ları, sol sidebar listesi ve LiveValuesPage tablo satırları
   // bu kaynağı paylaşır → kullanıcı üst çubuğa girdiği değer her yerde aynı
@@ -1058,13 +1081,24 @@ export function App() {
       if (dashboardStatusFilter === "offline" && d.communicationStatus === "online") return false;
       if (dashboardStatusFilter === "alarm" && !d.alarmActive) return false;
       if (dashboardAreaDeviceIds && !dashboardAreaDeviceIds.has(d.id)) return false;
+      if (dashboardLocationFilter !== "all") {
+        const label = deviceLocationLabel.get(d.id);
+        if (label !== dashboardLocationFilter) return false;
+      }
       if (q) {
         const text = `${d.name} ${d.code}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
       return true;
     });
-  }, [devices, dashboardSearch, dashboardStatusFilter, dashboardAreaDeviceIds]);
+  }, [
+    devices,
+    dashboardSearch,
+    dashboardStatusFilter,
+    dashboardAreaDeviceIds,
+    dashboardLocationFilter,
+    deviceLocationLabel
+  ]);
 
   // Filtre çubuğu için ham sayım rozetleri (filtre uygulanmamış toplam).
   const dashboardCounts = useMemo(() => {
@@ -1364,6 +1398,9 @@ export function App() {
               areaId={dashboardAreaId}
               onAreaIdChange={setDashboardAreaId}
               responsibilityAreas={responsibilityAreas}
+              locationFilter={dashboardLocationFilter}
+              onLocationFilterChange={setDashboardLocationFilter}
+              locationOptions={dashboardLocationOptions}
               counts={dashboardCounts}
               visibleCount={filteredDashboardDevices.length}
               areaLoading={dashboardAreaLoading}
@@ -1381,7 +1418,6 @@ export function App() {
                 />
               ) : null}
               <main className={`content dashboard-content ${activeTab === "map" ? "map-active" : ""}`}>
-                {loadingData ? <p>Yükleniyor...</p> : null}
                 {activeTab === "map" ? (
                   <DeviceMapTab
                     devices={filteredDashboardDevices}
@@ -1390,10 +1426,10 @@ export function App() {
                   />
                 ) : null}
                 {activeTab === "values" ? (
-                  <LiveValuesPage
-                    values={filteredDashboardLiveValues}
+                  <DeviceSummaryPage
+                    selectedDevice={selectedDevice}
+                    values={signalLiveValues}
                     signals={signalCatalog}
-                    devices={filteredDashboardDevices}
                     gateways={gateways}
                     loading={signalLiveLoading}
                     error={signalLiveError}
@@ -1444,6 +1480,11 @@ export function App() {
           </div>
         </div>
       ) : null}
+
+      <GlobalLoading
+        show={loadingData || alarmsLoading || dashboardAreaLoading}
+        message="Yükleniyor…"
+      />
     </div>
   );
 }

@@ -11,6 +11,11 @@ type Props = {
   areaId: number | "all";
   onAreaIdChange: (value: number | "all") => void;
   responsibilityAreas?: ResponsibilityAreaRow[];
+  /** Konum (il) filtresi — "all", "Yurt dışı" veya il adı. */
+  locationFilter: string;
+  onLocationFilterChange: (value: string) => void;
+  /** Mevcut cihazlardan derlenmiş benzersiz konum etiketleri. */
+  locationOptions: string[];
   /** Sayım rozetleri için pre-computed değerler (filtreden geçmemiş ham toplam). */
   counts: {
     total: number;
@@ -37,6 +42,9 @@ export function DashboardFilterBar({
   areaId,
   onAreaIdChange,
   responsibilityAreas,
+  locationFilter,
+  onLocationFilterChange,
+  locationOptions,
   counts,
   visibleCount,
   areaLoading,
@@ -46,7 +54,10 @@ export function DashboardFilterBar({
   onActiveTabChange
 }: Props) {
   const showActiveFilter =
-    statusFilter !== "all" || areaId !== "all" || search.trim().length > 0;
+    statusFilter !== "all" ||
+    areaId !== "all" ||
+    locationFilter !== "all" ||
+    search.trim().length > 0;
 
   return (
     <div className="dashboard-filter-bar">
@@ -124,6 +135,22 @@ export function DashboardFilterBar({
         </select>
       </label>
 
+      <label className="map-filter-area">
+        <span>Konum</span>
+        <select
+          value={locationFilter}
+          onChange={(event) => onLocationFilterChange(event.target.value)}
+          disabled={locationOptions.length === 0}
+        >
+          <option value="all">Tüm konumlar</option>
+          {locationOptions.map((loc) => (
+            <option key={loc} value={loc}>
+              {loc}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <span className="map-filter-summary">
         {areaLoading
           ? "Yükleniyor…"
@@ -138,6 +165,7 @@ export function DashboardFilterBar({
             onSearchChange("");
             onStatusFilterChange("all");
             onAreaIdChange("all");
+            onLocationFilterChange("all");
           }}
         >
           Temizle

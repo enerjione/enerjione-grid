@@ -1,4 +1,5 @@
 import type { DeviceRow } from "../../shared/types";
+import { locateDevice } from "../../shared/geoLookup";
 
 type Props = {
   devices: DeviceRow[];
@@ -35,6 +36,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
           const isOnline = device.communicationStatus === "online";
           const battery = device.batteryPercent;
           const battPct = typeof battery === "number" ? Math.max(0, Math.min(100, battery)) : null;
+          const location = locateDevice(device.latitude, device.longitude);
           return (
             <button
               key={device.id}
@@ -66,8 +68,12 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
               </div>
 
               <div className="device-row-foot">
+                <span className="device-row-location" title={location.label}>
+                  <span className="material-symbols-outlined">place</span>
+                  {location.label}
+                </span>
                 <span className="device-row-last">
-                  {device.lastUpdateAt ? `Son veri: ${formatRelative(device.lastUpdateAt)}` : "Son veri: —"}
+                  {device.lastUpdateAt ? formatRelative(device.lastUpdateAt) : "—"}
                 </span>
                 {device.alarmActive ? (
                   <span className="device-row-alarm-badge" title="Aktif alarm var">

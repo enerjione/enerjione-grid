@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type { DeviceModelOption, SignalCatalogRow, SignalDataType, SignalSource, UserRole } from "../../shared/types";
 
 type Props = {
@@ -309,6 +310,12 @@ export function SignalsPage({
                   <span className={`badge badge-${selected.data_type}`}>
                     {DATA_TYPE_SHORT[selected.data_type]}
                   </span>
+                  <ActiveSwitch
+                    checked={editIsActive}
+                    onChange={setEditIsActive}
+                    disabled={!canEdit}
+                    title="Pasif sinyaller gateway tarafından okunmaz; tarihçede kalır."
+                  />
                 </div>
               ) : null}
             </div>
@@ -418,25 +425,6 @@ export function SignalsPage({
                     <p className="signal-fieldset-hint">
                       Ham değer = scale × ham + offset. Birim sahaya göre uygulanır.
                     </p>
-                  </fieldset>
-
-                  <fieldset className="signal-fieldset" disabled={!canEdit}>
-                    <legend>Durum</legend>
-                    <label
-                      className={`signal-toggle-card ${editIsActive ? "signal-toggle-card-on" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={editIsActive}
-                        onChange={(event) => setEditIsActive(event.target.checked)}
-                      />
-                      <span className="signal-toggle-text">
-                        <span className="signal-toggle-title">{editIsActive ? "Aktif" : "Pasif"}</span>
-                        <span className="signal-toggle-hint">
-                          Pasif sinyaller gateway tarafından okunmaz; tarihçede kalır.
-                        </span>
-                      </span>
-                    </label>
                   </fieldset>
 
                   {canEdit ? (
