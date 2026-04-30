@@ -69,6 +69,9 @@ export type DeviceRow = {
   lastUpdateAt?: string;
   latitude: number;
   longitude: number;
+  // IEC 60870-5-104 ASDU Common Address. NULL ise outbound target'in default
+  // CA'si kullanilir.
+  iec104CommonAddress?: number | null;
 };
 
 export type UserRole = "operator" | "engineer" | "installer";
@@ -100,6 +103,7 @@ export type ApiDevice = {
   communication_status: CommunicationStatus;
   alarm_active: boolean;
   last_update_at?: string | null;
+  iec104_common_address?: number | null;
 };
 
 export type UserRead = {
@@ -214,6 +218,17 @@ export type SignalCatalogRow = {
   supports_alarm: boolean;
   is_active: boolean;
   display_order: number;
+  // IEC 60870-5-104 outbound template adresleme.
+  // Yeni model: `iec104_ioa` mutlak IOA; cihaz bazli ayrim ASDU CA ile yapilir.
+  // `iec104_ioa_offset` eski deploylar icin geri uyumlu fallback.
+  iec104_type_id?: number | null;
+  iec104_ioa?: number | null;
+  iec104_ioa_offset?: number | null;
+  // Modbus outbound (function code + register/coil address).
+  modbus_function?: number | null;
+  modbus_address?: number | null;
+  // MQTT outbound topic suffix'i.
+  mqtt_topic?: string | null;
 };
 
 export type SignalLiveRow = {

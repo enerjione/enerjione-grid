@@ -65,6 +65,7 @@ def create_tables():
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS reset BOOLEAN NOT NULL DEFAULT FALSE"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS reset_at TIMESTAMPTZ"))
+        connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS signal_key VARCHAR(120)"))
         connection.execute(
             text(
                 "ALTER TABLE gateways ADD COLUMN IF NOT EXISTS upstream_url VARCHAR(500) "
@@ -236,6 +237,27 @@ def create_tables():
         )
         connection.execute(
             text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_ioa_offset INTEGER")
+        )
+        # Mutlak IOA modeli: cihaz bazli ayrim ASDU CA ile yapilir, IOA sinyale
+        # ait sabit bir adres olur. Eski deploylar `iec104_ioa_offset` ile
+        # birlikte yasar; yeni alan NULL ise kod offset'i fallback olarak okur.
+        connection.execute(
+            text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_ioa INTEGER")
+        )
+        # Cihaza ASDU Common Address atamasi. NULL kalirsa outbound target'in
+        # default CA'si kullanilir (eski tek-CA davranisiyla uyumlu).
+        connection.execute(
+            text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS iec104_common_address INTEGER")
+        )
+        # Modbus + MQTT outbound template adresleme.
+        connection.execute(
+            text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS modbus_function INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS modbus_address INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS mqtt_topic VARCHAR(200)")
         )
         connection.execute(
             text(

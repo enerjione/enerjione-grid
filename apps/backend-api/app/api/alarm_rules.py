@@ -23,14 +23,14 @@ def list_alarm_rules(
 
 
 def _ensure_signal_exists(db: Session, signal_key: str) -> SignalCatalog:
+    """Sinyalin katalog'da var olduğunu doğrular.
+
+    `supports_alarm` bayrağı eskiden kuralın oluşmasını engelliyordu; artık
+    her sinyale (binary/analog/counter) kural eklenebilir. Bayrak yalnızca
+    UI'da bilgi amaçlı tutulur."""
     signal = db.scalar(select(SignalCatalog).where(SignalCatalog.key == signal_key))
     if signal is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Signal not found in catalog")
-    if not signal.supports_alarm:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Signal does not support alarms (supports_alarm=False)",
-        )
     return signal
 
 

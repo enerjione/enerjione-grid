@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.alarm import AlarmEvent
 from app.models.device import Device
 from app.models.enums import CommunicationStatus
 from app.models.telemetry import Telemetry
@@ -59,7 +63,33 @@ def _battery_percent_from_signal(signal_key: str, value: float) -> float | None:
     return None
 
 
-def process_telemetry_reading(device: Device, reading: TelemetryIn) -> tuple[Telemetry, dict[str, Any]]:
+def _auto_clear_quality_alarms(db: Session, device: Device) -> None:
+    """Cihaz OFFLINE→ONLINE gectiginde acik haberlesme arizalarini otomatik reset et.
+
+    Telemetri ingestion'da cagirilir; alarm-service'in in-memory state'ine bagli
+    kalmak yerine backend'in kendi gercegine (Device.communication_status) gore
+    karar verir. Bu sayede alarm-service yeniden baslasa bile dogru calisir.
+
+    Eslesme kriteri: ayni device + reset=False + title icinde "haber" gecen.
+    Eski/yeni format ("4853 haberlesme arizasi" vs "Haberleşme arızası") kapsanir.
+    """
+    rows = db.scalars(
+        select(AlarmEvent)
+        .where(AlarmEvent.device_id == device.id)
+        .where(AlarmEvent.reset.is_(False))
+        .where(AlarmEvent.title.ilike("%haber%"))
+    ).all()
+    now = datetime.now(timezone.utc)
+    for alarm in rows:
+        alarm.reset = True
+        alarm.reset_at = now
+
+
+def process_telemetry_reading(
+    device: Device,
+    reading: TelemetryIn,
+    db: Session | None = None,
+) -> tuple[Telemetry, dict[str, Any]]:
     normalized_quality = normalize_quality(reading.quality)
     previous_status = device.communication_status
     next_status = map_quality_to_status(normalized_quality)
@@ -89,6 +119,11 @@ def process_telemetry_reading(device: Device, reading: TelemetryIn) -> tuple[Tel
                 derived = None
             if derived is not None:
                 device.battery_percent = derived
+        # OFFLINE → ONLINE gecisinde acik "haberlesme arizasi" alarmlarini otomatik
+        # reset et. Bu sayede alarm-service'in restart sonrasi state kaybi olsa
+        # bile UI'daki aktif alarm dogru sekilde "Normale Donen" listesine duser.
+        if previous_status == CommunicationStatus.OFFLINE and db is not None:
+            _auto_clear_quality_alarms(db, device)
 
     event_payload = {
         "message_id": reading.message_id,

@@ -401,6 +401,26 @@ export function App() {
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, [session, handleLogout, toast]);
 
+  // Alarm listesini arka planda her 5 sn yenile — alarm-service yeni alarm
+  // urettiginde kullanici sayfayi yenilemeden anlik gorebilsin.
+  // Sadece "alarms" sayfasinda degil, diger sayfalardaki alarm rozet/sayilarinin
+  // da guncel kalmasi icin tum oturum boyunca calisir.
+  useEffect(() => {
+    if (!session) return;
+    const tick = async () => {
+      try {
+        const rows = await fetchAlarmEvents(session.accessToken);
+        setAlarms(rows);
+      } catch {
+        // sessizce yutuyoruz — gecici ag hatalari polling'i durdurmamali
+      }
+    };
+    const id = window.setInterval(() => {
+      void tick();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [session]);
+
   const reloadSignals = async () => {
     if (!session) return;
     setSignalLoading(true);

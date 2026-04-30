@@ -10,10 +10,13 @@ from app.models.alarm import AlarmEvent
 from app.models.alarm_rule import AlarmRule
 from app.models.device import Device
 from app.models.gateway import Gateway
+from app.models.outbound_target import OutboundTarget
 from app.models.signal_catalog import SignalCatalog
 from app.schemas.alarm_rule import AlarmRuleRead
+from app.schemas.device import DeviceRead
 from app.schemas.gateway import GatewayRead
 from app.schemas.internal import InternalAlarmClear, InternalAlarmIngest
+from app.schemas.outbound import OutboundTargetRead
 from app.schemas.signal_catalog import SignalCatalogRead
 from app.services.event_service import record_event
 
@@ -44,6 +47,39 @@ def list_signals_internal(
     """Ic servislerin standart sinyal listesini (supports_alarm dahil) cekmesi icin."""
     _require_service_token(x_service_token)
     stmt = select(SignalCatalog).where(SignalCatalog.is_active.is_(True))
+    return list(db.scalars(stmt).all())
+
+
+@router.get("/devices", response_model=list[DeviceRead])
+def list_devices_internal(
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """iec104-outbound gibi ic servislerin cihaz listesini cekmesi icin.
+
+    IEC 104 outbound servisi point registry'sini insa ederken cihaz code'larini
+    deterministik bir sirayla bilmek zorunda; bu endpoint bunu saglar.
+    """
+    _require_service_token(x_service_token)
+    stmt = select(Device).order_by(Device.code.asc())
+    return list(db.scalars(stmt).all())
+
+
+@router.get("/outbound-targets", response_model=list[OutboundTargetRead])
+def list_outbound_targets_internal(
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """iec104-outbound servisinin aktif IEC 104 hedeflerini cekmesi icin.
+
+    Sadece `is_active=True` olanlar; servis kendi protocol filtrelemesini yapar
+    (genel REST/MQTT hedeflerini gormesi sorun degildir, sessizce atlar)."""
+    _require_service_token(x_service_token)
+    stmt = (
+        select(OutboundTarget)
+        .where(OutboundTarget.is_active.is_(True))
+        .order_by(OutboundTarget.id.asc())
+    )
     return list(db.scalars(stmt).all())
 
 
@@ -89,21 +125,10 @@ def ingest_alarm(
             .limit(1)
         )
     if existing is not None:
+        # Mevcut acik alarm icin yeni bilgi geldi → sadece description'u guncelle.
+        # Olay (event) kaydetmiyoruz çünkü kullanıcı zaten alarmı görüyor; her
+        # tetikte bir "duplicate suppress" satırı eklemek olay listesini şişirir.
         existing.description = payload.description
-        record_event(
-            db,
-            category="alarm",
-            event_type="alarm_duplicate_suppressed",
-            severity="info",
-            device_code=payload.device_code,
-            message=f"Acik alarm icin duplicate suppress: {payload.title}",
-            metadata={
-                "alarm_id": existing.id,
-                "message_id": payload.message_id,
-                "correlation_id": payload.correlation_id,
-                "source_gateway": payload.source_gateway,
-            },
-        )
         db.commit()
         return {"status": "deduplicated", "alarm_id": existing.id}
 
@@ -112,20 +137,22 @@ def ingest_alarm(
         level=payload.level,
         title=payload.title,
         description=payload.description,
+        signal_key=payload.signal_key,
         created_at=datetime.now(timezone.utc),
     )
     db.add(alarm)
     record_event(
         db,
         category="alarm",
-        event_type="alarm_ingested_internal",
+        event_type="alarm_triggered",
         severity="warning",
         device_code=payload.device_code,
-        message=f"Alarm service eventi backend'e alındı: {payload.title}",
+        message=f"Alarm kuralı gerçekleşti: {payload.title}",
         metadata={
             "message_id": payload.message_id,
             "correlation_id": payload.correlation_id,
             "source_gateway": payload.source_gateway,
+            "signal_key": payload.signal_key,
         },
     )
     db.commit()

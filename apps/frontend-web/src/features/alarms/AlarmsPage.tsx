@@ -225,10 +225,28 @@ export function AlarmsPage({
   };
 
   const handleAcknowledgeAll = async () => {
+    const activeCount = activeAlarms.length;
+    const pendingCount = pendingResetAlarms.length;
+    if (activeCount === 0 && pendingCount === 0) return;
+    const message =
+      pendingCount > 0
+        ? `${activeCount} aktif alarm onaylanacak ve normale dönmüş ${pendingCount} kayıt silinecek. Onaylıyor musunuz?`
+        : `${activeCount} aktif alarm onaylanacak. Onaylıyor musunuz?`;
+    if (!window.confirm(message)) return;
     setSaving(true);
     setError("");
     try {
-      await onAcknowledgeAll();
+      if (activeCount > 0) {
+        await onAcknowledgeAll();
+      }
+      // Normale donmus + onay bekleyen kayitlari da temizle.
+      for (const alarm of pendingResetAlarms) {
+        try {
+          await onDelete(alarm.id);
+        } catch {
+          // Tek bir kayit silinemezse digerlerine devam et
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Tüm alarmlar onaylanamadı.");
     } finally {
@@ -475,8 +493,8 @@ export function AlarmsPage({
                 <tr>
                   <th>Tarih</th>
                   <th>Seviye</th>
-                  <th>Alarm</th>
                   <th>Cihaz</th>
+                  <th>Alarm</th>
                   <th>Durum</th>
                   <th>Atanan</th>
                   <th className="alarm-actions-th">İşlem</th>
@@ -502,12 +520,12 @@ export function AlarmsPage({
                     <td className="alarm-cell-level">
                       <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
                     </td>
+                    <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
                     <td className="alarm-cell-title">
                       <div className="alarm-title-text" title={alarm.description || alarm.title}>
                         {alarm.title}
                       </div>
                     </td>
-                    <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
                     <td className="alarm-cell-state">
                       <span className={`alarm-state ${alarm.acknowledged ? "state-ack" : "state-open"}`}>
                         {alarm.acknowledged ? "Onaylandı" : "Açık"}
@@ -597,8 +615,8 @@ export function AlarmsPage({
                 <tr>
                   <th>Tarih</th>
                   <th>Seviye</th>
-                  <th>Alarm</th>
                   <th>Cihaz</th>
+                  <th>Alarm</th>
                   <th>Atanan</th>
                   <th className="alarm-actions-th">İşlem</th>
                 </tr>
@@ -620,12 +638,12 @@ export function AlarmsPage({
                     <td className="alarm-cell-level">
                       <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{alarm.level}</span>
                     </td>
+                    <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
                     <td className="alarm-cell-title">
                       <div className="alarm-title-text" title={alarm.description || alarm.title}>
                         {alarm.title}
                       </div>
                     </td>
-                    <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
                     <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
                     <td className="actions-cell alarm-actions-cell">
                       <button

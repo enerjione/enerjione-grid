@@ -151,11 +151,15 @@ def list_live_values(
     if not device_rows or not catalog_rows:
         return []
 
+    # Latest telemetri satirini SECiminde `source_timestamp` yerine
+    # `Telemetry.id` (auto-increment) uzerinden secin: kapsayici bir gateway
+    # ayni timestamp ile peş pese ölçüm yayınlasa bile en son persist edilen
+    # satır kazanır. Aksi halde "değerler yenilenmiyor" gözükebiliyordu.
     subq = (
         select(
             Telemetry.device_id,
             Telemetry.signal_key,
-            func.max(Telemetry.source_timestamp).label("mx"),
+            func.max(Telemetry.id).label("mx_id"),
         )
         .group_by(Telemetry.device_id, Telemetry.signal_key)
         .subquery()
@@ -165,7 +169,7 @@ def list_live_values(
         and_(
             Telemetry.device_id == subq.c.device_id,
             Telemetry.signal_key == subq.c.signal_key,
-            Telemetry.source_timestamp == subq.c.mx,
+            Telemetry.id == subq.c.mx_id,
         ),
     )
     latest_by_pair: dict[tuple[int, str], Telemetry] = {}

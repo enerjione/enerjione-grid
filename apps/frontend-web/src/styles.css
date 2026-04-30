@@ -609,10 +609,24 @@ body {
 
 .device-management-layout {
   display: grid;
-  grid-template-columns: 280px 320px 1fr;
+  grid-template-columns: 360px 320px minmax(0, 1fr);
   gap: 12px;
   flex: 1;
   min-height: 0;
+}
+
+@media (min-width: 1500px) {
+  /* Geniş ekranda gateway sütununu biraz daha rahatlat;
+     sağ Cihaz Özellikleri paneli ekranın sonuna kadar uzar. */
+  .device-management-layout {
+    grid-template-columns: 380px 340px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1100px) {
+  .device-management-layout {
+    grid-template-columns: 300px 280px minmax(0, 1fr);
+  }
 }
 
 .device-management-left,
@@ -6365,6 +6379,295 @@ main.content.engineering-content:has(.device-management-panel) {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ==========================================================
+   Alarm Kuralları v3 — kural-listesi + create/edit form modu
+   ========================================================== */
+.alarm-rules-v3 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* List mode — toolbar */
+.rules-v3-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+/* List mode — kural listesi */
+.rules-v3-list-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.rules-v3-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rules-v3-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.rules-v3-row:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.08);
+}
+
+.rules-v3-row-inactive {
+  opacity: 0.65;
+}
+
+.rules-v3-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rules-v3-row-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rules-v3-row-headline strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.rules-v3-row-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rules-v3-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.rules-v3-row-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.rules-v3-row-condition {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.rules-v3-row-scope {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.rules-v3-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rules-v3-row-actions .rule-active-switch {
+  margin-left: 0;
+}
+
+.rules-v3-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 32px;
+  text-align: center;
+  gap: 8px;
+}
+
+.rules-v3-empty-icon {
+  font-size: 56px !important;
+  color: #cbd5e1;
+}
+
+.rules-v3-empty h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #334155;
+}
+
+/* Form mode — tam panel düzeni */
+.rules-v3-form-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.rules-v3-form-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.rules-v3-form-header h3 {
+  margin: 0;
+  flex: 1;
+  font-size: 18px;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rules-v3-back {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rules-v3-form-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rules-v3-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.rules-v3-form-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 18px;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1100px) {
+  .rules-v3-form-grid {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 880px) {
+  .rules-v3-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rules-v3-section-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.rules-v3-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.rules-v3-properties {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rules-v3-properties-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.rules-v3-properties-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 32px;
+}
+
+.rules-v3-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
 }
 
 /* ==========================================================

@@ -14,6 +14,10 @@ class AlarmEvent(Base):
     level: Mapped[str] = mapped_column(String(30), index=True)
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(String(1000))
+    # Alarmin tetiklendigi sinyalin key'i. Kaynak (master/sat01/sat02) bilgisini
+    # frontend prefix'ten turetir, boylece UI'da "Master / Sat 01 / Sat 02"
+    # rozeti gosterilir. Eski kayitlar icin NULL olabilir.
+    signal_key: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     assigned_to: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reset: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

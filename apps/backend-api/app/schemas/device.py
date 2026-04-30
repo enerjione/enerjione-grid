@@ -21,6 +21,10 @@ class DeviceScalarBase(BaseModel):
     signal_profile: str = "horstmann_sn2_fixed"
     latitude: float
     longitude: float
+    # IEC 60870-5-104 ASDU Common Address. NULL ise outbound target'in
+    # default CA'si kullanilir. 0..65534 araliginda; 65535 broadcast icin
+    # rezerve edildiginden cihaza atanmamasi tavsiye edilir.
+    iec104_common_address: int | None = Field(default=None, ge=0, le=65534)
 
 
 class DeviceCreate(DeviceScalarBase):
@@ -41,6 +45,7 @@ class DeviceUpdate(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     dnp3_extended: Dnp3ExtendedSettings | None = None
+    iec104_common_address: int | None = Field(default=None, ge=0, le=65534)
 
 
 class DeviceRead(DeviceScalarBase):

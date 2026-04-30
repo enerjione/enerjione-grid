@@ -94,7 +94,34 @@ def _persist_message(payload: dict[str, Any]) -> None:
                 db.rollback()
             return
 
-        telemetry, _event = process_telemetry_reading(device, reading)
+        try:
+            telemetry, _event = process_telemetry_reading(device, reading, db=db)
+        except Exception as exc:  # noqa: BLE001
+            # process_telemetry_reading icindeki yardimci sorgulardan biri
+            # (örn. _auto_clear_quality_alarms veya batarya hesabi) hata
+            # firlatirsa telemetri persist'i blocklanmasin — sadece minimal
+            # device alanlarini guncelleyip telemetri kaydini at.
+            logger.warning("telemetry-consumer-process-error msg=%s error=%s", message_id, exc)
+            db.rollback()
+            telemetry = None  # type: ignore[assignment]
+
+        if telemetry is None:
+            # Fallback: en azindan ham telemetri kaydini ve communication_status'u guncelle.
+            from app.models.telemetry import Telemetry
+            from app.services.tag_engine_service import map_quality_to_status, normalize_quality
+
+            normalized_quality = normalize_quality(reading.quality)
+            device.communication_status = map_quality_to_status(normalized_quality)
+            if device.communication_status.value == "online":
+                device.last_update_at = datetime.now(timezone.utc)
+            telemetry = Telemetry(
+                device_id=device.id,
+                signal_key=reading.signal_key,
+                value=reading.value,
+                quality=normalized_quality,
+                source_timestamp=reading.source_timestamp,
+            )
+
         db.add(telemetry)
         db.add(
             ProcessedMessage(

@@ -31,7 +31,16 @@ class SignalCatalogBase(BaseModel):
     display_order: int = 0
     # IEC 60870-5-104 adresleme — `string` ve desteklenmeyen tiplerde NULL.
     iec104_type_id: int | None = Field(default=None, ge=0, le=255)
+    # Yeni model: sinyalin mutlak IOA'si. Cihaz bazli ayrim ASDU CA ile yapilir.
+    iec104_ioa: int | None = Field(default=None, ge=0, le=16_777_215)
+    # Geri uyumluluk: eski deploylarda offset'ti; yeni alan dolu degilse mutlak
+    # IOA olarak yorumlanir. Yeni kayitlar `iec104_ioa` doldurmali.
     iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
+    # Modbus outbound (Holding=3, Input=4, Coil=1, Discrete=2)
+    modbus_function: int | None = Field(default=None, ge=1, le=255)
+    modbus_address: int | None = Field(default=None, ge=0, le=65_535)
+    # MQTT outbound topic suffix'i (cihaz koduyla birleştirilir).
+    mqtt_topic: str | None = Field(default=None, max_length=200)
 
 
 class SignalCatalogCreate(SignalCatalogBase):
@@ -54,7 +63,11 @@ class SignalCatalogUpdate(BaseModel):
     is_active: bool | None = None
     display_order: int | None = None
     iec104_type_id: int | None = Field(default=None, ge=0, le=255)
+    iec104_ioa: int | None = Field(default=None, ge=0, le=16_777_215)
     iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
+    modbus_function: int | None = Field(default=None, ge=1, le=255)
+    modbus_address: int | None = Field(default=None, ge=0, le=65_535)
+    mqtt_topic: str | None = Field(default=None, max_length=200)
 
 
 class SignalCatalogRead(SignalCatalogBase):

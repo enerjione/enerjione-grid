@@ -5,13 +5,15 @@ Yetenekler:
   1. **Spontaneous transmission (COT=3)** — `update_point()` cagirilirsa server
      ilgili client baglantilarina sinyalin ait oldugu cihazin Common Address'i
      ile ASDU yayinlar.
-  2. **General interrogation (C_IC_NA_1)** — client'in gonderdigi ASDU'daki CA
-     0xFFFF ise tum CA'lar; aksi halde yalnizca o CA. Sonuna ACT_TERM (cause=10).
-  3. STARTDT/STOPDT/TESTFR + clock sync (ack-only).
+  2. **General interrogation (C_IC_NA_1)** — client'in gonderdigi ASDU'daki
+     CA neyse:
+       - 0xFFFF (broadcast)  → tum CA'lara ait noktalari yayinla
+       - belirli bir CA      → yalnizca o CA'nin noktalari
+     Sonuna ACT_TERM (cause=10) konur.
+  3. STARTDT/STOPDT/TESTFR (U-frame) ve clock sync (C_CS_NA_1, ack-only).
 
-Bu server backend-api FastAPI lifespan icinde calisir. Daha kuvvetli/paralel
-calisma icin disardaki `apps/iec104-outbound` servisi ayni davranisi
-implemente eder; iki yer ayni TCP portunu paylasamaz.
+Tek TCP oturumunda bir veya birden cok cihazin (her biri ayri CA ile) verisi
+yayinlanabilir. K parametresi (MAX_UNACKED_I) ile akis kontrolu yapilir.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ import logging
 import struct
 from dataclasses import dataclass
 
-from app.services.iec104.encoder import (
+from iec104_outbound.encoder import (
     APCI_U_START_ACT,
     APCI_U_START_CONFIRM,
     APCI_U_STOP_ACT,
@@ -48,7 +50,7 @@ from app.services.iec104.encoder import (
     encode_interrogation_confirm,
     parse_apci,
 )
-from app.services.iec104.registry import (
+from iec104_outbound.registry import (
     BROADCAST_COMMON_ADDRESS,
     PointAddress,
     PointRegistry,
@@ -56,6 +58,7 @@ from app.services.iec104.registry import (
 
 logger = logging.getLogger(__name__)
 
+# Client en fazla bu kadar I-frame'i onaylamadan tasiyabilir (K parametresi).
 MAX_UNACKED_I = 12
 
 
@@ -66,6 +69,8 @@ class PointValue:
 
 
 class _ClientSession:
+    """Tek bir TCP client baglantisinin state'i."""
+
     def __init__(self, writer: asyncio.StreamWriter, peer: str) -> None:
         self.writer = writer
         self.peer = peer
@@ -82,14 +87,13 @@ class _ClientSession:
 
 
 def _parse_asdu_common_address(asdu: bytes) -> int | None:
+    """ASDU baslik (DUI) byte 4-5'inden Common Address'i okur (LE 16-bit)."""
     if len(asdu) < 6:
         return None
     return struct.unpack_from("<H", asdu, 4)[0]
 
 
 class IEC104Server:
-    """Tek bir OutboundTarget icin IEC 104 slave server'i."""
-
     def __init__(
         self,
         *,
@@ -124,18 +128,19 @@ class IEC104Server:
         for session in list(self._sessions):
             try:
                 session.writer.close()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("close_writer_error", exc_info=True)
         self._sessions.clear()
         if self._server is not None:
             self._server.close()
             try:
                 await self._server.wait_closed()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("server_wait_closed_error", exc_info=True)
             self._server = None
 
     def update_point(self, *, device_code: str, signal_key: str, value, good: bool = True) -> None:
+        """Bir veri noktasinin degerini gunceller; cihaza ait CA ile COT=3 yayar."""
         key = (device_code, signal_key)
         point = self._by_key.get(key)
         if point is None:
@@ -186,14 +191,14 @@ class IEC104Server:
                     await self._dispatch(session, parsed)
         except (asyncio.IncompleteReadError, ConnectionResetError):
             pass
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("iec104_client_handler_crashed name=%s peer=%s", self.name, peer_str)
         finally:
             self._sessions.discard(session)
             try:
                 writer.close()
                 await writer.wait_closed()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             logger.info("iec104_client_disconnected name=%s peer=%s", self.name, peer_str)
 
@@ -235,6 +240,7 @@ class IEC104Server:
             await self._handle_interrogation(session, requested_ca=requested_ca)
             return
         if type_id == TYPE_C_CS_NA_1:
+            # Clock sync — cevap CA'sini gelen CA ile ayni tut.
             ca = _parse_asdu_common_address(frame.asdu) or self.registry.default_common_address
             confirm = encode_interrogation_confirm(
                 common_address=ca, cause=COT_ACTIVATION_CON, qoi=0,
@@ -246,7 +252,13 @@ class IEC104Server:
     async def _handle_interrogation(
         self, session: _ClientSession, *, requested_ca: int,
     ) -> None:
+        """C_IC_NA_1 → ACT_CON + filtrelenmis degerler (COT=20) + ACT_TERM.
+
+        SCADA `requested_ca=0xFFFF` (broadcast) gonderirse tum CA'lara ait
+        noktalar yayinlanir; aksi halde yalnizca o CA.
+        """
         is_broadcast = requested_ca == BROADCAST_COMMON_ADDRESS
+        # ACT_CON gelen CA ile gonderilir (broadcast'te de).
         confirm = encode_interrogation_confirm(
             common_address=requested_ca or self.registry.default_common_address,
             cause=COT_ACTIVATION_CON, qoi=20,
@@ -316,12 +328,12 @@ class IEC104Server:
         session.unacked += 1
         try:
             await session.send(frame)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("iec104_send_failed name=%s peer=%s", self.name, session.peer)
 
 
 class IEC104ServerManager:
-    """Birden fazla target icin server yaratir/duragir; threadsafe update koprusu."""
+    """Birden fazla outbound target icin server yaratir/duragir; threadsafe update koprusu."""
 
     def __init__(self) -> None:
         self._servers: dict[int, IEC104Server] = {}
@@ -330,7 +342,16 @@ class IEC104ServerManager:
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
 
-    async def deploy(self, *, target_id: int, name: str, host: str, port: int, registry: PointRegistry) -> None:
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop | None:
+        return self._loop
+
+    def server_count(self) -> int:
+        return len(self._servers)
+
+    async def deploy(
+        self, *, target_id: int, name: str, host: str, port: int, registry: PointRegistry,
+    ) -> None:
         if target_id in self._servers:
             await self.undeploy(target_id)
         server = IEC104Server(name=name, host=host, port=port, registry=registry)
@@ -347,8 +368,9 @@ class IEC104ServerManager:
             await self.undeploy(target_id)
 
     def update_point_threadsafe(
-        self, *, device_code: str, signal_key: str, value, good: bool = True
+        self, *, device_code: str, signal_key: str, value, good: bool = True,
     ) -> None:
+        """Her aktif server'a degerin yayilmasini saglayan thread-safe koprü."""
         if self._loop is None:
             return
 
@@ -365,5 +387,4 @@ class IEC104ServerManager:
             pass
 
 
-# Modul-seviyesi singleton (FastAPI app state ile paylasilir).
 manager = IEC104ServerManager()

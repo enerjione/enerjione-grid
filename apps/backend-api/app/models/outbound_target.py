@@ -25,10 +25,15 @@ class OutboundTarget(Base):
     # digerlerinde yok sayilir.
     #   listen_host               : Server'in baglanacagi ag arayuzu (0.0.0.0 = tum).
     #   listen_port               : IEC 104 varsayilan TCP portu 2404.
-    #   iec104_common_address     : ASDU Common Address (CA). Dis SCADA ile
-    #                               onceden anlasilmis tek bir unite kimligi.
-    #   iec104_ioa_device_stride  : Cihaz basina IOA blok buyuklugu
-    #                               (absolute_ioa = device_index * stride + signal.offset).
+    #   iec104_common_address     : Default ASDU Common Address. Cihazlarin
+    #                               `iec104_common_address` alani NULL ise bu
+    #                               kullanilir. Cihaza ozel CA atandiginda tek
+    #                               TCP oturumunda farkli CA'lara ait ASDU'lar
+    #                               birlikte yayinlanir.
+    #   iec104_ioa_device_stride  : DEPRECATED. Eski "device_index * stride +
+    #                               signal_offset" modelinin kalintisi; yeni
+    #                               kayitlar bos birakmali. Sadece eski
+    #                               deploylar icin geri uyumluluk.
     listen_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
     listen_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     iec104_common_address: Mapped[int | None] = mapped_column(Integer, nullable=True)

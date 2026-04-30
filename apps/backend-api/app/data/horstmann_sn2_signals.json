@@ -14,7 +14,8 @@
     "supports_alarm": false,
     "display_order": 1000,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 1
+    "iec104_ioa_offset": 1,
+    "iec104_ioa": 1
   },
   {
     "key": "master.overcurrent_tripped",
@@ -31,7 +32,8 @@
     "supports_alarm": false,
     "display_order": 1003,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 2
+    "iec104_ioa_offset": 2,
+    "iec104_ioa": 2
   },
   {
     "key": "master.delta_i_delta_t_tripped",
@@ -48,7 +50,8 @@
     "supports_alarm": false,
     "display_order": 1006,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 3
+    "iec104_ioa_offset": 3,
+    "iec104_ioa": 3
   },
   {
     "key": "master.voltage_loss",
@@ -65,7 +68,8 @@
     "supports_alarm": false,
     "display_order": 1009,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 4
+    "iec104_ioa_offset": 4,
+    "iec104_ioa": 4
   },
   {
     "key": "master.current_loss",
@@ -82,7 +86,8 @@
     "supports_alarm": false,
     "display_order": 1012,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 5
+    "iec104_ioa_offset": 5,
+    "iec104_ioa": 5
   },
   {
     "key": "master.operation_mode",
@@ -99,7 +104,8 @@
     "supports_alarm": false,
     "display_order": 1015,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 6
+    "iec104_ioa_offset": 6,
+    "iec104_ioa": 6
   },
   {
     "key": "master.battery_status",
@@ -116,7 +122,8 @@
     "supports_alarm": false,
     "display_order": 1018,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 7
+    "iec104_ioa_offset": 7,
+    "iec104_ioa": 7
   },
   {
     "key": "master.delta_i_delta_t_pick_up",
@@ -133,7 +140,8 @@
     "supports_alarm": false,
     "display_order": 1023,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 8
+    "iec104_ioa_offset": 8,
+    "iec104_ioa": 8
   },
   {
     "key": "master.voltage_loss_all_units",
@@ -150,7 +158,8 @@
     "supports_alarm": false,
     "display_order": 1026,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 9
+    "iec104_ioa_offset": 9,
+    "iec104_ioa": 9
   },
   {
     "key": "master.permanent_fault",
@@ -167,7 +176,8 @@
     "supports_alarm": false,
     "display_order": 1027,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 10
+    "iec104_ioa_offset": 10,
+    "iec104_ioa": 10
   },
   {
     "key": "master.momentary_fault",
@@ -184,7 +194,8 @@
     "supports_alarm": false,
     "display_order": 1030,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 11
+    "iec104_ioa_offset": 11,
+    "iec104_ioa": 11
   },
   {
     "key": "master.load_flow_direction_green_a",
@@ -201,7 +212,8 @@
     "supports_alarm": false,
     "display_order": 1033,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 12
+    "iec104_ioa_offset": 12,
+    "iec104_ioa": 12
   },
   {
     "key": "master.load_flow_direction_red_b",
@@ -218,7 +230,8 @@
     "supports_alarm": false,
     "display_order": 1036,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 13
+    "iec104_ioa_offset": 13,
+    "iec104_ioa": 13
   },
   {
     "key": "master.overcurrent_fault_direction_green_a",
@@ -235,7 +248,8 @@
     "supports_alarm": false,
     "display_order": 1039,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 14
+    "iec104_ioa_offset": 14,
+    "iec104_ioa": 14
   },
   {
     "key": "master.overcurrent_fault_direction_red_b",
@@ -252,7 +266,8 @@
     "supports_alarm": false,
     "display_order": 1042,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 15
+    "iec104_ioa_offset": 15,
+    "iec104_ioa": 15
   },
   {
     "key": "master.tamper_detection",
@@ -269,7 +284,8 @@
     "supports_alarm": false,
     "display_order": 1045,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 16
+    "iec104_ioa_offset": 16,
+    "iec104_ioa": 16
   },
   {
     "key": "master.local_comm_enabled",
@@ -286,7 +302,8 @@
     "supports_alarm": false,
     "display_order": 1048,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 17
+    "iec104_ioa_offset": 17,
+    "iec104_ioa": 17
   },
   {
     "key": "master.password_enabled",
@@ -303,7 +320,8 @@
     "supports_alarm": false,
     "display_order": 1051,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 18
+    "iec104_ioa_offset": 18,
+    "iec104_ioa": 18
   },
   {
     "key": "master.delta_i_delta_t_fault_direction_green_a",
@@ -320,7 +338,8 @@
     "supports_alarm": false,
     "display_order": 1057,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 19
+    "iec104_ioa_offset": 19,
+    "iec104_ioa": 19
   },
   {
     "key": "master.delta_i_delta_t_fault_direction_red_b",
@@ -337,7 +356,8 @@
     "supports_alarm": false,
     "display_order": 1060,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 20
+    "iec104_ioa_offset": 20,
+    "iec104_ioa": 20
   },
   {
     "key": "master.boost_mode_enabled",
@@ -354,7 +374,8 @@
     "supports_alarm": false,
     "display_order": 1063,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 21
+    "iec104_ioa_offset": 21,
+    "iec104_ioa": 21
   },
   {
     "key": "master.conductor_temperature_alarm",
@@ -371,7 +392,8 @@
     "supports_alarm": false,
     "display_order": 1064,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 22
+    "iec104_ioa_offset": 22,
+    "iec104_ioa": 22
   },
   {
     "key": "master.momentary_fault_counter",
@@ -388,7 +410,8 @@
     "supports_alarm": false,
     "display_order": 1200,
     "iec104_type_id": 15,
-    "iec104_ioa_offset": 2000
+    "iec104_ioa_offset": 2000,
+    "iec104_ioa": 2000
   },
   {
     "key": "master.permanent_fault_counter",
@@ -405,7 +428,8 @@
     "supports_alarm": false,
     "display_order": 1201,
     "iec104_type_id": 15,
-    "iec104_ioa_offset": 2001
+    "iec104_ioa_offset": 2001,
+    "iec104_ioa": 2001
   },
   {
     "key": "master.modem_rssi",
@@ -422,7 +446,8 @@
     "supports_alarm": false,
     "display_order": 1300,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1000
+    "iec104_ioa_offset": 1000,
+    "iec104_ioa": 1000
   },
   {
     "key": "master.test_point_level",
@@ -439,7 +464,8 @@
     "supports_alarm": false,
     "display_order": 1301,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1001
+    "iec104_ioa_offset": 1001,
+    "iec104_ioa": 1001
   },
   {
     "key": "master.actual_current",
@@ -456,7 +482,8 @@
     "supports_alarm": false,
     "display_order": 1304,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1002
+    "iec104_ioa_offset": 1002,
+    "iec104_ioa": 1002
   },
   {
     "key": "master.minimum_voltage",
@@ -473,7 +500,8 @@
     "supports_alarm": false,
     "display_order": 1307,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1003
+    "iec104_ioa_offset": 1003,
+    "iec104_ioa": 1003
   },
   {
     "key": "master.latitude_degrees",
@@ -490,7 +518,8 @@
     "supports_alarm": false,
     "display_order": 1308,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1020
+    "iec104_ioa_offset": 1020,
+    "iec104_ioa": 1020
   },
   {
     "key": "master.latitude_minutes",
@@ -507,7 +536,8 @@
     "supports_alarm": false,
     "display_order": 1309,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1021
+    "iec104_ioa_offset": 1021,
+    "iec104_ioa": 1021
   },
   {
     "key": "master.maximum_voltage",
@@ -524,7 +554,8 @@
     "supports_alarm": false,
     "display_order": 1310,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1004
+    "iec104_ioa_offset": 1004,
+    "iec104_ioa": 1004
   },
   {
     "key": "master.latitude_seconds",
@@ -541,7 +572,8 @@
     "supports_alarm": false,
     "display_order": 1310,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1022
+    "iec104_ioa_offset": 1022,
+    "iec104_ioa": 1022
   },
   {
     "key": "master.longitude_degrees",
@@ -558,7 +590,8 @@
     "supports_alarm": false,
     "display_order": 1311,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1023
+    "iec104_ioa_offset": 1023,
+    "iec104_ioa": 1023
   },
   {
     "key": "master.longitude_minutes",
@@ -575,7 +608,8 @@
     "supports_alarm": false,
     "display_order": 1312,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1024
+    "iec104_ioa_offset": 1024,
+    "iec104_ioa": 1024
   },
   {
     "key": "master.battery_voltage_satellite",
@@ -592,7 +626,8 @@
     "supports_alarm": false,
     "display_order": 1313,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1005
+    "iec104_ioa_offset": 1005,
+    "iec104_ioa": 1005
   },
   {
     "key": "master.longitude_seconds",
@@ -609,7 +644,8 @@
     "supports_alarm": false,
     "display_order": 1313,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1025
+    "iec104_ioa_offset": 1025,
+    "iec104_ioa": 1025
   },
   {
     "key": "master.conductor_temperature_alarm_threshold",
@@ -626,7 +662,8 @@
     "supports_alarm": false,
     "display_order": 1314,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1026
+    "iec104_ioa_offset": 1026,
+    "iec104_ioa": 1026
   },
   {
     "key": "master.trip_level",
@@ -643,7 +680,8 @@
     "supports_alarm": false,
     "display_order": 1316,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1006
+    "iec104_ioa_offset": 1006,
+    "iec104_ioa": 1006
   },
   {
     "key": "master.nominal_voltage",
@@ -660,7 +698,8 @@
     "supports_alarm": false,
     "display_order": 1317,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1027
+    "iec104_ioa_offset": 1027,
+    "iec104_ioa": 1027
   },
   {
     "key": "master.device_temperature",
@@ -677,7 +716,8 @@
     "supports_alarm": false,
     "display_order": 1319,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1007
+    "iec104_ioa_offset": 1007,
+    "iec104_ioa": 1007
   },
   {
     "key": "master.minimum_current",
@@ -694,7 +734,8 @@
     "supports_alarm": false,
     "display_order": 1320,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1008
+    "iec104_ioa_offset": 1008,
+    "iec104_ioa": 1008
   },
   {
     "key": "master.pitch_angle",
@@ -711,7 +752,8 @@
     "supports_alarm": false,
     "display_order": 1320,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1028
+    "iec104_ioa_offset": 1028,
+    "iec104_ioa": 1028
   },
   {
     "key": "master.maximum_current",
@@ -728,7 +770,8 @@
     "supports_alarm": false,
     "display_order": 1323,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1009
+    "iec104_ioa_offset": 1009,
+    "iec104_ioa": 1009
   },
   {
     "key": "master.average_current",
@@ -745,7 +788,8 @@
     "supports_alarm": false,
     "display_order": 1326,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1010
+    "iec104_ioa_offset": 1010,
+    "iec104_ioa": 1010
   },
   {
     "key": "master.fault_current",
@@ -762,7 +806,8 @@
     "supports_alarm": false,
     "display_order": 1329,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1011
+    "iec104_ioa_offset": 1011,
+    "iec104_ioa": 1011
   },
   {
     "key": "master.fault_duration",
@@ -779,7 +824,8 @@
     "supports_alarm": false,
     "display_order": 1332,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1012
+    "iec104_ioa_offset": 1012,
+    "iec104_ioa": 1012
   },
   {
     "key": "master.last_good_known_current",
@@ -796,7 +842,8 @@
     "supports_alarm": false,
     "display_order": 1335,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1013
+    "iec104_ioa_offset": 1013,
+    "iec104_ioa": 1013
   },
   {
     "key": "master.actual_voltage",
@@ -813,7 +860,8 @@
     "supports_alarm": false,
     "display_order": 1338,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1014
+    "iec104_ioa_offset": 1014,
+    "iec104_ioa": 1014
   },
   {
     "key": "master.conductor_temperature",
@@ -830,7 +878,8 @@
     "supports_alarm": false,
     "display_order": 1341,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1015
+    "iec104_ioa_offset": 1015,
+    "iec104_ioa": 1015
   },
   {
     "key": "master.phase_angle",
@@ -847,7 +896,8 @@
     "supports_alarm": false,
     "display_order": 1344,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1016
+    "iec104_ioa_offset": 1016,
+    "iec104_ioa": 1016
   },
   {
     "key": "master.serial_number",
@@ -864,7 +914,8 @@
     "supports_alarm": false,
     "display_order": 1359,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1017
+    "iec104_ioa_offset": 1017,
+    "iec104_ioa": 1017
   },
   {
     "key": "master.firmware_version",
@@ -881,7 +932,8 @@
     "supports_alarm": false,
     "display_order": 1362,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1018
+    "iec104_ioa_offset": 1018,
+    "iec104_ioa": 1018
   },
   {
     "key": "master.hardware_revision",
@@ -898,7 +950,8 @@
     "supports_alarm": false,
     "display_order": 1365,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1019
+    "iec104_ioa_offset": 1019,
+    "iec104_ioa": 1019
   },
   {
     "key": "master.info_serial_number",
@@ -1289,7 +1342,8 @@
     "supports_alarm": false,
     "display_order": 2001,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 100
+    "iec104_ioa_offset": 100,
+    "iec104_ioa": 100
   },
   {
     "key": "sat01.overcurrent_tripped",
@@ -1306,7 +1360,8 @@
     "supports_alarm": false,
     "display_order": 2004,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 101
+    "iec104_ioa_offset": 101,
+    "iec104_ioa": 101
   },
   {
     "key": "sat01.delta_i_delta_t_tripped",
@@ -1323,7 +1378,8 @@
     "supports_alarm": false,
     "display_order": 2007,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 102
+    "iec104_ioa_offset": 102,
+    "iec104_ioa": 102
   },
   {
     "key": "sat01.voltage_loss",
@@ -1340,7 +1396,8 @@
     "supports_alarm": false,
     "display_order": 2010,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 103
+    "iec104_ioa_offset": 103,
+    "iec104_ioa": 103
   },
   {
     "key": "sat01.current_loss",
@@ -1357,7 +1414,8 @@
     "supports_alarm": false,
     "display_order": 2013,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 104
+    "iec104_ioa_offset": 104,
+    "iec104_ioa": 104
   },
   {
     "key": "sat01.operation_mode",
@@ -1374,7 +1432,8 @@
     "supports_alarm": false,
     "display_order": 2016,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 105
+    "iec104_ioa_offset": 105,
+    "iec104_ioa": 105
   },
   {
     "key": "sat01.battery_status",
@@ -1391,7 +1450,8 @@
     "supports_alarm": false,
     "display_order": 2019,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 106
+    "iec104_ioa_offset": 106,
+    "iec104_ioa": 106
   },
   {
     "key": "sat01.communication_failure",
@@ -1408,7 +1468,8 @@
     "supports_alarm": false,
     "display_order": 2021,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 107
+    "iec104_ioa_offset": 107,
+    "iec104_ioa": 107
   },
   {
     "key": "sat01.delta_i_delta_t_pick_up",
@@ -1425,7 +1486,8 @@
     "supports_alarm": false,
     "display_order": 2024,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 108
+    "iec104_ioa_offset": 108,
+    "iec104_ioa": 108
   },
   {
     "key": "sat01.permanent_fault",
@@ -1442,7 +1504,8 @@
     "supports_alarm": false,
     "display_order": 2028,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 109
+    "iec104_ioa_offset": 109,
+    "iec104_ioa": 109
   },
   {
     "key": "sat01.momentary_fault",
@@ -1459,7 +1522,8 @@
     "supports_alarm": false,
     "display_order": 2031,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 110
+    "iec104_ioa_offset": 110,
+    "iec104_ioa": 110
   },
   {
     "key": "sat01.load_flow_direction_green_a",
@@ -1476,7 +1540,8 @@
     "supports_alarm": false,
     "display_order": 2034,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 111
+    "iec104_ioa_offset": 111,
+    "iec104_ioa": 111
   },
   {
     "key": "sat01.load_flow_direction_red_b",
@@ -1493,7 +1558,8 @@
     "supports_alarm": false,
     "display_order": 2037,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 112
+    "iec104_ioa_offset": 112,
+    "iec104_ioa": 112
   },
   {
     "key": "sat01.overcurrent_fault_direction_green_a",
@@ -1510,7 +1576,8 @@
     "supports_alarm": false,
     "display_order": 2040,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 113
+    "iec104_ioa_offset": 113,
+    "iec104_ioa": 113
   },
   {
     "key": "sat01.overcurrent_fault_direction_red_b",
@@ -1527,7 +1594,8 @@
     "supports_alarm": false,
     "display_order": 2043,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 114
+    "iec104_ioa_offset": 114,
+    "iec104_ioa": 114
   },
   {
     "key": "sat01.tamper_detection",
@@ -1544,7 +1612,8 @@
     "supports_alarm": false,
     "display_order": 2046,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 115
+    "iec104_ioa_offset": 115,
+    "iec104_ioa": 115
   },
   {
     "key": "sat01.local_comm_enabled",
@@ -1561,7 +1630,8 @@
     "supports_alarm": false,
     "display_order": 2049,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 116
+    "iec104_ioa_offset": 116,
+    "iec104_ioa": 116
   },
   {
     "key": "sat01.password_enabled",
@@ -1578,7 +1648,8 @@
     "supports_alarm": false,
     "display_order": 2052,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 117
+    "iec104_ioa_offset": 117,
+    "iec104_ioa": 117
   },
   {
     "key": "sat01.delta_i_delta_t_fault_direction_green_a",
@@ -1595,7 +1666,8 @@
     "supports_alarm": false,
     "display_order": 2058,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 118
+    "iec104_ioa_offset": 118,
+    "iec104_ioa": 118
   },
   {
     "key": "sat01.delta_i_delta_t_fault_direction_red_b",
@@ -1612,7 +1684,8 @@
     "supports_alarm": false,
     "display_order": 2061,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 119
+    "iec104_ioa_offset": 119,
+    "iec104_ioa": 119
   },
   {
     "key": "sat01.conductor_temperature_alarm",
@@ -1629,7 +1702,8 @@
     "supports_alarm": false,
     "display_order": 2065,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 120
+    "iec104_ioa_offset": 120,
+    "iec104_ioa": 120
   },
   {
     "key": "sat01.momentary_fault_counter",
@@ -1646,7 +1720,8 @@
     "supports_alarm": false,
     "display_order": 2202,
     "iec104_type_id": 15,
-    "iec104_ioa_offset": 2010
+    "iec104_ioa_offset": 2010,
+    "iec104_ioa": 2010
   },
   {
     "key": "sat01.permanent_fault_counter",
@@ -1663,7 +1738,8 @@
     "supports_alarm": false,
     "display_order": 2203,
     "iec104_type_id": 15,
-    "iec104_ioa_offset": 2011
+    "iec104_ioa_offset": 2011,
+    "iec104_ioa": 2011
   },
   {
     "key": "sat01.test_point_level",
@@ -1680,7 +1756,8 @@
     "supports_alarm": false,
     "display_order": 2302,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1100
+    "iec104_ioa_offset": 1100,
+    "iec104_ioa": 1100
   },
   {
     "key": "sat01.actual_current",
@@ -1697,7 +1774,8 @@
     "supports_alarm": false,
     "display_order": 2305,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1101
+    "iec104_ioa_offset": 1101,
+    "iec104_ioa": 1101
   },
   {
     "key": "sat01.minimum_voltage",
@@ -1714,7 +1792,8 @@
     "supports_alarm": false,
     "display_order": 2308,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1102
+    "iec104_ioa_offset": 1102,
+    "iec104_ioa": 1102
   },
   {
     "key": "sat01.maximum_voltage",
@@ -1731,7 +1810,8 @@
     "supports_alarm": false,
     "display_order": 2311,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1103
+    "iec104_ioa_offset": 1103,
+    "iec104_ioa": 1103
   },
   {
     "key": "sat01.battery_voltage_satellite",
@@ -1748,7 +1828,8 @@
     "supports_alarm": false,
     "display_order": 2314,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1104
+    "iec104_ioa_offset": 1104,
+    "iec104_ioa": 1104
   },
   {
     "key": "sat01.conductor_temperature_alarm_threshold",
@@ -1765,7 +1846,8 @@
     "supports_alarm": false,
     "display_order": 2315,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1120
+    "iec104_ioa_offset": 1120,
+    "iec104_ioa": 1120
   },
   {
     "key": "sat01.trip_level",
@@ -1782,7 +1864,8 @@
     "supports_alarm": false,
     "display_order": 2317,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1105
+    "iec104_ioa_offset": 1105,
+    "iec104_ioa": 1105
   },
   {
     "key": "sat01.nominal_voltage",
@@ -1799,7 +1882,8 @@
     "supports_alarm": false,
     "display_order": 2318,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1121
+    "iec104_ioa_offset": 1121,
+    "iec104_ioa": 1121
   },
   {
     "key": "sat01.minimum_current",
@@ -1816,7 +1900,8 @@
     "supports_alarm": false,
     "display_order": 2321,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1106
+    "iec104_ioa_offset": 1106,
+    "iec104_ioa": 1106
   },
   {
     "key": "sat01.pitch_angle",
@@ -1833,7 +1918,8 @@
     "supports_alarm": false,
     "display_order": 2321,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1122
+    "iec104_ioa_offset": 1122,
+    "iec104_ioa": 1122
   },
   {
     "key": "sat01.maximum_current",
@@ -1850,7 +1936,8 @@
     "supports_alarm": false,
     "display_order": 2324,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1107
+    "iec104_ioa_offset": 1107,
+    "iec104_ioa": 1107
   },
   {
     "key": "sat01.average_current",
@@ -1867,7 +1954,8 @@
     "supports_alarm": false,
     "display_order": 2327,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1108
+    "iec104_ioa_offset": 1108,
+    "iec104_ioa": 1108
   },
   {
     "key": "sat01.fault_current",
@@ -1884,7 +1972,8 @@
     "supports_alarm": false,
     "display_order": 2330,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1109
+    "iec104_ioa_offset": 1109,
+    "iec104_ioa": 1109
   },
   {
     "key": "sat01.fault_duration",
@@ -1901,7 +1990,8 @@
     "supports_alarm": false,
     "display_order": 2333,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1110
+    "iec104_ioa_offset": 1110,
+    "iec104_ioa": 1110
   },
   {
     "key": "sat01.last_good_known_current",
@@ -1918,7 +2008,8 @@
     "supports_alarm": false,
     "display_order": 2336,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1111
+    "iec104_ioa_offset": 1111,
+    "iec104_ioa": 1111
   },
   {
     "key": "sat01.actual_voltage",
@@ -1935,7 +2026,8 @@
     "supports_alarm": false,
     "display_order": 2339,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1112
+    "iec104_ioa_offset": 1112,
+    "iec104_ioa": 1112
   },
   {
     "key": "sat01.conductor_temperature",
@@ -1952,7 +2044,8 @@
     "supports_alarm": false,
     "display_order": 2342,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1113
+    "iec104_ioa_offset": 1113,
+    "iec104_ioa": 1113
   },
   {
     "key": "sat01.phase_angle",
@@ -1969,7 +2062,8 @@
     "supports_alarm": false,
     "display_order": 2345,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1114
+    "iec104_ioa_offset": 1114,
+    "iec104_ioa": 1114
   },
   {
     "key": "sat01.serial_number",
@@ -1986,7 +2080,8 @@
     "supports_alarm": false,
     "display_order": 2360,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1115
+    "iec104_ioa_offset": 1115,
+    "iec104_ioa": 1115
   },
   {
     "key": "sat01.firmware_version",
@@ -2003,7 +2098,8 @@
     "supports_alarm": false,
     "display_order": 2363,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1116
+    "iec104_ioa_offset": 1116,
+    "iec104_ioa": 1116
   },
   {
     "key": "sat01.hardware_revision",
@@ -2020,7 +2116,8 @@
     "supports_alarm": false,
     "display_order": 2366,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1117
+    "iec104_ioa_offset": 1117,
+    "iec104_ioa": 1117
   },
   {
     "key": "sat01.rssi_satellite",
@@ -2037,7 +2134,8 @@
     "supports_alarm": false,
     "display_order": 2368,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1118
+    "iec104_ioa_offset": 1118,
+    "iec104_ioa": 1118
   },
   {
     "key": "sat01.device_temperature",
@@ -2054,7 +2152,8 @@
     "supports_alarm": false,
     "display_order": 2370,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1119
+    "iec104_ioa_offset": 1119,
+    "iec104_ioa": 1119
   },
   {
     "key": "sat01.info_serial_number",
@@ -2139,7 +2238,8 @@
     "supports_alarm": false,
     "display_order": 3002,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 200
+    "iec104_ioa_offset": 200,
+    "iec104_ioa": 200
   },
   {
     "key": "sat02.overcurrent_tripped",
@@ -2156,7 +2256,8 @@
     "supports_alarm": false,
     "display_order": 3005,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 201
+    "iec104_ioa_offset": 201,
+    "iec104_ioa": 201
   },
   {
     "key": "sat02.delta_i_delta_t_tripped",
@@ -2173,7 +2274,8 @@
     "supports_alarm": false,
     "display_order": 3008,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 202
+    "iec104_ioa_offset": 202,
+    "iec104_ioa": 202
   },
   {
     "key": "sat02.voltage_loss",
@@ -2190,7 +2292,8 @@
     "supports_alarm": false,
     "display_order": 3011,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 203
+    "iec104_ioa_offset": 203,
+    "iec104_ioa": 203
   },
   {
     "key": "sat02.current_loss",
@@ -2207,7 +2310,8 @@
     "supports_alarm": false,
     "display_order": 3014,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 204
+    "iec104_ioa_offset": 204,
+    "iec104_ioa": 204
   },
   {
     "key": "sat02.operation_mode",
@@ -2224,7 +2328,8 @@
     "supports_alarm": false,
     "display_order": 3017,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 205
+    "iec104_ioa_offset": 205,
+    "iec104_ioa": 205
   },
   {
     "key": "sat02.battery_status",
@@ -2241,7 +2346,8 @@
     "supports_alarm": false,
     "display_order": 3020,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 206
+    "iec104_ioa_offset": 206,
+    "iec104_ioa": 206
   },
   {
     "key": "sat02.communication_failure",
@@ -2258,7 +2364,8 @@
     "supports_alarm": false,
     "display_order": 3022,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 207
+    "iec104_ioa_offset": 207,
+    "iec104_ioa": 207
   },
   {
     "key": "sat02.delta_i_delta_t_pick_up",
@@ -2275,7 +2382,8 @@
     "supports_alarm": false,
     "display_order": 3025,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 208
+    "iec104_ioa_offset": 208,
+    "iec104_ioa": 208
   },
   {
     "key": "sat02.permanent_fault",
@@ -2292,7 +2400,8 @@
     "supports_alarm": false,
     "display_order": 3029,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 209
+    "iec104_ioa_offset": 209,
+    "iec104_ioa": 209
   },
   {
     "key": "sat02.momentary_fault",
@@ -2309,7 +2418,8 @@
     "supports_alarm": false,
     "display_order": 3032,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 210
+    "iec104_ioa_offset": 210,
+    "iec104_ioa": 210
   },
   {
     "key": "sat02.load_flow_direction_green_a",
@@ -2326,7 +2436,8 @@
     "supports_alarm": false,
     "display_order": 3035,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 211
+    "iec104_ioa_offset": 211,
+    "iec104_ioa": 211
   },
   {
     "key": "sat02.load_flow_direction_red_b",
@@ -2343,7 +2454,8 @@
     "supports_alarm": false,
     "display_order": 3038,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 212
+    "iec104_ioa_offset": 212,
+    "iec104_ioa": 212
   },
   {
     "key": "sat02.overcurrent_fault_direction_green_a",
@@ -2360,7 +2472,8 @@
     "supports_alarm": false,
     "display_order": 3041,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 213
+    "iec104_ioa_offset": 213,
+    "iec104_ioa": 213
   },
   {
     "key": "sat02.overcurrent_fault_direction_red_b",
@@ -2377,7 +2490,8 @@
     "supports_alarm": false,
     "display_order": 3044,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 214
+    "iec104_ioa_offset": 214,
+    "iec104_ioa": 214
   },
   {
     "key": "sat02.tamper_detection",
@@ -2394,7 +2508,8 @@
     "supports_alarm": false,
     "display_order": 3047,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 215
+    "iec104_ioa_offset": 215,
+    "iec104_ioa": 215
   },
   {
     "key": "sat02.local_comm_enabled",
@@ -2411,7 +2526,8 @@
     "supports_alarm": false,
     "display_order": 3050,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 216
+    "iec104_ioa_offset": 216,
+    "iec104_ioa": 216
   },
   {
     "key": "sat02.password_enabled",
@@ -2428,7 +2544,8 @@
     "supports_alarm": false,
     "display_order": 3053,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 217
+    "iec104_ioa_offset": 217,
+    "iec104_ioa": 217
   },
   {
     "key": "sat02.delta_i_delta_t_fault_direction_green_a",
@@ -2445,7 +2562,8 @@
     "supports_alarm": false,
     "display_order": 3059,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 218
+    "iec104_ioa_offset": 218,
+    "iec104_ioa": 218
   },
   {
     "key": "sat02.delta_i_delta_t_fault_direction_red_b",
@@ -2462,7 +2580,8 @@
     "supports_alarm": false,
     "display_order": 3062,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 219
+    "iec104_ioa_offset": 219,
+    "iec104_ioa": 219
   },
   {
     "key": "sat02.conductor_temperature_alarm",
@@ -2479,7 +2598,8 @@
     "supports_alarm": false,
     "display_order": 3066,
     "iec104_type_id": 1,
-    "iec104_ioa_offset": 220
+    "iec104_ioa_offset": 220,
+    "iec104_ioa": 220
   },
   {
     "key": "sat02.momentary_fault_counter",
@@ -2496,7 +2616,8 @@
     "supports_alarm": false,
     "display_order": 3204,
     "iec104_type_id": 15,
-    "iec104_ioa_offset": 2020
+    "iec104_ioa_offset": 2020,
+    "iec104_ioa": 2020
   },
   {
     "key": "sat02.permanent_fault_counter",
@@ -2513,7 +2634,8 @@
     "supports_alarm": false,
     "display_order": 3205,
     "iec104_type_id": 15,
-    "iec104_ioa_offset": 2021
+    "iec104_ioa_offset": 2021,
+    "iec104_ioa": 2021
   },
   {
     "key": "sat02.test_point_level",
@@ -2530,7 +2652,8 @@
     "supports_alarm": false,
     "display_order": 3303,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1200
+    "iec104_ioa_offset": 1200,
+    "iec104_ioa": 1200
   },
   {
     "key": "sat02.actual_current",
@@ -2547,7 +2670,8 @@
     "supports_alarm": false,
     "display_order": 3306,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1201
+    "iec104_ioa_offset": 1201,
+    "iec104_ioa": 1201
   },
   {
     "key": "sat02.minimum_voltage",
@@ -2564,7 +2688,8 @@
     "supports_alarm": false,
     "display_order": 3309,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1202
+    "iec104_ioa_offset": 1202,
+    "iec104_ioa": 1202
   },
   {
     "key": "sat02.maximum_voltage",
@@ -2581,7 +2706,8 @@
     "supports_alarm": false,
     "display_order": 3312,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1203
+    "iec104_ioa_offset": 1203,
+    "iec104_ioa": 1203
   },
   {
     "key": "sat02.battery_voltage_satellite",
@@ -2598,7 +2724,8 @@
     "supports_alarm": false,
     "display_order": 3315,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1204
+    "iec104_ioa_offset": 1204,
+    "iec104_ioa": 1204
   },
   {
     "key": "sat02.conductor_temperature_alarm_threshold",
@@ -2615,7 +2742,8 @@
     "supports_alarm": false,
     "display_order": 3316,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1220
+    "iec104_ioa_offset": 1220,
+    "iec104_ioa": 1220
   },
   {
     "key": "sat02.trip_level",
@@ -2632,7 +2760,8 @@
     "supports_alarm": false,
     "display_order": 3318,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1205
+    "iec104_ioa_offset": 1205,
+    "iec104_ioa": 1205
   },
   {
     "key": "sat02.nominal_voltage",
@@ -2649,7 +2778,8 @@
     "supports_alarm": false,
     "display_order": 3319,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1221
+    "iec104_ioa_offset": 1221,
+    "iec104_ioa": 1221
   },
   {
     "key": "sat02.minimum_current",
@@ -2666,7 +2796,8 @@
     "supports_alarm": false,
     "display_order": 3322,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1206
+    "iec104_ioa_offset": 1206,
+    "iec104_ioa": 1206
   },
   {
     "key": "sat02.pitch_angle",
@@ -2683,7 +2814,8 @@
     "supports_alarm": false,
     "display_order": 3322,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1222
+    "iec104_ioa_offset": 1222,
+    "iec104_ioa": 1222
   },
   {
     "key": "sat02.maximum_current",
@@ -2700,7 +2832,8 @@
     "supports_alarm": false,
     "display_order": 3325,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1207
+    "iec104_ioa_offset": 1207,
+    "iec104_ioa": 1207
   },
   {
     "key": "sat02.average_current",
@@ -2717,7 +2850,8 @@
     "supports_alarm": false,
     "display_order": 3328,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1208
+    "iec104_ioa_offset": 1208,
+    "iec104_ioa": 1208
   },
   {
     "key": "sat02.fault_current",
@@ -2734,7 +2868,8 @@
     "supports_alarm": false,
     "display_order": 3331,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1209
+    "iec104_ioa_offset": 1209,
+    "iec104_ioa": 1209
   },
   {
     "key": "sat02.fault_duration",
@@ -2751,7 +2886,8 @@
     "supports_alarm": false,
     "display_order": 3334,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1210
+    "iec104_ioa_offset": 1210,
+    "iec104_ioa": 1210
   },
   {
     "key": "sat02.last_good_known_current",
@@ -2768,7 +2904,8 @@
     "supports_alarm": false,
     "display_order": 3337,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1211
+    "iec104_ioa_offset": 1211,
+    "iec104_ioa": 1211
   },
   {
     "key": "sat02.actual_voltage",
@@ -2785,7 +2922,8 @@
     "supports_alarm": false,
     "display_order": 3340,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1212
+    "iec104_ioa_offset": 1212,
+    "iec104_ioa": 1212
   },
   {
     "key": "sat02.conductor_temperature",
@@ -2802,7 +2940,8 @@
     "supports_alarm": false,
     "display_order": 3343,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1213
+    "iec104_ioa_offset": 1213,
+    "iec104_ioa": 1213
   },
   {
     "key": "sat02.phase_angle",
@@ -2819,7 +2958,8 @@
     "supports_alarm": false,
     "display_order": 3346,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1214
+    "iec104_ioa_offset": 1214,
+    "iec104_ioa": 1214
   },
   {
     "key": "sat02.serial_number",
@@ -2836,7 +2976,8 @@
     "supports_alarm": false,
     "display_order": 3361,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1215
+    "iec104_ioa_offset": 1215,
+    "iec104_ioa": 1215
   },
   {
     "key": "sat02.firmware_version",
@@ -2853,7 +2994,8 @@
     "supports_alarm": false,
     "display_order": 3364,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1216
+    "iec104_ioa_offset": 1216,
+    "iec104_ioa": 1216
   },
   {
     "key": "sat02.hardware_revision",
@@ -2870,7 +3012,8 @@
     "supports_alarm": false,
     "display_order": 3367,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1217
+    "iec104_ioa_offset": 1217,
+    "iec104_ioa": 1217
   },
   {
     "key": "sat02.rssi_satellite",
@@ -2887,7 +3030,8 @@
     "supports_alarm": false,
     "display_order": 3369,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1218
+    "iec104_ioa_offset": 1218,
+    "iec104_ioa": 1218
   },
   {
     "key": "sat02.device_temperature",
@@ -2904,7 +3048,8 @@
     "supports_alarm": false,
     "display_order": 3371,
     "iec104_type_id": 13,
-    "iec104_ioa_offset": 1219
+    "iec104_ioa_offset": 1219,
+    "iec104_ioa": 1219
   },
   {
     "key": "sat02.info_serial_number",

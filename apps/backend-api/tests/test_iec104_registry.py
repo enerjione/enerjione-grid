@@ -1,130 +1,128 @@
-"""IEC 104 point registry unit testleri.
+"""IEC 104 point registry unit testleri (cihaz bazli ASDU CA modeli).
 
-Deterministik ve standartlara uygun IOA uretiminin garantisi bu testlere
-bagli. `PointRegistry` imzasindaki tum sozlesmeler burada dogrulanir.
+Yeni model: her cihaz kendi `iec104_common_address`'ine sahip olabilir;
+sinyaller `iec104_ioa` (mutlak IOA) tasir. Eski deploylar `iec104_ioa_offset`
+ile gelirse bu mutlak IOA olarak yorumlanir.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.services.iec104.registry import (
-    DEFAULT_IOA_DEVICE_STRIDE,
-    build_point_registry,
-)
+from app.services.iec104.registry import build_point_registry
 
 
 @dataclass
 class _FakeDevice:
     code: str
     is_active: bool = True
+    iec104_common_address: int | None = None
 
 
 @dataclass
 class _FakeSignal:
     key: str
     iec104_type_id: int | None
-    iec104_ioa_offset: int | None
+    iec104_ioa: int | None = None
+    iec104_ioa_offset: int | None = None
     is_active: bool = True
 
 
-def test_absolute_ioa_uses_stride_times_device_index_plus_offset() -> None:
-    devices = [_FakeDevice("DEV-A"), _FakeDevice("DEV-B"), _FakeDevice("DEV-C")]
-    signals = [
-        _FakeSignal("master.a", 13, 1000),
-        _FakeSignal("master.b", 1, 1),
+def test_device_specific_ca_used_when_present() -> None:
+    devices = [
+        _FakeDevice("DEV-A", iec104_common_address=10),
+        _FakeDevice("DEV-B", iec104_common_address=20),
     ]
+    signals = [_FakeSignal("voltage", 13, iec104_ioa=100)]
     registry = build_point_registry(
-        target_id=1, common_address=1, devices=devices, signals=signals,
-        device_stride=10_000,
+        target_id=1, default_common_address=1, devices=devices, signals=signals,
     )
     by_key = registry.by_key()
-    # DEV-A index 0
-    assert by_key[("DEV-A", "master.a")].absolute_ioa == 1000
-    assert by_key[("DEV-A", "master.b")].absolute_ioa == 1
-    # DEV-B index 1
-    assert by_key[("DEV-B", "master.a")].absolute_ioa == 11_000
-    # DEV-C index 2
-    assert by_key[("DEV-C", "master.b")].absolute_ioa == 20_001
+    assert by_key[("DEV-A", "voltage")].common_address == 10
+    assert by_key[("DEV-A", "voltage")].ioa == 100
+    assert by_key[("DEV-B", "voltage")].common_address == 20
+    assert by_key[("DEV-B", "voltage")].ioa == 100
 
 
-def test_devices_sorted_by_code_for_stability() -> None:
-    """Cihaz sirasi hash/DB order'a bakilmaksizin deterministik olmali."""
-    devices = [_FakeDevice("DEV-Z"), _FakeDevice("DEV-A"), _FakeDevice("DEV-M")]
-    signals = [_FakeSignal("x", 13, 100)]
+def test_default_ca_used_when_device_missing() -> None:
+    devices = [_FakeDevice("DEV-X")]  # iec104_common_address NULL
+    signals = [_FakeSignal("v", 13, iec104_ioa=42)]
     registry = build_point_registry(
-        target_id=1, common_address=1, devices=devices, signals=signals,
-        device_stride=10_000,
+        target_id=1, default_common_address=7, devices=devices, signals=signals,
     )
-    by_key = registry.by_key()
-    assert by_key[("DEV-A", "x")].absolute_ioa == 100          # index 0
-    assert by_key[("DEV-M", "x")].absolute_ioa == 10_100       # index 1
-    assert by_key[("DEV-Z", "x")].absolute_ioa == 20_100       # index 2
+    p = registry.by_key()[("DEV-X", "v")]
+    assert p.common_address == 7
+    assert p.ioa == 42
+
+
+def test_legacy_offset_treated_as_absolute_ioa() -> None:
+    devices = [_FakeDevice("D", iec104_common_address=3)]
+    signals = [_FakeSignal("legacy", 13, iec104_ioa=None, iec104_ioa_offset=999)]
+    registry = build_point_registry(
+        target_id=1, default_common_address=1, devices=devices, signals=signals,
+    )
+    p = registry.by_key()[("D", "legacy")]
+    assert p.ioa == 999
+
+
+def test_new_ioa_takes_precedence_over_offset() -> None:
+    devices = [_FakeDevice("D", iec104_common_address=3)]
+    signals = [_FakeSignal("both", 13, iec104_ioa=100, iec104_ioa_offset=999)]
+    registry = build_point_registry(
+        target_id=1, default_common_address=1, devices=devices, signals=signals,
+    )
+    p = registry.by_key()[("D", "both")]
+    assert p.ioa == 100
 
 
 def test_unmapped_signals_dropped() -> None:
-    devices = [_FakeDevice("DEV-1")]
+    devices = [_FakeDevice("DEV-1", iec104_common_address=1)]
     signals = [
-        _FakeSignal("mapped", 13, 1000),
-        _FakeSignal("unmapped_type", None, 1000),
-        _FakeSignal("unmapped_offset", 13, None),
-        _FakeSignal("inactive", 13, 1000, is_active=False),
+        _FakeSignal("mapped", 13, iec104_ioa=1000),
+        _FakeSignal("unmapped_type", None, iec104_ioa=1000),
+        _FakeSignal("unmapped_ioa", 13, iec104_ioa=None, iec104_ioa_offset=None),
+        _FakeSignal("inactive", 13, iec104_ioa=1000, is_active=False),
     ]
     registry = build_point_registry(
-        target_id=1, common_address=1, devices=devices, signals=signals,
+        target_id=1, default_common_address=1, devices=devices, signals=signals,
     )
     keys = {p.signal_key for p in registry.points}
     assert keys == {"mapped"}
 
 
 def test_inactive_devices_skipped() -> None:
-    devices = [_FakeDevice("DEV-A"), _FakeDevice("DEV-B", is_active=False)]
-    signals = [_FakeSignal("x", 13, 1)]
+    devices = [_FakeDevice("A", iec104_common_address=1), _FakeDevice("B", is_active=False)]
+    signals = [_FakeSignal("x", 13, iec104_ioa=1)]
     registry = build_point_registry(
-        target_id=1, common_address=1, devices=devices, signals=signals,
+        target_id=1, default_common_address=1, devices=devices, signals=signals,
     )
     codes = {p.device_code for p in registry.points}
-    assert codes == {"DEV-A"}
+    assert codes == {"A"}
 
 
-def test_default_stride_applied_when_none() -> None:
-    devices = [_FakeDevice("A"), _FakeDevice("B")]
-    signals = [_FakeSignal("s", 13, 50)]
-    registry = build_point_registry(
-        target_id=1, common_address=1, devices=devices, signals=signals,
-        device_stride=None,
-    )
-    assert registry.device_stride == DEFAULT_IOA_DEVICE_STRIDE
-    by_key = registry.by_key()
-    assert by_key[("B", "s")].absolute_ioa == DEFAULT_IOA_DEVICE_STRIDE + 50
-
-
-def test_24bit_ioa_cap_enforced_per_point() -> None:
-    # stride 900k. 18. cihaz icin index*stride = 16.200.000 (hala 16.7M altinda),
-    # 19. cihaz index*stride = 17.100.000 > 16.7M -> registry icin overflow, atla.
-    devices = [_FakeDevice(f"DEV-{i:03d}") for i in range(20)]
-    signals = [_FakeSignal("x", 13, 100)]
-    registry = build_point_registry(
-        target_id=1, common_address=1, devices=devices, signals=signals,
-        device_stride=900_000,
-    )
-    codes = {p.device_code for p in registry.points}
-    # Ilk 19 cihaz (index 0..18) girer; son cihaz (DEV-019) IOA overflow'dan
-    # dolayi registry'e dusmez.
-    assert "DEV-018" in codes
-    assert "DEV-019" not in codes
-
-
-def test_deterministic_point_order_by_device_then_signal_offset() -> None:
-    devices = [_FakeDevice("DEV-1")]
-    signals = [
-        _FakeSignal("z", 13, 5000),
-        _FakeSignal("a", 1, 1),
-        _FakeSignal("m", 15, 2000),
+def test_unique_common_addresses_listed() -> None:
+    devices = [
+        _FakeDevice("A", iec104_common_address=10),
+        _FakeDevice("B", iec104_common_address=20),
+        _FakeDevice("C", iec104_common_address=10),  # ayni CA tekrar
+        _FakeDevice("D"),  # default'a duser
     ]
+    signals = [_FakeSignal("s", 13, iec104_ioa=1)]
     registry = build_point_registry(
-        target_id=1, common_address=1, devices=devices, signals=signals,
+        target_id=1, default_common_address=99, devices=devices, signals=signals,
     )
-    # Points cihazi sirasina gore cikar, sinyal listesindeki verilen
-    # siraya gore ilerler (build_point_registry kontrollu iterasyon).
-    assert [p.signal_key for p in registry.points] == ["z", "a", "m"]
+    assert registry.unique_common_addresses() == (10, 20, 99)
+
+
+def test_devices_sorted_by_code_for_determinism() -> None:
+    devices = [
+        _FakeDevice("DEV-Z", iec104_common_address=3),
+        _FakeDevice("DEV-A", iec104_common_address=1),
+        _FakeDevice("DEV-M", iec104_common_address=2),
+    ]
+    signals = [_FakeSignal("x", 13, iec104_ioa=100)]
+    registry = build_point_registry(
+        target_id=1, default_common_address=1, devices=devices, signals=signals,
+    )
+    ordered_codes = [p.device_code for p in registry.points]
+    assert ordered_codes == ["DEV-A", "DEV-M", "DEV-Z"]

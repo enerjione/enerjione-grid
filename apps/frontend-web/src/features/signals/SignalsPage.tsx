@@ -121,6 +121,12 @@ export function SignalsPage({
   const [editScale, setEditScale] = useState("1");
   const [editOffset, setEditOffset] = useState("0");
   const [editIsActive, setEditIsActive] = useState(true);
+  // Outbound template adresleme — IEC104 / Modbus / MQTT
+  const [editIec104TypeId, setEditIec104TypeId] = useState("");
+  const [editIec104IoaOffset, setEditIec104IoaOffset] = useState("");
+  const [editModbusFunction, setEditModbusFunction] = useState("");
+  const [editModbusAddress, setEditModbusAddress] = useState("");
+  const [editMqttTopic, setEditMqttTopic] = useState("");
 
   useEffect(() => {
     if (selected) {
@@ -134,6 +140,27 @@ export function SignalsPage({
       setEditScale(String(selected.scale));
       setEditOffset(String(selected.offset));
       setEditIsActive(selected.is_active);
+      setEditIec104TypeId(
+        selected.iec104_type_id !== null && selected.iec104_type_id !== undefined
+          ? String(selected.iec104_type_id)
+          : ""
+      );
+      setEditIec104IoaOffset(
+        selected.iec104_ioa_offset !== null && selected.iec104_ioa_offset !== undefined
+          ? String(selected.iec104_ioa_offset)
+          : ""
+      );
+      setEditModbusFunction(
+        selected.modbus_function !== null && selected.modbus_function !== undefined
+          ? String(selected.modbus_function)
+          : ""
+      );
+      setEditModbusAddress(
+        selected.modbus_address !== null && selected.modbus_address !== undefined
+          ? String(selected.modbus_address)
+          : ""
+      );
+      setEditMqttTopic(selected.mqtt_topic ?? "");
       setLocalError("");
     }
   }, [selected]);
@@ -146,6 +173,12 @@ export function SignalsPage({
       // DNP3 Object Group veri tipine gore otomatik turetilir
       // (Analog=30, Analog Out=40, Binary=1, Binary Out=10, Counter=20, String=110).
       const dnp3Group = DNP3_GROUP_BY_TYPE[editDataType];
+      const parseIntOrNull = (v: string): number | null => {
+        const t = v.trim();
+        if (!t) return null;
+        const n = Number(t);
+        return Number.isFinite(n) ? Math.round(n) : null;
+      };
       await onUpdate(selected.key, {
         label: editLabel,
         unit: editUnit.trim() || null,
@@ -157,7 +190,12 @@ export function SignalsPage({
         dnp3_index: Number(editIndex),
         scale: Number(editScale),
         offset: Number(editOffset),
-        is_active: editIsActive
+        is_active: editIsActive,
+        iec104_type_id: parseIntOrNull(editIec104TypeId),
+        iec104_ioa_offset: parseIntOrNull(editIec104IoaOffset),
+        modbus_function: parseIntOrNull(editModbusFunction),
+        modbus_address: parseIntOrNull(editModbusAddress),
+        mqtt_topic: editMqttTopic.trim() || null
       });
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Sinyal güncellenemedi.");

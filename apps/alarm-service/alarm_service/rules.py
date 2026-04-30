@@ -59,12 +59,18 @@ class AlarmRuleCache:
             return False
         rules_data: list[dict[str, Any]] = rules_resp.json()
         signals_data: list[dict[str, Any]] = signals_resp.json()
-        alarmable = {s["key"] for s in signals_data if s.get("supports_alarm")}
+        # Onceden `supports_alarm` bayragi kuralin degerlendirilmesini engelliyordu;
+        # artik UI/backend tum sinyallere kural ekleyebildigi icin bu filtreyi
+        # kaldirdik. Sinyal katalog'da var olmasi yeterli sayilir; yine de
+        # alarmable set'ini "katalogdaki tum sinyaller" olarak tutuyoruz ki
+        # is_alarmable() rapor amacli dogru calisabilsin.
+        alarmable = {s["key"] for s in signals_data}
         by_signal: dict[str, list[AlarmRule]] = {}
         for item in rules_data:
             if not item.get("is_active", True):
                 continue
             if item["signal_key"] not in alarmable:
+                # Sinyal katalogdan tamamen silinmis -> kural anlamsiz, atla.
                 continue
             rule = AlarmRule(
                 id=int(item["id"]),

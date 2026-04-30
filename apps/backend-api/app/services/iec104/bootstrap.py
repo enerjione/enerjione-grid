@@ -19,10 +19,7 @@ from sqlalchemy.orm import Session
 from app.models.device import Device
 from app.models.outbound_target import OutboundTarget
 from app.models.signal_catalog import SignalCatalog
-from app.services.iec104.registry import (
-    DEFAULT_IOA_DEVICE_STRIDE,
-    build_point_registry,
-)
+from app.services.iec104.registry import build_point_registry
 from app.services.iec104.server import manager
 
 logger = logging.getLogger(__name__)
@@ -66,14 +63,12 @@ async def _deploy_single(
 ) -> None:
     host = target.listen_host or "0.0.0.0"
     port = target.listen_port or 2404
-    common_address = target.iec104_common_address or 1
-    stride = target.iec104_ioa_device_stride or DEFAULT_IOA_DEVICE_STRIDE
+    default_ca = target.iec104_common_address or 1
     registry = build_point_registry(
         target_id=target.id,
-        common_address=common_address,
+        default_common_address=default_ca,
         devices=devices,
         signals=signals,
-        device_stride=stride,
     )
     await manager.deploy(
         target_id=target.id,
@@ -83,13 +78,9 @@ async def _deploy_single(
         registry=registry,
     )
     logger.info(
-        "iec104_deployed target_id=%s name=%s host=%s port=%s ca=%s points=%d",
-        target.id,
-        target.name,
-        host,
-        port,
-        common_address,
-        len(registry.points),
+        "iec104_deployed target_id=%s name=%s host=%s port=%s default_ca=%s points=%d distinct_ca=%d",
+        target.id, target.name, host, port, default_ca,
+        len(registry.points), len(registry.unique_common_addresses()),
     )
 
 

@@ -84,6 +84,7 @@ _MUTABLE_FIELDS = (
     "display_order",
     "iec104_type_id",
     "iec104_ioa_offset",
+    "iec104_ioa",
 )
 
 

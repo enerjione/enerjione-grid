@@ -55,8 +55,26 @@ class SignalCatalog(Base):
     #   iec104_type_id  : ASDU Type Identifier (1=M_SP_NA_1 binary,
     #                     13=M_ME_NC_1 analog short float, 15=M_IT_NA_1 counter).
     #                     string / desteklenmeyen tipler icin NULL.
-    #   iec104_ioa_offset: Cihaz bloku icindeki goreli IOA (Information Object Address).
-    #                     Server, cihaz index'ine `iec104_ioa_device_stride` carpar ve
-    #                     bu offseti ekleyerek mutlak IOA'yi hesaplar.
+    #   iec104_ioa      : Sinyal icin mutlak IOA (Information Object Address, 24-bit).
+    #                     Cihaz bazli ayrim sinyal duzeyinde DEGIL, ASDU Common
+    #                     Address (cihazin `iec104_common_address` alani) ile
+    #                     yapilir. Boylece tek bir TCP oturumunda farkli CA'lara
+    #                     ait ASDU'lar yayinlanabilir.
+    #   iec104_ioa_offset: Eski ad (geri uyumluluk). Yeni alan dolu degilse bu
+    #                     mutlak IOA olarak okunur; her iki alan da NULL olan
+    #                     sinyaller IEC 104 ile yayinlanmaz.
     iec104_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    iec104_ioa: Mapped[int | None] = mapped_column(Integer, nullable=True)
     iec104_ioa_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Modbus outbound adresleme. Kullanici outbound template uzerinden cihaza
+    # standart bir Modbus adresi verir; cihaz instance'inin asdu/slave id'si
+    # ile birlikte gercek adres turetilir.
+    #   modbus_function: 3=holding register, 4=input register,
+    #                    1=coil, 2=discrete input.
+    modbus_function: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    modbus_address: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # MQTT outbound topic suffix'i. Tam topic: "<base_topic>/<device_code>/<mqtt_topic>"
+    # Ornek: "telemetry/voltage/phase_a"
+    mqtt_topic: Mapped[str | None] = mapped_column(String(200), nullable=True)

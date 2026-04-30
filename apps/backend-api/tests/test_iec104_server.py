@@ -56,10 +56,13 @@ async def _read_next_apdu(reader: asyncio.StreamReader, buffer: bytearray, timeo
 async def test_server_round_trip_spontaneous_and_interrogation() -> None:
     port = _free_port()
     points = (
-        PointAddress(device_code="DEV-A", signal_key="master.v", type_id=TYPE_M_ME_NC_1, absolute_ioa=1000),
+        PointAddress(
+            device_code="DEV-A", signal_key="master.v",
+            type_id=TYPE_M_ME_NC_1, common_address=7, ioa=1000,
+        ),
     )
     registry = PointRegistry(
-        target_id=1, common_address=7, device_stride=10_000, points=points
+        target_id=1, default_common_address=7, points=points,
     )
     server = IEC104Server(name="smoke", host="127.0.0.1", port=port, registry=registry)
     await server.start()

@@ -32,3 +32,9 @@ class Device(Base):
     )
     alarm_active: Mapped[bool] = mapped_column(default=False)
     last_update_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # IEC 60870-5-104 ASDU Common Address (CA). Outbound IEC 104 servisi
+    # bu cihazdan gelen sinyalleri ASDU yayinlayacaginda hangi CA ile
+    # paketleyecegini buradan ogrenir. NULL ise outbound target'in
+    # `iec104_common_address` (default) degeri kullanilir.
+    iec104_common_address: Mapped[int | None] = mapped_column(Integer, nullable=True)

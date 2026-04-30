@@ -136,20 +136,40 @@ def _quality_is_bad(payload: dict) -> bool:
     return quality in {"bad", "offline", "invalid"}
 
 
+_SOURCE_LABEL_TR = {
+    "master": "Master",
+    "sat01": "Satellite 01",
+    "sat02": "Satellite 02",
+}
+
+
+def _signal_source_label(signal_key: str | None) -> str:
+    """Sinyal anahtarinin prefix'inden kullanici dostu kaynak etiketi turet.
+
+    Ornek: "master.overcurrent_tripped" -> "Master".
+    Bilinmeyen prefix'ler icin prefix oldugu gibi (orn. "Sat03") doner;
+    prefix yoksa bos string."""
+    if not signal_key:
+        return ""
+    prefix = signal_key.split(".", 1)[0].lower()
+    return _SOURCE_LABEL_TR.get(prefix, prefix.capitalize())
+
+
 def _build_alarm_from_rule(
     payload: dict, rule_id: int, rule_name: str, rule_description: str, level: str, value: float
 ) -> dict:
+    # Title kuralın adını yansıtır; kaynak (master/sat01/sat02) bilgisi
+    # frontend'de signal_key prefix'inden turetilir, boylece backend dedup
+    # eski/yeni formatlar arasinda calismaya devam eder.
     return {
         "message_id": str(uuid4()),
         "correlation_id": payload.get("correlation_id") or payload.get("message_id") or str(uuid4()),
         "device_id": payload.get("device_id"),
         "device_code": payload.get("device_code"),
         "source_gateway": payload.get("source_gateway"),
+        "signal_key": payload.get("signal_key"),
         "title": rule_name,
-        "description": (
-            f"{rule_description or rule_name} | gateway={payload.get('source_gateway')} "
-            f"signal={payload.get('signal_key')} value={value}"
-        ),
+        "description": rule_description or rule_name,
         "level": level,
         "source_timestamp": payload.get("source_timestamp") or datetime.now(timezone.utc).isoformat(),
         "rule_id": rule_id,

@@ -13,6 +13,9 @@ class InternalAlarmIngest(BaseModel):
     message_id: str | None = None
     correlation_id: str | None = None
     source_gateway: str | None = None
+    # Sinyal anahtari — kaynak (master/sat01/sat02) bilgisini frontend prefix'ten
+    # turetir; alarm-service zaten payload'a koyar.
+    signal_key: str | None = None
 
 
 class InternalAlarmClear(BaseModel):

@@ -103,8 +103,11 @@ export function ResponsibilityAreasPage({
 
   const availableUsers = useMemo(() => {
     const q = searchUser.trim().toLowerCase();
+    // Sorumluluk alanlarına yalnızca operator hesapları atanabilir; mühendis ve
+    // kurulumcu zaten tüm cihazlara erişir, alana atamak anlam taşımaz.
     return users.filter(
       (u) =>
+        u.role === "operator" &&
         !userIdsInArea.has(u.id) &&
         (!q ||
           u.username.toLowerCase().includes(q) ||
