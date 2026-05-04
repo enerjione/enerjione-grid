@@ -2970,17 +2970,28 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 /* Sinyal detay panelindeki IEC 104 yayin toggle satiri:
-   sol: durum etiketi, sag: switch (rahat hedef). */
+   sol: durum etiketi, sag: switch (rahat hedef).
+   IEC 104 fieldset 2 kolon grid; toggle ve alanlar ust-uste cikabilsin diye
+   tum genisligi kapla. */
 .signal-iec104-toggle-row {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
   padding: 10px 14px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+}
+
+.signal-iec104-fields {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity 120ms;
 }
 
 .signal-iec104-toggle-label {
@@ -2991,10 +3002,6 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 /* Yayin kapali iken Type ID + IOA alanlarini soluk + tiklanmaz yap */
-.signal-iec104-fields {
-  transition: opacity 120ms;
-}
-
 .signal-iec104-fields--disabled {
   opacity: 0.5;
   pointer-events: none;
