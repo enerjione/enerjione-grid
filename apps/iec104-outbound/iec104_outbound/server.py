@@ -119,8 +119,12 @@ class IEC104Server:
             len(self.registry.points),
             len(self.registry.unique_common_addresses()),
         )
+        # reuse_address=True: SCADA target disable→enable sirasinda port'u
+        # TIME_WAIT'den hizlica geri alabilelim. Aksi halde "address already
+        # in use" alip yayina hic donemiyorduk.
         self._server = await asyncio.start_server(
-            self._handle_client, host=self.host, port=self.port
+            self._handle_client, host=self.host, port=self.port,
+            reuse_address=True,
         )
 
     async def stop(self) -> None:
@@ -140,12 +144,29 @@ class IEC104Server:
             self._server = None
 
     def update_point(self, *, device_code: str, signal_key: str, value, good: bool = True) -> None:
-        """Bir veri noktasinin degerini gunceller; cihaza ait CA ile COT=3 yayar."""
+        """Bir veri noktasinin degerini gunceller; **degisim varsa** CA ile COT=3 yayar.
+
+        IEC 104 spontaneous reporting mantigi (Report by Exception):
+          - Yeni okuma onceki yayinlanan deger ile ayni VE quality ayni ise APDU
+            URETMEZ. SCADA tarafinda bos buffer ve gereksiz trafik olmaz.
+          - Iki halde yayinlanir: (1) deger degisti, (2) good->bad veya bad->good
+            quality gecisi.
+          - Hicbir client bagli degilse de _values cache'i guncellenir; kullanici
+            sonradan baglanip GI cektiginde son deger gider (mevcut akis).
+
+        Not: analog sinyaller icin ileride deadband (orn. %1 degisim altinda
+        yayinla) eklenebilir; simdilik tam esitlik kontrolu yeterli.
+        """
         key = (device_code, signal_key)
         point = self._by_key.get(key)
         if point is None:
             return
+        previous = self._values.get(key)
+        # Cache'i her zaman yenile (daha sonraki GI dogru deger versin).
         self._values[key] = PointValue(value=value, good=good)
+        if previous is not None and previous.good == good and previous.value == value:
+            # Hic degisim yok — ne deger ne quality. Spontaneous APDU bastirilir.
+            return
         if not self._sessions:
             return
         asdu = self._encode_single_value(point, value=value, good=good, cause=COT_SPONTANEOUS)

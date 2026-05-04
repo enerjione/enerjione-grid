@@ -115,8 +115,11 @@ class IEC104Server:
             len(self.registry.points),
             len(self.registry.unique_common_addresses()),
         )
+        # reuse_address=True: target disable→enable sirasinda port'u TIME_WAIT'den
+        # hizlica geri alabilelim.
         self._server = await asyncio.start_server(
-            self._handle_client, host=self.host, port=self.port
+            self._handle_client, host=self.host, port=self.port,
+            reuse_address=True,
         )
 
     async def stop(self) -> None:
@@ -136,11 +139,21 @@ class IEC104Server:
             self._server = None
 
     def update_point(self, *, device_code: str, signal_key: str, value, good: bool = True) -> None:
+        """Bir veri noktasinin degerini gunceller; **degisim varsa** spontaneous (COT=3) yayar.
+
+        IEC 104 Report by Exception: ayni deger + ayni quality tekrar geldiginde
+        APDU uretmez; ne SCADA buffer'i dolar ne ag yuku artar. Yalniz deger
+        veya quality degistiginde tetiklenir. Cache her durumda guncellenir
+        ki sonradan baglanan client GI cektiginde son deger gitsin.
+        """
         key = (device_code, signal_key)
         point = self._by_key.get(key)
         if point is None:
             return
+        previous = self._values.get(key)
         self._values[key] = PointValue(value=value, good=good)
+        if previous is not None and previous.good == good and previous.value == value:
+            return
         if not self._sessions:
             return
         asdu = self._encode_single_value(point, value=value, good=good, cause=COT_SPONTANEOUS)

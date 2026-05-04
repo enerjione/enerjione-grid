@@ -1,12 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
-import type { OutboundTarget } from "../../shared/types";
+import type { DeviceRow, OutboundTarget } from "../../shared/types";
 
 type Protocol = "rest" | "mqtt" | "iec104";
 
 type Props = {
   targets: OutboundTarget[];
+  /** IEC 104 hedefi düzenlerken cihaz başına CA atayabilmek için. */
+  devices?: DeviceRow[];
   onCreate: (payload: {
     name: string;
     protocol: Protocol;
@@ -41,18 +43,25 @@ type Props = {
   onDelete: (targetId: number) => Promise<void>;
   /** IEC 104 hedefi icin point list CSV indir. */
   onDownloadIec104Points?: (targetId: number, suggestedName: string) => Promise<void>;
+  /** Tek bir cihazin iec104 CA'sini kaydet. NULL = default'a don. */
+  onUpdateDeviceCa?: (deviceCode: string, ca: number | null) => Promise<void>;
 };
 
 export function OutboundTargetsPanel({
   targets,
+  devices,
   onCreate,
   onUpdate,
   onDelete,
-  onDownloadIec104Points
+  onDownloadIec104Points,
+  onUpdateDeviceCa
 }: Props) {
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<OutboundTarget | null>(null);
   const [error, setError] = useState("");
+  // Cihaz CA tablosu icin local edit buffer: code -> input string ("" = default)
+  const [deviceCaDraft, setDeviceCaDraft] = useState<Record<string, string>>({});
+  const [savingDeviceCode, setSavingDeviceCode] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [protocol, setProtocol] = useState<Protocol>("rest");
@@ -167,6 +176,41 @@ export function OutboundTargetsPanel({
   const isCreatingIec104 = protocol === "iec104";
   const isEditingIec104 = editing?.protocol === "iec104";
 
+  // editing degistiginde cihaz CA buffer'ini DB'deki degerlerle senkronize et.
+  useEffect(() => {
+    if (!editing || editing.protocol !== "iec104") return;
+    const draft: Record<string, string> = {};
+    for (const d of devices ?? []) {
+      const ca = d.iec104CommonAddress;
+      draft[d.code] = ca !== null && ca !== undefined ? String(ca) : "";
+    }
+    setDeviceCaDraft(draft);
+  }, [editing, devices]);
+
+  const sortedDevices = useMemo(
+    () => [...(devices ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
+    [devices]
+  );
+
+  const handleSaveDeviceCa = async (deviceCode: string) => {
+    if (!onUpdateDeviceCa) return;
+    const raw = (deviceCaDraft[deviceCode] ?? "").trim();
+    const value = raw === "" ? null : Number(raw);
+    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 65534)) {
+      setError(`${deviceCode} için CA geçersiz (0-65534 arası bir tam sayı veya boş).`);
+      return;
+    }
+    setError("");
+    setSavingDeviceCode(deviceCode);
+    try {
+      await onUpdateDeviceCa(deviceCode, value);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cihaz CA kaydedilemedi.");
+    } finally {
+      setSavingDeviceCode(null);
+    }
+  };
+
   return (
     <section className="tab-panel">
       <div className="panel-head">
@@ -245,6 +289,73 @@ export function OutboundTargetsPanel({
                   bu default CA'yi kullanır. Aynı TCP yayınında farklı CA'lı ASDU'lar
                   birlikte yayılır.
                 </p>
+                {isEditingIec104 && onUpdateDeviceCa ? (
+                  <div className="iec104-device-ca-section">
+                    <h4 className="iec104-device-ca-title">Cihaz Başına ASDU CA</h4>
+                    <p className="helper-text">
+                      Boş bırakılan cihazlar yukarıdaki default CA'yi kullanır.
+                      Her satırda Kaydet ile o cihaz için yeniler.
+                    </p>
+                    <div className="iec104-device-ca-table-wrap">
+                      <table className="values-table iec104-device-ca-table">
+                        <thead>
+                          <tr>
+                            <th>Cihaz</th>
+                            <th>Kod</th>
+                            <th style={{ width: 120 }}>ASDU CA</th>
+                            <th style={{ width: 90 }}>İşlem</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedDevices.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="helper-text">Cihaz bulunamadı.</td>
+                            </tr>
+                          ) : null}
+                          {sortedDevices.map((d) => {
+                            const draftValue = deviceCaDraft[d.code] ?? "";
+                            const dbValue = d.iec104CommonAddress ?? null;
+                            const dbStr = dbValue !== null ? String(dbValue) : "";
+                            const dirty = draftValue !== dbStr;
+                            const isSaving = savingDeviceCode === d.code;
+                            return (
+                              <tr key={d.code}>
+                                <td>{d.name}</td>
+                                <td><code>{d.code}</code></td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={65534}
+                                    value={draftValue}
+                                    placeholder="(default)"
+                                    onChange={(event) =>
+                                      setDeviceCaDraft((prev) => ({
+                                        ...prev,
+                                        [d.code]: event.target.value
+                                      }))
+                                    }
+                                    disabled={isSaving}
+                                  />
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="secondary-btn action-btn"
+                                    disabled={!dirty || isSaving}
+                                    onClick={() => void handleSaveDeviceCa(d.code)}
+                                  >
+                                    {isSaving ? "..." : "Kaydet"}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
               </>
             ) : (
               <>

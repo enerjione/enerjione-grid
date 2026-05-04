@@ -1022,6 +1022,14 @@ export function App() {
     }
   };
 
+  const handleUpdateDeviceCa = async (deviceCode: string, ca: number | null) => {
+    if (!session) return;
+    await updateDevice(session.accessToken, deviceCode, { iec104_common_address: ca });
+    const all = await fetchDevices(session.accessToken);
+    setDevices(all);
+    toast.success(`${deviceCode} CA kaydedildi.`);
+  };
+
   const reloadNotificationSettings = async () => {
     if (!session || session.role !== "installer") return;
     setNotificationSettingsLoading(true);
@@ -1398,10 +1406,12 @@ export function App() {
             {engineeringPage === "outbound" && session.role === "installer" ? (
               <OutboundTargetsPanel
                 targets={outboundTargets}
+                devices={devices}
                 onCreate={handleCreateOutboundTarget}
                 onUpdate={handleUpdateOutboundTarget}
                 onDelete={handleDeleteOutboundTarget}
                 onDownloadIec104Points={handleDownloadIec104Points}
+                onUpdateDeviceCa={handleUpdateDeviceCa}
               />
             ) : null}
             {engineeringPage === "notifications" && session.role === "installer" ? (
