@@ -405,7 +405,6 @@ export function AlarmsPage({
                   <dd>
                     <span className="alarm-detail-strong">{new Date(selectedAlarm.acknowledged_at).toLocaleDateString("tr-TR")}</span>
                     <span className="alarm-detail-mono"> {new Date(selectedAlarm.acknowledged_at).toLocaleTimeString("tr-TR")}</span>
-                    {selectedAlarm.acknowledged_by ? <span className="alarm-detail-by"> · {selectedAlarm.acknowledged_by}</span> : null}
                   </dd>
                 </div>
               ) : null}
