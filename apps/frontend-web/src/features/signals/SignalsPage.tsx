@@ -13,6 +13,24 @@ type Props = {
 
 type SourceFilter = "all" | SignalSource;
 type TabKey = "all" | SignalDataType;
+type DetailTab = "general" | "iec104";
+
+// IEC 60870-5-104 monitor-direction ASDU Type ID'leri.
+// Kullanici dropdown'dan secsin diye standart kataloga referans.
+const IEC104_MONITOR_TYPES: { id: number; code: string; desc: string; dataTypes: SignalDataType[] }[] = [
+  { id: 1,  code: "M_SP_NA_1", desc: "Single point",                   dataTypes: ["binary"] },
+  { id: 3,  code: "M_DP_NA_1", desc: "Double point",                   dataTypes: ["binary"] },
+  { id: 9,  code: "M_ME_NA_1", desc: "Normalized measured value",      dataTypes: ["analog"] },
+  { id: 11, code: "M_ME_NB_1", desc: "Scaled measured value",          dataTypes: ["analog"] },
+  { id: 13, code: "M_ME_NC_1", desc: "Short floating point",           dataTypes: ["analog"] },
+  { id: 15, code: "M_IT_NA_1", desc: "Integrated total (counter)",     dataTypes: ["counter"] },
+  { id: 30, code: "M_SP_TB_1", desc: "Single point with CP56Time2a",   dataTypes: ["binary"] },
+  { id: 31, code: "M_DP_TB_1", desc: "Double point with CP56Time2a",   dataTypes: ["binary"] },
+  { id: 34, code: "M_ME_TD_1", desc: "Normalized + CP56Time2a",        dataTypes: ["analog"] },
+  { id: 35, code: "M_ME_TE_1", desc: "Scaled + CP56Time2a",            dataTypes: ["analog"] },
+  { id: 36, code: "M_ME_TF_1", desc: "Short float + CP56Time2a",       dataTypes: ["analog"] },
+  { id: 37, code: "M_IT_TB_1", desc: "Counter + CP56Time2a",           dataTypes: ["counter"] }
+];
 
 const DATA_TYPES: SignalDataType[] = [
   "analog",
@@ -123,10 +141,13 @@ export function SignalsPage({
   const [editIsActive, setEditIsActive] = useState(true);
   // Outbound template adresleme — IEC104 / Modbus / MQTT
   const [editIec104TypeId, setEditIec104TypeId] = useState("");
+  const [editIec104Ioa, setEditIec104Ioa] = useState("");
   const [editIec104IoaOffset, setEditIec104IoaOffset] = useState("");
   const [editModbusFunction, setEditModbusFunction] = useState("");
   const [editModbusAddress, setEditModbusAddress] = useState("");
   const [editMqttTopic, setEditMqttTopic] = useState("");
+  // Detay panel sekmesi: Genel ozellikler vs Outbound (IEC 104) adresleri.
+  const [detailTab, setDetailTab] = useState<DetailTab>("general");
 
   useEffect(() => {
     if (selected) {
@@ -143,6 +164,11 @@ export function SignalsPage({
       setEditIec104TypeId(
         selected.iec104_type_id !== null && selected.iec104_type_id !== undefined
           ? String(selected.iec104_type_id)
+          : ""
+      );
+      setEditIec104Ioa(
+        selected.iec104_ioa !== null && selected.iec104_ioa !== undefined
+          ? String(selected.iec104_ioa)
           : ""
       );
       setEditIec104IoaOffset(
@@ -192,6 +218,7 @@ export function SignalsPage({
         offset: Number(editOffset),
         is_active: editIsActive,
         iec104_type_id: parseIntOrNull(editIec104TypeId),
+        iec104_ioa: parseIntOrNull(editIec104Ioa),
         iec104_ioa_offset: parseIntOrNull(editIec104IoaOffset),
         modbus_function: parseIntOrNull(editModbusFunction),
         modbus_address: parseIntOrNull(editModbusAddress),
@@ -362,7 +389,29 @@ export function SignalsPage({
               <p className="helper-text signals-detail-empty">Listeden bir sinyal seçin; özellikler burada düzenlenir.</p>
             ) : (
               <div className="signals-detail-form-scroll">
+                <div className="signal-detail-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "general"}
+                    className={`signal-detail-tab ${detailTab === "general" ? "active" : ""}`}
+                    onClick={() => setDetailTab("general")}
+                  >
+                    Genel
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "iec104"}
+                    className={`signal-detail-tab ${detailTab === "iec104" ? "active" : ""}`}
+                    onClick={() => setDetailTab("iec104")}
+                  >
+                    Outbound · IEC 104
+                  </button>
+                </div>
                 <div className="signals-detail-form-v2">
+                  {detailTab === "general" ? (
+                  <>
                   <fieldset className="signal-fieldset" disabled={!canEdit}>
                     <legend>Tanım</legend>
                     <label className="signal-field signal-field--wide">
@@ -464,6 +513,76 @@ export function SignalsPage({
                       Ham değer = scale × ham + offset. Birim sahaya göre uygulanır.
                     </p>
                   </fieldset>
+                  </>
+                  ) : null}
+
+                  {detailTab === "iec104" ? (
+                  <>
+                  <fieldset className="signal-fieldset" disabled={!canEdit}>
+                    <legend>IEC 60870-5-104</legend>
+                    <label className="signal-field signal-field--wide">
+                      <span>ASDU Type ID</span>
+                      <select
+                        value={editIec104TypeId}
+                        onChange={(event) => setEditIec104TypeId(event.target.value)}
+                      >
+                        <option value="">— Yayinlama —</option>
+                        {IEC104_MONITOR_TYPES.filter(
+                          (t) => t.dataTypes.includes(editDataType)
+                        ).map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.id} · {t.code} — {t.desc}
+                          </option>
+                        ))}
+                        <optgroup label="Diger (uyumsuz veri tipi)">
+                          {IEC104_MONITOR_TYPES.filter(
+                            (t) => !t.dataTypes.includes(editDataType)
+                          ).map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.id} · {t.code} — {t.desc}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </label>
+                    <label className="signal-field">
+                      <span>IOA (Information Object Address)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={16777215}
+                        value={editIec104Ioa}
+                        onChange={(event) => setEditIec104Ioa(event.target.value)}
+                        placeholder="örn. 1001"
+                      />
+                    </label>
+                    <p className="signal-fieldset-hint">
+                      Bu sinyal IEC 104 outbound master'a yayinlanirken kullanilir.
+                      ASDU Common Address (CA) ise <strong>cihaz</strong> bazli;
+                      Cihazlar sayfasindan ayarlanir. Type ID bos birakilirsa bu
+                      sinyal yayinlanmaz.
+                    </p>
+                  </fieldset>
+
+                  <fieldset className="signal-fieldset" disabled={!canEdit}>
+                    <legend>Geri Uyumluluk (eski deploylar)</legend>
+                    <label className="signal-field">
+                      <span>IOA Offset (deprecated)</span>
+                      <input
+                        type="number"
+                        value={editIec104IoaOffset}
+                        onChange={(event) => setEditIec104IoaOffset(event.target.value)}
+                        placeholder="bos birakin"
+                      />
+                    </label>
+                    <p className="signal-fieldset-hint">
+                      Yeni kurulumlar icin yukaridaki <strong>IOA</strong> alanini
+                      kullanin. Bu alan eski formul (device_index × stride + offset)
+                      kullanan deploylar icindir.
+                    </p>
+                  </fieldset>
+                  </>
+                  ) : null}
 
                   {canEdit ? (
                     <div className="signal-form-actions">

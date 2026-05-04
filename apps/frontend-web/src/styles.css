@@ -4974,6 +4974,35 @@ main.content.engineering-content:has(.device-management-panel) {
   line-height: 1.5;
 }
 
+/* ---------- Signal detail tabs (Genel / IEC 104) ---------- */
+.signal-detail-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 18px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.signal-detail-tab {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 120ms, border-color 120ms;
+}
+
+.signal-detail-tab:hover {
+  color: #334155;
+}
+
+.signal-detail-tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
 .signals-detail-form-scroll {
   flex: 1;
   min-height: 0;
