@@ -502,9 +502,18 @@ export function App() {
     if (!session) {
       return;
     }
-    if (pageMode === "home" && activeTab === "values") {
+    // Anasayfada — harita ve tablo ikisi de canli degerlere ihtiyac duyar:
+    //   - Tablo: liste hucreleri
+    //   - Harita: popup batarya kartlari + sidebar master batarya yuzdesi
+    // Bu yuzden values veya map secilince ilk fetch tetiklenir; ayrica 5 sn'de
+    // bir yenilenir ki kullanici sayfa acik tutarken degerler canli kalsin.
+    if (pageMode !== "home") return;
+    if (activeTab !== "values" && activeTab !== "map") return;
+    void handleRefreshSignalLive();
+    const interval = window.setInterval(() => {
       void handleRefreshSignalLive();
-    }
+    }, 5000);
+    return () => window.clearInterval(interval);
   }, [session, pageMode, activeTab, handleRefreshSignalLive]);
 
   const reloadAlarmRules = async () => {
