@@ -76,6 +76,9 @@ import {
   createOutboundTarget,
   deleteOutboundTarget,
   downloadIec104PointsCsv,
+  downloadIec104PointsXlsx,
+  autoAssignDeviceCa,
+  fetchIec104Runtime,
   testNotificationSms,
   testNotificationSmtp,
   updateNotificationSettings as updateNotificationSettingsApi,
@@ -976,6 +979,7 @@ export function App() {
     listen_host?: string | null;
     listen_port?: number | null;
     iec104_common_address?: number | null;
+    iec104_allowed_peers?: string | null;
   }) => {
     if (!session) return;
     await createOutboundTarget(session.accessToken, payload);
@@ -997,6 +1001,7 @@ export function App() {
       listen_host?: string | null;
       listen_port?: number | null;
       iec104_common_address?: number | null;
+      iec104_allowed_peers?: string | null;
     }
   ) => {
     if (!session) return;
@@ -1015,8 +1020,16 @@ export function App() {
   const handleDownloadIec104Points = async (targetId: number, suggestedName: string) => {
     if (!session) return;
     try {
-      await downloadIec104PointsCsv(session.accessToken, targetId, suggestedName);
-      toast.success("IEC 104 point list indirildi.");
+      const count = await downloadIec104PointsCsv(session.accessToken, targetId, suggestedName);
+      if (count === 0) {
+        toast.warning(
+          "CSV indirildi ama içinde nokta yok. Sinyaller sayfasından her sinyal için Outbound · IEC 104 sekmesinde Type ID + IOA giriniz."
+        );
+      } else if (count !== null) {
+        toast.success(`IEC 104 point list indirildi (${count} nokta).`);
+      } else {
+        toast.success("IEC 104 point list indirildi.");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Point list indirilemedi.");
     }
@@ -1027,7 +1040,40 @@ export function App() {
     await updateDevice(session.accessToken, deviceCode, { iec104_common_address: ca });
     const all = await fetchDevices(session.accessToken);
     setDevices(all);
-    toast.success(`${deviceCode} CA kaydedildi.`);
+    toast.success(`${deviceCode} ASDU adresi kaydedildi.`);
+  };
+
+  const handleAutoAssignDeviceCa = async (targetId: number, overwrite: boolean) => {
+    if (!session) return;
+    try {
+      const result = await autoAssignDeviceCa(session.accessToken, targetId, overwrite);
+      const all = await fetchDevices(session.accessToken);
+      setDevices(all);
+      const msg = overwrite
+        ? `${result.assigned} cihaza yeni ASDU adresi atandı.`
+        : `${result.assigned} cihaza adres atandı, ${result.skipped} cihaz korundu.`;
+      toast.success(msg);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Otomatik atama başarısız.");
+    }
+  };
+
+  const handleDownloadIec104Xlsx = async (targetId: number, suggestedName: string) => {
+    if (!session) return;
+    try {
+      const count = await downloadIec104PointsXlsx(session.accessToken, targetId, suggestedName);
+      if (count === 0) {
+        toast.warning(
+          "Excel indirildi ama içinde nokta yok. Sinyaller sayfasından her sinyal için Outbound · IEC 104 sekmesinden Type ID + IOA giriniz."
+        );
+      } else if (count !== null) {
+        toast.success(`Sinyal listesi indirildi (${count} nokta).`);
+      } else {
+        toast.success("Sinyal listesi indirildi.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sinyal listesi indirilemedi.");
+    }
   };
 
   const reloadNotificationSettings = async () => {
@@ -1411,7 +1457,13 @@ export function App() {
                 onUpdate={handleUpdateOutboundTarget}
                 onDelete={handleDeleteOutboundTarget}
                 onDownloadIec104Points={handleDownloadIec104Points}
+                onDownloadIec104Xlsx={handleDownloadIec104Xlsx}
                 onUpdateDeviceCa={handleUpdateDeviceCa}
+                onAutoAssignDeviceCa={handleAutoAssignDeviceCa}
+                onFetchIec104Runtime={async (id) => {
+                  if (!session) throw new Error("Oturum yok.");
+                  return fetchIec104Runtime(session.accessToken, id);
+                }}
               />
             ) : null}
             {engineeringPage === "notifications" && session.role === "installer" ? (

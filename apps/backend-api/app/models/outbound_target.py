@@ -38,3 +38,6 @@ class OutboundTarget(Base):
     listen_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     iec104_common_address: Mapped[int | None] = mapped_column(Integer, nullable=True)
     iec104_ioa_device_stride: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # IP allowlist — virgulle ayrilmis IP'ler. Bos string veya NULL = serbest
+    # (her IP baglanabilir). Dolu ise sadece listedeki IP'lerden TCP kabul edilir.
+    iec104_allowed_peers: Mapped[str | None] = mapped_column(String(2000), nullable=True)

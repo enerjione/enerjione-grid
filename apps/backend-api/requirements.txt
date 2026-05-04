@@ -11,3 +11,4 @@ bcrypt<5
 pika
 paho-mqtt
 requests
+openpyxl

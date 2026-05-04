@@ -184,6 +184,16 @@ export type OutboundTarget = {
   listen_host?: string | null;
   listen_port?: number | null;
   iec104_common_address?: number | null;
+  /** Virgulle ayrilmis IP whitelist; bos = serbest. */
+  iec104_allowed_peers?: string | null;
+};
+
+export type Iec104RuntimeStatus = {
+  target_id: number;
+  server_running: boolean;
+  whitelist_active: boolean;
+  allowed_peers: string[];
+  connected_clients: { peer: string; started: boolean; connected_at: string }[];
 };
 
 export type NotificationSettings = {

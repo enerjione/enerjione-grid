@@ -139,6 +139,40 @@ _IEC104_TYPE_LABEL: dict[int, str] = {
 }
 
 
+@router.get("/{target_id}/iec104-runtime")
+def get_iec104_runtime(
+    target_id: int,
+    _: User = Depends(
+        require_roles([UserRole.ENGINEER, UserRole.INSTALLER])
+    ),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Bu IEC 104 hedefinin canli durumunu doner.
+
+    - server_running: server ayakta mi
+    - whitelist_active: bos = serbest, dolu = sadece listedekiler
+    - allowed_peers: parse edilmis IP listesi
+    - connected_clients: [{peer, started, connected_at}]
+    """
+    target = db.get(OutboundTarget, target_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found")
+    if target.protocol != "iec104":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Yalniz IEC 104 hedefler icin runtime sorgulanir.",
+        )
+    raw = (target.iec104_allowed_peers or "").strip()
+    allowed = [p.strip() for p in raw.split(",") if p.strip()]
+    return {
+        "target_id": target.id,
+        "server_running": iec104_manager.is_running(target.id),
+        "whitelist_active": bool(allowed),
+        "allowed_peers": allowed,
+        "connected_clients": iec104_manager.connected_clients(target.id),
+    }
+
+
 @router.get("/{target_id}/iec104-points.csv")
 def export_iec104_points_csv(
     target_id: int,
@@ -230,9 +264,214 @@ def export_iec104_points_csv(
     # Excel UTF-8 BOM ile dogru gostersin
     body = ("﻿" + csv_text).encode("utf-8")
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    filename = f"iec104-points-{target.name.replace(' ', '_')}-{ts}.csv"
+    safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in target.name)
+    filename = f"iec104-points-{safe_name}-{ts}.csv"
     return Response(
         content=body,
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Point-Count": str(len(registry.points)),
+            "Access-Control-Expose-Headers": "Content-Disposition, X-Point-Count",
+        },
     )
+
+
+@router.get("/{target_id}/iec104-points.xlsx")
+def export_iec104_points_xlsx(
+    target_id: int,
+    _: User = Depends(
+        require_roles([UserRole.ENGINEER, UserRole.INSTALLER])
+    ),
+    db: Session = Depends(get_db),
+) -> Response:
+    """SCADA mühendisi için Excel (.xlsx) point list.
+
+    İçerik:
+      - Sheet 'Points' — her cihaz × aktif IEC 104 sinyali (CA, IOA, Type ID,
+        type_code, etiket, birim, scale, offset)
+      - Sheet 'Devices' — cihaz listesi: cihaz adı/kodu + ASDU CA (default
+        miydi gösterir)
+
+    Sadece `iec104_enabled=True` ve `iec104_type_id` dolu sinyaller dahil.
+    Cihaz `iec104_common_address` boş ise default kullanılır ve 'is_default'
+    kolonu işaretlenir."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except Exception:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="openpyxl kurulu değil. requirements.txt'i güncelleyip yeniden başlatın.",
+        )
+
+    target = db.get(OutboundTarget, target_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found")
+    if target.protocol != "iec104":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Yalnız IEC 104 hedefler için point list üretilir.",
+        )
+
+    devices = list(db.scalars(select(Device).order_by(Device.code)).all())
+    signals = list(
+        db.scalars(
+            select(SignalCatalog)
+            .where(SignalCatalog.is_active.is_(True))
+            .order_by(SignalCatalog.dnp3_object_group, SignalCatalog.dnp3_index)
+        ).all()
+    )
+    default_ca = target.iec104_common_address or 1
+    registry = build_point_registry(
+        target_id=target.id,
+        default_common_address=default_ca,
+        devices=devices,
+        signals=signals,
+    )
+    sig_meta: dict[str, SignalCatalog] = {s.key: s for s in signals}
+    dev_meta: dict[str, Device] = {d.code: d for d in devices}
+
+    wb = Workbook()
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
+    center = Alignment(horizontal="center", vertical="center")
+
+    # Sheet 1: Points
+    ws = wb.active
+    ws.title = "Points"
+    headers = [
+        "Sıra", "Cihaz Adı", "Cihaz Kodu", "ASDU CA", "IOA",
+        "Type ID", "Type Code", "Sinyal Anahtarı", "Etiket", "Birim", "Scale", "Offset",
+    ]
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+
+    sorted_points = sorted(registry.points, key=lambda p: (p.common_address, p.ioa))
+    for row_idx, p in enumerate(sorted_points, start=1):
+        sig = sig_meta.get(p.signal_key)
+        dev = dev_meta.get(p.device_code)
+        ws.append([
+            row_idx,
+            dev.name if dev else "",
+            p.device_code,
+            p.common_address,
+            p.ioa,
+            p.type_id,
+            _IEC104_TYPE_LABEL.get(p.type_id, ""),
+            p.signal_key,
+            sig.label if sig else "",
+            sig.unit if sig and sig.unit else "",
+            sig.scale if sig else "",
+            sig.offset if sig else "",
+        ])
+    # Kolon genislikleri (yaklasik)
+    widths = [6, 24, 16, 10, 10, 10, 14, 32, 30, 8, 8, 8]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    ws.freeze_panes = "A2"
+
+    # Sheet 2: Devices
+    ws2 = wb.create_sheet("Devices")
+    dev_headers = ["Sıra", "Cihaz Adı", "Cihaz Kodu", "ASDU CA", "Default mi?"]
+    ws2.append(dev_headers)
+    for col_idx in range(1, len(dev_headers) + 1):
+        cell = ws2.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+    for row_idx, d in enumerate(devices, start=1):
+        own_ca = getattr(d, "iec104_common_address", None)
+        is_default = own_ca is None
+        effective_ca = own_ca if own_ca is not None else default_ca
+        ws2.append([row_idx, d.name, d.code, effective_ca, "Evet" if is_default else "Hayır"])
+    for i, w in enumerate([6, 28, 18, 10, 12], start=1):
+        ws2.column_dimensions[chr(64 + i)].width = w
+    ws2.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in target.name)
+    filename = f"iec104-points-{safe_name}-{ts}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Point-Count": str(len(sorted_points)),
+            "Access-Control-Expose-Headers": "Content-Disposition, X-Point-Count",
+        },
+    )
+
+
+@router.post("/{target_id}/auto-assign-device-ca", response_model=dict)
+def auto_assign_device_ca(
+    target_id: int,
+    payload: dict | None = None,
+    _: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Bu hedef altinda CA'si bos cihazlara sirayla 1, 2, 3... atar.
+
+    payload (opsiyonel):
+      start_at: int — baslangic (default 1)
+      overwrite: bool — mevcut CA'leri de ezerek yenile (default False)
+
+    Cikti: {assigned: N, skipped: M, devices: [{code, ca}]}
+    """
+    target = db.get(OutboundTarget, target_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found")
+    if target.protocol != "iec104":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Auto-assign yalnız IEC 104 hedefler için.",
+        )
+    payload = payload or {}
+    start_at = int(payload.get("start_at", 1))
+    overwrite = bool(payload.get("overwrite", False))
+    if start_at < 0 or start_at > 65000:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="start_at 0-65000 arası olmalı.")
+
+    devices = list(db.scalars(select(Device).order_by(Device.code)).all())
+    used_cas: set[int] = set()
+    if not overwrite:
+        for d in devices:
+            ca = getattr(d, "iec104_common_address", None)
+            if ca is not None:
+                used_cas.add(int(ca))
+
+    assigned = 0
+    skipped = 0
+    next_ca = start_at
+    result_list: list[dict] = []
+    for d in devices:
+        existing = getattr(d, "iec104_common_address", None)
+        if not overwrite and existing is not None:
+            skipped += 1
+            continue
+        # Bir sonraki bos CA bul
+        while next_ca in used_cas:
+            next_ca += 1
+            if next_ca > 65534:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Atanabilir CA aralığı tükendi.",
+                )
+        d.iec104_common_address = next_ca
+        used_cas.add(next_ca)
+        result_list.append({"code": d.code, "ca": next_ca})
+        assigned += 1
+        next_ca += 1
+
+    db.commit()
+    # IEC 104 server'i yeniden deploy et — CA degisikligi nokta haritasini etkiler.
+    _schedule_iec104_redeploy(db, target.id)
+    return {"assigned": assigned, "skipped": skipped, "devices": result_list}

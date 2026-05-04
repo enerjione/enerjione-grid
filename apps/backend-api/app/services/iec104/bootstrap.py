@@ -70,12 +70,19 @@ async def _deploy_single(
         devices=devices,
         signals=signals,
     )
+    allowed_peers_raw = (target.iec104_allowed_peers or "").strip()
+    allowed_peers: tuple[str, ...] = (
+        tuple(p.strip() for p in allowed_peers_raw.split(",") if p.strip())
+        if allowed_peers_raw
+        else ()
+    )
     await manager.deploy(
         target_id=target.id,
         name=target.name,
         host=host,
         port=port,
         registry=registry,
+        allowed_peers=allowed_peers,
     )
     logger.info(
         "iec104_deployed target_id=%s name=%s host=%s port=%s default_ca=%s points=%d distinct_ca=%d",

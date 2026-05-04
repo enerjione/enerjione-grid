@@ -18,6 +18,7 @@ class OutboundTargetCreate(BaseModel):
     listen_port: int | None = Field(default=None, ge=1, le=65535)
     iec104_common_address: int | None = Field(default=None, ge=0, le=65535)
     iec104_ioa_device_stride: int | None = Field(default=None, ge=1, le=1_000_000)
+    iec104_allowed_peers: str | None = None
 
 
 class OutboundTargetUpdate(BaseModel):
@@ -33,6 +34,7 @@ class OutboundTargetUpdate(BaseModel):
     listen_port: int | None = Field(default=None, ge=1, le=65535)
     iec104_common_address: int | None = Field(default=None, ge=0, le=65535)
     iec104_ioa_device_stride: int | None = Field(default=None, ge=1, le=1_000_000)
+    iec104_allowed_peers: str | None = None
 
 
 class OutboundTargetRead(BaseModel):
@@ -51,6 +53,7 @@ class OutboundTargetRead(BaseModel):
     listen_port: int | None = None
     iec104_common_address: int | None = None
     iec104_ioa_device_stride: int | None = None
+    iec104_allowed_peers: str | None = None
 
     class Config:
         from_attributes = True

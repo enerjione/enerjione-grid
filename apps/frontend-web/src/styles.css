@@ -3067,6 +3067,396 @@ main.content.engineering-content:has(.device-management-panel) {
   font-size: 12px;
 }
 
+/* Cihaz CA / runtime modal */
+.iec104-ca-modal,
+.iec104-runtime-modal {
+  max-width: 720px;
+  width: 92vw;
+}
+
+.iec104-ca-search {
+  width: 100%;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* Runtime özet kutusu */
+.iec104-runtime-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 10px 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.iec104-runtime-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iec104-runtime-allowed {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.iec104-runtime-allowed summary {
+  cursor: pointer;
+  color: #475569;
+  font-weight: 600;
+}
+
+.iec104-runtime-allowed ul {
+  margin: 6px 0 0 18px;
+  padding: 0;
+}
+
+.iec104-runtime-clients-title {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+/* Status dot */
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #cbd5e1;
+  flex-shrink: 0;
+}
+
+.status-dot--ok { background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.18); }
+.status-dot--bad { background: #ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,0.18); }
+
+/* Liste satirinda IEC 104 client sayisi rozeti */
+.iec104-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: filter 120ms;
+}
+
+.iec104-badge:hover { filter: brightness(0.95); }
+
+.iec104-badge--ok {
+  color: #15803d;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.iec104-badge--ok .status-dot { background: #16a34a; box-shadow: 0 0 0 2px rgba(34,197,94,0.25); }
+
+.iec104-badge--bad {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.iec104-badge--bad .status-dot { background: #dc2626; }
+
+/* ===== Modern outbound tablosu ===== */
+.outbound-modern-table-wrap {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.outbound-modern-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.outbound-modern-table thead th {
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.outbound-modern-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.outbound-modern-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.outbound-modern-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.outbound-row--inactive {
+  opacity: 0.65;
+}
+
+.outbound-name-cell {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.outbound-endpoint-cell {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #334155;
+}
+
+.outbound-active-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.outbound-active-pill--on {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.outbound-active-pill--on .status-dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+
+.outbound-active-pill--off {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.outbound-active-pill--off .status-dot {
+  background: #dc2626;
+}
+
+.outbound-proto-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.outbound-proto-iec104 {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #c4b5fd;
+}
+
+.outbound-proto-rest {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+
+.outbound-proto-mqtt {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+/* ===== ASDU adresleri modal'i — buyuk + modern ===== */
+.asdu-modal {
+  width: 92vw;
+  max-width: 980px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.asdu-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.asdu-modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.asdu-modal-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.asdu-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.asdu-modal-close:hover {
+  color: #0f172a;
+}
+
+.asdu-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 22px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.asdu-search {
+  flex: 1;
+  padding: 9px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.asdu-search:focus {
+  border-color: #6366f1;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.asdu-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.asdu-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 22px;
+}
+
+.asdu-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.asdu-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  padding: 10px 12px;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: left;
+  z-index: 1;
+}
+
+.asdu-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.asdu-row-index {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.asdu-row-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.asdu-row--unassigned td {
+  background: #fef9c3;
+}
+
+.asdu-row--unassigned .asdu-row-index {
+  color: #a16207;
+  font-weight: 700;
+}
+
+.asdu-row--assigned:hover td {
+  background: #f8fafc;
+}
+
+.asdu-table input[type="number"] {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.asdu-input--dirty {
+  border-color: #f59e0b !important;
+  background: #fffbeb;
+}
+
+.asdu-save-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+.asdu-empty {
+  text-align: center;
+  color: #94a3b8;
+  padding: 32px 0 !important;
+}
+
+.asdu-modal-foot {
+  padding: 14px 22px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .signal-card-name {
   font-size: 13px;
   font-weight: 600;

@@ -347,7 +347,15 @@ export function DeviceSummaryPage({
                     )}
                   </td>
                   <td className={`cell-value ${row.value === null ? "cell-value-pending" : ""}`}>
-                    {formatValue(row.value, dataType, row.unit)}
+                    {dataType === "binary" && row.value !== null && row.value !== undefined ? (
+                      <span
+                        className={`live-binary-pill ${row.value ? "live-binary-pill--true" : "live-binary-pill--false"}`}
+                      >
+                        {row.value ? "TRUE" : "FALSE"}
+                      </span>
+                    ) : (
+                      formatValue(row.value, dataType, row.unit)
+                    )}
                   </td>
                   <td className="cell-center">
                     {effectiveQuality ? (

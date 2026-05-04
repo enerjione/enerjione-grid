@@ -74,6 +74,9 @@ class _ClientSession:
         self.started = False
         self.unacked = 0
         self._write_lock = asyncio.Lock()
+        # Runtime istatigi: bu client ne zaman bagli, monotonic saat degil iso ts
+        # frontend "X dakika once" hesaplayabilsin diye.
+        self.connected_at_iso: str = ""
 
     async def send(self, apdu: bytes) -> None:
         async with self._write_lock:
@@ -97,11 +100,13 @@ class IEC104Server:
         host: str,
         port: int,
         registry: PointRegistry,
+        allowed_peers: tuple[str, ...] = (),
     ) -> None:
         self.name = name
         self.host = host
         self.port = port
         self.registry = registry
+        self.allowed_peers = allowed_peers
         self._by_key: dict[tuple[str, str], PointAddress] = registry.by_key()
         self._values: dict[tuple[str, str], PointValue] = {}
         self._sessions: set[_ClientSession] = set()
@@ -163,12 +168,41 @@ class IEC104Server:
             if session.started:
                 asyncio.create_task(self._send_i(session, asdu))
 
+    def connected_clients(self) -> list[dict]:
+        """Backend API runtime endpoint'i icin canli baglanti ozeti."""
+        return [
+            {
+                "peer": s.peer,
+                "started": s.started,
+                "connected_at": s.connected_at_iso,
+            }
+            for s in list(self._sessions)
+        ]
+
+    def _peer_allowed(self, peer_ip: str) -> bool:
+        """Whitelist bos = serbest. Dolu ise IP eslesmesi (CIDR yok, sadece IP)."""
+        if not self.allowed_peers:
+            return True
+        return peer_ip in self.allowed_peers
+
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        from datetime import datetime, timezone
         peer = writer.get_extra_info("peername")
-        peer_str = f"{peer[0]}:{peer[1]}" if peer else "?"
+        peer_ip = peer[0] if peer else ""
+        peer_str = f"{peer_ip}:{peer[1]}" if peer else "?"
+        if not self._peer_allowed(peer_ip):
+            logger.warning(
+                "iec104_client_rejected_whitelist name=%s peer=%s", self.name, peer_str,
+            )
+            try:
+                writer.close()
+            except Exception:  # noqa: BLE001
+                pass
+            return
         session = _ClientSession(writer=writer, peer=peer_str)
+        session.connected_at_iso = datetime.now(timezone.utc).isoformat()
         self._sessions.add(session)
         logger.info("iec104_client_connected name=%s peer=%s", self.name, peer_str)
 
@@ -343,12 +377,34 @@ class IEC104ServerManager:
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
 
-    async def deploy(self, *, target_id: int, name: str, host: str, port: int, registry: PointRegistry) -> None:
+    async def deploy(
+        self,
+        *,
+        target_id: int,
+        name: str,
+        host: str,
+        port: int,
+        registry: PointRegistry,
+        allowed_peers: tuple[str, ...] = (),
+    ) -> None:
         if target_id in self._servers:
             await self.undeploy(target_id)
-        server = IEC104Server(name=name, host=host, port=port, registry=registry)
+        server = IEC104Server(
+            name=name, host=host, port=port, registry=registry,
+            allowed_peers=allowed_peers,
+        )
         await server.start()
         self._servers[target_id] = server
+
+    def connected_clients(self, target_id: int) -> list[dict]:
+        """Belirtilen target icin runtime baglanti listesi. Yoksa [] doner."""
+        server = self._servers.get(target_id)
+        if server is None:
+            return []
+        return server.connected_clients()
+
+    def is_running(self, target_id: int) -> bool:
+        return target_id in self._servers
 
     async def undeploy(self, target_id: int) -> None:
         server = self._servers.pop(target_id, None)

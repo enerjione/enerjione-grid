@@ -608,6 +608,7 @@ export async function createOutboundTarget(
     listen_host?: string | null;
     listen_port?: number | null;
     iec104_common_address?: number | null;
+    iec104_allowed_peers?: string | null;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/outbound-targets`, {
@@ -633,6 +634,7 @@ export async function updateOutboundTarget(
     listen_host?: string | null;
     listen_port?: number | null;
     iec104_common_address?: number | null;
+    iec104_allowed_peers?: string | null;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}`, {
@@ -651,12 +653,28 @@ export async function deleteOutboundTarget(token: string, targetId: number): Pro
   if (!response.ok) throw await buildApiError(response, "Outbound hedef silinemedi.");
 }
 
-/** Bu IEC 104 hedefi icin point list CSV dosyasini browser'da indirir. */
-export async function downloadIec104PointsCsv(token: string, targetId: number, suggestedName: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.csv`, {
+export async function fetchIec104Runtime(token: string, targetId: number) {
+  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-runtime`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw await buildApiError(response, "IEC 104 point list indirilemedi.");
+  if (!response.ok) throw await buildApiError(response, "IEC 104 runtime alınamadı.");
+  return (await response.json()) as import("./types").Iec104RuntimeStatus;
+}
+
+/** Bu IEC 104 hedefi icin Excel (.xlsx) sinyal listesini indirir.
+ *  Cihaz × aktif IEC 104 sinyali kombinasyonlari + ASDU adresleri ile.
+ *  Donus deger: indirilen point sayisi (X-Point-Count header'i; yoksa null). */
+export async function downloadIec104PointsXlsx(
+  token: string,
+  targetId: number,
+  suggestedName: string
+): Promise<number | null> {
+  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.xlsx`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sinyal listesi indirilemedi.");
+  const countHeader = response.headers.get("X-Point-Count");
+  const count = countHeader !== null ? Number(countHeader) : null;
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -665,7 +683,53 @@ export async function downloadIec104PointsCsv(token: string, targetId: number, s
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return count;
+}
+
+/** Cihazlara sirayla ASDU adresi ata (1, 2, 3...). */
+export async function autoAssignDeviceCa(
+  token: string,
+  targetId: number,
+  overwrite: boolean
+): Promise<{ assigned: number; skipped: number; devices: { code: string; ca: number }[] }> {
+  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/auto-assign-device-ca`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ overwrite, start_at: 1 })
+  });
+  if (!response.ok) throw await buildApiError(response, "Otomatik atama başarısız.");
+  return await response.json();
+}
+
+/** Bu IEC 104 hedefi icin point list CSV dosyasini browser'da indirir.
+ *  Donus deger: indirilen point sayisi (X-Point-Count header'i; yoksa null). */
+export async function downloadIec104PointsCsv(
+  token: string,
+  targetId: number,
+  suggestedName: string
+): Promise<number | null> {
+  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.csv`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "IEC 104 point list indirilemedi.");
+  const countHeader = response.headers.get("X-Point-Count");
+  const count = countHeader !== null ? Number(countHeader) : null;
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = suggestedName;
+  // Bazi tarayicilar (Chromium nginx proxy arkasinda) DOM'a eklenmeyen
+  // anchor'lar uzerinden gelen click event'i bastiriyor; explicit append
+  // bunu garanti eder.
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Blob'u biraz sonra revoke et — bazi tarayicilarda click async indirmeyi
+  // tetikler, hemen revoke edersen "failed - network error" alirsin.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return count;
 }
 
 export async function fetchNotificationSettings(token: string): Promise<NotificationSettings> {

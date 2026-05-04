@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
-import type { DeviceRow, OutboundTarget } from "../../shared/types";
+import type { DeviceRow, Iec104RuntimeStatus, OutboundTarget } from "../../shared/types";
 
 type Protocol = "rest" | "mqtt" | "iec104";
 
 type Props = {
   targets: OutboundTarget[];
-  /** IEC 104 hedefi düzenlerken cihaz başına CA atayabilmek için. */
   devices?: DeviceRow[];
   onCreate: (payload: {
     name: string;
@@ -23,6 +22,7 @@ type Props = {
     listen_host?: string | null;
     listen_port?: number | null;
     iec104_common_address?: number | null;
+    iec104_allowed_peers?: string | null;
   }) => Promise<void>;
   onUpdate: (
     targetId: number,
@@ -38,13 +38,15 @@ type Props = {
       listen_host?: string | null;
       listen_port?: number | null;
       iec104_common_address?: number | null;
+      iec104_allowed_peers?: string | null;
     }
   ) => Promise<void>;
   onDelete: (targetId: number) => Promise<void>;
-  /** IEC 104 hedefi icin point list CSV indir. */
   onDownloadIec104Points?: (targetId: number, suggestedName: string) => Promise<void>;
-  /** Tek bir cihazin iec104 CA'sini kaydet. NULL = default'a don. */
+  onDownloadIec104Xlsx?: (targetId: number, suggestedName: string) => Promise<void>;
   onUpdateDeviceCa?: (deviceCode: string, ca: number | null) => Promise<void>;
+  onAutoAssignDeviceCa?: (targetId: number, overwrite: boolean) => Promise<void>;
+  onFetchIec104Runtime?: (targetId: number) => Promise<Iec104RuntimeStatus>;
 };
 
 export function OutboundTargetsPanel({
@@ -54,15 +56,30 @@ export function OutboundTargetsPanel({
   onUpdate,
   onDelete,
   onDownloadIec104Points,
-  onUpdateDeviceCa
+  onDownloadIec104Xlsx,
+  onUpdateDeviceCa,
+  onAutoAssignDeviceCa,
+  onFetchIec104Runtime
 }: Props) {
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<OutboundTarget | null>(null);
   const [error, setError] = useState("");
-  // Cihaz CA tablosu icin local edit buffer: code -> input string ("" = default)
+
+  // Cihaz ASDU adresleri popup
+  const [asduModalTarget, setAsduModalTarget] = useState<OutboundTarget | null>(null);
   const [deviceCaDraft, setDeviceCaDraft] = useState<Record<string, string>>({});
   const [savingDeviceCode, setSavingDeviceCode] = useState<string | null>(null);
+  const [caSearch, setCaSearch] = useState("");
+  const [autoAssigning, setAutoAssigning] = useState(false);
 
+  // Runtime status popup
+  const [runtimeTarget, setRuntimeTarget] = useState<OutboundTarget | null>(null);
+  const [runtime, setRuntime] = useState<Iec104RuntimeStatus | null>(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(false);
+
+  const [runtimeBadges, setRuntimeBadges] = useState<Record<number, { running: boolean; clients: number }>>({});
+
+  // Form state
   const [name, setName] = useState("");
   const [protocol, setProtocol] = useState<Protocol>("rest");
   const [endpoint, setEndpoint] = useState("");
@@ -73,10 +90,10 @@ export function OutboundTargetsPanel({
   const [qos, setQos] = useState(0);
   const [retain, setRetain] = useState(false);
   const [isActive, setIsActive] = useState(true);
-  // IEC 104 alanlari
   const [listenHost, setListenHost] = useState("0.0.0.0");
   const [listenPort, setListenPort] = useState("2404");
   const [iec104Ca, setIec104Ca] = useState("1");
+  const [allowedPeers, setAllowedPeers] = useState("");
 
   const resetForm = () => {
     setName("");
@@ -92,6 +109,7 @@ export function OutboundTargetsPanel({
     setListenHost("0.0.0.0");
     setListenPort("2404");
     setIec104Ca("1");
+    setAllowedPeers("");
   };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -102,7 +120,6 @@ export function OutboundTargetsPanel({
       await onCreate({
         name,
         protocol,
-        // IEC 104'te endpoint anlamsiz; placeholder gonder
         endpoint: isIec104 ? "" : endpoint,
         topic: topic.trim() ? topic.trim() : null,
         event_filter: eventFilter,
@@ -113,7 +130,8 @@ export function OutboundTargetsPanel({
         is_active: isActive,
         listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : null,
         listen_port: isIec104 ? Number(listenPort) || 2404 : null,
-        iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : null
+        iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : null,
+        iec104_allowed_peers: isIec104 ? (allowedPeers.trim() || null) : null
       });
       resetForm();
       setCreateOpen(false);
@@ -139,6 +157,7 @@ export function OutboundTargetsPanel({
         ? String(target.iec104_common_address)
         : "1"
     );
+    setAllowedPeers(target.iec104_allowed_peers ?? "");
   };
 
   const handleEdit = async (event: FormEvent<HTMLFormElement>) => {
@@ -158,12 +177,20 @@ export function OutboundTargetsPanel({
         is_active: isActive,
         listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : undefined,
         listen_port: isIec104 ? Number(listenPort) || 2404 : undefined,
-        iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : undefined
+        iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : undefined,
+        iec104_allowed_peers: isIec104 ? (allowedPeers.trim() || null) : undefined
       });
       setEditing(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Outbound hedef güncellenemedi.");
     }
+  };
+
+  const handleDownloadXlsx = async (target: OutboundTarget) => {
+    if (!onDownloadIec104Xlsx) return;
+    const safeName = target.name.replace(/[^A-Za-z0-9._-]+/g, "_");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    await onDownloadIec104Xlsx(target.id, `iec104-points-${safeName}-${ts}.xlsx`);
   };
 
   const handleDownloadCsv = async (target: OutboundTarget) => {
@@ -173,31 +200,42 @@ export function OutboundTargetsPanel({
     await onDownloadIec104Points(target.id, `iec104-points-${safeName}-${ts}.csv`);
   };
 
+  const handleAutoAssign = async (target: OutboundTarget, overwrite: boolean) => {
+    if (!onAutoAssignDeviceCa) return;
+    if (overwrite && !window.confirm("Tüm cihazlara 1, 2, 3... şeklinde sırayla yeniden ASDU adresi atanacak. Devam edilsin mi?")) {
+      return;
+    }
+    setAutoAssigning(true);
+    setError("");
+    try {
+      await onAutoAssignDeviceCa(target.id, overwrite);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Otomatik atama başarısız.");
+    } finally {
+      setAutoAssigning(false);
+    }
+  };
+
   const isCreatingIec104 = protocol === "iec104";
   const isEditingIec104 = editing?.protocol === "iec104";
 
-  // editing degistiginde cihaz CA buffer'ini DB'deki degerlerle senkronize et.
   useEffect(() => {
-    if (!editing || editing.protocol !== "iec104") return;
+    if (!asduModalTarget) return;
     const draft: Record<string, string> = {};
     for (const d of devices ?? []) {
       const ca = d.iec104CommonAddress;
       draft[d.code] = ca !== null && ca !== undefined ? String(ca) : "";
     }
     setDeviceCaDraft(draft);
-  }, [editing, devices]);
-
-  const sortedDevices = useMemo(
-    () => [...(devices ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
-    [devices]
-  );
+    setCaSearch("");
+  }, [asduModalTarget, devices]);
 
   const handleSaveDeviceCa = async (deviceCode: string) => {
     if (!onUpdateDeviceCa) return;
     const raw = (deviceCaDraft[deviceCode] ?? "").trim();
     const value = raw === "" ? null : Number(raw);
     if (value !== null && (!Number.isFinite(value) || value < 0 || value > 65534)) {
-      setError(`${deviceCode} için CA geçersiz (0-65534 arası bir tam sayı veya boş).`);
+      setError(`${deviceCode} için ASDU adresi geçersiz (0-65534 arası bir tam sayı veya boş).`);
       return;
     }
     setError("");
@@ -205,11 +243,85 @@ export function OutboundTargetsPanel({
     try {
       await onUpdateDeviceCa(deviceCode, value);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cihaz CA kaydedilemedi.");
+      setError(err instanceof Error ? err.message : "ASDU adresi kaydedilemedi.");
     } finally {
       setSavingDeviceCode(null);
     }
   };
+
+  const sortedDevices = useMemo(
+    () => [...(devices ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
+    [devices]
+  );
+
+  const filteredCaDevices = useMemo(() => {
+    const q = caSearch.trim().toLowerCase();
+    if (!q) return sortedDevices;
+    return sortedDevices.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        d.code.toLowerCase().includes(q) ||
+        String(d.iec104CommonAddress ?? "").includes(q)
+    );
+  }, [sortedDevices, caSearch]);
+
+  const assignedCount = sortedDevices.filter(
+    (d) => d.iec104CommonAddress !== null && d.iec104CommonAddress !== undefined
+  ).length;
+
+  // Runtime modal — 5 sn'de bir refresh
+  useEffect(() => {
+    if (!runtimeTarget || !onFetchIec104Runtime) return;
+    let cancelled = false;
+    const tick = async () => {
+      setRuntimeLoading(true);
+      try {
+        const data = await onFetchIec104Runtime(runtimeTarget.id);
+        if (!cancelled) setRuntime(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Runtime alınamadı.");
+      } finally {
+        if (!cancelled) setRuntimeLoading(false);
+      }
+    };
+    void tick();
+    const interval = window.setInterval(() => void tick(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [runtimeTarget, onFetchIec104Runtime]);
+
+  // Liste rozetleri 10 sn'de bir
+  useEffect(() => {
+    if (!onFetchIec104Runtime) return;
+    const iec104Ids = targets.filter((t) => t.protocol === "iec104").map((t) => t.id);
+    if (iec104Ids.length === 0) {
+      setRuntimeBadges({});
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      const updates: Record<number, { running: boolean; clients: number }> = {};
+      await Promise.all(
+        iec104Ids.map(async (id) => {
+          try {
+            const r = await onFetchIec104Runtime(id);
+            updates[id] = { running: r.server_running, clients: r.connected_clients.length };
+          } catch {
+            // ignore
+          }
+        })
+      );
+      if (!cancelled) setRuntimeBadges(updates);
+    };
+    void tick();
+    const interval = window.setInterval(() => void tick(), 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [targets, onFetchIec104Runtime]);
 
   return (
     <section className="tab-panel">
@@ -275,87 +387,18 @@ export function OutboundTargetsPanel({
                   />
                 </label>
                 <label>
-                  Default ASDU Common Address
-                  <input
-                    type="number"
-                    min={0}
-                    max={65534}
-                    value={iec104Ca}
-                    onChange={(event) => setIec104Ca(event.target.value)}
+                  İzinli SCADA IP'leri (whitelist)
+                  <textarea
+                    rows={2}
+                    value={allowedPeers}
+                    onChange={(event) => setAllowedPeers(event.target.value)}
+                    placeholder="Boş = serbest. Birden fazla için virgülle ayır: 192.168.1.10, 10.0.0.5"
                   />
                 </label>
                 <p className="helper-text">
-                  Cihazların kendi <code>iec104_common_address</code> alanı NULL olanlar
-                  bu default CA'yi kullanır. Aynı TCP yayınında farklı CA'lı ASDU'lar
-                  birlikte yayılır.
+                  Her cihazın ASDU adresini ayrı atamak için hedef satırının yanındaki
+                  <strong> Cihaz ASDU Adresleri</strong> butonunu kullanın.
                 </p>
-                {isEditingIec104 && onUpdateDeviceCa ? (
-                  <div className="iec104-device-ca-section">
-                    <h4 className="iec104-device-ca-title">Cihaz Başına ASDU CA</h4>
-                    <p className="helper-text">
-                      Boş bırakılan cihazlar yukarıdaki default CA'yi kullanır.
-                      Her satırda Kaydet ile o cihaz için yeniler.
-                    </p>
-                    <div className="iec104-device-ca-table-wrap">
-                      <table className="values-table iec104-device-ca-table">
-                        <thead>
-                          <tr>
-                            <th>Cihaz</th>
-                            <th>Kod</th>
-                            <th style={{ width: 120 }}>ASDU CA</th>
-                            <th style={{ width: 90 }}>İşlem</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedDevices.length === 0 ? (
-                            <tr>
-                              <td colSpan={4} className="helper-text">Cihaz bulunamadı.</td>
-                            </tr>
-                          ) : null}
-                          {sortedDevices.map((d) => {
-                            const draftValue = deviceCaDraft[d.code] ?? "";
-                            const dbValue = d.iec104CommonAddress ?? null;
-                            const dbStr = dbValue !== null ? String(dbValue) : "";
-                            const dirty = draftValue !== dbStr;
-                            const isSaving = savingDeviceCode === d.code;
-                            return (
-                              <tr key={d.code}>
-                                <td>{d.name}</td>
-                                <td><code>{d.code}</code></td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={65534}
-                                    value={draftValue}
-                                    placeholder="(default)"
-                                    onChange={(event) =>
-                                      setDeviceCaDraft((prev) => ({
-                                        ...prev,
-                                        [d.code]: event.target.value
-                                      }))
-                                    }
-                                    disabled={isSaving}
-                                  />
-                                </td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="secondary-btn action-btn"
-                                    disabled={!dirty || isSaving}
-                                    onClick={() => void handleSaveDeviceCa(d.code)}
-                                  >
-                                    {isSaving ? "..." : "Kaydet"}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : null}
               </>
             ) : (
               <>
@@ -410,62 +453,319 @@ export function OutboundTargetsPanel({
         </div>
       )}
 
-      <table className="values-table user-table">
-        <thead>
-          <tr>
-            <th>Ad</th>
-            <th>Protokol</th>
-            <th>Endpoint / Listen</th>
-            <th>Filtre</th>
-            <th>Aktif</th>
-            <th className="actions-header">İşlem</th>
-          </tr>
-        </thead>
-        <tbody>
-          {targets.map((item) => {
-            const isIec = item.protocol === "iec104";
-            const endpointDisplay = isIec
-              ? `${item.listen_host ?? "0.0.0.0"}:${item.listen_port ?? 2404} · CA=${item.iec104_common_address ?? 1}`
-              : item.endpoint;
-            return (
-              <tr key={item.id}>
-                <td>{item.name}</td>
-                <td>{item.protocol.toUpperCase()}</td>
-                <td>{endpointDisplay}</td>
-                <td>{item.event_filter}</td>
-                <td>{item.is_active ? "Evet" : "Hayır"}</td>
-                <td className="actions-cell">
-                  {isIec && onDownloadIec104Points ? (
-                    <button
-                      type="button"
-                      className="secondary-btn action-btn"
-                      title="Bu hedefin point listesini SCADA'ya yüklemek için CSV indir"
-                      onClick={() => void handleDownloadCsv(item)}
-                    >
-                      Point List CSV
-                    </button>
-                  ) : null}
-                  <button className="edit-btn action-btn" onClick={() => openEdit(item)}>
-                    Düzenle
+      {/* Cihaz ASDU adresleri popup'i — buyuk modal, modern tablo */}
+      {asduModalTarget && onUpdateDeviceCa ? (
+        <div className="settings-modal-backdrop">
+          <div className="settings-modal asdu-modal">
+            <div className="asdu-modal-head">
+              <div>
+                <h3 className="asdu-modal-title">Cihaz ASDU Adresleri</h3>
+                <p className="asdu-modal-sub">
+                  {asduModalTarget.name} · {sortedDevices.length} cihaz · {assignedCount} adres atandı
+                </p>
+              </div>
+              <button
+                type="button"
+                className="asdu-modal-close"
+                onClick={() => setAsduModalTarget(null)}
+                aria-label="Kapat"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="asdu-toolbar">
+              <input
+                className="asdu-search"
+                type="search"
+                placeholder="Cihaz ara (ad, kod, ASDU adresi)..."
+                value={caSearch}
+                onChange={(event) => setCaSearch(event.target.value)}
+              />
+              {onAutoAssignDeviceCa ? (
+                <div className="asdu-toolbar-actions">
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    disabled={autoAssigning}
+                    onClick={() => void handleAutoAssign(asduModalTarget, false)}
+                    title="Adres atanmamış cihazlara sırayla 1, 2, 3... ata"
+                  >
+                    {autoAssigning ? "Atanıyor..." : "Boşları Otomatik Doldur"}
                   </button>
                   <button
-                    className="danger-btn action-btn"
-                    onClick={() => {
-                      if (window.confirm(`${item.name} hedefi silinsin mi?`)) {
-                        void onDelete(item.id).catch((err: unknown) => {
-                          setError(err instanceof Error ? err.message : "Outbound hedef silinemedi.");
-                        });
-                      }
-                    }}
+                    type="button"
+                    className="secondary-btn"
+                    disabled={autoAssigning}
+                    onClick={() => void handleAutoAssign(asduModalTarget, true)}
+                    title="Tüm cihazlara baştan 1, 2, 3... ata (mevcutlar ezilir)"
                   >
-                    Sil
+                    Tümünü Sıfırla
                   </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="asdu-table-wrap">
+              <table className="asdu-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 60 }}>#</th>
+                    <th>Cihaz</th>
+                    <th>Kod</th>
+                    <th style={{ width: 160 }}>ASDU Adresi</th>
+                    <th style={{ width: 110 }}>İşlem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCaDevices.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="asdu-empty">
+                        {sortedDevices.length === 0 ? "Henüz cihaz yok." : "Aramaya uygun cihaz bulunamadı."}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {filteredCaDevices.map((d, idx) => {
+                    const draftValue = deviceCaDraft[d.code] ?? "";
+                    const dbValue = d.iec104CommonAddress ?? null;
+                    const dbStr = dbValue !== null ? String(dbValue) : "";
+                    const dirty = draftValue !== dbStr;
+                    const isSaving = savingDeviceCode === d.code;
+                    const hasAddr = dbValue !== null;
+                    return (
+                      <tr key={d.code} className={hasAddr ? "asdu-row--assigned" : "asdu-row--unassigned"}>
+                        <td className="asdu-row-index">{idx + 1}</td>
+                        <td className="asdu-row-name">{d.name}</td>
+                        <td><code>{d.code}</code></td>
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            max={65534}
+                            value={draftValue}
+                            placeholder="—"
+                            onChange={(event) =>
+                              setDeviceCaDraft((prev) => ({
+                                ...prev,
+                                [d.code]: event.target.value
+                              }))
+                            }
+                            disabled={isSaving}
+                            className={dirty ? "asdu-input--dirty" : ""}
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="primary-btn asdu-save-btn"
+                            disabled={!dirty || isSaving}
+                            onClick={() => void handleSaveDeviceCa(d.code)}
+                          >
+                            {isSaving ? "..." : "Kaydet"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="asdu-modal-foot">
+              <button type="button" className="secondary-btn" onClick={() => setAsduModalTarget(null)}>
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Runtime status popup'i */}
+      {runtimeTarget ? (
+        <div className="settings-modal-backdrop">
+          <div className="settings-modal iec104-runtime-modal">
+            <h3>Bağlantı Durumu — {runtimeTarget.name}</h3>
+            {runtimeLoading && !runtime ? <p className="helper-text">Yükleniyor...</p> : null}
+            {runtime ? (
+              <>
+                <div className="iec104-runtime-summary">
+                  <div>
+                    <span className={`status-dot ${runtime.server_running ? "status-dot--ok" : "status-dot--bad"}`} />
+                    <strong>Sunucu:</strong>{" "}
+                    {runtime.server_running ? "Çalışıyor" : "Kapalı"}
+                  </div>
+                  <div>
+                    <strong>Whitelist:</strong>{" "}
+                    {runtime.whitelist_active
+                      ? `aktif (${runtime.allowed_peers.length} IP)`
+                      : "kapalı (her IP serbest)"}
+                  </div>
+                  <div>
+                    <strong>Bağlı SCADA:</strong> {runtime.connected_clients.length}
+                  </div>
+                </div>
+                {runtime.whitelist_active ? (
+                  <details className="iec104-runtime-allowed">
+                    <summary>İzinli IP'ler ({runtime.allowed_peers.length})</summary>
+                    <ul>
+                      {runtime.allowed_peers.map((ip) => (
+                        <li key={ip}><code>{ip}</code></li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+                <h4 className="iec104-runtime-clients-title">Bağlı Client'lar</h4>
+                <table className="values-table">
+                  <thead>
+                    <tr>
+                      <th>Peer</th>
+                      <th>Durum</th>
+                      <th>Bağlandı</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runtime.connected_clients.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="helper-text">Henüz bağlı client yok.</td>
+                      </tr>
+                    ) : null}
+                    {runtime.connected_clients.map((c) => (
+                      <tr key={c.peer}>
+                        <td><code>{c.peer}</code></td>
+                        <td>{c.started ? "STARTDT (yayında)" : "Hazır değil"}</td>
+                        <td>
+                          {c.connected_at
+                            ? new Date(c.connected_at).toLocaleString("tr-TR")
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+            <div className="settings-actions">
+              <button type="button" onClick={() => { setRuntimeTarget(null); setRuntime(null); }}>
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modern liste tablosu — Aktif sütun en başta, "Filtre" kaldırıldı,
+          "Endpoint / Listen" basitleştirildi (default CA ekrandan kaldırıldı). */}
+      <div className="outbound-modern-table-wrap">
+        <table className="values-table outbound-modern-table">
+          <thead>
+            <tr>
+              <th style={{ width: 70 }}>Aktif</th>
+              <th>Ad</th>
+              <th style={{ width: 110 }}>Protokol</th>
+              <th>Endpoint / Listen</th>
+              <th style={{ width: 130 }}>Bağlı</th>
+              <th className="actions-header">İşlem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {targets.map((item) => {
+              const isIec = item.protocol === "iec104";
+              const endpointDisplay = isIec
+                ? `${item.listen_host ?? "0.0.0.0"}:${item.listen_port ?? 2404}`
+                : item.endpoint;
+              const badge = isIec ? runtimeBadges[item.id] : undefined;
+              return (
+                <tr key={item.id} className={item.is_active ? "" : "outbound-row--inactive"}>
+                  <td>
+                    <span
+                      className={`outbound-active-pill ${item.is_active ? "outbound-active-pill--on" : "outbound-active-pill--off"}`}
+                    >
+                      <span className="status-dot" />
+                      {item.is_active ? "Aktif" : "Pasif"}
+                    </span>
+                  </td>
+                  <td className="outbound-name-cell">{item.name}</td>
+                  <td>
+                    <span className={`outbound-proto-badge outbound-proto-${item.protocol}`}>
+                      {item.protocol.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="outbound-endpoint-cell">{endpointDisplay}</td>
+                  <td>
+                    {isIec && badge ? (
+                      <button
+                        type="button"
+                        className={`iec104-badge ${badge.running ? "iec104-badge--ok" : "iec104-badge--bad"}`}
+                        onClick={() => onFetchIec104Runtime && setRuntimeTarget(item)}
+                        title="Bağlı SCADA listesini gör"
+                      >
+                        <span className="status-dot" />
+                        {badge.running ? `${badge.clients} bağlı` : "kapalı"}
+                      </button>
+                    ) : (
+                      <span className="helper-text">—</span>
+                    )}
+                  </td>
+                  <td className="actions-cell">
+                    {isIec && onUpdateDeviceCa ? (
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        title="Cihaz başına ASDU adres atama"
+                        onClick={() => setAsduModalTarget(item)}
+                      >
+                        Cihaz ASDU Adresleri
+                      </button>
+                    ) : null}
+                    {isIec && onDownloadIec104Xlsx ? (
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        title="SCADA için Excel sinyal listesi indir"
+                        onClick={() => void handleDownloadXlsx(item)}
+                      >
+                        Sinyal Listesi (Excel)
+                      </button>
+                    ) : null}
+                    {isIec && onDownloadIec104Points ? (
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        title="CSV (eski format)"
+                        onClick={() => void handleDownloadCsv(item)}
+                      >
+                        CSV
+                      </button>
+                    ) : null}
+                    <button className="edit-btn action-btn" onClick={() => openEdit(item)}>
+                      Düzenle
+                    </button>
+                    <button
+                      className="danger-btn action-btn"
+                      onClick={() => {
+                        if (window.confirm(`${item.name} hedefi silinsin mi?`)) {
+                          void onDelete(item.id).catch((err: unknown) => {
+                            setError(err instanceof Error ? err.message : "Outbound hedef silinemedi.");
+                          });
+                        }
+                      }}
+                    >
+                      Sil
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {targets.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="helper-text" style={{ padding: 24, textAlign: "center" }}>
+                  Henüz outbound hedef yok. Üst sağdan + Hedef Ekle ile yeni bir hedef oluşturun.
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

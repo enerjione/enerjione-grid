@@ -97,6 +97,8 @@ def _build_signature(
     host = target.get("listen_host") or default_listen_host
     port = int(target.get("listen_port") or 2404)
     default_ca = int(target.get("iec104_common_address") or 1)
+    # Whitelist degisirse de redeploy tetiklensin diye signature'a dahil et.
+    allowed_peers_str = (target.get("iec104_allowed_peers") or "").strip()
     device_sigs = tuple(sorted(
         (
             str(d.get("code") or ""),
@@ -115,7 +117,7 @@ def _build_signature(
         )
         for s in signals
     ))
-    return (host, port, default_ca, device_sigs, signal_sigs)
+    return (host, port, default_ca, device_sigs, signal_sigs, allowed_peers_str)
 
 
 def _make_spec(
@@ -193,6 +195,12 @@ class CatalogSyncer:
             registry = _build_registry_for(
                 target=target, devices=devices, signals=signals,
             )
+            allowed_peers_raw = (target.get("iec104_allowed_peers") or "").strip()
+            allowed_peers: tuple[str, ...] = (
+                tuple(p.strip() for p in allowed_peers_raw.split(",") if p.strip())
+                if allowed_peers_raw
+                else ()
+            )
             try:
                 await self.manager.deploy(
                     target_id=spec.target_id,
@@ -200,6 +208,7 @@ class CatalogSyncer:
                     host=spec.host,
                     port=spec.port,
                     registry=registry,
+                    allowed_peers=allowed_peers,
                 )
                 self._deployed[target_id] = spec
                 logger.info(

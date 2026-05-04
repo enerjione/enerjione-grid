@@ -168,6 +168,10 @@ def create_tables():
         connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS listen_port INTEGER"))
         connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_common_address INTEGER"))
         connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_ioa_device_stride INTEGER"))
+        # Whitelist (NULL/'' = serbest)
+        connection.execute(
+            text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_allowed_peers VARCHAR(2000)")
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS outbox_events ("
