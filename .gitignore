@@ -5,6 +5,8 @@ __pycache__/
 .ruff_cache/
 .env
 .env.*
+# Ornek dosya commit edilmeli — kurulum scripti bunu kaynak olarak kullaniyor
+!.env.example
 node_modules/
 dist/
 build/
