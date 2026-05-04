@@ -2990,6 +2990,17 @@ main.content.engineering-content:has(.device-management-panel) {
   letter-spacing: 0.01em;
 }
 
+/* Yayin kapali iken Type ID + IOA alanlarini soluk + tiklanmaz yap */
+.signal-iec104-fields {
+  transition: opacity 120ms;
+}
+
+.signal-iec104-fields--disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+
 /* Cihaz Haberlesme tab'i icindeki IEC 104 bolumu — DNP3 alanlarindan sonra ayri sectionn */
 .device-iec104-section {
   margin-top: 18px;

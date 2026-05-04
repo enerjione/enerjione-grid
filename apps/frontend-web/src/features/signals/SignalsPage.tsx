@@ -553,48 +553,54 @@ export function SignalsPage({
                         title="IEC 104 outbound yayını sinyal bazında kapatılabilir."
                       />
                     </div>
-                    <label className="signal-field signal-field--wide">
-                      <span>ASDU Type ID</span>
-                      <select
-                        value={editIec104TypeId}
-                        onChange={(event) => setEditIec104TypeId(event.target.value)}
-                      >
-                        <option value="">— Yayinlama —</option>
-                        {IEC104_MONITOR_TYPES.filter(
-                          (t) => t.dataTypes.includes(editDataType)
-                        ).map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.id} · {t.code} — {t.desc}
-                          </option>
-                        ))}
-                        <optgroup label="Diger (uyumsuz veri tipi)">
+                    <div
+                      className={`signal-iec104-fields ${editIec104Enabled ? "" : "signal-iec104-fields--disabled"}`}
+                      aria-hidden={!editIec104Enabled}
+                    >
+                      <label className="signal-field signal-field--wide">
+                        <span>ASDU Type ID</span>
+                        <select
+                          value={editIec104TypeId}
+                          onChange={(event) => setEditIec104TypeId(event.target.value)}
+                          disabled={!canEdit || !editIec104Enabled}
+                        >
+                          <option value="">— Yayinlama —</option>
                           {IEC104_MONITOR_TYPES.filter(
-                            (t) => !t.dataTypes.includes(editDataType)
+                            (t) => t.dataTypes.includes(editDataType)
                           ).map((t) => (
                             <option key={t.id} value={t.id}>
                               {t.id} · {t.code} — {t.desc}
                             </option>
                           ))}
-                        </optgroup>
-                      </select>
-                    </label>
-                    <label className="signal-field">
-                      <span>IOA (Information Object Address)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={16777215}
-                        value={editIec104Ioa}
-                        onChange={(event) => setEditIec104Ioa(event.target.value)}
-                        placeholder="örn. 1001"
-                      />
-                    </label>
-                    <p className="signal-fieldset-hint">
-                      Bu sinyal IEC 104 outbound master'a yayınlanırken kullanılır.
-                      ASDU Common Address (CA) ise <strong>cihaz</strong> bazlı;
-                      Cihazlar sayfasından ayarlanır. Type ID boş bırakılırsa bu
-                      sinyal yayınlanmaz.
-                    </p>
+                          <optgroup label="Diger (uyumsuz veri tipi)">
+                            {IEC104_MONITOR_TYPES.filter(
+                              (t) => !t.dataTypes.includes(editDataType)
+                            ).map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.id} · {t.code} — {t.desc}
+                              </option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </label>
+                      <label className="signal-field">
+                        <span>IOA (Information Object Address)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={16777215}
+                          value={editIec104Ioa}
+                          onChange={(event) => setEditIec104Ioa(event.target.value)}
+                          placeholder="örn. 1001"
+                          disabled={!canEdit || !editIec104Enabled}
+                        />
+                      </label>
+                      <p className="signal-fieldset-hint">
+                        {editIec104Enabled
+                          ? "Bu sinyal IEC 104 outbound master'a yayınlanırken kullanılır. ASDU Common Address (CA) ise cihaz bazlı; Cihazlar sayfasından ayarlanır. Type ID boş bırakılırsa bu sinyal yayınlanmaz."
+                          : "Yayın kapalı. Sinyali yayına almak için yukarıdaki anahtarı açın."}
+                      </p>
+                    </div>
                   </fieldset>
                   </>
                   ) : null}
