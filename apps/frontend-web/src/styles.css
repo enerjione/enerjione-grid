@@ -2969,22 +2969,43 @@ main.content.engineering-content:has(.device-management-panel) {
   border-color: #e2e8f0;
 }
 
-/* Sinyal detay panelindeki IEC 104 yayin toggle satiri */
+/* Sinyal detay panelindeki IEC 104 yayin toggle satiri:
+   sol: durum etiketi, sag: switch (rahat hedef). */
 .signal-iec104-toggle-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-  padding: 8px 10px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
 }
 
 .signal-iec104-toggle-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
+  letter-spacing: 0.01em;
+}
+
+/* Cihaz Haberlesme tab'i icindeki IEC 104 bolumu — DNP3 alanlarindan sonra ayri sectionn */
+.device-iec104-section {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.device-iec104-section-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .signal-card-name {
@@ -5023,12 +5044,14 @@ main.content.engineering-content:has(.device-management-panel) {
 .signal-detail-tabs {
   display: flex;
   gap: 4px;
-  padding: 12px 18px 0;
+  padding: 14px 20px 0;
   border-bottom: 1px solid #e2e8f0;
+  /* Sekmeler ile altinda gelen icerik arasinda nefes alani */
+  margin-bottom: 18px;
 }
 
 .signal-detail-tab {
-  padding: 8px 14px;
+  padding: 10px 16px;
   font-size: 13px;
   font-weight: 600;
   color: #64748b;

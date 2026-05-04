@@ -118,6 +118,7 @@ type Props = {
       retry_count?: number;
       latitude?: number;
       longitude?: number;
+      iec104_common_address?: number | null;
     }
   ) => Promise<void>;
   onDelete: (deviceCode: string) => Promise<void>;
@@ -209,6 +210,9 @@ export function DeviceManagementPanel({
   const [pollIntervalSec, setPollIntervalSec] = useState("5");
   const [timeoutMs, setTimeoutMs] = useState("3000");
   const [retryCount, setRetryCount] = useState("2");
+  // IEC 60870-5-104 ASDU Common Address (cihaz bazli). NULL/"" → outbound
+  // hedefin default CA'si kullanilir.
+  const [iec104CommonAddress, setIec104CommonAddress] = useState("");
   const [latitude, setLatitude] = useState("0");
   const [longitude, setLongitude] = useState("0");
   // Cihazi baska gateway altina tasimak icin secili hedef gateway kodu.
@@ -302,6 +306,11 @@ export function DeviceManagementPanel({
     setPollIntervalSec(String(device.pollIntervalSec ?? 5));
     setTimeoutMs(String(device.timeoutMs ?? 3000));
     setRetryCount(String(device.retryCount ?? 2));
+    setIec104CommonAddress(
+      device.iec104CommonAddress !== null && device.iec104CommonAddress !== undefined
+        ? String(device.iec104CommonAddress)
+        : ""
+    );
     setLatitude(String(device.latitude ?? 0));
     setLongitude(String(device.longitude ?? 0));
     setDeviceGatewayCode(device.gatewayCode ?? "");
@@ -329,6 +338,8 @@ export function DeviceManagementPanel({
     const movedToAnotherGateway =
       targetGateway !== null && targetGateway !== (selectedDevice.gatewayCode ?? null);
     try {
+      const caTrimmed = iec104CommonAddress.trim();
+      const caValue = caTrimmed === "" ? null : Number(caTrimmed);
       await onUpdate(selectedDevice.code, {
         name,
         description: description.trim() || null,
@@ -341,6 +352,7 @@ export function DeviceManagementPanel({
         poll_interval_sec: Number(pollIntervalSec),
         timeout_ms: Number(timeoutMs),
         retry_count: Number(retryCount),
+        iec104_common_address: caValue,
         latitude: Number(latitude),
         longitude: Number(longitude)
       });
@@ -855,6 +867,27 @@ export function DeviceManagementPanel({
                         .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
                         .filter((p) => p > 0)}
                     />
+                    <div className="device-iec104-section">
+                      <h5 className="device-iec104-section-title">IEC 60870-5-104 (Outbound)</h5>
+                      <div className="device-detail-form-grid">
+                        <label>
+                          ASDU Common Address (CA)
+                          <input
+                            type="number"
+                            min={0}
+                            max={65534}
+                            placeholder="örn. 1, 2, 3..."
+                            value={iec104CommonAddress}
+                            onChange={(event) => setIec104CommonAddress(event.target.value)}
+                          />
+                        </label>
+                      </div>
+                      <p className="helper-text">
+                        Bu cihazın IEC 104 ASDU Common Address'i. Boş bırakılırsa
+                        outbound hedefin default CA'si kullanılır. Aynı TCP yayınında
+                        farklı cihazlar farklı CA ile yayınlanır.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

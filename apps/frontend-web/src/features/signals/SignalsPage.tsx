@@ -222,7 +222,7 @@ export function SignalsPage({
         is_active: editIsActive,
         iec104_type_id: parseIntOrNull(editIec104TypeId),
         iec104_ioa: parseIntOrNull(editIec104Ioa),
-        iec104_ioa_offset: parseIntOrNull(editIec104IoaOffset),
+        // iec104_ioa_offset deprecated — UI'dan kaldirildi, backend mevcut degeri korur.
         iec104_enabled: editIec104Enabled,
         modbus_function: parseIntOrNull(editModbusFunction),
         modbus_address: parseIntOrNull(editModbusAddress),
@@ -543,15 +543,15 @@ export function SignalsPage({
                   <fieldset className="signal-fieldset" disabled={!canEdit}>
                     <legend>IEC 60870-5-104</legend>
                     <div className="signal-iec104-toggle-row">
+                      <span className="signal-iec104-toggle-label">
+                        {editIec104Enabled ? "Yayında" : "Yayından kaldırıldı"}
+                      </span>
                       <ActiveSwitch
                         checked={editIec104Enabled}
                         onChange={setEditIec104Enabled}
                         disabled={!canEdit}
-                        title="IEC 104 outbound yayini sinyal bazinda kapatilabilir."
+                        title="IEC 104 outbound yayını sinyal bazında kapatılabilir."
                       />
-                      <span className="signal-iec104-toggle-label">
-                        {editIec104Enabled ? "Yayinda" : "Yayindan kaldirildi"}
-                      </span>
                     </div>
                     <label className="signal-field signal-field--wide">
                       <span>ASDU Type ID</span>
@@ -590,28 +590,10 @@ export function SignalsPage({
                       />
                     </label>
                     <p className="signal-fieldset-hint">
-                      Bu sinyal IEC 104 outbound master'a yayinlanirken kullanilir.
-                      ASDU Common Address (CA) ise <strong>cihaz</strong> bazli;
-                      Cihazlar sayfasindan ayarlanir. Type ID bos birakilirsa bu
-                      sinyal yayinlanmaz.
-                    </p>
-                  </fieldset>
-
-                  <fieldset className="signal-fieldset" disabled={!canEdit}>
-                    <legend>Geri Uyumluluk (eski deploylar)</legend>
-                    <label className="signal-field">
-                      <span>IOA Offset (deprecated)</span>
-                      <input
-                        type="number"
-                        value={editIec104IoaOffset}
-                        onChange={(event) => setEditIec104IoaOffset(event.target.value)}
-                        placeholder="bos birakin"
-                      />
-                    </label>
-                    <p className="signal-fieldset-hint">
-                      Yeni kurulumlar icin yukaridaki <strong>IOA</strong> alanini
-                      kullanin. Bu alan eski formul (device_index × stride + offset)
-                      kullanan deploylar icindir.
+                      Bu sinyal IEC 104 outbound master'a yayınlanırken kullanılır.
+                      ASDU Common Address (CA) ise <strong>cihaz</strong> bazlı;
+                      Cihazlar sayfasından ayarlanır. Type ID boş bırakılırsa bu
+                      sinyal yayınlanmaz.
                     </p>
                   </fieldset>
                   </>

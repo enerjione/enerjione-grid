@@ -171,7 +171,7 @@ export type Gateway = {
 export type OutboundTarget = {
   id: number;
   name: string;
-  protocol: "rest" | "mqtt";
+  protocol: "rest" | "mqtt" | "iec104";
   endpoint: string;
   topic?: string | null;
   event_filter: "all" | "telemetry" | "alarm";
@@ -180,6 +180,10 @@ export type OutboundTarget = {
   qos: number;
   retain: boolean;
   is_active: boolean;
+  // IEC 60870-5-104 hedefi icin (protocol === "iec104"):
+  listen_host?: string | null;
+  listen_port?: number | null;
+  iec104_common_address?: number | null;
 };
 
 export type NotificationSettings = {

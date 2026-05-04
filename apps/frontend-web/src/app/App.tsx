@@ -75,6 +75,7 @@ import {
   updateSignal,
   createOutboundTarget,
   deleteOutboundTarget,
+  downloadIec104PointsCsv,
   testNotificationSms,
   testNotificationSmtp,
   updateNotificationSettings as updateNotificationSettingsApi,
@@ -881,6 +882,7 @@ export function App() {
     signal_profile: string;
     latitude: number;
     longitude: number;
+    iec104_common_address?: number | null;
   }) => {
     if (!session) return;
     await createDevice(session.accessToken, payload);
@@ -919,6 +921,7 @@ export function App() {
       retry_count?: number;
       latitude?: number;
       longitude?: number;
+      iec104_common_address?: number | null;
     }
   ) => {
     if (!session) return;
@@ -952,7 +955,7 @@ export function App() {
 
   const handleCreateOutboundTarget = async (payload: {
     name: string;
-    protocol: "rest" | "mqtt";
+    protocol: "rest" | "mqtt" | "iec104";
     endpoint: string;
     topic?: string | null;
     event_filter: "all" | "telemetry" | "alarm";
@@ -961,6 +964,9 @@ export function App() {
     qos: number;
     retain: boolean;
     is_active: boolean;
+    listen_host?: string | null;
+    listen_port?: number | null;
+    iec104_common_address?: number | null;
   }) => {
     if (!session) return;
     await createOutboundTarget(session.accessToken, payload);
@@ -979,6 +985,9 @@ export function App() {
       qos?: number;
       retain?: boolean;
       is_active?: boolean;
+      listen_host?: string | null;
+      listen_port?: number | null;
+      iec104_common_address?: number | null;
     }
   ) => {
     if (!session) return;
@@ -992,6 +1001,16 @@ export function App() {
     await deleteOutboundTarget(session.accessToken, targetId);
     await reloadOutboundTargets();
     toast.success("Outbound hedef silindi.");
+  };
+
+  const handleDownloadIec104Points = async (targetId: number, suggestedName: string) => {
+    if (!session) return;
+    try {
+      await downloadIec104PointsCsv(session.accessToken, targetId, suggestedName);
+      toast.success("IEC 104 point list indirildi.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Point list indirilemedi.");
+    }
   };
 
   const reloadNotificationSettings = async () => {
@@ -1373,6 +1392,7 @@ export function App() {
                 onCreate={handleCreateOutboundTarget}
                 onUpdate={handleUpdateOutboundTarget}
                 onDelete={handleDeleteOutboundTarget}
+                onDownloadIec104Points={handleDownloadIec104Points}
               />
             ) : null}
             {engineeringPage === "notifications" && session.role === "installer" ? (

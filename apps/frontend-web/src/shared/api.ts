@@ -208,7 +208,8 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     alarmActive: item.alarm_active,
     lastUpdateAt: item.last_update_at ?? undefined,
     latitude: item.latitude,
-    longitude: item.longitude
+    longitude: item.longitude,
+    iec104CommonAddress: item.iec104_common_address ?? null
   }));
 }
 
@@ -238,6 +239,7 @@ export async function createDevice(
     signal_profile: string;
     latitude: number;
     longitude: number;
+    iec104_common_address?: number | null;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/devices`, {
@@ -265,6 +267,7 @@ export async function updateDevice(
     retry_count?: number;
     latitude?: number;
     longitude?: number;
+    iec104_common_address?: number | null;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/devices/${deviceCode}`, {
@@ -593,7 +596,7 @@ export async function createOutboundTarget(
   token: string,
   payload: {
     name: string;
-    protocol: "rest" | "mqtt";
+    protocol: "rest" | "mqtt" | "iec104";
     endpoint: string;
     topic?: string | null;
     event_filter: "all" | "telemetry" | "alarm";
@@ -602,6 +605,9 @@ export async function createOutboundTarget(
     qos: number;
     retain: boolean;
     is_active: boolean;
+    listen_host?: string | null;
+    listen_port?: number | null;
+    iec104_common_address?: number | null;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/outbound-targets`, {
@@ -624,6 +630,9 @@ export async function updateOutboundTarget(
     qos?: number;
     retain?: boolean;
     is_active?: boolean;
+    listen_host?: string | null;
+    listen_port?: number | null;
+    iec104_common_address?: number | null;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}`, {
@@ -640,6 +649,23 @@ export async function deleteOutboundTarget(token: string, targetId: number): Pro
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Outbound hedef silinemedi.");
+}
+
+/** Bu IEC 104 hedefi icin point list CSV dosyasini browser'da indirir. */
+export async function downloadIec104PointsCsv(token: string, targetId: number, suggestedName: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.csv`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "IEC 104 point list indirilemedi.");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = suggestedName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function fetchNotificationSettings(token: string): Promise<NotificationSettings> {
