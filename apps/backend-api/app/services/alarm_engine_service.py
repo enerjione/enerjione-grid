@@ -27,7 +27,7 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
         event_type="alarm_assigned",
         severity="info",
         actor_username=actor_username,
-        message=f"Alarm #{alarm.id} ataması güncellendi",
+        message=f"\"{alarm.title}\" alarmının ataması güncellendi",
         metadata={"alarm_id": alarm.id, "assigned_to": alarm.assigned_to},
     )
     db.commit()
@@ -64,7 +64,7 @@ def create_alarm_comment(db: Session, alarm_id: int, comment: str, current_user:
         event_type="alarm_comment_added",
         severity="info",
         actor_username=current_user.username,
-        message=f"Alarm #{alarm.id} için yorum eklendi",
+        message=f"\"{alarm.title}\" alarmına yorum eklendi",
         metadata={"alarm_id": alarm.id},
     )
     db.commit()
@@ -84,7 +84,7 @@ def acknowledge_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmE
         event_type="alarm_acknowledged",
         severity="info",
         actor_username=actor_username,
-        message=f"Alarm #{alarm.id} onaylandı",
+        message=f"\"{alarm.title}\" alarmı onaylandı",
         metadata={"alarm_id": alarm.id},
     )
     db.commit()
@@ -104,7 +104,7 @@ def reset_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmEvent:
         event_type="alarm_reset",
         severity="warning",
         actor_username=actor_username,
-        message=f"Alarm #{alarm.id} resetlendi",
+        message=f"\"{alarm.title}\" alarmı resetlendi",
         metadata={"alarm_id": alarm.id},
     )
     db.commit()
@@ -160,6 +160,7 @@ def delete_alarm(db: Session, alarm_id: int, actor_username: str) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Sadece resetlenmis (normal'e donmus) alarmlar silinebilir.",
         )
+    alarm_title = alarm.title  # Sildikten sonra erişilemez; once kopyalayalim
     # Yorumlari da sil (FK guvenligi).
     db.query(AlarmComment).filter(AlarmComment.alarm_event_id == alarm_id).delete(synchronize_session=False)
     db.delete(alarm)
@@ -169,8 +170,8 @@ def delete_alarm(db: Session, alarm_id: int, actor_username: str) -> None:
         event_type="alarm_deleted",
         severity="info",
         actor_username=actor_username,
-        message=f"Alarm #{alarm_id} silindi",
-        metadata={"alarm_id": alarm_id},
+        message=f"\"{alarm_title}\" alarmı silindi",
+        metadata={"alarm_id": alarm_id, "title": alarm_title},
     )
     db.commit()
 

@@ -1,7 +1,94 @@
 # Horstman Smart Logger Platform
 
 **Version:** 2.24.4
-Windows-first, Docker-free industrial monitoring platform starter for Horstmann Smart Navigator 2.0 devices.
+Industrial monitoring platform for Horstmann Smart Navigator 2.0 devices.
+Iki dağıtım modu:
+
+- **Production / Linux + Docker** — VDS, sunucu kurulumları (asağıdaki bölüm).
+- **Geliştirici / Windows native** — masaüstünde IDE ile hızlı iterasyon.
+
+---
+
+## Production: Linux + Docker (VDS / sunucu)
+
+Tek komutla ayağa kalkar. Ubuntu 22.04 / 24.04 ve Debian 12 üzerinde test edilmiştir.
+
+### 1. VDS'e Docker kur (yeni sunucu ise)
+
+```bash
+sudo bash infra/scripts/linux/install-docker.sh
+# Eger sudo kullanicisini docker grubuna eklediyse, tekrar SSH ile gir.
+```
+
+### 2. Repo'yu çek ve bootstrap
+
+```bash
+git clone https://github.com/<KULLANICI>/horstman-smart-logger.git
+cd horstman-smart-logger
+sudo bash infra/scripts/linux/bootstrap.sh
+```
+
+`bootstrap.sh` şunları yapar:
+- `.env.example`'dan `.env` üretir; `SECRET_KEY`, `INTERNAL_SERVICE_TOKEN`,
+  `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` değerlerini rastgele üretir.
+- Tüm imajları build eder (`docker compose build`).
+- Servisleri ayağa kaldırır (`docker compose up -d`).
+- backend-api hazır olana kadar bekler.
+
+### 3. Default installer hesabini oluştur
+
+```bash
+docker compose exec backend-api python -m scripts.seed_installer
+```
+
+Çıktı:
+```
+Installer user created (username=installer, password=ChangeMe123!).
+```
+
+### 4. Browser'dan aç
+
+```
+http://<vds-ip>/
+```
+
+Kullanıcı: `installer` / Şifre: `ChangeMe123!` — **ilk girişte mutlaka değiştir.**
+
+### Servisler ve portlar
+
+| Servis | Public port | Açıklama |
+|---|---|---|
+| frontend-web (nginx) | **80** | SPA + `/api/*` reverse proxy |
+| backend-api | — | Sadece compose network'unde |
+| postgres | — | Sadece compose network'unde |
+| rabbitmq AMQP | — | Sadece compose network'unde |
+| rabbitmq Management UI | 127.0.0.1:15672 | SSH tüneliyle erişim |
+| iec104-outbound | 2404, 2405, 2406 | Dış SCADA master bağlantısı |
+
+### Yaygın komutlar
+
+```bash
+docker compose ps                              # durum
+docker compose logs -f backend-api             # log akışı
+docker compose restart backend-api             # servis restart
+docker compose down                            # tümünü durdur (volume'ler kalir)
+docker compose down -v                         # volume'leri de sil (DB silinir!)
+docker compose pull && docker compose up -d    # imajlari guncelle
+```
+
+### HTTPS (opsiyonel, domain varsa)
+
+VDS önüne Caddy/Traefik/Cloudflare koyup `:80`'e proxy edin. Caddy örneği:
+
+```caddy
+hsl.example.com {
+    reverse_proxy localhost:80
+}
+```
+
+---
+
+## Geliştirici: Windows native (IDE ile hızlı iterasyon)
 
 ## Tek Tıkla Başlatma
 

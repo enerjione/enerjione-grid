@@ -68,14 +68,23 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms }: Props) 
               } ${hasAlarm ? "device-row--alarm" : ""}`}
               onClick={() => onSelect(device.id)}
             >
-              {/* Sağ üst köşede yanıp sönen alarm rozeti (absolute) */}
-              {hasAlarm ? (
+              {/* Sağ üst köşede alarm rozeti — onaylanmamışsa kırmızı yanıp söner,
+                 onaylanmışsa sarı/sabit (kullanıcı görmüş, üzerinde çalışılıyor). */}
+              {alarmState === "open" ? (
                 <span
                   className="device-row-alarm-pulse device-row-alarm-pulse--corner"
-                  title="Aktif alarm var"
-                  aria-label="Aktif alarm var"
+                  title="Onaylanmamış aktif alarm"
+                  aria-label="Onaylanmamış aktif alarm"
                 >
                   <span className="material-symbols-outlined">warning</span>
+                </span>
+              ) : alarmState === "ack" ? (
+                <span
+                  className="device-row-alarm-acked device-row-alarm-pulse--corner"
+                  title="Aktif alarm onaylandı, sürdürülüyor"
+                  aria-label="Aktif alarm onaylandı"
+                >
+                  <span className="material-symbols-outlined">verified</span>
                 </span>
               ) : null}
 
@@ -110,17 +119,20 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms }: Props) 
                 </span>
               </div>
 
-              {/* Alt satır: son güncelleme saati */}
+              {/* Alt satır: tarih + saat (sade) */}
               <div className="device-row-last-line">
                 <span className="material-symbols-outlined">schedule</span>
                 <span className="device-row-last-text">
                   {device.lastUpdateAt
-                    ? `Son güncelleme: ${new Date(device.lastUpdateAt).toLocaleTimeString("tr-TR", {
+                    ? new Date(device.lastUpdateAt).toLocaleString("tr-TR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
                         second: "2-digit"
-                      })} · ${formatRelative(device.lastUpdateAt)}`
-                    : "Son güncelleme: —"}
+                      })
+                    : "—"}
                 </span>
               </div>
             </button>

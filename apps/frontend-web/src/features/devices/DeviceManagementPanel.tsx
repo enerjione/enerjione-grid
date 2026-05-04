@@ -154,6 +154,9 @@ export function DeviceManagementPanel({
   const [composeError, setComposeError] = useState("");
   const [composeBusy, setComposeBusy] = useState(false);
   const [composeCopied, setComposeCopied] = useState(false);
+  // Gateway silme islemi sirasinda hangi gateway kodunu sildigimizi tutar.
+  // Bu degisken hem butonu disable etmeye hem overlay'i gostermeye yarar.
+  const [deletingGatewayCode, setDeletingGatewayCode] = useState<string | null>(null);
 
   const openComposeModal = (gwCode: string) => {
     setComposeFor(gwCode);
@@ -374,10 +377,10 @@ export function DeviceManagementPanel({
         description: createDescription.trim() || null,
         model: createModel,
         gateway_code: selectedGatewayCode || null,
-        // IP adresi UI'dan kaldirildi; outstation cihazlari ic agda DNP3 master
-        // (gateway) tarafindan adresleriyle yonetiliyor, backend semasi alani
-        // zorunlu istedigi icin guvenli default gonderiyoruz.
-        ip_address: createIpAddress || "0.0.0.0",
+        // Cihazin DNP3 outstation IP adresi. Gateway listening modunda buraya
+        // bagdir. Bos olursa form 'required' kuralina takilir; bu nedenle
+        // explicit default vermeye gerek yok.
+        ip_address: createIpAddress.trim(),
         dnp3_outstation_port: Number(createDnp3OutstationPort),
         dnp3_address: Number(createDnp3Address),
         dnp3_extended: { ...createDnp3Ext, ip_endpoint_type: "listening" },
@@ -445,13 +448,18 @@ export function DeviceManagementPanel({
     if (!codeToDelete) return;
     const gateway = gateways.find((item) => item.code === codeToDelete);
     if (!gateway) return;
+    if (deletingGatewayCode) return; // ayni anda baska bir silme suruyor
+    // Onay diyalogu App.tsx tarafinda gosteriliyor — burada cifte sormaya gerek yok.
     setError("");
+    setDeletingGatewayCode(codeToDelete);
     try {
       await onDeleteGateway(codeToDelete);
       setSelectedGatewayCode("");
       setSelectedDeviceCode("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gateway silinemedi.");
+    } finally {
+      setDeletingGatewayCode(null);
     }
   };
 
@@ -545,16 +553,19 @@ export function DeviceManagementPanel({
           <div className="device-group-list">
             {gateways.map((gateway) => {
               const gLive = getGatewayLiveness(gateway);
+              const isDeletingThis = deletingGatewayCode === gateway.code;
+              const anotherDeleting = Boolean(deletingGatewayCode) && !isDeletingThis;
               return (
               <div
                 key={gateway.id}
-                className={`device-group-item gateway-item ${selectedGatewayCode === gateway.code ? "active" : ""}`}
+                className={`device-group-item gateway-item ${selectedGatewayCode === gateway.code ? "active" : ""} ${isDeletingThis ? "is-deleting" : ""}`}
               >
                 <div className="gateway-item-body">
                   <button
                     type="button"
                     className="device-group-main gateway-select-main"
                     onClick={() => void handleGatewaySelect(gateway.code)}
+                    disabled={isDeletingThis}
                   >
                     <div className="gateway-title-row">
                       <div className="gateway-name-with-status">
@@ -573,6 +584,7 @@ export function DeviceManagementPanel({
                         onClick={() => openComposeModal(gateway.code)}
                         title="Docker Compose / .env indir"
                         aria-label="Docker Compose indir"
+                        disabled={isDeletingThis || anotherDeleting}
                       >
                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                           <path
@@ -587,6 +599,7 @@ export function DeviceManagementPanel({
                         onClick={() => handleStartGatewayEdit(gateway)}
                         title="Gateway Düzenle"
                         aria-label="Gateway Düzenle"
+                        disabled={isDeletingThis || anotherDeleting}
                       >
                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                           <path
@@ -597,21 +610,33 @@ export function DeviceManagementPanel({
                       </button>
                       <button
                         type="button"
-                        className="danger-btn action-btn"
+                        className={`danger-btn action-btn gateway-delete-btn ${isDeletingThis ? "is-busy" : ""}`}
                         onClick={() => void handleDeleteGateway(gateway.code)}
-                        title="Gateway Sil"
+                        title={isDeletingThis ? "Siliniyor..." : "Gateway Sil"}
                         aria-label="Gateway Sil"
+                        aria-busy={isDeletingThis || undefined}
+                        disabled={isDeletingThis || anotherDeleting}
                       >
-                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                          <path
-                            fill="currentColor"
-                            d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zm3.46-7.12 1.41-1.41L12 11.59l1.12-1.12 1.41 1.41L13.41 13l1.12 1.12-1.41 1.41L12 14.41l-1.12 1.12-1.41-1.41L10.59 13zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"
-                          />
-                        </svg>
+                        {isDeletingThis ? (
+                          <span className="btn-spinner" aria-hidden="true" />
+                        ) : (
+                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <path
+                              fill="currentColor"
+                              d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zm3.46-7.12 1.41-1.41L12 11.59l1.12-1.12 1.41 1.41L13.41 13l1.12 1.12-1.41 1.41L12 14.41l-1.12 1.12-1.41-1.41L10.59 13zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"
+                            />
+                          </svg>
+                        )}
                       </button>
                     </div>
                   ) : null}
                 </div>
+                {isDeletingThis ? (
+                  <div className="gateway-item-deleting-overlay" role="status" aria-live="polite">
+                    <span className="btn-spinner gateway-deleting-spinner" aria-hidden="true" />
+                    <span className="gateway-deleting-text">Gateway siliniyor...</span>
+                  </div>
+                ) : null}
               </div>
             );
             })}
@@ -1026,6 +1051,19 @@ export function DeviceManagementPanel({
             <label>
               Açıklama
               <input value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} />
+            </label>
+            <label>
+              Outstation IP adresi
+              <input
+                value={createIpAddress}
+                onChange={(event) => setCreateIpAddress(event.target.value)}
+                placeholder="örn. 192.168.1.50  (yerel test: 127.0.0.1, Docker-içi gateway: host.docker.internal)"
+                required
+              />
+              <small className="helper-text">
+                Gateway bu IP'ye DNP3 outstation portu üzerinden bağlanır. Gateway Docker'da
+                çalışıyor ve simülatör host'unuzdaysa <code>host.docker.internal</code> yazın.
+              </small>
             </label>
             <label>
               Outstation port

@@ -209,17 +209,29 @@ def _notify_backend(payload: dict) -> None:
     response.raise_for_status()
 
 
-def _notify_backend_clear(rule_id: int, rule_title: str, device_code: str | None, source_gateway: str | None) -> None:
+def _notify_backend_clear(
+    rule_id: int,
+    rule_title: str,
+    device_code: str | None,
+    source_gateway: str | None,
+    signal_key: str | None = None,
+) -> None:
     """Alarm sahada normale dondu - backend'deki acik kaydi reset=True yap.
 
     Backend `/internal/alarms/clear` endpoint'ine POST atar; mevcut acik alarm
-    'Normale Donen - Onay Bekliyor' kismina geciyor."""
+    'Normale Donen - Onay Bekliyor' kismina geciyor.
+
+    `signal_key` gondermek kritik: ayni cihazda farkli kaynak/sinyaller (orn.
+    sat01.x_alarm, sat02.x_alarm) ayni baslikta acik alarma sahip oldugunda,
+    sadece dogru sinyalin kaydi reset edilir; aksi halde yanlis sinyal
+    'normale dondu' olarak isaretlenir."""
     headers = {"X-Service-Token": INTERNAL_SERVICE_TOKEN}
     body = {
         "rule_id": rule_id,
         "title": rule_title,
         "device_code": device_code,
         "source_gateway": source_gateway,
+        "signal_key": signal_key,
         "source_timestamp": datetime.now(timezone.utc).isoformat(),
     }
     response = requests.post(BACKEND_INTERNAL_CLEAR_URL, json=body, headers=headers, timeout=8)
@@ -296,6 +308,7 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                     rule_title=rule.name,
                     device_code=str(device_code) if device_code else None,
                     source_gateway=payload.get("source_gateway"),
+                    signal_key=rule.signal_key,
                 )
             except Exception as exc:  # noqa: BLE001
                 print(f"alarm-service-clear-error rule_id={rule.id} error={exc}")
@@ -339,36 +352,9 @@ def main() -> None:
                 _ = properties
                 try:
                     payload = json.loads(body.decode("utf-8"))
-                    device_code = str(payload.get("device_code") or "")
-                    if _quality_is_bad(payload):
-                        # Yeni alarm yalnizca daha once kotuye dusmemisse uretilir;
-                        # aksi halde zaten backend'de dedup ile baski uygulanir
-                        # ama gereksiz network trafigi olusur. Yine de alarm-service'in
-                        # kosul takibi icin state'i guncelleriz.
-                        was_bad = _QUALITY_STATE.is_bad(device_code) if device_code else False
-                        if device_code:
-                            _QUALITY_STATE.mark_bad(device_code)
-                        if not was_bad:
-                            alarm_payload = _build_quality_alarm(payload)
-                            _publish_alarm(channel, alarm_payload)
-                            try:
-                                _notify_backend(alarm_payload)
-                            except Exception as exc:  # noqa: BLE001
-                                print(f"alarm-service-backend-error source=quality error={exc}")
-                    else:
-                        # Quality good - daha once kotuye dustuyse backend'deki
-                        # acik alarmi reset et, boylece UI'da 'Normale Donen' bolumune dussun.
-                        if device_code and _QUALITY_STATE.mark_good(device_code):
-                            try:
-                                _notify_backend_clear(
-                                    rule_id=0,
-                                    rule_title="Haberleşme arızası",
-                                    device_code=device_code,
-                                    source_gateway=payload.get("source_gateway"),
-                                )
-                                print(f"alarm-service-quality-cleared dev={device_code}")
-                            except Exception as exc:  # noqa: BLE001
-                                print(f"alarm-service-clear-error source=quality dev={device_code} error={exc}")
+                    # NOT: Otomatik "Haberleşme arızası" alarmı uretmiyoruz —
+                    # kullanici kendi kurallari uzerinden bu durumu tanimliyor.
+                    # Sadece tanimli alarm kurallarini degerlendir.
                     _process_rules_for_payload(channel, payload)
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                 except Exception as ex:  # noqa: BLE001

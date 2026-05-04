@@ -127,12 +127,35 @@ export function AlarmsPage({
     [alarms, search, levelFilter, assignmentFilter, deviceLabelById]
   );
 
+  // Aktif alarmda olan (device_id + signal_key/title) kombinasyonlarinin set'i.
+  // Backend bir sebeple pending kaydi silmemis olsa bile UI'da ayni alarm hem
+  // ust hem alt panelde gozukmesin diye defansif filtre.
+  const activeKeySet = useMemo(() => {
+    const set = new Set<string>();
+    for (const alarm of activeAlarms) {
+      const key = alarm.signal_key
+        ? `${alarm.device_id}|sk:${alarm.signal_key}|${alarm.title}`
+        : `${alarm.device_id}|t:${alarm.title}|${alarm.level}`;
+      set.add(key);
+    }
+    return set;
+  }, [activeAlarms]);
+
   // Onay bekleyen normale donenler: reset = true ama acknowledged = false.
-  // Onaylanmis ve resetli alarmlar tamamen gizlenir.
+  // Ek: ayni device + signal/title aktif alarmda varsa burada gizle.
   const pendingResetAlarms = useMemo(
-    () => alarms.filter((alarm) => alarm.reset && !alarm.acknowledged && filterPredicate(alarm)),
+    () =>
+      alarms.filter((alarm) => {
+        if (!alarm.reset || alarm.acknowledged) return false;
+        if (!filterPredicate(alarm)) return false;
+        const key = alarm.signal_key
+          ? `${alarm.device_id}|sk:${alarm.signal_key}|${alarm.title}`
+          : `${alarm.device_id}|t:${alarm.title}|${alarm.level}`;
+        if (activeKeySet.has(key)) return false;
+        return true;
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [alarms, search, levelFilter, assignmentFilter, deviceLabelById]
+    [alarms, search, levelFilter, assignmentFilter, deviceLabelById, activeKeySet]
   );
 
   // Birlesik liste — secili alarm dogrulamasi icin
@@ -207,6 +230,9 @@ export function AlarmsPage({
   };
 
   const handleAcknowledge = async (alarmId: number) => {
+    const alarm = alarms.find((a) => a.id === alarmId);
+    const label = alarm ? `"${alarm.title}"` : "bu alarm";
+    if (!window.confirm(`${label} onaylansın mı?`)) return;
     setSaving(true);
     setError("");
     try {
@@ -703,19 +729,6 @@ export function AlarmsPage({
                         }}
                       >
                         <span className="material-symbols-outlined">chat</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-delete"
-                        title="Sil"
-                        aria-label="Sil"
-                        disabled={saving}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleDelete(alarm.id);
-                        }}
-                      >
-                        <span className="material-symbols-outlined">delete</span>
                       </button>
                     </td>
                   </tr>

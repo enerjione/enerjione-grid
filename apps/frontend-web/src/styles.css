@@ -923,6 +923,78 @@ body {
   margin-top: 2px;
 }
 
+/* ---------- Generic button spinner ---------- */
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- Gateway delete in-progress visuals ---------- */
+/* Overlay'in dogru konumlanmasi icin gateway-item her zaman relative */
+.gateway-item {
+  position: relative;
+}
+
+.gateway-item.is-deleting {
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.gateway-delete-btn.is-busy {
+  position: relative;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Sallanip dikkat cekmesi icin hafif pulse */
+  animation: gateway-delete-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes gateway-delete-pulse {
+  0%,
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45); }
+  50%  { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+.gateway-item-deleting-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-radius: 8px;
+  pointer-events: auto;
+  z-index: 5;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.gateway-deleting-spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 3px;
+  color: #b91c1c;
+}
+
+.gateway-deleting-text {
+  letter-spacing: 0.02em;
+}
+
 .device-comms-hint {
   margin: 6px 0 0;
   font-size: 10px;
@@ -2121,7 +2193,86 @@ main.content.engineering-content:has(.device-management-panel) {
 .event-col-category {
   white-space: nowrap;
   vertical-align: middle;
-  min-width: 180px;
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
+  text-align: center;
+}
+
+/* Kategori pill'leri sabit genişlikte ve ortalı */
+.event-col-category .event-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  padding: 3px 0;
+}
+
+/* Tarih sütunu: en başa alındı, sabit genişlik, monospace */
+.event-col-date {
+  white-space: nowrap;
+  vertical-align: middle;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #475569;
+}
+
+/* Kullanıcı sütunu: dar */
+.event-col-user {
+  white-space: nowrap;
+  vertical-align: middle;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+/* Cihaz sütunu: sadece cihaz adı, sabit dar */
+.event-col-device {
+  white-space: nowrap;
+  vertical-align: middle;
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-device-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+/* Kaynak sütunu (Master / Sat 01 / Sat 02) — sabit + ortalı */
+.event-col-source {
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.event-source-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 86px;
+  padding: 3px 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+}
+
+.event-cell-empty {
+  color: #cbd5e1;
 }
 
 .event-pill {
@@ -7857,16 +8008,31 @@ main.content.engineering-content:has(.device-management-panel) {
   white-space: nowrap;
 }
 
-/* Kaynak sütunu: dar, sabit genişlik, ortalı */
+/* Cihaz sütunu (3.): ortalı + dar; pill ile aynı sınırda dursun */
+.alarms-section .alarms-page-table th:nth-child(3),
+.alarms-section .alarms-page-table .alarm-cell-device {
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
+  text-align: center;
+}
+
+.alarms-section .alarms-page-table .alarm-cell-device .alarm-device-cell {
+  align-items: center;
+}
+
+.alarms-section .alarms-page-table .alarm-cell-device .alarm-device-name,
+.alarms-section .alarms-page-table .alarm-cell-device .alarm-device-code {
+  text-align: center;
+}
+
+/* Kaynak sütunu (4.): dar, sabit genişlik, ortalı */
 .alarms-section .alarms-page-table th:nth-child(4),
 .alarms-section .alarms-page-table .alarm-cell-source {
   width: 110px;
   min-width: 110px;
   max-width: 110px;
   text-align: center;
-}
-
-.alarm-cell-source {
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
@@ -8225,12 +8391,24 @@ main.content.engineering-content:has(.device-management-panel) {
   z-index: 2;
 }
 
-/* Çerçevesiz meta satır (konum + batarya) */
+/* Çerçevesiz meta satır (konum + batarya) — pil en sağa yaslı */
 .device-sidebar-modern .device-row-meta-row.device-row-meta-row--bare {
   background: transparent;
   border: none;
   padding: 0 2px;
   gap: 10px;
+  justify-content: space-between;
+}
+
+/* Konum esnek (taşarsa ellipsis), pil sağda sabit */
+.device-sidebar-modern .device-row-meta-row.device-row-meta-row--bare .device-row-location {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.device-sidebar-modern .device-row-meta-row.device-row-meta-row--bare .device-battery-chip {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 /* Çerçevesiz batarya chip */

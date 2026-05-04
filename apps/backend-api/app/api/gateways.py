@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -120,9 +120,18 @@ def update_gateway(
     return row
 
 
+def _cleanup_rabbitmq_user(gateway_code: str) -> None:
+    """Background task: RabbitMQ user temizligi. HTTP response sonrasinda calisir."""
+    try:
+        _rmq_admin().delete_gateway_user(gateway_code=gateway_code)
+    except RabbitMqAdminError as exc:
+        logger.warning("rabbitmq_user_cleanup_failed gateway=%s error=%s", gateway_code, exc)
+
+
 @router.delete("/{gateway_code}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_gateway(
     gateway_code: str,
+    background_tasks: BackgroundTasks,
     _: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
@@ -134,11 +143,9 @@ def delete_gateway(
     db.execute(delete(GatewayIngestBatch).where(GatewayIngestBatch.gateway_code == gateway_code))
     db.delete(row)
     db.commit()
-    # Best-effort temizlik: RabbitMQ'daki dedicated user'i sil (yoksa sessiz gec).
-    try:
-        _rmq_admin().delete_gateway_user(gateway_code=gateway_code)
-    except RabbitMqAdminError as exc:
-        logger.warning("rabbitmq_user_cleanup_failed gateway=%s error=%s", gateway_code, exc)
+    # Best-effort RabbitMQ user temizligi response sonrasina ertelenir; boylece
+    # 5 sn'lik network timeout'u kullanici bekletmiyor olur.
+    background_tasks.add_task(_cleanup_rabbitmq_user, gateway_code)
     return None
 
 

@@ -20,7 +20,26 @@ import type {
 } from "./types";
 import { mergeDnp3Extended } from "./types";
 
-const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
+/** API base URL.
+ *
+ * Üretim (Docker / nginx reverse proxy): aynı origin altında `/api/v1` proxy edilir.
+ *   Bu durumda Vite build sırasında `VITE_API_BASE_URL` set edilirse o kullanılır;
+ *   set edilmediğinde same-origin `/api/v1` kullanılır.
+ *
+ * Geliştirme (Windows native, port 5173 + 8000): VITE_API_BASE_URL boşsa
+ *   `${hostname}:8000/api/v1` legacy davranışına geri dön — böylece eski geliştirici
+ *   akışı kırılmaz.
+ */
+const API_BASE_URL = (() => {
+  const fromEnv = (import.meta.env.VITE_API_BASE_URL ?? "").toString().trim();
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  // Vite dev server (5173) → backend ayrı port (8000) — eski davranış.
+  if (typeof window !== "undefined" && window.location.port === "5173") {
+    return `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
+  }
+  // Üretimde nginx aynı origin'de /api/v1 proxy ediyor.
+  return "/api/v1";
+})();
 const AUTH_STORAGE_KEY = "hsl-auth";
 
 type LoginResponse = {

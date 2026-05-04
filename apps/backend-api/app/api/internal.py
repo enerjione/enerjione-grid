@@ -98,11 +98,12 @@ def ingest_alarm(
     if device_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="device_id or valid device_code required")
 
-    # Dedup: ayni cihaz + ayni seviye + ayni baslik icin halen acik (reset edilmemis)
-    # bir alarm varsa yeni satir UPRETME. Bunun yerine mevcut alarmin description'unu
-    # gunceller (en son neden gelen mesajla yenilenir) ve event log'a "duplicate"
-    # kaydi atilir. Ayni hata sebebiyle 100 kez ayni alarm uretilmesini engeller.
-    existing = db.scalar(
+    # Dedup: ayni cihaz + ayni seviye + ayni baslik (+ varsa ayni signal_key)
+    # icin halen acik (reset edilmemis) bir alarm varsa yeni satir UPRETME.
+    # Bunun yerine mevcut alarmin description'unu gunceller. Boylece ayni
+    # hata sebebiyle 100 kez ayni alarm uretilmesini engeller — ama farkli
+    # sinyal/level kombinasyonlari birbirini eziyor olmaz.
+    dedup_stmt = (
         select(AlarmEvent)
         .where(AlarmEvent.device_id == device_id)
         .where(AlarmEvent.level == payload.level)
@@ -111,39 +112,70 @@ def ingest_alarm(
         .order_by(AlarmEvent.created_at.desc())
         .limit(1)
     )
-    # Title degisiklikleri (orn. eski "X haberlesme arizasi" vs yeni
-    # "Haberlesme arizasi") nedeniyle ayni cihazda mukerrer aciklamayi
-    # onlemek icin title benzerligine de bakariz.
-    if existing is None and "haber" in payload.title.lower():
-        existing = db.scalar(
-            select(AlarmEvent)
-            .where(AlarmEvent.device_id == device_id)
-            .where(AlarmEvent.level == payload.level)
-            .where(AlarmEvent.title.ilike("%haber%"))
-            .where(AlarmEvent.reset.is_(False))
-            .order_by(AlarmEvent.created_at.desc())
-            .limit(1)
+    if payload.signal_key:
+        # Ayni signal_key ile (veya henuz signal_key kaydedilmemis eski satirla)
+        # daha sıkı eslesme — boylece farklı sinyallerin ayni baslikli kurallari
+        # yanlislikla birbirini ezmez.
+        dedup_stmt = dedup_stmt.where(
+            (AlarmEvent.signal_key == payload.signal_key) | AlarmEvent.signal_key.is_(None)
         )
+    existing = db.scalar(dedup_stmt)
+
     if existing is not None:
         # Mevcut acik alarm icin yeni bilgi geldi → sadece description'u guncelle.
-        # Olay (event) kaydetmiyoruz çünkü kullanıcı zaten alarmı görüyor; her
-        # tetikte bir "duplicate suppress" satırı eklemek olay listesini şişirir.
         existing.description = payload.description
+        # Eski kayit signal_key olmadan acilmissa, yeni payload'tan tamamla.
+        if payload.signal_key and not existing.signal_key:
+            existing.signal_key = payload.signal_key
         db.commit()
         return {"status": "deduplicated", "alarm_id": existing.id}
 
-    # Ayni cihaz + ayni baslik icin reset=true olup onaylanmamis "Normale Donen
-    # - Onay Bekliyor" kayitlari, alarm tekrar tetiklenince UI'da iki yerde
-    # gozukmesin diye otomatik temizlenir. Onaylanmis kayitlar zaten gizli.
-    stale_pending = db.scalars(
+    # Ayni sinyal icin "Normale Donen - Onay Bekliyor" listesinde bekleyen
+    # onaylanmamis kayit varsa, alarm tekrar tetiklendigi icin onu sil. Kullanici
+    # "alarmim normale dondu, kabul edeyim" demeden sinyal yine gitti — bu
+    # durumda alt panelde tutmaya gerek yok, ust panele yeni satir gelir.
+    #
+    # ESLESME ONCELIK SIRASI:
+    #   1) signal_key varsa: ayni signal_key (level/title uyusmasa bile siler).
+    #      Ayni sinyal icin baska kural varsa onlar zaten farkli title ile
+    #      kendi kaydina sahip; burada ayni signal_key + reset=true + !ack tek
+    #      bir kayit olacak (alt panelde her kural icin tek satir).
+    #   2) signal_key yok (eski kayit) → title + level esit-az duyarli eslesme.
+    base_stale = (
         select(AlarmEvent)
         .where(AlarmEvent.device_id == device_id)
-        .where(AlarmEvent.title == payload.title)
         .where(AlarmEvent.reset.is_(True))
         .where(AlarmEvent.acknowledged.is_(False))
-    ).all()
-    for stale in stale_pending:
-        db.delete(stale)
+    )
+
+    deleted_any = False
+    if payload.signal_key:
+        # 1) Yeni kayitlar (signal_key dolu) — aynı sinyalin tüm pending'leri.
+        for stale in db.scalars(
+            base_stale.where(AlarmEvent.signal_key == payload.signal_key)
+        ).all():
+            db.delete(stale)
+            deleted_any = True
+        # 2) Eski kayitlar (signal_key NULL) ama ayni title+level → onları da sil.
+        for stale in db.scalars(
+            base_stale.where(AlarmEvent.signal_key.is_(None))
+            .where(AlarmEvent.title == payload.title)
+            .where(AlarmEvent.level == payload.level)
+        ).all():
+            db.delete(stale)
+            deleted_any = True
+    else:
+        # Payload'da signal_key gelmediyse (eski alarm-service uretimi),
+        # title + level esitligi ile sil.
+        for stale in db.scalars(
+            base_stale.where(AlarmEvent.title == payload.title)
+            .where(AlarmEvent.level == payload.level)
+        ).all():
+            db.delete(stale)
+            deleted_any = True
+
+    if deleted_any:
+        db.flush()
 
     alarm = AlarmEvent(
         device_id=device_id,
@@ -195,9 +227,9 @@ def clear_alarm(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="device_id or valid device_code required")
 
     # Eslesen acik alarmi bul: ayni cihaz + reset=False.
-    # Title eslesmesi: kalite alarmlari icin "haberlesme" / "haberleşme" gibi
-    # eski/yeni format ayni anlamda kabul edilir. Once tam eslesme denenir,
-    # bulunmazsa title benzerligi (LIKE) ile geriye uyumlu eslesme yapilir.
+    # Eslesme oncelikleri:
+    #   1) signal_key varsa once OnA gore esles (sat01 vs sat02 karismasin)
+    #   2) signal_key yoksa veya eski kayit signal_key'siz ise title ile esles
     base_stmt = (
         select(AlarmEvent)
         .where(AlarmEvent.device_id == device_id)
@@ -205,26 +237,69 @@ def clear_alarm(
         .order_by(AlarmEvent.created_at.desc())
     )
 
-    existing = None
-    if payload.title:
-        existing = db.scalar(base_stmt.where(AlarmEvent.title == payload.title).limit(1))
-        if existing is None:
-            # Geriye uyum: "Haberlesme arizasi" / "Haberleşme arızası" gibi
-            # eski/yeni formatlari ayni saymak icin substring eslesmesi.
-            normalized = payload.title.lower()
-            keyword = None
-            if "haber" in normalized:
-                keyword = "haber"
-            if keyword:
-                existing = db.scalar(
-                    base_stmt.where(AlarmEvent.title.ilike(f"%{keyword}%")).limit(1)
-                )
-    else:
+    existing: AlarmEvent | None = None
+
+    # Tercih 1: signal_key + title tam eslesmesi (en kesin, sat01/sat02 ayrimi)
+    if payload.signal_key and payload.title:
+        existing = db.scalar(
+            base_stmt.where(AlarmEvent.signal_key == payload.signal_key)
+            .where(AlarmEvent.title == payload.title)
+            .limit(1)
+        )
+
+    # Tercih 2: sadece signal_key (geriye uyum: title format degistiyse)
+    if existing is None and payload.signal_key:
+        existing = db.scalar(
+            base_stmt.where(AlarmEvent.signal_key == payload.signal_key).limit(1)
+        )
+
+    # Tercih 3: title tam eslesmesi (signal_key gondermeyen eski cagrilar)
+    if existing is None and payload.title:
+        existing = db.scalar(
+            base_stmt.where(AlarmEvent.title == payload.title)
+            .where(AlarmEvent.signal_key.is_(None))
+            .limit(1)
+        )
+        # Daha agresif fallback: title tam eslesmesi (signal_key sart degil).
+        # Sadece payload.signal_key da yoksa kullanilir; aksi halde yanlis
+        # sinyali resetleme riski var.
+        if existing is None and not payload.signal_key:
+            existing = db.scalar(base_stmt.where(AlarmEvent.title == payload.title).limit(1))
+
+    # Tercih 4: hicbir filtre yoksa son acik alarm
+    if existing is None and not payload.title and not payload.signal_key:
         existing = db.scalar(base_stmt.limit(1))
+
     if existing is None:
-        # Eslesen acik alarm yok - sessizce kabul et (idempotent)
         return {"status": "no_match"}
 
+    # Önemli kural: alarm zaten ONAYLANMIS ise normale donduğunde tarihçeye
+    # düşmeden direkt SİLİNİR. Kullanıcı zaten onaylamıştı, bilgilendi → alt
+    # panelde gereksiz yer kaplamasın. Sadece olay log'una gider.
+    was_acknowledged = bool(existing.acknowledged)
+    alarm_id = existing.id
+    alarm_title = existing.title
+    if was_acknowledged:
+        db.delete(existing)
+        record_event(
+            db,
+            category="alarm",
+            event_type="alarm_auto_cleared",
+            severity="info",
+            device_code=payload.device_code,
+            message=f"Onaylanmış alarm normale döndü ve silindi: {alarm_title}",
+            metadata={
+                "alarm_id": alarm_id,
+                "rule_id": payload.rule_id,
+                "signal_key": payload.signal_key,
+                "source_gateway": payload.source_gateway,
+                "auto_deleted": True,
+            },
+        )
+        db.commit()
+        return {"status": "cleared_and_deleted", "alarm_id": alarm_id}
+
+    # Onaylanmamis aktif alarm normale dondu → reset=True (alt panele duser)
     existing.reset = True
     existing.reset_at = datetime.now(timezone.utc)
     record_event(
@@ -233,15 +308,16 @@ def clear_alarm(
         event_type="alarm_auto_cleared",
         severity="info",
         device_code=payload.device_code,
-        message=f"Alarm sahada normale dondu: {existing.title}",
+        message=f"Alarm sahada normale döndü: {alarm_title}",
         metadata={
-            "alarm_id": existing.id,
+            "alarm_id": alarm_id,
             "rule_id": payload.rule_id,
+            "signal_key": payload.signal_key,
             "source_gateway": payload.source_gateway,
         },
     )
     db.commit()
-    return {"status": "cleared", "alarm_id": existing.id}
+    return {"status": "cleared", "alarm_id": alarm_id}
 
 
 @router.get("/gateways", response_model=list[GatewayRead])

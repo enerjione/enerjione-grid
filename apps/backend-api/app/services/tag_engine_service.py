@@ -119,11 +119,13 @@ def process_telemetry_reading(
                 derived = None
             if derived is not None:
                 device.battery_percent = derived
-        # OFFLINE → ONLINE gecisinde acik "haberlesme arizasi" alarmlarini otomatik
-        # reset et. Bu sayede alarm-service'in restart sonrasi state kaybi olsa
-        # bile UI'daki aktif alarm dogru sekilde "Normale Donen" listesine duser.
-        if previous_status == CommunicationStatus.OFFLINE and db is not None:
-            _auto_clear_quality_alarms(db, device)
+        # NOT: Otomatik "haberlesme arizasi" alarmlarini reset etmiyoruz —
+        # haberlesme alarmi kullanici kendi tanimladigi kural uzerinden
+        # uretiliyor; alarm-service zaten kosul karsilanmazsa clear cagrisi
+        # yapiyor. Backend'in burada eskisi gibi otomatik silmesi yanlis
+        # alarmlari kapatma riski tasiyordu.
+        _ = previous_status  # ileride gerekirse kullanilmak uzere
+        _ = db
 
     event_payload = {
         "message_id": reading.message_id,

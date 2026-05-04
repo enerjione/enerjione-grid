@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { TablePagination } from "../../components/TablePagination";
-import type { SystemEvent } from "../../shared/types";
+import type { DeviceRow, SystemEvent } from "../../shared/types";
 import {
   categoryFilterLabel,
   categoryLabelTr,
@@ -13,9 +13,29 @@ import {
 type Props = {
   events: SystemEvent[];
   loading?: boolean;
+  /** Cihaz kodu → ad çözümleme + kaynak (Master/Sat 01/Sat 02) için */
+  devices?: DeviceRow[];
 };
 
-export function EventsPage({ events, loading }: Props) {
+const SOURCE_LABEL_FROM_PREFIX: Record<string, { label: string; klass: string }> = {
+  master: { label: "Master", klass: "master" },
+  sat01: { label: "Sat 01", klass: "sat01" },
+  sat02: { label: "Sat 02", klass: "sat02" }
+};
+
+/** Event.metadata_json'dan signal_key çıkarır (varsa). */
+function extractSignalKey(metadataJson: string | null | undefined): string | null {
+  if (!metadataJson) return null;
+  try {
+    const parsed = JSON.parse(metadataJson);
+    const sk = parsed?.signal_key;
+    return typeof sk === "string" && sk ? sk : null;
+  } catch {
+    return null;
+  }
+}
+
+export function EventsPage({ events, loading, devices }: Props) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
@@ -25,6 +45,35 @@ export function EventsPage({ events, loading }: Props) {
   const [pageSize, setPageSize] = useState(50);
 
   const categories = useMemo(() => Array.from(new Set(events.map((item) => item.category))).sort(), [events]);
+
+  // Cihaz kodu → ad lookup
+  const deviceNameByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of devices ?? []) map.set(d.code, d.name);
+    return map;
+  }, [devices]);
+
+  /** Cihaz hücresi: sadece "ad" (kaynak bilgisi ayrı sütunda). */
+  const renderDeviceCell = (item: SystemEvent) => {
+    const code = item.device_code;
+    if (!code) return <span className="event-cell-empty">—</span>;
+    const name = deviceNameByCode.get(code) ?? code;
+    return <span className="event-device-name">{name}</span>;
+  };
+
+  /** Kaynak hücresi: signal_key prefix'inden Master/Sat 01/Sat 02 rozeti. */
+  const renderSourceCell = (item: SystemEvent) => {
+    const signalKey = extractSignalKey(item.metadata_json);
+    if (!signalKey) return <span className="event-cell-empty">—</span>;
+    const prefix = signalKey.split(".", 1)[0]?.toLowerCase() ?? "";
+    const source = SOURCE_LABEL_FROM_PREFIX[prefix];
+    if (!source) return <span className="event-cell-empty">{prefix || "—"}</span>;
+    return (
+      <span className={`badge badge-source badge-source-${source.klass} event-source-badge`}>
+        {source.label}
+      </span>
+    );
+  };
 
   const filteredEvents = useMemo(() => {
     return events.filter((item) => {
@@ -122,17 +171,19 @@ export function EventsPage({ events, loading }: Props) {
           <table className="values-table events-table">
             <thead>
               <tr>
+                <th className="event-col-date">Tarih</th>
                 <th>Öncelik</th>
                 <th>Kategori</th>
                 <th>Mesaj</th>
-                <th>Kullanıcı</th>
-                <th>Cihaz</th>
-                <th>Tarih</th>
+                <th className="event-col-user">Kullanıcı</th>
+                <th className="event-col-device">Cihaz</th>
+                <th className="event-col-source">Kaynak</th>
               </tr>
             </thead>
             <tbody>
               {pagedEvents.map((item) => (
                 <tr key={item.id}>
+                  <td className="event-col-date">{new Date(item.created_at).toLocaleString("tr-TR")}</td>
                   <td className="event-col-priority">
                     <span className={severityPillClass(item.severity)} title={item.severity}>
                       {severityLabelTr(item.severity)}
@@ -144,9 +195,9 @@ export function EventsPage({ events, loading }: Props) {
                     </span>
                   </td>
                   <td>{item.message}</td>
-                  <td>{item.actor_username ?? "-"}</td>
-                  <td>{item.device_code ?? "-"}</td>
-                  <td>{new Date(item.created_at).toLocaleString("tr-TR")}</td>
+                  <td className="event-col-user">{item.actor_username ?? "-"}</td>
+                  <td className="event-col-device">{renderDeviceCell(item)}</td>
+                  <td className="event-col-source">{renderSourceCell(item)}</td>
                 </tr>
               ))}
             </tbody>

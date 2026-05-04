@@ -8,7 +8,9 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
     # Uzun operatör oturumları (fabrika) için; .env: ACCESS_TOKEN_MINUTES=...
-    access_token_minutes: int = 720
+    # Varsayılan 30 gün = 43200 dk. "Beni hatırla" tıklayan kullanıcı saha
+    # ortamında hafta sonları boyunca tekrar giriş yapmak zorunda kalmasın.
+    access_token_minutes: int = 43_200
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/horstman"
     cors_origins: str = "*"
     event_bus_backend: str = "inprocess"

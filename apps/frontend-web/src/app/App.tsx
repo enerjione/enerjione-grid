@@ -770,20 +770,30 @@ export function App() {
             "Bu işlem geri alınamaz. Onaylıyor musunuz?"
           ].join("\n\n");
     if (!window.confirm(message)) return;
-    await deleteGateway(session.accessToken, gatewayCode);
-    const nextGateways = await reloadGateways();
-    const all = await fetchDevices(session.accessToken);
-    setDevices(all);
-    if (nextGateways && nextGateways.length > 0) {
-      const firstCode = nextGateways[0].code;
-      setDevicePanelGatewayCode(firstCode);
-      const scoped = await fetchDevices(session.accessToken, firstCode);
-      setDevicesByGateway(scoped);
-    } else {
-      setDevicePanelGatewayCode("");
-      setDevicesByGateway([]);
+    try {
+      await deleteGateway(session.accessToken, gatewayCode);
+      // Gateway listesi ve "tum cihazlar" listesi birbirinden bagimsiz —
+      // ardisik degil paralel cek.
+      const [nextGateways, all] = await Promise.all([
+        reloadGateways(),
+        fetchDevices(session.accessToken)
+      ]);
+      setDevices(all);
+      if (nextGateways && nextGateways.length > 0) {
+        const firstCode = nextGateways[0].code;
+        setDevicePanelGatewayCode(firstCode);
+        const scoped = await fetchDevices(session.accessToken, firstCode);
+        setDevicesByGateway(scoped);
+      } else {
+        setDevicePanelGatewayCode("");
+        setDevicesByGateway([]);
+      }
+      toast.success(`Gateway "${displayName}" silindi.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Gateway silinemedi.";
+      toast.error(`Gateway silinemedi: ${msg}`);
+      throw err; // DeviceManagementPanel'in busy state'i de finally'de kapanir
     }
-    toast.success(`Gateway "${displayName}" silindi.`);
   };
 
   const handleUpdateGateway = async (
@@ -1396,7 +1406,7 @@ export function App() {
               />
             ) : null}
             {pageMode === "events" ? (
-              <EventsPage events={events} loading={loadingData} />
+              <EventsPage events={events} loading={loadingData} devices={devices} />
             ) : null}
             {pageMode === "system-status" ? (
               <SystemStatusPage

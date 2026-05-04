@@ -1,0 +1,216 @@
+# Horstman Smart Logger — tek-komut Docker Compose dosyasi.
+#
+# Kurulum:
+#   1. cp .env.example .env
+#   2. .env'deki SECRET_KEY, INTERNAL_SERVICE_TOKEN, POSTGRES_PASSWORD,
+#      RABBITMQ_PASSWORD degerlerini DEGISTIR (`openssl rand -hex 32`).
+#   3. docker compose up -d --build
+#   4. Browser: http://<vds-ip>/  (port 80)
+#
+# Ilk acilista backend-api `Base.metadata.create_all` ile semayi olusturur.
+# Sonra installer hesabi olusturmak icin:
+#   docker compose exec backend-api python scripts/create_installer.py \
+#       --username admin --password 'StrongPassw0rd!' --full-name "Sistem Admin"
+#
+# (scripts/create_installer.py mevcutsa; degilse README'de manuel SQL adimi.)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hsl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-horstman}
+      POSTGRES_USER: ${POSTGRES_USER:-horstman}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env'de olmali}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-horstman} -d ${POSTGRES_DB:-horstman}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - hsl-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: hsl-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hsl}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD .env'de olmali}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    # Management UI host'a sadece localhost'tan acilir; genel internete kapali.
+    # Tunelle gormek icin: ssh -L 15672:localhost:15672 user@vds
+    ports:
+      - "127.0.0.1:15672:15672"
+    networks:
+      - hsl-net
+
+  backend-api:
+    build:
+      context: ./apps/backend-api
+      dockerfile: Dockerfile
+    image: hsl/backend-api:latest
+    container_name: hsl-backend-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY .env'de olmali}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-horstman}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-horstman}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_ADMIN_USERNAME: ${RABBITMQ_USER:-hsl}
+      RABBITMQ_ADMIN_PASSWORD: ${RABBITMQ_PASSWORD}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN .env'de olmali}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-43200}
+      TELEMETRY_RETENTION_MINUTES: ${TELEMETRY_RETENTION_MINUTES:-30}
+      TELEMETRY_RETENTION_INTERVAL_SEC: ${TELEMETRY_RETENTION_INTERVAL_SEC:-300}
+      SMTP_ENABLED: ${SMTP_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@horstman.local}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - hsl-net
+
+  tag-engine:
+    build:
+      context: ./apps/tag-engine
+      dockerfile: Dockerfile
+    image: hsl/tag-engine:latest
+    container_name: hsl-tag-engine
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: hsl.events
+      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: 8013
+    networks:
+      - hsl-net
+
+  alarm-service:
+    build:
+      context: ./apps/alarm-service
+      dockerfile: Dockerfile
+    image: hsl/alarm-service:latest
+    container_name: hsl-alarm-service
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend-api:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: hsl.events
+      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      BACKEND_API_BASE: http://backend-api:8000/api/v1
+      BACKEND_INTERNAL_ALARM_URL: http://backend-api:8000/api/v1/internal/alarms
+      BACKEND_INTERNAL_ALARM_CLEAR_URL: http://backend-api:8000/api/v1/internal/alarms/clear
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: 8011
+    networks:
+      - hsl-net
+
+  notification-worker:
+    build:
+      context: ./apps/notification-worker
+      dockerfile: Dockerfile
+    image: hsl/notification-worker:latest
+    container_name: hsl-notification-worker
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: hsl.events
+      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      BACKEND_API_BASE: http://backend-api:8000/api/v1
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: 8012
+    networks:
+      - hsl-net
+
+  iec104-outbound:
+    build:
+      context: ./apps/iec104-outbound
+      dockerfile: Dockerfile
+    image: hsl/iec104-outbound:latest
+    container_name: hsl-iec104-outbound
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend-api:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: hsl.events
+      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      BACKEND_API_BASE: http://backend-api:8000/api/v1
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: 8014
+      IEC104_DEFAULT_LISTEN_HOST: 0.0.0.0
+    # IEC 104 outbound master sistemler bu portlara baglanir.
+    # Buradaki aralik (2404 standart, 2405-2410 ek hedefler) kullaniciya gore
+    # genisletilebilir; backend'deki outbound_targets icindeki listen_port
+    # bu araliga dusmeli.
+    ports:
+      - "2404:2404"
+      - "2405:2405"
+      - "2406:2406"
+    networks:
+      - hsl-net
+
+  frontend-web:
+    build:
+      context: ./apps/frontend-web
+      dockerfile: Dockerfile
+    image: hsl/frontend-web:latest
+    container_name: hsl-frontend-web
+    restart: unless-stopped
+    depends_on:
+      - backend-api
+    ports:
+      # VDS'in 80 portu — kullanici browser'i buraya baglanir; nginx hem SPA'i
+      # serve eder hem /api/* isteklerini backend-api:8000'e proxy eder.
+      - "${FRONTEND_HTTP_PORT:-80}:80"
+    networks:
+      - hsl-net
+
+networks:
+  hsl-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  rabbitmq-data:

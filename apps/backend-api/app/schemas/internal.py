@@ -23,12 +23,15 @@ class InternalAlarmClear(BaseModel):
 
     Backend'deki acik (reset=False) alarmlardan eslesenleri reset=True yapar
     ki UI'da 'Normale Donen - Onay Bekliyor' bolumune dussun.
-    Eslesme: device + (rule_id varsa rule_id, yoksa title).
+    Eslesme: device + signal_key (varsa) + title.
     """
 
     device_id: int | None = None
     device_code: str | None = None
     rule_id: int | None = None
     title: str | None = None
+    # Yanlis sinyalin alarmini kapatmamak icin clear cagrilarinda hangi sinyalin
+    # normale dondugu da gonderilir. Eski cagrilar icin opsiyonel.
+    signal_key: str | None = None
     source_timestamp: datetime | None = None
     source_gateway: str | None = None
