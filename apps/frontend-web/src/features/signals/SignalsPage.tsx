@@ -140,6 +140,7 @@ export function SignalsPage({
   const [editOffset, setEditOffset] = useState("0");
   const [editIsActive, setEditIsActive] = useState(true);
   // Outbound template adresleme — IEC104 / Modbus / MQTT
+  const [editIec104Enabled, setEditIec104Enabled] = useState(true);
   const [editIec104TypeId, setEditIec104TypeId] = useState("");
   const [editIec104Ioa, setEditIec104Ioa] = useState("");
   const [editIec104IoaOffset, setEditIec104IoaOffset] = useState("");
@@ -171,6 +172,8 @@ export function SignalsPage({
           ? String(selected.iec104_ioa)
           : ""
       );
+      // IEC 104 yayini default true; kayit yoksa veya alan tanimsizsa true kabul et.
+      setEditIec104Enabled(selected.iec104_enabled !== false);
       setEditIec104IoaOffset(
         selected.iec104_ioa_offset !== null && selected.iec104_ioa_offset !== undefined
           ? String(selected.iec104_ioa_offset)
@@ -220,6 +223,7 @@ export function SignalsPage({
         iec104_type_id: parseIntOrNull(editIec104TypeId),
         iec104_ioa: parseIntOrNull(editIec104Ioa),
         iec104_ioa_offset: parseIntOrNull(editIec104IoaOffset),
+        iec104_enabled: editIec104Enabled,
         modbus_function: parseIntOrNull(editModbusFunction),
         modbus_address: parseIntOrNull(editModbusAddress),
         mqtt_topic: editMqttTopic.trim() || null
@@ -321,6 +325,15 @@ export function SignalsPage({
             <ul className="signals-card-list">
               {filteredSignals.map((signal) => {
                 const isActive = selectedKey === signal.key;
+                // IEC 104 "Yayinda" sayilmasi icin: sinyal aktif + iec104_enabled !== false
+                // + Type ID dolu. Hicbiri yoksa rozet gizlenir.
+                const iec104On =
+                  signal.iec104_enabled !== false &&
+                  signal.iec104_type_id !== null &&
+                  signal.iec104_type_id !== undefined;
+                const iec104Off =
+                  (signal.iec104_type_id !== null && signal.iec104_type_id !== undefined) &&
+                  signal.iec104_enabled === false;
                 return (
                   <li
                     key={signal.key}
@@ -336,6 +349,15 @@ export function SignalsPage({
                       <span className={`badge badge-${signal.data_type}`}>
                         {DATA_TYPE_SHORT[signal.data_type]}
                       </span>
+                      {iec104On ? (
+                        <span className="signal-card-iec104 signal-card-iec104--on" title="IEC 104 yayinda">
+                          104
+                        </span>
+                      ) : iec104Off ? (
+                        <span className="signal-card-iec104 signal-card-iec104--off" title="IEC 104 yayindan kaldirildi">
+                          104·off
+                        </span>
+                      ) : null}
                       <span className="signal-card-addr">
                         G{signal.dnp3_object_group} · i{signal.dnp3_index}
                       </span>
@@ -520,6 +542,17 @@ export function SignalsPage({
                   <>
                   <fieldset className="signal-fieldset" disabled={!canEdit}>
                     <legend>IEC 60870-5-104</legend>
+                    <div className="signal-iec104-toggle-row">
+                      <ActiveSwitch
+                        checked={editIec104Enabled}
+                        onChange={setEditIec104Enabled}
+                        disabled={!canEdit}
+                        title="IEC 104 outbound yayini sinyal bazinda kapatilabilir."
+                      />
+                      <span className="signal-iec104-toggle-label">
+                        {editIec104Enabled ? "Yayinda" : "Yayindan kaldirildi"}
+                      </span>
+                    </div>
                     <label className="signal-field signal-field--wide">
                       <span>ASDU Type ID</span>
                       <select

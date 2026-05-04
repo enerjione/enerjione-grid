@@ -36,6 +36,8 @@ class SignalCatalogBase(BaseModel):
     # Geri uyumluluk: eski deploylarda offset'ti; yeni alan dolu degilse mutlak
     # IOA olarak yorumlanir. Yeni kayitlar `iec104_ioa` doldurmali.
     iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
+    # IEC 104 yayini sinyal bazinda gecici kapatma. Default True (yayinla).
+    iec104_enabled: bool = True
     # Modbus outbound (Holding=3, Input=4, Coil=1, Discrete=2)
     modbus_function: int | None = Field(default=None, ge=1, le=255)
     modbus_address: int | None = Field(default=None, ge=0, le=65_535)
@@ -65,6 +67,7 @@ class SignalCatalogUpdate(BaseModel):
     iec104_type_id: int | None = Field(default=None, ge=0, le=255)
     iec104_ioa: int | None = Field(default=None, ge=0, le=16_777_215)
     iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
+    iec104_enabled: bool | None = None
     modbus_function: int | None = Field(default=None, ge=1, le=255)
     modbus_address: int | None = Field(default=None, ge=0, le=65_535)
     mqtt_topic: str | None = Field(default=None, max_length=200)

@@ -66,6 +66,9 @@ class SignalCatalog(Base):
     iec104_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     iec104_ioa: Mapped[int | None] = mapped_column(Integer, nullable=True)
     iec104_ioa_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # IEC 104 yayini sinyal bazinda gecici kapatma. Type ID + IOA dolu olsa bile
+    # bu False ise outbound dispatcher bu sinyali atlar. Default True (yayinla).
+    iec104_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Modbus outbound adresleme. Kullanici outbound template uzerinden cihaza
     # standart bir Modbus adresi verir; cihaz instance'inin asdu/slave id'si

@@ -259,6 +259,12 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS mqtt_topic VARCHAR(200)")
         )
+        # Sinyal bazinda IEC 104 yayini gecici kapatma — default true (yayinla).
+        connection.execute(
+            text(
+                "ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_enabled BOOLEAN NOT NULL DEFAULT TRUE"
+            )
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS alarm_rules ("

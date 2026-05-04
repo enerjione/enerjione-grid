@@ -103,6 +103,10 @@ def build_point_registry(
     for s in signals:
         if not getattr(s, "is_active", True):
             continue
+        # Sinyal bazinda IEC 104 yayini kapatilmis olabilir (Type ID + IOA dolu
+        # ama kullanici gecici olarak yayindan cekmis). Default True.
+        if getattr(s, "iec104_enabled", True) is False:
+            continue
         type_id = getattr(s, "iec104_type_id", None)
         if type_id is None:
             continue

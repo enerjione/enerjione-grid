@@ -226,6 +226,8 @@ export type SignalCatalogRow = {
   iec104_type_id?: number | null;
   iec104_ioa?: number | null;
   iec104_ioa_offset?: number | null;
+  /** Sinyal bazinda IEC 104 yayinini gecici kapatma. Default true. */
+  iec104_enabled?: boolean;
   // Modbus outbound (function code + register/coil address).
   modbus_function?: number | null;
   modbus_address?: number | null;

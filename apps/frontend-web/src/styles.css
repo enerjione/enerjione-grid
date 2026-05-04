@@ -2883,10 +2883,10 @@ main.content.engineering-content:has(.device-management-panel) {
 .signal-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: 3px;
+  padding: 8px 10px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s, box-shadow 0.12s, transform 0.12s;
@@ -2942,6 +2942,49 @@ main.content.engineering-content:has(.device-management-panel) {
   text-transform: uppercase;
   color: #94a3b8;
   letter-spacing: 0.05em;
+}
+
+/* IEC 104 yayin durumu rozeti — sinyal kartinin sag ust kosesinde mini gosterge */
+.signal-card-iec104 {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+}
+
+.signal-card-iec104--on {
+  color: #15803d;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.signal-card-iec104--off {
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+/* Sinyal detay panelindeki IEC 104 yayin toggle satiri */
+.signal-iec104-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.signal-iec104-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
 }
 
 .signal-card-name {
@@ -4756,7 +4799,9 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .signals-main-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(420px, 1fr);
+  /* Liste daraltildi (1fr) ve detay panel genisletildi (1.25fr); detay
+     icindeki sekmeler ve uzun input grid'leri rahat sigsin. */
+  grid-template-columns: minmax(0, 1fr) minmax(440px, 1.25fr);
   gap: 18px;
   flex: 1;
   min-height: 0;
@@ -4765,13 +4810,13 @@ main.content.engineering-content:has(.device-management-panel) {
 
 @media (min-width: 1400px) {
   .signals-main-layout {
-    grid-template-columns: minmax(0, 1.4fr) minmax(480px, 580px);
+    grid-template-columns: minmax(0, 1fr) minmax(520px, 700px);
   }
 }
 
 @media (max-width: 1280px) {
   .signals-main-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(380px, 480px);
+    grid-template-columns: minmax(0, 1fr) minmax(400px, 540px);
   }
 }
 
@@ -5259,6 +5304,41 @@ main.content.engineering-content:has(.device-management-panel) {
 .live-values-page .cell-value-pending {
   color: #94a3b8;
   font-weight: 500;
+}
+
+/* Binary canli deger gosterimi: TRUE = yesil, FALSE = kirmizi pill */
+.live-binary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.live-binary-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+.live-binary-pill--true {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.live-binary-pill--false {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
 }
 
 .live-values-refresh {
