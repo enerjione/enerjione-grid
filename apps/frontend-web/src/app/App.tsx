@@ -1446,6 +1446,7 @@ export function App() {
                   selectedId={selectedDeviceId}
                   onSelect={setSelectedDeviceId}
                   alarms={alarms}
+                  liveValues={signalLiveValues}
                 />
               ) : null}
               <main className={`content dashboard-content ${activeTab === "map" ? "map-active" : ""}`}>

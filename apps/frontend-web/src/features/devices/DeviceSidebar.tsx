@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { AlarmEvent, DeviceRow } from "../../shared/types";
+import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
 import { locateDevice } from "../../shared/geoLookup";
 
 type Props = {
@@ -9,7 +9,20 @@ type Props = {
   onSelect: (id: number) => void;
   /** Açık alarmları cihaz id'sine göre çözmek için. */
   alarms?: AlarmEvent[];
+  /** Master batarya voltajını canlı okumak için (3.40V=0%, 3.71V=100% lineer). */
+  liveValues?: SignalLiveRow[];
 };
+
+// Master batarya voltaj-yüzde haritası — DeviceMapTab popup ile aynı eşikler.
+const BATTERY_VOLTAGE_FULL = 3.71;
+const BATTERY_VOLTAGE_LOW = 3.4;
+
+function voltageToPercent(v: number | null): number | null {
+  if (v === null || Number.isNaN(v)) return null;
+  if (v <= BATTERY_VOLTAGE_LOW) return 0;
+  if (v >= BATTERY_VOLTAGE_FULL) return 100;
+  return Math.round(((v - BATTERY_VOLTAGE_LOW) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_LOW)) * 100);
+}
 
 function formatRelative(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -29,7 +42,7 @@ function batteryClass(percent: number | null | undefined): string {
   return "device-battery--ok";
 }
 
-export function DeviceSidebar({ devices, selectedId, onSelect, alarms }: Props) {
+export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValues }: Props) {
   // Cihaz id → alarm durumu: "open" (onaylanmamış aktif), "ack" (onaylanmış aktif), null
   const deviceAlarmState = useMemo(() => {
     const map = new Map<number, "open" | "ack">();
@@ -47,6 +60,20 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms }: Props) 
     return map;
   }, [alarms]);
 
+  // Cihaz id → master.battery_voltage_satellite canlı yüzdesi.
+  // Popup ile aynı kaynaktan beslenir; DB'deki device.battery_percent (default 100)
+  // henüz hiç batarya telemetrisi gelmediyse yanıltıcı %100 gösterirdi.
+  const masterBatteryByDevice = useMemo(() => {
+    const map = new Map<number, number | null>();
+    if (!liveValues) return map;
+    for (const row of liveValues) {
+      if (row.signal_key !== "master.battery_voltage_satellite") continue;
+      const v = typeof row.value === "number" ? row.value : null;
+      map.set(row.device_id, voltageToPercent(v));
+    }
+    return map;
+  }, [liveValues]);
+
   return (
     <aside className="sidebar device-sidebar-modern">
       <div className="device-list">
@@ -55,7 +82,12 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms }: Props) 
         ) : null}
         {devices.map((device) => {
           const isOnline = device.communicationStatus === "online";
-          const battery = device.batteryPercent;
+          // Once canli master batarya voltajini dene; yoksa eski DB alanina dus.
+          // Eski default %100 fallback'ine guvenmemek icin liveValues set ise
+          // ondan gelen sonuc (null da olabilir) tercih edilir.
+          const liveBatt = liveValues ? masterBatteryByDevice.get(device.id) ?? null : undefined;
+          const battery =
+            liveBatt !== undefined ? liveBatt : (device.batteryPercent ?? null);
           const battPct = typeof battery === "number" ? Math.max(0, Math.min(100, battery)) : null;
           const location = locateDevice(device.latitude, device.longitude);
           const alarmState = deviceAlarmState.get(device.id) ?? (device.alarmActive ? "open" : null);
