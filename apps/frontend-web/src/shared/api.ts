@@ -732,6 +732,28 @@ export async function downloadIec104PointsCsv(
   return count;
 }
 
+// ----- Project Settings -----
+// GET auth-siz kullanilabilsin; bazi yerlerde token vermeden de cagiriyoruz
+// (login ekrani, header initial fetch). Backend GET /project-settings public.
+export async function fetchProjectSettings(): Promise<import("./types").ProjectSettings> {
+  const response = await fetch(`${API_BASE_URL}/project-settings`);
+  if (!response.ok) throw await buildApiError(response, "Proje ayarları alınamadı.");
+  return (await response.json()) as import("./types").ProjectSettings;
+}
+
+export async function updateProjectSettings(
+  token: string,
+  payload: import("./types").ProjectSettings
+): Promise<import("./types").ProjectSettings> {
+  const response = await fetch(`${API_BASE_URL}/project-settings`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Proje ayarları kaydedilemedi.");
+  return (await response.json()) as import("./types").ProjectSettings;
+}
+
 export async function fetchNotificationSettings(token: string): Promise<NotificationSettings> {
   const response = await fetch(`${API_BASE_URL}/notification-settings`, {
     headers: authHeaders(token)

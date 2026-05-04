@@ -54,7 +54,12 @@ def _build_processed_payload(payload: dict) -> dict:
         "source_gateway": payload.get("source_gateway") or "unknown",
         "device_code": payload.get("device_code"),
         "signal_key": payload.get("signal_key"),
+        "signal_data_type": payload.get("signal_data_type"),
         "value": payload.get("value"),
+        # DNP3 Group 110 (Octet String) sinyallerinde gateway numeric value
+        # alanini None yollar; gercek metin value_string'tedir. Backend'in
+        # bu alani persist edebilmesi icin field'i drop etmeden geciriyoruz.
+        "value_string": payload.get("value_string"),
         "quality": quality,
         # Gateway dnp3 adapter'leri "comm_lost" (TCP/link kopuk) ve "restart"
         # (cihaz reboot etti, baseline bekleniyor) kalitelerini de yayinlar.

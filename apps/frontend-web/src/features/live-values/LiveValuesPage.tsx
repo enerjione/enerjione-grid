@@ -83,7 +83,18 @@ const NUMBER_FORMATTER = new Intl.NumberFormat("tr-TR", {
   useGrouping: false
 });
 
-function formatValue(value: number | null, dataType: SignalDataType | undefined, unit?: string | null) {
+function formatValue(
+  value: number | null,
+  dataType: SignalDataType | undefined,
+  unit?: string | null,
+  valueString?: string | null
+) {
+  // String tipli sinyaller (DNP3 Group 110 / Octet String) — gateway numeric
+  // value=null yollar; gercek metin value_string'tedir.
+  if (dataType === "string") {
+    const txt = (valueString ?? "").trim();
+    return txt.length > 0 ? txt : "—";
+  }
   if (value === null || value === undefined) {
     return "—";
   }
@@ -421,7 +432,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                         {row.value ? "TRUE" : "FALSE"}
                       </span>
                     ) : (
-                      formatValue(row.value, dataType, row.unit)
+                      formatValue(row.value, dataType, row.unit, row.value_string)
                     )}
                   </td>
                   <td className="cell-center">

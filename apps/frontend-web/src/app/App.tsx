@@ -10,12 +10,14 @@ import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
 import { NotificationSettingsPanel } from "../features/settings/NotificationSettingsPanel";
+import { ProjectSettingsPanel } from "../features/settings/ProjectSettingsPanel";
 import { DeviceSidebar } from "../features/devices/DeviceSidebar";
 import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
 import { DeviceSummaryPage } from "../features/device-summary/DeviceSummaryPage";
 import { GlobalLoading } from "../components/GlobalLoading";
+import { useProjectSettings } from "../components/ProjectSettingsProvider";
 import { locateDevice } from "../shared/geoLookup";
 import { SignalsPage } from "../features/signals/SignalsPage";
 import { AlarmRulesPage } from "../features/alarm-rules/AlarmRulesPage";
@@ -79,6 +81,7 @@ import {
   downloadIec104PointsXlsx,
   autoAssignDeviceCa,
   fetchIec104Runtime,
+  updateProjectSettings,
   testNotificationSms,
   testNotificationSmtp,
   updateNotificationSettings as updateNotificationSettingsApi,
@@ -114,7 +117,8 @@ type EngineeringPage =
   | "users"
   | "responsibility-areas"
   | "outbound"
-  | "notifications";
+  | "notifications"
+  | "project-settings";
 
 const ROUTE_STORAGE_KEY = "hsl.route.v1";
 const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "events", "system-status", "engineering"];
@@ -126,7 +130,8 @@ const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "users",
   "responsibility-areas",
   "outbound",
-  "notifications"
+  "notifications",
+  "project-settings"
 ];
 type PersistedRoute = {
   pageMode: PageMode;
@@ -165,6 +170,7 @@ function savePersistedRoute(route: PersistedRoute): void {
 }
 
 export function App() {
+  const projectSettings = useProjectSettings();
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [users, setUsers] = useState<UserRead[]>([]);
@@ -1058,6 +1064,14 @@ export function App() {
     }
   };
 
+  const handleSaveProjectSettings = async (payload: import("../shared/types").ProjectSettings) => {
+    if (!session) return;
+    await updateProjectSettings(session.accessToken, payload);
+    // Provider'i yenile — Login + Header logosu hemen guncellensin diye.
+    await projectSettings.refresh();
+    toast.success("Proje ayarları kaydedildi.");
+  };
+
   const handleDownloadIec104Xlsx = async (targetId: number, suggestedName: string) => {
     if (!session) return;
     try {
@@ -1358,6 +1372,12 @@ export function App() {
                   >
                     Bildirim Ayarları
                   </button>
+                  <button
+                    className={engineeringPage === "project-settings" ? "active" : ""}
+                    onClick={() => setEngineeringPage("project-settings")}
+                  >
+                    Proje Ayarları
+                  </button>
                 </>
               ) : null}
             </div>
@@ -1476,6 +1496,9 @@ export function App() {
                 onTestSmtp={handleTestNotificationSmtp}
                 onTestSms={handleTestNotificationSms}
               />
+            ) : null}
+            {engineeringPage === "project-settings" && session.role === "installer" ? (
+              <ProjectSettingsPanel onSave={handleSaveProjectSettings} />
             ) : null}
           </main>
         ) : pageMode !== "home" ? (

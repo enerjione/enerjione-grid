@@ -7,6 +7,7 @@ from app.models.notification_settings import NotificationSettings
 from app.models.outbound_target import OutboundTarget
 from app.models.outbox_event import OutboxEvent
 from app.models.processed_message import ProcessedMessage
+from app.models.project_settings import ProjectSettings
 from app.models.signal_catalog import SignalCatalog
 from app.models.system_event import SystemEvent
 from app.models.telemetry import Telemetry
@@ -21,6 +22,7 @@ __all__ = [
     "OutboundTarget",
     "OutboxEvent",
     "ProcessedMessage",
+    "ProjectSettings",
     "SignalCatalog",
     "AlarmRule",
     "Telemetry",

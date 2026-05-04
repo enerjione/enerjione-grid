@@ -196,6 +196,15 @@ export type Iec104RuntimeStatus = {
   connected_clients: { peer: string; started: boolean; connected_at: string }[];
 };
 
+export type ProjectSettings = {
+  project_name?: string | null;
+  customer_name?: string | null;
+  /** Login ekrani buyuk logo (data URL: data:image/png;base64,...). */
+  customer_logo?: string | null;
+  /** Header'da gosterilecek koyu zemin uyumlu kucuk logo (data URL). */
+  customer_logo_light?: string | null;
+};
+
 export type NotificationSettings = {
   smtp_enabled: boolean;
   smtp_host: string;
@@ -254,10 +263,16 @@ export type SignalLiveRow = {
   signal_label: string;
   unit?: string | null;
   source: SignalSource;
+  /** Backend tarafindan eklenen kategori (analog | binary | counter | analog_output | binary_output | string).
+   *  Eski backend versiyonlarinda alan gelmeyebilir; o yuzden optional. */
+  data_type?: string | null;
   device_id: number;
   device_code: string;
   device_name: string;
   value: number | null;
+  /** DNP3 Group 110 (Octet String) sinyallerinde gateway numeric value yerine
+   *  metin yollar; data_type === "string" satirlarda value_string gosterilir. */
+  value_string?: string | null;
   quality: string | null;
   source_timestamp: string | null;
 };

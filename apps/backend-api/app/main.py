@@ -4,11 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select as _select, text
 
-from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, health, internal, notification_settings, outbound_targets, responsibility_areas, signals, telemetry, users
+from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, health, internal, notification_settings, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, telemetry, users
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user  # noqa: F401
+from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user  # noqa: F401
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
@@ -49,6 +49,7 @@ app.include_router(outbound_targets.router, prefix=settings.api_prefix)
 app.include_router(signals.router, prefix=settings.api_prefix)
 app.include_router(alarm_rules.router, prefix=settings.api_prefix)
 app.include_router(internal.router, prefix=settings.api_prefix)
+app.include_router(project_settings_api.router, prefix=settings.api_prefix)
 
 
 @app.on_event("startup")
@@ -118,6 +119,13 @@ def create_tables():
             text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS dnp3_outstation_port INTEGER NOT NULL DEFAULT 20001")
         )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS dnp3_extended JSONB"))
+        # DNP3 Group 110 (Octet String) sinyalleri icin: numeric value NULL'a
+        # dusebilmeli (cunku string sinyalde sayi gelmez), ek olarak metin
+        # icerigi value_string kolonunda saklanir. Daha onceki versiyonlarda
+        # value NOT NULL Float idi; mevcut tabloyu nullable'a alir, yeni
+        # kolonu ekleriz.
+        connection.execute(text("ALTER TABLE telemetry ALTER COLUMN value DROP NOT NULL"))
+        connection.execute(text("ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS value_string TEXT"))
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS gateway_ingest_batches ("
@@ -171,6 +179,18 @@ def create_tables():
         # Whitelist (NULL/'' = serbest)
         connection.execute(
             text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_allowed_peers VARCHAR(2000)")
+        )
+        # Proje ayarlari (singleton; logo + isimler)
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS project_settings ("
+                "id INTEGER PRIMARY KEY DEFAULT 1, "
+                "project_name VARCHAR(200), "
+                "customer_name VARCHAR(200), "
+                "customer_logo TEXT, "
+                "customer_logo_light TEXT"
+                ")"
+            )
         )
         connection.execute(
             text(

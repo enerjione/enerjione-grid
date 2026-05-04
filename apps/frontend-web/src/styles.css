@@ -3457,6 +3457,153 @@ main.content.engineering-content:has(.device-management-panel) {
   justify-content: flex-end;
 }
 
+/* ===== Proje Ayarlari paneli ===== */
+.project-settings-panel {
+  max-width: 1100px;
+}
+
+.project-settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.project-settings-field {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.project-settings-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.project-settings-field input {
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.project-settings-logo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.project-settings-logo-box {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.project-settings-logo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.project-settings-logo-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.text-btn {
+  background: transparent;
+  border: none;
+  color: #b91c1c;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.text-btn:hover { text-decoration: underline; }
+
+.project-settings-logo-preview {
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.project-settings-logo-preview img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.project-settings-logo-preview--light {
+  background: #ffffff;
+}
+
+.project-settings-logo-preview--dark {
+  background: #0f172a;
+}
+
+.project-settings-logo-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.project-settings-logo-preview--dark .project-settings-logo-empty {
+  color: #64748b;
+}
+
+.project-settings-logo-upload {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  align-self: flex-start;
+}
+
+.project-settings-logo-upload:hover {
+  background: #e2e8f0;
+}
+
+.project-settings-logo-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.success-text {
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 8px 0;
+}
+
+@media (max-width: 768px) {
+  .project-settings-field,
+  .project-settings-logo-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .signal-card-name {
   font-size: 13px;
   font-weight: 600;

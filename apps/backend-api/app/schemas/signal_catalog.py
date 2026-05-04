@@ -87,9 +87,14 @@ class SignalLiveValue(BaseModel):
     signal_label: str
     unit: str | None = None
     source: str = "master"
+    data_type: str | None = None
     device_id: int
     device_code: str
     device_name: str
     value: float | None = None
+    # DNP3 Group 110 (Octet String) sinyallerinde numeric value None olur ve
+    # gercek metin bu alanda doner. Frontend data_type='string' satirlarda
+    # value_string'i gosterir.
+    value_string: str | None = None
     quality: str | None = None
     source_timestamp: str | None = None

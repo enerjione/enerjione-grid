@@ -118,6 +118,7 @@ def _persist_message(payload: dict[str, Any]) -> None:
                 device_id=device.id,
                 signal_key=reading.signal_key,
                 value=reading.value,
+                value_string=reading.value_string,
                 quality=normalized_quality,
                 source_timestamp=reading.source_timestamp,
             )

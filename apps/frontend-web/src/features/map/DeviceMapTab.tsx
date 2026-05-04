@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
@@ -15,6 +15,10 @@ type Props = {
 
 function FlyToSelected({ selectedDevice }: { selectedDevice?: DeviceRow }) {
   const map = useMap();
+  // Sadece secili cihaz id degistiginde fly et. Aksi halde her render'da
+  // (5 sn'lik live values yenileme dahil) zoom 7'ye geri donuyordu — kullanici
+  // manuel zoom yapamiyordu.
+  const lastFlownIdRef = useRef<number | null>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       map.invalidateSize();
@@ -22,9 +26,16 @@ function FlyToSelected({ selectedDevice }: { selectedDevice?: DeviceRow }) {
     return () => window.clearTimeout(timer);
   }, [map, selectedDevice]);
 
-  if (selectedDevice) {
+  useEffect(() => {
+    if (!selectedDevice) {
+      lastFlownIdRef.current = null;
+      return;
+    }
+    if (lastFlownIdRef.current === selectedDevice.id) return;
+    lastFlownIdRef.current = selectedDevice.id;
     map.flyTo([selectedDevice.latitude, selectedDevice.longitude], 7, { duration: 0.8 });
-  }
+  }, [map, selectedDevice]);
+
   return null;
 }
 

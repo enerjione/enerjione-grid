@@ -97,7 +97,10 @@ def process_telemetry_reading(
     telemetry = Telemetry(
         device_id=device.id,
         signal_key=reading.signal_key,
+        # DNP3 Group 110 (Octet String) sinyallerinde value=None gelir; numeric
+        # tipler her zaman dolu olur. value_string sadece string sinyalde dolar.
         value=reading.value,
+        value_string=reading.value_string,
         quality=normalized_quality,
         source_timestamp=reading.source_timestamp,
     )

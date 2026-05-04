@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 
+import { useProjectSettings } from "../../components/ProjectSettingsProvider";
+
 type Props = {
   onSubmit: (username: string, password: string, remember: boolean) => Promise<void>;
   loading: boolean;
@@ -9,6 +11,7 @@ type Props = {
 const REMEMBER_STORAGE_KEY = "hsl.login.remember";
 
 export function LoginForm({ onSubmit, loading, error }: Props) {
+  const { settings } = useProjectSettings();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -34,8 +37,9 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
         <form className="login-card" onSubmit={handleSubmit} autoComplete="off">
           <img
             className="customer-logo"
-            src="/customer-logo.png"
-            alt="Müşteri Logo"
+            // Once DB'de kayitli logo (proje ayarlarindan); yoksa eski statik PNG.
+            src={settings.customer_logo || "/customer-logo.png"}
+            alt={settings.customer_name || "Müşteri Logo"}
             onError={(event) => {
               event.currentTarget.src = "/customer-logo-placeholder.svg";
             }}

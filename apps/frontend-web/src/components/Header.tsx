@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useProjectSettings } from "./ProjectSettingsProvider";
 import type { UserRole } from "../shared/types";
 
 type Props = {
@@ -23,6 +24,7 @@ export function Header({
   activePage,
   onChangePage
 }: Props) {
+  const { settings } = useProjectSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -56,8 +58,9 @@ export function Header({
         <div className="customer-logo-wrap">
           <img
             className="header-customer-logo"
-            src="/customer-logo-light.png"
-            alt="Müşteri Logosu"
+            // Once light, yoksa buyuk logoyu (header'da kucultur), o da yoksa default PNG.
+            src={settings.customer_logo_light || settings.customer_logo || "/customer-logo-light.png"}
+            alt={settings.customer_name || "Müşteri Logosu"}
             onError={(event) => {
               event.currentTarget.src = "/customer-logo-placeholder.svg";
             }}
