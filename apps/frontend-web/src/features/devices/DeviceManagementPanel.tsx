@@ -1023,9 +1023,6 @@ export function DeviceManagementPanel({
         <div className="settings-modal-backdrop">
           <form className="settings-modal device-create-modal" onSubmit={handleCreateDevice}>
             <h3>Yeni Cihaz Ekle</h3>
-            <p className="helper-text">
-              Cihaz standart sinyal kataloğundaki tüm sinyalleri otomatik okur. Sinyal adresleri <strong>Sinyaller</strong> sayfasından yönetilir.
-            </p>
             <label>
               Cihaz Kodu
               <input value={createCode} onChange={(event) => setCreateCode(event.target.value)} required />
@@ -1057,13 +1054,9 @@ export function DeviceManagementPanel({
               <input
                 value={createIpAddress}
                 onChange={(event) => setCreateIpAddress(event.target.value)}
-                placeholder="örn. 192.168.1.50  (yerel test: 127.0.0.1, Docker-içi gateway: host.docker.internal)"
+                placeholder="192.168.1.50"
                 required
               />
-              <small className="helper-text">
-                Gateway bu IP'ye DNP3 outstation portu üzerinden bağlanır. Gateway Docker'da
-                çalışıyor ve simülatör host'unuzdaysa <code>host.docker.internal</code> yazın.
-              </small>
             </label>
             <label>
               Outstation port
