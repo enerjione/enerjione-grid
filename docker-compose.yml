@@ -47,9 +47,15 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
-    # Management UI host'a sadece localhost'tan acilir; genel internete kapali.
-    # Tunelle gormek icin: ssh -L 15672:localhost:15672 user@vds
     ports:
+      # AMQP — uzaktaki gateway'lerin (saha kurulumlari, baska VDS, ofis vs.)
+      # bagh kabilmesi icin internet'e acik. Guvenlik: dedicated user/parola
+      # ve "loopback_users" disable degil; backend her gateway icin ayri user
+      # uretiyor (gw-<code>). Default 'hsl' admin kullanicisi sadece backend
+      # tarafindan kullanilir, parolasi .env'de.
+      - "5672:5672"
+      # Management UI host'a sadece localhost'tan acilir; genel internete kapali.
+      # Tunelle gormek icin: ssh -L 15672:localhost:15672 user@vds
       - "127.0.0.1:15672:15672"
     networks:
       - hsl-net
@@ -91,6 +97,12 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    ports:
+      # Uzaktaki gateway'ler dogrudan baglanabilsin diye 8000 host'a expose.
+      # Browser yine de port 80 (nginx) uzerinden /api/* proxy'sini kullanir;
+      # 8000 sadece gateway'in REST cagrilari icindir (internal service token
+      # ile zaten korunmali; ek olarak CORS_ORIGINS uretimde kisitlanmali).
+      - "8000:8000"
     networks:
       - hsl-net
 
