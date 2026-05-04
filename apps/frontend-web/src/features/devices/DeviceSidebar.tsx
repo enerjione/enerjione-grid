@@ -1,10 +1,14 @@
-import type { DeviceRow } from "../../shared/types";
+import { useMemo } from "react";
+
+import type { AlarmEvent, DeviceRow } from "../../shared/types";
 import { locateDevice } from "../../shared/geoLookup";
 
 type Props = {
   devices: DeviceRow[];
   selectedId: number;
   onSelect: (id: number) => void;
+  /** Açık alarmları cihaz id'sine göre çözmek için. */
+  alarms?: AlarmEvent[];
 };
 
 function formatRelative(iso: string | null | undefined): string {
@@ -25,7 +29,24 @@ function batteryClass(percent: number | null | undefined): string {
   return "device-battery--ok";
 }
 
-export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
+export function DeviceSidebar({ devices, selectedId, onSelect, alarms }: Props) {
+  // Cihaz id → alarm durumu: "open" (onaylanmamış aktif), "ack" (onaylanmış aktif), null
+  const deviceAlarmState = useMemo(() => {
+    const map = new Map<number, "open" | "ack">();
+    if (!alarms) return map;
+    for (const a of alarms) {
+      if (a.reset) continue;
+      const prev = map.get(a.device_id);
+      if (!a.acknowledged) {
+        // Onaylanmamış varsa daima öncelikli
+        map.set(a.device_id, "open");
+      } else if (!prev) {
+        map.set(a.device_id, "ack");
+      }
+    }
+    return map;
+  }, [alarms]);
+
   return (
     <aside className="sidebar device-sidebar-modern">
       <div className="device-list">
@@ -37,19 +58,24 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
           const battery = device.batteryPercent;
           const battPct = typeof battery === "number" ? Math.max(0, Math.min(100, battery)) : null;
           const location = locateDevice(device.latitude, device.longitude);
+          const alarmState = deviceAlarmState.get(device.id) ?? (device.alarmActive ? "open" : null);
+          const hasAlarm = alarmState !== null;
           return (
             <button
               key={device.id}
               className={`device-row ${selectedId === device.id ? "selected" : ""} ${
                 isOnline ? "device-row--online" : "device-row--offline"
-              } ${device.alarmActive ? "device-row--alarm" : ""}`}
+              } ${hasAlarm ? "device-row--alarm" : ""}`}
               onClick={() => onSelect(device.id)}
             >
-              {/* Sağ üstte yanıp sönen alarm rozeti */}
-              {device.alarmActive ? (
-                <span className="device-row-alarm-pulse" title="Aktif alarm var">
+              {/* Sağ üst köşede yanıp sönen alarm rozeti (absolute) */}
+              {hasAlarm ? (
+                <span
+                  className="device-row-alarm-pulse device-row-alarm-pulse--corner"
+                  title="Aktif alarm var"
+                  aria-label="Aktif alarm var"
+                >
                   <span className="material-symbols-outlined">warning</span>
-                  Alarm
                 </span>
               ) : null}
 
@@ -65,14 +91,14 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
                 </div>
               </div>
 
-              {/* Orta satır: konum + batarya yan yana */}
-              <div className="device-row-meta-row">
+              {/* Orta satır: konum + batarya yan yana (çerçevesiz) */}
+              <div className="device-row-meta-row device-row-meta-row--bare">
                 <span className="device-row-location" title={location.label}>
                   <span className="material-symbols-outlined">place</span>
                   {location.label}
                 </span>
                 <span
-                  className={`device-battery-chip ${batteryClass(battPct)}`}
+                  className={`device-battery-chip device-battery-chip--bare ${batteryClass(battPct)}`}
                   title={battPct !== null ? `Batarya: %${Math.round(battPct)}` : "Batarya bilgisi yok"}
                 >
                   <span className="device-battery-icon" aria-hidden="true">
@@ -84,10 +110,17 @@ export function DeviceSidebar({ devices, selectedId, onSelect }: Props) {
                 </span>
               </div>
 
-              {/* Alt satır: son veri zamanı */}
-              <div className="device-row-foot">
-                <span className="device-row-last">
-                  {device.lastUpdateAt ? `Son veri: ${formatRelative(device.lastUpdateAt)}` : "Son veri: —"}
+              {/* Alt satır: son güncelleme saati */}
+              <div className="device-row-last-line">
+                <span className="material-symbols-outlined">schedule</span>
+                <span className="device-row-last-text">
+                  {device.lastUpdateAt
+                    ? `Son güncelleme: ${new Date(device.lastUpdateAt).toLocaleTimeString("tr-TR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit"
+                      })} · ${formatRelative(device.lastUpdateAt)}`
+                    : "Son güncelleme: —"}
                 </span>
               </div>
             </button>

@@ -318,7 +318,7 @@ export function AlarmsPage({
       <div className={mode === "modal" ? "alarm-detail-modal-body alarm-detail-2col" : "alarm-detail-2col"}>
         <header className="alarm-detail-header">
           <div className="alarm-detail-titlebar">
-            <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{selectedAlarm.level}</span>
+            <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{levelLabelTr(selectedAlarm.level)}</span>
             <h3>{selectedAlarm.title}</h3>
             <span className={`alarm-state ${stateClass}`}>{stateLabel}</span>
           </div>
@@ -348,7 +348,7 @@ export function AlarmsPage({
               <div className="alarm-detail-dl-row">
                 <dt>Seviye</dt>
                 <dd>
-                  <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{selectedAlarm.level}</span>
+                  <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{levelLabelTr(selectedAlarm.level)}</span>
                 </dd>
               </div>
               <div className="alarm-detail-dl-row">

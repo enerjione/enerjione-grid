@@ -1,13 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
-import type { DeviceRow } from "../../shared/types";
+import type { DeviceRow, SignalLiveRow } from "../../shared/types";
+import { locateDevice } from "../../shared/geoLookup";
 
 type Props = {
   devices: DeviceRow[];
   selectedDevice?: DeviceRow;
   onSelectDevice: (deviceId: number) => void;
+  /** Canlı sinyal değerleri — Master/Sat01/Sat02 batarya voltajları popup'ta. */
+  liveValues?: SignalLiveRow[];
 };
 
 function FlyToSelected({ selectedDevice }: { selectedDevice?: DeviceRow }) {
@@ -45,7 +48,77 @@ function markerIcon(status: DeviceRow["communicationStatus"]) {
   });
 }
 
-export function DeviceMapTab({ devices, selectedDevice, onSelectDevice }: Props) {
+// Lithium pil voltaj-yüzde haritası — backend ile aynı eşikler.
+const BATTERY_VOLTAGE_FULL = 3.71;
+const BATTERY_VOLTAGE_LOW = 3.4;
+
+function voltageToPercent(v: number | null | undefined): number | null {
+  if (v === null || v === undefined || !Number.isFinite(v)) return null;
+  if (v <= BATTERY_VOLTAGE_LOW) return 0;
+  if (v >= BATTERY_VOLTAGE_FULL) return 100;
+  return Math.round(((v - BATTERY_VOLTAGE_LOW) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_LOW)) * 100);
+}
+
+function batteryClass(percent: number | null): string {
+  if (percent === null) return "device-battery--unknown";
+  if (percent <= 20) return "device-battery--critical";
+  if (percent <= 50) return "device-battery--low";
+  return "device-battery--ok";
+}
+
+type SourceKey = "master" | "sat01" | "sat02";
+
+const SOURCE_LABEL: Record<SourceKey, string> = {
+  master: "Master",
+  sat01: "Satellite 01",
+  sat02: "Satellite 02"
+};
+
+function formatRelative(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const sec = Math.round((Date.now() - d.getTime()) / 1000);
+  if (sec < 5) return "şimdi";
+  if (sec < 60) return `${sec} sn önce`;
+  if (sec < 3600) return `${Math.round(sec / 60)} dk önce`;
+  if (sec < 86400) return `${Math.round(sec / 3600)} sa önce`;
+  return d.toLocaleString("tr-TR");
+}
+
+export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues }: Props) {
+  // Seçili cihaz için kaynak başına batarya voltajı/yüzdesi
+  const sourceBatteries = useMemo(() => {
+    if (!selectedDevice || !liveValues) {
+      return { master: null, sat01: null, sat02: null } as Record<
+        SourceKey,
+        { voltage: number | null; percent: number | null } | null
+      >;
+    }
+    const result: Record<SourceKey, { voltage: number | null; percent: number | null } | null> = {
+      master: null,
+      sat01: null,
+      sat02: null
+    };
+    const targets: { key: SourceKey; signal: string }[] = [
+      { key: "master", signal: "master.battery_voltage_satellite" },
+      { key: "sat01", signal: "sat01.battery_voltage_satellite" },
+      { key: "sat02", signal: "sat02.battery_voltage_satellite" }
+    ];
+    for (const t of targets) {
+      const row = liveValues.find(
+        (r) => r.device_id === selectedDevice.id && r.signal_key === t.signal
+      );
+      if (row) {
+        const v = row.value;
+        result[t.key] = {
+          voltage: typeof v === "number" ? v : null,
+          percent: voltageToPercent(typeof v === "number" ? v : null)
+        };
+      }
+    }
+    return result;
+  }, [selectedDevice, liveValues]);
+
   return (
     <section className="map-full">
       <div className="world-map-shell">
@@ -68,31 +141,98 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice }: Props)
         </MapContainer>
 
         {selectedDevice ? (
-          <div className="device-popup-card">
-            <button className="close-popup" onClick={() => onSelectDevice(0)}>
-              x
+          <div className="device-popup-card device-popup-card--modern">
+            <button
+              type="button"
+              className="device-popup-close"
+              onClick={() => onSelectDevice(0)}
+              aria-label="Kapat"
+            >
+              <span className="material-symbols-outlined">close</span>
             </button>
-            <h4>Cihaz Detayları</h4>
-            <p>
-              <strong>Cihaz:</strong> {selectedDevice.name}
-            </p>
-            <p>
-              <strong>Durum:</strong> {selectedDevice.communicationStatus}
-            </p>
-            <p>
-              <strong>Batarya:</strong> %{selectedDevice.batteryPercent}
-            </p>
-            <p>
-              <strong>Alarm:</strong> {selectedDevice.alarmActive ? "Uyarı" : "Normal"}
-            </p>
-            <p>
-              <strong>Konum:</strong> {selectedDevice.latitude.toFixed(4)}, {selectedDevice.longitude.toFixed(4)}
-            </p>
-            {selectedDevice.lastUpdateAt ? (
-              <p>
-                <strong>Son Güncelleme:</strong> {selectedDevice.lastUpdateAt}
-              </p>
-            ) : null}
+
+            {/* Üst başlık — alarm + durum + cihaz adı */}
+            <header className="device-popup-header">
+              <div className="device-popup-title">
+                <h4>{selectedDevice.name}</h4>
+                <span className="device-popup-code">{selectedDevice.code}</span>
+              </div>
+              <div className="device-popup-badges">
+                {selectedDevice.alarmActive ? (
+                  <span className="device-popup-alarm-badge" title="Aktif alarm var">
+                    <span className="material-symbols-outlined">warning</span>
+                    Alarm
+                  </span>
+                ) : null}
+                <span
+                  className={`device-popup-status ${
+                    selectedDevice.communicationStatus === "online" ? "online" : "offline"
+                  }`}
+                  title={selectedDevice.communicationStatus === "online" ? "Çevrimiçi" : "Çevrimdışı"}
+                >
+                  <span className="device-popup-status-dot" />
+                  {selectedDevice.communicationStatus === "online" ? "Çevrimiçi" : "Çevrimdışı"}
+                </span>
+              </div>
+            </header>
+
+            {/* Bilgi satırı: konum + son veri */}
+            <div className="device-popup-info">
+              <div className="device-popup-info-item">
+                <span className="material-symbols-outlined">place</span>
+                <div>
+                  <span className="device-popup-info-label">Konum</span>
+                  <span className="device-popup-info-value">
+                    {locateDevice(selectedDevice.latitude, selectedDevice.longitude).label}
+                  </span>
+                </div>
+              </div>
+              <div className="device-popup-info-item">
+                <span className="material-symbols-outlined">schedule</span>
+                <div>
+                  <span className="device-popup-info-label">Son veri</span>
+                  <span className="device-popup-info-value">
+                    {formatRelative(selectedDevice.lastUpdateAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Master / Sat01 / Sat02 batarya kartları */}
+            <div className="device-popup-batteries">
+              {(["master", "sat01", "sat02"] as SourceKey[]).map((src) => {
+                const data = sourceBatteries[src];
+                const pct = data?.percent ?? null;
+                const voltage = data?.voltage ?? null;
+                return (
+                  <div
+                    key={src}
+                    className={`device-popup-battery-card ${batteryClass(pct)}`}
+                    title={voltage !== null ? `${voltage.toFixed(2)} V` : "Veri yok"}
+                  >
+                    <div className="device-popup-battery-card-head">
+                      <span className={`badge badge-source badge-source-${src}`}>
+                        {SOURCE_LABEL[src]}
+                      </span>
+                      {voltage !== null ? (
+                        <span className="device-popup-battery-voltage">
+                          {voltage.toFixed(2)} V
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="device-popup-battery-bar">
+                      <span
+                        className="device-popup-battery-fill"
+                        style={{ width: `${pct ?? 0}%` }}
+                      />
+                    </div>
+                    <div className="device-popup-battery-percent">
+                      {pct !== null ? `%${pct}` : "—"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : null}
       </div>

@@ -1719,6 +1719,15 @@ main.content.engineering-content:has(.device-management-panel) {
   flex: 1;
 }
 
+/* Flat varyant: dış kart yok; iki bölme dikey flex'te. Aktif kart
+   esnek (flex: 1) → aralarındaki boş alanı kaplar; resolved kart sabit
+   yükseklikle altta oturur. */
+.alarms-layout-flat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .alarms-list-card,
 .alarms-detail-card {
   background: #fff;
@@ -3272,6 +3281,287 @@ main.content.engineering-content:has(.device-management-panel) {
   border: none;
   background: transparent;
   cursor: pointer;
+}
+
+/* ==========================================================
+   Harita popup — modern tasarım (Master/Sat01/Sat02 batarya kartları)
+   ========================================================== */
+.device-popup-card--modern {
+  width: 360px;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+  display: flex;
+  flex-direction: column;
+}
+
+.device-popup-card--modern p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.device-popup-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #475569;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  z-index: 2;
+}
+
+.device-popup-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.device-popup-close .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.device-popup-header {
+  position: relative;
+  padding: 14px 50px 12px 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-popup-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.device-popup-title h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-popup-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.device-popup-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.device-popup-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent;
+}
+
+.device-popup-status.online {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.device-popup-status.offline {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.device-popup-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.device-popup-status.online .device-popup-status-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.device-popup-status.offline .device-popup-status-dot {
+  background: #ef4444;
+}
+
+.device-popup-alarm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+  animation: device-alarm-pulse 1.4s ease-in-out infinite;
+}
+
+.device-popup-alarm-badge .material-symbols-outlined {
+  font-size: 13px;
+}
+
+/* Bilgi şeridi: konum + son veri */
+.device-popup-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+}
+
+.device-popup-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.device-popup-info-item > .material-symbols-outlined {
+  font-size: 16px;
+  color: #6366f1;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.device-popup-info-item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.device-popup-info-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.device-popup-info-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Master / Sat01 / Sat02 batarya kartları */
+.device-popup-batteries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  background: #fff;
+}
+
+.device-popup-battery-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.device-popup-battery-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.device-popup-battery-card .badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.device-popup-battery-voltage {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.device-popup-battery-bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.device-popup-battery-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease, background 0.2s ease;
+  background: #94a3b8;
+}
+
+.device-popup-battery-card.device-battery--ok .device-popup-battery-fill {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+.device-popup-battery-card.device-battery--low .device-popup-battery-fill {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+.device-popup-battery-card.device-battery--critical .device-popup-battery-fill {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+.device-popup-battery-card.device-battery--unknown .device-popup-battery-fill {
+  background: #cbd5e1;
+}
+
+.device-popup-battery-percent {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.device-popup-battery-card.device-battery--unknown .device-popup-battery-percent {
+  color: #94a3b8;
 }
 
 .map-item {
@@ -7330,7 +7620,7 @@ main.content.engineering-content:has(.device-management-panel) {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  margin-top: 12px;
+  margin-top: 10px;
   min-height: 0;
 }
 
@@ -7338,14 +7628,46 @@ main.content.engineering-content:has(.device-management-panel) {
   margin-top: 0;
 }
 
-/* Aktif bolum ekrani daha cok kaplasin (2:1) */
+/* Resolved bölmesi daha küçük başlık */
+.alarms-section-resolved .alarms-section-header {
+  padding: 10px 16px 8px;
+}
+
+.alarms-section-resolved .alarms-section-title h3 {
+  font-size: 13px;
+}
+
+/* Aktif kart esnek (boşluğu doldursun); resolved kart sabit yükseklikli ve
+   sayfanın altına yapışır. Aralarındaki boşluk böylece kapanır. */
 .alarms-section-active {
-  flex: 2 1 0;
+  flex: 1 1 auto;
+  min-height: 320px;
 }
 
 .alarms-section-resolved {
-  flex: 1 1 0;
-  max-height: 40%;
+  flex: 0 0 auto;
+  height: 260px;
+  max-height: 260px;
+}
+
+@media (max-height: 900px) {
+  .alarms-section-active {
+    min-height: 280px;
+  }
+  .alarms-section-resolved {
+    height: 220px;
+    max-height: 220px;
+  }
+}
+
+@media (max-height: 760px) {
+  .alarms-section-active {
+    min-height: 240px;
+  }
+  .alarms-section-resolved {
+    height: 200px;
+    max-height: 200px;
+  }
 }
 
 .alarms-section .alarms-table-wrap {
@@ -7535,9 +7857,41 @@ main.content.engineering-content:has(.device-management-panel) {
   white-space: nowrap;
 }
 
+/* Kaynak sütunu: dar, sabit genişlik, ortalı */
+.alarms-section .alarms-page-table th:nth-child(4),
+.alarms-section .alarms-page-table .alarm-cell-source {
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+  text-align: center;
+}
+
+.alarm-cell-source {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.alarm-cell-source .badge-source {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  padding: 3px 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Alarm başlık sütunu: kalanı doldurur, sola yaslı */
+.alarms-section .alarms-page-table th:nth-child(5),
+.alarms-section .alarms-page-table .alarm-cell-title {
+  text-align: left;
+}
+
 .alarm-cell-title {
   min-width: 0;
-  max-width: 360px;
+  width: auto;
 }
 
 .alarm-title-text {
@@ -7840,27 +8194,72 @@ main.content.engineering-content:has(.device-management-panel) {
   overflow: hidden;
 }
 
-/* Sağ üstte yanıp sönen alarm rozeti */
+/* Üst sağda yanıp sönen alarm rozeti — yalnızca uyarı sembolü, yuvarlak */
 .device-row-alarm-pulse {
-  position: absolute;
-  top: 8px;
-  right: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #fff;
   border: none;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  border-radius: 50%;
+  flex-shrink: 0;
   box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
   animation: device-alarm-pulse 1.4s ease-in-out infinite;
-  z-index: 1;
-  pointer-events: none;
+}
+
+.device-row-alarm-pulse .material-symbols-outlined {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Sağ üst köşeye sabit konumlu varyant */
+.device-row-alarm-pulse--corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+/* Çerçevesiz meta satır (konum + batarya) */
+.device-sidebar-modern .device-row-meta-row.device-row-meta-row--bare {
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  gap: 10px;
+}
+
+/* Çerçevesiz batarya chip */
+.device-battery-chip.device-battery-chip--bare {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* Alt satır: son güncelleme */
+.device-sidebar-modern .device-row-last-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 2px 0;
+  border-top: 1px solid #f1f5f9;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.device-sidebar-modern .device-row-last-line .material-symbols-outlined {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.device-sidebar-modern .device-row-last-text {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .device-row-alarm-pulse .material-symbols-outlined {
