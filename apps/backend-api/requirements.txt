@@ -10,3 +10,4 @@ email-validator
 bcrypt<5
 pika
 paho-mqtt
+requests
