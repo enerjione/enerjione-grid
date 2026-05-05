@@ -461,6 +461,25 @@ export function App() {
     return () => window.clearInterval(id);
   }, [session]);
 
+  // Grid topology snapshot canli refresh: 15 sn'de bir. Hat Yonetimi'nde
+  // yapilan degisiklikler (yeni cihaz ekleme/cikarma, direk tasima) anasayfa
+  // haritasina yansisin.
+  useEffect(() => {
+    if (!session) return;
+    const tick = async () => {
+      try {
+        const snap = await fetchGridSnapshot(session.accessToken);
+        setGridSnapshot(snap);
+      } catch {
+        // ignore
+      }
+    };
+    const id = window.setInterval(() => {
+      void tick();
+    }, 15000);
+    return () => window.clearInterval(id);
+  }, [session]);
+
   const reloadSignals = async () => {
     if (!session) return;
     setSignalLoading(true);

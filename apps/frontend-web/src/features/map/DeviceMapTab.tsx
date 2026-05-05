@@ -208,21 +208,42 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     return s;
   }, [alarms]);
 
-  // Cihaz id -> segment orta noktasi. DB'de eski lat/lon kalsa bile bu override
-  // edilir; cihaz dogru hat ustunde gozukur.
+  // Cihaz id -> slot uzerindeki konum.
+  // Coklu cihaz icin: ayni (from, to) ciftine sahip segmentler grupla, sira ile
+  // (idx+1)/(n+1) oraninda hat boyunca dagit. Backend ile ayni formul.
   const deviceLocationOverride = useMemo<Map<number, [number, number]>>(() => {
     const m = new Map<number, [number, number]>();
     if (!gridSnapshot) return m;
     const polesById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
+    // Slot anahtari -> bu slot'taki cihazli segmentler (sirali).
+    const bySlot = new Map<string, typeof gridSnapshot.segments>();
     for (const seg of gridSnapshot.segments) {
       if (!seg.device_id) continue;
-      const fp = polesById.get(seg.from_pole_id);
-      const tp = polesById.get(seg.to_pole_id);
+      const key = `${seg.from_pole_id}|${seg.to_pole_id}`;
+      const list = bySlot.get(key) ?? [];
+      list.push(seg);
+      bySlot.set(key, list);
+    }
+    for (const [key, segs] of bySlot.entries()) {
+      const [fromIdStr, toIdStr] = key.split("|");
+      const fp = polesById.get(Number(fromIdStr));
+      const tp = polesById.get(Number(toIdStr));
       if (!fp || !tp) continue;
-      m.set(seg.device_id, [
-        (fp.latitude + tp.latitude) / 2,
-        (fp.longitude + tp.longitude) / 2
-      ]);
+      // created_at + id ile sirala (backend ile ayni siralama).
+      const sorted = [...segs].sort((a, b) => {
+        const ad = new Date(a.created_at).getTime();
+        const bd = new Date(b.created_at).getTime();
+        if (ad !== bd) return ad - bd;
+        return a.id - b.id;
+      });
+      const total = sorted.length;
+      sorted.forEach((seg, idx) => {
+        if (!seg.device_id) return;
+        const t = (idx + 1) / (total + 1);
+        const lat = fp.latitude + (tp.latitude - fp.latitude) * t;
+        const lon = fp.longitude + (tp.longitude - fp.longitude) * t;
+        m.set(seg.device_id, [lat, lon]);
+      });
     }
     return m;
   }, [gridSnapshot]);
@@ -572,6 +593,23 @@ function DeviceDetailModal({
   const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
   const activeAlarms = alarms.filter((a) => a.device_id === device.id && !a.reset);
 
+  // Alarmin signal_key prefix'inden kaynagini cikar (master/sat01/sat02).
+  // Prefix yoksa veya bilinmiyorsa "master" varsay (ana kaynak).
+  const alarmSource = (a: AlarmEvent): SourceKey => {
+    const key = (a.signal_key ?? "").toLowerCase();
+    if (key.startsWith("sat01.")) return "sat01";
+    if (key.startsWith("sat02.")) return "sat02";
+    return "master";
+  };
+  const alarmsBySource: Record<SourceKey, AlarmEvent[]> = {
+    master: [],
+    sat01: [],
+    sat02: []
+  };
+  for (const a of activeAlarms) {
+    alarmsBySource[alarmSource(a)].push(a);
+  }
+
   // Topoloji bilgisi: bu cihaz hangi hat / bolge / segment ile bagli?
   const topoInfo = (() => {
     if (!gridSnapshot) return null;
@@ -681,6 +719,39 @@ function DeviceDetailModal({
             })}
           </div>
         </div>
+
+        {/* Alarmlar — bu kaynak icin (scroll edilebilen kompakt alan) */}
+        <div className="device-detail-col-section device-detail-col-alarms-section">
+          <div className="device-detail-col-title">
+            <span className="material-symbols-outlined">warning</span>
+            Alarmlar
+            {alarmsBySource[src].length > 0 ? (
+              <span className="device-detail-col-alarm-count">
+                {alarmsBySource[src].length}
+              </span>
+            ) : null}
+          </div>
+          <div className="device-detail-col-alarms">
+            {alarmsBySource[src].length === 0 ? (
+              <div className="device-detail-col-alarm-empty">Aktif alarm yok</div>
+            ) : (
+              alarmsBySource[src].map((a) => (
+                <div
+                  key={a.id}
+                  className={`device-detail-col-alarm-row level-${a.level.toLowerCase()}`}
+                  title={a.description || a.title}
+                >
+                  <span className="device-detail-col-alarm-title">{a.title}</span>
+                  <span className="device-detail-col-alarm-time">
+                    {new Date(a.created_at).toLocaleString("tr-TR", {
+                      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+                    })}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -732,34 +803,12 @@ function DeviceDetailModal({
           </button>
         </header>
 
-        {/* Aktif alarmlar — varsa header'in altinda dar bir serit */}
-        {activeAlarms.length > 0 ? (
-          <div className="device-detail-alert-bar">
-            <span className="material-symbols-outlined">warning</span>
-            <strong>{activeAlarms.length} aktif alarm</strong>
-            <span className="device-detail-alert-list">
-              {activeAlarms.slice(0, 3).map((a, idx) => (
-                <span key={a.id} className="device-detail-alert-chip">
-                  {a.title}
-                  {idx < Math.min(activeAlarms.length, 3) - 1 ? " · " : ""}
-                </span>
-              ))}
-              {activeAlarms.length > 3 ? (
-                <span className="device-detail-alert-more">+{activeAlarms.length - 3} daha</span>
-              ) : null}
-            </span>
-          </div>
-        ) : null}
-
         {/* 3 sutun: Master + Sat01 + Sat02 */}
         <div className="device-detail-modal-cols">
           {SOURCES.map((src) => renderColumn(src))}
         </div>
 
-        <footer className="device-detail-modal-foot">
-          <span className="helper-text">
-            Tüm sinyaller için Mühendislik &gt; Canlı Değerler sayfasını kullanın.
-          </span>
+        <footer className="device-detail-modal-foot device-detail-modal-foot--right">
           <button type="button" className="primary-btn" onClick={onClose}>
             Kapat
           </button>

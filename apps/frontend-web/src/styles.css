@@ -6278,7 +6278,7 @@ main.content.engineering-content:has(.device-management-panel) {
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-  width: 360px;
+  width: 380px;
   max-height: 78vh;
   overflow: hidden;
   display: flex;
@@ -6288,7 +6288,8 @@ main.content.engineering-content:has(.device-management-panel) {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  flex: 1;
+  overflow-y: auto;
 }
 .grid-segment-menu-head {
   display: flex;
@@ -14292,6 +14293,85 @@ main.content.engineering-content:has(.device-management-panel) {
   .device-detail-modal-cols {
     grid-template-columns: 1fr;
   }
+}
+
+/* Sutun altinda kaynak bazli alarm listesi */
+.device-detail-col-alarms-section {
+  margin-top: auto;
+  padding-top: 6px;
+}
+.device-detail-col-alarm-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  margin-left: auto;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.device-detail-col-alarms {
+  max-height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+}
+.device-detail-col-alarms::-webkit-scrollbar {
+  width: 4px;
+}
+.device-detail-col-alarms::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+.device-detail-col-alarm-empty {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 6px 4px;
+}
+.device-detail-col-alarm-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: #fef2f2;
+  border-left: 3px solid #dc2626;
+  font-size: 11px;
+  cursor: default;
+}
+.device-detail-col-alarm-row.level-warning {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}
+.device-detail-col-alarm-row.level-info {
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+}
+.device-detail-col-alarm-title {
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.device-detail-col-alarm-time {
+  font-size: 10px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Footer sadece sag tarafta (Kapat) */
+.device-detail-modal-foot--right {
+  justify-content: flex-end;
 }
 
 
