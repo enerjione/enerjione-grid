@@ -720,22 +720,15 @@ function DeviceDetailModal({
           <span className={`device-detail-col-badge is-${src === "master" ? "master" : src === "sat01" ? "sat1" : "sat2"}`}>
             {SOURCE_LABEL[src]}
           </span>
-        </header>
-
-        {/* Batarya — pil ikonu + buyuk yuzde */}
-        <div className={`device-detail-col-batt-card is-${battIconLevel}`}>
-          <span className="material-symbols-outlined device-detail-col-batt-icon">
-            {battIconName}
-          </span>
-          <div className="device-detail-col-batt-info">
-            <div className="device-detail-col-batt-pct">
-              {typeof battP === "number" ? `%${battP}` : "—"}
-            </div>
-            <div className="device-detail-col-batt-volt">
-              {typeof battV === "number" ? `${battV.toFixed(2)} V` : "— V"}
-            </div>
+          {/* Batarya — sag ust kosede kompakt pil */}
+          <div
+            className={`device-detail-col-batt-mini is-${battIconLevel}`}
+            title={typeof battV === "number" ? `${battV.toFixed(2)} V` : "Voltaj —"}
+          >
+            <span className="material-symbols-outlined">{battIconName}</span>
+            <strong>{typeof battP === "number" ? `%${battP}` : "—"}</strong>
           </div>
-        </div>
+        </header>
 
         {/* Ariza sayaclari */}
         <div className="device-detail-col-counters">
