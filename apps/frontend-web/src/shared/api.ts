@@ -9,6 +9,7 @@ import type {
   Dnp3ExtendedSettings,
   Gateway,
   HostStatus,
+  NotificationItem,
   ServicesReport,
   NotificationSettings,
   OutboundTarget,
@@ -1016,6 +1017,50 @@ export async function fetchServicesStatus(token: string): Promise<ServicesReport
   });
   if (!response.ok) throw await buildApiError(response, "Servis durumlari alınamadı.");
   return (await response.json()) as ServicesReport;
+}
+
+/* ===== Bildirim merkezi (zil ikonu) ===== */
+
+export async function fetchNotifications(
+  token: string,
+  options?: { onlyUnread?: boolean; limit?: number }
+): Promise<NotificationItem[]> {
+  const params = new URLSearchParams();
+  if (options?.onlyUnread) params.set("only_unread", "true");
+  if (options?.limit != null) params.set("limit", String(options.limit));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${API_BASE_URL}/notifications${qs}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bildirimler alınamadı.");
+  return (await response.json()) as NotificationItem[];
+}
+
+export async function fetchNotificationUnreadCount(token: string): Promise<number> {
+  const response = await fetch(`${API_BASE_URL}/notifications/unread-count`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Okunmamış bildirim sayısı alınamadı.");
+  const data = (await response.json()) as { unread: number };
+  return Number(data.unread || 0);
+}
+
+export async function markNotificationRead(token: string, notificationId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bildirim okundu işaretlenemedi.");
+}
+
+export async function markAllNotificationsRead(token: string): Promise<number> {
+  const response = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bildirimler okundu işaretlenemedi.");
+  const data = (await response.json()) as { affected: number };
+  return Number(data.affected || 0);
 }
 
 export async function resetSignalsToDefaults(token: string): Promise<{

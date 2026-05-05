@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
+import { NotificationBell } from "./NotificationBell";
 import { useProjectSettings } from "./ProjectSettingsProvider";
 import type { UserRole } from "../shared/types";
 
 type Props = {
   fullName?: string;
   role?: UserRole;
+  /** Bildirim merkezi icin oturum token'i; varsa zil header'da gozukur. */
+  accessToken?: string;
   onLogout?: () => void;
   onSettings?: () => void;
   isEngineeringView?: boolean;
@@ -17,6 +20,7 @@ type Props = {
 export function Header({
   fullName,
   role,
+  accessToken,
   onLogout,
   onSettings,
   isEngineeringView,
@@ -93,6 +97,21 @@ export function Header({
           >
             Mühendislik
           </button>
+        ) : null}
+
+        {accessToken ? (
+          <NotificationBell
+            token={accessToken}
+            onNavigate={(link) => {
+              // Bildirim linkleri /alarms, /events, /system-status formatinda gelir.
+              // App'in routing yapisinda window.location yerine onChangePage kullanmak
+              // istersek burada parse ederiz; simdilik basit olarak alarms/events/...
+              // oneklerine bakip mevcut sayfa modlarina map ediyoruz.
+              if (link.startsWith("/alarms")) onChangePage("alarms");
+              else if (link.startsWith("/events")) onChangePage("events");
+              else if (link.startsWith("/system-status")) onChangePage("system-status");
+            }}
+          />
         ) : null}
 
         <div className="profile-menu" ref={menuRef}>

@@ -603,6 +603,20 @@ export function AlarmsPage({
                       </button>
                       <button
                         type="button"
+                        className="icon-btn icon-btn-reset"
+                        title="Manuel olarak normale döndür (resetle)"
+                        aria-label="Resetle"
+                        disabled={saving}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!window.confirm(`"${alarm.title}" alarmı manuel olarak normale döndürülsün mü? (Reset)`)) return;
+                          void handleReset(alarm.id);
+                        }}
+                      >
+                        <span className="material-symbols-outlined">restart_alt</span>
+                      </button>
+                      <button
+                        type="button"
                         className="icon-btn icon-btn-assign"
                         title="Atama"
                         aria-label="Atama"

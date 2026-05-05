@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.alarm import AlarmComment, AlarmEvent
 from app.models.user import User
 from app.services.event_service import record_event
+from app.services.notification_service import create_notification, notify_users
 from app.services.outbox_service import enqueue_outbox_event
 
 
@@ -20,7 +21,9 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
     alarm = db.get(AlarmEvent, alarm_id)
     if alarm is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
-    alarm.assigned_to = assigned_to.strip() if assigned_to else None
+    previous_assignee = alarm.assigned_to
+    new_assignee = assigned_to.strip() if assigned_to else None
+    alarm.assigned_to = new_assignee
     record_event(
         db,
         category="alarm",
@@ -28,8 +31,28 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
         severity="info",
         actor_username=actor_username,
         message=f"\"{alarm.title}\" alarmının ataması güncellendi",
-        metadata={"alarm_id": alarm.id, "assigned_to": alarm.assigned_to},
+        metadata={"alarm_id": alarm.id, "assigned_to": new_assignee, "previous_assignee": previous_assignee},
     )
+    # Bildirim mantigi:
+    #  * Atanmis kisi degisti VE bos degil ise → atanan kisiye bildirim gonder
+    #  * Atayan kullanici kendisi olsa bile bildirim olusur (gorsel feedback icin)
+    #  * Ayni kisiye yeniden atama (degisiklik yok) → bildirim atlanir (spam onlemi)
+    if new_assignee and new_assignee != previous_assignee:
+        if new_assignee == actor_username:
+            title = f"Bu alarmı kendi üstünüze aldınız: {alarm.title}"
+        else:
+            title = f"Size yeni bir alarm atandı: {alarm.title}"
+        create_notification(
+            db,
+            recipient_username=new_assignee,
+            category="alarm_assignment",
+            severity=alarm.level or "info",
+            title=title,
+            body=alarm.description,
+            actor_username=actor_username,
+            link=f"/alarms#alarm-{alarm.id}",
+            metadata={"alarm_id": alarm.id, "level": alarm.level},
+        )
     db.commit()
     db.refresh(alarm)
     return alarm
@@ -67,6 +90,20 @@ def create_alarm_comment(db: Session, alarm_id: int, comment: str, current_user:
         message=f"\"{alarm.title}\" alarmına yorum eklendi",
         metadata={"alarm_id": alarm.id},
     )
+    # Yorum bildirimi: alarmin atandigi kullaniciya (yorum yazandan farkli ise)
+    # ve onceki yorum sahiplerine — basit versiyonda sadece atanan kisiye.
+    if alarm.assigned_to and alarm.assigned_to != current_user.username:
+        create_notification(
+            db,
+            recipient_username=alarm.assigned_to,
+            category="alarm_comment",
+            severity="info",
+            title=f"\"{alarm.title}\" alarmına yorum eklendi",
+            body=comment_text,
+            actor_username=current_user.username,
+            link=f"/alarms#alarm-{alarm.id}",
+            metadata={"alarm_id": alarm.id, "comment_id": None},
+        )
     db.commit()
     db.refresh(row)
     return row

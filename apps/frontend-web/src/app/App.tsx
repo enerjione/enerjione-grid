@@ -1354,6 +1354,7 @@ export function App() {
       <Header
         fullName={currentUser?.full_name ?? session.username}
         role={session.role}
+        accessToken={session.accessToken}
         activePage={pageMode}
         onChangePage={setPageMode}
         isEngineeringView={pageMode === "engineering"}

@@ -19,6 +19,7 @@ from app.schemas.internal import InternalAlarmClear, InternalAlarmIngest
 from app.schemas.outbound import OutboundTargetRead
 from app.schemas.signal_catalog import SignalCatalogRead
 from app.services.event_service import record_event
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -186,6 +187,7 @@ def ingest_alarm(
         created_at=datetime.now(timezone.utc),
     )
     db.add(alarm)
+    db.flush()  # alarm.id'yi notification metadata'sinda kullanabilmek icin
     record_event(
         db,
         category="alarm",
@@ -197,6 +199,29 @@ def ingest_alarm(
             "message_id": payload.message_id,
             "correlation_id": payload.correlation_id,
             "source_gateway": payload.source_gateway,
+            "signal_key": payload.signal_key,
+            "alarm_id": alarm.id,
+        },
+    )
+    # Broadcast bildirim — recipient_username=None ile tum aktif kullanicilara
+    # zilde gosterilir. Spesifik atama assign_alarm'da yapilir; o zaman ek bir
+    # notification olusturulur (atanan kisiye spesifik).
+    severity_for_notif = "critical" if (payload.level or "").lower() == "critical" else (
+        "error" if (payload.level or "").lower() in ("error", "high") else "warning"
+    )
+    create_notification(
+        db,
+        recipient_username=None,  # broadcast
+        category="alarm",
+        severity=severity_for_notif,
+        title=f"Yeni alarm: {payload.title}",
+        body=payload.description,
+        actor_username=None,
+        link=f"/alarms#alarm-{alarm.id}",
+        metadata={
+            "alarm_id": alarm.id,
+            "device_code": payload.device_code,
+            "level": payload.level,
             "signal_key": payload.signal_key,
         },
     )

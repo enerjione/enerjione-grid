@@ -476,3 +476,29 @@ export type ServicesReport = {
   services: ServiceStatus[];
   sampled_at: number;
 };
+
+/** Bildirim merkezi (Header zil ikonu). */
+export type NotificationCategory =
+  | "alarm"
+  | "alarm_assignment"
+  | "alarm_comment"
+  | "system"
+  | "info"
+  | "warning"
+  | "error"
+  | string;
+
+export type NotificationItem = {
+  id: number;
+  recipient_username: string | null;
+  category: NotificationCategory;
+  severity: string;
+  title: string;
+  body?: string | null;
+  actor_username?: string | null;
+  link?: string | null;
+  metadata_json?: string | null;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at: string;
+};
