@@ -297,6 +297,13 @@ def create_tables():
                 "ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_enabled BOOLEAN NOT NULL DEFAULT TRUE"
             )
         )
+        # Direk tipi: normal direk, trafo, vb. Hat baslangic/bitis goruntusu kullanici secimine
+        # gore degistirilebilir. Default 'pole'.
+        connection.execute(
+            text(
+                "ALTER TABLE poles ADD COLUMN IF NOT EXISTS pole_type VARCHAR(20) NOT NULL DEFAULT 'pole'"
+            )
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS alarm_rules ("

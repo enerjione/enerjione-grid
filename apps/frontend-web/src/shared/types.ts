@@ -222,6 +222,8 @@ export type Line = {
   segment_count?: number;
 };
 
+export type PoleType = "pole" | "transformer";
+
 export type Pole = {
   id: number;
   line_id: number;
@@ -229,6 +231,7 @@ export type Pole = {
   name?: string | null;
   latitude: number;
   longitude: number;
+  pole_type?: PoleType;
   created_at: string;
 };
 

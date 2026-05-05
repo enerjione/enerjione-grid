@@ -5797,8 +5797,79 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 .grid-mgmt-map-toolbar {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 8px; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px; flex-wrap: wrap;
+  padding: 6px 8px; border-radius: 8px;
+}
+.grid-mgmt-toolbar-group {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.grid-mgmt-toolbar-sep {
+  width: 1px; height: 22px; background: #e2e8f0; margin: 0 2px;
+}
+.grid-mgmt-tool-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.grid-mgmt-tool-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.grid-mgmt-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.grid-mgmt-tool-btn .material-symbols-outlined {
+  font-size: 18px;
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+}
+.grid-mgmt-tool-btn.is-active {
+  background: #4f46e5;
+  border-color: #4338ca;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
+}
+.grid-mgmt-tool-btn.is-active:hover:not(:disabled) {
+  background: #4338ca;
+  color: #fff;
+}
+.grid-mgmt-tool-btn.is-save {
+  background: #16a34a;
+  border-color: #15803d;
+  color: #fff;
+}
+.grid-mgmt-tool-btn.is-save:hover:not(:disabled) {
+  background: #15803d;
+  color: #fff;
+}
+.grid-mgmt-tool-btn.is-save:disabled {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #94a3b8;
+}
+.grid-mgmt-tool-btn.is-undo {
+  border-color: #fbbf24;
+  color: #b45309;
+  background: #fffbeb;
+}
+.grid-mgmt-tool-btn.is-undo:hover:not(:disabled) {
+  background: #fef3c7;
+  color: #92400e;
+}
+.grid-mgmt-tool-btn.is-undo:disabled {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #94a3b8;
 }
 .grid-mgmt-tip { font-size: 11px; }
 .grid-mgmt-map-shell.is-add-mode {
@@ -12927,4 +12998,737 @@ main.content.engineering-content:has(.device-management-panel) {
   color: #334155;
   font-weight: 500;
 }
+
+/* =========================================================================
+   Pole-tipi sembol opsiyonlari + draft markers
+   ========================================================================= */
+
+.grid-pole-pin.is-transformer {
+  background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+  width: 34px; height: 34px;
+  border-radius: 6px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(180, 83, 9, 0.4);
+}
+.grid-pole-pin.is-breaker {
+  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  width: 34px; height: 34px;
+  border-radius: 4px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(67, 56, 202, 0.4);
+}
+.grid-pole-pin.is-transformer.is-start,
+.grid-pole-pin.is-breaker.is-start {
+  outline: 3px solid #16a34a;
+  outline-offset: 1px;
+}
+.grid-pole-pin.is-transformer.is-end,
+.grid-pole-pin.is-breaker.is-end {
+  outline: 3px solid #dc2626;
+  outline-offset: 1px;
+}
+.grid-pole-pin .grid-pole-symbol {
+  font-size: 16px;
+  line-height: 1;
+}
+.grid-pole-pin .grid-pole-seq {
+  font-size: 8px;
+  font-weight: 800;
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  background: #0f172a;
+  color: #fff;
+  border-radius: 8px;
+  padding: 1px 4px;
+  border: 1.5px solid #fff;
+}
+.grid-pole-pin {
+  position: relative;
+}
+
+/* Draft markers — yeni eklenen / taşınan direkler */
+.grid-pole-pin.is-draft-added {
+  outline: 2px dashed #f59e0b;
+  outline-offset: 2px;
+  animation: pole-draft-pulse 1.2s ease-in-out infinite;
+}
+.grid-pole-pin.is-draft-moved {
+  outline: 2px dashed #3b82f6;
+  outline-offset: 2px;
+}
+@keyframes pole-draft-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+}
+
+/* Edit-mode toolbar vurgusu */
+.grid-mgmt-map-toolbar.is-edit-mode {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.grid-mgmt-draft-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Pole edit modal'inde sembol secimi */
+.pole-type-fieldset {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 12px 12px;
+  margin: 6px 0 10px;
+}
+.pole-type-fieldset legend {
+  font-size: 12px;
+  color: #475569;
+  padding: 0 6px;
+  font-weight: 600;
+}
+.pole-type-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.pole-type-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pole-type-option:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+.pole-type-option.is-selected {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+.pole-type-option input { display: none; }
+.pole-type-option .pole-type-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.pole-type-option > span:last-child {
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+}
+
+/* =========================================================================
+   Cihaz Detay Modal'i — buyutulmus, full-width yerlesim
+   ========================================================================= */
+.device-detail-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.device-detail-modal {
+  width: 100%;
+  max-width: 1200px;
+  height: calc(100vh - 48px);
+  max-height: 900px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.device-detail-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 24px;
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+.device-detail-modal-head .label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6366f1;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.device-detail-modal-head h3 {
+  margin: 4px 0 2px;
+  font-size: 22px;
+  color: #0f172a;
+}
+.device-detail-modal-head .device-code {
+  color: #64748b;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.device-detail-modal-close {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.device-detail-modal-close:hover {
+  background: #f1f5f9;
+}
+.device-detail-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 24px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+.device-detail-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.device-detail-section.is-fullwidth {
+  grid-column: 1 / -1;
+}
+.device-detail-section h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.device-detail-section h4 .material-symbols-outlined {
+  font-size: 18px;
+  color: #4f46e5;
+}
+.device-detail-alarm-row {
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.device-detail-alarm-row strong {
+  color: #b45309;
+  font-size: 13px;
+}
+.device-detail-alarm-row .desc {
+  font-size: 12px;
+  color: #475569;
+  margin-top: 2px;
+}
+.device-detail-alarm-row .ts {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.device-detail-battery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.device-detail-battery-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 80px 60px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+.device-detail-battery-source {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 12px;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+.device-detail-battery-source.is-master { background: #2563eb; }
+.device-detail-battery-source.is-sat1 { background: #16a34a; }
+.device-detail-battery-source.is-sat2 { background: #f59e0b; }
+.device-detail-battery-bar {
+  position: relative;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.device-detail-battery-bar > span {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.device-detail-battery-bar.is-low > span {
+  background: linear-gradient(90deg, #dc2626 0%, #ef4444 100%);
+}
+.device-detail-battery-bar.is-mid > span {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+}
+.device-detail-battery-volt {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  text-align: right;
+}
+.device-detail-battery-pct {
+  font-size: 11px;
+  color: #64748b;
+  text-align: right;
+}
+
+.device-detail-binary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.device-detail-binary-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+.device-detail-binary-pill.is-active {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.device-detail-binary-pill .state {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #e2e8f0;
+  color: #475569;
+}
+.device-detail-binary-pill.is-active .state {
+  background: #dc2626;
+  color: #fff;
+}
+
+.device-detail-analog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.device-detail-analog-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.device-detail-analog-card .lbl {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.device-detail-analog-card .val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  margin-top: 4px;
+}
+.device-detail-analog-card .unit {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: 4px;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.device-detail-counter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.device-detail-counter-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.device-detail-counter-card .icn {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.device-detail-counter-card.is-permanent .icn {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.device-detail-counter-card.is-transient .icn {
+  background: #fffbeb;
+  color: #d97706;
+}
+.device-detail-counter-card .lbl {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.device-detail-counter-card .val {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  line-height: 1.1;
+}
+.device-detail-counter-card .meta {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.device-detail-modal-foot {
+  padding: 12px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.device-detail-modal-foot .helper-text {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+@media (max-width: 900px) {
+  .device-detail-modal-body {
+    grid-template-columns: 1fr;
+  }
+  .device-detail-counter-grid,
+  .device-detail-binary-grid {
+    grid-template-columns: 1fr;
+  }
+  .device-detail-analog-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* =========================================================================
+   Liste tab — direkler agaci + cihaz kartlari
+   ========================================================================= */
+.grid-mgmt-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+.grid-mgmt-tree-pair {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Direk karti */
+.grid-mgmt-pole-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s;
+}
+.grid-mgmt-pole-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.grid-mgmt-pole-card.is-dragging { opacity: 0.55; }
+.grid-mgmt-pole-card.is-start { border-left: 4px solid #16a34a; }
+.grid-mgmt-pole-card.is-end { border-left: 4px solid #dc2626; }
+
+.grid-mgmt-pole-card-handle {
+  display: inline-flex;
+  align-items: center;
+  color: #94a3b8;
+  cursor: grab;
+}
+.grid-mgmt-pole-card-handle:active { cursor: grabbing; }
+.grid-mgmt-pole-card-handle .material-symbols-outlined { font-size: 20px; }
+
+.grid-mgmt-pole-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.grid-mgmt-pole-card-icon.is-transformer {
+  background: linear-gradient(135deg, #fef3c7 0%, #fcd34d 100%);
+  color: #b45309;
+}
+
+.grid-mgmt-pole-card-main {
+  flex: 1;
+  min-width: 0;
+}
+.grid-mgmt-pole-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.grid-mgmt-pole-card-title strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+.grid-mgmt-pole-card-seq {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+.grid-mgmt-pole-card-seq.is-start { background: #dcfce7; color: #15803d; }
+.grid-mgmt-pole-card-seq.is-end { background: #fee2e2; color: #b91c1c; }
+
+.grid-mgmt-pole-card-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.grid-mgmt-pole-card-tag.is-start { background: #16a34a; color: #fff; }
+.grid-mgmt-pole-card-tag.is-end { background: #dc2626; color: #fff; }
+.grid-mgmt-pole-card-tag.is-type { background: #fef3c7; color: #b45309; }
+
+.grid-mgmt-pole-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.grid-mgmt-pole-card-meta .material-symbols-outlined {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.grid-mgmt-pole-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.grid-mgmt-pole-card-actions .icon-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Segment karti — iki direk arasi */
+.grid-mgmt-segment-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 4px 36px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  position: relative;
+  transition: all 0.15s;
+}
+.grid-mgmt-segment-card.is-empty {
+  background: #fafbfc;
+}
+.grid-mgmt-segment-card.has-device {
+  background: #f0fdf4;
+  border-color: #86efac;
+  border-style: solid;
+}
+.grid-mgmt-segment-card.is-drop-target {
+  background: #eef2ff;
+  border-color: #6366f1;
+  border-style: solid;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.grid-mgmt-segment-card-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.grid-mgmt-segment-card-dot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+.grid-mgmt-segment-card-line {
+  width: 28px;
+  height: 3px;
+  background: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
+  border-radius: 2px;
+}
+.grid-mgmt-segment-card.has-device .grid-mgmt-segment-card-line {
+  background: linear-gradient(90deg, #16a34a 0%, #15803d 100%);
+}
+
+/* Cihaz chip'i */
+.grid-mgmt-device-chip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: grab;
+  transition: all 0.15s;
+}
+.grid-mgmt-device-chip:active { cursor: grabbing; }
+.grid-mgmt-device-chip:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.grid-mgmt-device-chip.is-dragging { opacity: 0.55; }
+.grid-mgmt-device-chip.is-alarm {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.grid-mgmt-device-chip-handle {
+  display: inline-flex;
+  color: #94a3b8;
+}
+.grid-mgmt-device-chip-handle .material-symbols-outlined { font-size: 18px; }
+
+.grid-mgmt-device-chip-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #16a34a;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+.grid-mgmt-device-chip-status.is-alarm {
+  background: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.22);
+  animation: device-chip-pulse 1.2s ease-in-out infinite;
+}
+@keyframes device-chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.22); }
+  50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+.grid-mgmt-device-chip-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.grid-mgmt-device-chip-main strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+.grid-mgmt-device-chip-main code {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.grid-mgmt-device-chip .icon-btn .material-symbols-outlined { font-size: 16px; }
+
+/* Bos segment placeholder */
+.grid-mgmt-device-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.grid-mgmt-device-empty .material-symbols-outlined {
+  font-size: 18px;
+  color: #94a3b8;
+}
+.grid-mgmt-device-empty .helper-text {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+}
+.grid-mgmt-device-empty .grid-mgmt-segment-select {
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  color: #334155;
+  cursor: pointer;
+}
+
 

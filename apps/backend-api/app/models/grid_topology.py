@@ -90,6 +90,9 @@ class Pole(Base):
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    # Direk tipi: 'pole' (varsayilan), 'transformer' (trafo), 'breaker', vs.
+    # UI hat baslangic/bitis sembolunu bu alana gore degistirir.
+    pole_type: Mapped[str] = mapped_column(String(20), nullable=False, default="pole")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )

@@ -76,6 +76,8 @@ class PoleBase(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
+    # Direk tipi: 'pole' | 'transformer' | 'breaker' (varsayilan: pole)
+    pole_type: str = Field(default="pole", max_length=20)
 
 
 class PoleCreate(PoleBase):
@@ -87,6 +89,7 @@ class PoleUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+    pole_type: str | None = Field(default=None, max_length=20)
 
 
 class PoleRead(PoleBase):

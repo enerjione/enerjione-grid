@@ -50,13 +50,40 @@ type DetailTab = "map" | "list";
 
 const DEFAULT_REGION_COLOR = "#2563eb";
 
-const poleIcon = (label: string, isStart: boolean, isEnd: boolean) => {
-  const cls = isStart ? "is-start" : isEnd ? "is-end" : "";
+const poleIcon = (
+  label: string,
+  isStart: boolean,
+  isEnd: boolean,
+  draftState?: "added" | "moved" | null,
+  poleType?: string
+) => {
+  const typeCls =
+    poleType === "transformer"
+      ? "is-transformer"
+      : poleType === "breaker"
+        ? "is-breaker"
+        : "";
+  const cls = [
+    isStart ? "is-start" : isEnd ? "is-end" : "",
+    typeCls,
+    draftState === "added" ? "is-draft-added" : "",
+    draftState === "moved" ? "is-draft-moved" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+  // Trafo/kesici icin sembolu icine yaz; aksi halde sira numarasi.
+  let inner = `<span>${label}</span>`;
+  if (poleType === "transformer") {
+    inner = `<span class="grid-pole-symbol" title="Trafo">⚡</span><span class="grid-pole-seq">${label}</span>`;
+  } else if (poleType === "breaker") {
+    inner = `<span class="grid-pole-symbol" title="Kesici">▣</span><span class="grid-pole-seq">${label}</span>`;
+  }
+  const size: [number, number] = poleType && poleType !== "pole" ? [34, 34] : [28, 28];
   return L.divIcon({
     className: "grid-pole-leaflet-wrap",
-    html: `<div class="grid-pole-pin ${cls}"><span>${label}</span></div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14]
+    html: `<div class="grid-pole-pin ${cls}">${inner}</div>`,
+    iconSize: size,
+    iconAnchor: [size[0] / 2, size[1] / 2]
   });
 };
 
@@ -96,6 +123,21 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
   // Diger hatlari arka planda goster (referans icin)
   const [showOtherLines, setShowOtherLines] = useState(false);
   const [otherLineDetails, setOtherLineDetails] = useState<Map<number, LineDetail>>(new Map());
+
+  // Direk düzenleme draft modu — açıkken drag/sil/ekle backend'e yansımaz,
+  // Kaydet'e basana kadar yerelde tutulur. Geri Al ile baseline'a dönülür.
+  const [editMode, setEditMode] = useState(false);
+  // Mevcut direkler için override (lat/lng/name değişikliği)
+  const [draftPoleEdits, setDraftPoleEdits] = useState<
+    Map<number, { latitude?: number; longitude?: number; name?: string | null }>
+  >(new Map());
+  // Yeni eklenen direkler (henüz backend'de yok). id geçici negatif sayı.
+  const [draftPoleAdds, setDraftPoleAdds] = useState<Pole[]>([]);
+  // Silinmek üzere işaretli direkler (id'leri).
+  const [draftPoleDeletes, setDraftPoleDeletes] = useState<Set<number>>(new Set());
+  // Sürüklenme sırasında anlık konum (polyline'in canlı yeniden çizilmesi için).
+  // Sürükleme bitince ya draftPoleEdits / draftPoleAdds'e taşınır.
+  const [draggingPole, setDraggingPole] = useState<{ id: number; lat: number; lng: number } | null>(null);
 
   // Bağlam menüsü (segment için)
   const [segmentMenu, setSegmentMenu] = useState<{
@@ -204,21 +246,51 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     };
   }, [showOtherLines, lines, selectedLineId, accessToken, detail]);
 
-  // sequence_no sırasıyla direk listesi
+  // sequence_no sırasıyla direk listesi.
+  // editMode açıkken: backend listesine draft eklemeleri kat, draft silmeleri çıkar,
+  // mevcut direklerin lat/lng/name override'larını uygula.
   const sortedPoles = useMemo<Pole[]>(() => {
     if (!detail) return [];
-    return [...detail.poles].sort((a, b) => a.sequence_no - b.sequence_no);
-  }, [detail]);
+    let base: Pole[] = detail.poles;
+    if (editMode) {
+      base = base.filter((p) => !draftPoleDeletes.has(p.id));
+      if (draftPoleEdits.size > 0) {
+        base = base.map((p) => {
+          const ov = draftPoleEdits.get(p.id);
+          if (!ov) return p;
+          return {
+            ...p,
+            latitude: ov.latitude ?? p.latitude,
+            longitude: ov.longitude ?? p.longitude,
+            name: ov.name !== undefined ? ov.name : p.name
+          };
+        });
+      }
+      base = [...base, ...draftPoleAdds];
+    }
+    return [...base].sort((a, b) => a.sequence_no - b.sequence_no);
+  }, [detail, editMode, draftPoleEdits, draftPoleAdds, draftPoleDeletes]);
+
+  const hasUnsavedDraft =
+    editMode && (draftPoleEdits.size > 0 || draftPoleAdds.length > 0 || draftPoleDeletes.size > 0);
+
+  // Sürükleme sırasında anlık konumu uygula (canlı polyline güncellemesi için).
+  const livePoles = useMemo<Pole[]>(() => {
+    if (!draggingPole) return sortedPoles;
+    return sortedPoles.map((p) =>
+      p.id === draggingPole.id ? { ...p, latitude: draggingPole.lat, longitude: draggingPole.lng } : p
+    );
+  }, [sortedPoles, draggingPole]);
 
   const polesById = useMemo<Map<number, Pole>>(
-    () => new Map(sortedPoles.map((p) => [p.id, p])),
-    [sortedPoles]
+    () => new Map(livePoles.map((p) => [p.id, p])),
+    [livePoles]
   );
 
   // Polyline pozisyonları
   const polylinePositions = useMemo<[number, number][]>(
-    () => sortedPoles.map((p) => [p.latitude, p.longitude]),
-    [sortedPoles]
+    () => livePoles.map((p) => [p.latitude, p.longitude]),
+    [livePoles]
   );
 
   // Ardışık direk segmentleri (otomatik segment listesi). DB'deki LineSegment
@@ -232,9 +304,9 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
 
   const segmentSlots = useMemo<SegmentSlot[]>(() => {
     const slots: SegmentSlot[] = [];
-    for (let i = 0; i < sortedPoles.length - 1; i += 1) {
-      const fromPole = sortedPoles[i];
-      const toPole = sortedPoles[i + 1];
+    for (let i = 0; i < livePoles.length - 1; i += 1) {
+      const fromPole = livePoles[i];
+      const toPole = livePoles[i + 1];
       const seg =
         detail?.segments.find(
           (s) => s.from_pole_id === fromPole.id && s.to_pole_id === toPole.id
@@ -242,7 +314,7 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
       slots.push({ fromPole, toPole, segment: seg });
     }
     return slots;
-  }, [detail, sortedPoles]);
+  }, [detail, livePoles]);
 
   // Cihazların hangileri zaten bir segmente bağlı (başka segmentte boştalar gizlensin)
   const usedDeviceIds = useMemo<Set<number>>(() => {
@@ -280,6 +352,23 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
   const handleMapClickAddPole = async (lat: number, lon: number) => {
     if (!selectedLine) return;
     const nextSeq = sortedPoles.length === 0 ? 1 : sortedPoles[sortedPoles.length - 1].sequence_no + 1;
+
+    // Draft modunda yerelde tut.
+    if (editMode) {
+      const tempId = -Date.now();
+      const draftPole: Pole = {
+        id: tempId,
+        line_id: selectedLine.id,
+        sequence_no: nextSeq,
+        latitude: lat,
+        longitude: lon,
+        name: null
+      } as Pole;
+      setDraftPoleAdds((prev) => [...prev, draftPole]);
+      toast.success(`Direk #${nextSeq} taslakta — Kaydet ile uygulayın.`);
+      return;
+    }
+
     setBusy(true);
     try {
       await createPole(accessToken, {
@@ -403,6 +492,8 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
 
   // Drag-to-reorder (HTML5 native, basit)
   const [draggedPoleId, setDraggedPoleId] = useState<number | null>(null);
+  // Segmentlere bağlı cihazları sürükle-bırak ile başka segmente taşımak için.
+  const [draggedDeviceSegId, setDraggedDeviceSegId] = useState<number | null>(null);
 
   const handleDrop = async (targetPoleId: number) => {
     if (draggedPoleId === null || draggedPoleId === targetPoleId) {
@@ -428,6 +519,20 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Liste görünümünde bir segmentin cihazını başka segmente sürükle-bırak ile taşı.
+  // (Backend zaten handleMoveDeviceToOtherSlot ile çalışıyor; burada yalnız hedef segmenti seçiyoruz.)
+  const handleDeviceDropOnSlot = async (targetSlot: SegmentSlot) => {
+    if (draggedDeviceSegId === null) return;
+    if (targetSlot.segment && targetSlot.segment.id === draggedDeviceSegId) {
+      setDraggedDeviceSegId(null);
+      return;
+    }
+    const fromSeg = detail?.segments.find((s) => s.id === draggedDeviceSegId) ?? null;
+    setDraggedDeviceSegId(null);
+    if (!fromSeg) return;
+    await handleMoveDeviceToOtherSlot(fromSeg, targetSlot);
   };
 
   return (
@@ -536,31 +641,86 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
             <p className="helper-text">Bir hat seçin; direkleri ve segmentleri burada düzenleyin.</p>
           ) : detailTab === "map" ? (
             <>
-              <div className="grid-mgmt-map-toolbar">
-                <button
-                  className={`secondary-btn ${addPoleMode ? "primary-btn" : ""}`}
-                  onClick={() => setAddPoleMode(!addPoleMode)}
-                  disabled={busy}
-                >
-                  {addPoleMode ? "Direk ekleme açık (haritaya tıkla)" : "+ Direk Ekle Modu"}
-                </button>
-                <button className="secondary-btn" disabled={sortedPoles.length < 2 || busy}
-                  onClick={() => void handleReverseOrder()}>
-                  ↔ Sırayı Tersine Çevir
-                </button>
-                <label className="grid-mgmt-toggle">
-                  <input
-                    type="checkbox"
-                    checked={showOtherLines}
-                    onChange={(e) => setShowOtherLines(e.target.checked)}
-                  />
-                  <span>Diğer hatları göster</span>
-                </label>
-                <span className="helper-text grid-mgmt-tip">
-                  {sortedPoles.length >= 2
-                    ? "Bir segmente tıklayarak cihaz atayın. Atanmış cihazı taşımak için cihaz simgesine tıklayın."
-                    : "Önce en az 2 direk ekleyin (haritaya tıklayarak)."}
-                </span>
+              <div className={`grid-mgmt-map-toolbar ${editMode ? "is-edit-mode" : ""}`}>
+                <div className="grid-mgmt-toolbar-group grid-mgmt-toolbar-left">
+                  <button
+                    className={`grid-mgmt-tool-btn ${editMode ? "is-active" : ""}`}
+                    onClick={() => {
+                      if (editMode && hasUnsavedDraft) {
+                        if (!window.confirm("Taslakta kaydedilmemiş değişiklikler var. Düzenleme modunu kapatmak istiyor musunuz?")) return;
+                        setDraftPoleAdds([]);
+                        setDraftPoleEdits(new Map());
+                        setDraftPoleDeletes(new Set());
+                      }
+                      setEditMode(!editMode);
+                      if (editMode) setAddPoleMode(false);
+                    }}
+                    disabled={busy}
+                    title="Açıkken: direk ekleme/taşıma/silme önce taslakta tutulur, Kaydet'e basana kadar kalıcı olmaz."
+                  >
+                    <span className="material-symbols-outlined">edit</span>
+                    {editMode ? "Düzenleme Açık" : "Düzenleme Modu"}
+                  </button>
+
+                  <label className="grid-mgmt-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showOtherLines}
+                      onChange={(e) => setShowOtherLines(e.target.checked)}
+                    />
+                    <span>Diğer hatlar</span>
+                  </label>
+                </div>
+
+                {editMode ? (
+                  <div className="grid-mgmt-toolbar-group grid-mgmt-toolbar-right">
+                    <button
+                      className={`grid-mgmt-tool-btn ${addPoleMode ? "is-active" : ""}`}
+                      onClick={() => setAddPoleMode(!addPoleMode)}
+                      disabled={busy}
+                      title={addPoleMode ? "Haritaya tıklayarak direk ekleyin" : "Direk ekleme modu"}
+                    >
+                      <span className="material-symbols-outlined">add_location_alt</span>
+                      Direk Ekle
+                    </button>
+
+                    <button
+                      className="grid-mgmt-tool-btn"
+                      disabled={sortedPoles.length < 2 || busy}
+                      onClick={() => void handleReverseOrder()}
+                      title="Direklerin sırasını tersine çevir"
+                    >
+                      <span className="material-symbols-outlined">swap_horiz</span>
+                      Tersine Çevir
+                    </button>
+
+                    <span className="grid-mgmt-toolbar-sep" />
+
+                    <button
+                      className="grid-mgmt-tool-btn is-undo"
+                      onClick={() => handleUndoDraft()}
+                      disabled={!hasUnsavedDraft || busy}
+                      title="Tüm taslak değişiklikleri geri al"
+                    >
+                      <span className="material-symbols-outlined">undo</span>
+                      Geri Al
+                    </button>
+                    <button
+                      className="grid-mgmt-tool-btn is-save"
+                      onClick={() => void handleSaveDraft()}
+                      disabled={!hasUnsavedDraft || busy}
+                      title="Taslak değişiklikleri kalıcı olarak kaydet"
+                    >
+                      <span className="material-symbols-outlined">save</span>
+                      Kaydet
+                      {hasUnsavedDraft ? (
+                        <span className="grid-mgmt-draft-badge">
+                          {draftPoleAdds.length + draftPoleEdits.size + draftPoleDeletes.size}
+                        </span>
+                      ) : null}
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div
@@ -666,25 +826,51 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                     );
                   })}
 
-                  {/* Direkler — sequence_no etiketli */}
+                  {/* Direkler — sequence_no etiketli. Draft modunda taslak işaretleri */}
                   {sortedPoles.map((p, idx) => {
                     const isStart = idx === 0;
                     const isEnd = idx === sortedPoles.length - 1;
+                    const draftState: "added" | "moved" | null = editMode
+                      ? p.id < 0
+                        ? "added"
+                        : draftPoleEdits.has(p.id)
+                          ? "moved"
+                          : null
+                      : null;
                     return (
                       <Marker
-                        key={p.id}
+                        key={`${p.id}-${editMode ? "edit" : "view"}`}
                         position={[p.latitude, p.longitude]}
-                        icon={poleIcon(String(p.sequence_no), isStart, isEnd)}
-                        draggable
+                        icon={poleIcon(
+                          String(p.sequence_no),
+                          isStart,
+                          isEnd,
+                          draftState,
+                          p.pole_type
+                        )}
+                        draggable={editMode}
                         eventHandlers={{
-                          click: () => setEditingPole(p),
+                          click: () => {
+                            // Draft eklenen direği düzenle modali ile değiştirmek
+                            // mantıksız (henüz backend'de yok). Sessiz geç.
+                            if (p.id < 0) return;
+                            setEditingPole(p);
+                          },
                           contextmenu: (event: L.LeafletMouseEvent) => {
                             event.originalEvent.preventDefault();
                             event.originalEvent.stopPropagation();
                             void handleDeletePole(p);
                           },
+                          dragstart: () => {
+                            setDraggingPole({ id: p.id, lat: p.latitude, lng: p.longitude });
+                          },
+                          drag: (event: L.LeafletEvent) => {
+                            const ll = (event.target as L.Marker).getLatLng();
+                            setDraggingPole({ id: p.id, lat: ll.lat, lng: ll.lng });
+                          },
                           dragend: (event: L.DragEndEvent) => {
                             const ll = (event.target as L.Marker).getLatLng();
+                            setDraggingPole(null);
                             void handlePoleDragEnd(p, ll.lat, ll.lng);
                           }
                         }}
@@ -692,8 +878,14 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                         <Tooltip>
                           {p.name ?? `Direk #${p.sequence_no}`}
                           {isStart ? " (BAŞ)" : isEnd ? " (SON)" : ""}
+                          {draftState === "added" ? " · YENİ (taslak)" : ""}
+                          {draftState === "moved" ? " · TAŞINDI (taslak)" : ""}
                           <br />
-                          <em style={{ fontSize: 10 }}>Tıkla: düzenle · Sürükle: taşı · Sağ tık: sil</em>
+                          <em style={{ fontSize: 10 }}>
+                            {editMode
+                              ? "Sürükle: taşı (taslak) · Sağ tık: sil (taslak)"
+                              : "Düzenleme için 'Düzenleme Modu'nu açın."}
+                          </em>
                         </Tooltip>
                       </Marker>
                     );
@@ -776,81 +968,151 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
             // ===== LISTE TAB =====
             <div className="grid-mgmt-list-tab">
               <div className="grid-mgmt-list-tab-toolbar">
-                <button className="secondary-btn" disabled={sortedPoles.length < 2 || busy}
-                  onClick={() => void handleReverseOrder()}>
-                  ↔ Sırayı Tersine Çevir
+                <button
+                  className="grid-mgmt-tool-btn"
+                  disabled={sortedPoles.length < 2 || busy}
+                  onClick={() => void handleReverseOrder()}
+                >
+                  <span className="material-symbols-outlined">swap_horiz</span>
+                  Sırayı Tersine Çevir
                 </button>
                 <span className="helper-text">
-                  Direk satırlarını sürükleyerek sırayı değiştirebilirsiniz.
+                  Direkleri sıralamak için satırları, cihazları taşımak için cihaz kartlarını sürükleyin.
                 </span>
               </div>
 
-              <div className="grid-mgmt-pole-rows">
+              <div className="grid-mgmt-tree">
                 {sortedPoles.length === 0 ? (
                   <p className="helper-text">Henüz direk yok. Harita sekmesine geçip direk ekleyin.</p>
                 ) : null}
                 {sortedPoles.map((p, idx) => {
                   const isStart = idx === 0;
                   const isEnd = idx === sortedPoles.length - 1;
-                  // Bu direkten sonraki segment
-                  const nextSlot = segmentSlots[idx]; // i. direkten i+1'e
+                  const nextSlot = segmentSlots[idx]; // i. direk -> i+1
                   const dev = nextSlot?.segment?.device_id
                     ? devices.find((d) => d.id === nextSlot.segment!.device_id)
                     : null;
+                  const symbol = p.pole_type === "transformer" ? "⚡" : "📍";
+                  const isDeviceDropTarget =
+                    draggedDeviceSegId !== null &&
+                    nextSlot &&
+                    (!nextSlot.segment || nextSlot.segment.id !== draggedDeviceSegId);
                   return (
-                    <div key={p.id}>
+                    <div key={p.id} className="grid-mgmt-tree-pair">
                       <div
-                        className={`grid-mgmt-pole-row ${draggedPoleId === p.id ? "is-dragging" : ""}`}
+                        className={`grid-mgmt-pole-card ${
+                          draggedPoleId === p.id ? "is-dragging" : ""
+                        } ${isStart ? "is-start" : isEnd ? "is-end" : ""}`}
                         draggable
                         onDragStart={() => setDraggedPoleId(p.id)}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => void handleDrop(p.id)}
                       >
-                        <span className="grid-mgmt-pole-row-handle">⋮⋮</span>
-                        <span className={`grid-mgmt-pole-row-seq ${isStart ? "is-start" : isEnd ? "is-end" : ""}`}>
-                          #{p.sequence_no}
-                          {isStart ? " · BAŞ" : isEnd ? " · SON" : ""}
+                        <span className="grid-mgmt-pole-card-handle" title="Sürükle">
+                          <span className="material-symbols-outlined">drag_indicator</span>
                         </span>
-                        <span className="grid-mgmt-pole-row-name">{p.name ?? "(adsız)"}</span>
-                        <span className="grid-mgmt-pole-row-coord">
-                          {p.latitude.toFixed(5)}, {p.longitude.toFixed(5)}
+                        <span className={`grid-mgmt-pole-card-icon ${
+                          p.pole_type === "transformer" ? "is-transformer" : ""
+                        }`}>
+                          {symbol}
                         </span>
-                        <div className="grid-mgmt-pole-row-actions">
+                        <div className="grid-mgmt-pole-card-main">
+                          <div className="grid-mgmt-pole-card-title">
+                            <span className={`grid-mgmt-pole-card-seq ${
+                              isStart ? "is-start" : isEnd ? "is-end" : ""
+                            }`}>
+                              #{p.sequence_no}
+                            </span>
+                            <strong>{p.name ?? "(adsız)"}</strong>
+                            {isStart ? <span className="grid-mgmt-pole-card-tag is-start">BAŞ</span> : null}
+                            {isEnd ? <span className="grid-mgmt-pole-card-tag is-end">SON</span> : null}
+                            {p.pole_type === "transformer" ? (
+                              <span className="grid-mgmt-pole-card-tag is-type">Trafo</span>
+                            ) : null}
+                          </div>
+                          <div className="grid-mgmt-pole-card-meta">
+                            <span className="material-symbols-outlined">location_on</span>
+                            {p.latitude.toFixed(5)}, {p.longitude.toFixed(5)}
+                          </div>
+                        </div>
+                        <div className="grid-mgmt-pole-card-actions">
                           <button className="icon-btn" title="Düzenle"
-                            onClick={() => setEditingPole(p)}>✎</button>
+                            onClick={() => setEditingPole(p)}>
+                            <span className="material-symbols-outlined">edit</span>
+                          </button>
                           <button className="icon-btn icon-btn-danger" title="Sil"
-                            onClick={() => void handleDeletePole(p)}>✕</button>
+                            onClick={() => void handleDeletePole(p)}>
+                            <span className="material-symbols-outlined">delete</span>
+                          </button>
                         </div>
                       </div>
+
                       {nextSlot ? (
-                        <div className="grid-mgmt-segment-row">
-                          <span className="grid-mgmt-segment-label">
-                            ↳ Segment {p.sequence_no} → {nextSlot.toPole.sequence_no}
-                          </span>
+                        <div
+                          className={`grid-mgmt-segment-card ${
+                            isDeviceDropTarget ? "is-drop-target" : ""
+                          } ${dev ? "has-device" : "is-empty"}`}
+                          onDragOver={(e) => {
+                            if (draggedDeviceSegId !== null) e.preventDefault();
+                          }}
+                          onDrop={() => void handleDeviceDropOnSlot(nextSlot)}
+                        >
+                          <div className="grid-mgmt-segment-card-track">
+                            <span className="grid-mgmt-segment-card-dot is-from">
+                              {nextSlot.fromPole.sequence_no}
+                            </span>
+                            <span className="grid-mgmt-segment-card-line" />
+                            <span className="grid-mgmt-segment-card-dot is-to">
+                              {nextSlot.toPole.sequence_no}
+                            </span>
+                          </div>
+
                           {dev ? (
-                            <>
-                              <span className="grid-mgmt-segment-device">
-                                <strong>{dev.name}</strong> <code>{dev.code}</code>
-                              </span>
-                              <button className="secondary-btn action-btn"
-                                onClick={() => void handleDetachDevice(nextSlot.segment!)}>
-                                Cihazı Kaldır
-                              </button>
-                            </>
-                          ) : (
-                            <select
-                              defaultValue=""
-                              className="grid-mgmt-segment-select"
-                              onChange={(e) => {
-                                const id = Number(e.target.value);
-                                if (id) void handleAttachDevice(nextSlot, id);
+                            <div
+                              className={`grid-mgmt-device-chip ${
+                                dev.alarmActive ? "is-alarm" : "is-normal"
+                              } ${draggedDeviceSegId === nextSlot.segment?.id ? "is-dragging" : ""}`}
+                              draggable
+                              onDragStart={() => {
+                                if (nextSlot.segment) setDraggedDeviceSegId(nextSlot.segment.id);
                               }}
+                              onDragEnd={() => setDraggedDeviceSegId(null)}
+                              title="Sürükle: başka segmente taşı"
                             >
-                              <option value="">Cihaz seç...</option>
-                              {availableDevices.map((d) => (
-                                <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
-                              ))}
-                            </select>
+                              <span className="grid-mgmt-device-chip-handle">
+                                <span className="material-symbols-outlined">drag_indicator</span>
+                              </span>
+                              <span className={`grid-mgmt-device-chip-status ${dev.alarmActive ? "is-alarm" : "is-normal"}`}></span>
+                              <div className="grid-mgmt-device-chip-main">
+                                <strong>{dev.name}</strong>
+                                <code>{dev.code}</code>
+                              </div>
+                              <button
+                                className="icon-btn icon-btn-danger"
+                                title="Cihazı bu segmentten kaldır"
+                                onClick={() => void handleDetachDevice(nextSlot.segment!)}
+                              >
+                                <span className="material-symbols-outlined">link_off</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="grid-mgmt-device-empty">
+                              <span className="material-symbols-outlined">add_link</span>
+                              <select
+                                defaultValue=""
+                                className="grid-mgmt-segment-select"
+                                onChange={(e) => {
+                                  const id = Number(e.target.value);
+                                  if (id) void handleAttachDevice(nextSlot, id);
+                                }}
+                              >
+                                <option value="">Cihaz ata...</option>
+                                {availableDevices.map((d) => (
+                                  <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                                ))}
+                              </select>
+                              <span className="helper-text">veya cihazı buraya sürükle</span>
+                            </div>
                           )}
                         </div>
                       ) : null}
@@ -955,6 +1217,24 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     }
   }
   async function handleDeletePole(p: Pole) {
+    // Draft modunda: yeni eklenen draft direkse listeden çıkar; aksi halde delete olarak işaretle.
+    if (editMode) {
+      if (p.id < 0) {
+        setDraftPoleAdds((prev) => prev.filter((x) => x.id !== p.id));
+        toast.success("Taslaktan çıkarıldı.");
+      } else {
+        setDraftPoleDeletes((prev) => new Set(prev).add(p.id));
+        // Taslakta sadece bu direğin override'ı varsa o da artık anlamsız — temizle.
+        setDraftPoleEdits((prev) => {
+          if (!prev.has(p.id)) return prev;
+          const next = new Map(prev);
+          next.delete(p.id);
+          return next;
+        });
+        toast.success("Direk silinmek üzere işaretlendi — Kaydet ile uygulayın.");
+      }
+      return;
+    }
     if (!window.confirm(`Direk #${p.sequence_no} silinsin mi? Bağlı segmentler de kaldırılır.`)) return;
     try {
       await deletePole(accessToken, p.id);
@@ -966,11 +1246,32 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
   }
 
   async function handlePoleDragEnd(p: Pole, lat: number, lng: number) {
+    const newLat = Number(lat.toFixed(6));
+    const newLng = Number(lng.toFixed(6));
+
+    // Draft modunda: pozisyonu yerelde tut.
+    if (editMode) {
+      if (p.id < 0) {
+        // Henüz kaydedilmemiş direk — adds listesindeki kaydı güncelle.
+        setDraftPoleAdds((prev) =>
+          prev.map((x) => (x.id === p.id ? { ...x, latitude: newLat, longitude: newLng } : x))
+        );
+      } else {
+        setDraftPoleEdits((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(p.id) ?? {};
+          next.set(p.id, { ...existing, latitude: newLat, longitude: newLng });
+          return next;
+        });
+      }
+      return;
+    }
+
     try {
       await import("../../shared/api").then((m) =>
         m.updatePole(accessToken, p.id, {
-          latitude: Number(lat.toFixed(6)),
-          longitude: Number(lng.toFixed(6))
+          latitude: newLat,
+          longitude: newLng
         })
       );
       toast.success(`Direk #${p.sequence_no} taşındı.`);
@@ -979,6 +1280,61 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
       toast.error(err instanceof Error ? err.message : "Direk taşınamadı.");
       if (selectedLineId !== null) await reloadDetail(selectedLineId); // hata olunca eski koordinata gerial
     }
+  }
+
+  async function handleSaveDraft() {
+    if (!selectedLine || !hasUnsavedDraft) return;
+    setBusy(true);
+    try {
+      const api = await import("../../shared/api");
+      // 1) Yeni eklenenler (sıralı, sequence_no doğru gitsin diye).
+      const sortedAdds = [...draftPoleAdds].sort((a, b) => a.sequence_no - b.sequence_no);
+      for (const p of sortedAdds) {
+        await api.createPole(accessToken, {
+          line_id: selectedLine.id,
+          sequence_no: p.sequence_no,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          name: p.name ?? null
+        });
+      }
+      // 2) Mevcut direk override'ları (move / rename).
+      for (const [poleId, ov] of draftPoleEdits.entries()) {
+        const payload: { latitude?: number; longitude?: number; name?: string | null } = {};
+        if (ov.latitude !== undefined) payload.latitude = ov.latitude;
+        if (ov.longitude !== undefined) payload.longitude = ov.longitude;
+        if (ov.name !== undefined) payload.name = ov.name;
+        if (Object.keys(payload).length > 0) {
+          await api.updatePole(accessToken, poleId, payload);
+        }
+      }
+      // 3) Silmeler (en son — bağlı segmentler de düşer).
+      for (const poleId of draftPoleDeletes) {
+        await api.deletePole(accessToken, poleId);
+      }
+      toast.success("Direk değişiklikleri kaydedildi.");
+      setDraftPoleAdds([]);
+      setDraftPoleEdits(new Map());
+      setDraftPoleDeletes(new Set());
+      await reloadDetail(selectedLine.id);
+      if (selectedRegionId !== null) await reloadLines(selectedRegionId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Kaydetme başarısız.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleUndoDraft() {
+    if (!hasUnsavedDraft) {
+      setEditMode(false);
+      return;
+    }
+    if (!window.confirm("Tüm taslak değişiklikler geri alınsın mı?")) return;
+    setDraftPoleAdds([]);
+    setDraftPoleEdits(new Map());
+    setDraftPoleDeletes(new Set());
+    toast.success("Taslak değişiklikler geri alındı.");
   }
 }
 
@@ -1316,6 +1672,7 @@ function PoleEditModal({
   const [name, setName] = useState(pole.name ?? "");
   const [latitude, setLatitude] = useState(String(pole.latitude));
   const [longitude, setLongitude] = useState(String(pole.longitude));
+  const [poleType, setPoleType] = useState<string>(pole.pole_type ?? "pole");
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const lat = Number(latitude);
@@ -1323,14 +1680,40 @@ function PoleEditModal({
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
     await onSubmit({
       name: name.trim() || null,
-      latitude: lat, longitude: lon
+      latitude: lat, longitude: lon,
+      pole_type: poleType as Pole["pole_type"]
     });
   };
+  const typeOptions: { value: string; label: string; icon: string }[] = [
+    { value: "pole", label: "Direk", icon: "📍" },
+    { value: "transformer", label: "Trafo", icon: "⚡" }
+  ];
   return (
     <div className="settings-modal-backdrop">
       <form className="settings-modal" onSubmit={submit}>
         <h3>Direk Düzenle (#{pole.sequence_no})</h3>
         <label>İsim <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Direk-47" /></label>
+        <fieldset className="pole-type-fieldset">
+          <legend>Sembol Tipi</legend>
+          <div className="pole-type-options">
+            {typeOptions.map((opt) => (
+              <label
+                key={opt.value}
+                className={`pole-type-option ${poleType === opt.value ? "is-selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="pole_type"
+                  value={opt.value}
+                  checked={poleType === opt.value}
+                  onChange={() => setPoleType(opt.value)}
+                />
+                <span className="pole-type-icon">{opt.icon}</span>
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <label>Enlem
           <input type="number" step="0.000001" value={latitude} onChange={(e) => setLatitude(e.target.value)} required />
         </label>
