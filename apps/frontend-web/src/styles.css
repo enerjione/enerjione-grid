@@ -13424,7 +13424,7 @@ main.content.engineering-content:has(.device-management-panel) {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 12px;
 }
 .device-detail-modal {
   width: 100%;
@@ -13442,7 +13442,7 @@ main.content.engineering-content:has(.device-management-panel) {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 18px 24px;
+  padding: 12px 20px;
   background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
   border-bottom: 1px solid #e2e8f0;
 }
@@ -13712,7 +13712,7 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 .device-detail-modal-foot {
-  padding: 12px 24px;
+  padding: 8px 20px;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
   display: flex;
@@ -14013,9 +14013,10 @@ main.content.engineering-content:has(.device-management-panel) {
    Cihaz Detay Modal'i — 3 sutun (Master + Sat01 + Sat02), genislestirilmis
    ========================================================================= */
 .device-detail-modal--wide {
-  max-width: 1400px;
-  height: calc(100vh - 32px);
-  max-height: 920px;
+  max-width: 1500px;
+  width: calc(100vw - 24px);
+  height: calc(100vh - 24px);
+  max-height: none;
 }
 .device-detail-modal-head-left {
   flex: 1;
@@ -14107,14 +14108,27 @@ main.content.engineering-content:has(.device-management-panel) {
 .device-detail-col {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 10px;
+  padding: 12px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+/* Bolumler dikeyde esit yayilsin — son bolume kadar ekranin altina dolsun */
+.device-detail-col > .device-detail-col-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Analog/binary listesi bolum icinde alani doldurur */
+.device-detail-col > .device-detail-col-section > .device-detail-col-analog,
+.device-detail-col > .device-detail-col-section > .device-detail-col-binary {
+  flex: 1;
+  align-content: start;
 }
 .device-detail-col--master { border-top: 4px solid #2563eb; }
 .device-detail-col--sat01 { border-top: 4px solid #16a34a; }
@@ -14230,18 +14244,21 @@ main.content.engineering-content:has(.device-management-panel) {
 .device-detail-col-analog {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 5px;
+  align-content: stretch;
 }
 .device-detail-col-analog-row {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: flex-start;
-  gap: 1px;
-  padding: 5px 8px;
+  gap: 2px;
+  padding: 7px 9px;
   background: #f8fafc;
   border-radius: 5px;
   font-size: 11px;
   min-width: 0;
+  min-height: 38px;
 }
 .device-detail-col-analog-row .lbl {
   color: #64748b;
@@ -14271,17 +14288,19 @@ main.content.engineering-content:has(.device-management-panel) {
 .device-detail-col-binary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 5px;
+  align-content: stretch;
 }
 .device-detail-col-binary-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 7px 8px;
   background: #f8fafc;
   border-radius: 5px;
   font-size: 11px;
   color: #64748b;
+  min-height: 28px;
 }
 .device-detail-col-binary-row .dot {
   width: 8px;
