@@ -213,6 +213,8 @@ export function App() {
   const [dashboardAreaDeviceIds, setDashboardAreaDeviceIds] = useState<Set<number> | null>(null);
   const [dashboardAreaLoading, setDashboardAreaLoading] = useState(false);
   const [dashboardLocationFilter, setDashboardLocationFilter] = useState<string>("all");
+  const [dashboardRegionId, setDashboardRegionId] = useState<number | "all">("all");
+  const [dashboardLineId, setDashboardLineId] = useState<number | "all">("all");
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("hsl.dashboard.sidebar-collapsed") === "1";
@@ -1208,6 +1210,30 @@ export function App() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "tr"));
   }, [deviceLocationLabel]);
 
+  // Cihaz id -> {regionId, regionName, lineId, lineName} — gridSnapshot'tan turetilir.
+  const deviceTopologyInfo = useMemo(() => {
+    const map = new Map<
+      number,
+      { regionId: number; regionName: string; lineId: number; lineName: string }
+    >();
+    if (!gridSnapshot) return map;
+    const lineById = new Map(gridSnapshot.lines.map((l) => [l.id, l]));
+    const regionById = new Map(gridSnapshot.regions.map((r) => [r.id, r]));
+    for (const seg of gridSnapshot.segments) {
+      if (!seg.device_id) continue;
+      const line = lineById.get(seg.line_id);
+      if (!line) continue;
+      const region = regionById.get(line.region_id);
+      map.set(seg.device_id, {
+        regionId: line.region_id,
+        regionName: region?.name ?? "",
+        lineId: line.id,
+        lineName: line.name
+      });
+    }
+    return map;
+  }, [gridSnapshot]);
+
   // Dashboard ortak filtrelerine göre süzülmüş cihaz listesi.
   // Harita marker'ları, sol sidebar listesi ve LiveValuesPage tablo satırları
   // bu kaynağı paylaşır → kullanıcı üst çubuğa girdiği değer her yerde aynı
@@ -1223,6 +1249,14 @@ export function App() {
         const label = deviceLocationLabel.get(d.id);
         if (label !== dashboardLocationFilter) return false;
       }
+      if (dashboardRegionId !== "all") {
+        const info = deviceTopologyInfo.get(d.id);
+        if (!info || info.regionId !== dashboardRegionId) return false;
+      }
+      if (dashboardLineId !== "all") {
+        const info = deviceTopologyInfo.get(d.id);
+        if (!info || info.lineId !== dashboardLineId) return false;
+      }
       if (q) {
         const text = `${d.name} ${d.code}`.toLowerCase();
         if (!text.includes(q)) return false;
@@ -1235,7 +1269,10 @@ export function App() {
     dashboardStatusFilter,
     dashboardAreaDeviceIds,
     dashboardLocationFilter,
-    deviceLocationLabel
+    deviceLocationLabel,
+    dashboardRegionId,
+    dashboardLineId,
+    deviceTopologyInfo
   ]);
 
   // Filtre çubuğu için ham sayım rozetleri (filtre uygulanmamış toplam).
@@ -1564,9 +1601,12 @@ export function App() {
               areaId={dashboardAreaId}
               onAreaIdChange={setDashboardAreaId}
               responsibilityAreas={responsibilityAreas}
-              locationFilter={dashboardLocationFilter}
-              onLocationFilterChange={setDashboardLocationFilter}
-              locationOptions={dashboardLocationOptions}
+              regionId={dashboardRegionId}
+              onRegionIdChange={setDashboardRegionId}
+              lineId={dashboardLineId}
+              onLineIdChange={setDashboardLineId}
+              regions={gridSnapshot?.regions ?? []}
+              lines={gridSnapshot?.lines ?? []}
               counts={dashboardCounts}
               visibleCount={filteredDashboardDevices.length}
               areaLoading={dashboardAreaLoading}
@@ -1583,6 +1623,14 @@ export function App() {
                   onSelect={setSelectedDeviceId}
                   alarms={alarms}
                   liveValues={signalLiveValues}
+                  deviceTopology={
+                    new Map(
+                      Array.from(deviceTopologyInfo.entries()).map(([id, v]) => [
+                        id,
+                        { regionName: v.regionName, lineName: v.lineName }
+                      ])
+                    )
+                  }
                 />
               ) : null}
               <main className={`content dashboard-content ${activeTab === "map" ? "map-active" : ""}`}>

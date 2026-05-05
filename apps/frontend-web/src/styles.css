@@ -5458,6 +5458,42 @@ main.content.engineering-content:has(.device-management-panel) {
   pointer-events: none;
 }
 
+/* Anasayfa haritası: cihaz marker'i — direkten ve dot'tan ayirt edici sembol */
+.device-marker-wrap { background: transparent; border: none; }
+.device-marker {
+  --c: #10b981;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.device-marker svg {
+  pointer-events: none;
+}
+.device-marker.is-online::after {
+  /* Yumusak dis halka */
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--c);
+  opacity: 0.4;
+  pointer-events: none;
+}
+.device-marker.is-alarm {
+  animation: device-marker-alarm 1.1s ease-in-out infinite;
+}
+@keyframes device-marker-alarm {
+  0%, 100% { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 0 rgba(220, 38, 38, 0.6); }
+  50% { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 12px rgba(220, 38, 38, 0); }
+}
+
 /* Anasayfa haritasında daha küçük direk pin'i (kalabalık olmasın diye) */
 .grid-pole-pin--sm {
   width: 20px;

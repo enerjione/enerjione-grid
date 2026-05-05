@@ -675,13 +675,25 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                         key={p.id}
                         position={[p.latitude, p.longitude]}
                         icon={poleIcon(String(p.sequence_no), isStart, isEnd)}
+                        draggable
                         eventHandlers={{
-                          click: () => setEditingPole(p)
+                          click: () => setEditingPole(p),
+                          contextmenu: (event: L.LeafletMouseEvent) => {
+                            event.originalEvent.preventDefault();
+                            event.originalEvent.stopPropagation();
+                            void handleDeletePole(p);
+                          },
+                          dragend: (event: L.DragEndEvent) => {
+                            const ll = (event.target as L.Marker).getLatLng();
+                            void handlePoleDragEnd(p, ll.lat, ll.lng);
+                          }
                         }}
                       >
                         <Tooltip>
                           {p.name ?? `Direk #${p.sequence_no}`}
                           {isStart ? " (BAŞ)" : isEnd ? " (SON)" : ""}
+                          <br />
+                          <em style={{ fontSize: 10 }}>Tıkla: düzenle · Sürükle: taşı · Sağ tık: sil</em>
                         </Tooltip>
                       </Marker>
                     );
@@ -950,6 +962,22 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
       if (selectedLineId !== null) await reloadDetail(selectedLineId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Direk silinemedi.");
+    }
+  }
+
+  async function handlePoleDragEnd(p: Pole, lat: number, lng: number) {
+    try {
+      await import("../../shared/api").then((m) =>
+        m.updatePole(accessToken, p.id, {
+          latitude: Number(lat.toFixed(6)),
+          longitude: Number(lng.toFixed(6))
+        })
+      );
+      toast.success(`Direk #${p.sequence_no} taşındı.`);
+      if (selectedLineId !== null) await reloadDetail(selectedLineId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Direk taşınamadı.");
+      if (selectedLineId !== null) await reloadDetail(selectedLineId); // hata olunca eski koordinata gerial
     }
   }
 }

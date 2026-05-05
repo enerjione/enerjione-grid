@@ -74,13 +74,26 @@ function MapInvalidator({ deps }: { deps: unknown[] }) {
   return null;
 }
 
-function markerIcon(status: DeviceRow["communicationStatus"]) {
-  const color = status === "online" ? "#10b981" : "#ef4444";
+function markerIcon(status: DeviceRow["communicationStatus"], alarmActive: boolean) {
+  // Cihaz sembolu: dis halkali, ortada simsek (Horstmann Smart Navigator).
+  // Direkten (gri pin) ve sade dot'tan ayirt edici.
+  const color = alarmActive ? "#dc2626" : status === "online" ? "#10b981" : "#94a3b8";
+  const cls = alarmActive
+    ? "is-alarm"
+    : status === "online"
+      ? "is-online"
+      : "is-offline";
   return L.divIcon({
-    className: "device-pin-wrapper",
-    html: `<span class="device-pin" style="background:${color}"></span>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10]
+    className: "device-marker-wrap",
+    html: `
+      <div class="device-marker ${cls}" style="--c:${color}">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path fill="#fff" d="M13 2 4 14h6l-1 8 9-12h-6z"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
   });
 }
 
@@ -354,11 +367,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             const position: [number, number] = override
               ? override
               : [device.latitude, device.longitude];
+            const isAlarmed = alarmActiveDeviceIds.has(device.id);
             return (
               <Marker
                 key={device.id}
                 position={position}
-                icon={markerIcon(device.communicationStatus)}
+                icon={markerIcon(device.communicationStatus, isAlarmed)}
                 eventHandlers={{
                   click: () => onSelectDevice(device.id)
                 }}

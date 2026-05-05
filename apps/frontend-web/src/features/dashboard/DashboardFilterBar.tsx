@@ -1,4 +1,4 @@
-import type { ResponsibilityAreaRow } from "../../shared/types";
+import type { Line, Region, ResponsibilityAreaRow } from "../../shared/types";
 
 export type StatusFilter = "all" | "online" | "offline" | "alarm";
 
@@ -11,11 +11,13 @@ type Props = {
   areaId: number | "all";
   onAreaIdChange: (value: number | "all") => void;
   responsibilityAreas?: ResponsibilityAreaRow[];
-  /** Konum (il) filtresi — "all", "Yurt dışı" veya il adı. */
-  locationFilter: string;
-  onLocationFilterChange: (value: string) => void;
-  /** Mevcut cihazlardan derlenmiş benzersiz konum etiketleri. */
-  locationOptions: string[];
+  /** Şebeke topolojisi filtreleri */
+  regionId: number | "all";
+  onRegionIdChange: (value: number | "all") => void;
+  lineId: number | "all";
+  onLineIdChange: (value: number | "all") => void;
+  regions?: Region[];
+  lines?: Line[];
   /** Sayım rozetleri için pre-computed değerler (filtreden geçmemiş ham toplam). */
   counts: {
     total: number;
@@ -23,13 +25,10 @@ type Props = {
     offline: number;
     alarm: number;
   };
-  /** Aktif filtre sonrası gösterilen cihaz sayısı (örn. "3 / 12 cihaz"). */
   visibleCount: number;
   areaLoading?: boolean;
-  /** Sol cihaz listesi (sidebar) gizli mi — toggle butonunun durumu. */
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
-  /** Aktif sekme: harita ya da tablo. */
   activeTab: "map" | "values";
   onActiveTabChange: (value: "map" | "values") => void;
 };
@@ -42,9 +41,12 @@ export function DashboardFilterBar({
   areaId,
   onAreaIdChange,
   responsibilityAreas,
-  locationFilter,
-  onLocationFilterChange,
-  locationOptions,
+  regionId,
+  onRegionIdChange,
+  lineId,
+  onLineIdChange,
+  regions,
+  lines,
   counts,
   visibleCount,
   areaLoading,
@@ -56,8 +58,14 @@ export function DashboardFilterBar({
   const showActiveFilter =
     statusFilter !== "all" ||
     areaId !== "all" ||
-    locationFilter !== "all" ||
+    regionId !== "all" ||
+    lineId !== "all" ||
     search.trim().length > 0;
+
+  // Bölge seçimine göre hat dropdown filtrele
+  const visibleLines = (lines ?? []).filter(
+    (l) => regionId === "all" || l.region_id === regionId
+  );
 
   return (
     <div className="dashboard-filter-bar">
@@ -136,18 +144,47 @@ export function DashboardFilterBar({
       </label>
 
       <label className="map-filter-area">
-        <span>Konum</span>
+        <span>Bölge</span>
         <select
-          value={locationFilter}
-          onChange={(event) => onLocationFilterChange(event.target.value)}
-          disabled={locationOptions.length === 0}
+          value={regionId === "all" ? "all" : String(regionId)}
+          onChange={(event) => {
+            const v = event.target.value;
+            const next = v === "all" ? "all" : Number(v);
+            onRegionIdChange(next);
+            // Bölge değişirse hat filtresini sıfırla (uyumsuz olabilir)
+            if (lineId !== "all") onLineIdChange("all");
+          }}
+          disabled={!regions || regions.length === 0}
         >
-          <option value="all">Tüm konumlar</option>
-          {locationOptions.map((loc) => (
-            <option key={loc} value={loc}>
-              {loc}
-            </option>
-          ))}
+          <option value="all">Tüm bölgeler</option>
+          {(regions ?? [])
+            .filter((r) => r.is_active)
+            .map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+        </select>
+      </label>
+
+      <label className="map-filter-area">
+        <span>Hat</span>
+        <select
+          value={lineId === "all" ? "all" : String(lineId)}
+          onChange={(event) => {
+            const v = event.target.value;
+            onLineIdChange(v === "all" ? "all" : Number(v));
+          }}
+          disabled={visibleLines.length === 0}
+        >
+          <option value="all">Tüm hatlar</option>
+          {visibleLines
+            .filter((l) => l.is_active)
+            .map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
         </select>
       </label>
 
@@ -165,7 +202,8 @@ export function DashboardFilterBar({
             onSearchChange("");
             onStatusFilterChange("all");
             onAreaIdChange("all");
-            onLocationFilterChange("all");
+            onRegionIdChange("all");
+            onLineIdChange("all");
           }}
         >
           Temizle

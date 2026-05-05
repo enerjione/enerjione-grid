@@ -1,8 +1,12 @@
 import { useMemo } from "react";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
-import { locateDevice } from "../../shared/geoLookup";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
+
+export type DeviceTopologyLabel = {
+  regionName: string;
+  lineName: string;
+};
 
 type Props = {
   devices: DeviceRow[];
@@ -12,6 +16,8 @@ type Props = {
   alarms?: AlarmEvent[];
   /** Master batarya voltajını canlı okumak için (3.40V=0%, 3.71V=100% lineer). */
   liveValues?: SignalLiveRow[];
+  /** Cihaz id -> {region,line} etiketi. Sebeke topolojisinden turetilir. */
+  deviceTopology?: Map<number, DeviceTopologyLabel>;
 };
 
 // Master batarya voltaj-yüzde haritası — Proje Ayarları'ndan override edilebilir.
@@ -47,7 +53,7 @@ function batteryClass(percent: number | null | undefined): string {
   return "device-battery--ok";
 }
 
-export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValues }: Props) {
+export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValues, deviceTopology }: Props) {
   const { settings } = useProjectSettings();
   const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
   const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
@@ -98,7 +104,10 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
           const battery =
             liveBatt !== undefined ? liveBatt : (device.batteryPercent ?? null);
           const battPct = typeof battery === "number" ? Math.max(0, Math.min(100, battery)) : null;
-          const location = locateDevice(device.latitude, device.longitude);
+          const topo = deviceTopology?.get(device.id);
+          const topoLabel = topo
+            ? `${topo.regionName ? topo.regionName + " · " : ""}${topo.lineName}`
+            : "Hat atanmamış";
           const alarmState = deviceAlarmState.get(device.id) ?? (device.alarmActive ? "open" : null);
           const hasAlarm = alarmState !== null;
           return (
@@ -141,11 +150,11 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
                 </div>
               </div>
 
-              {/* Orta satır: konum + batarya yan yana (çerçevesiz) */}
+              {/* Orta satır: bölge/hat + batarya yan yana (çerçevesiz) */}
               <div className="device-row-meta-row device-row-meta-row--bare">
-                <span className="device-row-location" title={location.label}>
-                  <span className="material-symbols-outlined">place</span>
-                  {location.label}
+                <span className="device-row-location" title={topoLabel}>
+                  <span className="material-symbols-outlined">cable</span>
+                  {topoLabel}
                 </span>
                 <span
                   className={`device-battery-chip device-battery-chip--bare ${batteryClass(battPct)}`}
