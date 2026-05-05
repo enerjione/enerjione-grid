@@ -22,6 +22,15 @@ type Props = {
 const DEFAULT_LINE_COLOR = "#2563eb";
 const FAULT_COLOR = "#ef4444";
 
+// Ariza noktasi marker'i — segment ortasinda buyuk yanip sonen kirmizi simsek.
+const faultPin = () =>
+  L.divIcon({
+    className: "grid-fault-leaflet-wrap",
+    html: `<div class="grid-fault-pin"><span class="material-symbols-outlined">bolt</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17]
+  });
+
 const polePin = (
   label: string,
   isStart: boolean,
@@ -276,11 +285,77 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       });
     }
 
-    // Cihaz segmentleri: from -> to direklerinden cizilen ekstra polyline.
-    // Cihazda alarm varsa kirmizi pulse; sagliklı ise hattin kendi rengiyle ust uste cizilmemesi icin
-    // sadece alarmda olan segmentleri vurgu olarak ekle.
+    // ===== Ariza lokalizasyon mantigi =====
+    // Cihazlar hat boyunca sirali (slot from_pole_seq, ardindan slot ici sira).
+    // Besleme yonu hat baslangicindan (#1) sonuna dogru.
+    // Bir cihaz alarm verirse: ondan oncesi enerjili (alarm akimi cihazdan
+    // gectiyse demek besleme tarafi saglikli), ariza ise ondan SONRADAKI
+    // segmentte gerceklesti.
+    // Lokalizasyon: hat bazinda alarm veren CIHAZLARI sirayla bul; "son alarmli
+    // cihaz ile bir sonraki segment" arizali olarak isaretlenir.
+    //   - Sonraki segment varsa o; yoksa (son cihaz hat ucundaysa) cihazin
+    //     kendi segmenti vurgulanir.
+    //
+    // Bu yaklasim "cihazlar hem kendinden oncekini hem sonrakini kontrol
+    // ederek nokta atisi" davranisini saglar:
+    //   #1 alarm, #2 alarm, #3 NORMAL  =>  arizali segment = #2-#3 arasi
+    //   tum cihazlar alarm             =>  arizali segment = son cihazin kendi konumu
+    //   hicbiri alarm degil            =>  hat tamamen yesil
+
+    // Slot icindeki cihaz sirasi icin segmentleri grupla.
+    type AnnotatedSeg = {
+      seg: typeof gridSnapshot.segments[number];
+      orderInSlot: number;  // slot icindeki sira (created_at, id'ye gore)
+      fromSeq: number;      // slot fromPole sequence_no
+      toSeq: number;        // slot toPole sequence_no
+    };
+    const lineDevices = new Map<number, AnnotatedSeg[]>();
+    {
+      // Slot anahtariyla grupla, her slotta sirala.
+      const bySlot = new Map<string, typeof gridSnapshot.segments>();
+      for (const seg of gridSnapshot.segments) {
+        if (!seg.device_id) continue;
+        const k = `${seg.line_id}|${seg.from_pole_id}|${seg.to_pole_id}`;
+        const arr = bySlot.get(k) ?? [];
+        arr.push(seg);
+        bySlot.set(k, arr);
+      }
+      for (const [, segs] of bySlot) {
+        const sortedSlot = [...segs].sort((a, b) => {
+          const ad = new Date(a.created_at).getTime();
+          const bd = new Date(b.created_at).getTime();
+          if (ad !== bd) return ad - bd;
+          return a.id - b.id;
+        });
+        sortedSlot.forEach((seg, idx) => {
+          const fp = polesById.get(seg.from_pole_id);
+          const tp = polesById.get(seg.to_pole_id);
+          if (!fp || !tp) return;
+          const list = lineDevices.get(seg.line_id) ?? [];
+          list.push({
+            seg,
+            orderInSlot: idx,
+            fromSeq: fp.sequence_no,
+            toSeq: tp.sequence_no
+          });
+          lineDevices.set(seg.line_id, list);
+        });
+      }
+      // Hat icinde tum cihazlari, slotlar arasinda fromSeq sirasiyla, slot
+      // icinde orderInSlot sirasiyla dizimle.
+      for (const [lid, list] of lineDevices) {
+        list.sort((a, b) => {
+          if (a.fromSeq !== b.fromSeq) return a.fromSeq - b.fromSeq;
+          if (a.toSeq !== b.toSeq) return a.toSeq - b.toSeq;
+          return a.orderInSlot - b.orderInSlot;
+        });
+        lineDevices.set(lid, list);
+      }
+    }
+
+    // Her hat icin lokalize edilmis tek (veya yok) ariza segmenti.
     const alarmedSegments: {
-      id: number;
+      id: string; // "fault-<lineId>"
       positions: [number, number][];
       midpoint: [number, number];
       device: DeviceRow | undefined;
@@ -289,31 +364,66 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       fromSeq: number | null;
       toSeq: number | null;
     }[] = [];
-    for (const seg of gridSnapshot.segments) {
-      if (!seg.device_id) continue;
-      const dev = devices.find((d) => d.id === seg.device_id);
-      const isAlarmed = dev ? alarmActiveDeviceIds.has(dev.id) : false;
-      if (!isAlarmed) continue;
-      const fromPole = polesById.get(seg.from_pole_id);
-      const toPole = polesById.get(seg.to_pole_id);
-      if (!fromPole || !toPole) continue;
-      const line = linesById.get(seg.line_id);
+    for (const [lineId, list] of lineDevices) {
+      // Alarmli cihazlarin sira indekslerini bul.
+      const alarmedIdx: number[] = [];
+      list.forEach((it, i) => {
+        if (it.seg.device_id && alarmActiveDeviceIds.has(it.seg.device_id)) {
+          alarmedIdx.push(i);
+        }
+      });
+      if (alarmedIdx.length === 0) continue;
+      const lastAlarmedIdx = alarmedIdx[alarmedIdx.length - 1];
+      const lastAlarmed = list[lastAlarmedIdx];
+      const next = list[lastAlarmedIdx + 1]; // sonraki cihaz (varsa)
+
+      const line = linesById.get(lineId);
       const region = line ? regionsById.get(line.region_id) : undefined;
+
+      // Ariza pozisyonu:
+      //   next varsa: lastAlarmed cihazi ile next cihazi arasi
+      //   next yoksa: lastAlarmed cihazinin kendi konumu (hat ucu)
+      const lastDeviceId = lastAlarmed.seg.device_id ?? undefined;
+      const lastDevPos = lastDeviceId ? deviceLocationOverride.get(lastDeviceId) : undefined;
+      const nextDevPos = next?.seg.device_id ? deviceLocationOverride.get(next.seg.device_id) : undefined;
+
+      let positions: [number, number][];
+      let midpoint: [number, number];
+      let fromSeqShow: number | null = lastAlarmed.fromSeq;
+      let toSeqShow: number | null = lastAlarmed.toSeq;
+
+      if (lastDevPos && nextDevPos) {
+        positions = [lastDevPos, nextDevPos];
+        midpoint = [
+          (lastDevPos[0] + nextDevPos[0]) / 2,
+          (lastDevPos[1] + nextDevPos[1]) / 2
+        ];
+        fromSeqShow = lastAlarmed.fromSeq;
+        toSeqShow = next?.toSeq ?? null;
+      } else if (lastDevPos) {
+        // Hat ucunda kalan alarm — cihazin kendi slot segmenti vurgulanir.
+        const fp = polesById.get(lastAlarmed.seg.from_pole_id);
+        const tp = polesById.get(lastAlarmed.seg.to_pole_id);
+        if (!fp || !tp) continue;
+        positions = [
+          [fp.latitude, fp.longitude],
+          [tp.latitude, tp.longitude]
+        ];
+        midpoint = lastDevPos;
+      } else {
+        continue;
+      }
+
+      const dev = lastDeviceId ? devices.find((d) => d.id === lastDeviceId) : undefined;
       alarmedSegments.push({
-        id: seg.id,
-        positions: [
-          [fromPole.latitude, fromPole.longitude],
-          [toPole.latitude, toPole.longitude]
-        ],
-        midpoint: [
-          (fromPole.latitude + toPole.latitude) / 2,
-          (fromPole.longitude + toPole.longitude) / 2
-        ],
+        id: `fault-${lineId}`,
+        positions,
+        midpoint,
         device: dev,
         lineName: line?.name ?? "",
         regionName: region?.name ?? "",
-        fromSeq: seg.from_pole_seq ?? null,
-        toSeq: seg.to_pole_seq ?? null
+        fromSeq: fromSeqShow,
+        toSeq: toSeqShow
       });
     }
 
@@ -362,7 +472,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             </Polyline>
           ))}
 
-          {/* Alarmlı segmentler: kırmızı kalın overlay */}
+          {/* Lokalize edilmis ariza segmenti: kirmizi kalin overlay + ikon marker */}
           {topology?.alarmedSegments.map((seg) => (
             <Polyline
               key={`alarm-seg-${seg.id}`}
@@ -384,9 +494,29 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                 {seg.fromSeq !== null && seg.toSeq !== null ? (
                   <><br />Direk #{seg.fromSeq} → #{seg.toSeq}</>
                 ) : null}
-                {seg.device ? <><br />Cihaz: <strong>{seg.device.name}</strong> ({seg.device.code})</> : null}
+                {seg.device ? <><br />Son alarmli cihaz: <strong>{seg.device.name}</strong> ({seg.device.code})</> : null}
               </Tooltip>
             </Polyline>
+          ))}
+          {/* Ariza noktasi ikonu (lokalize edilmis nokta — segment ortasinda) */}
+          {topology?.alarmedSegments.map((seg) => (
+            <Marker
+              key={`alarm-pin-${seg.id}`}
+              position={seg.midpoint}
+              icon={faultPin()}
+              eventHandlers={{
+                click: () => seg.device && onSelectDevice(seg.device.id)
+              }}
+            >
+              <Tooltip>
+                <strong style={{ color: FAULT_COLOR }}>⚠ ARIZA NOKTASI</strong>
+                <br />
+                {seg.regionName ? `${seg.regionName} · ` : ""}{seg.lineName}
+                {seg.fromSeq !== null && seg.toSeq !== null ? (
+                  <><br />Direk #{seg.fromSeq} → #{seg.toSeq}</>
+                ) : null}
+              </Tooltip>
+            </Marker>
           ))}
 
           {/* Direkler: küçük numara etiketli pin (trafo ise farkli sembol) */}

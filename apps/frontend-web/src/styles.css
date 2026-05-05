@@ -14357,4 +14357,33 @@ main.content.engineering-content:has(.device-management-panel) {
   justify-content: flex-end;
 }
 
+/* Anasayfa harita: ariza noktasi marker'i (lokalize edilmis nokta atisi) */
+.grid-fault-leaflet-wrap { background: transparent; border: none; }
+.grid-fault-pin {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fca5a5 0%, #dc2626 60%, #991b1b 100%);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(220, 38, 38, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  animation: grid-fault-pin-pulse 1.2s ease-in-out infinite;
+}
+.grid-fault-pin .material-symbols-outlined {
+  font-size: 22px !important;
+  font-variation-settings: 'FILL' 1, 'wght' 700;
+}
+@keyframes grid-fault-pin-pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(220, 38, 38, 0.45);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 14px rgba(220, 38, 38, 0);
+  }
+}
+
 
