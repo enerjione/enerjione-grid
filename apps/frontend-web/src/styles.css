@@ -14295,6 +14295,54 @@ main.content.engineering-content:has(.device-management-panel) {
   }
 }
 
+/* Batarya karti — pil ikonu + buyuk yuzde */
+.device-detail-col-batt-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.device-detail-col-batt-icon {
+  font-size: 30px !important;
+  flex-shrink: 0;
+}
+.device-detail-col-batt-card.is-full .device-detail-col-batt-icon { color: #16a34a; }
+.device-detail-col-batt-card.is-high .device-detail-col-batt-icon { color: #16a34a; }
+.device-detail-col-batt-card.is-mid .device-detail-col-batt-icon { color: #f59e0b; }
+.device-detail-col-batt-card.is-low .device-detail-col-batt-icon { color: #f97316; }
+.device-detail-col-batt-card.is-critical .device-detail-col-batt-icon { color: #dc2626; }
+.device-detail-col-batt-card.is-unknown .device-detail-col-batt-icon { color: #94a3b8; }
+.device-detail-col-batt-card.is-critical {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.device-detail-col-batt-card.is-low {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+.device-detail-col-batt-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.device-detail-col-batt-pct {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.device-detail-col-batt-volt {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  margin-top: 2px;
+}
+
 /* Sutun altinda kaynak bazli alarm listesi */
 .device-detail-col-alarms-section {
   margin-top: auto;

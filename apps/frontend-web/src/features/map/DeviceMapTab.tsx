@@ -551,22 +551,35 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
 // ===================================================================
 
 // Per-source sinyal seti — her kaynak (Master / Sat01 / Sat02) icin ayni anahtar.
-const PER_SOURCE_BINARY: { suffix: string; label: string }[] = [
-  { suffix: "overcurrent_tripped", label: "Aşırı akım" },
-  { suffix: "delta_i_delta_t_tripped", label: "ΔI/Δt" },
-  { suffix: "voltage_loss", label: "Gerilim kaybı" },
-  { suffix: "current_loss", label: "Akım kaybı" },
-  { suffix: "battery_status", label: "Pil durumu" },
-  { suffix: "communication_status", label: "Haberleşme" },
-  { suffix: "permanent_fault", label: "Kalıcı arıza" },
-  { suffix: "momentary_fault", label: "Geçici arıza" }
+// Durum + ariza yonu sinyalleri tek listede; UI bunlari grupluyor (durum ve yon).
+const PER_SOURCE_BINARY: { suffix: string; label: string; group?: "state" | "direction" }[] = [
+  { suffix: "overcurrent_tripped", label: "Aşırı akım", group: "state" },
+  { suffix: "delta_i_delta_t_tripped", label: "ΔI/Δt", group: "state" },
+  { suffix: "voltage_loss", label: "Gerilim kaybı", group: "state" },
+  { suffix: "current_loss", label: "Akım kaybı", group: "state" },
+  { suffix: "battery_status", label: "Pil durumu", group: "state" },
+  { suffix: "communication_status", label: "Haberleşme", group: "state" },
+  { suffix: "permanent_fault", label: "Kalıcı arıza", group: "state" },
+  { suffix: "momentary_fault", label: "Geçici arıza", group: "state" },
+  // Ariza yonu / akis yonu sinyalleri (A=Green, B=Red)
+  { suffix: "load_flow_direction_green_a", label: "Akış yönü A (yeşil)", group: "direction" },
+  { suffix: "load_flow_direction_red_b", label: "Akış yönü B (kırmızı)", group: "direction" },
+  { suffix: "overcurrent_fault_direction_green_a", label: "Aşırı akım arıza yönü A", group: "direction" },
+  { suffix: "overcurrent_fault_direction_red_b", label: "Aşırı akım arıza yönü B", group: "direction" },
+  { suffix: "delta_i_delta_t_fault_direction_green_a", label: "ΔI/Δt arıza yönü A", group: "direction" },
+  { suffix: "delta_i_delta_t_fault_direction_red_b", label: "ΔI/Δt arıza yönü B", group: "direction" }
 ];
 
-const PER_SOURCE_ANALOG: { suffix: string; label: string; unit: string }[] = [
-  { suffix: "actual_current", label: "Akım", unit: "mA" },
-  { suffix: "actual_voltage", label: "Gerilim", unit: "V" },
-  { suffix: "average_current", label: "Ort. akım", unit: "mA" },
-  { suffix: "conductor_temperature", label: "Sıcaklık", unit: "°C" }
+const PER_SOURCE_ANALOG: { suffix: string; label: string; unit: string; group?: "live" | "fault" }[] = [
+  { suffix: "actual_current", label: "Akım", unit: "mA", group: "live" },
+  { suffix: "actual_voltage", label: "Gerilim", unit: "V", group: "live" },
+  { suffix: "average_current", label: "Ort. akım", unit: "mA", group: "live" },
+  { suffix: "maximum_current", label: "Max. akım", unit: "mA", group: "live" },
+  { suffix: "conductor_temperature", label: "Sıcaklık", unit: "°C", group: "live" },
+  // Ariza ile ilgili degerler — son arizada kaydedilen
+  { suffix: "fault_current", label: "Arıza akımı", unit: "mA", group: "fault" },
+  { suffix: "fault_duration", label: "Arıza süresi", unit: "ms", group: "fault" },
+  { suffix: "last_good_known_current", label: "Son iyi akım", unit: "mA", group: "fault" }
 ];
 
 const SOURCES: SourceKey[] = ["master", "sat01", "sat02"];
@@ -632,6 +645,75 @@ function DeviceDetailModal({
     const permVal = typeof permRow?.value === "number" ? Math.trunc(permRow.value as number) : null;
     const tempVal = typeof tempRow?.value === "number" ? Math.trunc(tempRow.value as number) : null;
 
+    // Batarya pil iconu seviyesi (5 adim).
+    const battIconLevel =
+      battP === null
+        ? "unknown"
+        : battP >= 80
+          ? "full"
+          : battP >= 60
+            ? "high"
+            : battP >= 40
+              ? "mid"
+              : battP >= 20
+                ? "low"
+                : "critical";
+    // Material symbols battery iconlari
+    const battIconName =
+      battIconLevel === "full"
+        ? "battery_full"
+        : battIconLevel === "high"
+          ? "battery_5_bar"
+          : battIconLevel === "mid"
+            ? "battery_3_bar"
+            : battIconLevel === "low"
+              ? "battery_2_bar"
+              : battIconLevel === "critical"
+                ? "battery_alert"
+                : "battery_unknown";
+
+    const renderAnalogRow = ({
+      suffix,
+      label,
+      unit
+    }: { suffix: string; label: string; unit: string }) => {
+      const row = valueByKey.get(`${src}.${suffix}`);
+      const v = row?.value;
+      const display =
+        typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "—";
+      return (
+        <div key={suffix} className="device-detail-col-analog-row">
+          <span className="lbl">{label}</span>
+          <span className="val">
+            {display}
+            <span className="unit"> {row?.unit ?? unit}</span>
+          </span>
+        </div>
+      );
+    };
+
+    const renderBinaryRow = ({ suffix, label }: { suffix: string; label: string }) => {
+      const row = valueByKey.get(`${src}.${suffix}`);
+      if (!row) return null;
+      const v = row.value;
+      const active = typeof v === "number" ? v !== 0 : false;
+      return (
+        <div
+          key={suffix}
+          className={`device-detail-col-binary-row ${active ? "is-active" : ""}`}
+          title={`${src}.${suffix}`}
+        >
+          <span className="dot" />
+          <span className="lbl">{label}</span>
+        </div>
+      );
+    };
+
+    const stateBinary = PER_SOURCE_BINARY.filter((b) => b.group !== "direction");
+    const directionBinary = PER_SOURCE_BINARY.filter((b) => b.group === "direction");
+    const liveAnalog = PER_SOURCE_ANALOG.filter((a) => a.group !== "fault");
+    const faultAnalog = PER_SOURCE_ANALOG.filter((a) => a.group === "fault");
+
     return (
       <div key={src} className={`device-detail-col device-detail-col--${src}`}>
         <header className="device-detail-col-head">
@@ -640,14 +722,18 @@ function DeviceDetailModal({
           </span>
         </header>
 
-        {/* Batarya — kompakt */}
-        <div className="device-detail-col-batt">
-          <div className={`device-detail-battery-bar ${battBarCls}`}>
-            <span style={{ width: `${battP ?? 0}%` }} />
-          </div>
-          <div className="device-detail-col-batt-row">
-            <span>{typeof battV === "number" ? `${battV.toFixed(2)} V` : "—"}</span>
-            <strong>{typeof battP === "number" ? `%${battP}` : "—"}</strong>
+        {/* Batarya — pil ikonu + buyuk yuzde */}
+        <div className={`device-detail-col-batt-card is-${battIconLevel}`}>
+          <span className="material-symbols-outlined device-detail-col-batt-icon">
+            {battIconName}
+          </span>
+          <div className="device-detail-col-batt-info">
+            <div className="device-detail-col-batt-pct">
+              {typeof battP === "number" ? `%${battP}` : "—"}
+            </div>
+            <div className="device-detail-col-batt-volt">
+              {typeof battV === "number" ? `${battV.toFixed(2)} V` : "— V"}
+            </div>
           </div>
         </div>
 
@@ -669,30 +755,29 @@ function DeviceDetailModal({
           </div>
         </div>
 
-        {/* Olcumler */}
+        {/* Olcumler — canli */}
         <div className="device-detail-col-section">
           <div className="device-detail-col-title">
             <span className="material-symbols-outlined">monitoring</span>
             Ölçümler
           </div>
           <div className="device-detail-col-analog">
-            {PER_SOURCE_ANALOG.map(({ suffix, label, unit }) => {
-              const row = valueByKey.get(`${src}.${suffix}`);
-              const v = row?.value;
-              const display =
-                typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "—";
-              return (
-                <div key={suffix} className="device-detail-col-analog-row">
-                  <span className="lbl">{label}</span>
-                  <span className="val">
-                    {display}
-                    <span className="unit"> {row?.unit ?? unit}</span>
-                  </span>
-                </div>
-              );
-            })}
+            {liveAnalog.map(renderAnalogRow)}
           </div>
         </div>
+
+        {/* Olcumler — ariza ile ilgili (sadece bu kaynak icin sinyal varsa goster) */}
+        {faultAnalog.some(({ suffix }) => valueByKey.has(`${src}.${suffix}`)) ? (
+          <div className="device-detail-col-section">
+            <div className="device-detail-col-title">
+              <span className="material-symbols-outlined">warning</span>
+              Arıza Ölçümleri
+            </div>
+            <div className="device-detail-col-analog">
+              {faultAnalog.map(renderAnalogRow)}
+            </div>
+          </div>
+        ) : null}
 
         {/* Durum sinyalleri */}
         <div className="device-detail-col-section">
@@ -701,24 +786,22 @@ function DeviceDetailModal({
             Durum
           </div>
           <div className="device-detail-col-binary">
-            {PER_SOURCE_BINARY.map(({ suffix, label }) => {
-              const row = valueByKey.get(`${src}.${suffix}`);
-              if (!row) return null;
-              const v = row.value;
-              const active = typeof v === "number" ? v !== 0 : false;
-              return (
-                <div
-                  key={suffix}
-                  className={`device-detail-col-binary-row ${active ? "is-active" : ""}`}
-                  title={`${src}.${suffix}`}
-                >
-                  <span className="dot" />
-                  <span className="lbl">{label}</span>
-                </div>
-              );
-            })}
+            {stateBinary.map(renderBinaryRow)}
           </div>
         </div>
+
+        {/* Ariza yonu sinyalleri (sadece bu kaynak icin sinyal varsa goster) */}
+        {directionBinary.some(({ suffix }) => valueByKey.has(`${src}.${suffix}`)) ? (
+          <div className="device-detail-col-section">
+            <div className="device-detail-col-title">
+              <span className="material-symbols-outlined">explore</span>
+              Arıza Yönü
+            </div>
+            <div className="device-detail-col-binary">
+              {directionBinary.map(renderBinaryRow)}
+            </div>
+          </div>
+        ) : null}
 
         {/* Alarmlar — bu kaynak icin (scroll edilebilen kompakt alan) */}
         <div className="device-detail-col-section device-detail-col-alarms-section">
