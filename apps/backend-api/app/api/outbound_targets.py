@@ -468,7 +468,7 @@ def export_iec104_points_xlsx(
 def auto_assign_device_ca(
     target_id: int,
     payload: dict | None = None,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     """Bu hedef altinda CA'si bos cihazlara sirayla 1, 2, 3... atar.
@@ -524,6 +524,26 @@ def auto_assign_device_ca(
         assigned += 1
         next_ca += 1
 
+    if assigned > 0:
+        record_event(
+            db,
+            category="outbound_target",
+            event_type="iec104_auto_assign_ca",
+            severity="info",
+            actor_username=current_user.username,
+            message=(
+                f"'{target.name}' hedefi için {assigned} cihaza IEC 104 Common Address "
+                f"otomatik atandı (başlangıç: {start_at}, atlanan: {skipped}, overwrite: {overwrite})"
+            ),
+            metadata={
+                "target_id": target.id,
+                "target_name": target.name,
+                "assigned": assigned,
+                "skipped": skipped,
+                "start_at": start_at,
+                "overwrite": overwrite,
+            },
+        )
     db.commit()
     # IEC 104 server'i yeniden deploy et — CA degisikligi nokta haritasini etkiler.
     _schedule_iec104_redeploy(db, target.id)

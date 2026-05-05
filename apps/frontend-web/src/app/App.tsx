@@ -16,7 +16,7 @@ import { DeviceSidebar } from "../features/devices/DeviceSidebar";
 import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
-import { DeviceSummaryPage } from "../features/device-summary/DeviceSummaryPage";
+import { GridOverviewPage } from "../features/dashboard/GridOverviewPage";
 import { GlobalLoading } from "../components/GlobalLoading";
 import { useProjectSettings } from "../components/ProjectSettingsProvider";
 import { locateDevice } from "../shared/geoLookup";
@@ -427,8 +427,6 @@ export function App() {
 
   // Alarm listesini arka planda her 5 sn yenile — alarm-service yeni alarm
   // urettiginde kullanici sayfayi yenilemeden anlik gorebilsin.
-  // Sadece "alarms" sayfasinda degil, diger sayfalardaki alarm rozet/sayilarinin
-  // da guncel kalmasi icin tum oturum boyunca calisir.
   useEffect(() => {
     if (!session) return;
     const tick = async () => {
@@ -437,6 +435,24 @@ export function App() {
         setAlarms(rows);
       } catch {
         // sessizce yutuyoruz — gecici ag hatalari polling'i durdurmamali
+      }
+    };
+    const id = window.setInterval(() => {
+      void tick();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [session]);
+
+  // Olaylar (system events) canli refresh: 5 sn'de bir. Olay sayfasinda
+  // kullanici yeni kayitlari sayfa yenilemeden gorebilsin.
+  useEffect(() => {
+    if (!session) return;
+    const tick = async () => {
+      try {
+        const rows = await fetchSystemEvents(session.accessToken);
+        setEvents(rows);
+      } catch {
+        // ignore
       }
     };
     const id = window.setInterval(() => {
@@ -1645,14 +1661,12 @@ export function App() {
                   />
                 ) : null}
                 {activeTab === "values" ? (
-                  <DeviceSummaryPage
-                    selectedDevice={selectedDevice}
-                    values={signalLiveValues}
-                    signals={signalCatalog}
-                    gateways={gateways}
-                    loading={signalLiveLoading}
-                    error={signalLiveError}
-                    onRefresh={handleRefreshSignalLive}
+                  <GridOverviewPage
+                    devices={filteredDashboardDevices}
+                    alarms={alarms}
+                    gridSnapshot={gridSnapshot}
+                    onSelectDevice={setSelectedDeviceId}
+                    selectedDeviceId={selectedDeviceId}
                   />
                 ) : null}
               </main>

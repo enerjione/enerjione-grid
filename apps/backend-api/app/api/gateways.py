@@ -183,7 +183,7 @@ def delete_gateway(
 @router.post("/{gateway_code}/enable", response_model=GatewayRead)
 def enable_gateway(
     gateway_code: str,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
     """Gateway'i aktiflestirir. Collector bir sonraki config refresh dongusunde
@@ -191,7 +191,18 @@ def enable_gateway(
     row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    was_active = row.is_active
     row.is_active = True
+    if not was_active:
+        record_event(
+            db,
+            category="gateway",
+            event_type="gateway_enabled",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"{row.name} ({row.code}) gateway'i etkinleştirildi",
+            metadata={"gateway_code": row.code, "gateway_name": row.name},
+        )
     db.commit()
     db.refresh(row)
     return row
@@ -200,7 +211,7 @@ def enable_gateway(
 @router.post("/{gateway_code}/disable", response_model=GatewayRead)
 def disable_gateway(
     gateway_code: str,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
     """Gateway'i pasiflestirir. Collector bir sonraki config refresh dongusunde
@@ -208,7 +219,18 @@ def disable_gateway(
     row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    was_active = row.is_active
     row.is_active = False
+    if was_active:
+        record_event(
+            db,
+            category="gateway",
+            event_type="gateway_disabled",
+            severity="warning",
+            actor_username=current_user.username,
+            message=f"{row.name} ({row.code}) gateway'i devre dışı bırakıldı",
+            metadata={"gateway_code": row.code, "gateway_name": row.name},
+        )
     db.commit()
     db.refresh(row)
     return row

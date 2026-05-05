@@ -218,7 +218,7 @@ def delete_area(
 def add_user_to_area(
     area_id: int,
     user_id: int,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -241,6 +241,15 @@ def add_user_to_area(
     ).first()
     if not exists:
         db.execute(responsibility_area_users.insert().values(area_id=area_id, user_id=user_id))
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_user_added",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"{user.username} kullanıcısı '{area.name}' sorumluluk alanına eklendi",
+            metadata={"area_id": area_id, "area_name": area.name, "user_id": user_id, "username": user.username},
+        )
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -249,15 +258,27 @@ def add_user_to_area(
 def remove_user_from_area(
     area_id: int,
     user_id: int,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
+    area = db.get(ResponsibilityArea, area_id)
+    user = db.get(User, user_id)
     db.execute(
         sqlalchemy_delete(responsibility_area_users).where(
             responsibility_area_users.c.area_id == area_id,
             responsibility_area_users.c.user_id == user_id,
         )
     )
+    if area is not None and user is not None:
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_user_removed",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"{user.username} kullanıcısı '{area.name}' sorumluluk alanından çıkarıldı",
+            metadata={"area_id": area_id, "area_name": area.name, "user_id": user_id, "username": user.username},
+        )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -268,7 +289,7 @@ def remove_user_from_area(
 def add_device_to_area(
     area_id: int,
     device_id: int,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -283,6 +304,16 @@ def add_device_to_area(
     ).first()
     if not exists:
         db.execute(responsibility_area_devices.insert().values(area_id=area_id, device_id=device_id))
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_device_added",
+            severity="info",
+            actor_username=current_user.username,
+            device_code=device.code,
+            message=f"{device.name} cihazı '{area.name}' sorumluluk alanına eklendi",
+            metadata={"area_id": area_id, "area_name": area.name, "device_id": device_id, "device_code": device.code},
+        )
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -291,14 +322,27 @@ def add_device_to_area(
 def remove_device_from_area(
     area_id: int,
     device_id: int,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
+    area = db.get(ResponsibilityArea, area_id)
+    device = db.get(Device, device_id)
     db.execute(
         sqlalchemy_delete(responsibility_area_devices).where(
             responsibility_area_devices.c.area_id == area_id,
             responsibility_area_devices.c.device_id == device_id,
         )
     )
+    if area is not None and device is not None:
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_device_removed",
+            severity="info",
+            actor_username=current_user.username,
+            device_code=device.code,
+            message=f"{device.name} cihazı '{area.name}' sorumluluk alanından çıkarıldı",
+            metadata={"area_id": area_id, "area_name": area.name, "device_id": device_id, "device_code": device.code},
+        )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

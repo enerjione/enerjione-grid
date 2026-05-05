@@ -431,7 +431,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
 
           {host ? (
             <div className="sys-card-body">
-              {/* Tek satir 3 mini-donut: CPU / RAM / Disk */}
+              {/* Tek satir 3 mini-donut: CPU / RAM / Disk + altlarinda detay */}
               <div className="sys-mini-donuts">
                 <div className={`sys-mini-donut sys-mini-donut--${cpuTone}`}>
                   <div className="sys-mini-donut-vis">
@@ -441,6 +441,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                     </div>
                   </div>
                   <span className="sys-mini-donut-label">CPU</span>
+                  <span className="sys-mini-donut-detail">
+                    {host.cpu.physical_cores ?? "?"}P · {host.cpu.logical_cores ?? "?"}T
+                  </span>
                 </div>
 
                 <div className={`sys-mini-donut sys-mini-donut--${memTone}`}>
@@ -451,6 +454,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                     </div>
                   </div>
                   <span className="sys-mini-donut-label">RAM</span>
+                  <span className="sys-mini-donut-detail">
+                    {formatBytes(host.memory.used_bytes)} / {formatBytes(host.memory.total_bytes)}
+                  </span>
                 </div>
 
                 <div className={`sys-mini-donut sys-mini-donut--${diskTone}`}>
@@ -461,89 +467,137 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                     </div>
                   </div>
                   <span className="sys-mini-donut-label">Disk</span>
+                  <span className="sys-mini-donut-detail">
+                    {formatBytes(host.disk.used_bytes)} / {formatBytes(host.disk.total_bytes)}
+                  </span>
                 </div>
               </div>
 
-              {/* CPU sparkline */}
-              <div className="sys-trend">
-                <span className="sys-trend-label">CPU trendi (son ~2 dk)</span>
-                <Sparkline values={cpuHistory} tone={cpuTone} width={280} height={36} />
+              {/* CPU sparkline trendi */}
+              <div className={`sys-trend sys-trend--${cpuTone}`}>
+                <div className="sys-trend-head">
+                  <span className="material-symbols-outlined">trending_up</span>
+                  <span className="sys-trend-label">CPU trendi · son ~2 dk</span>
+                  <strong className="sys-trend-current">{host.cpu.percent.toFixed(0)}%</strong>
+                </div>
+                <Sparkline values={cpuHistory} tone={cpuTone} width={280} height={42} />
               </div>
 
-              {/* Detay liste */}
-              <ul className="sys-detail-list">
-                <li>
-                  <span className="sys-detail-key">CPU</span>
-                  <span className="sys-detail-val">
-                    {host.cpu.physical_cores ?? "?"} fiziksel · {host.cpu.logical_cores ?? "?"} mantıksal
-                  </span>
-                </li>
-                {host.cpu.load_avg_1m != null ? (
-                  <li>
-                    <span className="sys-detail-key">Yük</span>
-                    <span className="sys-detail-val">
-                      {host.cpu.load_avg_1m.toFixed(2)} · {(host.cpu.load_avg_5m ?? 0).toFixed(2)} ·{" "}
-                      {(host.cpu.load_avg_15m ?? 0).toFixed(2)}
+              {/* Yuk ortalamasi (sadece Linux'ta var) — tek bagimsiz rozet */}
+              {host.cpu.load_avg_1m != null ? (
+                <div className="sys-loadavg">
+                  <div className="sys-loadavg-icon">
+                    <span className="material-symbols-outlined">speed</span>
+                  </div>
+                  <div className="sys-loadavg-body">
+                    <span className="sys-loadavg-title">Yük ortalaması</span>
+                    <div className="sys-loadavg-values">
+                      <span>
+                        <em>1m</em>
+                        <strong>{host.cpu.load_avg_1m.toFixed(2)}</strong>
+                      </span>
+                      <span>
+                        <em>5m</em>
+                        <strong>{(host.cpu.load_avg_5m ?? 0).toFixed(2)}</strong>
+                      </span>
+                      <span>
+                        <em>15m</em>
+                        <strong>{(host.cpu.load_avg_15m ?? 0).toFixed(2)}</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Ag trafigi ozel gorsel — yatay akis */}
+              <div className="sys-net-panel">
+                <div className="sys-metric-group-title">
+                  <span className="material-symbols-outlined">lan</span>
+                  Ağ trafiği
+                </div>
+                <div className="sys-net-flow">
+                  <div className="sys-net-side sys-net-side--up">
+                    <div className="sys-net-arrow">
+                      <span className="material-symbols-outlined">arrow_upward</span>
+                    </div>
+                    <div className="sys-net-info">
+                      <strong>{formatBytes(host.network.bytes_sent)}</strong>
+                      <span>{host.network.packets_sent.toLocaleString("tr-TR")} pkt giden</span>
+                    </div>
+                  </div>
+                  <div className="sys-net-divider" />
+                  <div className="sys-net-side sys-net-side--down">
+                    <div className="sys-net-arrow">
+                      <span className="material-symbols-outlined">arrow_downward</span>
+                    </div>
+                    <div className="sys-net-info">
+                      <strong>{formatBytes(host.network.bytes_recv)}</strong>
+                      <span>{host.network.packets_recv.toLocaleString("tr-TR")} pkt gelen</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sistem bilgileri grubu */}
+              <div className="sys-info-group">
+                <div className="sys-metric-group-title">
+                  <span className="material-symbols-outlined">badge</span>
+                  Sistem bilgisi
+                </div>
+                <div className="sys-info-tiles">
+                  <div className="sys-info-tile">
+                    <span className="sys-info-tile-icon">
+                      <span className="material-symbols-outlined">dns</span>
                     </span>
-                  </li>
-                ) : null}
-                <li>
-                  <span className="sys-detail-key">RAM</span>
-                  <span className="sys-detail-val">
-                    {formatBytes(host.memory.used_bytes)} /{" "}
-                    {formatBytes(host.memory.total_bytes)}
-                  </span>
-                </li>
-                <li>
-                  <span className="sys-detail-key">Disk</span>
-                  <span className="sys-detail-val">
-                    {formatBytes(host.disk.used_bytes)} / {formatBytes(host.disk.total_bytes)}{" "}
-                    <em>({formatBytes(host.disk.free_bytes)} boş)</em>
-                  </span>
-                </li>
-                {host.memory.swap_total_bytes != null && host.memory.swap_total_bytes > 0 ? (
-                  <li>
-                    <span className="sys-detail-key">Swap</span>
-                    <span className="sys-detail-val">
-                      {(host.memory.swap_percent ?? 0).toFixed(0)}%{" "}
-                      <em>
-                        ({formatBytes(host.memory.swap_used_bytes ?? 0)}/
-                        {formatBytes(host.memory.swap_total_bytes)})
-                      </em>
+                    <div>
+                      <span className="sys-info-tile-label">Host</span>
+                      <strong className="sys-info-tile-val sys-info-tile-val--mono">
+                        {host.info.hostname}
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="sys-info-tile">
+                    <span className="sys-info-tile-icon">
+                      <span className="material-symbols-outlined">monitor</span>
                     </span>
-                  </li>
-                ) : null}
-                <li>
-                  <span className="sys-detail-key">Ağ ↑↓</span>
-                  <span className="sys-detail-val">
-                    {formatBytes(host.network.bytes_sent)} / {formatBytes(host.network.bytes_recv)}
-                  </span>
-                </li>
-                <li>
-                  <span className="sys-detail-key">Host</span>
-                  <span className="sys-detail-val sys-detail-val--mono">
-                    {host.info.hostname}
-                  </span>
-                </li>
-                <li>
-                  <span className="sys-detail-key">İşletim sistemi</span>
-                  <span className="sys-detail-val">
-                    {host.info.os_name} {host.info.os_release} · {host.info.machine}
-                  </span>
-                </li>
-                <li>
-                  <span className="sys-detail-key">Uptime</span>
-                  <span className="sys-detail-val">
-                    {formatDuration(host.info.uptime_seconds)}
-                  </span>
-                </li>
-                <li>
-                  <span className="sys-detail-key">Backend</span>
-                  <span className="sys-detail-val">
-                    PID {host.info.process_pid} · {formatDuration(host.info.process_uptime_seconds)}
-                  </span>
-                </li>
-              </ul>
+                    <div>
+                      <span className="sys-info-tile-label">İşletim sistemi</span>
+                      <strong className="sys-info-tile-val">
+                        {host.info.os_name} {host.info.os_release}
+                      </strong>
+                      <span className="sys-info-tile-sub">{host.info.machine}</span>
+                    </div>
+                  </div>
+                  <div className="sys-info-tile">
+                    <span className="sys-info-tile-icon">
+                      <span className="material-symbols-outlined">timer</span>
+                    </span>
+                    <div>
+                      <span className="sys-info-tile-label">Uptime</span>
+                      <strong className="sys-info-tile-val">
+                        {formatDuration(host.info.uptime_seconds)}
+                      </strong>
+                      <span className="sys-info-tile-sub">
+                        {new Date(host.info.boot_time * 1000).toLocaleString("tr-TR")}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="sys-info-tile">
+                    <span className="sys-info-tile-icon">
+                      <span className="material-symbols-outlined">deployed_code</span>
+                    </span>
+                    <div>
+                      <span className="sys-info-tile-label">Backend</span>
+                      <strong className="sys-info-tile-val">
+                        PID {host.info.process_pid}
+                      </strong>
+                      <span className="sys-info-tile-sub">
+                        {formatDuration(host.info.process_uptime_seconds)} aktif
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
         </section>

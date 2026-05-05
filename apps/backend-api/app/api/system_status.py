@@ -220,20 +220,21 @@ class ServicesReport(BaseModel):
     sampled_at: float
 
 
-_TCP_PROBE_TIMEOUT_SEC = 1.5
+_TCP_PROBE_TIMEOUT_SEC = 1.0
 
 
 def _tcp_probe(host: str, port: int) -> tuple[bool, float, str | None]:
     """TCP socket ile basit erisilebilirlik testi.
 
-    Returns: (healthy, latency_ms, error_msg)
+    Tum exception'lari yakalar — yoksa `_check_worker` icindeki for-loop'unun
+    sonraki host adayini deneme sansi olmaz. Returns: (healthy, latency_ms, error_msg)
     """
     started = time.perf_counter()
     try:
         with socket.create_connection((host, port), timeout=_TCP_PROBE_TIMEOUT_SEC):
             elapsed = (time.perf_counter() - started) * 1000.0
             return True, round(elapsed, 1), None
-    except (socket.gaierror, OSError, TimeoutError) as exc:
+    except Exception as exc:  # noqa: BLE001 — defensive; her hata sonraki host'a gecsin
         elapsed = (time.perf_counter() - started) * 1000.0
         return False, round(elapsed, 1), f"{type(exc).__name__}: {exc}"
 
@@ -296,29 +297,75 @@ def _check_rabbitmq() -> ServiceStatus:
     )
 
 
-def _check_worker(name: str, host_port_env_keys: tuple[str, ...], default_port: int) -> ServiceStatus:
-    """Native bir worker'in /health portuna TCP probe.
+def _check_worker(
+    name: str,
+    *,
+    env_prefix: str,
+    default_hosts: tuple[str, ...],
+    default_port: int,
+) -> ServiceStatus:
+    """Bir worker servisinin /health portuna TCP probe.
 
-    `host_port_env_keys`: env'den okunacak port keylerinin sirasi (ilk dolu olan
-    kullanilir). Bulunamazsa default_port kullanilir.
+    Host secimi (oncelik sirasi):
+      1. Env override: `<ENV_PREFIX>_HEALTH_HOST` (orn. `TAG_ENGINE_HEALTH_HOST`)
+      2. `default_hosts` icindeki hostname'leri sirayla dener — ilk erisilebilir
+         olan kullanilir. Boylece Docker compose'ta `tag-engine` servis ismi
+         otomatik bulunur, native kurulumda `127.0.0.1` fallback olur.
+
+    Port secimi:
+      1. `<ENV_PREFIX>_HEALTH_PORT` env varsa o
+      2. `WORKER_HEALTH_PORT` env varsa o (worker'larin `.env`'lerinde
+         kullandigi standart ad — dikkat: tum worker'larin ortak env'i
+         oldugundan farkli portlar icin yalnizca <PREFIX>_HEALTH_PORT kullan!)
+      3. `default_port`
     """
-    host = os.environ.get(f"{name.upper()}_HEALTH_HOST", "127.0.0.1")
+    # ----- Port -----
     port: int | None = None
-    for key in host_port_env_keys:
-        raw = os.environ.get(key, "").strip()
-        if raw and raw.isdigit():
-            port = int(raw)
-            break
+    # ONEMLI: WORKER_HEALTH_PORT ortak env oldugu icin hatali sekilde tum
+    # worker'lara ayni port'u uygulayabilir. Sadece <PREFIX>_HEALTH_PORT
+    # spesifik override icin kullanilir; diger durumlar default'a duser.
+    raw = os.environ.get(f"{env_prefix}_HEALTH_PORT", "").strip()
+    if raw and raw.isdigit():
+        port = int(raw)
     if port is None:
         port = default_port
-    ok, ms, err = _tcp_probe(host, int(port))
+
+    # ----- Host -----
+    override = os.environ.get(f"{env_prefix}_HEALTH_HOST", "").strip()
+    candidate_hosts: tuple[str, ...] = (override,) if override else default_hosts
+
+    last_err: str | None = None
+    last_ms: float = 0.0
+    chosen_host: str = candidate_hosts[0] if candidate_hosts else "127.0.0.1"
+    tried: list[str] = []
+    for host in candidate_hosts:
+        if not host:
+            continue
+        tried.append(host)
+        ok, ms, err = _tcp_probe(host, int(port))
+        chosen_host = host
+        last_err = err
+        last_ms = ms
+        if ok:
+            return ServiceStatus(
+                name=name,
+                role="worker",
+                healthy=True,
+                latency_ms=ms,
+                endpoint=f"{host}:{port}",
+            )
+    # Hiçbiri cevap vermedi — denenen tum host'lari ve son hatayi raporla,
+    # böylece kullanici hangi adlarin denendigini gorur.
+    detail = last_err or "TCP probe basarisiz."
+    if len(tried) > 1:
+        detail = f"{detail} | Denenen: {', '.join(tried)}"
     return ServiceStatus(
         name=name,
         role="worker",
-        healthy=ok,
-        latency_ms=ms,
-        endpoint=f"{host}:{port}",
-        detail=err,
+        healthy=False,
+        latency_ms=last_ms,
+        endpoint=f"{chosen_host}:{port}",
+        detail=detail,
     )
 
 
@@ -348,20 +395,47 @@ def get_services_status(
     services.append(_check_database())
     services.append(_check_rabbitmq())
 
-    # Worker'lar — gercek varsayilan portlar (worker main.py'lardan).
-    # tag-engine: 8011, alarm-service: 8012, notification-worker: 8013,
-    # iec104-outbound: 8013 (notification-worker ile cakisir; env override ile
-    # uretimde farkli portlara alinir). Her worker icin tercihen kendine
-    # ozel env key'i ile override edilebilir.
-    services.append(_check_worker("Tag Engine", ("TAG_ENGINE_HEALTH_PORT",), 8011))
-    services.append(_check_worker("Alarm Service", ("ALARM_SERVICE_HEALTH_PORT",), 8012))
+    # Worker'lar — Docker compose ortaminda her servis kendi hostname'iyle
+    # baglanir; native kurulumda 127.0.0.1 fallback'i devreye girer. Servis
+    # ismi varyasyonlari (orn. tag-engine vs tag_engine) ortak compose
+    # adlandirmalarina denk gelir; ilk cevap veren kazanir. Port default'lari
+    # worker main.py'lardaki sabitlerden alinir.
     services.append(
         _check_worker(
-            "Notification Worker", ("NOTIFICATION_WORKER_HEALTH_PORT",), 8013
+            "Tag Engine",
+            env_prefix="TAG_ENGINE",
+            default_hosts=("tag-engine", "tag_engine", "hsl-tag-engine", "127.0.0.1"),
+            default_port=8011,
         )
     )
     services.append(
-        _check_worker("IEC104 Outbound", ("IEC104_OUTBOUND_HEALTH_PORT",), 8014)
+        _check_worker(
+            "Alarm Service",
+            env_prefix="ALARM_SERVICE",
+            default_hosts=("alarm-service", "alarm_service", "hsl-alarm-service", "127.0.0.1"),
+            default_port=8012,
+        )
+    )
+    services.append(
+        _check_worker(
+            "Notification Worker",
+            env_prefix="NOTIFICATION_WORKER",
+            default_hosts=(
+                "notification-worker",
+                "notification_worker",
+                "hsl-notification-worker",
+                "127.0.0.1",
+            ),
+            default_port=8013,
+        )
+    )
+    services.append(
+        _check_worker(
+            "IEC104 Outbound",
+            env_prefix="IEC104_OUTBOUND",
+            default_hosts=("iec104-outbound", "iec104_outbound", "hsl-iec104-outbound", "127.0.0.1"),
+            default_port=8014,
+        )
     )
 
     return ServicesReport(services=services, sampled_at=time.time())

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
@@ -139,6 +139,11 @@ function formatRelative(iso: string | null | undefined): string {
 }
 
 export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms }: Props) {
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  // Cihaz değişince modali kapat (yanlışlıkla başka cihazın detayını gösterme)
+  useEffect(() => {
+    setDetailModalOpen(false);
+  }, [selectedDevice?.id]);
   const { settings } = useProjectSettings();
   const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
   const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
@@ -476,9 +481,214 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                 );
               })}
             </div>
+
+            <button
+              type="button"
+              className="device-popup-detail-btn"
+              onClick={() => setDetailModalOpen(true)}
+            >
+              <span className="material-symbols-outlined">read_more</span>
+              Tüm detayları göster
+            </button>
           </div>
+        ) : null}
+
+        {/* Cihaz detay modali — onemli sinyaller */}
+        {detailModalOpen && selectedDevice ? (
+          <DeviceDetailModal
+            device={selectedDevice}
+            liveValues={liveValues ?? []}
+            alarms={alarms ?? []}
+            sourceBatteries={sourceBatteries}
+            onClose={() => setDetailModalOpen(false)}
+          />
         ) : null}
       </div>
     </section>
+  );
+}
+
+// ===================================================================
+// Cihaz detay modali — onemli sinyaller, alarmlar, batarya, baglanti
+// ===================================================================
+
+const IMPORTANT_BINARY_KEYS: { key: string; label: string }[] = [
+  { key: "master.overcurrent_tripped", label: "Aşırı akım" },
+  { key: "master.delta_i_delta_t_tripped", label: "ΔI/Δt tripped" },
+  { key: "master.voltage_loss", label: "Gerilim kaybı" },
+  { key: "master.current_loss", label: "Akım kaybı" },
+  { key: "master.battery_status", label: "Pil durumu" },
+  { key: "master.communication_status", label: "Haberleşme" },
+  { key: "sat01.overcurrent_tripped", label: "Sat01 aşırı akım" },
+  { key: "sat02.overcurrent_tripped", label: "Sat02 aşırı akım" }
+];
+
+const IMPORTANT_ANALOG_KEYS: { key: string; label: string; unit: string }[] = [
+  { key: "master.actual_current", label: "Gerçek akım", unit: "mA" },
+  { key: "master.actual_voltage", label: "Gerçek gerilim", unit: "V" },
+  { key: "master.average_current", label: "Ortalama akım", unit: "mA" },
+  { key: "master.conductor_temperature", label: "İletken sıcaklığı", unit: "°C" }
+];
+
+function DeviceDetailModal({
+  device,
+  liveValues,
+  alarms,
+  sourceBatteries,
+  onClose
+}: {
+  device: DeviceRow;
+  liveValues: SignalLiveRow[];
+  alarms: AlarmEvent[];
+  sourceBatteries: Record<
+    SourceKey,
+    { voltage: number | null; percent: number | null } | null
+  >;
+  onClose: () => void;
+}) {
+  const deviceRows = liveValues.filter((r) => r.device_id === device.id);
+  const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
+  const activeAlarms = alarms.filter((a) => a.device_id === device.id && !a.reset);
+
+  return (
+    <div className="device-detail-modal-backdrop" onClick={onClose}>
+      <div className="device-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="device-detail-modal-head">
+          <div>
+            <span className="device-detail-modal-eyebrow">Cihaz Detayı</span>
+            <h3>{device.name}</h3>
+            <code>{device.code}</code>
+          </div>
+          <button
+            type="button"
+            className="device-detail-modal-close"
+            onClick={onClose}
+            aria-label="Kapat"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </header>
+
+        {/* Aktif alarmlar */}
+        {activeAlarms.length > 0 ? (
+          <section className="device-detail-section">
+            <h4 className="device-detail-section-title">
+              <span className="material-symbols-outlined">warning</span>
+              Aktif Alarmlar ({activeAlarms.length})
+            </h4>
+            <div className="device-detail-alarm-list">
+              {activeAlarms.slice(0, 5).map((a) => (
+                <div
+                  key={a.id}
+                  className={`device-detail-alarm device-detail-alarm--${a.level.toLowerCase()}`}
+                >
+                  <strong>{a.title}</strong>
+                  {a.description ? <span>{a.description}</span> : null}
+                  <span className="device-detail-alarm-time">
+                    {new Date(a.created_at).toLocaleString("tr-TR")}
+                  </span>
+                </div>
+              ))}
+              {activeAlarms.length > 5 ? (
+                <span className="helper-text">
+                  +{activeAlarms.length - 5} alarm daha — Alarmlar sayfasından bakın.
+                </span>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {/* Batarya */}
+        <section className="device-detail-section">
+          <h4 className="device-detail-section-title">
+            <span className="material-symbols-outlined">battery_charging_full</span>
+            Batarya
+          </h4>
+          <div className="device-detail-batteries">
+            {(["master", "sat01", "sat02"] as SourceKey[]).map((src) => {
+              const data = sourceBatteries[src];
+              return (
+                <div key={src} className="device-detail-battery-row">
+                  <span className={`badge badge-source badge-source-${src}`}>
+                    {SOURCE_LABEL[src]}
+                  </span>
+                  <span className="device-detail-battery-voltage">
+                    {data?.voltage !== null && data?.voltage !== undefined
+                      ? `${data.voltage.toFixed(2)} V`
+                      : "—"}
+                  </span>
+                  <span className="device-detail-battery-percent">
+                    {data?.percent !== null && data?.percent !== undefined
+                      ? `%${data.percent}`
+                      : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Önemli durum sinyalleri (binary) */}
+        <section className="device-detail-section">
+          <h4 className="device-detail-section-title">
+            <span className="material-symbols-outlined">flag</span>
+            Durum Sinyalleri
+          </h4>
+          <div className="device-detail-status-grid">
+            {IMPORTANT_BINARY_KEYS.map(({ key, label }) => {
+              const row = valueByKey.get(key);
+              if (!row) return null;
+              const v = row.value;
+              const active = typeof v === "number" ? v !== 0 : false;
+              return (
+                <div
+                  key={key}
+                  className={`device-detail-status-pill ${active ? "is-active" : "is-passive"}`}
+                  title={key}
+                >
+                  <span className="device-detail-status-label">{label}</span>
+                  <span className="device-detail-status-value">
+                    {active ? "AKTİF" : "Pasif"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Önemli analog ölçümler */}
+        <section className="device-detail-section">
+          <h4 className="device-detail-section-title">
+            <span className="material-symbols-outlined">monitoring</span>
+            Ölçümler
+          </h4>
+          <div className="device-detail-metrics-grid">
+            {IMPORTANT_ANALOG_KEYS.map(({ key, label, unit }) => {
+              const row = valueByKey.get(key);
+              const v = row?.value;
+              const display =
+                typeof v === "number" && Number.isFinite(v)
+                  ? `${v.toFixed(2)} ${row?.unit ?? unit}`
+                  : "—";
+              return (
+                <div key={key} className="device-detail-metric">
+                  <span className="device-detail-metric-label">{label}</span>
+                  <strong>{display}</strong>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <footer className="device-detail-modal-foot">
+          <span className="helper-text">
+            Tüm sinyaller için Mühendislik &gt; Canlı Değerler sayfasını kullanın.
+          </span>
+          <button type="button" className="primary-btn" onClick={onClose}>
+            Kapat
+          </button>
+        </footer>
+      </div>
+    </div>
   );
 }
