@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchHostStatus, loadSession } from "../../shared/api";
-import type { AlarmEvent, DeviceRow, Gateway, HostStatus } from "../../shared/types";
+import { fetchHostStatus, fetchServicesStatus, loadSession } from "../../shared/api";
+import type {
+  AlarmEvent,
+  DeviceRow,
+  Gateway,
+  HostStatus,
+  ServicesReport,
+  ServiceStatus
+} from "../../shared/types";
 
 type Props = {
   devices: DeviceRow[];
@@ -11,10 +18,9 @@ type Props = {
   onRefresh?: () => void | Promise<void>;
 };
 
-/** Sunucu kaynak metriklerini yenileme aralığı (sn). */
+/** Sunucu kaynak / servis durumu yenileme aralığı (sn). */
 const HOST_REFRESH_INTERVAL_SEC = 5;
-
-/** CPU sparkline icin tutulacak ornek sayisi (60sn'lik pencere). */
+const SERVICES_REFRESH_INTERVAL_SEC = 10;
 const HOST_HISTORY_LEN = 24;
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
@@ -49,7 +55,7 @@ function percentTone(percent: number): "ok" | "warn" | "bad" {
   return "ok";
 }
 
-/** SVG donut: 0-100 yuzdeyi yarim daire/tam daire arasinda animasyonlu boyar. */
+/** SVG donut: 0-100 yuzdeyi animasyonlu cizer. */
 function Donut({
   percent,
   size = 168,
@@ -65,19 +71,11 @@ function Donut({
   const r = (size - thickness) / 2;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - safe / 100);
-  const strokeColor =
-    tone === "bad" ? "#dc2626" : tone === "warn" ? "#f59e0b" : "#10b981";
+  const strokeColor = tone === "bad" ? "#dc2626" : tone === "warn" ? "#f59e0b" : "#10b981";
   const trackColor = "rgba(148, 163, 184, 0.18)";
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="donut">
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        stroke={trackColor}
-        strokeWidth={thickness}
-        fill="none"
-      />
+      <circle cx={size / 2} cy={size / 2} r={r} stroke={trackColor} strokeWidth={thickness} fill="none" />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -95,7 +93,6 @@ function Donut({
   );
 }
 
-/** Sparkline: son N degeri kucuk bir alan grafigine ceviren minimal SVG. */
 function Sparkline({
   values,
   width = 220,
@@ -110,14 +107,11 @@ function Sparkline({
   if (values.length < 2) {
     return <div className="sparkline sparkline--empty" style={{ width, height }} />;
   }
-  const maxV = 100;
-  const minV = 0;
-  const span = maxV - minV || 1;
   const stepX = width / (values.length - 1);
   const points = values
     .map((v, i) => {
       const x = i * stepX;
-      const y = height - ((v - minV) / span) * height;
+      const y = height - (Math.max(0, Math.min(100, v)) / 100) * height;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
@@ -125,8 +119,7 @@ function Sparkline({
     .split(" ")
     .map((p) => p)
     .join(" L")} L${width},${height} Z`;
-  const strokeColor =
-    tone === "bad" ? "#dc2626" : tone === "warn" ? "#f59e0b" : "#10b981";
+  const strokeColor = tone === "bad" ? "#dc2626" : tone === "warn" ? "#f59e0b" : "#10b981";
   const fillColor =
     tone === "bad"
       ? "rgba(220, 38, 38, 0.15)"
@@ -134,37 +127,21 @@ function Sparkline({
       ? "rgba(245, 158, 11, 0.15)"
       : "rgba(16, 185, 129, 0.15)";
   return (
-    <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className="sparkline"
-    >
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="sparkline">
       <path d={areaPath} fill={fillColor} />
-      <polyline points={points} fill="none" stroke={strokeColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
-function statusOrder(d: DeviceRow): number {
-  if (d.communicationStatus === "offline") return 0;
-  if (d.communicationStatus === "unknown") return 1;
-  return 2;
-}
-
-function lastUpdateTs(d: DeviceRow): number {
-  if (!d.lastUpdateAt) return 0;
-  return new Date(d.lastUpdateAt).getTime();
-}
-
-function commLabel(status: DeviceRow["communicationStatus"]): string {
-  if (status === "online") return "Çevrimiçi";
-  if (status === "offline") return "Çevrimdışı";
-  return "Belirsiz";
-}
-
-function lastSeenTone(gw: Gateway): "ok" | "warn" | "bad" | "muted" {
+function gatewayLastSeenTone(gw: Gateway): "ok" | "warn" | "bad" | "muted" {
   if (!gw.is_active) return "muted";
   if (!gw.last_seen_at) return "warn";
   const sec = (Date.now() - new Date(gw.last_seen_at).getTime()) / 1000;
@@ -173,22 +150,69 @@ function lastSeenTone(gw: Gateway): "ok" | "warn" | "bad" | "muted" {
   return "bad";
 }
 
+function gatewayStatusLabel(tone: "ok" | "warn" | "bad" | "muted"): string {
+  if (tone === "ok") return "Çevrimiçi";
+  if (tone === "warn") return "Gecikmeli";
+  if (tone === "bad") return "Çevrimdışı";
+  return "Pasif";
+}
+
+function serviceRoleIcon(role: ServiceStatus["role"]): string {
+  switch (role) {
+    case "db":
+      return "database";
+    case "broker":
+      return "lan";
+    case "worker":
+      return "memory";
+    case "gateway":
+      return "hub";
+    case "self":
+      return "api";
+    default:
+      return "settings";
+  }
+}
+
+function serviceRoleLabel(role: ServiceStatus["role"]): string {
+  switch (role) {
+    case "db":
+      return "Veritabanı";
+    case "broker":
+      return "Mesaj kuyruğu";
+    case "worker":
+      return "Worker";
+    case "gateway":
+      return "Gateway";
+    case "self":
+      return "API";
+    default:
+      return role;
+  }
+}
+
 export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh }: Props) {
   // Sunucu (backend host) anlik kaynak metrikleri
   const [host, setHost] = useState<HostStatus | null>(null);
   const [hostError, setHostError] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
-  // Sparkline icin son N CPU/RAM ornegi.
+  const hostInFlightRef = useRef(false);
+
+  // Servis durumlari
+  const [services, setServices] = useState<ServicesReport | null>(null);
+  const [servicesError, setServicesError] = useState<string | null>(null);
+  const servicesInFlightRef = useRef(false);
+
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [memHistory, setMemHistory] = useState<number[]>([]);
 
+  // Host metrikleri polling
   useEffect(() => {
     let cancelled = false;
     async function tick() {
-      if (inFlightRef.current) return;
+      if (hostInFlightRef.current) return;
       const session = loadSession();
       if (!session) return;
-      inFlightRef.current = true;
+      hostInFlightRef.current = true;
       try {
         const status = await fetchHostStatus(session.accessToken);
         if (!cancelled) {
@@ -208,7 +232,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           setHostError(exc instanceof Error ? exc.message : "Sunucu kaynak metrikleri alinamadi.");
         }
       } finally {
-        inFlightRef.current = false;
+        hostInFlightRef.current = false;
       }
     }
     void tick();
@@ -219,88 +243,100 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
     };
   }, []);
 
-  const stats = useMemo(() => {
+  // Servis durumlari polling (DB/Rabbit/worker'lar)
+  useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      if (servicesInFlightRef.current) return;
+      const session = loadSession();
+      if (!session) return;
+      servicesInFlightRef.current = true;
+      try {
+        const report = await fetchServicesStatus(session.accessToken);
+        if (!cancelled) {
+          setServices(report);
+          setServicesError(null);
+        }
+      } catch (exc) {
+        if (!cancelled) {
+          setServicesError(exc instanceof Error ? exc.message : "Servis durumlari alinamadi.");
+        }
+      } finally {
+        servicesInFlightRef.current = false;
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, SERVICES_REFRESH_INTERVAL_SEC * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  // Cihaz ozeti — sadece sayilar, tablo yok.
+  const deviceStats = useMemo(() => {
     const total = devices.length;
     const online = devices.filter((d) => d.communicationStatus === "online").length;
-    const offline = devices.filter((d) => d.communicationStatus === "offline").length;
-    const unknown = devices.filter((d) => d.communicationStatus === "unknown").length;
-    const commIssue = offline + unknown;
-    const openAlarms = alarms.filter((a) => !a.reset).length;
-    const gwTotal = gateways.length;
-    const gwActive = gateways.filter((g) => g.is_active).length;
+    // Haberleşmeyen = offline + unknown (kullanici 'bunlari ayiralim' dedi:
+    // 'haberlesen' = online, geri kalan haberlesmeyen).
+    const offline = total - online;
     const onlineRatio = total > 0 ? Math.round((online / total) * 100) : 0;
-    return { total, online, offline, unknown, commIssue, openAlarms, gwTotal, gwActive, onlineRatio };
-  }, [devices, gateways, alarms]);
-
-  const riskiest = useMemo(() => {
-    return devices
-      .slice()
-      .sort((a, b) => {
-        const c = statusOrder(a) - statusOrder(b);
-        if (c !== 0) return c;
-        return lastUpdateTs(a) - lastUpdateTs(b);
-      })
-      .slice(0, 10);
+    return { total, online, offline, onlineRatio };
   }, [devices]);
+
+  const alarmStats = useMemo(() => {
+    return { open: alarms.filter((a) => !a.reset).length };
+  }, [alarms]);
+
+  const gatewayStats = useMemo(() => {
+    const total = gateways.length;
+    const active = gateways.filter((g) => g.is_active).length;
+    return { total, active };
+  }, [gateways]);
+
+  const serviceCounts = useMemo(() => {
+    if (!services) return { total: 0, healthy: 0, unhealthy: 0 };
+    const total = services.services.length;
+    const healthy = services.services.filter((s) => s.healthy).length;
+    return { total, healthy, unhealthy: total - healthy };
+  }, [services]);
 
   const showSpinner = Boolean(loading);
 
-  // CPU/RAM/Disk metrikleri (host varsa).
   const cpuTone = host ? percentTone(host.cpu.percent) : "ok";
   const memTone = host ? percentTone(host.memory.percent) : "ok";
   const diskTone = host ? percentTone(host.disk.percent) : "ok";
 
   return (
     <section className="system-status-shell">
-      {/* HERO: baslik + global aksiyon */}
-      <header className="sys-hero">
-        <div className="sys-hero-text">
-          <span className="sys-hero-eyebrow">Sistem durumu</span>
-          <h1 className="sys-hero-title">Çatı yazılım canlı durum panosu</h1>
-          <p className="sys-hero-lead">
-            Cihaz haberleşmesi, gateway sağlığı ve sunucu kaynakları tek bakışta. Sunucu metrikleri her{" "}
-            <strong>{HOST_REFRESH_INTERVAL_SEC} sn</strong>, cihaz/alarm verileri yenileme isteğiyle güncellenir.
-          </p>
-        </div>
-        <div className="sys-hero-actions">
-          {host ? (
-            <div className="sys-hero-host">
-              <span className="sys-hero-host-name">{host.info.hostname}</span>
-              <span className="sys-hero-host-meta">
-                {host.info.os_name} {host.info.os_release} · {host.info.machine}
-              </span>
-              <span className="sys-hero-host-meta">
-                Uptime <strong>{formatDuration(host.info.uptime_seconds)}</strong> · Backend{" "}
-                <strong>{formatDuration(host.info.process_uptime_seconds)}</strong>
-              </span>
-            </div>
-          ) : null}
-          {onRefresh ? (
-            <button
-              type="button"
-              className="sys-hero-btn"
-              disabled={showSpinner}
-              onClick={() => void onRefresh()}
-            >
-              <span className="material-symbols-outlined">refresh</span>
-              {showSpinner ? "Yenileniyor…" : "Yenile"}
-            </button>
-          ) : null}
-        </div>
-      </header>
+      {/* Sag ust kose floating Yenile butonu (sticky; scroll'da hep erisilebilir) */}
+      {onRefresh ? (
+        <button
+          type="button"
+          className="sys-fab"
+          disabled={showSpinner}
+          onClick={() => void onRefresh()}
+          title={host ? `${host.info.hostname} · Uptime ${formatDuration(host.info.uptime_seconds)}` : "Yenile"}
+        >
+          <span
+            className={`material-symbols-outlined ${showSpinner ? "sys-fab-spin" : ""}`}
+          >
+            refresh
+          </span>
+          <span>{showSpinner ? "Yenileniyor" : "Yenile"}</span>
+        </button>
+      ) : null}
 
-      {/* KPI ŞERIDI: cihaz / haberleşme / alarm */}
-      <section className="sys-kpis">
+      {/* KPI: 4 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm */}
+      <section className="sys-kpis sys-kpis--lg">
         <article className="sys-kpi sys-kpi--total">
           <div className="sys-kpi-icon">
             <span className="material-symbols-outlined">router</span>
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">Toplam cihaz</span>
-            <strong className="sys-kpi-value">{stats.total}</strong>
-            <span className="sys-kpi-sub">
-              {stats.onlineRatio}% çevrimiçi
-            </span>
+            <strong className="sys-kpi-value">{deviceStats.total}</strong>
+            <span className="sys-kpi-sub">{deviceStats.onlineRatio}% çevrimiçi</span>
           </div>
         </article>
 
@@ -309,20 +345,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">wifi</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Çevrimiçi</span>
-            <strong className="sys-kpi-value">{stats.online}</strong>
-            <span className="sys-kpi-sub">son veri zamanı sağlıklı</span>
-          </div>
-        </article>
-
-        <article className="sys-kpi sys-kpi--warn">
-          <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">help</span>
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Belirsiz</span>
-            <strong className="sys-kpi-value">{stats.unknown}</strong>
-            <span className="sys-kpi-sub">durum henüz raporlanmadı</span>
+            <span className="sys-kpi-label">Haberleşen</span>
+            <strong className="sys-kpi-value">{deviceStats.online}</strong>
+            <span className="sys-kpi-sub">son veri taze</span>
           </div>
         </article>
 
@@ -331,20 +356,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">wifi_off</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Çevrimdışı</span>
-            <strong className="sys-kpi-value">{stats.offline}</strong>
-            <span className="sys-kpi-sub">haberleşme kopuk</span>
-          </div>
-        </article>
-
-        <article className="sys-kpi sys-kpi--accent">
-          <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">warning</span>
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Haberleşme riski</span>
-            <strong className="sys-kpi-value">{stats.commIssue}</strong>
-            <span className="sys-kpi-sub">belirsiz + çevrimdışı</span>
+            <span className="sys-kpi-label">Haberleşmeyen</span>
+            <strong className="sys-kpi-value">{deviceStats.offline}</strong>
+            <span className="sys-kpi-sub">çevrimdışı + belirsiz</span>
           </div>
         </article>
 
@@ -354,7 +368,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">Aktif alarm</span>
-            <strong className="sys-kpi-value">{stats.openAlarms}</strong>
+            <strong className="sys-kpi-value">{alarmStats.open}</strong>
             <span className="sys-kpi-sub">henüz reset edilmemiş</span>
           </div>
         </article>
@@ -366,256 +380,298 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">Gateway</span>
             <strong className="sys-kpi-value">
-              {stats.gwActive} <span className="sys-kpi-frac">/ {stats.gwTotal}</span>
+              {gatewayStats.active} <span className="sys-kpi-frac">/ {gatewayStats.total}</span>
             </strong>
             <span className="sys-kpi-sub">aktif / toplam</span>
           </div>
         </article>
+
+        <article
+          className={`sys-kpi ${
+            serviceCounts.unhealthy > 0 ? "sys-kpi--bad" : "sys-kpi--ok"
+          }`}
+        >
+          <div className="sys-kpi-icon">
+            <span className="material-symbols-outlined">monitor_heart</span>
+          </div>
+          <div className="sys-kpi-body">
+            <span className="sys-kpi-label">Servisler</span>
+            <strong className="sys-kpi-value">
+              {serviceCounts.healthy} <span className="sys-kpi-frac">/ {serviceCounts.total}</span>
+            </strong>
+            <span className="sys-kpi-sub">
+              {serviceCounts.unhealthy === 0
+                ? "tümü sağlıklı"
+                : `${serviceCounts.unhealthy} sorunlu`}
+            </span>
+          </div>
+        </article>
       </section>
 
-      {/* SUNUCU KAYNAKLARI: 3 büyük donut + sağda ek metrikler */}
-      <section className="sys-section sys-resources">
-        <header className="sys-section-head">
-          <div>
-            <h2 className="sys-section-title">Sunucu kaynakları</h2>
-            <p className="sys-section-lead">
-              Çatı yazılım sunucusunun anlık CPU, bellek, disk ve ağ kullanımı. Her{" "}
-              {HOST_REFRESH_INTERVAL_SEC} saniyede bir tazelenir.
-            </p>
-          </div>
+      {/* 3 dikey kart yan yana: Sunucu Kaynaklari · Servisler · Gateway'ler */}
+      <div className="sys-tri-grid">
+        {/* ------ KART 1: SUNUCU KAYNAKLARI ------ */}
+        <section className="sys-card">
+          <header className="sys-card-head">
+            <div className="sys-card-title-wrap">
+              <span className="material-symbols-outlined sys-card-icon sys-card-icon--cpu">
+                memory
+              </span>
+              <h2 className="sys-card-title">Sunucu kaynakları</h2>
+            </div>
+            {host ? (
+              <span className={`sys-pill sys-pill--${cpuTone}`}>
+                {cpuTone === "bad" ? "Yoğun" : cpuTone === "warn" ? "Yüksek" : "Sağlıklı"}
+              </span>
+            ) : null}
+          </header>
+
+          {hostError && !host ? <p className="sys-error-banner">{hostError}</p> : null}
+          {!host && !hostError ? <p className="sys-loading-banner">Yükleniyor…</p> : null}
+
           {host ? (
-            <span className={`sys-pill sys-pill--${cpuTone}`}>
-              {cpuTone === "bad" ? "Yoğun" : cpuTone === "warn" ? "Yüksek" : "Sağlıklı"}
-            </span>
-          ) : null}
-        </header>
+            <div className="sys-card-body">
+              {/* Tek satir 3 mini-donut: CPU / RAM / Disk */}
+              <div className="sys-mini-donuts">
+                <div className={`sys-mini-donut sys-mini-donut--${cpuTone}`}>
+                  <div className="sys-mini-donut-vis">
+                    <Donut percent={host.cpu.percent} tone={cpuTone} size={84} thickness={9} />
+                    <div className="sys-mini-donut-center">
+                      <strong>{host.cpu.percent.toFixed(0)}%</strong>
+                    </div>
+                  </div>
+                  <span className="sys-mini-donut-label">CPU</span>
+                </div>
 
-        {hostError && !host ? (
-          <p className="sys-error-banner">{hostError}</p>
-        ) : null}
+                <div className={`sys-mini-donut sys-mini-donut--${memTone}`}>
+                  <div className="sys-mini-donut-vis">
+                    <Donut percent={host.memory.percent} tone={memTone} size={84} thickness={9} />
+                    <div className="sys-mini-donut-center">
+                      <strong>{host.memory.percent.toFixed(0)}%</strong>
+                    </div>
+                  </div>
+                  <span className="sys-mini-donut-label">RAM</span>
+                </div>
 
-        {!host && !hostError ? (
-          <p className="sys-loading-banner">Sunucu metrikleri yükleniyor…</p>
-        ) : null}
-
-        {host ? (
-          <div className="sys-resources-grid">
-            <article className={`sys-resource sys-resource--${cpuTone}`}>
-              <div className="sys-resource-donut">
-                <Donut percent={host.cpu.percent} tone={cpuTone} />
-                <div className="sys-resource-donut-center">
-                  <strong>{host.cpu.percent.toFixed(0)}%</strong>
-                  <span>CPU</span>
+                <div className={`sys-mini-donut sys-mini-donut--${diskTone}`}>
+                  <div className="sys-mini-donut-vis">
+                    <Donut percent={host.disk.percent} tone={diskTone} size={84} thickness={9} />
+                    <div className="sys-mini-donut-center">
+                      <strong>{host.disk.percent.toFixed(0)}%</strong>
+                    </div>
+                  </div>
+                  <span className="sys-mini-donut-label">Disk</span>
                 </div>
               </div>
-              <div className="sys-resource-body">
-                <h3>İşlemci</h3>
-                <p className="sys-resource-meta">
-                  {host.cpu.physical_cores ?? "?"} fiziksel · {host.cpu.logical_cores ?? "?"} mantıksal çekirdek
-                </p>
+
+              {/* CPU sparkline */}
+              <div className="sys-trend">
+                <span className="sys-trend-label">CPU trendi (son ~2 dk)</span>
+                <Sparkline values={cpuHistory} tone={cpuTone} width={280} height={36} />
+              </div>
+
+              {/* Detay liste */}
+              <ul className="sys-detail-list">
+                <li>
+                  <span className="sys-detail-key">CPU</span>
+                  <span className="sys-detail-val">
+                    {host.cpu.physical_cores ?? "?"} fiziksel · {host.cpu.logical_cores ?? "?"} mantıksal
+                  </span>
+                </li>
                 {host.cpu.load_avg_1m != null ? (
-                  <p className="sys-resource-meta">
-                    Yük 1m / 5m / 15m:{" "}
-                    <strong>
+                  <li>
+                    <span className="sys-detail-key">Yük</span>
+                    <span className="sys-detail-val">
                       {host.cpu.load_avg_1m.toFixed(2)} · {(host.cpu.load_avg_5m ?? 0).toFixed(2)} ·{" "}
                       {(host.cpu.load_avg_15m ?? 0).toFixed(2)}
-                    </strong>
-                  </p>
+                    </span>
+                  </li>
                 ) : null}
-                <Sparkline values={cpuHistory} tone={cpuTone} />
-              </div>
-            </article>
-
-            <article className={`sys-resource sys-resource--${memTone}`}>
-              <div className="sys-resource-donut">
-                <Donut percent={host.memory.percent} tone={memTone} />
-                <div className="sys-resource-donut-center">
-                  <strong>{host.memory.percent.toFixed(0)}%</strong>
-                  <span>Bellek</span>
-                </div>
-              </div>
-              <div className="sys-resource-body">
-                <h3>RAM</h3>
-                <p className="sys-resource-meta">
-                  <strong>{formatBytes(host.memory.used_bytes)}</strong> /{" "}
-                  {formatBytes(host.memory.total_bytes)} kullanımda
-                </p>
-                <p className="sys-resource-meta">
-                  {formatBytes(host.memory.available_bytes)} boş
-                </p>
-                <Sparkline values={memHistory} tone={memTone} />
-              </div>
-            </article>
-
-            <article className={`sys-resource sys-resource--${diskTone}`}>
-              <div className="sys-resource-donut">
-                <Donut percent={host.disk.percent} tone={diskTone} />
-                <div className="sys-resource-donut-center">
-                  <strong>{host.disk.percent.toFixed(0)}%</strong>
-                  <span>Disk</span>
-                </div>
-              </div>
-              <div className="sys-resource-body">
-                <h3>Disk</h3>
-                <p className="sys-resource-meta">
-                  Yol: <code className="inline-code">{host.disk.path}</code>
-                </p>
-                <p className="sys-resource-meta">
-                  <strong>{formatBytes(host.disk.used_bytes)}</strong> /{" "}
-                  {formatBytes(host.disk.total_bytes)} kullanımda
-                </p>
-                <p className="sys-resource-meta">
-                  {formatBytes(host.disk.free_bytes)} boş
-                </p>
-              </div>
-            </article>
-          </div>
-        ) : null}
-
-        {host ? (
-          <div className="sys-resources-extras">
-            {host.memory.swap_total_bytes != null && host.memory.swap_total_bytes > 0 ? (
-              <div className="sys-extra-card">
-                <span className="sys-extra-label">Swap</span>
-                <strong className="sys-extra-value">
-                  {(host.memory.swap_percent ?? 0).toFixed(0)}%
-                </strong>
-                <span className="sys-extra-sub">
-                  {formatBytes(host.memory.swap_used_bytes ?? 0)} /{" "}
-                  {formatBytes(host.memory.swap_total_bytes)}
-                </span>
-              </div>
-            ) : null}
-            <div className="sys-extra-card">
-              <span className="sys-extra-label">Ağ ↑ (giden)</span>
-              <strong className="sys-extra-value">{formatBytes(host.network.bytes_sent)}</strong>
-              <span className="sys-extra-sub">
-                {host.network.packets_sent.toLocaleString("tr-TR")} paket
-              </span>
+                <li>
+                  <span className="sys-detail-key">RAM</span>
+                  <span className="sys-detail-val">
+                    {formatBytes(host.memory.used_bytes)} /{" "}
+                    {formatBytes(host.memory.total_bytes)}
+                  </span>
+                </li>
+                <li>
+                  <span className="sys-detail-key">Disk</span>
+                  <span className="sys-detail-val">
+                    {formatBytes(host.disk.used_bytes)} / {formatBytes(host.disk.total_bytes)}{" "}
+                    <em>({formatBytes(host.disk.free_bytes)} boş)</em>
+                  </span>
+                </li>
+                {host.memory.swap_total_bytes != null && host.memory.swap_total_bytes > 0 ? (
+                  <li>
+                    <span className="sys-detail-key">Swap</span>
+                    <span className="sys-detail-val">
+                      {(host.memory.swap_percent ?? 0).toFixed(0)}%{" "}
+                      <em>
+                        ({formatBytes(host.memory.swap_used_bytes ?? 0)}/
+                        {formatBytes(host.memory.swap_total_bytes)})
+                      </em>
+                    </span>
+                  </li>
+                ) : null}
+                <li>
+                  <span className="sys-detail-key">Ağ ↑↓</span>
+                  <span className="sys-detail-val">
+                    {formatBytes(host.network.bytes_sent)} / {formatBytes(host.network.bytes_recv)}
+                  </span>
+                </li>
+                <li>
+                  <span className="sys-detail-key">Host</span>
+                  <span className="sys-detail-val sys-detail-val--mono">
+                    {host.info.hostname}
+                  </span>
+                </li>
+                <li>
+                  <span className="sys-detail-key">İşletim sistemi</span>
+                  <span className="sys-detail-val">
+                    {host.info.os_name} {host.info.os_release} · {host.info.machine}
+                  </span>
+                </li>
+                <li>
+                  <span className="sys-detail-key">Uptime</span>
+                  <span className="sys-detail-val">
+                    {formatDuration(host.info.uptime_seconds)}
+                  </span>
+                </li>
+                <li>
+                  <span className="sys-detail-key">Backend</span>
+                  <span className="sys-detail-val">
+                    PID {host.info.process_pid} · {formatDuration(host.info.process_uptime_seconds)}
+                  </span>
+                </li>
+              </ul>
             </div>
-            <div className="sys-extra-card">
-              <span className="sys-extra-label">Ağ ↓ (gelen)</span>
-              <strong className="sys-extra-value">{formatBytes(host.network.bytes_recv)}</strong>
-              <span className="sys-extra-sub">
-                {host.network.packets_recv.toLocaleString("tr-TR")} paket
-              </span>
-            </div>
-            <div className="sys-extra-card">
-              <span className="sys-extra-label">Boot zamanı</span>
-              <strong className="sys-extra-value sys-extra-value--sm">
-                {new Date(host.info.boot_time * 1000).toLocaleString("tr-TR")}
-              </strong>
-              <span className="sys-extra-sub">PID {host.info.process_pid}</span>
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      {/* ALT GRID: 2 kolon — Öncelikli cihazlar + Gateway özeti */}
-      <div className="sys-bottom-grid">
-        <section className="sys-section sys-priority">
-          <header className="sys-section-head">
-            <div>
-              <h2 className="sys-section-title">Öncelikli cihazlar</h2>
-              <p className="sys-section-lead">Çevrimdışı / belirsiz olanlar önde, en eski veri yukarıda.</p>
-            </div>
-            <span className="sys-pill sys-pill--muted">{riskiest.length}</span>
-          </header>
-          {devices.length === 0 && !showSpinner ? (
-            <p className="sys-empty">Kayıtlı cihaz yok.</p>
-          ) : (
-            <div className="sys-priority-table-wrap">
-              <table className="sys-priority-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 40 }}>#</th>
-                    <th>Cihaz</th>
-                    <th>Durum</th>
-                    <th>Son veri</th>
-                    <th style={{ width: 90 }}>Batarya</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {riskiest.map((d, i) => (
-                    <tr key={d.id}>
-                      <td className="sys-priority-rank">{i + 1}</td>
-                      <td>
-                        <div className="sys-priority-name">
-                          <strong>{d.name}</strong>
-                          <code className="inline-code">{d.code}</code>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`sys-status-chip sys-status-chip--${d.communicationStatus}`}>
-                          <span className="sys-status-chip-dot" />
-                          {commLabel(d.communicationStatus)}
-                        </span>
-                      </td>
-                      <td className="sys-priority-time">
-                        {d.lastUpdateAt ? new Date(d.lastUpdateAt).toLocaleString("tr-TR") : "—"}
-                      </td>
-                      <td>
-                        {d.batteryPercent != null ? (
-                          <div className="sys-battery">
-                            <div className="sys-battery-track">
-                              <div
-                                className={`sys-battery-fill ${
-                                  d.batteryPercent < 20
-                                    ? "sys-battery-fill--bad"
-                                    : d.batteryPercent < 40
-                                    ? "sys-battery-fill--warn"
-                                    : "sys-battery-fill--ok"
-                                }`}
-                                style={{ width: `${Math.max(0, Math.min(100, d.batteryPercent))}%` }}
-                              />
-                            </div>
-                            <span>{Math.round(d.batteryPercent)}%</span>
-                          </div>
-                        ) : (
-                          <span className="helper-text">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : null}
         </section>
 
-        <section className="sys-section sys-gateways">
-          <header className="sys-section-head">
-            <div>
-              <h2 className="sys-section-title">Gateway özeti</h2>
-              <p className="sys-section-lead">Aktiflik ve son görülme zamanı.</p>
+        {/* ------ KART 2: SERVIS DURUMLARI ------ */}
+        <section className="sys-card">
+          <header className="sys-card-head">
+            <div className="sys-card-title-wrap">
+              <span className="material-symbols-outlined sys-card-icon sys-card-icon--svc">
+                monitor_heart
+              </span>
+              <h2 className="sys-card-title">Servis durumları</h2>
+            </div>
+            <span
+              className={`sys-pill ${
+                serviceCounts.unhealthy === 0 ? "sys-pill--ok" : "sys-pill--bad"
+              }`}
+            >
+              {serviceCounts.healthy}/{serviceCounts.total}
+            </span>
+          </header>
+
+          {servicesError && !services ? (
+            <p className="sys-error-banner">{servicesError}</p>
+          ) : null}
+          {!services && !servicesError ? (
+            <p className="sys-loading-banner">Servisler kontrol ediliyor…</p>
+          ) : null}
+
+          {services ? (
+            <ul className="sys-card-list">
+              {services.services.map((svc) => (
+                <li
+                  key={`${svc.role}-${svc.name}`}
+                  className={`sys-list-item ${
+                    svc.healthy ? "sys-list-item--ok" : "sys-list-item--bad"
+                  }`}
+                >
+                  <div
+                    className={`sys-list-leading ${
+                      svc.healthy ? "sys-list-leading--ok" : "sys-list-leading--bad"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined">
+                      {serviceRoleIcon(svc.role)}
+                    </span>
+                  </div>
+                  <div className="sys-list-body">
+                    <div className="sys-list-head">
+                      <strong>{svc.name}</strong>
+                      <span className="sys-list-role">{serviceRoleLabel(svc.role)}</span>
+                    </div>
+                    <div className="sys-list-meta">
+                      {svc.endpoint ? (
+                        <code className="inline-code">{svc.endpoint}</code>
+                      ) : null}
+                      {svc.healthy && svc.latency_ms != null ? (
+                        <span className="helper-text">{svc.latency_ms.toFixed(0)} ms</span>
+                      ) : null}
+                      {!svc.healthy && svc.detail ? (
+                        <span className="sys-list-error" title={svc.detail}>
+                          {svc.detail}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span
+                    className={`sys-list-status ${
+                      svc.healthy ? "sys-list-status--ok" : "sys-list-status--bad"
+                    }`}
+                  >
+                    <span className="sys-list-status-dot" />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+
+        {/* ------ KART 3: GATEWAY DURUMLARI ------ */}
+        <section className="sys-card">
+          <header className="sys-card-head">
+            <div className="sys-card-title-wrap">
+              <span className="material-symbols-outlined sys-card-icon sys-card-icon--gw">
+                hub
+              </span>
+              <h2 className="sys-card-title">Gateway durumları</h2>
             </div>
             <span className="sys-pill sys-pill--muted">{gateways.length}</span>
           </header>
           {gateways.length === 0 && !showSpinner ? (
             <p className="sys-empty">Tanımlı gateway yok.</p>
           ) : (
-            <ul className="sys-gw-list">
+            <ul className="sys-card-list">
               {gateways.map((g) => {
-                const tone = lastSeenTone(g);
+                const tone = gatewayLastSeenTone(g);
+                const ok = tone === "ok";
                 return (
-                  <li key={g.id} className={`sys-gw-item sys-gw-item--${tone}`}>
-                    <div className="sys-gw-left">
-                      <span className="sys-gw-dot" />
-                      <div>
-                        <strong className="sys-gw-name">{g.name}</strong>
+                  <li
+                    key={g.id}
+                    className={`sys-list-item sys-list-item--${tone}`}
+                  >
+                    <div className={`sys-list-leading sys-list-leading--${tone}`}>
+                      <span className="material-symbols-outlined">router</span>
+                    </div>
+                    <div className="sys-list-body">
+                      <div className="sys-list-head">
+                        <strong>{g.name}</strong>
                         <code className="inline-code">{g.code}</code>
                       </div>
+                      <div className="sys-list-meta">
+                        <span className={`sys-gw-status sys-gw-status--${tone}`}>
+                          {gatewayStatusLabel(tone)}
+                        </span>
+                        <span className="helper-text">
+                          {g.last_seen_at
+                            ? new Date(g.last_seen_at).toLocaleString("tr-TR")
+                            : "Henüz görülmedi"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="sys-gw-right">
-                      <span className={`sys-gw-status sys-gw-status--${g.is_active ? "active" : "passive"}`}>
-                        {g.is_active ? "Aktif" : "Pasif"}
-                      </span>
-                      <span className="helper-text">
-                        {g.last_seen_at
-                          ? `Son görülme: ${new Date(g.last_seen_at).toLocaleString("tr-TR")}`
-                          : "Henüz görülmedi"}
-                      </span>
-                    </div>
+                    <span
+                      className={`sys-list-status ${
+                        ok ? "sys-list-status--ok" : "sys-list-status--bad"
+                      }`}
+                    >
+                      <span className="sys-list-status-dot" />
+                    </span>
                   </li>
                 );
               })}

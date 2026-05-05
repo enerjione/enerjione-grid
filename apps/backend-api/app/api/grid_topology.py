@@ -31,6 +31,7 @@ from app.schemas.grid_topology import (
     LineUpdate,
     PoleCreate,
     PoleRead,
+    PoleReorderRequest,
     PoleUpdate,
     RegionCreate,
     RegionRead,
@@ -374,6 +375,101 @@ def delete_pole(
     )
     db.commit()
     return None
+
+
+@router.post("/lines/{line_id}/reorder-poles", response_model=list[PoleRead])
+def reorder_poles(
+    line_id: int,
+    payload: PoleReorderRequest,
+    current_user: User = Depends(require_roles(_EDIT_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Drag-to-reorder sonrasi tum direklerin sequence_no'larini topluca gunceller.
+
+    Iki gecisli yazim:
+      1) Hepsini geçici negatif degerlere tasi (UNIQUE constraint'in iki kayit
+         arasinda swap'a engel olmamasi icin).
+      2) Hedef pozitif sequence_no'lari yaz.
+    """
+    if payload.line_id != line_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="payload.line_id ile URL line_id eslesmiyor.",
+        )
+    line = db.get(Line, line_id)
+    if line is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hat bulunamadı.")
+    # DB'deki tüm direkler
+    poles_in_db = list(db.scalars(select(Pole).where(Pole.line_id == line_id)).all())
+    db_ids = {p.id for p in poles_in_db}
+    sent_ids = {item.pole_id for item in payload.items}
+    if db_ids != sent_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Yeniden siralama icin bu hattaki TUM direkler gonderilmeli.",
+        )
+    seq_set = {item.sequence_no for item in payload.items}
+    if len(seq_set) != len(payload.items):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Sıra numaraları benzersiz olmalı.",
+        )
+
+    pole_by_id = {p.id: p for p in poles_in_db}
+    # 1) Geçici negatif değerlere taşı
+    for idx, item in enumerate(payload.items, start=1):
+        pole_by_id[item.pole_id].sequence_no = -idx
+    db.flush()
+    # 2) Hedef sıralar
+    for item in payload.items:
+        pole_by_id[item.pole_id].sequence_no = item.sequence_no
+    db.flush()
+    record_event(
+        db, category="grid", event_type="poles_reordered", severity="info",
+        actor_username=current_user.username,
+        message=f"Hat direkleri yeniden sıralandı (line {line_id}, {len(payload.items)} direk)",
+        metadata={"line_id": line_id, "count": len(payload.items)},
+    )
+    db.commit()
+    # Yeni sırayla döndür
+    return list(db.scalars(
+        select(Pole).where(Pole.line_id == line_id).order_by(Pole.sequence_no)
+    ).all())
+
+
+@router.post("/lines/{line_id}/reverse-poles", response_model=list[PoleRead])
+def reverse_poles(
+    line_id: int,
+    current_user: User = Depends(require_roles(_EDIT_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Hat direklerinin sırasını tersine çevirir (baş ↔ son swap)."""
+    line = db.get(Line, line_id)
+    if line is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hat bulunamadı.")
+    poles = list(db.scalars(
+        select(Pole).where(Pole.line_id == line_id).order_by(Pole.sequence_no)
+    ).all())
+    if len(poles) < 2:
+        return poles
+    n = len(poles)
+    # 1) Önce negatif geçici
+    for idx, p in enumerate(poles, start=1):
+        p.sequence_no = -idx
+    db.flush()
+    # 2) Tersine numaralandır
+    for idx, p in enumerate(poles):
+        p.sequence_no = n - idx
+    db.flush()
+    record_event(
+        db, category="grid", event_type="poles_reversed", severity="info",
+        actor_username=current_user.username,
+        message=f"Hat sırası tersine çevrildi (line {line_id})",
+        metadata={"line_id": line_id, "count": n},
+    )
+    db.commit()
+    return list(db.scalars(
+        select(Pole).where(Pole.line_id == line_id).order_by(Pole.sequence_no)
+    ).all())
 
 
 # ============= SEGMENTS =============

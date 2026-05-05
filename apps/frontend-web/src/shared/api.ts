@@ -820,6 +820,27 @@ export async function deletePole(token: string, id: number): Promise<void> {
   if (!r.ok) throw await buildApiError(r, "Direk silinemedi.");
 }
 
+export async function reorderPoles(
+  token: string,
+  lineId: number,
+  items: { pole_id: number; sequence_no: number }[]
+): Promise<_Pole[]> {
+  const r = await fetch(`${API_BASE_URL}/grid/lines/${lineId}/reorder-poles`, {
+    method: "POST", headers: authHeaders(token),
+    body: JSON.stringify({ line_id: lineId, items })
+  });
+  if (!r.ok) throw await buildApiError(r, "Direk sırası güncellenemedi.");
+  return (await r.json()) as _Pole[];
+}
+
+export async function reversePoles(token: string, lineId: number): Promise<_Pole[]> {
+  const r = await fetch(`${API_BASE_URL}/grid/lines/${lineId}/reverse-poles`, {
+    method: "POST", headers: authHeaders(token)
+  });
+  if (!r.ok) throw await buildApiError(r, "Hat sırası tersine çevrilemedi.");
+  return (await r.json()) as _Pole[];
+}
+
 export async function createSegment(token: string, payload: Partial<_Segment>): Promise<_Segment> {
   const r = await fetch(`${API_BASE_URL}/grid/segments`, {
     method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)

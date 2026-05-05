@@ -1985,128 +1985,1052 @@ main.content.engineering-content:has(.device-management-panel) {
   width: min(420px, 92vw);
 }
 
-/* Sistem durumu */
-.system-status-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 4px 24px;
-}
+/* ============================================================
+ * SISTEM DURUMU SAYFASI — full-width modern dashboard
+ * ============================================================ */
 
-.system-status-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.system-status-title {
-  margin: 0 0 4px;
-  font-size: 1.35rem;
-  color: #0f172a;
-}
-
-.system-status-lead {
-  max-width: 42rem;
+.system-status-shell {
+  /* Tab-panel'in icindeki padding'i nullayip tam genislige yayilir. */
+  width: 100%;
+  max-width: none;
   margin: 0;
-  line-height: 1.45;
-}
-
-.system-status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.status-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 88px;
+  gap: 24px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: 100%;
+  /* Tab-panel default padding'i kaldirildiginda kenar bosluk korunsun. */
+  padding: 8px 4px 32px;
 }
 
-.status-card-label {
+/* ----- TOP BAR (kompakt, hero yerine) ----- */
+.sys-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #312e81 100%);
+  border-radius: 12px;
+  color: #f1f5f9;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  flex-wrap: wrap;
+}
+
+.sys-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sys-topbar-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #c7d2fe;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(199, 210, 254, 0.25);
+}
+
+.sys-topbar-host {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #cbd5e1;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sys-topbar-host .material-symbols-outlined {
+  font-size: 18px;
+  color: #94a3b8;
+}
+
+.sys-topbar-host strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.sys-topbar-host-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.sys-topbar-right {
+  display: flex;
+  gap: 10px;
+}
+
+/* ----- HERO (legacy / artik kullanilmiyor; sayfada baska yerden cagrilmasin diye sade) ----- */
+.sys-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 28px 32px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #312e81 100%);
+  color: #f1f5f9;
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+  position: relative;
+  overflow: hidden;
+}
+
+.sys-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 90% 20%, rgba(99, 102, 241, 0.32), transparent 45%),
+    radial-gradient(circle at 10% 90%, rgba(16, 185, 129, 0.22), transparent 50%);
+  pointer-events: none;
+}
+
+.sys-hero-text,
+.sys-hero-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.sys-hero-text {
+  flex: 1 1 480px;
+  min-width: 0;
+}
+
+.sys-hero-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #c7d2fe;
+  margin-bottom: 6px;
+}
+
+.sys-hero-title {
+  margin: 0 0 8px;
+  font-size: clamp(1.4rem, 2vw, 1.85rem);
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.sys-hero-lead {
+  margin: 0;
+  font-size: 14px;
+  color: #cbd5e1;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+.sys-hero-lead strong {
+  color: #fff;
+}
+
+.sys-hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.sys-hero-host {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 12px;
+  color: #cbd5e1;
+  backdrop-filter: blur(6px);
+}
+
+.sys-hero-host-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.sys-hero-host-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.sys-hero-host-meta strong {
+  color: #f1f5f9;
+}
+
+.sys-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: #fff;
+  color: #0f172a;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+}
+
+.sys-hero-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.32);
+}
+
+.sys-hero-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sys-hero-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* ----- KPI GRID ----- */
+.sys-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.sys-kpi {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.sys-kpi::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: #94a3b8;
+}
+
+.sys-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
+}
+
+.sys-kpi--total::before { background: linear-gradient(180deg, #6366f1, #4338ca); }
+.sys-kpi--ok::before { background: linear-gradient(180deg, #34d399, #10b981); }
+.sys-kpi--warn::before { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
+.sys-kpi--bad::before { background: linear-gradient(180deg, #f87171, #dc2626); }
+.sys-kpi--accent::before { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
+.sys-kpi--alarm::before { background: linear-gradient(180deg, #fb923c, #ea580c); }
+.sys-kpi--gw::before { background: linear-gradient(180deg, #38bdf8, #0284c7); }
+
+.sys-kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sys-kpi--ok .sys-kpi-icon { background: #d1fae5; color: #047857; }
+.sys-kpi--warn .sys-kpi-icon { background: #fef3c7; color: #b45309; }
+.sys-kpi--bad .sys-kpi-icon { background: #fee2e2; color: #b91c1c; }
+.sys-kpi--accent .sys-kpi-icon { background: #ede9fe; color: #6d28d9; }
+.sys-kpi--alarm .sys-kpi-icon { background: #ffedd5; color: #c2410c; }
+.sys-kpi--gw .sys-kpi-icon { background: #e0f2fe; color: #0369a1; }
+.sys-kpi--total .sys-kpi-icon { background: #e0e7ff; color: #4338ca; }
+
+.sys-kpi-icon .material-symbols-outlined {
+  font-size: 24px;
+}
+
+.sys-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sys-kpi-label {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: #64748b;
-  line-height: 1.3;
 }
 
-.status-card-value {
-  font-size: 1.75rem;
+.sys-kpi-value {
+  font-size: 1.85rem;
   font-weight: 800;
   color: #0f172a;
-  line-height: 1.1;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
 }
 
-.status-card--ok {
-  border-color: #bbf7d0;
-  background: linear-gradient(180deg, #f0fdf4 0%, #fff 100%);
-}
-.status-card--ok .status-card-value {
-  color: #166534;
+.sys-kpi--ok .sys-kpi-value { color: #047857; }
+.sys-kpi--warn .sys-kpi-value { color: #b45309; }
+.sys-kpi--bad .sys-kpi-value { color: #b91c1c; }
+.sys-kpi--accent .sys-kpi-value { color: #6d28d9; }
+.sys-kpi--alarm .sys-kpi-value { color: #c2410c; }
+.sys-kpi--gw .sys-kpi-value { color: #0369a1; }
+.sys-kpi--total .sys-kpi-value { color: #4338ca; }
+
+.sys-kpi-frac {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #94a3b8;
 }
 
-.status-card--warn {
+.sys-kpi-sub {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+/* ----- Section wrapper (Sunucu kaynaklari + alt panellerde kullanilir) -- */
+.sys-section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+.sys-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.sys-section-title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.sys-section-lead {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.sys-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.sys-pill--ok { background: #d1fae5; color: #047857; }
+.sys-pill--warn { background: #fef3c7; color: #b45309; }
+.sys-pill--bad { background: #fee2e2; color: #b91c1c; }
+.sys-pill--muted { background: #f1f5f9; color: #475569; }
+
+.sys-error-banner {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.sys-loading-banner {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.sys-empty {
+  margin: 0;
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* ----- KOMPAKT SUNUCU KAYNAKLARI ----- */
+.sys-resources--compact {
+  padding: 16px 18px;
+}
+
+.sys-section-head--inline {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.sys-section-head--inline .sys-section-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.sys-resources-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr)) minmax(220px, 1.2fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+@media (max-width: 1180px) {
+  .sys-resources-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .sys-resources-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sys-rcard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.2s;
+  min-height: 120px;
+}
+
+.sys-rcard:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+}
+
+.sys-rcard--ok { border-color: #bbf7d0; }
+.sys-rcard--warn {
   border-color: #fde68a;
-  background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+  background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
 }
-.status-card--warn .status-card-value {
-  color: #b45309;
+.sys-rcard--bad {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
 }
 
-.status-card--bad {
-  border-color: #fecaca;
-  background: linear-gradient(180deg, #fef2f2 0%, #fff 100%);
+.sys-rcard-donut {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  flex-shrink: 0;
 }
-.status-card--bad .status-card-value {
+
+.sys-rcard-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sys-rcard-donut-center strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.sys-rcard--ok .sys-rcard-donut-center strong { color: #047857; }
+.sys-rcard--warn .sys-rcard-donut-center strong { color: #b45309; }
+.sys-rcard--bad .sys-rcard-donut-center strong { color: #b91c1c; }
+
+.sys-rcard-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sys-rcard-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.sys-rcard-sub {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Ekstra metric satirlari (compact, 4. kolonda) */
+.sys-rextras {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.sys-rextra-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #f1f5f9;
+}
+
+.sys-rextra-row:last-child {
+  border-bottom: none;
+}
+
+.sys-rextra-key {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.sys-rextra-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: right;
+}
+
+.sys-rextra-val em {
+  font-style: normal;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+/* ----- ALT TEK GENIS KUTU (substack) ----- */
+.sys-stack {
+  padding: 0;
+  overflow: hidden;
+}
+
+.sys-substack {
+  padding: 18px 22px;
+}
+
+.sys-substack-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.sys-substack-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sys-substack-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: 22px !important;
+  flex-shrink: 0;
+}
+
+.sys-substack:nth-child(3) .sys-substack-icon {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.sys-substack-title {
+  margin: 0 0 2px;
+  font-size: 1rem;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.sys-substack-lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.45;
+  max-width: 60ch;
+}
+
+.sys-substack-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e2e8f0, transparent);
+  margin: 0 22px;
+}
+
+/* Servis ve gateway listelerinin grid varyasyonu (genis kutuda 2-3 kolon) */
+.sys-service-list--grid,
+.sys-gw-list--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .sys-service-list--grid,
+  .sys-gw-list--grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ----- LEGACY SUNUCU KAYNAKLARI (eski varyasyon, geriye uyumluluk) ----- */
+.sys-resources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.sys-resource {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 20px;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.2s;
+}
+
+.sys-resource:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.sys-resource--ok { border-color: #bbf7d0; }
+.sys-resource--warn { border-color: #fde68a; background: linear-gradient(135deg, #fffbeb 0%, #fff 100%); }
+.sys-resource--bad { border-color: #fecaca; background: linear-gradient(135deg, #fef2f2 0%, #fff 100%); }
+
+.sys-resource-donut {
+  position: relative;
+  width: 168px;
+  height: 168px;
+  flex-shrink: 0;
+}
+
+.sys-resource-donut .donut {
+  display: block;
+}
+
+.sys-resource-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sys-resource-donut-center strong {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.sys-resource--bad .sys-resource-donut-center strong { color: #b91c1c; }
+.sys-resource--warn .sys-resource-donut-center strong { color: #b45309; }
+.sys-resource--ok .sys-resource-donut-center strong { color: #047857; }
+
+.sys-resource-donut-center span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.sys-resource-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sys-resource-body h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.sys-resource-meta {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.sys-resource-meta strong {
+  color: #0f172a;
+}
+
+.sparkline {
+  display: block;
+  margin-top: 8px;
+}
+
+.sparkline--empty {
+  background: repeating-linear-gradient(
+    -45deg,
+    #f1f5f9,
+    #f1f5f9 4px,
+    #e2e8f0 4px,
+    #e2e8f0 8px
+  );
+  border-radius: 4px;
+  opacity: 0.4;
+}
+
+/* Ekstra metric kartlari (swap, network, boot) */
+.sys-resources-extras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.sys-extra-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sys-extra-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.sys-extra-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.sys-extra-value--sm {
+  font-size: 0.85rem;
+}
+
+.sys-extra-sub {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+/* ----- ALT GRID: Servisler + Gateway ----- */
+.sys-bottom-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .sys-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ----- Servis durumu kartlari ----- */
+.sys-service-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sys-service-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+.sys-service-item:hover {
+  transform: translateX(2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.sys-service-item--ok { border-color: #bbf7d0; }
+.sys-service-item--bad {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
+}
+
+.sys-service-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.sys-service-item--ok .sys-service-icon {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.sys-service-item--bad .sys-service-icon {
+  background: #fee2e2;
   color: #b91c1c;
 }
 
-.status-card--accent {
-  border-color: #c7d2fe;
-  background: linear-gradient(180deg, #eef2ff 0%, #fff 100%);
-}
-.status-card--accent .status-card-value {
-  color: #3730a3;
+.sys-service-icon .material-symbols-outlined {
+  font-size: 22px;
 }
 
-/* ----- Sunucu kaynaklari paneli (Sistem Durumu sayfasi ust kismi) ------- */
-.host-panel {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 18px 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+.sys-service-body {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.host-panel-head {
+.sys-service-head {
   display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 2px;
   flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 16px;
 }
 
-.host-panel-title {
-  margin: 0 0 4px;
-  font-size: 16px;
+.sys-service-head strong {
+  font-size: 14px;
   color: #0f172a;
 }
 
-.host-panel-lead {
+.sys-service-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sys-service-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.sys-service-error {
+  color: #b91c1c;
+  font-weight: 500;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  max-width: 26ch;
+}
+
+.sys-service-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sys-service-status--ok { background: #d1fae5; color: #047857; }
+.sys-service-status--bad { background: #fee2e2; color: #b91c1c; }
+
+.sys-service-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: sys-pulse 2s ease-in-out infinite;
+}
+
+.sys-service-status--bad .sys-service-status-dot {
+  animation: sys-pulse-fast 1s ease-in-out infinite;
+}
+
+@keyframes sys-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+@keyframes sys-pulse-fast {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ----- Gateway listesi (modern) ----- */
+.sys-gw-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sys-gw-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.sys-gw-item:hover {
+  transform: translateX(2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.sys-gw-item--ok { border-color: #bbf7d0; }
+.sys-gw-item--warn { border-color: #fde68a; }
+.sys-gw-item--bad {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
+}
+
+.sys-gw-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sys-gw-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.sys-gw-item--ok .sys-gw-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18);
+  animation: sys-pulse 2s ease-in-out infinite;
+}
+
+.sys-gw-item--warn .sys-gw-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+}
+
+.sys-gw-item--bad .sys-gw-dot {
+  background: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18);
+}
+
+.sys-gw-name {
+  font-size: 14px;
+  color: #0f172a;
+  margin-right: 8px;
+}
+
+.sys-gw-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.sys-gw-status {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sys-gw-status--ok { background: #d1fae5; color: #047857; }
+.sys-gw-status--warn { background: #fef3c7; color: #b45309; }
+.sys-gw-status--bad { background: #fee2e2; color: #b91c1c; }
+.sys-gw-status--muted { background: #f1f5f9; color: #475569; }
+
+/* ----- Eski siniflari korumak (geriye uyumluluk) ----- */
+.system-status-page {
+  /* Eski sayfayi kullanan baska bir yer kalirsa cati gorunmesin diye no-op. */
+  display: contents;
 }
 
 .host-panel-meta {
@@ -3993,6 +4917,192 @@ main.content.engineering-content:has(.device-management-panel) {
   background: #2563eb;
   width: 18px;
   height: 18px;
+}
+
+/* Yeni: Sekmeli detay paneli (Harita / Liste) */
+.grid-mgmt-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.grid-mgmt-detail-title { display: flex; flex-direction: column; gap: 2px; }
+.grid-mgmt-detail-title h4 { margin: 0; font-size: 14px; color: #0f172a; }
+
+.grid-mgmt-tabs {
+  display: inline-flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+.grid-mgmt-tab {
+  background: transparent; border: none;
+  padding: 6px 14px;
+  font-size: 12px; font-weight: 600;
+  color: #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.grid-mgmt-tab:hover { color: #0f172a; }
+.grid-mgmt-tab.active {
+  background: #fff; color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.grid-mgmt-map-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px; flex-wrap: wrap;
+}
+.grid-mgmt-tip { font-size: 11px; }
+.grid-mgmt-map-shell.is-add-mode {
+  outline: 2px dashed #2563eb;
+  outline-offset: -2px;
+  position: relative;
+}
+.grid-mgmt-map-shell.is-add-mode .leaflet-container { cursor: crosshair !important; }
+
+/* Direk pin (sayı etiketli) */
+.grid-pole-leaflet-wrap { background: transparent; border: none; }
+.grid-pole-pin {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: #1e293b; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.grid-pole-pin.is-start { background: #16a34a; }
+.grid-pole-pin.is-end { background: #dc2626; }
+
+/* Cihaz pin (segment ortasında) */
+.grid-device-leaflet-wrap { background: transparent; border: none; }
+.grid-device-pin {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  background: #6366f1;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transform: rotate(45deg);
+}
+.grid-device-pin.is-alarm {
+  background: #ef4444;
+  animation: grid-device-pulse 1.2s ease-in-out infinite;
+}
+@keyframes grid-device-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+/* Segment context menu */
+.grid-segment-menu {
+  position: fixed; z-index: 9999;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  width: 280px; max-height: 70vh; overflow-y: auto;
+}
+.grid-segment-menu-inner {
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+}
+.grid-segment-menu-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; margin-bottom: 4px;
+}
+.grid-segment-menu-head strong { font-size: 12px; color: #0f172a; }
+.grid-segment-menu-head button {
+  background: transparent; border: none;
+  font-size: 18px; cursor: pointer; color: #64748b;
+}
+.grid-segment-menu-device {
+  font-size: 12px; color: #334155;
+  background: #f1f5f9; padding: 6px 8px; border-radius: 6px;
+}
+.grid-segment-menu-inner > button {
+  text-align: left; padding: 8px 10px;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 6px; font-size: 13px; cursor: pointer;
+}
+.grid-segment-menu-inner > button:hover {
+  background: #eff6ff; border-color: #93c5fd;
+}
+.grid-segment-menu-inner > button.danger-btn {
+  color: #b91c1c; border-color: #fca5a5;
+}
+.grid-segment-menu-inner > button.danger-btn:hover { background: #fee2e2; }
+
+.grid-segment-menu-target-list,
+.grid-segment-menu-device-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 240px; overflow-y: auto;
+}
+.grid-segment-menu-target-list button,
+.grid-segment-menu-device-list button {
+  text-align: left; padding: 6px 10px;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 6px; font-size: 12px; cursor: pointer;
+}
+
+/* Liste sekmesi */
+.grid-mgmt-list-tab {
+  display: flex; flex-direction: column; gap: 10px;
+  flex: 1; min-height: 0;
+}
+.grid-mgmt-list-tab-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.grid-mgmt-pole-rows {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.grid-mgmt-pole-row {
+  display: grid;
+  grid-template-columns: 24px 130px 1fr 180px 70px;
+  gap: 10px; align-items: center;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: grab;
+  transition: border-color 120ms, background 120ms;
+}
+.grid-mgmt-pole-row.is-dragging {
+  opacity: 0.5; border-color: #2563eb;
+}
+.grid-mgmt-pole-row-handle {
+  color: #94a3b8; font-size: 14px; font-weight: 700; user-select: none;
+}
+.grid-mgmt-pole-row-seq {
+  font-weight: 700; color: #1e293b; font-size: 13px;
+}
+.grid-mgmt-pole-row-seq.is-start { color: #15803d; }
+.grid-mgmt-pole-row-seq.is-end { color: #b91c1c; }
+.grid-mgmt-pole-row-name { font-size: 13px; color: #334155; }
+.grid-mgmt-pole-row-coord {
+  font-size: 11px; font-family: ui-monospace, SFMono-Regular, monospace;
+  color: #64748b;
+}
+.grid-mgmt-pole-row-actions {
+  display: flex; gap: 4px; justify-self: end;
+}
+.grid-mgmt-segment-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 16px; margin: -2px 0 4px 22px;
+  border-left: 2px solid #cbd5e1;
+  background: #f8fafc;
+}
+.grid-mgmt-segment-label { font-size: 11px; color: #64748b; font-weight: 600; }
+.grid-mgmt-segment-device { font-size: 12px; color: #0f172a; }
+.grid-mgmt-segment-select {
+  padding: 4px 10px; font-size: 12px;
+  border-radius: 6px; border: 1px solid #cbd5e1;
 }
 
 .grid-pole-modal {

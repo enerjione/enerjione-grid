@@ -137,3 +137,20 @@ class LineDetail(BaseModel):
     line: LineRead
     poles: list[PoleRead]
     segments: list[LineSegmentRead]
+
+
+class PoleReorderItem(BaseModel):
+    """Drag-to-reorder sonrası tek bir direk için yeni sıra."""
+    pole_id: int
+    sequence_no: int = Field(ge=1)
+
+
+class PoleReorderRequest(BaseModel):
+    """Hat içindeki tüm direklerin yeni sıralarını topluca yollar.
+
+    Frontend listede sürükleyip bıraktıktan sonra son haldeki sıralamayı yollar.
+    Backend tüm sequence_no'ları **tek transaction** içinde günceller; arada
+    UNIQUE(line_id, sequence_no) constraint çakışmasını önlemek için önce
+    geçici negatif değerlere taşıyıp sonra hedef değerlere yazar."""
+    line_id: int
+    items: list[PoleReorderItem]

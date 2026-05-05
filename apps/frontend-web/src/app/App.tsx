@@ -1511,7 +1511,7 @@ export function App() {
             ) : null}
             {engineeringPage === "grid" &&
             (session.role === "engineer" || session.role === "installer") ? (
-              <GridManagementPanel accessToken={session.accessToken} />
+              <GridManagementPanel accessToken={session.accessToken} devices={devices} />
             ) : null}
           </main>
         ) : pageMode !== "home" ? (
