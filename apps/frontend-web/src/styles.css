@@ -14092,26 +14092,29 @@ main.content.engineering-content:has(.device-management-panel) {
   font-size: 12px;
 }
 
-/* 3 sutun gridi */
+/* 3 sutun gridi — modal icinde scroll olmadan tum sutunlar gorunur */
 .device-detail-modal-cols {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 14px 18px;
-  overflow-y: auto;
+  gap: 10px;
+  padding: 12px 16px;
+  overflow: hidden;
   background: #f8fafc;
+  min-height: 0;
 }
 
 .device-detail-col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 10px;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .device-detail-col--master { border-top: 4px solid #2563eb; }
 .device-detail-col--sat01 { border-top: 4px solid #16a34a; }
@@ -14316,122 +14319,18 @@ main.content.engineering-content:has(.device-management-panel) {
   margin-bottom: 6px;
 }
 
-/* Batarya — kompakt sag ust pil + yuzde rozeti */
-.device-detail-col-batt-mini {
+/* Modal sutun basliginda batarya — sidebar bileseni ile ayni gorunum,
+   sadece dolum animasyonu modal acildiginda 0'dan calismasi icin override. */
+.device-detail-col-head .device-battery {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 12px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  cursor: default;
+  gap: 6px;
 }
-.device-detail-col-batt-mini .material-symbols-outlined {
-  font-size: 16px !important;
+.device-detail-col-head .device-battery-fill {
+  animation: device-detail-batt-fill 0.7s ease-out;
 }
-.device-detail-col-batt-mini strong {
-  font-size: 12px;
-  font-weight: 700;
-  color: #0f172a;
-}
-.device-detail-col-batt-mini.is-full,
-.device-detail-col-batt-mini.is-high {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-}
-.device-detail-col-batt-mini.is-full .material-symbols-outlined,
-.device-detail-col-batt-mini.is-high .material-symbols-outlined { color: #16a34a; }
-.device-detail-col-batt-mini.is-mid {
-  background: #fffbeb;
-  border-color: #fde68a;
-}
-.device-detail-col-batt-mini.is-mid .material-symbols-outlined { color: #d97706; }
-.device-detail-col-batt-mini.is-low {
-  background: #fff7ed;
-  border-color: #fed7aa;
-}
-.device-detail-col-batt-mini.is-low .material-symbols-outlined { color: #ea580c; }
-.device-detail-col-batt-mini.is-critical {
-  background: #fef2f2;
-  border-color: #fecaca;
-}
-.device-detail-col-batt-mini.is-critical .material-symbols-outlined { color: #dc2626; }
-.device-detail-col-batt-mini.is-unknown .material-symbols-outlined { color: #94a3b8; }
-
-/* Sutun altinda kaynak bazli alarm listesi */
-.device-detail-col-alarms-section {
-  margin-top: auto;
-  padding-top: 6px;
-}
-.device-detail-col-alarm-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 16px;
-  padding: 0 5px;
-  margin-left: auto;
-  background: #dc2626;
-  color: #fff;
-  border-radius: 8px;
-  font-size: 9px;
-  font-weight: 800;
-  text-transform: none;
-  letter-spacing: 0;
-}
-.device-detail-col-alarms {
-  max-height: 140px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-right: 2px;
-}
-.device-detail-col-alarms::-webkit-scrollbar {
-  width: 4px;
-}
-.device-detail-col-alarms::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 2px;
-}
-.device-detail-col-alarm-empty {
-  font-size: 11px;
-  color: #94a3b8;
-  font-style: italic;
-  padding: 6px 4px;
-}
-.device-detail-col-alarm-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
-  border-radius: 5px;
-  background: #fef2f2;
-  border-left: 3px solid #dc2626;
-  font-size: 11px;
-  cursor: default;
-}
-.device-detail-col-alarm-row.level-warning {
-  background: #fffbeb;
-  border-left-color: #f59e0b;
-}
-.device-detail-col-alarm-row.level-info {
-  background: #eff6ff;
-  border-left-color: #3b82f6;
-}
-.device-detail-col-alarm-title {
-  font-weight: 600;
-  color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.device-detail-col-alarm-time {
-  font-size: 10px;
-  color: #64748b;
-  font-family: ui-monospace, SFMono-Regular, monospace;
+@keyframes device-detail-batt-fill {
+  from { width: 0 !important; }
 }
 
 /* Footer sadece sag tarafta (Kapat) */

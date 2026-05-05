@@ -535,7 +535,6 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           <DeviceDetailModal
             device={selectedDevice}
             liveValues={liveValues ?? []}
-            alarms={alarms ?? []}
             sourceBatteries={sourceBatteries}
             gridSnapshot={gridSnapshot ?? null}
             onClose={() => setDetailModalOpen(false)}
@@ -575,11 +574,13 @@ const PER_SOURCE_ANALOG: { suffix: string; label: string; unit: string; group?: 
   { suffix: "actual_voltage", label: "Gerilim", unit: "V", group: "live" },
   { suffix: "average_current", label: "Ort. akım", unit: "mA", group: "live" },
   { suffix: "maximum_current", label: "Max. akım", unit: "mA", group: "live" },
-  { suffix: "conductor_temperature", label: "Sıcaklık", unit: "°C", group: "live" },
+  { suffix: "conductor_temperature", label: "İletken sıc.", unit: "°C", group: "live" },
+  { suffix: "device_temperature", label: "Cihaz sıc.", unit: "°C", group: "live" },
   // Ariza ile ilgili degerler — son arizada kaydedilen
   { suffix: "fault_current", label: "Arıza akımı", unit: "mA", group: "fault" },
   { suffix: "fault_duration", label: "Arıza süresi", unit: "ms", group: "fault" },
-  { suffix: "last_good_known_current", label: "Son iyi akım", unit: "mA", group: "fault" }
+  { suffix: "last_good_known_current", label: "Son iyi akım", unit: "mA", group: "fault" },
+  { suffix: "minimum_current", label: "Min. akım", unit: "mA", group: "fault" }
 ];
 
 const SOURCES: SourceKey[] = ["master", "sat01", "sat02"];
@@ -587,14 +588,12 @@ const SOURCES: SourceKey[] = ["master", "sat01", "sat02"];
 function DeviceDetailModal({
   device,
   liveValues,
-  alarms,
   sourceBatteries,
   gridSnapshot,
   onClose
 }: {
   device: DeviceRow;
   liveValues: SignalLiveRow[];
-  alarms: AlarmEvent[];
   sourceBatteries: Record<
     SourceKey,
     { voltage: number | null; percent: number | null } | null
@@ -604,24 +603,6 @@ function DeviceDetailModal({
 }) {
   const deviceRows = liveValues.filter((r) => r.device_id === device.id);
   const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
-  const activeAlarms = alarms.filter((a) => a.device_id === device.id && !a.reset);
-
-  // Alarmin signal_key prefix'inden kaynagini cikar (master/sat01/sat02).
-  // Prefix yoksa veya bilinmiyorsa "master" varsay (ana kaynak).
-  const alarmSource = (a: AlarmEvent): SourceKey => {
-    const key = (a.signal_key ?? "").toLowerCase();
-    if (key.startsWith("sat01.")) return "sat01";
-    if (key.startsWith("sat02.")) return "sat02";
-    return "master";
-  };
-  const alarmsBySource: Record<SourceKey, AlarmEvent[]> = {
-    master: [],
-    sat01: [],
-    sat02: []
-  };
-  for (const a of activeAlarms) {
-    alarmsBySource[alarmSource(a)].push(a);
-  }
 
   // Topoloji bilgisi: bu cihaz hangi hat / bolge / segment ile bagli?
   const topoInfo = (() => {
@@ -645,32 +626,16 @@ function DeviceDetailModal({
     const permVal = typeof permRow?.value === "number" ? Math.trunc(permRow.value as number) : null;
     const tempVal = typeof tempRow?.value === "number" ? Math.trunc(tempRow.value as number) : null;
 
-    // Batarya pil iconu seviyesi (5 adim).
-    const battIconLevel =
+    // Batarya seviyesi — sidebar'daki batteryClass mantigi ile ayni:
+    // null=unknown, <=20 critical, <=50 low, otherwise ok.
+    const battLevelCls =
       battP === null
-        ? "unknown"
-        : battP >= 80
-          ? "full"
-          : battP >= 60
-            ? "high"
-            : battP >= 40
-              ? "mid"
-              : battP >= 20
-                ? "low"
-                : "critical";
-    // Material symbols battery iconlari
-    const battIconName =
-      battIconLevel === "full"
-        ? "battery_full"
-        : battIconLevel === "high"
-          ? "battery_5_bar"
-          : battIconLevel === "mid"
-            ? "battery_3_bar"
-            : battIconLevel === "low"
-              ? "battery_2_bar"
-              : battIconLevel === "critical"
-                ? "battery_alert"
-                : "battery_unknown";
+        ? "device-battery--unknown"
+        : battP <= 20
+          ? "device-battery--critical"
+          : battP <= 50
+            ? "device-battery--low"
+            : "device-battery--ok";
 
     const renderAnalogRow = ({
       suffix,
@@ -720,13 +685,20 @@ function DeviceDetailModal({
           <span className={`device-detail-col-badge is-${src === "master" ? "master" : src === "sat01" ? "sat1" : "sat2"}`}>
             {SOURCE_LABEL[src]}
           </span>
-          {/* Batarya — sag ust kosede kompakt pil */}
+          {/* Batarya — sag ust kosede pil ikonu (sidebar ile ayni stil) */}
           <div
-            className={`device-detail-col-batt-mini is-${battIconLevel}`}
+            className={`device-battery device-battery-mini ${battLevelCls}`}
             title={typeof battV === "number" ? `${battV.toFixed(2)} V` : "Voltaj —"}
           >
-            <span className="material-symbols-outlined">{battIconName}</span>
-            <strong>{typeof battP === "number" ? `%${battP}` : "—"}</strong>
+            <span className="device-battery-icon">
+              <span
+                className="device-battery-fill"
+                style={{ width: `${Math.max(0, Math.min(100, battP ?? 0))}%` }}
+              />
+            </span>
+            <span className="device-battery-text">
+              {typeof battP === "number" ? `%${battP}` : "—"}
+            </span>
           </div>
         </header>
 
@@ -795,39 +767,6 @@ function DeviceDetailModal({
             </div>
           </div>
         ) : null}
-
-        {/* Alarmlar — bu kaynak icin (scroll edilebilen kompakt alan) */}
-        <div className="device-detail-col-section device-detail-col-alarms-section">
-          <div className="device-detail-col-title">
-            <span className="material-symbols-outlined">warning</span>
-            Alarmlar
-            {alarmsBySource[src].length > 0 ? (
-              <span className="device-detail-col-alarm-count">
-                {alarmsBySource[src].length}
-              </span>
-            ) : null}
-          </div>
-          <div className="device-detail-col-alarms">
-            {alarmsBySource[src].length === 0 ? (
-              <div className="device-detail-col-alarm-empty">Aktif alarm yok</div>
-            ) : (
-              alarmsBySource[src].map((a) => (
-                <div
-                  key={a.id}
-                  className={`device-detail-col-alarm-row level-${a.level.toLowerCase()}`}
-                  title={a.description || a.title}
-                >
-                  <span className="device-detail-col-alarm-title">{a.title}</span>
-                  <span className="device-detail-col-alarm-time">
-                    {new Date(a.created_at).toLocaleString("tr-TR", {
-                      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
-                    })}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       </div>
     );
   };
