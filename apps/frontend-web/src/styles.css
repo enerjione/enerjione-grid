@@ -14381,6 +14381,50 @@ main.content.engineering-content:has(.device-management-panel) {
   justify-content: flex-end;
 }
 
+/* Cihaz detay modal header'inda string sinyaller — tek satir chip'ler */
+.device-detail-modal-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.device-detail-modal-info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 14px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  color: #334155;
+  max-width: 280px;
+  cursor: default;
+}
+.device-detail-modal-info-chip .material-symbols-outlined {
+  font-size: 14px;
+  color: #6366f1;
+  flex-shrink: 0;
+}
+.device-detail-modal-info-label {
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.device-detail-modal-info-value {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 /* String sinyaller (cihaz kimligi) — kompakt liste */
 .device-detail-col-string-list {
   display: flex;

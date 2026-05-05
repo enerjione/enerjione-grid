@@ -805,20 +805,18 @@ const PER_SOURCE_BINARY: { suffix: string; label: string; group?: "state" | "dir
   { suffix: "delta_i_delta_t_fault_direction_red_b", label: "ΔI/Δt arıza yönü B", group: "direction" }
 ];
 
-// Per-source string sinyaller (DNP3 Group 110 / Octet String) — cihaz kimligi.
+// Per-source string sinyaller — sutunlarda 'Bilgi' bolumunde detayli liste.
+// Header'daki master.info_* sinyaller burada tekrarlanmaz; sadece master/satellite
+// kaynak farki olan veya daha az kritik teknik detaylar.
 const PER_SOURCE_STRING: { suffix: string; label: string }[] = [
-  { suffix: "info_serial_number", label: "Seri No" },
-  { suffix: "info_fw_version", label: "Firmware" },
   { suffix: "info_fw_version_satellite", label: "FW (Satellite)" },
   { suffix: "info_hardware_revision", label: "Donanım" },
   { suffix: "info_part_no", label: "Parça No" },
-  { suffix: "info_network_operator", label: "Operatör" },
   { suffix: "info_network_type", label: "Şebeke" },
-  { suffix: "info_ipv4_address", label: "IPv4" },
-  { suffix: "info_modem_imei", label: "IMEI" },
   { suffix: "info_sim_serial_number_ccid", label: "SIM CCID" },
-  { suffix: "info_gps_string", label: "GPS" },
-  { suffix: "info_rtu_status_text", label: "RTU Durum" }
+  { suffix: "info_modem_model_name", label: "Modem" },
+  { suffix: "info_modem_fw_version", label: "Modem FW" },
+  { suffix: "info_last_configuration_update", label: "Son Konfig." }
 ];
 
 const PER_SOURCE_ANALOG: { suffix: string; label: string; unit: string; group?: "live" | "fault" }[] = [
@@ -855,6 +853,26 @@ function DeviceDetailModal({
 }) {
   const deviceRows = liveValues.filter((r) => r.device_id === device.id);
   const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
+
+  // Header'da gosterilecek en kritik string sinyaller (master kaynaginda).
+  // Bunlar cihaz kimligi/iletisim ozeti — tek bakista anlamak icin uste konur.
+  const headerInfoSignals: { suffix: string; label: string; icon: string }[] = [
+    { suffix: "info_serial_number", label: "Seri No", icon: "tag" },
+    { suffix: "info_fw_version", label: "Firmware", icon: "memory" },
+    { suffix: "info_modem_imei", label: "IMEI", icon: "sim_card" },
+    { suffix: "info_ipv4_address", label: "IPv4", icon: "lan" },
+    { suffix: "info_network_operator", label: "Operatör", icon: "signal_cellular_alt" },
+    { suffix: "info_gps_string", label: "GPS", icon: "my_location" },
+    { suffix: "info_rtu_status_text", label: "Durum", icon: "monitor_heart" }
+  ];
+  const headerInfoEntries = headerInfoSignals
+    .map((it) => {
+      const row = valueByKey.get(`master.${it.suffix}`);
+      const txt = (row?.value_string ?? "").trim();
+      if (!txt) return null;
+      return { ...it, value: txt };
+    })
+    .filter((x): x is { suffix: string; label: string; icon: string; value: string } => x !== null);
 
   // Topoloji bilgisi: bu cihaz hangi hat / bolge / segment ile bagli?
   const topoInfo = (() => {
@@ -1086,6 +1104,23 @@ function DeviceDetailModal({
                 </>
               )}
             </div>
+
+            {/* Cihaz kimligi: master kaynagindan gelen string sinyaller */}
+            {headerInfoEntries.length > 0 ? (
+              <div className="device-detail-modal-info">
+                {headerInfoEntries.map((it) => (
+                  <span
+                    key={it.suffix}
+                    className="device-detail-modal-info-chip"
+                    title={`${it.label}: ${it.value}`}
+                  >
+                    <span className="material-symbols-outlined">{it.icon}</span>
+                    <span className="device-detail-modal-info-label">{it.label}</span>
+                    <span className="device-detail-modal-info-value">{it.value}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
