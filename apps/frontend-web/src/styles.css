@@ -5429,6 +5429,35 @@ main.content.engineering-content:has(.device-management-panel) {
 .grid-pole-pin.is-start { background: #16a34a; }
 .grid-pole-pin.is-end { background: #dc2626; }
 
+/* "Diğer hatları göster" toggle */
+.grid-mgmt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+.grid-mgmt-toggle input { margin: 0; cursor: pointer; }
+
+/* Diger hatlarin direk pin'i — gri / yari saydam, etkilesimsiz */
+.grid-pole-pin--ghost {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(100, 116, 139, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
 /* Anasayfa haritasında daha küçük direk pin'i (kalabalık olmasın diye) */
 .grid-pole-pin--sm {
   width: 20px;

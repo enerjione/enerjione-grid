@@ -93,6 +93,10 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
   // Direk ekleme modu (harita tıklamayla)
   const [addPoleMode, setAddPoleMode] = useState(false);
 
+  // Diger hatlari arka planda goster (referans icin)
+  const [showOtherLines, setShowOtherLines] = useState(false);
+  const [otherLineDetails, setOtherLineDetails] = useState<Map<number, LineDetail>>(new Map());
+
   // Bağlam menüsü (segment için)
   const [segmentMenu, setSegmentMenu] = useState<{
     segment: LineSegment | null;
@@ -166,6 +170,39 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
       setError(err instanceof Error ? err.message : "Hat detayı alınamadı.");
     }
   };
+
+  // showOtherLines aktif iken aynı bölgedeki diğer hatların detayını paralel çek.
+  // Lines listesi her değiştiğinde tekrar yenile (yeni hat eklendiyse otomatik).
+  useEffect(() => {
+    if (!showOtherLines) {
+      setOtherLineDetails(new Map());
+      return;
+    }
+    const others = lines.filter((l) => l.id !== selectedLineId);
+    if (others.length === 0) {
+      setOtherLineDetails(new Map());
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const results = await Promise.all(
+        others.map(async (l) => {
+          try {
+            return [l.id, await fetchLineDetail(accessToken, l.id)] as const;
+          } catch {
+            return null;
+          }
+        })
+      );
+      if (cancelled) return;
+      const m = new Map<number, LineDetail>();
+      for (const r of results) if (r) m.set(r[0], r[1]);
+      setOtherLineDetails(m);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showOtherLines, lines, selectedLineId, accessToken, detail]);
 
   // sequence_no sırasıyla direk listesi
   const sortedPoles = useMemo<Pole[]>(() => {
@@ -511,6 +548,14 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                   onClick={() => void handleReverseOrder()}>
                   ↔ Sırayı Tersine Çevir
                 </button>
+                <label className="grid-mgmt-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showOtherLines}
+                    onChange={(e) => setShowOtherLines(e.target.checked)}
+                  />
+                  <span>Diğer hatları göster</span>
+                </label>
                 <span className="helper-text grid-mgmt-tip">
                   {sortedPoles.length >= 2
                     ? "Bir segmente tıklayarak cihaz atayın. Atanmış cihazı taşımak için cihaz simgesine tıklayın."
@@ -533,6 +578,55 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                   {addPoleMode ? (
                     <MapClickHandler onClick={(lat, lon) => void handleMapClickAddPole(lat, lon)} />
                   ) : null}
+
+                  {/* Diger hatlari arka planda goster (refernas amacli, soluk) */}
+                  {showOtherLines
+                    ? Array.from(otherLineDetails.values()).map((d) => {
+                        const sortedOther = [...d.poles].sort((a, b) => a.sequence_no - b.sequence_no);
+                        if (sortedOther.length < 2) return null;
+                        const positions: [number, number][] = sortedOther.map((p) => [
+                          p.latitude,
+                          p.longitude
+                        ]);
+                        const otherLineColor =
+                          d.line.color || selectedRegion?.color || DEFAULT_REGION_COLOR;
+                        return (
+                          <Polyline
+                            key={`other-${d.line.id}`}
+                            positions={positions}
+                            pathOptions={{
+                              color: otherLineColor,
+                              weight: 3,
+                              opacity: 0.35,
+                              dashArray: "6 6"
+                            }}
+                          >
+                            <Tooltip sticky>
+                              <strong>{d.line.name}</strong>
+                              <br />
+                              <em style={{ fontSize: 11 }}>(diğer hat — referans)</em>
+                            </Tooltip>
+                          </Polyline>
+                        );
+                      })
+                    : null}
+                  {showOtherLines
+                    ? Array.from(otherLineDetails.values()).flatMap((d) =>
+                        d.poles.map((p) => (
+                          <Marker
+                            key={`other-pole-${p.id}`}
+                            position={[p.latitude, p.longitude]}
+                            icon={L.divIcon({
+                              className: "grid-pole-leaflet-wrap",
+                              html: `<div class="grid-pole-pin grid-pole-pin--ghost"><span>${p.sequence_no}</span></div>`,
+                              iconSize: [22, 22],
+                              iconAnchor: [11, 11]
+                            })}
+                            interactive={false}
+                          />
+                        ))
+                      )
+                    : null}
 
                   {/* Polyline segmentleri ayri cizilir; sol VE sag tik ayni menuyu acar.
                       Direk ekleme modu aktif ise tikla geçer (haritaya direk eklenmesin diye
