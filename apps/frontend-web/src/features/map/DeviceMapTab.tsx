@@ -263,27 +263,31 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     const linesById = new Map(gridSnapshot.lines.map((l) => [l.id, l]));
     const regionsById = new Map(gridSnapshot.regions.map((r) => [r.id, r]));
 
-    // Hat bazli polyline: line.id -> [[lat,lon], ...] sequence_no sirali
+    // Hat bazli polyline: line.id -> [[lat,lon], ...] sequence_no sirali.
+    // NOT: Burada hattin ham polyline'ini hesapliyoruz; ariza lokalizasyonu
+    // asagida hesaplanip linePolylines uc parcaya ayrilacak (pre/fault/post).
     const polesByLine = new Map<number, typeof gridSnapshot.poles>();
     for (const p of gridSnapshot.poles) {
       const arr = polesByLine.get(p.line_id) ?? [];
       arr.push(p);
       polesByLine.set(p.line_id, arr);
     }
-    const linePolylines: { id: number; positions: [number, number][]; color: string; name: string; regionName: string }[] = [];
+    const sortedPolesByLine = new Map<number, typeof gridSnapshot.poles>();
     for (const [lineId, poles] of polesByLine) {
-      const line = linesById.get(lineId);
-      if (!line) continue;
-      const region = regionsById.get(line.region_id);
       const sorted = [...poles].sort((a, b) => a.sequence_no - b.sequence_no);
-      linePolylines.push({
-        id: lineId,
-        positions: sorted.map((p) => [p.latitude, p.longitude]),
-        color: line.color || region?.color || DEFAULT_LINE_COLOR,
-        name: line.name,
-        regionName: region?.name ?? ""
-      });
+      sortedPolesByLine.set(lineId, sorted);
     }
+
+    type LinePart = {
+      id: string;            // benzersiz key
+      lineId: number;
+      positions: [number, number][];
+      color: string;
+      kind: "healthy" | "fault" | "post";  // saglikli / ariza / ariza sonrasi
+      name: string;
+      regionName: string;
+    };
+    const linePolylines: LinePart[] = [];
 
     // ===== Ariza lokalizasyon mantigi =====
     // Cihazlar hat boyunca sirali (slot from_pole_seq, ardindan slot ici sira).
@@ -352,6 +356,47 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         lineDevices.set(lid, list);
       }
     }
+
+    // Iki nokta arasi oklid uzakligi (lat/lng kucuk olcekte yeterli yaklasim).
+    const dist2 = (a: [number, number], b: [number, number]) => {
+      const dx = a[0] - b[0];
+      const dy = a[1] - b[1];
+      return dx * dx + dy * dy;
+    };
+    // Bir polyline'i belirli bir nokta cevresinde ikiye ayir.
+    // Once nokta hangi segmentte (k. ile k+1.) en yakin: o segmenti ikiye keser.
+    const splitPolyline = (
+      polyline: [number, number][],
+      splitAt: [number, number]
+    ): { pre: [number, number][]; post: [number, number][] } => {
+      if (polyline.length < 2) {
+        return { pre: polyline, post: [] };
+      }
+      let bestK = 0;
+      let bestD = Infinity;
+      for (let k = 0; k < polyline.length - 1; k += 1) {
+        const a = polyline[k];
+        const b = polyline[k + 1];
+        const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        const d = dist2(mid, splitAt);
+        if (d < bestD) {
+          bestD = d;
+          bestK = k;
+        }
+      }
+      const pre: [number, number][] = [...polyline.slice(0, bestK + 1), splitAt];
+      const post: [number, number][] = [splitAt, ...polyline.slice(bestK + 1)];
+      return { pre, post };
+    };
+
+    // Hangi hatta nerede ariza var? (lineId -> { faultMid, ... })
+    type FaultInfo = {
+      midpoint: [number, number];
+      device: DeviceRow | undefined;
+      fromSeq: number | null;
+      toSeq: number | null;
+    };
+    const faultByLine = new Map<number, FaultInfo>();
 
     // Her hat icin lokalize edilmis tek (veya yok) ariza segmenti.
     const alarmedSegments: {
@@ -425,6 +470,61 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         fromSeq: fromSeqShow,
         toSeq: toSeqShow
       });
+      faultByLine.set(lineId, {
+        midpoint,
+        device: dev,
+        fromSeq: fromSeqShow,
+        toSeq: toSeqShow
+      });
+    }
+
+    // Hat polyline'larini olustur. Arizali hatlar 3 parcaya ayrilir
+    // (pre saglikli yesil + fault kirmizi pulse + post kirmizi sabit);
+    // arizasiz hatlar tek parca cizilir (kendi rengiyle).
+    for (const [lineId, sortedPoles] of sortedPolesByLine) {
+      const line = linesById.get(lineId);
+      if (!line) continue;
+      const region = regionsById.get(line.region_id);
+      const baseColor = line.color || region?.color || DEFAULT_LINE_COLOR;
+      const positionsAll: [number, number][] = sortedPoles.map((p) => [p.latitude, p.longitude]);
+      if (positionsAll.length < 2) continue;
+      const fault = faultByLine.get(lineId);
+      if (!fault) {
+        linePolylines.push({
+          id: `line-${lineId}`,
+          lineId,
+          positions: positionsAll,
+          color: baseColor,
+          kind: "healthy",
+          name: line.name,
+          regionName: region?.name ?? ""
+        });
+        continue;
+      }
+      // Arizali: hat'i fault.midpoint cevresinde ikiye ayir.
+      const { pre, post } = splitPolyline(positionsAll, fault.midpoint);
+      if (pre.length >= 2) {
+        linePolylines.push({
+          id: `line-${lineId}-pre`,
+          lineId,
+          positions: pre,
+          color: baseColor,
+          kind: "healthy",
+          name: line.name,
+          regionName: region?.name ?? ""
+        });
+      }
+      if (post.length >= 2) {
+        linePolylines.push({
+          id: `line-${lineId}-post`,
+          lineId,
+          positions: post,
+          color: FAULT_COLOR,
+          kind: "post",
+          name: line.name,
+          regionName: region?.name ?? ""
+        });
+      }
     }
 
     // Direklerin baslangic/bitis bilgisi
@@ -454,20 +554,26 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           />
           <MapInvalidator deps={[devices.length]} />
 
-          {/* Hat polylineları (sağlıklı): bölge rengi ince çizgi */}
+          {/* Hat polylineları:
+              - healthy/pre kismi: hattin kendi rengi
+              - post-fault kismi: kirmizi (ariza sonrasi enerjisiz/etkilenen bolum) */}
           {topology?.linePolylines.map((line) => (
             <Polyline
-              key={`line-${line.id}`}
+              key={line.id}
               positions={line.positions}
               pathOptions={{
                 color: line.color,
-                weight: 3,
-                opacity: 0.7
+                weight: line.kind === "post" ? 5 : 3,
+                opacity: line.kind === "post" ? 0.85 : 0.7,
+                dashArray: line.kind === "post" ? "10 6" : undefined
               }}
             >
               <Tooltip sticky>
                 <strong>{line.name}</strong>
                 {line.regionName ? <><br />{line.regionName}</> : null}
+                {line.kind === "post" ? (
+                  <><br /><em style={{ color: FAULT_COLOR }}>Arıza sonrası — etkilenen bölüm</em></>
+                ) : null}
               </Tooltip>
             </Polyline>
           ))}
