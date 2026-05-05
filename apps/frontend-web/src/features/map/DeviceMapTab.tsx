@@ -840,34 +840,6 @@ function DeviceDetailModal({
   const deviceRows = liveValues.filter((r) => r.device_id === device.id);
   const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
 
-  // Header'da gosterilecek tum onemli string sinyaller (master kaynaginda).
-  // Cihaz kimligi + iletisim + teknik detaylar — tek bakista anlamak icin uste konur.
-  const headerInfoSignals: { suffix: string; label: string; icon: string }[] = [
-    { suffix: "info_serial_number", label: "Seri No", icon: "tag" },
-    { suffix: "info_fw_version", label: "Firmware", icon: "memory" },
-    { suffix: "info_fw_version_satellite", label: "FW Sat", icon: "satellite_alt" },
-    { suffix: "info_hardware_revision", label: "Donanım", icon: "developer_board" },
-    { suffix: "info_part_no", label: "Parça No", icon: "qr_code" },
-    { suffix: "info_modem_imei", label: "IMEI", icon: "sim_card" },
-    { suffix: "info_sim_serial_number_ccid", label: "SIM CCID", icon: "credit_card" },
-    { suffix: "info_modem_model_name", label: "Modem", icon: "router" },
-    { suffix: "info_modem_fw_version", label: "Modem FW", icon: "system_update" },
-    { suffix: "info_ipv4_address", label: "IPv4", icon: "lan" },
-    { suffix: "info_network_operator", label: "Operatör", icon: "signal_cellular_alt" },
-    { suffix: "info_network_type", label: "Şebeke", icon: "network_cell" },
-    { suffix: "info_gps_string", label: "GPS", icon: "my_location" },
-    { suffix: "info_rtu_status_text", label: "Durum", icon: "monitor_heart" },
-    { suffix: "info_last_configuration_update", label: "Son Konfig.", icon: "history" }
-  ];
-  const headerInfoEntries = headerInfoSignals
-    .map((it) => {
-      const row = valueByKey.get(`master.${it.suffix}`);
-      const txt = (row?.value_string ?? "").trim();
-      if (!txt) return null;
-      return { ...it, value: txt };
-    })
-    .filter((x): x is { suffix: string; label: string; icon: string; value: string } => x !== null);
-
   // Topoloji bilgisi: bu cihaz hangi hat / bolge / segment ile bagli?
   const topoInfo = (() => {
     if (!gridSnapshot) return null;
@@ -1067,17 +1039,6 @@ function DeviceDetailModal({
                   Hat atanmamış
                 </span>
               )}
-              {headerInfoEntries.map((it) => (
-                <span
-                  key={it.suffix}
-                  className="device-detail-modal-info-chip"
-                  title={`${it.label}: ${it.value}`}
-                >
-                  <span className="material-symbols-outlined">{it.icon}</span>
-                  <span className="device-detail-modal-info-label">{it.label}</span>
-                  <span className="device-detail-modal-info-value">{it.value}</span>
-                </span>
-              ))}
             </div>
           </div>
           <button

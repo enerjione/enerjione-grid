@@ -183,6 +183,10 @@ export function DeviceSummaryPage({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return deviceValues.filter((row) => {
+      // String tipli sinyaller hic gosterilmiyor (cihaz tarafinda 'Not Class 0')
+      const sig = signalByKey.get(row.signal_key);
+      const dt = (row.data_type as string | undefined) ?? sig?.data_type;
+      if (dt === "string") return false;
       if (activeTab !== "all" && row.source !== activeTab) return false;
       if (!q) return true;
       return (
@@ -190,7 +194,7 @@ export function DeviceSummaryPage({
         row.signal_key.toLowerCase().includes(q)
       );
     });
-  }, [deviceValues, activeTab, search]);
+  }, [deviceValues, signalByKey, activeTab, search]);
 
   useEffect(() => {
     setPage(1);

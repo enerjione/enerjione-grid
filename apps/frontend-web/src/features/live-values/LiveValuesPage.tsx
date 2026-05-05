@@ -32,14 +32,16 @@ type TabKey = "all" | SignalDataType;
 const DATA_TYPES: SignalDataType[] = [
   "analog",
   "binary",
-  "counter",
-  "string"
+  "counter"
 ];
 
 const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
   analog: "Analog Input",
   binary: "Binary Input",
   counter: "Counter",
+  // 'string' tipi sistemde gosterilmiyor (cihaz konfigurasyonunda Class 0
+  // disinda atanmis, okunamiyor). Tipte yine taniml ki SignalCatalog seed'i
+  // bozulmasin, ama UI'de filtre/tab listesinden kaldirildi.
   string: "String"
 };
 
@@ -225,6 +227,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     const q = search.trim().toLowerCase();
     return values.filter((row) => {
       const sig = signalByKey.get(row.signal_key);
+      // String tipli sinyaller hic gosterilmiyor — cihaz tarafinda 'Not Class 0'
+      // ile isaretli oldugu icin okunamiyor.
+      if (sig?.data_type === "string") return false;
       if (activeTab !== "all") {
         if (!sig || sig.data_type !== activeTab) return false;
       }
