@@ -22,13 +22,29 @@ type Props = {
 const DEFAULT_LINE_COLOR = "#2563eb";
 const FAULT_COLOR = "#ef4444";
 
-const polePin = (label: string, isStart: boolean, isEnd: boolean) => {
-  const cls = isStart ? "is-start" : isEnd ? "is-end" : "";
+const polePin = (
+  label: string,
+  isStart: boolean,
+  isEnd: boolean,
+  poleType?: string
+) => {
+  const typeCls =
+    poleType === "transformer" ? "is-transformer" : "";
+  const cls = [
+    isStart ? "is-start" : isEnd ? "is-end" : "",
+    typeCls
+  ].filter(Boolean).join(" ");
+  // Trafo direkleri biraz daha buyuk ve sembollu gosterilir.
+  const isTrafo = poleType === "transformer";
+  const inner = isTrafo
+    ? `<span class="grid-pole-symbol" title="Trafo">⚡</span><span class="grid-pole-seq">${label}</span>`
+    : `<span>${label}</span>`;
+  const size: [number, number] = isTrafo ? [26, 26] : [20, 20];
   return L.divIcon({
     className: "grid-pole-leaflet-wrap",
-    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}"><span>${label}</span></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10]
+    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}</div>`,
+    iconSize: size,
+    iconAnchor: [size[0] / 2, size[1] / 2]
   });
 };
 
@@ -352,12 +368,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             </Polyline>
           ))}
 
-          {/* Direkler: küçük numara etiketli pin */}
+          {/* Direkler: küçük numara etiketli pin (trafo ise farkli sembol) */}
           {topology?.polesWithRole.map(({ p, isStart, isEnd }) => (
             <Marker
               key={`pole-${p.id}`}
               position={[p.latitude, p.longitude]}
-              icon={polePin(String(p.sequence_no), isStart, isEnd)}
+              icon={polePin(String(p.sequence_no), isStart, isEnd, p.pole_type)}
               eventHandlers={{}}
             >
               <Tooltip>

@@ -452,11 +452,12 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     setBusy(true);
     setSegmentMenu(null);
     try {
-      if (slot.segment) {
-        // Mevcut segmenti güncelle
-        await updateSegment(accessToken, slot.segment.id, { device_id: deviceId });
+      // Coklu cihaz: ayni slot'ta cihazsiz segment varsa onu kullan, yoksa yeni
+      // segment yarat. Cihazli segmentlere dokunma — cunku coklu cihaz mumkun.
+      const emptySeg = slot.segments.find((s) => !s.device_id) ?? null;
+      if (emptySeg) {
+        await updateSegment(accessToken, emptySeg.id, { device_id: deviceId });
       } else {
-        // Yeni segment yarat
         await createSegment(accessToken, {
           line_id: selectedLine.id,
           from_pole_id: slot.fromPole.id,
@@ -474,12 +475,15 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     }
   };
 
+  // Cihazi segmentten kaldir. Coklu cihaz icin: sadece bu segment'i SIL
+  // (cihazsiz segment kaydi tutmaya gerek yok). Boylece slot'ta kalan diger
+  // cihazlar otomatik yeniden dagilir.
   const handleDetachDevice = async (segment: LineSegment) => {
     if (!selectedLine) return;
     setBusy(true);
     setSegmentMenu(null);
     try {
-      await updateSegment(accessToken, segment.id, { device_id: null });
+      await deleteSegment(accessToken, segment.id);
       toast.success("Cihaz segmentten kaldırıldı.");
       await reloadDetail(selectedLine.id);
     } catch (err) {
@@ -855,6 +859,7 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                       [slot.fromPole.latitude, slot.fromPole.longitude],
                       [slot.toPole.latitude, slot.toPole.longitude]
                     ];
+                    const hasDevice = slot.segments.some((s) => s.device_id);
                     const openMenu = (event: L.LeafletMouseEvent) => {
                       if (addPoleMode) return; // direk ekleme aktifse menu acma
                       event.originalEvent.preventDefault();
@@ -873,8 +878,8 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                         key={`seg-${idx}`}
                         positions={positions}
                         pathOptions={{
-                          color: slot.segment?.device_id ? "#16a34a" : lineColor,
-                          weight: slot.segment?.device_id ? 6 : 5,
+                          color: hasDevice ? "#16a34a" : lineColor,
+                          weight: hasDevice ? 6 : 5,
                           opacity: 0.9
                         }}
                         eventHandlers={{
@@ -947,44 +952,52 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                     );
                   })}
 
-                  {/* Segmentlere bağlı cihazlar — orta noktada. Hem sol tık hem
-                      sağ tık ayni menuyu acar — kullanici hangisinde takıldıysa. */}
-                  {segmentSlots.map((slot) => {
-                    if (!slot.segment?.device_id) return null;
-                    const mid = midpoint(slot.fromPole, slot.toPole);
-                    if (!mid) return null;
-                    const dev = devices.find((d) => d.id === slot.segment?.device_id);
-                    const openMenu = (event: L.LeafletMouseEvent) => {
-                      event.originalEvent.preventDefault();
-                      event.originalEvent.stopPropagation();
-                      const native = event.originalEvent;
-                      setSegmentMenu({
-                        segment: slot.segment,
-                        pseudoFromId: slot.fromPole.id,
-                        pseudoToId: slot.toPole.id,
-                        x: native.clientX,
-                        y: native.clientY
-                      });
-                    };
-                    return (
-                      <Marker
-                        key={`dev-${slot.segment.id}`}
-                        position={mid}
-                        icon={deviceIcon(dev?.alarmActive ?? false)}
-                        eventHandlers={{
-                          click: openMenu,
-                          contextmenu: openMenu
-                        }}
-                      >
-                        <Tooltip>
-                          {dev ? `${dev.name} (${dev.code})` : `Cihaz #${slot.segment.device_id}`}
-                          <br />
-                          {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
-                          <br />
-                          <em>Tıkla: taşı / kaldır</em>
-                        </Tooltip>
-                      </Marker>
-                    );
+                  {/* Segmentlere bagli cihazlar — coklu cihaz icin ayni slot'ta
+                      birden fazla marker, dagitik konumlarda (1/n+1, 2/n+1, ...). */}
+                  {segmentSlots.flatMap((slot) => {
+                    const segsWithDevice = slot.segments.filter((s) => s.device_id);
+                    const total = segsWithDevice.length;
+                    if (total === 0) return [];
+                    return segsWithDevice.map((seg, idx) => {
+                      const t = (idx + 1) / (total + 1);
+                      const lat =
+                        slot.fromPole.latitude + (slot.toPole.latitude - slot.fromPole.latitude) * t;
+                      const lon =
+                        slot.fromPole.longitude + (slot.toPole.longitude - slot.fromPole.longitude) * t;
+                      const dev = devices.find((d) => d.id === seg.device_id);
+                      const openMenu = (event: L.LeafletMouseEvent) => {
+                        event.originalEvent.preventDefault();
+                        event.originalEvent.stopPropagation();
+                        const native = event.originalEvent;
+                        setSegmentMenu({
+                          segment: seg,
+                          pseudoFromId: slot.fromPole.id,
+                          pseudoToId: slot.toPole.id,
+                          x: native.clientX,
+                          y: native.clientY
+                        });
+                      };
+                      return (
+                        <Marker
+                          key={`dev-${seg.id}`}
+                          position={[lat, lon]}
+                          icon={deviceIcon(dev?.alarmActive ?? false)}
+                          eventHandlers={{
+                            click: openMenu,
+                            contextmenu: openMenu
+                          }}
+                        >
+                          <Tooltip>
+                            {dev ? `${dev.name} (${dev.code})` : `Cihaz #${seg.device_id}`}
+                            <br />
+                            {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
+                            {total > 1 ? ` · ${idx + 1}/${total}` : ""}
+                            <br />
+                            <em>Tıkla: taşı / kaldır</em>
+                          </Tooltip>
+                        </Marker>
+                      );
+                    });
                   })}
                 </MapContainer>
 
@@ -1405,6 +1418,13 @@ function MapClickHandler({ onClick }: { onClick: (lat: number, lon: number) => v
   return null;
 }
 
+type CtxSlot = {
+  fromPole: Pole;
+  toPole: Pole;
+  segment: LineSegment | null;
+  segments: LineSegment[];
+};
+
 function SegmentContextMenu({
   slot,
   allSlots,
@@ -1416,25 +1436,25 @@ function SegmentContextMenu({
   onDeleteSegment,
   onClose
 }: {
-  slot: { fromPole: Pole; toPole: Pole; segment: LineSegment | null };
-  allSlots: { fromPole: Pole; toPole: Pole; segment: LineSegment | null }[];
+  slot: CtxSlot;
+  allSlots: CtxSlot[];
   devices: DeviceRow[];
   availableDevices: DeviceRow[];
   onAttach: (deviceId: number) => void;
   onDetach: (seg: LineSegment) => void;
-  onMove: (
-    seg: LineSegment,
-    target: { fromPole: Pole; toPole: Pole; segment: LineSegment | null }
-  ) => void;
+  onMove: (seg: LineSegment, target: CtxSlot) => void;
   onDeleteSegment: (seg: LineSegment) => void;
   onClose: () => void;
 }) {
-  const [moveMode, setMoveMode] = useState(false);
+  // Goruntu modlari: 'list' = mevcut cihazlar listesi (default),
+  //                  'add'  = yeni cihaz secme arama paneli,
+  //                  'move' = bir cihazi baska segmente tasi (movingSeg ile)
+  const [view, setView] = useState<"list" | "add" | "move">("list");
+  const [movingSeg, setMovingSeg] = useState<LineSegment | null>(null);
   const [search, setSearch] = useState("");
 
-  const dev = slot.segment?.device_id
-    ? devices.find((d) => d.id === slot.segment?.device_id)
-    : null;
+  // Slot'taki cihazli segmentler (sirali).
+  const segsWithDevice = slot.segments.filter((s) => s.device_id);
 
   const filteredAvailable = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1462,6 +1482,12 @@ function SegmentContextMenu({
     });
   }, [otherSlots, search]);
 
+  const back = () => {
+    setView("list");
+    setMovingSeg(null);
+    setSearch("");
+  };
+
   return (
     <div className="grid-segment-menu-inner">
       <div className="grid-segment-menu-head">
@@ -1470,164 +1496,214 @@ function SegmentContextMenu({
           <strong>
             #{slot.fromPole.sequence_no} → #{slot.toPole.sequence_no}
           </strong>
+          {segsWithDevice.length > 0 ? (
+            <span className="grid-segment-menu-count-pill">
+              {segsWithDevice.length} cihaz
+            </span>
+          ) : null}
         </div>
         <button type="button" className="grid-segment-menu-close" onClick={onClose} aria-label="Kapat">
           ×
         </button>
       </div>
 
-      {dev ? (
-        // ===== ATANMIS CIHAZ =====
+      {view === "list" ? (
+        // ===== MEVCUT CIHAZLAR + CIHAZ EKLE =====
         <>
-          <div className="grid-segment-menu-current">
-            <div className="grid-segment-menu-current-icon">
-              <span className="material-symbols-outlined">offline_bolt</span>
+          {segsWithDevice.length === 0 ? (
+            <div className="grid-segment-menu-empty grid-segment-menu-empty--padded">
+              <span className="material-symbols-outlined">cable</span>
+              Bu segmente henüz cihaz atanmamış.
             </div>
-            <div className="grid-segment-menu-current-info">
-              <span className="grid-segment-menu-current-label">Atanmış cihaz</span>
-              <strong>{dev.name}</strong>
-              <span className="grid-segment-menu-current-meta">
-                <code>{dev.code}</code>
-                {dev.gatewayCode ? <> · {dev.gatewayCode}</> : null}
-                {" · "}
-                <span className={`grid-segment-menu-status grid-segment-menu-status--${dev.communicationStatus}`}>
-                  {dev.communicationStatus === "online" ? "çevrimiçi" : "çevrimdışı"}
-                </span>
-              </span>
+          ) : (
+            <div className="grid-segment-menu-device-stack">
+              {segsWithDevice.map((seg, idx) => {
+                const d = devices.find((x) => x.id === seg.device_id);
+                if (!d) return null;
+                return (
+                  <div key={seg.id} className="grid-segment-menu-attached">
+                    <span className="grid-segment-menu-attached-pos">
+                      {segsWithDevice.length > 1 ? `${idx + 1}/${segsWithDevice.length}` : ""}
+                    </span>
+                    <div className="grid-segment-menu-attached-icon">
+                      <span className="material-symbols-outlined">offline_bolt</span>
+                    </div>
+                    <div className="grid-segment-menu-attached-info">
+                      <strong>{d.name}</strong>
+                      <span className="grid-segment-menu-attached-meta">
+                        <code>{d.code}</code>
+                        {d.gatewayCode ? <> · {d.gatewayCode}</> : null}
+                        {" · "}
+                        <span className={`grid-segment-menu-status grid-segment-menu-status--${d.communicationStatus}`}>
+                          {d.communicationStatus === "online" ? "çevrimiçi" : "çevrimdışı"}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="grid-segment-menu-attached-actions">
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Başka segmente taşı"
+                        onClick={() => {
+                          setMovingSeg(seg);
+                          setView("move");
+                          setSearch("");
+                        }}
+                      >
+                        <span className="material-symbols-outlined">swap_horiz</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-danger"
+                        title="Cihazı kaldır"
+                        onClick={() => onDetach(seg)}
+                      >
+                        <span className="material-symbols-outlined">link_off</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          )}
+
+          <button
+            type="button"
+            className="grid-segment-menu-add-btn"
+            disabled={availableDevices.length === 0}
+            onClick={() => {
+              setView("add");
+              setSearch("");
+            }}
+            title={
+              availableDevices.length === 0
+                ? "Atanabilir cihaz yok"
+                : "Bu segmente cihaz ekle"
+            }
+          >
+            <span className="material-symbols-outlined">add</span>
+            Cihaz Ekle
+          </button>
+        </>
+      ) : view === "add" ? (
+        // ===== CIHAZ EKLE (arama + secim) =====
+        <>
+          <div className="grid-segment-menu-search-row">
+            <span className="material-symbols-outlined">search</span>
+            <input
+              type="search"
+              placeholder="Cihaz ara (ad, kod, gateway)..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            <span className="grid-segment-menu-count">
+              {filteredAvailable.length} / {availableDevices.length}
+            </span>
           </div>
 
-          {!moveMode ? (
-            <div className="grid-segment-menu-actions">
-              <button className="grid-segment-menu-action" onClick={() => { setSearch(""); setMoveMode(true); }}>
-                <span className="material-symbols-outlined">swap_horiz</span>
-                Başka segmente taşı
-              </button>
-              <button
-                className="grid-segment-menu-action"
-                onClick={() => slot.segment && onDetach(slot.segment)}
-              >
-                <span className="material-symbols-outlined">link_off</span>
-                Cihazı kaldır
-              </button>
-              {slot.segment ? (
+          <div className="grid-segment-menu-device-list">
+            {filteredAvailable.length === 0 ? (
+              <p className="grid-segment-menu-empty">
+                {availableDevices.length === 0
+                  ? "Atanabilir cihaz yok. Önce başka bir segmentten cihaz çıkarın."
+                  : "Sonuç bulunamadı."}
+              </p>
+            ) : (
+              filteredAvailable.map((d) => (
                 <button
-                  className="grid-segment-menu-action grid-segment-menu-action--danger"
-                  onClick={() => onDeleteSegment(slot.segment!)}
+                  key={d.id}
+                  className="grid-segment-menu-device-card"
+                  onClick={() => onAttach(d.id)}
                 >
-                  <span className="material-symbols-outlined">delete</span>
-                  Segmenti sil
+                  <span className="grid-segment-menu-device-icon">
+                    <span className="material-symbols-outlined">offline_bolt</span>
+                  </span>
+                  <span className="grid-segment-menu-device-info">
+                    <strong>{d.name}</strong>
+                    <span className="grid-segment-menu-device-meta">
+                      <code>{d.code}</code>
+                      {d.gatewayCode ? <> · {d.gatewayCode}</> : null}
+                    </span>
+                  </span>
+                  <span
+                    className={`grid-segment-menu-status grid-segment-menu-status--${d.communicationStatus}`}
+                  >
+                    {d.communicationStatus === "online" ? "açık" : "kapalı"}
+                  </span>
+                  <span className="grid-segment-menu-device-arrow">→</span>
                 </button>
-              ) : null}
-            </div>
-          ) : (
-            <>
-              <div className="grid-segment-menu-search-row">
-                <span className="material-symbols-outlined">search</span>
-                <input
-                  type="search"
-                  placeholder="Hedef segment ara (sıra no veya direk adı)..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="grid-segment-menu-target-list">
-                {filteredTargets.length === 0 ? (
-                  <p className="grid-segment-menu-empty">
-                    {otherSlots.length === 0 ? "Başka segment yok." : "Sonuç bulunamadı."}
-                  </p>
-                ) : (
-                  filteredTargets.map((s) => {
-                    const occupied = s.segment?.device_id;
-                    const occupyingDev = occupied
-                      ? devices.find((d) => d.id === occupied)
-                      : null;
-                    return (
-                      <button
-                        key={`${s.fromPole.id}-${s.toPole.id}`}
-                        className="grid-segment-menu-target"
-                        onClick={() => slot.segment && onMove(slot.segment, s)}
-                      >
-                        <span className="grid-segment-menu-target-route">
-                          #{s.fromPole.sequence_no} → #{s.toPole.sequence_no}
-                        </span>
-                        {occupyingDev ? (
-                          <span className="grid-segment-menu-target-warn">
-                            dolu · {occupyingDev.name} ezilecek
-                          </span>
-                        ) : (
-                          <span className="grid-segment-menu-target-empty">boş</span>
-                        )}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-              <button className="grid-segment-menu-cancel" onClick={() => { setSearch(""); setMoveMode(false); }}>
-                ← Geri dön
-              </button>
-            </>
-          )}
+              ))
+            )}
+          </div>
+
+          <button className="grid-segment-menu-cancel" onClick={back}>
+            ← Geri dön
+          </button>
         </>
       ) : (
-        // ===== BOS SEGMENT, CIHAZ ATA =====
+        // ===== TASI: hedef segment sec =====
         <>
-          {availableDevices.length === 0 ? (
-            <div className="grid-segment-menu-empty grid-segment-menu-empty--padded">
-              <span className="material-symbols-outlined">info</span>
-              Tüm cihazlar zaten başka segmentlere atanmış. Önce başka bir segmentten cihaz çıkarmanız gerekir.
-            </div>
-          ) : (
-            <>
-              <div className="grid-segment-menu-search-row">
-                <span className="material-symbols-outlined">search</span>
-                <input
-                  type="search"
-                  placeholder="Cihaz ara (ad, kod, gateway)..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  autoFocus
-                />
-                <span className="grid-segment-menu-count">
-                  {filteredAvailable.length} / {availableDevices.length}
-                </span>
-              </div>
-
-              <div className="grid-segment-menu-device-list">
-                {filteredAvailable.length === 0 ? (
-                  <p className="grid-segment-menu-empty">Sonuç bulunamadı.</p>
-                ) : (
-                  filteredAvailable.map((d) => (
-                    <button
-                      key={d.id}
-                      className="grid-segment-menu-device-card"
-                      onClick={() => onAttach(d.id)}
-                    >
-                      <span className="grid-segment-menu-device-icon">
-                        <span className="material-symbols-outlined">offline_bolt</span>
+          <div className="grid-segment-menu-move-info">
+            {movingSeg ? (
+              (() => {
+                const movingDev = devices.find((x) => x.id === movingSeg.device_id);
+                return movingDev ? (
+                  <>
+                    <span className="material-symbols-outlined">offline_bolt</span>
+                    <span>
+                      <strong>{movingDev.name}</strong> taşınacak hedef segmenti seçin
+                    </span>
+                  </>
+                ) : null;
+              })()
+            ) : null}
+          </div>
+          <div className="grid-segment-menu-search-row">
+            <span className="material-symbols-outlined">search</span>
+            <input
+              type="search"
+              placeholder="Hedef segment ara (sıra no veya direk adı)..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="grid-segment-menu-target-list">
+            {filteredTargets.length === 0 ? (
+              <p className="grid-segment-menu-empty">
+                {otherSlots.length === 0 ? "Başka segment yok." : "Sonuç bulunamadı."}
+              </p>
+            ) : (
+              filteredTargets.map((s) => {
+                const occupiedCount = s.segments.filter((x) => x.device_id).length;
+                return (
+                  <button
+                    key={`${s.fromPole.id}-${s.toPole.id}`}
+                    className="grid-segment-menu-target"
+                    onClick={() => movingSeg && onMove(movingSeg, s)}
+                  >
+                    <span className="grid-segment-menu-target-route">
+                      #{s.fromPole.sequence_no} → #{s.toPole.sequence_no}
+                    </span>
+                    {occupiedCount > 0 ? (
+                      <span className="grid-segment-menu-target-warn">
+                        {occupiedCount} cihaz var · yan yana eklenecek
                       </span>
-                      <span className="grid-segment-menu-device-info">
-                        <strong>{d.name}</strong>
-                        <span className="grid-segment-menu-device-meta">
-                          <code>{d.code}</code>
-                          {d.gatewayCode ? <> · {d.gatewayCode}</> : null}
-                        </span>
-                      </span>
-                      <span
-                        className={`grid-segment-menu-status grid-segment-menu-status--${d.communicationStatus}`}
-                      >
-                        {d.communicationStatus === "online" ? "açık" : "kapalı"}
-                      </span>
-                      <span className="grid-segment-menu-device-arrow">→</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </>
-          )}
+                    ) : (
+                      <span className="grid-segment-menu-target-empty">boş</span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <button className="grid-segment-menu-cancel" onClick={back}>
+            ← Geri dön
+          </button>
         </>
       )}
+
     </div>
   );
 }

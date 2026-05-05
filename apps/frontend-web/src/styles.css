@@ -6225,6 +6225,22 @@ main.content.engineering-content:has(.device-management-panel) {
   height: 20px;
   font-size: 9px;
 }
+/* Anasayfa kompakt varyant icin trafo override (--sm'in icindeki transformer) */
+.grid-pole-pin--sm.is-transformer {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+}
+.grid-pole-pin--sm.is-transformer .grid-pole-symbol {
+  font-size: 13px;
+}
+.grid-pole-pin--sm.is-transformer .grid-pole-seq {
+  font-size: 8px;
+  bottom: -5px;
+  right: -5px;
+  padding: 0 3px;
+}
 
 /* Anasayfa haritası: alarmlı segment polyline'ı pulse */
 .grid-segment-alarm-line {
