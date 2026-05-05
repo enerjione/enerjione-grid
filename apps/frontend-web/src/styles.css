@@ -9699,6 +9699,30 @@ main.content.engineering-content:has(.device-management-panel) {
   border-color: #fca5a5;
 }
 
+/* String canli deger gosterimi: indigo zemin + monospace metin
+   (ornegin SN-XXXXXX, v4.2.4, IPv4 adresi, GPS string vb.) */
+.live-string-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.cell-value-empty {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
 .live-values-refresh {
   white-space: nowrap;
   font-size: 13px;

@@ -434,6 +434,12 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                       >
                         {row.value ? "TRUE" : "FALSE"}
                       </span>
+                    ) : dataType === "string" ? (
+                      (() => {
+                        const txt = (row.value_string ?? "").trim();
+                        if (!txt) return <span className="cell-value-empty">—</span>;
+                        return <span className="live-string-chip" title={txt}>{txt}</span>;
+                      })()
                     ) : (
                       formatValue(row.value, dataType, row.unit, row.value_string)
                     )}
