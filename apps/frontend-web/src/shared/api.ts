@@ -741,6 +741,19 @@ type _Pole = import("./types").Pole;
 type _Segment = import("./types").LineSegment;
 type _LineDetail = import("./types").LineDetail;
 
+export type GridSnapshot = {
+  regions: _Region[];
+  lines: _Line[];
+  poles: _Pole[];
+  segments: _Segment[];
+};
+
+export async function fetchGridSnapshot(token: string): Promise<GridSnapshot> {
+  const r = await fetch(`${API_BASE_URL}/grid/snapshot`, { headers: authHeaders(token) });
+  if (!r.ok) throw await buildApiError(r, "Şebeke topolojisi alınamadı.");
+  return (await r.json()) as GridSnapshot;
+}
+
 export async function fetchRegions(token: string): Promise<_Region[]> {
   const r = await fetch(`${API_BASE_URL}/grid/regions`, { headers: authHeaders(token) });
   if (!r.ok) throw await buildApiError(r, "Bölgeler alınamadı.");

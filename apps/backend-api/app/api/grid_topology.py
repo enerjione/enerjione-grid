@@ -22,6 +22,7 @@ from app.models.enums import UserRole
 from app.models.grid_topology import Line, LineSegment, Pole, Region
 from app.models.user import User
 from app.schemas.grid_topology import (
+    GridSnapshot,
     LineCreate,
     LineDetail,
     LineRead,
@@ -42,6 +43,72 @@ from app.services.event_service import record_event
 router = APIRouter(prefix="/grid", tags=["grid-topology"])
 
 _EDIT_ROLES = [UserRole.ENGINEER, UserRole.INSTALLER]
+
+
+@router.get("/snapshot", response_model=GridSnapshot)
+def grid_snapshot(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Anasayfa haritasi icin tek istekte tum sebeke topolojisi.
+
+    Cok cihazli (600+) sahada bile tek HTTP cagrisinda render verisini doner.
+    Operator scope filtrelemesi BU AŞAMADA YAPILMAZ — saha gorseli butun.
+    """
+    regions = list(db.scalars(select(Region).order_by(Region.name.asc())).all())
+    lines = list(db.scalars(select(Line)).all())
+    poles = list(db.scalars(select(Pole).order_by(Pole.line_id, Pole.sequence_no)).all())
+    segments_raw = list(db.scalars(select(LineSegment)).all())
+
+    # Region: line_count enrich
+    line_counts: dict[int, int] = {}
+    for line_obj in lines:
+        line_counts[line_obj.region_id] = line_counts.get(line_obj.region_id, 0) + 1
+    region_reads: list[RegionRead] = []
+    for r in regions:
+        item = RegionRead.model_validate(r, from_attributes=True)
+        region_reads.append(item.model_copy(update={"line_count": line_counts.get(r.id, 0)}))
+
+    # Line: pole_count, segment_count enrich
+    pole_count_by_line: dict[int, int] = {}
+    seg_count_by_line: dict[int, int] = {}
+    for p in poles:
+        pole_count_by_line[p.line_id] = pole_count_by_line.get(p.line_id, 0) + 1
+    for s in segments_raw:
+        seg_count_by_line[s.line_id] = seg_count_by_line.get(s.line_id, 0) + 1
+    line_reads: list[LineRead] = []
+    for l in lines:
+        item = LineRead.model_validate(l, from_attributes=True)
+        line_reads.append(item.model_copy(update={
+            "pole_count": pole_count_by_line.get(l.id, 0),
+            "segment_count": seg_count_by_line.get(l.id, 0),
+        }))
+
+    # Segment: device + pole sequence enrichment (tek seferde toplu)
+    pole_seq_map: dict[int, int] = {p.id: p.sequence_no for p in poles}
+    device_ids = [s.device_id for s in segments_raw if s.device_id is not None]
+    device_map: dict[int, Device] = {}
+    if device_ids:
+        for d in db.scalars(select(Device).where(Device.id.in_(device_ids))).all():
+            device_map[d.id] = d
+    seg_reads: list[LineSegmentRead] = []
+    for s in segments_raw:
+        dev = device_map.get(s.device_id) if s.device_id else None
+        seg_reads.append(LineSegmentRead(
+            id=s.id, line_id=s.line_id,
+            from_pole_id=s.from_pole_id, to_pole_id=s.to_pole_id,
+            device_id=s.device_id, created_at=s.created_at,
+            from_pole_seq=pole_seq_map.get(s.from_pole_id),
+            to_pole_seq=pole_seq_map.get(s.to_pole_id),
+            device_code=dev.code if dev else None,
+            device_name=dev.name if dev else None,
+        ))
+
+    pole_reads = [PoleRead.model_validate(p, from_attributes=True) for p in poles]
+    return GridSnapshot(
+        regions=region_reads, lines=line_reads,
+        poles=pole_reads, segments=seg_reads,
+    )
 
 
 # ============= REGIONS =============

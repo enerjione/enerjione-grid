@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
-import L from "leaflet";
 import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
@@ -241,9 +239,6 @@ export function DeviceManagementPanel({
   const [editGatewayHost, setEditGatewayHost] = useState("");
   const [editGatewayPort, setEditGatewayPort] = useState("20000");
   const [editGatewayToken, setEditGatewayToken] = useState("");
-  const [showMapPicker, setShowMapPicker] = useState(false);
-  const [pickerLat, setPickerLat] = useState(39);
-  const [pickerLon, setPickerLon] = useState(35);
   const [devicePropsTab, setDevicePropsTab] = useState<DevicePropsTab>("system");
 
   const lastDeviceRef = useRef<DeviceRow | null>(null);
@@ -504,49 +499,6 @@ export function DeviceManagementPanel({
     }
   };
 
-  const handleOpenMapPicker = () => {
-    setPickerLat(Number(latitude) || 39);
-    setPickerLon(Number(longitude) || 35);
-    setShowMapPicker(true);
-  };
-
-  const handleApplyMapLocation = () => {
-    setLatitude(String(pickerLat));
-    setLongitude(String(pickerLon));
-    setShowMapPicker(false);
-  };
-
-  const mapPickerIcon = L.divIcon({
-    className: "device-pin-wrapper",
-    html: `<span class="device-pin" style="background:#2563eb"></span>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10]
-  });
-
-  function LocationPicker() {
-    useMapEvents({
-      click(event) {
-        setPickerLat(Number(event.latlng.lat.toFixed(6)));
-        setPickerLon(Number(event.latlng.lng.toFixed(6)));
-      }
-    });
-    return <Marker position={[pickerLat, pickerLon]} icon={mapPickerIcon} />;
-  }
-
-  // Yeni cihaz oluşturma modalındaki gömülü harita için: tıklama lat/lon
-  // string state'lerini doğrudan günceller.
-  function CreateModalLocationPicker() {
-    const lat = Number(createLatitude) || 0;
-    const lon = Number(createLongitude) || 0;
-    useMapEvents({
-      click(event) {
-        setCreateLatitude(event.latlng.lat.toFixed(6));
-        setCreateLongitude(event.latlng.lng.toFixed(6));
-      }
-    });
-    return <Marker position={[lat, lon]} icon={mapPickerIcon} />;
-  }
-
   return (
     <section className="tab-panel device-management-panel">
       <div className="device-management-layout">
@@ -779,15 +731,11 @@ export function DeviceManagementPanel({
                       Açıklama
                       <input value={description} onChange={(event) => setDescription(event.target.value)} />
                     </label>
-                    <label>
-                      Enlem
-                      <input value={latitude} onChange={(event) => setLatitude(event.target.value)} />
-                    </label>
-                    <label>
-                      Boylam
-                      <input value={longitude} onChange={(event) => setLongitude(event.target.value)} />
-                    </label>
                   </div>
+                  <p className="helper-text">
+                    Cihazın konumu artık <strong>Mühendislik &gt; Hat Yönetimi</strong> sayfasından,
+                    cihaz bir hat segmentine atandığında otomatik belirlenir.
+                  </p>
                 </div>
               ) : (
                 <div
@@ -914,9 +862,6 @@ export function DeviceManagementPanel({
                   {selectedGateway ? <span className="device-comms-meta"> · {selectedGateway.name}</span> : null}
                 </div>
                 <div className="device-form-actions">
-                  <button type="button" className="secondary-btn" onClick={handleOpenMapPicker}>
-                    Haritadan Seç
-                  </button>
                   <button type="button" className="primary-btn" onClick={() => void handleSaveDevice()}>
                     Kaydet
                   </button>
@@ -1153,41 +1098,10 @@ export function DeviceManagementPanel({
                 required
               />
             </label>
-            <div className="device-create-location">
-              <div className="device-create-location-header">
-                <strong>Konum</strong>
-                <span className="helper-text">Haritaya tıklayarak veya değerleri elle girerek konumu belirleyin.</span>
-              </div>
-              <div className="device-create-location-coords">
-                <label>
-                  Enlem
-                  <input
-                    value={createLatitude}
-                    onChange={(event) => setCreateLatitude(event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Boylam
-                  <input
-                    value={createLongitude}
-                    onChange={(event) => setCreateLongitude(event.target.value)}
-                    required
-                  />
-                </label>
-              </div>
-              <div className="device-create-location-map">
-                <MapContainer
-                  className="world-map"
-                  center={[Number(createLatitude) || 39, Number(createLongitude) || 35]}
-                  zoom={Number(createLatitude) && Number(createLongitude) ? 13 : 6}
-                  scrollWheelZoom
-                >
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  <CreateModalLocationPicker />
-                </MapContainer>
-              </div>
-            </div>
+            <p className="helper-text">
+              Konum, cihaz bir hat segmentine atandığında otomatik belirlenir.
+              Atama için <strong>Mühendislik &gt; Hat Yönetimi</strong> sayfasını kullanın.
+            </p>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowCreateModal(false)}>
                 İptal
@@ -1243,32 +1157,6 @@ export function DeviceManagementPanel({
         </div>
       ) : null}
 
-      {showMapPicker ? (
-        <div className="settings-modal-backdrop">
-          <div className="settings-modal map-picker-modal">
-            <h3>Haritadan Konum Seç</h3>
-            <p className="helper-text">Haritaya tıklayarak cihaz konumunu belirleyin.</p>
-            <div className="map-picker-shell">
-              <MapContainer className="world-map" center={[pickerLat, pickerLon]} zoom={7} scrollWheelZoom>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <LocationPicker />
-              </MapContainer>
-            </div>
-            <div className="map-picker-coords">
-              <span>Enlem: {pickerLat}</span>
-              <span>Boylam: {pickerLon}</span>
-            </div>
-            <div className="modal-actions">
-              <button type="button" className="secondary-btn" onClick={() => setShowMapPicker(false)}>
-                İptal
-              </button>
-              <button type="button" className="primary-btn" onClick={handleApplyMapLocation}>
-                Konumu Uygula
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

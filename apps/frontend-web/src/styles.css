@@ -2004,7 +2004,438 @@ main.content.engineering-content:has(.device-management-panel) {
   padding: 8px 4px 32px;
 }
 
-/* ----- TOP BAR (kompakt, hero yerine) ----- */
+/* ============================================================
+ * Yeni 3-kolon dashboard (Sunucu / Servisler / Gateway)
+ * ============================================================ */
+
+/* Sayfa shell'i relative - FAB position absolute icin. */
+.system-status-shell {
+  position: relative;
+}
+
+/* ----- Floating Yenile butonu (sayfanin sag ust kosesinde) ----- */
+.sys-fab {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(67, 56, 202, 0.32);
+  transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.sys-fab:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(67, 56, 202, 0.45);
+}
+
+.sys-fab:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.sys-fab .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.sys-fab-spin {
+  animation: sys-fab-spin 1s linear infinite;
+}
+
+@keyframes sys-fab-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ----- 3-kolon ana grid (tum kartlar ayni yukseklikte) ----- */
+.sys-tri-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  /* align-items: stretch (default) ile tum kartlar en uzun olanin yuksekligine
+     uzar; karinin ic icerigi flex:1 ile kalan alani doldurur. */
+  align-items: stretch;
+}
+
+@media (max-width: 1280px) {
+  .sys-tri-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .sys-tri-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ----- Kart sablonu (3 kolonun tamami) ----- */
+.sys-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: box-shadow 0.2s;
+  /* Grid stretch ile butun kartlar ayni yukseklige sahip olur. */
+  height: 100%;
+  min-height: 0;
+}
+
+.sys-card:hover {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+/* Kart govdesi: dogal boyutu kullanir, icerik en uste hizalanir; alt bos
+   kisim sayfa esit-yukseklik gridi tarafindan kart icine alinir. */
+.sys-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Servisler/Gateway kartlarinda liste icin: az oge varsa kart yukseklige
+   uyarken alt alta listeyi yayma — dogal yuksekligi al, fazlasi bos kalsin
+   ki diger kartlardaki "iceriksiz boslugu doldurmus gibi" hissi olusmasin.
+   Onun yerine kartin kendi disindaki icerik (head + list) start'a hizaliyoruz
+   ve flex-grow yok; sys-card flex:column ile baslayan list, kalan alanda
+   bos kalir ama bu temiz gorunur (sayfa zaten esit yuksekligi grid stretch
+   ile garanti ediyor). */
+.sys-card > .sys-card-list {
+  flex: 0 0 auto;
+}
+
+/* Loading/Error banner'larinda kart yukseklige cokmesin diye min alan. */
+.sys-card .sys-loading-banner,
+.sys-card .sys-error-banner,
+.sys-card .sys-empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.sys-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sys-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sys-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px !important;
+  flex-shrink: 0;
+}
+
+.sys-card-icon--cpu { background: #fef3c7; color: #b45309; }
+.sys-card-icon--svc { background: #d1fae5; color: #047857; }
+.sys-card-icon--gw { background: #e0f2fe; color: #0369a1; }
+
+.sys-card-title {
+  margin: 0;
+  font-size: 1rem;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sys-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ----- Mini donut'lar (Sunucu kartinin ust kismi) ----- */
+.sys-mini-donuts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.sys-mini-donut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.sys-mini-donut--ok { border-color: #bbf7d0; }
+.sys-mini-donut--warn { border-color: #fde68a; background: #fffbeb; }
+.sys-mini-donut--bad { border-color: #fecaca; background: #fef2f2; }
+
+.sys-mini-donut-vis {
+  position: relative;
+  width: 84px;
+  height: 84px;
+}
+
+.sys-mini-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sys-mini-donut-center strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.sys-mini-donut--ok .sys-mini-donut-center strong { color: #047857; }
+.sys-mini-donut--warn .sys-mini-donut-center strong { color: #b45309; }
+.sys-mini-donut--bad .sys-mini-donut-center strong { color: #b91c1c; }
+
+.sys-mini-donut-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+/* ----- CPU trend (sparkline + label) ----- */
+.sys-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.sys-trend-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.sys-trend .sparkline {
+  width: 100%;
+  height: 36px;
+}
+
+/* ----- Detay liste (Sunucu kartinin alt kismi) ----- */
+.sys-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sys-detail-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dashed #f1f5f9;
+  font-size: 12.5px;
+}
+
+.sys-detail-list li:last-child {
+  border-bottom: none;
+}
+
+.sys-detail-key {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.sys-detail-val {
+  font-size: 12.5px;
+  color: #0f172a;
+  text-align: right;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.sys-detail-val--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.sys-detail-val em {
+  font-style: normal;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+/* ----- Kart icindeki liste (Servisler & Gateway'ler) ----- */
+.sys-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sys-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.2s;
+}
+
+.sys-list-item:hover {
+  transform: translateX(2px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.05);
+}
+
+.sys-list-item--ok { border-color: #bbf7d0; background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%); }
+.sys-list-item--warn { border-color: #fde68a; background: linear-gradient(135deg, #fffbeb 0%, #fff 100%); }
+.sys-list-item--bad { border-color: #fecaca; background: linear-gradient(135deg, #fef2f2 0%, #fff 100%); }
+.sys-list-item--muted { border-color: #e2e8f0; background: #f8fafc; }
+
+.sys-list-leading {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.sys-list-leading--ok { background: #d1fae5; color: #047857; }
+.sys-list-leading--warn { background: #fef3c7; color: #b45309; }
+.sys-list-leading--bad { background: #fee2e2; color: #b91c1c; }
+.sys-list-leading--muted { background: #f1f5f9; color: #475569; }
+
+.sys-list-leading .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.sys-list-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sys-list-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sys-list-head strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.sys-list-role {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.sys-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+
+.sys-list-error {
+  color: #b91c1c;
+  font-weight: 500;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-list-status {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sys-list-status--ok { background: rgba(16, 185, 129, 0.15); }
+.sys-list-status--bad { background: rgba(220, 38, 38, 0.15); }
+
+.sys-list-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sys-list-status--ok .sys-list-status-dot {
+  color: #10b981;
+  animation: sys-pulse 2s ease-in-out infinite;
+}
+
+.sys-list-status--bad .sys-list-status-dot {
+  color: #dc2626;
+  animation: sys-pulse-fast 1s ease-in-out infinite;
+}
+
+/* ----- TOP BAR (legacy, hero yerine) ----- */
 .sys-topbar {
   display: flex;
   align-items: center;
@@ -2207,6 +2638,23 @@ main.content.engineering-content:has(.device-management-panel) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 14px;
+  /* Ust kose FAB butonu icin sag tarafta alan birak. Kpis flex-flow auto-fit
+     oldugu icin son kartin yana kayma riski yok, ust ust gelmez. */
+  padding-right: 130px;
+}
+
+@media (max-width: 720px) {
+  .sys-kpis {
+    padding-right: 0;
+  }
+  .sys-fab {
+    /* Kucuk ekranda FAB'i normal akisa al, sayfanin ustune koy. */
+    position: relative;
+    align-self: flex-end;
+    top: 0;
+    right: 0;
+    margin-bottom: -8px;
+  }
 }
 
 .sys-kpi {
@@ -4980,6 +5428,23 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .grid-pole-pin.is-start { background: #16a34a; }
 .grid-pole-pin.is-end { background: #dc2626; }
+
+/* Anasayfa haritasında daha küçük direk pin'i (kalabalık olmasın diye) */
+.grid-pole-pin--sm {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+}
+
+/* Anasayfa haritası: alarmlı segment polyline'ı pulse */
+.grid-segment-alarm-line {
+  animation: grid-alarm-line-pulse 1.4s ease-in-out infinite;
+  cursor: pointer;
+}
+@keyframes grid-alarm-line-pulse {
+  0%, 100% { stroke-opacity: 0.95; stroke-width: 6; }
+  50% { stroke-opacity: 0.55; stroke-width: 8; }
+}
 
 /* Cihaz pin (segment ortasında) */
 .grid-device-leaflet-wrap { background: transparent; border: none; }

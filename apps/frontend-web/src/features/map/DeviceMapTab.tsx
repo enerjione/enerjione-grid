@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
-import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
-import type { DeviceRow, SignalLiveRow } from "../../shared/types";
+import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
+import type { GridSnapshot } from "../../shared/api";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { locateDevice } from "../../shared/geoLookup";
 
@@ -12,6 +13,23 @@ type Props = {
   onSelectDevice: (deviceId: number) => void;
   /** Canlı sinyal değerleri — Master/Sat01/Sat02 batarya voltajları popup'ta. */
   liveValues?: SignalLiveRow[];
+  /** Şebeke topolojisi — anasayfada bölge/hat/direk/segment görselleri için. */
+  gridSnapshot?: GridSnapshot | null;
+  /** Aktif alarmlar — segment cihazının alarm durumunu hesaplamak için. */
+  alarms?: AlarmEvent[];
+};
+
+const DEFAULT_LINE_COLOR = "#2563eb";
+const FAULT_COLOR = "#ef4444";
+
+const polePin = (label: string, isStart: boolean, isEnd: boolean) => {
+  const cls = isStart ? "is-start" : isEnd ? "is-end" : "";
+  return L.divIcon({
+    className: "grid-pole-leaflet-wrap",
+    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}"><span>${label}</span></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+  });
 };
 
 function FlyToSelected({ selectedDevice }: { selectedDevice?: DeviceRow }) {
@@ -101,7 +119,7 @@ function formatRelative(iso: string | null | undefined): string {
   return d.toLocaleString("tr-TR");
 }
 
-export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues }: Props) {
+export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms }: Props) {
   const { settings } = useProjectSettings();
   const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
   const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
@@ -140,6 +158,101 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     return result;
   }, [selectedDevice, liveValues, voltageToPercent]);
 
+  // ===== Sebeke topolojisi: hatlar + direkler + cihaz segmentleri =====
+  // Cihazda aktif (reset edilmemis) alarm var mi? Polyline rengi icin.
+  const alarmActiveDeviceIds = useMemo<Set<number>>(() => {
+    const s = new Set<number>();
+    for (const a of alarms ?? []) {
+      if (!a.reset) s.add(a.device_id);
+    }
+    return s;
+  }, [alarms]);
+
+  const topology = useMemo(() => {
+    if (!gridSnapshot) return null;
+    const polesById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
+    const linesById = new Map(gridSnapshot.lines.map((l) => [l.id, l]));
+    const regionsById = new Map(gridSnapshot.regions.map((r) => [r.id, r]));
+
+    // Hat bazli polyline: line.id -> [[lat,lon], ...] sequence_no sirali
+    const polesByLine = new Map<number, typeof gridSnapshot.poles>();
+    for (const p of gridSnapshot.poles) {
+      const arr = polesByLine.get(p.line_id) ?? [];
+      arr.push(p);
+      polesByLine.set(p.line_id, arr);
+    }
+    const linePolylines: { id: number; positions: [number, number][]; color: string; name: string; regionName: string }[] = [];
+    for (const [lineId, poles] of polesByLine) {
+      const line = linesById.get(lineId);
+      if (!line) continue;
+      const region = regionsById.get(line.region_id);
+      const sorted = [...poles].sort((a, b) => a.sequence_no - b.sequence_no);
+      linePolylines.push({
+        id: lineId,
+        positions: sorted.map((p) => [p.latitude, p.longitude]),
+        color: line.color || region?.color || DEFAULT_LINE_COLOR,
+        name: line.name,
+        regionName: region?.name ?? ""
+      });
+    }
+
+    // Cihaz segmentleri: from -> to direklerinden cizilen ekstra polyline.
+    // Cihazda alarm varsa kirmizi pulse; sagliklı ise hattin kendi rengiyle ust uste cizilmemesi icin
+    // sadece alarmda olan segmentleri vurgu olarak ekle.
+    const alarmedSegments: {
+      id: number;
+      positions: [number, number][];
+      midpoint: [number, number];
+      device: DeviceRow | undefined;
+      lineName: string;
+      regionName: string;
+      fromSeq: number | null;
+      toSeq: number | null;
+    }[] = [];
+    for (const seg of gridSnapshot.segments) {
+      if (!seg.device_id) continue;
+      const dev = devices.find((d) => d.id === seg.device_id);
+      const isAlarmed = dev ? alarmActiveDeviceIds.has(dev.id) : false;
+      if (!isAlarmed) continue;
+      const fromPole = polesById.get(seg.from_pole_id);
+      const toPole = polesById.get(seg.to_pole_id);
+      if (!fromPole || !toPole) continue;
+      const line = linesById.get(seg.line_id);
+      const region = line ? regionsById.get(line.region_id) : undefined;
+      alarmedSegments.push({
+        id: seg.id,
+        positions: [
+          [fromPole.latitude, fromPole.longitude],
+          [toPole.latitude, toPole.longitude]
+        ],
+        midpoint: [
+          (fromPole.latitude + toPole.latitude) / 2,
+          (fromPole.longitude + toPole.longitude) / 2
+        ],
+        device: dev,
+        lineName: line?.name ?? "",
+        regionName: region?.name ?? "",
+        fromSeq: seg.from_pole_seq ?? null,
+        toSeq: seg.to_pole_seq ?? null
+      });
+    }
+
+    // Direklerin baslangic/bitis bilgisi
+    const polesWithRole: { p: typeof gridSnapshot.poles[number]; isStart: boolean; isEnd: boolean }[] = [];
+    for (const [, poles] of polesByLine) {
+      const sorted = [...poles].sort((a, b) => a.sequence_no - b.sequence_no);
+      sorted.forEach((p, idx) => {
+        polesWithRole.push({
+          p,
+          isStart: idx === 0,
+          isEnd: idx === sorted.length - 1
+        });
+      });
+    }
+
+    return { linePolylines, alarmedSegments, polesWithRole };
+  }, [gridSnapshot, devices, alarmActiveDeviceIds]);
+
   return (
     <section className="map-full">
       <div className="world-map-shell">
@@ -147,6 +260,67 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <FlyToSelected selectedDevice={selectedDevice} />
           <MapInvalidator deps={[devices.length]} />
+
+          {/* Hat polylineları (sağlıklı): bölge rengi ince çizgi */}
+          {topology?.linePolylines.map((line) => (
+            <Polyline
+              key={`line-${line.id}`}
+              positions={line.positions}
+              pathOptions={{
+                color: line.color,
+                weight: 3,
+                opacity: 0.7
+              }}
+            >
+              <Tooltip sticky>
+                <strong>{line.name}</strong>
+                {line.regionName ? <><br />{line.regionName}</> : null}
+              </Tooltip>
+            </Polyline>
+          ))}
+
+          {/* Alarmlı segmentler: kırmızı kalın overlay */}
+          {topology?.alarmedSegments.map((seg) => (
+            <Polyline
+              key={`alarm-seg-${seg.id}`}
+              positions={seg.positions}
+              pathOptions={{
+                color: FAULT_COLOR,
+                weight: 6,
+                opacity: 0.9,
+                className: "grid-segment-alarm-line"
+              }}
+              eventHandlers={{
+                click: () => seg.device && onSelectDevice(seg.device.id)
+              }}
+            >
+              <Tooltip sticky>
+                <strong style={{ color: FAULT_COLOR }}>⚠ ARIZA</strong>
+                <br />
+                {seg.regionName ? `${seg.regionName} · ` : ""}{seg.lineName}
+                {seg.fromSeq !== null && seg.toSeq !== null ? (
+                  <><br />Direk #{seg.fromSeq} → #{seg.toSeq}</>
+                ) : null}
+                {seg.device ? <><br />Cihaz: <strong>{seg.device.name}</strong> ({seg.device.code})</> : null}
+              </Tooltip>
+            </Polyline>
+          ))}
+
+          {/* Direkler: küçük numara etiketli pin */}
+          {topology?.polesWithRole.map(({ p, isStart, isEnd }) => (
+            <Marker
+              key={`pole-${p.id}`}
+              position={[p.latitude, p.longitude]}
+              icon={polePin(String(p.sequence_no), isStart, isEnd)}
+              eventHandlers={{}}
+            >
+              <Tooltip>
+                {p.name ?? `Direk #${p.sequence_no}`}
+                {isStart ? " (BAŞ)" : isEnd ? " (SON)" : ""}
+              </Tooltip>
+            </Marker>
+          ))}
+
           {devices.map((device) => (
             <Marker
               key={device.id}

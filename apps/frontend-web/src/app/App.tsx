@@ -55,6 +55,8 @@ import {
   fetchMe,
   fetchNotificationSettings,
   fetchOutboundTargets,
+  fetchGridSnapshot,
+  type GridSnapshot,
   fetchSignals,
   fetchSignalLiveValues,
   fetchUsers,
@@ -184,6 +186,7 @@ export function App() {
   /** Cihazlar sekmesinde listelenen gateway (kapsam); yenileme ve yoklama bunu kullanır */
   const [devicePanelGatewayCode, setDevicePanelGatewayCode] = useState<string>("");
   const [outboundTargets, setOutboundTargets] = useState<OutboundTarget[]>([]);
+  const [gridSnapshot, setGridSnapshot] = useState<GridSnapshot | null>(null);
   const [alarmsLoading, setAlarmsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
   const [authError, setAuthError] = useState<string>();
@@ -338,6 +341,12 @@ export function App() {
           setResponsibilityAreas(areaRows);
         } catch {
           setResponsibilityAreas([]);
+        }
+        try {
+          const snap = await fetchGridSnapshot(session.accessToken);
+          setGridSnapshot(snap);
+        } catch {
+          setGridSnapshot(null);
         }
       } catch {
         setAuthError("Oturum geçersiz veya API erişilemiyor.");
@@ -1583,6 +1592,8 @@ export function App() {
                     selectedDevice={selectedDevice}
                     onSelectDevice={setSelectedDeviceId}
                     liveValues={signalLiveValues}
+                    gridSnapshot={gridSnapshot}
+                    alarms={alarms}
                   />
                 ) : null}
                 {activeTab === "values" ? (

@@ -513,7 +513,7 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                 </button>
                 <span className="helper-text grid-mgmt-tip">
                   {sortedPoles.length >= 2
-                    ? "Polyline üzerindeki bir segmente sağ tıklayarak cihaz atayın."
+                    ? "Bir segmente tıklayarak cihaz atayın. Atanmış cihazı taşımak için cihaz simgesine tıklayın."
                     : "Önce en az 2 direk ekleyin (haritaya tıklayarak)."}
                 </span>
               </div>
@@ -534,34 +534,39 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                     <MapClickHandler onClick={(lat, lon) => void handleMapClickAddPole(lat, lon)} />
                   ) : null}
 
-                  {/* Polyline segmentleri ayrı çizilir, her segmentin sağ tıkı kendi menüsü */}
+                  {/* Polyline segmentleri ayri cizilir; sol VE sag tik ayni menuyu acar.
+                      Direk ekleme modu aktif ise tikla geçer (haritaya direk eklenmesin diye
+                      stopPropagation ile yutulur). */}
                   {segmentSlots.map((slot, idx) => {
                     const positions: [number, number][] = [
                       [slot.fromPole.latitude, slot.fromPole.longitude],
                       [slot.toPole.latitude, slot.toPole.longitude]
                     ];
+                    const openMenu = (event: L.LeafletMouseEvent) => {
+                      if (addPoleMode) return; // direk ekleme aktifse menu acma
+                      event.originalEvent.preventDefault();
+                      event.originalEvent.stopPropagation();
+                      const native = event.originalEvent;
+                      setSegmentMenu({
+                        segment: slot.segment,
+                        pseudoFromId: slot.fromPole.id,
+                        pseudoToId: slot.toPole.id,
+                        x: native.clientX,
+                        y: native.clientY
+                      });
+                    };
                     return (
                       <Polyline
                         key={`seg-${idx}`}
                         positions={positions}
                         pathOptions={{
                           color: slot.segment?.device_id ? "#16a34a" : lineColor,
-                          weight: slot.segment?.device_id ? 5 : 4,
+                          weight: slot.segment?.device_id ? 6 : 5,
                           opacity: 0.9
                         }}
                         eventHandlers={{
-                          contextmenu: (event: L.LeafletMouseEvent) => {
-                            event.originalEvent.preventDefault();
-                            event.originalEvent.stopPropagation();
-                            const native = event.originalEvent;
-                            setSegmentMenu({
-                              segment: slot.segment,
-                              pseudoFromId: slot.fromPole.id,
-                              pseudoToId: slot.toPole.id,
-                              x: native.clientX,
-                              y: native.clientY
-                            });
-                          }
+                          click: openMenu,
+                          contextmenu: openMenu
                         }}
                       />
                     );
@@ -588,22 +593,41 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                     );
                   })}
 
-                  {/* Segmentlere bağlı cihazlar — orta noktada */}
+                  {/* Segmentlere bağlı cihazlar — orta noktada. Hem sol tık hem
+                      sağ tık ayni menuyu acar — kullanici hangisinde takıldıysa. */}
                   {segmentSlots.map((slot) => {
                     if (!slot.segment?.device_id) return null;
                     const mid = midpoint(slot.fromPole, slot.toPole);
                     if (!mid) return null;
                     const dev = devices.find((d) => d.id === slot.segment?.device_id);
+                    const openMenu = (event: L.LeafletMouseEvent) => {
+                      event.originalEvent.preventDefault();
+                      event.originalEvent.stopPropagation();
+                      const native = event.originalEvent;
+                      setSegmentMenu({
+                        segment: slot.segment,
+                        pseudoFromId: slot.fromPole.id,
+                        pseudoToId: slot.toPole.id,
+                        x: native.clientX,
+                        y: native.clientY
+                      });
+                    };
                     return (
                       <Marker
                         key={`dev-${slot.segment.id}`}
                         position={mid}
                         icon={deviceIcon(dev?.alarmActive ?? false)}
+                        eventHandlers={{
+                          click: openMenu,
+                          contextmenu: openMenu
+                        }}
                       >
                         <Tooltip>
                           {dev ? `${dev.name} (${dev.code})` : `Cihaz #${slot.segment.device_id}`}
                           <br />
                           {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
+                          <br />
+                          <em>Tıkla: taşı / kaldır</em>
                         </Tooltip>
                       </Marker>
                     );

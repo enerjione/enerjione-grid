@@ -139,6 +139,15 @@ class LineDetail(BaseModel):
     segments: list[LineSegmentRead]
 
 
+class GridSnapshot(BaseModel):
+    """Anasayfa haritasi icin tek istekte tum topoloji ozeti.
+    Tum bolgeler, hatlar, direkler ve segmentler ile cihaz baglari beraber."""
+    regions: list[RegionRead]
+    lines: list[LineRead]
+    poles: list[PoleRead]
+    segments: list[LineSegmentRead]
+
+
 class PoleReorderItem(BaseModel):
     """Drag-to-reorder sonrası tek bir direk için yeni sıra."""
     pole_id: int
