@@ -196,6 +196,62 @@ export type Iec104RuntimeStatus = {
   connected_clients: { peer: string; started: boolean; connected_at: string }[];
 };
 
+// ===== Sebeke topolojisi =====
+
+export type Region = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  is_active: boolean;
+  created_at: string;
+  line_count?: number;
+};
+
+export type Line = {
+  id: number;
+  region_id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  is_active: boolean;
+  created_at: string;
+  pole_count?: number;
+  segment_count?: number;
+};
+
+export type Pole = {
+  id: number;
+  line_id: number;
+  sequence_no: number;
+  name?: string | null;
+  latitude: number;
+  longitude: number;
+  created_at: string;
+};
+
+export type LineSegment = {
+  id: number;
+  line_id: number;
+  from_pole_id: number;
+  to_pole_id: number;
+  device_id?: number | null;
+  created_at: string;
+  /** UI render kolaylığı için backend expand ediyor */
+  from_pole_seq?: number | null;
+  to_pole_seq?: number | null;
+  device_code?: string | null;
+  device_name?: string | null;
+};
+
+export type LineDetail = {
+  line: Line;
+  poles: Pole[];
+  segments: LineSegment[];
+};
+
 export type ProjectSettings = {
   project_name?: string | null;
   customer_name?: string | null;
@@ -335,4 +391,85 @@ export type AlarmRuleRow = {
   debounce_sec: number;
   device_code_filter?: string | null;
   is_active: boolean;
+};
+
+/** Backend host'unun anlik kaynak metrikleri (`/system-status/host`).
+ *  Sistem Durumu sayfasinda canli yenilenir. */
+export type HostStatusInfo = {
+  hostname: string;
+  os_name: string;
+  os_release: string;
+  machine: string;
+  python_version: string;
+  /** Unix timestamp (saniye). */
+  boot_time: number;
+  uptime_seconds: number;
+  process_pid: number;
+  process_uptime_seconds: number;
+};
+
+export type HostCpuMetrics = {
+  /** 0-100 arasi tum CPU agirlikli ortalama. */
+  percent: number;
+  per_cpu_percent: number[];
+  load_avg_1m?: number | null;
+  load_avg_5m?: number | null;
+  load_avg_15m?: number | null;
+  physical_cores?: number | null;
+  logical_cores?: number | null;
+};
+
+export type HostMemoryMetrics = {
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  percent: number;
+  swap_total_bytes?: number | null;
+  swap_used_bytes?: number | null;
+  swap_percent?: number | null;
+};
+
+export type HostDiskMetrics = {
+  path: string;
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  percent: number;
+};
+
+export type HostNetworkMetrics = {
+  bytes_sent: number;
+  bytes_recv: number;
+  packets_sent: number;
+  packets_recv: number;
+};
+
+export type HostStatus = {
+  info: HostStatusInfo;
+  cpu: HostCpuMetrics;
+  memory: HostMemoryMetrics;
+  disk: HostDiskMetrics;
+  network: HostNetworkMetrics;
+  /** Olcum aninin Unix timestamp'i (saniye). */
+  sampled_at: number;
+};
+
+/** Sistem servisleri saglik raporu (`/system-status/services`). */
+export type ServiceRole = "db" | "broker" | "worker" | "gateway" | "self";
+
+export type ServiceStatus = {
+  name: string;
+  role: ServiceRole;
+  healthy: boolean;
+  /** Probe gidiş-dönüş suresi (ms). */
+  latency_ms?: number | null;
+  /** Hata veya bilgi mesaji. */
+  detail?: string | null;
+  /** host:port veya url. */
+  endpoint?: string | null;
+};
+
+export type ServicesReport = {
+  services: ServiceStatus[];
+  sampled_at: number;
 };

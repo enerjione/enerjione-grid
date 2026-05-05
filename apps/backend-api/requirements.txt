@@ -12,3 +12,7 @@ pika
 paho-mqtt
 requests
 openpyxl
+# Sistem durumu sayfasinda CPU/RAM/disk/uptime metriklerini almak icin.
+# psutil tum metrikleri standart API uzerinden saglar; manylinux + Windows
+# wheel'leri PyPI'de hazir, ek native bagimliligi yok.
+psutil>=5.9,<7

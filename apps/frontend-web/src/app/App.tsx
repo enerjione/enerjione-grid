@@ -11,6 +11,7 @@ import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
 import { NotificationSettingsPanel } from "../features/settings/NotificationSettingsPanel";
 import { ProjectSettingsPanel } from "../features/settings/ProjectSettingsPanel";
+import { GridManagementPanel } from "../features/grid/GridManagementPanel";
 import { DeviceSidebar } from "../features/devices/DeviceSidebar";
 import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
@@ -118,7 +119,8 @@ type EngineeringPage =
   | "responsibility-areas"
   | "outbound"
   | "notifications"
-  | "project-settings";
+  | "project-settings"
+  | "grid";
 
 const ROUTE_STORAGE_KEY = "hsl.route.v1";
 const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "events", "system-status", "engineering"];
@@ -131,7 +133,8 @@ const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "responsibility-areas",
   "outbound",
   "notifications",
-  "project-settings"
+  "project-settings",
+  "grid"
 ];
 type PersistedRoute = {
   pageMode: PageMode;
@@ -1378,6 +1381,12 @@ export function App() {
                   >
                     Proje Ayarları
                   </button>
+                  <button
+                    className={engineeringPage === "grid" ? "active" : ""}
+                    onClick={() => setEngineeringPage("grid")}
+                  >
+                    Hat Yönetimi
+                  </button>
                 </>
               ) : null}
             </div>
@@ -1499,6 +1508,10 @@ export function App() {
             ) : null}
             {engineeringPage === "project-settings" && session.role === "installer" ? (
               <ProjectSettingsPanel onSave={handleSaveProjectSettings} />
+            ) : null}
+            {engineeringPage === "grid" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <GridManagementPanel accessToken={session.accessToken} />
             ) : null}
           </main>
         ) : pageMode !== "home" ? (

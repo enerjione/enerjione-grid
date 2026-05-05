@@ -8,6 +8,8 @@ import type {
   DeviceRow,
   Dnp3ExtendedSettings,
   Gateway,
+  HostStatus,
+  ServicesReport,
   NotificationSettings,
   OutboundTarget,
   ResponsibilityAreaDetail,
@@ -732,6 +734,113 @@ export async function downloadIec104PointsCsv(
   return count;
 }
 
+// ----- Grid Topology (Bolge / Hat / Direk / Segment) -----
+type _Region = import("./types").Region;
+type _Line = import("./types").Line;
+type _Pole = import("./types").Pole;
+type _Segment = import("./types").LineSegment;
+type _LineDetail = import("./types").LineDetail;
+
+export async function fetchRegions(token: string): Promise<_Region[]> {
+  const r = await fetch(`${API_BASE_URL}/grid/regions`, { headers: authHeaders(token) });
+  if (!r.ok) throw await buildApiError(r, "Bölgeler alınamadı.");
+  return (await r.json()) as _Region[];
+}
+export async function createRegion(token: string, payload: Partial<_Region>): Promise<_Region> {
+  const r = await fetch(`${API_BASE_URL}/grid/regions`, {
+    method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Bölge oluşturulamadı.");
+  return (await r.json()) as _Region;
+}
+export async function updateRegion(token: string, id: number, payload: Partial<_Region>): Promise<_Region> {
+  const r = await fetch(`${API_BASE_URL}/grid/regions/${id}`, {
+    method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Bölge güncellenemedi.");
+  return (await r.json()) as _Region;
+}
+export async function deleteRegion(token: string, id: number): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/grid/regions/${id}`, {
+    method: "DELETE", headers: authHeaders(token)
+  });
+  if (!r.ok) throw await buildApiError(r, "Bölge silinemedi.");
+}
+
+export async function fetchLines(token: string, regionId?: number): Promise<_Line[]> {
+  const url = regionId ? `${API_BASE_URL}/grid/lines?region_id=${regionId}` : `${API_BASE_URL}/grid/lines`;
+  const r = await fetch(url, { headers: authHeaders(token) });
+  if (!r.ok) throw await buildApiError(r, "Hatlar alınamadı.");
+  return (await r.json()) as _Line[];
+}
+export async function fetchLineDetail(token: string, lineId: number): Promise<_LineDetail> {
+  const r = await fetch(`${API_BASE_URL}/grid/lines/${lineId}`, { headers: authHeaders(token) });
+  if (!r.ok) throw await buildApiError(r, "Hat detayı alınamadı.");
+  return (await r.json()) as _LineDetail;
+}
+export async function createLine(token: string, payload: Partial<_Line>): Promise<_Line> {
+  const r = await fetch(`${API_BASE_URL}/grid/lines`, {
+    method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Hat oluşturulamadı.");
+  return (await r.json()) as _Line;
+}
+export async function updateLine(token: string, id: number, payload: Partial<_Line>): Promise<_Line> {
+  const r = await fetch(`${API_BASE_URL}/grid/lines/${id}`, {
+    method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Hat güncellenemedi.");
+  return (await r.json()) as _Line;
+}
+export async function deleteLine(token: string, id: number): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/grid/lines/${id}`, {
+    method: "DELETE", headers: authHeaders(token)
+  });
+  if (!r.ok) throw await buildApiError(r, "Hat silinemedi.");
+}
+
+export async function createPole(token: string, payload: Partial<_Pole>): Promise<_Pole> {
+  const r = await fetch(`${API_BASE_URL}/grid/poles`, {
+    method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Direk oluşturulamadı.");
+  return (await r.json()) as _Pole;
+}
+export async function updatePole(token: string, id: number, payload: Partial<_Pole>): Promise<_Pole> {
+  const r = await fetch(`${API_BASE_URL}/grid/poles/${id}`, {
+    method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Direk güncellenemedi.");
+  return (await r.json()) as _Pole;
+}
+export async function deletePole(token: string, id: number): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/grid/poles/${id}`, {
+    method: "DELETE", headers: authHeaders(token)
+  });
+  if (!r.ok) throw await buildApiError(r, "Direk silinemedi.");
+}
+
+export async function createSegment(token: string, payload: Partial<_Segment>): Promise<_Segment> {
+  const r = await fetch(`${API_BASE_URL}/grid/segments`, {
+    method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Segment oluşturulamadı.");
+  return (await r.json()) as _Segment;
+}
+export async function updateSegment(token: string, id: number, payload: Partial<_Segment>): Promise<_Segment> {
+  const r = await fetch(`${API_BASE_URL}/grid/segments/${id}`, {
+    method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw await buildApiError(r, "Segment güncellenemedi.");
+  return (await r.json()) as _Segment;
+}
+export async function deleteSegment(token: string, id: number): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/grid/segments/${id}`, {
+    method: "DELETE", headers: authHeaders(token)
+  });
+  if (!r.ok) throw await buildApiError(r, "Segment silinemedi.");
+}
+
 // ----- Project Settings -----
 // GET auth-siz kullanilabilsin; bazi yerlerde token vermeden de cagiriyoruz
 // (login ekrani, header initial fetch). Backend GET /project-settings public.
@@ -850,6 +959,29 @@ export async function fetchSignalLiveValues(token: string): Promise<SignalLiveRo
   const response = await fetch(`${API_BASE_URL}/signals/live`, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Canlı sinyal değerleri alınamadı.");
   return (await response.json()) as SignalLiveRow[];
+}
+
+/** Sistem Durumu sayfasi icin: backend host'unun anlik CPU/RAM/disk/uptime
+ *  metriklerini getirir. Sayfa kapali iken cagirilmaz; psutil hesaplamasi
+ *  cok hizli oldugu icin polling 5-10 sn'de tekrarlanabilir. */
+export async function fetchHostStatus(token: string): Promise<HostStatus> {
+  const response = await fetch(`${API_BASE_URL}/system-status/host`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sunucu kaynak metrikleri alınamadı.");
+  return (await response.json()) as HostStatus;
+}
+
+/** Sistem Durumu sayfasi icin: backend'in bagli oldugu servislerin (DB,
+ *  RabbitMQ, tag-engine vb.) saglik durumu. Her cagri tum servisleri
+ *  paralel kontrol etmez (sirayla, kucuk timeout'la); pratikte 200ms altinda
+ *  toplam suren bir cevap doner. */
+export async function fetchServicesStatus(token: string): Promise<ServicesReport> {
+  const response = await fetch(`${API_BASE_URL}/system-status/services`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Servis durumlari alınamadı.");
+  return (await response.json()) as ServicesReport;
 }
 
 export async function resetSignalsToDefaults(token: string): Promise<{

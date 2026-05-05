@@ -6,6 +6,7 @@ from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.notification_settings import NotificationSettings
 from app.models.outbound_target import OutboundTarget
 from app.models.outbox_event import OutboxEvent
+from app.models.grid_topology import Line, LineSegment, Pole, Region
 from app.models.processed_message import ProcessedMessage
 from app.models.project_settings import ProjectSettings
 from app.models.signal_catalog import SignalCatalog
@@ -23,6 +24,10 @@ __all__ = [
     "OutboxEvent",
     "ProcessedMessage",
     "ProjectSettings",
+    "Region",
+    "Line",
+    "Pole",
+    "LineSegment",
     "SignalCatalog",
     "AlarmRule",
     "Telemetry",

@@ -1,0 +1,139 @@
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+# ----- Region -----
+
+class RegionBase(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+    color: str | None = Field(default=None, max_length=20)
+    is_active: bool = True
+
+
+class RegionCreate(RegionBase):
+    pass
+
+
+class RegionUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=50)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+    color: str | None = Field(default=None, max_length=20)
+    is_active: bool | None = None
+
+
+class RegionRead(RegionBase):
+    id: int
+    created_at: datetime
+    line_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+# ----- Line -----
+
+class LineBase(BaseModel):
+    region_id: int
+    code: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+    color: str | None = Field(default=None, max_length=20)
+    is_active: bool = True
+
+
+class LineCreate(LineBase):
+    pass
+
+
+class LineUpdate(BaseModel):
+    region_id: int | None = None
+    code: str | None = Field(default=None, min_length=1, max_length=80)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+    color: str | None = Field(default=None, max_length=20)
+    is_active: bool | None = None
+
+
+class LineRead(LineBase):
+    id: int
+    created_at: datetime
+    pole_count: int = 0
+    segment_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+# ----- Pole -----
+
+class PoleBase(BaseModel):
+    line_id: int
+    sequence_no: int = Field(ge=1)
+    name: str | None = Field(default=None, max_length=120)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class PoleCreate(PoleBase):
+    pass
+
+
+class PoleUpdate(BaseModel):
+    sequence_no: int | None = Field(default=None, ge=1)
+    name: str | None = Field(default=None, max_length=120)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
+class PoleRead(PoleBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ----- LineSegment -----
+
+class LineSegmentBase(BaseModel):
+    line_id: int
+    from_pole_id: int
+    to_pole_id: int
+    device_id: int | None = None
+
+
+class LineSegmentCreate(LineSegmentBase):
+    pass
+
+
+class LineSegmentUpdate(BaseModel):
+    from_pole_id: int | None = None
+    to_pole_id: int | None = None
+    device_id: int | None = None
+
+
+class LineSegmentRead(LineSegmentBase):
+    id: int
+    created_at: datetime
+    # UI render kolaylığı için expand edilmiş alanlar:
+    from_pole_seq: int | None = None
+    to_pole_seq: int | None = None
+    device_code: str | None = None
+    device_name: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+# ----- Detay (UI tek-sayfa için) -----
+
+class LineDetail(BaseModel):
+    """Mühendislik > Hat Yönetimi sayfasında bir hattın tüm direkleri + segmentleri.
+    Tek API çağrısıyla render için."""
+    line: LineRead
+    poles: list[PoleRead]
+    segments: list[LineSegmentRead]

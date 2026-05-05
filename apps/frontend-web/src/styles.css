@@ -2080,6 +2080,169 @@ main.content.engineering-content:has(.device-management-panel) {
   color: #3730a3;
 }
 
+/* ----- Sunucu kaynaklari paneli (Sistem Durumu sayfasi ust kismi) ------- */
+.host-panel {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.host-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.host-panel-title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.host-panel-lead {
+  margin: 0;
+}
+
+.host-panel-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+  font-size: 12px;
+}
+
+.host-panel-host {
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.host-panel-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.host-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.host-gauge {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s;
+}
+
+.host-gauge--ok {
+  border-color: #bbf7d0;
+}
+
+.host-gauge--warn {
+  border-color: #fde68a;
+}
+
+.host-gauge--bad {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.host-gauge-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.host-gauge-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.host-gauge-percent {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.host-gauge--ok .host-gauge-percent {
+  color: #047857;
+}
+
+.host-gauge--warn .host-gauge-percent {
+  color: #b45309;
+}
+
+.host-gauge--bad .host-gauge-percent {
+  color: #b91c1c;
+}
+
+.host-gauge-track {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.host-gauge-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.host-gauge--ok .host-gauge-fill {
+  background: linear-gradient(90deg, #34d399, #10b981);
+}
+
+.host-gauge--warn .host-gauge-fill {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.host-gauge--bad .host-gauge-fill {
+  background: linear-gradient(90deg, #f87171, #dc2626);
+}
+
+.host-gauge-caption {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.host-load-row,
+.host-net-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.host-net-row span:not(.helper-text) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .system-status-panels {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
@@ -3645,6 +3808,231 @@ main.content.engineering-content:has(.device-management-panel) {
   background: #f8fafc;
   display: flex;
   justify-content: flex-end;
+}
+
+/* ===== Mühendislik > Hat Yönetimi paneli ===== */
+.grid-mgmt-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.grid-mgmt-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr) minmax(420px, 2.5fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.grid-mgmt-col {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.grid-mgmt-col-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 10px;
+}
+
+.grid-mgmt-col-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.grid-mgmt-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grid-mgmt-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+
+.grid-mgmt-list-item:hover { border-color: #93c5fd; }
+.grid-mgmt-list-item.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.grid-mgmt-color-dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.grid-mgmt-list-item-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.grid-mgmt-list-item-main strong {
+  font-size: 13px;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-mgmt-list-code {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.grid-mgmt-list-count {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.grid-mgmt-list-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.grid-mgmt-list-actions .icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+}
+.grid-mgmt-list-actions .icon-btn:hover { background: #f1f5f9; }
+.grid-mgmt-list-actions .icon-btn-danger { color: #b91c1c; }
+.grid-mgmt-list-actions .icon-btn-danger:hover { background: #fee2e2; }
+
+.grid-mgmt-col-detail {
+  gap: 0;
+}
+
+.grid-mgmt-map-shell {
+  flex: 1;
+  min-height: 240px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.grid-mgmt-map {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+
+.grid-mgmt-pole-list {
+  flex: 0 0 auto;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.grid-mgmt-pole-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.grid-mgmt-pole-table {
+  font-size: 12px;
+}
+
+.grid-mgmt-pole-table th,
+.grid-mgmt-pole-table td {
+  padding: 6px 10px;
+}
+
+.grid-pole-marker {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.grid-pole-marker--selected {
+  background: #2563eb;
+  width: 18px;
+  height: 18px;
+}
+
+.grid-pole-modal {
+  width: 92vw;
+  max-width: 880px;
+}
+
+.grid-pole-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 16px;
+  margin: 8px 0;
+}
+
+.grid-pole-coords {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.grid-pole-modal-map-shell {
+  height: 320px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.grid-pole-modal-map {
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 1100px) {
+  .grid-mgmt-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+  }
+  .grid-pole-modal-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===== Proje Ayarlari paneli ===== */
