@@ -404,6 +404,8 @@ def update_pole(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Direk bulunamadı.")
     changes = payload.model_dump(exclude_none=True)
+    moved = "latitude" in changes or "longitude" in changes
+    line_id = row.line_id
     for key, value in changes.items():
         setattr(row, key, value)
     try:
@@ -411,6 +413,10 @@ def update_pole(
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sıra numarası çakışıyor.")
+    # Direk koordinatlari degistiyse, bu hatta bagli tum cihazlarin konumunu
+    # yeniden orta-nokta olarak hesapla.
+    if moved:
+        _resync_devices_on_line(db, line_id)
     record_event(
         db, category="grid", event_type="pole_updated", severity="info",
         actor_username=current_user.username,
@@ -573,6 +579,54 @@ def list_segments(
     ]
 
 
+def _sync_device_position_from_segment(
+    db: Session, *, device_id: int | None, from_pole_id: int, to_pole_id: int
+) -> None:
+    """Cihazi bir segmente baglarken/guncellerken cihaz konumunu segmentin
+    iki direginin orta noktasi olarak yazar. Anasayfa haritasinda cihaz
+    marker'i hat uzerinde dogru pozisyonda gozuksun diye."""
+    if device_id is None:
+        return
+    device = db.get(Device, device_id)
+    if device is None:
+        return
+    from_pole = db.get(Pole, from_pole_id)
+    to_pole = db.get(Pole, to_pole_id)
+    if from_pole is None or to_pole is None:
+        return
+    device.latitude = (from_pole.latitude + to_pole.latitude) / 2.0
+    device.longitude = (from_pole.longitude + to_pole.longitude) / 2.0
+
+
+def _resync_devices_on_line(db: Session, line_id: int) -> None:
+    """Hattaki tum direkler tasinmis olabilir (drag-reorder, reverse, pole patch).
+    Bu hatta bagli her cihazin konumunu kendi segmentinin orta noktasina yeniden
+    yaz. Coklu cihaz icin tek toplu sorgu."""
+    segs = list(db.scalars(
+        select(LineSegment).where(
+            LineSegment.line_id == line_id,
+            LineSegment.device_id.isnot(None),
+        )
+    ).all())
+    if not segs:
+        return
+    pole_ids: set[int] = set()
+    for s in segs:
+        pole_ids.add(s.from_pole_id)
+        pole_ids.add(s.to_pole_id)
+    poles = {p.id: p for p in db.scalars(select(Pole).where(Pole.id.in_(pole_ids))).all()}
+    device_ids = [s.device_id for s in segs if s.device_id is not None]
+    devices = {d.id: d for d in db.scalars(select(Device).where(Device.id.in_(device_ids))).all()}
+    for s in segs:
+        fp = poles.get(s.from_pole_id)
+        tp = poles.get(s.to_pole_id)
+        dev = devices.get(s.device_id) if s.device_id is not None else None
+        if fp is None or tp is None or dev is None:
+            continue
+        dev.latitude = (fp.latitude + tp.latitude) / 2.0
+        dev.longitude = (fp.longitude + tp.longitude) / 2.0
+
+
 def _validate_segment_endpoints(db: Session, line_id: int, from_id: int, to_id: int) -> None:
     if from_id == to_id:
         raise HTTPException(
@@ -619,6 +673,11 @@ def create_segment(
             status_code=status.HTTP_409_CONFLICT,
             detail="Aynı (başlangıç, bitiş) çiftine sahip segment zaten var.",
         )
+    # Cihaz baglandiysa konumunu segmentin orta noktasina yaz.
+    _sync_device_position_from_segment(
+        db, device_id=row.device_id,
+        from_pole_id=row.from_pole_id, to_pole_id=row.to_pole_id,
+    )
     record_event(
         db, category="grid", event_type="segment_created", severity="info",
         actor_username=current_user.username,
@@ -666,6 +725,11 @@ def update_segment(
             )
     for key, value in changes.items():
         setattr(row, key, value)
+    # Cihaz veya direk degisikliginde cihaz konumunu senkronize et.
+    _sync_device_position_from_segment(
+        db, device_id=row.device_id,
+        from_pole_id=row.from_pole_id, to_pole_id=row.to_pole_id,
+    )
     record_event(
         db, category="grid", event_type="segment_updated", severity="info",
         actor_username=current_user.username,

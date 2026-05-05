@@ -32,11 +32,14 @@ const polePin = (label: string, isStart: boolean, isEnd: boolean) => {
   });
 };
 
-function FlyToSelected({ selectedDevice }: { selectedDevice?: DeviceRow }) {
+function FlyToSelected({
+  selectedDevice,
+  override
+}: {
+  selectedDevice?: DeviceRow;
+  override?: [number, number];
+}) {
   const map = useMap();
-  // Sadece secili cihaz id degistiginde fly et. Aksi halde her render'da
-  // (5 sn'lik live values yenileme dahil) zoom 7'ye geri donuyordu — kullanici
-  // manuel zoom yapamiyordu.
   const lastFlownIdRef = useRef<number | null>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -52,8 +55,11 @@ function FlyToSelected({ selectedDevice }: { selectedDevice?: DeviceRow }) {
     }
     if (lastFlownIdRef.current === selectedDevice.id) return;
     lastFlownIdRef.current = selectedDevice.id;
-    map.flyTo([selectedDevice.latitude, selectedDevice.longitude], 7, { duration: 0.8 });
-  }, [map, selectedDevice]);
+    const target: [number, number] = override
+      ? override
+      : [selectedDevice.latitude, selectedDevice.longitude];
+    map.flyTo(target, 13, { duration: 0.8 });
+  }, [map, selectedDevice, override]);
 
   return null;
 }
@@ -168,6 +174,25 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     return s;
   }, [alarms]);
 
+  // Cihaz id -> segment orta noktasi. DB'de eski lat/lon kalsa bile bu override
+  // edilir; cihaz dogru hat ustunde gozukur.
+  const deviceLocationOverride = useMemo<Map<number, [number, number]>>(() => {
+    const m = new Map<number, [number, number]>();
+    if (!gridSnapshot) return m;
+    const polesById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
+    for (const seg of gridSnapshot.segments) {
+      if (!seg.device_id) continue;
+      const fp = polesById.get(seg.from_pole_id);
+      const tp = polesById.get(seg.to_pole_id);
+      if (!fp || !tp) continue;
+      m.set(seg.device_id, [
+        (fp.latitude + tp.latitude) / 2,
+        (fp.longitude + tp.longitude) / 2
+      ]);
+    }
+    return m;
+  }, [gridSnapshot]);
+
   const topology = useMemo(() => {
     if (!gridSnapshot) return null;
     const polesById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
@@ -258,7 +283,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       <div className="world-map-shell">
         <MapContainer className="world-map" center={[39.0, 35.0]} zoom={5} scrollWheelZoom>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <FlyToSelected selectedDevice={selectedDevice} />
+          <FlyToSelected
+            selectedDevice={selectedDevice}
+            override={selectedDevice ? deviceLocationOverride.get(selectedDevice.id) : undefined}
+          />
           <MapInvalidator deps={[devices.length]} />
 
           {/* Hat polylineları (sağlıklı): bölge rengi ince çizgi */}
@@ -321,18 +349,24 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             </Marker>
           ))}
 
-          {devices.map((device) => (
-            <Marker
-              key={device.id}
-              position={[device.latitude, device.longitude]}
-              icon={markerIcon(device.communicationStatus)}
-              eventHandlers={{
-                click: () => onSelectDevice(device.id)
-              }}
-            >
-              <Tooltip>{device.name}</Tooltip>
-            </Marker>
-          ))}
+          {devices.map((device) => {
+            const override = deviceLocationOverride.get(device.id);
+            const position: [number, number] = override
+              ? override
+              : [device.latitude, device.longitude];
+            return (
+              <Marker
+                key={device.id}
+                position={position}
+                icon={markerIcon(device.communicationStatus)}
+                eventHandlers={{
+                  click: () => onSelectDevice(device.id)
+                }}
+              >
+                <Tooltip>{device.name}</Tooltip>
+              </Marker>
+            );
+          })}
         </MapContainer>
 
         {selectedDevice ? (
