@@ -293,13 +293,63 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     [livePoles]
   );
 
+  // React-Leaflet Marker'in `position` propu referansiyla karsilastiriliyor
+  // (props.position !== prevProps.position). Yeni [lat,lng] array her render'da
+  // yeni referans uretirse, leaflet aktif drag'i kesintiye ugratir. Bu yuzden
+  // her direk icin lat/lng degismedikce STABIL kalan tek bir tuple cache'liyoruz.
+  const poleMarkerPositions = useMemo(() => {
+    const cache = new Map<number, [number, number]>();
+    for (const p of sortedPoles) {
+      cache.set(p.id, [p.latitude, p.longitude]);
+    }
+    return cache;
+    // sortedPoles.length ve her direk icin lat/lng dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sortedPoles.length,
+    sortedPoles.map((p) => `${p.id}:${p.latitude}:${p.longitude}`).join("|")
+  ]);
+
+  // poleIcon cagrisi her render'da yeni L.divIcon uretir. Drag sirasinda surekli
+  // setIcon cagrildiginda DOM swap olusur. Pole-id + state karmasinda cache.
+  const poleMarkerIcons = useMemo(() => {
+    const cache = new Map<number, L.DivIcon>();
+    sortedPoles.forEach((p, idx) => {
+      const isStart = idx === 0;
+      const isEnd = idx === sortedPoles.length - 1;
+      const draftState: "added" | "moved" | null = editMode
+        ? p.id < 0
+          ? "added"
+          : draftPoleEdits.has(p.id)
+            ? "moved"
+            : null
+        : null;
+      cache.set(
+        p.id,
+        poleIcon(String(p.sequence_no), isStart, isEnd, draftState, p.pole_type)
+      );
+    });
+    return cache;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sortedPoles.length,
+    editMode,
+    sortedPoles.map((p) => `${p.id}:${p.sequence_no}:${p.pole_type ?? ""}:${draftPoleEdits.has(p.id) ? "m" : ""}:${p.id < 0 ? "n" : ""}`).join("|")
+  ]);
+
   // Ardışık direk segmentleri (otomatik segment listesi). DB'deki LineSegment
   // kayıtlarıyla eşleşenleri bağla, eşleşmeyen pseudo segmentlere de cihaz
   // atanabilsin diye liste döner.
+  // SegmentSlot: ardisik iki direk arasi.
+  // NOT: Backend coklu cihaz destekliyor (ayni from/to icin birden cok kayit).
+  // UI taraf coklu cihaz render'i bir sonraki iterasyonda eklenecek; simdilik
+  // ayni slot'taki TUM kayitlari da tutuyoruz, ana referansa ilk olani veriyoruz.
   type SegmentSlot = {
     fromPole: Pole;
     toPole: Pole;
     segment: LineSegment | null;
+    /** Slot'taki tum kayitlar (coklu cihaz icin) — ileride UI bunu kullanacak. */
+    segments: LineSegment[];
   };
 
   const segmentSlots = useMemo<SegmentSlot[]>(() => {
@@ -307,11 +357,20 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     for (let i = 0; i < livePoles.length - 1; i += 1) {
       const fromPole = livePoles[i];
       const toPole = livePoles[i + 1];
-      const seg =
-        detail?.segments.find(
-          (s) => s.from_pole_id === fromPole.id && s.to_pole_id === toPole.id
-        ) ?? null;
-      slots.push({ fromPole, toPole, segment: seg });
+      const segs = (detail?.segments ?? [])
+        .filter((s) => s.from_pole_id === fromPole.id && s.to_pole_id === toPole.id)
+        .sort((a, b) => {
+          const ad = new Date(a.created_at).getTime();
+          const bd = new Date(b.created_at).getTime();
+          if (ad !== bd) return ad - bd;
+          return a.id - b.id;
+        });
+      slots.push({
+        fromPole,
+        toPole,
+        segment: segs[0] ?? null,
+        segments: segs
+      });
     }
     return slots;
   }, [detail, livePoles]);
@@ -839,15 +898,12 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                       : null;
                     return (
                       <Marker
-                        key={`${p.id}-${editMode ? "edit" : "view"}`}
-                        position={[p.latitude, p.longitude]}
-                        icon={poleIcon(
-                          String(p.sequence_no),
-                          isStart,
-                          isEnd,
-                          draftState,
-                          p.pole_type
-                        )}
+                        key={p.id}
+                        position={poleMarkerPositions.get(p.id) ?? [p.latitude, p.longitude]}
+                        icon={
+                          poleMarkerIcons.get(p.id) ??
+                          poleIcon(String(p.sequence_no), isStart, isEnd, draftState, p.pole_type)
+                        }
                         draggable={editMode}
                         eventHandlers={{
                           click: () => {

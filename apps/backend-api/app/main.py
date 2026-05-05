@@ -4,11 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select as _select, text
 
-from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, grid_topology, health, internal, notification_settings, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, system_status, telemetry, users
+from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, system_status, telemetry, users
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user  # noqa: F401
+from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user  # noqa: F401
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
@@ -52,6 +52,7 @@ app.include_router(internal.router, prefix=settings.api_prefix)
 app.include_router(project_settings_api.router, prefix=settings.api_prefix)
 app.include_router(grid_topology.router, prefix=settings.api_prefix)
 app.include_router(system_status.router, prefix=settings.api_prefix)
+app.include_router(notifications_api.router, prefix=settings.api_prefix)
 
 
 @app.on_event("startup")
@@ -303,6 +304,12 @@ def create_tables():
             text(
                 "ALTER TABLE poles ADD COLUMN IF NOT EXISTS pole_type VARCHAR(20) NOT NULL DEFAULT 'pole'"
             )
+        )
+        # Iki direk arasinda birden fazla cihaz olabilmesi icin (from, to) UNIQUE
+        # kisitini dusur. Cihaz UNIQUE constraint'i (uq) ayrica kalir; ayni cihaz
+        # iki yerde olamaz.
+        connection.execute(
+            text("ALTER TABLE line_segments DROP CONSTRAINT IF EXISTS uq_segment_endpoints")
         )
         connection.execute(
             text(

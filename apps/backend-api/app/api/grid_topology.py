@@ -579,29 +579,81 @@ def list_segments(
     ]
 
 
-def _sync_device_position_from_segment(
-    db: Session, *, device_id: int | None, from_pole_id: int, to_pole_id: int
-) -> None:
-    """Cihazi bir segmente baglarken/guncellerken cihaz konumunu segmentin
-    iki direginin orta noktasi olarak yazar. Anasayfa haritasinda cihaz
-    marker'i hat uzerinde dogru pozisyonda gozuksun diye."""
-    if device_id is None:
-        return
-    device = db.get(Device, device_id)
-    if device is None:
-        return
+def _slot_position_for_device(
+    from_lat: float, from_lon: float,
+    to_lat: float, to_lon: float,
+    index: int, total: int,
+) -> tuple[float, float]:
+    """Bir slot'taki (iki direk arasi) cihazlari, sira ile slot uzerinde esit
+    olarak dagit.
+
+    total=1: orta nokta (1/2)
+    total=2: 1/3, 2/3
+    total=3: 1/4, 2/4, 3/4 ...
+    Genel formul: t = (index+1) / (total+1)
+    """
+    t = (index + 1) / (total + 1)
+    lat = from_lat + (to_lat - from_lat) * t
+    lon = from_lon + (to_lon - from_lon) * t
+    return lat, lon
+
+
+def _resync_slot(db: Session, from_pole_id: int, to_pole_id: int) -> None:
+    """Bir slot'taki (ayni from/to direk ciftine sahip tum) segmentlerin cihaz
+    konumlarini sira ile yeniden yaz. Cihaz birden fazla olabilir; her cihaz
+    slot uzerinde esit araliklarda dagilir.
+
+    Cagri yerleri:
+      - segment olusturma/guncelleme/silme (slot'taki cihaz sayisi degisir)
+      - direk tasima (slot'un iki ucu kayar)
+    """
     from_pole = db.get(Pole, from_pole_id)
     to_pole = db.get(Pole, to_pole_id)
     if from_pole is None or to_pole is None:
         return
-    device.latitude = (from_pole.latitude + to_pole.latitude) / 2.0
-    device.longitude = (from_pole.longitude + to_pole.longitude) / 2.0
+    # Slot'a bagli, cihazi olan tum segmentleri sirayla al (created_at + id ile
+    # deterministik sira icin).
+    segs = list(db.scalars(
+        select(LineSegment).where(
+            LineSegment.from_pole_id == from_pole_id,
+            LineSegment.to_pole_id == to_pole_id,
+            LineSegment.device_id.isnot(None),
+        ).order_by(LineSegment.created_at, LineSegment.id)
+    ).all())
+    total = len(segs)
+    if total == 0:
+        return
+    devices_by_id = {
+        d.id: d for d in db.scalars(
+            select(Device).where(Device.id.in_([s.device_id for s in segs]))
+        ).all()
+    }
+    for i, s in enumerate(segs):
+        dev = devices_by_id.get(s.device_id) if s.device_id is not None else None
+        if dev is None:
+            continue
+        lat, lon = _slot_position_for_device(
+            from_pole.latitude, from_pole.longitude,
+            to_pole.latitude, to_pole.longitude,
+            i, total,
+        )
+        dev.latitude = lat
+        dev.longitude = lon
+
+
+def _sync_device_position_from_segment(
+    db: Session, *, device_id: int | None, from_pole_id: int, to_pole_id: int
+) -> None:
+    """Bir slot'taki tum cihazlarin konumunu yeniden hesapla.
+    Coklu cihaz destegi: ayni iki direk arasinda birden cok cihaz olabilir,
+    her biri slot uzerinde esit araliklarla dagilir."""
+    _resync_slot(db, from_pole_id, to_pole_id)
 
 
 def _resync_devices_on_line(db: Session, line_id: int) -> None:
     """Hattaki tum direkler tasinmis olabilir (drag-reorder, reverse, pole patch).
-    Bu hatta bagli her cihazin konumunu kendi segmentinin orta noktasina yeniden
-    yaz. Coklu cihaz icin tek toplu sorgu."""
+    Tum cihazli segmentleri grupla; her (from, to) slot'unu ayri yeniden hesapla.
+    Bu sayede coklu cihaz olan slot'larda da dogru sira+pozisyon olusur."""
     segs = list(db.scalars(
         select(LineSegment).where(
             LineSegment.line_id == line_id,
@@ -610,21 +662,13 @@ def _resync_devices_on_line(db: Session, line_id: int) -> None:
     ).all())
     if not segs:
         return
-    pole_ids: set[int] = set()
+    seen_slots: set[tuple[int, int]] = set()
     for s in segs:
-        pole_ids.add(s.from_pole_id)
-        pole_ids.add(s.to_pole_id)
-    poles = {p.id: p for p in db.scalars(select(Pole).where(Pole.id.in_(pole_ids))).all()}
-    device_ids = [s.device_id for s in segs if s.device_id is not None]
-    devices = {d.id: d for d in db.scalars(select(Device).where(Device.id.in_(device_ids))).all()}
-    for s in segs:
-        fp = poles.get(s.from_pole_id)
-        tp = poles.get(s.to_pole_id)
-        dev = devices.get(s.device_id) if s.device_id is not None else None
-        if fp is None or tp is None or dev is None:
+        slot_key = (s.from_pole_id, s.to_pole_id)
+        if slot_key in seen_slots:
             continue
-        dev.latitude = (fp.latitude + tp.latitude) / 2.0
-        dev.longitude = (fp.longitude + tp.longitude) / 2.0
+        seen_slots.add(slot_key)
+        _resync_slot(db, s.from_pole_id, s.to_pole_id)
 
 
 def _validate_segment_endpoints(db: Session, line_id: int, from_id: int, to_id: int) -> None:
@@ -671,7 +715,7 @@ def create_segment(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Aynı (başlangıç, bitiş) çiftine sahip segment zaten var.",
+            detail="Segment kaydedilemedi (cihaz zaten başka bir segmente bağlı olabilir).",
         )
     # Cihaz baglandiysa konumunu segmentin orta noktasina yaz.
     _sync_device_position_from_segment(
@@ -751,7 +795,12 @@ def delete_segment(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment bulunamadı.")
     line_id = row.line_id
+    from_id = row.from_pole_id
+    to_id = row.to_pole_id
     db.delete(row)
+    db.flush()
+    # Slot'ta kalan diger cihazlari yeniden dagit (orta noktalari yeniden hesaplansin).
+    _resync_slot(db, from_id, to_id)
     record_event(
         db, category="grid", event_type="segment_deleted", severity="warning",
         actor_username=current_user.username,

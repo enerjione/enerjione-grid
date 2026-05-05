@@ -115,15 +115,13 @@ class LineSegment(Base):
     to_pole_id: Mapped[int] = mapped_column(
         ForeignKey("poles.id", ondelete="CASCADE"), nullable=False
     )
-    # Bu segmenti izleyen cihaz (Horstmann SN2). Bir cihaz tek segmente bağlanır.
+    # Bu segmenti izleyen cihaz (Horstmann SN2). Bir cihaz tek segmente baglanir.
+    # NOT: Ayni (from, to) cifti icin birden fazla LineSegment kaydi olabilir
+    # (bir direk arasinda birden cok cihaz). Cihaz UNIQUE kalir; ayni cihaz
+    # iki yerde olamaz.
     device_id: Mapped[int | None] = mapped_column(
         ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, unique=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
-    )
-
-    __table_args__ = (
-        # Aynı (from, to) çifti tekrarlamasın.
-        UniqueConstraint("from_pole_id", "to_pole_id", name="uq_segment_endpoints"),
     )

@@ -500,6 +500,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             liveValues={liveValues ?? []}
             alarms={alarms ?? []}
             sourceBatteries={sourceBatteries}
+            gridSnapshot={gridSnapshot ?? null}
             onClose={() => setDetailModalOpen(false)}
           />
         ) : null}
@@ -512,28 +513,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
 // Cihaz detay modali — onemli sinyaller, alarmlar, batarya, baglanti
 // ===================================================================
 
-const IMPORTANT_BINARY_KEYS: { key: string; label: string }[] = [
-  { key: "master.overcurrent_tripped", label: "Aşırı akım" },
-  { key: "master.delta_i_delta_t_tripped", label: "ΔI/Δt tripped" },
-  { key: "master.voltage_loss", label: "Gerilim kaybı" },
-  { key: "master.current_loss", label: "Akım kaybı" },
-  { key: "master.battery_status", label: "Pil durumu" },
-  { key: "master.communication_status", label: "Haberleşme" },
-  { key: "sat01.overcurrent_tripped", label: "Sat01 aşırı akım" },
-  { key: "sat02.overcurrent_tripped", label: "Sat02 aşırı akım" }
-];
-
-const IMPORTANT_ANALOG_KEYS: { key: string; label: string; unit: string }[] = [
-  { key: "master.actual_current", label: "Gerçek akım", unit: "mA" },
-  { key: "master.actual_voltage", label: "Gerçek gerilim", unit: "V" },
-  { key: "master.average_current", label: "Ortalama akım", unit: "mA" },
-  { key: "master.conductor_temperature", label: "İletken sıcaklığı", unit: "°C" }
-];
-
-// Per-source signal sets for batteries, status, and analog signals.
+// Per-source sinyal seti — her kaynak (Master / Sat01 / Sat02) icin ayni anahtar.
 const PER_SOURCE_BINARY: { suffix: string; label: string }[] = [
   { suffix: "overcurrent_tripped", label: "Aşırı akım" },
-  { suffix: "delta_i_delta_t_tripped", label: "ΔI/Δt tripped" },
+  { suffix: "delta_i_delta_t_tripped", label: "ΔI/Δt" },
   { suffix: "voltage_loss", label: "Gerilim kaybı" },
   { suffix: "current_loss", label: "Akım kaybı" },
   { suffix: "battery_status", label: "Pil durumu" },
@@ -543,10 +526,10 @@ const PER_SOURCE_BINARY: { suffix: string; label: string }[] = [
 ];
 
 const PER_SOURCE_ANALOG: { suffix: string; label: string; unit: string }[] = [
-  { suffix: "actual_current", label: "Gerçek akım", unit: "mA" },
-  { suffix: "actual_voltage", label: "Gerçek gerilim", unit: "V" },
-  { suffix: "average_current", label: "Ortalama akım", unit: "mA" },
-  { suffix: "conductor_temperature", label: "İletken sıcaklığı", unit: "°C" }
+  { suffix: "actual_current", label: "Akım", unit: "mA" },
+  { suffix: "actual_voltage", label: "Gerilim", unit: "V" },
+  { suffix: "average_current", label: "Ort. akım", unit: "mA" },
+  { suffix: "conductor_temperature", label: "Sıcaklık", unit: "°C" }
 ];
 
 const SOURCES: SourceKey[] = ["master", "sat01", "sat02"];
@@ -556,6 +539,7 @@ function DeviceDetailModal({
   liveValues,
   alarms,
   sourceBatteries,
+  gridSnapshot,
   onClose
 }: {
   device: DeviceRow;
@@ -565,34 +549,121 @@ function DeviceDetailModal({
     SourceKey,
     { voltage: number | null; percent: number | null } | null
   >;
+  gridSnapshot: GridSnapshot | null;
   onClose: () => void;
 }) {
   const deviceRows = liveValues.filter((r) => r.device_id === device.id);
   const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
   const activeAlarms = alarms.filter((a) => a.device_id === device.id && !a.reset);
 
-  const renderCounter = (src: SourceKey, kind: "permanent" | "momentary") => {
-    const key = `${src}.${kind}_fault_counter`;
-    const row = valueByKey.get(key);
-    const v = row?.value;
-    const display =
-      typeof v === "number" && Number.isFinite(v) ? Math.trunc(v).toString() : "—";
+  // Topoloji bilgisi: bu cihaz hangi hat / bolge / segment ile bagli?
+  const topoInfo = (() => {
+    if (!gridSnapshot) return null;
+    const seg = gridSnapshot.segments.find((s) => s.device_id === device.id);
+    if (!seg) return null;
+    const line = gridSnapshot.lines.find((l) => l.id === seg.line_id);
+    if (!line) return null;
+    const region = gridSnapshot.regions.find((r) => r.id === line.region_id);
+    return { regionName: region?.name ?? "—", lineName: line.name, fromSeq: seg.from_pole_seq ?? null, toSeq: seg.to_pole_seq ?? null };
+  })();
+
+  const renderColumn = (src: SourceKey) => {
+    const data = sourceBatteries[src];
+    const battV = data?.voltage ?? null;
+    const battP = data?.percent ?? null;
+    const battBarCls = battP === null ? "" : battP <= 20 ? "is-low" : battP <= 50 ? "is-mid" : "";
+
+    const permRow = valueByKey.get(`${src}.permanent_fault_counter`);
+    const tempRow = valueByKey.get(`${src}.momentary_fault_counter`);
+    const permVal = typeof permRow?.value === "number" ? Math.trunc(permRow.value as number) : null;
+    const tempVal = typeof tempRow?.value === "number" ? Math.trunc(tempRow.value as number) : null;
+
     return (
-      <div
-        key={key}
-        className={`device-detail-counter-card is-${kind === "permanent" ? "permanent" : "transient"}`}
-      >
-        <div className="icn">
-          {kind === "permanent" ? (
-            <span className="material-symbols-outlined">error</span>
-          ) : (
-            <span className="material-symbols-outlined">flash_on</span>
-          )}
+      <div key={src} className={`device-detail-col device-detail-col--${src}`}>
+        <header className="device-detail-col-head">
+          <span className={`device-detail-col-badge is-${src === "master" ? "master" : src === "sat01" ? "sat1" : "sat2"}`}>
+            {SOURCE_LABEL[src]}
+          </span>
+        </header>
+
+        {/* Batarya — kompakt */}
+        <div className="device-detail-col-batt">
+          <div className={`device-detail-battery-bar ${battBarCls}`}>
+            <span style={{ width: `${battP ?? 0}%` }} />
+          </div>
+          <div className="device-detail-col-batt-row">
+            <span>{typeof battV === "number" ? `${battV.toFixed(2)} V` : "—"}</span>
+            <strong>{typeof battP === "number" ? `%${battP}` : "—"}</strong>
+          </div>
         </div>
-        <div>
-          <div className="lbl">{kind === "permanent" ? "Kalıcı arıza" : "Geçici arıza"}</div>
-          <div className="val">{display}</div>
-          <div className="meta">{SOURCE_LABEL[src]}</div>
+
+        {/* Ariza sayaclari */}
+        <div className="device-detail-col-counters">
+          <div className="device-detail-mini-counter is-permanent">
+            <span className="material-symbols-outlined">error</span>
+            <div>
+              <div className="lbl">Kalıcı</div>
+              <div className="val">{permVal ?? "—"}</div>
+            </div>
+          </div>
+          <div className="device-detail-mini-counter is-transient">
+            <span className="material-symbols-outlined">flash_on</span>
+            <div>
+              <div className="lbl">Geçici</div>
+              <div className="val">{tempVal ?? "—"}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Olcumler */}
+        <div className="device-detail-col-section">
+          <div className="device-detail-col-title">
+            <span className="material-symbols-outlined">monitoring</span>
+            Ölçümler
+          </div>
+          <div className="device-detail-col-analog">
+            {PER_SOURCE_ANALOG.map(({ suffix, label, unit }) => {
+              const row = valueByKey.get(`${src}.${suffix}`);
+              const v = row?.value;
+              const display =
+                typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "—";
+              return (
+                <div key={suffix} className="device-detail-col-analog-row">
+                  <span className="lbl">{label}</span>
+                  <span className="val">
+                    {display}
+                    <span className="unit"> {row?.unit ?? unit}</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Durum sinyalleri */}
+        <div className="device-detail-col-section">
+          <div className="device-detail-col-title">
+            <span className="material-symbols-outlined">flag</span>
+            Durum
+          </div>
+          <div className="device-detail-col-binary">
+            {PER_SOURCE_BINARY.map(({ suffix, label }) => {
+              const row = valueByKey.get(`${src}.${suffix}`);
+              if (!row) return null;
+              const v = row.value;
+              const active = typeof v === "number" ? v !== 0 : false;
+              return (
+                <div
+                  key={suffix}
+                  className={`device-detail-col-binary-row ${active ? "is-active" : ""}`}
+                  title={`${src}.${suffix}`}
+                >
+                  <span className="dot" />
+                  <span className="lbl">{label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -600,12 +671,40 @@ function DeviceDetailModal({
 
   return (
     <div className="device-detail-modal-backdrop" onClick={onClose}>
-      <div className="device-detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="device-detail-modal device-detail-modal--wide" onClick={(e) => e.stopPropagation()}>
         <header className="device-detail-modal-head">
-          <div>
+          <div className="device-detail-modal-head-left">
             <span className="label">Cihaz Detayı</span>
             <h3>{device.name}</h3>
-            <span className="device-code">{device.code}</span>
+            <div className="device-detail-modal-meta">
+              <span className="device-code">{device.code}</span>
+              {topoInfo ? (
+                <>
+                  <span className="device-detail-modal-meta-sep">·</span>
+                  <span className="device-detail-modal-meta-chip">
+                    <span className="material-symbols-outlined">map</span>
+                    {topoInfo.regionName}
+                  </span>
+                  <span className="device-detail-modal-meta-chip is-line">
+                    <span className="material-symbols-outlined">cable</span>
+                    {topoInfo.lineName}
+                  </span>
+                  {topoInfo.fromSeq !== null && topoInfo.toSeq !== null ? (
+                    <span className="device-detail-modal-meta-chip is-seg">
+                      Direk #{topoInfo.fromSeq} → #{topoInfo.toSeq}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span className="device-detail-modal-meta-sep">·</span>
+                  <span className="device-detail-modal-meta-chip is-warn">
+                    <span className="material-symbols-outlined">link_off</span>
+                    Hat atanmamış
+                  </span>
+                </>
+              )}
+            </div>
           </div>
           <button
             type="button"
@@ -617,139 +716,28 @@ function DeviceDetailModal({
           </button>
         </header>
 
-        <div className="device-detail-modal-body">
-          {/* Aktif alarmlar — full width */}
-          {activeAlarms.length > 0 ? (
-            <section className="device-detail-section is-fullwidth">
-              <h4>
-                <span className="material-symbols-outlined">warning</span>
-                Aktif Alarmlar ({activeAlarms.length})
-              </h4>
-              <div>
-                {activeAlarms.slice(0, 5).map((a) => (
-                  <div key={a.id} className="device-detail-alarm-row">
-                    <strong>{a.title}</strong>
-                    {a.description ? <div className="desc">{a.description}</div> : null}
-                    <div className="ts">{new Date(a.created_at).toLocaleString("tr-TR")}</div>
-                  </div>
-                ))}
-                {activeAlarms.length > 5 ? (
-                  <span className="helper-text">
-                    +{activeAlarms.length - 5} alarm daha — Alarmlar sayfasından bakın.
-                  </span>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
+        {/* Aktif alarmlar — varsa header'in altinda dar bir serit */}
+        {activeAlarms.length > 0 ? (
+          <div className="device-detail-alert-bar">
+            <span className="material-symbols-outlined">warning</span>
+            <strong>{activeAlarms.length} aktif alarm</strong>
+            <span className="device-detail-alert-list">
+              {activeAlarms.slice(0, 3).map((a, idx) => (
+                <span key={a.id} className="device-detail-alert-chip">
+                  {a.title}
+                  {idx < Math.min(activeAlarms.length, 3) - 1 ? " · " : ""}
+                </span>
+              ))}
+              {activeAlarms.length > 3 ? (
+                <span className="device-detail-alert-more">+{activeAlarms.length - 3} daha</span>
+              ) : null}
+            </span>
+          </div>
+        ) : null}
 
-          {/* Bataryalar — her kaynak icin */}
-          <section className="device-detail-section is-fullwidth">
-            <h4>
-              <span className="material-symbols-outlined">battery_charging_full</span>
-              Bataryalar (Master + Satellite)
-            </h4>
-            <div className="device-detail-battery-list">
-              {SOURCES.map((src) => {
-                const data = sourceBatteries[src];
-                const v = data?.voltage ?? null;
-                const p = data?.percent ?? null;
-                const barCls = p === null ? "" : p <= 20 ? "is-low" : p <= 50 ? "is-mid" : "";
-                return (
-                  <div key={src} className="device-detail-battery-row">
-                    <span className={`device-detail-battery-source is-${src === "master" ? "master" : src === "sat01" ? "sat1" : "sat2"}`}>
-                      {SOURCE_LABEL[src]}
-                    </span>
-                    <div className={`device-detail-battery-bar ${barCls}`}>
-                      <span style={{ width: `${p ?? 0}%` }} />
-                    </div>
-                    <div className="device-detail-battery-volt">
-                      {typeof v === "number" ? `${v.toFixed(2)} V` : "—"}
-                    </div>
-                    <div className="device-detail-battery-pct">
-                      {typeof p === "number" ? `%${p}` : "—"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Arıza sayaçları — kalıcı + geçici */}
-          <section className="device-detail-section is-fullwidth">
-            <h4>
-              <span className="material-symbols-outlined">history</span>
-              Arıza Sayaçları
-            </h4>
-            <div className="device-detail-counter-grid">
-              {SOURCES.flatMap((src) => [
-                renderCounter(src, "permanent"),
-                renderCounter(src, "momentary")
-              ])}
-            </div>
-          </section>
-
-          {/* Durum sinyalleri (binary) — her kaynak icin */}
-          {SOURCES.map((src) => {
-            const rows = PER_SOURCE_BINARY.map(({ suffix, label }) => {
-              const row = valueByKey.get(`${src}.${suffix}`);
-              if (!row) return null;
-              const v = row.value;
-              const active = typeof v === "number" ? v !== 0 : false;
-              return (
-                <div
-                  key={`${src}.${suffix}`}
-                  className={`device-detail-binary-pill ${active ? "is-active" : ""}`}
-                  title={`${src}.${suffix}`}
-                >
-                  <span>{label}</span>
-                  <span className="state">{active ? "AKTİF" : "PASİF"}</span>
-                </div>
-              );
-            }).filter(Boolean);
-            if (rows.length === 0) return null;
-            return (
-              <section key={`bin-${src}`} className="device-detail-section">
-                <h4>
-                  <span className="material-symbols-outlined">flag</span>
-                  Durum Sinyalleri · {SOURCE_LABEL[src]}
-                </h4>
-                <div className="device-detail-binary-grid">{rows}</div>
-              </section>
-            );
-          })}
-
-          {/* Analog olcumler — her kaynak icin */}
-          {SOURCES.map((src) => {
-            const cards = PER_SOURCE_ANALOG.map(({ suffix, label, unit }) => {
-              const row = valueByKey.get(`${src}.${suffix}`);
-              const v = row?.value;
-              const display =
-                typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "—";
-              return (
-                <div key={`${src}.${suffix}`} className="device-detail-analog-card">
-                  <div className="lbl">{label}</div>
-                  <div className="val">
-                    {display}
-                    <span className="unit">{row?.unit ?? unit}</span>
-                  </div>
-                </div>
-              );
-            });
-            // Eger bu kaynak icin hicbir kayit yoksa bolumu atla
-            const anyHasValue = PER_SOURCE_ANALOG.some(
-              ({ suffix }) => valueByKey.get(`${src}.${suffix}`) !== undefined
-            );
-            if (!anyHasValue) return null;
-            return (
-              <section key={`an-${src}`} className="device-detail-section">
-                <h4>
-                  <span className="material-symbols-outlined">monitoring</span>
-                  Ölçümler · {SOURCE_LABEL[src]}
-                </h4>
-                <div className="device-detail-analog-grid">{cards}</div>
-              </section>
-            );
-          })}
+        {/* 3 sutun: Master + Sat01 + Sat02 */}
+        <div className="device-detail-modal-cols">
+          {SOURCES.map((src) => renderColumn(src))}
         </div>
 
         <footer className="device-detail-modal-foot">
