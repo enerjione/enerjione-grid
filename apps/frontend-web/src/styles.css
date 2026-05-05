@@ -14381,7 +14381,9 @@ main.content.engineering-content:has(.device-management-panel) {
   justify-content: flex-end;
 }
 
-/* Cihaz detay modal header'inda string sinyaller — tek satir chip'ler */
+/* Cihaz detay modal header'inda string sinyaller — kompakt chip'ler.
+   Topology meta satirinin altinda flex-wrap ile birden cok satira sigar.
+   Her chip kendi icinde [icon] [label] [value] yapisinda. */
 .device-detail-modal-info {
   display: flex;
   align-items: center;
@@ -14394,13 +14396,17 @@ main.content.engineering-content:has(.device-management-panel) {
   align-items: center;
   gap: 5px;
   padding: 3px 9px;
-  border-radius: 14px;
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
   font-size: 11px;
   color: #334155;
   max-width: 280px;
   cursor: default;
+  transition: border-color 0.15s;
+}
+.device-detail-modal-info-chip:hover {
+  border-color: #94a3b8;
 }
 .device-detail-modal-info-chip .material-symbols-outlined {
   font-size: 14px;
@@ -14408,54 +14414,18 @@ main.content.engineering-content:has(.device-management-panel) {
   flex-shrink: 0;
 }
 .device-detail-modal-info-label {
-  font-weight: 600;
+  font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
-  font-size: 10px;
+  letter-spacing: 0.4px;
+  font-size: 9px;
   flex-shrink: 0;
 }
 .device-detail-modal-info-value {
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-weight: 700;
-  color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-/* String sinyaller (cihaz kimligi) — kompakt liste */
-.device-detail-col-string-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.device-detail-col-string-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 4px 8px;
-  background: #f8fafc;
-  border-radius: 5px;
-  font-size: 11px;
-  min-width: 0;
-}
-.device-detail-col-string-row .lbl {
-  color: #64748b;
   font-weight: 600;
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.3px;
-  flex-shrink: 0;
-}
-.device-detail-col-string-row .val {
   color: #0f172a;
-  font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: 11px;
-  font-weight: 600;
-  text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

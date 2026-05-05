@@ -805,20 +805,6 @@ const PER_SOURCE_BINARY: { suffix: string; label: string; group?: "state" | "dir
   { suffix: "delta_i_delta_t_fault_direction_red_b", label: "ΔI/Δt arıza yönü B", group: "direction" }
 ];
 
-// Per-source string sinyaller — sutunlarda 'Bilgi' bolumunde detayli liste.
-// Header'daki master.info_* sinyaller burada tekrarlanmaz; sadece master/satellite
-// kaynak farki olan veya daha az kritik teknik detaylar.
-const PER_SOURCE_STRING: { suffix: string; label: string }[] = [
-  { suffix: "info_fw_version_satellite", label: "FW (Satellite)" },
-  { suffix: "info_hardware_revision", label: "Donanım" },
-  { suffix: "info_part_no", label: "Parça No" },
-  { suffix: "info_network_type", label: "Şebeke" },
-  { suffix: "info_sim_serial_number_ccid", label: "SIM CCID" },
-  { suffix: "info_modem_model_name", label: "Modem" },
-  { suffix: "info_modem_fw_version", label: "Modem FW" },
-  { suffix: "info_last_configuration_update", label: "Son Konfig." }
-];
-
 const PER_SOURCE_ANALOG: { suffix: string; label: string; unit: string; group?: "live" | "fault" }[] = [
   { suffix: "actual_current", label: "Akım", unit: "mA", group: "live" },
   { suffix: "actual_voltage", label: "Gerilim", unit: "V", group: "live" },
@@ -854,16 +840,24 @@ function DeviceDetailModal({
   const deviceRows = liveValues.filter((r) => r.device_id === device.id);
   const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
 
-  // Header'da gosterilecek en kritik string sinyaller (master kaynaginda).
-  // Bunlar cihaz kimligi/iletisim ozeti — tek bakista anlamak icin uste konur.
+  // Header'da gosterilecek tum onemli string sinyaller (master kaynaginda).
+  // Cihaz kimligi + iletisim + teknik detaylar — tek bakista anlamak icin uste konur.
   const headerInfoSignals: { suffix: string; label: string; icon: string }[] = [
     { suffix: "info_serial_number", label: "Seri No", icon: "tag" },
     { suffix: "info_fw_version", label: "Firmware", icon: "memory" },
+    { suffix: "info_fw_version_satellite", label: "FW Sat", icon: "satellite_alt" },
+    { suffix: "info_hardware_revision", label: "Donanım", icon: "developer_board" },
+    { suffix: "info_part_no", label: "Parça No", icon: "qr_code" },
     { suffix: "info_modem_imei", label: "IMEI", icon: "sim_card" },
+    { suffix: "info_sim_serial_number_ccid", label: "SIM CCID", icon: "credit_card" },
+    { suffix: "info_modem_model_name", label: "Modem", icon: "router" },
+    { suffix: "info_modem_fw_version", label: "Modem FW", icon: "system_update" },
     { suffix: "info_ipv4_address", label: "IPv4", icon: "lan" },
     { suffix: "info_network_operator", label: "Operatör", icon: "signal_cellular_alt" },
+    { suffix: "info_network_type", label: "Şebeke", icon: "network_cell" },
     { suffix: "info_gps_string", label: "GPS", icon: "my_location" },
-    { suffix: "info_rtu_status_text", label: "Durum", icon: "monitor_heart" }
+    { suffix: "info_rtu_status_text", label: "Durum", icon: "monitor_heart" },
+    { suffix: "info_last_configuration_update", label: "Son Konfig.", icon: "history" }
   ];
   const headerInfoEntries = headerInfoSignals
     .map((it) => {
@@ -1038,32 +1032,6 @@ function DeviceDetailModal({
           </div>
         ) : null}
 
-        {/* String sinyaller (cihaz kimligi: seri no, firmware, IMEI vb.).
-            Sadece bu kaynak icin en az bir string sinyal varsa goster. */}
-        {PER_SOURCE_STRING.some(({ suffix }) => {
-          const row = valueByKey.get(`${src}.${suffix}`);
-          return row && row.value_string && row.value_string.trim() !== "";
-        }) ? (
-          <div className="device-detail-col-section">
-            <div className="device-detail-col-title">
-              <span className="material-symbols-outlined">badge</span>
-              Bilgi
-            </div>
-            <div className="device-detail-col-string-list">
-              {PER_SOURCE_STRING.map(({ suffix, label }) => {
-                const row = valueByKey.get(`${src}.${suffix}`);
-                const txt = (row?.value_string ?? "").trim();
-                if (!txt) return null;
-                return (
-                  <div key={suffix} className="device-detail-col-string-row" title={`${src}.${suffix}`}>
-                    <span className="lbl">{label}</span>
-                    <span className="val">{txt}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
       </div>
     );
   };
