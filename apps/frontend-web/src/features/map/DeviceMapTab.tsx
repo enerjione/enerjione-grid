@@ -1041,13 +1041,12 @@ function DeviceDetailModal({
       <div className="device-detail-modal device-detail-modal--wide" onClick={(e) => e.stopPropagation()}>
         <header className="device-detail-modal-head">
           <div className="device-detail-modal-head-left">
-            <span className="label">Cihaz Detayı</span>
-            <h3>{device.name}</h3>
-            <div className="device-detail-modal-meta">
-              <span className="device-code">{device.code}</span>
+            {/* Tek satir: cihaz adi + kod + topology chip'leri + tum info chip'ler */}
+            <div className="device-detail-modal-titlebar">
+              <h3 className="device-detail-modal-title">{device.name}</h3>
+              <span className="device-detail-modal-titlebar-code">{device.code}</span>
               {topoInfo ? (
                 <>
-                  <span className="device-detail-modal-meta-sep">·</span>
                   <span className="device-detail-modal-meta-chip">
                     <span className="material-symbols-outlined">map</span>
                     {topoInfo.regionName}
@@ -1058,37 +1057,28 @@ function DeviceDetailModal({
                   </span>
                   {topoInfo.fromSeq !== null && topoInfo.toSeq !== null ? (
                     <span className="device-detail-modal-meta-chip is-seg">
-                      Direk #{topoInfo.fromSeq} → #{topoInfo.toSeq}
+                      #{topoInfo.fromSeq} → #{topoInfo.toSeq}
                     </span>
                   ) : null}
                 </>
               ) : (
-                <>
-                  <span className="device-detail-modal-meta-sep">·</span>
-                  <span className="device-detail-modal-meta-chip is-warn">
-                    <span className="material-symbols-outlined">link_off</span>
-                    Hat atanmamış
-                  </span>
-                </>
+                <span className="device-detail-modal-meta-chip is-warn">
+                  <span className="material-symbols-outlined">link_off</span>
+                  Hat atanmamış
+                </span>
               )}
+              {headerInfoEntries.map((it) => (
+                <span
+                  key={it.suffix}
+                  className="device-detail-modal-info-chip"
+                  title={`${it.label}: ${it.value}`}
+                >
+                  <span className="material-symbols-outlined">{it.icon}</span>
+                  <span className="device-detail-modal-info-label">{it.label}</span>
+                  <span className="device-detail-modal-info-value">{it.value}</span>
+                </span>
+              ))}
             </div>
-
-            {/* Cihaz kimligi: master kaynagindan gelen string sinyaller */}
-            {headerInfoEntries.length > 0 ? (
-              <div className="device-detail-modal-info">
-                {headerInfoEntries.map((it) => (
-                  <span
-                    key={it.suffix}
-                    className="device-detail-modal-info-chip"
-                    title={`${it.label}: ${it.value}`}
-                  >
-                    <span className="material-symbols-outlined">{it.icon}</span>
-                    <span className="device-detail-modal-info-label">{it.label}</span>
-                    <span className="device-detail-modal-info-value">{it.value}</span>
-                  </span>
-                ))}
-              </div>
-            ) : null}
           </div>
           <button
             type="button"
