@@ -16,6 +16,7 @@ from app.models.outbound_target import OutboundTarget
 from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
 from app.schemas.outbound import OutboundTargetCreate, OutboundTargetRead, OutboundTargetUpdate
+from app.services.event_service import record_event
 from app.services.iec104.bootstrap import redeploy_target
 from app.services.iec104.registry import build_point_registry
 from app.services.iec104.server import manager as iec104_manager
@@ -64,7 +65,7 @@ def list_outbound_targets(
 @router.post("", response_model=OutboundTargetRead, status_code=status.HTTP_201_CREATED)
 def create_outbound_target(
     payload: OutboundTargetCreate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     existing = db.scalar(select(OutboundTarget).where(OutboundTarget.name == payload.name))
@@ -72,6 +73,16 @@ def create_outbound_target(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Outbound target already exists")
     row = OutboundTarget(**payload.model_dump())
     db.add(row)
+    db.flush()
+    record_event(
+        db,
+        category="outbound",
+        event_type="outbound_created",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Outbound hedef eklendi: {row.name} ({row.protocol.upper()})",
+        metadata={"target_id": row.id, "protocol": row.protocol},
+    )
     db.commit()
     db.refresh(row)
     if row.protocol == "iec104":
@@ -83,7 +94,7 @@ def create_outbound_target(
 def update_outbound_target(
     target_id: int,
     payload: OutboundTargetUpdate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.get(OutboundTarget, target_id)
@@ -92,6 +103,15 @@ def update_outbound_target(
     updates = payload.model_dump(exclude_unset=True)
     for key, value in updates.items():
         setattr(row, key, value)
+    record_event(
+        db,
+        category="outbound",
+        event_type="outbound_updated",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Outbound hedef güncellendi: {row.name}",
+        metadata={"target_id": row.id, "fields": list(updates.keys())},
+    )
     db.commit()
     db.refresh(row)
     if row.protocol == "iec104":
@@ -102,7 +122,7 @@ def update_outbound_target(
 @router.delete("/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_outbound_target(
     target_id: int,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.get(OutboundTarget, target_id)
@@ -110,7 +130,18 @@ def delete_outbound_target(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found")
     was_iec104 = row.protocol == "iec104"
     saved_id = row.id
+    name = row.name
+    proto = row.protocol
     db.delete(row)
+    record_event(
+        db,
+        category="outbound",
+        event_type="outbound_deleted",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"Outbound hedef silindi: {name} ({proto.upper()})",
+        metadata={"target_id": saved_id, "protocol": proto},
+    )
     db.commit()
     if was_iec104:
         # undeploy ayni IEC 104 manager uzerinde calisir; schedule threadsafe.

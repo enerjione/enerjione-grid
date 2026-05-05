@@ -26,6 +26,7 @@ from app.schemas.gateway import (
     GatewayRead,
     GatewayUpdate,
 )
+from app.services.event_service import record_event
 from app.services.gateway_compose import (
     ComposeRenderError,
     ComposeRenderInput,
@@ -70,7 +71,7 @@ def list_gateways(
 @router.post("", response_model=GatewayRead, status_code=status.HTTP_201_CREATED)
 def create_gateway(
     payload: GatewayCreate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     existing = db.scalar(select(Gateway).where(Gateway.code == payload.code))
@@ -98,6 +99,16 @@ def create_gateway(
         data["rabbitmq_password"] = rmq_user.password
     row = Gateway(**data)
     db.add(row)
+    db.flush()
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_created",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Gateway eklendi: {row.name} ({row.code})",
+        metadata={"gateway_code": row.code},
+    )
     db.commit()
     db.refresh(row)
     return row
@@ -107,14 +118,24 @@ def create_gateway(
 def update_gateway(
     gateway_code: str,
     payload: GatewayUpdate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
-    for key, value in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    for key, value in changes.items():
         setattr(row, key, value)
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_updated",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Gateway güncellendi: {row.name} ({row.code})",
+        metadata={"gateway_code": row.code, "fields": list(changes.keys())},
+    )
     db.commit()
     db.refresh(row)
     return row
@@ -132,19 +153,29 @@ def _cleanup_rabbitmq_user(gateway_code: str) -> None:
 def delete_gateway(
     gateway_code: str,
     background_tasks: BackgroundTasks,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    name = row.name
+    code = row.code
     repository = DeviceRepository(db)
-    repository.delete_all_for_gateway(gateway_code)
+    deleted_devices = repository.delete_all_for_gateway(gateway_code)
     db.execute(delete(GatewayIngestBatch).where(GatewayIngestBatch.gateway_code == gateway_code))
     db.delete(row)
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_deleted",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"Gateway silindi: {name} ({code}); {deleted_devices} bağlı cihaz da kaldırıldı",
+        metadata={"gateway_code": code, "deleted_devices": deleted_devices},
+    )
     db.commit()
-    # Best-effort RabbitMQ user temizligi response sonrasina ertelenir; boylece
-    # 5 sn'lik network timeout'u kullanici bekletmiyor olur.
+    # Best-effort RabbitMQ user temizligi response sonrasina ertelenir.
     background_tasks.add_task(_cleanup_rabbitmq_user, gateway_code)
     return None
 

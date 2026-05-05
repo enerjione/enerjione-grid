@@ -18,6 +18,7 @@ from app.models.enums import UserRole
 from app.models.project_settings import ProjectSettings
 from app.models.user import User
 from app.schemas.project_settings import ProjectSettingsRead, ProjectSettingsUpdate
+from app.services.event_service import record_event
 
 router = APIRouter(prefix="/project-settings", tags=["project-settings"])
 
@@ -44,13 +45,29 @@ def get_project_settings(db: Session = Depends(get_db)):
 @router.put("", response_model=ProjectSettingsRead, status_code=status.HTTP_200_OK)
 def update_project_settings(
     payload: ProjectSettingsUpdate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = _get_or_empty(db)
     updates = payload.model_dump(exclude_unset=True)
     for key, value in updates.items():
         setattr(row, key, value)
+    # Logo data URL'leri buyuk olabilir; metadata'ya koymak yerine kisa flag tut.
+    summary_fields = []
+    for k in updates.keys():
+        if k in ("customer_logo", "customer_logo_light"):
+            summary_fields.append(f"{k}({'set' if updates[k] else 'cleared'})")
+        else:
+            summary_fields.append(k)
+    record_event(
+        db,
+        category="project-settings",
+        event_type="project_settings_updated",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Proje ayarları güncellendi: {', '.join(summary_fields)}",
+        metadata={"fields": list(updates.keys())},
+    )
     db.commit()
     db.refresh(row)
     return row

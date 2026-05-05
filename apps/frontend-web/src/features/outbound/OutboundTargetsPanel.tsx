@@ -93,7 +93,10 @@ export function OutboundTargetsPanel({
   const [listenHost, setListenHost] = useState("0.0.0.0");
   const [listenPort, setListenPort] = useState("2404");
   const [iec104Ca, setIec104Ca] = useState("1");
-  const [allowedPeers, setAllowedPeers] = useState("");
+  // Whitelist artik liste olarak yonetilir; Save'de virgulle birlestirilir.
+  const [allowedPeerList, setAllowedPeerList] = useState<string[]>([]);
+  const [newPeerIp, setNewPeerIp] = useState("");
+  const [peerError, setPeerError] = useState("");
 
   const resetForm = () => {
     setName("");
@@ -109,7 +112,9 @@ export function OutboundTargetsPanel({
     setListenHost("0.0.0.0");
     setListenPort("2404");
     setIec104Ca("1");
-    setAllowedPeers("");
+    setAllowedPeerList([]);
+    setNewPeerIp("");
+    setPeerError("");
   };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -131,7 +136,7 @@ export function OutboundTargetsPanel({
         listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : null,
         listen_port: isIec104 ? Number(listenPort) || 2404 : null,
         iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : null,
-        iec104_allowed_peers: isIec104 ? (allowedPeers.trim() || null) : null
+        iec104_allowed_peers: isIec104 ? (allowedPeerList.join(",") || null) : null
       });
       resetForm();
       setCreateOpen(false);
@@ -157,7 +162,12 @@ export function OutboundTargetsPanel({
         ? String(target.iec104_common_address)
         : "1"
     );
-    setAllowedPeers(target.iec104_allowed_peers ?? "");
+    const raw = target.iec104_allowed_peers ?? "";
+    setAllowedPeerList(
+      raw.split(",").map((p) => p.trim()).filter((p) => p.length > 0)
+    );
+    setNewPeerIp("");
+    setPeerError("");
   };
 
   const handleEdit = async (event: FormEvent<HTMLFormElement>) => {
@@ -178,7 +188,7 @@ export function OutboundTargetsPanel({
         listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : undefined,
         listen_port: isIec104 ? Number(listenPort) || 2404 : undefined,
         iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : undefined,
-        iec104_allowed_peers: isIec104 ? (allowedPeers.trim() || null) : undefined
+        iec104_allowed_peers: isIec104 ? (allowedPeerList.join(",") || null) : undefined
       });
       setEditing(null);
     } catch (err) {
@@ -214,6 +224,37 @@ export function OutboundTargetsPanel({
     } finally {
       setAutoAssigning(false);
     }
+  };
+
+  // Whitelist IP yardimcilari — IPv4 dotted decimal validasyonu (CIDR yok).
+  const isValidIpv4 = (ip: string): boolean => {
+    const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+    if (!m) return false;
+    return [m[1], m[2], m[3], m[4]].every((p) => {
+      const n = Number(p);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
+  };
+
+  const handleAddPeerIp = () => {
+    const ip = newPeerIp.trim();
+    if (!ip) return;
+    if (!isValidIpv4(ip)) {
+      setPeerError(`Geçersiz IPv4: ${ip}`);
+      return;
+    }
+    if (allowedPeerList.includes(ip)) {
+      setPeerError(`${ip} zaten listede.`);
+      return;
+    }
+    setAllowedPeerList((prev) => [...prev, ip]);
+    setNewPeerIp("");
+    setPeerError("");
+  };
+
+  const handleRemovePeerIp = (ip: string) => {
+    setAllowedPeerList((prev) => prev.filter((p) => p !== ip));
+    setPeerError("");
   };
 
   const isCreatingIec104 = protocol === "iec104";
@@ -335,7 +376,10 @@ export function OutboundTargetsPanel({
 
       {(isCreateOpen || editing) && (
         <div className="settings-modal-backdrop">
-          <form className="settings-modal" onSubmit={editing ? handleEdit : handleCreate}>
+          <form
+            className={`settings-modal ${(isCreatingIec104 || isEditingIec104) ? "iec104-edit-modal" : ""}`}
+            onSubmit={editing ? handleEdit : handleCreate}
+          >
             <h3>{editing ? "Hedef Düzenle" : "Yeni Outbound Hedef"}</h3>
             {!editing ? (
               <>
@@ -366,40 +410,105 @@ export function OutboundTargetsPanel({
             )}
 
             {(isCreatingIec104 || isEditingIec104) ? (
-              <>
-                <label>
-                  Listen Host
-                  <input
-                    value={listenHost}
-                    onChange={(event) => setListenHost(event.target.value)}
-                    placeholder="0.0.0.0"
-                  />
-                </label>
-                <label>
-                  Listen Port
-                  <input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={listenPort}
-                    onChange={(event) => setListenPort(event.target.value)}
-                    placeholder="2404"
-                  />
-                </label>
-                <label>
-                  İzinli SCADA IP'leri (whitelist)
-                  <textarea
-                    rows={2}
-                    value={allowedPeers}
-                    onChange={(event) => setAllowedPeers(event.target.value)}
-                    placeholder="Boş = serbest. Birden fazla için virgülle ayır: 192.168.1.10, 10.0.0.5"
-                  />
-                </label>
-                <p className="helper-text">
-                  Her cihazın ASDU adresini ayrı atamak için hedef satırının yanındaki
-                  <strong> Cihaz ASDU Adresleri</strong> butonunu kullanın.
-                </p>
-              </>
+              <div className="iec104-edit-grid">
+                {/* SOL KOLON — Server parametreleri */}
+                <div className="iec104-edit-col">
+                  <h4 className="iec104-edit-col-title">Sunucu</h4>
+                  <label>
+                    Listen Host
+                    <input
+                      value={listenHost}
+                      onChange={(event) => setListenHost(event.target.value)}
+                      placeholder="0.0.0.0"
+                    />
+                  </label>
+                  <label>
+                    Listen Port
+                    <input
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={listenPort}
+                      onChange={(event) => setListenPort(event.target.value)}
+                      placeholder="2404"
+                    />
+                  </label>
+                  <p className="helper-text">
+                    Her cihazın ASDU adresini ayrı atamak için hedef satırının
+                    yanındaki <strong>Cihaz ASDU Adresleri</strong> butonunu kullanın.
+                  </p>
+                </div>
+
+                {/* SAG KOLON — IP whitelist yonetimi */}
+                <div className="iec104-edit-col iec104-whitelist-col">
+                  <div className="iec104-whitelist-head">
+                    <h4 className="iec104-edit-col-title">İzinli SCADA IP'leri</h4>
+                    <span
+                      className={`iec104-whitelist-status ${allowedPeerList.length > 0 ? "iec104-whitelist-status--active" : "iec104-whitelist-status--open"}`}
+                    >
+                      <span className="status-dot" />
+                      {allowedPeerList.length > 0
+                        ? `${allowedPeerList.length} IP izinli`
+                        : "Whitelist kapalı"}
+                    </span>
+                  </div>
+                  <p className="helper-text">
+                    Liste boş ise <strong>her IP bağlanabilir</strong>. IP eklediğinizde
+                    yalnız listedeki IP'lerden TCP kabul edilir.
+                  </p>
+                  <div className="iec104-peer-input-row">
+                    <input
+                      type="text"
+                      value={newPeerIp}
+                      onChange={(event) => {
+                        setNewPeerIp(event.target.value);
+                        if (peerError) setPeerError("");
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          handleAddPeerIp();
+                        }
+                      }}
+                      placeholder="192.168.1.10"
+                      pattern="^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
+                    />
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      onClick={handleAddPeerIp}
+                      disabled={!newPeerIp.trim()}
+                    >
+                      Ekle
+                    </button>
+                  </div>
+                  {peerError ? <p className="error-text iec104-peer-error">{peerError}</p> : null}
+
+                  <div className="iec104-peer-list">
+                    {allowedPeerList.length === 0 ? (
+                      <div className="iec104-peer-empty">
+                        Henüz IP eklenmedi. Liste boş bırakılırsa her bağlantı kabul edilir.
+                      </div>
+                    ) : (
+                      allowedPeerList.map((ip, idx) => (
+                        <div key={ip} className="iec104-peer-chip">
+                          <span className="iec104-peer-chip-idx">{idx + 1}</span>
+                          <code className="iec104-peer-chip-ip">{ip}</code>
+                          <button
+                            type="button"
+                            className="iec104-peer-chip-remove"
+                            onClick={() => handleRemovePeerIp(ip)}
+                            title="Listeden kaldır"
+                            aria-label={`${ip} kaldır`}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 <label>

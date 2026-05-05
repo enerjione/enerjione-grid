@@ -9,6 +9,7 @@ from app.models.enums import UserRole
 from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
 from app.schemas.alarm_rule import AlarmRuleCreate, AlarmRuleRead, AlarmRuleUpdate
+from app.services.event_service import record_event
 
 router = APIRouter(prefix="/alarm-rules", tags=["alarm-rules"])
 
@@ -37,12 +38,22 @@ def _ensure_signal_exists(db: Session, signal_key: str) -> SignalCatalog:
 @router.post("", response_model=AlarmRuleRead, status_code=status.HTTP_201_CREATED)
 def create_alarm_rule(
     payload: AlarmRuleCreate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     _ensure_signal_exists(db, payload.signal_key)
     row = AlarmRule(**payload.model_dump())
     db.add(row)
+    db.flush()
+    record_event(
+        db,
+        category="alarm-rule",
+        event_type="alarm_rule_created",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Alarm kuralı eklendi: {row.name} ({row.signal_key})",
+        metadata={"rule_id": row.id, "signal_key": row.signal_key, "level": row.level},
+    )
     db.commit()
     db.refresh(row)
     return row
@@ -52,14 +63,24 @@ def create_alarm_rule(
 def update_alarm_rule(
     rule_id: int,
     payload: AlarmRuleUpdate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.scalar(select(AlarmRule).where(AlarmRule.id == rule_id))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm rule not found")
-    for key, value in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    for key, value in changes.items():
         setattr(row, key, value)
+    record_event(
+        db,
+        category="alarm-rule",
+        event_type="alarm_rule_updated",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Alarm kuralı güncellendi: {row.name}",
+        metadata={"rule_id": row.id, "fields": list(changes.keys())},
+    )
     db.commit()
     db.refresh(row)
     return row
@@ -68,12 +89,23 @@ def update_alarm_rule(
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_alarm_rule(
     rule_id: int,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.scalar(select(AlarmRule).where(AlarmRule.id == rule_id))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm rule not found")
+    name = row.name
+    sig = row.signal_key
     db.delete(row)
+    record_event(
+        db,
+        category="alarm-rule",
+        event_type="alarm_rule_deleted",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"Alarm kuralı silindi: {name} ({sig})",
+        metadata={"rule_id": rule_id, "signal_key": sig},
+    )
     db.commit()
     return None

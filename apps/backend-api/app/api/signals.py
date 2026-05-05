@@ -16,6 +16,7 @@ from app.schemas.signal_catalog import (
     SignalCatalogUpdate,
     SignalLiveValue,
 )
+from app.services.event_service import record_event
 from app.services.signal_catalog_seed import load_default_signals, seed_default_signals
 
 router = APIRouter(prefix="/signals", tags=["signals"])
@@ -43,7 +44,7 @@ def list_signals(
 @router.post("", response_model=SignalCatalogRead, status_code=status.HTTP_201_CREATED)
 def create_signal(
     payload: SignalCatalogCreate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     existing = db.scalar(select(SignalCatalog).where(SignalCatalog.key == payload.key))
@@ -51,6 +52,16 @@ def create_signal(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Signal key already exists")
     row = SignalCatalog(**payload.model_dump())
     db.add(row)
+    db.flush()
+    record_event(
+        db,
+        category="signal",
+        event_type="signal_created",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Sinyal eklendi: {row.label} ({row.key})",
+        metadata={"signal_key": row.key, "model": row.model},
+    )
     db.commit()
     db.refresh(row)
     return row
@@ -60,14 +71,24 @@ def create_signal(
 def update_signal(
     signal_key: str,
     payload: SignalCatalogUpdate,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.scalar(select(SignalCatalog).where(SignalCatalog.key == signal_key))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signal not found")
-    for key, value in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    for key, value in changes.items():
         setattr(row, key, value)
+    record_event(
+        db,
+        category="signal",
+        event_type="signal_updated",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Sinyal güncellendi: {row.label} ({row.key})",
+        metadata={"signal_key": row.key, "fields": list(changes.keys())},
+    )
     db.commit()
     db.refresh(row)
     return row
@@ -76,27 +97,34 @@ def update_signal(
 @router.delete("/{signal_key}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_signal(
     signal_key: str,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
     row = db.scalar(select(SignalCatalog).where(SignalCatalog.key == signal_key))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signal not found")
+    label = row.label
+    key = row.key
     db.delete(row)
+    record_event(
+        db,
+        category="signal",
+        event_type="signal_deleted",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"Sinyal silindi: {label} ({key})",
+        metadata={"signal_key": key},
+    )
     db.commit()
     return None
 
 
 @router.post("/reset-to-defaults")
 def reset_signals_to_defaults(
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    """Sinyal katalogunu Horstmann SN2 fabrika listesine dondurur.
-
-    - `horstmann_sn2_signals.json` icindeki key'ler disindaki TUM sinyaller silinir.
-    - Eksik kayitlar eklenir, mevcut alanlar JSON ile senkronize edilir.
-    """
+    """Sinyal katalogunu Horstmann SN2 fabrika listesine dondurur."""
     defaults = load_default_signals()
     if not defaults:
         raise HTTPException(
@@ -104,6 +132,21 @@ def reset_signals_to_defaults(
             detail="Horstmann SN2 seed dosyasi bulunamadi.",
         )
     stats = seed_default_signals(db, strict=True)
+    record_event(
+        db,
+        category="signal",
+        event_type="signal_reset_defaults",
+        severity="warning",
+        actor_username=current_user.username,
+        message=(
+            f"Sinyal kataloğu fabrika ayarlarına döndürüldü "
+            f"(eklenen: {stats.get('inserted', 0)}, "
+            f"güncellenen: {stats.get('updated', 0)}, "
+            f"silinen: {stats.get('removed', 0)})"
+        ),
+        metadata=stats,
+    )
+    db.commit()
     return {
         "removed": stats.get("removed", 0),
         "inserted": stats.get("inserted", 0),

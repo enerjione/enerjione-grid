@@ -33,6 +33,7 @@ from app.schemas.responsibility_area import (
     ResponsibilityAreaUpdate,
     ResponsibilityAreaUserRead,
 )
+from app.services.event_service import record_event
 
 router = APIRouter(prefix="/responsibility-areas", tags=["responsibility-areas"])
 
@@ -94,9 +95,18 @@ def create_area(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sorumluluk alani kodu zaten kullaniliyor.")
     row = ResponsibilityArea(**payload.model_dump())
     db.add(row)
+    db.flush()
+    record_event(
+        db,
+        category="responsibility-area",
+        event_type="area_created",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Sorumluluk alanı eklendi: {row.name} ({row.code})",
+        metadata={"area_id": row.id},
+    )
     db.commit()
     db.refresh(row)
-    _ = current_user
     return _build_read(db, row)
 
 
@@ -153,14 +163,24 @@ def get_area(
 def update_area(
     area_id: int,
     payload: ResponsibilityAreaUpdate,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
     if area is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sorumluluk alani bulunamadi.")
-    for field, value in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    for field, value in changes.items():
         setattr(area, field, value)
+    record_event(
+        db,
+        category="responsibility-area",
+        event_type="area_updated",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Sorumluluk alanı güncellendi: {area.name}",
+        metadata={"area_id": area.id, "fields": list(changes.keys())},
+    )
     db.commit()
     db.refresh(area)
     return _build_read(db, area)
@@ -169,14 +189,25 @@ def update_area(
 @router.delete("/{area_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_area(
     area_id: int,
-    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
     if area is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sorumluluk alani bulunamadi.")
+    name = area.name
+    code = area.code
     # Junction tablolari ON DELETE CASCADE ile temizleniyor.
     db.delete(area)
+    record_event(
+        db,
+        category="responsibility-area",
+        event_type="area_deleted",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"Sorumluluk alanı silindi: {name} ({code})",
+        metadata={"area_id": area_id},
+    )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

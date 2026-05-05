@@ -3289,11 +3289,201 @@ main.content.engineering-content:has(.device-management-panel) {
   border-color: #fcd34d;
 }
 
+/* ===== IEC 104 Hedef Duzenle modal'i — iki kolon ===== */
+.iec104-edit-modal {
+  width: 92vw;
+  max-width: 880px;
+}
+
+.iec104-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 8px 0 4px;
+}
+
+.iec104-edit-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.iec104-edit-col-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+}
+
+.iec104-whitelist-col {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.iec104-whitelist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.iec104-whitelist-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.iec104-whitelist-status--active {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+
+.iec104-whitelist-status--active .status-dot {
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.iec104-whitelist-status--open {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.iec104-whitelist-status--open .status-dot {
+  background: #94a3b8;
+}
+
+.iec104-peer-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.iec104-peer-input-row input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.iec104-peer-input-row input:focus {
+  border-color: #6366f1;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.iec104-peer-input-row .primary-btn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+.iec104-peer-error {
+  margin: 0;
+  font-size: 12px;
+}
+
+.iec104-peer-list {
+  margin-top: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+
+.iec104-peer-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #94a3b8;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+}
+
+.iec104-peer-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+
+.iec104-peer-chip:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.08);
+}
+
+.iec104-peer-chip-idx {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.iec104-peer-chip-ip {
+  flex: 1;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: #0f172a;
+}
+
+.iec104-peer-chip-remove {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 120ms, color 120ms;
+}
+
+.iec104-peer-chip-remove:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+@media (max-width: 720px) {
+  .iec104-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== ASDU adresleri modal'i — buyuk + modern ===== */
 .asdu-modal {
-  width: 92vw;
-  max-width: 980px;
-  max-height: 88vh;
+  width: 96vw;
+  max-width: 1280px;
+  /* Sabit yukseklik: cok cihaz eklense bile modal buyumez, ic tablo kayar */
+  height: 90vh;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   padding: 0;
