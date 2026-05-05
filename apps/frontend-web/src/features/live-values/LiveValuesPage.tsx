@@ -401,7 +401,10 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           <tbody>
             {pagedRows.map((row) => {
               const sig = signalByKey.get(row.signal_key);
-              const dataType = sig?.data_type;
+              // Once row.data_type (backend live endpoint'inden gelir; en doğru kaynak),
+              // sonra catalog. Catalog yuklenmemis olsa bile string sinyaller dogru
+              // gosterilsin diye row.data_type one alindi.
+              const dataType = ((row.data_type as SignalDataType | undefined) ?? sig?.data_type) as SignalDataType | undefined;
               return (
                 <tr key={`${row.device_id}-${row.signal_key}`}>
                   <td>

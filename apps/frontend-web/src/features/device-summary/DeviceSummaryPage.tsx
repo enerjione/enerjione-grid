@@ -331,7 +331,8 @@ export function DeviceSummaryPage({
           <tbody>
             {pagedRows.map((row) => {
               const sig = signalByKey.get(row.signal_key);
-              const dataType = sig?.data_type;
+              // row.data_type (backend live endpoint'i) > catalog data_type
+              const dataType = ((row.data_type as SignalDataType | undefined) ?? sig?.data_type) as SignalDataType | undefined;
               const effectiveQuality = gwOnline ? row.quality : "bad";
               return (
                 <tr key={`${row.device_id}-${row.signal_key}`}>

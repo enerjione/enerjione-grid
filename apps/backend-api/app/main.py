@@ -180,7 +180,7 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_allowed_peers VARCHAR(2000)")
         )
-        # Proje ayarlari (singleton; logo + isimler)
+        # Proje ayarlari (singleton; logo + isimler + batarya esikleri)
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS project_settings ("
@@ -191,6 +191,12 @@ def create_tables():
                 "customer_logo_light TEXT"
                 ")"
             )
+        )
+        connection.execute(
+            text("ALTER TABLE project_settings ADD COLUMN IF NOT EXISTS battery_voltage_low DOUBLE PRECISION")
+        )
+        connection.execute(
+            text("ALTER TABLE project_settings ADD COLUMN IF NOT EXISTS battery_voltage_full DOUBLE PRECISION")
         )
         connection.execute(
             text(

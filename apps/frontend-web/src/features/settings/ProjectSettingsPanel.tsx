@@ -32,6 +32,8 @@ export function ProjectSettingsPanel({ onSave }: Props) {
   const [customerName, setCustomerName] = useState("");
   const [customerLogo, setCustomerLogo] = useState<string | null>(null);
   const [customerLogoLight, setCustomerLogoLight] = useState<string | null>(null);
+  const [batteryLow, setBatteryLow] = useState<string>("");
+  const [batteryFull, setBatteryFull] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -41,6 +43,16 @@ export function ProjectSettingsPanel({ onSave }: Props) {
     setCustomerName(settings.customer_name ?? "");
     setCustomerLogo(settings.customer_logo ?? null);
     setCustomerLogoLight(settings.customer_logo_light ?? null);
+    setBatteryLow(
+      settings.battery_voltage_low !== null && settings.battery_voltage_low !== undefined
+        ? String(settings.battery_voltage_low)
+        : ""
+    );
+    setBatteryFull(
+      settings.battery_voltage_full !== null && settings.battery_voltage_full !== undefined
+        ? String(settings.battery_voltage_full)
+        : ""
+    );
   }, [settings]);
 
   const handlePickLogo = async (
@@ -66,12 +78,31 @@ export function ProjectSettingsPanel({ onSave }: Props) {
     setSaving(true);
     setError("");
     setSuccess("");
+    const lowNum = batteryLow.trim() === "" ? null : Number(batteryLow);
+    const fullNum = batteryFull.trim() === "" ? null : Number(batteryFull);
+    if (lowNum !== null && (!Number.isFinite(lowNum) || lowNum < 0 || lowNum > 10)) {
+      setError("Düşük voltaj geçersiz (0-10 V).");
+      setSaving(false);
+      return;
+    }
+    if (fullNum !== null && (!Number.isFinite(fullNum) || fullNum < 0 || fullNum > 10)) {
+      setError("Tam voltaj geçersiz (0-10 V).");
+      setSaving(false);
+      return;
+    }
+    if (lowNum !== null && fullNum !== null && fullNum <= lowNum) {
+      setError("Tam voltaj, düşük voltajdan büyük olmalı.");
+      setSaving(false);
+      return;
+    }
     try {
       await onSave({
         project_name: projectName.trim() || null,
         customer_name: customerName.trim() || null,
         customer_logo: customerLogo,
-        customer_logo_light: customerLogoLight
+        customer_logo_light: customerLogoLight,
+        battery_voltage_low: lowNum,
+        battery_voltage_full: fullNum
       });
       await refresh();
       setSuccess("Proje ayarları kaydedildi.");
@@ -132,6 +163,42 @@ export function ProjectSettingsPanel({ onSave }: Props) {
             onClear={() => setCustomerLogoLight(null)}
             previewClass="project-settings-logo-preview project-settings-logo-preview--dark"
           />
+        </div>
+
+        <div className="project-settings-battery-box">
+          <h4>Batarya Voltaj Eşikleri</h4>
+          <p className="helper-text">
+            Cihaz batarya yüzdesi <code>master.battery_voltage_satellite</code>{" "}
+            sinyalinden hesaplanır. Bu eşikler dışındaki değerlerde sırasıyla %0
+            ve %100 atanır; arada lineer interpolasyon. Boş bırakılırsa varsayılan
+            (3.40 V / 3.71 V) kullanılır.
+          </p>
+          <div className="project-settings-battery-grid">
+            <label>
+              Düşük Voltaj (%0) — V
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                max={10}
+                placeholder="3.40"
+                value={batteryLow}
+                onChange={(event) => setBatteryLow(event.target.value)}
+              />
+            </label>
+            <label>
+              Tam Voltaj (%100) — V
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                max={10}
+                placeholder="3.71"
+                value={batteryFull}
+                onChange={(event) => setBatteryFull(event.target.value)}
+              />
+            </label>
+          </div>
         </div>
       </div>
 

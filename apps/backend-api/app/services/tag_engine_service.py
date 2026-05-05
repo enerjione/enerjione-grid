@@ -31,36 +31,50 @@ def map_quality_to_status(quality: str) -> CommunicationStatus:
     )
 
 
-# Lithium pil voltaj-yüzde haritası (Horstmann SN2 sahası).
-# 3.71 V ve uzeri → %100 (full), 3.40 V ve alti → %0 (low). Aralarinda lineer.
-BATTERY_VOLTAGE_FULL = 3.71
-BATTERY_VOLTAGE_LOW = 3.40
+# Lithium pil voltaj-yüzde haritası (default; proje ayarlarindan override edilebilir).
+DEFAULT_BATTERY_VOLTAGE_FULL = 3.71
+DEFAULT_BATTERY_VOLTAGE_LOW = 3.40
 
 
-def _battery_percent_from_signal(signal_key: str, value: float) -> float | None:
-    """Sinyal degerinden master cihazin batarya yuzdesini turet.
+def _battery_thresholds(db: Session | None) -> tuple[float, float]:
+    """Proje ayarlarindan (low, full) cek; yoksa default."""
+    if db is None:
+        return DEFAULT_BATTERY_VOLTAGE_LOW, DEFAULT_BATTERY_VOLTAGE_FULL
+    try:
+        from app.models.project_settings import ProjectSettings
+        row = db.get(ProjectSettings, 1)
+        if row is not None:
+            low = row.battery_voltage_low if row.battery_voltage_low is not None else DEFAULT_BATTERY_VOLTAGE_LOW
+            full = row.battery_voltage_full if row.battery_voltage_full is not None else DEFAULT_BATTERY_VOLTAGE_FULL
+            if full > low:
+                return float(low), float(full)
+    except Exception:  # noqa: BLE001
+        pass
+    return DEFAULT_BATTERY_VOLTAGE_LOW, DEFAULT_BATTERY_VOLTAGE_FULL
 
-    Master cihaz icin SADECE `master.battery_voltage_satellite` (analog, V)
-    kullanilir. Voltaj 3.40V ve alti → 0%, 3.71V ve uzerinde → 100%; arasinda
-    lineer interpolation. Saha ekibinin belirttigi lithium pil calisma araligi.
 
-    `master.battery_status` (binary AKTIF/PASIF) GERCEK SoC degil — sadece
-    pil takili mi bilgisi. Bu yuzden burada hesaba dahil etmiyoruz; aksi
-    halde 1 doner ve hep %100 gozukur (mevcut hatanin sebebi).
+def _battery_percent_from_signal(
+    signal_key: str, value: float, db: Session | None = None
+) -> float | None:
+    """Master `battery_voltage_satellite` sinyalinden yuzde turet.
 
-    Sat01/sat02 batarya sinyalleri ileride genisletilecek (kullanicinin sonraki
-    asamada istedigi 'satellite tiklayinca onun bataryasini gostermek')."""
+    Eşikler proje ayarlarindan okunur (`battery_voltage_low/full`); ayar yoksa
+    fallback 3.40 / 3.71 V kullanilir. value <= low → 0, value >= full → 100,
+    arasi lineer."""
     if not signal_key:
         return None
     key = signal_key.lower()
-    if key == "master.battery_voltage_satellite":
-        if value <= BATTERY_VOLTAGE_LOW:
-            return 0.0
-        if value >= BATTERY_VOLTAGE_FULL:
-            return 100.0
-        span = BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_LOW
-        return round((value - BATTERY_VOLTAGE_LOW) / span * 100.0, 1)
-    return None
+    if key != "master.battery_voltage_satellite":
+        return None
+    low, full = _battery_thresholds(db)
+    if value <= low:
+        return 0.0
+    if value >= full:
+        return 100.0
+    span = full - low
+    if span <= 0:
+        return None
+    return round((value - low) / span * 100.0, 1)
 
 
 def _auto_clear_quality_alarms(db: Session, device: Device) -> None:
@@ -117,7 +131,9 @@ def process_telemetry_reading(
         # deger korunur.
         if reading.value is not None:
             try:
-                derived = _battery_percent_from_signal(reading.signal_key, float(reading.value))
+                derived = _battery_percent_from_signal(
+                    reading.signal_key, float(reading.value), db=db
+                )
             except (TypeError, ValueError):
                 derived = None
             if derived is not None:

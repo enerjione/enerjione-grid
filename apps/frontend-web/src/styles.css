@@ -3597,6 +3597,45 @@ main.content.engineering-content:has(.device-management-panel) {
   margin: 8px 0;
 }
 
+.project-settings-battery-box {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-settings-battery-box h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.project-settings-battery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.project-settings-battery-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.project-settings-battery-grid input {
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 @media (max-width: 768px) {
   .project-settings-field,
   .project-settings-logo-grid {

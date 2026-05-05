@@ -75,10 +75,19 @@ async def _async_main() -> None:
             },
         }
 
+    def _runtime_for(target_id: int) -> dict:
+        """Backend-api'nin sorabilecegi tek-target runtime ozeti."""
+        return {
+            "target_id": target_id,
+            "server_running": iec104_manager.is_running(target_id),
+            "connected_clients": iec104_manager.connected_clients(target_id),
+        }
+
     health = start_health_server(
         host=settings.health_host,
         port=settings.health_port,
         snapshot=_health,
+        runtime_for=_runtime_for,
     )
     logger.info(
         "iec104_outbound_starting version=%s health=%s:%d",

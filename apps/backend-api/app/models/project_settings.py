@@ -10,7 +10,7 @@ Buyuk dosya beklemiyoruz (max ~500 KB); sutun tipi TEXT, sinirsiz.
 
 from __future__ import annotations
 
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -26,3 +26,7 @@ class ProjectSettings(Base):
     customer_logo: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Header'da gosterilecek koyu zemin uyumlu kucuk logo (data URL).
     customer_logo_light: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Batarya yuzdesi voltajdan turetilirken kullanilan esikler (V).
+    # NULL ise fallback default'lar kullanilir (3.40 / 3.71).
+    battery_voltage_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    battery_voltage_full: Mapped[float | None] = mapped_column(Float, nullable=True)

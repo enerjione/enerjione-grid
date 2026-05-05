@@ -8,6 +8,8 @@ class ProjectSettingsRead(BaseModel):
     customer_name: str | None = None
     customer_logo: str | None = None
     customer_logo_light: str | None = None
+    battery_voltage_low: float | None = None
+    battery_voltage_full: float | None = None
 
     class Config:
         from_attributes = True
@@ -18,7 +20,7 @@ class ProjectSettingsUpdate(BaseModel):
 
     project_name: str | None = Field(default=None, max_length=200)
     customer_name: str | None = Field(default=None, max_length=200)
-    # Boyut sinirini kabaca buyuk PNG/SVG'leri kapsayacak sekilde tutuyoruz
-    # (~750 KB base64 ~ 1 MB orig). Frontend buyuk dosya secerse 413 doner.
     customer_logo: str | None = Field(default=None, max_length=1_500_000)
     customer_logo_light: str | None = Field(default=None, max_length=1_500_000)
+    battery_voltage_low: float | None = Field(default=None, ge=0, le=10)
+    battery_voltage_full: float | None = Field(default=None, ge=0, le=10)

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
 import { locateDevice } from "../../shared/geoLookup";
+import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 
 type Props = {
   devices: DeviceRow[];
@@ -13,15 +14,19 @@ type Props = {
   liveValues?: SignalLiveRow[];
 };
 
-// Master batarya voltaj-yüzde haritası — DeviceMapTab popup ile aynı eşikler.
-const BATTERY_VOLTAGE_FULL = 3.71;
-const BATTERY_VOLTAGE_LOW = 3.4;
+// Master batarya voltaj-yüzde haritası — Proje Ayarları'ndan override edilebilir.
+const DEFAULT_BATTERY_VOLTAGE_FULL = 3.71;
+const DEFAULT_BATTERY_VOLTAGE_LOW = 3.4;
 
-function voltageToPercent(v: number | null): number | null {
-  if (v === null || Number.isNaN(v)) return null;
-  if (v <= BATTERY_VOLTAGE_LOW) return 0;
-  if (v >= BATTERY_VOLTAGE_FULL) return 100;
-  return Math.round(((v - BATTERY_VOLTAGE_LOW) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_LOW)) * 100);
+function makeVoltageToPercent(low: number, full: number) {
+  const span = full - low;
+  return (v: number | null): number | null => {
+    if (v === null || Number.isNaN(v)) return null;
+    if (v <= low) return 0;
+    if (v >= full) return 100;
+    if (span <= 0) return null;
+    return Math.round(((v - low) / span) * 100);
+  };
 }
 
 function formatRelative(iso: string | null | undefined): string {
@@ -43,6 +48,10 @@ function batteryClass(percent: number | null | undefined): string {
 }
 
 export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValues }: Props) {
+  const { settings } = useProjectSettings();
+  const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
+  const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
+  const voltageToPercent = useMemo(() => makeVoltageToPercent(battLow, battFull), [battLow, battFull]);
   // Cihaz id → alarm durumu: "open" (onaylanmamış aktif), "ack" (onaylanmış aktif), null
   const deviceAlarmState = useMemo(() => {
     const map = new Map<number, "open" | "ack">();
@@ -72,7 +81,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
       map.set(row.device_id, voltageToPercent(v));
     }
     return map;
-  }, [liveValues]);
+  }, [liveValues, voltageToPercent]);
 
   return (
     <aside className="sidebar device-sidebar-modern">

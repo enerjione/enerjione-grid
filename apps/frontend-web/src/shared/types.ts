@@ -203,6 +203,9 @@ export type ProjectSettings = {
   customer_logo?: string | null;
   /** Header'da gosterilecek koyu zemin uyumlu kucuk logo (data URL). */
   customer_logo_light?: string | null;
+  /** Batarya yuzdesi voltajdan turetilirken kullanilan esikler (V). */
+  battery_voltage_low?: number | null;
+  battery_voltage_full?: number | null;
 };
 
 export type NotificationSettings = {

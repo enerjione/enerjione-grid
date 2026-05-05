@@ -149,11 +149,13 @@ def get_iec104_runtime(
 ) -> dict:
     """Bu IEC 104 hedefinin canli durumunu doner.
 
-    - server_running: server ayakta mi
-    - whitelist_active: bos = serbest, dolu = sadece listedekiler
-    - allowed_peers: parse edilmis IP listesi
-    - connected_clients: [{peer, started, connected_at}]
-    """
+    Gercek IEC 104 TCP server'lari ayri `iec104-outbound` Docker servisinde
+    calisir. Bu endpoint hedef DB satirini + iec104-outbound HTTP health
+    endpoint'inden runtime'i toplar. Eski (gomulu) backend manager'i fallback
+    olarak kalir — ama compose'da artik kullanilmiyor."""
+    import os
+    import requests as _requests
+
     target = db.get(OutboundTarget, target_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found")
@@ -164,12 +166,32 @@ def get_iec104_runtime(
         )
     raw = (target.iec104_allowed_peers or "").strip()
     allowed = [p.strip() for p in raw.split(",") if p.strip()]
+
+    # Once compose servisinden cek (asil server orada)
+    server_running = False
+    connected_clients: list[dict] = []
+    base = os.getenv("IEC104_OUTBOUND_HEALTH_URL", "http://iec104-outbound:8014")
+    try:
+        resp = _requests.get(f"{base}/runtime/{target_id}", timeout=2.5)
+        if resp.status_code == 200:
+            data = resp.json() or {}
+            server_running = bool(data.get("server_running"))
+            connected_clients = list(data.get("connected_clients") or [])
+        else:
+            # Servis cevap verdi ama hata; gomulu manager'a dus.
+            server_running = iec104_manager.is_running(target.id)
+            connected_clients = iec104_manager.connected_clients(target.id)
+    except Exception:
+        # Servis erisilemiyor — gomulu manager (eski mod) ile devam et.
+        server_running = iec104_manager.is_running(target.id)
+        connected_clients = iec104_manager.connected_clients(target.id)
+
     return {
         "target_id": target.id,
-        "server_running": iec104_manager.is_running(target.id),
+        "server_running": server_running,
         "whitelist_active": bool(allowed),
         "allowed_peers": allowed,
-        "connected_clients": iec104_manager.connected_clients(target.id),
+        "connected_clients": connected_clients,
     }
 
 

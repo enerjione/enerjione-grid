@@ -3,6 +3,7 @@ import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet"
 import L from "leaflet";
 
 import type { DeviceRow, SignalLiveRow } from "../../shared/types";
+import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { locateDevice } from "../../shared/geoLookup";
 
 type Props = {
@@ -59,15 +60,19 @@ function markerIcon(status: DeviceRow["communicationStatus"]) {
   });
 }
 
-// Lithium pil voltaj-yüzde haritası — backend ile aynı eşikler.
-const BATTERY_VOLTAGE_FULL = 3.71;
-const BATTERY_VOLTAGE_LOW = 3.4;
+// Lithium pil voltaj-yüzde haritası — Proje Ayarları'ndan override edilebilir.
+const DEFAULT_BATTERY_VOLTAGE_FULL = 3.71;
+const DEFAULT_BATTERY_VOLTAGE_LOW = 3.4;
 
-function voltageToPercent(v: number | null | undefined): number | null {
-  if (v === null || v === undefined || !Number.isFinite(v)) return null;
-  if (v <= BATTERY_VOLTAGE_LOW) return 0;
-  if (v >= BATTERY_VOLTAGE_FULL) return 100;
-  return Math.round(((v - BATTERY_VOLTAGE_LOW) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_LOW)) * 100);
+function makeVoltageToPercent(low: number, full: number) {
+  const span = full - low;
+  return (v: number | null | undefined): number | null => {
+    if (v === null || v === undefined || !Number.isFinite(v)) return null;
+    if (v <= low) return 0;
+    if (v >= full) return 100;
+    if (span <= 0) return null;
+    return Math.round(((v - low) / span) * 100);
+  };
 }
 
 function batteryClass(percent: number | null): string {
@@ -97,6 +102,11 @@ function formatRelative(iso: string | null | undefined): string {
 }
 
 export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues }: Props) {
+  const { settings } = useProjectSettings();
+  const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
+  const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
+  const voltageToPercent = useMemo(() => makeVoltageToPercent(battLow, battFull), [battLow, battFull]);
+
   // Seçili cihaz için kaynak başına batarya voltajı/yüzdesi
   const sourceBatteries = useMemo(() => {
     if (!selectedDevice || !liveValues) {
@@ -128,7 +138,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       }
     }
     return result;
-  }, [selectedDevice, liveValues]);
+  }, [selectedDevice, liveValues, voltageToPercent]);
 
   return (
     <section className="map-full">
