@@ -410,21 +410,11 @@ export function NotificationBell({ token, onNavigate }: Props) {
                       ) : null}
                       {/* Aciklama (basliktan farkli ise) */}
                       {bodyToShow ? <p className="notif-item-text">{bodyToShow}</p> : null}
-                      {/* Olcum + esik karsilastirmasi gorsel sunum */}
-                      {isAlarm && valueDisplay ? (
-                        <div className="notif-item-measure">
-                          <span className="notif-measure-value">{valueDisplay}</span>
-                          {opSym && thresholdDisplay ? (
-                            <>
-                              <span className="notif-measure-op">{opSym}</span>
-                              <span className="notif-measure-threshold">
-                                {thresholdDisplay}
-                                <span className="notif-measure-threshold-label">eşik</span>
-                              </span>
-                            </>
-                          ) : null}
-                        </div>
-                      ) : null}
+                      {/* Eski ölçüm/eşik kutusu kullanici talebiyle kart-
+                          dan kaldirildi (özellikle binary sinyallerde
+                          "1 boolean_true 0 eşik" anlamsizdi). Detayli ol-
+                          cum bilgisi mail/Telegram bildiriminde ve alarm
+                          detay sayfasinda yer alir. */}
                       {/* Alt satir: zaman + actor (eger varsa). Seviye rozeti
                           ust satira tasinarak meta sadelesti. */}
                       <div className="notif-item-meta">
