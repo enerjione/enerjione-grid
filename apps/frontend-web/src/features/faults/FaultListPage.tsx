@@ -191,38 +191,7 @@ export function FaultListPage({
 
   return (
     <div className="faults-page">
-      {/* Üst başlık + istatistik şeridi */}
-      <header className="faults-page-header">
-        <div className="faults-page-title-wrap">
-          <span className="material-symbols-outlined faults-page-icon">report</span>
-          <div>
-            <h2>Hat Arızaları</h2>
-            <p className="faults-page-sub">
-              Sahada tespit edilen arıza noktaları ve sorumluluk atamaları.
-            </p>
-          </div>
-        </div>
-        <div className="faults-page-toolbar">
-          <input
-            type="search"
-            placeholder="Hat / cihaz / atanan ara…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="faults-search"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="faults-filter"
-          >
-            <option value="active">Aktif</option>
-            <option value="closed">Kapatılanlar</option>
-            <option value="all">Hepsi</option>
-          </select>
-        </div>
-      </header>
-
-      {/* Sayaç chip'leri (toplam, atandı, devam, çözüldü) */}
+      {/* Sayaç chip'leri — sayfanın en üstünde (başlık YOK) */}
       <div className="faults-stats">
         <div className="faults-stat-chip faults-stat-chip--total">
           <span className="faults-stat-num">{stats.total}</span>
@@ -248,6 +217,27 @@ export function FaultListPage({
           <span className="faults-stat-num">{stats.closed}</span>
           <span className="faults-stat-label">Kapatıldı</span>
         </div>
+      </div>
+
+      {/* Filtre satırı — chip'lerin altında, listenin üstünde ince şerit */}
+      <div className="faults-toolbar-row">
+        <input
+          type="search"
+          placeholder="Hat / cihaz / atanan ara…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="faults-search"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          className="faults-filter"
+        >
+          <option value="active">Aktif</option>
+          <option value="closed">Kapatılanlar</option>
+          <option value="all">Hepsi</option>
+        </select>
+        <span className="faults-toolbar-count">{filtered.length} arıza</span>
       </div>
 
       <div className="faults-page-body">
