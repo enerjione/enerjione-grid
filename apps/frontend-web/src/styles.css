@@ -7851,6 +7851,44 @@ main.content.engineering-content:has(.device-management-panel) {
   background: #0f172a;
 }
 
+/* Favicon kucuk + kare gosterim — gercek tarayici sekmesinde nasil
+   gozukecegini taklit eder. Cubuk dolgusu ile cevrelenir, hassasiyet
+   icin tarayici sekme cubugu temasi gibi acik gri bir zemine yerlesir. */
+.project-settings-favicon-preview {
+  background: #f8fafc;
+  height: 140px;
+}
+.project-settings-favicon-preview img {
+  width: 64px;
+  height: 64px;
+  max-height: none;
+  max-width: none;
+  object-fit: contain;
+  /* checkered transparency arka plani — png/svg saydamligi gozuksun */
+  background-image:
+    linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+    linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+    linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+/* Login dekoratif gorsel — landscape, daha buyuk preview alani */
+.project-settings-login-image-preview {
+  background: #f1f5f9;
+  height: 200px;
+}
+.project-settings-login-image-preview img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
 .project-settings-logo-empty {
   font-size: 12px;
   color: #94a3b8;

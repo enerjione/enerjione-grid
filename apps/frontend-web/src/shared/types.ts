@@ -325,6 +325,12 @@ export type ProjectSettings = {
   /** Batarya yuzdesi voltajdan turetilirken kullanilan esikler (V). */
   battery_voltage_low?: number | null;
   battery_voltage_full?: number | null;
+  /** Tarayici sekmesinde gozukecek baslik (document.title). */
+  site_title?: string | null;
+  /** Tarayici sekmesinde gozukecek favicon (data URL). */
+  favicon?: string | null;
+  /** Login ekraninin sag tarafindaki dekoratif gorsel (data URL). */
+  login_image?: string | null;
 };
 
 export type NotificationSettings = {

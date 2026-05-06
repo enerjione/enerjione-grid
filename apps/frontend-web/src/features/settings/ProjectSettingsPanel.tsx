@@ -9,8 +9,10 @@ import { useEffect, useState } from "react";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import type { ProjectSettings } from "../../shared/types";
 
-const MAX_FILE_SIZE = 1_000_000; // 1 MB
+const MAX_FILE_SIZE = 1_000_000; // 1 MB (logo, favicon)
+const MAX_LOGIN_IMAGE_SIZE = 2_500_000; // 2.5 MB (login dekoratif gorsel daha buyuk olabilir)
 const ACCEPT = "image/png,image/jpeg,image/svg+xml,image/webp";
+const ACCEPT_FAVICON = "image/x-icon,image/png,image/svg+xml,image/vnd.microsoft.icon";
 
 type Props = {
   onSave: (payload: ProjectSettings) => Promise<void>;
@@ -34,6 +36,9 @@ export function ProjectSettingsPanel({ onSave }: Props) {
   const [customerLogoLight, setCustomerLogoLight] = useState<string | null>(null);
   const [batteryLow, setBatteryLow] = useState<string>("");
   const [batteryFull, setBatteryFull] = useState<string>("");
+  const [siteTitle, setSiteTitle] = useState("");
+  const [favicon, setFavicon] = useState<string | null>(null);
+  const [loginImage, setLoginImage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -53,17 +58,21 @@ export function ProjectSettingsPanel({ onSave }: Props) {
         ? String(settings.battery_voltage_full)
         : ""
     );
+    setSiteTitle(settings.site_title ?? "");
+    setFavicon(settings.favicon ?? null);
+    setLoginImage(settings.login_image ?? null);
   }, [settings]);
 
   const handlePickLogo = async (
     file: File | undefined,
-    setter: (val: string | null) => void
+    setter: (val: string | null) => void,
+    maxSize = MAX_FILE_SIZE
   ) => {
     setError("");
     setSuccess("");
     if (!file) return;
-    if (file.size > MAX_FILE_SIZE) {
-      setError(`Dosya çok büyük (max ${Math.round(MAX_FILE_SIZE / 1024)} KB).`);
+    if (file.size > maxSize) {
+      setError(`Dosya çok büyük (max ${Math.round(maxSize / 1024)} KB).`);
       return;
     }
     try {
@@ -102,7 +111,10 @@ export function ProjectSettingsPanel({ onSave }: Props) {
         customer_logo: customerLogo,
         customer_logo_light: customerLogoLight,
         battery_voltage_low: lowNum,
-        battery_voltage_full: fullNum
+        battery_voltage_full: fullNum,
+        site_title: siteTitle.trim() || null,
+        favicon: favicon,
+        login_image: loginImage
       });
       await refresh();
       setSuccess("Proje ayarları kaydedildi.");
@@ -144,6 +156,20 @@ export function ProjectSettingsPanel({ onSave }: Props) {
               placeholder="Örn: Aras EDAŞ"
             />
           </label>
+          <label>
+            Tarayıcı Sekme Başlığı
+            <input
+              type="text"
+              value={siteTitle}
+              onChange={(event) => setSiteTitle(event.target.value)}
+              placeholder="Örn: Aras EDAŞ Smart Logger"
+              maxLength={200}
+            />
+            <small className="helper-text">
+              Tarayıcı sekmesinde ve yer imlerinde gözükür. Boş bırakılırsa
+              varsayılan "Horstmann Smart Logger" kullanılır.
+            </small>
+          </label>
         </div>
 
         <div className="project-settings-logo-grid">
@@ -162,6 +188,27 @@ export function ProjectSettingsPanel({ onSave }: Props) {
             onPick={(file) => void handlePickLogo(file, setCustomerLogoLight)}
             onClear={() => setCustomerLogoLight(null)}
             previewClass="project-settings-logo-preview project-settings-logo-preview--dark"
+          />
+          <LogoBox
+            title="Tarayıcı İkonu (Favicon)"
+            description="Tarayıcı sekmesinde başlığın yanında gözükür. ICO, PNG veya SVG. Kare format ve 16-128 px arası önerilir."
+            value={favicon}
+            onPick={(file) => void handlePickLogo(file, setFavicon, MAX_FILE_SIZE)}
+            onClear={() => setFavicon(null)}
+            previewClass="project-settings-logo-preview project-settings-favicon-preview"
+            accept={ACCEPT_FAVICON}
+            buttonLabel="Favicon Seç"
+            emptyLabel="Varsayılan favicon kullanılıyor"
+          />
+          <LogoBox
+            title="Giriş Ekranı Görseli"
+            description="Giriş ekranının sağ tarafındaki dekoratif görsel. Kaldırılırsa varsayılan görsel kullanılır. Geniş ekran (örn. 1200×800) önerilir."
+            value={loginImage}
+            onPick={(file) => void handlePickLogo(file, setLoginImage, MAX_LOGIN_IMAGE_SIZE)}
+            onClear={() => setLoginImage(null)}
+            previewClass="project-settings-logo-preview project-settings-login-image-preview"
+            buttonLabel="Görsel Seç"
+            emptyLabel="Henüz görsel yüklenmedi"
           />
         </div>
 
@@ -226,9 +273,22 @@ type LogoBoxProps = {
   onPick: (file: File | undefined) => void;
   onClear: () => void;
   previewClass: string;
+  accept?: string;
+  buttonLabel?: string;
+  emptyLabel?: string;
 };
 
-function LogoBox({ title, description, value, onPick, onClear, previewClass }: LogoBoxProps) {
+function LogoBox({
+  title,
+  description,
+  value,
+  onPick,
+  onClear,
+  previewClass,
+  accept = ACCEPT,
+  buttonLabel = "Logo Seç",
+  emptyLabel = "Henüz logo yüklenmedi"
+}: LogoBoxProps) {
   return (
     <div className="project-settings-logo-box">
       <div className="project-settings-logo-head">
@@ -244,16 +304,16 @@ function LogoBox({ title, description, value, onPick, onClear, previewClass }: L
         {value ? (
           <img src={value} alt={title} />
         ) : (
-          <span className="project-settings-logo-empty">Henüz logo yüklenmedi</span>
+          <span className="project-settings-logo-empty">{emptyLabel}</span>
         )}
       </div>
       <label className="project-settings-logo-upload">
         <input
           type="file"
-          accept={ACCEPT}
+          accept={accept}
           onChange={(event) => onPick(event.target.files?.[0])}
         />
-        <span>Logo Seç</span>
+        <span>{buttonLabel}</span>
       </label>
     </div>
   );

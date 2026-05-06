@@ -46,6 +46,30 @@ export function ProjectSettingsProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // site_title degistiginde document.title'a uygula. Kaydedildiginde
+  // anlik olarak sekme baslıgı yansır; sayfa yeniden yuklenmesine gerek yok.
+  // Bos string gelirse fallback default kullanilir.
+  useEffect(() => {
+    const fallback = "Horstmann Smart Logger";
+    const t = (settings.site_title ?? "").trim();
+    document.title = t.length > 0 ? t : fallback;
+  }, [settings.site_title]);
+
+  // favicon degistiginde <link rel="icon"> elementini guncelle. data URL veya
+  // public path olabilir. Ayar bos ise public/favicon.ico fallback'i gerekir.
+  useEffect(() => {
+    const href = (settings.favicon ?? "").trim();
+    // Mevcut ikon link'lerini topla (multiple olabilir: shortcut, apple-touch).
+    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    // Bos ise default favicon.ico'ya don.
+    link.href = href.length > 0 ? href : "/favicon.ico";
+  }, [settings.favicon]);
+
   const applyLocal = useCallback((next: ProjectSettings) => {
     setSettings(next);
   }, []);

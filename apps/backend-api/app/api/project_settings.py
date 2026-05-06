@@ -52,10 +52,12 @@ def update_project_settings(
     updates = payload.model_dump(exclude_unset=True)
     for key, value in updates.items():
         setattr(row, key, value)
-    # Logo data URL'leri buyuk olabilir; metadata'ya koymak yerine kisa flag tut.
+    # Logo / favicon / login image data URL'leri buyuk olabilir; metadata'ya
+    # koymak yerine kisa flag tut.
+    _BLOB_FIELDS = {"customer_logo", "customer_logo_light", "favicon", "login_image"}
     summary_fields = []
     for k in updates.keys():
-        if k in ("customer_logo", "customer_logo_light"):
+        if k in _BLOB_FIELDS:
             summary_fields.append(f"{k}({'set' if updates[k] else 'cleared'})")
         else:
             summary_fields.append(k)

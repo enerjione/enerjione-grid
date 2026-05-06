@@ -236,6 +236,16 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE project_settings ADD COLUMN IF NOT EXISTS battery_voltage_full DOUBLE PRECISION")
         )
+        # Tarayici sekme basligi + favicon + login dekoratif gorseli (data URL)
+        connection.execute(
+            text("ALTER TABLE project_settings ADD COLUMN IF NOT EXISTS site_title VARCHAR(200)")
+        )
+        connection.execute(
+            text("ALTER TABLE project_settings ADD COLUMN IF NOT EXISTS favicon TEXT")
+        )
+        connection.execute(
+            text("ALTER TABLE project_settings ADD COLUMN IF NOT EXISTS login_image TEXT")
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS outbox_events ("

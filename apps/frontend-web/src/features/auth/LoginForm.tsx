@@ -107,7 +107,14 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
         </form>
 
         <aside className="login-visual">
-          <img className="visual-image" src="/login-visual.png" alt="Form Elektrik Görseli" />
+          {/* Proje Ayarlari'ndan login_image yuklenmisse onu, yoksa default
+              statik gorseli goster. INSTALLER ayar uzerinden istedigi gorseli
+              kullanabilir (sirket fotografi / saha cihaz cekimi vs). */}
+          <img
+            className="visual-image"
+            src={settings.login_image || "/login-visual.png"}
+            alt="Giriş ekranı görseli"
+          />
         </aside>
       </div>
     </div>

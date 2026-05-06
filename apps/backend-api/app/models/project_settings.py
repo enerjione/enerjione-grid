@@ -30,3 +30,12 @@ class ProjectSettings(Base):
     # NULL ise fallback default'lar kullanilir (3.40 / 3.71).
     battery_voltage_low: Mapped[float | None] = mapped_column(Float, nullable=True)
     battery_voltage_full: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Tarayici sekmesinde gozukecek baslik (document.title). NULL ise
+    # default "Horstmann Smart Logger" kullanilir.
+    site_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Tarayici sekmesinde gozukecek favicon (data URL: 'data:image/x-icon;base64,...'
+    # veya 'data:image/png;base64,...'). NULL ise public/favicon.ico kullanilir.
+    favicon: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Login ekraninda sag taraftaki dekoratif gorsel (data URL). NULL ise
+    # default goruntu (varsa) veya bos kullanilir.
+    login_image: Mapped[str | None] = mapped_column(Text, nullable=True)
