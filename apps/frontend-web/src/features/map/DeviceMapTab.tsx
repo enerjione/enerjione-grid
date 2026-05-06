@@ -544,26 +544,26 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       const splitAt = fault.splitPoint ?? fault.midpoint;
       const { pre: preFault, post: postFault } = splitPolyline(positionsAll, splitAt);
 
-      // Pre-fault (alarmli bolum) -> KIRMIZI
+      // Pre (hat baslangicindan kesim noktasina) -> YESIL (saglikli bolum)
       if (preFault.length >= 2) {
         linePolylines.push({
-          id: `line-${lineId}-fault-side`,
+          id: `line-${lineId}-healthy-side`,
           lineId,
           positions: preFault,
-          color: FAULT_COLOR,
-          kind: "post",
+          color: HEALTHY_FAULT_LINE_COLOR,
+          kind: "healthy",
           name: line.name,
           regionName: region?.name ?? ""
         });
       }
-      // Post-fault (alarm vermemis bolum) -> YESIL
+      // Post (kesim noktasindan hat ucuna) -> KIRMIZI dashed (etkilenen bolum)
       if (postFault.length >= 2) {
         linePolylines.push({
-          id: `line-${lineId}-healthy-side`,
+          id: `line-${lineId}-fault-side`,
           lineId,
           positions: postFault,
-          color: HEALTHY_FAULT_LINE_COLOR,
-          kind: "healthy",
+          color: FAULT_COLOR,
+          kind: "post",
           name: line.name,
           regionName: region?.name ?? ""
         });
