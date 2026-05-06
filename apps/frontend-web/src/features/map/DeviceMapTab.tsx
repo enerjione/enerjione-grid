@@ -252,7 +252,11 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       const total = sorted.length;
       sorted.forEach((seg, idx) => {
         if (!seg.device_id) return;
-        const t = (idx + 1) / (total + 1);
+        // Manuel device_position_t varsa onu kullan; yoksa otomatik dagit.
+        const tManual = seg.device_position_t;
+        const t = (tManual !== null && tManual !== undefined && tManual >= 0 && tManual <= 1)
+          ? tManual
+          : (idx + 1) / (total + 1);
         const lat = fp.latitude + (tp.latitude - fp.latitude) * t;
         const lon = fp.longitude + (tp.longitude - fp.longitude) * t;
         m.set(seg.device_id, [lat, lon]);
@@ -583,7 +587,34 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       });
     }
 
-    return { linePolylines, alarmedSegments, polesWithRole };
+    // Bransman baglanti cizgileri: ana hat diregi -> dal hattinin 1. diregi.
+    // Hat'in branched_from_pole_id'si varsa, o pole'un konumundan dal hattinin
+    // ilk direginin konumuna kesik cizgi cizilir (gorsel bagi belirtsin).
+    const branchLinks: {
+      id: string;
+      positions: [number, number][];
+      branchLineName: string;
+      parentLineName: string;
+    }[] = [];
+    for (const [lineId, sorted] of sortedPolesByLine) {
+      const line = linesById.get(lineId);
+      if (!line || !line.branched_from_pole_id) continue;
+      const parentPole = polesById.get(line.branched_from_pole_id);
+      const firstPole = sorted[0];
+      if (!parentPole || !firstPole) continue;
+      const parentLine = linesById.get(parentPole.line_id);
+      branchLinks.push({
+        id: `branch-${lineId}`,
+        positions: [
+          [parentPole.latitude, parentPole.longitude],
+          [firstPole.latitude, firstPole.longitude]
+        ],
+        branchLineName: line.name,
+        parentLineName: parentLine?.name ?? ""
+      });
+    }
+
+    return { linePolylines, alarmedSegments, polesWithRole, branchLinks };
   }, [gridSnapshot, devices, alarmActiveDeviceIds]);
 
   return (
@@ -629,6 +660,27 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           {/* Ariza noktasi marker'i kaldirildi — hat polyline pre/post
               renklendirmesi (yesil/kirmizi dashed) arizanin konumunu zaten
               gosteriyor. Ek bir simsek pin kafa karistiriciydi. */}
+
+          {/* Bransman baglantilari: ana hat diregi -> dal hattinin ilk diregi.
+              Mavimsi kesik cizgi ile gorsel bag belirtilir. */}
+          {topology?.branchLinks.map((link) => (
+            <Polyline
+              key={link.id}
+              positions={link.positions}
+              pathOptions={{
+                color: "#6366f1",
+                weight: 3,
+                opacity: 0.8,
+                dashArray: "6 4"
+              }}
+            >
+              <Tooltip sticky>
+                <strong>Branşman</strong>
+                <br />
+                {link.branchLineName} ← {link.parentLineName}
+              </Tooltip>
+            </Polyline>
+          ))}
 
           {/* Direkler: küçük numara etiketli pin (trafo ise farkli sembol) */}
           {topology?.polesWithRole.map(({ p, isStart, isEnd }) => (

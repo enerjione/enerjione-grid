@@ -408,6 +408,17 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     [devices, usedDeviceIds]
   );
 
+  // Bransman: secili hat baska bir hattin diregine bagliysa, o pole'un
+  // konumu (gridSnapshot'tan). Hat haritasinda dal-baglanti cizgisi cizilir.
+  const branchParentPos = useMemo<[number, number] | null>(() => {
+    const selLine = lines.find((l) => l.id === selectedLineId);
+    const parentPoleId = selLine?.branched_from_pole_id;
+    if (!parentPoleId || !gridSnapshot) return null;
+    const parent = gridSnapshot.poles.find((p) => p.id === parentPoleId);
+    if (!parent) return null;
+    return [parent.latitude, parent.longitude];
+  }, [lines, selectedLineId, gridSnapshot]);
+
   // Harita merkezi
   const mapCenter = useMemo<[number, number]>(() => {
     if (sortedPoles.length > 0) {
@@ -866,6 +877,29 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                         ))
                       )
                     : null}
+
+                  {/* Bransman: secili hat baska bir hattin diregine bagliysa,
+                      o pole konumu ile hattin ilk diregi arasinda kesik mavi cizgi. */}
+                  {branchParentPos && sortedPoles.length > 0 ? (
+                    <Polyline
+                      positions={[
+                        branchParentPos,
+                        [sortedPoles[0].latitude, sortedPoles[0].longitude]
+                      ]}
+                      pathOptions={{
+                        color: "#6366f1",
+                        weight: 3,
+                        opacity: 0.85,
+                        dashArray: "6 4"
+                      }}
+                    >
+                      <Tooltip sticky>
+                        <strong>Branşman</strong>
+                        <br />
+                        <em>Bu hat başka bir hattın direğine bağlı</em>
+                      </Tooltip>
+                    </Polyline>
+                  ) : null}
 
                   {/* Polyline segmentleri ayri cizilir; sol VE sag tik ayni menuyu acar.
                       Direk ekleme modu aktif ise tikla geçer (haritaya direk eklenmesin diye
