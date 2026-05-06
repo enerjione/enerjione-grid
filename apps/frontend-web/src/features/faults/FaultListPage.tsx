@@ -56,6 +56,15 @@ function fmtDate(iso?: string | null): string {
   return new Date(iso).toLocaleString("tr-TR");
 }
 
+function fmtDateParts(iso?: string | null): { date: string; time: string } {
+  if (!iso) return { date: "—", time: "" };
+  const d = new Date(iso);
+  return {
+    date: d.toLocaleDateString("tr-TR"),
+    time: d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+  };
+}
+
 function fmtElapsed(openedIso: string, endMs: number): string {
   const start = new Date(openedIso).getTime();
   let sec = Math.max(0, Math.round((endMs - start) / 1000));
@@ -309,13 +318,24 @@ export function FaultListPage({
 
                     {/* Alt: zaman + atanan + yorum, daha modern info chip'leri */}
                     <div className="faults-card-info-grid">
-                      <div className="faults-card-info-chip" title={fmtDate(f.opened_at)}>
-                        <span className="material-symbols-outlined">schedule</span>
-                        <div>
-                          <span className="faults-card-info-label">Açılış</span>
-                          <strong>{fmtDate(f.opened_at)}</strong>
-                        </div>
-                      </div>
+                      {(() => {
+                        const parts = fmtDateParts(f.opened_at);
+                        return (
+                          <div
+                            className="faults-card-info-chip faults-card-info-chip--time"
+                            title={fmtDate(f.opened_at)}
+                          >
+                            <span className="material-symbols-outlined">schedule</span>
+                            <div>
+                              <span className="faults-card-info-label">Açılış</span>
+                              <strong className="faults-card-info-datetime">
+                                <span>{parts.date}</span>
+                                <span className="faults-card-info-time">{parts.time}</span>
+                              </strong>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       <div className="faults-card-info-chip">
                         <span className="material-symbols-outlined">person</span>
                         <div>
