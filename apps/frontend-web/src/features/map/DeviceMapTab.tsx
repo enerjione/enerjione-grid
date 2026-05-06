@@ -288,159 +288,334 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
 
     type LinePart = {
       id: string;            // benzersiz key
-      lineId: number;
+      lineId: number | null; // null -> bransman baglanti edge'i
       positions: [number, number][];
       color: string;
-      kind: "healthy" | "fault" | "post";  // saglikli / ariza / ariza sonrasi
+      kind: "healthy" | "fault";   // saglikli yesil / arizali kirmizi kesik
       name: string;
       regionName: string;
     };
     const linePolylines: LinePart[] = [];
-    // Saglikli (alarm yok) hatlar her zaman yesil — kullanici hat rengi
-    // secimi sistemden kaldirildi; renk standartlasti.
     const HEALTHY_DEFAULT = HEALTHY_FAULT_LINE_COLOR;
 
-    // ===== Ariza lokalizasyon mantigi =====
-    // Cihazlar hat boyunca sirali (slot from_pole_seq, ardindan slot ici sira).
-    // Besleme yonu hat baslangicindan (#1) sonuna dogru.
-    // Bir cihaz alarm verirse: ondan oncesi enerjili (alarm akimi cihazdan
-    // gectiyse demek besleme tarafi saglikli), ariza ise ondan SONRADAKI
-    // segmentte gerceklesti.
-    // Lokalizasyon: hat bazinda alarm veren CIHAZLARI sirayla bul; "son alarmli
-    // cihaz ile bir sonraki segment" arizali olarak isaretlenir.
-    //   - Sonraki segment varsa o; yoksa (son cihaz hat ucundaysa) cihazin
-    //     kendi segmenti vurgulanir.
+    // ============================================================
+    //   ARIZA YERI KESTIRIM ALGORITMASI (Graf bazli)
+    // ============================================================
     //
-    // Bu yaklasim "cihazlar hem kendinden oncekini hem sonrakini kontrol
-    // ederek nokta atisi" davranisini saglar:
-    //   #1 alarm, #2 alarm, #3 NORMAL  =>  arizali segment = #2-#3 arasi
-    //   tum cihazlar alarm             =>  arizali segment = son cihazin kendi konumu
-    //   hicbiri alarm degil            =>  hat tamamen yesil
+    // Horstmann Smart Navigator cihazlari hat boyunca yerlestirilmis
+    // FAULT INDICATOR'lerdir. Her cihaz:
+    //   RED  (alarm aktif)  : ariza akimini ALGILADI
+    //   GREEN (alarm yok)   : ariza akimini ALGILAMADI
+    //
+    // Ariza yeri = SON RED ile ILK GREEN cihaz arasindaki edge'dir.
+    // Sadece bu edge KIRMIZI KESIK cizilir; geri kalan tum hat YESIL.
+    //
+    // Topoloji bir GRAF'tir:
+    //   * node = pole (direk)
+    //   * edge = iki ardisik pole arasindaki kablo (hat segmenti)
+    //   * edge = bransman baglantisi (parent_pole -> branch_first_pole)
+    //
+    // Bransman, ana hattin dogal devamidir: parent hattin son alarmli
+    // cihazi bransman pole'undan onceyse, bransmana akim hic gelmemis;
+    // ama yine de "son RED -> ilk GREEN" geçişi tek bir edge oldugundan
+    // sadece o edge kirmizi gosterilir (tum dal degil).
+    //
+    // ============================================================
 
-    // Slot icindeki cihaz sirasi icin segmentleri grupla.
-    type AnnotatedSeg = {
-      seg: typeof gridSnapshot.segments[number];
-      orderInSlot: number;  // slot icindeki sira (created_at, id'ye gore)
-      fromSeq: number;      // slot fromPole sequence_no
-      toSeq: number;        // slot toPole sequence_no
+    // 1) GRAF EDGE'LERINI KUR
+    //
+    // Edge tanimi:
+    //   { id, fromPoleId, toPoleId, lineId|null, type: 'segment'|'branch',
+    //     positions: polyline koordinatlari (bransman icin de iki pole) }
+    //
+    // segment: ayni hat icinde ardisik iki pole (sequence_no n -> n+1).
+    //   Bu edge'in uzerinde sifir veya daha fazla cihaz olabilir.
+    type Edge = {
+      id: string;
+      fromPoleId: number;
+      toPoleId: number;
+      lineId: number | null;
+      type: "segment" | "branch";
+      // Edge polyline'i (segment: 2 nokta; bransman: 2 nokta).
+      positions: [number, number][];
+      lineName: string;
+      regionName: string;
     };
-    const lineDevices = new Map<number, AnnotatedSeg[]>();
-    {
-      // Slot anahtariyla grupla, her slotta sirala.
-      const bySlot = new Map<string, typeof gridSnapshot.segments>();
-      for (const seg of gridSnapshot.segments) {
-        if (!seg.device_id) continue;
-        const k = `${seg.line_id}|${seg.from_pole_id}|${seg.to_pole_id}`;
-        const arr = bySlot.get(k) ?? [];
-        arr.push(seg);
-        bySlot.set(k, arr);
+    const edges: Edge[] = [];
+    // Adjacency: pole_id -> [edge_id]
+    const adj = new Map<number, string[]>();
+    const edgeById = new Map<string, Edge>();
+    const addEdge = (e: Edge) => {
+      edges.push(e);
+      edgeById.set(e.id, e);
+      const a = adj.get(e.fromPoleId) ?? [];
+      a.push(e.id);
+      adj.set(e.fromPoleId, a);
+      const b = adj.get(e.toPoleId) ?? [];
+      b.push(e.id);
+      adj.set(e.toPoleId, b);
+    };
+
+    for (const [lineId, sortedPoles] of sortedPolesByLine) {
+      const line = linesById.get(lineId);
+      const region = line ? regionsById.get(line.region_id) : undefined;
+      for (let i = 0; i < sortedPoles.length - 1; i += 1) {
+        const a = sortedPoles[i];
+        const b = sortedPoles[i + 1];
+        addEdge({
+          id: `seg-${lineId}-${a.id}-${b.id}`,
+          fromPoleId: a.id,
+          toPoleId: b.id,
+          lineId,
+          type: "segment",
+          positions: [
+            [a.latitude, a.longitude],
+            [b.latitude, b.longitude]
+          ],
+          lineName: line?.name ?? "",
+          regionName: region?.name ?? ""
+        });
       }
-      for (const [, segs] of bySlot) {
-        const sortedSlot = [...segs].sort((a, b) => {
-          const ad = new Date(a.created_at).getTime();
-          const bd = new Date(b.created_at).getTime();
-          if (ad !== bd) return ad - bd;
-          return a.id - b.id;
-        });
-        sortedSlot.forEach((seg, idx) => {
-          const fp = polesById.get(seg.from_pole_id);
-          const tp = polesById.get(seg.to_pole_id);
-          if (!fp || !tp) return;
-          const list = lineDevices.get(seg.line_id) ?? [];
-          list.push({
-            seg,
-            orderInSlot: idx,
-            fromSeq: fp.sequence_no,
-            toSeq: tp.sequence_no
-          });
-          lineDevices.set(seg.line_id, list);
-        });
-      }
-      // Hat icinde tum cihazlari, slotlar arasinda fromSeq sirasiyla, slot
-      // icinde orderInSlot sirasiyla dizimle.
-      for (const [lid, list] of lineDevices) {
-        list.sort((a, b) => {
-          if (a.fromSeq !== b.fromSeq) return a.fromSeq - b.fromSeq;
-          if (a.toSeq !== b.toSeq) return a.toSeq - b.toSeq;
-          return a.orderInSlot - b.orderInSlot;
-        });
-        lineDevices.set(lid, list);
+    }
+    // Bransman edge'leri: parent_pole -> dal hattinin ilk diregi.
+    for (const [lineId, sorted] of sortedPolesByLine) {
+      const line = linesById.get(lineId);
+      if (!line || !line.branched_from_pole_id) continue;
+      const parentPole = polesById.get(line.branched_from_pole_id);
+      const firstPole = sorted[0];
+      if (!parentPole || !firstPole) continue;
+      const region = regionsById.get(line.region_id);
+      addEdge({
+        id: `branch-${lineId}`,
+        fromPoleId: parentPole.id,
+        toPoleId: firstPole.id,
+        lineId,
+        type: "branch",
+        positions: [
+          [parentPole.latitude, parentPole.longitude],
+          [firstPole.latitude, firstPole.longitude]
+        ],
+        lineName: line.name,
+        regionName: region?.name ?? ""
+      });
+    }
+
+    // 2) HER EDGE ICIN UZERINDEKI CIHAZLARIN ALARM (RED) DURUMUNU ANNOTATE ET
+    //
+    // Bir edge "uzerindeki cihaz" = o edge'in iki pole'unu (from, to) slot
+    // olarak kullanan segment kayitlarinin device_id'si. Slot anahtari
+    // (line_id, from_pole_id, to_pole_id) olarak segments tablosundan
+    // alinir.
+    //
+    // Bir cihazin RED olmasi: alarmActiveDeviceIds icinde olmasi.
+    // Bir edge:
+    //   - icinde HIÇ cihaz YOKSA: state = "unknown" (gecisin nereden
+    //     gectigini bilmek icin onemli; aslinda bu gecisin tam buradan
+    //     gectigi anlamina gelir).
+    //   - en az bir cihaz var ve hepsi GREEN: state = "all_green"
+    //   - en az bir cihaz var ve hepsi RED: state = "all_red"
+    //   - hem RED hem GREEN var: state = "mixed" (gecis bu edge icinde)
+    type EdgeAnnot = {
+      edge: Edge;
+      reds: number;        // RED cihaz sayisi
+      greens: number;      // GREEN cihaz sayisi (alarmsiz)
+      // Edge icindeki cihazlar device_position_t sirasiyla. RED/GREEN dizisi.
+      devices: { deviceId: number; isRed: boolean; t: number }[];
+    };
+    const edgeAnnotById = new Map<string, EdgeAnnot>();
+    for (const e of edges) {
+      edgeAnnotById.set(e.id, { edge: e, reds: 0, greens: 0, devices: [] });
+    }
+    // Segments uzerindeki cihazlari edge'lere ata.
+    for (const seg of gridSnapshot.segments) {
+      if (!seg.device_id) continue;
+      // Bu segmentin slot pole ciftinin tam karsiligi olan SEGMENT-TYPE edge.
+      // Edge id: seg-<lineId>-<from>-<to>
+      const eid = `seg-${seg.line_id}-${seg.from_pole_id}-${seg.to_pole_id}`;
+      const annot = edgeAnnotById.get(eid);
+      if (!annot) continue;
+      const isRed = alarmActiveDeviceIds.has(seg.device_id);
+      const t = (seg.device_position_t !== null && seg.device_position_t !== undefined)
+        ? seg.device_position_t
+        : 0.5;
+      annot.devices.push({ deviceId: seg.device_id, isRed, t });
+      if (isRed) annot.reds += 1; else annot.greens += 1;
+    }
+    for (const annot of edgeAnnotById.values()) {
+      annot.devices.sort((a, b) => a.t - b.t);
+    }
+
+    // 3) BESLEME KAYNAGI = HER GRAF BILESEN ICIN
+    //    "branched_from_pole_id'si OLMAYAN hat"larin sequence_no=1 pole'u.
+    //    Buradan BFS ile graf'i tara, edge sirasini DETERMINISTIC yap
+    //    (besleme yonu).
+    //
+    // BFS sirasinda her edge'i SADECE BIR YONDE travese ederiz; cunku
+    // ardisik (RED -> GREEN) gecisini akim yonune gore aramak istiyoruz.
+    const rootPoleIds: number[] = [];
+    for (const [lineId, sorted] of sortedPolesByLine) {
+      const line = linesById.get(lineId);
+      if (!line) continue;
+      // Branshman olmayan hatlarin bas pole'u bir koktur. (Bransman
+      // hatlarinin baslangici parent'a bagli oldugundan ayrica root degil.)
+      if (!line.branched_from_pole_id && sorted.length > 0) {
+        rootPoleIds.push(sorted[0].id);
       }
     }
 
-    // Iki nokta arasi oklid uzakligi (lat/lng kucuk olcekte yeterli yaklasim).
-    const dist2 = (a: [number, number], b: [number, number]) => {
-      const dx = a[0] - b[0];
-      const dy = a[1] - b[1];
-      return dx * dx + dy * dy;
-    };
-    // Bir polyline'i belirli bir nokta cevresinde ikiye ayir.
-    // Nokta polyline uzerinde olmayabilir — en yakin edge'i bul,
-    // noktayi o edge'e dik atisla projekte et, polyline'i o projeksiyon
-    // noktasinda kes.
-    const splitPolyline = (
-      polyline: [number, number][],
-      splitAt: [number, number]
-    ): { pre: [number, number][]; post: [number, number][] } => {
-      if (polyline.length < 2) {
-        return { pre: polyline, post: [] };
-      }
-      let bestK = 0;
-      let bestD = Infinity;
-      let bestProj: [number, number] = polyline[0];
-      for (let k = 0; k < polyline.length - 1; k += 1) {
-        const a = polyline[k];
-        const b = polyline[k + 1];
-        // Edge yon vektoru
-        const dx = b[0] - a[0];
-        const dy = b[1] - a[1];
-        const len2 = dx * dx + dy * dy;
-        if (len2 === 0) continue;
-        // splitAt'in a'ya gore edge uzerindeki t parametresi (0..1 arasinda projeksiyon edge ici)
-        const t = Math.max(0, Math.min(1, ((splitAt[0] - a[0]) * dx + (splitAt[1] - a[1]) * dy) / len2));
-        const projX = a[0] + t * dx;
-        const projY = a[1] + t * dy;
-        const ddx = projX - splitAt[0];
-        const ddy = projY - splitAt[1];
-        const d = ddx * ddx + ddy * ddy;
-        if (d < bestD) {
-          bestD = d;
-          bestK = k;
-          bestProj = [projX, projY];
+    // Edge'in BESLEME yonune gore DOGRU yonde gezilmesi:
+    // Segment edge'i: line'in sequence_no kucukten buyuge dogru.
+    // Bransman edge'i: parent_pole -> branch_first_pole.
+    //
+    // Bunu saglamak icin edge yon-bilgisini koruyacagim: addEdge'te zaten
+    // dogru yonde ekledim (segment: pole[i] -> pole[i+1]; branch: parent
+    // -> firstPole). Yani edge.fromPoleId besleme tarafi, toPoleId yuk
+    // tarafi.
+
+    // 4) GRAF UZERINDE BFS ile EDGE'LERI BESLEME YONUNDE TARA
+    //    Her bilesende, her path icin RED -> GREEN gecisini bul.
+    //
+    // Algoritma cikitsi: hangi edge'ler "fault edge" olarak isaretlenmeli.
+    const faultEdgeIds = new Set<string>();
+    {
+      // visited: pole_id (fanout sirasinda BFS klasik)
+      const visited = new Set<number>();
+      type StackItem = {
+        poleId: number;
+        // Bu pole'a kadar gelen path uzerindeki SON GORULEN cihaz state'i.
+        // "red" / "green" / null (henuz cihaz gormemis).
+        lastState: "red" | "green" | null;
+        // RED'ten GREEN'e gecisi yakaladigimizda kullanmak uzere son RED'i
+        // iceren edge id'si (yani gecisin "GIRIS edge"'i)... aslinda burada
+        // tam ihtiyacimiz olan: gecisi mark edecegimiz edge GIRDIGIMIZ
+        // edge'in kendisi (RED bolgeden GREEN bolgeye gecerken). Asagida
+        // her edge gezerken kontrol edip mark ediyoruz.
+      };
+      const dfsFromRoot = (rootPoleId: number) => {
+        const stack: StackItem[] = [{ poleId: rootPoleId, lastState: null }];
+        while (stack.length > 0) {
+          const cur = stack.pop()!;
+          if (visited.has(cur.poleId)) continue;
+          visited.add(cur.poleId);
+          const adjEdges = adj.get(cur.poleId) ?? [];
+          for (const eid of adjEdges) {
+            const e = edgeById.get(eid);
+            if (!e) continue;
+            // Sadece ileri yonde gez: from = cur.poleId
+            if (e.fromPoleId !== cur.poleId) continue;
+            const nextPoleId = e.toPoleId;
+            if (visited.has(nextPoleId)) continue;
+
+            const annot = edgeAnnotById.get(e.id);
+            // Bu edge'in icinde RED/GREEN cihaz dizisini incele:
+            // ARDISIK olarak path-state guncellenir; eger edge icinde
+            // RED'ten GREEN'e gecis varsa edge fault edge'tir.
+            // Eger edge icinde sadece RED varsa: lastState = "red".
+            // Eger edge icinde sadece GREEN varsa: lastState son GREEN.
+            //   ama path uzerinde onceden RED varsa ve simdi GREEN
+            //   geliyorsa gecis bu edge'tedir.
+            // Eger edge'te HIÇ cihaz yoksa: lastState degismez; ama
+            //   path uzerinde onceden RED varsa ve sonraki edge'de
+            //   GREEN gelirse gecis ARADAKI bos edge'lerde gerceklesmis
+            //   sayilir; bunun icin "pending transition" kavramini
+            //   kullaniyoruz: bu edge'i mark etmiyoruz, sonraki bilgili
+            //   edge'i bekleriz; ama gerekirse bu edge'i de mark
+            //   ederiz cunku gecis fiziksel olarak burada da olabilir.
+            //
+            // Sadelestirme: kullanici "son RED ile ilk GREEN arasinda"
+            // dedi. Iki cihaz arasi "edge" path'te birbirini takip eden
+            // RED ve GREEN cihazlar arasidir. Edge icinde cihaz yoksa
+            // gecis BOS edge'lerden BIRINDE olabilir; en konservatif
+            // tahmin: gecis SON RED CIHAZIN BULUNDUGU EDGE ile ILK
+            // GREEN CIHAZIN BULUNDUGU EDGE'in ARASINDAKI tum edge'ler
+            // de fault adayi olur. Ama kullanicinin ornegi tek edge
+            // gosterdiginden ve her edge'te 1 cihaz oldugundan, biz
+            // de pratik olarak: gecisin oldugu son RED-cihaz-edge'i
+            // ile ilk GREEN-cihaz-edge'i arasindaki TEK ARA EDGE'i
+            // mark ederiz; eger ardisik edge'lerse (cihazlar farkli
+            // edge'lerde) ARALARINDAKI EDGE = BUNLARIN ORTA EDGE'I
+            // YOK aslinda; kullanici ornegi: pole6 RED, pole7 GREEN
+            // -> SADECE 6-7 edge'i. Yani RED cihaz pole6'da, GREEN
+            // cihaz pole7'de degil; cihazlar EDGE'LER ICINDE
+            // (pole-pole arasinda). Bizim datamizda da boyle:
+            // segment'in from_pole / to_pole'u var, cihaz ortada.
+            //
+            // Pratik kural: bu edge icinde RED cihaz varsa ve sonra
+            // GREEN cihaz varsa (ayni edge icinde gecis), bu edge
+            // fault edge. Ayrica path-level: bir edge icindeki son
+            // cihaz RED iken sonraki edge'in ilk cihazi GREEN ise,
+            // gecis BU IKI EDGE'DEN BIRINDE; en olasi yer aralarindaki
+            // POLE'a en yakin olan; biz iki edge'i de iyi ihtimalle
+            // tek bir edge'i mark ederiz: GREEN cihazin oldugu edge.
+            //
+            // Sebebi: GREEN cihaz akimi gormediginden ariza ondan
+            // ONCEDEDIR; akim son RED cihaza kadar gelip ondan sonra
+            // ariza nedeniyle GREEN cihaza ulasamamistir. En lokalize
+            // tahmin: GREEN cihazin yer aldigi edge'in BASLANGIC
+            // tarafi (yani RED ile GREEN'in arasindaki edge'in kendisi).
+            //
+            // Ozetle:
+            //   prevState=red, edge ilk cihaz=green -> bu edge fault.
+            //   edge icinde red sonra green -> bu edge fault.
+            //   edge tamamen green ve prevState=red -> bu edge fault
+            //     (cihaz gormeyene kadar; aslinda red'ten sonraki
+            //     ilk green-only edge fault).
+
+            let edgeIsFault = false;
+            let newState: "red" | "green" | null = cur.lastState;
+
+            if (annot && annot.devices.length > 0) {
+              // Edge icinde cihazlar var — siralidir.
+              for (const d of annot.devices) {
+                if (newState === "red" && !d.isRed) {
+                  // RED'ten GREEN'e gecis bu edge icinde
+                  edgeIsFault = true;
+                  newState = "green";
+                  break; // ilk gecis yeterli — fault edge bulundu
+                }
+                newState = d.isRed ? "red" : "green";
+              }
+            } else {
+              // Edge'te cihaz yok — state degismez; ama prevState=red
+              // ve sonraki bir edge'de green gorursek, oradaki edge
+              // fault olarak mark edilecek (bu edge fault degil).
+              newState = cur.lastState;
+            }
+
+            if (edgeIsFault) {
+              faultEdgeIds.add(e.id);
+            }
+
+            stack.push({ poleId: nextPoleId, lastState: newState });
+          }
+        }
+      };
+      for (const root of rootPoleIds) {
+        if (!visited.has(root)) {
+          dfsFromRoot(root);
         }
       }
-      // Pre: polyline[0..bestK] + projeksiyon noktasi
-      // Post: projeksiyon noktasi + polyline[bestK+1..end]
-      const pre: [number, number][] = [...polyline.slice(0, bestK + 1), bestProj];
-      const post: [number, number][] = [bestProj, ...polyline.slice(bestK + 1)];
-      return { pre, post };
-    };
+    }
 
-    // Hangi hatta nerede ariza var? (lineId -> { faultMid, ... })
-    type FaultInfo = {
-      midpoint: [number, number];
-      device: DeviceRow | undefined;
-      fromSeq: number | null;
-      toSeq: number | null;
-      // Hat polyline'ini boldugumuz koordinat — alarmsiz ilk cihazin konumu
-      // (varsa). Boylece cihazlar konumlanmis pozisyonlarinda kesim olur:
-      // alarmsiz cihazdan slot bitis diregine kadar olan kucuk parca yesil
-      // (akim cihaza ulasmamis), sonraki cihaza kadar olan kismin tamami
-      // ile beslemeden cihaza kadar kirmizi.
-      // null ise tum hat kirmizi (besleme hic gelmedi / tum cihazlar alarm).
-      splitPoint: [number, number] | null;
-      // Son alarmli cihazin konumu (parent->branch propagasyonu icin).
-      // Ana hatta arizanin hat boyu nerede oldugunu temsil eder.
-      lastAlarmedSeqIndex: number; // hat icindeki cihaz dizisindeki indeks
-      // Son alarmli cihazin oturdugu slot'un fromPole sequence_no'su.
-      // Bransman propagasyonunda "ariza bransman pole'undan once mi" kontrolu icin.
-      faultFromSeq: number;
-    };
-    const faultByLine = new Map<number, FaultInfo>();
+    // 5) RENDER ICIN POLYLINE'LARI URET
+    //    - faultEdgeIds icindekiler: KIRMIZI KESIK
+    //    - digerleri: SOLID YESIL
+    for (const e of edges) {
+      const isFault = faultEdgeIds.has(e.id);
+      linePolylines.push({
+        id: `edge-${e.id}`,
+        lineId: e.lineId,
+        positions: e.positions,
+        color: isFault ? FAULT_COLOR : HEALTHY_DEFAULT,
+        kind: isFault ? "fault" : "healthy",
+        name: e.lineName,
+        regionName: e.regionName
+      });
+    }
 
-    // Her hat icin lokalize edilmis tek (veya yok) ariza segmenti.
+    // Uyumluluk icin bos diziler (eski API surekligi).
     const alarmedSegments: {
-      id: string; // "fault-<lineId>"
+      id: string;
       positions: [number, number][];
       midpoint: [number, number];
       device: DeviceRow | undefined;
@@ -449,240 +624,8 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       fromSeq: number | null;
       toSeq: number | null;
     }[] = [];
-    for (const [lineId, list] of lineDevices) {
-      // Alarmli cihazlarin sira indekslerini bul.
-      const alarmedIdx: number[] = [];
-      list.forEach((it, i) => {
-        if (it.seg.device_id && alarmActiveDeviceIds.has(it.seg.device_id)) {
-          alarmedIdx.push(i);
-        }
-      });
-      if (alarmedIdx.length === 0) continue;
-      const lastAlarmedIdx = alarmedIdx[alarmedIdx.length - 1];
-      const lastAlarmed = list[lastAlarmedIdx];
-      const next = list[lastAlarmedIdx + 1]; // sonraki cihaz (varsa)
 
-      const line = linesById.get(lineId);
-      const region = line ? regionsById.get(line.region_id) : undefined;
-
-      // Ariza pozisyonu:
-      //   next varsa: lastAlarmed cihazi ile next cihazi arasi
-      //   next yoksa: lastAlarmed cihazinin kendi konumu (hat ucu)
-      const lastDeviceId = lastAlarmed.seg.device_id ?? undefined;
-      const lastDevPos = lastDeviceId ? deviceLocationOverride.get(lastDeviceId) : undefined;
-      const nextDevPos = next?.seg.device_id ? deviceLocationOverride.get(next.seg.device_id) : undefined;
-
-      let positions: [number, number][];
-      let midpoint: [number, number];
-      let fromSeqShow: number | null = lastAlarmed.fromSeq;
-      let toSeqShow: number | null = lastAlarmed.toSeq;
-      // fullyAffected ARTIK YOK — eski "tum cihazlar alarm = tum hat kirmizi"
-      // mantigi YANLISTI. Cihaz alarm verdiginde akim ondan gecmis demektir;
-      // demek ki tum cihazlara kadar SAGLIKLI, son cihazdan sonrasi kirmizi.
-      // Bu durumda splitPoint = lastDevPos (son alarmli cihazin konumu).
-
-      if (lastDevPos && nextDevPos) {
-        positions = [lastDevPos, nextDevPos];
-        midpoint = [
-          (lastDevPos[0] + nextDevPos[0]) / 2,
-          (lastDevPos[1] + nextDevPos[1]) / 2
-        ];
-        fromSeqShow = lastAlarmed.fromSeq;
-        toSeqShow = next?.toSeq ?? null;
-      } else if (lastDevPos) {
-        // Hat ucunda kalan alarm — cihazin kendi slot segmenti vurgulanir.
-        const fp = polesById.get(lastAlarmed.seg.from_pole_id);
-        const tp = polesById.get(lastAlarmed.seg.to_pole_id);
-        if (!fp || !tp) continue;
-        positions = [
-          [fp.latitude, fp.longitude],
-          [tp.latitude, tp.longitude]
-        ];
-        midpoint = lastDevPos;
-      } else {
-        continue;
-      }
-
-      const dev = lastDeviceId ? devices.find((d) => d.id === lastDeviceId) : undefined;
-      alarmedSegments.push({
-        id: `fault-${lineId}`,
-        positions,
-        midpoint,
-        device: dev,
-        lineName: line?.name ?? "",
-        regionName: region?.name ?? "",
-        fromSeq: fromSeqShow,
-        toSeq: toSeqShow
-      });
-      faultByLine.set(lineId, {
-        midpoint,
-        device: dev,
-        fromSeq: fromSeqShow,
-        toSeq: toSeqShow,
-        // Kesim noktasi:
-        //   next varsa: alarmsiz ilk cihazin konumu (akim oraya gelmedi)
-        //   yoksa: son alarmli cihazin konumu (akim oraya kadar geldi,
-        //          sonrasi supheli/arizali)
-        splitPoint: nextDevPos ?? lastDevPos ?? null,
-        lastAlarmedSeqIndex: lastAlarmedIdx,
-        faultFromSeq: lastAlarmed.fromSeq
-      });
-    }
-
-    // ===== Bransman propagasyonu =====
-    // Bir hat baska bir hattin direginden bransmanlanmissa akim kaynagi
-    // parent hattaki bransman pole'udur. Parent hattaki son alarmli cihaz
-    // bransman pole'undan ONCEYSE (yani akim bransman pole'una hic ulasmamis)
-    // dal hattina da akim gelmez -> dal tamamen olu (KIRMIZI).
-    //
-    // Mantik: Cihaz alarm veriyorsa akim ondan gecti demektir; o zaman akim
-    // o cihaza KADAR olan tum hat segmenti (besleme tarafi) saglikli. Son
-    // alarmli cihazin pole'u >= bransman pole'u ise bransmana enerji gelmis
-    // demektir.
-    //
-    // Cycle korumasi icin ziyaret edilen line'lari takip et.
-    const branchFullyDead = new Set<number>();
-    {
-      const visiting = new Set<number>();
-      const isUpstreamDead = (lineId: number): boolean => {
-        if (visiting.has(lineId)) return false;
-        visiting.add(lineId);
-        try {
-          const line = linesById.get(lineId);
-          if (!line || !line.branched_from_pole_id) return false;
-          const parentPole = polesById.get(line.branched_from_pole_id);
-          if (!parentPole) return false;
-          const parentLineId = parentPole.line_id;
-          // Once parent kendisi bir bransmansa ve onun upstream'i oluyse
-          // recursive olarak bu dal da olur.
-          if (branchFullyDead.has(parentLineId) || isUpstreamDead(parentLineId)) {
-            return true;
-          }
-          const parentLineDevices = lineDevices.get(parentLineId) ?? [];
-          // Parent hatta hic cihaz yoksa veya hic alarm yoksa: parent hatta
-          // ariza var/yok bilmiyoruz. Konservatif: parent saglikli kabul et
-          // (akim bransmana ulasiyor).
-          // Parent hatta alarm var mi?
-          const parentFault = faultByLine.get(parentLineId);
-          if (!parentFault) {
-            // Parent hatta hicbir cihaz alarm vermemis -> ya tamamen
-            // saglikli ya da hic cihaz yok. Ariza bilgisi olmadigindan
-            // bransmana akim ulastigini varsayariz.
-            return false;
-          }
-          // Parent hatta hicbir alarmli cihaz hat ucundan once degilse,
-          // bransman'a akim ulasmis olabilir — toSeq kontrolune bakilir.
-          // Son alarmli cihazin pole'u (slot baslangic seq) bransman
-          // pole'unun seq'inden KUCUKSE: akim son alarmli cihaza kadar
-          // geldi ama bransmana ulasmadi -> dal olu.
-          // BUYUK/ESITSE: akim bransmana kadar geldi -> dal saglikli
-          // (dalin kendi alarmlari var/yok kendi icinde degerlendirilir).
-          //
-          // ASIL DEGERLENDIRME: son alarmli cihazin SLOT KONUMU.
-          // Ariza segmenti = son alarmli cihaz slot'unun TO pole'u
-          // tarafinda (cihazdan sonra). Yani akim parent hattin
-          // (last_alarmed.toSeq) pole'una KADAR geldi.
-          // Bransman pole seq <= last_alarmed.toSeq ise akim bransmana
-          // geldi (dal saglikli).
-          // parentFault.fromSeq + 1 ~ toSeq (slot iki ardisik direk
-          // arasinda). Direkt parentFault.toSeq'i kullanmak en saglikli.
-          const lastReachedSeq = parentFault.toSeq ?? parentFault.faultFromSeq;
-          const branchSeq = parentPole.sequence_no;
-          // lastReachedSeq < branchSeq -> dal olu
-          return lastReachedSeq < branchSeq;
-        } finally {
-          visiting.delete(lineId);
-        }
-      };
-      for (const [lineId] of sortedPolesByLine) {
-        if (isUpstreamDead(lineId)) {
-          branchFullyDead.add(lineId);
-        }
-      }
-    }
-
-    // Hat polyline'larini olustur. Arizali hatlar 3 parcaya ayrilir
-    // (pre saglikli yesil + fault kirmizi pulse + post kirmizi sabit);
-    // arizasiz hatlar tek parca cizilir (kendi rengiyle).
-    for (const [lineId, sortedPoles] of sortedPolesByLine) {
-      const line = linesById.get(lineId);
-      if (!line) continue;
-      const region = regionsById.get(line.region_id);
-      const positionsAll: [number, number][] = sortedPoles.map((p) => [p.latitude, p.longitude]);
-      if (positionsAll.length < 2) continue;
-      const fault = faultByLine.get(lineId);
-      const isBranchDead = branchFullyDead.has(lineId);
-
-      // Senaryo 1: Bu hatta hic ariza yok VE upstream de saglikli -> tum hat yesil.
-      if (!fault && !isBranchDead) {
-        linePolylines.push({
-          id: `line-${lineId}`,
-          lineId,
-          positions: positionsAll,
-          color: HEALTHY_DEFAULT,
-          kind: "healthy",
-          name: line.name,
-          regionName: region?.name ?? ""
-        });
-        continue;
-      }
-
-      // Senaryo 2: Bransman propagasyonu ile dal tamamen olu (parent'ta
-      // bransman noktasindan once ariza). Hatta kendi cihazinda alarm
-      // olmasa bile akim hic gelmediginden tum hat KIRMIZI olmali.
-      if (isBranchDead && !fault) {
-        linePolylines.push({
-          id: `line-${lineId}-branch-dead`,
-          lineId,
-          positions: positionsAll,
-          color: FAULT_COLOR,
-          kind: "post",
-          name: line.name,
-          regionName: region?.name ?? ""
-        });
-        continue;
-      }
-
-      // Senaryo 3: Hat'in icinde lokalize ariza var — splitPoint'ten kes.
-      //
-      // Mantik: Cihaz alarm veriyorsa akim ondan gecti -> alarmli cihazlar
-      // saglikli (yesil) tarafa duser. Son alarmli cihazdan SONRAKI ilk
-      // alarmsiz cihaza kadarki bolge SUPHELI/ARIZALI (kirmizi). Yani:
-      //   splitPoint = next (alarmsiz ilk) cihazin konumu
-      //   Hat baslangici -> splitPoint  -> YESIL (akim gecti, son alarmli
-      //                                    cihaza kadar saglikli)
-      //   splitPoint -> hat ucu        -> KIRMIZI (akim gelmedi,
-      //                                    arizali/supheli bolge)
-      if (fault && fault.splitPoint) {
-        const { pre: preFault, post: postFault } = splitPolyline(positionsAll, fault.splitPoint);
-        // Pre (baslangictan splitPoint'e) -> YESIL (saglikli)
-        if (preFault.length >= 2) {
-          linePolylines.push({
-            id: `line-${lineId}-healthy-side`,
-            lineId,
-            positions: preFault,
-            color: HEALTHY_FAULT_LINE_COLOR,
-            kind: "healthy",
-            name: line.name,
-            regionName: region?.name ?? ""
-          });
-        }
-        // Post (splitPoint'ten uca) -> KIRMIZI (arizali/supheli)
-        if (postFault.length >= 2) {
-          linePolylines.push({
-            id: `line-${lineId}-fault-side`,
-            lineId,
-            positions: postFault,
-            color: FAULT_COLOR,
-            kind: "post",
-            name: line.name,
-            regionName: region?.name ?? ""
-          });
-        }
-      }
-    }
-
-    // Direklerin baslangic/bitis bilgisi
+    // Direklerin baslangic/bitis bilgisi (sequence_no=1 BAS, en yuksek SON).
     const polesWithRole: { p: typeof gridSnapshot.poles[number]; isStart: boolean; isEnd: boolean }[] = [];
     for (const [, poles] of polesByLine) {
       const sorted = [...poles].sort((a, b) => a.sequence_no - b.sequence_no);
@@ -695,36 +638,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       });
     }
 
-    // Bransman baglanti cizgileri: ana hat diregi -> dal hattinin 1. diregi.
-    // Hat'in branched_from_pole_id'si varsa, o pole'un konumundan dal hattinin
-    // ilk direginin konumuna kesik cizgi cizilir (gorsel bagi belirtsin).
-    // Renk: dal hat upstream propagasyonla olduyse (parent'ta bransmandan
-    // once ariza) baglanti da KIRMIZI; aksi halde MAVI.
-    const branchLinks: {
-      id: string;
-      positions: [number, number][];
-      branchLineName: string;
-      parentLineName: string;
-      faulted: boolean;
-    }[] = [];
-    for (const [lineId, sorted] of sortedPolesByLine) {
-      const line = linesById.get(lineId);
-      if (!line || !line.branched_from_pole_id) continue;
-      const parentPole = polesById.get(line.branched_from_pole_id);
-      const firstPole = sorted[0];
-      if (!parentPole || !firstPole) continue;
-      const parentLine = linesById.get(parentPole.line_id);
-      branchLinks.push({
-        id: `branch-${lineId}`,
-        positions: [
-          [parentPole.latitude, parentPole.longitude],
-          [firstPole.latitude, firstPole.longitude]
-        ],
-        branchLineName: line.name,
-        parentLineName: parentLine?.name ?? "",
-        faulted: branchFullyDead.has(lineId)
-      });
-    }
+    // Bransman baglantilari artik linePolylines icinde renklendirilerek
+    // ciziliyor; ayri bir dashed-mavi link layer'i artik gerekmez.
+    const branchLinks: never[] = [];
 
     return { linePolylines, alarmedSegments, polesWithRole, branchLinks };
   }, [gridSnapshot, devices, alarmActiveDeviceIds]);
@@ -740,59 +656,35 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           />
           <MapInvalidator deps={[devices.length]} />
 
-          {/* Hat polylineları:
-              - healthy/pre kismi: hattin kendi rengi
-              - post-fault kismi: kirmizi (ariza sonrasi enerjisiz/etkilenen bolum) */}
+          {/* Hat polylineları (her edge bagimsiz):
+                - healthy : SOLID YESIL
+                - fault   : RED DASHED (sadece son RED ile ilk GREEN
+                            arasindaki tek edge)
+              Bransman baglantilari da (parent_pole -> branch_first_pole)
+              ayni listede normal edge gibi cizilir. */}
           {topology?.linePolylines.map((line) => {
-            const isHealthy = line.kind === "healthy";
+            const isFault = line.kind === "fault";
             return (
-            <Polyline
-              key={line.id}
-              positions={line.positions}
-              pathOptions={{
-                color: line.color,
-                weight: line.kind === "post" ? 5 : isHealthy ? 5 : 3,
-                opacity: line.kind === "post" ? 0.85 : isHealthy ? 0.9 : 0.7,
-                dashArray: line.kind === "post" ? "10 6" : undefined
-              }}
-            >
-              <Tooltip sticky>
-                <strong>{line.name}</strong>
-                {line.regionName ? <><br />{line.regionName}</> : null}
-                {line.kind === "post" ? (
-                  <><br /><em style={{ color: FAULT_COLOR }}>Arıza sonrası — etkilenen bölüm</em></>
-                ) : isHealthy ? (
-                  <><br /><em style={{ color: HEALTHY_FAULT_LINE_COLOR }}>Sağlıklı / enerjili</em></>
-                ) : null}
-              </Tooltip>
-            </Polyline>
+              <Polyline
+                key={line.id}
+                positions={line.positions}
+                pathOptions={{
+                  color: line.color,
+                  weight: isFault ? 5 : 4,
+                  opacity: isFault ? 0.9 : 0.85,
+                  dashArray: isFault ? "10 6" : undefined
+                }}
+              >
+                <Tooltip sticky>
+                  <strong>{line.name}</strong>
+                  {line.regionName ? <><br />{line.regionName}</> : null}
+                  {isFault ? (
+                    <><br /><em style={{ color: FAULT_COLOR }}>Tahmini arıza yeri</em></>
+                  ) : null}
+                </Tooltip>
+              </Polyline>
             );
           })}
-
-          {/* Ariza noktasi marker'i kaldirildi — hat polyline pre/post
-              renklendirmesi (yesil/kirmizi dashed) arizanin konumunu zaten
-              gosteriyor. Ek bir simsek pin kafa karistiriciydi. */}
-
-          {/* Bransman baglantilari: ana hat diregi -> dal hattinin ilk diregi.
-              Mavimsi kesik cizgi ile gorsel bag belirtilir. */}
-          {topology?.branchLinks.map((link) => (
-            <Polyline
-              key={link.id}
-              positions={link.positions}
-              pathOptions={{
-                color: link.faulted ? FAULT_COLOR : "#6366f1",
-                weight: 3,
-                opacity: 0.85,
-                dashArray: "6 4"
-              }}
-            >
-              <Tooltip sticky>
-                <strong>Branşman{link.faulted ? " (Enerji yok)" : ""}</strong>
-                <br />
-                {link.branchLineName} ← {link.parentLineName}
-              </Tooltip>
-            </Polyline>
-          ))}
 
           {/* Direkler: küçük numara etiketli pin (trafo ise farkli sembol) */}
           {topology?.polesWithRole.map(({ p, isStart, isEnd }) => (
