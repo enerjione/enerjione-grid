@@ -649,7 +649,6 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 />
                 <div className="grid-mgmt-list-item-main">
                   <strong>{r.name}</strong>
-                  <code className="grid-mgmt-list-code">{r.code}</code>
                 </div>
                 <span className="grid-mgmt-list-count">{r.line_count ?? 0} hat</span>
                 <div className="grid-mgmt-list-actions">
@@ -685,7 +684,6 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   style={{ background: l.color || selectedRegion?.color || DEFAULT_REGION_COLOR }} />
                 <div className="grid-mgmt-list-item-main">
                   <strong>{l.name}</strong>
-                  <code className="grid-mgmt-list-code">{l.code}</code>
                 </div>
                 <span className="grid-mgmt-list-count">{l.pole_count ?? 0} direk · {l.segment_count ?? 0} segment</span>
                 <div className="grid-mgmt-list-actions">
