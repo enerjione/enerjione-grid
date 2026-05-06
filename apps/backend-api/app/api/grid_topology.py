@@ -655,14 +655,19 @@ def _resync_slot(db: Session, from_pole_id: int, to_pole_id: int) -> None:
     to_pole = db.get(Pole, to_pole_id)
     if from_pole is None or to_pole is None:
         return
-    # Slot'a bagli, cihazi olan tum segmentleri sirayla al (created_at + id ile
-    # deterministik sira icin).
+    # Slot'a bagli, cihazi olan tum segmentleri sirayla al.
+    # Manuel device_position_t varsa o sirayla, yoksa created_at + id ile
+    # deterministik sira (NULL'lar sona koyalim).
     segs = list(db.scalars(
         select(LineSegment).where(
             LineSegment.from_pole_id == from_pole_id,
             LineSegment.to_pole_id == to_pole_id,
             LineSegment.device_id.isnot(None),
-        ).order_by(LineSegment.created_at, LineSegment.id)
+        ).order_by(
+            LineSegment.device_position_t.asc().nulls_last(),
+            LineSegment.created_at,
+            LineSegment.id,
+        )
     ).all())
     total = len(segs)
     if total == 0:

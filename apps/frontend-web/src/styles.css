@@ -14974,6 +14974,114 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .seg-menu-back-btn .material-symbols-outlined { font-size: 18px; }
 
+/* Harita uzeri sag tik context menu */
+.map-ctx-menu {
+  position: fixed;
+  z-index: 9999;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  min-width: 220px;
+  overflow: hidden;
+}
+.map-ctx-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.map-ctx-menu-close {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 4px;
+}
+.map-ctx-menu-close:hover { color: #b91c1c; }
+.map-ctx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: #334155;
+  transition: background 0.15s;
+}
+.map-ctx-menu-item:hover {
+  background: #eef2ff;
+  color: #4338ca;
+}
+.map-ctx-menu-item .material-symbols-outlined {
+  font-size: 18px;
+  color: #6366f1;
+}
+.map-ctx-menu-item--danger {
+  color: #b91c1c;
+}
+.map-ctx-menu-item--danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+.map-ctx-menu-item--danger .material-symbols-outlined {
+  color: #dc2626;
+}
+
+/* LineModal'da bransman secim alani */
+.line-branch-fieldset {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: #f8fafc;
+}
+.line-branch-fieldset legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  padding: 0 6px;
+}
+.line-branch-fieldset legend .notify-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+}
+.line-branch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.line-branch-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+.line-branch-grid select {
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+
 /* Hat Yonetimi haritasinda cihaz uzeri kalici cihaz adi etiketi
    (sadece duzenleme modunda gorunur) */
 .grid-device-name-label.leaflet-tooltip {

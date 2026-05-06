@@ -161,6 +161,20 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     y: number;
   } | null>(null);
 
+  // Harita bos alan / direk / polyline icin sag tik menu.
+  // type='map'    -> bos haritada sag tik (Buraya direk ekle, vb.)
+  // type='pole'   -> direk uzerine sag tik (Sil, Araya direk ekle)
+  // type='line'   -> polyline uzerine sag tik (Buraya direk ekle, vb.)
+  const [mapContextMenu, setMapContextMenu] = useState<{
+    type: "map" | "pole" | "line";
+    lat: number;
+    lng: number;
+    x: number;
+    y: number;
+    poleId?: number;
+    poleSeq?: number;
+  } | null>(null);
+
   // Modaller
   const [regionModalOpen, setRegionModalOpen] = useState(false);
   const [editingRegion, setEditingRegion] = useState<Region | null>(null);
@@ -378,6 +392,18 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       const segs = (detail?.segments ?? [])
         .filter((s) => s.from_pole_id === fromPole.id && s.to_pole_id === toPole.id)
         .sort((a, b) => {
+          // Once draft (drag aninda guncellenen), sonra backend'deki
+          // device_position_t'ye gore sirala. Iki cihazin t'leri varsa
+          // suruklenen cihaz digerinin onune/arkasina gectiginde sira
+          // otomatik degisir.
+          const ta = draftDevicePositions.get(a.id)?.device_position_t ?? a.device_position_t;
+          const tb = draftDevicePositions.get(b.id)?.device_position_t ?? b.device_position_t;
+          const aHasT = ta !== null && ta !== undefined;
+          const bHasT = tb !== null && tb !== undefined;
+          if (aHasT && bHasT) return (ta as number) - (tb as number);
+          if (aHasT) return -1;
+          if (bHasT) return 1;
+          // Her ikisi de NULL: created_at + id'ye fallback
           const ad = new Date(a.created_at).getTime();
           const bd = new Date(b.created_at).getTime();
           if (ad !== bd) return ad - bd;
@@ -828,7 +854,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
               <div
                 className={`grid-mgmt-map-shell ${addPoleMode ? "is-add-mode" : ""}`}
-                onClick={() => setSegmentMenu(null)}
+                onClick={() => {
+                  setSegmentMenu(null);
+                  setMapContextMenu(null);
+                }}
               >
                 <MapContainer
                   center={mapCenter}
@@ -840,6 +869,15 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
                   {addPoleMode ? (
                     <MapClickHandler onClick={(lat, lon) => void handleMapClickAddPole(lat, lon)} />
+                  ) : null}
+
+                  {/* Edit modunda haritaya sag tik -> context menu (direk ekle vb.) */}
+                  {editMode ? (
+                    <MapContextMenuHandler
+                      onContextMenu={(lat, lng, x, y) =>
+                        setMapContextMenu({ type: "map", lat, lng, x, y })
+                      }
+                    />
                   ) : null}
 
                   {/* Diger hatlari arka planda goster (refernas amacli, soluk) */}
@@ -985,7 +1023,22 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           contextmenu: (event: L.LeafletMouseEvent) => {
                             event.originalEvent.preventDefault();
                             event.originalEvent.stopPropagation();
-                            void handleDeletePole(p);
+                            // Edit modunda direk uzerine sag tik -> context menu
+                            // (Sil, Aralik ekle vs.); edit disinda direkt sil.
+                            if (editMode) {
+                              const native = event.originalEvent;
+                              setMapContextMenu({
+                                type: "pole",
+                                lat: p.latitude,
+                                lng: p.longitude,
+                                x: native.clientX,
+                                y: native.clientY,
+                                poleId: p.id,
+                                poleSeq: p.sequence_no
+                              });
+                            } else {
+                              void handleDeletePole(p);
+                            }
                           },
                           dragstart: () => {
                             setDraggingPole({ id: p.id, lat: p.latitude, lng: p.longitude });
@@ -1146,6 +1199,100 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                         />
                       );
                     })()}
+                  </div>
+                ) : null}
+
+                {/* Harita context menu (sag tik): bos alan / direk / polyline */}
+                {mapContextMenu ? (
+                  <div
+                    className="map-ctx-menu"
+                    style={{ left: mapContextMenu.x, top: mapContextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="map-ctx-menu-head">
+                      {mapContextMenu.type === "pole"
+                        ? `Direk #${mapContextMenu.poleSeq}`
+                        : mapContextMenu.type === "line"
+                          ? "Hat üzerinde"
+                          : "Harita konumu"}
+                      <button
+                        type="button"
+                        className="map-ctx-menu-close"
+                        onClick={() => setMapContextMenu(null)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {mapContextMenu.type === "map" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="map-ctx-menu-item"
+                          onClick={() => {
+                            void handleMapClickAddPole(mapContextMenu.lat, mapContextMenu.lng);
+                            setMapContextMenu(null);
+                          }}
+                        >
+                          <span className="material-symbols-outlined">add_location</span>
+                          Sona direk ekle
+                        </button>
+                      </>
+                    ) : null}
+                    {mapContextMenu.type === "pole" && mapContextMenu.poleId !== undefined ? (
+                      <>
+                        <button
+                          type="button"
+                          className="map-ctx-menu-item"
+                          onClick={() => {
+                            const poleObj = sortedPoles.find((p) => p.id === mapContextMenu.poleId);
+                            if (poleObj) setEditingPole(poleObj);
+                            setMapContextMenu(null);
+                          }}
+                        >
+                          <span className="material-symbols-outlined">edit</span>
+                          Direk düzenle
+                        </button>
+                        <button
+                          type="button"
+                          className="map-ctx-menu-item"
+                          onClick={() => {
+                            // Bu direkten ONCE araya direk ekle (yeni direk
+                            // bu seq'i alir, mevcut diregin seq'i 1 artar).
+                            const seq = mapContextMenu.poleSeq ?? 1;
+                            void handleInsertPoleAt(seq, mapContextMenu.lat, mapContextMenu.lng);
+                            setMapContextMenu(null);
+                          }}
+                        >
+                          <span className="material-symbols-outlined">arrow_upward</span>
+                          Bu direğin önüne yeni direk ekle
+                        </button>
+                        <button
+                          type="button"
+                          className="map-ctx-menu-item"
+                          onClick={() => {
+                            // Bu direkten SONRA araya direk ekle.
+                            const seq = (mapContextMenu.poleSeq ?? 0) + 1;
+                            void handleInsertPoleAt(seq, mapContextMenu.lat, mapContextMenu.lng);
+                            setMapContextMenu(null);
+                          }}
+                        >
+                          <span className="material-symbols-outlined">arrow_downward</span>
+                          Bu direğin sonrasına yeni direk ekle
+                        </button>
+                        <button
+                          type="button"
+                          className="map-ctx-menu-item map-ctx-menu-item--danger"
+                          onClick={() => {
+                            const poleObj = sortedPoles.find((p) => p.id === mapContextMenu.poleId);
+                            if (poleObj) void handleDeletePole(poleObj);
+                            setMapContextMenu(null);
+                          }}
+                        >
+                          <span className="material-symbols-outlined">delete</span>
+                          Direği sil
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -1473,6 +1620,29 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     }
   }
 
+  // Belirli sequence_no'ya direk ekler (araya ekleme — backend mevcut
+  // direkleri otomatik kaydirir).
+  async function handleInsertPoleAt(seq: number, lat: number, lng: number) {
+    if (!selectedLine) return;
+    setBusy(true);
+    try {
+      await createPole(accessToken, {
+        line_id: selectedLine.id,
+        sequence_no: seq,
+        latitude: lat,
+        longitude: lng,
+        name: null
+      });
+      toast.success(`Direk #${seq} eklendi.`);
+      await reloadDetail(selectedLine.id);
+      if (selectedRegionId !== null) await reloadLines(selectedRegionId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Direk eklenemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Slot uzerindeki cihaz marker'i suruklendiginde sadece DRAFT'e yazar;
   // kullanici 'Kaydet' butonuna basana kadar backend'e gitmez. Boylece:
   //   - 'Kaydet' butonu hasUnsavedDraft uzerinden etkin olur
@@ -1557,6 +1727,28 @@ function MapClickHandler({ onClick }: { onClick: (lat: number, lon: number) => v
   useMapEvents({
     click(event) {
       onClick(Number(event.latlng.lat.toFixed(6)), Number(event.latlng.lng.toFixed(6)));
+    }
+  });
+  return null;
+}
+
+// Harita uzerinde bos alana sag tikla -> context menu acan helper.
+function MapContextMenuHandler({
+  onContextMenu
+}: {
+  onContextMenu: (lat: number, lon: number, x: number, y: number) => void;
+}) {
+  useMapEvents({
+    contextmenu(event) {
+      // Sag tik default browser menusunu engelle
+      event.originalEvent.preventDefault();
+      const native = event.originalEvent;
+      onContextMenu(
+        Number(event.latlng.lat.toFixed(6)),
+        Number(event.latlng.lng.toFixed(6)),
+        native.clientX,
+        native.clientY
+      );
     }
   });
   return null;
