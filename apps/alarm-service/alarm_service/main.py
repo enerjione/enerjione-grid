@@ -26,7 +26,7 @@ BACKEND_INTERNAL_CLEAR_URL = os.getenv(
 )
 BACKEND_API_BASE = os.getenv("BACKEND_API_BASE", "http://127.0.0.1:8000/api/v1")
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "change-me-internal-token")
-RULES_REFRESH_SEC = int(os.getenv("ALARM_RULES_REFRESH_SEC", "30"))
+RULES_REFRESH_SEC = int(os.getenv("ALARM_RULES_REFRESH_SEC", "10"))
 
 
 # Kural (rule_id, device_code) bazli durum takibi: aktiflik + debounce buffer + ilk gorulen zaman

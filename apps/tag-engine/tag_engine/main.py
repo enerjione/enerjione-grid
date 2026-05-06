@@ -103,6 +103,9 @@ def main() -> None:
                     payload = json.loads(body.decode("utf-8"))
                     processed = _build_processed_payload(payload)
                     if processed["source_gateway"] == "unknown":
+                        # Sadece anomali (eksik gateway) durumunda log; her mesajda
+                        # print yapmak Docker stdout fsync ile per-message gecikme
+                        # uretiyordu (saniyede 200+ mesajda toplam yavaslama).
                         print(
                             "tag-engine-warning missing source_gateway "
                             f"msg={processed['message_id']} dev={processed['device_code']}"
@@ -122,11 +125,6 @@ def main() -> None:
                                 "signal_key": processed.get("signal_key") or "",
                             },
                         ),
-                    )
-                    print(
-                        "tag-engine-forwarded "
-                        f"msg={processed['message_id']} corr={processed['correlation_id']} "
-                        f"gw={processed['source_gateway']} dev={processed['device_code']}"
                     )
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                 except Exception as ex:
