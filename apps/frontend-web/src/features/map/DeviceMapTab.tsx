@@ -44,9 +44,10 @@ const polePin = (
   isStart: boolean,
   isEnd: boolean,
   poleType?: string,
-  isBranchPoint?: boolean
+  isBranchPoint?: boolean,
+  isBranchEntry?: boolean
 ) => {
-  const key = `${label}|${isStart ? 1 : 0}|${isEnd ? 1 : 0}|${poleType ?? ""}|${isBranchPoint ? 1 : 0}`;
+  const key = `${label}|${isStart ? 1 : 0}|${isEnd ? 1 : 0}|${poleType ?? ""}|${isBranchPoint ? 1 : 0}|${isBranchEntry ? 1 : 0}`;
   const cached = _polePinCache.get(key);
   if (cached) return cached;
   const typeCls =
@@ -54,18 +55,28 @@ const polePin = (
   const cls = [
     isStart ? "is-start" : isEnd ? "is-end" : "",
     typeCls,
-    isBranchPoint ? "is-branch-point" : ""
+    // Branşman pole iki türlü olabilir:
+    //   isBranchPoint = bu direk bir veya birden fazla dalin "kaynagi"dir
+    //   isBranchEntry = bu direk bir dalin ilk diregidir (parent'a bagli)
+    // Iki sinif birden olabilir (zincir bransman); CSS bunu ele alir.
+    isBranchPoint ? "is-branch-point" : "",
+    isBranchEntry ? "is-branch-entry" : ""
   ].filter(Boolean).join(" ");
-  // Trafo direkleri biraz daha buyuk ve sembollu gosterilir.
+  // Trafo: ic ice cift halka — fiziksel sembol cagrisimi.
+  // Numara halka altinda kucuk badge olarak gosterilir.
   const isTrafo = poleType === "transformer";
   const inner = isTrafo
-    ? `<span class="grid-pole-symbol" title="Trafo">⚡</span><span class="grid-pole-seq">${label}</span>`
+    ? `<span class="grid-trafo-rings" aria-label="Trafo">
+         <span class="grid-trafo-ring grid-trafo-ring--outer"></span>
+         <span class="grid-trafo-ring grid-trafo-ring--inner"></span>
+       </span>
+       <span class="grid-pole-seq">${label}</span>`
     : `<span>${label}</span>`;
   // Bransman noktasi ise pin'in ust kosesine kucuk Y-catalli rozet.
-  const branchBadge = isBranchPoint
+  const branchBadge = (isBranchPoint || isBranchEntry)
     ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
     : "";
-  const size: [number, number] = isTrafo ? [26, 26] : [20, 20];
+  const size: [number, number] = isTrafo ? [30, 30] : [20, 20];
   const icon = L.divIcon({
     className: "grid-pole-leaflet-wrap",
     html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}</div>`,
@@ -190,11 +201,38 @@ function formatRelative(iso: string | null | undefined): string {
   return d.toLocaleString("tr-TR");
 }
 
+// Harita uzerinde tiklanan hat / direk icin sag-popup kart bilgisi.
+type PoleInfoCard = {
+  pole: NonNullable<GridSnapshot["poles"]>[number];
+  lineName: string;
+  isStart: boolean;
+  isEnd: boolean;
+  isBranchPoint: boolean;
+  childLineNames: string[];
+  isBranchEntry: boolean;
+  branchParentLineName: string;
+};
+type LineInfoCard = {
+  lineId: number | null;
+  name: string;
+  regionName: string;
+  isFault: boolean;
+};
+
 export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms }: Props) {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [poleInfo, setPoleInfo] = useState<PoleInfoCard | null>(null);
+  const [lineInfo, setLineInfo] = useState<LineInfoCard | null>(null);
   // Cihaz değişince modali kapat (yanlışlıkla başka cihazın detayını gösterme)
   useEffect(() => {
     setDetailModalOpen(false);
+  }, [selectedDevice?.id]);
+  // Cihaz secildiginde diger pop-up kartlarini kapat (UI ust uste binmesin).
+  useEffect(() => {
+    if (selectedDevice) {
+      setPoleInfo(null);
+      setLineInfo(null);
+    }
   }, [selectedDevice?.id]);
   const { settings } = useProjectSettings();
   const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
@@ -801,6 +839,36 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       }
     }
 
+    // Bransman birinci direkleri (her dal hattin ilk diregi) — parent_pole
+    // ile cakisir/yakin ise gorseli birlestiririz.
+    type BranchEntryInfo = {
+      childPoleId: number;
+      parentPoleId: number;
+      mergedWithParent: boolean; // konum cok yakin mi
+      parentLineName: string;
+    };
+    const branchEntryByChildPole = new Map<number, BranchEntryInfo>();
+    // Iki nokta arasi yaklasik metre (kucuk olcekte: 1deg lat ~ 111km)
+    const distMeters = (a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) => {
+      const dLat = (a.latitude - b.latitude) * 111000;
+      const dLon = (a.longitude - b.longitude) * 111000 * Math.cos((a.latitude * Math.PI) / 180);
+      return Math.sqrt(dLat * dLat + dLon * dLon);
+    };
+    for (const [lineId, line] of linesById) {
+      if (!line.branched_from_pole_id) continue;
+      const sorted = sortedPolesByLine.get(lineId);
+      const firstPole = sorted?.[0];
+      const parentPole = polesById.get(line.branched_from_pole_id);
+      if (!firstPole || !parentPole) continue;
+      const parentLine = linesById.get(parentPole.line_id);
+      branchEntryByChildPole.set(firstPole.id, {
+        childPoleId: firstPole.id,
+        parentPoleId: parentPole.id,
+        mergedWithParent: distMeters(firstPole, parentPole) < 8, // 8m altinda cakisik say
+        parentLineName: parentLine?.name ?? ""
+      });
+    }
+
     // Direklerin baslangic/bitis bilgisi (sequence_no=1 BAS, en yuksek SON).
     // Ayrica bransman noktasi olup olmadigi ve hangi hatlarin ayrildigi
     // bilgisi UI'da farkli icon ve tooltip uretmek icin tasinir.
@@ -811,19 +879,29 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       isBranchPoint: boolean;
       childLineNames: string[];
       lineName: string;
+      // Bu pole, baska bir hat'in baslangic diregi mi (bransman dali)?
+      isBranchEntry: boolean;
+      // Parent ile cakisik/birlesik mi (gorsel olarak gizlenebilir)?
+      mergedWithParent: boolean;
+      // Bagli oldugu parent line adi (tooltip icin)
+      branchParentLineName: string;
     }[] = [];
     for (const [lineId, poles] of polesByLine) {
       const sorted = [...poles].sort((a, b) => a.sequence_no - b.sequence_no);
       const line = linesById.get(lineId);
       sorted.forEach((p, idx) => {
         const children = branchChildrenByPole.get(p.id) ?? [];
+        const entry = branchEntryByChildPole.get(p.id);
         polesWithRole.push({
           p,
           isStart: idx === 0,
           isEnd: idx === sorted.length - 1,
           isBranchPoint: children.length > 0,
           childLineNames: children,
-          lineName: line?.name ?? ""
+          lineName: line?.name ?? "",
+          isBranchEntry: !!entry,
+          mergedWithParent: entry?.mergedWithParent ?? false,
+          branchParentLineName: entry?.parentLineName ?? ""
         });
       });
     }
@@ -864,6 +942,18 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   opacity: isFault ? 0.9 : 0.85,
                   dashArray: isFault ? "10 6" : undefined
                 }}
+                eventHandlers={{
+                  click: () => {
+                    setLineInfo({
+                      lineId: line.lineId,
+                      name: line.name,
+                      regionName: line.regionName,
+                      isFault
+                    });
+                    // Direk veya cihaz pop-up'i acik ise kapat
+                    setPoleInfo(null);
+                  }
+                }}
               >
                 <Tooltip sticky>
                   <strong>{line.name}</strong>
@@ -878,34 +968,47 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
 
           {/* Direkler: numara etiketli pin (trafo / bransman icin ozel rozet).
               Bransman noktalarinda pin uzerinde kucuk catallanma rozeti
-              gosterilir; tooltip'te hangi hatlarin ayrildigi yazilir. */}
-          {topology?.polesWithRole.map(({ p, isStart, isEnd, isBranchPoint, childLineNames, lineName }) => (
+              gosterilir; tooltip hover'da ayrintili bilgi verir.
+              mergedWithParent: dal'in ilk diregi parent ile cakisik ise
+              ayri bir pin gosterilmez (gorsel kalabaligi onler). */}
+          {topology?.polesWithRole
+            .filter((info) => !info.mergedWithParent)
+            .map(({ p, isStart, isEnd, isBranchPoint, childLineNames, lineName, isBranchEntry, branchParentLineName }) => (
             <Marker
               key={`pole-${p.id}`}
               position={[p.latitude, p.longitude]}
-              icon={polePin(String(p.sequence_no), isStart, isEnd, p.pole_type, isBranchPoint)}
-              eventHandlers={{}}
+              icon={polePin(String(p.sequence_no), isStart, isEnd, p.pole_type, isBranchPoint, isBranchEntry)}
+              eventHandlers={{
+                click: () => {
+                  setPoleInfo({
+                    pole: p,
+                    lineName,
+                    isStart,
+                    isEnd,
+                    isBranchPoint,
+                    childLineNames,
+                    isBranchEntry,
+                    branchParentLineName
+                  });
+                }
+              }}
             >
-              <Tooltip
-                permanent
-                direction="bottom"
-                offset={[0, 6]}
-                className="grid-pole-label-tip"
-              >
-                #{p.sequence_no}
-              </Tooltip>
               <Tooltip sticky direction="top" offset={[0, -8]}>
                 <strong>{p.name ?? `Direk #${p.sequence_no}`}</strong>
                 {lineName ? <><br /><span style={{ opacity: 0.75 }}>{lineName}</span></> : null}
                 {isStart ? <><br /><em>Hat başı</em></> : isEnd ? <><br /><em>Hat sonu</em></> : null}
-                {isBranchPoint && childLineNames.length > 0 ? (
+                {(isBranchPoint && childLineNames.length > 0) || isBranchEntry ? (
                   <>
                     <br />
                     <strong style={{ color: "#6366f1" }}>Branşman noktası</strong>
-                    <br />
-                    <span style={{ opacity: 0.85 }}>
-                      Ayrılan hat{childLineNames.length > 1 ? "lar" : ""}: {childLineNames.join(", ")}
-                    </span>
+                    {isBranchPoint && childLineNames.length > 0 ? (
+                      <><br /><span style={{ opacity: 0.85 }}>
+                        Ayrılan hat{childLineNames.length > 1 ? "lar" : ""}: {childLineNames.join(", ")}
+                      </span></>
+                    ) : null}
+                    {isBranchEntry && branchParentLineName ? (
+                      <><br /><span style={{ opacity: 0.85 }}>Bağlı: {branchParentLineName}</span></>
+                    ) : null}
                   </>
                 ) : null}
               </Tooltip>
@@ -935,6 +1038,117 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             );
           })}
         </MapContainer>
+
+        {/* Direk bilgi karti — pin'e tiklaninca sag ust kosede acilir */}
+        {poleInfo && !selectedDevice ? (
+          <div className="map-info-card map-info-card--pole">
+            <button
+              type="button"
+              className="map-info-card-close"
+              onClick={() => setPoleInfo(null)}
+              aria-label="Kapat"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+            <header className="map-info-card-header">
+              <div className="map-info-card-icon">
+                {poleInfo.pole.pole_type === "transformer" ? (
+                  <span className="map-info-card-trafo-mini">
+                    <span /><span />
+                  </span>
+                ) : (
+                  <span className="material-symbols-outlined">cell_tower</span>
+                )}
+              </div>
+              <div className="map-info-card-title">
+                <h4>{poleInfo.pole.name ?? `Direk #${poleInfo.pole.sequence_no}`}</h4>
+                <span className="map-info-card-sub">
+                  #{poleInfo.pole.sequence_no} · {poleInfo.lineName}
+                </span>
+              </div>
+            </header>
+            <ul className="map-info-card-rows">
+              <li>
+                <span className="map-info-card-label">Tip</span>
+                <span className="map-info-card-value">
+                  {poleInfo.pole.pole_type === "transformer" ? "Trafo direği" : "Direk"}
+                </span>
+              </li>
+              {poleInfo.isStart || poleInfo.isEnd ? (
+                <li>
+                  <span className="map-info-card-label">Konum</span>
+                  <span className="map-info-card-value">
+                    {poleInfo.isStart ? "Hat başı" : "Hat sonu"}
+                  </span>
+                </li>
+              ) : null}
+              {poleInfo.isBranchPoint && poleInfo.childLineNames.length > 0 ? (
+                <li>
+                  <span className="map-info-card-label">Branşman</span>
+                  <span className="map-info-card-value" style={{ color: "#6366f1" }}>
+                    Ayrılan: {poleInfo.childLineNames.join(", ")}
+                  </span>
+                </li>
+              ) : null}
+              {poleInfo.isBranchEntry && poleInfo.branchParentLineName ? (
+                <li>
+                  <span className="map-info-card-label">Bağlı</span>
+                  <span className="map-info-card-value" style={{ color: "#6366f1" }}>
+                    {poleInfo.branchParentLineName}
+                  </span>
+                </li>
+              ) : null}
+              <li>
+                <span className="map-info-card-label">Koordinat</span>
+                <span className="map-info-card-value" style={{ fontFamily: "monospace", fontSize: 11 }}>
+                  {poleInfo.pole.latitude.toFixed(6)}, {poleInfo.pole.longitude.toFixed(6)}
+                </span>
+              </li>
+            </ul>
+          </div>
+        ) : null}
+
+        {/* Hat bilgi karti — polyline'a tiklaninca acilir */}
+        {lineInfo && !selectedDevice && !poleInfo ? (
+          <div className="map-info-card map-info-card--line">
+            <button
+              type="button"
+              className="map-info-card-close"
+              onClick={() => setLineInfo(null)}
+              aria-label="Kapat"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+            <header className="map-info-card-header">
+              <div className="map-info-card-icon">
+                <span className="material-symbols-outlined">timeline</span>
+              </div>
+              <div className="map-info-card-title">
+                <h4>{lineInfo.name || "Hat"}</h4>
+                {lineInfo.regionName ? (
+                  <span className="map-info-card-sub">{lineInfo.regionName}</span>
+                ) : null}
+              </div>
+            </header>
+            <ul className="map-info-card-rows">
+              {lineInfo.regionName ? (
+                <li>
+                  <span className="map-info-card-label">Bölge</span>
+                  <span className="map-info-card-value">{lineInfo.regionName}</span>
+                </li>
+              ) : null}
+              <li>
+                <span className="map-info-card-label">Durum</span>
+                <span
+                  className="map-info-card-value"
+                  style={{ color: lineInfo.isFault ? FAULT_COLOR : HEALTHY_FAULT_LINE_COLOR }}
+                >
+                  {lineInfo.isFault ? "Tahmini arıza yeri" : "Sağlıklı"}
+                </span>
+              </li>
+            </ul>
+          </div>
+        ) : null}
 
         {selectedDevice ? (
           <div className="device-popup-card device-popup-card--modern">
