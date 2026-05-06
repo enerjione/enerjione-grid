@@ -374,6 +374,28 @@ def create_pole(
     line = db.get(Line, payload.line_id)
     if line is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hat bulunamadı.")
+
+    # Araya direk ekleme: sequence_no zaten kullaniliyorsa, mevcut o seq'li ve
+    # sonraki direkleri 1 ileri kaydirip yeni direge yer ac.
+    seq = payload.sequence_no
+    existing_at_or_after = list(db.scalars(
+        select(Pole).where(
+            Pole.line_id == payload.line_id,
+            Pole.sequence_no >= seq,
+        ).order_by(Pole.sequence_no.desc())  # son'dan basa: collision olmasin
+    ).all())
+    if existing_at_or_after:
+        # Once gecici cok yuksek seq'lere kaydir (UNIQUE constraint atlasin),
+        # sonra hedef seq+1, seq+2, ... atayalim.
+        for idx, p in enumerate(existing_at_or_after):
+            p.sequence_no = 100000 + idx  # gecici uniq slot
+        db.flush()
+        # Geri yaz: en kucuk olanin seq'i 'seq+1' olacak (cunku desc'tan
+        # geldigi icin son eleman en kucuk seq'liydi).
+        for idx, p in enumerate(reversed(existing_at_or_after)):
+            p.sequence_no = seq + idx + 1
+        db.flush()
+
     try:
         row = Pole(**payload.model_dump())
         db.add(row)
@@ -388,7 +410,7 @@ def create_pole(
         db, category="grid", event_type="pole_created", severity="info",
         actor_username=current_user.username,
         message=f"Direk eklendi: {row.name or '(adsız)'} (#{row.sequence_no})",
-        metadata={"pole_id": row.id, "line_id": row.line_id},
+        metadata={"pole_id": row.id, "line_id": row.line_id, "shifted": len(existing_at_or_after)},
     )
     db.commit()
     db.refresh(row)
@@ -442,11 +464,29 @@ def delete_pole(
     # Direk silinince ona bağlı segmentler CASCADE ile silinir.
     seq, line_id = row.sequence_no, row.line_id
     db.delete(row)
+    db.flush()
+
+    # Renumber: silinen seq'ten sonra gelen tum direkleri 1 azalt.
+    # Boylece sequence_no sirali kalir (1, 2, 3, ... gap olmaz).
+    # NOT: uq_pole_line_sequence UNIQUE constraint'i nedeniyle once gecici
+    # olarak buyuk degerlere kaydirip sonra geri yazmak gerekir; basit
+    # yaklasim: silinenden sonra gelenleri tek tek kucult, en yakindan
+    # baslayarak (collision olmasin diye).
+    affected = list(db.scalars(
+        select(Pole).where(
+            Pole.line_id == line_id,
+            Pole.sequence_no > seq,
+        ).order_by(Pole.sequence_no.asc())
+    ).all())
+    for p in affected:
+        p.sequence_no = p.sequence_no - 1
+        db.flush()
+
     record_event(
         db, category="grid", event_type="pole_deleted", severity="warning",
         actor_username=current_user.username,
         message=f"Direk silindi: #{seq}",
-        metadata={"pole_id": pole_id, "line_id": line_id},
+        metadata={"pole_id": pole_id, "line_id": line_id, "renumbered": len(affected)},
     )
     db.commit()
     return None

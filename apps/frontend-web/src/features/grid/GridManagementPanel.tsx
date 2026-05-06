@@ -144,6 +144,13 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
   // Sürüklenme sırasında anlık konum (polyline'in canlı yeniden çizilmesi için).
   // Sürükleme bitince ya draftPoleEdits / draftPoleAdds'e taşınır.
   const [draggingPole, setDraggingPole] = useState<{ id: number; lat: number; lng: number } | null>(null);
+  // Cihaz konum drag'i icin draft. segmentId -> { device_position_t, slotKey, order }
+  // slotKey: "fromPoleId|toPoleId" — ayni slot icindeki sira swap'larini takip
+  // edebilmek icin. order: bu slot icindeki yeni sira (drag esnasinda diger
+  // cihazi gectiginde 0/1 yer degistirebilir).
+  const [draftDevicePositions, setDraftDevicePositions] = useState<
+    Map<number, { device_position_t: number }>
+  >(new Map());
 
   // Bağlam menüsü (segment için)
   const [segmentMenu, setSegmentMenu] = useState<{
@@ -278,7 +285,12 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
   }, [detail, editMode, draftPoleEdits, draftPoleAdds, draftPoleDeletes]);
 
   const hasUnsavedDraft =
-    editMode && (draftPoleEdits.size > 0 || draftPoleAdds.length > 0 || draftPoleDeletes.size > 0);
+    editMode && (
+      draftPoleEdits.size > 0
+      || draftPoleAdds.length > 0
+      || draftPoleDeletes.size > 0
+      || draftDevicePositions.size > 0
+    );
 
   // Sürükleme sırasında anlık konumu uygula (canlı polyline güncellemesi için).
   const livePoles = useMemo<Pole[]>(() => {
@@ -741,6 +753,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                         setDraftPoleAdds([]);
                         setDraftPoleEdits(new Map());
                         setDraftPoleDeletes(new Set());
+                        setDraftDevicePositions(new Map());
                       }
                       setEditMode(!editMode);
                       if (editMode) setAddPoleMode(false);
@@ -805,7 +818,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       Kaydet
                       {hasUnsavedDraft ? (
                         <span className="grid-mgmt-draft-badge">
-                          {draftPoleAdds.length + draftPoleEdits.size + draftPoleDeletes.size}
+                          {draftPoleAdds.length + draftPoleEdits.size + draftPoleDeletes.size + draftDevicePositions.size}
                         </span>
                       ) : null}
                     </button>
@@ -1019,8 +1032,9 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                     const dy = by - ay;
                     const len2 = dx * dx + dy * dy;
                     return segsWithDevice.map((seg, idx) => {
-                      // Manuel device_position_t varsa onu kullan; yoksa otomatik dagit.
-                      const tManual = seg.device_position_t;
+                      // Once draft, sonra backend value, sonra auto orta-nokta.
+                      const draft = draftDevicePositions.get(seg.id);
+                      const tManual = draft?.device_position_t ?? seg.device_position_t;
                       const t = (tManual !== null && tManual !== undefined && tManual >= 0 && tManual <= 1)
                         ? tManual
                         : (idx + 1) / (total + 1);
@@ -1459,31 +1473,18 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     }
   }
 
-  // Slot uzerindeki cihaz marker'i suruklendiginde t parametresini (0..1)
-  // backend'e yaz; backend cihaz konumunu bu t degerine gore yeniden hesaplar.
-  // Optimistic update: local detail'i hemen guncelle ki marker yeni konumda
-  // kalsin, reload sonrasi 'eski yere geri donme' olmasin.
-  async function handleDeviceDragEnd(seg: LineSegment, tNew: number) {
+  // Slot uzerindeki cihaz marker'i suruklendiginde sadece DRAFT'e yazar;
+  // kullanici 'Kaydet' butonuna basana kadar backend'e gitmez. Boylece:
+  //   - 'Kaydet' butonu hasUnsavedDraft uzerinden etkin olur
+  //   - sayfayi yenilemeden cihazi suruklemek/birakmak/yeniden suruklemek
+  //     mumkun (optimistic 'eski yerine donme' problemi yasanmaz)
+  function handleDeviceDragEnd(seg: LineSegment, tNew: number) {
     const tRounded = Number(tNew.toFixed(4));
-    // 1. Local detail'i optimistic guncelle
-    setDetail((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        segments: prev.segments.map((s) =>
-          s.id === seg.id ? { ...s, device_position_t: tRounded } : s
-        )
-      };
+    setDraftDevicePositions((prev) => {
+      const next = new Map(prev);
+      next.set(seg.id, { device_position_t: tRounded });
+      return next;
     });
-    // 2. Backend'e yaz
-    try {
-      await updateSegment(accessToken, seg.id, { device_position_t: tRounded });
-      // Basari — reload yapmiyoruz cunku optimistic guncelleme yeterli.
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cihaz konumu güncellenemedi.");
-      // Hata olursa reload ile gercek backend durumuna don
-      if (selectedLineId !== null) await reloadDetail(selectedLineId);
-    }
   }
 
   async function handleSaveDraft() {
@@ -1516,10 +1517,17 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       for (const poleId of draftPoleDeletes) {
         await api.deletePole(accessToken, poleId);
       }
-      toast.success("Direk değişiklikleri kaydedildi.");
+      // 4) Cihaz konum override'lari (slot icindeki t parametresi).
+      for (const [segmentId, ov] of draftDevicePositions.entries()) {
+        await api.updateSegment(accessToken, segmentId, {
+          device_position_t: ov.device_position_t
+        });
+      }
+      toast.success("Değişiklikler kaydedildi.");
       setDraftPoleAdds([]);
       setDraftPoleEdits(new Map());
       setDraftPoleDeletes(new Set());
+      setDraftDevicePositions(new Map());
       await reloadDetail(selectedLine.id);
       if (selectedRegionId !== null) await reloadLines(selectedRegionId);
     } catch (err) {
@@ -1538,6 +1546,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     setDraftPoleAdds([]);
     setDraftPoleEdits(new Map());
     setDraftPoleDeletes(new Set());
+    setDraftDevicePositions(new Map());
     toast.success("Taslak değişiklikler geri alındı.");
   }
 }
