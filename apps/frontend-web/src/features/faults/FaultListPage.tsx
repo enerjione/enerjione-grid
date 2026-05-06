@@ -260,70 +260,81 @@ export function FaultListPage({
                     </div>
                   </div>
 
-                  {/* Sağ: Durum + atanan + zaman */}
+                  {/* Sağ: Durum + atanan + zaman (modern grid) */}
                   <div className="faults-card-rich-block faults-card-rich-block--status">
-                    <span
-                      className="faults-status-pill faults-status-pill--lg"
-                      style={{ background: `${sc}22`, color: sc }}
-                    >
-                      {STATUS_LABEL[f.status] ?? f.status}
-                    </span>
-                    {(() => {
-                      const isLive =
-                        f.status !== "closed" && f.status !== "resolved";
-                      const endMs = isLive
-                        ? now
-                        : f.closed_at
-                          ? new Date(f.closed_at).getTime()
-                          : f.resolved_at
-                            ? new Date(f.resolved_at).getTime()
-                            : now;
-                      return (
-                        <div
-                          className={`faults-card-time-pill ${
-                            isLive ? "is-live" : "is-final"
-                          }`}
-                          title={
-                            isLive
-                              ? "Arıza halen aktif — canlı süre"
-                              : "Toplam arıza süresi"
-                          }
-                        >
-                          {isLive ? (
-                            <span
-                              className="faults-card-time-pulse"
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            <span className="material-symbols-outlined">
-                              hourglass_top
-                            </span>
-                          )}
-                          <div>
-                            <span className="faults-card-time-label">
-                              {isLive ? "Arıza Süresi" : "Toplam Süre"}
-                            </span>
+                    {/* Üst satır: Durum + Süre pill yan yana */}
+                    <div className="faults-card-status-row">
+                      <span
+                        className="faults-status-pill faults-status-pill--lg"
+                        style={{ background: `${sc}22`, color: sc }}
+                      >
+                        {STATUS_LABEL[f.status] ?? f.status}
+                      </span>
+                      {(() => {
+                        const isLive =
+                          f.status !== "closed" && f.status !== "resolved";
+                        const endMs = isLive
+                          ? now
+                          : f.closed_at
+                            ? new Date(f.closed_at).getTime()
+                            : f.resolved_at
+                              ? new Date(f.resolved_at).getTime()
+                              : now;
+                        return (
+                          <div
+                            className={`faults-card-time-pill ${
+                              isLive ? "is-live" : "is-final"
+                            }`}
+                            title={
+                              isLive
+                                ? "Arıza halen aktif — canlı süre"
+                                : "Toplam arıza süresi"
+                            }
+                          >
+                            {isLive ? (
+                              <span
+                                className="faults-card-time-pulse"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <span className="material-symbols-outlined">
+                                hourglass_top
+                              </span>
+                            )}
                             <strong>{fmtElapsed(f.opened_at, endMs)}</strong>
                           </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Alt: zaman + atanan + yorum, daha modern info chip'leri */}
+                    <div className="faults-card-info-grid">
+                      <div className="faults-card-info-chip" title={fmtDate(f.opened_at)}>
+                        <span className="material-symbols-outlined">schedule</span>
+                        <div>
+                          <span className="faults-card-info-label">Açılış</span>
+                          <strong>{fmtDate(f.opened_at)}</strong>
                         </div>
-                      );
-                    })()}
-                    <div className="faults-card-meta-stack">
-                      <div className="faults-card-meta">
+                      </div>
+                      <div className="faults-card-info-chip">
                         <span className="material-symbols-outlined">person</span>
-                        <span>
-                          {f.assigned_to_full_name ?? f.assigned_to_username ?? (
-                            <em className="faults-card-meta-dim">Atanmamış</em>
-                          )}
-                        </span>
+                        <div>
+                          <span className="faults-card-info-label">Atanan</span>
+                          <strong>
+                            {f.assigned_to_full_name ?? f.assigned_to_username ?? (
+                              <em className="faults-card-meta-dim">Atanmamış</em>
+                            )}
+                          </strong>
+                        </div>
                       </div>
-                      <div className="faults-card-meta" title={fmtDate(f.opened_at)}>
-                        <span className="material-symbols-outlined">event</span>
-                        <span>{fmtDate(f.opened_at)}</span>
-                      </div>
-                      <div className="faults-card-meta">
+                      <div className="faults-card-info-chip">
                         <span className="material-symbols-outlined">forum</span>
-                        <span>{f.comment_count > 0 ? `${f.comment_count} yorum` : "Yorum yok"}</span>
+                        <div>
+                          <span className="faults-card-info-label">Yorum</span>
+                          <strong>
+                            {f.comment_count > 0 ? `${f.comment_count} yorum` : "—"}
+                          </strong>
+                        </div>
                       </div>
                     </div>
                   </div>

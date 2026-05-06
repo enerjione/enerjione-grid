@@ -16704,29 +16704,25 @@ main.content.engineering-content:has(.device-management-panel) {
   font-size: 11px;
 }
 
-/* Kart icindeki canli sure pill'i (modal'in mini hali) */
+/* === Sag blokta durum + sure ust satiri === */
+.faults-card-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Sure pill — kompakt, ozel renkli, etiket yok (sadece sayisal deger) */
 .faults-card-time-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px 4px 8px;
+  padding: 4px 12px;
   border-radius: 999px;
   background: #f8fafc;
   border: 1px solid rgba(148, 163, 184, 0.3);
   white-space: nowrap;
-}
-.faults-card-time-pill > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  line-height: 1.1;
-}
-.faults-card-time-label {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .faults-card-time-pill strong {
   font-size: 12px;
@@ -16735,21 +16731,15 @@ main.content.engineering-content:has(.device-management-panel) {
   font-variant-numeric: tabular-nums;
 }
 .faults-card-time-pill.is-live {
-  background: rgba(239, 68, 68, 0.08);
+  background: linear-gradient(135deg, #fef2f2 0%, #ffe4e6 100%);
   border-color: rgba(239, 68, 68, 0.35);
-}
-.faults-card-time-pill.is-live .faults-card-time-label {
-  color: #b91c1c;
 }
 .faults-card-time-pill.is-live strong {
   color: #b91c1c;
 }
 .faults-card-time-pill.is-final {
-  background: rgba(16, 185, 129, 0.08);
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
   border-color: rgba(16, 185, 129, 0.3);
-}
-.faults-card-time-pill.is-final .faults-card-time-label {
-  color: #047857;
 }
 .faults-card-time-pill.is-final strong {
   color: #047857;
@@ -16766,6 +16756,73 @@ main.content.engineering-content:has(.device-management-panel) {
   display: inline-block;
   flex-shrink: 0;
   animation: fault-elapsed-pulse 1.4s ease-out infinite;
+}
+
+/* === Modern info grid (Acilis / Atanan / Yorum) === */
+.faults-card-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
+}
+@media (max-width: 1280px) {
+  .faults-card-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 1100px) {
+  .faults-card-info-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .faults-card-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.faults-card-info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  min-width: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.faults-card.faults-card--rich:hover .faults-card-info-chip {
+  background: #ffffff;
+  border-color: rgba(99, 102, 241, 0.25);
+}
+.faults-card-info-chip .material-symbols-outlined {
+  font-size: 16px !important;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.faults-card-info-chip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  line-height: 1.2;
+}
+.faults-card-info-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.faults-card-info-chip strong {
+  font-size: 12px;
+  color: #0f172a;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .faults-card-meta-stack {
