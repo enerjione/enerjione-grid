@@ -402,11 +402,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       device: DeviceRow | undefined;
       fromSeq: number | null;
       toSeq: number | null;
-      // Hat polyline'ini ikiye boldugumuz direk sequence_no'su:
-      // bu sequence'a kadar (dahil) PRE (yesil), sonrasi POST (kirmizi).
-      // splitSeq = lastAlarmed.toSeq -> son alarmli cihazin bitis diregi.
-      // Cihazdan sonraki tum hat ucu etkilenen bolumdur.
-      splitSeq: number | null;
+      // Hat polyline'ini boldugumuz koordinat — alarmsiz ilk cihazin konumu
+      // (varsa). Boylece cihazlar konumlanmis pozisyonlarinda kesim olur:
+      // alarmsiz cihazdan slot bitis diregine kadar olan kucuk parca yesil
+      // (akim cihaza ulasmamis), sonraki cihaza kadar olan kismin tamami
+      // ile beslemeden cihaza kadar kirmizi.
+      splitPoint: [number, number] | null;
     };
     const faultByLine = new Map<number, FaultInfo>();
 
@@ -487,11 +488,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         device: dev,
         fromSeq: fromSeqShow,
         toSeq: toSeqShow,
-        // Son alarmli cihazin baglanti slot'unun BITIS diregi -> kesim noktasi.
-        // Bu direge kadar (dahil) yesil; bu direkten sonra (sonraki polyline
-        // edge'inden itibaren) kirmizi. Boylece cihazin bagli oldugu segment
-        // YESILE dahil kalir; sonraki direk araliklari KIRMIZI olur.
-        splitSeq: lastAlarmed.toSeq
+        // Kesim noktasi: alarmsiz ilk cihazin (next) konumu — yoksa son
+        // alarmli cihazin konumu (hat ucu).
+        splitPoint: nextDevPos ?? lastDevPos ?? null
       });
     }
 
@@ -517,32 +516,17 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         });
         continue;
       }
-      // Arizali: hat'i splitSeq direginde kes.
-      //   splitSeq = son alarmli cihazin segment bitis diregi (toSeq) =
-      //   arizanin tahmini noktasi.
-      //   Hat baslangicindan bu direge kadar olan kisim ALARM VEREN
+      // Arizali: hat'i splitPoint koordinatinda kes.
+      //   splitPoint = alarmsiz ilk cihazin konumu (varsa).
+      //   Hat baslangicindan splitPoint'e kadar olan kisim ALARM VEREN
       //   cihazlari icerir -> KIRMIZI (arizali bolum).
-      //   Bu direkten hat ucuna kadar olan kisim alarm vermeyen cihazlar
-      //   (akim gelmemis) -> YESIL (saglikli/etkilenmemis bolum).
-      const splitSeq = fault.splitSeq;
-      let splitIdx = -1;
-      if (splitSeq !== null) {
-        splitIdx = sortedPoles.findIndex((p) => p.sequence_no === splitSeq);
-      }
-      // splitSeq bulunamazsa veya hat ucundaysa, midpoint'e gore eski yontem
-      // yedek olarak kullanilir.
-      let preFault: [number, number][];
-      let postFault: [number, number][];
-      if (splitIdx >= 0 && splitIdx < positionsAll.length - 1) {
-        // preFault (besleme + alarmli cihazlar) = 0..splitIdx dahil
-        preFault = positionsAll.slice(0, splitIdx + 1);
-        // postFault (alarm vermemis cihazlar) = splitIdx..end
-        postFault = positionsAll.slice(splitIdx);
-      } else {
-        const split = splitPolyline(positionsAll, fault.midpoint);
-        preFault = split.pre;
-        postFault = split.post;
-      }
+      //   splitPoint'ten hat ucuna kadar olan kisim alarm vermeyen
+      //   cihazlardir (akim gelmemis) -> YESIL.
+      // Boylece cihazin tam konumunda kesim olur — direk-bazli kesimde
+      // alarmsiz cihazin onceki diregi de yesile dahil oluyordu, kullanici
+      // 'cihazdan direge kadar yesil olsun' dedi: splitPoint=cihaz konumu.
+      const splitAt = fault.splitPoint ?? fault.midpoint;
+      const { pre: preFault, post: postFault } = splitPolyline(positionsAll, splitAt);
 
       // Pre-fault (alarmli bolum) -> KIRMIZI
       if (preFault.length >= 2) {
