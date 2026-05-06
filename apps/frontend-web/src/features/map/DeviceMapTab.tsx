@@ -427,7 +427,16 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       // alarmsiz cihazdan slot bitis diregine kadar olan kucuk parca yesil
       // (akim cihaza ulasmamis), sonraki cihaza kadar olan kismin tamami
       // ile beslemeden cihaza kadar kirmizi.
+      // null ise tum hat kirmizi (besleme hic gelmedi / tum cihazlar alarm).
       splitPoint: [number, number] | null;
+      // Son alarmli cihazin konumu (parent->branch propagasyonu icin).
+      // Ana hatta arizanin hat boyu nerede oldugunu temsil eder.
+      lastAlarmedSeqIndex: number; // hat icindeki cihaz dizisindeki indeks
+      // Son alarmli cihazin oturdugu slot'un fromPole sequence_no'su.
+      // Bransman propagasyonunda "ariza bransman pole'undan once mi" kontrolu icin.
+      faultFromSeq: number;
+      // Tum hat kirmizi mi (son alarmli cihazdan sonra alarmsiz cihaz yok).
+      fullyAffected: boolean;
     };
     const faultByLine = new Map<number, FaultInfo>();
 
@@ -469,6 +478,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       let midpoint: [number, number];
       let fromSeqShow: number | null = lastAlarmed.fromSeq;
       let toSeqShow: number | null = lastAlarmed.toSeq;
+      // fullyAffected: son alarmli cihazdan sonra alarm vermeyen cihaz YOKSA
+      // (yani next yok, hat ucunda kaldiysa) hat tamamen etkilenmis demektir;
+      // hat baslangicindan sonuna kadar kirmizi olmalidir.
+      const fullyAffected = !next;
 
       if (lastDevPos && nextDevPos) {
         positions = [lastDevPos, nextDevPos];
@@ -508,10 +521,64 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         device: dev,
         fromSeq: fromSeqShow,
         toSeq: toSeqShow,
-        // Kesim noktasi: alarmsiz ilk cihazin (next) konumu — yoksa son
-        // alarmli cihazin konumu (hat ucu).
-        splitPoint: nextDevPos ?? lastDevPos ?? null
+        // Kesim noktasi:
+        //   next varsa: alarmsiz ilk cihazin konumu (hat ortasi ariza)
+        //   yoksa: null -> tum hat kirmizi (besleme hic gelmedi senaryosu)
+        splitPoint: nextDevPos ?? null,
+        lastAlarmedSeqIndex: lastAlarmedIdx,
+        faultFromSeq: lastAlarmed.fromSeq,
+        fullyAffected
       });
+    }
+
+    // ===== Bransman propagasyonu =====
+    // Bir hat baska bir hattin direginden bransmanlanmissa, ana hattaki
+    // ariza branşman pole'undan ONCE veya bransman pole'unda gerceklesmisse
+    // dal hattina hic akim gelmemistir -> dal hat tamamen kirmizi.
+    // Cycle korumasi icin ziyaret edilen line'lari takip et.
+    const branchFullyDead = new Set<number>();
+    {
+      const visiting = new Set<number>();
+      const isUpstreamFaulted = (lineId: number): boolean => {
+        if (visiting.has(lineId)) return false;
+        visiting.add(lineId);
+        try {
+          const line = linesById.get(lineId);
+          if (!line || !line.branched_from_pole_id) return false;
+          const parentPole = polesById.get(line.branched_from_pole_id);
+          if (!parentPole) return false;
+          const parentLineId = parentPole.line_id;
+          // Once parent'in kendisi bir bransmansa ve onun upstream'i ariza
+          // gormusse, recursive olarak bu hat da olur.
+          if (branchFullyDead.has(parentLineId) || isUpstreamFaulted(parentLineId)) {
+            return true;
+          }
+          // Parent hatta direkt ariza var mi?
+          const parentFault = faultByLine.get(parentLineId);
+          if (!parentFault) return false;
+          // Parent tamamen olduyse propagasyon kesin.
+          if (parentFault.fullyAffected) return true;
+          // Ariza branşman pole'undan once veya o pole'da ise
+          // (ariza lokalizasyonunda faultFromSeq son alarmli cihazin slot
+          // baslangic seq'i; son alarmli cihaz bransman pole'unda veya
+          // sonrasinda olabilir ama enerji yine de bransman pole'una kadar
+          // gelmistir — yine de güvenli yorum: faultFromSeq < bransman_seq
+          // ise bransmana akim hic ulasmamistir).
+          const branchSeq = parentPole.sequence_no;
+          // faultFromSeq: arizanin baslangic diregi seq.
+          // Ariza segmenti = lastAlarmed cihazin slot'u (faultFromSeq -> faultFromSeq+1).
+          // Eger faultFromSeq < branchSeq ise ariza bransmandan once -> dal olu.
+          // faultFromSeq >= branchSeq ise ariza bransmandan sonra -> dal saglikli.
+          return parentFault.faultFromSeq < branchSeq;
+        } finally {
+          visiting.delete(lineId);
+        }
+      };
+      for (const [lineId] of sortedPolesByLine) {
+        if (isUpstreamFaulted(lineId)) {
+          branchFullyDead.add(lineId);
+        }
+      }
     }
 
     // Hat polyline'larini olustur. Arizali hatlar 3 parcaya ayrilir
@@ -524,7 +591,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       const positionsAll: [number, number][] = sortedPoles.map((p) => [p.latitude, p.longitude]);
       if (positionsAll.length < 2) continue;
       const fault = faultByLine.get(lineId);
-      if (!fault) {
+      const isBranchDead = branchFullyDead.has(lineId);
+
+      // Senaryo 1: Bu hatta hic ariza yok VE upstream de saglikli -> tum hat yesil.
+      if (!fault && !isBranchDead) {
         linePolylines.push({
           id: `line-${lineId}`,
           lineId,
@@ -536,41 +606,68 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         });
         continue;
       }
-      // Arizali: hat'i splitPoint koordinatinda kes.
-      //   splitPoint = alarmsiz ilk cihazin konumu (varsa).
-      //   Hat baslangicindan splitPoint'e kadar olan kisim ALARM VEREN
-      //   cihazlari icerir -> KIRMIZI (arizali bolum).
-      //   splitPoint'ten hat ucuna kadar olan kisim alarm vermeyen
-      //   cihazlardir (akim gelmemis) -> YESIL.
-      // Boylece cihazin tam konumunda kesim olur — direk-bazli kesimde
-      // alarmsiz cihazin onceki diregi de yesile dahil oluyordu, kullanici
-      // 'cihazdan direge kadar yesil olsun' dedi: splitPoint=cihaz konumu.
-      const splitAt = fault.splitPoint ?? fault.midpoint;
-      const { pre: preFault, post: postFault } = splitPolyline(positionsAll, splitAt);
 
-      // Pre (hat baslangicindan kesim noktasina) -> YESIL (saglikli bolum)
-      if (preFault.length >= 2) {
+      // Senaryo 2: Bransman propagasyonu ile dal tamamen olu (parent'ta
+      // bransman noktasindan once ariza). Hatta kendi cihazinda alarm
+      // olmasa bile akim hic gelmediginden tum hat KIRMIZI olmali.
+      if (isBranchDead && !fault) {
         linePolylines.push({
-          id: `line-${lineId}-healthy-side`,
+          id: `line-${lineId}-branch-dead`,
           lineId,
-          positions: preFault,
-          color: HEALTHY_FAULT_LINE_COLOR,
-          kind: "healthy",
-          name: line.name,
-          regionName: region?.name ?? ""
-        });
-      }
-      // Post (kesim noktasindan hat ucuna) -> KIRMIZI dashed (etkilenen bolum)
-      if (postFault.length >= 2) {
-        linePolylines.push({
-          id: `line-${lineId}-fault-side`,
-          lineId,
-          positions: postFault,
+          positions: positionsAll,
           color: FAULT_COLOR,
           kind: "post",
           name: line.name,
           regionName: region?.name ?? ""
         });
+        continue;
+      }
+
+      // Senaryo 3: Hat tamamen etkilenmis (son alarmli cihazdan sonra
+      // alarmsiz cihaz yok) — tum hat KIRMIZI.
+      if (fault && (fault.fullyAffected || fault.splitPoint === null)) {
+        linePolylines.push({
+          id: `line-${lineId}-all-fault`,
+          lineId,
+          positions: positionsAll,
+          color: FAULT_COLOR,
+          kind: "post",
+          name: line.name,
+          regionName: region?.name ?? ""
+        });
+        continue;
+      }
+
+      // Senaryo 4: Hat'in icinde lokalize ariza var — splitPoint'ten kes.
+      //   Hat baslangicindan splitPoint'e kadar -> KIRMIZI (arizali bolum;
+      //   alarm veren cihazlari icerir).
+      //   splitPoint'ten hat ucuna kadar -> YESIL (alarmsiz, akim gelmemis).
+      if (fault && fault.splitPoint) {
+        const { pre: preFault, post: postFault } = splitPolyline(positionsAll, fault.splitPoint);
+        // Pre (baslangictan kesime) -> KIRMIZI ariza bolumu
+        if (preFault.length >= 2) {
+          linePolylines.push({
+            id: `line-${lineId}-fault-side`,
+            lineId,
+            positions: preFault,
+            color: FAULT_COLOR,
+            kind: "post",
+            name: line.name,
+            regionName: region?.name ?? ""
+          });
+        }
+        // Post (kesimden uca) -> YESIL saglikli bolum
+        if (postFault.length >= 2) {
+          linePolylines.push({
+            id: `line-${lineId}-healthy-side`,
+            lineId,
+            positions: postFault,
+            color: HEALTHY_FAULT_LINE_COLOR,
+            kind: "healthy",
+            name: line.name,
+            regionName: region?.name ?? ""
+          });
+        }
       }
     }
 
@@ -590,11 +687,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     // Bransman baglanti cizgileri: ana hat diregi -> dal hattinin 1. diregi.
     // Hat'in branched_from_pole_id'si varsa, o pole'un konumundan dal hattinin
     // ilk direginin konumuna kesik cizgi cizilir (gorsel bagi belirtsin).
+    // Renk: dal hat upstream propagasyonla olduyse (parent'ta bransmandan
+    // once ariza) baglanti da KIRMIZI; aksi halde MAVI.
     const branchLinks: {
       id: string;
       positions: [number, number][];
       branchLineName: string;
       parentLineName: string;
+      faulted: boolean;
     }[] = [];
     for (const [lineId, sorted] of sortedPolesByLine) {
       const line = linesById.get(lineId);
@@ -610,7 +710,8 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           [firstPole.latitude, firstPole.longitude]
         ],
         branchLineName: line.name,
-        parentLineName: parentLine?.name ?? ""
+        parentLineName: parentLine?.name ?? "",
+        faulted: branchFullyDead.has(lineId)
       });
     }
 
@@ -668,14 +769,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               key={link.id}
               positions={link.positions}
               pathOptions={{
-                color: "#6366f1",
+                color: link.faulted ? FAULT_COLOR : "#6366f1",
                 weight: 3,
-                opacity: 0.8,
+                opacity: 0.85,
                 dashArray: "6 4"
               }}
             >
               <Tooltip sticky>
-                <strong>Branşman</strong>
+                <strong>Branşman{link.faulted ? " (Enerji yok)" : ""}</strong>
                 <br />
                 {link.branchLineName} ← {link.parentLineName}
               </Tooltip>
