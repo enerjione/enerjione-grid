@@ -684,9 +684,6 @@ export function DeviceManagementPanel({
                   id="device-panel-system"
                   aria-labelledby="device-tab-system"
                 >
-                  <p className="device-props-panel-hint">
-                    Cihaz tanıtımı, görünen ad, konum: merkez listeleri ve harita bu bilgileri kullanır.
-                  </p>
                   <div className="device-detail-form-grid">
                     <label>
                       Cihaz Kodu
@@ -732,10 +729,6 @@ export function DeviceManagementPanel({
                       <input value={description} onChange={(event) => setDescription(event.target.value)} />
                     </label>
                   </div>
-                  <p className="helper-text">
-                    Cihazın konumu artık <strong>Mühendislik &gt; Hat Yönetimi</strong> sayfasından,
-                    cihaz bir hat segmentine atandığında otomatik belirlenir.
-                  </p>
                 </div>
               ) : (
                 <div
