@@ -35,6 +35,10 @@ class _RuleState:
         self._lock = Lock()
         self._active: dict[tuple[int, str, str], bool] = {}
         self._pending_since: dict[tuple[int, str, str], float] = {}
+        # Son backend clear cagrisinin zaman damgasi (rate-limit icin):
+        # in-memory state drift senaryosunda her tick'te clear cagrisi
+        # atmamak icin (rule, device, signal) key'i basina min aralik tutariz.
+        self._last_clear_sent: dict[tuple[int, str, str], float] = {}
 
     def get_active(self, key: tuple[int, str, str]) -> bool:
         with self._lock:
@@ -58,6 +62,21 @@ class _RuleState:
     def clear_pending(self, key: tuple[int, str, str]) -> None:
         with self._lock:
             self._pending_since.pop(key, None)
+
+    def should_send_clear(self, key: tuple[int, str, str], now: float, min_interval_sec: float) -> bool:
+        """Drift-proof clear gonderme rate-limit'i.
+
+        prev_active=False olsa bile periyodik olarak backend'e clear gondeririz
+        (DB'de hala acik alarm kalmis olabilir — alarm-service restart edildi
+        veya state drift oldu). Min aralik kullaniyoruz ki her tick'te
+        flood etmesin."""
+        with self._lock:
+            last = self._last_clear_sent.get(key)
+            return last is None or (now - last) >= min_interval_sec
+
+    def mark_clear_sent(self, key: tuple[int, str, str], now: float) -> None:
+        with self._lock:
+            self._last_clear_sent[key] = now
 
 
 _STATE = _RuleState()
@@ -300,21 +319,36 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 "alarm-service-raised "
                 f"rule_id={rule.id} signal={rule.signal_key} dev={device_code} value={value}"
             )
-        elif not should_be_active and prev_active:
-            _STATE.set_active(key, False)
-            try:
-                _notify_backend_clear(
-                    rule_id=rule.id,
-                    rule_title=rule.name,
-                    device_code=str(device_code) if device_code else None,
-                    source_gateway=payload.get("source_gateway"),
-                    signal_key=rule.signal_key,
-                )
-            except Exception as exc:  # noqa: BLE001
-                print(f"alarm-service-clear-error rule_id={rule.id} error={exc}")
-            print(f"alarm-service-cleared rule_id={rule.id} signal={rule.signal_key} dev={device_code}")
         elif not should_be_active:
+            # prev_active=True ise (transition kosulu) clear hemen gonderilir.
+            # prev_active=False ama should_be_active=False senaryosunda da
+            # periyodik clear gondeririz: alarm-service restart veya state
+            # drift'inde DB'de hala acik alarm kalmis olabilir; min 60sn
+            # araliklarla idempotent clear cagrisi atariz (backend zaten
+            # eslesen acik alarm yoksa no_match doner).
+            was_active = prev_active
+            if was_active:
+                _STATE.set_active(key, False)
             _STATE.clear_pending(key)
+            # Drift recovery: prev_active False olsa bile 60sn'de bir
+            # clear deneriz; transition durumda hemen, drift durumunda
+            # rate-limited.
+            should_send = was_active or _STATE.should_send_clear(key, now, 60.0)
+            if should_send:
+                _STATE.mark_clear_sent(key, now)
+                try:
+                    _notify_backend_clear(
+                        rule_id=rule.id,
+                        rule_title=rule.name,
+                        device_code=str(device_code) if device_code else None,
+                        source_gateway=payload.get("source_gateway"),
+                        signal_key=rule.signal_key,
+                    )
+                    if was_active:
+                        print(f"alarm-service-cleared rule_id={rule.id} signal={rule.signal_key} dev={device_code}")
+                except Exception as exc:  # noqa: BLE001
+                    if was_active:
+                        print(f"alarm-service-clear-error rule_id={rule.id} error={exc}")
 
 
 def main() -> None:
