@@ -316,29 +316,52 @@ body {
   flex: 1 1 auto;
 }
 
+/* Bildirim listesi: kartlar arasinda nefes alacak bosluk + her kart
+   kendi border/shadow ile ayri bir blok gibi gozuksun. Ust uste binmis
+   satirlar yerine net "kart" hissiyati. */
+.notif-list {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f1f5f9;
+}
+
 .notif-item {
   display: flex;
   gap: 12px;
   padding: 12px 14px;
-  border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .notif-item:hover {
-  background: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
 }
 
 .notif-item:last-child {
-  border-bottom: none;
+  /* gap zaten ayriyor — eski "border-bottom: none" gerek yok */
 }
 
 .notif-item--unread {
-  background: linear-gradient(90deg, #eff6ff 0%, #fff 100%);
+  background: #fff;
+  border-left: 3px solid #4338ca;
+}
+.notif-item--unread.notif-sev-warning {
+  border-left-color: #f59e0b;
+}
+.notif-item--unread.notif-sev-critical {
+  border-left-color: #dc2626;
 }
 
 .notif-item--unread:hover {
-  background: linear-gradient(90deg, #dbeafe 0%, #f8fafc 100%);
+  background: #fafbff;
 }
 
 .notif-item-icon {

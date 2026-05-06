@@ -126,6 +126,9 @@ type AlarmMetadata = {
   signal_key?: string | null;
   signal_source?: string | null;
   source_gateway?: string | null;
+  line_name?: string | null;
+  line_code?: string | null;
+  region_name?: string | null;
   value?: number | null;
   value_string?: string | null;
   threshold?: number | null;
@@ -292,6 +295,19 @@ export function NotificationBell({ token, onNavigate }: Props) {
                   ? fmtNumber(meta.threshold)
                   : null;
                 const levelTr = levelLabelTr(meta?.level ?? item.severity);
+                // body alarm bildiriminde basligin kopyasi olabiliyor ("Yeni
+                // alarm: Test alarmi" -> body "Test alarmi"). Tekrari gizle.
+                const bodyToShow = (() => {
+                  if (!item.body || !isAlarm) return item.body ?? null;
+                  const body = item.body.trim();
+                  const title = item.title.trim();
+                  // "Yeni alarm: X" basligindaki X = body ise tekrar — gizle.
+                  if (title.endsWith(`: ${body}`)) return null;
+                  if (title === body) return null;
+                  return body;
+                })();
+                const lineLabel = meta?.line_name ?? meta?.line_code ?? null;
+                const regionLabel = meta?.region_name ?? null;
                 return (
                   <li
                     key={item.id}
@@ -306,10 +322,11 @@ export function NotificationBell({ token, onNavigate }: Props) {
                         <strong className="notif-item-title">{item.title}</strong>
                         {!item.is_read ? <span className="notif-item-dot" /> : null}
                       </div>
-                      {/* Cihaz + Kaynak satir satir — kullanici hangi cihazin
-                          hangi kaynagindan (master/sat01/sat02) alarm geldigini
-                          tek bakista anlasin. Sinyal kodu yok (cok teknik). */}
-                      {isAlarm && (deviceLabel || srcLabel) ? (
+                      {/* Cihaz + Kaynak + Hat + Bolge satir satir — kullanici
+                          hangi cihazin hangi kaynagindan (master/sat01/sat02),
+                          hangi hat ve bolgeden alarm geldigini tek bakista
+                          anlasin. */}
+                      {isAlarm && (deviceLabel || srcLabel || lineLabel || regionLabel) ? (
                         <div className="notif-item-rows">
                           {deviceLabel ? (
                             <div className="notif-row">
@@ -329,10 +346,26 @@ export function NotificationBell({ token, onNavigate }: Props) {
                               </span>
                             </div>
                           ) : null}
+                          {lineLabel ? (
+                            <div className="notif-row">
+                              <span className="notif-row-icon material-symbols-outlined">power</span>
+                              <span className="notif-row-label">Hat</span>
+                              <span className="notif-row-value" title={meta?.line_code ?? undefined}>
+                                {lineLabel}
+                              </span>
+                            </div>
+                          ) : null}
+                          {regionLabel ? (
+                            <div className="notif-row">
+                              <span className="notif-row-icon material-symbols-outlined">map</span>
+                              <span className="notif-row-label">Bölge</span>
+                              <span className="notif-row-value">{regionLabel}</span>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
-                      {/* Aciklama */}
-                      {item.body ? <p className="notif-item-text">{item.body}</p> : null}
+                      {/* Aciklama (basliktan farkli ise) */}
+                      {bodyToShow ? <p className="notif-item-text">{bodyToShow}</p> : null}
                       {/* Olcum + esik karsilastirmasi gorsel sunum */}
                       {isAlarm && valueDisplay ? (
                         <div className="notif-item-measure">
@@ -349,8 +382,6 @@ export function NotificationBell({ token, onNavigate }: Props) {
                         </div>
                       ) : null}
                       <div className="notif-item-meta">
-                        {/* "Alarm" kategori rozeti yok — basliktan zaten bel-
-                            li. Sadece seviye + zaman gosteriyoruz, sade. */}
                         {levelTr ? (
                           <span className={`notif-level-badge ${sevCls}`}>{levelTr}</span>
                         ) : null}

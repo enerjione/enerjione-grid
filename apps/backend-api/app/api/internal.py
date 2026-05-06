@@ -211,8 +211,8 @@ def ingest_alarm(
     )
     # Cihaz adini bildirimde gostermek icin Device row'undan cek (yoksa code).
     # Notification metadata zenginlestirilir: frontend bunu okur ve "hangi
-    # cihaz, hangi kaynak (master/sat01), hangi sinyal, hangi deger, hangi
-    # esik" detaylarini gorsel kart olarak gosterir.
+    # cihaz, hangi kaynak (master/sat01), hangi hat / hangi bolge" detaylarini
+    # gorsel kart olarak gosterir.
     device_name = None
     if device_id is not None:
         dev_row = db.get(Device, device_id)
@@ -222,6 +222,30 @@ def ingest_alarm(
     signal_source = None
     if payload.signal_key and "." in payload.signal_key:
         signal_source = payload.signal_key.split(".", 1)[0].lower()
+    # Hat ve bolge bilgisi — cihaz LineSegment'e atanmissa Line + Region
+    # adlarini alabiliriz. Cihaz hicbir hata atanmamissa null kalir; frontend
+    # o satiri gostermez.
+    line_name: str | None = None
+    line_code: str | None = None
+    region_name: str | None = None
+    if device_id is not None:
+        try:
+            from app.models.grid_topology import Line, LineSegment, Region
+            seg = db.scalar(
+                select(LineSegment).where(LineSegment.device_id == device_id).limit(1)
+            )
+            if seg is not None:
+                line_row = db.get(Line, seg.line_id)
+                if line_row is not None:
+                    line_name = line_row.name
+                    line_code = line_row.code
+                    region_row = db.get(Region, line_row.region_id)
+                    if region_row is not None:
+                        region_name = region_row.name
+        except Exception:  # noqa: BLE001
+            # Topoloji hatasi alarm akisini bozmasin — sadece hat/bolge alanlari
+            # eksik kalir; bildirim yine ulasir.
+            pass
     create_notification(
         db,
         recipient_username=None,  # broadcast
@@ -239,6 +263,9 @@ def ingest_alarm(
             "signal_key": payload.signal_key,
             "signal_source": signal_source,
             "source_gateway": payload.source_gateway,
+            "line_name": line_name,
+            "line_code": line_code,
+            "region_name": region_name,
             "value": payload.value,
             "value_string": payload.value_string,
             "threshold": payload.threshold,
