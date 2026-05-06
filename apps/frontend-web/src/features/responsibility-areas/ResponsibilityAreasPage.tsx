@@ -70,7 +70,7 @@ export function ResponsibilityAreasPage({
   const [searchUser, setSearchUser] = useState("");
   const [searchDevice, setSearchDevice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<"general" | "users" | "regions" | "lines" | "devices">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "users" | "regions" | "lines">("general");
 
   useEffect(() => {
     if (selectedAreaId === null && areas.length > 0) {
@@ -125,7 +125,7 @@ export function ResponsibilityAreasPage({
 
   const availableUsers = useMemo(() => {
     const q = searchUser.trim().toLowerCase();
-    // Sorumluluk alanlarına yalnızca operator hesapları atanabilir; mühendis ve
+    // Ekiplere yalnızca operator hesapları atanabilir; mühendis ve
     // kurulumcu zaten tüm cihazlara erişir, alana atamak anlam taşımaz.
     return users.filter(
       (u) =>
@@ -164,7 +164,7 @@ export function ResponsibilityAreasPage({
       setCreateDescription("");
       setShowCreateModal(false);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Sorumluluk alanı oluşturulamadı.");
+      setLocalError(err instanceof Error ? err.message : "Ekip oluşturulamadı.");
     } finally {
       setBusy(false);
     }
@@ -182,7 +182,7 @@ export function ResponsibilityAreasPage({
       });
       await reloadDetail(detail.id);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Sorumluluk alanı güncellenemedi.");
+      setLocalError(err instanceof Error ? err.message : "Ekip güncellenemedi.");
     } finally {
       setBusy(false);
     }
@@ -190,7 +190,7 @@ export function ResponsibilityAreasPage({
 
   const handleDelete = async () => {
     if (!detail) return;
-    if (!window.confirm(`"${detail.name}" sorumluluk alanı silinsin mi?`)) return;
+    if (!window.confirm(`"${detail.name}" ekip silinsin mi?`)) return;
     setBusy(true);
     setLocalError("");
     try {
@@ -198,7 +198,7 @@ export function ResponsibilityAreasPage({
       setSelectedAreaId(null);
       setDetail(null);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Sorumluluk alanı silinemedi.");
+      setLocalError(err instanceof Error ? err.message : "Ekip silinemedi.");
     } finally {
       setBusy(false);
     }
@@ -341,7 +341,7 @@ export function ResponsibilityAreasPage({
         {/* Sol: alanlar listesi */}
         <aside className="responsibility-sidebar">
           <div className="responsibility-sidebar-header">
-            <h3>Sorumluluk Alanları</h3>
+            <h3>Ekipler</h3>
             {canEdit ? (
               <button
                 type="button"
@@ -382,7 +382,7 @@ export function ResponsibilityAreasPage({
             ))}
             {areas.length === 0 && !loading ? (
               <li className="responsibility-empty-list">
-                <p>Henüz sorumluluk alanı yok.</p>
+                <p>Henüz ekip yok.</p>
                 {canEdit ? <p className="helper-text">Sağdaki "+ Yeni" ile bir alan oluşturun.</p> : null}
               </li>
             ) : null}
@@ -403,7 +403,7 @@ export function ResponsibilityAreasPage({
               <span className="material-symbols-outlined responsibility-empty-icon">folder_open</span>
               <h3>Bir alan seçin</h3>
               <p className="helper-text">
-                Soldan bir sorumluluk alanı seçin ya da yeni bir alan oluşturun. Seçilen alana
+                Soldan bir ekip seçin ya da yeni bir alan oluşturun. Seçilen alana
                 kullanıcı ve cihaz ekleyebilirsiniz.
               </p>
             </div>
@@ -475,16 +475,6 @@ export function ResponsibilityAreasPage({
                     <span className="material-symbols-outlined">cable</span>
                     <span className="responsibility-tab-label">Hatlar</span>
                     <span className="responsibility-tab-count">{detail.lines?.length ?? 0}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`responsibility-tab ${activeTab === "devices" ? "active" : ""}`}
-                    onClick={() => setActiveTab("devices")}
-                  >
-                    <span className="material-symbols-outlined">devices</span>
-                    <span className="responsibility-tab-label">Cihazlar</span>
-                    <span className="responsibility-tab-count">{detail.devices.length}</span>
                   </button>
                 </nav>
               </header>
@@ -764,89 +754,6 @@ export function ResponsibilityAreasPage({
                 </div>
                 ) : null}
 
-                {activeTab === "devices" ? (
-                <div className="responsibility-section">
-                  <p className="helper-text responsibility-section-hint-block">
-                    Solda eklenebilir, sağda bu alana atanmış cihazlar. (Alan; bölge ve hat üzerinden de cihazlara dolaylı sahiptir.)
-                  </p>
-                  <div className="responsibility-transfer-grid">
-                    <div className="transfer-pane transfer-pane--source">
-                      <div className="transfer-pane-titlebar">
-                        <span className="transfer-pane-title">Eklenebilir</span>
-                        <span className="transfer-pane-count">{availableDevices.length}</span>
-                      </div>
-                      <input
-                        className="transfer-search"
-                        placeholder="Cihaz ara..."
-                        value={searchDevice}
-                        onChange={(e) => setSearchDevice(e.target.value)}
-                      />
-                      <ul className="transfer-list">
-                        {availableDevices.map((d) => (
-                          <li key={d.id} className="transfer-item">
-                            <div className="transfer-item-icon"><span className="material-symbols-outlined">router</span></div>
-                            <div className="transfer-item-text">
-                              <strong>{d.name}</strong>
-                              <span>{d.code}</span>
-                            </div>
-                            {canEdit ? (
-                              <button
-                                type="button"
-                                className="icon-btn icon-btn-add"
-                                title="Alana ekle"
-                                aria-label="Alana ekle"
-                                disabled={busy}
-                                onClick={() => void handleAddDevice(d.id)}
-                              >
-                                ＋
-                              </button>
-                            ) : null}
-                          </li>
-                        ))}
-                        {availableDevices.length === 0 ? (
-                          <li className="transfer-empty">
-                            {searchDevice ? "Aramaya uygun cihaz yok." : "Eklenebilecek cihaz kalmadı."}
-                          </li>
-                        ) : null}
-                      </ul>
-                    </div>
-                    <div className="transfer-pane transfer-pane--target">
-                      <div className="transfer-pane-titlebar">
-                        <span className="transfer-pane-title">Bu Alanda</span>
-                        <span className="transfer-pane-count transfer-pane-count--target">{detail.devices.length}</span>
-                      </div>
-                      <ul className="transfer-list">
-                        {detail.devices.map((d) => (
-                          <li key={d.id} className="transfer-item transfer-item-in">
-                            {canEdit ? (
-                              <button
-                                type="button"
-                                className="icon-btn icon-btn-remove"
-                                title="Alandan çıkar"
-                                aria-label="Alandan çıkar"
-                                disabled={busy}
-                                onClick={() => void handleRemoveDevice(d.id)}
-                              >
-                                −
-                              </button>
-                            ) : null}
-                            <div className="transfer-item-icon"><span className="material-symbols-outlined">router</span></div>
-                            <div className="transfer-item-text">
-                              <strong>{d.name}</strong>
-                              <span>{d.code}</span>
-                            </div>
-                          </li>
-                        ))}
-                        {detail.devices.length === 0 ? (
-                          <li className="transfer-empty">
-                            Henüz cihaz yok. Soldan + butonu ile ekleyin.
-                          </li>
-                        ) : null}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
               </div>
             </>
           ) : null}
@@ -856,7 +763,7 @@ export function ResponsibilityAreasPage({
       {showCreateModal ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleCreate}>
-            <h3>Yeni Sorumluluk Alanı</h3>
+            <h3>Yeni Ekip</h3>
             <label>
               Kod (kısaltma, benzersiz)
               <input value={createCode} onChange={(e) => setCreateCode(e.target.value)} required />

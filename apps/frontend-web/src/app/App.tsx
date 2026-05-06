@@ -465,9 +465,9 @@ export function App() {
     return () => window.clearInterval(id);
   }, [session]);
 
-  // Grid topology snapshot canli refresh: 15 sn'de bir. Hat Yonetimi'nde
-  // yapilan degisiklikler (yeni cihaz ekleme/cikarma, direk tasima) anasayfa
-  // haritasina yansisin.
+  // Grid topology snapshot canli refresh: 5 sn'de bir. Hat Yonetimi'nde
+  // yapilan degisiklikler (cihaz konumu, direk ekle/sil/tasi, bransman)
+  // anasayfa haritasina hizla yansisin.
   useEffect(() => {
     if (!session) return;
     const tick = async () => {
@@ -480,7 +480,7 @@ export function App() {
     };
     const id = window.setInterval(() => {
       void tick();
-    }, 15000);
+    }, 5000);
     return () => window.clearInterval(id);
   }, [session]);
 
@@ -1450,7 +1450,7 @@ export function App() {
                     void reloadResponsibilityAreas();
                   }}
                 >
-                  Sorumluluk Alanları
+                  Ekip Yönetimi
                 </button>
               ) : null}
               {session.role === "installer" ? (

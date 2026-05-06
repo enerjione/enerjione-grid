@@ -413,6 +413,28 @@ def add_region_to_area(
     ).first()
     if not exists:
         db.execute(responsibility_area_regions.insert().values(area_id=area_id, region_id=region_id))
+        # Bolge eklendiginde, o bolgeye bagli tum hatlari da otomatik olarak
+        # ekibin kapsamina ekle. Kullanici daha sonra istemedigi hatti tek tek
+        # kaldirabilir (Hatlar tabindan).
+        existing_line_ids = {
+            row[0]
+            for row in db.execute(
+                select(responsibility_area_lines.c.line_id).where(
+                    responsibility_area_lines.c.area_id == area_id
+                )
+            ).all()
+        }
+        region_lines = list(
+            db.scalars(select(Line).where(Line.region_id == region_id)).all()
+        )
+        added_line_count = 0
+        for ln in region_lines:
+            if ln.id in existing_line_ids:
+                continue
+            db.execute(
+                responsibility_area_lines.insert().values(area_id=area_id, line_id=ln.id)
+            )
+            added_line_count += 1
         record_event(
             db,
             category="responsibility_area",
@@ -420,7 +442,13 @@ def add_region_to_area(
             severity="info",
             actor_username=current_user.username,
             message=f"'{region.name}' bölgesi '{area.name}' sorumluluk alanına eklendi",
-            metadata={"area_id": area_id, "area_name": area.name, "region_id": region_id, "region_name": region.name},
+            metadata={
+                "area_id": area_id,
+                "area_name": area.name,
+                "region_id": region_id,
+                "region_name": region.name,
+                "auto_added_lines": added_line_count,
+            },
         )
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

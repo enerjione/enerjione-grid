@@ -316,7 +316,10 @@ def update_line(
     row = db.get(Line, line_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hat bulunamadı.")
-    changes = payload.model_dump(exclude_none=True)
+    # exclude_unset=True: kullanicinin acik bir sekilde set ettigi alanlar (None
+    # dahil) uygulanir, gondermedikleri korunur. exclude_none yanlisti — kullanici
+    # bransman'i kaldirmak icin null gonderdiginde es geciliyordu.
+    changes = payload.model_dump(exclude_unset=True)
     for key, value in changes.items():
         setattr(row, key, value)
     record_event(
