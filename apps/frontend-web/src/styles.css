@@ -14473,4 +14473,479 @@ main.content.engineering-content:has(.device-management-panel) {
   }
 }
 
+/* =========================================================================
+   Hat Yonetimi haritasi: segment context menu (cihaz ekle/duzenle popup'i)
+   Tamamen yeniden tasarlandi — modern, ferah, butonlar net.
+   ========================================================================= */
+
+/* Popup wrapper genisligini biraz buyut, max yukseklik koy */
+.grid-segment-menu {
+  width: 420px !important;
+  max-height: 80vh !important;
+}
+
+/* Inner scroll container — eski yapiyla uyumlu */
+.grid-segment-menu-inner {
+  display: contents;
+}
+
+.seg-menu {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* ------- Header ------- */
+.seg-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+.seg-menu-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.seg-menu-eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  color: #6366f1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.seg-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.seg-menu-pole {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 26px;
+  padding: 0 8px;
+  background: #fff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #0f172a;
+}
+.seg-menu-arrow {
+  color: #94a3b8;
+  font-size: 16px;
+  font-weight: 700;
+}
+.seg-menu-count {
+  margin-left: 4px;
+  padding: 2px 8px;
+  background: #4f46e5;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.seg-menu-count.seg-menu-count--empty {
+  background: #e2e8f0;
+  color: #64748b;
+}
+.seg-menu-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #64748b;
+  flex-shrink: 0;
+  padding: 0;
+}
+.seg-menu-close:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.seg-menu-close .material-symbols-outlined { font-size: 20px; }
+
+/* ------- Body (devices list / picker) ------- */
+.seg-menu-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  padding: 12px;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+/* ------- Empty state ------- */
+.seg-menu-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+}
+.seg-menu-empty > .material-symbols-outlined {
+  font-size: 28px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.seg-menu-empty strong {
+  display: block;
+  font-size: 13px;
+  color: #334155;
+  margin-bottom: 2px;
+}
+.seg-menu-empty p {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* ------- Cihaz listesi (atanmis cihazlar) ------- */
+.seg-menu-devices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.seg-menu-device-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.seg-menu-device-item:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+.seg-menu-device-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.seg-menu-device-icon.is-online {
+  background: #dcfce7;
+  color: #15803d;
+}
+.seg-menu-device-icon.is-offline {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.seg-menu-device-icon .material-symbols-outlined {
+  font-size: 22px;
+}
+.seg-menu-device-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.seg-menu-device-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.seg-menu-device-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seg-menu-device-pos {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  padding: 2px 6px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.seg-menu-device-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #64748b;
+}
+.seg-menu-device-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  padding: 1px 6px;
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.seg-menu-device-gw {
+  color: #475569;
+  font-size: 11px;
+}
+.seg-menu-device-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.seg-menu-device-status .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.seg-menu-device-status.is-online {
+  color: #15803d;
+}
+.seg-menu-device-status.is-online .dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.18);
+}
+.seg-menu-device-status.is-offline {
+  color: #b91c1c;
+}
+.seg-menu-device-status.is-offline .dot {
+  background: #dc2626;
+}
+
+/* Cihaz aksiyon butonlari */
+.seg-menu-device-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.seg-menu-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #475569;
+  padding: 0;
+  transition: all 0.15s;
+}
+.seg-menu-icon-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.seg-menu-icon-btn .material-symbols-outlined { font-size: 18px; }
+.seg-menu-icon-btn--danger {
+  color: #b91c1c;
+}
+.seg-menu-icon-btn--danger:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+/* ------- Cihaz ekle butonu (ana liste sonu) ------- */
+.seg-menu-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 4px;
+}
+.seg-menu-add-btn:hover:not(:disabled) {
+  background: #4338ca;
+}
+.seg-menu-add-btn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+.seg-menu-add-btn .material-symbols-outlined { font-size: 20px; }
+.seg-menu-add-count {
+  margin-left: 6px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ------- Arama input ------- */
+.seg-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+.seg-menu-search > .material-symbols-outlined {
+  font-size: 18px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.seg-menu-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #0f172a;
+}
+.seg-menu-search input::placeholder {
+  color: #94a3b8;
+}
+.seg-menu-search-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  padding: 2px 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+/* ------- Pickable list (cihaz ekle / hedef segment sec) ------- */
+.seg-menu-pickable {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.seg-menu-pickable-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+.seg-menu-pickable-item:hover {
+  background: #eef2ff;
+  border-color: #6366f1;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.12);
+}
+.seg-menu-pickable-arrow {
+  color: #94a3b8;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.seg-menu-pickable-item:hover .seg-menu-pickable-arrow {
+  color: #4f46e5;
+}
+
+/* ------- Tasi: hedef segment listesi item ------- */
+.seg-menu-target-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.seg-menu-target-status {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+}
+.seg-menu-target-status.is-ok { color: #16a34a; }
+.seg-menu-target-status.is-warn { color: #b45309; }
+
+/* ------- Move info banner ------- */
+.seg-menu-move-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+.seg-menu-move-info > .material-symbols-outlined {
+  font-size: 22px;
+  color: #d97706;
+}
+.seg-menu-move-info strong {
+  display: block;
+  font-size: 13px;
+  color: #92400e;
+}
+.seg-menu-move-info p {
+  margin: 0;
+  font-size: 11px;
+  color: #b45309;
+}
+
+/* ------- Geri don butonu ------- */
+.seg-menu-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: auto;
+  align-self: flex-start;
+}
+.seg-menu-back-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.seg-menu-back-btn .material-symbols-outlined { font-size: 18px; }
 
