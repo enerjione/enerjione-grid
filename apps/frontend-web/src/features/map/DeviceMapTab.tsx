@@ -21,6 +21,10 @@ type Props = {
 
 const DEFAULT_LINE_COLOR = "#2563eb";
 const FAULT_COLOR = "#ef4444";
+// Arizali bir hatta arizadan ONCEKI (besleme tarafi) kismi belirgin yesil
+// renkle gosterilir — operator hangi bolum saglikli/enerjili oldugunu anlik
+// gorebilsin diye. Hattin kendi rengi (mavi/turuncu) yerine bu kullanilir.
+const HEALTHY_FAULT_LINE_COLOR = "#16a34a";
 
 // Ariza noktasi marker'i — segment ortasinda buyuk yanip sonen kirmizi simsek.
 const faultPin = () =>
@@ -501,14 +505,15 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         });
         continue;
       }
-      // Arizali: hat'i fault.midpoint cevresinde ikiye ayir.
+      // Arizali: hat'i fault.midpoint cevresinde ikiye ayir. Pre kismi
+      // (besleme tarafi -> ariza noktasi) saglikli/enerjili - belirgin yesil.
       const { pre, post } = splitPolyline(positionsAll, fault.midpoint);
       if (pre.length >= 2) {
         linePolylines.push({
           id: `line-${lineId}-pre`,
           lineId,
           positions: pre,
-          color: baseColor,
+          color: HEALTHY_FAULT_LINE_COLOR,
           kind: "healthy",
           name: line.name,
           regionName: region?.name ?? ""
@@ -557,14 +562,18 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           {/* Hat polylineları:
               - healthy/pre kismi: hattin kendi rengi
               - post-fault kismi: kirmizi (ariza sonrasi enerjisiz/etkilenen bolum) */}
-          {topology?.linePolylines.map((line) => (
+          {topology?.linePolylines.map((line) => {
+            // Arizali bir hatta pre kismi yesil ve kalin (enerjili bolum vurgusu);
+            // diger 'healthy' hatlar default ince mavi.
+            const isHealthyOfFaulted = line.kind === "healthy" && line.color === HEALTHY_FAULT_LINE_COLOR;
+            return (
             <Polyline
               key={line.id}
               positions={line.positions}
               pathOptions={{
                 color: line.color,
-                weight: line.kind === "post" ? 5 : 3,
-                opacity: line.kind === "post" ? 0.85 : 0.7,
+                weight: line.kind === "post" ? 5 : isHealthyOfFaulted ? 5 : 3,
+                opacity: line.kind === "post" ? 0.85 : isHealthyOfFaulted ? 0.9 : 0.7,
                 dashArray: line.kind === "post" ? "10 6" : undefined
               }}
             >
@@ -573,10 +582,13 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                 {line.regionName ? <><br />{line.regionName}</> : null}
                 {line.kind === "post" ? (
                   <><br /><em style={{ color: FAULT_COLOR }}>Arıza sonrası — etkilenen bölüm</em></>
+                ) : isHealthyOfFaulted ? (
+                  <><br /><em style={{ color: HEALTHY_FAULT_LINE_COLOR }}>Sağlıklı — enerjili bölüm</em></>
                 ) : null}
               </Tooltip>
             </Polyline>
-          ))}
+            );
+          })}
 
           {/* Lokalize edilmis ariza segmenti: kirmizi kalin overlay + ikon marker */}
           {topology?.alarmedSegments.map((seg) => (
@@ -1055,12 +1067,6 @@ function DeviceDetailModal({
         <div className="device-detail-modal-cols">
           {SOURCES.map((src) => renderColumn(src))}
         </div>
-
-        <footer className="device-detail-modal-foot device-detail-modal-foot--right">
-          <button type="button" className="primary-btn" onClick={onClose}>
-            Kapat
-          </button>
-        </footer>
       </div>
     </div>
   );

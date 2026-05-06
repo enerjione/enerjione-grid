@@ -815,27 +815,6 @@ export function DeviceManagementPanel({
                         .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
                         .filter((p) => p > 0)}
                     />
-                    <div className="device-iec104-section">
-                      <h5 className="device-iec104-section-title">IEC 60870-5-104 (Outbound)</h5>
-                      <div className="device-detail-form-grid">
-                        <label>
-                          ASDU Common Address (CA)
-                          <input
-                            type="number"
-                            min={0}
-                            max={65534}
-                            placeholder="örn. 1, 2, 3..."
-                            value={iec104CommonAddress}
-                            onChange={(event) => setIec104CommonAddress(event.target.value)}
-                          />
-                        </label>
-                      </div>
-                      <p className="helper-text">
-                        Bu cihazın IEC 104 ASDU Common Address'i. Boş bırakılırsa
-                        outbound hedefin default CA'si kullanılır. Aynı TCP yayınında
-                        farklı cihazlar farklı CA ile yayınlanır.
-                      </p>
-                    </div>
                   </div>
                 </div>
               )}
