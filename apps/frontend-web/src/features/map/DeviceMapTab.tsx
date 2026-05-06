@@ -292,6 +292,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       regionName: string;
     };
     const linePolylines: LinePart[] = [];
+    // Saglikli (alarm yok) hatlar her zaman yesil — kullanici hat rengi
+    // secimi sistemden kaldirildi; renk standartlasti.
+    const HEALTHY_DEFAULT = HEALTHY_FAULT_LINE_COLOR;
 
     // ===== Ariza lokalizasyon mantigi =====
     // Cihazlar hat boyunca sirali (slot from_pole_seq, ardindan slot ici sira).
@@ -399,6 +402,11 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       device: DeviceRow | undefined;
       fromSeq: number | null;
       toSeq: number | null;
+      // Hat polyline'ini ikiye boldugumuz direk sequence_no'su:
+      // bu sequence'a kadar (dahil) PRE (yesil), sonrasi POST (kirmizi).
+      // splitSeq = lastAlarmed.toSeq -> son alarmli cihazin bitis diregi.
+      // Cihazdan sonraki tum hat ucu etkilenen bolumdur.
+      splitSeq: number | null;
     };
     const faultByLine = new Map<number, FaultInfo>();
 
@@ -478,7 +486,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         midpoint,
         device: dev,
         fromSeq: fromSeqShow,
-        toSeq: toSeqShow
+        toSeq: toSeqShow,
+        // Son alarmli cihazin baglanti slot'unun BITIS diregi -> kesim noktasi.
+        // Bu direge kadar (dahil) yesil; bu direkten sonra (sonraki polyline
+        // edge'inden itibaren) kirmizi. Boylece cihazin bagli oldugu segment
+        // YESILE dahil kalir; sonraki direk araliklari KIRMIZI olur.
+        splitSeq: lastAlarmed.toSeq
       });
     }
 
@@ -489,7 +502,6 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       const line = linesById.get(lineId);
       if (!line) continue;
       const region = regionsById.get(line.region_id);
-      const baseColor = line.color || region?.color || DEFAULT_LINE_COLOR;
       const positionsAll: [number, number][] = sortedPoles.map((p) => [p.latitude, p.longitude]);
       if (positionsAll.length < 2) continue;
       const fault = faultByLine.get(lineId);
@@ -498,34 +510,60 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           id: `line-${lineId}`,
           lineId,
           positions: positionsAll,
-          color: baseColor,
+          color: HEALTHY_DEFAULT,
           kind: "healthy",
           name: line.name,
           regionName: region?.name ?? ""
         });
         continue;
       }
-      // Arizali: hat'i fault.midpoint cevresinde ikiye ayir. Pre kismi
-      // (besleme tarafi -> ariza noktasi) saglikli/enerjili - belirgin yesil.
-      const { pre, post } = splitPolyline(positionsAll, fault.midpoint);
-      if (pre.length >= 2) {
+      // Arizali: hat'i splitSeq direginde kes.
+      //   splitSeq = son alarmli cihazin segment bitis diregi (toSeq) =
+      //   arizanin tahmini noktasi.
+      //   Hat baslangicindan bu direge kadar olan kisim ALARM VEREN
+      //   cihazlari icerir -> KIRMIZI (arizali bolum).
+      //   Bu direkten hat ucuna kadar olan kisim alarm vermeyen cihazlar
+      //   (akim gelmemis) -> YESIL (saglikli/etkilenmemis bolum).
+      const splitSeq = fault.splitSeq;
+      let splitIdx = -1;
+      if (splitSeq !== null) {
+        splitIdx = sortedPoles.findIndex((p) => p.sequence_no === splitSeq);
+      }
+      // splitSeq bulunamazsa veya hat ucundaysa, midpoint'e gore eski yontem
+      // yedek olarak kullanilir.
+      let preFault: [number, number][];
+      let postFault: [number, number][];
+      if (splitIdx >= 0 && splitIdx < positionsAll.length - 1) {
+        // preFault (besleme + alarmli cihazlar) = 0..splitIdx dahil
+        preFault = positionsAll.slice(0, splitIdx + 1);
+        // postFault (alarm vermemis cihazlar) = splitIdx..end
+        postFault = positionsAll.slice(splitIdx);
+      } else {
+        const split = splitPolyline(positionsAll, fault.midpoint);
+        preFault = split.pre;
+        postFault = split.post;
+      }
+
+      // Pre-fault (alarmli bolum) -> KIRMIZI
+      if (preFault.length >= 2) {
         linePolylines.push({
-          id: `line-${lineId}-pre`,
+          id: `line-${lineId}-fault-side`,
           lineId,
-          positions: pre,
-          color: HEALTHY_FAULT_LINE_COLOR,
-          kind: "healthy",
+          positions: preFault,
+          color: FAULT_COLOR,
+          kind: "post",
           name: line.name,
           regionName: region?.name ?? ""
         });
       }
-      if (post.length >= 2) {
+      // Post-fault (alarm vermemis bolum) -> YESIL
+      if (postFault.length >= 2) {
         linePolylines.push({
-          id: `line-${lineId}-post`,
+          id: `line-${lineId}-healthy-side`,
           lineId,
-          positions: post,
-          color: FAULT_COLOR,
-          kind: "post",
+          positions: postFault,
+          color: HEALTHY_FAULT_LINE_COLOR,
+          kind: "healthy",
           name: line.name,
           regionName: region?.name ?? ""
         });
@@ -563,17 +601,15 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               - healthy/pre kismi: hattin kendi rengi
               - post-fault kismi: kirmizi (ariza sonrasi enerjisiz/etkilenen bolum) */}
           {topology?.linePolylines.map((line) => {
-            // Arizali bir hatta pre kismi yesil ve kalin (enerjili bolum vurgusu);
-            // diger 'healthy' hatlar default ince mavi.
-            const isHealthyOfFaulted = line.kind === "healthy" && line.color === HEALTHY_FAULT_LINE_COLOR;
+            const isHealthy = line.kind === "healthy";
             return (
             <Polyline
               key={line.id}
               positions={line.positions}
               pathOptions={{
                 color: line.color,
-                weight: line.kind === "post" ? 5 : isHealthyOfFaulted ? 5 : 3,
-                opacity: line.kind === "post" ? 0.85 : isHealthyOfFaulted ? 0.9 : 0.7,
+                weight: line.kind === "post" ? 5 : isHealthy ? 5 : 3,
+                opacity: line.kind === "post" ? 0.85 : isHealthy ? 0.9 : 0.7,
                 dashArray: line.kind === "post" ? "10 6" : undefined
               }}
             >
@@ -582,8 +618,8 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                 {line.regionName ? <><br />{line.regionName}</> : null}
                 {line.kind === "post" ? (
                   <><br /><em style={{ color: FAULT_COLOR }}>Arıza sonrası — etkilenen bölüm</em></>
-                ) : isHealthyOfFaulted ? (
-                  <><br /><em style={{ color: HEALTHY_FAULT_LINE_COLOR }}>Sağlıklı — enerjili bölüm</em></>
+                ) : isHealthy ? (
+                  <><br /><em style={{ color: HEALTHY_FAULT_LINE_COLOR }}>Sağlıklı / enerjili</em></>
                 ) : null}
               </Tooltip>
             </Polyline>

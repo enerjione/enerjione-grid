@@ -878,9 +878,11 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
                         key={`seg-${idx}`}
                         positions={positions}
                         pathOptions={{
-                          color: hasDevice ? "#16a34a" : lineColor,
-                          weight: hasDevice ? 6 : 5,
-                          opacity: 0.9
+                          // Saglikli (alarm yok) hat -> yesil; cihaz baglandiginda
+                          // daha kalin/koyu, cihazsiz slot biraz daha ince/acik.
+                          color: hasDevice ? "#16a34a" : "#22c55e",
+                          weight: hasDevice ? 6 : 4,
+                          opacity: hasDevice ? 0.95 : 0.7
                         }}
                         eventHandlers={{
                           click: openMenu,
@@ -1761,13 +1763,15 @@ function LineModal({
   const [code, setCode] = useState(initial?.code ?? "");
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [color, setColor] = useState(initial?.color ?? "");
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     await onSubmit({
       region_id: regionId, code: code.trim(), name: name.trim(),
-      description: description.trim() || null, color: color || null,
+      description: description.trim() || null,
+      // color alani sistem genelinde standartlasti (saglikli=yesil, ariza=kirmizi);
+      // kullanici secimine gerek yok. Backend'e null gonderiliyor.
+      color: null,
       is_active: isActive
     });
   };
@@ -1778,9 +1782,6 @@ function LineModal({
         <label>Kod <input value={code} onChange={(e) => setCode(e.target.value)} required /></label>
         <label>Ad <input value={name} onChange={(e) => setName(e.target.value)} required /></label>
         <label>Açıklama <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-        <label>Renk (boş = bölgenin rengi)
-          <input type="color" value={color || "#94a3b8"} onChange={(e) => setColor(e.target.value)} />
-        </label>
         <label className="notify-option">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
           Aktif
