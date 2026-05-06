@@ -17,18 +17,33 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 
 def _is_stale_online(device: Device) -> bool:
-    """DB'de "online" yaziyor olsa bile son telemetri esikten eskiyse True.
-    Esik: max(180sn, poll_interval_sec * 3 + 30sn).
+    """DB'de "online" yaziyor olsa bile son telemetri cok eskiyse True.
+
+    Cihaz bagliyken bile cok yavas telemetri gonderebilir (event-bazli
+    sinyaller, dusuk poll rate vb). False-negative riskini azaltmak icin
+    threshold cok cok genis tutuldu — sadece "uzun zamandir hic veri yok"
+    senaryosunda offline'a duser.
+
+    Eski threshold: max(180sn, poll*3+30) — kisaydi, normal calisan
+    cihazlari bile offline gostermeye basladi (kullanici sikayeti).
+
+    Yeni threshold: max(15dk, poll*30+60sn). Cihaz gerçekten 15+ dakika
+    veri yollamadiysa offline kabul edilir; aksi halde DB'ye guvenilir.
     """
     if device.communication_status != CommunicationStatus.ONLINE:
         return False
     last = device.last_update_at
     if last is None:
-        return True
+        # Hic veri gelmemis cihaz — DB online olarak isaretleyemez zaten;
+        # eger oyleyse manuel set edilmis (false positive). Yine de stale
+        # saymayi cok katı yapmamak icin: NULL'da OFFLINE'a dusurmuyoruz,
+        # DB ne diyorsa onu donuyoruz. Tag engine'in last_update_at'i
+        # online'da set ettigine guveniyoruz.
+        return False
     if last.tzinfo is None:
         last = last.replace(tzinfo=timezone.utc)
     elapsed = (datetime.now(timezone.utc) - last).total_seconds()
-    threshold = max(180, (device.poll_interval_sec or 5) * 3 + 30)
+    threshold = max(900, (device.poll_interval_sec or 5) * 30 + 60)
     return elapsed > threshold
 
 
