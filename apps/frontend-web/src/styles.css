@@ -245,7 +245,9 @@ body {
   right: 0;
   width: 380px;
   max-width: 92vw;
-  max-height: 70vh;
+  /* Iç max-height: header (~50px) + 3 kart liste (606px) + tampon = ~660px.
+     Kucuk ekranda viewport sinirinda kal (calc 90vh max). */
+  max-height: min(660px, 90vh);
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -318,13 +320,22 @@ body {
   list-style: none;
   margin: 0;
   flex: 0 1 auto;
-  max-height: 480px;
+  /* Yukseklik: yaklasik 3 kart yuksekligini gosteren bir pencere. Daha
+     fazla bildirim varsa kullanici bu kutu icinde scroll'lar; kartlar
+     ASLA kirpilmaz cunku item'lar `flex-shrink:0` ile dogal yuksekliklerini
+     korur. Hesap: 3 x ~190px kart + 2 x 8px gap + 20px ic padding ≈ 606. */
+  max-height: 606px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* Karti dogal yuksekligine birak — 4. kart yer kalmadigi icin scroll'a
+   tasinacak, ic icerik kirpilmayacak. */
+.notif-list .notif-item {
+  flex: 0 0 auto;
 }
 /* Hafif gorunur scrollbar — kart icindeki overflow normal scroll */
 .notif-list::-webkit-scrollbar {
@@ -339,7 +350,6 @@ body {
 }
 .notif-list::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.65);
-  background: #f1f5f9;
 }
 
 .notif-item {
@@ -15908,7 +15918,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .faults-cards {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
   width: 100%;
 }
@@ -15947,8 +15957,8 @@ main.content.engineering-content:has(.device-management-panel) {
 .faults-card {
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-left: 5px solid #ef4444;
-  border-radius: 14px;
+  border-left: 4px solid #ef4444;
+  border-radius: 10px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -15958,7 +15968,7 @@ main.content.engineering-content:has(.device-management-panel) {
   font: inherit;
   color: inherit;
   width: 100%;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 .faults-card:hover {
@@ -16482,30 +16492,31 @@ main.content.engineering-content:has(.device-management-panel) {
 .faults-card-rich-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(220px, 1.1fr) minmax(360px, 2fr) minmax(180px, 0.9fr);
-  gap: 22px;
-  padding: 16px 20px;
+  grid-template-columns: minmax(190px, 1fr) minmax(320px, 1.9fr) minmax(160px, 0.85fr);
+  gap: 14px;
+  padding: 8px 14px;
   align-items: center;
 }
 @media (max-width: 1100px) {
   .faults-card-rich-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 10px;
+    padding: 10px 12px;
   }
 }
 .faults-card-rich-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
 }
 .faults-card-rich-block--devices {
   flex-direction: row;
   align-items: stretch;
-  gap: 10px;
+  gap: 8px;
   border-left: 1px dashed rgba(148, 163, 184, 0.3);
   border-right: 1px dashed rgba(148, 163, 184, 0.3);
-  padding: 0 16px;
+  padding: 0 12px;
 }
 @media (max-width: 1100px) {
   .faults-card-rich-block--devices {
@@ -16513,69 +16524,69 @@ main.content.engineering-content:has(.device-management-panel) {
     border-right: none;
     border-top: 1px dashed rgba(148, 163, 184, 0.3);
     border-bottom: 1px dashed rgba(148, 163, 184, 0.3);
-    padding: 12px 0;
+    padding: 8px 0;
   }
 }
 .faults-card-rich-block--status {
   align-items: flex-start;
-  gap: 10px;
+  gap: 6px;
 }
 .faults-card-region {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
+  gap: 4px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #6366f1;
   font-weight: 700;
 }
 .faults-card-region .material-symbols-outlined {
-  font-size: 16px !important;
+  font-size: 14px !important;
 }
 .faults-card-line-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .faults-card-line-name .material-symbols-outlined {
-  font-size: 22px !important;
+  font-size: 18px !important;
   color: #6366f1;
   background: rgba(99, 102, 241, 0.1);
-  padding: 5px;
-  border-radius: 8px;
+  padding: 3px;
+  border-radius: 6px;
 }
 .faults-card-line-name strong {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 700;
   color: #0f172a;
 }
 .faults-card-range-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .faults-card-range-tag {
-  font-size: 10.5px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #94a3b8;
   font-weight: 700;
 }
 .faults-card-range-text {
-  font-size: 14px;
+  font-size: 12.5px;
   color: #ef4444;
   font-weight: 700;
 }
 .faults-card-dev-card {
   flex: 1;
   background: #f8fafc;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   border: 1px solid rgba(148, 163, 184, 0.2);
   min-width: 0;
 }
@@ -16615,7 +16626,7 @@ main.content.engineering-content:has(.device-management-panel) {
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
 }
 .faults-card-dev-card-name strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
@@ -16623,42 +16634,51 @@ main.content.engineering-content:has(.device-management-panel) {
   text-overflow: ellipsis;
 }
 .faults-card-dev-card-code {
-  font-size: 11px;
+  font-size: 10.5px;
   color: #94a3b8;
   font-family: monospace;
 }
 .faults-card-dev-arrow {
   display: flex;
   align-items: center;
-  font-size: 22px !important;
+  font-size: 18px !important;
   color: #cbd5e1;
 }
 .faults-status-pill--lg {
-  padding: 5px 14px;
-  font-size: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
 }
 .faults-card-meta-stack {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 3px 10px;
   width: 100%;
 }
 .faults-card-meta-stack .faults-card-meta {
-  font-size: 12.5px;
+  font-size: 11.5px;
 }
 .faults-card-cta {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  padding: 0 16px;
-  color: #94a3b8;
-  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.04));
+  gap: 4px;
+  padding: 6px 14px 6px 16px;
+  margin: 8px 12px 8px 0;
+  align-self: center;
+  background: rgba(99, 102, 241, 0.1);
+  color: #4338ca;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .faults-card-cta .material-symbols-outlined {
-  font-size: 18px !important;
+  font-size: 14px !important;
 }
 .faults-card.faults-card--rich:hover .faults-card-cta {
-  color: #6366f1;
-  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.12));
+  background: #6366f1;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
 }
 
 /* ===========================================================================
