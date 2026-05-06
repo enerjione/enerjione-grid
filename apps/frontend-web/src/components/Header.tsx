@@ -70,7 +70,7 @@ export function Header({
             }}
           />
         </div>
-        <nav className="header-nav">
+        <nav className="header-nav header-nav--framed">
           <button className={activePage === "home" ? "active" : ""} onClick={() => onChangePage("home")}>
             Anasayfa
           </button>
@@ -99,50 +99,51 @@ export function Header({
           </button>
         ) : null}
 
-        {accessToken ? (
-          <NotificationBell
-            token={accessToken}
-            onNavigate={(link) => {
-              // Bildirim linkleri /alarms, /events, /system-status formatinda gelir.
-              // App'in routing yapisinda window.location yerine onChangePage kullanmak
-              // istersek burada parse ederiz; simdilik basit olarak alarms/events/...
-              // oneklerine bakip mevcut sayfa modlarina map ediyoruz.
-              if (link.startsWith("/alarms")) onChangePage("alarms");
-              else if (link.startsWith("/events")) onChangePage("events");
-              else if (link.startsWith("/system-status")) onChangePage("system-status");
-            }}
-          />
-        ) : null}
-
-        <div className="profile-menu" ref={menuRef}>
-          <button className="profile-trigger" onClick={() => setMenuOpen((prev) => !prev)}>
-            <div className="profile-text">
-              <strong>{fullName ?? "Kullanıcı"}</strong>
-              <small>{roleLabel}</small>
-            </div>
-            <div className="profile-avatar">{initials}</div>
-          </button>
-
-          {menuOpen ? (
-            <div className="profile-dropdown">
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  onSettings?.();
-                }}
-              >
-                Ayarlar
-              </button>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  onLogout?.();
-                }}
-              >
-                Çıkış Yap
-              </button>
-            </div>
+        {/* Bildirim zili + kullanici menusu — ayni cerceve icinde gruplu */}
+        <div className="header-user-cluster">
+          {accessToken ? (
+            <NotificationBell
+              token={accessToken}
+              onNavigate={(link) => {
+                if (link.startsWith("/alarms")) onChangePage("alarms");
+                else if (link.startsWith("/events")) onChangePage("events");
+                else if (link.startsWith("/system-status")) onChangePage("system-status");
+              }}
+            />
           ) : null}
+
+          <span className="header-user-cluster-divider" aria-hidden="true" />
+
+          <div className="profile-menu" ref={menuRef}>
+            <button className="profile-trigger" onClick={() => setMenuOpen((prev) => !prev)}>
+              <div className="profile-text">
+                <strong>{fullName ?? "Kullanıcı"}</strong>
+                <small>{roleLabel}</small>
+              </div>
+              <div className="profile-avatar">{initials}</div>
+            </button>
+
+            {menuOpen ? (
+              <div className="profile-dropdown">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onSettings?.();
+                  }}
+                >
+                  Ayarlar
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onLogout?.();
+                  }}
+                >
+                  Çıkış Yap
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </header>

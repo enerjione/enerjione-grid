@@ -67,6 +67,28 @@ body {
   margin-left: 18px;
 }
 
+/* Menu butonlarini cevreleyen cerceve — gorsel olarak header'in geri
+   kalanindan ayrik bir grup olusturur. */
+.header-nav.header-nav--framed {
+  gap: 4px;
+  padding: 4px;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.header-nav.header-nav--framed button {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+.header-nav.header-nav--framed button.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.45);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2);
+}
+
 .header-nav button {
   border: 1px solid transparent;
   background: transparent;
@@ -413,6 +435,35 @@ body {
 .notif-item-time {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
+}
+
+/* Header'in sag tarafinda bildirim zili + kullanici profilini ayni
+   cerceve icinde gosteren grup. NotificationBell ve profile-menu
+   bu cerceveye yerlesir; aralarinda dikey ayrac cizgi olur. */
+.header-user-cluster {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.header-user-cluster-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(148, 163, 184, 0.35);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+/* Cluster icindeki bell butonu ve profile trigger arka planini
+   kaldir — cerceve zaten background veriyor. */
+.header-user-cluster .notif-bell-btn,
+.header-user-cluster .profile-trigger {
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .profile-trigger {

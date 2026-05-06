@@ -16,8 +16,8 @@
  *   - Direkler: sequence_no sırasıyla, drag-to-reorder, "Tersine çevir" butonu
  *   - Her direk satırının altında o direkten sonraki segment + atanmış cihaz
  */
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import {
@@ -867,6 +867,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 >
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
+                  {/* Hat secildiginde haritayi otomatik olarak hattin tum
+                      direklerini kapsayan alana zoomla. */}
+                  <FitToLine lineId={selectedLineId} poles={sortedPoles} />
+
                   {addPoleMode ? (
                     <MapClickHandler onClick={(lat, lon) => void handleMapClickAddPole(lat, lon)} />
                   ) : null}
@@ -1145,8 +1149,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             dragend: handleDragEnd
                           }}
                         >
-                          {/* Duzenleme modunda kalici etiket: cihaz adi gorunsun */}
-                          {editMode && dev ? (
+                          {/* Cihaz adi her zaman kalici etiket olarak gozuksun
+                              (edit modunda olmasak da). Yakindan bakanlar
+                              hangi cihazin nerede oldugunu hizla gorur. */}
+                          {dev ? (
                             <Tooltip
                               permanent
                               direction="top"
@@ -1155,16 +1161,14 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             >
                               {dev.name}
                             </Tooltip>
-                          ) : (
-                            <Tooltip>
-                              {dev ? `${dev.name} (${dev.code})` : `Cihaz #${seg.device_id}`}
-                              <br />
-                              {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
-                              {total > 1 ? ` · ${idx + 1}/${total}` : ""}
-                              <br />
-                              <em>Tıkla: taşı / kaldır</em>
-                            </Tooltip>
-                          )}
+                          ) : null}
+                          <Tooltip sticky direction="bottom" offset={[0, 8]}>
+                            {dev ? `${dev.name} (${dev.code})` : `Cihaz #${seg.device_id}`}
+                            <br />
+                            {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
+                            {total > 1 ? ` · ${idx + 1}/${total}` : ""}
+                            {editMode ? (<><br /><em>Tıkla: taşı / kaldır</em></>) : null}
+                          </Tooltip>
                         </Marker>
                       );
                     });
@@ -1722,6 +1726,34 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 }
 
 // ============= Helper components =============
+
+/** Hat secimi degistiginde haritayi secili hattin direk tutarini kapsayan
+ *  alana otomatik fitBounds ile zoomlar. lineId degisikligini izler;
+ *  ayni hat icinde direk eklemek/silmek harita zoom'unu yenilemez. */
+function FitToLine({
+  lineId,
+  poles
+}: {
+  lineId: number | null;
+  poles: { latitude: number; longitude: number }[];
+}) {
+  const map = useMap();
+  const lastLineRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (lineId === lastLineRef.current) return;
+    lastLineRef.current = lineId;
+    if (lineId === null || poles.length === 0) return;
+    if (poles.length === 1) {
+      map.setView([poles[0].latitude, poles[0].longitude], 16, { animate: true });
+      return;
+    }
+    const latlngs: L.LatLngExpression[] = poles.map((p) => [p.latitude, p.longitude]);
+    const bounds = L.latLngBounds(latlngs);
+    // Pad: kenarlardan biraz nefes payi ver; max zoom 17 (cok yakin gitmesin).
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17, animate: true });
+  }, [lineId, poles, map]);
+  return null;
+}
 
 function MapClickHandler({ onClick }: { onClick: (lat: number, lon: number) => void }) {
   useMapEvents({
