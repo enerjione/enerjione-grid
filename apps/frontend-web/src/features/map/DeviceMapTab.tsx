@@ -544,6 +544,46 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       }
     }
 
+    // 4a) Her node icin "subtreeHasGreenDevice" — altta GREEN cihaz var mi?
+    // Bu bilgi: state=red iken bir node'a vardiysak ve altta GREEN cihaz YOKSA,
+    // ariza bu noktadan sonra gizlidir; pending edge'ler hat sonuna kadar fault.
+    const subtreeHasGreenDevice = new Map<string, boolean>();
+    {
+      type Frame = { nodeId: string; phase: 0 | 1 };
+      const stack: Frame[] = rootNodeIds.map((id) => ({ nodeId: id, phase: 0 as 0 | 1 }));
+      while (stack.length > 0) {
+        const f = stack[stack.length - 1];
+        const node = nodes.get(f.nodeId);
+        if (!node) {
+          stack.pop();
+          continue;
+        }
+        if (f.phase === 0) {
+          f.phase = 1;
+          const outs = outEdges.get(f.nodeId) ?? [];
+          for (const eid of outs) {
+            const e = edgeById.get(eid);
+            if (!e) continue;
+            stack.push({ nodeId: e.toNodeId, phase: 0 });
+          }
+        } else {
+          stack.pop();
+          let has = false;
+          if (node.kind === "device" && !node.isRed) has = true;
+          const outs = outEdges.get(f.nodeId) ?? [];
+          for (const eid of outs) {
+            const e = edgeById.get(eid);
+            if (!e) continue;
+            if (subtreeHasGreenDevice.get(e.toNodeId)) {
+              has = true;
+              break;
+            }
+          }
+          subtreeHasGreenDevice.set(f.nodeId, has);
+        }
+      }
+    }
+
     // 4) ON HESAPLAMA: Her node icin "subtreeHasRed" — node'un altindaki
     //    (besleme yonunde) subtree'de en az bir RED cihaz var mi?
     //
@@ -700,7 +740,20 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               nextState = "green";
             }
           } else {
-            // Pole node: state degismez.
+            // Pole node: state degismez. AMA bu pole'un altinda HIC CIHAZ
+            // YOKSA (ne RED ne GREEN) ve state=red ise: ariza bu noktadan
+            // sonra bilinmez (cihaz yok ki transition tespit edelim);
+            // pending fault'a yazilir. Bu durumda alttaki edge'ler de
+            // fault olmali, pending'i sifirlamiyoruz — her edge eklendikce
+            // tekrar fault yazilir (Set idempotent).
+            const hasRedBelow = subtreeHasRed.get(e.toNodeId) === true;
+            const hasGreenBelow = subtreeHasGreenDevice.get(e.toNodeId) === true;
+            const noDeviceBelow = !hasRedBelow && !hasGreenBelow;
+            if (entryState === "red" && noDeviceBelow) {
+              for (const pe of branchPending) {
+                faultEdgeIds.add(pe);
+              }
+            }
           }
 
           stack.push({
