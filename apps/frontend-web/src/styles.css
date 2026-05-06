@@ -14035,8 +14035,9 @@ main.content.engineering-content:has(.device-management-panel) {
 .device-detail-modal--wide {
   max-width: 1500px;
   width: calc(100vw - 24px);
-  height: calc(100vh - 24px);
-  max-height: none;
+  /* Yukseklik tum ekrani kaplamasin — icerige gore otomatik, ust sinir 80vh */
+  height: auto;
+  max-height: 80vh;
 }
 .device-detail-modal-head-left {
   flex: 1;
