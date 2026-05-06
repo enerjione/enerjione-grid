@@ -31,7 +31,7 @@ import os
 import threading
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, text
+from sqlalchemy import delete, text  # `delete` processed_messages purge'unde kullaniliyor
 
 from app.db.session import SessionLocal
 from app.models.processed_message import ProcessedMessage
@@ -143,17 +143,64 @@ class TelemetryRetentionWorker:
             self._stop.wait(max(30, sleep_s // 2))
 
     def _purge_telemetry(self) -> int:
+        """Eski telemetri row'larini siler — AMA her (device_id, signal_key)
+        icin EN SON row'u her zaman korur.
+
+        Eski davranis: timestamp < cutoff olan tum row'lar silinir. Bir sinyal
+        30 dakikadir degismiyorsa son row'u da silinir, frontend canli
+        degerler tablosunda bos kalir. Kullanici "değer kayboluyor" diye
+        bildirdi.
+
+        Yeni davranis: window function ile her sinyalin id-DESC sirasindaki
+        ilk row'unu (ROW_NUMBER=1) hicbir zaman silmeyiz. Geri kalan eski
+        row'lar (ROW_NUMBER>=2) cutoff'tan onceyse silinir. Boylece her
+        sinyalin son degeri DB'de kalici, retention sadece tarihsel veriyi
+        temizler.
+
+        SQL (PostgreSQL):
+          DELETE FROM telemetry t USING (
+            SELECT id FROM (
+              SELECT id, source_timestamp,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY device_id, signal_key
+                       ORDER BY id DESC
+                     ) AS rn
+              FROM telemetry
+            ) sub
+            WHERE rn > 1 AND source_timestamp < :cutoff
+          ) old
+          WHERE t.id = old.id
+        """
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=_telemetry_retention_minutes())
         db = SessionLocal()
         try:
             result = db.execute(
-                delete(Telemetry).where(Telemetry.source_timestamp < cutoff)
+                text(
+                    """
+                    DELETE FROM telemetry t
+                    USING (
+                        SELECT id
+                        FROM (
+                            SELECT id, source_timestamp,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY device_id, signal_key
+                                       ORDER BY id DESC
+                                   ) AS rn
+                            FROM telemetry
+                        ) sub
+                        WHERE rn > 1 AND source_timestamp < :cutoff
+                    ) old
+                    WHERE t.id = old.id
+                    """
+                ),
+                {"cutoff": cutoff},
             )
             db.commit()
             removed = int(getattr(result, "rowcount", 0) or 0)
             if removed > 0:
                 logger.info(
-                    "telemetry_retention_purged removed=%d cutoff=%s",
+                    "telemetry_retention_purged removed=%d cutoff=%s "
+                    "(her sinyalin son row'u korundu)",
                     removed,
                     cutoff.isoformat(),
                 )
