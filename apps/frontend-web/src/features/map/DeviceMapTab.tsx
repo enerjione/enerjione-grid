@@ -328,62 +328,174 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     //
     // ============================================================
 
-    // 1) GRAF EDGE'LERINI KUR
+    // 1) NODE TIPLERI
     //
-    // Edge tanimi:
-    //   { id, fromPoleId, toPoleId, lineId|null, type: 'segment'|'branch',
-    //     positions: polyline koordinatlari (bransman icin de iki pole) }
+    // Cihaz bazli renklendirme icin graf node'larini SADECE
+    // direklerle sinirlandirmak yetmez; cihazlar da node olmali ki
+    // edge'ler "cihazlar arasi" parcalara bolunsun.
     //
-    // segment: ayni hat icinde ardisik iki pole (sequence_no n -> n+1).
-    //   Bu edge'in uzerinde sifir veya daha fazla cihaz olabilir.
+    // Node turleri:
+    //   - pole node id  : `p-<poleId>`
+    //   - device node id: `d-<deviceId>`
+    //
+    // Bir slot (pole_a -> pole_b) icinde N cihaz varsa, slot N+1
+    // mikro-edge'e bolunur:
+    //   pole_a -> dev1 -> dev2 -> ... -> devN -> pole_b
+    // Eger N=0 ise tek edge: pole_a -> pole_b.
+    //
+    // Branshman: parent_pole -> branch_first_pole tek edge (genellikle
+    // bu segmentte cihaz yoktur).
+    type NodeKind = "pole" | "device";
+    type GraphNode = {
+      id: string;
+      kind: NodeKind;
+      pos: [number, number];
+      // device node ise: cihazin alarm durumu (RED ise true)
+      isRed?: boolean;
+      poleId?: number;
+      deviceId?: number;
+    };
+    const nodes = new Map<string, GraphNode>();
+    const poleNodeId = (poleId: number) => `p-${poleId}`;
+    const deviceNodeId = (deviceId: number) => `d-${deviceId}`;
+
+    // Tum direkleri node olarak kaydet.
+    for (const p of gridSnapshot.poles) {
+      nodes.set(poleNodeId(p.id), {
+        id: poleNodeId(p.id),
+        kind: "pole",
+        pos: [p.latitude, p.longitude],
+        poleId: p.id
+      });
+    }
+    // Tum cihazlari (bir segmente atanmis olanlar) node olarak kaydet.
+    // Pozisyon: deviceLocationOverride'tan; yoksa device.lat/lon'undan.
+    for (const seg of gridSnapshot.segments) {
+      if (!seg.device_id) continue;
+      const dev = devices.find((d) => d.id === seg.device_id);
+      const pos: [number, number] = deviceLocationOverride.get(seg.device_id)
+        ?? (dev ? [dev.latitude, dev.longitude] : [0, 0]);
+      nodes.set(deviceNodeId(seg.device_id), {
+        id: deviceNodeId(seg.device_id),
+        kind: "device",
+        pos,
+        isRed: alarmActiveDeviceIds.has(seg.device_id),
+        deviceId: seg.device_id
+      });
+    }
+
+    // 2) EDGE'LERI KUR (CIHAZLARI ARALARA YERLESTIREREK)
+    //
+    // Edge: { id, fromNodeId, toNodeId, positions, lineId, lineName, regionName }
+    // Yon: besleme tarafi -> yuk tarafi.
     type Edge = {
       id: string;
-      fromPoleId: number;
-      toPoleId: number;
-      lineId: number | null;
-      type: "segment" | "branch";
-      // Edge polyline'i (segment: 2 nokta; bransman: 2 nokta).
+      fromNodeId: string;
+      toNodeId: string;
       positions: [number, number][];
+      lineId: number | null;
       lineName: string;
       regionName: string;
     };
     const edges: Edge[] = [];
-    // Adjacency: pole_id -> [edge_id]
-    const adj = new Map<number, string[]>();
     const edgeById = new Map<string, Edge>();
+    // Komsu edge'lere from-node uzerinden erisim (besleme yonune gore
+    // out-edge'ler).
+    const outEdges = new Map<string, string[]>();
     const addEdge = (e: Edge) => {
       edges.push(e);
       edgeById.set(e.id, e);
-      const a = adj.get(e.fromPoleId) ?? [];
-      a.push(e.id);
-      adj.set(e.fromPoleId, a);
-      const b = adj.get(e.toPoleId) ?? [];
-      b.push(e.id);
-      adj.set(e.toPoleId, b);
+      const arr = outEdges.get(e.fromNodeId) ?? [];
+      arr.push(e.id);
+      outEdges.set(e.fromNodeId, arr);
     };
 
+    // Slot bazli (line_id, from_pole_id, to_pole_id) cihazlar (orderInSlot
+    // ile sirali). Cihazlar device_position_t'ye gore siralidir; yoksa
+    // created_at + id.
+    type SegRec = {
+      seg: typeof gridSnapshot.segments[number];
+      t: number;
+    };
+    const segsBySlot = new Map<string, SegRec[]>();
+    for (const seg of gridSnapshot.segments) {
+      const k = `${seg.line_id}|${seg.from_pole_id}|${seg.to_pole_id}`;
+      const arr = segsBySlot.get(k) ?? [];
+      const t = (seg.device_position_t !== null && seg.device_position_t !== undefined)
+        ? seg.device_position_t
+        : 0.5;
+      arr.push({ seg, t });
+      segsBySlot.set(k, arr);
+    }
+    for (const arr of segsBySlot.values()) {
+      arr.sort((a, b) => {
+        if (a.t !== b.t) return a.t - b.t;
+        const ad = new Date(a.seg.created_at).getTime();
+        const bd = new Date(b.seg.created_at).getTime();
+        if (ad !== bd) return ad - bd;
+        return a.seg.id - b.seg.id;
+      });
+    }
+
+    // Hat slot'larini sirayla isle: pole_a -> dev1 -> ... -> pole_b
     for (const [lineId, sortedPoles] of sortedPolesByLine) {
       const line = linesById.get(lineId);
       const region = line ? regionsById.get(line.region_id) : undefined;
       for (let i = 0; i < sortedPoles.length - 1; i += 1) {
         const a = sortedPoles[i];
         const b = sortedPoles[i + 1];
+        const slotKey = `${lineId}|${a.id}|${b.id}`;
+        const slotSegs = (segsBySlot.get(slotKey) ?? []).filter((r) => r.seg.device_id);
+        const aPos: [number, number] = [a.latitude, a.longitude];
+        const bPos: [number, number] = [b.latitude, b.longitude];
+        if (slotSegs.length === 0) {
+          // Cihaz yok: tek edge pole_a -> pole_b
+          addEdge({
+            id: `e-${lineId}-${a.id}-${b.id}-direct`,
+            fromNodeId: poleNodeId(a.id),
+            toNodeId: poleNodeId(b.id),
+            positions: [aPos, bPos],
+            lineId,
+            lineName: line?.name ?? "",
+            regionName: region?.name ?? ""
+          });
+          continue;
+        }
+        // Cihazlari sirayla yerleştir: pole_a -> dev1 -> dev2 -> ... -> pole_b
+        let prevNodeId = poleNodeId(a.id);
+        let prevPos = aPos;
+        for (let k = 0; k < slotSegs.length; k += 1) {
+          const rec = slotSegs[k];
+          const did = rec.seg.device_id!;
+          const dNodeId = deviceNodeId(did);
+          const dPos = nodes.get(dNodeId)?.pos ?? prevPos;
+          addEdge({
+            id: `e-${lineId}-${a.id}-${b.id}-d${did}-in`,
+            fromNodeId: prevNodeId,
+            toNodeId: dNodeId,
+            positions: [prevPos, dPos],
+            lineId,
+            lineName: line?.name ?? "",
+            regionName: region?.name ?? ""
+          });
+          prevNodeId = dNodeId;
+          prevPos = dPos;
+        }
+        // Son cihazdan pole_b'ye kapanis edge'i
         addEdge({
-          id: `seg-${lineId}-${a.id}-${b.id}`,
-          fromPoleId: a.id,
-          toPoleId: b.id,
+          id: `e-${lineId}-${a.id}-${b.id}-tail`,
+          fromNodeId: prevNodeId,
+          toNodeId: poleNodeId(b.id),
+          positions: [prevPos, bPos],
           lineId,
-          type: "segment",
-          positions: [
-            [a.latitude, a.longitude],
-            [b.latitude, b.longitude]
-          ],
           lineName: line?.name ?? "",
           regionName: region?.name ?? ""
         });
       }
     }
-    // Bransman edge'leri: parent_pole -> dal hattinin ilk diregi.
+
+    // Bransman edge'leri: parent_pole -> branch_first_pole.
+    // Genellikle bu kisimda cihaz yok — tek edge.
     for (const [lineId, sorted] of sortedPolesByLine) {
       const line = linesById.get(lineId);
       if (!line || !line.branched_from_pole_id) continue;
@@ -393,219 +505,78 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       const region = regionsById.get(line.region_id);
       addEdge({
         id: `branch-${lineId}`,
-        fromPoleId: parentPole.id,
-        toPoleId: firstPole.id,
-        lineId,
-        type: "branch",
+        fromNodeId: poleNodeId(parentPole.id),
+        toNodeId: poleNodeId(firstPole.id),
         positions: [
           [parentPole.latitude, parentPole.longitude],
           [firstPole.latitude, firstPole.longitude]
         ],
+        lineId,
         lineName: line.name,
         regionName: region?.name ?? ""
       });
     }
 
-    // 2) HER EDGE ICIN UZERINDEKI CIHAZLARIN ALARM (RED) DURUMUNU ANNOTATE ET
-    //
-    // Bir edge "uzerindeki cihaz" = o edge'in iki pole'unu (from, to) slot
-    // olarak kullanan segment kayitlarinin device_id'si. Slot anahtari
-    // (line_id, from_pole_id, to_pole_id) olarak segments tablosundan
-    // alinir.
-    //
-    // Bir cihazin RED olmasi: alarmActiveDeviceIds icinde olmasi.
-    // Bir edge:
-    //   - icinde HIÇ cihaz YOKSA: state = "unknown" (gecisin nereden
-    //     gectigini bilmek icin onemli; aslinda bu gecisin tam buradan
-    //     gectigi anlamina gelir).
-    //   - en az bir cihaz var ve hepsi GREEN: state = "all_green"
-    //   - en az bir cihaz var ve hepsi RED: state = "all_red"
-    //   - hem RED hem GREEN var: state = "mixed" (gecis bu edge icinde)
-    type EdgeAnnot = {
-      edge: Edge;
-      reds: number;        // RED cihaz sayisi
-      greens: number;      // GREEN cihaz sayisi (alarmsiz)
-      // Edge icindeki cihazlar device_position_t sirasiyla. RED/GREEN dizisi.
-      devices: { deviceId: number; isRed: boolean; t: number }[];
-    };
-    const edgeAnnotById = new Map<string, EdgeAnnot>();
-    for (const e of edges) {
-      edgeAnnotById.set(e.id, { edge: e, reds: 0, greens: 0, devices: [] });
-    }
-    // Segments uzerindeki cihazlari edge'lere ata.
-    for (const seg of gridSnapshot.segments) {
-      if (!seg.device_id) continue;
-      // Bu segmentin slot pole ciftinin tam karsiligi olan SEGMENT-TYPE edge.
-      // Edge id: seg-<lineId>-<from>-<to>
-      const eid = `seg-${seg.line_id}-${seg.from_pole_id}-${seg.to_pole_id}`;
-      const annot = edgeAnnotById.get(eid);
-      if (!annot) continue;
-      const isRed = alarmActiveDeviceIds.has(seg.device_id);
-      const t = (seg.device_position_t !== null && seg.device_position_t !== undefined)
-        ? seg.device_position_t
-        : 0.5;
-      annot.devices.push({ deviceId: seg.device_id, isRed, t });
-      if (isRed) annot.reds += 1; else annot.greens += 1;
-    }
-    for (const annot of edgeAnnotById.values()) {
-      annot.devices.sort((a, b) => a.t - b.t);
-    }
-
-    // 3) BESLEME KAYNAGI = HER GRAF BILESEN ICIN
-    //    "branched_from_pole_id'si OLMAYAN hat"larin sequence_no=1 pole'u.
-    //    Buradan BFS ile graf'i tara, edge sirasini DETERMINISTIC yap
-    //    (besleme yonu).
-    //
-    // BFS sirasinda her edge'i SADECE BIR YONDE travese ederiz; cunku
-    // ardisik (RED -> GREEN) gecisini akim yonune gore aramak istiyoruz.
-    const rootPoleIds: number[] = [];
+    // 3) BESLEME KAYNAGI (root) — bransman olmayan hatlarin sequence_no=1 pole'u.
+    const rootNodeIds: string[] = [];
     for (const [lineId, sorted] of sortedPolesByLine) {
       const line = linesById.get(lineId);
       if (!line) continue;
-      // Branshman olmayan hatlarin bas pole'u bir koktur. (Bransman
-      // hatlarinin baslangici parent'a bagli oldugundan ayrica root degil.)
       if (!line.branched_from_pole_id && sorted.length > 0) {
-        rootPoleIds.push(sorted[0].id);
+        rootNodeIds.push(poleNodeId(sorted[0].id));
       }
     }
 
-    // Edge'in BESLEME yonune gore DOGRU yonde gezilmesi:
-    // Segment edge'i: line'in sequence_no kucukten buyuge dogru.
-    // Bransman edge'i: parent_pole -> branch_first_pole.
+    // 4) BESLEME YONUNDE DFS — RED -> GREEN gecisini yakala
     //
-    // Bunu saglamak icin edge yon-bilgisini koruyacagim: addEdge'te zaten
-    // dogru yonde ekledim (segment: pole[i] -> pole[i+1]; branch: parent
-    // -> firstPole). Yani edge.fromPoleId besleme tarafi, toPoleId yuk
-    // tarafi.
-
-    // 4) GRAF UZERINDE BFS ile EDGE'LERI BESLEME YONUNDE TARA
-    //    Her bilesende, her path icin RED -> GREEN gecisini bul.
+    // Path uzerinde lastState: "red" | "green" | null.
+    // Edge gezerken:
+    //   - to-node bir DEVICE ise: device'in RED/GREEN'i state'i belirler.
+    //     * lastState=red iken devGreen geliyor -> BU EDGE fault edge.
+    //     * lastState=null iken devRed -> state=red (henuz fault yok).
+    //     * lastState=null iken devGreen -> state=green.
+    //   - to-node bir POLE ise: state degismez (pole notr).
     //
-    // Algoritma cikitsi: hangi edge'ler "fault edge" olarak isaretlenmeli.
+    // Bu yaklasim "iki cihaz arasi" parca renklendirir: cunku edge'ler
+    // cihazlar+pole'lerin arasinda; RED->GREEN gecisi tek mikro-edge.
     const faultEdgeIds = new Set<string>();
     {
-      // visited: pole_id (fanout sirasinda BFS klasik)
-      const visited = new Set<number>();
-      type StackItem = {
-        poleId: number;
-        // Bu pole'a kadar gelen path uzerindeki SON GORULEN cihaz state'i.
-        // "red" / "green" / null (henuz cihaz gormemis).
-        lastState: "red" | "green" | null;
-        // RED'ten GREEN'e gecisi yakaladigimizda kullanmak uzere son RED'i
-        // iceren edge id'si (yani gecisin "GIRIS edge"'i)... aslinda burada
-        // tam ihtiyacimiz olan: gecisi mark edecegimiz edge GIRDIGIMIZ
-        // edge'in kendisi (RED bolgeden GREEN bolgeye gecerken). Asagida
-        // her edge gezerken kontrol edip mark ediyoruz.
-      };
-      const dfsFromRoot = (rootPoleId: number) => {
-        const stack: StackItem[] = [{ poleId: rootPoleId, lastState: null }];
-        while (stack.length > 0) {
-          const cur = stack.pop()!;
-          if (visited.has(cur.poleId)) continue;
-          visited.add(cur.poleId);
-          const adjEdges = adj.get(cur.poleId) ?? [];
-          for (const eid of adjEdges) {
-            const e = edgeById.get(eid);
-            if (!e) continue;
-            // Sadece ileri yonde gez: from = cur.poleId
-            if (e.fromPoleId !== cur.poleId) continue;
-            const nextPoleId = e.toPoleId;
-            if (visited.has(nextPoleId)) continue;
+      const visited = new Set<string>();
+      type Item = { nodeId: string; lastState: "red" | "green" | null };
+      const stack: Item[] = rootNodeIds.map((id) => ({ nodeId: id, lastState: null }));
+      while (stack.length > 0) {
+        const cur = stack.pop()!;
+        if (visited.has(cur.nodeId)) continue;
+        visited.add(cur.nodeId);
+        const outs = outEdges.get(cur.nodeId) ?? [];
+        for (const eid of outs) {
+          const e = edgeById.get(eid);
+          if (!e) continue;
+          const toNode = nodes.get(e.toNodeId);
+          if (!toNode) continue;
 
-            const annot = edgeAnnotById.get(e.id);
-            // Bu edge'in icinde RED/GREEN cihaz dizisini incele:
-            // ARDISIK olarak path-state guncellenir; eger edge icinde
-            // RED'ten GREEN'e gecis varsa edge fault edge'tir.
-            // Eger edge icinde sadece RED varsa: lastState = "red".
-            // Eger edge icinde sadece GREEN varsa: lastState son GREEN.
-            //   ama path uzerinde onceden RED varsa ve simdi GREEN
-            //   geliyorsa gecis bu edge'tedir.
-            // Eger edge'te HIÇ cihaz yoksa: lastState degismez; ama
-            //   path uzerinde onceden RED varsa ve sonraki edge'de
-            //   GREEN gelirse gecis ARADAKI bos edge'lerde gerceklesmis
-            //   sayilir; bunun icin "pending transition" kavramini
-            //   kullaniyoruz: bu edge'i mark etmiyoruz, sonraki bilgili
-            //   edge'i bekleriz; ama gerekirse bu edge'i de mark
-            //   ederiz cunku gecis fiziksel olarak burada da olabilir.
-            //
-            // Sadelestirme: kullanici "son RED ile ilk GREEN arasinda"
-            // dedi. Iki cihaz arasi "edge" path'te birbirini takip eden
-            // RED ve GREEN cihazlar arasidir. Edge icinde cihaz yoksa
-            // gecis BOS edge'lerden BIRINDE olabilir; en konservatif
-            // tahmin: gecis SON RED CIHAZIN BULUNDUGU EDGE ile ILK
-            // GREEN CIHAZIN BULUNDUGU EDGE'in ARASINDAKI tum edge'ler
-            // de fault adayi olur. Ama kullanicinin ornegi tek edge
-            // gosterdiginden ve her edge'te 1 cihaz oldugundan, biz
-            // de pratik olarak: gecisin oldugu son RED-cihaz-edge'i
-            // ile ilk GREEN-cihaz-edge'i arasindaki TEK ARA EDGE'i
-            // mark ederiz; eger ardisik edge'lerse (cihazlar farkli
-            // edge'lerde) ARALARINDAKI EDGE = BUNLARIN ORTA EDGE'I
-            // YOK aslinda; kullanici ornegi: pole6 RED, pole7 GREEN
-            // -> SADECE 6-7 edge'i. Yani RED cihaz pole6'da, GREEN
-            // cihaz pole7'de degil; cihazlar EDGE'LER ICINDE
-            // (pole-pole arasinda). Bizim datamizda da boyle:
-            // segment'in from_pole / to_pole'u var, cihaz ortada.
-            //
-            // Pratik kural: bu edge icinde RED cihaz varsa ve sonra
-            // GREEN cihaz varsa (ayni edge icinde gecis), bu edge
-            // fault edge. Ayrica path-level: bir edge icindeki son
-            // cihaz RED iken sonraki edge'in ilk cihazi GREEN ise,
-            // gecis BU IKI EDGE'DEN BIRINDE; en olasi yer aralarindaki
-            // POLE'a en yakin olan; biz iki edge'i de iyi ihtimalle
-            // tek bir edge'i mark ederiz: GREEN cihazin oldugu edge.
-            //
-            // Sebebi: GREEN cihaz akimi gormediginden ariza ondan
-            // ONCEDEDIR; akim son RED cihaza kadar gelip ondan sonra
-            // ariza nedeniyle GREEN cihaza ulasamamistir. En lokalize
-            // tahmin: GREEN cihazin yer aldigi edge'in BASLANGIC
-            // tarafi (yani RED ile GREEN'in arasindaki edge'in kendisi).
-            //
-            // Ozetle:
-            //   prevState=red, edge ilk cihaz=green -> bu edge fault.
-            //   edge icinde red sonra green -> bu edge fault.
-            //   edge tamamen green ve prevState=red -> bu edge fault
-            //     (cihaz gormeyene kadar; aslinda red'ten sonraki
-            //     ilk green-only edge fault).
+          let nextState: "red" | "green" | null = cur.lastState;
+          let isFault = false;
 
-            let edgeIsFault = false;
-            let newState: "red" | "green" | null = cur.lastState;
-
-            if (annot && annot.devices.length > 0) {
-              // Edge icinde cihazlar var — siralidir.
-              for (const d of annot.devices) {
-                if (newState === "red" && !d.isRed) {
-                  // RED'ten GREEN'e gecis bu edge icinde
-                  edgeIsFault = true;
-                  newState = "green";
-                  break; // ilk gecis yeterli — fault edge bulundu
-                }
-                newState = d.isRed ? "red" : "green";
-              }
-            } else {
-              // Edge'te cihaz yok — state degismez; ama prevState=red
-              // ve sonraki bir edge'de green gorursek, oradaki edge
-              // fault olarak mark edilecek (bu edge fault degil).
-              newState = cur.lastState;
+          if (toNode.kind === "device") {
+            const isRed = !!toNode.isRed;
+            if (cur.lastState === "red" && !isRed) {
+              // Son RED'ten ILK GREEN'e gecis: bu edge fault.
+              isFault = true;
             }
-
-            if (edgeIsFault) {
-              faultEdgeIds.add(e.id);
-            }
-
-            stack.push({ poleId: nextPoleId, lastState: newState });
+            nextState = isRed ? "red" : "green";
+          } else {
+            // Pole node — state degismez.
+            nextState = cur.lastState;
           }
-        }
-      };
-      for (const root of rootPoleIds) {
-        if (!visited.has(root)) {
-          dfsFromRoot(root);
+
+          if (isFault) faultEdgeIds.add(e.id);
+          stack.push({ nodeId: e.toNodeId, lastState: nextState });
         }
       }
     }
 
-    // 5) RENDER ICIN POLYLINE'LARI URET
-    //    - faultEdgeIds icindekiler: KIRMIZI KESIK
-    //    - digerleri: SOLID YESIL
+    // 5) RENDER: edge'leri polyline olarak ureti.
     for (const e of edges) {
       const isFault = faultEdgeIds.has(e.id);
       linePolylines.push({
