@@ -529,25 +529,42 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
 
     // 4) BESLEME YONUNDE DFS — RED -> GREEN gecisini yakala
     //
-    // Path uzerinde lastState: "red" | "green" | null.
-    // Edge gezerken:
-    //   - to-node bir DEVICE ise: device'in RED/GREEN'i state'i belirler.
-    //     * lastState=red iken devGreen geliyor -> BU EDGE fault edge.
-    //     * lastState=null iken devRed -> state=red (henuz fault yok).
-    //     * lastState=null iken devGreen -> state=green.
-    //   - to-node bir POLE ise: state degismez (pole notr).
+    // Mantik: Cihaz RED ise akim ondan gecmis demek; akim son RED
+    // cihazdan sonraki bolgede arizaya ugrayip ilk GREEN cihaza
+    // ulasamamistir. Yani SON RED ile ILK GREEN arasinda KALAN TUM
+    // mikro-edge'ler (cihaz olmayan ara segmentler dahil) fault
+    // adayidir.
     //
-    // Bu yaklasim "iki cihaz arasi" parca renklendirir: cunku edge'ler
-    // cihazlar+pole'lerin arasinda; RED->GREEN gecisi tek mikro-edge.
+    // Implementation:
+    //   - Her path icin "pendingEdges" listesi tasinir.
+    //   - lastState=red iken gezilen her edge pendingEdges'e eklenir.
+    //   - Bir GREEN cihaza ulasinca pendingEdges + bu edge -> hepsi
+    //     faultEdgeIds'e yazilir; lastState=green.
+    //   - Bir RED cihaza ulasinca pendingEdges TEMIZLENIR (akim daha
+    //     ileri gitti; eski adaylar saglikli sayilir); lastState=red.
+    //   - lastState=null iken edge'ler pending olmaz.
+    //   - Pole node geçiş edge'i: state degismez ama state=red ise
+    //     pendingEdges'e eklenir.
+    //
+    // Cycle koruma: visited node seti DFS sirasinda kullanilir; ama
+    // DFS state'i path-bagimli oldugundan node'u ziyaret etmek visited
+    // ile isaretlenmez (her path'te ayri pendingEdges olabilir).
+    // Bunun yerine her edge sadece BIR YONDE (besleme yonunde) gezilir
+    // ve outEdges kullanildigindan loop riski yok (graf agac yapida).
     const faultEdgeIds = new Set<string>();
     {
-      const visited = new Set<string>();
-      type Item = { nodeId: string; lastState: "red" | "green" | null };
-      const stack: Item[] = rootNodeIds.map((id) => ({ nodeId: id, lastState: null }));
+      type Item = {
+        nodeId: string;
+        lastState: "red" | "green" | null;
+        pendingEdges: string[];
+      };
+      const stack: Item[] = rootNodeIds.map((id) => ({
+        nodeId: id,
+        lastState: null,
+        pendingEdges: []
+      }));
       while (stack.length > 0) {
         const cur = stack.pop()!;
-        if (visited.has(cur.nodeId)) continue;
-        visited.add(cur.nodeId);
         const outs = outEdges.get(cur.nodeId) ?? [];
         for (const eid of outs) {
           const e = edgeById.get(eid);
@@ -555,23 +572,47 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           const toNode = nodes.get(e.toNodeId);
           if (!toNode) continue;
 
+          // Bu kola ait (path-bagimsiz kopya) state olusturuluyor.
           let nextState: "red" | "green" | null = cur.lastState;
-          let isFault = false;
+          // Bu edge'in pending'e dahil olup olmayacagi: state=red ise
+          // edge fault adayi olarak biriksin.
+          const branchPending = cur.lastState === "red"
+            ? [...cur.pendingEdges, e.id]
+            : [...cur.pendingEdges];
 
           if (toNode.kind === "device") {
             const isRed = !!toNode.isRed;
             if (cur.lastState === "red" && !isRed) {
-              // Son RED'ten ILK GREEN'e gecis: bu edge fault.
-              isFault = true;
+              // Son RED'ten sonra ilk GREEN cihaza geldik:
+              // pendingEdges (bu edge dahil) hepsi fault.
+              for (const pe of branchPending) {
+                faultEdgeIds.add(pe);
+              }
+              // Pending temizlendi (gecis tamamlandi); state=green.
+              branchPending.length = 0;
+              nextState = "green";
+            } else if (isRed) {
+              // RED cihaz: akim daha ileri gitti -> pending sıfırla
+              // (eski edge'ler artik saglikli sayilir).
+              branchPending.length = 0;
+              nextState = "red";
+            } else {
+              // GREEN cihaz, state=null veya green:
+              // pending zaten bos (state=red degildi); bu edge fault degil.
+              branchPending.length = 0;
+              nextState = "green";
             }
-            nextState = isRed ? "red" : "green";
           } else {
-            // Pole node — state degismez.
-            nextState = cur.lastState;
+            // Pole node: state degismez. branchPending zaten dolduruldu
+            // (state=red ise). Bu edge sadece pending'e eklenir, henuz
+            // fault degil — ileride GREEN cihaz gelirse fault olur.
           }
 
-          if (isFault) faultEdgeIds.add(e.id);
-          stack.push({ nodeId: e.toNodeId, lastState: nextState });
+          stack.push({
+            nodeId: e.toNodeId,
+            lastState: nextState,
+            pendingEdges: branchPending
+          });
         }
       }
     }
@@ -738,12 +779,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   click: () => onSelectDevice(device.id)
                 }}
               >
-                {/* Cihaz adi sadece hover'da gozuksun — kalici etiketler
-                    zoom'lu haritada cok yer kapliyor, kullanici kaldirildi. */}
-                <Tooltip sticky direction="top" offset={[0, -10]}>
-                  <strong>{device.name}</strong>
-                  <br />
-                  <span style={{ opacity: 0.75 }}>{device.code}</span>
+                {/* Hover'da sadece cihaz adi — kullanici sade istedi. */}
+                <Tooltip direction="top" offset={[0, -10]}>
+                  {device.name}
                 </Tooltip>
               </Marker>
             );
