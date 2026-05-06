@@ -6327,29 +6327,38 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .grid-trafo-rings {
   position: relative;
-  width: 32px;
+  /* Pin iconSize 36x36 -> merkez (18,18). Halkalari oyle yerlestiriyoruz
+     ki iki halkanin BIRLESIM (kesisim) noktasi pin merkezine denk gelsin.
+     Hat polyline'i pin merkezine bagliydi -> simdi tam halkalarin
+     ortasindaki "8" sekli birlesim cizgisine baglanmis gibi gorunur.
+     Halka cap 22px, 6px ust uste bindirme: toplam genislik = 22+22-6 = 38. */
+  width: 38px;
   height: 22px;
   display: block;
-  /* Hat polyline'i halkanin altinda kalsa bile gozukmesin diye opak
-     beyaz dolgu (halka cizgisi disindaki ic alan) — z-index pin > path. */
+  /* rings konteyneri pin merkezinde olsun (flex parent zaten ortaliyor). */
 }
 .grid-trafo-ring {
   position: absolute;
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  /* Default (ara direk) — koyu, halka rengi olarak okunur. */
   border: 3px solid #1e293b;
-  /* Halkalarin ICI BOS (transparent): kullanici talebi — sadece halka
-     cizgileri gozuksun, dolgu olmasin. Hat polyline'i halkanin altina
-     girebilir; yeni iconSize (36) ve halka cap'i (22) sayesinde cizgi
-     halkanin disinda kalir, halka kenarina dayanir. */
   background: transparent;
   top: 0;
   box-sizing: border-box;
 }
+/* left degerleri pin merkezi (rings genislik/2 = 19) iki halkanin temas
+   noktasinda olacak sekilde:
+     sol halka sag kenari = 19  -> sol halka left = 19 - 22 = -3
+     sag halka sol kenari = 19 - overlap/2; 6px overlap istiyoruz
+       -> sag halka left = 19 - 6 = ... daha basit: sol left=-3, sag left=19+6-22=... hayir.
+   Direkt tarif: rings genisligi 38, halkalar yan yana 6px overlap ile.
+     sol halka: left = 0
+     sag halka: left = 22 - 6 = 16
+   Boylelikle iki halka kesisim x araligi: 16..22 (6px); orta nokta = 19
+   = rings genisliginin yarisi = pin merkezinin x'i. */
 .grid-trafo-ring--outer { left: 0; }
-.grid-trafo-ring--inner { left: 10px; }
+.grid-trafo-ring--inner { left: 16px; }
 
 /* Hat basi/sonu durumunda halkanin kendisi yesil/kirmizi olur (ek bir
    cerceveye gerek yok — kullanici talebi). */
