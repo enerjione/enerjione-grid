@@ -1772,6 +1772,21 @@ function SegmentContextMenu({
 
 // ============= MODALS =============
 
+// Backend code alani NOT NULL bekledigi icin isimden otomatik kod uretiyoruz.
+// Kullanici "Kod" alanini gormez; isim degistirildiginde unique kalmasi icin
+// timestamp suffix eklenir.
+function autoCodeFromName(name: string, prefix: string = ""): string {
+  const slug = (name || prefix || "ITEM")
+    .toLocaleUpperCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 30);
+  const ts = Date.now().toString(36).slice(-5).toUpperCase();
+  return `${slug || prefix || "ITEM"}-${ts}`;
+}
+
 function RegionModal({
   initial, busy, onClose, onSubmit
 }: {
@@ -1779,15 +1794,16 @@ function RegionModal({
   onClose: () => void;
   onSubmit: (payload: Partial<Region>) => Promise<void>;
 }) {
-  const [code, setCode] = useState(initial?.code ?? "");
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [color, setColor] = useState(initial?.color ?? DEFAULT_REGION_COLOR);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // Yeni kayitsa otomatik kod uret; mevcut kayitsa eski kodu koru.
+    const code = initial?.code ?? autoCodeFromName(name, "BOLGE");
     await onSubmit({
-      code: code.trim(), name: name.trim(),
+      code, name: name.trim(),
       description: description.trim() || null,
       color, is_active: isActive
     });
@@ -1796,8 +1812,7 @@ function RegionModal({
     <div className="settings-modal-backdrop">
       <form className="settings-modal" onSubmit={submit}>
         <h3>{initial ? "Bölgeyi Düzenle" : "Yeni Bölge"}</h3>
-        <label>Kod <input value={code} onChange={(e) => setCode(e.target.value)} required /></label>
-        <label>Ad <input value={name} onChange={(e) => setName(e.target.value)} required /></label>
+        <label>Ad <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
         <label>Açıklama <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
         <label>Renk <input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></label>
         <label className="notify-option">
@@ -1820,14 +1835,14 @@ function LineModal({
   onClose: () => void;
   onSubmit: (payload: Partial<Line>) => Promise<void>;
 }) {
-  const [code, setCode] = useState(initial?.code ?? "");
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const code = initial?.code ?? autoCodeFromName(name, "HAT");
     await onSubmit({
-      region_id: regionId, code: code.trim(), name: name.trim(),
+      region_id: regionId, code, name: name.trim(),
       description: description.trim() || null,
       // color alani sistem genelinde standartlasti (saglikli=yesil, ariza=kirmizi);
       // kullanici secimine gerek yok. Backend'e null gonderiliyor.
@@ -1839,8 +1854,7 @@ function LineModal({
     <div className="settings-modal-backdrop">
       <form className="settings-modal" onSubmit={submit}>
         <h3>{initial ? "Hattı Düzenle" : "Yeni Hat"}</h3>
-        <label>Kod <input value={code} onChange={(e) => setCode(e.target.value)} required /></label>
-        <label>Ad <input value={name} onChange={(e) => setName(e.target.value)} required /></label>
+        <label>Ad <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
         <label>Açıklama <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
         <label className="notify-option">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
