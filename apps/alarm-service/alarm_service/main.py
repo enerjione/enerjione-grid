@@ -175,7 +175,15 @@ def _signal_source_label(signal_key: str | None) -> str:
 
 
 def _build_alarm_from_rule(
-    payload: dict, rule_id: int, rule_name: str, rule_description: str, level: str, value: float
+    payload: dict,
+    rule_id: int,
+    rule_name: str,
+    rule_description: str,
+    level: str,
+    value: float,
+    *,
+    threshold: float | None = None,
+    operator: str | None = None,
 ) -> dict:
     # Title kuralın adını yansıtır; kaynak (master/sat01/sat02) bilgisi
     # frontend'de signal_key prefix'inden turetilir, boylece backend dedup
@@ -192,6 +200,12 @@ def _build_alarm_from_rule(
         "level": level,
         "source_timestamp": payload.get("source_timestamp") or datetime.now(timezone.utc).isoformat(),
         "rule_id": rule_id,
+        # Bildirim panelinde "Akim 142 A (>100 A esigi)" gibi gostermek icin
+        # tetikleyen olcum + esik + karsilastirma operatoru.
+        "value": value,
+        "value_string": payload.get("value_string"),
+        "threshold": threshold,
+        "operator": operator,
     }
 
 
@@ -309,6 +323,8 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 rule_description=rule.description,
                 level=rule.level,
                 value=value,
+                threshold=rule.threshold,
+                operator=rule.comparator,
             )
             _publish_alarm(channel, alarm_payload)
             try:

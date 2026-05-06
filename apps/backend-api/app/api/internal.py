@@ -209,6 +209,19 @@ def ingest_alarm(
     severity_for_notif = "critical" if (payload.level or "").lower() == "critical" else (
         "error" if (payload.level or "").lower() in ("error", "high") else "warning"
     )
+    # Cihaz adini bildirimde gostermek icin Device row'undan cek (yoksa code).
+    # Notification metadata zenginlestirilir: frontend bunu okur ve "hangi
+    # cihaz, hangi kaynak (master/sat01), hangi sinyal, hangi deger, hangi
+    # esik" detaylarini gorsel kart olarak gosterir.
+    device_name = None
+    if device_id is not None:
+        dev_row = db.get(Device, device_id)
+        if dev_row is not None:
+            device_name = dev_row.name
+    # Sinyal kaynagi: signal_key prefix'inden turet (master/sat01/sat02).
+    signal_source = None
+    if payload.signal_key and "." in payload.signal_key:
+        signal_source = payload.signal_key.split(".", 1)[0].lower()
     create_notification(
         db,
         recipient_username=None,  # broadcast
@@ -221,10 +234,35 @@ def ingest_alarm(
         metadata={
             "alarm_id": alarm.id,
             "device_code": payload.device_code,
+            "device_name": device_name,
             "level": payload.level,
             "signal_key": payload.signal_key,
+            "signal_source": signal_source,
+            "source_gateway": payload.source_gateway,
+            "value": payload.value,
+            "value_string": payload.value_string,
+            "threshold": payload.threshold,
+            "operator": payload.operator,
+            "source_timestamp": payload.source_timestamp.isoformat()
+            if payload.source_timestamp
+            else None,
         },
     )
+    # Ariza listesini yeniden hesapla — yeni alarm hatta etkili olabilir.
+    try:
+        from app.services.fault_recompute_service import recompute_faults
+        recompute_faults(db)
+    except Exception:  # noqa: BLE001
+        # Fault recompute hatasi alarm akisini bozmasin — log yeterli.
+        import logging as _logging
+        _logging.getLogger(__name__).exception("fault_recompute_failed_after_ingest")
+    # Notification dispatcher: ilgili kullanicilara web/email/sms gonder.
+    try:
+        from app.services.notification_dispatch_service import dispatch_alarm_notifications
+        dispatch_alarm_notifications(db, alarm)
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).exception("notification_dispatch_failed")
     db.commit()
     return {"status": "accepted"}
 
@@ -321,6 +359,12 @@ def clear_alarm(
                 "auto_deleted": True,
             },
         )
+        try:
+            from app.services.fault_recompute_service import recompute_faults
+            recompute_faults(db)
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("fault_recompute_failed_after_clear_ack")
         db.commit()
         return {"status": "cleared_and_deleted", "alarm_id": alarm_id}
 
@@ -341,6 +385,12 @@ def clear_alarm(
             "source_gateway": payload.source_gateway,
         },
     )
+    try:
+        from app.services.fault_recompute_service import recompute_faults
+        recompute_faults(db)
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).exception("fault_recompute_failed_after_clear")
     db.commit()
     return {"status": "cleared", "alarm_id": alarm_id}
 

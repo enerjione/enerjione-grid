@@ -16,6 +16,18 @@ class InternalAlarmIngest(BaseModel):
     # Sinyal anahtari — kaynak (master/sat01/sat02) bilgisini frontend prefix'ten
     # turetir; alarm-service zaten payload'a koyar.
     signal_key: str | None = None
+    # Tetikleyen olcum degeri (alarm kuralinin esigi gectigi anki deger).
+    # Bildirim panelinde "Akim 142 A (esik 100 A)" gibi detayli gosterim icin.
+    value: float | None = None
+    # Sinyalin metinsel karsiligi (DNP3 Group 110 / Octet String). value None
+    # gelirse degerin metni burada olur (orn. "trip status: opened").
+    value_string: str | None = None
+    # Alarm kuralinin esik degeri (varsa). Frontend "deger A esikten yuksek/duşuk"
+    # mesajini olusturmak icin kullanir.
+    threshold: float | None = None
+    # Esige gore karsilastirma operatoru ("gt", "lt", "eq", "ne"). Frontend
+    # ">", "<", "=", "!=" sembollerine cevirir.
+    operator: str | None = None
 
 
 class InternalAlarmClear(BaseModel):

@@ -437,6 +437,141 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Cihaz / kaynak / sinyal rozet seridi — alarm bildirimi kartinda
+   "hangi cihaz, hangi kaynak (master/sat01), hangi sinyal" net gozuksun. */
+.notif-item-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.notif-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notif-chip .material-symbols-outlined {
+  font-size: 13px;
+}
+.notif-chip--device {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+.notif-chip--signal {
+  background: #ecfeff;
+  color: #0e7490;
+  border-color: #a5f3fc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.notif-chip--source {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #c4b5fd;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+.notif-chip--src-master {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+.notif-chip--src-sat01 {
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #fde68a;
+}
+.notif-chip--src-sat02 {
+  background: #fce7f3;
+  color: #9d174d;
+  border-color: #f9a8d4;
+}
+
+/* Olcum + esik gorsel sunumu: "142 A > 100 A (eşik)" benzeri */
+.notif-item-measure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fdba74;
+  margin-top: 4px;
+  align-self: flex-start;
+  max-width: 100%;
+}
+.notif-sev-critical .notif-item-measure {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: #fca5a5;
+}
+.notif-sev-info .notif-item-measure {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #93c5fd;
+}
+.notif-measure-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.notif-measure-op {
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+}
+.notif-measure-threshold {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+.notif-measure-threshold-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Seviye rozeti (CRITICAL / WARNING / INFO) */
+.notif-level-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background: #e2e8f0;
+  color: #334155;
+}
+.notif-level-badge.notif-sev-critical {
+  background: #b91c1c;
+  color: #fff;
+}
+.notif-level-badge.notif-sev-warning {
+  background: #d97706;
+  color: #fff;
+}
+.notif-level-badge.notif-sev-info {
+  background: #2563eb;
+  color: #fff;
+}
+
 /* Header'in sag tarafinda bildirim zili + kullanici profilini ayni
    cerceve icinde gosteren grup. NotificationBell ve profile-menu
    bu cerceveye yerlesir; aralarinda dikey ayrac cizgi olur. */

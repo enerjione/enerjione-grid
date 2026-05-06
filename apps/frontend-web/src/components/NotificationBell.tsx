@@ -73,6 +73,65 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleString("tr-TR");
 }
 
+// Sinyal kaynagi (master / sat01 / sat02 / ...) frontend dostu etikete cevir.
+const _SOURCE_LABEL: Record<string, string> = {
+  master: "Master",
+  sat01: "Satellite 01",
+  sat02: "Satellite 02"
+};
+
+function sourceLabel(src: string | null | undefined): string | null {
+  if (!src) return null;
+  const key = src.toLowerCase();
+  return _SOURCE_LABEL[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+// Backend metadata.operator string'ini insan-okur sembol/metne cevir.
+function operatorSymbol(op: string | null | undefined): string {
+  if (!op) return "";
+  const k = op.toLowerCase();
+  if (k === "gt" || k === ">") return ">";
+  if (k === "ge" || k === ">=") return "≥";
+  if (k === "lt" || k === "<") return "<";
+  if (k === "le" || k === "<=") return "≤";
+  if (k === "eq" || k === "=" || k === "==") return "=";
+  if (k === "ne" || k === "!=") return "≠";
+  return op;
+}
+
+// Sayisal degeri tr-TR locale'de, gereksiz trailing zero'yu kirpan formatla.
+const _NUM_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
+function fmtNumber(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "";
+  return _NUM_FMT.format(v);
+}
+
+type AlarmMetadata = {
+  alarm_id?: number | null;
+  device_code?: string | null;
+  device_name?: string | null;
+  level?: string | null;
+  signal_key?: string | null;
+  signal_source?: string | null;
+  source_gateway?: string | null;
+  value?: number | null;
+  value_string?: string | null;
+  threshold?: number | null;
+  operator?: string | null;
+  source_timestamp?: string | null;
+};
+
+function parseMetadata(raw: string | null | undefined): AlarmMetadata | null {
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object") return obj as AlarmMetadata;
+  } catch {
+    // Bozuk JSON — sessizce yut, kart yine baslik+body ile gosterilir.
+  }
+  return null;
+}
+
 export function NotificationBell({ token, onNavigate }: Props) {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -202,33 +261,105 @@ export function NotificationBell({ token, onNavigate }: Props) {
 
           {!loading && items.length > 0 ? (
             <ul className="notif-list">
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  className={`notif-item ${item.is_read ? "" : "notif-item--unread"} ${severityClass(item.severity)}`}
-                  onClick={() => void handleItemClick(item)}
-                >
-                  <span className={`notif-item-icon ${severityClass(item.severity)}`}>
-                    <span className="material-symbols-outlined">{categoryIcon(item.category)}</span>
-                  </span>
-                  <div className="notif-item-body">
-                    <div className="notif-item-title-row">
-                      <strong className="notif-item-title">{item.title}</strong>
-                      {!item.is_read ? <span className="notif-item-dot" /> : null}
-                    </div>
-                    {item.body ? <p className="notif-item-text">{item.body}</p> : null}
-                    <div className="notif-item-meta">
-                      <span className={`notif-item-cat ${severityClass(item.severity)}`}>
-                        {categoryLabel(item.category)}
-                      </span>
-                      {item.actor_username ? (
-                        <span className="notif-item-actor">{item.actor_username}</span>
+              {items.map((item) => {
+                const meta = parseMetadata(item.metadata_json);
+                const isAlarm = item.category === "alarm";
+                const sevCls = severityClass(item.severity);
+                const deviceLabel = meta?.device_name
+                  ? meta.device_name
+                  : meta?.device_code ?? null;
+                const deviceCode = meta?.device_code ?? null;
+                const srcLabel = sourceLabel(meta?.signal_source);
+                const opSym = operatorSymbol(meta?.operator);
+                // Sinyal etiketinin kullanici dostu hali: signal_key son
+                // bolumunden ".battery_voltage_satellite" -> "Battery Voltage
+                // Satellite" gibi degil, direkt anahtari gostermek SCADA
+                // konvansiyonu icin daha tanidik. Kaynak ayri rozet.
+                const signalKeyShort = (() => {
+                  const key = meta?.signal_key;
+                  if (!key) return null;
+                  const idx = key.indexOf(".");
+                  return idx >= 0 ? key.slice(idx + 1) : key;
+                })();
+                const valueDisplay = meta?.value_string
+                  ? meta.value_string
+                  : meta?.value !== null && meta?.value !== undefined
+                  ? fmtNumber(meta.value)
+                  : null;
+                const thresholdDisplay = meta?.threshold !== null && meta?.threshold !== undefined
+                  ? fmtNumber(meta.threshold)
+                  : null;
+                return (
+                  <li
+                    key={item.id}
+                    className={`notif-item ${item.is_read ? "" : "notif-item--unread"} ${sevCls}`}
+                    onClick={() => void handleItemClick(item)}
+                  >
+                    <span className={`notif-item-icon ${sevCls}`}>
+                      <span className="material-symbols-outlined">{categoryIcon(item.category)}</span>
+                    </span>
+                    <div className="notif-item-body">
+                      <div className="notif-item-title-row">
+                        <strong className="notif-item-title">{item.title}</strong>
+                        {!item.is_read ? <span className="notif-item-dot" /> : null}
+                      </div>
+                      {/* Cihaz / kaynak / sinyal rozet seridi — sadece alarm */}
+                      {isAlarm && (deviceLabel || srcLabel || signalKeyShort) ? (
+                        <div className="notif-item-chips">
+                          {deviceLabel ? (
+                            <span className="notif-chip notif-chip--device" title={deviceCode ?? undefined}>
+                              <span className="material-symbols-outlined">router</span>
+                              {deviceLabel}
+                            </span>
+                          ) : null}
+                          {srcLabel ? (
+                            <span className={`notif-chip notif-chip--source notif-chip--src-${(meta?.signal_source ?? "").toLowerCase()}`}>
+                              {srcLabel}
+                            </span>
+                          ) : null}
+                          {signalKeyShort ? (
+                            <span className="notif-chip notif-chip--signal" title={meta?.signal_key ?? undefined}>
+                              <span className="material-symbols-outlined">monitoring</span>
+                              {signalKeyShort}
+                            </span>
+                          ) : null}
+                        </div>
                       ) : null}
-                      <span className="notif-item-time">{timeAgo(item.created_at)}</span>
+                      {/* Aciklama */}
+                      {item.body ? <p className="notif-item-text">{item.body}</p> : null}
+                      {/* Olcum + esik karsilastirmasi gorsel sunum */}
+                      {isAlarm && valueDisplay ? (
+                        <div className="notif-item-measure">
+                          <span className="notif-measure-value">{valueDisplay}</span>
+                          {opSym && thresholdDisplay ? (
+                            <>
+                              <span className="notif-measure-op">{opSym}</span>
+                              <span className="notif-measure-threshold">
+                                {thresholdDisplay}
+                                <span className="notif-measure-threshold-label">eşik</span>
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="notif-item-meta">
+                        <span className={`notif-item-cat ${sevCls}`}>
+                          {categoryLabel(item.category)}
+                        </span>
+                        {meta?.level ? (
+                          <span className={`notif-level-badge ${sevCls}`}>
+                            {meta.level.toUpperCase()}
+                          </span>
+                        ) : null}
+                        {item.actor_username ? (
+                          <span className="notif-item-actor">{item.actor_username}</span>
+                        ) : null}
+                        <span className="notif-item-time">{timeAgo(item.created_at)}</span>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
         </div>
