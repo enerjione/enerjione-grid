@@ -16769,7 +16769,9 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .fault-modal-head-right {
   display: flex;
-  gap: 12px;
+  gap: 14px;
+  align-items: stretch;
+  flex-wrap: wrap;
 }
 .fault-modal-head-meta {
   display: flex;
@@ -16788,6 +16790,59 @@ main.content.engineering-content:has(.device-management-panel) {
   font-size: 13px;
   color: #0f172a;
   font-weight: 600;
+}
+
+/* Canli ariza suresi rozeti — sag ust kose */
+.fault-modal-head-elapsed {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-end;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-width: 130px;
+}
+.fault-modal-head-elapsed.is-live {
+  background: rgba(239, 68, 68, 0.07);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.fault-modal-head-elapsed-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fault-modal-head-elapsed.is-live .fault-modal-head-elapsed-label {
+  color: #b91c1c;
+}
+.fault-modal-head-elapsed strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.fault-modal-head-elapsed.is-live strong {
+  color: #ef4444;
+}
+.fault-modal-elapsed-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+  animation: fault-elapsed-pulse 1.4s ease-out infinite;
+}
+@keyframes fault-elapsed-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  70%  { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 .fault-modal-body {
   flex: 1;
@@ -17098,7 +17153,7 @@ main.content.engineering-content:has(.device-management-panel) {
   font-size: 13px;
   background: #f9fafb;
   color: #0f172a;
-  resize: vertical;
+  resize: none;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .fault-modal-card textarea:focus,

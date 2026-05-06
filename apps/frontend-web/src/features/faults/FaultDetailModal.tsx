@@ -103,6 +103,35 @@ export function FaultDetailModal({
   const [noteDraft, setNoteDraft] = useState(fault.note ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Canlı süre sayacı için "now" state'i her saniye güncellenir.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  // Arıza süresi: open->resolved/closed arasi (closed varsa stop, yoksa
+  // simdiki zamana kadar canli sayim).
+  const elapsedText = useMemo(() => {
+    const start = new Date(fault.opened_at).getTime();
+    const end =
+      fault.status === "closed" && fault.closed_at
+        ? new Date(fault.closed_at).getTime()
+        : fault.status === "resolved" && fault.resolved_at
+          ? new Date(fault.resolved_at).getTime()
+          : now;
+    let sec = Math.max(0, Math.round((end - start) / 1000));
+    const days = Math.floor(sec / 86400);
+    sec -= days * 86400;
+    const hours = Math.floor(sec / 3600);
+    sec -= hours * 3600;
+    const mins = Math.floor(sec / 60);
+    sec -= mins * 60;
+    if (days > 0) return `${days}g ${hours}sa ${mins}dk`;
+    if (hours > 0) return `${hours}sa ${mins}dk ${sec}sn`;
+    if (mins > 0) return `${mins}dk ${sec}sn`;
+    return `${sec}sn`;
+  }, [now, fault.opened_at, fault.status, fault.closed_at, fault.resolved_at]);
+  const isLive = fault.status !== "closed" && fault.status !== "resolved";
 
   useEffect(() => {
     setNoteDraft(fault.note ?? "");
@@ -430,8 +459,6 @@ export function FaultDetailModal({
     }
   };
 
-  const statusColor = STATUS_COLOR[fault.status] ?? "#64748b";
-
   return (
     <div className="fault-modal-backdrop" onClick={onClose}>
       <div
@@ -451,12 +478,9 @@ export function FaultDetailModal({
 
         <header className="fault-modal-head">
           <div className="fault-modal-head-left">
-            <span
-              className="fault-modal-status-pill"
-              style={{ background: `${statusColor}22`, color: statusColor }}
-            >
-              {STATUS_LABEL[fault.status] ?? fault.status}
-            </span>
+            {/* Atandı/Açık pill'i kaldırıldı — orta kolondaki "Sorumluluk"
+                kartında zaten durum gosteriliyor; baslikta tekrari gerek
+                degil (kullanici talebi). */}
             <h2>{fault.line_name}</h2>
             <div className="fault-modal-breadcrumbs">
               <span className="material-symbols-outlined">place</span>
@@ -473,6 +497,22 @@ export function FaultDetailModal({
             <div className="fault-modal-head-meta">
               <span className="fault-modal-head-label">Açılış</span>
               <strong>{fmtDate(fault.opened_at)}</strong>
+            </div>
+            <div
+              className={`fault-modal-head-elapsed ${isLive ? "is-live" : ""}`}
+              title={isLive ? "Arıza halen aktif — canlı süre" : "Toplam süre"}
+            >
+              <span className="fault-modal-head-elapsed-label">
+                {isLive ? (
+                  <>
+                    <span className="fault-modal-elapsed-pulse" aria-hidden="true" />
+                    Arıza Süresi
+                  </>
+                ) : (
+                  "Toplam Süre"
+                )}
+              </span>
+              <strong>{elapsedText}</strong>
             </div>
           </div>
         </header>
