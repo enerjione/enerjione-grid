@@ -131,6 +131,53 @@ export type AlarmEvent = {
   created_at: string;
 };
 
+/** Hat Arizalari ("Fault") — anasayfa haritasindaki "son RED -> ilk GREEN
+    arasi" hesabinin DB'ye yazilmis kalici karsiligi. Ticket sistemiyle
+    birlikte: arizaya bir kullanici atanir, durum yonetir, yorum/rapor ekler. */
+export type FaultEvent = {
+  id: number;
+  line_id: number;
+  line_name: string;
+  region_id: number;
+  region_name: string;
+  last_red_device_id: number;
+  last_red_device_code?: string | null;
+  last_red_device_name?: string | null;
+  first_green_device_id?: number | null;
+  first_green_device_code?: string | null;
+  first_green_device_name?: string | null;
+  from_pole_id: number;
+  to_pole_id: number;
+  from_pole_seq?: number | null;
+  to_pole_seq?: number | null;
+  status: "open" | "assigned" | "in_progress" | "resolved" | "closed" | string;
+  opened_at: string;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+  note?: string | null;
+  assigned_to_username?: string | null;
+  assigned_to_full_name?: string | null;
+  assigned_at?: string | null;
+  comment_count: number;
+};
+
+export type FaultComment = {
+  id: number;
+  fault_id: number;
+  author_username: string;
+  body: string;
+  created_at: string;
+};
+
+/** Kullanici-bazli bildirim kanal tercihleri. */
+export type UserNotificationPreferences = {
+  user_id: number;
+  web_enabled: boolean;
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  min_level_rank: number;
+};
+
 export type AlarmComment = {
   id: number;
   alarm_event_id: number;

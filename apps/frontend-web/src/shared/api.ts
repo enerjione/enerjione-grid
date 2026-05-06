@@ -390,6 +390,110 @@ export async function fetchAlarmEvents(token: string): Promise<AlarmEvent[]> {
   return (await response.json()) as AlarmEvent[];
 }
 
+// ============= Hat Arızaları (Faults) — ticket sistemi =============
+
+export async function fetchFaults(
+  token: string,
+  status: "active" | "all" | "open" | "closed" = "active"
+): Promise<import("./types").FaultEvent[]> {
+  const url = `${API_BASE_URL}/faults?status=${encodeURIComponent(status)}`;
+  const response = await fetch(url, { headers: authHeaders(token) });
+  if (!response.ok) throw await buildApiError(response, "Arızalar alınamadı.");
+  return (await response.json()) as import("./types").FaultEvent[];
+}
+
+export async function assignFault(
+  token: string,
+  faultId: number,
+  username: string | null
+): Promise<import("./types").FaultEvent> {
+  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/assign`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ assigned_to_username: username })
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza ataması yapılamadı.");
+  return (await response.json()) as import("./types").FaultEvent;
+}
+
+export async function updateFaultStatus(
+  token: string,
+  faultId: number,
+  newStatus: string
+): Promise<import("./types").FaultEvent> {
+  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/status`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ status: newStatus })
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza durumu güncellenemedi.");
+  return (await response.json()) as import("./types").FaultEvent;
+}
+
+export async function updateFaultNote(
+  token: string,
+  faultId: number,
+  note: string | null
+): Promise<import("./types").FaultEvent> {
+  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/note`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ note })
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza notu güncellenemedi.");
+  return (await response.json()) as import("./types").FaultEvent;
+}
+
+export async function fetchFaultComments(
+  token: string,
+  faultId: number
+): Promise<import("./types").FaultComment[]> {
+  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/comments`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza yorumları alınamadı.");
+  return (await response.json()) as import("./types").FaultComment[];
+}
+
+export async function addFaultComment(
+  token: string,
+  faultId: number,
+  body: string
+): Promise<import("./types").FaultComment> {
+  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/comments`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ body })
+  });
+  if (!response.ok) throw await buildApiError(response, "Yorum eklenemedi.");
+  return (await response.json()) as import("./types").FaultComment;
+}
+
+// ============= Kullanıcı Bildirim Tercihleri =============
+
+export async function fetchMyNotificationPrefs(
+  token: string
+): Promise<import("./types").UserNotificationPreferences> {
+  const response = await fetch(`${API_BASE_URL}/me/notification-preferences`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bildirim tercihleri alınamadı.");
+  return (await response.json()) as import("./types").UserNotificationPreferences;
+}
+
+export async function updateMyNotificationPrefs(
+  token: string,
+  payload: Partial<Omit<import("./types").UserNotificationPreferences, "user_id">>
+): Promise<import("./types").UserNotificationPreferences> {
+  const response = await fetch(`${API_BASE_URL}/me/notification-preferences`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bildirim tercihleri güncellenemedi.");
+  return (await response.json()) as import("./types").UserNotificationPreferences;
+}
+
 export async function assignAlarm(token: string, alarmId: number, assignedTo: string | null): Promise<AlarmEvent> {
   const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}/assign`, {
     method: "PATCH",

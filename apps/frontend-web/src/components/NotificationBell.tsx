@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import {
   fetchNotifications,
@@ -222,20 +222,30 @@ export function NotificationBell({ token, onNavigate }: Props) {
   };
 
   const handleItemClick = async (item: NotificationItem) => {
-    // Once okundu isaretle ve listeden cikar
-    if (!item.is_read) {
-      try {
-        await markNotificationRead(token, item.id);
-      } catch {
-        // Hata olsa bile UI'dan cikaralim — bir sonraki polling gercegi gosterir
-      }
-      setItems((prev) => prev.filter((it) => it.id !== item.id));
-      setUnread((u) => Math.max(0, u - 1));
-    }
+    // Karta tiklandiginda LINK varsa o sayfaya git; okundu isaretleme
+    // ayri ✓ butonu ile yapilir (kullanici sadece detaya bakmak isteyince
+    // yanlislikla listeden silmemis olur).
     if (item.link && onNavigate) {
       onNavigate(item.link);
       setOpen(false);
     }
+  };
+
+  // Tekli onaylama (✓ butonu): bildirimi okundu isaretler ve listeden
+  // cikarir. Karta tiklamayi tetiklememesi icin event propagation durdurulur.
+  const handleMarkOne = async (
+    e: ReactMouseEvent<HTMLButtonElement>,
+    item: NotificationItem
+  ) => {
+    e.stopPropagation();
+    if (item.is_read) return;
+    try {
+      await markNotificationRead(token, item.id);
+    } catch {
+      // Hata olsa bile UI'dan cikaralim
+    }
+    setItems((prev) => prev.filter((it) => it.id !== item.id));
+    setUnread((u) => Math.max(0, u - 1));
   };
 
   return (
@@ -321,6 +331,17 @@ export function NotificationBell({ token, onNavigate }: Props) {
                       <div className="notif-item-title-row">
                         <strong className="notif-item-title">{item.title}</strong>
                         {!item.is_read ? <span className="notif-item-dot" /> : null}
+                        {!item.is_read ? (
+                          <button
+                            type="button"
+                            className="notif-item-mark-btn"
+                            title="Bu bildirimi okundu işaretle"
+                            aria-label="Okundu işaretle"
+                            onClick={(e) => void handleMarkOne(e, item)}
+                          >
+                            <span className="material-symbols-outlined">done</span>
+                          </button>
+                        ) : null}
                       </div>
                       {/* Cihaz + Kaynak + Hat + Bolge satir satir — kullanici
                           hangi cihazin hangi kaynagindan (master/sat01/sat02),

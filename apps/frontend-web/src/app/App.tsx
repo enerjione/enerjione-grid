@@ -4,6 +4,7 @@ import { useToast } from "../components/ToastProvider";
 import { LoginForm } from "../features/auth/LoginForm";
 import { UserManagementPanel } from "../features/auth/UserManagementPanel";
 import { AlarmsPage } from "../features/alarms/AlarmsPage";
+import { FaultListPage } from "../features/faults/FaultListPage";
 import { ResponsibilityAreasPage } from "../features/responsibility-areas/ResponsibilityAreasPage";
 import { EventsPage } from "../features/events/EventsPage";
 import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
@@ -44,6 +45,14 @@ import {
   deleteResponsibilityArea,
   fetchAlarmComments,
   fetchAlarmEvents,
+  fetchFaults,
+  assignFault,
+  updateFaultStatus,
+  updateFaultNote,
+  fetchFaultComments,
+  addFaultComment,
+  fetchMyNotificationPrefs,
+  updateMyNotificationPrefs,
   fetchAlarmRules,
   fetchDeviceModels,
   fetchDevices,
@@ -105,6 +114,9 @@ import type {
   DeviceModelOption,
   Dnp3ExtendedSettings,
   DeviceRow,
+  FaultComment,
+  FaultEvent,
+  UserNotificationPreferences,
   Gateway,
   NotificationSettings,
   OutboundTarget,
@@ -117,7 +129,7 @@ import type {
 } from "../shared/types";
 
 type TabId = "map" | "values";
-type PageMode = "home" | "alarms" | "events" | "system-status" | "engineering";
+type PageMode = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
 type EngineeringPage =
   | "devices"
   | "signals"
@@ -131,7 +143,7 @@ type EngineeringPage =
   | "grid";
 
 const ROUTE_STORAGE_KEY = "hsl.route.v1";
-const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "events", "system-status", "engineering"];
+const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering"];
 const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "devices",
   "signals",
@@ -186,6 +198,7 @@ export function App() {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [users, setUsers] = useState<UserRead[]>([]);
   const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
+  const [faults, setFaults] = useState<FaultEvent[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [devicesByGateway, setDevicesByGateway] = useState<DeviceRow[]>([]);
@@ -259,6 +272,8 @@ export function App() {
     };
   }, [dashboardAreaId, session]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<UserNotificationPreferences | null>(null);
+  const [notifPrefsSaving, setNotifPrefsSaving] = useState(false);
   const [settingsFullName, setSettingsFullName] = useState("");
   const [settingsEmail, setSettingsEmail] = useState("");
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
@@ -415,6 +430,7 @@ export function App() {
     setDevices([]);
     setUsers([]);
     setAlarms([]);
+    setFaults([]);
     setEvents([]);
     setGateways([]);
     setDevicesByGateway([]);
@@ -457,6 +473,26 @@ export function App() {
         // sessizce yutuyoruz — gecici ag hatalari polling'i durdurmamali
       }
     };
+    const id = window.setInterval(() => {
+      void tick();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [session]);
+
+  // Hat Arizalari (faults) canli refresh: 5 sn'de bir. Backend'in
+  // fault_recompute_service'i alarm degistikce DB'yi senkronlar; biz de
+  // burada UI'da liste tazelenir.
+  useEffect(() => {
+    if (!session) return;
+    const tick = async () => {
+      try {
+        const rows = await fetchFaults(session.accessToken, "active");
+        setFaults(rows);
+      } catch {
+        // ignore
+      }
+    };
+    void tick();
     const id = window.setInterval(() => {
       void tick();
     }, 5000);
@@ -708,6 +744,41 @@ export function App() {
     const updated = await assignAlarm(session.accessToken, alarmId, assignedTo);
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
     toast.success(assignedTo ? `Alarm ${assignedTo} kullanıcısına atandı.` : "Alarm ataması kaldırıldı.");
+  };
+
+  // ===== Hat Arizalari (Fault) ticket handlers =====
+  const handleAssignFault = async (faultId: number, username: string | null) => {
+    if (!session) return;
+    const updated = await assignFault(session.accessToken, faultId, username);
+    setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    toast.success(username ? `Arıza ${username} kullanıcısına atandı.` : "Arıza ataması kaldırıldı.");
+  };
+  const handleUpdateFaultStatus = async (faultId: number, newStatus: string) => {
+    if (!session) return;
+    const updated = await updateFaultStatus(session.accessToken, faultId, newStatus);
+    setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    toast.success("Arıza durumu güncellendi.");
+  };
+  const handleUpdateFaultNote = async (faultId: number, note: string | null) => {
+    if (!session) return;
+    const updated = await updateFaultNote(session.accessToken, faultId, note);
+    setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    toast.success("Not kaydedildi.");
+  };
+  const handleLoadFaultComments = async (faultId: number): Promise<FaultComment[]> => {
+    if (!session) return [];
+    return fetchFaultComments(session.accessToken, faultId);
+  };
+  const handleAddFaultComment = async (faultId: number, body: string) => {
+    if (!session) return;
+    await addFaultComment(session.accessToken, faultId, body);
+    // Yorum eklenince comment_count'u +1 yapalim ki listede gozuksun
+    setFaults((prev) =>
+      prev.map((f) =>
+        f.id === faultId ? { ...f, comment_count: (f.comment_count ?? 0) + 1 } : f
+      )
+    );
+    toast.success("Yorum eklendi.");
   };
 
   const handleLoadAlarmComments = async (alarmId: number): Promise<AlarmComment[]> => {
@@ -1272,6 +1343,32 @@ export function App() {
     setSettingsNewPassword("");
     setSettingsError("");
     setSettingsOpen(true);
+    if (session) {
+      void (async () => {
+        try {
+          const prefs = await fetchMyNotificationPrefs(session.accessToken);
+          setNotifPrefs(prefs);
+        } catch {
+          setNotifPrefs(null);
+        }
+      })();
+    }
+  };
+
+  const handleToggleNotifPref = async (
+    key: "web_enabled" | "email_enabled" | "sms_enabled"
+  ) => {
+    if (!session || !notifPrefs) return;
+    const next: Partial<UserNotificationPreferences> = { [key]: !notifPrefs[key] };
+    setNotifPrefsSaving(true);
+    try {
+      const updated = await updateMyNotificationPrefs(session.accessToken, next);
+      setNotifPrefs(updated);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Tercih kaydedilemedi.");
+    } finally {
+      setNotifPrefsSaving(false);
+    }
   };
 
   const handleSaveSettings = async () => {
@@ -1709,6 +1806,20 @@ export function App() {
                 onResetAll={handleResetAllAlarms}
               />
             ) : null}
+            {pageMode === "faults" ? (
+              <FaultListPage
+                faults={faults}
+                users={users}
+                currentUsername={session.username}
+                canAssign={session.role === "engineer" || session.role === "installer"}
+                loading={false}
+                onAssign={handleAssignFault}
+                onUpdateStatus={handleUpdateFaultStatus}
+                onUpdateNote={handleUpdateFaultNote}
+                onLoadComments={handleLoadFaultComments}
+                onAddComment={handleAddFaultComment}
+              />
+            ) : null}
             {pageMode === "events" ? (
               <EventsPage events={events} loading={loadingData} devices={devices} />
             ) : null}
@@ -1819,6 +1930,60 @@ export function App() {
               />
             </label>
             {settingsError ? <p className="error-text">{settingsError}</p> : null}
+
+            {/* Bildirim tercihleri — kanal bazli toggle. Kullanici burada
+                kapatirsa sistem cap'inda etkin olsa bile bildirim almaz. */}
+            {notifPrefs ? (
+              <div className="notif-prefs-section">
+                <h4>Bildirim Tercihleri</h4>
+                <div className="notif-prefs-row">
+                  <div className="notif-prefs-row-label">
+                    <strong>Web bildirimi</strong>
+                    <span>Tarayıcıda zilde uyarı görünsün.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`notif-prefs-toggle ${notifPrefs.web_enabled ? "on" : ""}`}
+                    onClick={() => void handleToggleNotifPref("web_enabled")}
+                    disabled={notifPrefsSaving}
+                    aria-label="Web bildirimi"
+                  />
+                </div>
+                <div className="notif-prefs-row">
+                  <div className="notif-prefs-row-label">
+                    <strong>E-posta</strong>
+                    <span>
+                      Alarm/arıza durumlarında e-posta gönderilsin.
+                      {currentUser?.email ? "" : " (E-posta eklenmemiş.)"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`notif-prefs-toggle ${notifPrefs.email_enabled ? "on" : ""}`}
+                    onClick={() => void handleToggleNotifPref("email_enabled")}
+                    disabled={notifPrefsSaving}
+                    aria-label="E-posta bildirimi"
+                  />
+                </div>
+                <div className="notif-prefs-row">
+                  <div className="notif-prefs-row-label">
+                    <strong>SMS</strong>
+                    <span>
+                      Acil/kritik durumlar için SMS.
+                      {currentUser?.phone_number ? "" : " (Telefon numarası eklenmemiş.)"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`notif-prefs-toggle ${notifPrefs.sms_enabled ? "on" : ""}`}
+                    onClick={() => void handleToggleNotifPref("sms_enabled")}
+                    disabled={notifPrefsSaving}
+                    aria-label="SMS bildirimi"
+                  />
+                </div>
+              </div>
+            ) : null}
+
             <div className="settings-actions">
               <button onClick={() => setSettingsOpen(false)}>Vazgeç</button>
               <button onClick={handleSaveSettings} disabled={settingsSaving}>

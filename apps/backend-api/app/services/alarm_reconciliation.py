@@ -224,6 +224,12 @@ class AlarmReconciliationWorker:
                     action, alarm.id, alarm.device_id, alarm.signal_key, last.value,
                 )
             if cleared_count > 0:
+                # Reconcile sonrasi fault listesini de yenile
+                try:
+                    from app.services.fault_recompute_service import recompute_faults
+                    recompute_faults(db)
+                except Exception:  # noqa: BLE001
+                    logger.exception("fault_recompute_failed_after_reconcile")
                 db.commit()
         finally:
             db.close()

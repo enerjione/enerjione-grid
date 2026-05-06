@@ -13,8 +13,8 @@ type Props = {
   onSettings?: () => void;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
-  activePage: "home" | "alarms" | "events" | "system-status" | "engineering";
-  onChangePage: (page: "home" | "alarms" | "events" | "system-status" | "engineering") => void;
+  activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
+  onChangePage: (page: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering") => void;
 };
 
 export function Header({
@@ -77,6 +77,9 @@ export function Header({
           <button className={activePage === "alarms" ? "active" : ""} onClick={() => onChangePage("alarms")}>
             Alarmlar
           </button>
+          <button className={activePage === "faults" ? "active" : ""} onClick={() => onChangePage("faults")}>
+            Hat Arızaları
+          </button>
           <button className={activePage === "events" ? "active" : ""} onClick={() => onChangePage("events")}>
             Olaylar
           </button>
@@ -106,6 +109,7 @@ export function Header({
               token={accessToken}
               onNavigate={(link) => {
                 if (link.startsWith("/alarms")) onChangePage("alarms");
+                else if (link.startsWith("/faults")) onChangePage("faults");
                 else if (link.startsWith("/events")) onChangePage("events");
                 else if (link.startsWith("/system-status")) onChangePage("system-status");
               }}
