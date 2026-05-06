@@ -243,6 +243,12 @@ def render_env(args: ComposeRenderInput) -> str:
     return _apply_template(_ENV_TEMPLATE, _replacements(args))
 
 
+def filename_for(args: ComposeRenderInput, *, kind: Literal["compose", "env"]) -> str:
+    """Indirilecek dosyanin adi: hsl-gw-<code>.yml veya hsl-gw-<code>.env."""
+    suffix = "yml" if kind == "compose" else "env"
+    return f"hsl-gw-{args.code.lower()}.{suffix}"
+
+
 def normalize_backend_url_for_container(url: str) -> str:
     """localhost / 127.0.0.1 -> host.docker.internal cevirimi.
 
