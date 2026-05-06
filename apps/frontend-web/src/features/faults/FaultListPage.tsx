@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
 
 import type { GridSnapshot } from "../../shared/api";
-import type { FaultComment, FaultEvent, UserRead } from "../../shared/types";
+import type {
+  AlarmEvent,
+  DeviceRow,
+  FaultComment,
+  FaultEvent,
+  UserRead
+} from "../../shared/types";
 import { FaultDetailModal } from "./FaultDetailModal";
 
 type Props = {
@@ -11,6 +17,8 @@ type Props = {
   canAssign: boolean; // engineer/installer
   loading?: boolean;
   gridSnapshot?: GridSnapshot | null;
+  devices?: DeviceRow[];
+  alarms?: AlarmEvent[];
   onAssign: (faultId: number, username: string | null) => Promise<void>;
   onUpdateStatus: (faultId: number, status: string) => Promise<void>;
   onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
@@ -55,6 +63,8 @@ export function FaultListPage({
   canAssign,
   loading,
   gridSnapshot,
+  devices,
+  alarms,
   onAssign,
   onUpdateStatus,
   onUpdateNote,
@@ -270,6 +280,8 @@ export function FaultListPage({
           currentUsername={currentUsername}
           canAssign={canAssign}
           gridSnapshot={gridSnapshot}
+          devices={devices}
+          alarms={alarms}
           onClose={() => setOpenFaultId(null)}
           onAssign={onAssign}
           onUpdateStatus={onUpdateStatus}

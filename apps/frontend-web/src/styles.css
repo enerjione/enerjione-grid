@@ -16669,7 +16669,9 @@ main.content.engineering-content:has(.device-management-panel) {
   inset: 0;
   background: rgba(15, 23, 42, 0.55);
   backdrop-filter: blur(4px);
-  z-index: 1000;
+  /* Header (.header) z-index: 1100 oldugundan modal onun ustune
+     cikmali. 1500 ile her durumda header'in onunde durur. */
+  z-index: 1500;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16817,12 +16819,18 @@ main.content.engineering-content:has(.device-management-panel) {
   padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  overflow-y: auto;
+  gap: 16px;
   min-width: 0;
 }
+.fault-modal-mid,
+.fault-modal-comments-col {
+  overflow-y: auto;
+}
+/* Sol kolon scroll YOK — kullanici talebi. Icerik (harita+koordinat
+   listesi+cihaz akisi) sabit kompakt yerleseck. */
 .fault-modal-left {
   border-right: 1px solid rgba(148, 163, 184, 0.18);
+  overflow: hidden;
 }
 .fault-modal-mid {
   border-right: 1px solid rgba(148, 163, 184, 0.18);
@@ -16870,11 +16878,12 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .fault-modal-map {
   width: 100%;
-  height: 280px;
+  height: 240px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.25);
   z-index: 0;
+  flex-shrink: 0;
 }
 .fault-modal-map-empty {
   padding: 40px;
@@ -16916,6 +16925,197 @@ main.content.engineering-content:has(.device-management-panel) {
   color: #fff;
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Cihaz marker (mini): yıldırım simgesi yesil/kirmizi disk */
+.fault-modal-dev-icon-wrap { background: transparent !important; border: none !important; }
+.fault-modal-dev-icon {
+  --c: #10b981;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.fault-modal-dev-icon::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--c);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Lejandda nokta tipi (cihaz simgeleri icin) */
+.fault-modal-map-legend .fault-modal-legend-dot {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  margin-right: 6px;
+}
+
+/* ===== Orta kolon — modern kart tasarımı ===== */
+.fault-modal-card {
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+.fault-modal-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fault-modal-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fault-modal-card-icon .material-symbols-outlined {
+  font-size: 20px !important;
+}
+.fault-modal-card-head h4 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #0f172a;
+}
+.fault-modal-card-head p {
+  margin: 1px 0 0 0;
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+.fault-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Atanan kullanici display (operator icin readonly gorunum) */
+.fault-modal-assignee-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.fault-modal-assignee-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #6366f1;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.fault-modal-assignee-display strong {
+  font-size: 13px;
+  display: block;
+  color: #0f172a;
+}
+.fault-modal-assignee-display small {
+  font-size: 11px;
+  color: #64748b;
+}
+.fault-modal-assignee-empty {
+  font-style: italic;
+  color: #94a3b8;
+}
+
+/* Status grid — durum butonlari kart formatinda 2x2 */
+.fault-modal-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.fault-modal-status-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: #fff;
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+.fault-modal-status-card:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #6366f1;
+}
+.fault-modal-status-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.fault-modal-status-card.active {
+  font-weight: 700;
+}
+.fault-modal-status-card-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7);
+}
+.fault-modal-status-card.active .fault-modal-status-card-dot {
+  background: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
+}
+
+/* Kart icindeki textarea/select — kart background'a uyumlu */
+.fault-modal-card textarea,
+.fault-modal-card select {
+  padding: 9px 12px;
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  background: #f9fafb;
+  color: #0f172a;
+  resize: vertical;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.fault-modal-card textarea:focus,
+.fault-modal-card select:focus {
+  outline: none;
+  border-color: #6366f1;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+.fault-modal-card .fault-modal-save-btn {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fault-modal-card .fault-modal-save-btn .material-symbols-outlined {
+  font-size: 16px !important;
 }
 
 /* Koordinat listesi (arıza aralığındaki direkler) */

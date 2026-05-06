@@ -3,7 +3,7 @@ import { MapContainer, Marker, Polyline, TileLayer, Tooltip } from "react-leafle
 import L from "leaflet";
 
 import type { GridSnapshot } from "../../shared/api";
-import type { FaultComment, FaultEvent, UserRead } from "../../shared/types";
+import type { AlarmEvent, DeviceRow, FaultComment, FaultEvent, UserRead } from "../../shared/types";
 
 type Props = {
   fault: FaultEvent;
@@ -11,6 +11,10 @@ type Props = {
   currentUsername: string;
   canAssign: boolean;
   gridSnapshot?: GridSnapshot | null;
+  /** Cihaz listesi — modal haritasinda cihaz marker'lari icin. */
+  devices?: DeviceRow[];
+  /** Aktif alarmlar — cihazin RED/GREEN durumunu hesaplamak icin. */
+  alarms?: AlarmEvent[];
   onClose: () => void;
   onAssign: (faultId: number, username: string | null) => Promise<void>;
   onUpdateStatus: (faultId: number, status: string) => Promise<void>;
@@ -50,12 +54,43 @@ const miniPolePin = (label: string, isRed: boolean, isGreen: boolean) => {
   });
 };
 
+// Cihaz marker'i — RED ise kirmizi yildirim, GREEN ise yesil yildirim.
+const miniDeviceIcon = (isRed: boolean) => {
+  const color = isRed ? "#dc2626" : "#10b981";
+  return L.divIcon({
+    className: "fault-modal-dev-icon-wrap",
+    html: `
+      <div class="fault-modal-dev-icon" style="--c:${color}">
+        <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true">
+          <path fill="#fff" d="M13 2 4 14h6l-1 8 9-12h-6z"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11]
+  });
+};
+
+// İki nokta arası lerp
+function lerp(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+  t: number
+): [number, number] {
+  return [
+    a.latitude + (b.latitude - a.latitude) * t,
+    a.longitude + (b.longitude - a.longitude) * t
+  ];
+}
+
 export function FaultDetailModal({
   fault,
   users,
   currentUsername,
   canAssign,
   gridSnapshot,
+  devices,
+  alarms,
   onClose,
   onAssign,
   onUpdateStatus,
@@ -99,45 +134,185 @@ export function FaultDetailModal({
 
   const canEdit = canAssign || fault.assigned_to_username === currentUsername;
 
-  // Mini harita — arızanın bulunduğu hattin TUM direkleri sirayli polyline.
-  // Ariza araligi = from_pole_seq..to_pole_seq arasindaki ardisik tum
-  // direkleri takip eden parça (KIRMIZI KESIK). Dışındaki bölümler YESIL.
-  // Onceden hatali olarak from_pole'dan to_pole'a DUZ cizgi cekiyordu —
-  // hattin gercek geometrisini takip etmiyordu.
+  // Aktif (resetlenmemis) alarm device id'leri — cihaz RED/GREEN durumu icin
+  const alarmActiveDeviceIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const a of alarms ?? []) if (!a.reset) s.add(a.device_id);
+    return s;
+  }, [alarms]);
+
+  // Mini harita — anasayfa mantigi:
+  //  1) Hat icindeki tum cihazlarin slot uzerindeki konumlari
+  //     (device_position_t veya otomatik dagılim) hesaplanir.
+  //  2) Hat polyline'i 3 parcaya bolunur:
+  //     - hat basi -> Son ariza algilayan cihaz konumu  : YESIL (saglikli)
+  //     - Son ariza algilayan -> Ilk algilamayan cihaz  : KIRMIZI KESIK
+  //     - Ilk algilamayan cihaz -> hat ucu              : YESIL (saglikli)
+  //  3) Cihaz marker'lari konumlarinda gosterilir (RED/GREEN).
   const mapView = useMemo(() => {
     if (!gridSnapshot) return null;
+    const polesById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
     const linePoles = gridSnapshot.poles
       .filter((p) => p.line_id === fault.line_id)
       .sort((a, b) => a.sequence_no - b.sequence_no);
     if (linePoles.length === 0) return null;
 
+    // Bu hatta atanmis cihazli segmentleri slot bazinda topla
+    type SegRec = {
+      deviceId: number;
+      fromPoleId: number;
+      toPoleId: number;
+      fromSeq: number;
+      toSeq: number;
+      t: number; // slot icindeki konum 0..1
+      isRed: boolean;
+    };
+    const slotSegs = new Map<string, SegRec[]>();
+    for (const seg of gridSnapshot.segments) {
+      if (seg.line_id !== fault.line_id || !seg.device_id) continue;
+      const fp = polesById.get(seg.from_pole_id);
+      const tp = polesById.get(seg.to_pole_id);
+      if (!fp || !tp) continue;
+      const t =
+        seg.device_position_t !== null && seg.device_position_t !== undefined
+          ? seg.device_position_t
+          : 0.5;
+      const key = `${seg.from_pole_id}|${seg.to_pole_id}`;
+      const arr = slotSegs.get(key) ?? [];
+      arr.push({
+        deviceId: seg.device_id,
+        fromPoleId: seg.from_pole_id,
+        toPoleId: seg.to_pole_id,
+        fromSeq: fp.sequence_no,
+        toSeq: tp.sequence_no,
+        t,
+        isRed: alarmActiveDeviceIds.has(seg.device_id)
+      });
+      slotSegs.set(key, arr);
+    }
+    // Slot icindeki cihazlari t'ye gore sirala; otomatik dagılim (t==0.5
+    // varsayilan) durumunda created_at sirasi ile esit araliklara dagıt
+    for (const [, arr] of slotSegs) {
+      arr.sort((a, b) => a.t - b.t);
+      // hepsinin t'si ayni 0.5 ise (manuel ayarlanmamis) -> esit dagit
+      if (arr.length > 1 && arr.every((r) => r.t === 0.5)) {
+        const n = arr.length;
+        arr.forEach((r, i) => {
+          r.t = (i + 1) / (n + 1);
+        });
+      }
+    }
+
+    // Hat icindeki tum cihazlari sirayla diz: slot fromSeq, sonra slot ici t
+    type DevPoint = SegRec & { lat: number; lon: number; idx: number };
+    const lineDevices: DevPoint[] = [];
+    for (let i = 0; i < linePoles.length - 1; i += 1) {
+      const a = linePoles[i];
+      const b = linePoles[i + 1];
+      const key = `${a.id}|${b.id}`;
+      const slot = slotSegs.get(key) ?? [];
+      for (const r of slot) {
+        const [lat, lon] = lerp(a, b, r.t);
+        lineDevices.push({ ...r, lat, lon, idx: lineDevices.length });
+      }
+    }
+
+    // Son alarmli (RED) cihaz indexi
+    let lastRedIdx = -1;
+    let firstGreenAfterRedIdx = -1;
+    for (let i = 0; i < lineDevices.length; i += 1) {
+      if (lineDevices[i].isRed) lastRedIdx = i;
+    }
+    if (lastRedIdx >= 0) {
+      // Son RED'ten sonraki ilk GREEN
+      for (let i = lastRedIdx + 1; i < lineDevices.length; i += 1) {
+        if (!lineDevices[i].isRed) {
+          firstGreenAfterRedIdx = i;
+          break;
+        }
+      }
+    }
+
+    // Hat polyline'i: tum direklerin sirali koordinatlari
+    const fullLine: [number, number][] = linePoles.map((p) => [p.latitude, p.longitude]);
+
+    // Cihaz konumlarina gore 3-parca cizim:
+    //   - "splitA" = son alarmli cihazin konumu (yoksa null)
+    //   - "splitB" = ilk alarmsiz cihaz konumu (yoksa hat ucu)
+    let splitA: [number, number] | null = null;
+    let splitB: [number, number] | null = null;
+    if (lastRedIdx >= 0) {
+      splitA = [lineDevices[lastRedIdx].lat, lineDevices[lastRedIdx].lon];
+      if (firstGreenAfterRedIdx >= 0) {
+        splitB = [lineDevices[firstGreenAfterRedIdx].lat, lineDevices[firstGreenAfterRedIdx].lon];
+      } else {
+        // Son RED'ten sonra GREEN cihaz yok -> hat ucu (son direk)
+        const last = linePoles[linePoles.length - 1];
+        splitB = [last.latitude, last.longitude];
+      }
+    }
+
+    // Polyline'i splitA ve splitB noktalarinda kes — gercek hat geometrisi
+    // korunarak. Yaklasim: her splitPoint'i en yakin polyline edge'inde
+    // dik projeksiyonla bulup polyline'i 2 parcaya ayir.
+    const splitPolyline = (
+      polyline: [number, number][],
+      splitAt: [number, number]
+    ): { pre: [number, number][]; post: [number, number][] } => {
+      if (polyline.length < 2) return { pre: polyline, post: [] };
+      let bestK = 0;
+      let bestD = Infinity;
+      let bestProj: [number, number] = polyline[0];
+      for (let k = 0; k < polyline.length - 1; k += 1) {
+        const a = polyline[k];
+        const b = polyline[k + 1];
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) continue;
+        const t = Math.max(
+          0,
+          Math.min(1, ((splitAt[0] - a[0]) * dx + (splitAt[1] - a[1]) * dy) / len2)
+        );
+        const projX = a[0] + t * dx;
+        const projY = a[1] + t * dy;
+        const ddx = projX - splitAt[0];
+        const ddy = projY - splitAt[1];
+        const d = ddx * ddx + ddy * ddy;
+        if (d < bestD) {
+          bestD = d;
+          bestK = k;
+          bestProj = [projX, projY];
+        }
+      }
+      return {
+        pre: [...polyline.slice(0, bestK + 1), bestProj],
+        post: [bestProj, ...polyline.slice(bestK + 1)]
+      };
+    };
+
+    let preGreen: [number, number][] = fullLine; // varsayilan: tamami yesil
+    let faultRed: [number, number][] = [];
+    let postGreen: [number, number][] = [];
+    if (splitA && splitB) {
+      const splitAtA = splitPolyline(fullLine, splitA);
+      preGreen = splitAtA.pre;
+      const remainder = splitAtA.post;
+      const splitAtB = splitPolyline(remainder, splitB);
+      faultRed = splitAtB.pre;
+      postGreen = splitAtB.post;
+    } else if (splitA) {
+      // Sadece son alarmli; hat ucuna kadar fault
+      const splitAtA = splitPolyline(fullLine, splitA);
+      preGreen = splitAtA.pre;
+      faultRed = splitAtA.post;
+    }
+
+    // Bounds: arıza aralığındaki direkleri ve cihazlari kapsa
     const fromSeq = fault.from_pole_seq ?? null;
     const toSeq = fault.to_pole_seq ?? null;
     const lo = fromSeq != null && toSeq != null ? Math.min(fromSeq, toSeq) : null;
     const hi = fromSeq != null && toSeq != null ? Math.max(fromSeq, toSeq) : null;
-
-    // Hat polyline'ini 3 parcaya boluyoruz (sequence_no sirasiyla):
-    //   pre   : sequence_no <= lo (arıza baslangici dahil) -> YESIL saglikli
-    //   fault : lo..hi arasi tum direkler -> KIRMIZI KESIK (ariza araligi)
-    //   post  : hi >= sequence_no -> YESIL saglikli
-    // Boylece pre ve fault paylasiyor "lo" indeksli direk; fault ve post
-    // paylasiyor "hi" indeksli direk — boylece polyline kopuk gozukmez.
-    const preGreen: [number, number][] = [];
-    const faultRed: [number, number][] = [];
-    const postGreen: [number, number][] = [];
-    if (lo !== null && hi !== null) {
-      for (const p of linePoles) {
-        const s = p.sequence_no;
-        if (s <= lo) preGreen.push([p.latitude, p.longitude]);
-        if (s >= lo && s <= hi) faultRed.push([p.latitude, p.longitude]);
-        if (s >= hi) postGreen.push([p.latitude, p.longitude]);
-      }
-    } else {
-      // sequence yoksa hepsini yesil ciz
-      for (const p of linePoles) preGreen.push([p.latitude, p.longitude]);
-    }
-
-    // Bounds — sadece arıza aralığı varsa onu, yoksa tum hat
     const focusPoles =
       lo !== null && hi !== null
         ? linePoles.filter((p) => p.sequence_no >= lo && p.sequence_no <= hi)
@@ -153,6 +328,19 @@ export function FaultDetailModal({
       Math.max(...lons) - Math.min(...lons)
     );
     const zoom = span < 0.003 ? 16 : span < 0.01 ? 15 : span < 0.03 ? 14 : span < 0.1 ? 13 : 11;
+
+    // Cihaz marker'lari listesi
+    const deviceMarkers = lineDevices.map((d) => {
+      const dev = (devices ?? []).find((dx) => dx.id === d.deviceId);
+      return {
+        deviceId: d.deviceId,
+        lat: d.lat,
+        lon: d.lon,
+        isRed: d.isRed,
+        name: dev?.name ?? `Cihaz #${d.deviceId}`,
+        code: dev?.code
+      };
+    });
 
     // Direk koordinat listesi (aralik icindekiler)
     const rangePoles = focusPoles.map((p) => ({
@@ -178,10 +366,13 @@ export function FaultDetailModal({
         isInFaultRange:
           lo !== null && hi !== null && p.sequence_no >= lo && p.sequence_no <= hi
       })),
-      rangePoles
+      rangePoles,
+      deviceMarkers
     };
   }, [
     gridSnapshot,
+    devices,
+    alarmActiveDeviceIds,
     fault.line_id,
     fault.from_pole_id,
     fault.to_pole_id,
@@ -331,7 +522,7 @@ export function FaultDetailModal({
                     ) : null}
                     {mapView.polesWithRole.map(({ p, isFromFault, isToFault, isInFaultRange }) => (
                       <Marker
-                        key={p.id}
+                        key={`p-${p.id}`}
                         position={[p.latitude, p.longitude]}
                         icon={miniPolePin(
                           String(p.sequence_no),
@@ -346,10 +537,29 @@ export function FaultDetailModal({
                         </Tooltip>
                       </Marker>
                     ))}
+                    {/* Cihaz marker'lari (RED/GREEN) */}
+                    {mapView.deviceMarkers.map((d) => (
+                      <Marker
+                        key={`d-${d.deviceId}`}
+                        position={[d.lat, d.lon]}
+                        icon={miniDeviceIcon(d.isRed)}
+                      >
+                        <Tooltip>
+                          <strong>{d.name}</strong>
+                          {d.code ? <><br /><span style={{ opacity: 0.7 }}>{d.code}</span></> : null}
+                          <br />
+                          <em style={{ color: d.isRed ? "#dc2626" : "#10b981" }}>
+                            {d.isRed ? "Arıza algıladı" : "Arıza algılamadı"}
+                          </em>
+                        </Tooltip>
+                      </Marker>
+                    ))}
                   </MapContainer>
                   <div className="fault-modal-map-legend">
                     <span><i style={{ background: "#ef4444" }} /> Arıza aralığı (kırmızı kesik)</span>
                     <span><i style={{ background: "#16a34a" }} /> Hat sağlıklı bölüm</span>
+                    <span><i className="fault-modal-legend-dot" style={{ background: "#dc2626" }} /> Arıza algılayan cihaz</span>
+                    <span><i className="fault-modal-legend-dot" style={{ background: "#10b981" }} /> Algılamayan cihaz</span>
                   </div>
                 </div>
               ) : (
@@ -433,12 +643,21 @@ export function FaultDetailModal({
             </div>
           </div>
 
-          {/* Orta kolon: ticket yönetimi (sorumluluk + durum + not) */}
+          {/* Orta kolon: ticket yönetimi — modern kart tasarımı */}
           <div className="fault-modal-mid">
-            <div className="fault-modal-section">
-              <h4>Sorumluluk</h4>
-              <div className="fault-modal-row">
-                <label className="fault-modal-label">Atanan</label>
+            {/* Sorumluluk kart */}
+            <div className="fault-modal-card">
+              <div className="fault-modal-card-head">
+                <span className="fault-modal-card-icon" style={{ background: "rgba(99,102,241,0.12)", color: "#6366f1" }}>
+                  <span className="material-symbols-outlined">assignment_ind</span>
+                </span>
+                <div>
+                  <h4>Sorumluluk</h4>
+                  <p>Arızadan sorumlu kişi ve mevcut durum</p>
+                </div>
+              </div>
+              <div className="fault-modal-field">
+                <label className="fault-modal-label">Atanan kullanıcı</label>
                 {canAssign ? (
                   <select
                     value={fault.assigned_to_username ?? ""}
@@ -453,42 +672,78 @@ export function FaultDetailModal({
                     ))}
                   </select>
                 ) : (
-                  <span className="fault-modal-value">
-                    {fault.assigned_to_full_name ?? fault.assigned_to_username ?? "—"}
-                  </span>
+                  <div className="fault-modal-assignee-display">
+                    {fault.assigned_to_username ? (
+                      <>
+                        <span className="fault-modal-assignee-avatar">
+                          {(fault.assigned_to_username || "?").substring(0, 2).toUpperCase()}
+                        </span>
+                        <div>
+                          <strong>{fault.assigned_to_full_name ?? fault.assigned_to_username}</strong>
+                          {fault.assigned_to_full_name ? (
+                            <small>{fault.assigned_to_username}</small>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="fault-modal-assignee-empty">Atanmamış</span>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="fault-modal-row">
+              <div className="fault-modal-field">
                 <label className="fault-modal-label">Durum</label>
-                <div className="fault-modal-status-buttons">
-                  {(["assigned", "in_progress", "resolved", "closed"] as const).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`fault-modal-status-btn ${fault.status === s ? "active" : ""}`}
-                      onClick={() => void handleStatus(s)}
-                      disabled={saving || !canEdit}
-                      style={
-                        fault.status === s
-                          ? { background: STATUS_COLOR[s], color: "#fff", borderColor: "transparent" }
-                          : undefined
-                      }
-                    >
-                      {STATUS_LABEL[s]}
-                    </button>
-                  ))}
+                <div className="fault-modal-status-grid">
+                  {(["assigned", "in_progress", "resolved", "closed"] as const).map((s) => {
+                    const active = fault.status === s;
+                    const color = STATUS_COLOR[s];
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        className={`fault-modal-status-card ${active ? "active" : ""}`}
+                        onClick={() => void handleStatus(s)}
+                        disabled={saving || !canEdit}
+                        style={
+                          active
+                            ? {
+                                background: color,
+                                color: "#fff",
+                                borderColor: color,
+                                boxShadow: `0 4px 12px ${color}40`
+                              }
+                            : { borderColor: `${color}40` }
+                        }
+                      >
+                        <span
+                          className="fault-modal-status-card-dot"
+                          style={{ background: color }}
+                        />
+                        <span>{STATUS_LABEL[s]}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            <div className="fault-modal-section">
-              <h4>Kısa Not</h4>
+            {/* Kısa Not kart */}
+            <div className="fault-modal-card">
+              <div className="fault-modal-card-head">
+                <span className="fault-modal-card-icon" style={{ background: "rgba(245,158,11,0.12)", color: "#d97706" }}>
+                  <span className="material-symbols-outlined">edit_note</span>
+                </span>
+                <div>
+                  <h4>Kısa Not</h4>
+                  <p>Hızlı bir özet — saha ekibi için ipucu</p>
+                </div>
+              </div>
               <textarea
-                rows={3}
+                rows={4}
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
                 disabled={saving || !canEdit}
-                placeholder="Kısa açıklama (opsiyonel)…"
+                placeholder="Örn: Direk #2 yakınında ağaç dalı temas etmiş gibi…"
               />
               {canEdit ? (
                 <button
@@ -497,6 +752,7 @@ export function FaultDetailModal({
                   onClick={() => void handleSaveNote()}
                   disabled={saving}
                 >
+                  <span className="material-symbols-outlined">save</span>
                   Notu Kaydet
                 </button>
               ) : null}

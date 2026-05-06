@@ -1814,6 +1814,8 @@ export function App() {
                 canAssign={session.role === "engineer" || session.role === "installer"}
                 loading={false}
                 gridSnapshot={gridSnapshot}
+                devices={devices}
+                alarms={alarms}
                 onAssign={handleAssignFault}
                 onUpdateStatus={handleUpdateFaultStatus}
                 onUpdateNote={handleUpdateFaultNote}
