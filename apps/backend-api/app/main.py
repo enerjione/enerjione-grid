@@ -191,6 +191,16 @@ def create_tables():
                 "sms_api_key VARCHAR(255) NOT NULL DEFAULT '')"
             )
         )
+        # Telegram bot ayarlari (mevcut deploylar icin migration).
+        connection.execute(
+            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE")
+        )
+        connection.execute(
+            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS telegram_bot_token VARCHAR(255) NOT NULL DEFAULT ''")
+        )
+        connection.execute(
+            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS telegram_chat_ids VARCHAR(2000) NOT NULL DEFAULT ''")
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS outbound_targets ("
@@ -429,6 +439,18 @@ def create_tables():
         )
         connection.execute(
             text("CREATE INDEX IF NOT EXISTS idx_alarm_rules_signal_key ON alarm_rules (signal_key)")
+        )
+        # Kanal-bazli bildirim flag'leri (kural duzeyinde acilip kapatilir).
+        # Default false: kullanici kasitla acmadigi surece email/sms/telegram
+        # gitmez (spam koruma).
+        connection.execute(
+            text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS notify_email BOOLEAN NOT NULL DEFAULT FALSE")
+        )
+        connection.execute(
+            text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS notify_sms BOOLEAN NOT NULL DEFAULT FALSE")
+        )
+        connection.execute(
+            text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS notify_telegram BOOLEAN NOT NULL DEFAULT FALSE")
         )
     db = SessionLocal()
     try:

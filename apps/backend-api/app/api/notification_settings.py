@@ -10,11 +10,16 @@ from app.schemas.notification import (
     NotificationSettingsUpdate,
     NotificationSmsTestRequest,
     NotificationSmtpTestRequest,
+    NotificationTelegramTestRequest,
     NotificationTestResult,
 )
 from app.services.event_service import record_event
 from app.services.notification_settings_service import get_or_create_notification_settings
-from app.services.notification_test_service import send_sms_test, send_smtp_test
+from app.services.notification_test_service import (
+    send_sms_test,
+    send_smtp_test,
+    send_telegram_test,
+)
 
 router = APIRouter(prefix="/notification-settings", tags=["notification-settings"])
 
@@ -44,6 +49,9 @@ def update_notification_settings(
     settings_row.sms_provider = payload.sms_provider
     settings_row.sms_api_url = payload.sms_api_url
     settings_row.sms_api_key = payload.sms_api_key
+    settings_row.telegram_enabled = payload.telegram_enabled
+    settings_row.telegram_bot_token = payload.telegram_bot_token
+    settings_row.telegram_chat_ids = payload.telegram_chat_ids
     record_event(
         db,
         category="settings",
@@ -136,3 +144,41 @@ def test_sms_settings(
         )
         db.commit()
         return NotificationTestResult(ok=False, detail=f"SMS test başarısız: {ex}")
+
+
+@router.post("/test-telegram", response_model=NotificationTestResult)
+def test_telegram_settings(
+    payload: NotificationTelegramTestRequest,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_notification_settings(db)
+    message = payload.message or "Horstman Smart Logger Telegram test."
+    try:
+        send_telegram_test(
+            settings_row,
+            chat_id=payload.chat_id,
+            message=message,
+            parse_mode="HTML",
+        )
+        record_event(
+            db,
+            category="settings",
+            event_type="notification_telegram_test_ok",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"Telegram test başarılı: chat={payload.chat_id}",
+        )
+        db.commit()
+        return NotificationTestResult(ok=True, detail="Telegram test mesajı gönderildi.")
+    except Exception as ex:
+        record_event(
+            db,
+            category="settings",
+            event_type="notification_telegram_test_failed",
+            severity="error",
+            actor_username=current_user.username,
+            message=f"Telegram test başarısız: {ex}",
+        )
+        db.commit()
+        return NotificationTestResult(ok=False, detail=f"Telegram test başarısız: {ex}")

@@ -39,3 +39,11 @@ class AlarmRule(Base):
     device_code_filter: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Bildirim kanallari — kural bazli secim. Web bildirimi her zaman gider
+    # (sistemin baslangictaki davranisi); diger kanallar opsiyonel.
+    # Default'lar False: kullanici kuraldan acmadan email/sms/telegram
+    # gitmez. Boylece "her alarm spam'lemesin" garantisi.
+    notify_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    notify_sms: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    notify_telegram: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

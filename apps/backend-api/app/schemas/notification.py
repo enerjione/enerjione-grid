@@ -12,6 +12,9 @@ class NotificationSettingsRead(BaseModel):
     sms_provider: str
     sms_api_url: str
     sms_api_key: str
+    telegram_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_chat_ids: str = ""
 
     class Config:
         from_attributes = True
@@ -28,6 +31,9 @@ class NotificationSettingsUpdate(BaseModel):
     sms_provider: str
     sms_api_url: str
     sms_api_key: str
+    telegram_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_chat_ids: str = ""
 
 
 class NotificationSmtpTestRequest(BaseModel):
@@ -38,6 +44,11 @@ class NotificationSmtpTestRequest(BaseModel):
 
 class NotificationSmsTestRequest(BaseModel):
     recipient_phone: str
+    message: str | None = None
+
+
+class NotificationTelegramTestRequest(BaseModel):
+    chat_id: str
     message: str | None = None
 
 

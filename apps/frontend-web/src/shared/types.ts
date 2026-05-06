@@ -344,6 +344,11 @@ export type NotificationSettings = {
   sms_provider: string;
   sms_api_url: string;
   sms_api_key: string;
+  /** Telegram Bot ile bildirim gondermek icin. */
+  telegram_enabled?: boolean;
+  telegram_bot_token?: string;
+  /** Virgulle ayrili chat ID listesi (kanal/grup). */
+  telegram_chat_ids?: string;
 };
 
 export type SignalDataType =
@@ -480,6 +485,11 @@ export type AlarmRuleRow = {
   debounce_sec: number;
   device_code_filter?: string | null;
   is_active: boolean;
+  /** Kural-bazli bildirim kanallari. Web bildirimi her zaman gider; bunlar
+   *  sadece kuraldan acildiysa email/sms/telegram tetiklenir. Default false. */
+  notify_email?: boolean;
+  notify_sms?: boolean;
+  notify_telegram?: boolean;
 };
 
 /** Backend host'unun anlik kaynak metrikleri (`/system-status/host`).

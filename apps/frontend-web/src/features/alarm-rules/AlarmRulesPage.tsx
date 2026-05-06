@@ -59,7 +59,10 @@ const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   hysteresis: 0,
   debounce_sec: 0,
   device_code_filter: "",
-  is_active: true
+  is_active: true,
+  notify_email: false,
+  notify_sms: false,
+  notify_telegram: false
 };
 
 function isBooleanComparator(c: AlarmComparator): boolean {
@@ -179,7 +182,10 @@ export function AlarmRulesPage({
         hysteresis: selectedRule.hysteresis,
         debounce_sec: selectedRule.debounce_sec,
         device_code_filter: selectedRule.device_code_filter ?? "",
-        is_active: selectedRule.is_active
+        is_active: selectedRule.is_active,
+        notify_email: selectedRule.notify_email === true,
+        notify_sms: selectedRule.notify_sms === true,
+        notify_telegram: selectedRule.notify_telegram === true
       });
       setLocalError("");
     }
@@ -554,6 +560,58 @@ export function AlarmRulesPage({
                           Virgülle ayırın. Boş bırakırsanız kural tüm cihazlara uygulanır.
                         </small>
                       </label>
+                    </fieldset>
+
+                    <fieldset className="rule-fieldset" disabled={!canEdit}>
+                      <legend>Bildirim Kanalları</legend>
+                      <p className="rule-hint" style={{ margin: "0 0 10px" }}>
+                        Bu kural tetiklendiğinde web bildirimi her zaman üretilir.
+                        Aşağıdakilerden seçili olanlar ek olarak gönderilir.
+                      </p>
+                      <div className="rule-channel-grid">
+                        <label className="rule-channel-option">
+                          <input
+                            type="checkbox"
+                            checked={form.notify_email === true}
+                            onChange={(e) =>
+                              setForm({ ...form, notify_email: e.target.checked })
+                            }
+                          />
+                          <span className="rule-channel-icon">✉️</span>
+                          <span className="rule-channel-label">
+                            <strong>E-posta</strong>
+                            <small>Sorumlu kullanıcılara HTML şablonlu mail.</small>
+                          </span>
+                        </label>
+                        <label className="rule-channel-option">
+                          <input
+                            type="checkbox"
+                            checked={form.notify_sms === true}
+                            onChange={(e) =>
+                              setForm({ ...form, notify_sms: e.target.checked })
+                            }
+                          />
+                          <span className="rule-channel-icon">📱</span>
+                          <span className="rule-channel-label">
+                            <strong>SMS</strong>
+                            <small>Telefon numarası kayıtlı kullanıcılara kısa mesaj.</small>
+                          </span>
+                        </label>
+                        <label className="rule-channel-option">
+                          <input
+                            type="checkbox"
+                            checked={form.notify_telegram === true}
+                            onChange={(e) =>
+                              setForm({ ...form, notify_telegram: e.target.checked })
+                            }
+                          />
+                          <span className="rule-channel-icon">📨</span>
+                          <span className="rule-channel-label">
+                            <strong>Telegram</strong>
+                            <small>Bildirim Ayarları'nda tanımlı tüm chat'lere gönderilir.</small>
+                          </span>
+                        </label>
+                      </div>
                     </fieldset>
 
                     {(localError || error) ? (

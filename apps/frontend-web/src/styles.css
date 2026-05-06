@@ -7778,6 +7778,61 @@ main.content.engineering-content:has(.device-management-panel) {
   }
 }
 
+/* Alarm kurali bildirim kanali secici (E-posta / SMS / Telegram).
+   Sade kart tarzi: ikon + baslik + aciklama, secim icin tum kart tiklanabilir. */
+.rule-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.rule-channel-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.rule-channel-option:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.rule-channel-option input[type="checkbox"] {
+  margin-top: 4px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: #4338ca;
+}
+.rule-channel-option:has(input:checked) {
+  border-color: #4338ca;
+  background: #eef2ff;
+  box-shadow: 0 0 0 1px #4338ca inset;
+}
+.rule-channel-icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.rule-channel-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rule-channel-label strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+.rule-channel-label small {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
 /* ===== Proje Ayarlari paneli =====
    Genis ekranda tum yatay alani kullansin. 1100px max-width yerine panelin
    bulundugu container ne kadarsa o kadar genisler. */

@@ -125,6 +125,10 @@ def recompute_faults(db: Session) -> None:
         else:
             open_by_line[f.line_id] = f
 
+    # Yeni fault'lar (bu turda olusturulanlar) — email dispatch icin biriktir.
+    # commit'ten sonra dispatch ederiz ki fault.id atanmis olsun.
+    new_faults_for_dispatch: list[tuple[FaultEvent, Pole | None]] = []
+
     handled_lines: set[int] = set()
 
     for line in lines:
@@ -196,6 +200,10 @@ def recompute_faults(db: Session) -> None:
                 first_green_dev.code if first_green_dev else None,
                 picked.username if picked else None,
             )
+            # Email dispatch icin biriktir; commit sonrasi gonderilecek.
+            # Konum: from_pole'un koordinatlarini kullan (saha personeli
+            # bu noktaya gider; fault aralık baslangici).
+            new_faults_for_dispatch.append((fault, from_pole))
         else:
             # Mevcut fault'i guncelle (cihaz/pole degismis olabilir)
             existing.last_red_device_id = last_red_seg.device_id  # type: ignore[assignment]
@@ -217,3 +225,36 @@ def recompute_faults(db: Session) -> None:
         logger.info("fault_resolved fault_id=%d line_id=%d", fault.id, line_id)
     # cagiran fonksiyon commit yapacak
     _ = regions_by_id  # used in API serializer
+
+    # Yeni acilan fault'lar icin email dispatch — flush ile id atanmasi gerek.
+    # commit cagiran fonksiyonda yapilacak; biz flush ederek id'leri elde
+    # ediyoruz. dispatch ic try/except ile sarili, hatalari yutuyor.
+    if new_faults_for_dispatch:
+        try:
+            db.flush()
+        except Exception:  # noqa: BLE001
+            logger.exception("fault_flush_failed_before_dispatch")
+            return
+        try:
+            from app.services.notification_dispatch_service import dispatch_fault_notifications
+        except Exception:  # noqa: BLE001
+            logger.exception("fault_notification_dispatch_import_failed")
+            return
+        for fault, from_pole in new_faults_for_dispatch:
+            try:
+                dispatch_fault_notifications(
+                    db,
+                    fault_id=fault.id,
+                    line_id=fault.line_id,
+                    region_id=fault.region_id,
+                    last_red_device_id=fault.last_red_device_id,
+                    first_green_device_id=fault.first_green_device_id,
+                    from_pole_seq=fault.from_pole_seq,
+                    to_pole_seq=fault.to_pole_seq,
+                    latitude=from_pole.latitude if from_pole else None,
+                    longitude=from_pole.longitude if from_pole else None,
+                    opened_at=fault.opened_at,
+                    assigned_to_username=fault.assigned_to_username,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("fault_email_dispatch_failed fault_id=%s", fault.id)

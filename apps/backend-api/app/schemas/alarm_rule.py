@@ -21,6 +21,11 @@ class AlarmRuleBase(BaseModel):
     debounce_sec: int = 0
     device_code_filter: str | None = None
     is_active: bool = True
+    # Kural-bazli bildirim kanallari (web bildirimi her zaman gider).
+    # Default false: kullanici acmadan email/sms/telegram gitmez.
+    notify_email: bool = False
+    notify_sms: bool = False
+    notify_telegram: bool = False
 
 
 class AlarmRuleCreate(AlarmRuleBase):
@@ -38,6 +43,9 @@ class AlarmRuleUpdate(BaseModel):
     debounce_sec: int | None = None
     device_code_filter: str | None = None
     is_active: bool | None = None
+    notify_email: bool | None = None
+    notify_sms: bool | None = None
+    notify_telegram: bool | None = None
 
 
 class AlarmRuleRead(AlarmRuleBase):
