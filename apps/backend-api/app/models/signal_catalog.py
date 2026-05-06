@@ -69,6 +69,12 @@ class SignalCatalog(Base):
     # IEC 104 yayini sinyal bazinda gecici kapatma. Type ID + IOA dolu olsa bile
     # bu False ise outbound dispatcher bu sinyali atlar. Default True (yayinla).
     iec104_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # IEC 104 frame'inde CP56Time2a zaman etiketi gondersin mi?
+    # True ise type id 1 -> 30 (M_SP_TB_1), 13 -> 36 (M_ME_TF_1) yapilir.
+    # Default: dijital (binary) sinyaller icin True (degisim anini SCADA bilsin),
+    # analog/sayac icin False (frame yuku artmasin). Backend bootstrap akisi
+    # mevcut sinyalleri data_type'a gore otomatik doldurur (bir kez).
+    iec104_with_timestamp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Modbus outbound adresleme. Kullanici outbound template uzerinden cihaza
     # standart bir Modbus adresi verir; cihaz instance'inin asdu/slave id'si

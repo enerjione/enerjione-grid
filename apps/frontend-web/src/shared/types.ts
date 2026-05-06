@@ -379,6 +379,9 @@ export type SignalCatalogRow = {
   iec104_ioa_offset?: number | null;
   /** Sinyal bazinda IEC 104 yayinini gecici kapatma. Default true. */
   iec104_enabled?: boolean;
+  /** CP56Time2a zaman etiketi tasiyan ASDU tipinde mi yayinlansin?
+   *  Dijital sinyallerde default true; analoglarda default false. */
+  iec104_with_timestamp?: boolean;
   // Modbus outbound (function code + register/coil address).
   modbus_function?: number | null;
   modbus_address?: number | null;

@@ -22,6 +22,7 @@ import asyncio
 import logging
 import struct
 from dataclasses import dataclass
+from datetime import datetime
 
 from iec104_outbound.encoder import (
     APCI_U_START_ACT,
@@ -46,7 +47,9 @@ from iec104_outbound.encoder import (
     build_u_frame,
     encode_asdu_counter,
     encode_asdu_float,
+    encode_asdu_float_t,
     encode_asdu_single_point,
+    encode_asdu_single_point_t,
     encode_interrogation_confirm,
     parse_apci,
 )
@@ -66,6 +69,10 @@ MAX_UNACKED_I = 12
 class PointValue:
     value: float | int | bool
     good: bool = True
+    # Telemetri kaynak zaman damgasi (UTC). CP56Time2a tasiyan tip'lerde
+    # (M_SP_TB_1, M_ME_TF_1) bu deger frame'e gomulur. None ise gonderim
+    # sirasinda "simdiki" zaman kullanilir.
+    timestamp: "datetime | None" = None
 
 
 class _ClientSession:
@@ -157,7 +164,15 @@ class IEC104Server:
                 logger.debug("server_wait_closed_error", exc_info=True)
             self._server = None
 
-    def update_point(self, *, device_code: str, signal_key: str, value, good: bool = True) -> None:
+    def update_point(
+        self,
+        *,
+        device_code: str,
+        signal_key: str,
+        value,
+        good: bool = True,
+        timestamp: datetime | None = None,
+    ) -> None:
         """Bir veri noktasinin degerini gunceller; **degisim varsa** CA ile COT=3 yayar.
 
         IEC 104 spontaneous reporting mantigi (Report by Exception):
@@ -168,6 +183,10 @@ class IEC104Server:
           - Hicbir client bagli degilse de _values cache'i guncellenir; kullanici
             sonradan baglanip GI cektiginde son deger gider (mevcut akis).
 
+        timestamp: telemetri kaynak zaman damgasi. Sinyal `with_timestamp` ile
+        konfigure edilmisse CP56Time2a olarak frame'e gomulur; aksi halde
+        ihmal edilir.
+
         Not: analog sinyaller icin ileride deadband (orn. %1 degisim altinda
         yayinla) eklenebilir; simdilik tam esitlik kontrolu yeterli.
         """
@@ -177,13 +196,15 @@ class IEC104Server:
             return
         previous = self._values.get(key)
         # Cache'i her zaman yenile (daha sonraki GI dogru deger versin).
-        self._values[key] = PointValue(value=value, good=good)
+        self._values[key] = PointValue(value=value, good=good, timestamp=timestamp)
         if previous is not None and previous.good == good and previous.value == value:
             # Hic degisim yok — ne deger ne quality. Spontaneous APDU bastirilir.
             return
         if not self._sessions:
             return
-        asdu = self._encode_single_value(point, value=value, good=good, cause=COT_SPONTANEOUS)
+        asdu = self._encode_single_value(
+            point, value=value, good=good, cause=COT_SPONTANEOUS, timestamp=timestamp
+        )
         if asdu is None:
             return
         for session in list(self._sessions):
@@ -322,11 +343,13 @@ class IEC104Server:
                     False if point.type_id == TYPE_M_SP_NA_1 else 0
                 )
                 asdu = self._encode_single_value(
-                    point, value=default_value, good=False, cause=COT_INTERROGATION
+                    point, value=default_value, good=False, cause=COT_INTERROGATION,
+                    timestamp=None,
                 )
             else:
                 asdu = self._encode_single_value(
-                    point, value=current.value, good=current.good, cause=COT_INTERROGATION
+                    point, value=current.value, good=current.good,
+                    cause=COT_INTERROGATION, timestamp=current.timestamp,
                 )
             if asdu is not None:
                 await self._send_i(session, asdu)
@@ -338,10 +361,29 @@ class IEC104Server:
         await self._send_i(session, terminate)
 
     def _encode_single_value(
-        self, point: PointAddress, *, value, good: bool, cause: int,
+        self,
+        point: PointAddress,
+        *,
+        value,
+        good: bool,
+        cause: int,
+        timestamp: datetime | None = None,
     ) -> bytes | None:
+        """Sinyal type'ina gore uygun ASDU encoder'i secer.
+
+        with_timestamp=True ise CP56Time2a tasiyan tip kullanilir:
+          - M_SP_NA_1 (1)  -> M_SP_TB_1 (30)
+          - M_ME_NC_1 (13) -> M_ME_TF_1 (36)
+          - M_IT_NA_1 (15) -> simdilik timestamp'siz kalir (M_IT_TB_1 = 37
+            ileride eklenebilir).
+        """
         ca = point.common_address
         if point.type_id == TYPE_M_SP_NA_1:
+            if point.with_timestamp:
+                return encode_asdu_single_point_t(
+                    common_address=ca, cause=cause, ioa=point.ioa,
+                    value=bool(value), good=good, timestamp=timestamp,
+                )
             return encode_asdu_single_point(
                 common_address=ca, cause=cause, ioa=point.ioa,
                 value=bool(value), good=good,
@@ -352,6 +394,11 @@ class IEC104Server:
             except (TypeError, ValueError):
                 fvalue = 0.0
                 good = False
+            if point.with_timestamp:
+                return encode_asdu_float_t(
+                    common_address=ca, cause=cause, ioa=point.ioa,
+                    value=fvalue, good=good, timestamp=timestamp,
+                )
             return encode_asdu_float(
                 common_address=ca, cause=cause, ioa=point.ioa,
                 value=fvalue, good=good,
@@ -426,9 +473,20 @@ class IEC104ServerManager:
             await self.undeploy(target_id)
 
     def update_point_threadsafe(
-        self, *, device_code: str, signal_key: str, value, good: bool = True,
+        self,
+        *,
+        device_code: str,
+        signal_key: str,
+        value,
+        good: bool = True,
+        timestamp: datetime | None = None,
     ) -> None:
-        """Her aktif server'a degerin yayilmasini saglayan thread-safe koprü."""
+        """Her aktif server'a degerin yayilmasini saglayan thread-safe koprü.
+
+        timestamp: telemetri kaynak zaman damgasi. Sinyalin IEC 104
+        konfigurasyonunda `with_timestamp` aktifse CP56Time2a olarak
+        frame'e gomulur; aksi halde server tarafinda ihmal edilir.
+        """
         if self._loop is None:
             return
 
@@ -436,7 +494,7 @@ class IEC104ServerManager:
             for server in self._servers.values():
                 server.update_point(
                     device_code=device_code, signal_key=signal_key,
-                    value=value, good=good,
+                    value=value, good=good, timestamp=timestamp,
                 )
 
         try:

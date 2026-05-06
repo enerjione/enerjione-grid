@@ -144,6 +144,8 @@ export function SignalsPage({
   const [editIec104TypeId, setEditIec104TypeId] = useState("");
   const [editIec104Ioa, setEditIec104Ioa] = useState("");
   const [editIec104IoaOffset, setEditIec104IoaOffset] = useState("");
+  // CP56Time2a zaman etiketi: dijitalde default true, analogda false.
+  const [editIec104WithTimestamp, setEditIec104WithTimestamp] = useState(false);
   const [editModbusFunction, setEditModbusFunction] = useState("");
   const [editModbusAddress, setEditModbusAddress] = useState("");
   const [editMqttTopic, setEditMqttTopic] = useState("");
@@ -174,6 +176,7 @@ export function SignalsPage({
       );
       // IEC 104 yayini default true; kayit yoksa veya alan tanimsizsa true kabul et.
       setEditIec104Enabled(selected.iec104_enabled !== false);
+      setEditIec104WithTimestamp(selected.iec104_with_timestamp === true);
       setEditIec104IoaOffset(
         selected.iec104_ioa_offset !== null && selected.iec104_ioa_offset !== undefined
           ? String(selected.iec104_ioa_offset)
@@ -224,6 +227,7 @@ export function SignalsPage({
         iec104_ioa: parseIntOrNull(editIec104Ioa),
         // iec104_ioa_offset deprecated — UI'dan kaldirildi, backend mevcut degeri korur.
         iec104_enabled: editIec104Enabled,
+        iec104_with_timestamp: editIec104WithTimestamp,
         modbus_function: parseIntOrNull(editModbusFunction),
         modbus_address: parseIntOrNull(editModbusAddress),
         mqtt_topic: editMqttTopic.trim() || null
@@ -594,6 +598,25 @@ export function SignalsPage({
                           placeholder="örn. 1001"
                           disabled={!canEdit || !editIec104Enabled}
                         />
+                      </label>
+                      {/* CP56Time2a zaman etiketi: dijital sinyallerde event'in
+                          olustugu tam zamani SCADA bilsin diye onerilir.
+                          Analog'larda (Type 13) genelde gereksiz yuk. */}
+                      <label className="signal-field signal-field--checkbox">
+                        <input
+                          type="checkbox"
+                          checked={editIec104WithTimestamp}
+                          onChange={(event) => setEditIec104WithTimestamp(event.target.checked)}
+                          disabled={!canEdit || !editIec104Enabled}
+                        />
+                        <span>
+                          Zaman etiketi gönder (CP56Time2a)
+                          <small className="signal-field-help">
+                            Aktifse Type 1 → 30 (M_SP_TB_1), 13 → 36 (M_ME_TF_1) olur.
+                            Dijital (binary) sinyallerde önerilir; SCADA olayın oluştuğu
+                            anı bilir. Analoglarda ek yük olmasın diye kapalı bırakın.
+                          </small>
+                        </span>
                       </label>
                       <p className="signal-fieldset-hint">
                         {editIec104Enabled

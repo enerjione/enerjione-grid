@@ -35,6 +35,11 @@ class PointAddress:
     type_id: int
     common_address: int
     ioa: int
+    # Sinyal IEC 104 mesajinda CP56Time2a zaman etiketi tasiyacak mi?
+    # True ise server, type_id 1 yerine 30 (M_SP_TB_1), 13 yerine 36
+    # (M_ME_TF_1) versiyonunu kullanir. Counter (15) icin henuz timestamp
+    # destegi eklenmedi (M_IT_TB_1 = 37) — gerekirse genisletilebilir.
+    with_timestamp: bool = False
 
 
 @dataclass(frozen=True)
@@ -122,7 +127,7 @@ def build_point_registry(
         (d for d in devices if d.get("is_active", True)),
         key=lambda d: str(d.get("code") or ""),
     )
-    mapped_signals: list[tuple[Mapping, int, int]] = []
+    mapped_signals: list[tuple[Mapping, int, int, bool]] = []
     for s in signals:
         if not s.get("is_active", True):
             continue
@@ -136,7 +141,12 @@ def build_point_registry(
             type_id = int(type_id_raw)
         except (TypeError, ValueError):
             continue
-        mapped_signals.append((s, type_id, ioa))
+        # Zaman etiketi flag'i: backend SignalCatalog.iec104_with_timestamp.
+        # default: dijital (binary) sinyallerde True, analog (float/counter)'de
+        # False. Backend default'lari katalog seed'inde set ediyor; eski
+        # kayitlarda da is_digital fallback ile dolduruluyor.
+        with_ts = bool(s.get("iec104_with_timestamp", False))
+        mapped_signals.append((s, type_id, ioa, with_ts))
 
     points: list[PointAddress] = []
     for device in active_devices:
@@ -144,7 +154,7 @@ def build_point_registry(
         if not device_code:
             continue
         ca = _resolve_device_ca(device, default=default_common_address)
-        for signal, type_id, ioa in mapped_signals:
+        for signal, type_id, ioa, with_ts in mapped_signals:
             signal_key = str(signal.get("key") or "")
             if not signal_key:
                 continue
@@ -155,6 +165,7 @@ def build_point_registry(
                     type_id=type_id,
                     common_address=ca,
                     ioa=ioa,
+                    with_timestamp=with_ts,
                 )
             )
 

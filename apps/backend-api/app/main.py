@@ -343,6 +343,45 @@ def create_tables():
                 "ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_enabled BOOLEAN NOT NULL DEFAULT TRUE"
             )
         )
+        # IEC 104 zaman etiketi (CP56Time2a). Default false; mevcut binary
+        # (data_type='binary') sinyalleri tek seferlik backfill ile true yap
+        # (kullanici cogu zaman dijital event'lere zaman bekler). Analog/sayac
+        # default false kalir.
+        connection.execute(
+            text(
+                "ALTER TABLE signal_catalog ADD COLUMN IF NOT EXISTS iec104_with_timestamp BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+        # Tek seferlik backfill: binary sinyalleri true yap. UPDATE her startup'ta
+        # idempotent calisir (zaten true olanlari yeniden true yapmak no-op);
+        # kullanici sonradan elle false yaparsa yine true'ya cevirmeyiz cunku
+        # sadece NULL'dan baslayanlari guncelliyoruz... ama default NOT NULL
+        # FALSE oldugu icin bu kosul islemez. Bunun yerine: sadece DEFAULT
+        # uygulanmis FALSE'lari binary'lerde true yap, ama bunu tespit etmek
+        # icin ek bir 'iec104_with_timestamp_user_set' flag gerek. SCADA pratigi
+        # standart: ilk migration anindaki backfill yeterli — sonradan kullanici
+        # tercihini ezmesin diye sadece tek seferlik calistir.
+        # Cozum: bir migration_marker tablosu kullan.
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS migration_markers ("
+                "key VARCHAR(120) PRIMARY KEY, "
+                "applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
+            )
+        )
+        marker_row = connection.execute(
+            text("SELECT 1 FROM migration_markers WHERE key='iec104_with_timestamp_binary_default'")
+        ).first()
+        if marker_row is None:
+            connection.execute(
+                text(
+                    "UPDATE signal_catalog SET iec104_with_timestamp = TRUE "
+                    "WHERE data_type = 'binary' AND iec104_type_id IS NOT NULL"
+                )
+            )
+            connection.execute(
+                text("INSERT INTO migration_markers(key) VALUES ('iec104_with_timestamp_binary_default')")
+            )
         # Direk tipi: normal direk, trafo, vb. Hat baslangic/bitis goruntusu kullanici secimine
         # gore degistirilebilir. Default 'pole'.
         connection.execute(

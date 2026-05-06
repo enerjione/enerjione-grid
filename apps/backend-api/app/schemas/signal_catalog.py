@@ -38,6 +38,10 @@ class SignalCatalogBase(BaseModel):
     iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
     # IEC 104 yayini sinyal bazinda gecici kapatma. Default True (yayinla).
     iec104_enabled: bool = True
+    # CP56Time2a zaman etiketli ASDU tipinde mi yayinlansin? Default False
+    # (analog sinyaller icin gereksiz yuk). Dijital sinyallere migration ile
+    # otomatik True yapilir; kullanici sinyal duzenleme formunda secebilir.
+    iec104_with_timestamp: bool = False
     # Modbus outbound (Holding=3, Input=4, Coil=1, Discrete=2)
     modbus_function: int | None = Field(default=None, ge=1, le=255)
     modbus_address: int | None = Field(default=None, ge=0, le=65_535)
@@ -68,6 +72,7 @@ class SignalCatalogUpdate(BaseModel):
     iec104_ioa: int | None = Field(default=None, ge=0, le=16_777_215)
     iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
     iec104_enabled: bool | None = None
+    iec104_with_timestamp: bool | None = None
     modbus_function: int | None = Field(default=None, ge=1, le=255)
     modbus_address: int | None = Field(default=None, ge=0, le=65_535)
     mqtt_topic: str | None = Field(default=None, max_length=200)

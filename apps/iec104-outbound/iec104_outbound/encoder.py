@@ -16,6 +16,8 @@ desteklenir:
     TypeID 1   M_SP_NA_1   binary single-point (1 byte SIQ)
     TypeID 13  M_ME_NC_1   measured short float (4 byte IEEE754 LE + QDS)
     TypeID 15  M_IT_NA_1   integrated totals (4 byte int32 LE + BCR)
+    TypeID 30  M_SP_TB_1   single-point with CP56Time2a timestamp
+    TypeID 36  M_ME_TF_1   measured short float with CP56Time2a timestamp
     TypeID 100 C_IC_NA_1   general interrogation command (gelen)
     TypeID 103 C_CS_NA_1   clock sync (gelen; yok sayilir, ack)
 
@@ -26,11 +28,14 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 # --- TypeID sabitleri (IEC 60870-5-101 Tablo) -------------------------------
 TYPE_M_SP_NA_1 = 1
 TYPE_M_ME_NC_1 = 13
 TYPE_M_IT_NA_1 = 15
+TYPE_M_SP_TB_1 = 30   # single-point + CP56Time2a
+TYPE_M_ME_TF_1 = 36   # short float + CP56Time2a
 TYPE_C_IC_NA_1 = 100
 TYPE_C_CS_NA_1 = 103
 
@@ -195,6 +200,77 @@ def encode_asdu_counter(
     bcr = (sequence & 0x1F) | (0x00 if good else 0x20)
     payload = struct.pack("<i", int(value)) + bytes((bcr,))
     return dui + _encode_ioa(ioa) + payload
+
+
+def _encode_cp56time2a(ts: datetime | None) -> bytes:
+    """7 byte CP56Time2a (IEC 60870-5-101 / 7.2.6.18).
+
+    Bayt duzeni:
+      [0..1] millisecond: 16-bit LE (saniye + milisaniye birlestirilmis,
+             0..59999 araliginda — saniye*1000 + ms)
+      [2]    minute:    bit 0..5 = 0..59, bit 6 = RES1, bit 7 = IV (invalid)
+      [3]    hour:      bit 0..4 = 0..23, bit 5..6 = RES2, bit 7 = SU (sum.time)
+      [4]    day-of-month: bit 0..4 = 1..31, bit 5..7 = day-of-week (0..7)
+      [5]    month:    bit 0..3 = 1..12, bit 4..7 = RES3
+      [6]    year:     bit 0..6 = 0..99 (yil-2000), bit 7 = RES4
+
+    ts None ise simdiki UTC zamani kullanilir; aksi halde verilen datetime
+    UTC'ye cevrilir. CP56Time2a TZ flag'i tasimaz, kararlilik icin UTC.
+    """
+    if ts is None:
+        ts = datetime.now(timezone.utc)
+    elif ts.tzinfo is None:
+        # Naive datetime'i UTC kabul et
+        ts = ts.replace(tzinfo=timezone.utc)
+    else:
+        ts = ts.astimezone(timezone.utc)
+    ms_field = (ts.second * 1000 + (ts.microsecond // 1000)) & 0xFFFF
+    minute = ts.minute & 0x3F          # IV=0, RES1=0
+    hour = ts.hour & 0x1F              # SU=0, RES2=0
+    # ISO weekday: Mon=1..Sun=7. CP56Time2a 1..7 ayni anlam (Pazar=7).
+    day_of_week = ts.isoweekday() & 0x07
+    day_of_month = ts.day & 0x1F
+    dow_dom = ((day_of_week & 0x07) << 5) | day_of_month
+    month = ts.month & 0x0F            # RES3=0
+    year = (ts.year - 2000) & 0x7F     # RES4=0
+    return struct.pack(
+        "<HBBBBB",
+        ms_field,
+        minute,
+        hour,
+        dow_dom,
+        month,
+        year,
+    )
+
+
+def encode_asdu_single_point_t(
+    *, common_address: int, cause: int, ioa: int,
+    value: bool, good: bool = True, originator: int = 0,
+    timestamp: datetime | None = None,
+) -> bytes:
+    """TypeID 30 — single-point + CP56Time2a (1+3+1+7 = 12 byte info object)."""
+    dui = _encode_dui(
+        type_id=TYPE_M_SP_TB_1, num_ix=1, sq=False,
+        cause=cause, originator=originator, common_address=common_address,
+    )
+    siq = (0x01 if value else 0x00) | (0x00 if good else 0x80)
+    return dui + _encode_ioa(ioa) + bytes((siq,)) + _encode_cp56time2a(timestamp)
+
+
+def encode_asdu_float_t(
+    *, common_address: int, cause: int, ioa: int,
+    value: float, good: bool = True, originator: int = 0,
+    timestamp: datetime | None = None,
+) -> bytes:
+    """TypeID 36 — short float + QDS + CP56Time2a (3+4+1+7 = 15 byte info object)."""
+    dui = _encode_dui(
+        type_id=TYPE_M_ME_TF_1, num_ix=1, sq=False,
+        cause=cause, originator=originator, common_address=common_address,
+    )
+    qds = 0x00 if good else 0x80
+    payload = struct.pack("<f", float(value)) + bytes((qds,))
+    return dui + _encode_ioa(ioa) + payload + _encode_cp56time2a(timestamp)
 
 
 def encode_interrogation_confirm(

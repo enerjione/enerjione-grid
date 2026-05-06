@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import datetime
 from threading import Event, Thread
 
 import pika
@@ -30,6 +31,25 @@ _GOOD_QUALITIES = {"good", "ok", ""}
 
 def _is_good(quality: str | None) -> bool:
     return str(quality or "good").strip().lower() in _GOOD_QUALITIES
+
+
+def _parse_iso_timestamp(raw: str | None) -> datetime | None:
+    """ISO 8601 zaman damgasini datetime'e cevir; basarisizsa None.
+
+    Tipik formatlar: "2026-05-06T12:34:56.123+00:00", "2026-05-06T12:34:56Z".
+    Python 3.10 fromisoformat 'Z' suffix'ini desteklemez; manuel cevir.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
 
 
 class TelemetryConsumer:
@@ -132,10 +152,16 @@ class TelemetryConsumer:
             return
         value = payload.get("value")
         good = _is_good(payload.get("quality"))
+        # source_timestamp ISO 8601 string olarak gelir (örn. "2026-05-06T...").
+        # CP56Time2a frame'lerinde kullanilir; sinyal `with_timestamp=False`
+        # ise yine de cache'lensin diye gonderiyoruz, encoder ihtiyac yoksa
+        # ihmal eder.
+        ts = _parse_iso_timestamp(payload.get("source_timestamp"))
         # Manager tum aktif server'lari dolasir; o target'ta bu point yoksa sessizce atlar.
         self.manager.update_point_threadsafe(
             device_code=str(device_code),
             signal_key=str(signal_key),
             value=value,
             good=good,
+            timestamp=ts,
         )
