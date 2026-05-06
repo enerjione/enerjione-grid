@@ -86,6 +86,18 @@ function sourceLabel(src: string | null | undefined): string | null {
   return _SOURCE_LABEL[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
 }
 
+// Alarm seviyesini Turkce etikete cevir.
+function levelLabelTr(level: string | null | undefined): string | null {
+  if (!level) return null;
+  const k = level.toLowerCase();
+  if (k === "critical" || k === "high") return "Kritik";
+  if (k === "warning" || k === "warn" || k === "medium") return "Uyarı";
+  if (k === "info" || k === "low") return "Bilgi";
+  if (k === "error") return "Hata";
+  // Bilinmeyen — ilk harf büyük
+  return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
 // Backend metadata.operator string'ini insan-okur sembol/metne cevir.
 function operatorSymbol(op: string | null | undefined): string {
   if (!op) return "";
@@ -271,16 +283,6 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 const deviceCode = meta?.device_code ?? null;
                 const srcLabel = sourceLabel(meta?.signal_source);
                 const opSym = operatorSymbol(meta?.operator);
-                // Sinyal etiketinin kullanici dostu hali: signal_key son
-                // bolumunden ".battery_voltage_satellite" -> "Battery Voltage
-                // Satellite" gibi degil, direkt anahtari gostermek SCADA
-                // konvansiyonu icin daha tanidik. Kaynak ayri rozet.
-                const signalKeyShort = (() => {
-                  const key = meta?.signal_key;
-                  if (!key) return null;
-                  const idx = key.indexOf(".");
-                  return idx >= 0 ? key.slice(idx + 1) : key;
-                })();
                 const valueDisplay = meta?.value_string
                   ? meta.value_string
                   : meta?.value !== null && meta?.value !== undefined
@@ -289,6 +291,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 const thresholdDisplay = meta?.threshold !== null && meta?.threshold !== undefined
                   ? fmtNumber(meta.threshold)
                   : null;
+                const levelTr = levelLabelTr(meta?.level ?? item.severity);
                 return (
                   <li
                     key={item.id}
@@ -303,25 +306,28 @@ export function NotificationBell({ token, onNavigate }: Props) {
                         <strong className="notif-item-title">{item.title}</strong>
                         {!item.is_read ? <span className="notif-item-dot" /> : null}
                       </div>
-                      {/* Cihaz / kaynak / sinyal rozet seridi — sadece alarm */}
-                      {isAlarm && (deviceLabel || srcLabel || signalKeyShort) ? (
-                        <div className="notif-item-chips">
+                      {/* Cihaz + Kaynak satir satir — kullanici hangi cihazin
+                          hangi kaynagindan (master/sat01/sat02) alarm geldigini
+                          tek bakista anlasin. Sinyal kodu yok (cok teknik). */}
+                      {isAlarm && (deviceLabel || srcLabel) ? (
+                        <div className="notif-item-rows">
                           {deviceLabel ? (
-                            <span className="notif-chip notif-chip--device" title={deviceCode ?? undefined}>
-                              <span className="material-symbols-outlined">router</span>
-                              {deviceLabel}
-                            </span>
+                            <div className="notif-row">
+                              <span className="notif-row-icon material-symbols-outlined">router</span>
+                              <span className="notif-row-label">Cihaz</span>
+                              <span className="notif-row-value" title={deviceCode ?? undefined}>
+                                {deviceLabel}
+                              </span>
+                            </div>
                           ) : null}
                           {srcLabel ? (
-                            <span className={`notif-chip notif-chip--source notif-chip--src-${(meta?.signal_source ?? "").toLowerCase()}`}>
-                              {srcLabel}
-                            </span>
-                          ) : null}
-                          {signalKeyShort ? (
-                            <span className="notif-chip notif-chip--signal" title={meta?.signal_key ?? undefined}>
-                              <span className="material-symbols-outlined">monitoring</span>
-                              {signalKeyShort}
-                            </span>
+                            <div className="notif-row">
+                              <span className="notif-row-icon material-symbols-outlined">satellite_alt</span>
+                              <span className="notif-row-label">Kaynak</span>
+                              <span className={`notif-row-value notif-row-value--src notif-row-value--src-${(meta?.signal_source ?? "").toLowerCase()}`}>
+                                {srcLabel}
+                              </span>
+                            </div>
                           ) : null}
                         </div>
                       ) : null}
@@ -343,13 +349,10 @@ export function NotificationBell({ token, onNavigate }: Props) {
                         </div>
                       ) : null}
                       <div className="notif-item-meta">
-                        <span className={`notif-item-cat ${sevCls}`}>
-                          {categoryLabel(item.category)}
-                        </span>
-                        {meta?.level ? (
-                          <span className={`notif-level-badge ${sevCls}`}>
-                            {meta.level.toUpperCase()}
-                          </span>
+                        {/* "Alarm" kategori rozeti yok — basliktan zaten bel-
+                            li. Sadece seviye + zaman gosteriyoruz, sade. */}
+                        {levelTr ? (
+                          <span className={`notif-level-badge ${sevCls}`}>{levelTr}</span>
                         ) : null}
                         {item.actor_username ? (
                           <span className="notif-item-actor">{item.actor_username}</span>
