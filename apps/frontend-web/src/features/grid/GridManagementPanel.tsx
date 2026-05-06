@@ -39,11 +39,17 @@ import {
   updateSegment
 } from "../../shared/api";
 import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region } from "../../shared/types";
+import type { GridSnapshot } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
 
 type Props = {
   accessToken: string;
   devices: DeviceRow[];
+  /** Tum sistemin topoloji ozeti — diger hat/bolgelerdeki kullanilan cihazlari
+   *  gizlemek icin kullanilir. Bir cihaz tum sistemde tek bir segmente
+   *  baglanabilir (DB unique constraint), bu yuzden "Cihaz Ekle" listesinde
+   *  baska hatta atanmis cihazlar gorunmemeli. */
+  gridSnapshot: GridSnapshot | null;
 };
 
 type DetailTab = "map" | "list";
@@ -102,7 +108,7 @@ function midpoint(a: Pole | undefined, b: Pole | undefined): [number, number] | 
   return [(a.latitude + b.latitude) / 2, (a.longitude + b.longitude) / 2];
 }
 
-export function GridManagementPanel({ accessToken, devices }: Props) {
+export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Props) {
   const toast = useToast();
 
   // ----- Veri state -----
@@ -375,15 +381,27 @@ export function GridManagementPanel({ accessToken, devices }: Props) {
     return slots;
   }, [detail, livePoles]);
 
-  // Cihazların hangileri zaten bir segmente bağlı (başka segmentte boştalar gizlensin)
+  // Cihazlarin hangileri TUM SISTEMDE zaten bir segmente bagli.
+  // DB seviyesinde LineSegment.device_id UNIQUE — bir cihaz sadece bir
+  // segmente baglanabilir. UI'de 'Cihaz Ekle' listesinde sadece tum sistemde
+  // bos olan cihazlar gorunmeli; aksi halde kullanici yanlislikla baska
+  // hatta atanmis bir cihazi secmeye calisabilir, backend 409 doner.
   const usedDeviceIds = useMemo<Set<number>>(() => {
     const s = new Set<number>();
-    if (!detail) return s;
-    for (const seg of detail.segments) {
-      if (seg.device_id) s.add(seg.device_id);
+    // Mevcut hat detayinin segmentleri (en taze bilgi).
+    if (detail) {
+      for (const seg of detail.segments) {
+        if (seg.device_id) s.add(seg.device_id);
+      }
+    }
+    // Tum sistem snapshot'i (diger hat ve bolgelerdeki kullanilan cihazlar).
+    if (gridSnapshot) {
+      for (const seg of gridSnapshot.segments) {
+        if (seg.device_id) s.add(seg.device_id);
+      }
     }
     return s;
-  }, [detail]);
+  }, [detail, gridSnapshot]);
 
   const availableDevices = useMemo<DeviceRow[]>(
     () => devices.filter((d) => !usedDeviceIds.has(d.id)),

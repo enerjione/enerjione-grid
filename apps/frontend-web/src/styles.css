@@ -5846,10 +5846,16 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .grid-mgmt-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr) minmax(420px, 2.5fr);
-  gap: 14px;
+  /* Bolge ve Hat kartlari kompakt, harita maksimum genis. */
+  grid-template-columns: 240px 280px minmax(0, 1fr);
+  gap: 12px;
   flex: 1;
   min-height: 0;
+}
+@media (max-width: 1280px) {
+  .grid-mgmt-layout {
+    grid-template-columns: 200px 240px minmax(0, 1fr);
+  }
 }
 
 .grid-mgmt-col {
