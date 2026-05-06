@@ -1351,7 +1351,19 @@ export function App() {
   // anda etkili olur.
   const filteredDashboardDevices = useMemo(() => {
     const q = dashboardSearch.trim().toLowerCase();
+    // gridSnapshot henuz yuklenmediginde topology bos olur — bu durumda
+    // cihazlari "hat'a atanmamis" sayip filtrelemek tum listeyi siler.
+    // O yuzden snapshot bilgisi varken (en az bir hat varken) "hat'a
+    // atanmis" filtresini uygula; aksi halde cihazlari tum kalsin.
+    const topologyReady = !!gridSnapshot && deviceTopologyInfo.size >= 0 && (gridSnapshot.lines.length > 0);
     return devices.filter((d) => {
+      // Anasayfa = "izlenen sebeke". Cihaz herhangi bir hat segmentine
+      // ATANMAMIS ise anasayfada (sidebar/harita/canli degerler) gosterilmez.
+      // Cihaz Yonetimi'nde tum cihazlar ayrica yonetilir; oradan silmek
+      // yerine sadece hat'tan kaldirmak yeterli — cihaz kayitli kalir,
+      // tekrar atanabilir; ama gosterim acisindan "topolojinin parcasi
+      // degil" sayilir.
+      if (topologyReady && !deviceTopologyInfo.has(d.id)) return false;
       if (dashboardStatusFilter === "online" && d.communicationStatus !== "online") return false;
       if (dashboardStatusFilter === "offline" && d.communicationStatus === "online") return false;
       if (dashboardStatusFilter === "alarm" && !d.alarmActive) return false;
@@ -1375,6 +1387,7 @@ export function App() {
       return true;
     });
   }, [
+    gridSnapshot,
     devices,
     dashboardSearch,
     dashboardStatusFilter,
