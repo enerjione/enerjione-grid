@@ -12,24 +12,49 @@ const CATEGORY_LABELS: Record<string, string> = {
   auth: "Giriş ve oturum",
   user: "Kullanıcı yönetimi",
   alarm: "Alarmlar",
+  "alarm-rule": "Alarm kuralı",
+  alarm_assignment: "Alarm ataması",
+  alarm_comment: "Alarm yorumu",
   notification: "Bildirim gönderimi",
-  settings: "SMTP / SMS ayarları",
+  settings: "Bildirim ayarları",
+  "project-settings": "Proje ayarları",
   outbound: "Dış sistemlere aktarım",
+  outbound_target: "Outbound hedefleri",
   telemetry: "Cihaz telemetrisi",
+  device: "Cihaz yönetimi",
+  signal: "Sinyal kataloğu",
+  gateway: "Gateway yönetimi",
+  grid: "Hat yönetimi",
+  "responsibility-area": "Sorumluluk alanı",
+  responsibility_area: "Sorumluluk alanı",
+  fault: "Hat arızası",
   system: "Sistem"
 };
+
+/** Bazi kategoriler "key.like.this" yerine isim turetilebilir; yine de
+ *  bilinmeyen bir kategori gelirse insan-okur formata cevirelim:
+ *    "alarm-rule"           -> "Alarm rule"
+ *    "responsibility_area"  -> "Responsibility area"
+ *  Bu basliklar sadece fallback amacli; "Diger (xxx)" benzeri parantezli
+ *  ham gosterim KULLANILMAZ. */
+function _humanize(category: string): string {
+  if (!category) return "Diğer";
+  const cleaned = category.replace(/[_-]+/g, " ").trim();
+  if (!cleaned) return "Diğer";
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
 
 export function severityLabelTr(severity: string): string {
   return SEVERITY_LABELS[severity] ?? severity;
 }
 
 export function categoryLabelTr(category: string): string {
-  return CATEGORY_LABELS[category] ?? `Diğer (${category})`;
+  return CATEGORY_LABELS[category] ?? _humanize(category);
 }
 
 /** Filtre seçeneklerinde: bilinmeyen kategori satır içi de gösterilsin. */
 export function categoryFilterLabel(category: string): string {
-  return CATEGORY_LABELS[category] ?? category;
+  return CATEGORY_LABELS[category] ?? _humanize(category);
 }
 
 export function severityPillClass(severity: string): string {
@@ -45,10 +70,22 @@ const CATEGORY_MOD: Record<string, string> = {
   auth: "auth",
   user: "user",
   alarm: "alarm",
+  "alarm-rule": "alarm",
+  alarm_assignment: "alarm",
+  alarm_comment: "alarm",
   notification: "notification",
   settings: "settings",
+  "project-settings": "settings",
   outbound: "outbound",
+  outbound_target: "outbound",
   telemetry: "telemetry",
+  device: "telemetry",
+  signal: "telemetry",
+  gateway: "telemetry",
+  grid: "telemetry",
+  "responsibility-area": "user",
+  responsibility_area: "user",
+  fault: "alarm",
   system: "system"
 };
 

@@ -200,6 +200,43 @@ def recompute_faults(db: Session) -> None:
                 first_green_dev.code if first_green_dev else None,
                 picked.username if picked else None,
             )
+            # Olay kaydi: yeni fault aciliyor — Olaylar sayfasinda gozuksun.
+            # Mesaj kullanici dostu Turkce; metadata'da line/region/device
+            # detaylari (gerekirse genisletilebilir).
+            try:
+                from app.services.event_service import record_event
+                region_obj = regions_by_id.get(line.region_id)
+                last_red_label = last_red_dev.name if last_red_dev else (
+                    last_red_dev.code if last_red_dev else "—"
+                )
+                msg = (
+                    f"Hat arızası açıldı: {line.name}"
+                    + (f" ({region_obj.name})" if region_obj else "")
+                    + f" — Direk #{fault.from_pole_seq} ↔ #{fault.to_pole_seq}"
+                    + f", Son aktif cihaz: {last_red_label}"
+                )
+                record_event(
+                    db,
+                    category="fault",
+                    event_type="fault_opened",
+                    severity="warning",
+                    device_code=last_red_dev.code if last_red_dev else None,
+                    message=msg,
+                    metadata={
+                        "line_id": line.id,
+                        "line_code": line.code,
+                        "line_name": line.name,
+                        "region_id": line.region_id,
+                        "region_name": region_obj.name if region_obj else None,
+                        "from_pole_seq": fault.from_pole_seq,
+                        "to_pole_seq": fault.to_pole_seq,
+                        "last_red_device_id": fault.last_red_device_id,
+                        "first_green_device_id": fault.first_green_device_id,
+                        "assigned_to": picked.username if picked else None,
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("fault_record_event_failed")
             # Email dispatch icin biriktir; commit sonrasi gonderilecek.
             # Konum: from_pole'un koordinatlarini kullan (saha personeli
             # bu noktaya gider; fault aralık baslangici).
@@ -223,6 +260,31 @@ def recompute_faults(db: Session) -> None:
         fault.status = "resolved"
         fault.resolved_at = now
         logger.info("fault_resolved fault_id=%d line_id=%d", fault.id, line_id)
+        # Olay kaydi: ariza normale dondu.
+        try:
+            from app.services.event_service import record_event
+            line_obj = next((l for l in lines if l.id == line_id), None)
+            region_obj = regions_by_id.get(line_obj.region_id) if line_obj else None
+            line_name = line_obj.name if line_obj else f"#{line_id}"
+            msg = (
+                f"Hat arızası normale döndü: {line_name}"
+                + (f" ({region_obj.name})" if region_obj else "")
+            )
+            record_event(
+                db,
+                category="fault",
+                event_type="fault_resolved",
+                severity="info",
+                message=msg,
+                metadata={
+                    "fault_id": fault.id,
+                    "line_id": line_id,
+                    "line_name": line_name,
+                    "region_name": region_obj.name if region_obj else None,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("fault_resolved_record_event_failed")
     # cagiran fonksiyon commit yapacak
     _ = regions_by_id  # used in API serializer
 
