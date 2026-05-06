@@ -257,10 +257,6 @@ export function FaultListPage({
                     </div>
                   </div>
                 </div>
-                <div className="faults-card-cta">
-                  <span>Detay</span>
-                  <span className="material-symbols-outlined">arrow_forward_ios</span>
-                </div>
               </button>
             );
           })
