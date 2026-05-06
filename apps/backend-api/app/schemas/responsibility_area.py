@@ -37,11 +37,30 @@ class ResponsibilityAreaDeviceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ResponsibilityAreaRegionRead(BaseModel):
+    id: int
+    code: str
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ResponsibilityAreaLineRead(BaseModel):
+    id: int
+    code: str
+    name: str
+    region_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ResponsibilityAreaRead(ResponsibilityAreaBase):
     id: int
     created_at: datetime
     user_count: int = 0
     device_count: int = 0
+    region_count: int = 0
+    line_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,3 +68,5 @@ class ResponsibilityAreaRead(ResponsibilityAreaBase):
 class ResponsibilityAreaDetail(ResponsibilityAreaRead):
     users: list[ResponsibilityAreaUserRead] = []
     devices: list[ResponsibilityAreaDeviceRead] = []
+    regions: list[ResponsibilityAreaRegionRead] = []
+    lines: list[ResponsibilityAreaLineRead] = []

@@ -1204,3 +1204,35 @@ export async function removeDeviceFromArea(token: string, areaId: number, device
   });
   if (!response.ok) throw await buildApiError(response, "Cihaz alandan çıkarılamadı.");
 }
+
+export async function addRegionToArea(token: string, areaId: number, regionId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/regions/${regionId}`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bölge alana eklenemedi.");
+}
+
+export async function removeRegionFromArea(token: string, areaId: number, regionId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/regions/${regionId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bölge alandan çıkarılamadı.");
+}
+
+export async function addLineToArea(token: string, areaId: number, lineId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/lines/${lineId}`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Hat alana eklenemedi.");
+}
+
+export async function removeLineFromArea(token: string, areaId: number, lineId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/lines/${lineId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Hat alandan çıkarılamadı.");
+}

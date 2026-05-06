@@ -352,6 +352,8 @@ export type ResponsibilityAreaRow = {
   created_at: string;
   user_count: number;
   device_count: number;
+  region_count?: number;
+  line_count?: number;
 };
 
 export type ResponsibilityAreaUser = {
@@ -367,9 +369,24 @@ export type ResponsibilityAreaDevice = {
   name: string;
 };
 
+export type ResponsibilityAreaRegion = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+export type ResponsibilityAreaLine = {
+  id: number;
+  code: string;
+  name: string;
+  region_id: number;
+};
+
 export type ResponsibilityAreaDetail = ResponsibilityAreaRow & {
   users: ResponsibilityAreaUser[];
   devices: ResponsibilityAreaDevice[];
+  regions?: ResponsibilityAreaRegion[];
+  lines?: ResponsibilityAreaLine[];
 };
 
 export type AlarmLevel = "info" | "warning" | "critical";

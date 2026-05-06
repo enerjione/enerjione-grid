@@ -38,6 +38,28 @@ responsibility_area_devices = Table(
 )
 
 
+# M2M: Sorumluluk alani <-> Bolge
+# Bolge atandiginda o bolgenin TUM hatlari ve hatlar uzerindeki TUM cihazlar
+# scope'a dahil olur. Boylece her cihazi tek tek atamaya gerek kalmaz.
+responsibility_area_regions = Table(
+    "responsibility_area_regions",
+    Base.metadata,
+    Column("area_id", Integer, ForeignKey("responsibility_areas.id", ondelete="CASCADE"), primary_key=True),
+    Column("region_id", Integer, ForeignKey("regions.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+# M2M: Sorumluluk alani <-> Hat
+# Hat atandiginda o hattin tum cihazlari scope'a dahil olur (bolgeden daha
+# spesifik granularite).
+responsibility_area_lines = Table(
+    "responsibility_area_lines",
+    Base.metadata,
+    Column("area_id", Integer, ForeignKey("responsibility_areas.id", ondelete="CASCADE"), primary_key=True),
+    Column("line_id", Integer, ForeignKey("lines.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
 class ResponsibilityArea(Base):
     __tablename__ = "responsibility_areas"
 

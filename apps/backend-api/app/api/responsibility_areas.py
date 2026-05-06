@@ -19,9 +19,12 @@ from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.enums import UserRole
+from app.models.grid_topology import Line, Region
 from app.models.responsibility_area import (
     ResponsibilityArea,
     responsibility_area_devices,
+    responsibility_area_lines,
+    responsibility_area_regions,
     responsibility_area_users,
 )
 from app.models.user import User
@@ -29,7 +32,9 @@ from app.schemas.responsibility_area import (
     ResponsibilityAreaCreate,
     ResponsibilityAreaDetail,
     ResponsibilityAreaDeviceRead,
+    ResponsibilityAreaLineRead,
     ResponsibilityAreaRead,
+    ResponsibilityAreaRegionRead,
     ResponsibilityAreaUpdate,
     ResponsibilityAreaUserRead,
 )
@@ -63,6 +68,16 @@ def _build_read(db: Session, area: ResponsibilityArea) -> ResponsibilityAreaRead
         .select_from(responsibility_area_devices)
         .where(responsibility_area_devices.c.area_id == area.id)
     ) or 0
+    region_count = db.scalar(
+        select(func.count())
+        .select_from(responsibility_area_regions)
+        .where(responsibility_area_regions.c.area_id == area.id)
+    ) or 0
+    line_count = db.scalar(
+        select(func.count())
+        .select_from(responsibility_area_lines)
+        .where(responsibility_area_lines.c.area_id == area.id)
+    ) or 0
     return ResponsibilityAreaRead(
         id=area.id,
         code=area.code,
@@ -72,6 +87,8 @@ def _build_read(db: Session, area: ResponsibilityArea) -> ResponsibilityAreaRead
         created_at=area.created_at,
         user_count=int(user_count),
         device_count=int(device_count),
+        region_count=int(region_count),
+        line_count=int(line_count),
     )
 
 
@@ -131,11 +148,29 @@ def get_area(
             select(responsibility_area_devices.c.device_id).where(responsibility_area_devices.c.area_id == area_id)
         ).all()
     ]
+    region_ids = [
+        row[0]
+        for row in db.execute(
+            select(responsibility_area_regions.c.region_id).where(responsibility_area_regions.c.area_id == area_id)
+        ).all()
+    ]
+    line_ids = [
+        row[0]
+        for row in db.execute(
+            select(responsibility_area_lines.c.line_id).where(responsibility_area_lines.c.area_id == area_id)
+        ).all()
+    ]
     users = (
         list(db.scalars(select(User).where(User.id.in_(user_ids))).all()) if user_ids else []
     )
     devices = (
         list(db.scalars(select(Device).where(Device.id.in_(device_ids))).all()) if device_ids else []
+    )
+    regions = (
+        list(db.scalars(select(Region).where(Region.id.in_(region_ids))).all()) if region_ids else []
+    )
+    lines = (
+        list(db.scalars(select(Line).where(Line.id.in_(line_ids))).all()) if line_ids else []
     )
     base = _build_read(db, area)
     return ResponsibilityAreaDetail(
@@ -147,6 +182,8 @@ def get_area(
         created_at=base.created_at,
         user_count=base.user_count,
         device_count=base.device_count,
+        region_count=base.region_count,
+        line_count=base.line_count,
         users=[
             ResponsibilityAreaUserRead(
                 id=u.id, username=u.username, full_name=u.full_name, email=u.email
@@ -155,6 +192,13 @@ def get_area(
         ],
         devices=[
             ResponsibilityAreaDeviceRead(id=d.id, code=d.code, name=d.name) for d in devices
+        ],
+        regions=[
+            ResponsibilityAreaRegionRead(id=r.id, code=r.code, name=r.name) for r in regions
+        ],
+        lines=[
+            ResponsibilityAreaLineRead(id=l.id, code=l.code, name=l.name, region_id=l.region_id)
+            for l in lines
         ],
     )
 
@@ -343,6 +387,132 @@ def remove_device_from_area(
             device_code=device.code,
             message=f"{device.name} cihazı '{area.name}' sorumluluk alanından çıkarıldı",
             metadata={"area_id": area_id, "area_name": area.name, "device_id": device_id, "device_code": device.code},
+        )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ============= Region (Bolge) atamasi =============
+
+@router.post("/{area_id}/regions/{region_id}", status_code=status.HTTP_204_NO_CONTENT)
+def add_region_to_area(
+    area_id: int,
+    region_id: int,
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    area = db.get(ResponsibilityArea, area_id)
+    region = db.get(Region, region_id)
+    if area is None or region is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alan veya bölge bulunamadı.")
+    exists = db.execute(
+        select(responsibility_area_regions).where(
+            responsibility_area_regions.c.area_id == area_id,
+            responsibility_area_regions.c.region_id == region_id,
+        )
+    ).first()
+    if not exists:
+        db.execute(responsibility_area_regions.insert().values(area_id=area_id, region_id=region_id))
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_region_added",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"'{region.name}' bölgesi '{area.name}' sorumluluk alanına eklendi",
+            metadata={"area_id": area_id, "area_name": area.name, "region_id": region_id, "region_name": region.name},
+        )
+        db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{area_id}/regions/{region_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_region_from_area(
+    area_id: int,
+    region_id: int,
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    area = db.get(ResponsibilityArea, area_id)
+    region = db.get(Region, region_id)
+    db.execute(
+        sqlalchemy_delete(responsibility_area_regions).where(
+            responsibility_area_regions.c.area_id == area_id,
+            responsibility_area_regions.c.region_id == region_id,
+        )
+    )
+    if area is not None and region is not None:
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_region_removed",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"'{region.name}' bölgesi '{area.name}' sorumluluk alanından çıkarıldı",
+            metadata={"area_id": area_id, "area_name": area.name, "region_id": region_id, "region_name": region.name},
+        )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ============= Line (Hat) atamasi =============
+
+@router.post("/{area_id}/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
+def add_line_to_area(
+    area_id: int,
+    line_id: int,
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    area = db.get(ResponsibilityArea, area_id)
+    line = db.get(Line, line_id)
+    if area is None or line is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alan veya hat bulunamadı.")
+    exists = db.execute(
+        select(responsibility_area_lines).where(
+            responsibility_area_lines.c.area_id == area_id,
+            responsibility_area_lines.c.line_id == line_id,
+        )
+    ).first()
+    if not exists:
+        db.execute(responsibility_area_lines.insert().values(area_id=area_id, line_id=line_id))
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_line_added",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"'{line.name}' hattı '{area.name}' sorumluluk alanına eklendi",
+            metadata={"area_id": area_id, "area_name": area.name, "line_id": line_id, "line_name": line.name},
+        )
+        db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{area_id}/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_line_from_area(
+    area_id: int,
+    line_id: int,
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    area = db.get(ResponsibilityArea, area_id)
+    line = db.get(Line, line_id)
+    db.execute(
+        sqlalchemy_delete(responsibility_area_lines).where(
+            responsibility_area_lines.c.area_id == area_id,
+            responsibility_area_lines.c.line_id == line_id,
+        )
+    )
+    if area is not None and line is not None:
+        record_event(
+            db,
+            category="responsibility_area",
+            event_type="area_line_removed",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"'{line.name}' hattı '{area.name}' sorumluluk alanından çıkarıldı",
+            metadata={"area_id": area_id, "area_name": area.name, "line_id": line_id, "line_name": line.name},
         )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
