@@ -527,7 +527,55 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       }
     }
 
-    // 4) BESLEME YONUNDE DFS — RED -> GREEN gecisini yakala
+    // 4) ON HESAPLAMA: Her node icin "subtreeHasRed" — node'un altindaki
+    //    (besleme yonunde) subtree'de en az bir RED cihaz var mi?
+    //
+    // Bu bilgi sayesinde branşman noktalarinda akim hangi dala
+    // "ilerledi" sezgisini kullaniriz: RED iceren dal, akimin gittigi
+    // koldur. Diger dallar (sadece GREEN veya cihazsiz) ana yolun
+    // disindadir; oradaki GREEN cihazlar ariza yolunda DEGIL — yani
+    // ana hattaki RED'den o yondeki GREEN'e fault olusturulmamali.
+    const subtreeHasRed = new Map<string, boolean>();
+    {
+      // Iteratif post-order: cocuklarin sonucu hesaplanmadan ebeveyn
+      // hesaplanamaz. Stack'te (node, phase) yaklaşimi.
+      type Frame = { nodeId: string; phase: 0 | 1 };
+      const stack: Frame[] = rootNodeIds.map((id) => ({ nodeId: id, phase: 0 as 0 | 1 }));
+      while (stack.length > 0) {
+        const f = stack[stack.length - 1];
+        const node = nodes.get(f.nodeId);
+        if (!node) {
+          stack.pop();
+          continue;
+        }
+        if (f.phase === 0) {
+          f.phase = 1;
+          const outs = outEdges.get(f.nodeId) ?? [];
+          for (const eid of outs) {
+            const e = edgeById.get(eid);
+            if (!e) continue;
+            stack.push({ nodeId: e.toNodeId, phase: 0 });
+          }
+        } else {
+          stack.pop();
+          // Cocuklarin sonuclarini birlestir
+          let has = false;
+          if (node.kind === "device" && node.isRed) has = true;
+          const outs = outEdges.get(f.nodeId) ?? [];
+          for (const eid of outs) {
+            const e = edgeById.get(eid);
+            if (!e) continue;
+            if (subtreeHasRed.get(e.toNodeId)) {
+              has = true;
+              break;
+            }
+          }
+          subtreeHasRed.set(f.nodeId, has);
+        }
+      }
+    }
+
+    // 5) BESLEME YONUNDE DFS — RED -> GREEN gecisini yakala
     //
     // Mantik: Cihaz RED ise akim ondan gecmis demek; akim son RED
     // cihazdan sonraki bolgede arizaya ugrayip ilk GREEN cihaza
@@ -535,22 +583,17 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     // mikro-edge'ler (cihaz olmayan ara segmentler dahil) fault
     // adayidir.
     //
-    // Implementation:
-    //   - Her path icin "pendingEdges" listesi tasinir.
-    //   - lastState=red iken gezilen her edge pendingEdges'e eklenir.
-    //   - Bir GREEN cihaza ulasinca pendingEdges + bu edge -> hepsi
-    //     faultEdgeIds'e yazilir; lastState=green.
-    //   - Bir RED cihaza ulasinca pendingEdges TEMIZLENIR (akim daha
-    //     ileri gitti; eski adaylar saglikli sayilir); lastState=red.
-    //   - lastState=null iken edge'ler pending olmaz.
-    //   - Pole node geçiş edge'i: state degismez ama state=red ise
-    //     pendingEdges'e eklenir.
-    //
-    // Cycle koruma: visited node seti DFS sirasinda kullanilir; ama
-    // DFS state'i path-bagimli oldugundan node'u ziyaret etmek visited
-    // ile isaretlenmez (her path'te ayri pendingEdges olabilir).
-    // Bunun yerine her edge sadece BIR YONDE (besleme yonunde) gezilir
-    // ve outEdges kullanildigindan loop riski yok (graf agac yapida).
+    // BRANSMAN KURALI: Bir node'un birden fazla out-edge'i varsa
+    // (bransman noktasi), state=red iken sadece "subtreeHasRed=true"
+    // olan dallar akimin gittigi yolu temsil eder; pending fault
+    // arayisi orada devam eder. Diger dallar (sadece GREEN var):
+    //   * lastState korunur (state=red propagate edilmez ki dalda
+    //     ilk gelen GREEN fault olarak yorumlanmasin),
+    //   * dal yine de gezilir (cihazlar isaretlenir, state guncellenir),
+    //   * ama pending fault'a yazilmaz.
+    // Bu sayede ana hatta RED cihaz varken bir kola dal RED, diger
+    // kola GREEN ise: RED dali ariza arar, GREEN dal "akim oraya da
+    // ulasti" sayilir ve normal yesil cizilir.
     const faultEdgeIds = new Set<string>();
     {
       type Item = {
@@ -566,46 +609,72 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       while (stack.length > 0) {
         const cur = stack.pop()!;
         const outs = outEdges.get(cur.nodeId) ?? [];
+
+        // BRANSMAN AYRIMI: cur.lastState=red iken birden fazla out-edge
+        // varsa, sadece subtreeHasRed=true olan dal pending'i miras alir.
+        // Diger dallar pending'i miras almaz; ayrica state'i de korumaz
+        // (state=null gibi davranır ki o daldaki GREEN'ler ana yolun
+        // RED'inden sonra gelmis ariza adayi sayilmasin).
+        let redChildCount = 0;
+        if (cur.lastState === "red" && outs.length > 1) {
+          for (const eid of outs) {
+            const e = edgeById.get(eid);
+            if (e && subtreeHasRed.get(e.toNodeId)) redChildCount += 1;
+          }
+        }
+
         for (const eid of outs) {
           const e = edgeById.get(eid);
           if (!e) continue;
           const toNode = nodes.get(e.toNodeId);
           if (!toNode) continue;
 
-          // Bu kola ait (path-bagimsiz kopya) state olusturuluyor.
-          let nextState: "red" | "green" | null = cur.lastState;
-          // Bu edge'in pending'e dahil olup olmayacagi: state=red ise
-          // edge fault adayi olarak biriksin.
-          const branchPending = cur.lastState === "red"
-            ? [...cur.pendingEdges, e.id]
-            : [...cur.pendingEdges];
+          // Akim hangi dala gitti?
+          //   - state=red ve birden fazla dal varsa: subtreeHasRed olan
+          //     dal akimin yoluyla devam eder.
+          //   - state=red ve sadece subtreeHasRed=true olan tek bir dal
+          //     varsa, GREEN sadece olan dallar "yan dal" sayilir.
+          //   - state!=red veya tek dal: normal davran.
+          const branchHasRed = subtreeHasRed.get(e.toNodeId) === true;
+          const isMainPath =
+            cur.lastState !== "red" ||
+            outs.length === 1 ||
+            redChildCount === 0 || // hicbir dalda RED yoksa hepsi ayni durumda — ana yolu yok say
+            branchHasRed;
+
+          // Pending'e edge ekle: sadece state=red ve "ana yol" dali ise.
+          const branchPending: string[] =
+            cur.lastState === "red" && isMainPath
+              ? [...cur.pendingEdges, e.id]
+              : isMainPath
+                ? [...cur.pendingEdges]
+                : []; // yan dal: pending miras almaz
+
+          // Yan dal'a girerken state baslangici: null (yeni bir logical
+          // path gibi). Bu sayede yan dalda ilk gelen GREEN fault
+          // tetiklemez; ama dalda RED varsa kendi icinde RED->GREEN
+          // gecisi yine yakalanir.
+          let entryState: "red" | "green" | null = isMainPath ? cur.lastState : null;
+
+          let nextState: "red" | "green" | null = entryState;
 
           if (toNode.kind === "device") {
             const isRed = !!toNode.isRed;
-            if (cur.lastState === "red" && !isRed) {
-              // Son RED'ten sonra ilk GREEN cihaza geldik:
-              // pendingEdges (bu edge dahil) hepsi fault.
+            if (entryState === "red" && !isRed) {
               for (const pe of branchPending) {
                 faultEdgeIds.add(pe);
               }
-              // Pending temizlendi (gecis tamamlandi); state=green.
               branchPending.length = 0;
               nextState = "green";
             } else if (isRed) {
-              // RED cihaz: akim daha ileri gitti -> pending sıfırla
-              // (eski edge'ler artik saglikli sayilir).
               branchPending.length = 0;
               nextState = "red";
             } else {
-              // GREEN cihaz, state=null veya green:
-              // pending zaten bos (state=red degildi); bu edge fault degil.
               branchPending.length = 0;
               nextState = "green";
             }
           } else {
-            // Pole node: state degismez. branchPending zaten dolduruldu
-            // (state=red ise). Bu edge sadece pending'e eklenir, henuz
-            // fault degil — ileride GREEN cihaz gelirse fault olur.
+            // Pole node: state degismez.
           }
 
           stack.push({
