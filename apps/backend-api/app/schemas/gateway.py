@@ -47,6 +47,10 @@ class GatewayRead(BaseModel):
     last_seen_at: datetime | None = None
     control_host: str = "127.0.0.1"
     control_port: int = 0
+    # Initiating mode TCP server portu icin host tarafi baslangici. Default
+    # 20100; ek gateway eklenince otomatik 21100, 22100, ... olarak atanir.
+    # Frontend cihaz formunda "Master IP Port" yardim metni icin kullanir.
+    initiating_port_base: int = 20100
 
     class Config:
         from_attributes = True

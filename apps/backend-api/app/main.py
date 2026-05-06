@@ -93,6 +93,12 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS rabbitmq_password VARCHAR(255)")
         )
+        # Initiating mode TCP server port araligi: gateway basina ayri 1000'lik
+        # blok. Default 20100 (geriye uyumluluk; tek gateway senaryolari icin).
+        # Frontend yeni gateway eklerken otomatik benzersiz blok atar.
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS initiating_port_base INTEGER NOT NULL DEFAULT 20100")
+        )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS description VARCHAR(500)"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS gateway_code VARCHAR(50)"))
         connection.execute(
@@ -129,6 +135,24 @@ def create_tables():
         # kolonu ekleriz.
         connection.execute(text("ALTER TABLE telemetry ALTER COLUMN value DROP NOT NULL"))
         connection.execute(text("ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS value_string TEXT"))
+        # Telemetry retention DELETE'i (telemetry_retention.py) source_timestamp
+        # uzerinde range query yapar; index olmadan tablo buyudukce full table
+        # scan + lock contention. 600 cihaz olceginde tablo dakikada milyon
+        # satir buyur — bu index zorunlu.
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_telemetry_source_timestamp ON telemetry(source_timestamp)")
+        )
+        # Frontend "son N dakikalik degerler" + alarm engine "device+signal'in
+        # son durumu" sorgulari icin composite index. device_id + signal_key
+        # ayri ayri zaten index'li ama PostgreSQL bu kombinasyonda multi-index
+        # bitmap scan yaparak suboptimal. Composite + DESC timestamp ile latest-
+        # value sorgusunda dogrudan index seek olur.
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_telemetry_device_signal_ts "
+                "ON telemetry(device_id, signal_key, source_timestamp DESC)"
+            )
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS gateway_ingest_batches ("

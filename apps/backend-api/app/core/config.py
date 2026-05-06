@@ -12,6 +12,15 @@ class Settings(BaseSettings):
     # ortamında hafta sonları boyunca tekrar giriş yapmak zorunda kalmasın.
     access_token_minutes: int = 43_200
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/horstman"
+    # SQLAlchemy connection pool ayarlari (600 cihaz / 10K msg/sn olcekleri icin
+    # default pool_size=5, max_overflow=10 yetersiz kalir; concurrent telemetry
+    # consumer + alarm-service + tag-engine + frontend istekleri = 50-80 paralel
+    # query ihtimali var). pool_recycle PostgreSQL idle disconnect (default 8h)
+    # oncesinde stale connection'i atip yenisini acar.
+    db_pool_size: int = 30
+    db_max_overflow: int = 20
+    db_pool_recycle_sec: int = 3600
+    db_pool_timeout_sec: int = 30
     cors_origins: str = "*"
     event_bus_backend: str = "inprocess"
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"

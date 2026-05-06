@@ -73,11 +73,17 @@ services:
     ports:
       - "127.0.0.1:{{HOST_HEALTH_PORT}}:8020"
       # Initiating mode'daki cihazlar buraya outbound TCP baglantisi acar.
-      # Backend cihaz basina 20100..20700 araliginda port atar; gateway her
-      # initiating cihaz icin ayri TCP server kanali acar (OpenDNP3 kanal-
-      # client 1-1 oldugu icin port mecbur). Saha cihazi frontend'deki
-      # "Master IP Port" alanini bu portla doldurmali.
-      - "20100-20700:20100-20700"
+      # Backend cihaz basina ({{INITIATING_PORT_BASE}}..{{INITIATING_PORT_LAST}})
+      # araliginda port atar; gateway her initiating cihaz icin ayri TCP server
+      # kanali acar (OpenDNP3 kanal-client 1-1 oldugu icin port mecbur). Saha
+      # cihazi frontend'deki "Master IP Port" alanini bu portla doldurmali.
+      #
+      # Coklu gateway senaryosunda (ayni host) port catismasi olmamasi icin
+      # her gateway'e ayri 1000'lik blok atanir (20100, 21100, 22100, ...).
+      # Sol taraf (host) gateway'e ozel blok; sag taraf (container) hep
+      # 20100-20700 — gateway kodu ic portta sabit. Docker port forwarding
+      # ile cihazdan gelen public port iceride 20100'e cevrilir.
+      - "{{INITIATING_PORT_BASE}}-{{INITIATING_PORT_LAST}}:20100-20700"
     # Container icinden host'a (cati yazilim/RabbitMQ ayni makinada ise)
     # erisim icin: host.docker.internal -> host-gateway. Linux Docker
     # 20.10+ bu ozel ismi kabul eder, Windows/macOS Docker Desktop'ta
@@ -177,6 +183,14 @@ class ComposeRenderInput:
     host_port: int = 8020
     image: str = "ghcr.io/fikretsafak/horstmann-dnp3-gateway:latest"
     app_environment: Literal["development", "staging", "production"] = "production"
+    # Initiating mode TCP server portu icin host tarafi baslangic. Gateway
+    # icindeki container hep 20100-20700 dinler; host'a publish edilen aralik
+    # gateway'e ozel olur (multi-gateway port catismasi onleme).
+    # Default 20100 = ilk gateway icin; sonraki gateway'ler 21100, 22100, ...
+    initiating_port_base: int = 20100
+    # Aralik genisligi (default 600 cihaz). 1000'lik blok arasinda 600
+    # kullaniyoruz, 400 buffer kalir gelecek genisleme icin.
+    initiating_port_count: int = 600
 
 
 class ComposeRenderError(ValueError):
@@ -197,9 +211,24 @@ def _validate(args: ComposeRenderInput) -> None:
         raise ComposeRenderError("backend_url bos olamaz")
     if not args.rabbitmq_url.strip():
         raise ComposeRenderError("rabbitmq_url bos olamaz")
+    if args.initiating_port_count < 1 or args.initiating_port_count > 5000:
+        raise ComposeRenderError(
+            f"initiating_port_count gecersiz: {args.initiating_port_count} (1-5000)"
+        )
+    last_port = args.initiating_port_base + args.initiating_port_count - 1
+    if not (1024 <= args.initiating_port_base <= 65000) or last_port > 65535:
+        raise ComposeRenderError(
+            f"initiating_port_base aralik disi: base={args.initiating_port_base} "
+            f"count={args.initiating_port_count} last={last_port} (1024-65535)"
+        )
 
 
 def _replacements(args: ComposeRenderInput) -> dict[str, str]:
+    last_port = args.initiating_port_base + args.initiating_port_count - 1
+    # Container icindeki hedef hep 20100-20700 (gateway kodu ic portta sabit).
+    # Host'a publish edilen aralik gateway-spesifik (multi-gateway port
+    # catismasi onleme). 600 cihaz/gateway varsayimi; 400 portluk gap blok
+    # araligini buyutmek istersek diye buffer.
     return {
         "GATEWAY_CODE": args.code,
         "GATEWAY_CODE_LOWER": args.code.lower(),
@@ -210,6 +239,8 @@ def _replacements(args: ComposeRenderInput) -> dict[str, str]:
         "HOST_HEALTH_PORT": str(args.host_port),
         "IMAGE": args.image,
         "APP_ENVIRONMENT": args.app_environment,
+        "INITIATING_PORT_BASE": str(args.initiating_port_base),
+        "INITIATING_PORT_LAST": str(last_port),
     }
 
 

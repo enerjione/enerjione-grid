@@ -166,6 +166,11 @@ export type Gateway = {
   last_seen_at?: string | null;
   control_host: string;
   control_port: number;
+  /** Initiating mode TCP server portu icin host tarafi baslangic portu.
+   *  Cihaz "Master IP Port" alani bu degerden baslayan numarayi alir
+   *  (port_base + cihaz idx). Coklu gateway senaryosunda her gateway
+   *  benzersiz blok aldigi icin port catismasi olmaz (20100, 21100, ...). */
+  initiating_port_base?: number;
 };
 
 export type OutboundTarget = {

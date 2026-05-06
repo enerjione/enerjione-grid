@@ -68,6 +68,45 @@ def list_gateways(
     return list(db.scalars(stmt).all())
 
 
+_INITIATING_PORT_BLOCK_SIZE = 1000  # her gateway 1000'lik blok alir
+_INITIATING_PORT_BASE_FIRST = 20100  # ilk gateway buradan baslar
+_INITIATING_PORT_BASE_MAX = 60000  # 65535 - 1000 buffer; ustu kabul edilmez
+
+
+def _allocate_initiating_port_base(db: Session) -> int:
+    """Yeni gateway icin kullanilmamis port araligi base'i bul.
+
+    Strateji: Mevcut gateway'lerin initiating_port_base'lerine bak; en
+    yuksek olana 1000 ekle. Bos slot var ise (ornek: bir gateway silinmis ve
+    arada delik kalmis) onu kullan.
+
+    Boylece host'ta birden fazla gateway calistigında port catismasi olmaz:
+    Gateway 1: 20100-20699 (host)
+    Gateway 2: 21100-21699 (host)
+    Gateway 3: 22100-22699 (host)
+    ...
+    Container'in icindeki port hep 20100-20699 (gateway kodu sabit).
+    """
+    used_bases = set(
+        int(b)
+        for (b,) in db.execute(select(Gateway.initiating_port_base)).all()
+        if b is not None
+    )
+    candidate = _INITIATING_PORT_BASE_FIRST
+    while candidate <= _INITIATING_PORT_BASE_MAX:
+        if candidate not in used_bases:
+            return candidate
+        candidate += _INITIATING_PORT_BLOCK_SIZE
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"Port araligi tukendi: {_INITIATING_PORT_BASE_FIRST}.."
+            f"{_INITIATING_PORT_BASE_MAX} arasinda bos blok yok. Eski gateway'leri "
+            "silin veya daha yuksek port araligi konfigurasyonu yapin."
+        ),
+    )
+
+
 @router.post("", response_model=GatewayRead, status_code=status.HTTP_201_CREATED)
 def create_gateway(
     payload: GatewayCreate,
@@ -97,6 +136,10 @@ def create_gateway(
     if rmq_user is not None:
         data["rabbitmq_username"] = rmq_user.username
         data["rabbitmq_password"] = rmq_user.password
+    # Otomatik port araligi atama: aynı host'ta birden fazla gateway calistirilabilsin
+    # diye her gateway'e benzersiz bir 1000'lik blok atanir. Frontend manuel
+    # belirleme yapmaz; bu mantik backend'de.
+    data.setdefault("initiating_port_base", _allocate_initiating_port_base(db))
     row = Gateway(**data)
     db.add(row)
     db.flush()
@@ -335,6 +378,12 @@ def download_gateway_compose(
     else:
         effective_host_port = host_port
     try:
+        # Port araligi: gateway'e atanmis benzersiz block (multi-gateway port
+        # catismasi onleme). Eski kayitlarin default 20100'u var.
+        port_base = int(gateway.initiating_port_base or _INITIATING_PORT_BASE_FIRST)
+        # Aralik genisligi: 600 cihaz (block size 1000, 400 buffer kalir).
+        # Bunu da config'e tasiyabiliriz fakat simdilik sabit.
+        port_count = 600
         render_input = ComposeRenderInput(
             code=gateway.code,
             token=gateway.token,
@@ -344,6 +393,8 @@ def download_gateway_compose(
             host_port=effective_host_port,
             image=image,
             app_environment=app_environment,
+            initiating_port_base=port_base,
+            initiating_port_count=port_count,
         )
     except (ComposeRenderError, TypeError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -448,15 +499,20 @@ def get_gateway_config(
     # client kabul ettigi icin cihaz basina port mecbur. Backend cihaz
     # sirasina gore deterministik atar (DB id'sine gore) — boylece compose
     # YAML'i ayni port'lari expose eder ve cihaz config'inde port sabit kalir.
+    #
+    # Port araligi: gateway.initiating_port_base + idx. Cok-gateway senaryolarinda
+    # her gateway'in ayri bir port blogu var (20100, 21100, 22100, ...) ve
+    # bu sayede ayni host'ta calisirken catismaz.
     initiating_devices_sorted = sorted(
         [d for d in devices if (d.dnp3_extended or {}).get("ip_endpoint_type") == "initiating"],
         key=lambda d: d.id,
     )
     initiating_port_map: dict[str, int] = {}
+    port_base = int(gateway.initiating_port_base or _INITIATING_PORT_BASE_FIRST)
     for idx, d in enumerate(initiating_devices_sorted):
-        # 20100..20700 araligi - frontend'de bilgilendirme amacli compose template
-        # bu range'i acar, kullanici manuel port girmez.
-        initiating_port_map[d.code] = 20100 + idx
+        # Frontend "Master IP Port" alanini bu portla doldurmali — saha cihazi
+        # public IP:port'a outbound TCP baglantisi acar.
+        initiating_port_map[d.code] = port_base + idx
 
     config_devices = []
     for device in devices:

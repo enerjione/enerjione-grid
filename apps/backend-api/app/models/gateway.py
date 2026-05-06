@@ -33,3 +33,16 @@ class Gateway(Base):
     # uretilir. Bos gelirse fallback olarak global rabbitmq_url kullanilir.
     rabbitmq_username: Mapped[str | None] = mapped_column(String(120), nullable=True)
     rabbitmq_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Initiating mode cihazlar icin gateway'e ozel TCP server port araligi
+    # baslangici. Aynı host'ta birden fazla gateway calistirildiginda port
+    # catismasi olmamasi icin her gateway'e benzersiz 1000'lik bir aralik
+    # atanir: 20100, 21100, 22100, 23100, ... (ilk gateway 20100-21099, ikinci
+    # 21100-22099, vb.). 600 cihaz/aralik kapasitesi (her gateway'in icindeki
+    # idx + base = port). Frontend "Yeni gateway ekle" akisinda otomatik
+    # atanir; eski gateway'ler default 20100 kullanir (geriye uyumluluk).
+    initiating_port_base: Mapped[int] = mapped_column(
+        Integer,
+        default=20100,
+        nullable=False,
+    )
