@@ -48,9 +48,13 @@ function categoryIcon(cat: string): string {
     case "alarm":
       return "warning";
     case "alarm_assignment":
+    case "fault_assignment":
       return "assignment_ind";
     case "alarm_comment":
+    case "fault_comment":
       return "chat";
+    case "fault":
+      return "bolt";
     case "system":
       return "settings";
     case "error":
@@ -317,6 +321,30 @@ export function NotificationBell({ token, onNavigate }: Props) {
               {items.map((item) => {
                 const meta = parseMetadata(item.metadata_json);
                 const isAlarm = item.category === "alarm";
+                const isAssignment =
+                  item.category === "alarm_assignment" ||
+                  item.category === "fault_assignment";
+                const isFault =
+                  item.category === "fault" || item.category === "fault_assignment";
+                const isComment =
+                  item.category === "alarm_comment" ||
+                  item.category === "fault_comment";
+                // Kategori-bazli renk degistirici. Severity sinifi (kritik=
+                // kirmizi, uyari=turuncu) koru AMA "atama" ve "yorum" gibi
+                // bilgilendirici kategorilerde fault icin mor, alarm icin
+                // turkuaz, yorum icin gri-mavi seritle ayri renk paleti
+                // gonderilir. CSS bu ek sinifa gore border + arka plan
+                // gradient'ini override eder.
+                const catCls =
+                  item.category === "alarm_assignment"
+                    ? "notif-cat-alarm-assignment"
+                    : item.category === "fault_assignment"
+                    ? "notif-cat-fault-assignment"
+                    : item.category === "alarm_comment"
+                    ? "notif-cat-alarm-comment"
+                    : item.category === "fault_comment"
+                    ? "notif-cat-fault-comment"
+                    : "";
                 const sevCls = severityClass(item.severity);
                 const deviceLabel = meta?.device_name
                   ? meta.device_name
@@ -335,13 +363,16 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 const levelTr = levelLabelTr(meta?.level ?? item.severity);
                 // body alarm bildiriminde basligin kopyasi olabiliyor ("Yeni
                 // alarm: Test alarmi" -> body "Test alarmi"). Tekrari gizle.
+                // Atama/yorum bildirimlerinde body genellikle anlamli ek bilgi
+                // (atayan, hat aciklamasi, yorum metni) — koruyalim.
                 const bodyToShow = (() => {
-                  if (!item.body || !isAlarm) return item.body ?? null;
+                  if (!item.body) return null;
                   const body = item.body.trim();
+                  if (!body) return null;
                   const title = item.title.trim();
+                  if (title === body) return null;
                   // "Yeni alarm: X" basligindaki X = body ise tekrar — gizle.
                   if (title.endsWith(`: ${body}`)) return null;
-                  if (title === body) return null;
                   return body;
                 })();
                 const lineLabel = meta?.line_name ?? meta?.line_code ?? null;
@@ -363,7 +394,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 return (
                   <li
                     key={item.id}
-                    className={`notif-item ${item.is_read ? "" : "notif-item--unread"} ${sevCls}`}
+                    className={`notif-item ${item.is_read ? "" : "notif-item--unread"} ${sevCls} ${catCls}`}
                     onClick={() => void handleItemClick(item)}
                   >
                     <span className={`notif-item-icon ${sevCls}`}>
@@ -381,7 +412,18 @@ export function NotificationBell({ token, onNavigate }: Props) {
                           <strong className="notif-item-title">{titleParts.main}</strong>
                         </div>
                         <div className="notif-item-actions">
-                          {levelTr ? (
+                          {/* Kategoriye gore farkli rozet:
+                              - alarm: severity (Kritik/Uyari/Bilgi)
+                              - alarm_assignment / fault_assignment: "Atama"
+                              - alarm_comment / fault_comment: "Yorum"
+                              - fault: "Arıza" */}
+                          {isAssignment ? (
+                            <span className="notif-level-badge notif-badge-assignment">Atama</span>
+                          ) : isComment ? (
+                            <span className="notif-level-badge notif-badge-comment">Yorum</span>
+                          ) : item.category === "fault" ? (
+                            <span className="notif-level-badge notif-badge-fault">Arıza</span>
+                          ) : levelTr ? (
                             <span className={`notif-level-badge ${sevCls}`}>{levelTr}</span>
                           ) : null}
                           {!item.is_read ? (
@@ -398,7 +440,8 @@ export function NotificationBell({ token, onNavigate }: Props) {
                         </div>
                       </div>
                       {/* Cihaz + Kaynak + Hat + Bolge satir satir */}
-                      {isAlarm && (deviceLabel || srcLabel || lineLabel || regionLabel) ? (
+                      {(isAlarm || isFault || isComment) &&
+                      (deviceLabel || srcLabel || lineLabel || regionLabel) ? (
                         <div className="notif-item-rows">
                           {deviceLabel ? (
                             <div className="notif-row">

@@ -407,6 +407,52 @@ def create_fault_comment(
         message=f"Ariza yorumu eklendi: fault {fault_id}",
         metadata={"fault_id": fault_id},
     )
+    # Atanan kullanici varsa ve yorum sahibi degilse: web bildirim + email.
+    if f.assigned_to_username and f.assigned_to_username != current_user.username:
+        from app.models.grid_topology import Line, Region
+        from app.services.notification_service import create_notification
+        line_row = db.get(Line, f.line_id) if f.line_id else None
+        region_row = db.get(Region, f.region_id) if f.region_id else None
+        line_name = line_row.name if line_row else f"#{f.line_id}"
+        region_name = region_row.name if region_row else None
+        notif_title = f"Yeni yorum: {line_name}"
+        try:
+            create_notification(
+                db,
+                recipient_username=f.assigned_to_username,
+                category="fault_comment",
+                severity="info",
+                title=notif_title,
+                body=body,
+                actor_username=current_user.username,
+                link=f"/faults#fault-{fault_id}",
+                metadata={
+                    "fault_id": fault_id,
+                    "line_id": f.line_id,
+                    "line_name": line_name,
+                    "region_id": f.region_id,
+                    "region_name": region_name,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("fault_comment_notif_failed")
+        # Email
+        try:
+            from app.services.alarm_engine_service import _send_assignment_email
+            _send_assignment_email(
+                db,
+                recipient_username=f.assigned_to_username,
+                kind="fault",
+                title=notif_title,
+                description=body,
+                level="info",
+                actor_username=current_user.username,
+                link_path=f"/faults#fault-{fault_id}",
+            )
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("fault_comment_email_failed")
     db.commit()
     db.refresh(comment)
     return FaultCommentRead.model_validate(comment, from_attributes=True)

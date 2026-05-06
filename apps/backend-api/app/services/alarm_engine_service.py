@@ -168,20 +168,36 @@ def create_alarm_comment(db: Session, alarm_id: int, comment: str, current_user:
         message=f"\"{alarm.title}\" alarmına yorum eklendi",
         metadata={"alarm_id": alarm.id},
     )
-    # Yorum bildirimi: alarmin atandigi kullaniciya (yorum yazandan farkli ise)
-    # ve onceki yorum sahiplerine — basit versiyonda sadece atanan kisiye.
+    # Yorum bildirimi: alarmin atandigi kullaniciya (yorum yazandan farkli ise).
+    # Title: "Yeni yorum: <alarm adi>" -> bildirim panelinde eyebrow+main olur.
     if alarm.assigned_to and alarm.assigned_to != current_user.username:
+        notif_title = f"Yeni yorum: {alarm.title}"
         create_notification(
             db,
             recipient_username=alarm.assigned_to,
             category="alarm_comment",
             severity="info",
-            title=f"\"{alarm.title}\" alarmına yorum eklendi",
+            title=notif_title,
             body=comment_text,
             actor_username=current_user.username,
             link=f"/alarms#alarm-{alarm.id}",
             metadata={"alarm_id": alarm.id, "comment_id": None},
         )
+        # Email bildirimi: kullanici email tercihi acik VE SMTP enabled ise.
+        try:
+            _send_assignment_email(
+                db,
+                recipient_username=alarm.assigned_to,
+                kind="alarm",
+                title=notif_title,
+                description=comment_text,
+                level="info",
+                actor_username=current_user.username,
+                link_path=f"/alarms#alarm-{alarm.id}",
+            )
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("alarm_comment_email_failed")
     db.commit()
     db.refresh(row)
     return row

@@ -391,6 +391,72 @@ body {
   box-shadow: 0 6px 18px rgba(220, 38, 38, 0.18);
 }
 
+/* Kategori-bazli renk paleti — atama ve yorum bildirimleri severity'den
+   bagimsiz olarak kendi renk seridini alir (uyari/kritik tonlarini ezmez,
+   onlardan SONRA yazilmasi yeterli — CSS source order). */
+.notif-item.notif-cat-alarm-assignment,
+.notif-item.notif-cat-fault-assignment {
+  /* mor/indigo — atama her zaman dikkat istiyor ama alarm degil */
+  border-left-color: #6366f1;
+  background: linear-gradient(90deg, #eef2ff 0%, #fff 35%);
+  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.08);
+}
+.notif-item.notif-cat-alarm-assignment:hover,
+.notif-item.notif-cat-fault-assignment:hover {
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.18);
+}
+.notif-item.notif-cat-alarm-assignment .notif-item-icon,
+.notif-item.notif-cat-fault-assignment .notif-item-icon,
+.notif-item.notif-cat-alarm-assignment .notif-item-eyebrow,
+.notif-item.notif-cat-fault-assignment .notif-item-eyebrow {
+  color: #4338ca;
+}
+.notif-item.notif-cat-alarm-assignment .notif-item-icon {
+  background: #e0e7ff;
+}
+.notif-item.notif-cat-fault-assignment .notif-item-icon {
+  background: #e0e7ff;
+}
+
+.notif-item.notif-cat-alarm-comment,
+.notif-item.notif-cat-fault-comment {
+  /* turkuaz — yorum: bilgilendirici, olumlu ton */
+  border-left-color: #14b8a6;
+  background: linear-gradient(90deg, #f0fdfa 0%, #fff 35%);
+}
+.notif-item.notif-cat-alarm-comment .notif-item-icon,
+.notif-item.notif-cat-fault-comment .notif-item-icon {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+.notif-item.notif-cat-alarm-comment .notif-item-eyebrow,
+.notif-item.notif-cat-fault-comment .notif-item-eyebrow {
+  color: #0f766e;
+}
+
+/* Kategori rozetleri (Atama / Yorum / Arıza) — severity rozetinin yerine */
+.notif-level-badge.notif-badge-assignment {
+  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  color: #ffffff;
+  border-color: #4338ca;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.25);
+  animation: none;
+}
+.notif-level-badge.notif-badge-comment {
+  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
+  color: #ffffff;
+  border-color: #0f766e;
+  box-shadow: 0 2px 4px rgba(20, 184, 166, 0.25);
+  animation: none;
+}
+.notif-level-badge.notif-badge-fault {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  color: #ffffff;
+  border-color: #991b1b;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.25);
+  animation: none;
+}
+
 /* Okunmamis: sol seritte daha kalın efekt; eski mavi yuvarlak yok. */
 .notif-item--unread {
   border-left-width: 5px;
