@@ -1813,6 +1813,7 @@ export function App() {
                 currentUsername={session.username}
                 canAssign={session.role === "engineer" || session.role === "installer"}
                 loading={false}
+                gridSnapshot={gridSnapshot}
                 onAssign={handleAssignFault}
                 onUpdateStatus={handleUpdateFaultStatus}
                 onUpdateNote={handleUpdateFaultNote}

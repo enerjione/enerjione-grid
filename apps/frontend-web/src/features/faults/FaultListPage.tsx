@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
+import type { GridSnapshot } from "../../shared/api";
 import type { FaultComment, FaultEvent, UserRead } from "../../shared/types";
+import { FaultDetailModal } from "./FaultDetailModal";
 
 type Props = {
   faults: FaultEvent[];
@@ -8,6 +10,7 @@ type Props = {
   currentUsername: string;
   canAssign: boolean; // engineer/installer
   loading?: boolean;
+  gridSnapshot?: GridSnapshot | null;
   onAssign: (faultId: number, username: string | null) => Promise<void>;
   onUpdateStatus: (faultId: number, status: string) => Promise<void>;
   onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
@@ -30,12 +33,6 @@ const STATUS_COLOR: Record<string, string> = {
   closed: "#64748b"
 };
 
-function fmtDate(iso?: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString("tr-TR");
-}
-
 function fmtRelative(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -46,12 +43,18 @@ function fmtRelative(iso?: string | null): string {
   return `${Math.round(sec / 86400)} gün önce`;
 }
 
+function fmtDate(iso?: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("tr-TR");
+}
+
 export function FaultListPage({
   faults,
   users,
   currentUsername,
   canAssign,
   loading,
+  gridSnapshot,
   onAssign,
   onUpdateStatus,
   onUpdateNote,
@@ -60,14 +63,8 @@ export function FaultListPage({
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<"active" | "all" | "closed">("active");
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [comments, setComments] = useState<FaultComment[]>([]);
-  const [commentDraft, setCommentDraft] = useState("");
-  const [noteDraft, setNoteDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [openFaultId, setOpenFaultId] = useState<number | null>(null);
 
-  // İstatistik chip'ler (toplam aktif, atanmış, devam ediyor, kapatılan)
   const stats = useMemo(() => {
     const total = faults.length;
     const open = faults.filter((f) => f.status === "open").length;
@@ -88,110 +85,21 @@ export function FaultListPage({
     const q = search.trim().toLowerCase();
     if (q) {
       arr = arr.filter((f) => {
-        const hay = `${f.line_name} ${f.region_name} ${f.last_red_device_name ?? ""} ${f.last_red_device_code ?? ""} ${f.assigned_to_username ?? ""}`.toLowerCase();
+        const hay = `${f.line_name} ${f.region_name} ${f.last_red_device_name ?? ""} ${f.last_red_device_code ?? ""} ${f.first_green_device_name ?? ""} ${f.first_green_device_code ?? ""} ${f.assigned_to_username ?? ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
-    // En yeni en üstte
     return [...arr].sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime());
   }, [faults, statusFilter, search]);
 
-  const selected = useMemo(
-    () => filtered.find((f) => f.id === selectedId) ?? faults.find((f) => f.id === selectedId) ?? null,
-    [filtered, faults, selectedId]
+  const openFault = useMemo(
+    () => (openFaultId !== null ? faults.find((f) => f.id === openFaultId) ?? null : null),
+    [faults, openFaultId]
   );
-
-  // Detay paneline gec / yorum ve note state'i hazırla
-  useEffect(() => {
-    if (selected) {
-      setNoteDraft(selected.note ?? "");
-      setCommentDraft("");
-      setError("");
-      void (async () => {
-        try {
-          const list = await onLoadComments(selected.id);
-          setComments(list);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Yorumlar alınamadı.");
-        }
-      })();
-    } else {
-      setComments([]);
-      setNoteDraft("");
-      setCommentDraft("");
-    }
-  }, [selected?.id, onLoadComments]);
-
-  const userOptions = useMemo(() => {
-    return [...users].sort((a, b) => a.full_name.localeCompare(b.full_name, "tr"));
-  }, [users]);
-
-  const canEditFault = (f: FaultEvent | null): boolean => {
-    if (!f) return false;
-    if (canAssign) return true; // engineer/installer
-    return f.assigned_to_username === currentUsername;
-  };
-
-  const handleAssign = async (newUsername: string) => {
-    if (!selected) return;
-    setSaving(true);
-    setError("");
-    try {
-      await onAssign(selected.id, newUsername || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Atama yapılamadı.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleStatus = async (newStatus: string) => {
-    if (!selected) return;
-    setSaving(true);
-    setError("");
-    try {
-      await onUpdateStatus(selected.id, newStatus);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Durum güncellenemedi.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveNote = async () => {
-    if (!selected) return;
-    setSaving(true);
-    setError("");
-    try {
-      await onUpdateNote(selected.id, noteDraft.trim() || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Not kaydedilemedi.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAddComment = async () => {
-    if (!selected) return;
-    const body = commentDraft.trim();
-    if (!body) return;
-    setSaving(true);
-    setError("");
-    try {
-      await onAddComment(selected.id, body);
-      const list = await onLoadComments(selected.id);
-      setComments(list);
-      setCommentDraft("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Yorum eklenemedi.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="faults-page">
-      {/* Sayaç chip'leri — sayfanın en üstünde (başlık YOK) */}
+      {/* Sayaç şeridi */}
       <div className="faults-stats">
         <div className="faults-stat-chip faults-stat-chip--total">
           <span className="faults-stat-num">{stats.total}</span>
@@ -219,11 +127,11 @@ export function FaultListPage({
         </div>
       </div>
 
-      {/* Filtre satırı — chip'lerin altında, listenin üstünde ince şerit */}
+      {/* Filtre satırı */}
       <div className="faults-toolbar-row">
         <input
           type="search"
-          placeholder="Hat / cihaz / atanan ara…"
+          placeholder="Bölge / hat / cihaz / atanan ara…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="faults-search"
@@ -240,260 +148,139 @@ export function FaultListPage({
         <span className="faults-toolbar-count">{filtered.length} arıza</span>
       </div>
 
-      <div className="faults-page-body">
-        <div className="faults-cards">
-          {loading && filtered.length === 0 ? (
-            <div className="faults-empty-card">
-              <span className="material-symbols-outlined">hourglass_empty</span>
-              <p>Yükleniyor…</p>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="faults-empty-card">
-              <span className="material-symbols-outlined">check_circle</span>
-              <h3>Aktif arıza yok</h3>
-              <p>
-                {search
-                  ? "Aramaya uygun arıza bulunamadı. Farklı bir terim deneyin."
-                  : statusFilter === "closed"
-                  ? "Kapatılmış arıza kaydı yok."
-                  : "Sistem temiz. Sahada arıza tespit edilince burada listelenecek."}
-              </p>
-            </div>
-          ) : (
-            filtered.map((f) => {
-              const isSelected = selectedId === f.id;
-              const sc = STATUS_COLOR[f.status] ?? "#64748b";
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  className={`faults-card ${isSelected ? "selected" : ""}`}
-                  onClick={() => setSelectedId(f.id)}
-                  style={{ borderLeftColor: sc }}
-                >
-                  <div className="faults-card-row faults-card-row--top">
-                    <div className="faults-card-line">
-                      <span className="material-symbols-outlined faults-card-line-icon">timeline</span>
-                      <div>
-                        <strong>{f.line_name}</strong>
-                        <span>{f.region_name}</span>
-                      </div>
+      {/* Tam genişlik kart listesi */}
+      <div className="faults-cards faults-cards--full">
+        {loading && filtered.length === 0 ? (
+          <div className="faults-empty-card">
+            <span className="material-symbols-outlined">hourglass_empty</span>
+            <p>Yükleniyor…</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="faults-empty-card">
+            <span className="material-symbols-outlined">check_circle</span>
+            <h3>Aktif arıza yok</h3>
+            <p>
+              {search
+                ? "Aramaya uygun arıza bulunamadı. Farklı bir terim deneyin."
+                : statusFilter === "closed"
+                ? "Kapatılmış arıza kaydı yok."
+                : "Sistem temiz. Sahada arıza tespit edilince burada listelenecek."}
+            </p>
+          </div>
+        ) : (
+          filtered.map((f) => {
+            const sc = STATUS_COLOR[f.status] ?? "#64748b";
+            return (
+              <button
+                key={f.id}
+                type="button"
+                className="faults-card faults-card--rich"
+                onClick={() => setOpenFaultId(f.id)}
+                style={{ borderLeftColor: sc }}
+                title={`Detay görüntüle — ${fmtDate(f.opened_at)}`}
+              >
+                <div className="faults-card-rich-grid">
+                  {/* Sol: Bölge + Hat + Aralık */}
+                  <div className="faults-card-rich-block">
+                    <div className="faults-card-region">
+                      <span className="material-symbols-outlined">place</span>
+                      <strong>{f.region_name}</strong>
                     </div>
+                    <div className="faults-card-line-name">
+                      <span className="material-symbols-outlined">timeline</span>
+                      <strong>{f.line_name}</strong>
+                    </div>
+                    <div className="faults-card-range-row">
+                      <span className="faults-card-range-tag">Arıza Aralığı</span>
+                      <strong className="faults-card-range-text">
+                        Direk #{f.from_pole_seq ?? "?"} — Direk #{f.to_pole_seq ?? "?"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Orta: Cihaz akışı */}
+                  <div className="faults-card-rich-block faults-card-rich-block--devices">
+                    <div className="faults-card-dev-card faults-card-dev-card--red">
+                      <span className="faults-card-dev-card-label">
+                        Son Arıza Algılayan Cihaz
+                      </span>
+                      <div className="faults-card-dev-card-name">
+                        <span className="faults-card-dev-card-dot" />
+                        <strong>{f.last_red_device_name ?? "—"}</strong>
+                      </div>
+                      {f.last_red_device_code ? (
+                        <span className="faults-card-dev-card-code">{f.last_red_device_code}</span>
+                      ) : null}
+                    </div>
+                    <span className="faults-card-dev-arrow material-symbols-outlined">
+                      arrow_forward
+                    </span>
+                    <div className="faults-card-dev-card faults-card-dev-card--green">
+                      <span className="faults-card-dev-card-label">
+                        İlk Arıza Algılamayan Cihaz
+                      </span>
+                      <div className="faults-card-dev-card-name">
+                        <span className="faults-card-dev-card-dot" />
+                        <strong>{f.first_green_device_name ?? "Hat ucu"}</strong>
+                      </div>
+                      {f.first_green_device_code ? (
+                        <span className="faults-card-dev-card-code">{f.first_green_device_code}</span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Sağ: Durum + atanan + zaman */}
+                  <div className="faults-card-rich-block faults-card-rich-block--status">
                     <span
-                      className="faults-status-pill"
+                      className="faults-status-pill faults-status-pill--lg"
                       style={{ background: `${sc}22`, color: sc }}
                     >
                       {STATUS_LABEL[f.status] ?? f.status}
                     </span>
-                  </div>
-
-                  <div className="faults-card-row faults-card-row--mid">
-                    <div className="faults-card-range">
-                      <span className="faults-card-range-label">Arıza Aralığı</span>
-                      <strong>
-                        {f.from_pole_seq != null && f.to_pole_seq != null
-                          ? `Direk #${f.from_pole_seq} — #${f.to_pole_seq}`
-                          : "—"}
-                      </strong>
-                    </div>
-                    <div className="faults-card-devices">
-                      <div className="faults-card-dev faults-card-dev--red">
-                        <span className="faults-card-dev-dot" />
-                        <div>
-                          <span>Son RED</span>
-                          <strong>{f.last_red_device_name ?? "—"}</strong>
-                        </div>
+                    <div className="faults-card-meta-stack">
+                      <div className="faults-card-meta">
+                        <span className="material-symbols-outlined">person</span>
+                        <span>
+                          {f.assigned_to_full_name ?? f.assigned_to_username ?? (
+                            <em className="faults-card-meta-dim">Atanmamış</em>
+                          )}
+                        </span>
                       </div>
-                      <span className="faults-card-arrow">→</span>
-                      <div className="faults-card-dev faults-card-dev--green">
-                        <span className="faults-card-dev-dot" />
-                        <div>
-                          <span>İlk YEŞİL</span>
-                          <strong>{f.first_green_device_name ?? "Hat ucu"}</strong>
-                        </div>
+                      <div className="faults-card-meta">
+                        <span className="material-symbols-outlined">schedule</span>
+                        <span title={fmtDate(f.opened_at)}>{fmtRelative(f.opened_at)}</span>
+                      </div>
+                      <div className="faults-card-meta">
+                        <span className="material-symbols-outlined">forum</span>
+                        <span>{f.comment_count > 0 ? `${f.comment_count} yorum` : "Yorum yok"}</span>
                       </div>
                     </div>
                   </div>
-
-                  <div className="faults-card-row faults-card-row--bot">
-                    <div className="faults-card-meta">
-                      <span className="material-symbols-outlined">schedule</span>
-                      <span title={fmtDate(f.opened_at)}>{fmtRelative(f.opened_at)}</span>
-                    </div>
-                    <div className="faults-card-meta">
-                      <span className="material-symbols-outlined">person</span>
-                      <span>
-                        {f.assigned_to_full_name ?? f.assigned_to_username ?? (
-                          <em className="faults-card-meta-dim">Atanmamış</em>
-                        )}
-                      </span>
-                    </div>
-                    <div className="faults-card-meta">
-                      <span className="material-symbols-outlined">forum</span>
-                      <span>{f.comment_count > 0 ? `${f.comment_count} yorum` : "Yorum yok"}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {selected ? (
-          <aside className="faults-detail">
-            <header className="faults-detail-head">
-              <div>
-                <h3>{selected.line_name}</h3>
-                <span className="faults-detail-sub">
-                  {selected.region_name} · Direk #{selected.from_pole_seq} — #{selected.to_pole_seq}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="faults-detail-close"
-                onClick={() => setSelectedId(null)}
-                aria-label="Kapat"
-              >
-                <span className="material-symbols-outlined">close</span>
+                </div>
+                <div className="faults-card-cta">
+                  <span className="material-symbols-outlined">arrow_forward_ios</span>
+                </div>
               </button>
-            </header>
-
-            <div className="faults-detail-info">
-              <div>
-                <span className="faults-detail-label">Açılış</span>
-                <span>{fmtDate(selected.opened_at)}</span>
-              </div>
-              {selected.resolved_at ? (
-                <div>
-                  <span className="faults-detail-label">Çözüldü</span>
-                  <span>{fmtDate(selected.resolved_at)}</span>
-                </div>
-              ) : null}
-              {selected.closed_at ? (
-                <div>
-                  <span className="faults-detail-label">Kapatıldı</span>
-                  <span>{fmtDate(selected.closed_at)}</span>
-                </div>
-              ) : null}
-              <div>
-                <span className="faults-detail-label">Son RED Cihaz</span>
-                <span>
-                  {selected.last_red_device_name ?? "—"}
-                  {selected.last_red_device_code ? ` (${selected.last_red_device_code})` : ""}
-                </span>
-              </div>
-              <div>
-                <span className="faults-detail-label">İlk YEŞİL Cihaz</span>
-                <span>
-                  {selected.first_green_device_name
-                    ? `${selected.first_green_device_name}${
-                        selected.first_green_device_code ? ` (${selected.first_green_device_code})` : ""
-                      }`
-                    : "— hat ucu"}
-                </span>
-              </div>
-            </div>
-
-            <div className="faults-detail-section">
-              <span className="faults-detail-label">Atanan</span>
-              {canAssign ? (
-                <select
-                  value={selected.assigned_to_username ?? ""}
-                  onChange={(e) => void handleAssign(e.target.value)}
-                  disabled={saving}
-                >
-                  <option value="">— atanmamış —</option>
-                  {userOptions.map((u) => (
-                    <option key={u.id} value={u.username}>
-                      {u.full_name} ({u.username})
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span>{selected.assigned_to_full_name ?? selected.assigned_to_username ?? "—"}</span>
-              )}
-            </div>
-
-            <div className="faults-detail-section">
-              <span className="faults-detail-label">Durum</span>
-              <div className="faults-status-buttons">
-                {(["assigned", "in_progress", "resolved", "closed"] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`faults-status-btn ${selected.status === s ? "active" : ""}`}
-                    onClick={() => void handleStatus(s)}
-                    disabled={saving || !canEditFault(selected)}
-                    style={selected.status === s ? { background: STATUS_COLOR[s], color: "#fff" } : undefined}
-                  >
-                    {STATUS_LABEL[s]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="faults-detail-section">
-              <span className="faults-detail-label">Kısa Not</span>
-              <textarea
-                rows={2}
-                value={noteDraft}
-                onChange={(e) => setNoteDraft(e.target.value)}
-                disabled={saving || !canEditFault(selected)}
-                placeholder="Kısa açıklama (opsiyonel)…"
-              />
-              {canEditFault(selected) ? (
-                <button
-                  type="button"
-                  className="faults-detail-save"
-                  onClick={() => void handleSaveNote()}
-                  disabled={saving}
-                >
-                  Notu Kaydet
-                </button>
-              ) : null}
-            </div>
-
-            <div className="faults-detail-section">
-              <span className="faults-detail-label">Saha Raporu / Yorumlar</span>
-              <ul className="faults-comments">
-                {comments.length === 0 ? (
-                  <li className="faults-comments-empty">Henüz yorum yok.</li>
-                ) : (
-                  comments.map((c) => (
-                    <li key={c.id} className="faults-comment-item">
-                      <header>
-                        <strong>{c.author_username}</strong>
-                        <span>{fmtDate(c.created_at)}</span>
-                      </header>
-                      <p>{c.body}</p>
-                    </li>
-                  ))
-                )}
-              </ul>
-              {canEditFault(selected) ? (
-                <div className="faults-comment-add">
-                  <textarea
-                    rows={3}
-                    placeholder="Saha gözlemi, bakım/onarım adımları, parça değişimi…"
-                    value={commentDraft}
-                    onChange={(e) => setCommentDraft(e.target.value)}
-                    disabled={saving}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleAddComment()}
-                    disabled={saving || !commentDraft.trim()}
-                  >
-                    Yorum Ekle
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            {error ? <div className="faults-detail-error">{error}</div> : null}
-          </aside>
-        ) : null}
+            );
+          })
+        )}
       </div>
+
+      {openFault ? (
+        <FaultDetailModal
+          fault={openFault}
+          users={users}
+          currentUsername={currentUsername}
+          canAssign={canAssign}
+          gridSnapshot={gridSnapshot}
+          onClose={() => setOpenFaultId(null)}
+          onAssign={onAssign}
+          onUpdateStatus={onUpdateStatus}
+          onUpdateNote={onUpdateNote}
+          onLoadComments={onLoadComments}
+          onAddComment={onAddComment}
+        />
+      ) : null}
     </div>
   );
 }
