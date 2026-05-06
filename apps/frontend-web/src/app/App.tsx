@@ -93,8 +93,10 @@ import {
   testNotificationSmtp,
   updateNotificationSettings as updateNotificationSettingsApi,
   updateUser,
-  updateMyProfile
+  updateMyProfile,
+  API_BASE_URL
 } from "../shared/api";
+import { useLiveValuesSocket } from "../shared/useLiveValuesSocket";
 import type {
   AlarmComment,
   AlarmEvent,
@@ -280,6 +282,20 @@ export function App() {
   const [alarmRulesError, setAlarmRulesError] = useState("");
 
   const signalLiveFetchIdRef = useRef(0);
+
+  // WebSocket-based canli telemetri akisi. Polling fallback ile birlikte
+  // calisir; WS bagli iken ~200ms gecikme. Bagi kopunca polling devam eder.
+  const liveSocket = useLiveValuesSocket({
+    token: session?.accessToken ?? "",
+    apiBaseUrl: API_BASE_URL,
+    enabled: Boolean(session?.accessToken)
+  });
+
+  useEffect(() => {
+    liveSocket.registerHandler((msg) => {
+      setSignalLiveValues((prev) => liveSocket.apply(prev, msg));
+    });
+  }, [liveSocket]);
 
   useEffect(() => {
     const load = async () => {

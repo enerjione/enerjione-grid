@@ -33,7 +33,9 @@ import { mergeDnp3Extended } from "./types";
  *   `${hostname}:8000/api/v1` legacy davranışına geri dön — böylece eski geliştirici
  *   akışı kırılmaz.
  */
-const API_BASE_URL = (() => {
+// WebSocket hook'undan da kullanilmak icin export. Ayni resolution mantigini
+// orada da elde ediliyor olur.
+export const API_BASE_URL = (() => {
   const fromEnv = (import.meta.env.VITE_API_BASE_URL ?? "").toString().trim();
   if (fromEnv) return fromEnv.replace(/\/+$/, "");
   // Vite dev server (5173) → backend ayrı port (8000) — eski davranış.

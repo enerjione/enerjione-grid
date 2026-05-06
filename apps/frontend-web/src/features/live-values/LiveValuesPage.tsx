@@ -53,15 +53,19 @@ const SOURCE_LABEL: Record<string, string> = {
 
 const AUTO_REFRESH_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: "Kapalı" },
+  { value: 1, label: "1 sn" },
+  { value: 2, label: "2 sn" },
   { value: 5, label: "5 sn" },
   { value: 10, label: "10 sn" },
   { value: 30, label: "30 sn" },
-  { value: 60, label: "1 dk" },
-  { value: 300, label: "5 dk" }
+  { value: 60, label: "1 dk" }
 ];
 
 const AUTO_REFRESH_STORAGE_KEY = "hsl.live-values.auto-refresh-sec";
-const AUTO_REFRESH_DEFAULT_SEC = 10;
+// Default 10sn -> 2sn: kullanici cihaz degerini neredeyse anlik gorur.
+// Backend her live-values cagrisinda 600 cihaz × 175 sinyal SELECT yapar;
+// composite index (idx_telemetry_device_signal_ts) ile <50ms tamamlanir.
+const AUTO_REFRESH_DEFAULT_SEC = 2;
 
 function readStoredAutoRefresh(): number {
   if (typeof window === "undefined") return AUTO_REFRESH_DEFAULT_SEC;

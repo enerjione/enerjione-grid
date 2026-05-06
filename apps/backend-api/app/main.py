@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select as _select, text
 
-from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, system_status, telemetry, users
+from app.api import alarm_rules, alarms, auth, device_models, devices, events, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, system_status, telemetry, users, ws_live
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -53,6 +53,8 @@ app.include_router(project_settings_api.router, prefix=settings.api_prefix)
 app.include_router(grid_topology.router, prefix=settings.api_prefix)
 app.include_router(system_status.router, prefix=settings.api_prefix)
 app.include_router(notifications_api.router, prefix=settings.api_prefix)
+# WebSocket endpoint: api_prefix altinda /ws/live-values
+app.include_router(ws_live.router, prefix=settings.api_prefix)
 
 
 @app.on_event("startup")

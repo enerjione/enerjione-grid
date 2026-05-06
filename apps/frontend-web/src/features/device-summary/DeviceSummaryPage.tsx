@@ -86,6 +86,8 @@ function formatTimestamp(ts: string | null): string {
 
 const AUTO_REFRESH_OPTIONS = [
   { value: 0, label: "Kapalı" },
+  { value: 1, label: "1 sn" },
+  { value: 2, label: "2 sn" },
   { value: 5, label: "5 sn" },
   { value: 10, label: "10 sn" },
   { value: 30, label: "30 sn" },
@@ -93,6 +95,8 @@ const AUTO_REFRESH_OPTIONS = [
 ];
 
 const AUTO_REFRESH_KEY = "hsl.device-summary.auto-refresh-sec";
+// Default 10sn -> 2sn: cihaz detay sayfasinda anlik takip.
+const AUTO_REFRESH_DEFAULT_SEC = 2;
 
 export function DeviceSummaryPage({
   selectedDevice,
@@ -108,10 +112,10 @@ export function DeviceSummaryPage({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [autoRefreshSec, setAutoRefreshSec] = useState<number>(() => {
-    if (typeof window === "undefined") return 10;
+    if (typeof window === "undefined") return AUTO_REFRESH_DEFAULT_SEC;
     const raw = window.localStorage.getItem(AUTO_REFRESH_KEY);
-    const parsed = raw ? Number.parseInt(raw, 10) : 10;
-    return Number.isFinite(parsed) ? parsed : 10;
+    const parsed = raw ? Number.parseInt(raw, 10) : AUTO_REFRESH_DEFAULT_SEC;
+    return Number.isFinite(parsed) ? parsed : AUTO_REFRESH_DEFAULT_SEC;
   });
 
   useEffect(() => {

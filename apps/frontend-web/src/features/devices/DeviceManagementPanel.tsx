@@ -73,6 +73,7 @@ type Props = {
     is_active: boolean;
     control_host: string;
     control_port: number;
+    initiating_port_count: number;
   }) => Promise<void>;
   onUpdateGateway: (
     gatewayCode: string,
@@ -438,7 +439,8 @@ export function DeviceManagementPanel({
         token: gatewayToken,
         is_active: true,
         control_host: "127.0.0.1",
-        control_port: 0
+        control_port: 0,
+        initiating_port_count: 0
       });
       setShowGatewayCreateModal(false);
       setGatewayCode("");

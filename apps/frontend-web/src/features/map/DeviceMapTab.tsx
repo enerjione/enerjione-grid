@@ -39,23 +39,29 @@ const polePin = (
   label: string,
   isStart: boolean,
   isEnd: boolean,
-  poleType?: string
+  poleType?: string,
+  isBranchPoint?: boolean
 ) => {
   const typeCls =
     poleType === "transformer" ? "is-transformer" : "";
   const cls = [
     isStart ? "is-start" : isEnd ? "is-end" : "",
-    typeCls
+    typeCls,
+    isBranchPoint ? "is-branch-point" : ""
   ].filter(Boolean).join(" ");
   // Trafo direkleri biraz daha buyuk ve sembollu gosterilir.
   const isTrafo = poleType === "transformer";
   const inner = isTrafo
     ? `<span class="grid-pole-symbol" title="Trafo">⚡</span><span class="grid-pole-seq">${label}</span>`
     : `<span>${label}</span>`;
+  // Bransman noktasi ise pin'in ust kosesine kucuk Y-catalli rozet.
+  const branchBadge = isBranchPoint
+    ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
+    : "";
   const size: [number, number] = isTrafo ? [26, 26] : [20, 20];
   return L.divIcon({
     className: "grid-pole-leaflet-wrap",
-    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}</div>`,
+    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}</div>`,
     iconSize: size,
     iconAnchor: [size[0] / 2, size[1] / 2]
   });
@@ -625,15 +631,39 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       toSeq: number | null;
     }[] = [];
 
+    // Hangi direklerden bransman cikiyor? (parent_pole_id -> [child line name])
+    const branchChildrenByPole = new Map<number, string[]>();
+    for (const [, line] of linesById) {
+      if (line.branched_from_pole_id) {
+        const arr = branchChildrenByPole.get(line.branched_from_pole_id) ?? [];
+        arr.push(line.name);
+        branchChildrenByPole.set(line.branched_from_pole_id, arr);
+      }
+    }
+
     // Direklerin baslangic/bitis bilgisi (sequence_no=1 BAS, en yuksek SON).
-    const polesWithRole: { p: typeof gridSnapshot.poles[number]; isStart: boolean; isEnd: boolean }[] = [];
-    for (const [, poles] of polesByLine) {
+    // Ayrica bransman noktasi olup olmadigi ve hangi hatlarin ayrildigi
+    // bilgisi UI'da farkli icon ve tooltip uretmek icin tasinir.
+    const polesWithRole: {
+      p: typeof gridSnapshot.poles[number];
+      isStart: boolean;
+      isEnd: boolean;
+      isBranchPoint: boolean;
+      childLineNames: string[];
+      lineName: string;
+    }[] = [];
+    for (const [lineId, poles] of polesByLine) {
       const sorted = [...poles].sort((a, b) => a.sequence_no - b.sequence_no);
+      const line = linesById.get(lineId);
       sorted.forEach((p, idx) => {
+        const children = branchChildrenByPole.get(p.id) ?? [];
         polesWithRole.push({
           p,
           isStart: idx === 0,
-          isEnd: idx === sorted.length - 1
+          isEnd: idx === sorted.length - 1,
+          isBranchPoint: children.length > 0,
+          childLineNames: children,
+          lineName: line?.name ?? ""
         });
       });
     }
@@ -686,17 +716,38 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             );
           })}
 
-          {/* Direkler: küçük numara etiketli pin (trafo ise farkli sembol) */}
-          {topology?.polesWithRole.map(({ p, isStart, isEnd }) => (
+          {/* Direkler: numara etiketli pin (trafo / bransman icin ozel rozet).
+              Bransman noktalarinda pin uzerinde kucuk catallanma rozeti
+              gosterilir; tooltip'te hangi hatlarin ayrildigi yazilir. */}
+          {topology?.polesWithRole.map(({ p, isStart, isEnd, isBranchPoint, childLineNames, lineName }) => (
             <Marker
               key={`pole-${p.id}`}
               position={[p.latitude, p.longitude]}
-              icon={polePin(String(p.sequence_no), isStart, isEnd, p.pole_type)}
+              icon={polePin(String(p.sequence_no), isStart, isEnd, p.pole_type, isBranchPoint)}
               eventHandlers={{}}
             >
-              <Tooltip>
-                {p.name ?? `Direk #${p.sequence_no}`}
-                {isStart ? " (BAŞ)" : isEnd ? " (SON)" : ""}
+              <Tooltip
+                permanent
+                direction="bottom"
+                offset={[0, 6]}
+                className="grid-pole-label-tip"
+              >
+                #{p.sequence_no}
+              </Tooltip>
+              <Tooltip sticky direction="top" offset={[0, -8]}>
+                <strong>{p.name ?? `Direk #${p.sequence_no}`}</strong>
+                {lineName ? <><br /><span style={{ opacity: 0.75 }}>{lineName}</span></> : null}
+                {isStart ? <><br /><em>Hat başı</em></> : isEnd ? <><br /><em>Hat sonu</em></> : null}
+                {isBranchPoint && childLineNames.length > 0 ? (
+                  <>
+                    <br />
+                    <strong style={{ color: "#6366f1" }}>Branşman noktası</strong>
+                    <br />
+                    <span style={{ opacity: 0.85 }}>
+                      Ayrılan hat{childLineNames.length > 1 ? "lar" : ""}: {childLineNames.join(", ")}
+                    </span>
+                  </>
+                ) : null}
               </Tooltip>
             </Marker>
           ))}
@@ -716,7 +767,22 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   click: () => onSelectDevice(device.id)
                 }}
               >
-                <Tooltip>{device.name}</Tooltip>
+                {/* Yakinlasildiginda goz gezdirenlerin cihazi tanimasi
+                    icin kucuk kalici isim etiketi. CSS opacity ile yakin
+                    zoom'da belirginlesir, uzakta soluk durur. */}
+                <Tooltip
+                  permanent
+                  direction="bottom"
+                  offset={[0, 8]}
+                  className="device-name-label-tip"
+                >
+                  {device.name}
+                </Tooltip>
+                <Tooltip sticky direction="top" offset={[0, -10]}>
+                  <strong>{device.name}</strong>
+                  <br />
+                  <span style={{ opacity: 0.75 }}>{device.code}</span>
+                </Tooltip>
               </Marker>
             );
           })}

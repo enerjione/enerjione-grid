@@ -35,6 +35,7 @@ from app.models.device import Device
 from app.models.processed_message import ProcessedMessage
 from app.schemas.telemetry import TelemetryIn
 from app.services.tag_engine_service import process_telemetry_reading
+from app.services.ws_broadcaster import broadcaster as ws_broadcaster
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,13 @@ def _consume_loop() -> None:
                 try:
                     payload = json.loads(body.decode("utf-8"))
                     _persist_message(payload)
+                    # WS broadcast: bagli frontend client'lara anlik push.
+                    # Persist sonrasinda yapilir; DB'ye yazilmis veriyi
+                    # frontend ayni anda gorur (snapshot fetch ile tutarli).
+                    try:
+                        ws_broadcaster.broadcast(payload)
+                    except Exception:  # noqa: BLE001 — WS hatasi consume akisini bozmasin
+                        logger.debug("ws_broadcast_failed", exc_info=True)
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("telemetry-consumer-failed error=%s", exc)
