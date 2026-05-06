@@ -99,6 +99,13 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS initiating_port_base INTEGER NOT NULL DEFAULT 20100")
         )
+        # Bu gateway icin acilacak initiating port sayisi (max initiating cihaz).
+        # Default 0: sadece listening cihazlar; gateway cihazlara outbound TCP
+        # client olarak baglanir, port acmaz. Initiating cihaz eklenecekse
+        # kullanici frontend formundan deger artirir.
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS initiating_port_count INTEGER NOT NULL DEFAULT 0")
+        )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS description VARCHAR(500)"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS gateway_code VARCHAR(50)"))
         connection.execute(

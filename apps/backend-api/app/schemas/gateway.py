@@ -16,6 +16,10 @@ class GatewayCreate(BaseModel):
     is_active: bool = True
     control_host: str = "127.0.0.1"
     control_port: int = 0
+    # Bu gateway icin acilacak initiating port sayisi (= max initiating cihaz).
+    # Default 0: yalniz listening cihazlar (gateway cihaza outbound baglanir).
+    # Initiating cihaz icin kullanici frontend'den artirir.
+    initiating_port_count: int = 0
 
 
 class GatewayUpdate(BaseModel):
@@ -30,6 +34,7 @@ class GatewayUpdate(BaseModel):
     is_active: bool | None = None
     control_host: str | None = None
     control_port: int | None = None
+    initiating_port_count: int | None = None
 
 
 class GatewayRead(BaseModel):
@@ -49,8 +54,9 @@ class GatewayRead(BaseModel):
     control_port: int = 0
     # Initiating mode TCP server portu icin host tarafi baslangici. Default
     # 20100; ek gateway eklenince otomatik 21100, 22100, ... olarak atanir.
-    # Frontend cihaz formunda "Master IP Port" yardim metni icin kullanir.
     initiating_port_base: int = 20100
+    # Bu gateway icin acilacak initiating port sayisi (= max initiating cihaz).
+    initiating_port_count: int = 50
 
     class Config:
         from_attributes = True

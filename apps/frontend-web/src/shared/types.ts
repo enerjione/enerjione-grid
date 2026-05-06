@@ -171,6 +171,10 @@ export type Gateway = {
    *  (port_base + cihaz idx). Coklu gateway senaryosunda her gateway
    *  benzersiz blok aldigi icin port catismasi olmaz (20100, 21100, ...). */
   initiating_port_base?: number;
+  /** Bu gateway icin acilacak initiating port sayisi (= max initiating cihaz).
+   *  Default 0: yalniz listening cihazlar (gateway cihaza outbound baglanir,
+   *  port acilmaz). Initiating cihaz eklendiginde artirilir. */
+  initiating_port_count?: number;
 };
 
 export type OutboundTarget = {

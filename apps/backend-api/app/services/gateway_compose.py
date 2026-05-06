@@ -11,9 +11,11 @@ Tasarim:
   - Iki cikti: ``compose`` (docker-compose.yml) ve ``env`` (host'ta python ile
     dogrudan calistirma icin .env). Frontend ihtiyaca gore ikisinden birini ister.
 
-Gateway (collector) tarafindaki esdegeri:
-  ``Horstmann Smart Logger DNP3 Gateway/scripts/render_compose.py``.
-  Senkron tutmak gerekirse her iki yerdeki sablonu birlikte degistirin.
+Initiating mode port araligi:
+  - Sadece kullanicinin belirttigi sayida port acilir (default 50). 600 port
+    publish etmek Docker iptables'i siserir; cogu kurulumda 0-10 initiating
+    cihaz vardir, 50 buffer yeterli.
+  - Coklu gateway icin her gateway'e benzersiz blok atanir (20100, 21100, ...).
 """
 
 from __future__ import annotations
@@ -27,18 +29,11 @@ from urllib.parse import urlparse
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
 
-# Asagidaki sablonlar gateway repo'sundaki ``docker/compose.template.yml`` ve
-# ``docker/.env.template`` ile birebir eslesmeli — gateway tarafina disardan
-# erisim olmadigi icin string sabit olarak gomuldu.
+# Sablon: gateway repo'sundaki ``docker/compose.template.yml`` ile birebir
+# eslesmeli — gateway tarafina disardan erisim olmadigi icin string sabit.
 _COMPOSE_TEMPLATE = """\
-# Horstmann Smart Logger DNP3 Gateway -- otomatik uretildi (backend)
-# Bu dosya tek bir gateway icin docker compose yapilandirmasidir.
-#
-# Kurulum (Ubuntu / Debian / Docker Engine 24+):
-#   docker compose -f hsl-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
-#
-# Coklu gateway: ayri kod + ayri host-port + ayri YAML dosyasi.
-# Image: image build talimati icin: docs/DOCKER.md (gateway repo).
+# Horstmann Smart Logger DNP3 Gateway — {{GATEWAY_CODE}}
+# Kurulum: docker compose -f hsl-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
 
 name: hsl-gateway-{{GATEWAY_CODE_LOWER}}
 
@@ -72,31 +67,7 @@ services:
       SHOW_GATEWAY_TOKEN_ON_START: "false"
     ports:
       - "127.0.0.1:{{HOST_HEALTH_PORT}}:8020"
-      # Initiating mode'daki cihazlar buraya outbound TCP baglantisi acar.
-      # Backend cihaz basina ({{INITIATING_PORT_BASE}}..{{INITIATING_PORT_LAST}})
-      # araliginda port atar; gateway her initiating cihaz icin ayri TCP server
-      # kanali acar (OpenDNP3 kanal-client 1-1 oldugu icin port mecbur). Saha
-      # cihazi frontend'deki "Master IP Port" alanini bu portla doldurmali.
-      #
-      # Coklu gateway senaryosunda (ayni host) port catismasi olmamasi icin
-      # her gateway'e ayri 1000'lik blok atanir (20100, 21100, 22100, ...).
-      # Sol taraf (host) gateway'e ozel blok; sag taraf (container) hep
-      # 20100-20700 — gateway kodu ic portta sabit. Docker port forwarding
-      # ile cihazdan gelen public port iceride 20100'e cevrilir.
-      - "{{INITIATING_PORT_BASE}}-{{INITIATING_PORT_LAST}}:20100-20700"
-    # Container icinden host'a (cati yazilim/RabbitMQ ayni makinada ise)
-    # erisim icin: host.docker.internal -> host-gateway. Linux Docker
-    # 20.10+ bu ozel ismi kabul eder, Windows/macOS Docker Desktop'ta
-    # zaten gomulu. BACKEND_API_URL "host.docker.internal" yazilirsa
-    # gateway DNS'i bu IP'ye cevirir; "localhost"/"127.0.0.1" yanlistir
-    # cunku container'in kendisini gosterir.
-    #
-    # network_mode: "host" YERINE extra_hosts kullanmak istenirse RabbitMQ
-    # IPv6'da dinlemiyorsa pika getaddrinfo'da AF_INET6 sonucu donunce
-    # "Network is unreachable" alir. Bu yuzden DNS'in IPv4 once cozumlemesini
-    # garanti edecegimiz tek yol: container'a host'un IPv4 adresini direkt
-    # extra_hosts ile mapping'i ile vermek. Burada "host-gateway" ozel
-    # token Docker tarafindan IPv4 host adresine cevrilir.
+{{INITIATING_PORTS_BLOCK}}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -123,18 +94,13 @@ networks:
   hsl:
     name: hsl
     external: false
-    # IPv4 zorla. Cati yazilimdaki RabbitMQ/PostgreSQL Windows host'unda
-    # genelde sadece IPv4 dinler; container Docker'in default IPv6 prefix'i
-    # uzerinden cozmeye calisirsa "Network is unreachable" alir. enable_ipv6
-    # kapali oldugu icin host.docker.internal her zaman IPv4'e cevrilir.
     enable_ipv6: false
 """
 
 
 _ENV_TEMPLATE = """\
-# Horstmann Smart Logger DNP3 Gateway -- otomatik uretildi (backend)
-# Tek bir gateway icin .env. Gateway'i Docker disinda calistiracaksaniz:
-#   python -m dnp3_gateway --env-file ./hsl-gw-{{GATEWAY_CODE_LOWER}}.env
+# Horstmann Smart Logger DNP3 Gateway — {{GATEWAY_CODE}}
+# Docker disinda calistirma: python -m dnp3_gateway --env-file ./hsl-gw-{{GATEWAY_CODE_LOWER}}.env
 
 GATEWAY_CODE={{GATEWAY_CODE}}
 GATEWAY_TOKEN={{GATEWAY_TOKEN}}
@@ -183,14 +149,13 @@ class ComposeRenderInput:
     host_port: int = 8020
     image: str = "ghcr.io/fikretsafak/horstmann-dnp3-gateway:latest"
     app_environment: Literal["development", "staging", "production"] = "production"
-    # Initiating mode TCP server portu icin host tarafi baslangic. Gateway
-    # icindeki container hep 20100-20700 dinler; host'a publish edilen aralik
-    # gateway'e ozel olur (multi-gateway port catismasi onleme).
-    # Default 20100 = ilk gateway icin; sonraki gateway'ler 21100, 22100, ...
+    # Initiating cihaz portu icin host tarafi baslangic (multi-gateway port
+    # catismasi onleme — her gateway'e benzersiz blok 20100, 21100, ...).
     initiating_port_base: int = 20100
-    # Aralik genisligi (default 600 cihaz). 1000'lik blok arasinda 600
-    # kullaniyoruz, 400 buffer kalir gelecek genisleme icin.
-    initiating_port_count: int = 600
+    # Acilacak port sayisi = max initiating cihaz. 0 ise hic port acilmaz
+    # (sadece listening cihazlar; default kurulumun bu olmasi beklenir cunku
+    # gateway cihaza TCP client olarak baglanir, dinleme portu gerekmez).
+    initiating_port_count: int = 0
 
 
 class ComposeRenderError(ValueError):
@@ -211,24 +176,39 @@ def _validate(args: ComposeRenderInput) -> None:
         raise ComposeRenderError("backend_url bos olamaz")
     if not args.rabbitmq_url.strip():
         raise ComposeRenderError("rabbitmq_url bos olamaz")
-    if args.initiating_port_count < 1 or args.initiating_port_count > 5000:
+    if args.initiating_port_count < 0 or args.initiating_port_count > 1000:
         raise ComposeRenderError(
-            f"initiating_port_count gecersiz: {args.initiating_port_count} (1-5000)"
+            f"initiating_port_count gecersiz: {args.initiating_port_count} (0-1000)"
         )
-    last_port = args.initiating_port_base + args.initiating_port_count - 1
-    if not (1024 <= args.initiating_port_base <= 65000) or last_port > 65535:
-        raise ComposeRenderError(
-            f"initiating_port_base aralik disi: base={args.initiating_port_base} "
-            f"count={args.initiating_port_count} last={last_port} (1024-65535)"
-        )
+    if args.initiating_port_count > 0:
+        last_port = args.initiating_port_base + args.initiating_port_count - 1
+        if not (1024 <= args.initiating_port_base <= 65000) or last_port > 65535:
+            raise ComposeRenderError(
+                f"initiating_port_base aralik disi: base={args.initiating_port_base} "
+                f"count={args.initiating_port_count} last={last_port}"
+            )
+
+
+def _build_initiating_ports_block(args: ComposeRenderInput) -> str:
+    """Compose'un ports: bloguna eklenecek initiating port satiri.
+
+    count=0 ise tamamen bos doner — sadece listening cihazlar olan gateway'ler
+    Docker'da tek port (health) ile calisir, iptables temiz kalir.
+
+    count>0 ise tek satir: "20100-20149:20100-20149" formatinda.
+    Sol (host) gateway-spesifik blok; sag (container) hep 20100'den baslar
+    (gateway kodu ic portta sabit). Boylece her container ayni binary, sadece
+    publish edilen portlar farkli.
+    """
+    if args.initiating_port_count <= 0:
+        return ""
+    base = args.initiating_port_base
+    last = base + args.initiating_port_count - 1
+    container_last = 20100 + args.initiating_port_count - 1
+    return f'      - "{base}-{last}:20100-{container_last}"'
 
 
 def _replacements(args: ComposeRenderInput) -> dict[str, str]:
-    last_port = args.initiating_port_base + args.initiating_port_count - 1
-    # Container icindeki hedef hep 20100-20700 (gateway kodu ic portta sabit).
-    # Host'a publish edilen aralik gateway-spesifik (multi-gateway port
-    # catismasi onleme). 600 cihaz/gateway varsayimi; 400 portluk gap blok
-    # araligini buyutmek istersek diye buffer.
     return {
         "GATEWAY_CODE": args.code,
         "GATEWAY_CODE_LOWER": args.code.lower(),
@@ -239,8 +219,7 @@ def _replacements(args: ComposeRenderInput) -> dict[str, str]:
         "HOST_HEALTH_PORT": str(args.host_port),
         "IMAGE": args.image,
         "APP_ENVIRONMENT": args.app_environment,
-        "INITIATING_PORT_BASE": str(args.initiating_port_base),
-        "INITIATING_PORT_LAST": str(last_port),
+        "INITIATING_PORTS_BLOCK": _build_initiating_ports_block(args),
     }
 
 
@@ -248,7 +227,7 @@ def _apply_template(template: str, replacements: dict[str, str]) -> str:
     def _sub(match: "re.Match[str]") -> str:
         key = match.group(1)
         if key not in replacements:
-            raise ComposeRenderError(f"Sablonda doldurulmamis yer tutucu: {{{{ {key} }}}}")
+            raise ComposeRenderError(f"sablonda bilinmeyen yer tutucu: {{{{{key}}}}}")
         return replacements[key]
 
     return _PLACEHOLDER_RE.sub(_sub, template)
@@ -264,73 +243,30 @@ def render_env(args: ComposeRenderInput) -> str:
     return _apply_template(_ENV_TEMPLATE, _replacements(args))
 
 
-def filename_for(args: ComposeRenderInput, *, kind: Literal["compose", "env"]) -> str:
-    suffix = "yml" if kind == "compose" else "env"
-    return f"hsl-gw-{args.code.lower()}.{suffix}"
+def normalize_backend_url_for_container(url: str) -> str:
+    """localhost / 127.0.0.1 -> host.docker.internal cevirimi.
 
-
-_LOCALHOST_NAMES = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
-
-
-def _container_host(host: str) -> str:
-    """Container icinden host makinaye erismek icin DNS adi.
-
-    Kullanici frontend'de "localhost" veya "127.0.0.1" yazarsa bu container
-    icinde container'in kendisini gosterir, host makinaya degil. Docker
-    Desktop (Windows/macOS) ve Linux Docker 20.10+ ``host.docker.internal``
-    ozel ismini destekler; compose template'inde ``extra_hosts: host-gateway``
-    ile bu Linux'ta da garantiye alindi.
+    Container icinden host'a erisim ihtiyaci. Kullanici frontend'de
+    "http://localhost:8000" yazsa bile compose dosyasi icinde
+    "http://host.docker.internal:8000" olarak yazilir; aksi halde container
+    kendisini gosterir.
     """
-
-    h = (host or "").strip().lower()
-    if h in _LOCALHOST_NAMES:
-        return "host.docker.internal"
-    return host
-
-
-def normalize_backend_url_for_container(backend_url: str) -> str:
-    """backend_url'deki localhost/127.0.0.1'i host.docker.internal'a cevirir.
-
-    Saha kurulumunda kullanici cati yazilim ile ayni makinada gateway
-    calistiriyorsa (en yaygin senaryo) frontend "localhost" girer. Compose
-    icindeki gateway container'i bu ismi yanlis cozumler — bu yuzden URL'i
-    yazmadan once duzeltiyoruz.
-    """
-
-    parsed = urlparse(backend_url.strip())
-    if not parsed.hostname:
-        return backend_url
-    new_host = _container_host(parsed.hostname)
-    if new_host == parsed.hostname:
-        return backend_url
-    # urlunparse ile yeniden olustur (port + path + scheme korunur)
-    netloc = new_host
-    if parsed.port:
-        netloc = f"{new_host}:{parsed.port}"
-    if parsed.username:
-        userinfo = parsed.username
-        if parsed.password:
-            userinfo += f":{parsed.password}"
-        netloc = f"{userinfo}@{netloc}"
-    return parsed._replace(netloc=netloc).geturl()
+    parsed = urlparse(url.strip())
+    if parsed.hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+        netloc = "host.docker.internal"
+        if parsed.port is not None:
+            netloc = f"{netloc}:{parsed.port}"
+        return parsed._replace(netloc=netloc).geturl()
+    return url.strip()
 
 
 def derive_rabbitmq_url(backend_url: str) -> str:
-    """backend_url'in host kismindan varsayilan AMQP URL'i turetir.
+    """Backend URL'inden ayni hostname uzerinde guest cred ile AMQP URL turetir.
 
-    Carı yazilim kurulumunda RabbitMQ varsayilan olarak ayni host'ta 5672
-    portunda calisiyor; kullanicinin frontend'de ayrica RabbitMQ adresi
-    girmesini onlemek icin backend host'u broker host'u olarak kullaniriz.
-    "localhost"/"127.0.0.1" yazilmissa container icinden erisim icin
-    host.docker.internal'a cevrilir. Kullanici farkli bir broker isterse
-    endpoint'e ``rabbitmq_url`` parametresi gecerek bu davranisi override
-    edebilir.
+    Backend ile RabbitMQ ayni host'ta dusunulur; kurulum kolayligi icin
+    fallback. Production'da Management API uzerinden gateway'e ozel cred
+    olusturulur ve compose dosyasina gomulur.
     """
-
     parsed = urlparse(backend_url.strip())
-    host = _container_host(parsed.hostname or "127.0.0.1")
-    # Cati yazilimdaki diger servisler (alarm-service, notification-worker,
-    # tag-engine, backend-api) ayni broker'a "guest:guest" ile baglaniyor;
-    # gateway de tutarli olsun. Ozel kullanici isteniyorsa frontend
-    # rabbitmq_url query param'i ile override edebilir.
-    return f"amqp://guest:guest@{host}:5672/"
+    host = parsed.hostname or "localhost"
+    return f"amqp://hsl:hsl@{host}:5672/"

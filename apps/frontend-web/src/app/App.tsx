@@ -825,6 +825,7 @@ export function App() {
     is_active: boolean;
     control_host: string;
     control_port: number;
+    initiating_port_count: number;
   }) => {
     if (!session) return;
     await createGateway(session.accessToken, payload);

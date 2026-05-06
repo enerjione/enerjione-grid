@@ -491,6 +491,7 @@ export async function createGateway(
     is_active: boolean;
     control_host: string;
     control_port: number;
+    initiating_port_count?: number;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/gateways`, {
@@ -516,6 +517,7 @@ export async function updateGateway(
     is_active?: boolean;
     control_host?: string;
     control_port?: number;
+    initiating_port_count?: number;
   }
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/gateways/${gatewayCode}`, {

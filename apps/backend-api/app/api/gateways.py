@@ -378,12 +378,12 @@ def download_gateway_compose(
     else:
         effective_host_port = host_port
     try:
-        # Port araligi: gateway'e atanmis benzersiz block (multi-gateway port
-        # catismasi onleme). Eski kayitlarin default 20100'u var.
+        # Port araligi: gateway'e atanmis benzersiz block + sayisi.
+        # initiating_port_count = 0 ise hic port acilmaz (sadece listening
+        # cihazlar). Default 50; kullanici frontend'den artirabilir.
         port_base = int(gateway.initiating_port_base or _INITIATING_PORT_BASE_FIRST)
-        # Aralik genisligi: 600 cihaz (block size 1000, 400 buffer kalir).
-        # Bunu da config'e tasiyabiliriz fakat simdilik sabit.
-        port_count = 600
+        # 0 = sadece listening cihazlar; compose'da hic port publish edilmez.
+        port_count = int(gateway.initiating_port_count or 0)
         render_input = ComposeRenderInput(
             code=gateway.code,
             token=gateway.token,

@@ -23,6 +23,7 @@ type Props = {
     is_active: boolean;
     control_host: string;
     control_port: number;
+    initiating_port_count: number;
   }) => Promise<void>;
   onToggleActive: (gatewayCode: string, isActive: boolean) => Promise<void>;
   onDelete: (gatewayCode: string) => Promise<void>;
@@ -54,6 +55,10 @@ export function GatewayManagementPanel({
   const [token, setToken] = useState("");
   const [controlHost, setControlHost] = useState("127.0.0.1");
   const [controlPort, setControlPort] = useState("8020");
+  // Initiating cihaz portu sayisi (= max initiating cihaz). Default 0 cunku
+  // listening modda gateway cihaza outbound TCP client olarak baglanir, port
+  // acmaz. Initiating cihaz (4G/SIM, gateway'e dinleyen) eklenecekse artirilir.
+  const [initiatingPortCount, setInitiatingPortCount] = useState("0");
   const [error, setError] = useState("");
 
   const [downloadFor, setDownloadFor] = useState<string | null>(null);
@@ -107,7 +112,8 @@ export function GatewayManagementPanel({
         token,
         is_active: true,
         control_host: controlHost.trim() || "127.0.0.1",
-        control_port: Number(controlPort) || 0
+        control_port: Number(controlPort) || 0,
+        initiating_port_count: Math.max(0, Math.min(1000, Number(initiatingPortCount) || 0))
       });
       setShowCreateModal(false);
       setCode("");
@@ -121,6 +127,7 @@ export function GatewayManagementPanel({
       setToken("");
       setControlHost("127.0.0.1");
       setControlPort("8020");
+      setInitiatingPortCount("0");
       openDownloadModal(createdCode);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gateway oluşturulamadı.");
@@ -308,6 +315,21 @@ export function GatewayManagementPanel({
                 value={controlPort}
                 onChange={(event) => setControlPort(event.target.value)}
               />
+            </label>
+            <label>
+              Beklenen Initiating Cihaz Sayısı (4G/SIM cihazlar)
+              <input
+                type="number"
+                min={0}
+                max={1000}
+                value={initiatingPortCount}
+                onChange={(event) => setInitiatingPortCount(event.target.value)}
+                placeholder="0"
+              />
+              <small className="helper-text" style={{ display: "block", marginTop: 4 }}>
+                Cihazlara <b>siz bağlanıyorsanız</b> (Listening) <code>0</code> bırakın — port açılmaz.
+                Cihaz size dışarıdan bağlanıyorsa (Initiating, 4G/SIM) cihaz sayısı kadar girin.
+              </small>
             </label>
             {error ? <p className="error-text">{error}</p> : null}
             <div className="modal-actions">
