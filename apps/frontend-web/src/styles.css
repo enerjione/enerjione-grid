@@ -6301,25 +6301,34 @@ main.content.engineering-content:has(.device-management-panel) {
   height: 20px;
   font-size: 9px;
 }
-/* Trafo direk pin'i — ic ice cift halka (klasik elektrik sembolu).
-   Halkalar kismen ust uste binecek sekilde ofsetli; alttaki sira numarasi
-   kucuk badge olarak halkalarin altinda gosterilir. */
+/* Trafo direk pin'i — sadelestirilmis: TEK GORSEL = ic ice iki halka.
+   Cerceve, kare arka plan, gradient YOK. Hat basi/sonu (is-start/is-end)
+   renk override'lari da iptal — sadece halkalar gozuksun. */
+.grid-pole-pin.is-transformer,
 .grid-pole-pin--sm.is-transformer {
-  width: 30px;
-  height: 30px;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  width: 24px !important;
+  height: 24px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
+  /* hat basi (yesil) / hat sonu (kirmizi) override'larini iptal et:
+     trafo direkleri kendi sembolu ile ifade edilir, ek renk anlamsiz. */
+}
+.grid-pole-pin.is-transformer.is-start,
+.grid-pole-pin.is-transformer.is-end,
+.grid-pole-pin--sm.is-transformer.is-start,
+.grid-pole-pin--sm.is-transformer.is-end {
+  background: transparent !important;
 }
 .grid-trafo-rings {
   position: relative;
-  width: 26px;
-  height: 18px;
+  width: 22px;
+  height: 14px;
   display: block;
 }
 .grid-trafo-ring {
@@ -6327,34 +6336,38 @@ main.content.engineering-content:has(.device-management-panel) {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2.5px solid #b45309;
-  background: rgba(251, 191, 36, 0.78);
-  top: 2px;
+  border: 2px solid #1e293b;
+  background: transparent;
+  top: 0;
 }
 .grid-trafo-ring--outer { left: 0; }
-.grid-trafo-ring--inner { left: 9px; background: rgba(254, 215, 170, 0.85); }
+.grid-trafo-ring--inner { left: 7px; }
+.grid-pole-pin.is-transformer .grid-pole-seq,
 .grid-pole-pin--sm.is-transformer .grid-pole-seq {
   position: absolute;
-  bottom: -7px;
+  bottom: -10px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 9px;
   font-weight: 700;
-  color: #fff;
-  background: #b45309;
-  border: 1px solid #fff;
-  padding: 0 4px;
-  border-radius: 999px;
-  line-height: 12px;
-  min-width: 12px;
-  text-align: center;
+  color: #1e293b;
+  background: transparent;
+  border: none;
+  padding: 0;
+  line-height: 1;
   letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
-/* Bransman noktasi pin'i — pin'in kenari ve uzerinde catallanma rozeti */
-.grid-pole-pin.is-branch-point {
+/* Bransman noktasi pin'i — pin'in kenari ve uzerinde catallanma rozeti.
+   Trafo'da bu efektler GORUNMEZ; trafo zaten kendi sembolu ile ifade
+   edilir, ek halka karmasiklik yapar. */
+.grid-pole-pin.is-branch-point:not(.is-transformer) {
   position: relative;
   box-shadow: 0 0 0 2px #6366f1, 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.grid-pole-pin.is-transformer .grid-pole-branch-badge {
+  display: none;
 }
 .grid-pole-branch-badge {
   position: absolute;
