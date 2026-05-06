@@ -12,7 +12,7 @@ from app.models import alarm, alarm_rule, device, gateway, gateway_ingest_batch,
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
-from app.services import telemetry_consumer, telemetry_retention
+from app.services import alarm_reconciliation, telemetry_consumer, telemetry_retention
 
 app = FastAPI(title=settings.app_name)
 
@@ -498,3 +498,16 @@ def start_telemetry_retention():
 @app.on_event("shutdown")
 def stop_telemetry_retention():
     telemetry_retention.stop()
+
+
+@app.on_event("startup")
+def start_alarm_reconciliation():
+    """Acik alarmlari periyodik olarak kontrol et — kosul artik karsilanmiyorsa
+    onaylanmis ise sil, onaylanmamis ise reset=True yap. alarm-service in-memory
+    state drift'inden bagimsiz self-healing saglar."""
+    alarm_reconciliation.start()
+
+
+@app.on_event("shutdown")
+def stop_alarm_reconciliation():
+    alarm_reconciliation.stop()
