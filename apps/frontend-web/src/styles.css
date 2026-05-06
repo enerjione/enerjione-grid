@@ -16703,6 +16703,71 @@ main.content.engineering-content:has(.device-management-panel) {
   padding: 3px 10px;
   font-size: 11px;
 }
+
+/* Kart icindeki canli sure pill'i (modal'in mini hali) */
+.faults-card-time-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  white-space: nowrap;
+}
+.faults-card-time-pill > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  line-height: 1.1;
+}
+.faults-card-time-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.faults-card-time-pill strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.faults-card-time-pill.is-live {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.faults-card-time-pill.is-live .faults-card-time-label {
+  color: #b91c1c;
+}
+.faults-card-time-pill.is-live strong {
+  color: #b91c1c;
+}
+.faults-card-time-pill.is-final {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.faults-card-time-pill.is-final .faults-card-time-label {
+  color: #047857;
+}
+.faults-card-time-pill.is-final strong {
+  color: #047857;
+}
+.faults-card-time-pill.is-final .material-symbols-outlined {
+  font-size: 14px !important;
+  color: #10b981;
+}
+.faults-card-time-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  display: inline-block;
+  flex-shrink: 0;
+  animation: fault-elapsed-pulse 1.4s ease-out infinite;
+}
+
 .faults-card-meta-stack {
   display: flex;
   flex-direction: row;

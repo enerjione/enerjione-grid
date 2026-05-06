@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { GridSnapshot } from "../../shared/api";
 import type {
@@ -56,6 +56,20 @@ function fmtDate(iso?: string | null): string {
   return new Date(iso).toLocaleString("tr-TR");
 }
 
+function fmtElapsed(openedIso: string, endMs: number): string {
+  const start = new Date(openedIso).getTime();
+  let sec = Math.max(0, Math.round((endMs - start) / 1000));
+  const days = Math.floor(sec / 86400);
+  sec -= days * 86400;
+  const hours = Math.floor(sec / 3600);
+  sec -= hours * 3600;
+  const mins = Math.floor(sec / 60);
+  if (days > 0) return `${days}g ${hours}sa ${mins}dk`;
+  if (hours > 0) return `${hours}sa ${mins}dk`;
+  if (mins > 0) return `${mins}dk`;
+  return `<1dk`;
+}
+
 export function FaultListPage({
   faults,
   users,
@@ -74,6 +88,13 @@ export function FaultListPage({
   const [statusFilter, setStatusFilter] = useState<"active" | "all" | "closed">("active");
   const [search, setSearch] = useState("");
   const [openFaultId, setOpenFaultId] = useState<number | null>(null);
+  // Canlı süre sayacı için "now" — kart üzerindeki "x sa y dk" güncel kalsin.
+  // Kart sayisi çok değil, 30sn'lik tick yeterli (ms hassasiyet anlamsız).
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const stats = useMemo(() => {
     const total = faults.length;
@@ -247,6 +268,46 @@ export function FaultListPage({
                     >
                       {STATUS_LABEL[f.status] ?? f.status}
                     </span>
+                    {(() => {
+                      const isLive =
+                        f.status !== "closed" && f.status !== "resolved";
+                      const endMs = isLive
+                        ? now
+                        : f.closed_at
+                          ? new Date(f.closed_at).getTime()
+                          : f.resolved_at
+                            ? new Date(f.resolved_at).getTime()
+                            : now;
+                      return (
+                        <div
+                          className={`faults-card-time-pill ${
+                            isLive ? "is-live" : "is-final"
+                          }`}
+                          title={
+                            isLive
+                              ? "Arıza halen aktif — canlı süre"
+                              : "Toplam arıza süresi"
+                          }
+                        >
+                          {isLive ? (
+                            <span
+                              className="faults-card-time-pulse"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <span className="material-symbols-outlined">
+                              hourglass_top
+                            </span>
+                          )}
+                          <div>
+                            <span className="faults-card-time-label">
+                              {isLive ? "Arıza Süresi" : "Toplam Süre"}
+                            </span>
+                            <strong>{fmtElapsed(f.opened_at, endMs)}</strong>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="faults-card-meta-stack">
                       <div className="faults-card-meta">
                         <span className="material-symbols-outlined">person</span>
@@ -256,9 +317,9 @@ export function FaultListPage({
                           )}
                         </span>
                       </div>
-                      <div className="faults-card-meta">
-                        <span className="material-symbols-outlined">schedule</span>
-                        <span title={fmtDate(f.opened_at)}>{fmtRelative(f.opened_at)}</span>
+                      <div className="faults-card-meta" title={fmtDate(f.opened_at)}>
+                        <span className="material-symbols-outlined">event</span>
+                        <span>{fmtDate(f.opened_at)}</span>
                       </div>
                       <div className="faults-card-meta">
                         <span className="material-symbols-outlined">forum</span>
