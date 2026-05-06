@@ -738,17 +738,8 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   click: () => onSelectDevice(device.id)
                 }}
               >
-                {/* Yakinlasildiginda goz gezdirenlerin cihazi tanimasi
-                    icin kucuk kalici isim etiketi. CSS opacity ile yakin
-                    zoom'da belirginlesir, uzakta soluk durur. */}
-                <Tooltip
-                  permanent
-                  direction="bottom"
-                  offset={[0, 8]}
-                  className="device-name-label-tip"
-                >
-                  {device.name}
-                </Tooltip>
+                {/* Cihaz adi sadece hover'da gozuksun — kalici etiketler
+                    zoom'lu haritada cok yer kapliyor, kullanici kaldirildi. */}
                 <Tooltip sticky direction="top" offset={[0, -10]}>
                   <strong>{device.name}</strong>
                   <br />
