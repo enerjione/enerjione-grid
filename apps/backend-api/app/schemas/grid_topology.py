@@ -43,6 +43,8 @@ class LineBase(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     color: str | None = Field(default=None, max_length=20)
     is_active: bool = True
+    # Bransman: bu hat baska bir hattin diregine bagliysa o pole'un id'si.
+    branched_from_pole_id: int | None = None
 
 
 class LineCreate(LineBase):
@@ -56,6 +58,7 @@ class LineUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     color: str | None = Field(default=None, max_length=20)
     is_active: bool | None = None
+    branched_from_pole_id: int | None = None
 
 
 class LineRead(LineBase):

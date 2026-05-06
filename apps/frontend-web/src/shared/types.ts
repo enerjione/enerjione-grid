@@ -217,6 +217,8 @@ export type Line = {
   description?: string | null;
   color?: string | null;
   is_active: boolean;
+  /** Bransman: bu hat baska bir hattin diregine bagliysa o pole'un id'si. */
+  branched_from_pole_id?: number | null;
   created_at: string;
   pole_count?: number;
   segment_count?: number;

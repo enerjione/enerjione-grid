@@ -68,6 +68,13 @@ class Line(Base):
     # Bölge rengini override etmek için (boşsa Region.color kullanılır).
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Bransman: Bu hat baska bir hattin diregine bagliysa o pole'un id'si.
+    # Saglik bilgisi: bu direk hem ana hattin bir noktasi, hem bu hattin baslangici
+    # gibi davranir. Frontend ariza algoritmasi ana hat -> bransman'a kadar
+    # akimi takip ederken bransman'i da kontrol eder.
+    branched_from_pole_id: Mapped[int | None] = mapped_column(
+        ForeignKey("poles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
