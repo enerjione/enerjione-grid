@@ -371,7 +371,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       return dx * dx + dy * dy;
     };
     // Bir polyline'i belirli bir nokta cevresinde ikiye ayir.
-    // Once nokta hangi segmentte (k. ile k+1.) en yakin: o segmenti ikiye keser.
+    // Nokta polyline uzerinde olmayabilir — en yakin edge'i bul,
+    // noktayi o edge'e dik atisla projekte et, polyline'i o projeksiyon
+    // noktasinda kes.
     const splitPolyline = (
       polyline: [number, number][],
       splitAt: [number, number]
@@ -381,18 +383,32 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       }
       let bestK = 0;
       let bestD = Infinity;
+      let bestProj: [number, number] = polyline[0];
       for (let k = 0; k < polyline.length - 1; k += 1) {
         const a = polyline[k];
         const b = polyline[k + 1];
-        const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        const d = dist2(mid, splitAt);
+        // Edge yon vektoru
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) continue;
+        // splitAt'in a'ya gore edge uzerindeki t parametresi (0..1 arasinda projeksiyon edge ici)
+        const t = Math.max(0, Math.min(1, ((splitAt[0] - a[0]) * dx + (splitAt[1] - a[1]) * dy) / len2));
+        const projX = a[0] + t * dx;
+        const projY = a[1] + t * dy;
+        const ddx = projX - splitAt[0];
+        const ddy = projY - splitAt[1];
+        const d = ddx * ddx + ddy * ddy;
         if (d < bestD) {
           bestD = d;
           bestK = k;
+          bestProj = [projX, projY];
         }
       }
-      const pre: [number, number][] = [...polyline.slice(0, bestK + 1), splitAt];
-      const post: [number, number][] = [splitAt, ...polyline.slice(bestK + 1)];
+      // Pre: polyline[0..bestK] + projeksiyon noktasi
+      // Post: projeksiyon noktasi + polyline[bestK+1..end]
+      const pre: [number, number][] = [...polyline.slice(0, bestK + 1), bestProj];
+      const post: [number, number][] = [bestProj, ...polyline.slice(bestK + 1)];
       return { pre, post };
     };
 
