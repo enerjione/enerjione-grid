@@ -6302,12 +6302,14 @@ main.content.engineering-content:has(.device-management-panel) {
   font-size: 9px;
 }
 /* Trafo direk pin'i — sadelestirilmis: TEK GORSEL = ic ice iki halka.
-   Cerceve, kare arka plan, gradient YOK. Hat basi/sonu (is-start/is-end)
-   renk override'lari da iptal — sadece halkalar gozuksun. */
+   Cerceve, kare arka plan, gradient YOK. Halka rengi hat basi/sonu
+   durumuna gore degisir (yesil = is-start, kirmizi = is-end, koyu mavi
+   = ara direk). Halka cap'i hat polyline weight'inden buyuk olmali ki
+   cizgi halkanin icinden gecmesin, kenari opak doldurma ile maskelensin. */
 .grid-pole-pin.is-transformer,
 .grid-pole-pin--sm.is-transformer {
-  width: 24px !important;
-  height: 24px !important;
+  width: 36px !important;
+  height: 36px !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -6316,8 +6318,6 @@ main.content.engineering-content:has(.device-management-panel) {
   align-items: center;
   justify-content: center;
   position: relative;
-  /* hat basi (yesil) / hat sonu (kirmizi) override'larini iptal et:
-     trafo direkleri kendi sembolu ile ifade edilir, ek renk anlamsiz. */
 }
 .grid-pole-pin.is-transformer.is-start,
 .grid-pole-pin.is-transformer.is-end,
@@ -6327,28 +6327,46 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .grid-trafo-rings {
   position: relative;
-  width: 22px;
-  height: 14px;
+  width: 32px;
+  height: 22px;
   display: block;
+  /* Hat polyline'i halkanin altinda kalsa bile gozukmesin diye opak
+     beyaz dolgu (halka cizgisi disindaki ic alan) — z-index pin > path. */
 }
 .grid-trafo-ring {
   position: absolute;
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 2px solid #1e293b;
-  background: transparent;
+  /* Default (ara direk) — koyu, halka rengi olarak okunur. */
+  border: 3px solid #1e293b;
+  /* Halkanin ICINI beyaz dolduruyoruz: hat cizgisi halkanin uzerinden
+     gectiginde halkanin icinden gecmis gibi gozukmesin, kenara dayansin. */
+  background: #ffffff;
   top: 0;
+  box-sizing: border-box;
 }
 .grid-trafo-ring--outer { left: 0; }
-.grid-trafo-ring--inner { left: 7px; }
+.grid-trafo-ring--inner { left: 10px; }
+
+/* Hat basi/sonu durumunda halkanin kendisi yesil/kirmizi olur (ek bir
+   cerceveye gerek yok — kullanici talebi). */
+.grid-pole-pin.is-transformer.is-start .grid-trafo-ring,
+.grid-pole-pin--sm.is-transformer.is-start .grid-trafo-ring {
+  border-color: #16a34a;
+}
+.grid-pole-pin.is-transformer.is-end .grid-trafo-ring,
+.grid-pole-pin--sm.is-transformer.is-end .grid-trafo-ring {
+  border-color: #dc2626;
+}
+
 .grid-pole-pin.is-transformer .grid-pole-seq,
 .grid-pole-pin--sm.is-transformer .grid-pole-seq {
   position: absolute;
-  bottom: -10px;
+  bottom: -12px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: #1e293b;
   background: transparent;

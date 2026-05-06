@@ -1,12 +1,9 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
-from app.models.device import Device
-from app.models.enums import CommunicationStatus, UserRole
+from app.models.enums import UserRole
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.device import DeviceCreate, DeviceRead, DeviceUpdate
@@ -16,44 +13,17 @@ from app.services.scope_service import get_visible_device_ids
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
-def _is_stale_online(device: Device) -> bool:
-    """DB'de "online" yaziyor olsa bile son telemetri cok eskiyse True.
-
-    Cihaz bagliyken bile cok yavas telemetri gonderebilir (event-bazli
-    sinyaller, dusuk poll rate vb). False-negative riskini azaltmak icin
-    threshold cok cok genis tutuldu — sadece "uzun zamandir hic veri yok"
-    senaryosunda offline'a duser.
-
-    Eski threshold: max(180sn, poll*3+30) — kisaydi, normal calisan
-    cihazlari bile offline gostermeye basladi (kullanici sikayeti).
-
-    Yeni threshold: max(15dk, poll*30+60sn). Cihaz gerçekten 15+ dakika
-    veri yollamadiysa offline kabul edilir; aksi halde DB'ye guvenilir.
-    """
-    if device.communication_status != CommunicationStatus.ONLINE:
-        return False
-    last = device.last_update_at
-    if last is None:
-        # Hic veri gelmemis cihaz — DB online olarak isaretleyemez zaten;
-        # eger oyleyse manuel set edilmis (false positive). Yine de stale
-        # saymayi cok katı yapmamak icin: NULL'da OFFLINE'a dusurmuyoruz,
-        # DB ne diyorsa onu donuyoruz. Tag engine'in last_update_at'i
-        # online'da set ettigine guveniyoruz.
-        return False
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=timezone.utc)
-    elapsed = (datetime.now(timezone.utc) - last).total_seconds()
-    threshold = max(900, (device.poll_interval_sec or 5) * 30 + 60)
-    return elapsed > threshold
-
-
-def _to_read_with_stale_check(device: Device) -> DeviceRead:
-    """ORM cihazi DeviceRead'a serialize ederken stale online -> offline
-    override uygular. ORM objesini mutate ETMEZ (DB'ye sizmaz)."""
-    read = DeviceRead.model_validate(device, from_attributes=True)
-    if _is_stale_online(device):
-        read.communication_status = CommunicationStatus.OFFLINE
-    return read
+# NOT: Onceden burada bir "stale online -> offline" override calisiyordu;
+# DB'de "online" yazmasina ragmen son telemetri esikten eskiyse OFFLINE'a
+# dusuruyordu. Ancak:
+#   1) datetime karsilastirmasi (timezone offset edge-case'leri) flicker
+#      yaratiyordu — kullanici "sayfa yenilendikce farkli sonuc" dedi,
+#   2) bagliyken yavas telemetri gonderen cihazlari da offline gosteriyordu,
+#   3) tag-engine zaten her telemetri'de communication_status'u dogru
+#      sekilde guncelliyor (offline/comm_lost/restart -> OFFLINE; iyi
+#      okuma -> ONLINE).
+# Frontend tarafinda gateway-down kontrolu (effectiveCommStatus) ek
+# koruma sagliyor. DB'deki tek gercege guvenmek en stabil yaklasim.
 
 
 @router.get("", response_model=list[DeviceRead])
@@ -71,8 +41,7 @@ def list_devices(
     visible_ids = get_visible_device_ids(db, current_user)
     if visible_ids is not None:
         rows = [d for d in rows if d.id in visible_ids]
-    # Stale online -> offline override (DB'ye yazmadan, sadece response).
-    return [_to_read_with_stale_check(d) for d in rows]
+    return rows
 
 
 @router.post("", response_model=DeviceRead, status_code=status.HTTP_201_CREATED)

@@ -76,7 +76,7 @@ const polePin = (
   const branchBadge = (isBranchPoint || isBranchEntry)
     ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
     : "";
-  const size: [number, number] = isTrafo ? [30, 30] : [20, 20];
+  const size: [number, number] = isTrafo ? [36, 36] : [20, 20];
   const icon = L.divIcon({
     className: "grid-pole-leaflet-wrap",
     html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}</div>`,

@@ -500,6 +500,27 @@ export function App() {
     return () => window.clearInterval(id);
   }, [session]);
 
+  // Cihaz listesi canli refresh: 5sn'de bir. Anasayfa cihaz panelindeki
+  // haberlesme durumlari (yesil/gri dot), batarya, alarm bayraklari
+  // sayfa yenilenmeden guncellensin. Onceden sadece ilk yuklemede ve
+  // manuel refresh'te cekiliyordu — bu yuzden cihaz online olsa bile
+  // UI'da stale "haberlesme yok" goruntusu kaliyordu.
+  useEffect(() => {
+    if (!session) return;
+    const tick = async () => {
+      try {
+        const list = await fetchDevices(session.accessToken);
+        setDevices(list);
+      } catch {
+        // ignore
+      }
+    };
+    const id = window.setInterval(() => {
+      void tick();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [session]);
+
   const reloadSignals = async () => {
     if (!session) return;
     setSignalLoading(true);
