@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouse
 
 import {
   fetchNotifications,
-  fetchNotificationUnreadCount,
   markAllNotificationsRead,
   markNotificationRead
 } from "../shared/api";
@@ -160,8 +159,21 @@ export function NotificationBell({ token, onNavigate }: Props) {
     if (pollInFlight.current) return;
     pollInFlight.current = true;
     try {
-      const n = await fetchNotificationUnreadCount(token);
-      setUnread(n);
+      // Backend tum okunmamislari sayar; frontend ise eski format alarmlari
+      // (metadata'siz) gizliyor. Tutarli rakam icin polling sirasinda da
+      // ayni filtre kuralini uygula: list cek, filtreden gec, count'i kullan.
+      const list = await fetchNotifications(token, { onlyUnread: true, limit: 50 });
+      const filteredCount = list.filter((item) => {
+        if (item.category !== "alarm") return true;
+        if (!item.metadata_json) return false;
+        try {
+          const meta = JSON.parse(item.metadata_json) as { device_code?: unknown };
+          return Boolean(meta && typeof meta.device_code === "string" && meta.device_code);
+        } catch {
+          return false;
+        }
+      }).length;
+      setUnread(filteredCount);
     } catch {
       // Sessizce gec - polling hatalari kullaniciyi rahatsiz etmesin
     } finally {
@@ -176,8 +188,24 @@ export function NotificationBell({ token, onNavigate }: Props) {
       // Yalnizca okunmamislari getir — kullanici daha onceden okuduklarini
       // tekrar gormek istemiyor (istek). Liste boyutu da stabil kalir.
       const list = await fetchNotifications(token, { onlyUnread: true, limit: 50 });
-      setItems(list);
-      setUnread(list.length);
+      // Eski format alarm bildirimlerini gizle: yeni alarm kayitlari
+      // metadata_json icinde device_code (ve genelde line_name/region_name)
+      // tasiyor; bunlardan once uretilmis "ALARM Test alarmi" gibi bos
+      // kartlar artik anlamsiz. Kategori "alarm" + metadata'da device_code
+      // yoksa filtrele. Diger kategoriler (alarm_assignment, fault_*) ve
+      // dolu metadata'li alarmlar etkilenmez.
+      const filtered = list.filter((item) => {
+        if (item.category !== "alarm") return true;
+        if (!item.metadata_json) return false;
+        try {
+          const meta = JSON.parse(item.metadata_json) as { device_code?: unknown };
+          return Boolean(meta && typeof meta.device_code === "string" && meta.device_code);
+        } catch {
+          return false;
+        }
+      });
+      setItems(filtered);
+      setUnread(filtered.length);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Bildirimler alınamadı.");
     } finally {

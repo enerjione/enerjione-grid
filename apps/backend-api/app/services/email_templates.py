@@ -266,6 +266,125 @@ def _google_maps_directions_url(latitude: float, longitude: float) -> str:
     return f"https://www.google.com/maps/dir/?api=1&destination={latitude},{longitude}"
 
 
+def render_assignment_email(
+    *,
+    project_title: str | None,
+    kind: str,  # "alarm" | "fault"
+    recipient_full_name: str,
+    title: str,
+    description: str | None,
+    level: str | None,
+    actor_username: str | None,
+    link_path: str | None = None,
+) -> tuple[str, str]:
+    """Alarm/Fault atama bildirimi HTML maili.
+
+    Atanan kisinin sistemde gorebilmesi icin baslik + aciklama + atayan
+    kullanici adi. Severity kucuk rozetle gosterilir; CTA butonu (varsa
+    link_path) "Detayi Goruntule" yazar."""
+    lvl_label = _level_label_tr(level)
+    lvl_color = _level_color(level)
+    title_safe = _esc(project_title or "Smart Logger")
+    name_safe = _esc(recipient_full_name)
+    rule_safe = _esc(title)
+    desc_safe = _esc(description) if description else ""
+    actor_safe = _esc(actor_username) if actor_username else "-"
+    eyebrow = "Yeni Arıza Ataması" if kind == "fault" else "Yeni Alarm Ataması"
+    icon_emoji = "🛠" if kind == "fault" else "🔔"
+
+    rows: list[tuple[str, str]] = [
+        ("Atayan", actor_safe),
+    ]
+    if level:
+        rows.append((
+            "Seviye",
+            f'<span style="display:inline-block;padding:2px 10px;border-radius:6px;'
+            f'background:{lvl_color};color:#ffffff;font-size:11px;font-weight:700;'
+            f'letter-spacing:0.04em;">{_esc(lvl_label)}</span>',
+        ))
+    rows_html = "".join(
+        f'<tr>'
+        f'<td style="padding:10px 14px;color:#64748b;font-size:12px;'
+        f'text-transform:uppercase;letter-spacing:0.04em;font-weight:700;'
+        f'width:120px;border-bottom:1px solid #f1f5f9;">{_esc(label)}</td>'
+        f'<td style="padding:10px 14px;color:#0f172a;font-size:14px;'
+        f'border-bottom:1px solid #f1f5f9;">{value}</td>'
+        f'</tr>'
+        for label, value in rows
+    )
+
+    desc_block = (
+        f'<p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5;">'
+        f'{desc_safe}</p>'
+    ) if desc_safe else ""
+
+    cta_block = ""
+    if link_path:
+        cta_block = (
+            f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+            f'style="margin:20px 0 0;"><tr><td>'
+            f'<span style="display:inline-block;padding:10px 22px;background:#4338ca;'
+            f'color:#ffffff;border-radius:8px;font-weight:600;font-size:14px;">'
+            f'Sistemden detayını görüntüleyebilirsiniz</span>'
+            f'</td></tr></table>'
+        )
+
+    subject = f"[{eyebrow}] {title}"
+    html_body = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{_esc(subject)}</title>
+</head>
+<body style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"
+         style="max-width:600px;width:100%;background:#ffffff;border-radius:14px;
+                box-shadow:0 4px 14px rgba(15,23,42,0.06);overflow:hidden;">
+    <tr>
+      <td style="background:#4338ca;padding:18px 24px;color:#ffffff;">
+        <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;
+                    font-weight:700;opacity:0.85;">{title_safe}</div>
+        <div style="font-size:20px;font-weight:700;margin-top:4px;">
+          {icon_emoji} {_esc(eyebrow)}
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:24px;">
+        <p style="margin:0 0 14px;color:#0f172a;font-size:15px;">
+          Merhaba <strong>{name_safe}</strong>,
+        </p>
+        <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5;">
+          Sistemde size yeni bir {"arıza" if kind == "fault" else "alarm"}
+          atandı. Detaylar aşağıdadır.
+        </p>
+        <h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;line-height:1.3;">
+          {rule_safe}
+        </h2>
+        {desc_block}
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;
+                      border-collapse:separate;border-spacing:0;">
+          {rows_html}
+        </table>
+        {cta_block}
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px;
+                 line-height:1.5;border-top:1px solid #e2e8f0;">
+        Bu e-posta size yapılan atama nedeniyle gönderildi. Bildirimleri
+        kapatmak için kullanıcı tercihlerinizden e-posta seçeneğini
+        kapatabilirsiniz.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+    return subject, html_body
+
+
 def render_fault_email(
     *,
     project_title: str | None,

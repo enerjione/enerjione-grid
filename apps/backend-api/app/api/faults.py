@@ -210,6 +210,7 @@ def assign_fault(
     f = db.get(FaultEvent, fault_id)
     if f is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ariza bulunamadi.")
+    previous_assignee = f.assigned_to_username
     target_username = payload.assigned_to_username or None
     if target_username:
         target = db.scalar(select(User).where(User.username == target_username))
@@ -228,6 +229,65 @@ def assign_fault(
         message=f"Ariza atandi: fault {fault_id} -> {target_username or '(boş)'}",
         metadata={"fault_id": fault_id, "assigned_to": target_username},
     )
+    # Atanan kisi degistiyse (yeni kisi varsa) web bildirim + email gonder.
+    # Aynı kisiye yeniden atama bildirim spam'i olusturmasin.
+    if target_username and target_username != previous_assignee:
+        # Ariza bilgisini topla — bildirim metnini guzellestirir.
+        from app.models.grid_topology import Line, Region
+        from app.services.notification_service import create_notification
+        line_row = db.get(Line, f.line_id) if f.line_id else None
+        region_row = db.get(Region, f.region_id) if f.region_id else None
+        line_name = line_row.name if line_row else f"#{f.line_id}"
+        region_name = region_row.name if region_row else None
+        if current_user.username == target_username:
+            notif_title = f"Bu arızayı kendi üstünüze aldınız: {line_name}"
+        else:
+            notif_title = f"Size yeni bir arıza atandı: {line_name}"
+        body_text = (
+            f"Hat: {line_name}"
+            + (f" ({region_name})" if region_name else "")
+            + (f", Direk #{f.from_pole_seq} ↔ #{f.to_pole_seq}"
+               if f.from_pole_seq is not None and f.to_pole_seq is not None else "")
+        )
+        try:
+            create_notification(
+                db,
+                recipient_username=target_username,
+                category="fault_assignment",
+                severity="warning",
+                title=notif_title,
+                body=body_text,
+                actor_username=current_user.username,
+                link=f"/faults#fault-{fault_id}",
+                metadata={
+                    "fault_id": fault_id,
+                    "line_id": f.line_id,
+                    "line_name": line_name,
+                    "region_id": f.region_id,
+                    "region_name": region_name,
+                    "from_pole_seq": f.from_pole_seq,
+                    "to_pole_seq": f.to_pole_seq,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("fault_assignment_notif_failed")
+        # E-posta bildirimi
+        try:
+            from app.services.alarm_engine_service import _send_assignment_email
+            _send_assignment_email(
+                db,
+                recipient_username=target_username,
+                kind="fault",
+                title=notif_title,
+                description=body_text,
+                level="warning",
+                actor_username=current_user.username,
+                link_path=f"/faults#fault-{fault_id}",
+            )
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("fault_assignment_email_failed")
     db.commit()
     db.refresh(f)
     return _serialize_fault(db, f)

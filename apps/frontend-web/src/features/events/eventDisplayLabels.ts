@@ -28,6 +28,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   "responsibility-area": "Sorumluluk alanı",
   responsibility_area: "Sorumluluk alanı",
   fault: "Hat arızası",
+  fault_assignment: "Arıza ataması",
   system: "Sistem"
 };
 
@@ -86,6 +87,7 @@ const CATEGORY_MOD: Record<string, string> = {
   "responsibility-area": "user",
   responsibility_area: "user",
   fault: "alarm",
+  fault_assignment: "alarm",
   system: "system"
 };
 

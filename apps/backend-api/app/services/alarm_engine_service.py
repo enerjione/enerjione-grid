@@ -53,9 +53,87 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
             link=f"/alarms#alarm-{alarm.id}",
             metadata={"alarm_id": alarm.id, "level": alarm.level},
         )
+        # E-posta bildirimi: kullanicinin email_enabled tercihi acik VE
+        # NotificationSettings.smtp_enabled ise atanan kisiye HTML mail.
+        try:
+            _send_assignment_email(
+                db,
+                recipient_username=new_assignee,
+                kind="alarm",
+                title=title,
+                description=alarm.description,
+                level=alarm.level,
+                actor_username=actor_username,
+                link_path=f"/alarms#alarm-{alarm.id}",
+            )
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("alarm_assignment_email_failed")
     db.commit()
     db.refresh(alarm)
     return alarm
+
+
+def _send_assignment_email(
+    db: Session,
+    *,
+    recipient_username: str,
+    kind: str,
+    title: str,
+    description: str | None,
+    level: str | None,
+    actor_username: str | None,
+    link_path: str | None = None,
+) -> None:
+    """Atama bildirimi (alarm/fault) icin HTML mail.
+
+    Sistem ayarlarinda SMTP aktif VE kullanicinin email tercihi acik (default
+    True) ise gonderilir. UserNotificationPreference satiri yoksa default
+    web+email True kabul edilir."""
+    from app.models.notification_settings import NotificationSettings
+    from app.models.project_settings import ProjectSettings
+    from app.models.user import User
+    from app.models.user_notification_preference import UserNotificationPreference
+    from app.services.email_templates import render_assignment_email
+    from app.services.notification_test_service import send_smtp_test
+
+    settings = db.scalar(select(NotificationSettings).limit(1))
+    if settings is None or not settings.smtp_enabled:
+        return
+    user = db.scalar(select(User).where(User.username == recipient_username))
+    if user is None or not user.email:
+        return
+    pref = db.get(UserNotificationPreference, user.id)
+    # Default: email_enabled = True (kullanici acikca kapatmadi).
+    email_enabled = True if pref is None else bool(pref.email_enabled)
+    if not email_enabled:
+        return
+    proj = db.get(ProjectSettings, 1)
+    project_title = (
+        (proj.site_title or proj.project_name or proj.customer_name) if proj else None
+    ) or None
+    subject, html_body = render_assignment_email(
+        project_title=project_title,
+        kind=kind,
+        recipient_full_name=user.full_name or user.username,
+        title=title,
+        description=description,
+        level=level,
+        actor_username=actor_username,
+        link_path=link_path,
+    )
+    plain_text = (
+        f"{title}\n\n"
+        f"Atayan: {actor_username or '-'}\n"
+        f"Aciklama: {description or '-'}\n"
+    )
+    send_smtp_test(
+        settings,
+        recipient_email=user.email,
+        subject=subject,
+        message=plain_text,
+        html_body=html_body,
+    )
 
 
 def list_alarm_comments(db: Session, alarm_id: int) -> list[AlarmComment]:
