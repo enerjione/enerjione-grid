@@ -165,14 +165,30 @@ export function NotificationSettingsPanel({
 
   return (
     <section className="tab-panel notification-tab-panel">
-      <div className="panel-head">
-        <h3>Bildirim Ayarları</h3>
+      <div className="panel-head notification-panel-head">
+        <div>
+          <h3>Bildirim Ayarları</h3>
+          <p className="helper-text" style={{ margin: "4px 0 0 0" }}>
+            Sistem geneli bildirim kanalları. Bir alarm kuralı tetiklendiğinde
+            kuraldaki "E-posta / SMS / Telegram" seçenekleri bu sayfada
+            <strong> aktif</strong> olan kanallardan gönderilir.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="primary-btn notification-save-top"
+          disabled={saving}
+          onClick={() => {
+            // Form submit'i tetikle (form ref yerine event dispatch)
+            void handleSubmit({
+              preventDefault: () => undefined
+            } as unknown as FormEvent<HTMLFormElement>);
+          }}
+        >
+          <span className="material-symbols-outlined">save</span>
+          {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}
+        </button>
       </div>
-      <p className="helper-text" style={{ marginTop: -8, marginBottom: 16 }}>
-        Sistem geneli bildirim kanalları. Bir alarm kuralı tetiklendiğinde
-        kuraldaki "E-posta / SMS / Telegram" seçenekleri bu sayfada
-        <strong> aktif</strong> olan kanallardan gönderilir.
-      </p>
 
       {/* Kanal durum ozeti — kullanici tek bakista hangi kanal acik gorur */}
       <div className="notif-status-row">
@@ -238,7 +254,7 @@ export function NotificationSettingsPanel({
                     }
                   />
                 </label>
-                <label className="notif-field">
+                <label className="notif-field notif-field--full">
                   <span>Kullanıcı Adı</span>
                   <input
                     value={form.smtp_username}
@@ -246,9 +262,10 @@ export function NotificationSettingsPanel({
                       setForm((prev) => ({ ...prev, smtp_username: event.target.value }))
                     }
                     autoComplete="off"
+                    placeholder="kullanici@firma.com"
                   />
                 </label>
-                <label className="notif-field">
+                <label className="notif-field notif-field--full">
                   <span>Şifre</span>
                   <input
                     type="password"
@@ -257,6 +274,7 @@ export function NotificationSettingsPanel({
                       setForm((prev) => ({ ...prev, smtp_password: event.target.value }))
                     }
                     autoComplete="new-password"
+                    placeholder="••••••••"
                   />
                 </label>
                 <label className="notif-field notif-field--full">
@@ -496,13 +514,6 @@ export function NotificationSettingsPanel({
         ) : null}
         {error ? <p className="error-text">{error}</p> : null}
         {submitError ? <p className="error-text">{submitError}</p> : null}
-
-        <div className="notification-form-actions">
-          <button type="submit" className="primary-btn" disabled={saving}>
-            <span className="material-symbols-outlined">save</span>
-            {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}
-          </button>
-        </div>
       </form>
     </section>
   );
