@@ -318,6 +318,20 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 })();
                 const lineLabel = meta?.line_name ?? meta?.line_code ?? null;
                 const regionLabel = meta?.region_name ?? null;
+                // Baslik formati: "Yeni alarm: <Alarm adi>" -> ust satira
+                // "Yeni alarm" kucuk eyebrow, alta buyuk alarm adi.
+                // Format uymuyorsa baslik tek parca gosterilir.
+                const titleParts = (() => {
+                  const t = item.title.trim();
+                  const idx = t.indexOf(":");
+                  if (idx > 0 && idx < t.length - 1) {
+                    return {
+                      eyebrow: t.slice(0, idx).trim(),
+                      main: t.slice(idx + 1).trim(),
+                    };
+                  }
+                  return { eyebrow: null as string | null, main: t };
+                })();
                 return (
                   <li
                     key={item.id}
@@ -332,7 +346,12 @@ export function NotificationBell({ token, onNavigate }: Props) {
                           Eski mavi okunmadi yuvarlagi kaldirildi; sol kalin renk
                           seridi zaten okunmadi/severity'yi gosteriyor. */}
                       <div className="notif-item-title-row">
-                        <strong className="notif-item-title">{item.title}</strong>
+                        <div className="notif-item-title-stack">
+                          {titleParts.eyebrow ? (
+                            <span className="notif-item-eyebrow">{titleParts.eyebrow}</span>
+                          ) : null}
+                          <strong className="notif-item-title">{titleParts.main}</strong>
+                        </div>
                         <div className="notif-item-actions">
                           {levelTr ? (
                             <span className={`notif-level-badge ${sevCls}`}>{levelTr}</span>

@@ -418,14 +418,37 @@ body {
   flex-shrink: 0;
 }
 
-.notif-item-title {
-  font-size: 13.5px;
-  color: #0f172a;
+/* Baslik dikey stack: ust satir kucuk eyebrow ("Yeni alarm"),
+   alt satir buyuk alarm adi ("Test alarmi"). */
+.notif-item-title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 1 1 auto;
-  word-break: break-word;
-  line-height: 1.35;
-  font-weight: 700;
   min-width: 0;
+}
+
+.notif-item-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  line-height: 1;
+}
+.notif-item.notif-sev-critical .notif-item-eyebrow {
+  color: #dc2626;
+}
+.notif-item.notif-sev-warning .notif-item-eyebrow {
+  color: #d97706;
+}
+
+.notif-item-title {
+  font-size: 14px;
+  color: #0f172a;
+  word-break: break-word;
+  line-height: 1.3;
+  font-weight: 700;
 }
 
 /* notif-item-dot artik kullanilmiyor — sol kalin renk seridi okunmadi
@@ -511,42 +534,37 @@ body {
    "hangi cihaz, hangi kaynak (Master/Satellite 01/Satellite 02)" tek
    bakista anlasilsin. Sinyal kodu kullaniciya gosterilmiyor (teknik
    detay; gerekirse alarm detay sayfasinda yer alir). */
+/* Cihaz/Kaynak/Hat/Bolge satirlari — kart icindeki diger metinlerle
+   ayni hizada, cerceve/arka plan YOK. Sade liste, kart kompoziyonunu
+   kirmasin. Sol marj icon hizasina denk gelsin. */
 .notif-item-rows {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-top: 4px;
-  padding: 8px 10px;
-  background: #f8fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-.notif-item.notif-sev-warning .notif-item-rows {
-  background: #fffbeb;
-  border-color: #fef3c7;
-}
-.notif-item.notif-sev-critical .notif-item-rows {
-  background: #fef2f2;
-  border-color: #fecaca;
+  gap: 4px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 .notif-row {
   display: grid;
-  grid-template-columns: 16px 50px 1fr;
+  grid-template-columns: 14px 54px 1fr;
   align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
+  gap: 8px;
+  font-size: 12px;
   line-height: 1.3;
 }
 .notif-row-icon {
   font-size: 14px !important;
-  color: #64748b;
+  color: #94a3b8;
 }
 .notif-row-label {
   color: #94a3b8;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 10px;
+  letter-spacing: 0.05em;
+  font-size: 9.5px;
 }
 .notif-row-value {
   color: #0f172a;
@@ -15741,8 +15759,229 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 @media (min-width: 1100px) {
   .faults-page-body {
-    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-columns: minmax(0, 1fr) 400px;
   }
+}
+
+/* ==== Sayac chip seridi ==== */
+.faults-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.faults-stat-chip {
+  flex: 1 1 120px;
+  min-width: 110px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  border-left: 4px solid #cbd5e1;
+}
+.faults-stat-chip--total      { border-left-color: #475569; }
+.faults-stat-chip--open       { border-left-color: #ef4444; }
+.faults-stat-chip--assigned   { border-left-color: #f59e0b; }
+.faults-stat-chip--progress   { border-left-color: #3b82f6; }
+.faults-stat-chip--resolved   { border-left-color: #10b981; }
+.faults-stat-chip--closed     { border-left-color: #94a3b8; }
+.faults-stat-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+}
+.faults-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* ==== Kart liste ==== */
+.faults-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.faults-empty-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 48px 24px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.faults-empty-card .material-symbols-outlined {
+  font-size: 56px !important;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 14px;
+  border-radius: 50%;
+}
+.faults-empty-card h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #0f172a;
+}
+.faults-empty-card p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 380px;
+  line-height: 1.5;
+}
+.faults-card {
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-left: 5px solid #ef4444;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.faults-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+}
+.faults-card.selected {
+  outline: 2px solid rgba(59, 130, 246, 0.55);
+  outline-offset: -2px;
+  background: rgba(59, 130, 246, 0.04);
+}
+.faults-card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.faults-card-row--top {
+  justify-content: space-between;
+}
+.faults-card-row--mid {
+  border-top: 1px dashed rgba(148, 163, 184, 0.25);
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.25);
+  padding: 10px 0;
+}
+.faults-card-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.faults-card-line-icon {
+  font-size: 22px !important;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 6px;
+  border-radius: 8px;
+}
+.faults-card-line strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.faults-card-line span {
+  display: block;
+  font-size: 11.5px;
+  color: #64748b;
+}
+.faults-card-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+}
+.faults-card-range-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.faults-card-range strong {
+  font-size: 14px;
+  color: #6366f1;
+  font-weight: 700;
+}
+.faults-card-devices {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.faults-card-dev {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.faults-card-dev > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.faults-card-dev span {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.faults-card-dev strong {
+  font-size: 12.5px;
+  color: #0f172a;
+  font-weight: 600;
+}
+.faults-card-dev-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.faults-card-dev--red .faults-card-dev-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
+}
+.faults-card-dev--green .faults-card-dev-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+.faults-card-arrow {
+  color: #cbd5e1;
+  font-size: 16px;
+  font-weight: 700;
+}
+.faults-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #475569;
+}
+.faults-card-meta .material-symbols-outlined {
+  font-size: 16px !important;
+  color: #94a3b8;
+}
+.faults-card-meta-dim {
+  color: #cbd5e1;
+  font-style: italic;
 }
 
 .faults-list {
