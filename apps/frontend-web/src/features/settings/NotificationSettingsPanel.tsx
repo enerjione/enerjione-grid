@@ -31,6 +31,13 @@ const EMPTY_SETTINGS: NotificationSettings = {
   telegram_chat_ids: ""
 };
 
+type ChannelDef = {
+  key: "smtp" | "sms" | "telegram";
+  label: string;
+  icon: string;
+  enabled: boolean;
+};
+
 export function NotificationSettingsPanel({
   initialSettings,
   loading,
@@ -46,14 +53,17 @@ export function NotificationSettingsPanel({
   const [smtpTestEmail, setSmtpTestEmail] = useState("");
   const [smsTestPhone, setSmsTestPhone] = useState("");
   const [telegramTestChat, setTelegramTestChat] = useState("");
-  const [testInfo, setTestInfo] = useState("");
+  // Test sonucu kanal-bazli ayri tutuluyor; her kart kendi banner'inda
+  // basari/hata gosterir (tek "testInfo" string'i karistirici idi).
+  const [testResult, setTestResult] = useState<
+    { channel: "smtp" | "sms" | "telegram"; ok: boolean; detail: string } | null
+  >(null);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [testingSms, setTestingSms] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
 
   useEffect(() => {
     if (initialSettings) {
-      // Backend bos donduyse defaultlari koru (telegram alanlari Optional).
       setForm({
         ...EMPTY_SETTINGS,
         ...initialSettings,
@@ -76,17 +86,21 @@ export function NotificationSettingsPanel({
 
   const handleSmtpTest = async () => {
     if (!smtpTestEmail.trim()) {
-      setSubmitError("SMTP test için alıcı e-posta giriniz.");
+      setTestResult({ channel: "smtp", ok: false, detail: "Test için alıcı e-posta giriniz." });
       return;
     }
     setSubmitError("");
-    setTestInfo("");
+    setTestResult(null);
     setTestingSmtp(true);
     try {
       const result = await onTestSmtp({ recipient_email: smtpTestEmail.trim() });
-      setTestInfo(result.detail);
+      setTestResult({ channel: "smtp", ...result });
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "SMTP test başarısız.");
+      setTestResult({
+        channel: "smtp",
+        ok: false,
+        detail: err instanceof Error ? err.message : "SMTP test başarısız."
+      });
     } finally {
       setTestingSmtp(false);
     }
@@ -94,17 +108,21 @@ export function NotificationSettingsPanel({
 
   const handleSmsTest = async () => {
     if (!smsTestPhone.trim()) {
-      setSubmitError("SMS test için telefon numarası giriniz.");
+      setTestResult({ channel: "sms", ok: false, detail: "Test için telefon numarası giriniz." });
       return;
     }
     setSubmitError("");
-    setTestInfo("");
+    setTestResult(null);
     setTestingSms(true);
     try {
       const result = await onTestSms({ recipient_phone: smsTestPhone.trim() });
-      setTestInfo(result.detail);
+      setTestResult({ channel: "sms", ...result });
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "SMS test başarısız.");
+      setTestResult({
+        channel: "sms",
+        ok: false,
+        detail: err instanceof Error ? err.message : "SMS test başarısız."
+      });
     } finally {
       setTestingSms(false);
     }
@@ -114,210 +132,375 @@ export function NotificationSettingsPanel({
     if (!onTestTelegram) return;
     const chat = telegramTestChat.trim();
     if (!chat) {
-      setSubmitError("Telegram test için chat ID giriniz.");
+      setTestResult({ channel: "telegram", ok: false, detail: "Test için chat ID giriniz." });
       return;
     }
     setSubmitError("");
-    setTestInfo("");
+    setTestResult(null);
     setTestingTelegram(true);
     try {
       const result = await onTestTelegram({ chat_id: chat });
-      setTestInfo(result.detail);
+      setTestResult({ channel: "telegram", ...result });
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Telegram test başarısız.");
+      setTestResult({
+        channel: "telegram",
+        ok: false,
+        detail: err instanceof Error ? err.message : "Telegram test başarısız."
+      });
     } finally {
       setTestingTelegram(false);
     }
   };
+
+  const channels: ChannelDef[] = [
+    { key: "smtp", label: "E-posta (SMTP)", icon: "mail", enabled: form.smtp_enabled },
+    { key: "sms", label: "SMS", icon: "sms", enabled: form.sms_enabled },
+    {
+      key: "telegram",
+      label: "Telegram Bot",
+      icon: "send",
+      enabled: form.telegram_enabled === true
+    }
+  ];
 
   return (
     <section className="tab-panel notification-tab-panel">
       <div className="panel-head">
         <h3>Bildirim Ayarları</h3>
       </div>
-      <form className="settings-modal notification-settings-panel" onSubmit={handleSubmit}>
-        <div className="notification-columns">
-          <div className="notification-card">
-            <h4>E-posta (SMTP)</h4>
-            <label className="notify-option">
-              <input
-                type="checkbox"
-                checked={form.smtp_enabled}
-                onChange={(event) => setForm((prev) => ({ ...prev, smtp_enabled: event.target.checked }))}
-              />
-              SMTP Aktif
-            </label>
-            <label>
-              SMTP Sunucu
-              <input
-                value={form.smtp_host}
-                onChange={(event) => setForm((prev) => ({ ...prev, smtp_host: event.target.value }))}
-                placeholder="smtp.ornek.com"
-              />
-            </label>
-            <label>
-              SMTP Port
-              <input
-                type="number"
-                min={1}
-                max={65535}
-                value={form.smtp_port}
-                onChange={(event) => setForm((prev) => ({ ...prev, smtp_port: Number(event.target.value) || 0 }))}
-              />
-            </label>
-            <label>
-              SMTP Kullanıcı Adı
-              <input
-                value={form.smtp_username}
-                onChange={(event) => setForm((prev) => ({ ...prev, smtp_username: event.target.value }))}
-              />
-            </label>
-            <label>
-              SMTP Şifre
-              <input
-                type="password"
-                value={form.smtp_password}
-                onChange={(event) => setForm((prev) => ({ ...prev, smtp_password: event.target.value }))}
-              />
-            </label>
-            <label>
-              Gönderen E-posta
-              <input
-                type="email"
-                value={form.smtp_from_email}
-                onChange={(event) => setForm((prev) => ({ ...prev, smtp_from_email: event.target.value }))}
-                placeholder="alarm@firma.com"
-              />
-            </label>
-            <label>
-              Test E-posta Adresi
-              <input
-                type="email"
-                value={smtpTestEmail}
-                onChange={(event) => setSmtpTestEmail(event.target.value)}
-                placeholder="test@firma.com"
-              />
-            </label>
-            <button type="button" className="secondary-btn" onClick={handleSmtpTest} disabled={testingSmtp}>
-              {testingSmtp ? "SMTP Test Ediliyor..." : "SMTP Test Gönder"}
-            </button>
-          </div>
+      <p className="helper-text" style={{ marginTop: -8, marginBottom: 16 }}>
+        Sistem geneli bildirim kanalları. Bir alarm kuralı tetiklendiğinde
+        kuraldaki "E-posta / SMS / Telegram" seçenekleri bu sayfada
+        <strong> aktif</strong> olan kanallardan gönderilir.
+      </p>
 
-          <div className="notification-card">
-            <h4>SMS</h4>
-            <label className="notify-option">
-              <input
-                type="checkbox"
-                checked={form.sms_enabled}
-                onChange={(event) => setForm((prev) => ({ ...prev, sms_enabled: event.target.checked }))}
-              />
-              SMS Aktif
-            </label>
-            <label>
-              SMS Sağlayıcı
-              <input
-                value={form.sms_provider}
-                onChange={(event) => setForm((prev) => ({ ...prev, sms_provider: event.target.value }))}
-                placeholder="mock / netgsm / twilio"
-              />
-            </label>
-            <label>
-              SMS API URL
-              <input
-                value={form.sms_api_url}
-                onChange={(event) => setForm((prev) => ({ ...prev, sms_api_url: event.target.value }))}
-                placeholder="https://..."
-              />
-            </label>
-            <label>
-              SMS API Key
-              <input
-                value={form.sms_api_key}
-                onChange={(event) => setForm((prev) => ({ ...prev, sms_api_key: event.target.value }))}
-              />
-            </label>
-            <label>
-              Test Telefon Numarası
-              <input
-                value={smsTestPhone}
-                onChange={(event) => setSmsTestPhone(event.target.value)}
-                placeholder="+90 5xx xxx xx xx"
-              />
-            </label>
-            <button type="button" className="secondary-btn" onClick={handleSmsTest} disabled={testingSms}>
-              {testingSms ? "SMS Test Ediliyor..." : "SMS Test Gönder"}
-            </button>
+      {/* Kanal durum ozeti — kullanici tek bakista hangi kanal acik gorur */}
+      <div className="notif-status-row">
+        {channels.map((ch) => (
+          <div
+            key={ch.key}
+            className={`notif-status-pill ${ch.enabled ? "is-on" : "is-off"}`}
+          >
+            <span className="material-symbols-outlined">{ch.icon}</span>
+            <span className="notif-status-label">{ch.label}</span>
+            <span className="notif-status-state">{ch.enabled ? "Aktif" : "Pasif"}</span>
           </div>
+        ))}
+      </div>
 
-          <div className="notification-card">
-            <h4>Telegram Bot</h4>
-            <p className="helper-text" style={{ marginTop: 0 }}>
-              Alarm kuralında "Telegram" işaretliyse, kural tetiklendiğinde
-              aşağıdaki bot kanal/grup chat ID'lerine HTML mesaj gönderilir.
-              Bot tokenini <code>@BotFather</code>'dan alabilirsiniz.
-            </p>
-            <label className="notify-option">
-              <input
-                type="checkbox"
-                checked={form.telegram_enabled === true}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, telegram_enabled: event.target.checked }))
-                }
-              />
-              Telegram Aktif
-            </label>
-            <label>
-              Bot Token
-              <input
-                type="password"
-                value={form.telegram_bot_token ?? ""}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, telegram_bot_token: event.target.value }))
-                }
-                placeholder="123456:ABC-DEF1234ghIkl..."
-                autoComplete="off"
-              />
-            </label>
-            <label>
-              Chat ID Listesi
-              <input
-                value={form.telegram_chat_ids ?? ""}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, telegram_chat_ids: event.target.value }))
-                }
-                placeholder="-1001234567890, 123456789"
-              />
-              <small className="helper-text">
-                Virgülle ayırın. Grup chat ID'leri "-100" ile başlar; kişisel
-                chat ID'lerini <code>@userinfobot</code>'tan öğrenebilirsiniz.
-              </small>
-            </label>
-            <label>
-              Test Chat ID
-              <input
-                value={telegramTestChat}
-                onChange={(event) => setTelegramTestChat(event.target.value)}
-                placeholder="-1001234567890"
-              />
-            </label>
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={handleTelegramTest}
-              disabled={testingTelegram || !onTestTelegram}
-            >
-              {testingTelegram ? "Telegram Test Ediliyor..." : "Telegram Test Gönder"}
-            </button>
-          </div>
+      <form className="notification-settings-panel notification-form-v2" onSubmit={handleSubmit}>
+        <div className="notification-cards-grid">
+          {/* ============ SMTP / E-posta ============ */}
+          <article className={`notification-card-v2 ${form.smtp_enabled ? "is-active" : ""}`}>
+            <header className="notification-card-head">
+              <div className="notification-card-icon">
+                <span className="material-symbols-outlined">mail</span>
+              </div>
+              <div className="notification-card-titles">
+                <h4>E-posta (SMTP)</h4>
+                <small>HTML şablonlu alarm bildirim e-postaları.</small>
+              </div>
+              <label className="notif-toggle">
+                <input
+                  type="checkbox"
+                  checked={form.smtp_enabled}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, smtp_enabled: event.target.checked }))
+                  }
+                />
+                <span className="notif-toggle-slider" />
+              </label>
+            </header>
+            <div className="notification-card-body">
+              <div className="notif-field-grid">
+                <label className="notif-field">
+                  <span>SMTP Sunucu</span>
+                  <input
+                    value={form.smtp_host}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, smtp_host: event.target.value }))
+                    }
+                    placeholder="smtp.ornek.com"
+                  />
+                </label>
+                <label className="notif-field notif-field--narrow">
+                  <span>Port</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={form.smtp_port}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        smtp_port: Number(event.target.value) || 0
+                      }))
+                    }
+                  />
+                </label>
+                <label className="notif-field">
+                  <span>Kullanıcı Adı</span>
+                  <input
+                    value={form.smtp_username}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, smtp_username: event.target.value }))
+                    }
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="notif-field">
+                  <span>Şifre</span>
+                  <input
+                    type="password"
+                    value={form.smtp_password}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, smtp_password: event.target.value }))
+                    }
+                    autoComplete="new-password"
+                  />
+                </label>
+                <label className="notif-field notif-field--full">
+                  <span>Gönderen E-posta</span>
+                  <input
+                    type="email"
+                    value={form.smtp_from_email}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, smtp_from_email: event.target.value }))
+                    }
+                    placeholder="alarm@firma.com"
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="notification-card-test">
+              <div className="notif-test-title">
+                <span className="material-symbols-outlined">science</span>
+                <span>Test Gönder</span>
+              </div>
+              <div className="notif-test-row">
+                <input
+                  type="email"
+                  value={smtpTestEmail}
+                  onChange={(event) => setSmtpTestEmail(event.target.value)}
+                  placeholder="test@firma.com"
+                />
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={handleSmtpTest}
+                  disabled={testingSmtp}
+                >
+                  {testingSmtp ? "Gönderiliyor..." : "Test"}
+                </button>
+              </div>
+              {testResult && testResult.channel === "smtp" ? (
+                <div
+                  className={`notif-test-result ${testResult.ok ? "is-ok" : "is-fail"}`}
+                  role="status"
+                >
+                  <span className="material-symbols-outlined">
+                    {testResult.ok ? "check_circle" : "error"}
+                  </span>
+                  {testResult.detail}
+                </div>
+              ) : null}
+            </div>
+          </article>
+
+          {/* ============ SMS ============ */}
+          <article className={`notification-card-v2 ${form.sms_enabled ? "is-active" : ""}`}>
+            <header className="notification-card-head">
+              <div className="notification-card-icon">
+                <span className="material-symbols-outlined">sms</span>
+              </div>
+              <div className="notification-card-titles">
+                <h4>SMS</h4>
+                <small>Telefon numarası kayıtlı kullanıcılara kısa mesaj.</small>
+              </div>
+              <label className="notif-toggle">
+                <input
+                  type="checkbox"
+                  checked={form.sms_enabled}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, sms_enabled: event.target.checked }))
+                  }
+                />
+                <span className="notif-toggle-slider" />
+              </label>
+            </header>
+            <div className="notification-card-body">
+              <div className="notif-field-grid">
+                <label className="notif-field notif-field--full">
+                  <span>SMS Sağlayıcı</span>
+                  <input
+                    value={form.sms_provider}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, sms_provider: event.target.value }))
+                    }
+                    placeholder="mock / netgsm / twilio"
+                  />
+                </label>
+                <label className="notif-field notif-field--full">
+                  <span>API URL</span>
+                  <input
+                    value={form.sms_api_url}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, sms_api_url: event.target.value }))
+                    }
+                    placeholder="https://api.netgsm.com.tr/sms/send"
+                  />
+                </label>
+                <label className="notif-field notif-field--full">
+                  <span>API Key</span>
+                  <input
+                    type="password"
+                    value={form.sms_api_key}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, sms_api_key: event.target.value }))
+                    }
+                    autoComplete="new-password"
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="notification-card-test">
+              <div className="notif-test-title">
+                <span className="material-symbols-outlined">science</span>
+                <span>Test Gönder</span>
+              </div>
+              <div className="notif-test-row">
+                <input
+                  value={smsTestPhone}
+                  onChange={(event) => setSmsTestPhone(event.target.value)}
+                  placeholder="+90 5xx xxx xx xx"
+                />
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={handleSmsTest}
+                  disabled={testingSms}
+                >
+                  {testingSms ? "Gönderiliyor..." : "Test"}
+                </button>
+              </div>
+              {testResult && testResult.channel === "sms" ? (
+                <div
+                  className={`notif-test-result ${testResult.ok ? "is-ok" : "is-fail"}`}
+                  role="status"
+                >
+                  <span className="material-symbols-outlined">
+                    {testResult.ok ? "check_circle" : "error"}
+                  </span>
+                  {testResult.detail}
+                </div>
+              ) : null}
+            </div>
+          </article>
+
+          {/* ============ Telegram ============ */}
+          <article
+            className={`notification-card-v2 ${form.telegram_enabled === true ? "is-active" : ""}`}
+          >
+            <header className="notification-card-head">
+              <div className="notification-card-icon">
+                <span className="material-symbols-outlined">send</span>
+              </div>
+              <div className="notification-card-titles">
+                <h4>Telegram Bot</h4>
+                <small>Bot ile kanal/grup chat'lerine HTML mesaj.</small>
+              </div>
+              <label className="notif-toggle">
+                <input
+                  type="checkbox"
+                  checked={form.telegram_enabled === true}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, telegram_enabled: event.target.checked }))
+                  }
+                />
+                <span className="notif-toggle-slider" />
+              </label>
+            </header>
+            <div className="notification-card-body">
+              <div className="notif-field-grid">
+                <label className="notif-field notif-field--full">
+                  <span>Bot Token</span>
+                  <input
+                    type="password"
+                    value={form.telegram_bot_token ?? ""}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, telegram_bot_token: event.target.value }))
+                    }
+                    placeholder="123456:ABC-DEF1234ghIkl..."
+                    autoComplete="off"
+                  />
+                  <small className="helper-text">
+                    Token <code>@BotFather</code>'dan alınır. Boş bırakılırsa Telegram
+                    bildirimi devre dışıdır.
+                  </small>
+                </label>
+                <label className="notif-field notif-field--full">
+                  <span>Chat ID Listesi</span>
+                  <input
+                    value={form.telegram_chat_ids ?? ""}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, telegram_chat_ids: event.target.value }))
+                    }
+                    placeholder="-1001234567890, 123456789"
+                  />
+                  <small className="helper-text">
+                    Virgülle ayırın. Grup ID'leri <code>-100</code> ile başlar; kişisel
+                    chat ID'leri <code>@userinfobot</code>'tan öğrenilir.
+                  </small>
+                </label>
+              </div>
+            </div>
+            <div className="notification-card-test">
+              <div className="notif-test-title">
+                <span className="material-symbols-outlined">science</span>
+                <span>Test Gönder</span>
+              </div>
+              <div className="notif-test-row">
+                <input
+                  value={telegramTestChat}
+                  onChange={(event) => setTelegramTestChat(event.target.value)}
+                  placeholder="-1001234567890"
+                />
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={handleTelegramTest}
+                  disabled={testingTelegram || !onTestTelegram}
+                >
+                  {testingTelegram ? "Gönderiliyor..." : "Test"}
+                </button>
+              </div>
+              {testResult && testResult.channel === "telegram" ? (
+                <div
+                  className={`notif-test-result ${testResult.ok ? "is-ok" : "is-fail"}`}
+                  role="status"
+                >
+                  <span className="material-symbols-outlined">
+                    {testResult.ok ? "check_circle" : "error"}
+                  </span>
+                  {testResult.detail}
+                </div>
+              ) : null}
+            </div>
+          </article>
         </div>
 
-        {loading ? <p className="helper-text">Ayarlar yükleniyor...</p> : null}
+        {loading ? (
+          <p className="helper-text" style={{ textAlign: "center" }}>
+            Ayarlar yükleniyor...
+          </p>
+        ) : null}
         {error ? <p className="error-text">{error}</p> : null}
         {submitError ? <p className="error-text">{submitError}</p> : null}
-        {testInfo ? <p className="helper-text">{testInfo}</p> : null}
-        <div className="settings-actions">
-          <button type="submit" disabled={saving}>
-            {saving ? "Kaydediliyor..." : "Kaydet"}
+
+        <div className="notification-form-actions">
+          <button type="submit" className="primary-btn" disabled={saving}>
+            <span className="material-symbols-outlined">save</span>
+            {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}
           </button>
         </div>
       </form>
