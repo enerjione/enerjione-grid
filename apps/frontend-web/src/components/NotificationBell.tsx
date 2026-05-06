@@ -328,25 +328,29 @@ export function NotificationBell({ token, onNavigate }: Props) {
                       <span className="material-symbols-outlined">{categoryIcon(item.category)}</span>
                     </span>
                     <div className="notif-item-body">
+                      {/* Ust satir: baslik + sag tarafta seviye rozeti + onay butonu.
+                          Eski mavi okunmadi yuvarlagi kaldirildi; sol kalin renk
+                          seridi zaten okunmadi/severity'yi gosteriyor. */}
                       <div className="notif-item-title-row">
                         <strong className="notif-item-title">{item.title}</strong>
-                        {!item.is_read ? <span className="notif-item-dot" /> : null}
-                        {!item.is_read ? (
-                          <button
-                            type="button"
-                            className="notif-item-mark-btn"
-                            title="Bu bildirimi okundu işaretle"
-                            aria-label="Okundu işaretle"
-                            onClick={(e) => void handleMarkOne(e, item)}
-                          >
-                            <span className="material-symbols-outlined">done</span>
-                          </button>
-                        ) : null}
+                        <div className="notif-item-actions">
+                          {levelTr ? (
+                            <span className={`notif-level-badge ${sevCls}`}>{levelTr}</span>
+                          ) : null}
+                          {!item.is_read ? (
+                            <button
+                              type="button"
+                              className="notif-item-mark-btn"
+                              title="Bu bildirimi okundu işaretle"
+                              aria-label="Okundu işaretle"
+                              onClick={(e) => void handleMarkOne(e, item)}
+                            >
+                              <span className="material-symbols-outlined">done</span>
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                      {/* Cihaz + Kaynak + Hat + Bolge satir satir — kullanici
-                          hangi cihazin hangi kaynagindan (master/sat01/sat02),
-                          hangi hat ve bolgeden alarm geldigini tek bakista
-                          anlasin. */}
+                      {/* Cihaz + Kaynak + Hat + Bolge satir satir */}
                       {isAlarm && (deviceLabel || srcLabel || lineLabel || regionLabel) ? (
                         <div className="notif-item-rows">
                           {deviceLabel ? (
@@ -402,10 +406,9 @@ export function NotificationBell({ token, onNavigate }: Props) {
                           ) : null}
                         </div>
                       ) : null}
+                      {/* Alt satir: zaman + actor (eger varsa). Seviye rozeti
+                          ust satira tasinarak meta sadelesti. */}
                       <div className="notif-item-meta">
-                        {levelTr ? (
-                          <span className={`notif-level-badge ${sevCls}`}>{levelTr}</span>
-                        ) : null}
                         {item.actor_username ? (
                           <span className="notif-item-actor">{item.actor_username}</span>
                         ) : null}
