@@ -35,22 +35,37 @@ def map_quality_to_status(quality: str) -> CommunicationStatus:
 DEFAULT_BATTERY_VOLTAGE_FULL = 3.71
 DEFAULT_BATTERY_VOLTAGE_LOW = 3.40
 
+# ProjectSettings DB query cache: her telemetry mesajinda DB'ye gitmeyelim.
+# 600 cihazda saniyede ~10 battery sinyali olur, hepsi ayni satiri okur.
+# 60 saniyelik cache yeterli (kullanici ayar degistirmesinden sonra max 1 dk).
+_BATTERY_THRESHOLDS_CACHE: tuple[float, float, float] | None = None  # (low, full, cached_at_epoch)
+_BATTERY_THRESHOLDS_TTL_SEC = 60.0
+
 
 def _battery_thresholds(db: Session | None) -> tuple[float, float]:
-    """Proje ayarlarindan (low, full) cek; yoksa default."""
+    """Proje ayarlarindan (low, full) cek; yoksa default. 60sn TTL ile cache."""
+    global _BATTERY_THRESHOLDS_CACHE
+    import time as _time
+    now = _time.monotonic()
+    cached = _BATTERY_THRESHOLDS_CACHE
+    if cached is not None and (now - cached[2]) < _BATTERY_THRESHOLDS_TTL_SEC:
+        return cached[0], cached[1]
     if db is None:
         return DEFAULT_BATTERY_VOLTAGE_LOW, DEFAULT_BATTERY_VOLTAGE_FULL
+    low = DEFAULT_BATTERY_VOLTAGE_LOW
+    full = DEFAULT_BATTERY_VOLTAGE_FULL
     try:
         from app.models.project_settings import ProjectSettings
         row = db.get(ProjectSettings, 1)
         if row is not None:
             low = row.battery_voltage_low if row.battery_voltage_low is not None else DEFAULT_BATTERY_VOLTAGE_LOW
             full = row.battery_voltage_full if row.battery_voltage_full is not None else DEFAULT_BATTERY_VOLTAGE_FULL
-            if full > low:
-                return float(low), float(full)
+            if full <= low:
+                low, full = DEFAULT_BATTERY_VOLTAGE_LOW, DEFAULT_BATTERY_VOLTAGE_FULL
     except Exception:  # noqa: BLE001
         pass
-    return DEFAULT_BATTERY_VOLTAGE_LOW, DEFAULT_BATTERY_VOLTAGE_FULL
+    _BATTERY_THRESHOLDS_CACHE = (float(low), float(full), now)
+    return float(low), float(full)
 
 
 def _battery_percent_from_signal(

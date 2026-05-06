@@ -173,14 +173,19 @@ def _consume_loop() -> None:
                 _ = properties
                 try:
                     payload = json.loads(body.decode("utf-8"))
-                    _persist_message(payload)
-                    # WS broadcast: bagli frontend client'lara anlik push.
-                    # Persist sonrasinda yapilir; DB'ye yazilmis veriyi
-                    # frontend ayni anda gorur (snapshot fetch ile tutarli).
+                    # WS broadcast ONCE: frontend cihaz degerini anlik gorur.
+                    # DB persist sonrasinda yapilirsa, DB lock/yavaslama frontend'i
+                    # de yavaslatir. WS sadece in-memory queue'ya put_nowait
+                    # (~mikro saniyeler), persist baska is parcaciginda gibi
+                    # davranir. Tutarsizlik riski kucuk: snapshot fetch
+                    # /signals/live DB'den okudugu icin her halukarda ayni
+                    # row'u gosterir; WS push erken gelir, polling 2sn sonra
+                    # ayni veriyi tekrar dogrular.
                     try:
                         ws_broadcaster.broadcast(payload)
                     except Exception:  # noqa: BLE001 — WS hatasi consume akisini bozmasin
                         logger.debug("ws_broadcast_failed", exc_info=True)
+                    _persist_message(payload)
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("telemetry-consumer-failed error=%s", exc)

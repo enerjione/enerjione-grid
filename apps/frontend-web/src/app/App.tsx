@@ -583,16 +583,22 @@ export function App() {
     // Anasayfada — harita ve tablo ikisi de canli degerlere ihtiyac duyar:
     //   - Tablo: liste hucreleri
     //   - Harita: popup batarya kartlari + sidebar master batarya yuzdesi
-    // Bu yuzden values veya map secilince ilk fetch tetiklenir; ayrica 5 sn'de
-    // bir yenilenir ki kullanici sayfa acik tutarken degerler canli kalsin.
+    //
+    // WS bagli iken: telemetri push ile saniye altinda gelir; polling sadece
+    // bir guvenlik agi (yeni cihaz eklenmesi, WS drop ettigi mesajlar). 30sn
+    // polling yeterli — backend'e gereksiz yuk vermiyor, frontend hala canli.
+    // WS bagli degilken (WS unsupported / nginx config eksik): polling 5sn
+    // (degerler "yeterince" canli gozuksun).
     if (pageMode !== "home") return;
     if (activeTab !== "values" && activeTab !== "map") return;
     void handleRefreshSignalLive();
+    const wsConnected = liveSocket.connectionState === "open";
+    const intervalMs = wsConnected ? 30000 : 5000;
     const interval = window.setInterval(() => {
       void handleRefreshSignalLive();
-    }, 5000);
+    }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [session, pageMode, activeTab, handleRefreshSignalLive]);
+  }, [session, pageMode, activeTab, handleRefreshSignalLive, liveSocket.connectionState]);
 
   const reloadAlarmRules = async () => {
     if (!session) return;
