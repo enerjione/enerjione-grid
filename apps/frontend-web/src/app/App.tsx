@@ -37,6 +37,8 @@ import {
   deleteSignal,
   deleteUser,
   addDeviceToArea,
+  addLineToArea,
+  addRegionToArea,
   addUserToArea,
   createResponsibilityArea,
   deleteResponsibilityArea,
@@ -49,6 +51,8 @@ import {
   fetchResponsibilityAreaDetail,
   fetchResponsibilityAreas,
   removeDeviceFromArea,
+  removeLineFromArea,
+  removeRegionFromArea,
   removeUserFromArea,
   updateResponsibilityArea,
   fetchSystemEvents,
@@ -770,6 +774,34 @@ export function App() {
     await removeDeviceFromArea(session.accessToken, areaId, deviceId);
     await reloadResponsibilityAreas();
     toast.success("Cihaz alandan çıkarıldı.");
+  };
+
+  const handleAddRegionToArea = async (areaId: number, regionId: number) => {
+    if (!session) return;
+    await addRegionToArea(session.accessToken, areaId, regionId);
+    await reloadResponsibilityAreas();
+    toast.success("Bölge alana eklendi.");
+  };
+
+  const handleRemoveRegionFromArea = async (areaId: number, regionId: number) => {
+    if (!session) return;
+    await removeRegionFromArea(session.accessToken, areaId, regionId);
+    await reloadResponsibilityAreas();
+    toast.success("Bölge alandan çıkarıldı.");
+  };
+
+  const handleAddLineToArea = async (areaId: number, lineId: number) => {
+    if (!session) return;
+    await addLineToArea(session.accessToken, areaId, lineId);
+    await reloadResponsibilityAreas();
+    toast.success("Hat alana eklendi.");
+  };
+
+  const handleRemoveLineFromArea = async (areaId: number, lineId: number) => {
+    if (!session) return;
+    await removeLineFromArea(session.accessToken, areaId, lineId);
+    await reloadResponsibilityAreas();
+    toast.success("Hat alandan çıkarıldı.");
   };
 
   const reloadGateways = async () => {
@@ -1550,6 +1582,8 @@ export function App() {
                 areas={responsibilityAreas}
                 users={users}
                 devices={devices}
+                regions={gridSnapshot?.regions ?? []}
+                lines={gridSnapshot?.lines ?? []}
                 onLoadDetail={handleLoadAreaDetail}
                 onCreate={handleCreateArea}
                 onUpdate={handleUpdateArea}
@@ -1558,6 +1592,10 @@ export function App() {
                 onRemoveUser={handleRemoveUserFromArea}
                 onAddDevice={handleAddDeviceToArea}
                 onRemoveDevice={handleRemoveDeviceFromArea}
+                onAddRegion={handleAddRegionToArea}
+                onRemoveRegion={handleRemoveRegionFromArea}
+                onAddLine={handleAddLineToArea}
+                onRemoveLine={handleRemoveLineFromArea}
               />
             ) : null}
             {engineeringPage === "outbound" && session.role === "installer" ? (

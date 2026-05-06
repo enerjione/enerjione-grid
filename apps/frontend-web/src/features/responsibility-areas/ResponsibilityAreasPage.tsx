@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type {
   DeviceRow,
+  Line,
+  Region,
   ResponsibilityAreaDetail,
   ResponsibilityAreaRow,
   UserRead
@@ -13,6 +15,8 @@ type Props = {
   areas: ResponsibilityAreaRow[];
   users: UserRead[];
   devices: DeviceRow[];
+  regions: Region[];
+  lines: Line[];
   loading?: boolean;
   error?: string;
   onLoadDetail: (areaId: number) => Promise<ResponsibilityAreaDetail>;
@@ -23,6 +27,10 @@ type Props = {
   onRemoveUser: (areaId: number, userId: number) => Promise<void>;
   onAddDevice: (areaId: number, deviceId: number) => Promise<void>;
   onRemoveDevice: (areaId: number, deviceId: number) => Promise<void>;
+  onAddRegion: (areaId: number, regionId: number) => Promise<void>;
+  onRemoveRegion: (areaId: number, regionId: number) => Promise<void>;
+  onAddLine: (areaId: number, lineId: number) => Promise<void>;
+  onRemoveLine: (areaId: number, lineId: number) => Promise<void>;
 };
 
 export function ResponsibilityAreasPage({
@@ -30,6 +38,8 @@ export function ResponsibilityAreasPage({
   areas,
   users,
   devices,
+  regions,
+  lines,
   loading,
   error,
   onLoadDetail,
@@ -39,7 +49,11 @@ export function ResponsibilityAreasPage({
   onAddUser,
   onRemoveUser,
   onAddDevice,
-  onRemoveDevice
+  onRemoveDevice,
+  onAddRegion,
+  onRemoveRegion,
+  onAddLine,
+  onRemoveLine
 }: Props) {
   const canEdit = role === "engineer" || role === "installer";
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
@@ -56,7 +70,7 @@ export function ResponsibilityAreasPage({
   const [searchUser, setSearchUser] = useState("");
   const [searchDevice, setSearchDevice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<"general" | "users" | "devices">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "users" | "regions" | "lines" | "devices">("general");
 
   useEffect(() => {
     if (selectedAreaId === null && areas.length > 0) {
@@ -94,6 +108,14 @@ export function ResponsibilityAreasPage({
 
   const userIdsInArea = useMemo(
     () => new Set(detail?.users.map((u) => u.id) ?? []),
+    [detail]
+  );
+  const regionIdsInArea = useMemo(
+    () => new Set(detail?.regions?.map((r) => r.id) ?? []),
+    [detail]
+  );
+  const lineIdsInArea = useMemo(
+    () => new Set(detail?.lines?.map((l) => l.id) ?? []),
     [detail]
   );
   const deviceIdsInArea = useMemo(
@@ -238,6 +260,81 @@ export function ResponsibilityAreasPage({
     }
   };
 
+  const handleAddRegion = async (regionId: number) => {
+    if (!detail) return;
+    setBusy(true);
+    setLocalError("");
+    try {
+      await onAddRegion(detail.id, regionId);
+      await reloadDetail(detail.id);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "Bölge eklenemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRemoveRegion = async (regionId: number) => {
+    if (!detail) return;
+    setBusy(true);
+    setLocalError("");
+    try {
+      await onRemoveRegion(detail.id, regionId);
+      await reloadDetail(detail.id);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "Bölge çıkarılamadı.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAddLine = async (lineId: number) => {
+    if (!detail) return;
+    setBusy(true);
+    setLocalError("");
+    try {
+      await onAddLine(detail.id, lineId);
+      await reloadDetail(detail.id);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "Hat eklenemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRemoveLine = async (lineId: number) => {
+    if (!detail) return;
+    setBusy(true);
+    setLocalError("");
+    try {
+      await onRemoveLine(detail.id, lineId);
+      await reloadDetail(detail.id);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "Hat çıkarılamadı.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const [searchRegion, setSearchRegion] = useState("");
+  const [searchLine, setSearchLine] = useState("");
+  const availableRegions = useMemo(() => {
+    const q = searchRegion.trim().toLowerCase();
+    return regions.filter((r) => {
+      if (regionIdsInArea.has(r.id)) return false;
+      if (!q) return true;
+      return r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q);
+    });
+  }, [regions, regionIdsInArea, searchRegion]);
+  const availableLines = useMemo(() => {
+    const q = searchLine.trim().toLowerCase();
+    return lines.filter((l) => {
+      if (lineIdsInArea.has(l.id)) return false;
+      if (!q) return true;
+      return l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q);
+    });
+  }, [lines, lineIdsInArea, searchLine]);
+
   return (
     <section className="responsibility-page">
       <div className="responsibility-layout">
@@ -358,6 +455,26 @@ export function ResponsibilityAreasPage({
                     <span className="material-symbols-outlined">group</span>
                     <span className="responsibility-tab-label">Kullanıcılar</span>
                     <span className="responsibility-tab-count">{detail.users.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`responsibility-tab ${activeTab === "regions" ? "active" : ""}`}
+                    onClick={() => setActiveTab("regions")}
+                  >
+                    <span className="material-symbols-outlined">map</span>
+                    <span className="responsibility-tab-label">Bölgeler</span>
+                    <span className="responsibility-tab-count">{detail.regions?.length ?? 0}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`responsibility-tab ${activeTab === "lines" ? "active" : ""}`}
+                    onClick={() => setActiveTab("lines")}
+                  >
+                    <span className="material-symbols-outlined">cable</span>
+                    <span className="responsibility-tab-label">Hatlar</span>
+                    <span className="responsibility-tab-count">{detail.lines?.length ?? 0}</span>
                   </button>
                   <button
                     type="button"
@@ -483,10 +600,174 @@ export function ResponsibilityAreasPage({
                   </div>
                 ) : null}
 
+                {activeTab === "regions" ? (
+                <div className="responsibility-section">
+                  <p className="helper-text responsibility-section-hint-block">
+                    Bölge eklendiğinde o bölgenin tüm hatları ve cihazları otomatik kapsama girer.
+                  </p>
+                  <div className="responsibility-transfer-grid">
+                    <div className="transfer-pane transfer-pane--source">
+                      <div className="transfer-pane-titlebar">
+                        <span className="transfer-pane-title">Eklenebilir</span>
+                        <span className="transfer-pane-count">{availableRegions.length}</span>
+                      </div>
+                      <input
+                        className="transfer-search"
+                        placeholder="Bölge ara..."
+                        value={searchRegion}
+                        onChange={(e) => setSearchRegion(e.target.value)}
+                      />
+                      <ul className="transfer-list">
+                        {availableRegions.map((r) => (
+                          <li key={r.id} className="transfer-item">
+                            <div className="transfer-item-icon"><span className="material-symbols-outlined">map</span></div>
+                            <div className="transfer-item-text">
+                              <strong>{r.name}</strong>
+                              <span>{r.code}</span>
+                            </div>
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn-add"
+                                title="Alana ekle"
+                                aria-label="Alana ekle"
+                                disabled={busy}
+                                onClick={() => void handleAddRegion(r.id)}
+                              >
+                                ＋
+                              </button>
+                            ) : null}
+                          </li>
+                        ))}
+                        {availableRegions.length === 0 ? (
+                          <li className="transfer-empty">
+                            {searchRegion ? "Aramaya uygun bölge yok." : "Eklenebilecek bölge kalmadı."}
+                          </li>
+                        ) : null}
+                      </ul>
+                    </div>
+                    <div className="transfer-pane transfer-pane--target">
+                      <div className="transfer-pane-titlebar">
+                        <span className="transfer-pane-title">Bu Alanda</span>
+                        <span className="transfer-pane-count transfer-pane-count--target">{detail.regions?.length ?? 0}</span>
+                      </div>
+                      <ul className="transfer-list">
+                        {(detail.regions ?? []).map((r) => (
+                          <li key={r.id} className="transfer-item transfer-item-in">
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn-remove"
+                                title="Alandan çıkar"
+                                aria-label="Alandan çıkar"
+                                disabled={busy}
+                                onClick={() => void handleRemoveRegion(r.id)}
+                              >
+                                −
+                              </button>
+                            ) : null}
+                            <div className="transfer-item-icon"><span className="material-symbols-outlined">map</span></div>
+                            <div className="transfer-item-text">
+                              <strong>{r.name}</strong>
+                              <span>{r.code}</span>
+                            </div>
+                          </li>
+                        ))}
+                        {(detail.regions?.length ?? 0) === 0 ? (
+                          <li className="transfer-empty">Bu alana henüz bölge atanmadı.</li>
+                        ) : null}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                ) : null}
+
+                {activeTab === "lines" ? (
+                <div className="responsibility-section">
+                  <p className="helper-text responsibility-section-hint-block">
+                    Hat eklendiğinde o hattaki tüm cihazlar otomatik kapsama girer (bölgeden daha spesifik).
+                  </p>
+                  <div className="responsibility-transfer-grid">
+                    <div className="transfer-pane transfer-pane--source">
+                      <div className="transfer-pane-titlebar">
+                        <span className="transfer-pane-title">Eklenebilir</span>
+                        <span className="transfer-pane-count">{availableLines.length}</span>
+                      </div>
+                      <input
+                        className="transfer-search"
+                        placeholder="Hat ara..."
+                        value={searchLine}
+                        onChange={(e) => setSearchLine(e.target.value)}
+                      />
+                      <ul className="transfer-list">
+                        {availableLines.map((l) => (
+                          <li key={l.id} className="transfer-item">
+                            <div className="transfer-item-icon"><span className="material-symbols-outlined">cable</span></div>
+                            <div className="transfer-item-text">
+                              <strong>{l.name}</strong>
+                              <span>{l.code}</span>
+                            </div>
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn-add"
+                                title="Alana ekle"
+                                aria-label="Alana ekle"
+                                disabled={busy}
+                                onClick={() => void handleAddLine(l.id)}
+                              >
+                                ＋
+                              </button>
+                            ) : null}
+                          </li>
+                        ))}
+                        {availableLines.length === 0 ? (
+                          <li className="transfer-empty">
+                            {searchLine ? "Aramaya uygun hat yok." : "Eklenebilecek hat kalmadı."}
+                          </li>
+                        ) : null}
+                      </ul>
+                    </div>
+                    <div className="transfer-pane transfer-pane--target">
+                      <div className="transfer-pane-titlebar">
+                        <span className="transfer-pane-title">Bu Alanda</span>
+                        <span className="transfer-pane-count transfer-pane-count--target">{detail.lines?.length ?? 0}</span>
+                      </div>
+                      <ul className="transfer-list">
+                        {(detail.lines ?? []).map((l) => (
+                          <li key={l.id} className="transfer-item transfer-item-in">
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn-remove"
+                                title="Alandan çıkar"
+                                aria-label="Alandan çıkar"
+                                disabled={busy}
+                                onClick={() => void handleRemoveLine(l.id)}
+                              >
+                                −
+                              </button>
+                            ) : null}
+                            <div className="transfer-item-icon"><span className="material-symbols-outlined">cable</span></div>
+                            <div className="transfer-item-text">
+                              <strong>{l.name}</strong>
+                              <span>{l.code}</span>
+                            </div>
+                          </li>
+                        ))}
+                        {(detail.lines?.length ?? 0) === 0 ? (
+                          <li className="transfer-empty">Bu alana henüz hat atanmadı.</li>
+                        ) : null}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                ) : null}
+
                 {activeTab === "devices" ? (
                 <div className="responsibility-section">
                   <p className="helper-text responsibility-section-hint-block">
-                    Solda eklenebilir, sağda bu alana atanmış cihazlar.
+                    Solda eklenebilir, sağda bu alana atanmış cihazlar. (Alan; bölge ve hat üzerinden de cihazlara dolaylı sahiptir.)
                   </p>
                   <div className="responsibility-transfer-grid">
                     <div className="transfer-pane transfer-pane--source">
