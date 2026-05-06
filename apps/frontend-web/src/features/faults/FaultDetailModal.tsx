@@ -494,25 +494,34 @@ export function FaultDetailModal({
             </div>
           </div>
           <div className="fault-modal-head-right">
-            <div className="fault-modal-head-meta">
-              <span className="fault-modal-head-label">Açılış</span>
-              <strong>{fmtDate(fault.opened_at)}</strong>
+            <div className="fault-modal-time-pill fault-modal-time-pill--opened">
+              <span className="fault-modal-time-pill-icon">
+                <span className="material-symbols-outlined">event</span>
+              </span>
+              <div>
+                <span className="fault-modal-time-pill-label">Açılış</span>
+                <strong>{fmtDate(fault.opened_at)}</strong>
+              </div>
             </div>
             <div
-              className={`fault-modal-head-elapsed ${isLive ? "is-live" : ""}`}
+              className={`fault-modal-time-pill fault-modal-time-pill--elapsed ${
+                isLive ? "is-live" : "is-final"
+              }`}
               title={isLive ? "Arıza halen aktif — canlı süre" : "Toplam süre"}
             >
-              <span className="fault-modal-head-elapsed-label">
+              <span className="fault-modal-time-pill-icon">
                 {isLive ? (
-                  <>
-                    <span className="fault-modal-elapsed-pulse" aria-hidden="true" />
-                    Arıza Süresi
-                  </>
+                  <span className="fault-modal-elapsed-pulse" aria-hidden="true" />
                 ) : (
-                  "Toplam Süre"
+                  <span className="material-symbols-outlined">hourglass_top</span>
                 )}
               </span>
-              <strong>{elapsedText}</strong>
+              <div>
+                <span className="fault-modal-time-pill-label">
+                  {isLive ? "Arıza Süresi" : "Toplam Süre"}
+                </span>
+                <strong>{elapsedText}</strong>
+              </div>
             </div>
           </div>
         </header>
@@ -767,8 +776,8 @@ export function FaultDetailModal({
               </div>
             </div>
 
-            {/* Kısa Not kart */}
-            <div className="fault-modal-card">
+            {/* Kısa Not kart — modal'ın en altına kadar uzanır (flex-grow) */}
+            <div className="fault-modal-card fault-modal-card--note">
               <div className="fault-modal-card-head">
                 <span className="fault-modal-card-icon" style={{ background: "rgba(245,158,11,0.12)", color: "#d97706" }}>
                   <span className="material-symbols-outlined">edit_note</span>
@@ -779,7 +788,6 @@ export function FaultDetailModal({
                 </div>
               </div>
               <textarea
-                rows={4}
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
                 disabled={saving || !canEdit}

@@ -16769,79 +16769,127 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .fault-modal-head-right {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: stretch;
   flex-wrap: wrap;
 }
-.fault-modal-head-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: right;
-}
-.fault-modal-head-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  font-weight: 700;
-}
-.fault-modal-head-meta strong {
-  font-size: 13px;
-  color: #0f172a;
-  font-weight: 600;
-}
 
-/* Canli ariza suresi rozeti — sag ust kose */
-.fault-modal-head-elapsed {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: flex-end;
-  background: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 10px;
-  padding: 6px 12px;
-  min-width: 130px;
-}
-.fault-modal-head-elapsed.is-live {
-  background: rgba(239, 68, 68, 0.07);
-  border-color: rgba(239, 68, 68, 0.35);
-}
-.fault-modal-head-elapsed-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 700;
-  color: #94a3b8;
+/* === Modern zaman pill'leri (Acilis + Ariza Suresi) === */
+.fault-modal-time-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  min-width: 160px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.fault-modal-head-elapsed.is-live .fault-modal-head-elapsed-label {
+.fault-modal-time-pill > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.fault-modal-time-pill-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+.fault-modal-time-pill strong {
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.fault-modal-time-pill-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fault-modal-time-pill-icon .material-symbols-outlined {
+  font-size: 18px !important;
+}
+
+/* Acilis: morumsu, sakin */
+.fault-modal-time-pill--opened {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+.fault-modal-time-pill--opened .fault-modal-time-pill-icon {
+  background: rgba(99, 102, 241, 0.18);
+  color: #6366f1;
+}
+.fault-modal-time-pill--opened .fault-modal-time-pill-label {
+  color: #6366f1;
+}
+
+/* Ariza Suresi (canli) — kirmizi vurgu */
+.fault-modal-time-pill--elapsed.is-live {
+  background: linear-gradient(135deg, #fef2f2 0%, #ffe4e6 100%);
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.1);
+}
+.fault-modal-time-pill--elapsed.is-live .fault-modal-time-pill-icon {
+  background: rgba(239, 68, 68, 0.18);
+}
+.fault-modal-time-pill--elapsed.is-live .fault-modal-time-pill-label {
   color: #b91c1c;
 }
-.fault-modal-head-elapsed strong {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
+.fault-modal-time-pill--elapsed.is-live strong {
+  color: #b91c1c;
 }
-.fault-modal-head-elapsed.is-live strong {
-  color: #ef4444;
+
+/* Toplam Sure (final) — yesil sakin */
+.fault-modal-time-pill--elapsed.is-final {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: rgba(16, 185, 129, 0.3);
 }
+.fault-modal-time-pill--elapsed.is-final .fault-modal-time-pill-icon {
+  background: rgba(16, 185, 129, 0.18);
+  color: #10b981;
+}
+.fault-modal-time-pill--elapsed.is-final .fault-modal-time-pill-label {
+  color: #047857;
+}
+.fault-modal-time-pill--elapsed.is-final strong {
+  color: #047857;
+}
+
+/* Canli pulse rozeti (icon icinde) */
 .fault-modal-elapsed-pulse {
-  width: 8px;
-  height: 8px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #ef4444;
   display: inline-block;
   box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
   animation: fault-elapsed-pulse 1.4s ease-out infinite;
+  position: relative;
+}
+.fault-modal-elapsed-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.6;
 }
 @keyframes fault-elapsed-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
-  70%  { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  70%  { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
   100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 .fault-modal-body {
@@ -17171,6 +17219,21 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .fault-modal-card .fault-modal-save-btn .material-symbols-outlined {
   font-size: 16px !important;
+}
+
+/* Kisa Not kart — orta kolonun kalan tum yukseklugini doldursun.
+   Orta kolon flex-column oldugundan flex:1 ile geri kalan alani kaplar;
+   icindeki textarea da flex:1 olarak butun ic alani doldurur — kullanici
+   yorumu yazarken alan en alta kadar uzanir. */
+.fault-modal-card--note {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+.fault-modal-card--note textarea {
+  flex: 1 1 auto;
+  min-height: 140px;
 }
 
 /* Koordinat listesi (arıza aralığındaki direkler) */
