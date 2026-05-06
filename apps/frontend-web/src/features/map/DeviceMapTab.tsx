@@ -76,7 +76,7 @@ const polePin = (
   const branchBadge = (isBranchPoint || isBranchEntry)
     ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
     : "";
-  const size: [number, number] = isTrafo ? [36, 36] : [20, 20];
+  const size: [number, number] = isTrafo ? [40, 40] : [20, 20];
   const icon = L.divIcon({
     className: "grid-pole-leaflet-wrap",
     html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}</div>`,
@@ -472,6 +472,35 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       seg: typeof gridSnapshot.segments[number];
       t: number;
     };
+    // Trafo pole'lar — endpoint'i trafo direginde olan polyline parcalari
+    // tam direk koordinatina kadar cizilirse hat trafonun halkalarinin
+    // icinden gecmis gibi gozukur. Bunun yerine endpoint'i direk
+    // koordinatindan TRAFO_PIN_RADIUS_M kadar geri cekeriz; cizgi halka
+    // grubunun DIS kenarinda son bulur.
+    // Yaklasim: Leaflet ekran piksellerinde halka grubu yari capi ~22px;
+    // 1 derece enlem ~111000m. Kullanicinin haritasi cesitli zoom'larda
+    // calisacak; sabit bir METRE ofseti yerine sabit yaklasik bir
+    // derece kucucuk degeri (3 metre) kullaniyoruz — bu cogu zoom'da
+    // halka grubunun yaklasik dis kenarini hedefler.
+    const TRAFO_OFFSET_M = 12;
+    const isTrafoPoleId = (poleId: number) => polesById.get(poleId)?.pole_type === "transformer";
+    const offsetTowardsFrom = (
+      from: [number, number],
+      to: [number, number],
+      meters: number
+    ): [number, number] => {
+      // 1 derece lat ~ 111000m; lon icin enleme gore cos(lat) duzeltmesi.
+      const dLat = from[0] - to[0];
+      const dLon = from[1] - to[1];
+      const latM = dLat * 111000;
+      const lonM = dLon * 111000 * Math.cos((to[0] * Math.PI) / 180);
+      const distM = Math.sqrt(latM * latM + lonM * lonM);
+      if (distM < 1) return to; // cok yakin, ofset etme
+      const t = meters / distM;
+      // to'dan from yonune dogru meters kadar git
+      return [to[0] + dLat * t, to[1] + dLon * t];
+    };
+
     const segsBySlot = new Map<string, SegRec[]>();
     for (const seg of gridSnapshot.segments) {
       const k = `${seg.line_id}|${seg.from_pole_id}|${seg.to_pole_id}`;
@@ -501,15 +530,18 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         const b = sortedPoles[i + 1];
         const slotKey = `${lineId}|${a.id}|${b.id}`;
         const slotSegs = (segsBySlot.get(slotKey) ?? []).filter((r) => r.seg.device_id);
-        const aPos: [number, number] = [a.latitude, a.longitude];
-        const bPos: [number, number] = [b.latitude, b.longitude];
+        const rawAPos: [number, number] = [a.latitude, a.longitude];
+        const rawBPos: [number, number] = [b.latitude, b.longitude];
         if (slotSegs.length === 0) {
-          // Cihaz yok: tek edge pole_a -> pole_b
+          // Cihaz yok: tek edge pole_a -> pole_b. Trafo pole'larina
+          // baglanan ucu geri cek (cizgi halkalarin disinda dursun).
+          const aDraw = isTrafoPoleId(a.id) ? offsetTowardsFrom(rawBPos, rawAPos, TRAFO_OFFSET_M) : rawAPos;
+          const bDraw = isTrafoPoleId(b.id) ? offsetTowardsFrom(rawAPos, rawBPos, TRAFO_OFFSET_M) : rawBPos;
           addEdge({
             id: `e-${lineId}-${a.id}-${b.id}-direct`,
             fromNodeId: poleNodeId(a.id),
             toNodeId: poleNodeId(b.id),
-            positions: [aPos, bPos],
+            positions: [aDraw, bDraw],
             lineId,
             lineName: line?.name ?? "",
             regionName: region?.name ?? ""
@@ -518,7 +550,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         }
         // Cihazlari sirayla yerleştir: pole_a -> dev1 -> dev2 -> ... -> pole_b
         let prevNodeId = poleNodeId(a.id);
-        let prevPos = aPos;
+        // Ilk segment'in pole_a tarafi pole_a TRAFO ise geri cekilir.
+        let prevPos: [number, number] = isTrafoPoleId(a.id)
+          ? offsetTowardsFrom(rawBPos, rawAPos, TRAFO_OFFSET_M)
+          : rawAPos;
         for (let k = 0; k < slotSegs.length; k += 1) {
           const rec = slotSegs[k];
           const did = rec.seg.device_id!;
@@ -536,12 +571,13 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           prevNodeId = dNodeId;
           prevPos = dPos;
         }
-        // Son cihazdan pole_b'ye kapanis edge'i
+        // Son cihazdan pole_b'ye kapanis edge'i — pole_b TRAFO ise geri cekilir
+        const tailEnd = isTrafoPoleId(b.id) ? offsetTowardsFrom(prevPos, rawBPos, TRAFO_OFFSET_M) : rawBPos;
         addEdge({
           id: `e-${lineId}-${a.id}-${b.id}-tail`,
           fromNodeId: prevNodeId,
           toNodeId: poleNodeId(b.id),
-          positions: [prevPos, bPos],
+          positions: [prevPos, tailEnd],
           lineId,
           lineName: line?.name ?? "",
           regionName: region?.name ?? ""
@@ -558,13 +594,21 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       const firstPole = sorted[0];
       if (!parentPole || !firstPole) continue;
       const region = regionsById.get(line.region_id);
+      const parentRaw: [number, number] = [parentPole.latitude, parentPole.longitude];
+      const firstRaw: [number, number] = [firstPole.latitude, firstPole.longitude];
+      const parentDraw = isTrafoPoleId(parentPole.id)
+        ? offsetTowardsFrom(firstRaw, parentRaw, TRAFO_OFFSET_M)
+        : parentRaw;
+      const firstDraw = isTrafoPoleId(firstPole.id)
+        ? offsetTowardsFrom(parentRaw, firstRaw, TRAFO_OFFSET_M)
+        : firstRaw;
       addEdge({
         id: `branch-${lineId}`,
         fromNodeId: poleNodeId(parentPole.id),
         toNodeId: poleNodeId(firstPole.id),
         positions: [
-          [parentPole.latitude, parentPole.longitude],
-          [firstPole.latitude, firstPole.longitude]
+          parentDraw,
+          firstDraw
         ],
         lineId,
         lineName: line.name,

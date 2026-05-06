@@ -6301,15 +6301,16 @@ main.content.engineering-content:has(.device-management-panel) {
   height: 20px;
   font-size: 9px;
 }
-/* Trafo direk pin'i — sadelestirilmis: TEK GORSEL = ic ice iki halka.
-   Cerceve, kare arka plan, gradient YOK. Halka rengi hat basi/sonu
-   durumuna gore degisir (yesil = is-start, kirmizi = is-end, koyu mavi
-   = ara direk). Halka cap'i hat polyline weight'inden buyuk olmali ki
-   cizgi halkanin icinden gecmesin, kenari opak doldurma ile maskelensin. */
+/* Trafo direk pin'i — ic ice iki halka. Pin merkezinde halkalar var;
+   hat polyline pin koordinatina (= direk konumu = halkalarin
+   geometrik merkezi) baglanir. Halkalarin etrafinda opak beyaz
+   "halo" alan vardir (radial-gradient ile) — hat polyline halka
+   etrafindan gecerken bu beyaz halo cizgiyi maskeler ve halka
+   dis kenarina dayanmis gibi gorulur. */
 .grid-pole-pin.is-transformer,
 .grid-pole-pin--sm.is-transformer {
-  width: 36px !important;
-  height: 36px !important;
+  width: 40px !important;
+  height: 40px !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -6327,15 +6328,9 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .grid-trafo-rings {
   position: relative;
-  /* Pin iconSize 36x36 -> merkez (18,18). Halkalari oyle yerlestiriyoruz
-     ki iki halkanin BIRLESIM (kesisim) noktasi pin merkezine denk gelsin.
-     Hat polyline'i pin merkezine bagliydi -> simdi tam halkalarin
-     ortasindaki "8" sekli birlesim cizgisine baglanmis gibi gorunur.
-     Halka cap 22px, 6px ust uste bindirme: toplam genislik = 22+22-6 = 38. */
   width: 38px;
   height: 22px;
   display: block;
-  /* rings konteyneri pin merkezinde olsun (flex parent zaten ortaliyor). */
 }
 .grid-trafo-ring {
   position: absolute;
