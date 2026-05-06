@@ -1005,6 +1005,32 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           y: native.clientY
                         });
                       };
+                      // Cihaz suruklendiginde: drag boyunca her tickte slot
+                      // vektorune perpendicular projekte et, marker'i zorla
+                      // hat uzerinde tut. Bu sayede cihaz "havada" duramaz,
+                      // sadece slot uzerinde kayar.
+                      const handleDrag = (event: L.LeafletEvent) => {
+                        if (len2 === 0) return;
+                        const m = event.target as L.Marker;
+                        const ll = m.getLatLng();
+                        const px = ll.lat - ax;
+                        const py = ll.lng - ay;
+                        const tProj = Math.max(0, Math.min(1, (px * dx + py * dy) / len2));
+                        const projLat = ax + dx * tProj;
+                        const projLng = ay + dy * tProj;
+                        // Sadece sapma varsa duzelt (sonsuz dongu olmasin diye threshold)
+                        if (Math.abs(projLat - ll.lat) > 1e-9 || Math.abs(projLng - ll.lng) > 1e-9) {
+                          m.setLatLng([projLat, projLng]);
+                        }
+                      };
+                      const handleDragEnd = (event: L.DragEndEvent) => {
+                        if (len2 === 0) return;
+                        const ll = (event.target as L.Marker).getLatLng();
+                        const px = ll.lat - ax;
+                        const py = ll.lng - ay;
+                        const tNew = Math.max(0, Math.min(1, (px * dx + py * dy) / len2));
+                        void handleDeviceDragEnd(seg, tNew);
+                      };
                       return (
                         <Marker
                           key={`dev-${seg.id}-${editMode ? "edit" : "view"}`}
@@ -1014,30 +1040,30 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           eventHandlers={{
                             click: openMenu,
                             contextmenu: openMenu,
-                            dragend: editMode ? (event: L.DragEndEvent) => {
-                              const ll = (event.target as L.Marker).getLatLng();
-                              // Yeni konumu slot vektorune perpendicular projekte et
-                              // ve t parametresini bul (0..1).
-                              if (len2 === 0) return;
-                              const px = ll.lat - ax;
-                              const py = ll.lng - ay;
-                              const tNew = Math.max(0, Math.min(1, (px * dx + py * dy) / len2));
-                              void handleDeviceDragEnd(seg, tNew);
-                            } : undefined
+                            drag: handleDrag,
+                            dragend: handleDragEnd
                           }}
                         >
-                          <Tooltip>
-                            {dev ? `${dev.name} (${dev.code})` : `Cihaz #${seg.device_id}`}
-                            <br />
-                            {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
-                            {total > 1 ? ` · ${idx + 1}/${total}` : ""}
-                            <br />
-                            {editMode ? (
-                              <em>Sürükle: konumu ayarla · Tıkla: menü</em>
-                            ) : (
+                          {/* Duzenleme modunda kalici etiket: cihaz adi gorunsun */}
+                          {editMode && dev ? (
+                            <Tooltip
+                              permanent
+                              direction="top"
+                              offset={[0, -8]}
+                              className="grid-device-name-label"
+                            >
+                              {dev.name}
+                            </Tooltip>
+                          ) : (
+                            <Tooltip>
+                              {dev ? `${dev.name} (${dev.code})` : `Cihaz #${seg.device_id}`}
+                              <br />
+                              {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
+                              {total > 1 ? ` · ${idx + 1}/${total}` : ""}
+                              <br />
                               <em>Tıkla: taşı / kaldır</em>
-                            )}
-                          </Tooltip>
+                            </Tooltip>
+                          )}
                         </Marker>
                       );
                     });
@@ -1263,7 +1289,12 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       ) : null}
 
       {lineModalOpen && selectedRegion ? (
-        <LineModal regionId={selectedRegion.id} initial={editingLine} busy={busy}
+        <LineModal
+          regionId={selectedRegion.id}
+          initial={editingLine}
+          busy={busy}
+          gridSnapshot={gridSnapshot}
+          currentLineId={editingLine?.id ?? null}
           onClose={() => setLineModalOpen(false)}
           onSubmit={async (payload) => {
             setBusy(true);
@@ -1396,14 +1427,27 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
   // Slot uzerindeki cihaz marker'i suruklendiginde t parametresini (0..1)
   // backend'e yaz; backend cihaz konumunu bu t degerine gore yeniden hesaplar.
+  // Optimistic update: local detail'i hemen guncelle ki marker yeni konumda
+  // kalsin, reload sonrasi 'eski yere geri donme' olmasin.
   async function handleDeviceDragEnd(seg: LineSegment, tNew: number) {
     const tRounded = Number(tNew.toFixed(4));
+    // 1. Local detail'i optimistic guncelle
+    setDetail((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        segments: prev.segments.map((s) =>
+          s.id === seg.id ? { ...s, device_position_t: tRounded } : s
+        )
+      };
+    });
+    // 2. Backend'e yaz
     try {
       await updateSegment(accessToken, seg.id, { device_position_t: tRounded });
-      toast.success("Cihaz konumu güncellendi.");
-      if (selectedLineId !== null) await reloadDetail(selectedLineId);
+      // Basari — reload yapmiyoruz cunku optimistic guncelleme yeterli.
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Cihaz konumu güncellenemedi.");
+      // Hata olursa reload ile gercek backend durumuna don
       if (selectedLineId !== null) await reloadDetail(selectedLineId);
     }
   }
@@ -1868,15 +1912,38 @@ function RegionModal({
 }
 
 function LineModal({
-  regionId, initial, busy, onClose, onSubmit
+  regionId, initial, busy, onClose, onSubmit, gridSnapshot, currentLineId
 }: {
   regionId: number; initial: Line | null; busy: boolean;
   onClose: () => void;
   onSubmit: (payload: Partial<Line>) => Promise<void>;
+  gridSnapshot: GridSnapshot | null;
+  currentLineId: number | null;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
+  // Bransman: bu hat baska bir hattin diregine bagli mi?
+  const [isBranch, setIsBranch] = useState<boolean>(
+    initial?.branched_from_pole_id !== undefined && initial?.branched_from_pole_id !== null
+  );
+  const [parentLineId, setParentLineId] = useState<number | "">(() => {
+    if (!initial?.branched_from_pole_id || !gridSnapshot) return "";
+    const parentPole = gridSnapshot.poles.find((p) => p.id === initial.branched_from_pole_id);
+    return parentPole ? parentPole.line_id : "";
+  });
+  const [parentPoleId, setParentPoleId] = useState<number | "">(initial?.branched_from_pole_id ?? "");
+
+  // Branşman secebilecegimiz hatlar: kendisi DISINDA tum hatlar.
+  const branchableLines = (gridSnapshot?.lines ?? []).filter(
+    (l) => l.id !== currentLineId
+  );
+  const parentPoles = parentLineId
+    ? (gridSnapshot?.poles ?? [])
+        .filter((p) => p.line_id === parentLineId)
+        .sort((a, b) => a.sequence_no - b.sequence_no)
+    : [];
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const code = initial?.code ?? autoCodeFromName(name, "HAT");
@@ -1886,7 +1953,8 @@ function LineModal({
       // color alani sistem genelinde standartlasti (saglikli=yesil, ariza=kirmizi);
       // kullanici secimine gerek yok. Backend'e null gonderiliyor.
       color: null,
-      is_active: isActive
+      is_active: isActive,
+      branched_from_pole_id: isBranch && typeof parentPoleId === "number" ? parentPoleId : null
     });
   };
   return (
@@ -1899,6 +1967,70 @@ function LineModal({
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
           Aktif
         </label>
+
+        {/* Branşman secimi */}
+        <fieldset className="line-branch-fieldset">
+          <legend>
+            <label className="notify-option">
+              <input
+                type="checkbox"
+                checked={isBranch}
+                onChange={(e) => {
+                  setIsBranch(e.target.checked);
+                  if (!e.target.checked) {
+                    setParentLineId("");
+                    setParentPoleId("");
+                  }
+                }}
+              />
+              Branşman olarak ekle (başka bir hattın direğine bağla)
+            </label>
+          </legend>
+          {isBranch ? (
+            <div className="line-branch-grid">
+              <label>
+                Ana hat
+                <select
+                  value={parentLineId === "" ? "" : String(parentLineId)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setParentLineId(v === "" ? "" : Number(v));
+                    setParentPoleId("");
+                  }}
+                  required={isBranch}
+                >
+                  <option value="">— seçin —</option>
+                  {branchableLines.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Bağlanılacak direk
+                <select
+                  value={parentPoleId === "" ? "" : String(parentPoleId)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setParentPoleId(v === "" ? "" : Number(v));
+                  }}
+                  required={isBranch}
+                  disabled={parentLineId === "" || parentPoles.length === 0}
+                >
+                  <option value="">— seçin —</option>
+                  {parentPoles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      Direk #{p.sequence_no}{p.name ? ` · ${p.name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+          <p className="helper-text" style={{ marginTop: 6, fontSize: 11 }}>
+            Branşman, bir hattın belirli bir direğine bağlanan dal hattıdır.
+            Arıza algoritması ana hat ile dalı birlikte değerlendirir.
+          </p>
+        </fieldset>
         <div className="settings-actions">
           <button type="button" onClick={onClose} disabled={busy}>İptal</button>
           <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : "Kaydet"}</button>
