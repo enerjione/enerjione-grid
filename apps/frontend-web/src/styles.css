@@ -16276,6 +16276,11 @@ main.content.engineering-content:has(.device-management-panel) {
 .faults-stat-chip--progress   { border-left-color: #3b82f6; }
 .faults-stat-chip--resolved   { border-left-color: #10b981; }
 .faults-stat-chip--closed     { border-left-color: #94a3b8; }
+.faults-stat-chip--avg        { border-left-color: #6366f1; }
+.faults-stat-chip--avg .faults-stat-num {
+  color: #4338ca;
+  font-size: 18px;
+}
 .faults-stat-num {
   font-size: 22px;
   font-weight: 800;

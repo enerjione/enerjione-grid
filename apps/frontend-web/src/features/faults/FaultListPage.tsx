@@ -6,12 +6,16 @@ import type {
   DeviceRow,
   FaultComment,
   FaultEvent,
+  FaultStats,
   UserRead
 } from "../../shared/types";
 import { FaultDetailModal } from "./FaultDetailModal";
 
 type Props = {
   faults: FaultEvent[];
+  /** Backend'den gelen ozet istatistikler (avg_resolution_seconds vb).
+   * null ise henuz yuklenmedi/erisilmedi — chip'te "—" gosterilir. */
+  stats?: FaultStats | null;
   users: UserRead[];
   currentUsername: string;
   canAssign: boolean; // engineer/installer
@@ -65,6 +69,19 @@ function fmtDateParts(iso?: string | null): { date: string; time: string } {
   };
 }
 
+function fmtDurationSeconds(totalSec: number): string {
+  let sec = Math.max(0, Math.round(totalSec));
+  const days = Math.floor(sec / 86400);
+  sec -= days * 86400;
+  const hours = Math.floor(sec / 3600);
+  sec -= hours * 3600;
+  const mins = Math.floor(sec / 60);
+  if (days > 0) return `${days}g ${hours}sa`;
+  if (hours > 0) return `${hours}sa ${mins}dk`;
+  if (mins > 0) return `${mins}dk`;
+  return `<1dk`;
+}
+
 function fmtElapsed(openedIso: string, endMs: number): string {
   const start = new Date(openedIso).getTime();
   let sec = Math.max(0, Math.round((endMs - start) / 1000));
@@ -81,6 +98,7 @@ function fmtElapsed(openedIso: string, endMs: number): string {
 
 export function FaultListPage({
   faults,
+  stats: backendStats,
   users,
   currentUsername,
   canAssign,
@@ -164,6 +182,16 @@ export function FaultListPage({
         <div className="faults-stat-chip faults-stat-chip--closed">
           <span className="faults-stat-num">{stats.closed}</span>
           <span className="faults-stat-label">Kapatıldı</span>
+        </div>
+        {/* Ortalama Çözüm Süresi — backend istatistiği (resolved/closed
+            kayitlardan ortalama). Henuz kapatilmis kayit yoksa "—". */}
+        <div className="faults-stat-chip faults-stat-chip--avg">
+          <span className="faults-stat-num">
+            {backendStats && backendStats.avg_resolution_seconds != null
+              ? fmtDurationSeconds(backendStats.avg_resolution_seconds)
+              : "—"}
+          </span>
+          <span className="faults-stat-label">Ort. Çözüm Süresi</span>
         </div>
       </div>
 

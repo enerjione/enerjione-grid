@@ -14,9 +14,16 @@ def send_smtp_test(
     subject: str,
     message: str,
     html_body: str | None = None,
+    attachments: list[dict] | None = None,
 ) -> None:
     """SMTP gonderim. html_body verilirse multipart/alternative gonderilir
     (plain text fallback + HTML), aksi halde sadece plain text.
+
+    attachments: opsiyonel liste; her eleman dict olarak
+      {"filename": str, "content": bytes, "mime": "image/png"|...,
+       "cid": str | None}.
+    cid verilirse inline (HTML icindeki <img src="cid:..."> referans
+    edilebilir) olarak eklenir; aksi halde regular ek olarak.
     """
     if not settings_row.smtp_host:
         raise ValueError("SMTP sunucu adresi boş.")
@@ -34,6 +41,28 @@ def send_smtp_test(
         # multipart/alternative: HTML versiyonu ekle. Modern clientlar HTML'i
         # tercih eder; eski clientlar plain text'e duser.
         mail.add_alternative(html_body, subtype="html")
+
+    # Ek dosyalar (image/png vb)
+    for att in attachments or []:
+        try:
+            content = att.get("content")
+            if not content:
+                continue
+            mime = att.get("mime", "application/octet-stream")
+            maintype, _, subtype = mime.partition("/")
+            if not subtype:
+                subtype = "octet-stream"
+            filename = att.get("filename") or "attachment.bin"
+            kwargs: dict = {"maintype": maintype, "subtype": subtype, "filename": filename}
+            cid = att.get("cid")
+            if cid:
+                # Inline (HTML body icindeki cid: referansi icin)
+                kwargs["disposition"] = "inline"
+                kwargs["cid"] = f"<{cid}>"
+            mail.add_attachment(content, **kwargs)
+        except Exception:  # noqa: BLE001
+            # Tek attachment hatasi tum maili dusurmesin
+            continue
 
     if settings_row.smtp_port == 465:
         with smtplib.SMTP_SSL(settings_row.smtp_host, settings_row.smtp_port, context=ssl.create_default_context()) as server:

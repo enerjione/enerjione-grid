@@ -16,3 +16,8 @@ openpyxl
 # psutil tum metrikleri standart API uzerinden saglar; manylinux + Windows
 # wheel'leri PyPI'de hazir, ek native bagimliligi yok.
 psutil>=5.9,<7
+# Ariza email bildirimlerinde haritanin PNG goruntusunu uretmek icin.
+# OSM tile'larini fetch edip uzerine polyline + marker cizer; Pillow
+# bagimliligini kendi paketliyor.
+staticmap>=0.5.6,<1
+Pillow>=10.0,<11

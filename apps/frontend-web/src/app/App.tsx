@@ -46,6 +46,7 @@ import {
   fetchAlarmComments,
   fetchAlarmEvents,
   fetchFaults,
+  fetchFaultStats,
   assignFault,
   updateFaultStatus,
   updateFaultNote,
@@ -117,6 +118,7 @@ import type {
   DeviceRow,
   FaultComment,
   FaultEvent,
+  FaultStats,
   UserNotificationPreferences,
   Gateway,
   NotificationSettings,
@@ -200,6 +202,7 @@ export function App() {
   const [users, setUsers] = useState<UserRead[]>([]);
   const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
   const [faults, setFaults] = useState<FaultEvent[]>([]);
+  const [faultStats, setFaultStats] = useState<FaultStats | null>(null);
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [devicesByGateway, setDevicesByGateway] = useState<DeviceRow[]>([]);
@@ -497,6 +500,24 @@ export function App() {
     const id = window.setInterval(() => {
       void tick();
     }, 5000);
+    return () => window.clearInterval(id);
+  }, [session]);
+
+  // Hat Arizalari ozet istatistikleri (avg cozum suresi vb) — 30sn polling.
+  useEffect(() => {
+    if (!session) return;
+    const tick = async () => {
+      try {
+        const s = await fetchFaultStats(session.accessToken);
+        setFaultStats(s);
+      } catch {
+        // ignore
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => {
+      void tick();
+    }, 30000);
     return () => window.clearInterval(id);
   }, [session]);
 
@@ -1818,6 +1839,7 @@ export function App() {
             {pageMode === "faults" ? (
               <FaultListPage
                 faults={faults}
+                stats={faultStats}
                 users={users}
                 currentUsername={session.username}
                 canAssign={session.role === "engineer" || session.role === "installer"}

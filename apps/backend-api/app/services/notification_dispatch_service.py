@@ -162,6 +162,29 @@ def _build_alarm_email(
     return subject, plain_text, html_body
 
 
+def _resolve_active_fault(db: Session, alarm: AlarmEvent) -> "FaultEvent | None":
+    """Bu alarm'in tetikledigi (cihazin oturdugu) hatdaki AKTIF fault'u bul.
+
+    Fault recompute servisi alarm ingest'te zaten cagrildigi icin alarmin
+    cihazi bagli oldugu hat'da bir aktif FaultEvent satiri olmasi
+    beklenir.
+    """
+    from app.models.fault import FaultEvent
+    from app.models.grid_topology import LineSegment
+    if alarm.device_id is None:
+        return None
+    seg = db.scalar(select(LineSegment).where(LineSegment.device_id == alarm.device_id))
+    if seg is None:
+        return None
+    return db.scalar(
+        select(FaultEvent)
+        .where(FaultEvent.line_id == seg.line_id)
+        .where(FaultEvent.status != "closed")
+        .order_by(FaultEvent.opened_at.desc())
+        .limit(1)
+    )
+
+
 def _send_email_for_user(
     db: Session,
     settings: NotificationSettings | None,
@@ -174,6 +197,49 @@ def _send_email_for_user(
     if not user.email:
         return
     subject, plain_text, html_body = _build_alarm_email(db, alarm, project_title)
+
+    # Mail govdesine harita gorseli ekle. Fault aktifse PNG render edip
+    # inline (cid) ek olarak ekleriz; HTML body de <img src="cid:fault-map">
+    # referansiyla gosterir. Render hatasi mail'i bozmasin — ek atla.
+    attachments: list[dict] = []
+    try:
+        fault = _resolve_active_fault(db, alarm)
+        if fault is not None:
+            from app.services.fault_map_render import render_fault_map_png
+            png = render_fault_map_png(db, fault)
+            if png:
+                cid = f"fault-map-{fault.id}"
+                attachments.append(
+                    {
+                        "filename": f"ariza-haritasi-{fault.id}.png",
+                        "content": png,
+                        "mime": "image/png",
+                        "cid": cid,
+                    }
+                )
+                # HTML body'ye haritayi ekle (inline goruntu)
+                # Sadece <body> sonuna append edelim ki mevcut sablon
+                # bozulmasin.
+                if html_body and "</body>" in html_body:
+                    inline_block = (
+                        f'<div style="margin:18px 0;text-align:center;">'
+                        f'<img src="cid:{cid}" alt="Arıza haritası" '
+                        f'style="max-width:100%;border-radius:10px;'
+                        f'box-shadow:0 2px 8px rgba(0,0,0,.1);" /></div>'
+                    )
+                    html_body = html_body.replace(
+                        "</body>", inline_block + "</body>"
+                    )
+                elif html_body:
+                    html_body = (
+                        html_body
+                        + f'<div style="margin:18px 0;text-align:center;">'
+                          f'<img src="cid:{cid}" alt="Arıza haritası" '
+                          f'style="max-width:100%;border-radius:10px;" /></div>'
+                    )
+    except Exception:  # noqa: BLE001
+        logger.exception("fault_map_render_outer_failed")
+
     try:
         send_smtp_test(
             settings,
@@ -181,8 +247,12 @@ def _send_email_for_user(
             subject=subject,
             message=plain_text,
             html_body=html_body,
+            attachments=attachments or None,
         )
-        logger.info("alarm_email_sent user=%s alarm_id=%d", user.username, alarm.id)
+        logger.info(
+            "alarm_email_sent user=%s alarm_id=%d map_attached=%s",
+            user.username, alarm.id, bool(attachments),
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "alarm_email_failed user=%s alarm_id=%d error=%s",

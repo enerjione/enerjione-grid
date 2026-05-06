@@ -169,6 +169,18 @@ export type FaultComment = {
   created_at: string;
 };
 
+/** Hat Arizalari — ozet istatistikler. */
+export type FaultStats = {
+  total: number;
+  open: number;
+  assigned: number;
+  in_progress: number;
+  resolved: number;
+  closed: number;
+  avg_resolution_seconds: number | null;
+  last_30d_count: number;
+};
+
 /** Kullanici-bazli bildirim kanal tercihleri. */
 export type UserNotificationPreferences = {
   user_id: number;

@@ -402,6 +402,16 @@ export async function fetchFaults(
   return (await response.json()) as import("./types").FaultEvent[];
 }
 
+export async function fetchFaultStats(
+  token: string
+): Promise<import("./types").FaultStats> {
+  const response = await fetch(`${API_BASE_URL}/faults/stats`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza istatistikleri alınamadı.");
+  return (await response.json()) as import("./types").FaultStats;
+}
+
 export async function assignFault(
   token: string,
   faultId: number,

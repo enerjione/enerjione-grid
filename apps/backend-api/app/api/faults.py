@@ -15,7 +15,7 @@ Yetki:
   - Engineer/Installer: tum fault'lar.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -111,6 +111,78 @@ def list_faults(
 
     rows = list(db.scalars(stmt).all())
     return [_serialize_fault(db, r) for r in rows]
+
+
+@router.get("/stats")
+def fault_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Ozet istatistikler — UI'da chip'lerde gosterilmek icin.
+
+    Donus:
+      total, open, assigned, in_progress, resolved, closed
+      avg_resolution_seconds: kapatilan fault'larin (resolved/closed) ort.
+        cozum suresi (saniye). Henuz kapatilmis kayit yoksa null.
+      last_30d_count: son 30 gunde acilan fault sayisi.
+    """
+    stmt = select(FaultEvent)
+    line_scope = get_visible_line_ids(db, current_user)
+    if line_scope is not None:
+        if not line_scope:
+            return {
+                "total": 0,
+                "open": 0,
+                "assigned": 0,
+                "in_progress": 0,
+                "resolved": 0,
+                "closed": 0,
+                "avg_resolution_seconds": None,
+                "last_30d_count": 0,
+            }
+        stmt = stmt.where(FaultEvent.line_id.in_(line_scope))
+
+    rows = list(db.scalars(stmt).all())
+    counts = {
+        "total": len(rows),
+        "open": 0,
+        "assigned": 0,
+        "in_progress": 0,
+        "resolved": 0,
+        "closed": 0,
+    }
+    durations: list[float] = []
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    last_30d_count = 0
+    for f in rows:
+        s = f.status
+        if s in counts:
+            counts[s] += 1
+        end = f.closed_at or f.resolved_at
+        if end is not None:
+            opened = f.opened_at
+            if opened.tzinfo is None:
+                from datetime import timezone as _tz
+                opened = opened.replace(tzinfo=_tz.utc)
+            if end.tzinfo is None:
+                from datetime import timezone as _tz
+                end = end.replace(tzinfo=_tz.utc)
+            durations.append((end - opened).total_seconds())
+        opened = f.opened_at
+        if opened.tzinfo is None:
+            from datetime import timezone as _tz
+            opened = opened.replace(tzinfo=_tz.utc)
+        if opened >= cutoff:
+            last_30d_count += 1
+
+    avg_res = None
+    if durations:
+        avg_res = sum(durations) / len(durations)
+    return {
+        **counts,
+        "avg_resolution_seconds": avg_res,
+        "last_30d_count": last_30d_count,
+    }
 
 
 @router.get("/{fault_id}", response_model=FaultEventRead)
