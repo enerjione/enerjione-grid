@@ -2316,11 +2316,15 @@ main.content.engineering-content:has(.device-management-panel) {
   overflow: auto;
 }
 
+/* Notification panel base — overflow:auto'yu hidden ile override et;
+   asagidaki daha spesifik kurallar kart ici scroll'u ayarliyor. */
 .notification-tab-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
   flex: 1;
+  overflow: hidden !important;
+  padding: 14px 16px;
 }
 
 .notification-settings-panel {
@@ -2692,28 +2696,103 @@ main.content.engineering-content:has(.device-management-panel) {
 
 /* Notification tab panel — kartlar grid icinde tum yuksekligi paylasir
    ve test bolumu kart altina yapisir. */
+/* Notification tab panel — pencere yuksekligini scroll yapmadan
+   tamamen kullansin. Panel kendisi flex-column ve overflow:hidden;
+   icerik fazlaysa sadece KARTLARIN ICI kucuk scroll'lar olur. */
 .notification-tab-panel {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 .notification-tab-panel .notification-form-v2 {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
 .notification-tab-panel .notification-cards-grid {
   flex: 1 1 auto;
   align-items: stretch;
+  min-height: 0;
+}
+/* Her kart kendi icindeki body alanini scrollluyor; basliklar ve test
+   bolumu sabit kalir. */
+.notification-tab-panel .notification-card-v2 {
+  min-height: 0;
+  overflow: hidden;
+}
+.notification-tab-panel .notification-card-body {
+  overflow-y: auto;
+  min-height: 0;
 }
 .notification-card-test {
   margin-top: auto;
+  flex-shrink: 0;
+}
+
+/* Kompakt boyutlandirma — kart icindeki padding ve gap'leri
+   kucuk tutarak butun kanallar tek goruntude rahat sigsin. */
+.notification-tab-panel .notification-card-head {
+  padding: 12px 14px;
+}
+.notification-tab-panel .notification-card-icon {
+  width: 32px;
+  height: 32px;
+}
+.notification-tab-panel .notification-card-icon .material-symbols-outlined {
+  font-size: 18px;
+}
+.notification-tab-panel .notification-card-titles h4 {
+  font-size: 14px;
+  margin: 0;
+}
+.notification-tab-panel .notification-card-titles small {
+  font-size: 11.5px;
+}
+.notification-tab-panel .notification-card-body {
+  padding: 12px 14px;
+}
+.notification-tab-panel .notif-field-grid {
+  gap: 8px 10px;
+}
+.notification-tab-panel .notif-field {
+  font-size: 12px;
+  gap: 3px;
+}
+.notification-tab-panel .notif-field input {
+  padding: 6px 9px;
+  font-size: 12.5px;
+}
+.notification-tab-panel .notif-field .helper-text {
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+.notification-tab-panel .notification-card-test {
+  padding: 10px 14px 12px;
+}
+.notification-tab-panel .notif-test-row input {
+  padding: 6px 9px;
+  font-size: 12.5px;
+}
+.notification-tab-panel .notif-status-row {
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.notification-panel-head {
+  flex-shrink: 0;
+  margin-bottom: 12px !important;
 }
 
 @media (max-width: 720px) {
   .notif-field-grid {
     grid-template-columns: 1fr;
+  }
+  /* Dar ekranda 3 kart yatay sigmiyorsa scroll'a izin ver */
+  .notification-tab-panel {
+    overflow-y: auto;
   }
 }
 
