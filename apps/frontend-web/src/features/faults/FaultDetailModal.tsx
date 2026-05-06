@@ -99,28 +99,51 @@ export function FaultDetailModal({
 
   const canEdit = canAssign || fault.assigned_to_username === currentUsername;
 
-  // Mini harita — arızanın bulunduğu hat + ilgili pole'lar
+  // Mini harita — arızanın bulunduğu hattin TUM direkleri sirayli polyline.
+  // Ariza araligi = from_pole_seq..to_pole_seq arasindaki ardisik tum
+  // direkleri takip eden parça (KIRMIZI KESIK). Dışındaki bölümler YESIL.
+  // Onceden hatali olarak from_pole'dan to_pole'a DUZ cizgi cekiyordu —
+  // hattin gercek geometrisini takip etmiyordu.
   const mapView = useMemo(() => {
     if (!gridSnapshot) return null;
-    const polesById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
     const linePoles = gridSnapshot.poles
       .filter((p) => p.line_id === fault.line_id)
       .sort((a, b) => a.sequence_no - b.sequence_no);
     if (linePoles.length === 0) return null;
-    const polyline: [number, number][] = linePoles.map((p) => [p.latitude, p.longitude]);
-    // Arıza aralığındaki edge'i (from -> to) ayrı çiz
-    const fromP = polesById.get(fault.from_pole_id);
-    const toP = polesById.get(fault.to_pole_id);
-    let faultEdge: [number, number][] | null = null;
-    if (fromP && toP) {
-      faultEdge = [
-        [fromP.latitude, fromP.longitude],
-        [toP.latitude, toP.longitude]
-      ];
+
+    const fromSeq = fault.from_pole_seq ?? null;
+    const toSeq = fault.to_pole_seq ?? null;
+    const lo = fromSeq != null && toSeq != null ? Math.min(fromSeq, toSeq) : null;
+    const hi = fromSeq != null && toSeq != null ? Math.max(fromSeq, toSeq) : null;
+
+    // Hat polyline'ini 3 parcaya boluyoruz (sequence_no sirasiyla):
+    //   pre   : sequence_no <= lo (arıza baslangici dahil) -> YESIL saglikli
+    //   fault : lo..hi arasi tum direkler -> KIRMIZI KESIK (ariza araligi)
+    //   post  : hi >= sequence_no -> YESIL saglikli
+    // Boylece pre ve fault paylasiyor "lo" indeksli direk; fault ve post
+    // paylasiyor "hi" indeksli direk — boylece polyline kopuk gozukmez.
+    const preGreen: [number, number][] = [];
+    const faultRed: [number, number][] = [];
+    const postGreen: [number, number][] = [];
+    if (lo !== null && hi !== null) {
+      for (const p of linePoles) {
+        const s = p.sequence_no;
+        if (s <= lo) preGreen.push([p.latitude, p.longitude]);
+        if (s >= lo && s <= hi) faultRed.push([p.latitude, p.longitude]);
+        if (s >= hi) postGreen.push([p.latitude, p.longitude]);
+      }
+    } else {
+      // sequence yoksa hepsini yesil ciz
+      for (const p of linePoles) preGreen.push([p.latitude, p.longitude]);
     }
-    // Bounds
-    const lats = polyline.map((p) => p[0]);
-    const lons = polyline.map((p) => p[1]);
+
+    // Bounds — sadece arıza aralığı varsa onu, yoksa tum hat
+    const focusPoles =
+      lo !== null && hi !== null
+        ? linePoles.filter((p) => p.sequence_no >= lo && p.sequence_no <= hi)
+        : linePoles;
+    const lats = focusPoles.map((p) => p.latitude);
+    const lons = focusPoles.map((p) => p.longitude);
     const center: [number, number] = [
       lats.reduce((a, b) => a + b, 0) / lats.length,
       lons.reduce((a, b) => a + b, 0) / lons.length
@@ -129,20 +152,42 @@ export function FaultDetailModal({
       Math.max(...lats) - Math.min(...lats),
       Math.max(...lons) - Math.min(...lons)
     );
-    // Zoom seçimi: span'a göre yaklaşık değer
-    const zoom = span < 0.005 ? 16 : span < 0.02 ? 14 : span < 0.1 ? 12 : 10;
+    const zoom = span < 0.003 ? 16 : span < 0.01 ? 15 : span < 0.03 ? 14 : span < 0.1 ? 13 : 11;
+
+    // Direk koordinat listesi (aralik icindekiler)
+    const rangePoles = focusPoles.map((p) => ({
+      id: p.id,
+      sequence_no: p.sequence_no,
+      name: p.name ?? `Direk #${p.sequence_no}`,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      isStart: p.id === fault.from_pole_id,
+      isEnd: p.id === fault.to_pole_id
+    }));
+
     return {
-      polyline,
-      faultEdge,
+      preGreen,
+      faultRed,
+      postGreen,
       center,
       zoom,
       polesWithRole: linePoles.map((p) => ({
         p,
         isFromFault: p.id === fault.from_pole_id,
-        isToFault: p.id === fault.to_pole_id
-      }))
+        isToFault: p.id === fault.to_pole_id,
+        isInFaultRange:
+          lo !== null && hi !== null && p.sequence_no >= lo && p.sequence_no <= hi
+      })),
+      rangePoles
     };
-  }, [gridSnapshot, fault.line_id, fault.from_pole_id, fault.to_pole_id]);
+  }, [
+    gridSnapshot,
+    fault.line_id,
+    fault.from_pole_id,
+    fault.to_pole_id,
+    fault.from_pole_seq,
+    fault.to_pole_seq
+  ]);
 
   const handleAssign = async (newUsername: string) => {
     setSaving(true);
@@ -258,13 +303,24 @@ export function FaultDetailModal({
                     attributionControl={false}
                   >
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    <Polyline
-                      positions={mapView.polyline}
-                      pathOptions={{ color: "#16a34a", weight: 4, opacity: 0.85 }}
-                    />
-                    {mapView.faultEdge ? (
+                    {/* Sırayla: pre yeşil, ariza kirmizi kesik, post yeşil.
+                        Üç parça hattin gercek geometrisini takip eder; eski
+                        from->to duz cizgi yanlistı. */}
+                    {mapView.preGreen.length >= 2 ? (
                       <Polyline
-                        positions={mapView.faultEdge}
+                        positions={mapView.preGreen}
+                        pathOptions={{ color: "#16a34a", weight: 4, opacity: 0.85 }}
+                      />
+                    ) : null}
+                    {mapView.postGreen.length >= 2 ? (
+                      <Polyline
+                        positions={mapView.postGreen}
+                        pathOptions={{ color: "#16a34a", weight: 4, opacity: 0.85 }}
+                      />
+                    ) : null}
+                    {mapView.faultRed.length >= 2 ? (
+                      <Polyline
+                        positions={mapView.faultRed}
                         pathOptions={{
                           color: "#ef4444",
                           weight: 6,
@@ -273,11 +329,15 @@ export function FaultDetailModal({
                         }}
                       />
                     ) : null}
-                    {mapView.polesWithRole.map(({ p, isFromFault, isToFault }) => (
+                    {mapView.polesWithRole.map(({ p, isFromFault, isToFault, isInFaultRange }) => (
                       <Marker
                         key={p.id}
                         position={[p.latitude, p.longitude]}
-                        icon={miniPolePin(String(p.sequence_no), isFromFault, isToFault)}
+                        icon={miniPolePin(
+                          String(p.sequence_no),
+                          isFromFault,
+                          isToFault || (isInFaultRange && !isFromFault)
+                        )}
                       >
                         <Tooltip>
                           {p.name ?? `Direk #${p.sequence_no}`}
@@ -298,6 +358,40 @@ export function FaultDetailModal({
                 </div>
               )}
             </div>
+
+            {/* Arıza aralığındaki direklerin koordinat listesi */}
+            {mapView && mapView.rangePoles.length > 0 ? (
+              <div className="fault-modal-section">
+                <h4>Arıza Aralığındaki Direkler</h4>
+                <ul className="fault-modal-poles-list">
+                  {mapView.rangePoles.map((rp) => (
+                    <li
+                      key={rp.id}
+                      className={`fault-modal-pole-row ${
+                        rp.isStart ? "is-start" : rp.isEnd ? "is-end" : ""
+                      }`}
+                    >
+                      <span className="fault-modal-pole-seq">#{rp.sequence_no}</span>
+                      <div className="fault-modal-pole-name">
+                        <strong>{rp.name}</strong>
+                        {rp.isStart ? (
+                          <span className="fault-modal-pole-tag fault-modal-pole-tag--red">
+                            Arıza başlangıcı
+                          </span>
+                        ) : rp.isEnd ? (
+                          <span className="fault-modal-pole-tag fault-modal-pole-tag--green">
+                            Arıza bitişi
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className="fault-modal-pole-coords" title="Enlem, Boylam">
+                        {rp.latitude.toFixed(6)}, {rp.longitude.toFixed(6)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <div className="fault-modal-section">
               <h4>Arıza Tespit Eden Cihazlar</h4>
@@ -339,8 +433,8 @@ export function FaultDetailModal({
             </div>
           </div>
 
-          {/* Sağ kolon: ticket yönetimi + yorumlar */}
-          <div className="fault-modal-right">
+          {/* Orta kolon: ticket yönetimi (sorumluluk + durum + not) */}
+          <div className="fault-modal-mid">
             <div className="fault-modal-section">
               <h4>Sorumluluk</h4>
               <div className="fault-modal-row">
@@ -390,7 +484,7 @@ export function FaultDetailModal({
             <div className="fault-modal-section">
               <h4>Kısa Not</h4>
               <textarea
-                rows={2}
+                rows={3}
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
                 disabled={saving || !canEdit}
@@ -408,8 +502,14 @@ export function FaultDetailModal({
               ) : null}
             </div>
 
+            {error ? <div className="fault-modal-error">{error}</div> : null}
+          </div>
+
+          {/* Sağ kolon: SADECE saha raporu / yorumlar */}
+          <div className="fault-modal-comments-col">
             <div className="fault-modal-section fault-modal-section--comments">
               <h4>
+                <span className="material-symbols-outlined" aria-hidden="true">forum</span>
                 Saha Raporu / Yorumlar
                 {comments.length > 0 ? <span className="fault-modal-count">{comments.length}</span> : null}
               </h4>
@@ -455,8 +555,6 @@ export function FaultDetailModal({
                 </div>
               ) : null}
             </div>
-
-            {error ? <div className="fault-modal-error">{error}</div> : null}
           </div>
         </div>
       </div>

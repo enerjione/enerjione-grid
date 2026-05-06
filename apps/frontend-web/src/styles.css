@@ -16704,7 +16704,7 @@ main.content.engineering-content:has(.device-management-panel) {
   background: #ffffff;
   border-radius: 18px;
   width: 100%;
-  max-width: 1200px;
+  max-width: 1480px;
   max-height: calc(100vh - 40px);
   overflow: hidden;
   display: flex;
@@ -16810,9 +16810,20 @@ main.content.engineering-content:has(.device-management-panel) {
 .fault-modal-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  /* 3 kolon: harita+koordinatlar | ticket islemleri | yorumlar */
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr) minmax(320px, 1fr);
   gap: 0;
   overflow: hidden;
+}
+@media (max-width: 1200px) {
+  .fault-modal-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  }
+  .fault-modal-comments-col {
+    grid-column: 1 / -1;
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+    border-left: none !important;
+  }
 }
 @media (max-width: 900px) {
   .fault-modal-body {
@@ -16820,27 +16831,33 @@ main.content.engineering-content:has(.device-management-panel) {
     overflow-y: auto;
   }
 }
-.fault-modal-left {
+.fault-modal-left,
+.fault-modal-mid,
+.fault-modal-comments-col {
   padding: 18px 22px;
   display: flex;
   flex-direction: column;
   gap: 18px;
   overflow-y: auto;
+  min-width: 0;
+}
+.fault-modal-left {
   border-right: 1px solid rgba(148, 163, 184, 0.18);
 }
+.fault-modal-mid {
+  border-right: 1px solid rgba(148, 163, 184, 0.18);
+  background: #fcfcfd;
+}
+.fault-modal-comments-col {
+  background: #f8fafc;
+}
 @media (max-width: 900px) {
-  .fault-modal-left {
+  .fault-modal-left,
+  .fault-modal-mid {
     border-right: none;
     border-bottom: 1px solid rgba(148, 163, 184, 0.18);
     overflow-y: visible;
   }
-}
-.fault-modal-right {
-  padding: 18px 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  overflow-y: auto;
 }
 .fault-modal-section h4 {
   margin: 0 0 10px 0;
@@ -16919,6 +16936,78 @@ main.content.engineering-content:has(.device-management-panel) {
   color: #fff;
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Koordinat listesi (arıza aralığındaki direkler) */
+.fault-modal-poles-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+.fault-modal-pole-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 10px;
+  background: #ffffff;
+  border-radius: 8px;
+  font-size: 12.5px;
+  border-left: 3px solid transparent;
+}
+.fault-modal-pole-row.is-start {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.04);
+}
+.fault-modal-pole-row.is-end {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.04);
+}
+.fault-modal-pole-seq {
+  font-weight: 700;
+  color: #6366f1;
+  font-size: 12px;
+  min-width: 30px;
+}
+.fault-modal-pole-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.fault-modal-pole-name strong {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 12.5px;
+}
+.fault-modal-pole-tag {
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fault-modal-pole-tag--red {
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+.fault-modal-pole-tag--green {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+.fault-modal-pole-coords {
+  font-family: monospace;
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
 }
 .fault-modal-devices {
   display: flex;
@@ -17079,8 +17168,15 @@ main.content.engineering-content:has(.device-management-panel) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 320px;
+  flex: 1;
+  min-height: 200px;
   overflow-y: auto;
+}
+.fault-modal-comments-col .fault-modal-section--comments {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .fault-modal-comments-empty {
   padding: 20px;
