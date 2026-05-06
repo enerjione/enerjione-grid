@@ -308,22 +308,37 @@ body {
   color: #b91c1c;
 }
 
+/* Bildirim listesi: kartlar arasinda nefes alacak bosluk + her kart
+   kendi border/shadow ile ayri bir blok gibi gozuksun. Ust uste binmis
+   satirlar yerine net "kart" hissiyati.
+
+   Yukseklik: ~3 kart kadar gozuksun (yaklasik 480px), fazlasi ic scroll.
+   Boylece dropdown her zaman ekran disina tasmadan kompakt durur. */
 .notif-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  flex: 0 1 auto;
+  max-height: 480px;
   overflow-y: auto;
-  flex: 1 1 auto;
-}
-
-/* Bildirim listesi: kartlar arasinda nefes alacak bosluk + her kart
-   kendi border/shadow ile ayri bir blok gibi gozuksun. Ust uste binmis
-   satirlar yerine net "kart" hissiyati. */
-.notif-list {
+  overscroll-behavior: contain;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* Hafif gorunur scrollbar — kart icindeki overflow normal scroll */
+.notif-list::-webkit-scrollbar {
+  width: 6px;
+}
+.notif-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.notif-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 3px;
+}
+.notif-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
   background: #f1f5f9;
 }
 
@@ -7753,22 +7768,32 @@ main.content.engineering-content:has(.device-management-panel) {
   }
 }
 
-/* ===== Proje Ayarlari paneli ===== */
+/* ===== Proje Ayarlari paneli =====
+   Genis ekranda tum yatay alani kullansin. 1100px max-width yerine panelin
+   bulundugu container ne kadarsa o kadar genisler. */
 .project-settings-panel {
-  max-width: 1100px;
+  max-width: 100%;
 }
 
 .project-settings-grid {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   margin-top: 16px;
 }
 
+/* Metin alanlari satiri: Proje Adi / Musteri Adi / Sekme Basligi 3 esit
+   sutun (genis ekranda). Dar ekranda otomatik 2 sutuna duser, sonra 1. */
 .project-settings-field {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .project-settings-field {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .project-settings-field label {
@@ -7789,7 +7814,10 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .project-settings-logo-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Genis ekranda 4 kart yan yana (Login / Header / Favicon / Login Image)
+     orta ekranda 2 sutun, kucukte tek sutun. Otomatik fitting:
+     min 260px - max 1fr esit pay. */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
 }
 
@@ -7801,6 +7829,14 @@ main.content.engineering-content:has(.device-management-panel) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+}
+/* Boxlar yan yana iken preview yuksekligi tutarli olsun.
+   Login image biraz daha buyuk preview ister; ama yine de box'lar
+   ayni hizada bitsin diye preview area flex 1 ile yayilir. */
+.project-settings-logo-box .project-settings-logo-preview {
+  flex: 1 1 auto;
+  min-height: 140px;
 }
 
 .project-settings-logo-head {
