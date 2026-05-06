@@ -241,6 +241,8 @@ export type LineSegment = {
   from_pole_id: number;
   to_pole_id: number;
   device_id?: number | null;
+  /** Cihazin slot icindeki fiziksel konumu (0..1). NULL = otomatik dagilim. */
+  device_position_t?: number | null;
   created_at: string;
   /** UI render kolaylığı için backend expand ediyor */
   from_pole_seq?: number | null;

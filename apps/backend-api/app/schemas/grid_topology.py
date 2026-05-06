@@ -107,6 +107,8 @@ class LineSegmentBase(BaseModel):
     from_pole_id: int
     to_pole_id: int
     device_id: int | None = None
+    # Cihazin slot icindeki fiziksel konumu (0..1). NULL = otomatik dagilim.
+    device_position_t: float | None = None
 
 
 class LineSegmentCreate(LineSegmentBase):
@@ -117,6 +119,7 @@ class LineSegmentUpdate(BaseModel):
     from_pole_id: int | None = None
     to_pole_id: int | None = None
     device_id: int | None = None
+    device_position_t: float | None = None
 
 
 class LineSegmentRead(LineSegmentBase):

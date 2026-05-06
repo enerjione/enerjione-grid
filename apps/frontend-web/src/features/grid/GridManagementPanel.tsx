@@ -976,12 +976,22 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                     const segsWithDevice = slot.segments.filter((s) => s.device_id);
                     const total = segsWithDevice.length;
                     if (total === 0) return [];
+                    // Slot uzerinde projektif kesim icin a (from) -> b (to) vektoru.
+                    const ax = slot.fromPole.latitude;
+                    const ay = slot.fromPole.longitude;
+                    const bx = slot.toPole.latitude;
+                    const by = slot.toPole.longitude;
+                    const dx = bx - ax;
+                    const dy = by - ay;
+                    const len2 = dx * dx + dy * dy;
                     return segsWithDevice.map((seg, idx) => {
-                      const t = (idx + 1) / (total + 1);
-                      const lat =
-                        slot.fromPole.latitude + (slot.toPole.latitude - slot.fromPole.latitude) * t;
-                      const lon =
-                        slot.fromPole.longitude + (slot.toPole.longitude - slot.fromPole.longitude) * t;
+                      // Manuel device_position_t varsa onu kullan; yoksa otomatik dagit.
+                      const tManual = seg.device_position_t;
+                      const t = (tManual !== null && tManual !== undefined && tManual >= 0 && tManual <= 1)
+                        ? tManual
+                        : (idx + 1) / (total + 1);
+                      const lat = ax + dx * t;
+                      const lon = ay + dy * t;
                       const dev = devices.find((d) => d.id === seg.device_id);
                       const openMenu = (event: L.LeafletMouseEvent) => {
                         event.originalEvent.preventDefault();
@@ -997,12 +1007,23 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       };
                       return (
                         <Marker
-                          key={`dev-${seg.id}`}
+                          key={`dev-${seg.id}-${editMode ? "edit" : "view"}`}
                           position={[lat, lon]}
                           icon={deviceIcon(dev?.alarmActive ?? false)}
+                          draggable={editMode}
                           eventHandlers={{
                             click: openMenu,
-                            contextmenu: openMenu
+                            contextmenu: openMenu,
+                            dragend: editMode ? (event: L.DragEndEvent) => {
+                              const ll = (event.target as L.Marker).getLatLng();
+                              // Yeni konumu slot vektorune perpendicular projekte et
+                              // ve t parametresini bul (0..1).
+                              if (len2 === 0) return;
+                              const px = ll.lat - ax;
+                              const py = ll.lng - ay;
+                              const tNew = Math.max(0, Math.min(1, (px * dx + py * dy) / len2));
+                              void handleDeviceDragEnd(seg, tNew);
+                            } : undefined
                           }}
                         >
                           <Tooltip>
@@ -1011,7 +1032,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
                             {total > 1 ? ` · ${idx + 1}/${total}` : ""}
                             <br />
-                            <em>Tıkla: taşı / kaldır</em>
+                            {editMode ? (
+                              <em>Sürükle: konumu ayarla · Tıkla: menü</em>
+                            ) : (
+                              <em>Tıkla: taşı / kaldır</em>
+                            )}
                           </Tooltip>
                         </Marker>
                       );
@@ -1366,6 +1391,20 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Direk taşınamadı.");
       if (selectedLineId !== null) await reloadDetail(selectedLineId); // hata olunca eski koordinata gerial
+    }
+  }
+
+  // Slot uzerindeki cihaz marker'i suruklendiginde t parametresini (0..1)
+  // backend'e yaz; backend cihaz konumunu bu t degerine gore yeniden hesaplar.
+  async function handleDeviceDragEnd(seg: LineSegment, tNew: number) {
+    const tRounded = Number(tNew.toFixed(4));
+    try {
+      await updateSegment(accessToken, seg.id, { device_position_t: tRounded });
+      toast.success("Cihaz konumu güncellendi.");
+      if (selectedLineId !== null) await reloadDetail(selectedLineId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cihaz konumu güncellenemedi.");
+      if (selectedLineId !== null) await reloadDetail(selectedLineId);
     }
   }
 

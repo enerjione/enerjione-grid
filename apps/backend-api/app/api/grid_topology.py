@@ -97,7 +97,9 @@ def grid_snapshot(
         seg_reads.append(LineSegmentRead(
             id=s.id, line_id=s.line_id,
             from_pole_id=s.from_pole_id, to_pole_id=s.to_pole_id,
-            device_id=s.device_id, created_at=s.created_at,
+            device_id=s.device_id,
+            device_position_t=s.device_position_t,
+            created_at=s.created_at,
             from_pole_seq=pole_seq_map.get(s.from_pole_id),
             to_pole_seq=pole_seq_map.get(s.to_pole_id),
             device_code=dev.code if dev else None,
@@ -569,7 +571,9 @@ def list_segments(
         LineSegmentRead(
             id=s.id, line_id=s.line_id,
             from_pole_id=s.from_pole_id, to_pole_id=s.to_pole_id,
-            device_id=s.device_id, created_at=s.created_at,
+            device_id=s.device_id,
+            device_position_t=s.device_position_t,
+            created_at=s.created_at,
             from_pole_seq=pole_seq.get(s.from_pole_id),
             to_pole_seq=pole_seq.get(s.to_pole_id),
             device_code=device_map[s.device_id].code if s.device_id and s.device_id in device_map else None,
@@ -632,11 +636,18 @@ def _resync_slot(db: Session, from_pole_id: int, to_pole_id: int) -> None:
         dev = devices_by_id.get(s.device_id) if s.device_id is not None else None
         if dev is None:
             continue
-        lat, lon = _slot_position_for_device(
-            from_pole.latitude, from_pole.longitude,
-            to_pole.latitude, to_pole.longitude,
-            i, total,
-        )
+        # Manuel olarak ayarlanmis device_position_t varsa override; yoksa
+        # otomatik orta-nokta dagilimi.
+        manual_t = s.device_position_t
+        if manual_t is not None and 0.0 <= manual_t <= 1.0:
+            lat = from_pole.latitude + (to_pole.latitude - from_pole.latitude) * manual_t
+            lon = from_pole.longitude + (to_pole.longitude - from_pole.longitude) * manual_t
+        else:
+            lat, lon = _slot_position_for_device(
+                from_pole.latitude, from_pole.longitude,
+                to_pole.latitude, to_pole.longitude,
+                i, total,
+            )
         dev.latitude = lat
         dev.longitude = lon
 
@@ -818,7 +829,9 @@ def _segment_to_read(db: Session, row: LineSegment) -> LineSegmentRead:
     return LineSegmentRead(
         id=row.id, line_id=row.line_id,
         from_pole_id=row.from_pole_id, to_pole_id=row.to_pole_id,
-        device_id=row.device_id, created_at=row.created_at,
+        device_id=row.device_id,
+        device_position_t=row.device_position_t,
+        created_at=row.created_at,
         from_pole_seq=from_pole.sequence_no if from_pole else None,
         to_pole_seq=to_pole.sequence_no if to_pole else None,
         device_code=device.code if device else None,

@@ -311,6 +311,11 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE line_segments DROP CONSTRAINT IF EXISTS uq_segment_endpoints")
         )
+        # Cihazin slot icindeki fiziksel konumu (0..1 arasinda t parametresi).
+        # NULL = auto orta-nokta dagilimi.
+        connection.execute(
+            text("ALTER TABLE line_segments ADD COLUMN IF NOT EXISTS device_position_t DOUBLE PRECISION")
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS alarm_rules ("

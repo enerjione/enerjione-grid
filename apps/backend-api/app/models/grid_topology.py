@@ -122,6 +122,11 @@ class LineSegment(Base):
     device_id: Mapped[int | None] = mapped_column(
         ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, unique=True
     )
+    # Cihazin slot icindeki fiziksel konumu (0..1). NULL ise otomatik orta-nokta
+    # dagilimi kullanilir (slot'taki cihazlar esit araliklarla yerlesir). Manuel
+    # ayarlandiginda kullanici suruklemeyle bu degeri belirler ve auto-dagilim
+    # bu cihaz icin override edilir.
+    device_position_t: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
