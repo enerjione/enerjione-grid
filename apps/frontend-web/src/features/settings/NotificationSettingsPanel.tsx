@@ -10,6 +10,9 @@ type Props = {
   onSave: (payload: NotificationSettings) => Promise<void>;
   onTestSmtp: (payload: { recipient_email: string; subject?: string; message?: string }) => Promise<{ ok: boolean; detail: string }>;
   onTestSms: (payload: { recipient_phone: string; message?: string }) => Promise<{ ok: boolean; detail: string }>;
+  /** Telegram bot test gonderimi. Alarm akisindaki bot tokeni ve verilen
+   *  chat_id ile sade bir test mesaji yollar. */
+  onTestTelegram?: (payload: { chat_id: string; message?: string }) => Promise<{ ok: boolean; detail: string }>;
 };
 
 const EMPTY_SETTINGS: NotificationSettings = {
@@ -22,7 +25,10 @@ const EMPTY_SETTINGS: NotificationSettings = {
   sms_enabled: false,
   sms_provider: "mock",
   sms_api_url: "",
-  sms_api_key: ""
+  sms_api_key: "",
+  telegram_enabled: false,
+  telegram_bot_token: "",
+  telegram_chat_ids: ""
 };
 
 export function NotificationSettingsPanel({
@@ -32,19 +38,29 @@ export function NotificationSettingsPanel({
   error,
   onSave,
   onTestSmtp,
-  onTestSms
+  onTestSms,
+  onTestTelegram
 }: Props) {
   const [form, setForm] = useState<NotificationSettings>(EMPTY_SETTINGS);
   const [submitError, setSubmitError] = useState("");
   const [smtpTestEmail, setSmtpTestEmail] = useState("");
   const [smsTestPhone, setSmsTestPhone] = useState("");
+  const [telegramTestChat, setTelegramTestChat] = useState("");
   const [testInfo, setTestInfo] = useState("");
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [testingSms, setTestingSms] = useState(false);
+  const [testingTelegram, setTestingTelegram] = useState(false);
 
   useEffect(() => {
     if (initialSettings) {
-      setForm(initialSettings);
+      // Backend bos donduyse defaultlari koru (telegram alanlari Optional).
+      setForm({
+        ...EMPTY_SETTINGS,
+        ...initialSettings,
+        telegram_enabled: initialSettings.telegram_enabled ?? false,
+        telegram_bot_token: initialSettings.telegram_bot_token ?? "",
+        telegram_chat_ids: initialSettings.telegram_chat_ids ?? ""
+      });
     }
   }, [initialSettings]);
 
@@ -91,6 +107,26 @@ export function NotificationSettingsPanel({
       setSubmitError(err instanceof Error ? err.message : "SMS test başarısız.");
     } finally {
       setTestingSms(false);
+    }
+  };
+
+  const handleTelegramTest = async () => {
+    if (!onTestTelegram) return;
+    const chat = telegramTestChat.trim();
+    if (!chat) {
+      setSubmitError("Telegram test için chat ID giriniz.");
+      return;
+    }
+    setSubmitError("");
+    setTestInfo("");
+    setTestingTelegram(true);
+    try {
+      const result = await onTestTelegram({ chat_id: chat });
+      setTestInfo(result.detail);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Telegram test başarısız.");
+    } finally {
+      setTestingTelegram(false);
     }
   };
 
@@ -210,6 +246,67 @@ export function NotificationSettingsPanel({
             </label>
             <button type="button" className="secondary-btn" onClick={handleSmsTest} disabled={testingSms}>
               {testingSms ? "SMS Test Ediliyor..." : "SMS Test Gönder"}
+            </button>
+          </div>
+
+          <div className="notification-card">
+            <h4>Telegram Bot</h4>
+            <p className="helper-text" style={{ marginTop: 0 }}>
+              Alarm kuralında "Telegram" işaretliyse, kural tetiklendiğinde
+              aşağıdaki bot kanal/grup chat ID'lerine HTML mesaj gönderilir.
+              Bot tokenini <code>@BotFather</code>'dan alabilirsiniz.
+            </p>
+            <label className="notify-option">
+              <input
+                type="checkbox"
+                checked={form.telegram_enabled === true}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, telegram_enabled: event.target.checked }))
+                }
+              />
+              Telegram Aktif
+            </label>
+            <label>
+              Bot Token
+              <input
+                type="password"
+                value={form.telegram_bot_token ?? ""}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, telegram_bot_token: event.target.value }))
+                }
+                placeholder="123456:ABC-DEF1234ghIkl..."
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              Chat ID Listesi
+              <input
+                value={form.telegram_chat_ids ?? ""}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, telegram_chat_ids: event.target.value }))
+                }
+                placeholder="-1001234567890, 123456789"
+              />
+              <small className="helper-text">
+                Virgülle ayırın. Grup chat ID'leri "-100" ile başlar; kişisel
+                chat ID'lerini <code>@userinfobot</code>'tan öğrenebilirsiniz.
+              </small>
+            </label>
+            <label>
+              Test Chat ID
+              <input
+                value={telegramTestChat}
+                onChange={(event) => setTelegramTestChat(event.target.value)}
+                placeholder="-1001234567890"
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={handleTelegramTest}
+              disabled={testingTelegram || !onTestTelegram}
+            >
+              {testingTelegram ? "Telegram Test Ediliyor..." : "Telegram Test Gönder"}
             </button>
           </div>
         </div>

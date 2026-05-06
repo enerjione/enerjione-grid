@@ -1053,6 +1053,19 @@ export async function testNotificationSms(
   return (await response.json()) as { ok: boolean; detail: string };
 }
 
+export async function testNotificationTelegram(
+  token: string,
+  payload: { chat_id: string; message?: string }
+): Promise<{ ok: boolean; detail: string }> {
+  const response = await fetch(`${API_BASE_URL}/notification-settings/test-telegram`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Telegram test gönderimi başarısız.");
+  return (await response.json()) as { ok: boolean; detail: string };
+}
+
 // ----- Signal Catalog -----
 export async function fetchSignals(token: string, model?: string): Promise<SignalCatalogRow[]> {
   const url = model

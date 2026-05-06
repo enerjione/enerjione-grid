@@ -100,6 +100,7 @@ import {
   updateProjectSettings,
   testNotificationSms,
   testNotificationSmtp,
+  testNotificationTelegram,
   updateNotificationSettings as updateNotificationSettingsApi,
   updateUser,
   updateMyProfile,
@@ -1334,6 +1335,13 @@ export function App() {
     return testNotificationSms(session.accessToken, payload);
   };
 
+  const handleTestNotificationTelegram = async (payload: { chat_id: string; message?: string }) => {
+    if (!session) {
+      throw new Error("Oturum bulunamadı.");
+    }
+    return testNotificationTelegram(session.accessToken, payload);
+  };
+
   const handleOpenSettings = () => {
     if (currentUser) {
       setSettingsFullName(currentUser.full_name);
@@ -1778,6 +1786,7 @@ export function App() {
                 onSave={handleSaveNotificationSettings}
                 onTestSmtp={handleTestNotificationSmtp}
                 onTestSms={handleTestNotificationSms}
+                onTestTelegram={handleTestNotificationTelegram}
               />
             ) : null}
             {engineeringPage === "project-settings" && session.role === "installer" ? (

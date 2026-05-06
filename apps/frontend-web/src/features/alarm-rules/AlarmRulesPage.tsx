@@ -577,7 +577,7 @@ export function AlarmRulesPage({
                               setForm({ ...form, notify_email: e.target.checked })
                             }
                           />
-                          <span className="rule-channel-icon">✉️</span>
+                          <span className="rule-channel-icon material-symbols-outlined">mail</span>
                           <span className="rule-channel-label">
                             <strong>E-posta</strong>
                             <small>Sorumlu kullanıcılara HTML şablonlu mail.</small>
@@ -591,7 +591,7 @@ export function AlarmRulesPage({
                               setForm({ ...form, notify_sms: e.target.checked })
                             }
                           />
-                          <span className="rule-channel-icon">📱</span>
+                          <span className="rule-channel-icon material-symbols-outlined">sms</span>
                           <span className="rule-channel-label">
                             <strong>SMS</strong>
                             <small>Telefon numarası kayıtlı kullanıcılara kısa mesaj.</small>
@@ -605,7 +605,7 @@ export function AlarmRulesPage({
                               setForm({ ...form, notify_telegram: e.target.checked })
                             }
                           />
-                          <span className="rule-channel-icon">📨</span>
+                          <span className="rule-channel-icon material-symbols-outlined">send</span>
                           <span className="rule-channel-label">
                             <strong>Telegram</strong>
                             <small>Bildirim Ayarları'nda tanımlı tüm chat'lere gönderilir.</small>

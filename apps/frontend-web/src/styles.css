@@ -7813,9 +7813,18 @@ main.content.engineering-content:has(.device-management-panel) {
   box-shadow: 0 0 0 1px #4338ca inset;
 }
 .rule-channel-icon {
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
   flex-shrink: 0;
+  color: #4338ca;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rule-channel-option:has(input:checked) .rule-channel-icon {
+  color: #312e81;
 }
 .rule-channel-label {
   display: flex;
