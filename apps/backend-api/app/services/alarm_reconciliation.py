@@ -181,6 +181,17 @@ class AlarmReconciliationWorker:
                     select(AlarmEvent).where(AlarmEvent.reset.is_(False))
                 ).all()
             )
+            # Her tick'te fault_events tablosunu aktif alarmlardan yeniden
+            # hesapla. Bu, internal endpoint'leri uzerinden geçmeyen
+            # (manuel olusturulmus eski) alarmlarin da fault listesine
+            # yansimasini saglar; ayrica fault_events drift'lerini onler.
+            try:
+                from app.services.fault_recompute_service import recompute_faults
+                recompute_faults(db)
+                db.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception("fault_recompute_failed_in_periodic_tick")
+                db.rollback()
             if not open_alarms:
                 return
             # Kural cache'i: title -> rule (ilk eslesme)

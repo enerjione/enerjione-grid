@@ -36,6 +36,16 @@ function fmtDate(iso?: string | null): string {
   return d.toLocaleString("tr-TR");
 }
 
+function fmtRelative(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const sec = Math.round((Date.now() - d.getTime()) / 1000);
+  if (sec < 60) return `${sec} sn önce`;
+  if (sec < 3600) return `${Math.round(sec / 60)} dk önce`;
+  if (sec < 86400) return `${Math.round(sec / 3600)} sa önce`;
+  return `${Math.round(sec / 86400)} gün önce`;
+}
+
 export function FaultListPage({
   faults,
   users,
@@ -57,6 +67,17 @@ export function FaultListPage({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // İstatistik chip'ler (toplam aktif, atanmış, devam ediyor, kapatılan)
+  const stats = useMemo(() => {
+    const total = faults.length;
+    const open = faults.filter((f) => f.status === "open").length;
+    const assigned = faults.filter((f) => f.status === "assigned").length;
+    const inProgress = faults.filter((f) => f.status === "in_progress").length;
+    const resolved = faults.filter((f) => f.status === "resolved").length;
+    const closed = faults.filter((f) => f.status === "closed").length;
+    return { total, open, assigned, inProgress, resolved, closed };
+  }, [faults]);
+
   const filtered = useMemo(() => {
     let arr = faults;
     if (statusFilter === "active") {
@@ -71,7 +92,8 @@ export function FaultListPage({
         return hay.includes(q);
       });
     }
-    return arr;
+    // En yeni en üstte
+    return [...arr].sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime());
   }, [faults, statusFilter, search]);
 
   const selected = useMemo(
@@ -169,6 +191,7 @@ export function FaultListPage({
 
   return (
     <div className="faults-page">
+      {/* Üst başlık + istatistik şeridi */}
       <header className="faults-page-header">
         <div className="faults-page-title-wrap">
           <span className="material-symbols-outlined faults-page-icon">report</span>
@@ -199,77 +222,130 @@ export function FaultListPage({
         </div>
       </header>
 
+      {/* Sayaç chip'leri (toplam, atandı, devam, çözüldü) */}
+      <div className="faults-stats">
+        <div className="faults-stat-chip faults-stat-chip--total">
+          <span className="faults-stat-num">{stats.total}</span>
+          <span className="faults-stat-label">Toplam</span>
+        </div>
+        <div className="faults-stat-chip faults-stat-chip--open">
+          <span className="faults-stat-num">{stats.open}</span>
+          <span className="faults-stat-label">Açık</span>
+        </div>
+        <div className="faults-stat-chip faults-stat-chip--assigned">
+          <span className="faults-stat-num">{stats.assigned}</span>
+          <span className="faults-stat-label">Atandı</span>
+        </div>
+        <div className="faults-stat-chip faults-stat-chip--progress">
+          <span className="faults-stat-num">{stats.inProgress}</span>
+          <span className="faults-stat-label">Devam Ediyor</span>
+        </div>
+        <div className="faults-stat-chip faults-stat-chip--resolved">
+          <span className="faults-stat-num">{stats.resolved}</span>
+          <span className="faults-stat-label">Sahada Çözüldü</span>
+        </div>
+        <div className="faults-stat-chip faults-stat-chip--closed">
+          <span className="faults-stat-num">{stats.closed}</span>
+          <span className="faults-stat-label">Kapatıldı</span>
+        </div>
+      </div>
+
       <div className="faults-page-body">
-        <div className="faults-list">
+        <div className="faults-cards">
           {loading && filtered.length === 0 ? (
-            <div className="faults-empty">Yükleniyor…</div>
+            <div className="faults-empty-card">
+              <span className="material-symbols-outlined">hourglass_empty</span>
+              <p>Yükleniyor…</p>
+            </div>
           ) : filtered.length === 0 ? (
-            <div className="faults-empty">Bu filtreye uygun arıza yok.</div>
+            <div className="faults-empty-card">
+              <span className="material-symbols-outlined">check_circle</span>
+              <h3>Aktif arıza yok</h3>
+              <p>
+                {search
+                  ? "Aramaya uygun arıza bulunamadı. Farklı bir terim deneyin."
+                  : statusFilter === "closed"
+                  ? "Kapatılmış arıza kaydı yok."
+                  : "Sistem temiz. Sahada arıza tespit edilince burada listelenecek."}
+              </p>
+            </div>
           ) : (
-            <table className="faults-table">
-              <thead>
-                <tr>
-                  <th>Tarih</th>
-                  <th>Bölge / Hat</th>
-                  <th>Aralık</th>
-                  <th>Son RED Cihaz</th>
-                  <th>İlk YEŞİL Cihaz</th>
-                  <th>Durum</th>
-                  <th>Atanan</th>
-                  <th>Yorum</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((f) => (
-                  <tr
-                    key={f.id}
-                    className={`faults-row ${selectedId === f.id ? "selected" : ""}`}
-                    onClick={() => setSelectedId(f.id)}
-                  >
-                    <td className="faults-cell-date">{fmtDate(f.opened_at)}</td>
-                    <td>
-                      <div className="faults-cell-line">
+            filtered.map((f) => {
+              const isSelected = selectedId === f.id;
+              const sc = STATUS_COLOR[f.status] ?? "#64748b";
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  className={`faults-card ${isSelected ? "selected" : ""}`}
+                  onClick={() => setSelectedId(f.id)}
+                  style={{ borderLeftColor: sc }}
+                >
+                  <div className="faults-card-row faults-card-row--top">
+                    <div className="faults-card-line">
+                      <span className="material-symbols-outlined faults-card-line-icon">timeline</span>
+                      <div>
                         <strong>{f.line_name}</strong>
                         <span>{f.region_name}</span>
                       </div>
-                    </td>
-                    <td className="faults-cell-range">
-                      {f.from_pole_seq != null && f.to_pole_seq != null
-                        ? `Direk #${f.from_pole_seq} — #${f.to_pole_seq}`
-                        : "—"}
-                    </td>
-                    <td>
-                      <div className="faults-cell-dev">
-                        <strong>{f.last_red_device_name ?? "—"}</strong>
-                        {f.last_red_device_code ? <span>{f.last_red_device_code}</span> : null}
-                      </div>
-                    </td>
-                    <td>
-                      {f.first_green_device_name ? (
-                        <div className="faults-cell-dev">
-                          <strong>{f.first_green_device_name}</strong>
-                          {f.first_green_device_code ? <span>{f.first_green_device_code}</span> : null}
+                    </div>
+                    <span
+                      className="faults-status-pill"
+                      style={{ background: `${sc}22`, color: sc }}
+                    >
+                      {STATUS_LABEL[f.status] ?? f.status}
+                    </span>
+                  </div>
+
+                  <div className="faults-card-row faults-card-row--mid">
+                    <div className="faults-card-range">
+                      <span className="faults-card-range-label">Arıza Aralığı</span>
+                      <strong>
+                        {f.from_pole_seq != null && f.to_pole_seq != null
+                          ? `Direk #${f.from_pole_seq} — #${f.to_pole_seq}`
+                          : "—"}
+                      </strong>
+                    </div>
+                    <div className="faults-card-devices">
+                      <div className="faults-card-dev faults-card-dev--red">
+                        <span className="faults-card-dev-dot" />
+                        <div>
+                          <span>Son RED</span>
+                          <strong>{f.last_red_device_name ?? "—"}</strong>
                         </div>
-                      ) : (
-                        <span className="faults-cell-dim">— hat ucu</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className="faults-status-pill"
-                        style={{ background: `${STATUS_COLOR[f.status] ?? "#64748b"}22`, color: STATUS_COLOR[f.status] ?? "#64748b" }}
-                      >
-                        {STATUS_LABEL[f.status] ?? f.status}
+                      </div>
+                      <span className="faults-card-arrow">→</span>
+                      <div className="faults-card-dev faults-card-dev--green">
+                        <span className="faults-card-dev-dot" />
+                        <div>
+                          <span>İlk YEŞİL</span>
+                          <strong>{f.first_green_device_name ?? "Hat ucu"}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="faults-card-row faults-card-row--bot">
+                    <div className="faults-card-meta">
+                      <span className="material-symbols-outlined">schedule</span>
+                      <span title={fmtDate(f.opened_at)}>{fmtRelative(f.opened_at)}</span>
+                    </div>
+                    <div className="faults-card-meta">
+                      <span className="material-symbols-outlined">person</span>
+                      <span>
+                        {f.assigned_to_full_name ?? f.assigned_to_username ?? (
+                          <em className="faults-card-meta-dim">Atanmamış</em>
+                        )}
                       </span>
-                    </td>
-                    <td className="faults-cell-assignee">
-                      {f.assigned_to_full_name ?? f.assigned_to_username ?? "—"}
-                    </td>
-                    <td>{f.comment_count > 0 ? f.comment_count : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    <div className="faults-card-meta">
+                      <span className="material-symbols-outlined">forum</span>
+                      <span>{f.comment_count > 0 ? `${f.comment_count} yorum` : "Yorum yok"}</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
 

@@ -104,11 +104,26 @@ def recompute_faults(db: Session) -> None:
         arr.sort(key=lambda t: (t[0], t[1], t[2]))
 
     now = datetime.now(timezone.utc)
-    # line_id -> mevcut acik FaultEvent
+    # line_id -> mevcut AKTIF FaultEvent. "Aktif" = closed olmayan tum
+    # statusler (open/assigned/in_progress/resolved). Bir hatta tek aktif
+    # fault tutuyoruz; yeni alarm degisiklikleri mevcut kaydı GUNCELLER,
+    # yeni satir AÇMAZ (aksi halde duplicate olusur).
     open_faults = list(
-        db.scalars(select(FaultEvent).where(FaultEvent.status == "open")).all()
+        db.scalars(
+            select(FaultEvent).where(FaultEvent.status != "closed")
+        ).all()
     )
-    open_by_line: dict[int, FaultEvent] = {f.line_id: f for f in open_faults}
+    open_by_line: dict[int, FaultEvent] = {}
+    # Bir hatta birden fazla aktif kayit varsa (eski drift), en yenisini
+    # tut, digerlerini closed yap (silmek riskli — tarihce icin closed).
+    for f in sorted(open_faults, key=lambda x: x.opened_at, reverse=True):
+        if f.line_id in open_by_line:
+            f.status = "closed"
+            f.closed_at = now
+            if f.resolved_at is None:
+                f.resolved_at = now
+        else:
+            open_by_line[f.line_id] = f
 
     handled_lines: set[int] = set()
 
