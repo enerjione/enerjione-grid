@@ -35,6 +35,10 @@ const faultPin = () =>
     iconAnchor: [17, 17]
   });
 
+// Pole icon CACHE — markerIcon ile ayni nedenle: polling her tick'te
+// ayni kombinasyon icin yeni divIcon yaratmasin (DOM re-render +
+// olasi flicker).
+const _polePinCache = new Map<string, L.DivIcon>();
 const polePin = (
   label: string,
   isStart: boolean,
@@ -42,6 +46,9 @@ const polePin = (
   poleType?: string,
   isBranchPoint?: boolean
 ) => {
+  const key = `${label}|${isStart ? 1 : 0}|${isEnd ? 1 : 0}|${poleType ?? ""}|${isBranchPoint ? 1 : 0}`;
+  const cached = _polePinCache.get(key);
+  if (cached) return cached;
   const typeCls =
     poleType === "transformer" ? "is-transformer" : "";
   const cls = [
@@ -59,12 +66,14 @@ const polePin = (
     ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
     : "";
   const size: [number, number] = isTrafo ? [26, 26] : [20, 20];
-  return L.divIcon({
+  const icon = L.divIcon({
     className: "grid-pole-leaflet-wrap",
     html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}</div>`,
     iconSize: size,
     iconAnchor: [size[0] / 2, size[1] / 2]
   });
+  _polePinCache.set(key, icon);
+  return icon;
 };
 
 function FlyToSelected({
@@ -109,16 +118,22 @@ function MapInvalidator({ deps }: { deps: unknown[] }) {
   return null;
 }
 
+// Icon CACHE: ayni (status, alarmActive) icin AYNI L.divIcon instance'ini
+// dondur. Aksi takdirde polling her 5sn'de yeni icon yarattigindan, marker
+// DOM'u re-render olur ve CSS alarm-pulse animasyonu surekli %0'dan
+// baslayarak titrer (kullanici sikayeti).
+const _markerIconCache = new Map<string, L.DivIcon>();
 function markerIcon(status: DeviceRow["communicationStatus"], alarmActive: boolean) {
-  // Cihaz sembolu: dis halkali, ortada simsek (Horstmann Smart Navigator).
-  // Direkten (gri pin) ve sade dot'tan ayirt edici.
+  const key = `${status}|${alarmActive ? 1 : 0}`;
+  const cached = _markerIconCache.get(key);
+  if (cached) return cached;
   const color = alarmActive ? "#dc2626" : status === "online" ? "#10b981" : "#94a3b8";
   const cls = alarmActive
     ? "is-alarm"
     : status === "online"
       ? "is-online"
       : "is-offline";
-  return L.divIcon({
+  const icon = L.divIcon({
     className: "device-marker-wrap",
     html: `
       <div class="device-marker ${cls}" style="--c:${color}">
@@ -130,6 +145,8 @@ function markerIcon(status: DeviceRow["communicationStatus"], alarmActive: boole
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
+  _markerIconCache.set(key, icon);
+  return icon;
 }
 
 // Lithium pil voltaj-yüzde haritası — Proje Ayarları'ndan override edilebilir.
@@ -609,6 +626,15 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       while (stack.length > 0) {
         const cur = stack.pop()!;
         const outs = outEdges.get(cur.nodeId) ?? [];
+
+        // PATH LEAF: out-edge'i olmayan bir node'a vardiysak ve hala
+        // state=red ise, son RED'ten sonra GREEN cihaz GORMEDIK ama
+        // path bitti — ariza son RED ile hat ucu arasinda olabilir.
+        // Pending'deki tum edge'ler fault olarak isaretlenir.
+        if (outs.length === 0 && cur.lastState === "red" && cur.pendingEdges.length > 0) {
+          for (const pe of cur.pendingEdges) faultEdgeIds.add(pe);
+          continue;
+        }
 
         // BRANSMAN AYRIMI: cur.lastState=red iken birden fazla out-edge
         // varsa, sadece subtreeHasRed=true olan dal pending'i miras alir.
