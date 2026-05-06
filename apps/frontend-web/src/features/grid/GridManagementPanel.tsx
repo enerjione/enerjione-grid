@@ -1491,60 +1491,72 @@ function SegmentContextMenu({
   };
 
   return (
-    <div className="grid-segment-menu-inner">
-      <div className="grid-segment-menu-head">
-        <div className="grid-segment-menu-title">
-          <span className="grid-segment-menu-badge">SEGMENT</span>
-          <strong>
-            #{slot.fromPole.sequence_no} → #{slot.toPole.sequence_no}
-          </strong>
-          {segsWithDevice.length > 0 ? (
-            <span className="grid-segment-menu-count-pill">
-              {segsWithDevice.length} cihaz
-            </span>
-          ) : null}
+    <div className="seg-menu">
+      <header className="seg-menu-head">
+        <div className="seg-menu-head-text">
+          <div className="seg-menu-eyebrow">SEGMENT</div>
+          <div className="seg-menu-title">
+            <span className="seg-menu-pole">#{slot.fromPole.sequence_no}</span>
+            <span className="seg-menu-arrow">→</span>
+            <span className="seg-menu-pole">#{slot.toPole.sequence_no}</span>
+            {segsWithDevice.length > 0 ? (
+              <span className="seg-menu-count">
+                {segsWithDevice.length} cihaz
+              </span>
+            ) : (
+              <span className="seg-menu-count seg-menu-count--empty">boş</span>
+            )}
+          </div>
         </div>
-        <button type="button" className="grid-segment-menu-close" onClick={onClose} aria-label="Kapat">
-          ×
+        <button type="button" className="seg-menu-close" onClick={onClose} aria-label="Kapat">
+          <span className="material-symbols-outlined">close</span>
         </button>
-      </div>
+      </header>
 
       {view === "list" ? (
         // ===== MEVCUT CIHAZLAR + CIHAZ EKLE =====
-        <>
+        <div className="seg-menu-body">
           {segsWithDevice.length === 0 ? (
-            <div className="grid-segment-menu-empty grid-segment-menu-empty--padded">
+            <div className="seg-menu-empty">
               <span className="material-symbols-outlined">cable</span>
-              Bu segmente henüz cihaz atanmamış.
+              <div>
+                <strong>Atanmış cihaz yok</strong>
+                <p>Bu segmente cihaz eklemek için aşağıdaki butonu kullanın.</p>
+              </div>
             </div>
           ) : (
-            <div className="grid-segment-menu-device-stack">
+            <ul className="seg-menu-devices">
               {segsWithDevice.map((seg, idx) => {
                 const d = devices.find((x) => x.id === seg.device_id);
                 if (!d) return null;
+                const online = d.communicationStatus === "online";
                 return (
-                  <div key={seg.id} className="grid-segment-menu-attached">
-                    <span className="grid-segment-menu-attached-pos">
-                      {segsWithDevice.length > 1 ? `${idx + 1}/${segsWithDevice.length}` : ""}
-                    </span>
-                    <div className="grid-segment-menu-attached-icon">
+                  <li key={seg.id} className="seg-menu-device-item">
+                    <div className={`seg-menu-device-icon ${online ? "is-online" : "is-offline"}`}>
                       <span className="material-symbols-outlined">offline_bolt</span>
                     </div>
-                    <div className="grid-segment-menu-attached-info">
-                      <strong>{d.name}</strong>
-                      <span className="grid-segment-menu-attached-meta">
-                        <code>{d.code}</code>
-                        {d.gatewayCode ? <> · {d.gatewayCode}</> : null}
-                        {" · "}
-                        <span className={`grid-segment-menu-status grid-segment-menu-status--${d.communicationStatus}`}>
-                          {d.communicationStatus === "online" ? "çevrimiçi" : "çevrimdışı"}
+                    <div className="seg-menu-device-main">
+                      <div className="seg-menu-device-name-row">
+                        <strong className="seg-menu-device-name">{d.name}</strong>
+                        {segsWithDevice.length > 1 ? (
+                          <span className="seg-menu-device-pos">{idx + 1}/{segsWithDevice.length}</span>
+                        ) : null}
+                      </div>
+                      <div className="seg-menu-device-meta">
+                        <code className="seg-menu-device-code">{d.code}</code>
+                        {d.gatewayCode ? (
+                          <span className="seg-menu-device-gw">{d.gatewayCode}</span>
+                        ) : null}
+                        <span className={`seg-menu-device-status ${online ? "is-online" : "is-offline"}`}>
+                          <span className="dot" />
+                          {online ? "çevrimiçi" : "çevrimdışı"}
                         </span>
-                      </span>
+                      </div>
                     </div>
-                    <div className="grid-segment-menu-attached-actions">
+                    <div className="seg-menu-device-actions">
                       <button
                         type="button"
-                        className="icon-btn"
+                        className="seg-menu-icon-btn"
                         title="Başka segmente taşı"
                         onClick={() => {
                           setMovingSeg(seg);
@@ -1556,22 +1568,22 @@ function SegmentContextMenu({
                       </button>
                       <button
                         type="button"
-                        className="icon-btn icon-btn-danger"
+                        className="seg-menu-icon-btn seg-menu-icon-btn--danger"
                         title="Cihazı kaldır"
                         onClick={() => onDetach(seg)}
                       >
                         <span className="material-symbols-outlined">link_off</span>
                       </button>
                     </div>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
 
           <button
             type="button"
-            className="grid-segment-menu-add-btn"
+            className="seg-menu-add-btn"
             disabled={availableDevices.length === 0}
             onClick={() => {
               setView("add");
@@ -1584,126 +1596,158 @@ function SegmentContextMenu({
             }
           >
             <span className="material-symbols-outlined">add</span>
-            Cihaz Ekle
+            <span>Cihaz Ekle</span>
+            {availableDevices.length > 0 ? (
+              <span className="seg-menu-add-count">{availableDevices.length} aday</span>
+            ) : null}
           </button>
-        </>
+        </div>
       ) : view === "add" ? (
         // ===== CIHAZ EKLE (arama + secim) =====
-        <>
-          <div className="grid-segment-menu-search-row">
+        <div className="seg-menu-body">
+          <div className="seg-menu-search">
             <span className="material-symbols-outlined">search</span>
             <input
               type="search"
-              placeholder="Cihaz ara (ad, kod, gateway)..."
+              placeholder="Cihaz ara: ad, kod veya gateway"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
             />
-            <span className="grid-segment-menu-count">
-              {filteredAvailable.length} / {availableDevices.length}
+            <span className="seg-menu-search-count">
+              {filteredAvailable.length}/{availableDevices.length}
             </span>
           </div>
 
-          <div className="grid-segment-menu-device-list">
+          <ul className="seg-menu-pickable">
             {filteredAvailable.length === 0 ? (
-              <p className="grid-segment-menu-empty">
-                {availableDevices.length === 0
-                  ? "Atanabilir cihaz yok. Önce başka bir segmentten cihaz çıkarın."
-                  : "Sonuç bulunamadı."}
-              </p>
+              <li className="seg-menu-empty">
+                <span className="material-symbols-outlined">search_off</span>
+                <div>
+                  <strong>
+                    {availableDevices.length === 0
+                      ? "Atanabilir cihaz yok"
+                      : "Sonuç bulunamadı"}
+                  </strong>
+                  <p>
+                    {availableDevices.length === 0
+                      ? "Önce başka bir segmentten cihaz çıkarın."
+                      : "Farklı bir arama deneyin."}
+                  </p>
+                </div>
+              </li>
             ) : (
-              filteredAvailable.map((d) => (
-                <button
-                  key={d.id}
-                  className="grid-segment-menu-device-card"
-                  onClick={() => onAttach(d.id)}
-                >
-                  <span className="grid-segment-menu-device-icon">
-                    <span className="material-symbols-outlined">offline_bolt</span>
-                  </span>
-                  <span className="grid-segment-menu-device-info">
-                    <strong>{d.name}</strong>
-                    <span className="grid-segment-menu-device-meta">
-                      <code>{d.code}</code>
-                      {d.gatewayCode ? <> · {d.gatewayCode}</> : null}
-                    </span>
-                  </span>
-                  <span
-                    className={`grid-segment-menu-status grid-segment-menu-status--${d.communicationStatus}`}
-                  >
-                    {d.communicationStatus === "online" ? "açık" : "kapalı"}
-                  </span>
-                  <span className="grid-segment-menu-device-arrow">→</span>
-                </button>
-              ))
+              filteredAvailable.map((d) => {
+                const online = d.communicationStatus === "online";
+                return (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      className="seg-menu-pickable-item"
+                      onClick={() => onAttach(d.id)}
+                    >
+                      <div className={`seg-menu-device-icon ${online ? "is-online" : "is-offline"}`}>
+                        <span className="material-symbols-outlined">offline_bolt</span>
+                      </div>
+                      <div className="seg-menu-device-main">
+                        <strong className="seg-menu-device-name">{d.name}</strong>
+                        <div className="seg-menu-device-meta">
+                          <code className="seg-menu-device-code">{d.code}</code>
+                          {d.gatewayCode ? (
+                            <span className="seg-menu-device-gw">{d.gatewayCode}</span>
+                          ) : null}
+                          <span className={`seg-menu-device-status ${online ? "is-online" : "is-offline"}`}>
+                            <span className="dot" />
+                            {online ? "çevrimiçi" : "çevrimdışı"}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="seg-menu-pickable-arrow material-symbols-outlined">
+                        chevron_right
+                      </span>
+                    </button>
+                  </li>
+                );
+              })
             )}
-          </div>
+          </ul>
 
-          <button className="grid-segment-menu-cancel" onClick={back}>
-            ← Geri dön
+          <button type="button" className="seg-menu-back-btn" onClick={back}>
+            <span className="material-symbols-outlined">arrow_back</span>
+            Geri dön
           </button>
-        </>
+        </div>
       ) : (
         // ===== TASI: hedef segment sec =====
-        <>
-          <div className="grid-segment-menu-move-info">
-            {movingSeg ? (
-              (() => {
-                const movingDev = devices.find((x) => x.id === movingSeg.device_id);
-                return movingDev ? (
-                  <>
-                    <span className="material-symbols-outlined">offline_bolt</span>
-                    <span>
-                      <strong>{movingDev.name}</strong> taşınacak hedef segmenti seçin
-                    </span>
-                  </>
-                ) : null;
-              })()
-            ) : null}
-          </div>
-          <div className="grid-segment-menu-search-row">
+        <div className="seg-menu-body">
+          {movingSeg ? (
+            (() => {
+              const movingDev = devices.find((x) => x.id === movingSeg.device_id);
+              return movingDev ? (
+                <div className="seg-menu-move-info">
+                  <span className="material-symbols-outlined">swap_horiz</span>
+                  <div>
+                    <strong>{movingDev.name}</strong>
+                    <p>Bu cihazı taşımak için hedef segmenti seçin</p>
+                  </div>
+                </div>
+              ) : null;
+            })()
+          ) : null}
+          <div className="seg-menu-search">
             <span className="material-symbols-outlined">search</span>
             <input
               type="search"
-              placeholder="Hedef segment ara (sıra no veya direk adı)..."
+              placeholder="Hedef segment ara: sıra no veya direk adı"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
             />
           </div>
-          <div className="grid-segment-menu-target-list">
+          <ul className="seg-menu-pickable">
             {filteredTargets.length === 0 ? (
-              <p className="grid-segment-menu-empty">
-                {otherSlots.length === 0 ? "Başka segment yok." : "Sonuç bulunamadı."}
-              </p>
+              <li className="seg-menu-empty">
+                <span className="material-symbols-outlined">search_off</span>
+                <div>
+                  <strong>
+                    {otherSlots.length === 0 ? "Başka segment yok" : "Sonuç bulunamadı"}
+                  </strong>
+                </div>
+              </li>
             ) : (
               filteredTargets.map((s) => {
                 const occupiedCount = s.segments.filter((x) => x.device_id).length;
                 return (
-                  <button
-                    key={`${s.fromPole.id}-${s.toPole.id}`}
-                    className="grid-segment-menu-target"
-                    onClick={() => movingSeg && onMove(movingSeg, s)}
-                  >
-                    <span className="grid-segment-menu-target-route">
-                      #{s.fromPole.sequence_no} → #{s.toPole.sequence_no}
-                    </span>
-                    {occupiedCount > 0 ? (
-                      <span className="grid-segment-menu-target-warn">
-                        {occupiedCount} cihaz var · yan yana eklenecek
+                  <li key={`${s.fromPole.id}-${s.toPole.id}`}>
+                    <button
+                      type="button"
+                      className="seg-menu-pickable-item"
+                      onClick={() => movingSeg && onMove(movingSeg, s)}
+                    >
+                      <div className="seg-menu-target-route">
+                        <span className="seg-menu-pole">#{s.fromPole.sequence_no}</span>
+                        <span className="seg-menu-arrow">→</span>
+                        <span className="seg-menu-pole">#{s.toPole.sequence_no}</span>
+                      </div>
+                      <span className={`seg-menu-target-status ${occupiedCount > 0 ? "is-warn" : "is-ok"}`}>
+                        {occupiedCount > 0
+                          ? `${occupiedCount} cihaz var · yan yana eklenecek`
+                          : "boş"}
                       </span>
-                    ) : (
-                      <span className="grid-segment-menu-target-empty">boş</span>
-                    )}
-                  </button>
+                      <span className="seg-menu-pickable-arrow material-symbols-outlined">
+                        chevron_right
+                      </span>
+                    </button>
+                  </li>
                 );
               })
             )}
-          </div>
-          <button className="grid-segment-menu-cancel" onClick={back}>
-            ← Geri dön
+          </ul>
+          <button type="button" className="seg-menu-back-btn" onClick={back}>
+            <span className="material-symbols-outlined">arrow_back</span>
+            Geri dön
           </button>
-        </>
+        </div>
       )}
 
     </div>

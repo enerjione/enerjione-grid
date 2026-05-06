@@ -626,33 +626,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             );
           })}
 
-          {/* Lokalize edilmis ariza segmenti: kirmizi kalin overlay + ikon marker */}
-          {topology?.alarmedSegments.map((seg) => (
-            <Polyline
-              key={`alarm-seg-${seg.id}`}
-              positions={seg.positions}
-              pathOptions={{
-                color: FAULT_COLOR,
-                weight: 6,
-                opacity: 0.9,
-                className: "grid-segment-alarm-line"
-              }}
-              eventHandlers={{
-                click: () => seg.device && onSelectDevice(seg.device.id)
-              }}
-            >
-              <Tooltip sticky>
-                <strong style={{ color: FAULT_COLOR }}>⚠ ARIZA</strong>
-                <br />
-                {seg.regionName ? `${seg.regionName} · ` : ""}{seg.lineName}
-                {seg.fromSeq !== null && seg.toSeq !== null ? (
-                  <><br />Direk #{seg.fromSeq} → #{seg.toSeq}</>
-                ) : null}
-                {seg.device ? <><br />Son alarmli cihaz: <strong>{seg.device.name}</strong> ({seg.device.code})</> : null}
-              </Tooltip>
-            </Polyline>
-          ))}
-          {/* Ariza noktasi ikonu (lokalize edilmis nokta — segment ortasinda) */}
+          {/* Ariza noktasi ikonu (lokalize edilmis nokta — son alarmli cihaz
+              ile sonraki cihaz arasinin orta noktasinda).
+              NOT: Onceden burada arizali iki cihaz arasini birbirine baglayan
+              KIRMIZI POLYLINE da ciziliyordu; kullanici istegine gore o cizgi
+              kaldirildi. Hat segmentleri kendisi pre/post olarak renklenir;
+              sadece nokta atisi marker'i kalir. */}
           {topology?.alarmedSegments.map((seg) => (
             <Marker
               key={`alarm-pin-${seg.id}`}
