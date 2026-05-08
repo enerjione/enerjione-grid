@@ -333,6 +333,16 @@ export async function changeMyPassword(
   if (!response.ok) throw new Error("Şifre değiştirilemedi.");
 }
 
+export async function updateMyLanguage(token: string, language: string): Promise<UserRead> {
+  const response = await fetch(`${API_BASE_URL}/auth/me/language`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ language })
+  });
+  if (!response.ok) throw await buildApiError(response, "Dil tercihi kaydedilemedi.");
+  return (await response.json()) as UserRead;
+}
+
 export async function createUser(
   token: string,
   payload: {

@@ -10,6 +10,7 @@ class UserRead(BaseModel):
     phone_number: str | None = None
     full_name: str
     role: UserRole
+    language: str | None = None
 
     class Config:
         from_attributes = True
@@ -38,6 +39,12 @@ class ResetPasswordRequest(BaseModel):
 class SelfProfileUpdateRequest(BaseModel):
     full_name: str
     email: EmailStr
+
+
+class LanguageUpdateRequest(BaseModel):
+    """Kullanicinin tercih ettigi arayuz dili. Desteklenen kodlar: tr, en."""
+
+    language: str
 
 
 class SelfPasswordChangeRequest(BaseModel):

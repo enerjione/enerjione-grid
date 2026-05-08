@@ -1,0 +1,290 @@
+{
+  "common": {
+    "save": "Save",
+    "saveAll": "Save All Settings",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "close": "Close",
+    "open": "Open",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "search": "Search",
+    "searchPlaceholder": "Search...",
+    "filter": "Filter",
+    "all": "All",
+    "none": "None",
+    "user": "User",
+    "username": "Username",
+    "password": "Password",
+    "email": "Email",
+    "phone": "Phone",
+    "fullName": "Full Name",
+    "role": "Role",
+    "status": "Status",
+    "actions": "Actions",
+    "details": "Details",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "confirm": "Confirm",
+    "errorOccurred": "An error occurred",
+    "noData": "No data found",
+    "required": "Required",
+    "minutesAgo": "{{count}} minutes ago",
+    "hoursAgo": "{{count}} hours ago",
+    "daysAgo": "{{count}} days ago",
+    "secondsAgo": "{{count}} seconds ago"
+  },
+  "language": {
+    "label": "Language",
+    "tr": "Turkish",
+    "en": "English",
+    "selectPlaceholder": "Select language",
+    "saved": "Language preference saved"
+  },
+  "roles": {
+    "engineer": "Engineer",
+    "installer": "Installer",
+    "operator": "Operator",
+    "user": "User"
+  },
+  "header": {
+    "home": "Home",
+    "alarms": "Alarms",
+    "faults": "Line Faults",
+    "events": "Events",
+    "systemStatus": "System Status",
+    "engineering": "Engineering",
+    "settings": "Settings",
+    "logout": "Log Out",
+    "user": "User",
+    "customerLogoAlt": "Customer Logo"
+  },
+  "login": {
+    "title": "Sign In",
+    "username": "Username",
+    "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "remember": "Remember me",
+    "submit": "Sign In",
+    "submitting": "Signing in...",
+    "invalidCredentials": "Invalid username or password",
+    "visualAlt": "Login screen image",
+    "customerLogoAlt": "Customer Logo"
+  },
+  "alarms": {
+    "title": "Alarms",
+    "active": "Active",
+    "acknowledged": "Acknowledged",
+    "reset": "Reset",
+    "noAlarms": "No active alarms",
+    "device": "Device",
+    "line": "Line",
+    "region": "Region",
+    "openedAt": "Opened",
+    "acknowledgedAt": "Acknowledged at",
+    "resetAt": "Reset at",
+    "ackBtn": "Acknowledge",
+    "assignBtn": "Assign",
+    "comment": "Comment",
+    "addComment": "Add comment",
+    "severity": "Severity",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low"
+  },
+  "faults": {
+    "title": "Line Faults",
+    "stats": {
+      "total": "Total",
+      "open": "Open",
+      "assigned": "Assigned",
+      "inProgress": "In Progress",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "avgResolution": "Avg. Resolution Time",
+      "last30Days": "Last 30 days"
+    },
+    "status": {
+      "open": "Open",
+      "assigned": "Assigned",
+      "in_progress": "In Progress",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "filter": {
+      "search": "Search (line / pole / device)",
+      "status": "Status",
+      "all": "All",
+      "count_one": "{{count}} fault",
+      "count_other": "{{count}} faults"
+    },
+    "card": {
+      "region": "Region",
+      "line": "Line",
+      "range": "Range",
+      "lastRed": "Last RED",
+      "firstGreen": "First GREEN",
+      "openedAt": "Opened",
+      "duration": "Fault Duration",
+      "live": "Live",
+      "final": "Final",
+      "assignedTo": "Assigned",
+      "noAssignee": "Unassigned",
+      "note": "Note"
+    },
+    "detail": {
+      "title": "Fault Details",
+      "tickets": "Responsibility",
+      "comments": "Comments",
+      "addComment": "Add comment",
+      "writeNote": "Short note",
+      "saveNote": "Save Note",
+      "assignee": "Assignee",
+      "changeAssignee": "Change assignee",
+      "changeStatus": "Change status",
+      "coordinates": "Pole Coordinates",
+      "devicesInRange": "Devices In Range",
+      "mapTitle": "Fault Location"
+    },
+    "empty": "No active faults"
+  },
+  "events": {
+    "title": "Events",
+    "category": "Category",
+    "type": "Type",
+    "severity": "Severity",
+    "actor": "Actor",
+    "message": "Message",
+    "timestamp": "Timestamp"
+  },
+  "systemStatus": {
+    "title": "System Status",
+    "services": "Services",
+    "database": "Database",
+    "rabbitmq": "RabbitMQ",
+    "uptime": "Uptime",
+    "lastSeen": "Last Seen",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "engineering": {
+    "title": "Engineering",
+    "nav": {
+      "users": "Users",
+      "gateways": "Gateways",
+      "devices": "Devices",
+      "deviceModels": "Device Models",
+      "signals": "Signals",
+      "alarmRules": "Alarm Rules",
+      "outboundTargets": "Outbound Targets",
+      "responsibilityAreas": "Responsibility Areas",
+      "grid": "Line Management",
+      "backups": "Backups",
+      "projectSettings": "Project Settings",
+      "notificationSettings": "Notification Settings"
+    }
+  },
+  "backups": {
+    "title": "Backups",
+    "manualBackup": "Create Backup",
+    "creatingBackup": "Creating backup...",
+    "schedule": {
+      "title": "Scheduled Backup",
+      "enabled": "Enabled",
+      "intervalHours": "Interval (hours)",
+      "retentionCount": "Backups to keep",
+      "lastRun": "Last run",
+      "save": "Save Schedule"
+    },
+    "table": {
+      "createdAt": "Date",
+      "type": "Type",
+      "size": "Size",
+      "status": "Status",
+      "createdBy": "Created By",
+      "actions": "Actions"
+    },
+    "type": {
+      "manual": "Manual",
+      "scheduled": "Scheduled"
+    },
+    "status": {
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed"
+    },
+    "download": "Download",
+    "restore": "Restore",
+    "deleteConfirmTitle": "Delete backup",
+    "deleteConfirmBody": "This backup will be deleted and cannot be recovered.",
+    "restoreConfirmTitle": "Restore backup",
+    "restoreConfirmBody": "Current data will be replaced with this backup. Continue?"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "markAllRead": "Mark all as read",
+    "settings": {
+      "title": "Notification Settings",
+      "saveAll": "Save All Settings",
+      "channels": {
+        "web": "Web",
+        "email": "Email",
+        "sms": "SMS",
+        "telegram": "Telegram"
+      },
+      "smtp": {
+        "title": "SMTP Settings",
+        "host": "Host",
+        "port": "Port",
+        "user": "User",
+        "password": "Password",
+        "from": "From",
+        "tls": "TLS",
+        "test": "Send Test Email"
+      },
+      "sms": {
+        "title": "SMS Settings",
+        "provider": "Provider",
+        "apiKey": "API Key",
+        "from": "Sender",
+        "test": "Send Test SMS"
+      },
+      "telegram": {
+        "title": "Telegram Settings",
+        "botToken": "Bot Token",
+        "chatIds": "Chat IDs",
+        "test": "Send Test Message"
+      }
+    }
+  },
+  "userSettings": {
+    "title": "User Settings",
+    "profile": "Profile",
+    "security": "Security",
+    "language": "Language",
+    "languageHelp": "Interface language. The app opens in this language when you sign in.",
+    "changePassword": "Change Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "New Password (Confirm)",
+    "saveProfile": "Save Profile",
+    "savePassword": "Update Password"
+  },
+  "errors": {
+    "network": "Cannot reach server",
+    "unauthorized": "Unauthorized",
+    "notFound": "Not found",
+    "validation": "Invalid data",
+    "unknown": "An unexpected error occurred"
+  }
+}

@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { NotificationBell } from "./NotificationBell";
 import { useProjectSettings } from "./ProjectSettingsProvider";
+import {
+  LANGUAGE_LABELS,
+  SUPPORTED_LANGUAGES,
+  isSupportedLanguage,
+  type SupportedLanguage,
+} from "../shared/i18n";
 import type { UserRole } from "../shared/types";
 
 type Props = {
@@ -11,6 +18,9 @@ type Props = {
   accessToken?: string;
   onLogout?: () => void;
   onSettings?: () => void;
+  /** Profil dropdown'undan dil degisikligi. Mevcut dil ve secilen kod. */
+  currentLanguage?: string | null;
+  onChangeLanguage?: (code: SupportedLanguage) => void | Promise<void>;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
   activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
@@ -23,12 +33,20 @@ export function Header({
   accessToken,
   onLogout,
   onSettings,
+  currentLanguage,
+  onChangeLanguage,
   isEngineeringView,
   onToggleEngineering,
   activePage,
   onChangePage
 }: Props) {
-  const { settings } = useProjectSettings();
+  const { settings, loading: settingsLoading } = useProjectSettings();
+  const { t, i18n } = useTranslation();
+  const activeLang: SupportedLanguage = isSupportedLanguage(currentLanguage)
+    ? currentLanguage
+    : isSupportedLanguage(i18n.language)
+    ? i18n.language
+    : "tr";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -50,7 +68,13 @@ export function Header({
       .map((item) => item[0]?.toUpperCase())
       .join("") || "U";
   const roleLabel =
-    role === "installer" ? "Kurulumcu" : role === "engineer" ? "Mühendis" : role === "operator" ? "Operatör" : "Kullanıcı";
+    role === "installer"
+      ? t("roles.installer")
+      : role === "engineer"
+      ? t("roles.engineer")
+      : role === "operator"
+      ? t("roles.operator")
+      : t("roles.user");
 
   return (
     <header className="header">
@@ -60,34 +84,43 @@ export function Header({
         </div>
         <span className="header-divider" />
         <div className="customer-logo-wrap">
-          <img
-            className="header-customer-logo"
-            // Once light, yoksa buyuk logoyu (header'da kucultur), o da yoksa default PNG.
-            src={settings.customer_logo_light || settings.customer_logo || "/customer-logo-light.png"}
-            alt={settings.customer_name || "Müşteri Logosu"}
-            onError={(event) => {
-              event.currentTarget.src = "/customer-logo-placeholder.svg";
-            }}
-          />
+          {/* Ayarlar yuklenmeden eski statik PNG'yi gosterip sonra DB logosuyla
+              degistirmek flash yaratiyordu — yuklenene kadar saydam placeholder. */}
+          {settingsLoading ? (
+            <div className="header-customer-logo header-customer-logo--placeholder" aria-hidden="true" />
+          ) : (
+            <img
+              className="header-customer-logo"
+              src={
+                settings.customer_logo_light ||
+                settings.customer_logo ||
+                "/customer-logo-placeholder.svg"
+              }
+              alt={settings.customer_name || t("header.customerLogoAlt")}
+              onError={(event) => {
+                event.currentTarget.src = "/customer-logo-placeholder.svg";
+              }}
+            />
+          )}
         </div>
         <nav className="header-nav header-nav--framed">
           <button className={activePage === "home" ? "active" : ""} onClick={() => onChangePage("home")}>
-            Anasayfa
+            {t("header.home")}
           </button>
           <button className={activePage === "alarms" ? "active" : ""} onClick={() => onChangePage("alarms")}>
-            Alarmlar
+            {t("header.alarms")}
           </button>
           <button className={activePage === "faults" ? "active" : ""} onClick={() => onChangePage("faults")}>
-            Hat Arızaları
+            {t("header.faults")}
           </button>
           <button className={activePage === "events" ? "active" : ""} onClick={() => onChangePage("events")}>
-            Olaylar
+            {t("header.events")}
           </button>
           <button
             className={activePage === "system-status" ? "active" : ""}
             onClick={() => onChangePage("system-status")}
           >
-            Sistem durumu
+            {t("header.systemStatus")}
           </button>
         </nav>
       </div>
@@ -98,7 +131,7 @@ export function Header({
             className={`engineering-btn ${isEngineeringView ? "active" : ""}`}
             onClick={() => onToggleEngineering?.()}
           >
-            Mühendislik
+            {t("header.engineering")}
           </button>
         ) : null}
 
@@ -121,7 +154,7 @@ export function Header({
           <div className="profile-menu" ref={menuRef}>
             <button className="profile-trigger" onClick={() => setMenuOpen((prev) => !prev)}>
               <div className="profile-text">
-                <strong>{fullName ?? "Kullanıcı"}</strong>
+                <strong>{fullName ?? t("header.user")}</strong>
                 <small>{roleLabel}</small>
               </div>
               <div className="profile-avatar">{initials}</div>
@@ -135,15 +168,45 @@ export function Header({
                     onSettings?.();
                   }}
                 >
-                  Ayarlar
+                  {t("header.settings")}
                 </button>
+
+                {/* Dil seçici — kullanıcı profil dropdown'ından doğrudan
+                    arayüz dilini değiştirebilir. Seçim backend'e kaydedilir
+                    (App.handleChangeLanguage), localStorage'a yazılır ve
+                    react-i18next senkronize edilir. */}
+                {onChangeLanguage ? (
+                  <div className="profile-dropdown__lang">
+                    <span className="profile-dropdown__lang-label">
+                      {t("language.label")}
+                    </span>
+                    <div className="profile-dropdown__lang-options">
+                      {SUPPORTED_LANGUAGES.map((code) => (
+                        <button
+                          key={code}
+                          type="button"
+                          className={`profile-dropdown__lang-btn ${
+                            activeLang === code ? "is-active" : ""
+                          }`}
+                          onClick={() => {
+                            void onChangeLanguage(code);
+                          }}
+                          title={LANGUAGE_LABELS[code]}
+                        >
+                          {code.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <button
                   onClick={() => {
                     setMenuOpen(false);
                     onLogout?.();
                   }}
                 >
-                  Çıkış Yap
+                  {t("header.logout")}
                 </button>
               </div>
             ) : null}

@@ -459,6 +459,40 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS notify_telegram BOOLEAN NOT NULL DEFAULT FALSE")
         )
+
+        # i18n: kullanici basina arayuz dili. NULL = sistem default (tr).
+        connection.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(8)")
+        )
+
+        # FaultEvent FK kaskat migration: hat/region/direk/cihaz silinince
+        # bu hat/region/direkle iliskili ariza kaydi otomatik temizlenmeli.
+        # Eski deploylar `ON DELETE NO ACTION` ile birakilmisti — `delete_line`
+        # bu yuzden FK constraint hatasi veriyordu. Constraint'leri DROP edip
+        # CASCADE ile yeniden olusturuyoruz. fault_events tablosu yoksa atla.
+        existing_fault_table = connection.execute(
+            text("SELECT 1 FROM information_schema.tables WHERE table_name='fault_events'")
+        ).first()
+        if existing_fault_table is not None:
+            fault_fk_specs = [
+                ("fault_events_line_id_fkey", "line_id", "lines", "CASCADE"),
+                ("fault_events_region_id_fkey", "region_id", "regions", "CASCADE"),
+                ("fault_events_last_red_device_id_fkey", "last_red_device_id", "devices", "CASCADE"),
+                ("fault_events_first_green_device_id_fkey", "first_green_device_id", "devices", "SET NULL"),
+                ("fault_events_from_pole_id_fkey", "from_pole_id", "poles", "CASCADE"),
+                ("fault_events_to_pole_id_fkey", "to_pole_id", "poles", "CASCADE"),
+            ]
+            for fk_name, col, ref_table, action in fault_fk_specs:
+                connection.execute(
+                    text(f"ALTER TABLE fault_events DROP CONSTRAINT IF EXISTS {fk_name}")
+                )
+                connection.execute(
+                    text(
+                        f"ALTER TABLE fault_events ADD CONSTRAINT {fk_name} "
+                        f"FOREIGN KEY ({col}) REFERENCES {ref_table}(id) "
+                        f"ON DELETE {action}"
+                    )
+                )
     db = SessionLocal()
     try:
         # strict=True: JSON listesi disindaki tum sinyalleri siler.

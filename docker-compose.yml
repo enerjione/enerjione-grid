@@ -91,6 +91,9 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@horstman.local}
+      # DB yedek dosyalari icin sabit dizin. backup-data volume'una baglanir
+      # ki container yeniden olusturulsa da yedekler kaybolmaz.
+      BACKUP_DIR: /var/lib/hsl-backups
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -103,6 +106,8 @@ services:
       # 8000 sadece gateway'in REST cagrilari icindir (internal service token
       # ile zaten korunmali; ek olarak CORS_ORIGINS uretimde kisitlanmali).
       - "8000:8000"
+    volumes:
+      - backup-data:/var/lib/hsl-backups
     networks:
       - hsl-net
 
@@ -226,3 +231,4 @@ networks:
 volumes:
   postgres-data:
   rabbitmq-data:
+  backup-data:

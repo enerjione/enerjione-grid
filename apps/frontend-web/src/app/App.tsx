@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Header } from "../components/Header";
 import { useToast } from "../components/ToastProvider";
 import { LoginForm } from "../features/auth/LoginForm";
@@ -21,6 +22,13 @@ import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/Das
 import { GridOverviewPage } from "../features/dashboard/GridOverviewPage";
 import { GlobalLoading } from "../components/GlobalLoading";
 import { useProjectSettings } from "../components/ProjectSettingsProvider";
+import {
+  isSupportedLanguage,
+  setLanguage as setI18nLanguage,
+  SUPPORTED_LANGUAGES,
+  LANGUAGE_LABELS,
+  type SupportedLanguage,
+} from "../shared/i18n";
 import { locateDevice } from "../shared/geoLookup";
 import { SignalsPage } from "../features/signals/SignalsPage";
 import { AlarmRulesPage } from "../features/alarm-rules/AlarmRulesPage";
@@ -107,6 +115,7 @@ import {
   updateNotificationSettings as updateNotificationSettingsApi,
   updateUser,
   updateMyProfile,
+  updateMyLanguage,
   API_BASE_URL
 } from "../shared/api";
 import { useLiveValuesSocket } from "../shared/useLiveValuesSocket";
@@ -217,10 +226,20 @@ export function App() {
   const [alarmsLoading, setAlarmsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
   const [authError, setAuthError] = useState<string>();
+
+  // i18n: kullanici tercihi degistiginde (login sonrasi me yuklenince veya
+  // ayarlardan dil secildiginde) react-i18next'i ona gore senkronize et.
+  useEffect(() => {
+    const code = currentUser?.language;
+    if (isSupportedLanguage(code)) {
+      setI18nLanguage(code);
+    }
+  }, [currentUser?.language]);
   const [loadingLogin, setLoadingLogin] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number>(0);
   const toast = useToast();
+  const { t } = useTranslation();
   const persistedRouteRef = useRef<PersistedRoute>(loadPersistedRoute());
   // Harita ana sayfada her oturumda varsayılan olsun — persist edilmez.
   const [activeTab, setActiveTab] = useState<TabId>("map");
@@ -1419,6 +1438,22 @@ export function App() {
     }
   };
 
+  const handleChangeLanguage = async (code: SupportedLanguage) => {
+    if (!session) return;
+    // Optimistic: UI ani degissin, hata olursa eski state'e geri donelim.
+    const previous = currentUser?.language ?? null;
+    setI18nLanguage(code);
+    setCurrentUser((u) => (u ? { ...u, language: code } : u));
+    try {
+      const updated = await updateMyLanguage(session.accessToken, code);
+      setCurrentUser(updated);
+    } catch (err) {
+      if (isSupportedLanguage(previous)) setI18nLanguage(previous);
+      setCurrentUser((u) => (u ? { ...u, language: previous } : u));
+      toast.error(err instanceof Error ? err.message : "Dil tercihi kaydedilemedi.");
+    }
+  };
+
   const handleSaveSettings = async () => {
     if (!session) return;
     setSettingsSaving(true);
@@ -1614,6 +1649,8 @@ export function App() {
         onToggleEngineering={() => setPageMode("engineering")}
         onSettings={handleOpenSettings}
         onLogout={handleLogout}
+        currentLanguage={currentUser?.language ?? null}
+        onChangeLanguage={handleChangeLanguage}
       />
       <div className="body">
         {pageMode === "engineering" ? (
@@ -1623,7 +1660,7 @@ export function App() {
                 className={engineeringPage === "devices" ? "active" : ""}
                 onClick={() => setEngineeringPage("devices")}
               >
-                Cihazlar
+                {t("engineering.nav.devices")}
               </button>
               {session.role === "engineer" || session.role === "installer" ? (
                 <button
@@ -1641,7 +1678,7 @@ export function App() {
                     void reloadUsers();
                   }}
                 >
-                  Kullanıcılar
+                  {t("engineering.nav.users")}
                 </button>
               ) : null}
               {session.role === "engineer" || session.role === "installer" ? (
@@ -1652,7 +1689,7 @@ export function App() {
                     void reloadResponsibilityAreas();
                   }}
                 >
-                  Ekip Yönetimi
+                  {t("engineering.nav.responsibilityAreas")}
                 </button>
               ) : null}
               {session.role === "installer" ? (
@@ -1664,7 +1701,7 @@ export function App() {
                       void reloadSignals();
                     }}
                   >
-                    Sinyaller
+                    {t("engineering.nav.signals")}
                   </button>
                   <button
                     className={engineeringPage === "alarm-rules" ? "active" : ""}
@@ -1674,13 +1711,13 @@ export function App() {
                       void reloadSignals();
                     }}
                   >
-                    Alarm Yönetimi
+                    {t("engineering.nav.alarmRules")}
                   </button>
                   <button
                     className={engineeringPage === "outbound" ? "active" : ""}
                     onClick={() => setEngineeringPage("outbound")}
                   >
-                    Outbound
+                    {t("engineering.nav.outboundTargets")}
                   </button>
                   <button
                     className={engineeringPage === "notifications" ? "active" : ""}
@@ -1689,25 +1726,25 @@ export function App() {
                       void reloadNotificationSettings();
                     }}
                   >
-                    Bildirim Ayarları
+                    {t("engineering.nav.notificationSettings")}
                   </button>
                   <button
                     className={engineeringPage === "project-settings" ? "active" : ""}
                     onClick={() => setEngineeringPage("project-settings")}
                   >
-                    Proje Ayarları
+                    {t("engineering.nav.projectSettings")}
                   </button>
                   <button
                     className={engineeringPage === "grid" ? "active" : ""}
                     onClick={() => setEngineeringPage("grid")}
                   >
-                    Hat Yönetimi
+                    {t("engineering.nav.grid")}
                   </button>
                   <button
                     className={engineeringPage === "backups" ? "active" : ""}
                     onClick={() => setEngineeringPage("backups")}
                   >
-                    Yedekler
+                    {t("engineering.nav.backups")}
                   </button>
                 </>
               ) : null}
@@ -1968,17 +2005,32 @@ export function App() {
       {settingsOpen ? (
         <div className="settings-modal-backdrop">
           <div className="settings-modal">
-            <h3>Profil Ayarları</h3>
+            <h3>{t("userSettings.title")}</h3>
             <label>
-              İsim Soyisim
+              {t("common.fullName")}
               <input value={settingsFullName} onChange={(event) => setSettingsFullName(event.target.value)} />
             </label>
             <label>
-              E-posta
+              {t("common.email")}
               <input value={settingsEmail} onChange={(event) => setSettingsEmail(event.target.value)} />
             </label>
             <label>
-              Mevcut Şifre (opsiyonel)
+              {t("userSettings.language")}
+              <select
+                value={
+                  isSupportedLanguage(currentUser?.language) ? (currentUser!.language as string) : "tr"
+                }
+                onChange={(event) => void handleChangeLanguage(event.target.value as SupportedLanguage)}
+              >
+                {SUPPORTED_LANGUAGES.map((code) => (
+                  <option key={code} value={code}>
+                    {LANGUAGE_LABELS[code]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {t("userSettings.currentPassword")}
               <input
                 type="password"
                 value={settingsCurrentPassword}
@@ -1986,7 +2038,7 @@ export function App() {
               />
             </label>
             <label>
-              Yeni Şifre (opsiyonel)
+              {t("userSettings.newPassword")}
               <input
                 type="password"
                 value={settingsNewPassword}

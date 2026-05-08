@@ -113,6 +113,7 @@ export type UserRead = {
   phone_number?: string | null;
   full_name: string;
   role: UserRole;
+  language?: string | null;
 };
 
 export type AlarmEvent = {

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App } from "./app/App";
 import { ToastProvider } from "./components/ToastProvider";
 import { ProjectSettingsProvider } from "./components/ProjectSettingsProvider";
+import "./shared/i18n";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 

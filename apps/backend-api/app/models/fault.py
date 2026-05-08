@@ -40,22 +40,33 @@ class FaultEvent(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # Topoloji icindeki konum
-    line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"), index=True)
-    region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"), index=True)
+    # Topoloji icindeki konum.
+    # Hat/region/direk silindiginde ariza kaydi da otomatik silinir
+    # (gecmis kayit barindirma yerine kaskat tercih edildi — silinmis hat
+    # icin ariza kaydi mantiksiz). Cihaz silinmesinde de cascade.
+    line_id: Mapped[int] = mapped_column(
+        ForeignKey("lines.id", ondelete="CASCADE"), index=True
+    )
+    region_id: Mapped[int] = mapped_column(
+        ForeignKey("regions.id", ondelete="CASCADE"), index=True
+    )
 
     # Ariza aralik uc noktalari (son RED ile ilk GREEN cihaz arasinda)
     # last_red_device_id NULL olamaz — bu cihaz sayesinde fault tespit edildi.
     last_red_device_id: Mapped[int] = mapped_column(
-        ForeignKey("devices.id"), index=True, nullable=False
+        ForeignKey("devices.id", ondelete="CASCADE"), index=True, nullable=False
     )
     # ilk green cihaz: NULL olabilir (hat ucunda alarm: sonraki cihaz yok).
     first_green_device_id: Mapped[int | None] = mapped_column(
-        ForeignKey("devices.id"), nullable=True
+        ForeignKey("devices.id", ondelete="SET NULL"), nullable=True
     )
     # Direk araligi (cihazlarin oturdugu slot uclari)
-    from_pole_id: Mapped[int] = mapped_column(ForeignKey("poles.id"), index=True)
-    to_pole_id: Mapped[int] = mapped_column(ForeignKey("poles.id"), index=True)
+    from_pole_id: Mapped[int] = mapped_column(
+        ForeignKey("poles.id", ondelete="CASCADE"), index=True
+    )
+    to_pole_id: Mapped[int] = mapped_column(
+        ForeignKey("poles.id", ondelete="CASCADE"), index=True
+    )
     # Pole sequence_no'larini aciklayici metin/UI icin saklayalim (denormalized).
     from_pole_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     to_pole_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)

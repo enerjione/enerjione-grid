@@ -18296,22 +18296,23 @@ main.content.engineering-content:has(.device-management-panel) {
   flex-direction: column;
   gap: 14px;
   padding: 14px 16px !important;
-  overflow-y: auto;
+  /* Sayfa yuksekligini doldur — list bolumu kalan alana yayilir, table icinde
+     scrollu kendi tasir. Diger muhendislik sekmeleri ile ayni davranis. */
+  min-height: 0;
+  flex: 1;
+  overflow: hidden !important;
 }
 .backups-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
 }
 .backups-head h3 {
-  margin: 0 0 4px 0;
-}
-.backups-head .helper-text {
   margin: 0;
-  max-width: 600px;
-  font-size: 12.5px;
+  font-size: 18px;
+  color: #0f172a;
 }
 .backups-create-btn {
   display: inline-flex;
@@ -18436,6 +18437,41 @@ main.content.engineering-content:has(.device-management-panel) {
   border-radius: 12px;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
   overflow: hidden;
+  /* Kalan dikey alani doldur — head/stats/schedule yukarida, biz asagiya
+     yayiliriz. Ic tablo kendi scroll'unu tasir. */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.backups-list-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.backups-error-row td {
+  background: #fef2f2;
+  padding: 0 !important;
+}
+.backups-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  color: #991b1b;
+  font-size: 12px;
+}
+.backups-error-banner .material-symbols-outlined {
+  font-size: 18px;
+  margin-top: 1px;
+}
+.backups-error-banner code {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 2px;
+  color: #7f1d1d;
 }
 .backups-list-head {
   display: flex;
@@ -18578,4 +18614,105 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .backups-confirm-restore:hover {
   background: #dc2626 !important;
+}
+
+/* ==================== Language Switcher (i18n) ==================== */
+.lang-switcher {
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+}
+.lang-switcher__btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #555;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.lang-switcher__btn:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e40af;
+}
+.lang-switcher__btn.is-active {
+  background: #2563eb;
+  color: #fff;
+}
+.lang-switcher--compact {
+  margin-left: auto;
+}
+.login-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.login-header-row h2 {
+  margin: 0;
+}
+
+/* Profil dropdown — dil seçici alt bölümü */
+.profile-dropdown__lang {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  margin: 4px 0;
+}
+.profile-dropdown__lang-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 600;
+}
+.profile-dropdown__lang-options {
+  display: inline-flex;
+  gap: 6px;
+}
+.profile-dropdown__lang-btn {
+  flex: 1;
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.profile-dropdown__lang-btn:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e40af;
+  border-color: rgba(37, 99, 235, 0.5);
+}
+.profile-dropdown__lang-btn.is-active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+/* Logo placeholder'lari — proje ayarlari yuklenirken eski statik logonun
+   flash gostermesini engelliyor. Boyut img ile ayni, gorsel saydam. */
+.customer-logo--placeholder {
+  background: transparent;
+  border: none;
+}
+.header-customer-logo--placeholder {
+  background: transparent;
+  border: none;
 }

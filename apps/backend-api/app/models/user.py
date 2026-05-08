@@ -15,3 +15,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
+    # i18n: kullanicinin tercih ettigi arayuz dili (ISO 639-1: 'tr', 'en'...).
+    # NULL = sistem default (tr). Kullanici giris yaptiginda bu alan
+    # frontend i18n'e yuklenir ve UI bu dile gore acilir.
+    language: Mapped[str | None] = mapped_column(String(8), nullable=True)

@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
+import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 
 type Props = {
   onSubmit: (username: string, password: string, remember: boolean) => Promise<void>;
@@ -11,7 +13,8 @@ type Props = {
 const REMEMBER_STORAGE_KEY = "hsl.login.remember";
 
 export function LoginForm({ onSubmit, loading, error }: Props) {
-  const { settings } = useProjectSettings();
+  const { settings, loading: settingsLoading } = useProjectSettings();
+  const { t } = useTranslation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -35,19 +38,29 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
     <div className="login-page">
       <div className="login-shell">
         <form className="login-card" onSubmit={handleSubmit} autoComplete="off">
-          <img
-            className="customer-logo"
-            // Once DB'de kayitli logo (proje ayarlarindan); yoksa eski statik PNG.
-            src={settings.customer_logo || "/customer-logo.png"}
-            alt={settings.customer_name || "Müşteri Logo"}
-            onError={(event) => {
-              event.currentTarget.src = "/customer-logo-placeholder.svg";
-            }}
-          />
+          {/* Logo: ayarlar yuklenirken hicbir sey gosterme (flash onleme).
+              Yuklendiginde DB'de kayitli logo varsa onu, yoksa placeholder
+              SVG'yi goster. Eski statik /customer-logo.png artik kullanilmiyor;
+              o gorseldi farkli musterilerde yanlis logo gozukmesinin sebebi. */}
+          {settingsLoading ? (
+            <div className="customer-logo customer-logo--placeholder" aria-hidden="true" />
+          ) : (
+            <img
+              className="customer-logo"
+              src={settings.customer_logo || "/customer-logo-placeholder.svg"}
+              alt={settings.customer_name || t("login.customerLogoAlt")}
+              onError={(event) => {
+                event.currentTarget.src = "/customer-logo-placeholder.svg";
+              }}
+            />
+          )}
           <div className="login-form-fields">
-            <h2>Giriş Yap</h2>
+            <div className="login-header-row">
+              <h2>{t("login.title")}</h2>
+              <LanguageSwitcher compact />
+            </div>
             <label>
-              Kullanıcı Adı
+              {t("login.username")}
               <input
                 name="hsl-login-username"
                 autoComplete="off"
@@ -57,7 +70,7 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
               />
             </label>
             <label>
-              Şifre
+              {t("login.password")}
               <div className="password-input-wrap">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -71,8 +84,8 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
                   type="button"
                   className="password-toggle-btn"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
-                  title={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                  aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}
+                  title={showPassword ? t("login.hidePassword") : t("login.showPassword")}
                 >
                   {showPassword ? (
                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -96,11 +109,11 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
                 checked={remember}
                 onChange={(event) => setRemember(event.target.checked)}
               />
-              <span>Beni hatırla</span>
+              <span>{t("login.remember")}</span>
             </label>
             {error ? <p className="error-text">{error}</p> : null}
             <button type="submit" disabled={loading}>
-              {loading ? "Giriş yapılıyor..." : "Giriş"}
+              {loading ? t("login.submitting") : t("login.submit")}
             </button>
           </div>
           <img className="form-logo-bottom" src="/form-logo.png" alt="Form Elektrik" />
@@ -113,7 +126,7 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
           <img
             className="visual-image"
             src={settings.login_image || "/login-visual.png"}
-            alt="Giriş ekranı görseli"
+            alt={t("login.visualAlt")}
           />
         </aside>
       </div>

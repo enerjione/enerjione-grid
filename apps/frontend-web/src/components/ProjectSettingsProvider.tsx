@@ -18,6 +18,31 @@ type ContextShape = {
 };
 
 const EMPTY: ProjectSettings = {};
+const CACHE_KEY = "hsl.projectSettings.v1";
+
+/** localStorage'a kalici cache. Login ekrani backend'den ayarlari cekene kadar
+ * eski statik logoyu gostermek yerine bu cache'i kullanir; flash kaybolur. */
+function loadCachedSettings(): ProjectSettings {
+  if (typeof window === "undefined") return EMPTY;
+  try {
+    const raw = window.localStorage.getItem(CACHE_KEY);
+    if (!raw) return EMPTY;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as ProjectSettings;
+  } catch {
+    /* corrupted cache — yoksay */
+  }
+  return EMPTY;
+}
+
+function saveCachedSettings(s: ProjectSettings): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CACHE_KEY, JSON.stringify(s));
+  } catch {
+    /* quota / private mode */
+  }
+}
 
 const Ctx = createContext<ContextShape>({
   settings: EMPTY,
@@ -27,7 +52,9 @@ const Ctx = createContext<ContextShape>({
 });
 
 export function ProjectSettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<ProjectSettings>(EMPTY);
+  // Senkron cache okuma — ilk render'da hemen onceki kullanicinin gordugu
+  // logo/baslik/favicon ile aciliyoruz. Backend cevap verince guncelleniyor.
+  const [settings, setSettings] = useState<ProjectSettings>(() => loadCachedSettings());
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -35,8 +62,9 @@ export function ProjectSettingsProvider({ children }: { children: ReactNode }) {
     try {
       const data = await fetchProjectSettings();
       setSettings(data);
+      saveCachedSettings(data);
     } catch {
-      // Backend cevap vermezse logo bos kalir, fallback PNG'ler devreye girer.
+      // Backend cevap vermezse cache'teki son bilinen ayarlar kalir.
     } finally {
       setLoading(false);
     }
@@ -72,6 +100,7 @@ export function ProjectSettingsProvider({ children }: { children: ReactNode }) {
 
   const applyLocal = useCallback((next: ProjectSettings) => {
     setSettings(next);
+    saveCachedSettings(next);
   }, []);
 
   const value = useMemo<ContextShape>(

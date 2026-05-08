@@ -5,7 +5,11 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
-from app.schemas.user import SelfPasswordChangeRequest, SelfProfileUpdateRequest, UserRead
+from app.schemas.user import LanguageUpdateRequest, SelfPasswordChangeRequest, SelfProfileUpdateRequest, UserRead
+
+# Frontend i18n ile uyumlu desteklenen diller. Yeni dil eklerken hem
+# bu listeye hem de frontend resources/<code>.json dosyasina ekle.
+SUPPORTED_LANGUAGES = {"tr", "en"}
 from app.api.deps import get_current_user
 from app.services.auth_service import create_access_token, get_password_hash, verify_password
 from app.services.event_service import record_event
@@ -46,6 +50,24 @@ def update_me(
 ):
     current_user.full_name = payload.full_name
     current_user.email = payload.email
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.put("/me/language", response_model=UserRead)
+def update_my_language(
+    payload: LanguageUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    code = (payload.language or "").strip().lower()
+    if code not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Desteklenmeyen dil: {payload.language}",
+        )
+    current_user.language = code
     db.commit()
     db.refresh(current_user)
     return current_user

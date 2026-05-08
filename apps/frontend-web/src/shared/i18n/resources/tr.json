@@ -1,0 +1,290 @@
+{
+  "common": {
+    "save": "Kaydet",
+    "saveAll": "Tüm Ayarları Kaydet",
+    "cancel": "İptal",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "add": "Ekle",
+    "close": "Kapat",
+    "open": "Aç",
+    "yes": "Evet",
+    "no": "Hayır",
+    "ok": "Tamam",
+    "loading": "Yükleniyor...",
+    "saving": "Kaydediliyor...",
+    "search": "Ara",
+    "searchPlaceholder": "Ara...",
+    "filter": "Filtre",
+    "all": "Tümü",
+    "none": "Yok",
+    "user": "Kullanıcı",
+    "username": "Kullanıcı Adı",
+    "password": "Şifre",
+    "email": "E-posta",
+    "phone": "Telefon",
+    "fullName": "Ad Soyad",
+    "role": "Rol",
+    "status": "Durum",
+    "actions": "İşlemler",
+    "details": "Detaylar",
+    "back": "Geri",
+    "next": "İleri",
+    "previous": "Önceki",
+    "refresh": "Yenile",
+    "retry": "Tekrar Dene",
+    "confirm": "Onayla",
+    "errorOccurred": "Bir hata oluştu",
+    "noData": "Kayıt bulunamadı",
+    "required": "Zorunlu alan",
+    "minutesAgo": "{{count}} dakika önce",
+    "hoursAgo": "{{count}} saat önce",
+    "daysAgo": "{{count}} gün önce",
+    "secondsAgo": "{{count}} saniye önce"
+  },
+  "language": {
+    "label": "Dil",
+    "tr": "Türkçe",
+    "en": "İngilizce",
+    "selectPlaceholder": "Dil seçin",
+    "saved": "Dil tercihi kaydedildi"
+  },
+  "roles": {
+    "engineer": "Mühendis",
+    "installer": "Kurulumcu",
+    "operator": "Operatör",
+    "user": "Kullanıcı"
+  },
+  "header": {
+    "home": "Anasayfa",
+    "alarms": "Alarmlar",
+    "faults": "Hat Arızaları",
+    "events": "Olaylar",
+    "systemStatus": "Sistem durumu",
+    "engineering": "Mühendislik",
+    "settings": "Ayarlar",
+    "logout": "Çıkış Yap",
+    "user": "Kullanıcı",
+    "customerLogoAlt": "Müşteri Logosu"
+  },
+  "login": {
+    "title": "Giriş Yap",
+    "username": "Kullanıcı Adı",
+    "password": "Şifre",
+    "showPassword": "Şifreyi göster",
+    "hidePassword": "Şifreyi gizle",
+    "remember": "Beni hatırla",
+    "submit": "Giriş",
+    "submitting": "Giriş yapılıyor...",
+    "invalidCredentials": "Kullanıcı adı veya şifre hatalı",
+    "visualAlt": "Giriş ekranı görseli",
+    "customerLogoAlt": "Müşteri Logo"
+  },
+  "alarms": {
+    "title": "Alarmlar",
+    "active": "Aktif",
+    "acknowledged": "Onaylandı",
+    "reset": "Sıfırlandı",
+    "noAlarms": "Aktif alarm yok",
+    "device": "Cihaz",
+    "line": "Hat",
+    "region": "Bölge",
+    "openedAt": "Açılış",
+    "acknowledgedAt": "Onay zamanı",
+    "resetAt": "Sıfırlanma zamanı",
+    "ackBtn": "Onayla",
+    "assignBtn": "Ata",
+    "comment": "Yorum",
+    "addComment": "Yorum ekle",
+    "severity": "Önem",
+    "high": "Yüksek",
+    "medium": "Orta",
+    "low": "Düşük"
+  },
+  "faults": {
+    "title": "Hat Arızaları",
+    "stats": {
+      "total": "Toplam",
+      "open": "Açık",
+      "assigned": "Atandı",
+      "inProgress": "Devam",
+      "resolved": "Çözüldü",
+      "closed": "Kapatıldı",
+      "avgResolution": "Ort. Çözüm Süresi",
+      "last30Days": "Son 30 gün"
+    },
+    "status": {
+      "open": "Açık",
+      "assigned": "Atandı",
+      "in_progress": "Devam Ediyor",
+      "resolved": "Çözüldü",
+      "closed": "Kapatıldı"
+    },
+    "filter": {
+      "search": "Ara (hat / direk / cihaz)",
+      "status": "Durum",
+      "all": "Tümü",
+      "count_one": "{{count}} arıza",
+      "count_other": "{{count}} arıza"
+    },
+    "card": {
+      "region": "Bölge",
+      "line": "Hat",
+      "range": "Aralık",
+      "lastRed": "Son RED",
+      "firstGreen": "İlk GREEN",
+      "openedAt": "Açılış",
+      "duration": "Arıza Süresi",
+      "live": "Canlı",
+      "final": "Final",
+      "assignedTo": "Atanan",
+      "noAssignee": "Atanmadı",
+      "note": "Not"
+    },
+    "detail": {
+      "title": "Arıza Detayı",
+      "tickets": "Sorumluluk",
+      "comments": "Yorumlar",
+      "addComment": "Yorum ekle",
+      "writeNote": "Kısa not",
+      "saveNote": "Notu Kaydet",
+      "assignee": "Atanan kullanıcı",
+      "changeAssignee": "Atanan değiştir",
+      "changeStatus": "Durumu değiştir",
+      "coordinates": "Direk Koordinatları",
+      "devicesInRange": "Aralıktaki Cihazlar",
+      "mapTitle": "Arıza Konumu"
+    },
+    "empty": "Aktif arıza yok"
+  },
+  "events": {
+    "title": "Olaylar",
+    "category": "Kategori",
+    "type": "Tip",
+    "severity": "Önem",
+    "actor": "Aktör",
+    "message": "Mesaj",
+    "timestamp": "Zaman"
+  },
+  "systemStatus": {
+    "title": "Sistem Durumu",
+    "services": "Servisler",
+    "database": "Veritabanı",
+    "rabbitmq": "RabbitMQ",
+    "uptime": "Çalışma Süresi",
+    "lastSeen": "Son Görüldü",
+    "online": "Çevrimiçi",
+    "offline": "Çevrimdışı"
+  },
+  "engineering": {
+    "title": "Mühendislik",
+    "nav": {
+      "users": "Kullanıcılar",
+      "gateways": "Gateway'ler",
+      "devices": "Cihazlar",
+      "deviceModels": "Cihaz Modelleri",
+      "signals": "Sinyaller",
+      "alarmRules": "Alarm Kuralları",
+      "outboundTargets": "Outbound Hedefleri",
+      "responsibilityAreas": "Sorumluluk Alanları",
+      "grid": "Hat Yönetimi",
+      "backups": "Yedekler",
+      "projectSettings": "Proje Ayarları",
+      "notificationSettings": "Bildirim Ayarları"
+    }
+  },
+  "backups": {
+    "title": "Yedekler",
+    "manualBackup": "Yedek Al",
+    "creatingBackup": "Yedek alınıyor...",
+    "schedule": {
+      "title": "Periyodik Yedek Programı",
+      "enabled": "Etkin",
+      "intervalHours": "Aralık (saat)",
+      "retentionCount": "Tutulacak yedek sayısı",
+      "lastRun": "Son çalıştırma",
+      "save": "Programı Kaydet"
+    },
+    "table": {
+      "createdAt": "Tarih",
+      "type": "Tip",
+      "size": "Boyut",
+      "status": "Durum",
+      "createdBy": "Oluşturan",
+      "actions": "İşlemler"
+    },
+    "type": {
+      "manual": "Manuel",
+      "scheduled": "Otomatik"
+    },
+    "status": {
+      "running": "Çalışıyor",
+      "success": "Başarılı",
+      "failed": "Başarısız"
+    },
+    "download": "İndir",
+    "restore": "Geri Yükle",
+    "deleteConfirmTitle": "Yedeği sil",
+    "deleteConfirmBody": "Bu yedek silinecek, geri alınamaz.",
+    "restoreConfirmTitle": "Yedeği geri yükle",
+    "restoreConfirmBody": "Mevcut veriler bu yedek ile değiştirilecek. Devam edilsin mi?"
+  },
+  "notifications": {
+    "title": "Bildirimler",
+    "empty": "Bildirim yok",
+    "markAllRead": "Tümünü okundu işaretle",
+    "settings": {
+      "title": "Bildirim Ayarları",
+      "saveAll": "Tüm Ayarları Kaydet",
+      "channels": {
+        "web": "Web",
+        "email": "E-posta",
+        "sms": "SMS",
+        "telegram": "Telegram"
+      },
+      "smtp": {
+        "title": "SMTP Ayarları",
+        "host": "Sunucu",
+        "port": "Port",
+        "user": "Kullanıcı",
+        "password": "Şifre",
+        "from": "Gönderen",
+        "tls": "TLS",
+        "test": "Test E-postası Gönder"
+      },
+      "sms": {
+        "title": "SMS Ayarları",
+        "provider": "Sağlayıcı",
+        "apiKey": "API Anahtarı",
+        "from": "Başlık",
+        "test": "Test SMS Gönder"
+      },
+      "telegram": {
+        "title": "Telegram Ayarları",
+        "botToken": "Bot Token",
+        "chatIds": "Chat ID'leri",
+        "test": "Test Mesajı Gönder"
+      }
+    }
+  },
+  "userSettings": {
+    "title": "Kullanıcı Ayarları",
+    "profile": "Profil",
+    "security": "Güvenlik",
+    "language": "Dil",
+    "languageHelp": "Arayüz dili. Giriş yaptığınızda bu dilde açılır.",
+    "changePassword": "Şifre Değiştir",
+    "currentPassword": "Mevcut Şifre",
+    "newPassword": "Yeni Şifre",
+    "confirmPassword": "Yeni Şifre (Tekrar)",
+    "saveProfile": "Profili Kaydet",
+    "savePassword": "Şifreyi Değiştir"
+  },
+  "errors": {
+    "network": "Sunucuya ulaşılamıyor",
+    "unauthorized": "Yetkisiz",
+    "notFound": "Bulunamadı",
+    "validation": "Geçersiz veri",
+    "unknown": "Beklenmeyen bir hata oluştu"
+  }
+}

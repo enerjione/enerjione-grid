@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   createManualBackup,
@@ -50,6 +51,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export function BackupsPanel({ accessToken }: Props) {
   const toast = useToast();
+  const { t } = useTranslation();
   const [backups, setBackups] = useState<BackupJob[]>([]);
   const [schedule, setSchedule] = useState<BackupSchedule | null>(null);
   const [loading, setLoading] = useState(false);
@@ -165,14 +167,7 @@ export function BackupsPanel({ accessToken }: Props) {
   return (
     <section className="tab-panel backups-panel">
       <div className="backups-head">
-        <div>
-          <h3>Yedekleme & Geri Yükleme</h3>
-          <p className="helper-text">
-            Veritabanı yedekleri (PostgreSQL pg_dump). Manuel yedek alabilir,
-            periyodik program ayarlayabilirsiniz. Yedekleri sunucu diskinde
-            tutulur ve buradan indirilebilir.
-          </p>
-        </div>
+        <h3>{t("backups.title")}</h3>
         <button
           type="button"
           className="primary-btn backups-create-btn"
@@ -180,7 +175,7 @@ export function BackupsPanel({ accessToken }: Props) {
           disabled={creating}
         >
           <span className="material-symbols-outlined">backup</span>
-          {creating ? "Yedek alınıyor…" : "Yeni Yedek Al"}
+          {creating ? t("backups.creatingBackup") : t("backups.manualBackup")}
         </button>
       </div>
 
@@ -302,6 +297,7 @@ export function BackupsPanel({ accessToken }: Props) {
             Henüz yedek yok. Üstten "Yeni Yedek Al" butonu ile başlayabilirsiniz.
           </div>
         ) : (
+          <div className="backups-list-table-wrap">
           <table className="backups-table">
             <thead>
               <tr>
@@ -318,72 +314,88 @@ export function BackupsPanel({ accessToken }: Props) {
               {backups.map((b) => {
                 const sc = STATUS_COLOR[b.status] ?? "#64748b";
                 return (
-                  <tr key={b.id}>
-                    <td>{fmtDate(b.created_at)}</td>
-                    <td>
-                      <span
-                        className={`backups-type-pill is-${b.job_type}`}
-                        title={b.job_type}
-                      >
-                        {TYPE_LABEL[b.job_type] ?? b.job_type}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className="backups-status-pill"
-                        style={{ background: `${sc}22`, color: sc }}
-                        title={b.error_message ?? undefined}
-                      >
-                        {STATUS_LABEL[b.status] ?? b.status}
-                      </span>
-                    </td>
-                    <td className="backups-cell-mono">{fmtBytes(b.size_bytes)}</td>
-                    <td>{b.created_by_username ?? "—"}</td>
-                    <td className="backups-cell-mono backups-cell-filename">
-                      {b.filename ?? "—"}
-                    </td>
-                    <td>
-                      <div className="backups-actions">
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          title="İndir"
-                          aria-label="İndir"
-                          disabled={b.status !== "success"}
-                          onClick={() => void handleDownload(b)}
+                  <Fragment key={b.id}>
+                    <tr>
+                      <td>{fmtDate(b.created_at)}</td>
+                      <td>
+                        <span
+                          className={`backups-type-pill is-${b.job_type}`}
+                          title={b.job_type}
                         >
-                          <span className="material-symbols-outlined">download</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-warn"
-                          title="Geri Yükle"
-                          aria-label="Geri Yükle"
-                          disabled={b.status !== "success" || restoringId === b.id}
-                          onClick={() => setConfirmRestoreId(b.id)}
+                          {TYPE_LABEL[b.job_type] ?? b.job_type}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className="backups-status-pill"
+                          style={{ background: `${sc}22`, color: sc }}
+                          title={b.error_message ?? undefined}
                         >
-                          {restoringId === b.id ? (
-                            <span className="material-symbols-outlined">hourglass_top</span>
-                          ) : (
-                            <span className="material-symbols-outlined">restart_alt</span>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
-                          title="Sil"
-                          aria-label="Sil"
-                          onClick={() => void handleDelete(b.id)}
-                        >
-                          <span className="material-symbols-outlined">delete</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                          {STATUS_LABEL[b.status] ?? b.status}
+                        </span>
+                      </td>
+                      <td className="backups-cell-mono">{fmtBytes(b.size_bytes)}</td>
+                      <td>{b.created_by_username ?? "—"}</td>
+                      <td className="backups-cell-mono backups-cell-filename">
+                        {b.filename ?? "—"}
+                      </td>
+                      <td>
+                        <div className="backups-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            title="İndir"
+                            aria-label="İndir"
+                            disabled={b.status !== "success"}
+                            onClick={() => void handleDownload(b)}
+                          >
+                            <span className="material-symbols-outlined">download</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-warn"
+                            title="Geri Yükle"
+                            aria-label="Geri Yükle"
+                            disabled={b.status !== "success" || restoringId === b.id}
+                            onClick={() => setConfirmRestoreId(b.id)}
+                          >
+                            {restoringId === b.id ? (
+                              <span className="material-symbols-outlined">hourglass_top</span>
+                            ) : (
+                              <span className="material-symbols-outlined">restart_alt</span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-danger"
+                            title="Sil"
+                            aria-label="Sil"
+                            onClick={() => void handleDelete(b.id)}
+                          >
+                            <span className="material-symbols-outlined">delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {b.status === "failed" && b.error_message ? (
+                      <tr className="backups-error-row">
+                        <td colSpan={7}>
+                          <div className="backups-error-banner">
+                            <span className="material-symbols-outlined">error</span>
+                            <div>
+                              <strong>Hata</strong>
+                              <code>{b.error_message}</code>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
