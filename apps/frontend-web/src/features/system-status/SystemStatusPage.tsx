@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { fetchHostStatus, fetchServicesStatus, loadSession } from "../../shared/api";
 import type {
@@ -36,16 +37,20 @@ function formatBytes(value: number | null | undefined, fractionDigits = 1): stri
   return `${n.toFixed(fractionDigits)} ${BYTE_UNITS[i]}`;
 }
 
-function formatDuration(seconds: number | null | undefined): string {
+function formatDuration(
+  seconds: number | null | undefined,
+  units?: { d: string; h: string; m: string }
+): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const u = units ?? { d: "g", h: "sa", m: "dk" };
   const s = Math.floor(seconds);
   const days = Math.floor(s / 86400);
   const hours = Math.floor((s % 86400) / 3600);
   const minutes = Math.floor((s % 3600) / 60);
   const parts: string[] = [];
-  if (days > 0) parts.push(`${days}g`);
-  if (hours > 0 || days > 0) parts.push(`${hours}sa`);
-  parts.push(`${minutes}dk`);
+  if (days > 0) parts.push(`${days}${u.d}`);
+  if (hours > 0 || days > 0) parts.push(`${hours}${u.h}`);
+  parts.push(`${minutes}${u.m}`);
   return parts.join(" ");
 }
 
@@ -150,13 +155,6 @@ function gatewayLastSeenTone(gw: Gateway): "ok" | "warn" | "bad" | "muted" {
   return "bad";
 }
 
-function gatewayStatusLabel(tone: "ok" | "warn" | "bad" | "muted"): string {
-  if (tone === "ok") return "Çevrimiçi";
-  if (tone === "warn") return "Gecikmeli";
-  if (tone === "bad") return "Çevrimdışı";
-  return "Pasif";
-}
-
 function serviceRoleIcon(role: ServiceStatus["role"]): string {
   switch (role) {
     case "db":
@@ -174,24 +172,25 @@ function serviceRoleIcon(role: ServiceStatus["role"]): string {
   }
 }
 
-function serviceRoleLabel(role: ServiceStatus["role"]): string {
-  switch (role) {
-    case "db":
-      return "Veritabanı";
-    case "broker":
-      return "Mesaj kuyruğu";
-    case "worker":
-      return "Worker";
-    case "gateway":
-      return "Gateway";
-    case "self":
-      return "API";
-    default:
-      return role;
-  }
-}
-
 export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
+  const isTr = i18n.language?.startsWith("tr");
+  const durationUnits = isTr
+    ? { d: "g", h: "sa", m: "dk" }
+    : { d: "d", h: "h", m: "m" };
+  const gatewayStatusLabel = (tone: "ok" | "warn" | "bad" | "muted"): string => {
+    if (tone === "ok") return t("systemStatus.gateways.stateOnline");
+    if (tone === "warn") return t("systemStatus.gateways.stateLagging");
+    if (tone === "bad") return t("systemStatus.gateways.stateOffline");
+    return t("systemStatus.gateways.stateInactive");
+  };
+  const serviceRoleLabel = (role: ServiceStatus["role"]): string => {
+    if (role === "db" || role === "broker" || role === "worker" || role === "gateway" || role === "self") {
+      return t(`systemStatus.services.role.${role}`);
+    }
+    return role;
+  };
   // Sunucu (backend host) anlik kaynak metrikleri
   const [host, setHost] = useState<HostStatus | null>(null);
   const [hostError, setHostError] = useState<string | null>(null);
@@ -229,7 +228,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
         }
       } catch (exc) {
         if (!cancelled) {
-          setHostError(exc instanceof Error ? exc.message : "Sunucu kaynak metrikleri alinamadi.");
+          setHostError(exc instanceof Error ? exc.message : t("systemStatus.host.errorMetrics"));
         }
       } finally {
         hostInFlightRef.current = false;
@@ -259,7 +258,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
         }
       } catch (exc) {
         if (!cancelled) {
-          setServicesError(exc instanceof Error ? exc.message : "Servis durumlari alinamadi.");
+          setServicesError(exc instanceof Error ? exc.message : t("systemStatus.services.errorFetch"));
         }
       } finally {
         servicesInFlightRef.current = false;
@@ -316,14 +315,14 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           className="sys-fab"
           disabled={showSpinner}
           onClick={() => void onRefresh()}
-          title={host ? `${host.info.hostname} · Uptime ${formatDuration(host.info.uptime_seconds)}` : "Yenile"}
+          title={host ? `${host.info.hostname} · ${t("systemStatus.host.infoUptime")} ${formatDuration(host.info.uptime_seconds, durationUnits)}` : t("common.refresh")}
         >
           <span
             className={`material-symbols-outlined ${showSpinner ? "sys-fab-spin" : ""}`}
           >
             refresh
           </span>
-          <span>{showSpinner ? "Yenileniyor" : "Yenile"}</span>
+          <span>{showSpinner ? t("common.refreshing") : t("common.refresh")}</span>
         </button>
       ) : null}
 
@@ -334,9 +333,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">router</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Toplam cihaz</span>
+            <span className="sys-kpi-label">{t("systemStatus.kpi.totalDevices")}</span>
             <strong className="sys-kpi-value">{deviceStats.total}</strong>
-            <span className="sys-kpi-sub">{deviceStats.onlineRatio}% çevrimiçi</span>
+            <span className="sys-kpi-sub">{t("systemStatus.kpi.totalDevicesSub", { percent: deviceStats.onlineRatio })}</span>
           </div>
         </article>
 
@@ -345,9 +344,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">wifi</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Haberleşen</span>
+            <span className="sys-kpi-label">{t("systemStatus.kpi.online")}</span>
             <strong className="sys-kpi-value">{deviceStats.online}</strong>
-            <span className="sys-kpi-sub">son veri taze</span>
+            <span className="sys-kpi-sub">{t("systemStatus.kpi.onlineSub")}</span>
           </div>
         </article>
 
@@ -356,9 +355,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">wifi_off</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Haberleşmeyen</span>
+            <span className="sys-kpi-label">{t("systemStatus.kpi.offline")}</span>
             <strong className="sys-kpi-value">{deviceStats.offline}</strong>
-            <span className="sys-kpi-sub">çevrimdışı + belirsiz</span>
+            <span className="sys-kpi-sub">{t("systemStatus.kpi.offlineSub")}</span>
           </div>
         </article>
 
@@ -367,9 +366,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">notifications_active</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Aktif alarm</span>
+            <span className="sys-kpi-label">{t("systemStatus.kpi.activeAlarm")}</span>
             <strong className="sys-kpi-value">{alarmStats.open}</strong>
-            <span className="sys-kpi-sub">henüz reset edilmemiş</span>
+            <span className="sys-kpi-sub">{t("systemStatus.kpi.activeAlarmSub")}</span>
           </div>
         </article>
 
@@ -378,11 +377,11 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">hub</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Gateway</span>
+            <span className="sys-kpi-label">{t("systemStatus.kpi.gateway")}</span>
             <strong className="sys-kpi-value">
               {gatewayStats.active} <span className="sys-kpi-frac">/ {gatewayStats.total}</span>
             </strong>
-            <span className="sys-kpi-sub">aktif / toplam</span>
+            <span className="sys-kpi-sub">{t("systemStatus.kpi.gatewaySub")}</span>
           </div>
         </article>
 
@@ -395,14 +394,14 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <span className="material-symbols-outlined">monitor_heart</span>
           </div>
           <div className="sys-kpi-body">
-            <span className="sys-kpi-label">Servisler</span>
+            <span className="sys-kpi-label">{t("systemStatus.kpi.services")}</span>
             <strong className="sys-kpi-value">
               {serviceCounts.healthy} <span className="sys-kpi-frac">/ {serviceCounts.total}</span>
             </strong>
             <span className="sys-kpi-sub">
               {serviceCounts.unhealthy === 0
-                ? "tümü sağlıklı"
-                : `${serviceCounts.unhealthy} sorunlu`}
+                ? t("systemStatus.kpi.servicesAllOk")
+                : t("systemStatus.kpi.servicesIssue", { count: serviceCounts.unhealthy })}
             </span>
           </div>
         </article>
@@ -417,17 +416,21 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
               <span className="material-symbols-outlined sys-card-icon sys-card-icon--cpu">
                 memory
               </span>
-              <h2 className="sys-card-title">Sunucu kaynakları</h2>
+              <h2 className="sys-card-title">{t("systemStatus.host.title")}</h2>
             </div>
             {host ? (
               <span className={`sys-pill sys-pill--${cpuTone}`}>
-                {cpuTone === "bad" ? "Yoğun" : cpuTone === "warn" ? "Yüksek" : "Sağlıklı"}
+                {cpuTone === "bad"
+                  ? t("systemStatus.host.stateBusy")
+                  : cpuTone === "warn"
+                  ? t("systemStatus.host.stateHigh")
+                  : t("systemStatus.host.stateOk")}
               </span>
             ) : null}
           </header>
 
           {hostError && !host ? <p className="sys-error-banner">{hostError}</p> : null}
-          {!host && !hostError ? <p className="sys-loading-banner">Yükleniyor…</p> : null}
+          {!host && !hostError ? <p className="sys-loading-banner">{t("systemStatus.host.loading")}</p> : null}
 
           {host ? (
             <div className="sys-card-body">
@@ -477,7 +480,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
               <div className={`sys-trend sys-trend--${cpuTone}`}>
                 <div className="sys-trend-head">
                   <span className="material-symbols-outlined">trending_up</span>
-                  <span className="sys-trend-label">CPU trendi · son ~2 dk</span>
+                  <span className="sys-trend-label">{t("systemStatus.host.trendCpu")}</span>
                   <strong className="sys-trend-current">{host.cpu.percent.toFixed(0)}%</strong>
                 </div>
                 <Sparkline values={cpuHistory} tone={cpuTone} width={280} height={42} />
@@ -490,7 +493,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                     <span className="material-symbols-outlined">speed</span>
                   </div>
                   <div className="sys-loadavg-body">
-                    <span className="sys-loadavg-title">Yük ortalaması</span>
+                    <span className="sys-loadavg-title">{t("systemStatus.host.loadAvg")}</span>
                     <div className="sys-loadavg-values">
                       <span>
                         <em>1m</em>
@@ -513,7 +516,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
               <div className="sys-net-panel">
                 <div className="sys-metric-group-title">
                   <span className="material-symbols-outlined">lan</span>
-                  Ağ trafiği
+                  {t("systemStatus.host.network")}
                 </div>
                 <div className="sys-net-flow">
                   <div className="sys-net-side sys-net-side--up">
@@ -522,7 +525,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                     </div>
                     <div className="sys-net-info">
                       <strong>{formatBytes(host.network.bytes_sent)}</strong>
-                      <span>{host.network.packets_sent.toLocaleString("tr-TR")} pkt giden</span>
+                      <span>{t("systemStatus.host.netUp", { value: host.network.packets_sent.toLocaleString(localeTag) })}</span>
                     </div>
                   </div>
                   <div className="sys-net-divider" />
@@ -532,7 +535,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                     </div>
                     <div className="sys-net-info">
                       <strong>{formatBytes(host.network.bytes_recv)}</strong>
-                      <span>{host.network.packets_recv.toLocaleString("tr-TR")} pkt gelen</span>
+                      <span>{t("systemStatus.host.netDown", { value: host.network.packets_recv.toLocaleString(localeTag) })}</span>
                     </div>
                   </div>
                 </div>
@@ -542,7 +545,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
               <div className="sys-info-group">
                 <div className="sys-metric-group-title">
                   <span className="material-symbols-outlined">badge</span>
-                  Sistem bilgisi
+                  {t("systemStatus.host.systemInfo")}
                 </div>
                 <div className="sys-info-tiles">
                   <div className="sys-info-tile">
@@ -550,7 +553,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                       <span className="material-symbols-outlined">dns</span>
                     </span>
                     <div>
-                      <span className="sys-info-tile-label">Host</span>
+                      <span className="sys-info-tile-label">{t("systemStatus.host.infoHost")}</span>
                       <strong className="sys-info-tile-val sys-info-tile-val--mono">
                         {host.info.hostname}
                       </strong>
@@ -561,7 +564,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                       <span className="material-symbols-outlined">monitor</span>
                     </span>
                     <div>
-                      <span className="sys-info-tile-label">İşletim sistemi</span>
+                      <span className="sys-info-tile-label">{t("systemStatus.host.infoOS")}</span>
                       <strong className="sys-info-tile-val">
                         {host.info.os_name} {host.info.os_release}
                       </strong>
@@ -573,12 +576,12 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                       <span className="material-symbols-outlined">timer</span>
                     </span>
                     <div>
-                      <span className="sys-info-tile-label">Uptime</span>
+                      <span className="sys-info-tile-label">{t("systemStatus.host.infoUptime")}</span>
                       <strong className="sys-info-tile-val">
-                        {formatDuration(host.info.uptime_seconds)}
+                        {formatDuration(host.info.uptime_seconds, durationUnits)}
                       </strong>
                       <span className="sys-info-tile-sub">
-                        {new Date(host.info.boot_time * 1000).toLocaleString("tr-TR")}
+                        {new Date(host.info.boot_time * 1000).toLocaleString(localeTag)}
                       </span>
                     </div>
                   </div>
@@ -587,12 +590,12 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                       <span className="material-symbols-outlined">deployed_code</span>
                     </span>
                     <div>
-                      <span className="sys-info-tile-label">Backend</span>
+                      <span className="sys-info-tile-label">{t("systemStatus.host.infoBackend")}</span>
                       <strong className="sys-info-tile-val">
                         PID {host.info.process_pid}
                       </strong>
                       <span className="sys-info-tile-sub">
-                        {formatDuration(host.info.process_uptime_seconds)} aktif
+                        {t("systemStatus.host.backendActive", { duration: formatDuration(host.info.process_uptime_seconds, durationUnits) })}
                       </span>
                     </div>
                   </div>
@@ -609,7 +612,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
               <span className="material-symbols-outlined sys-card-icon sys-card-icon--svc">
                 monitor_heart
               </span>
-              <h2 className="sys-card-title">Servis durumları</h2>
+              <h2 className="sys-card-title">{t("systemStatus.services.title")}</h2>
             </div>
             <span
               className={`sys-pill ${
@@ -624,7 +627,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             <p className="sys-error-banner">{servicesError}</p>
           ) : null}
           {!services && !servicesError ? (
-            <p className="sys-loading-banner">Servisler kontrol ediliyor…</p>
+            <p className="sys-loading-banner">{t("systemStatus.services.loading")}</p>
           ) : null}
 
           {services ? (
@@ -684,12 +687,12 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
               <span className="material-symbols-outlined sys-card-icon sys-card-icon--gw">
                 hub
               </span>
-              <h2 className="sys-card-title">Gateway durumları</h2>
+              <h2 className="sys-card-title">{t("systemStatus.gateways.title")}</h2>
             </div>
             <span className="sys-pill sys-pill--muted">{gateways.length}</span>
           </header>
           {gateways.length === 0 && !showSpinner ? (
-            <p className="sys-empty">Tanımlı gateway yok.</p>
+            <p className="sys-empty">{t("systemStatus.gateways.empty")}</p>
           ) : (
             <ul className="sys-card-list">
               {gateways.map((g) => {
@@ -714,8 +717,8 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                         </span>
                         <span className="helper-text">
                           {g.last_seen_at
-                            ? new Date(g.last_seen_at).toLocaleString("tr-TR")
-                            : "Henüz görülmedi"}
+                            ? new Date(g.last_seen_at).toLocaleString(localeTag)
+                            : t("systemStatus.gateways.neverSeen")}
                         </span>
                       </div>
                     </div>

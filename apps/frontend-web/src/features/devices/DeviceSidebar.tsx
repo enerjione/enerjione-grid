@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
@@ -55,6 +56,7 @@ function batteryClass(percent: number | null | undefined): string {
 
 export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValues, deviceTopology }: Props) {
   const { settings } = useProjectSettings();
+  const { t } = useTranslation();
   const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
   const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
   const voltageToPercent = useMemo(() => makeVoltageToPercent(battLow, battFull), [battLow, battFull]);
@@ -93,7 +95,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
     <aside className="sidebar device-sidebar-modern">
       <div className="device-list">
         {devices.length === 0 ? (
-          <p className="device-list-empty">Cihaz bulunamadı.</p>
+          <p className="device-list-empty">{t("dashboard.sidebar.noDevices")}</p>
         ) : null}
         {devices.map((device) => {
           const isOnline = device.communicationStatus === "online";
@@ -107,7 +109,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
           const topo = deviceTopology?.get(device.id);
           const topoLabel = topo
             ? `${topo.regionName ? topo.regionName + " · " : ""}${topo.lineName}`
-            : "Hat atanmamış";
+            : t("dashboard.sidebar.noLine");
           const alarmState = deviceAlarmState.get(device.id) ?? (device.alarmActive ? "open" : null);
           const hasAlarm = alarmState !== null;
           return (
@@ -123,16 +125,16 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
               {alarmState === "open" ? (
                 <span
                   className="device-row-alarm-pulse device-row-alarm-pulse--corner"
-                  title="Onaylanmamış aktif alarm"
-                  aria-label="Onaylanmamış aktif alarm"
+                  title={t("dashboard.sidebar.alarmOpen")}
+                  aria-label={t("dashboard.sidebar.alarmOpen")}
                 >
                   <span className="material-symbols-outlined">warning</span>
                 </span>
               ) : alarmState === "ack" ? (
                 <span
                   className="device-row-alarm-acked device-row-alarm-pulse--corner"
-                  title="Aktif alarm onaylandı, sürdürülüyor"
-                  aria-label="Aktif alarm onaylandı"
+                  title={t("dashboard.sidebar.alarmAcked")}
+                  aria-label={t("dashboard.sidebar.alarmAcked")}
                 >
                   <span className="material-symbols-outlined">verified</span>
                 </span>
@@ -142,7 +144,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
               <div className="device-row-top">
                 <span
                   className={`device-status-dot ${isOnline ? "online" : "offline"}`}
-                  title={isOnline ? "Çevrimiçi" : "Çevrimdışı"}
+                  title={isOnline ? t("dashboard.sidebar.online") : t("dashboard.sidebar.offline")}
                 />
                 <div className="device-row-name">
                   <strong>{device.name}</strong>
@@ -158,7 +160,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
                 </span>
                 <span
                   className={`device-battery-chip device-battery-chip--bare ${batteryClass(battPct)}`}
-                  title={battPct !== null ? `Batarya: %${Math.round(battPct)}` : "Batarya bilgisi yok"}
+                  title={battPct !== null ? t("dashboard.sidebar.battery", { value: Math.round(battPct) }) : t("dashboard.sidebar.noBattery")}
                 >
                   <span className="device-battery-icon" aria-hidden="true">
                     <span className="device-battery-fill" style={{ width: `${battPct ?? 0}%` }} />

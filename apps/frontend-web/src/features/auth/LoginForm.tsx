@@ -2,7 +2,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
-import { LanguageSwitcher } from "../../components/LanguageSwitcher";
+import {
+  LANGUAGE_LABELS,
+  SUPPORTED_LANGUAGES,
+  isSupportedLanguage,
+  setLanguage,
+  type SupportedLanguage,
+} from "../../shared/i18n";
 
 type Props = {
   onSubmit: (username: string, password: string, remember: boolean) => Promise<void>;
@@ -14,7 +20,10 @@ const REMEMBER_STORAGE_KEY = "hsl.login.remember";
 
 export function LoginForm({ onSubmit, loading, error }: Props) {
   const { settings, loading: settingsLoading } = useProjectSettings();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const activeLang: SupportedLanguage = isSupportedLanguage(i18n.language)
+    ? i18n.language
+    : "tr";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -36,6 +45,25 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
 
   return (
     <div className="login-page">
+      {/* Sayfa basinda dil secici — ekranin sagina sabit. Login oncesi henuz
+          oturum olmadigi icin secim sadece localStorage + i18next state'ini
+          gunceller; giris sonrasi profil ayarlarindan kalici tercih kaydedilir. */}
+      <div className="login-lang-bar">
+        <label className="login-lang-select">
+          <span className="login-lang-select__label">{t("language.label")}</span>
+          <select
+            value={activeLang}
+            onChange={(event) => setLanguage(event.target.value as SupportedLanguage)}
+            aria-label={t("language.label")}
+          >
+            {SUPPORTED_LANGUAGES.map((code) => (
+              <option key={code} value={code}>
+                {LANGUAGE_LABELS[code]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="login-shell">
         <form className="login-card" onSubmit={handleSubmit} autoComplete="off">
           {/* Logo: ayarlar yuklenirken hicbir sey gosterme (flash onleme).
@@ -55,10 +83,7 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
             />
           )}
           <div className="login-form-fields">
-            <div className="login-header-row">
-              <h2>{t("login.title")}</h2>
-              <LanguageSwitcher compact />
-            </div>
+            <h2>{t("login.title")}</h2>
             <label>
               {t("login.username")}
               <input

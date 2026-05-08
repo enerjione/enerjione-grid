@@ -9421,6 +9421,7 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 .login-page {
+  position: relative; /* .login-lang-bar absolute konumunun referansi */
   height: 100vh;
   display: flex;
   align-items: stretch;
@@ -18658,6 +18659,54 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .login-header-row h2 {
   margin: 0;
+}
+
+/* Login sayfasinin en ustunde sag tarafa hizali dil secici combobox.
+   Kart icinde degil, sayfa seviyesinde — tasarimda en ustte cikar. */
+.login-lang-bar {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.login-lang-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+.login-lang-select__label {
+  text-transform: uppercase;
+}
+.login-lang-select select {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  padding: 4px 22px 4px 4px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  background-size: 12px 12px;
+  outline: none;
+}
+.login-lang-select select:focus {
+  color: #1e40af;
 }
 
 /* Profil dropdown — dil seçici alt bölümü */

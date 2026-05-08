@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { UserRead, UserRole } from "../../shared/types";
 
@@ -39,6 +40,7 @@ export function UserManagementPanel({
   onUpdate,
   onResetPassword
 }: Props) {
+  const { t } = useTranslation();
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<UserRead | null>(null);
@@ -215,14 +217,7 @@ export function UserManagementPanel({
     <section className="tab-panel">
       <div className="panel-head">
         <div>
-          <h3>Kullanıcı Yönetimi</h3>
-          {!allowInstallerRole ? (
-            <p className="helper-text" style={{ margin: "6px 0 0", maxWidth: "42rem" }}>
-              Bu ekranda yalnızca <strong>operatör</strong> ve <strong>mühendis</strong> hesapları listelenir ve
-              yönetilir. Kurulumcu hesapları yalnızca kurulumcu tarafından yönetilir; mühendis kurulumcu rolü
-              atayamaz.
-            </p>
-          ) : null}
+          <h3>{t("engineering.users.title")}</h3>
         </div>
         <button
           className="add-user-btn"
@@ -231,7 +226,7 @@ export function UserManagementPanel({
             setCreateModalOpen(true);
           }}
         >
-          + Kullanıcı Ekle
+          + {t("engineering.users.newUser")}
         </button>
       </div>
       {/* Modal kapalıyken (toplu işlem hataları için) panelde gösterilir.
@@ -399,14 +394,14 @@ export function UserManagementPanel({
       <table className="values-table user-table">
         <thead>
           <tr>
-            <th>Kullanıcı</th>
-            <th>Kullanıcı Adı</th>
-            <th>Rol</th>
-            <th>E-posta</th>
-            <th>Telefon</th>
-            <th>E-posta Bildirim</th>
-            <th>SMS Bildirim</th>
-            <th className="actions-header">İşlem</th>
+            <th>{t("engineering.users.table.fullName")}</th>
+            <th>{t("engineering.users.table.username")}</th>
+            <th>{t("engineering.users.table.role")}</th>
+            <th>{t("engineering.users.table.email")}</th>
+            <th>{t("engineering.users.table.phone")}</th>
+            <th>{t("notifications.settings.channels.email")}</th>
+            <th>{t("notifications.settings.channels.sms")}</th>
+            <th className="actions-header">{t("engineering.users.table.actions")}</th>
           </tr>
         </thead>
         <tbody>

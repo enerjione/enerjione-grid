@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import type { Line, Region, ResponsibilityAreaRow } from "../../shared/types";
 
 export type StatusFilter = "all" | "online" | "offline" | "alarm";
@@ -55,6 +57,7 @@ export function DashboardFilterBar({
   activeTab,
   onActiveTabChange
 }: Props) {
+  const { t } = useTranslation();
   const showActiveFilter =
     statusFilter !== "all" ||
     areaId !== "all" ||
@@ -73,8 +76,8 @@ export function DashboardFilterBar({
         type="button"
         className="dashboard-filter-toggle"
         onClick={onToggleSidebar}
-        title={sidebarCollapsed ? "Cihaz listesini göster" : "Cihaz listesini gizle"}
-        aria-label={sidebarCollapsed ? "Cihaz listesini göster" : "Cihaz listesini gizle"}
+        title={sidebarCollapsed ? t("dashboard.filter.showSidebar") : t("dashboard.filter.hideSidebar")}
+        aria-label={sidebarCollapsed ? t("dashboard.filter.showSidebar") : t("dashboard.filter.hideSidebar")}
       >
         <span className="material-symbols-outlined">
           {sidebarCollapsed ? "menu_open" : "menu"}
@@ -84,7 +87,7 @@ export function DashboardFilterBar({
       <input
         type="search"
         className="dashboard-filter-search"
-        placeholder="Cihaz ara (ad, kod)..."
+        placeholder={t("dashboard.filter.searchPlaceholder")}
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
       />
@@ -95,35 +98,35 @@ export function DashboardFilterBar({
           className={`map-filter-chip ${statusFilter === "all" ? "active" : ""}`}
           onClick={() => onStatusFilterChange("all")}
         >
-          Tümü <span className="map-filter-chip-count">{counts.total}</span>
+          {t("dashboard.filter.all")} <span className="map-filter-chip-count">{counts.total}</span>
         </button>
         <button
           type="button"
           className={`map-filter-chip map-filter-chip--online ${statusFilter === "online" ? "active" : ""}`}
           onClick={() => onStatusFilterChange("online")}
         >
-          Çevrimiçi <span className="map-filter-chip-count">{counts.online}</span>
+          {t("dashboard.filter.online")} <span className="map-filter-chip-count">{counts.online}</span>
         </button>
         <button
           type="button"
           className={`map-filter-chip map-filter-chip--offline ${statusFilter === "offline" ? "active" : ""}`}
           onClick={() => onStatusFilterChange("offline")}
         >
-          Çevrimdışı <span className="map-filter-chip-count">{counts.offline}</span>
+          {t("dashboard.filter.offline")} <span className="map-filter-chip-count">{counts.offline}</span>
         </button>
         <button
           type="button"
           className={`map-filter-chip map-filter-chip--alarm ${statusFilter === "alarm" ? "active" : ""}`}
           onClick={() => onStatusFilterChange("alarm")}
         >
-          Alarmlı <span className="map-filter-chip-count">{counts.alarm}</span>
+          {t("dashboard.filter.withAlarm")} <span className="map-filter-chip-count">{counts.alarm}</span>
         </button>
       </div>
 
       <div className="map-filter-divider" />
 
       <label className="map-filter-area">
-        <span>Sorumluluk alanı</span>
+        <span>{t("dashboard.filter.responsibilityArea")}</span>
         <select
           value={areaId === "all" ? "all" : String(areaId)}
           onChange={(event) => {
@@ -132,7 +135,7 @@ export function DashboardFilterBar({
           }}
           disabled={!responsibilityAreas || responsibilityAreas.length === 0}
         >
-          <option value="all">Tüm alanlar</option>
+          <option value="all">{t("dashboard.filter.allAreas")}</option>
           {(responsibilityAreas ?? [])
             .filter((a) => a.is_active)
             .map((area) => (
@@ -144,7 +147,7 @@ export function DashboardFilterBar({
       </label>
 
       <label className="map-filter-area">
-        <span>Bölge</span>
+        <span>{t("dashboard.filter.region")}</span>
         <select
           value={regionId === "all" ? "all" : String(regionId)}
           onChange={(event) => {
@@ -156,7 +159,7 @@ export function DashboardFilterBar({
           }}
           disabled={!regions || regions.length === 0}
         >
-          <option value="all">Tüm bölgeler</option>
+          <option value="all">{t("dashboard.filter.allRegions")}</option>
           {(regions ?? [])
             .filter((r) => r.is_active)
             .map((r) => (
@@ -168,7 +171,7 @@ export function DashboardFilterBar({
       </label>
 
       <label className="map-filter-area">
-        <span>Hat</span>
+        <span>{t("dashboard.filter.line")}</span>
         <select
           value={lineId === "all" ? "all" : String(lineId)}
           onChange={(event) => {
@@ -177,7 +180,7 @@ export function DashboardFilterBar({
           }}
           disabled={visibleLines.length === 0}
         >
-          <option value="all">Tüm hatlar</option>
+          <option value="all">{t("dashboard.filter.allLines")}</option>
           {visibleLines
             .filter((l) => l.is_active)
             .map((l) => (
@@ -190,8 +193,8 @@ export function DashboardFilterBar({
 
       <span className="map-filter-summary">
         {areaLoading
-          ? "Yükleniyor…"
-          : `${visibleCount} / ${counts.total} cihaz`}
+          ? t("dashboard.filter.loading")
+          : t("dashboard.filter.deviceCount", { visible: visibleCount, total: counts.total })}
       </span>
 
       {showActiveFilter ? (
@@ -206,7 +209,7 @@ export function DashboardFilterBar({
             onLineIdChange("all");
           }}
         >
-          Temizle
+          {t("dashboard.filter.clear")}
         </button>
       ) : null}
 
@@ -216,14 +219,14 @@ export function DashboardFilterBar({
           className={`dashboard-filter-tab ${activeTab === "map" ? "active" : ""}`}
           onClick={() => onActiveTabChange("map")}
         >
-          Harita
+          {t("dashboard.filter.tabMap")}
         </button>
         <button
           type="button"
           className={`dashboard-filter-tab ${activeTab === "values" ? "active" : ""}`}
           onClick={() => onActiveTabChange("values")}
         >
-          Tablo
+          {t("dashboard.filter.tabTable")}
         </button>
       </div>
     </div>

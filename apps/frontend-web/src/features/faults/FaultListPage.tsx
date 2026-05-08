@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { GridSnapshot } from "../../shared/api";
 import type {
@@ -30,13 +31,6 @@ type Props = {
   onAddComment: (faultId: number, body: string) => Promise<void>;
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  open: "Açık",
-  assigned: "Atandı",
-  in_progress: "Devam Ediyor",
-  resolved: "Sahada Çözüldü",
-  closed: "Kapatıldı"
-};
 const STATUS_COLOR: Record<string, string> = {
   open: "#ef4444",
   assigned: "#f59e0b",
@@ -45,27 +39,20 @@ const STATUS_COLOR: Record<string, string> = {
   closed: "#64748b"
 };
 
-function fmtRelative(iso?: string | null): string {
+function fmtDate(iso: string | null | undefined, localeTag: string): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  const sec = Math.round((Date.now() - d.getTime()) / 1000);
-  if (sec < 60) return `${sec} sn önce`;
-  if (sec < 3600) return `${Math.round(sec / 60)} dk önce`;
-  if (sec < 86400) return `${Math.round(sec / 3600)} sa önce`;
-  return `${Math.round(sec / 86400)} gün önce`;
+  return new Date(iso).toLocaleString(localeTag);
 }
 
-function fmtDate(iso?: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("tr-TR");
-}
-
-function fmtDateParts(iso?: string | null): { date: string; time: string } {
+function fmtDateParts(
+  iso: string | null | undefined,
+  localeTag: string
+): { date: string; time: string } {
   if (!iso) return { date: "—", time: "" };
   const d = new Date(iso);
   return {
-    date: d.toLocaleDateString("tr-TR"),
-    time: d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+    date: d.toLocaleDateString(localeTag),
+    time: d.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" })
   };
 }
 
@@ -112,6 +99,8 @@ export function FaultListPage({
   onLoadComments,
   onAddComment
 }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [statusFilter, setStatusFilter] = useState<"active" | "all" | "closed">("active");
   const [search, setSearch] = useState("");
   const [openFaultId, setOpenFaultId] = useState<number | null>(null);
@@ -161,27 +150,27 @@ export function FaultListPage({
       <div className="faults-stats">
         <div className="faults-stat-chip faults-stat-chip--total">
           <span className="faults-stat-num">{stats.total}</span>
-          <span className="faults-stat-label">Toplam</span>
+          <span className="faults-stat-label">{t("faults.stats.total")}</span>
         </div>
         <div className="faults-stat-chip faults-stat-chip--open">
           <span className="faults-stat-num">{stats.open}</span>
-          <span className="faults-stat-label">Açık</span>
+          <span className="faults-stat-label">{t("faults.stats.open")}</span>
         </div>
         <div className="faults-stat-chip faults-stat-chip--assigned">
           <span className="faults-stat-num">{stats.assigned}</span>
-          <span className="faults-stat-label">Atandı</span>
+          <span className="faults-stat-label">{t("faults.stats.assigned")}</span>
         </div>
         <div className="faults-stat-chip faults-stat-chip--progress">
           <span className="faults-stat-num">{stats.inProgress}</span>
-          <span className="faults-stat-label">Devam Ediyor</span>
+          <span className="faults-stat-label">{t("faults.stats.inProgress")}</span>
         </div>
         <div className="faults-stat-chip faults-stat-chip--resolved">
           <span className="faults-stat-num">{stats.resolved}</span>
-          <span className="faults-stat-label">Sahada Çözüldü</span>
+          <span className="faults-stat-label">{t("faults.stats.resolved")}</span>
         </div>
         <div className="faults-stat-chip faults-stat-chip--closed">
           <span className="faults-stat-num">{stats.closed}</span>
-          <span className="faults-stat-label">Kapatıldı</span>
+          <span className="faults-stat-label">{t("faults.stats.closed")}</span>
         </div>
         {/* Ortalama Çözüm Süresi — backend istatistiği (resolved/closed
             kayitlardan ortalama). Henuz kapatilmis kayit yoksa "—". */}
@@ -191,7 +180,7 @@ export function FaultListPage({
               ? fmtDurationSeconds(backendStats.avg_resolution_seconds)
               : "—"}
           </span>
-          <span className="faults-stat-label">Ort. Çözüm Süresi</span>
+          <span className="faults-stat-label">{t("faults.stats.avgResolution")}</span>
         </div>
       </div>
 
@@ -199,7 +188,7 @@ export function FaultListPage({
       <div className="faults-toolbar-row">
         <input
           type="search"
-          placeholder="Bölge / hat / cihaz / atanan ara…"
+          placeholder={t("faults.filter.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="faults-search"
@@ -209,11 +198,11 @@ export function FaultListPage({
           onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
           className="faults-filter"
         >
-          <option value="active">Aktif</option>
-          <option value="closed">Kapatılanlar</option>
-          <option value="all">Hepsi</option>
+          <option value="active">{t("faults.filter.active")}</option>
+          <option value="closed">{t("faults.filter.closed")}</option>
+          <option value="all">{t("faults.filter.all")}</option>
         </select>
-        <span className="faults-toolbar-count">{filtered.length} arıza</span>
+        <span className="faults-toolbar-count">{t("faults.filter.count", { count: filtered.length })}</span>
       </div>
 
       {/* Tam genişlik kart listesi */}
@@ -221,23 +210,25 @@ export function FaultListPage({
         {loading && filtered.length === 0 ? (
           <div className="faults-empty-card">
             <span className="material-symbols-outlined">hourglass_empty</span>
-            <p>Yükleniyor…</p>
+            <p>{t("faults.empty.loading")}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="faults-empty-card">
             <span className="material-symbols-outlined">check_circle</span>
-            <h3>Aktif arıza yok</h3>
+            <h3>{t("faults.empty.noActive")}</h3>
             <p>
               {search
-                ? "Aramaya uygun arıza bulunamadı. Farklı bir terim deneyin."
+                ? t("faults.empty.noResultsForSearch")
                 : statusFilter === "closed"
-                ? "Kapatılmış arıza kaydı yok."
-                : "Sistem temiz. Sahada arıza tespit edilince burada listelenecek."}
+                ? t("faults.empty.noClosed")
+                : t("faults.empty.systemClean")}
             </p>
           </div>
         ) : (
           filtered.map((f) => {
             const sc = STATUS_COLOR[f.status] ?? "#64748b";
+            const statusKey = `faults.status.${f.status}`;
+            const statusLabel = i18n.exists(statusKey) ? t(statusKey) : f.status;
             return (
               <button
                 key={f.id}
@@ -245,7 +236,7 @@ export function FaultListPage({
                 className="faults-card faults-card--rich"
                 onClick={() => setOpenFaultId(f.id)}
                 style={{ borderLeftColor: sc }}
-                title={`Detay görüntüle — ${fmtDate(f.opened_at)}`}
+                title={t("faults.card.openTooltip", { at: fmtDate(f.opened_at, localeTag) })}
               >
                 <div className="faults-card-rich-grid">
                   {/* Sol: Bölge + Hat + Aralık */}
@@ -259,9 +250,9 @@ export function FaultListPage({
                       <strong>{f.line_name}</strong>
                     </div>
                     <div className="faults-card-range-row">
-                      <span className="faults-card-range-tag">Arıza Aralığı</span>
+                      <span className="faults-card-range-tag">{t("faults.card.rangeTag")}</span>
                       <strong className="faults-card-range-text">
-                        Direk #{f.from_pole_seq ?? "?"} — Direk #{f.to_pole_seq ?? "?"}
+                        {t("faults.card.rangeText", { from: f.from_pole_seq ?? "?", to: f.to_pole_seq ?? "?" })}
                       </strong>
                     </div>
                   </div>
@@ -270,7 +261,7 @@ export function FaultListPage({
                   <div className="faults-card-rich-block faults-card-rich-block--devices">
                     <div className="faults-card-dev-card faults-card-dev-card--red">
                       <span className="faults-card-dev-card-label">
-                        Son Arıza Algılayan Cihaz
+                        {t("faults.card.lastRedLabel")}
                       </span>
                       <div className="faults-card-dev-card-name">
                         <span className="faults-card-dev-card-dot" />
@@ -285,11 +276,11 @@ export function FaultListPage({
                     </span>
                     <div className="faults-card-dev-card faults-card-dev-card--green">
                       <span className="faults-card-dev-card-label">
-                        İlk Arıza Algılamayan Cihaz
+                        {t("faults.card.firstGreenLabel")}
                       </span>
                       <div className="faults-card-dev-card-name">
                         <span className="faults-card-dev-card-dot" />
-                        <strong>{f.first_green_device_name ?? "Hat ucu"}</strong>
+                        <strong>{f.first_green_device_name ?? t("faults.card.lineEnd")}</strong>
                       </div>
                       {f.first_green_device_code ? (
                         <span className="faults-card-dev-card-code">{f.first_green_device_code}</span>
@@ -305,7 +296,7 @@ export function FaultListPage({
                         className="faults-status-pill faults-status-pill--lg"
                         style={{ background: `${sc}22`, color: sc }}
                       >
-                        {STATUS_LABEL[f.status] ?? f.status}
+                        {statusLabel}
                       </span>
                       {(() => {
                         const isLive =
@@ -322,11 +313,7 @@ export function FaultListPage({
                             className={`faults-card-time-pill ${
                               isLive ? "is-live" : "is-final"
                             }`}
-                            title={
-                              isLive
-                                ? "Arıza halen aktif — canlı süre"
-                                : "Toplam arıza süresi"
-                            }
+                            title={isLive ? t("faults.card.durationLive") : t("faults.card.durationFinal")}
                           >
                             {isLive ? (
                               <span
@@ -347,15 +334,15 @@ export function FaultListPage({
                     {/* Alt: zaman + atanan + yorum, daha modern info chip'leri */}
                     <div className="faults-card-info-grid">
                       {(() => {
-                        const parts = fmtDateParts(f.opened_at);
+                        const parts = fmtDateParts(f.opened_at, localeTag);
                         return (
                           <div
                             className="faults-card-info-chip faults-card-info-chip--time"
-                            title={fmtDate(f.opened_at)}
+                            title={fmtDate(f.opened_at, localeTag)}
                           >
                             <span className="material-symbols-outlined">schedule</span>
                             <div>
-                              <span className="faults-card-info-label">Açılış</span>
+                              <span className="faults-card-info-label">{t("faults.card.openedAt")}</span>
                               <strong className="faults-card-info-datetime">
                                 <span>{parts.date}</span>
                                 <span className="faults-card-info-time">{parts.time}</span>
@@ -367,10 +354,10 @@ export function FaultListPage({
                       <div className="faults-card-info-chip">
                         <span className="material-symbols-outlined">person</span>
                         <div>
-                          <span className="faults-card-info-label">Atanan</span>
+                          <span className="faults-card-info-label">{t("faults.card.assignedTo")}</span>
                           <strong>
                             {f.assigned_to_full_name ?? f.assigned_to_username ?? (
-                              <em className="faults-card-meta-dim">Atanmamış</em>
+                              <em className="faults-card-meta-dim">{t("faults.card.noAssignee")}</em>
                             )}
                           </strong>
                         </div>
@@ -378,9 +365,9 @@ export function FaultListPage({
                       <div className="faults-card-info-chip">
                         <span className="material-symbols-outlined">forum</span>
                         <div>
-                          <span className="faults-card-info-label">Yorum</span>
+                          <span className="faults-card-info-label">{t("faults.card.comment")}</span>
                           <strong>
-                            {f.comment_count > 0 ? `${f.comment_count} yorum` : "—"}
+                            {f.comment_count > 0 ? t("faults.card.commentCount", { count: f.comment_count }) : "—"}
                           </strong>
                         </div>
                       </div>

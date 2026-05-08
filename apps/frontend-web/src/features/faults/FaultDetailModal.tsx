@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
 
@@ -23,13 +24,6 @@ type Props = {
   onAddComment: (faultId: number, body: string) => Promise<void>;
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  open: "Açık",
-  assigned: "Atandı",
-  in_progress: "Devam Ediyor",
-  resolved: "Sahada Çözüldü",
-  closed: "Kapatıldı"
-};
 const STATUS_COLOR: Record<string, string> = {
   open: "#ef4444",
   assigned: "#f59e0b",
@@ -38,9 +32,9 @@ const STATUS_COLOR: Record<string, string> = {
   closed: "#64748b"
 };
 
-function fmtDate(iso?: string | null): string {
+function fmtDate(iso: string | null | undefined, localeTag: string): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("tr-TR");
+  return new Date(iso).toLocaleString(localeTag);
 }
 
 // Mini harita için sade direk pin'i
@@ -98,6 +92,8 @@ export function FaultDetailModal({
   onLoadComments,
   onAddComment
 }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [comments, setComments] = useState<FaultComment[]>([]);
   const [commentDraft, setCommentDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState(fault.note ?? "");
@@ -142,10 +138,10 @@ export function FaultDetailModal({
         const list = await onLoadComments(fault.id);
         setComments(list);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Yorumlar alınamadı.");
+        setError(err instanceof Error ? err.message : t("faults.detail.loadingComments"));
       }
     })();
-  }, [fault.id, onLoadComments]);
+  }, [fault.id, onLoadComments, t]);
 
   // ESC ile kapatma
   useEffect(() => {
@@ -157,8 +153,8 @@ export function FaultDetailModal({
   }, [onClose]);
 
   const userOptions = useMemo(
-    () => [...users].sort((a, b) => a.full_name.localeCompare(b.full_name, "tr")),
-    [users]
+    () => [...users].sort((a, b) => a.full_name.localeCompare(b.full_name, localeTag)),
+    [users, localeTag]
   );
 
   const canEdit = canAssign || fault.assigned_to_username === currentUsername;
@@ -366,16 +362,17 @@ export function FaultDetailModal({
         lat: d.lat,
         lon: d.lon,
         isRed: d.isRed,
-        name: dev?.name ?? `Cihaz #${d.deviceId}`,
+        name: dev?.name ?? `${t("common.device")} #${d.deviceId}`,
         code: dev?.code
       };
     });
 
     // Direk koordinat listesi (aralik icindekiler)
+    const poleFallback = i18n.language?.startsWith("tr") ? "Direk" : "Pole";
     const rangePoles = focusPoles.map((p) => ({
       id: p.id,
       sequence_no: p.sequence_no,
-      name: p.name ?? `Direk #${p.sequence_no}`,
+      name: p.name ?? `${poleFallback} #${p.sequence_no}`,
       latitude: p.latitude,
       longitude: p.longitude,
       isStart: p.id === fault.from_pole_id,
@@ -398,6 +395,7 @@ export function FaultDetailModal({
       rangePoles,
       deviceMarkers
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     gridSnapshot,
     devices,
@@ -406,7 +404,8 @@ export function FaultDetailModal({
     fault.from_pole_id,
     fault.to_pole_id,
     fault.from_pole_seq,
-    fault.to_pole_seq
+    fault.to_pole_seq,
+    i18n.language
   ]);
 
   const handleAssign = async (newUsername: string) => {
@@ -415,7 +414,7 @@ export function FaultDetailModal({
     try {
       await onAssign(fault.id, newUsername || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Atama yapılamadı.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.assignFailed"));
     } finally {
       setSaving(false);
     }
@@ -426,7 +425,7 @@ export function FaultDetailModal({
     try {
       await onUpdateStatus(fault.id, newStatus);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Durum güncellenemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
       setSaving(false);
     }
@@ -437,7 +436,7 @@ export function FaultDetailModal({
     try {
       await onUpdateNote(fault.id, noteDraft.trim() || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Not kaydedilemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
       setSaving(false);
     }
@@ -453,7 +452,7 @@ export function FaultDetailModal({
       setComments(list);
       setCommentDraft("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Yorum eklenemedi.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.commentFailed"));
     } finally {
       setSaving(false);
     }
@@ -471,7 +470,7 @@ export function FaultDetailModal({
           type="button"
           className="fault-modal-close"
           onClick={onClose}
-          aria-label="Kapat"
+          aria-label={t("common.close")}
         >
           <span className="material-symbols-outlined">close</span>
         </button>
@@ -489,7 +488,7 @@ export function FaultDetailModal({
               <span>{fault.line_name}</span>
               <span className="fault-modal-bc-sep">·</span>
               <strong>
-                Direk #{fault.from_pole_seq} — #{fault.to_pole_seq}
+                {t("faults.card.rangeText", { from: fault.from_pole_seq, to: fault.to_pole_seq })}
               </strong>
             </div>
           </div>
@@ -499,15 +498,15 @@ export function FaultDetailModal({
                 <span className="material-symbols-outlined">event</span>
               </span>
               <div>
-                <span className="fault-modal-time-pill-label">Açılış</span>
-                <strong>{fmtDate(fault.opened_at)}</strong>
+                <span className="fault-modal-time-pill-label">{t("faults.card.openedAt")}</span>
+                <strong>{fmtDate(fault.opened_at, localeTag)}</strong>
               </div>
             </div>
             <div
               className={`fault-modal-time-pill fault-modal-time-pill--elapsed ${
                 isLive ? "is-live" : "is-final"
               }`}
-              title={isLive ? "Arıza halen aktif — canlı süre" : "Toplam süre"}
+              title={isLive ? t("faults.card.durationLive") : t("faults.card.durationFinal")}
             >
               <span className="fault-modal-time-pill-icon">
                 {isLive ? (
@@ -518,7 +517,7 @@ export function FaultDetailModal({
               </span>
               <div>
                 <span className="fault-modal-time-pill-label">
-                  {isLive ? "Arıza Süresi" : "Toplam Süre"}
+                  {t("faults.detail.duration")}
                 </span>
                 <strong>{elapsedText}</strong>
               </div>
@@ -530,7 +529,7 @@ export function FaultDetailModal({
           {/* Sol kolon: harita + cihaz bilgisi */}
           <div className="fault-modal-left">
             <div className="fault-modal-section">
-              <h4>Konum</h4>
+              <h4>{t("faults.detail.mapTitle")}</h4>
               {mapView ? (
                 <div className="fault-modal-map-wrap">
                   <MapContainer
@@ -580,9 +579,9 @@ export function FaultDetailModal({
                         )}
                       >
                         <Tooltip>
-                          {p.name ?? `Direk #${p.sequence_no}`}
-                          {isFromFault ? " (Arıza başlangıcı)" : ""}
-                          {isToFault ? " (Arıza bitişi)" : ""}
+                          {p.name ?? `${t("faults.detail.tooltipPole")} #${p.sequence_no}`}
+                          {isFromFault ? ` (${t("faults.detail.tooltipFaultStart")})` : ""}
+                          {isToFault ? ` (${t("faults.detail.tooltipFaultEnd")})` : ""}
                         </Tooltip>
                       </Marker>
                     ))}
@@ -598,22 +597,22 @@ export function FaultDetailModal({
                           {d.code ? <><br /><span style={{ opacity: 0.7 }}>{d.code}</span></> : null}
                           <br />
                           <em style={{ color: d.isRed ? "#dc2626" : "#10b981" }}>
-                            {d.isRed ? "Arıza algıladı" : "Arıza algılamadı"}
+                            {d.isRed ? t("faults.detail.deviceDetectedFault") : t("faults.detail.deviceNoFault")}
                           </em>
                         </Tooltip>
                       </Marker>
                     ))}
                   </MapContainer>
                   <div className="fault-modal-map-legend">
-                    <span><i style={{ background: "#ef4444" }} /> Arıza aralığı (kırmızı kesik)</span>
-                    <span><i style={{ background: "#16a34a" }} /> Hat sağlıklı bölüm</span>
-                    <span><i className="fault-modal-legend-dot" style={{ background: "#dc2626" }} /> Arıza algılayan cihaz</span>
-                    <span><i className="fault-modal-legend-dot" style={{ background: "#10b981" }} /> Algılamayan cihaz</span>
+                    <span><i style={{ background: "#ef4444" }} /> {t("faults.detail.mapLegendFault")}</span>
+                    <span><i style={{ background: "#16a34a" }} /> {t("faults.detail.mapLegendOk")}</span>
+                    <span><i className="fault-modal-legend-dot" style={{ background: "#dc2626" }} /> {t("faults.detail.mapLegendDeviceRed")}</span>
+                    <span><i className="fault-modal-legend-dot" style={{ background: "#10b981" }} /> {t("faults.detail.mapLegendDeviceGreen")}</span>
                   </div>
                 </div>
               ) : (
                 <div className="fault-modal-map-empty">
-                  Harita verisi bulunamadı.
+                  {t("faults.detail.mapEmpty")}
                 </div>
               )}
             </div>
@@ -621,7 +620,7 @@ export function FaultDetailModal({
             {/* Arıza aralığındaki direklerin koordinat listesi */}
             {mapView && mapView.rangePoles.length > 0 ? (
               <div className="fault-modal-section">
-                <h4>Arıza Aralığındaki Direkler</h4>
+                <h4>{t("faults.detail.rangePolesTitle")}</h4>
                 <ul className="fault-modal-poles-list">
                   {mapView.rangePoles.map((rp) => (
                     <li
@@ -635,15 +634,15 @@ export function FaultDetailModal({
                         <strong>{rp.name}</strong>
                         {rp.isStart ? (
                           <span className="fault-modal-pole-tag fault-modal-pole-tag--red">
-                            Arıza başlangıcı
+                            {t("faults.detail.poleRangeStart")}
                           </span>
                         ) : rp.isEnd ? (
                           <span className="fault-modal-pole-tag fault-modal-pole-tag--green">
-                            Arıza bitişi
+                            {t("faults.detail.poleRangeEnd")}
                           </span>
                         ) : null}
                       </div>
-                      <span className="fault-modal-pole-coords" title="Enlem, Boylam">
+                      <span className="fault-modal-pole-coords" title={t("faults.detail.poleCoordsTooltip")}>
                         {rp.latitude.toFixed(6)}, {rp.longitude.toFixed(6)}
                       </span>
                     </li>
@@ -653,13 +652,13 @@ export function FaultDetailModal({
             ) : null}
 
             <div className="fault-modal-section">
-              <h4>Arıza Tespit Eden Cihazlar</h4>
+              <h4>{t("faults.detail.devicesTitle")}</h4>
               <div className="fault-modal-devices">
                 <div className="fault-modal-device fault-modal-device--red">
                   <span className="fault-modal-device-dot" />
                   <div>
                     <span className="fault-modal-device-role">
-                      Son arıza algılayan cihaz
+                      {t("faults.detail.deviceLastRedRole")}
                     </span>
                     <strong>{fault.last_red_device_name ?? "—"}</strong>
                     {fault.last_red_device_code ? (
@@ -674,10 +673,10 @@ export function FaultDetailModal({
                   <span className="fault-modal-device-dot" />
                   <div>
                     <span className="fault-modal-device-role">
-                      İlk arıza algılamayan cihaz
+                      {t("faults.detail.deviceFirstGreenRole")}
                     </span>
                     <strong>
-                      {fault.first_green_device_name ?? "Hat ucu (cihaz yok)"}
+                      {fault.first_green_device_name ?? t("faults.detail.deviceFirstGreenLineEnd")}
                     </strong>
                     {fault.first_green_device_code ? (
                       <small>{fault.first_green_device_code}</small>
@@ -686,8 +685,7 @@ export function FaultDetailModal({
                 </div>
               </div>
               <p className="fault-modal-devices-hint">
-                Bu iki cihaz arasındaki direk-direk bölgesi sahada arıza
-                yapılması muhtemel kısımdır.
+                {t("faults.detail.devicesHint")}
               </p>
             </div>
           </div>
@@ -701,19 +699,19 @@ export function FaultDetailModal({
                   <span className="material-symbols-outlined">assignment_ind</span>
                 </span>
                 <div>
-                  <h4>Sorumluluk</h4>
-                  <p>Arızadan sorumlu kişi ve mevcut durum</p>
+                  <h4>{t("faults.detail.tickets")}</h4>
+                  <p>{t("faults.detail.ticketsHint")}</p>
                 </div>
               </div>
               <div className="fault-modal-field">
-                <label className="fault-modal-label">Atanan kullanıcı</label>
+                <label className="fault-modal-label">{t("faults.detail.assignee")}</label>
                 {canAssign ? (
                   <select
                     value={fault.assigned_to_username ?? ""}
                     onChange={(e) => void handleAssign(e.target.value)}
                     disabled={saving}
                   >
-                    <option value="">— atanmamış —</option>
+                    <option value="">{t("faults.detail.assigneeUnset")}</option>
                     {userOptions.map((u) => (
                       <option key={u.id} value={u.username}>
                         {u.full_name} ({u.username})
@@ -735,13 +733,13 @@ export function FaultDetailModal({
                         </div>
                       </>
                     ) : (
-                      <span className="fault-modal-assignee-empty">Atanmamış</span>
+                      <span className="fault-modal-assignee-empty">{t("faults.detail.assigneeEmpty")}</span>
                     )}
                   </div>
                 )}
               </div>
               <div className="fault-modal-field">
-                <label className="fault-modal-label">Durum</label>
+                <label className="fault-modal-label">{t("faults.detail.statusLabel")}</label>
                 <div className="fault-modal-status-grid">
                   {(["assigned", "in_progress", "resolved", "closed"] as const).map((s) => {
                     const active = fault.status === s;
@@ -768,7 +766,7 @@ export function FaultDetailModal({
                           className="fault-modal-status-card-dot"
                           style={{ background: color }}
                         />
-                        <span>{STATUS_LABEL[s]}</span>
+                        <span>{t(`faults.status.${s}`)}</span>
                       </button>
                     );
                   })}
@@ -783,15 +781,15 @@ export function FaultDetailModal({
                   <span className="material-symbols-outlined">edit_note</span>
                 </span>
                 <div>
-                  <h4>Kısa Not</h4>
-                  <p>Hızlı bir özet — saha ekibi için ipucu</p>
+                  <h4>{t("faults.detail.writeNote")}</h4>
+                  <p>{t("faults.detail.writeNoteHint")}</p>
                 </div>
               </div>
               <textarea
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
                 disabled={saving || !canEdit}
-                placeholder="Örn: Direk #2 yakınında ağaç dalı temas etmiş gibi…"
+                placeholder={t("faults.detail.writeNotePlaceholder")}
               />
               {canEdit ? (
                 <button
@@ -801,7 +799,7 @@ export function FaultDetailModal({
                   disabled={saving}
                 >
                   <span className="material-symbols-outlined">save</span>
-                  Notu Kaydet
+                  {t("faults.detail.saveNote")}
                 </button>
               ) : null}
             </div>
@@ -814,13 +812,13 @@ export function FaultDetailModal({
             <div className="fault-modal-section fault-modal-section--comments">
               <h4>
                 <span className="material-symbols-outlined" aria-hidden="true">forum</span>
-                Saha Raporu / Yorumlar
+                {t("faults.detail.commentsTitle")}
                 {comments.length > 0 ? <span className="fault-modal-count">{comments.length}</span> : null}
               </h4>
               <ul className="fault-modal-comments">
                 {comments.length === 0 ? (
                   <li className="fault-modal-comments-empty">
-                    Henüz yorum yok. Saha gözlemi veya yapılan işlemleri buradan paylaşın.
+                    {t("faults.detail.commentsHint")}
                   </li>
                 ) : (
                   comments.map((c) => (
@@ -832,7 +830,7 @@ export function FaultDetailModal({
                           </span>
                           <strong>{c.author_username}</strong>
                         </span>
-                        <span className="fault-modal-comment-time">{fmtDate(c.created_at)}</span>
+                        <span className="fault-modal-comment-time">{fmtDate(c.created_at, localeTag)}</span>
                       </header>
                       <p>{c.body}</p>
                     </li>
@@ -843,7 +841,7 @@ export function FaultDetailModal({
                 <div className="fault-modal-comment-add">
                   <textarea
                     rows={3}
-                    placeholder="Saha gözlemi, yapılan bakım/onarım adımları, parça değişimi…"
+                    placeholder={t("faults.detail.commentsAddPlaceholder")}
                     value={commentDraft}
                     onChange={(e) => setCommentDraft(e.target.value)}
                     disabled={saving}
@@ -854,7 +852,7 @@ export function FaultDetailModal({
                     disabled={saving || !commentDraft.trim()}
                   >
                     <span className="material-symbols-outlined">send</span>
-                    Yorum Ekle
+                    {t("faults.detail.addCommentBtn")}
                   </button>
                 </div>
               ) : null}

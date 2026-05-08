@@ -5,6 +5,7 @@
  * filtrelerine saygi gosterir (devices listesi App tarafindan filtrelenmis).
  */
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { AlarmEvent, DeviceRow } from "../../shared/types";
 import type { GridSnapshot } from "../../shared/api";
@@ -30,6 +31,8 @@ export function GridOverviewPage({
   onSelectDevice,
   selectedDeviceId
 }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   // Arızalı cihazların aktif alarm bilgisi (en güncel onaylanmamış)
   const deviceFaults = useMemo<Map<number, DeviceFault[]>>(() => {
     const m = new Map<number, DeviceFault[]>();
@@ -96,11 +99,11 @@ export function GridOverviewPage({
       const region = line ? regionById.get(line.region_id) : undefined;
       const segLabel =
         seg.from_pole_seq !== null && seg.to_pole_seq !== null
-          ? `Direk #${seg.from_pole_seq} → #${seg.to_pole_seq}`
+          ? t("dashboard.overview.segmentLabel", { from: seg.from_pole_seq, to: seg.to_pole_seq })
           : null;
       deviceMeta.set(seg.device_id, {
         regionId: region?.id ?? null,
-        regionName: region?.name ?? "Bölgesiz",
+        regionName: region?.name ?? t("dashboard.overview.noRegionGroup"),
         regionColor: region?.color ?? null,
         lineId: line?.id ?? null,
         lineName: line?.name ?? null,
@@ -114,7 +117,7 @@ export function GridOverviewPage({
       const meta = deviceMeta.get(dev.id);
       const region = ensureRegion(
         meta?.regionId ?? null,
-        meta?.regionName ?? "Bölge atanmamış",
+        meta?.regionName ?? t("dashboard.overview.noRegionGroup"),
         meta?.regionColor ?? null
       );
       const lineKey: number | "none" = meta?.lineId ?? "none";
@@ -122,7 +125,7 @@ export function GridOverviewPage({
       if (!line) {
         line = {
           lineId: meta?.lineId ?? -1,
-          lineName: meta?.lineName ?? "Hat atanmamış",
+          lineName: meta?.lineName ?? t("dashboard.overview.noLineGroup"),
           lineCode: meta?.lineCode ?? "",
           lineColor: meta?.lineColor ?? null,
           devices: []
@@ -136,17 +139,18 @@ export function GridOverviewPage({
     const sortedRegions: RegionGroup[] = Array.from(regions.values()).sort((a, b) => {
       if (a.regionId === null) return 1;
       if (b.regionId === null) return -1;
-      return a.regionName.localeCompare(b.regionName, "tr");
+      return a.regionName.localeCompare(b.regionName, localeTag);
     });
     return sortedRegions.map((r) => ({
       ...r,
       lines: Array.from(r.lines.values()).sort((a, b) => {
         if (a.lineId === -1) return 1;
         if (b.lineId === -1) return -1;
-        return a.lineName.localeCompare(b.lineName, "tr");
+        return a.lineName.localeCompare(b.lineName, localeTag);
       })
     }));
-  }, [devices, gridSnapshot]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devices, gridSnapshot, i18n.language]);
 
   // Hangi bölge/hat açık (default hepsi açık)
   const [collapsedRegions, setCollapsedRegions] = useState<Set<number | "none">>(new Set());
@@ -192,10 +196,8 @@ export function GridOverviewPage({
     return (
       <section className="grid-overview-empty">
         <span className="material-symbols-outlined">inbox</span>
-        <h3>Cihaz bulunamadı</h3>
-        <p className="helper-text">
-          Filtreyi temizleyin veya Mühendislik &gt; Hat Yönetimi'nden bir hat oluşturup cihaz atayın.
-        </p>
+        <h3>{t("dashboard.overview.noDevices")}</h3>
+        <p className="helper-text">{t("dashboard.overview.noDevicesHint")}</p>
       </section>
     );
   }
@@ -204,15 +206,15 @@ export function GridOverviewPage({
     <section className="grid-overview-page">
       <div className="grid-overview-summary">
         <div className="grid-overview-summary-card">
-          <span className="grid-overview-summary-label">Toplam cihaz</span>
+          <span className="grid-overview-summary-label">{t("dashboard.overview.totalDevices")}</span>
           <strong>{stats.total}</strong>
         </div>
         <div className="grid-overview-summary-card grid-overview-summary-card--ok">
-          <span className="grid-overview-summary-label">Çevrimiçi</span>
+          <span className="grid-overview-summary-label">{t("dashboard.overview.online")}</span>
           <strong>{stats.onlineCount}</strong>
         </div>
         <div className="grid-overview-summary-card grid-overview-summary-card--alarm">
-          <span className="grid-overview-summary-label">Aktif arıza</span>
+          <span className="grid-overview-summary-label">{t("dashboard.overview.activeFaults")}</span>
           <strong>{stats.alarmCount}</strong>
         </div>
       </div>
@@ -248,9 +250,9 @@ export function GridOverviewPage({
                 ) : null}
                 <strong>{region.regionName}</strong>
                 <span className="grid-overview-region-stats">
-                  {region.lines.length} hat · {regionDeviceCount} cihaz
+                  {t("dashboard.overview.regionStats", { lines: region.lines.length, devices: regionDeviceCount })}
                   {regionAlarmCount > 0 ? (
-                    <span className="grid-overview-alarm-pill">{regionAlarmCount} arıza</span>
+                    <span className="grid-overview-alarm-pill">{t("dashboard.overview.faultCount", { count: regionAlarmCount })}</span>
                   ) : null}
                 </span>
               </button>
@@ -283,10 +285,10 @@ export function GridOverviewPage({
                             ) : null}
                           </span>
                           <span className="grid-overview-line-stats">
-                            {line.devices.length} cihaz
+                            {t("dashboard.overview.lineDeviceCount", { count: line.devices.length })}
                             {lineAlarmCount > 0 ? (
                               <span className="grid-overview-alarm-pill">
-                                {lineAlarmCount} arıza
+                                {t("dashboard.overview.faultCount", { count: lineAlarmCount })}
                               </span>
                             ) : null}
                           </span>
@@ -296,12 +298,12 @@ export function GridOverviewPage({
                           <table className="grid-overview-table">
                             <thead>
                               <tr>
-                                <th style={{ width: 40 }}>Durum</th>
-                                <th>Cihaz</th>
-                                <th>Segment</th>
-                                <th>Arıza</th>
-                                <th style={{ width: 90 }}>Batarya</th>
-                                <th style={{ width: 140 }}>Son veri</th>
+                                <th style={{ width: 40 }}>{t("dashboard.overview.tableStatus")}</th>
+                                <th>{t("dashboard.overview.tableDevice")}</th>
+                                <th>{t("dashboard.overview.tableSegment")}</th>
+                                <th>{t("dashboard.overview.tableFault")}</th>
+                                <th style={{ width: 90 }}>{t("dashboard.overview.tableBattery")}</th>
+                                <th style={{ width: 140 }}>{t("dashboard.overview.tableLastData")}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -329,10 +331,10 @@ export function GridOverviewPage({
                                         }`}
                                         title={
                                           isAlarmed
-                                            ? "Arıza"
+                                            ? t("dashboard.overview.tooltipFault")
                                             : isOnline
-                                              ? "Çevrimiçi"
-                                              : "Çevrimdışı"
+                                              ? t("dashboard.overview.tooltipOnline")
+                                              : t("dashboard.overview.tooltipOffline")
                                         }
                                       />
                                     </td>
@@ -378,7 +380,7 @@ export function GridOverviewPage({
                                     </td>
                                     <td className="grid-overview-last">
                                       {device.lastUpdateAt
-                                        ? formatRelative(device.lastUpdateAt)
+                                        ? formatRelative(device.lastUpdateAt, localeTag, t)
                                         : <span className="helper-text">—</span>}
                                     </td>
                                   </tr>
@@ -399,11 +401,15 @@ export function GridOverviewPage({
   );
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(
+  iso: string,
+  localeTag: string,
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string {
   const sec = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (sec < 5) return "şimdi";
-  if (sec < 60) return `${sec} sn önce`;
-  if (sec < 3600) return `${Math.round(sec / 60)} dk önce`;
-  if (sec < 86400) return `${Math.round(sec / 3600)} sa önce`;
-  return new Date(iso).toLocaleString("tr-TR");
+  if (sec < 5) return t("common.now");
+  if (sec < 60) return t("common.secondsAgoShort", { count: sec });
+  if (sec < 3600) return t("common.minutesAgoShort", { count: Math.round(sec / 60) });
+  if (sec < 86400) return t("common.hoursAgoShort", { count: Math.round(sec / 3600) });
+  return new Date(iso).toLocaleString(localeTag);
 }

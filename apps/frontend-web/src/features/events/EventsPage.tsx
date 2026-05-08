@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { TablePagination } from "../../components/TablePagination";
 import type { DeviceRow, SystemEvent } from "../../shared/types";
@@ -36,6 +37,8 @@ function extractSignalKey(metadataJson: string | null | undefined): string | nul
 }
 
 export function EventsPage({ events, loading, devices }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
@@ -101,7 +104,7 @@ export function EventsPage({ events, loading, devices }: Props) {
     mesaj: item.message,
     kullanici: item.actor_username ?? "-",
     cihaz: item.device_code ?? "-",
-    tarih: new Date(item.created_at).toLocaleString("tr-TR")
+    tarih: new Date(item.created_at).toLocaleString(localeTag)
   }));
 
   const handleExport = () => {
@@ -111,14 +114,22 @@ export function EventsPage({ events, loading, devices }: Props) {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `olaylar-${now}.json`;
+      const baseJson = i18n.language?.startsWith("tr") ? "olaylar" : "events";
+      anchor.download = `${baseJson}-${now}.json`;
       anchor.click();
       URL.revokeObjectURL(url);
       setShowExportModal(false);
       return;
     }
 
-    const headers = ["Öncelik", "Kategori", "Mesaj", "Kullanıcı", "Cihaz", "Tarih"];
+    const headers = [
+      t("events.table.priority"),
+      t("events.table.category"),
+      t("events.table.message"),
+      t("events.table.user"),
+      t("events.table.device"),
+      t("events.table.date"),
+    ];
     const rows = exportRows.map((item) =>
       [item.oncelik, item.kategori, item.mesaj, item.kullanici, item.cihaz, item.tarih]
         .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
@@ -129,7 +140,8 @@ export function EventsPage({ events, loading, devices }: Props) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `olaylar-${now}.csv`;
+    const base = i18n.language?.startsWith("tr") ? "olaylar" : "events";
+    anchor.download = `${base}-${now}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
     setShowExportModal(false);
@@ -141,13 +153,13 @@ export function EventsPage({ events, loading, devices }: Props) {
         <div className="alarms-toolbar events-toolbar">
           <input
             className="device-search-input"
-            placeholder="Olay ara..."
+            placeholder={t("events.search")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <div className="alarms-filter-row">
             <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-              <option value="all">Tüm kategoriler</option>
+              <option value="all">{t("events.filterAllCategories")}</option>
               {categories.map((category) => (
                 <option key={category} value={category}>
                   {categoryFilterLabel(category)}
@@ -155,14 +167,14 @@ export function EventsPage({ events, loading, devices }: Props) {
               ))}
             </select>
             <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}>
-              <option value="all">Tüm öncelikler</option>
+              <option value="all">{t("events.filterAllSeverities")}</option>
               <option value="info">{severityLabelTr("info")}</option>
               <option value="warning">{severityLabelTr("warning")}</option>
               <option value="error">{severityLabelTr("error")}</option>
               <option value="critical">{severityLabelTr("critical")}</option>
             </select>
             <button className="secondary-btn action-btn" type="button" onClick={() => setShowExportModal(true)}>
-              Export
+              {t("common.export")}
             </button>
           </div>
         </div>
@@ -171,19 +183,19 @@ export function EventsPage({ events, loading, devices }: Props) {
           <table className="values-table events-table">
             <thead>
               <tr>
-                <th className="event-col-date">Tarih</th>
-                <th>Öncelik</th>
-                <th>Kategori</th>
-                <th>Mesaj</th>
-                <th className="event-col-user">Kullanıcı</th>
-                <th className="event-col-device">Cihaz</th>
-                <th className="event-col-source">Kaynak</th>
+                <th className="event-col-date">{t("events.table.date")}</th>
+                <th>{t("events.table.priority")}</th>
+                <th>{t("events.table.category")}</th>
+                <th>{t("events.table.message")}</th>
+                <th className="event-col-user">{t("events.table.user")}</th>
+                <th className="event-col-device">{t("events.table.device")}</th>
+                <th className="event-col-source">{t("events.table.source")}</th>
               </tr>
             </thead>
             <tbody>
               {pagedEvents.map((item) => (
                 <tr key={item.id}>
-                  <td className="event-col-date">{new Date(item.created_at).toLocaleString("tr-TR")}</td>
+                  <td className="event-col-date">{new Date(item.created_at).toLocaleString(localeTag)}</td>
                   <td className="event-col-priority">
                     <span className={severityPillClass(item.severity)} title={item.severity}>
                       {severityLabelTr(item.severity)}
@@ -203,7 +215,7 @@ export function EventsPage({ events, loading, devices }: Props) {
             </tbody>
           </table>
         </div>
-        {!loading && filteredEvents.length === 0 ? <p className="helper-text">Filtreye uygun olay bulunamadı.</p> : null}
+        {!loading && filteredEvents.length === 0 ? <p className="helper-text">{t("events.noResults")}</p> : null}
         {filteredEvents.length > 0 ? (
           <TablePagination
             totalItems={filteredEvents.length}
@@ -211,17 +223,17 @@ export function EventsPage({ events, loading, devices }: Props) {
             pageSize={pageSize}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
-            itemLabel="olay"
+            itemLabel={t("events.itemLabel")}
           />
         ) : null}
       </div>
       {showExportModal ? (
         <div className="settings-modal-backdrop">
           <div className="settings-modal export-modal">
-            <h3>Olayları Dışa Aktar</h3>
-            <p className="helper-text">Filtrelenmiş olaylar seçtiğiniz formatta indirilecektir.</p>
+            <h3>{t("events.export.title")}</h3>
+            <p className="helper-text">{t("events.export.hint")}</p>
             <label>
-              Format
+              {t("events.export.format")}
               <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as "csv" | "json")}>
                 <option value="csv">CSV</option>
                 <option value="json">JSON</option>
@@ -229,10 +241,10 @@ export function EventsPage({ events, loading, devices }: Props) {
             </label>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowExportModal(false)}>
-                İptal
+                {t("common.cancel")}
               </button>
               <button type="button" className="primary-btn" onClick={handleExport}>
-                İndir
+                {t("events.export.download")}
               </button>
             </div>
           </div>

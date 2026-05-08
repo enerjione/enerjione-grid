@@ -1,62 +1,61 @@
-/** Olay listesi ve filtreler için Türkçe etiketler (API hâlâ İngilizce kod kullanır). */
+/** Olay listesi ve filtreler için i18n etiketleri. API hâlâ İngilizce kod kullanır. */
 
-const SEVERITY_LABELS: Record<string, string> = {
-  info: "Bilgi",
-  warning: "Uyarı",
-  error: "Hata",
-  critical: "Kritik",
-  debug: "Ayrıntı"
+import i18n from "../../shared/i18n";
+
+const SEVERITY_KEY: Record<string, string> = {
+  info: "events.severity.info",
+  warning: "events.severity.warning",
+  error: "events.severity.error",
+  critical: "events.severity.critical",
+  debug: "events.severity.debug",
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  auth: "Giriş ve oturum",
-  user: "Kullanıcı yönetimi",
-  alarm: "Alarmlar",
-  "alarm-rule": "Alarm kuralı",
-  alarm_assignment: "Alarm ataması",
-  alarm_comment: "Alarm yorumu",
-  notification: "Bildirim gönderimi",
-  settings: "Bildirim ayarları",
-  "project-settings": "Proje ayarları",
-  outbound: "Dış sistemlere aktarım",
-  outbound_target: "Outbound hedefleri",
-  telemetry: "Cihaz telemetrisi",
-  device: "Cihaz yönetimi",
-  signal: "Sinyal kataloğu",
-  gateway: "Gateway yönetimi",
-  grid: "Hat yönetimi",
-  "responsibility-area": "Sorumluluk alanı",
-  responsibility_area: "Sorumluluk alanı",
-  fault: "Hat arızası",
-  fault_assignment: "Arıza ataması",
-  fault_comment: "Arıza yorumu",
-  system: "Sistem"
+const CATEGORY_KEY: Record<string, string> = {
+  auth: "events.category.auth",
+  user: "events.category.user",
+  alarm: "events.category.alarm",
+  "alarm-rule": "events.category.alarmRule",
+  alarm_assignment: "events.category.alarmAssignment",
+  alarm_comment: "events.category.alarmComment",
+  notification: "events.category.notification",
+  settings: "events.category.settings",
+  "project-settings": "events.category.projectSettings",
+  outbound: "events.category.outbound",
+  outbound_target: "events.category.outboundTarget",
+  telemetry: "events.category.telemetry",
+  device: "events.category.device",
+  signal: "events.category.signal",
+  gateway: "events.category.gateway",
+  grid: "events.category.grid",
+  "responsibility-area": "events.category.responsibilityArea",
+  responsibility_area: "events.category.responsibilityArea",
+  fault: "events.category.fault",
+  fault_assignment: "events.category.faultAssignment",
+  fault_comment: "events.category.faultComment",
+  system: "events.category.system",
 };
 
-/** Bazi kategoriler "key.like.this" yerine isim turetilebilir; yine de
- *  bilinmeyen bir kategori gelirse insan-okur formata cevirelim:
- *    "alarm-rule"           -> "Alarm rule"
- *    "responsibility_area"  -> "Responsibility area"
- *  Bu basliklar sadece fallback amacli; "Diger (xxx)" benzeri parantezli
- *  ham gosterim KULLANILMAZ. */
+/** Bilinmeyen kategori string'ini insan okur formata çevirir:
+ *    "alarm-rule" -> "Alarm rule" */
 function _humanize(category: string): string {
-  if (!category) return "Diğer";
+  if (!category) return i18n.t("events.category.other");
   const cleaned = category.replace(/[_-]+/g, " ").trim();
-  if (!cleaned) return "Diğer";
+  if (!cleaned) return i18n.t("events.category.other");
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
 export function severityLabelTr(severity: string): string {
-  return SEVERITY_LABELS[severity] ?? severity;
+  const key = SEVERITY_KEY[severity];
+  return key ? i18n.t(key) : severity;
 }
 
 export function categoryLabelTr(category: string): string {
-  return CATEGORY_LABELS[category] ?? _humanize(category);
+  const key = CATEGORY_KEY[category];
+  return key ? i18n.t(key) : _humanize(category);
 }
 
-/** Filtre seçeneklerinde: bilinmeyen kategori satır içi de gösterilsin. */
 export function categoryFilterLabel(category: string): string {
-  return CATEGORY_LABELS[category] ?? _humanize(category);
+  return categoryLabelTr(category);
 }
 
 export function severityPillClass(severity: string): string {
@@ -90,7 +89,7 @@ const CATEGORY_MOD: Record<string, string> = {
   fault: "alarm",
   fault_assignment: "alarm",
   fault_comment: "alarm",
-  system: "system"
+  system: "system",
 };
 
 export function categoryPillClass(category: string): string {

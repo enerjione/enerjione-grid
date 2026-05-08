@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { TablePagination } from "../../components/TablePagination";
 import type { AlarmComment, AlarmEvent, DeviceRow, UserRead } from "../../shared/types";
@@ -34,6 +35,8 @@ export function AlarmsPage({
   onAcknowledgeAll,
   onResetAll
 }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState<"all" | "critical" | "warning" | "info">("all");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned" | "unassigned">("all");
@@ -75,12 +78,12 @@ export function AlarmsPage({
     );
   };
 
-  /** Seviye kodundan Türkçe etiket. */
+  /** Seviye kodundan i18n etiketi. Bilinmeyen seviye için ham değer döner. */
   const levelLabelTr = (level: string): string => {
     const k = level.toLowerCase();
-    if (k === "info") return "Bilgi";
-    if (k === "warning") return "Uyarı";
-    if (k === "critical") return "Kritik";
+    if (k === "info" || k === "warning" || k === "critical" || k === "error" || k === "debug") {
+      return t(`alarms.level.${k}`);
+    }
     return level;
   };
 
@@ -193,7 +196,7 @@ export function AlarmsPage({
         const comments = await onLoadComments(selectedAlarmId);
         setCommentsByAlarm((prev) => ({ ...prev, [selectedAlarmId]: comments }));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Yorumlar yüklenemedi.");
+        setError(err instanceof Error ? err.message : t("alarms.errors.loadComments"));
       }
     };
     void load();
@@ -205,7 +208,7 @@ export function AlarmsPage({
     try {
       await onAssign(alarmId, assignedTo || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Alarm ataması yapılamadı.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.assignFailed"));
     } finally {
       setSaving(false);
     }
@@ -223,7 +226,7 @@ export function AlarmsPage({
       setCommentsByAlarm((prev) => ({ ...prev, [selectedAlarmId]: refreshed }));
       setCommentDraft("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Yorum kaydedilemedi.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.commentFailed"));
     } finally {
       setSaving(false);
     }
@@ -231,14 +234,14 @@ export function AlarmsPage({
 
   const handleAcknowledge = async (alarmId: number) => {
     const alarm = alarms.find((a) => a.id === alarmId);
-    const label = alarm ? `"${alarm.title}"` : "bu alarm";
-    if (!window.confirm(`${label} onaylansın mı?`)) return;
+    const label = alarm ? `"${alarm.title}"` : t("alarms.confirmAckThis");
+    if (!window.confirm(t("alarms.confirmAck", { label }))) return;
     setSaving(true);
     setError("");
     try {
       await onAcknowledge(alarmId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Alarm onaylanamadı.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.ackFailed"));
     } finally {
       setSaving(false);
     }
@@ -250,14 +253,14 @@ export function AlarmsPage({
     try {
       await onReset(alarmId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Alarm resetlenemedi.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.resetFailed"));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (alarmId: number) => {
-    if (!window.confirm("Bu alarm kalici olarak silinsin mi?")) return;
+    if (!window.confirm(t("alarms.confirmDelete"))) return;
     setSaving(true);
     setError("");
     try {
@@ -267,7 +270,7 @@ export function AlarmsPage({
         setDetailModalOpen(false);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Alarm silinemedi.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.deleteFailed"));
     } finally {
       setSaving(false);
     }
@@ -285,8 +288,8 @@ export function AlarmsPage({
     if (activeCount === 0 && pendingCount === 0) return;
     const message =
       pendingCount > 0
-        ? `${activeCount} aktif alarm onaylanacak ve normale dönmüş ${pendingCount} kayıt silinecek. Onaylıyor musunuz?`
-        : `${activeCount} aktif alarm onaylanacak. Onaylıyor musunuz?`;
+        ? t("alarms.confirmAckAllPending", { active: activeCount, pending: pendingCount })
+        : t("alarms.confirmAckAllActive", { active: activeCount });
     if (!window.confirm(message)) return;
     setSaving(true);
     setError("");
@@ -303,7 +306,7 @@ export function AlarmsPage({
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Tüm alarmlar onaylanamadı.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.ackAllFailed"));
     } finally {
       setSaving(false);
     }
@@ -315,7 +318,7 @@ export function AlarmsPage({
     try {
       await onResetAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Tüm alarmlar resetlenemedi.");
+      setError(err instanceof Error ? err.message : t("alarms.errors.resetAllFailed"));
     } finally {
       setSaving(false);
     }
@@ -325,8 +328,8 @@ export function AlarmsPage({
     if (!selectedAlarm) {
       return (
         <div className={mode === "modal" ? "alarm-detail-modal-body" : undefined}>
-          <h3>Alarm Detayı</h3>
-          <p className="helper-text">Detay için soldan bir alarm seçin.</p>
+          <h3>{t("alarms.detail.title")}</h3>
+          <p className="helper-text">{t("alarms.detail.selectHint")}</p>
           {error ? <p className="error-text">{error}</p> : null}
         </div>
       );
@@ -335,10 +338,10 @@ export function AlarmsPage({
     const deviceInfo = deviceLabelById.get(selectedAlarm.device_id);
     const comments = commentsByAlarm[selectedAlarm.id] ?? [];
     const stateLabel = selectedAlarm.reset
-      ? "Normale döndü"
+      ? t("alarms.stateReset")
       : selectedAlarm.acknowledged
-        ? "Onaylandı"
-        : "Açık";
+        ? t("alarms.stateAck")
+        : t("alarms.stateOpen");
     const stateClass = selectedAlarm.reset ? "state-reset" : selectedAlarm.acknowledged ? "state-ack" : "state-open";
     return (
       <div className={mode === "modal" ? "alarm-detail-modal-body alarm-detail-2col" : "alarm-detail-2col"}>
@@ -356,10 +359,10 @@ export function AlarmsPage({
         <div className="alarm-detail-grid">
           {/* SOL: Detaylar + atama */}
           <section className="alarm-detail-info">
-            <h4 className="alarm-detail-section-title">Detaylar</h4>
+            <h4 className="alarm-detail-section-title">{t("alarms.detail.sectionDetails")}</h4>
             <dl className="alarm-detail-dl">
               <div className="alarm-detail-dl-row">
-                <dt>Cihaz</dt>
+                <dt>{t("alarms.detail.fieldDevice")}</dt>
                 <dd>
                   {deviceInfo ? (
                     <>
@@ -372,39 +375,39 @@ export function AlarmsPage({
                 </dd>
               </div>
               <div className="alarm-detail-dl-row">
-                <dt>Seviye</dt>
+                <dt>{t("alarms.detail.fieldLevel")}</dt>
                 <dd>
                   <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{levelLabelTr(selectedAlarm.level)}</span>
                 </dd>
               </div>
               <div className="alarm-detail-dl-row">
-                <dt>Durum</dt>
+                <dt>{t("alarms.detail.fieldStatus")}</dt>
                 <dd>
                   <span className={`alarm-state ${stateClass}`}>{stateLabel}</span>
                 </dd>
               </div>
               <div className="alarm-detail-dl-row">
-                <dt>Oluşma</dt>
+                <dt>{t("alarms.detail.fieldOpened")}</dt>
                 <dd>
-                  <span className="alarm-detail-strong">{created.toLocaleDateString("tr-TR")}</span>
-                  <span className="alarm-detail-mono"> {created.toLocaleTimeString("tr-TR")}</span>
+                  <span className="alarm-detail-strong">{created.toLocaleDateString(localeTag)}</span>
+                  <span className="alarm-detail-mono"> {created.toLocaleTimeString(localeTag)}</span>
                 </dd>
               </div>
               {selectedAlarm.reset && selectedAlarm.reset_at ? (
                 <div className="alarm-detail-dl-row">
-                  <dt>Normale Dönüş</dt>
+                  <dt>{t("alarms.detail.fieldReset")}</dt>
                   <dd>
-                    <span className="alarm-detail-strong">{new Date(selectedAlarm.reset_at).toLocaleDateString("tr-TR")}</span>
-                    <span className="alarm-detail-mono"> {new Date(selectedAlarm.reset_at).toLocaleTimeString("tr-TR")}</span>
+                    <span className="alarm-detail-strong">{new Date(selectedAlarm.reset_at).toLocaleDateString(localeTag)}</span>
+                    <span className="alarm-detail-mono"> {new Date(selectedAlarm.reset_at).toLocaleTimeString(localeTag)}</span>
                   </dd>
                 </div>
               ) : null}
               {selectedAlarm.acknowledged && selectedAlarm.acknowledged_at ? (
                 <div className="alarm-detail-dl-row">
-                  <dt>Onay</dt>
+                  <dt>{t("alarms.detail.fieldAck")}</dt>
                   <dd>
-                    <span className="alarm-detail-strong">{new Date(selectedAlarm.acknowledged_at).toLocaleDateString("tr-TR")}</span>
-                    <span className="alarm-detail-mono"> {new Date(selectedAlarm.acknowledged_at).toLocaleTimeString("tr-TR")}</span>
+                    <span className="alarm-detail-strong">{new Date(selectedAlarm.acknowledged_at).toLocaleDateString(localeTag)}</span>
+                    <span className="alarm-detail-mono"> {new Date(selectedAlarm.acknowledged_at).toLocaleTimeString(localeTag)}</span>
                   </dd>
                 </div>
               ) : null}
@@ -412,14 +415,14 @@ export function AlarmsPage({
 
             <div className="alarm-detail-assign-block">
               <label className="alarm-detail-assign-label">
-                <span>Sorumluya Ata</span>
+                <span>{t("alarms.detail.assignTo")}</span>
                 <select
                   className="alarm-detail-select"
                   disabled={saving}
                   value={selectedAlarm.assigned_to ?? ""}
                   onChange={(event) => void handleAssign(selectedAlarm.id, event.target.value)}
                 >
-                  <option value="">Atanmamış</option>
+                  <option value="">{t("alarms.detail.assignNone")}</option>
                   {users.map((user) => (
                     <option key={user.id} value={user.username}>
                       {user.full_name}
@@ -433,7 +436,7 @@ export function AlarmsPage({
           {/* SAĞ: Yorumlar */}
           <section className="alarm-detail-comments">
             <div className="alarm-detail-comments-header">
-              <h4 className="alarm-detail-section-title">Yorumlar</h4>
+              <h4 className="alarm-detail-section-title">{t("alarms.detail.sectionComments")}</h4>
               <span className="alarm-detail-comments-count">{comments.length}</span>
             </div>
             <div className="alarm-detail-comments-list">
@@ -445,26 +448,26 @@ export function AlarmsPage({
                     </span>
                     <div className="alarm-comment-card-meta-text">
                       <strong>{comment.author_username}</strong>
-                      <span>{new Date(comment.created_at).toLocaleString("tr-TR")}</span>
+                      <span>{new Date(comment.created_at).toLocaleString(localeTag)}</span>
                     </div>
                   </div>
                   <p className="alarm-comment-card-body">{comment.comment}</p>
                 </div>
               ))}
               {comments.length === 0 ? (
-                <p className="alarm-detail-comments-empty">Henüz yorum yok. İlk yorumu ekleyin.</p>
+                <p className="alarm-detail-comments-empty">{t("alarms.detail.commentsEmpty")}</p>
               ) : null}
             </div>
             <div className="alarm-detail-comment-form">
               <textarea
                 className="alarm-detail-comment-textarea"
-                placeholder="Bu alarma bir yorum yazın... (örn. müşteri arandı, ekip yönlendirildi vs.)"
+                placeholder={t("alarms.detail.commentPlaceholder")}
                 value={commentDraft}
                 onChange={(event) => setCommentDraft(event.target.value)}
                 rows={3}
               />
               <small className="alarm-detail-comment-hint">
-                Yorumlar olay kaydına da işlenir; süreç ekipçe takip edilebilir.
+                {t("alarms.detail.commentHint")}
               </small>
               <div className="alarm-detail-comment-actions">
                 {mode === "modal" ? (
@@ -473,7 +476,7 @@ export function AlarmsPage({
                     className="secondary-btn"
                     onClick={() => setDetailModalOpen(false)}
                   >
-                    Kapat
+                    {t("common.close")}
                   </button>
                 ) : null}
                 <button
@@ -482,7 +485,7 @@ export function AlarmsPage({
                   disabled={saving || !commentDraft.trim()}
                   onClick={() => void handleAddComment()}
                 >
-                  {saving ? "Kaydediliyor..." : "Yorumu Kaydet"}
+                  {saving ? t("alarms.detail.savingComment") : t("alarms.detail.saveComment")}
                 </button>
               </div>
             </div>
@@ -499,33 +502,33 @@ export function AlarmsPage({
         <div className="alarms-toolbar alarms-page-toolbar">
           <input
             className="device-search-input"
-            placeholder="Alarm ara..."
+            placeholder={t("alarms.search")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <div className="alarms-filter-row">
             <select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value as typeof levelFilter)}>
-              <option value="all">Tüm Seviyeler</option>
-              <option value="critical">Kritik</option>
-              <option value="warning">Uyarı</option>
-              <option value="info">Bilgi</option>
+              <option value="all">{t("alarms.filterAllLevels")}</option>
+              <option value="critical">{t("alarms.level.critical")}</option>
+              <option value="warning">{t("alarms.level.warning")}</option>
+              <option value="info">{t("alarms.level.info")}</option>
             </select>
             <select
               value={assignmentFilter}
               onChange={(event) => setAssignmentFilter(event.target.value as typeof assignmentFilter)}
             >
-              <option value="all">Tüm Atamalar</option>
-              <option value="assigned">Atanmış</option>
-              <option value="unassigned">Atanmamış</option>
+              <option value="all">{t("alarms.filterAllAssignments")}</option>
+              <option value="assigned">{t("alarms.assigned")}</option>
+              <option value="unassigned">{t("alarms.unassigned")}</option>
             </select>
             <button
               type="button"
               className="secondary-btn action-btn"
               disabled={saving || activeAlarms.length === 0}
               onClick={() => void handleAcknowledgeAll()}
-              title="Aktif alarmların tümünü onayla"
+              title={t("alarms.ackAllTooltip")}
             >
-              Tümünü Onayla
+              {t("alarms.ackAll")}
             </button>
           </div>
         </div>
@@ -536,7 +539,7 @@ export function AlarmsPage({
               <span className="alarms-section-icon alarms-section-icon-active">
                 <span className="material-symbols-outlined">notifications_active</span>
               </span>
-              <h3>Aktif Alarmlar</h3>
+              <h3>{t("alarms.active")}</h3>
               <span className="alarms-section-count alarms-section-count-active">{activeAlarms.length}</span>
             </div>
           </div>
@@ -544,14 +547,14 @@ export function AlarmsPage({
             <table className="values-table alarms-page-table">
               <thead>
                 <tr>
-                  <th>Tarih</th>
-                  <th>Seviye</th>
-                  <th>Cihaz</th>
-                  <th>Kaynak</th>
-                  <th>Alarm</th>
-                  <th>Durum</th>
-                  <th>Atanan</th>
-                  <th className="alarm-actions-th">İşlem</th>
+                  <th>{t("alarms.table.date")}</th>
+                  <th>{t("alarms.table.level")}</th>
+                  <th>{t("alarms.table.device")}</th>
+                  <th>{t("alarms.table.source")}</th>
+                  <th>{t("alarms.table.alarm")}</th>
+                  <th>{t("alarms.table.status")}</th>
+                  <th>{t("alarms.table.assignee")}</th>
+                  <th className="alarm-actions-th">{t("alarms.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -568,8 +571,8 @@ export function AlarmsPage({
                     onDoubleClick={() => openDetail(alarm.id, "comments")}
                   >
                     <td className="alarm-cell-date">
-                      <div className="alarm-date">{created.toLocaleDateString("tr-TR")}</div>
-                      <div className="alarm-time">{created.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
+                      <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
+                      <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
                     </td>
                     <td className="alarm-cell-level">
                       <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{levelLabelTr(alarm.level)}</span>
@@ -583,7 +586,7 @@ export function AlarmsPage({
                     </td>
                     <td className="alarm-cell-state">
                       <span className={`alarm-state ${alarm.acknowledged ? "state-ack" : "state-open"}`}>
-                        {alarm.acknowledged ? "Onaylandı" : "Açık"}
+                        {alarm.acknowledged ? t("alarms.stateAck") : t("alarms.stateOpen")}
                       </span>
                     </td>
                     <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
@@ -591,8 +594,8 @@ export function AlarmsPage({
                       <button
                         type="button"
                         className="icon-btn icon-btn-ack"
-                        title="Onayla"
-                        aria-label="Onayla"
+                        title={t("alarms.actions.acknowledge")}
+                        aria-label={t("alarms.actions.acknowledge")}
                         disabled={saving || Boolean(alarm.acknowledged)}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -604,8 +607,8 @@ export function AlarmsPage({
                       <button
                         type="button"
                         className="icon-btn icon-btn-assign"
-                        title="Atama"
-                        aria-label="Atama"
+                        title={t("alarms.actions.assign")}
+                        aria-label={t("alarms.actions.assign")}
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -617,8 +620,8 @@ export function AlarmsPage({
                       <button
                         type="button"
                         className="icon-btn icon-btn-comment"
-                        title="Yorum"
-                        aria-label="Yorum"
+                        title={t("alarms.actions.comment")}
+                        aria-label={t("alarms.actions.comment")}
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -634,7 +637,7 @@ export function AlarmsPage({
                 {activeAlarms.length === 0 && !loading ? (
                   <tr>
                     <td colSpan={8} className="alarms-empty-cell">
-                      Aktif alarm yok.
+                      {t("alarms.noActive")}
                     </td>
                   </tr>
                 ) : null}
@@ -648,7 +651,7 @@ export function AlarmsPage({
               pageSize={pageSize}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              itemLabel="aktif alarm"
+              itemLabel={t("alarms.itemLabel")}
             />
           ) : null}
         </div>
@@ -660,7 +663,7 @@ export function AlarmsPage({
               <span className="alarms-section-icon alarms-section-icon-resolved">
                 <span className="material-symbols-outlined">history_toggle_off</span>
               </span>
-              <h3>Normale Dönen — Onay Bekliyor</h3>
+              <h3>{t("alarms.pendingReset")}</h3>
               <span className="alarms-section-count alarms-section-count-resolved">{pendingResetAlarms.length}</span>
             </div>
           </div>
@@ -668,13 +671,13 @@ export function AlarmsPage({
             <table className="values-table alarms-page-table">
               <thead>
                 <tr>
-                  <th>Tarih</th>
-                  <th>Seviye</th>
-                  <th>Cihaz</th>
-                  <th>Kaynak</th>
-                  <th>Alarm</th>
-                  <th>Atanan</th>
-                  <th className="alarm-actions-th">İşlem</th>
+                  <th>{t("alarms.table.date")}</th>
+                  <th>{t("alarms.table.level")}</th>
+                  <th>{t("alarms.table.device")}</th>
+                  <th>{t("alarms.table.source")}</th>
+                  <th>{t("alarms.table.alarm")}</th>
+                  <th>{t("alarms.table.assignee")}</th>
+                  <th className="alarm-actions-th">{t("alarms.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -688,8 +691,8 @@ export function AlarmsPage({
                     onDoubleClick={() => openDetail(alarm.id, "comments")}
                   >
                     <td className="alarm-cell-date">
-                      <div className="alarm-date">{created.toLocaleDateString("tr-TR")}</div>
-                      <div className="alarm-time">{created.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
+                      <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
+                      <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
                     </td>
                     <td className="alarm-cell-level">
                       <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{levelLabelTr(alarm.level)}</span>
@@ -706,8 +709,8 @@ export function AlarmsPage({
                       <button
                         type="button"
                         className="icon-btn icon-btn-ack"
-                        title="Onayla ve listeden çıkar"
-                        aria-label="Onayla"
+                        title={t("alarms.actions.ackAndRemove")}
+                        aria-label={t("alarms.actions.acknowledge")}
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -719,8 +722,8 @@ export function AlarmsPage({
                       <button
                         type="button"
                         className="icon-btn icon-btn-comment"
-                        title="Yorum"
-                        aria-label="Yorum"
+                        title={t("alarms.actions.comment")}
+                        aria-label={t("alarms.actions.comment")}
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -736,7 +739,7 @@ export function AlarmsPage({
                 {pendingResetAlarms.length === 0 && !loading ? (
                   <tr>
                     <td colSpan={7} className="alarms-empty-cell">
-                      Onay bekleyen normale dönmüş alarm yok.
+                      {t("alarms.noPending")}
                     </td>
                   </tr>
                 ) : null}
@@ -745,7 +748,7 @@ export function AlarmsPage({
           </div>
           {pendingResetAlarms.length > 100 ? (
             <p className="helper-text alarms-section-overflow-hint">
-              {pendingResetAlarms.length - 100} kayıt daha var — onayladıkça listeden çıkacak.
+              {t("alarms.moreOverflow", { count: pendingResetAlarms.length - 100 })}
             </p>
           ) : null}
         </div>
