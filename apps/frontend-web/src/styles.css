@@ -18287,3 +18287,295 @@ main.content.engineering-content:has(.device-management-panel) {
   border-radius: 8px;
   font-size: 12px;
 }
+
+/* ===========================================================================
+   Yedekler & Geri Yukleme paneli
+   =========================================================================== */
+.backups-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px !important;
+  overflow-y: auto;
+}
+.backups-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.backups-head h3 {
+  margin: 0 0 4px 0;
+}
+.backups-head .helper-text {
+  margin: 0;
+  max-width: 600px;
+  font-size: 12.5px;
+}
+.backups-create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.backups-create-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.backups-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.backups-stat-chip {
+  flex: 1 1 150px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  border-left: 4px solid #475569;
+}
+.backups-stat-chip.is-ok      { border-left-color: #10b981; }
+.backups-stat-chip.is-fail    { border-left-color: #ef4444; }
+.backups-stat-chip.is-size    { border-left-color: #6366f1; }
+.backups-stat-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.backups-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.backups-schedule-card {
+  display: flex;
+  gap: 14px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ffffff 60%);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.backups-schedule-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.18);
+  color: #4338ca;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.backups-schedule-icon .material-symbols-outlined {
+  font-size: 22px;
+}
+.backups-schedule-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.backups-schedule-body h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #0f172a;
+}
+.backups-schedule-fields {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-top: 6px;
+}
+.backups-schedule-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+}
+.backups-schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+.backups-schedule-field input {
+  width: 110px;
+  padding: 6px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.backups-schedule-last {
+  font-size: 12px;
+  color: #64748b;
+}
+.backups-schedule-last strong {
+  color: #0f172a;
+  margin-left: 4px;
+}
+
+.backups-list {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+.backups-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+.backups-list-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #0f172a;
+}
+.backups-empty {
+  padding: 30px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.backups-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.backups-table thead th {
+  background: #f8fafc;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+.backups-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  vertical-align: middle;
+}
+.backups-cell-mono {
+  font-family: monospace;
+  font-size: 12px;
+  color: #475569;
+}
+.backups-cell-filename {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.backups-type-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #eef2ff;
+  color: #4338ca;
+}
+.backups-type-pill.is-scheduled {
+  background: #f0fdf4;
+  color: #047857;
+}
+.backups-status-pill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.backups-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* Geri yukleme onay modali */
+.backups-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.backups-confirm-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px 28px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.4);
+}
+.backups-confirm-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.backups-confirm-icon .material-symbols-outlined {
+  font-size: 32px;
+}
+.backups-confirm-modal h3 {
+  margin: 0 0 12px 0;
+  color: #0f172a;
+  font-size: 18px;
+}
+.backups-confirm-modal p {
+  margin: 0 0 8px 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.backups-confirm-warn {
+  background: rgba(239, 68, 68, 0.08);
+  border-left: 3px solid #ef4444;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: left;
+  margin-top: 12px !important;
+  color: #b91c1c !important;
+  font-size: 13px !important;
+}
+.backups-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 18px;
+}
+.backups-confirm-restore {
+  background: #ef4444 !important;
+}
+.backups-confirm-restore:hover {
+  background: #dc2626 !important;
+}

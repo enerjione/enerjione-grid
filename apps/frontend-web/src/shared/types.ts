@@ -169,6 +169,28 @@ export type FaultComment = {
   created_at: string;
 };
 
+/** DB yedek dosyasi metadata'si. */
+export type BackupJob = {
+  id: number;
+  job_type: "manual" | "scheduled" | string;
+  status: "running" | "success" | "failed" | string;
+  file_path?: string | null;
+  size_bytes?: number | null;
+  error_message?: string | null;
+  created_by_username?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  filename?: string | null;
+};
+
+/** Periyodik yedek ayarlari. */
+export type BackupSchedule = {
+  enabled: boolean;
+  interval_hours: number;
+  retention_count: number;
+  last_run_at?: string | null;
+};
+
 /** Hat Arizalari — ozet istatistikler. */
 export type FaultStats = {
   total: number;
