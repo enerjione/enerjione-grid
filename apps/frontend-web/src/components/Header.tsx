@@ -40,7 +40,7 @@ export function Header({
   activePage,
   onChangePage
 }: Props) {
-  const { settings, loading: settingsLoading } = useProjectSettings();
+  const { settings } = useProjectSettings();
   const { t, i18n } = useTranslation();
   const activeLang: SupportedLanguage = isSupportedLanguage(currentLanguage)
     ? currentLanguage
@@ -84,24 +84,21 @@ export function Header({
         </div>
         <span className="header-divider" />
         <div className="customer-logo-wrap">
-          {/* Ayarlar yuklenmeden eski statik PNG'yi gosterip sonra DB logosuyla
-              degistirmek flash yaratiyordu — yuklenene kadar saydam placeholder. */}
-          {settingsLoading ? (
-            <div className="header-customer-logo header-customer-logo--placeholder" aria-hidden="true" />
-          ) : (
-            <img
-              className="header-customer-logo"
-              src={
-                settings.customer_logo_light ||
-                settings.customer_logo ||
-                "/customer-logo-placeholder.svg"
-              }
-              alt={settings.customer_name || t("header.customerLogoAlt")}
-              onError={(event) => {
-                event.currentTarget.src = "/customer-logo-placeholder.svg";
-              }}
-            />
-          )}
+          {/* Cache hit ise senkron olarak DB logosu; cache miss + ilk fetch
+              tamamlanmamissa statik default light PNG. Boylece flash yok ve
+              login sonrasi da boslukta degil dogru logo gorunur. */}
+          <img
+            className="header-customer-logo"
+            src={
+              settings.customer_logo_light ||
+              settings.customer_logo ||
+              "/customer-logo-light.png"
+            }
+            alt={settings.customer_name || t("header.customerLogoAlt")}
+            onError={(event) => {
+              event.currentTarget.src = "/customer-logo-placeholder.svg";
+            }}
+          />
         </div>
         <nav className="header-nav header-nav--framed">
           <button className={activePage === "home" ? "active" : ""} onClick={() => onChangePage("home")}>

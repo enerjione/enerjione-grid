@@ -19,7 +19,7 @@ type Props = {
 const REMEMBER_STORAGE_KEY = "hsl.login.remember";
 
 export function LoginForm({ onSubmit, loading, error }: Props) {
-  const { settings, loading: settingsLoading } = useProjectSettings();
+  const { settings } = useProjectSettings();
   const { t, i18n } = useTranslation();
   const activeLang: SupportedLanguage = isSupportedLanguage(i18n.language)
     ? i18n.language
@@ -66,22 +66,21 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
       </div>
       <div className="login-shell">
         <form className="login-card" onSubmit={handleSubmit} autoComplete="off">
-          {/* Logo: ayarlar yuklenirken hicbir sey gosterme (flash onleme).
-              Yuklendiginde DB'de kayitli logo varsa onu, yoksa placeholder
-              SVG'yi goster. Eski statik /customer-logo.png artik kullanilmiyor;
-              o gorseldi farkli musterilerde yanlis logo gozukmesinin sebebi. */}
-          {settingsLoading ? (
-            <div className="customer-logo customer-logo--placeholder" aria-hidden="true" />
-          ) : (
-            <img
-              className="customer-logo"
-              src={settings.customer_logo || "/customer-logo-placeholder.svg"}
-              alt={settings.customer_name || t("login.customerLogoAlt")}
-              onError={(event) => {
-                event.currentTarget.src = "/customer-logo-placeholder.svg";
-              }}
-            />
-          )}
+          {/* Logo:
+              - Cache'ten / backend'ten gelen DB logosu varsa onu goster.
+              - Hic logo bilgisi yoksa (cache miss + henuz fetch tamamlanmadi
+                veya backend'de kayit yok) statik default PNG gosterilir.
+              Eski problem: ayarlar yuklenirken placeholder div'i gosteriyorduk
+              ve cache hit oldugunda da logo gozukmuyordu. Artik: settings
+              senkron cache'ten geliyor; customer_logo varsa anında render. */}
+          <img
+            className="customer-logo"
+            src={settings.customer_logo || "/customer-logo.png"}
+            alt={settings.customer_name || t("login.customerLogoAlt")}
+            onError={(event) => {
+              event.currentTarget.src = "/customer-logo-placeholder.svg";
+            }}
+          />
           <div className="login-form-fields">
             <h2>{t("login.title")}</h2>
             <label>
