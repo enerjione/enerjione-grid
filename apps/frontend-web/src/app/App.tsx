@@ -1649,8 +1649,6 @@ export function App() {
         onToggleEngineering={() => setPageMode("engineering")}
         onSettings={handleOpenSettings}
         onLogout={handleLogout}
-        currentLanguage={currentUser?.language ?? null}
-        onChangeLanguage={handleChangeLanguage}
       />
       <div className="body">
         {pageMode === "engineering" ? (

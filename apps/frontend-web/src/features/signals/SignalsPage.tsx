@@ -36,8 +36,7 @@ const IEC104_MONITOR_TYPES: { id: number; code: string; desc: string; dataTypes:
 const DATA_TYPES: SignalDataType[] = [
   "analog",
   "binary",
-  "counter",
-  "string"
+  "counter"
 ];
 
 const SOURCES: SignalSource[] = ["master", "sat01", "sat02"];
@@ -101,7 +100,7 @@ export function SignalsPage({
   }, [deviceModels, modelFilter]);
 
   const signalsForModel = useMemo(
-    () => signals.filter((s) => s.model === modelFilter),
+    () => signals.filter((s) => s.model === modelFilter && s.data_type !== "string"),
     [signals, modelFilter]
   );
 
@@ -499,11 +498,15 @@ export function SignalsPage({
                     <legend>{t("engineering.signals.fieldsetDnp3")}</legend>
                     <label className="signal-field">
                       <span>{t("engineering.signals.labelDnp3Class")}</span>
-                      <input
+                      <select
                         value={editDnp3Class}
                         onChange={(event) => setEditDnp3Class(event.target.value)}
-                        placeholder={t("engineering.signals.form.dnp3ClassPlaceholder")}
-                      />
+                      >
+                        <option value="Class 0">Class 0</option>
+                        <option value="Class 1">Class 1</option>
+                        <option value="Class 2">Class 2</option>
+                        <option value="Class 3">Class 3</option>
+                      </select>
                     </label>
                     <label className="signal-field">
                       <span>{t("engineering.signals.labelDnp3Index")}</span>

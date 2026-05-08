@@ -443,7 +443,7 @@ export function UserManagementPanel({
                   disabled={currentUserId === user.id}
                   title={currentUserId === user.id ? t("engineering.users.selfDeleteHint") : t("engineering.users.deleteTooltip")}
                 >
-                  {t("engineering.users.delete")}
+                  {t("common.delete")}
                 </button>
               </td>
             </tr>

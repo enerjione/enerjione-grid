@@ -493,6 +493,39 @@ def create_tables():
                         f"ON DELETE {action}"
                     )
                 )
+
+        # Hat (lines) silindiginde bagli tablolar CASCADE/SET NULL olmali. Eski
+        # deployda FK'lar NO ACTION ile olusturulmus olabilir; modeldeki ondelete
+        # parametresi yeni tablolara uygulanir, ama mevcut DB'de constraint
+        # zaten varsa SQLAlchemy silip yeniden olusturmaz. Hat silme hatasinin
+        # kok nedeni budur: poles / line_segments / responsibility_area_lines
+        # / branched_from_pole_id constraint'lerini idempotent rebuild edelim.
+        line_dep_fk_specs = [
+            ("poles", "poles_line_id_fkey", "line_id", "lines", "CASCADE"),
+            ("line_segments", "line_segments_line_id_fkey", "line_id", "lines", "CASCADE"),
+            ("line_segments", "line_segments_from_pole_id_fkey", "from_pole_id", "poles", "CASCADE"),
+            ("line_segments", "line_segments_to_pole_id_fkey", "to_pole_id", "poles", "CASCADE"),
+            ("lines", "lines_region_id_fkey", "region_id", "regions", "CASCADE"),
+            ("lines", "lines_branched_from_pole_id_fkey", "branched_from_pole_id", "poles", "SET NULL"),
+            ("responsibility_area_lines", "responsibility_area_lines_line_id_fkey", "line_id", "lines", "CASCADE"),
+        ]
+        for tbl, fk_name, col, ref_table, action in line_dep_fk_specs:
+            tbl_exists = connection.execute(
+                text("SELECT 1 FROM information_schema.tables WHERE table_name=:t"),
+                {"t": tbl},
+            ).first()
+            if tbl_exists is None:
+                continue
+            connection.execute(
+                text(f"ALTER TABLE {tbl} DROP CONSTRAINT IF EXISTS {fk_name}")
+            )
+            connection.execute(
+                text(
+                    f"ALTER TABLE {tbl} ADD CONSTRAINT {fk_name} "
+                    f"FOREIGN KEY ({col}) REFERENCES {ref_table}(id) "
+                    f"ON DELETE {action}"
+                )
+            )
     db = SessionLocal()
     try:
         # strict=True: JSON listesi disindaki tum sinyalleri siler.

@@ -721,7 +721,7 @@ export function AlarmRulesPage({
                       </span>
                       <strong>{rule.name}</strong>
                       {!rule.is_active ? (
-                        <span className="rules-v3-row-flag">Pasif</span>
+                        <span className="rules-v3-row-flag">{t("common.inactive")}</span>
                       ) : null}
                     </div>
                     <div className="rules-v3-row-meta">

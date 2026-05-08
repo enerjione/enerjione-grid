@@ -130,6 +130,33 @@ function MapInvalidator({ deps }: { deps: unknown[] }) {
   return null;
 }
 
+/**
+ * Sayfa ilk yüklendiğinde (cihaz / topoloji konum bilgileri geldiği anda)
+ * tüm cihaz + direk koordinatlarının bounds'una kamerayı sığdırır. Kullanıcı
+ * elle pan/zoom yaptığında veya bir cihaz seçildiğinde tekrar tetiklenmez —
+ * yalnız ilk anlamlı koordinat setinde bir kez çalışır.
+ */
+function AutoFitOnLoad({
+  points,
+  hasSelection
+}: {
+  points: Array<[number, number]>;
+  hasSelection: boolean;
+}) {
+  const map = useMap();
+  const fittedRef = useRef(false);
+  useEffect(() => {
+    if (fittedRef.current) return;
+    if (hasSelection) return;
+    if (points.length === 0) return;
+    const bounds = L.latLngBounds(points.map((p) => L.latLng(p[0], p[1])));
+    if (!bounds.isValid()) return;
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15, animate: false });
+    fittedRef.current = true;
+  }, [map, points, hasSelection]);
+  return null;
+}
+
 // Icon CACHE: ayni (status, alarmActive) icin AYNI L.divIcon instance'ini
 // dondur. Aksi takdirde polling her 5sn'de yeni icon yarattigindan, marker
 // DOM'u re-render olur ve CSS alarm-pulse animasyonu surekli %0'dan
@@ -245,6 +272,28 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
   const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
   const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
   const voltageToPercent = useMemo(() => makeVoltageToPercent(battLow, battFull), [battLow, battFull]);
+
+  // Anasayfa ilk acilista, harita Turkiye merkezinde 5x zoom yerine tum
+  // sebeke direklerinin/cihazlarinin sigdigi bounds'a yakinlasarak acilsin.
+  // Topoloji direkleri varsa onu kullan; yoksa cihaz konumlarina dus.
+  const autoFitPoints = useMemo<Array<[number, number]>>(() => {
+    const acc: Array<[number, number]> = [];
+    if (gridSnapshot?.poles?.length) {
+      for (const p of gridSnapshot.poles) {
+        if (typeof p.latitude === "number" && typeof p.longitude === "number") {
+          acc.push([p.latitude, p.longitude]);
+        }
+      }
+    }
+    if (acc.length === 0) {
+      for (const d of devices) {
+        if (typeof d.latitude === "number" && typeof d.longitude === "number") {
+          acc.push([d.latitude, d.longitude]);
+        }
+      }
+    }
+    return acc;
+  }, [gridSnapshot?.poles, devices]);
 
   // Seçili cihaz için kaynak başına batarya voltajı/yüzdesi
   const sourceBatteries = useMemo(() => {
@@ -974,6 +1023,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             override={selectedDevice ? deviceLocationOverride.get(selectedDevice.id) : undefined}
           />
           <MapInvalidator deps={[devices.length]} />
+          <AutoFitOnLoad points={autoFitPoints} hasSelection={Boolean(selectedDevice)} />
 
           {/* Hat polylineları (her edge bagimsiz):
                 - healthy : SOLID YESIL

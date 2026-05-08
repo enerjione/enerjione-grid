@@ -3,12 +3,6 @@ import { useTranslation } from "react-i18next";
 
 import { NotificationBell } from "./NotificationBell";
 import { useProjectSettings } from "./ProjectSettingsProvider";
-import {
-  LANGUAGE_LABELS,
-  SUPPORTED_LANGUAGES,
-  isSupportedLanguage,
-  type SupportedLanguage,
-} from "../shared/i18n";
 import type { UserRole } from "../shared/types";
 
 type Props = {
@@ -18,9 +12,6 @@ type Props = {
   accessToken?: string;
   onLogout?: () => void;
   onSettings?: () => void;
-  /** Profil dropdown'undan dil degisikligi. Mevcut dil ve secilen kod. */
-  currentLanguage?: string | null;
-  onChangeLanguage?: (code: SupportedLanguage) => void | Promise<void>;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
   activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
@@ -33,20 +24,13 @@ export function Header({
   accessToken,
   onLogout,
   onSettings,
-  currentLanguage,
-  onChangeLanguage,
   isEngineeringView,
   onToggleEngineering,
   activePage,
   onChangePage
 }: Props) {
   const { settings } = useProjectSettings();
-  const { t, i18n } = useTranslation();
-  const activeLang: SupportedLanguage = isSupportedLanguage(currentLanguage)
-    ? currentLanguage
-    : isSupportedLanguage(i18n.language)
-    ? i18n.language
-    : "tr";
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -167,35 +151,6 @@ export function Header({
                 >
                   {t("header.settings")}
                 </button>
-
-                {/* Dil seçici — kullanıcı profil dropdown'ından doğrudan
-                    arayüz dilini değiştirebilir. Seçim backend'e kaydedilir
-                    (App.handleChangeLanguage), localStorage'a yazılır ve
-                    react-i18next senkronize edilir. */}
-                {onChangeLanguage ? (
-                  <div className="profile-dropdown__lang">
-                    <span className="profile-dropdown__lang-label">
-                      {t("language.label")}
-                    </span>
-                    <div className="profile-dropdown__lang-options">
-                      {SUPPORTED_LANGUAGES.map((code) => (
-                        <button
-                          key={code}
-                          type="button"
-                          className={`profile-dropdown__lang-btn ${
-                            activeLang === code ? "is-active" : ""
-                          }`}
-                          onClick={() => {
-                            void onChangeLanguage(code);
-                          }}
-                          title={LANGUAGE_LABELS[code]}
-                        >
-                          {code.toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
 
                 <button
                   onClick={() => {
