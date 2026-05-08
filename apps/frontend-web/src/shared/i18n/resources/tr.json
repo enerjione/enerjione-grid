@@ -1188,6 +1188,9 @@
       "noDeviceTitle": "Atanmış cihaz yok",
       "noDeviceHint": "Bu segmente cihaz eklemek için aşağıdaki butonu kullanın.",
       "addDevice": "Cihaz Ekle",
+      "addDeviceTitle": "Bu segmente cihaz ekle",
+      "noAssignableDevice": "Atanabilir cihaz yok",
+      "candidateCount": "{{count}} aday",
       "moveTargetHint": "Bu cihazı taşımak için hedef segmenti seçin",
       "loadLinesFail": "Hatlar alınamadı.",
       "deviceAssigned": "Cihaz segmente atandı.",
@@ -1261,6 +1264,7 @@
     },
     "schedule": {
       "title": "Periyodik Yedek Programı",
+      "openBtn": "Periyodik Program",
       "description": "Açıkken belirtilen aralıkta otomatik yedek alınır; tutulacak yedek sayısını aştığında en eski \"otomatik\" yedekler silinir.",
       "enabled": "Açık",
       "disabled": "Kapalı",

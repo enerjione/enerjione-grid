@@ -18341,6 +18341,49 @@ main.content.engineering-content:has(.device-management-panel) {
   font-size: 18px;
 }
 
+/* Yeni layout: stats + actions tek satirda. Stats sola yayilir; actions sagda
+   sabit kalir. Dar ekranda flex-wrap ile alt alta gecer. */
+.backups-topbar {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.backups-topbar .backups-stats {
+  flex: 1 1 460px;
+  min-width: 0;
+}
+.backups-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.backups-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.backups-action-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Schedule modal — confirm-modal'a benziyor ama daha geniş; alanlar yatay
+   yerleşir. */
+.backups-schedule-modal {
+  max-width: 540px;
+}
+.backups-schedule-fields--modal {
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+
 .backups-stats {
   display: flex;
   gap: 10px;

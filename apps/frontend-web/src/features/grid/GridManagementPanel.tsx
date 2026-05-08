@@ -229,7 +229,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         setSelectedLineId(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Hatlar alınamadı.");
+      setError(err instanceof Error ? err.message : t("engineering.grid.loadLinesFail"));
     }
   };
 
@@ -534,7 +534,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
           device_id: deviceId
         });
       }
-      toast.success("Cihaz segmente atandı.");
+      toast.success(t("engineering.grid.deviceAssigned"));
       await reloadDetail(selectedLine.id);
       if (selectedRegionId !== null) await reloadLines(selectedRegionId);
     } catch (err) {
@@ -553,7 +553,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     setSegmentMenu(null);
     try {
       await deleteSegment(accessToken, segment.id);
-      toast.success("Cihaz segmentten kaldırıldı.");
+      toast.success(t("engineering.grid.deviceDetached"));
       await reloadDetail(selectedLine.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Cihaz kaldırılamadı.");
@@ -583,7 +583,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
           device_id: fromSegment.device_id
         });
       }
-      toast.success("Cihaz başka segmente taşındı.");
+      toast.success(t("engineering.grid.deviceMoved"));
       await reloadDetail(selectedLine.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Cihaz taşınamadı.");
@@ -593,7 +593,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
   };
 
   const handleDeleteSegment = async (segment: LineSegment) => {
-    if (!window.confirm("Bu segment ve bağlı cihaz kaydı silinsin mi?")) return;
+    if (!window.confirm(t("engineering.grid.confirmDeleteSegment"))) return;
     setBusy(true);
     setSegmentMenu(null);
     try {
@@ -609,7 +609,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
   const handleReverseOrder = async () => {
     if (!selectedLine) return;
-    if (!window.confirm("Hat direklerinin sırası tersine çevrilsin mi? (Baş ↔ son swap)")) return;
+    if (!window.confirm(t("engineering.grid.confirmReverse"))) return;
     setBusy(true);
     try {
       await reversePoles(accessToken, selectedLine.id);
@@ -673,7 +673,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         {/* SOL — Bölgeler */}
         <div className="grid-mgmt-col grid-mgmt-col-regions">
           <div className="grid-mgmt-col-head">
-            <h4>Bölgeler</h4>
+            <h4>{t("engineering.grid.regions")}</h4>
             <button
               className="add-user-btn"
               onClick={() => {
@@ -681,12 +681,12 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 setRegionModalOpen(true);
               }}
             >
-              + Bölge
+              {t("engineering.grid.addRegionShort")}
             </button>
           </div>
           <div className="grid-mgmt-list">
             {regions.length === 0 ? (
-              <p className="helper-text">Henüz bölge yok.</p>
+              <p className="helper-text">{t("engineering.grid.noRegions")}</p>
             ) : null}
             {regions.map((r) => (
               <div
@@ -701,11 +701,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 <div className="grid-mgmt-list-item-main">
                   <strong>{r.name}</strong>
                 </div>
-                <span className="grid-mgmt-list-count">{r.line_count ?? 0} hat</span>
+                <span className="grid-mgmt-list-count">{t("engineering.grid.lineCount", { count: r.line_count ?? 0 })}</span>
                 <div className="grid-mgmt-list-actions">
-                  <button type="button" className="icon-btn" title="Düzenle"
+                  <button type="button" className="icon-btn" title={t("common.edit")}
                     onClick={(e) => { e.stopPropagation(); setEditingRegion(r); setRegionModalOpen(true); }}>✎</button>
-                  <button type="button" className="icon-btn icon-btn-danger" title="Sil"
+                  <button type="button" className="icon-btn icon-btn-danger" title={t("common.delete")}
                     onClick={(e) => { e.stopPropagation(); void handleDeleteRegion(r); }}>✕</button>
                 </div>
               </div>
@@ -716,15 +716,15 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         {/* ORTA — Hatlar */}
         <div className="grid-mgmt-col grid-mgmt-col-lines">
           <div className="grid-mgmt-col-head">
-            <h4>Hatlar {selectedRegion ? `· ${selectedRegion.name}` : ""}</h4>
+            <h4>{t("engineering.grid.lines")}{selectedRegion ? ` · ${selectedRegion.name}` : ""}</h4>
             <button className="add-user-btn" disabled={!selectedRegion}
-              onClick={() => { setEditingLine(null); setLineModalOpen(true); }}>+ Hat</button>
+              onClick={() => { setEditingLine(null); setLineModalOpen(true); }}>{t("engineering.grid.addLineShort")}</button>
           </div>
           <div className="grid-mgmt-list">
             {!selectedRegion ? (
-              <p className="helper-text">Önce soldan bir bölge seçin.</p>
+              <p className="helper-text">{t("engineering.grid.noLinesPickRegion")}</p>
             ) : lines.length === 0 ? (
-              <p className="helper-text">Bu bölgede henüz hat yok.</p>
+              <p className="helper-text">{t("engineering.grid.noLinesInRegion")}</p>
             ) : null}
             {lines.map((l) => (
               <div key={l.id}
@@ -736,11 +736,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 <div className="grid-mgmt-list-item-main">
                   <strong>{l.name}</strong>
                 </div>
-                <span className="grid-mgmt-list-count">{l.pole_count ?? 0} direk · {l.segment_count ?? 0} segment</span>
+                <span className="grid-mgmt-list-count">{t("engineering.grid.poleSegmentCount", { poles: l.pole_count ?? 0, segments: l.segment_count ?? 0 })}</span>
                 <div className="grid-mgmt-list-actions">
-                  <button type="button" className="icon-btn" title="Düzenle"
+                  <button type="button" className="icon-btn" title={t("common.edit")}
                     onClick={(e) => { e.stopPropagation(); setEditingLine(l); setLineModalOpen(true); }}>✎</button>
-                  <button type="button" className="icon-btn icon-btn-danger" title="Sil"
+                  <button type="button" className="icon-btn icon-btn-danger" title={t("common.delete")}
                     onClick={(e) => { e.stopPropagation(); void handleDeleteLine(l); }}>✕</button>
                 </div>
               </div>
@@ -752,23 +752,23 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         <div className="grid-mgmt-col grid-mgmt-col-detail">
           <div className="grid-mgmt-detail-head">
             <div className="grid-mgmt-detail-title">
-              <h4>Hat Detayı {selectedLine ? `· ${selectedLine.name}` : ""}</h4>
+              <h4>{t("engineering.grid.lineDetailTitle")}{selectedLine ? ` · ${selectedLine.name}` : ""}</h4>
               {selectedLine ? (
-                <span className="helper-text">{sortedPoles.length} direk · {detail?.segments.length ?? 0} segment</span>
+                <span className="helper-text">{t("engineering.grid.poleSegmentCount", { poles: sortedPoles.length, segments: detail?.segments.length ?? 0 })}</span>
               ) : null}
             </div>
             {selectedLine ? (
               <div className="grid-mgmt-tabs">
                 <button className={`grid-mgmt-tab ${detailTab === "map" ? "active" : ""}`}
-                  onClick={() => setDetailTab("map")}>Harita</button>
+                  onClick={() => setDetailTab("map")}>{t("engineering.grid.tabMap")}</button>
                 <button className={`grid-mgmt-tab ${detailTab === "list" ? "active" : ""}`}
-                  onClick={() => setDetailTab("list")}>Liste</button>
+                  onClick={() => setDetailTab("list")}>{t("engineering.grid.tabList")}</button>
               </div>
             ) : null}
           </div>
 
           {!selectedLine ? (
-            <p className="helper-text">Bir hat seçin; direkleri ve segmentleri burada düzenleyin.</p>
+            <p className="helper-text">{t("engineering.grid.pickLineHint")}</p>
           ) : detailTab === "map" ? (
             <>
               <div className={`grid-mgmt-map-toolbar ${editMode ? "is-edit-mode" : ""}`}>
@@ -777,7 +777,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                     className={`grid-mgmt-tool-btn ${editMode ? "is-active" : ""}`}
                     onClick={() => {
                       if (editMode && hasUnsavedDraft) {
-                        if (!window.confirm("Taslakta kaydedilmemiş değişiklikler var. Düzenleme modunu kapatmak istiyor musunuz?")) return;
+                        if (!window.confirm(t("engineering.grid.editModeUnsavedConfirm"))) return;
                         setDraftPoleAdds([]);
                         setDraftPoleEdits(new Map());
                         setDraftPoleDeletes(new Set());
@@ -787,10 +787,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       if (editMode) setAddPoleMode(false);
                     }}
                     disabled={busy}
-                    title="Açıkken: direk ekleme/taşıma/silme önce taslakta tutulur, Kaydet'e basana kadar kalıcı olmaz."
+                    title={t("engineering.grid.editModeBtnTooltip")}
                   >
                     <span className="material-symbols-outlined">edit</span>
-                    {editMode ? "Düzenleme Açık" : "Düzenleme Modu"}
+                    {editMode ? t("engineering.grid.editModeOn") : t("engineering.grid.editModeOff")}
                   </button>
 
                   <label className="grid-mgmt-toggle">
@@ -799,7 +799,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       checked={showOtherLines}
                       onChange={(e) => setShowOtherLines(e.target.checked)}
                     />
-                    <span>Diğer hatlar</span>
+                    <span>{t("engineering.grid.showOtherLines")}</span>
                   </label>
                 </div>
 
@@ -951,9 +951,9 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       }}
                     >
                       <Tooltip sticky>
-                        <strong>Branşman</strong>
+                        <strong>{t("engineering.grid.branch")}</strong>
                         <br />
-                        <em>Bu hat başka bir hattın direğine bağlı</em>
+                        <em>{t("engineering.grid.branchExplain")}</em>
                       </Tooltip>
                     </Polyline>
                   ) : null}
@@ -1094,11 +1094,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       // Once draft, sonra backend value, sonra auto orta-nokta.
                       const draft = draftDevicePositions.get(seg.id);
                       const tManual = draft?.device_position_t ?? seg.device_position_t;
-                      const t = (tManual !== null && tManual !== undefined && tManual >= 0 && tManual <= 1)
+                      const tParam = (tManual !== null && tManual !== undefined && tManual >= 0 && tManual <= 1)
                         ? tManual
                         : (idx + 1) / (total + 1);
-                      const lat = ax + dx * t;
-                      const lon = ay + dy * t;
+                      const lat = ax + dx * tParam;
+                      const lon = ay + dy * tParam;
                       const dev = devices.find((d) => d.id === seg.device_id);
                       const openMenu = (event: L.LeafletMouseEvent) => {
                         event.originalEvent.preventDefault();
@@ -1169,7 +1169,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             <br />
                             {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
                             {total > 1 ? ` · ${idx + 1}/${total}` : ""}
-                            {editMode ? (<><br /><em>Tıkla: taşı / kaldır</em></>) : null}
+                            {editMode ? (<><br /><em>{t("engineering.grid.clickMoveOrRemove")}</em></>) : null}
                           </Tooltip>
                         </Marker>
                       );
@@ -1445,7 +1445,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                                   if (id) void handleAttachDevice(nextSlot, id);
                                 }}
                               >
-                                <option value="">Cihaz ata...</option>
+                                <option value="">{t("engineering.grid.assignDevicePlaceholder")}</option>
                                 {availableDevices.map((d) => (
                                   <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
                                 ))}
@@ -1889,8 +1889,8 @@ function SegmentContextMenu({
             <div className="seg-menu-empty">
               <span className="material-symbols-outlined">cable</span>
               <div>
-                <strong>Atanmış cihaz yok</strong>
-                <p>Bu segmente cihaz eklemek için aşağıdaki butonu kullanın.</p>
+                <strong>{t("engineering.grid.noDeviceTitle")}</strong>
+                <p>{t("engineering.grid.noDeviceHint")}</p>
               </div>
             </div>
           ) : (
@@ -1960,14 +1960,14 @@ function SegmentContextMenu({
             }}
             title={
               availableDevices.length === 0
-                ? "Atanabilir cihaz yok"
-                : "Bu segmente cihaz ekle"
+                ? t("engineering.grid.noAssignableDevice")
+                : t("engineering.grid.addDeviceTitle")
             }
           >
             <span className="material-symbols-outlined">add</span>
-            <span>Cihaz Ekle</span>
+            <span>{t("engineering.grid.addDevice")}</span>
             {availableDevices.length > 0 ? (
-              <span className="seg-menu-add-count">{availableDevices.length} aday</span>
+              <span className="seg-menu-add-count">{t("engineering.grid.candidateCount", { count: availableDevices.length })}</span>
             ) : null}
           </button>
         </div>
@@ -2057,7 +2057,7 @@ function SegmentContextMenu({
                   <span className="material-symbols-outlined">swap_horiz</span>
                   <div>
                     <strong>{movingDev.name}</strong>
-                    <p>Bu cihazı taşımak için hedef segmenti seçin</p>
+                    <p>{t("engineering.grid.moveTargetHint")}</p>
                   </div>
                 </div>
               ) : null;

@@ -1188,6 +1188,9 @@
       "noDeviceTitle": "No device assigned",
       "noDeviceHint": "Use the button below to add a device to this segment.",
       "addDevice": "Add Device",
+      "addDeviceTitle": "Add a device to this segment",
+      "noAssignableDevice": "No assignable device",
+      "candidateCount": "{{count}} candidate",
       "moveTargetHint": "Pick a target segment to move this device",
       "loadLinesFail": "Failed to load lines.",
       "deviceAssigned": "Device assigned to segment.",
@@ -1261,6 +1264,7 @@
     },
     "schedule": {
       "title": "Scheduled Backup",
+      "openBtn": "Schedule",
       "description": "When enabled, automatic backups run at the chosen interval; the oldest \"scheduled\" backups are deleted once the retention count is exceeded.",
       "enabled": "On",
       "disabled": "Off",
