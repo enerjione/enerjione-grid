@@ -18326,6 +18326,20 @@ main.content.engineering-content:has(.device-management-panel) {
 .backups-create-btn .material-symbols-outlined {
   font-size: 18px;
 }
+.backups-head--actions-only {
+  justify-content: flex-end;
+}
+.backups-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.backups-upload-btn .material-symbols-outlined {
+  font-size: 18px;
+}
 
 .backups-stats {
   display: flex;

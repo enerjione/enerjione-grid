@@ -403,7 +403,8 @@
       "backup_restore_started": "Yedek geri yükleme başlatıldı (id={{id}})",
       "backup_restore_finished": "Yedek geri yükleme tamamlandı (id={{id}})",
       "backup_restore_failed": "Yedek geri yükleme başarısız (id={{id}}): {{error}}",
-      "backup_schedule_updated": "Yedek programı güncellendi"
+      "backup_schedule_updated": "Yedek programı güncellendi",
+      "backup_uploaded": "Yedek dosyası yüklendi (id={{id}}, {{name}})"
     },
     "category": {
       "auth": "Giriş ve oturum",
@@ -764,6 +765,12 @@
     "title": "Yedekler",
     "manualBackup": "Yeni Yedek Al",
     "creatingBackup": "Yedek alınıyor...",
+    "uploadBackup": "Yedek Dosyası Yükle",
+    "uploading": "Yükleniyor...",
+    "uploadHint": "Daha önce indirilmiş .dump uzantılı yedek dosyasını yükleyin",
+    "uploadOnlyDump": "Sadece .dump uzantılı pg_dump custom-format dosyası kabul edilir.",
+    "uploadSuccess": "Yedek dosyası yüklendi. Geri Yükle butonuyla sisteme uygulayabilirsiniz.",
+    "uploadFail": "Yedek yüklenemedi.",
     "stats": {
       "total": "Toplam",
       "success": "Başarılı",
@@ -796,7 +803,8 @@
     },
     "type": {
       "manual": "Manuel",
-      "scheduled": "Otomatik"
+      "scheduled": "Otomatik",
+      "uploaded": "Yüklendi"
     },
     "status": {
       "running": "Devam ediyor",

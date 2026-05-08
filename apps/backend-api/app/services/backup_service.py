@@ -33,11 +33,21 @@ from app.models.backup import BackupJob, BackupSchedule
 logger = logging.getLogger(__name__)
 
 
-def _backup_dir() -> Path:
+def get_backup_dir() -> Path:
+    """Yedek dosyalari icin diskte hedef dizin (.dump cikti yolu).
+
+    BACKUP_DIR env ile override edilebilir; container'da volume olarak
+    /var/lib/hsl-backups baglanir.
+    """
     raw = os.getenv("BACKUP_DIR", "./backups")
     p = Path(raw).resolve()
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+# Geriye-doneuk uyumluluk: eski cagiri taraflari _backup_dir kullanmaya
+# devam edebilir.
+_backup_dir = get_backup_dir
 
 
 def _parse_db_url(url: str) -> dict:
@@ -67,8 +77,40 @@ def _pg_env() -> dict[str, str]:
     return env
 
 
+# Yedekten haric tutulan tablolar (sadece schema yedeklenir, veri haric).
+# Telemetri/olay/queue/notification gibi operasyonel veriler hizli buyuyup
+# yedek dosyasini gereksizce sisirir. Geri yuklemede bu tablolar bos
+# kalir, sistem yeniden veri toplamaya devam eder. Config tablolari
+# (users, gateways, devices, regions/lines/poles/segments, signal_catalog,
+# alarm_rules, outbound_targets, notification_settings, project_settings,
+# responsibility_areas, user_notification_preferences) tam veri ile yedeklenir.
+EXCLUDED_DATA_TABLES = (
+    "telemetry",
+    "alarm_events",
+    "alarm_comments",
+    "fault_events",
+    "fault_comments",
+    "system_events",
+    "notifications",
+    "outbox_events",
+    "processed_messages",
+    "gateway_ingest_batches",
+    # backup_jobs ve backup_schedule kendisi de geri yuklenince eski
+    # gecmisi getirir; karisikligi onlemek icin de schema-only.
+    "backup_jobs",
+    "backup_schedule",
+)
+
+
 def run_pg_dump(file_path: Path) -> tuple[bool, str]:
-    """pg_dump calistir, custom format (.dump) yaz. (success, error_msg)."""
+    """pg_dump calistir, custom format (.dump) yaz. (success, error_msg).
+
+    EXCLUDED_DATA_TABLES tablolari icin --exclude-table-data kullanilir:
+    schema (CREATE TABLE) yedek dosyasinda kalir, ama satir verisi atlanir.
+    Bu sayede yedek dosyasi yalnizca config/ayar verilerini icerir ve
+    onemli olcude kucuk olur. Geri yuklemede bu tablolar bos haliyle
+    yeniden olusturulur, sistem normal calismasina devam eder.
+    """
     db = _parse_db_url(settings.database_url)
     pg_dump = os.getenv("PG_DUMP", "pg_dump")
     cmd = [
@@ -82,6 +124,8 @@ def run_pg_dump(file_path: Path) -> tuple[bool, str]:
         "--no-owner",
         "--no-acl",
     ]
+    for tbl in EXCLUDED_DATA_TABLES:
+        cmd.extend(["--exclude-table-data", tbl])
     try:
         completed = subprocess.run(
             cmd,

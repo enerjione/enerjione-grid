@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -8,7 +8,8 @@ import {
   fetchBackups,
   fetchBackupSchedule,
   restoreBackup,
-  updateBackupSchedule
+  updateBackupSchedule,
+  uploadBackupFile
 } from "../../shared/api";
 import type { BackupJob, BackupSchedule } from "../../shared/types";
 import { useToast } from "../../components/ToastProvider";
@@ -29,36 +30,30 @@ function fmtBytes(n: number | null | undefined): string {
   return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
 }
 
-function fmtDate(iso?: string | null): string {
+function fmtDate(iso: string | null | undefined, localeTag: string): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("tr-TR");
+  return new Date(iso).toLocaleString(localeTag);
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  running: "Devam ediyor",
-  success: "Başarılı",
-  failed: "Başarısız"
-};
 const STATUS_COLOR: Record<string, string> = {
   running: "#3b82f6",
   success: "#10b981",
   failed: "#ef4444"
 };
-const TYPE_LABEL: Record<string, string> = {
-  manual: "Manuel",
-  scheduled: "Otomatik"
-};
 
 export function BackupsPanel({ accessToken }: Props) {
   const toast = useToast();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [backups, setBackups] = useState<BackupJob[]>([]);
   const [schedule, setSchedule] = useState<BackupSchedule | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const [confirmRestoreId, setConfirmRestoreId] = useState<number | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -95,6 +90,31 @@ export function BackupsPanel({ accessToken }: Props) {
       toast.error(err instanceof Error ? err.message : "Yedek alınamadı.");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // input'u resetle ki ayni dosya tekrar secilebilsin
+    e.target.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".dump")) {
+      toast.error(t("backups.uploadOnlyDump"));
+      return;
+    }
+    setUploading(true);
+    try {
+      await uploadBackupFile(accessToken, file);
+      toast.success(t("backups.uploadSuccess"));
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("backups.uploadFail"));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -166,8 +186,26 @@ export function BackupsPanel({ accessToken }: Props) {
 
   return (
     <section className="tab-panel backups-panel">
-      <div className="backups-head">
-        <h3>{t("backups.title")}</h3>
+      {/* Baslik kaldirildi — sekme adi zaten "Yedekler" gosteriyor.
+          Sag ust: yeni yedek + indirilmis yedek dosyasi yukle butonlari. */}
+      <div className="backups-head backups-head--actions-only">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".dump"
+          style={{ display: "none" }}
+          onChange={(e) => void handleFileChosen(e)}
+        />
+        <button
+          type="button"
+          className="secondary-btn backups-upload-btn"
+          onClick={handleUploadClick}
+          disabled={uploading}
+          title={t("backups.uploadHint")}
+        >
+          <span className="material-symbols-outlined">upload_file</span>
+          {uploading ? t("backups.uploading") : t("backups.uploadBackup")}
+        </button>
         <button
           type="button"
           className="primary-btn backups-create-btn"
@@ -268,7 +306,7 @@ export function BackupsPanel({ accessToken }: Props) {
               {schedule.last_run_at ? (
                 <div className="backups-schedule-last">
                   <span>Son otomatik yedek:</span>
-                  <strong>{fmtDate(schedule.last_run_at)}</strong>
+                  <strong>{fmtDate(schedule.last_run_at, localeTag)}</strong>
                 </div>
               ) : null}
             </div>
@@ -316,13 +354,13 @@ export function BackupsPanel({ accessToken }: Props) {
                 return (
                   <Fragment key={b.id}>
                     <tr>
-                      <td>{fmtDate(b.created_at)}</td>
+                      <td>{fmtDate(b.created_at, localeTag)}</td>
                       <td>
                         <span
                           className={`backups-type-pill is-${b.job_type}`}
                           title={b.job_type}
                         >
-                          {TYPE_LABEL[b.job_type] ?? b.job_type}
+                          {t(`backups.type.${b.job_type}`, { defaultValue: b.job_type })}
                         </span>
                       </td>
                       <td>
@@ -331,7 +369,7 @@ export function BackupsPanel({ accessToken }: Props) {
                           style={{ background: `${sc}22`, color: sc }}
                           title={b.error_message ?? undefined}
                         >
-                          {STATUS_LABEL[b.status] ?? b.status}
+                          {t(`backups.status.${b.status}`, { defaultValue: b.status })}
                         </span>
                       </td>
                       <td className="backups-cell-mono">{fmtBytes(b.size_bytes)}</td>

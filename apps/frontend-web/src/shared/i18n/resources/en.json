@@ -403,7 +403,8 @@
       "backup_restore_started": "Backup restore started (id={{id}})",
       "backup_restore_finished": "Backup restore finished (id={{id}})",
       "backup_restore_failed": "Backup restore failed (id={{id}}): {{error}}",
-      "backup_schedule_updated": "Backup schedule updated"
+      "backup_schedule_updated": "Backup schedule updated",
+      "backup_uploaded": "Backup uploaded (id={{id}}, {{name}})"
     },
     "category": {
       "auth": "Login & session",
@@ -764,6 +765,12 @@
     "title": "Backups",
     "manualBackup": "New Backup",
     "creatingBackup": "Creating backup...",
+    "uploadBackup": "Upload Backup File",
+    "uploading": "Uploading...",
+    "uploadHint": "Upload a previously downloaded .dump backup file",
+    "uploadOnlyDump": "Only .dump pg_dump custom-format files are accepted.",
+    "uploadSuccess": "Backup file uploaded. Use the Restore button to apply it.",
+    "uploadFail": "Upload failed.",
     "stats": {
       "total": "Total",
       "success": "Successful",
@@ -796,7 +803,8 @@
     },
     "type": {
       "manual": "Manual",
-      "scheduled": "Scheduled"
+      "scheduled": "Scheduled",
+      "uploaded": "Uploaded"
     },
     "status": {
       "running": "Running",

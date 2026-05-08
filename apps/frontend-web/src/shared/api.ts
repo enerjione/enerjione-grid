@@ -444,6 +444,24 @@ export function backupDownloadUrl(backupId: number): string {
   return `${API_BASE_URL}/admin/backups/${backupId}/download`;
 }
 
+/** Daha onceden indirilmis .dump dosyasini yukle. Sunucuda BackupJob
+ * (job_type='uploaded') olarak kaydedilir; sonra normal Restore akisi
+ * uygulanabilir. */
+export async function uploadBackupFile(
+  token: string,
+  file: File
+): Promise<import("./types").BackupJob> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/admin/backups/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }, // Content-Type FormData ile auto
+    body: fd
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek yüklenemedi.");
+  return (await response.json()) as import("./types").BackupJob;
+}
+
 export async function downloadBackupFile(
   token: string,
   backupId: number,

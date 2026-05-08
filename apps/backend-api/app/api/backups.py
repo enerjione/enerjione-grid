@@ -14,10 +14,12 @@ Endpoint'ler:
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from datetime import datetime, timezone
 
 from app.api.deps import require_roles
 from app.db.session import get_db
@@ -32,6 +34,7 @@ from app.schemas.backup import (
 from app.services.backup_service import (
     create_backup,
     delete_backup_file,
+    get_backup_dir,
     get_or_create_schedule,
     restore_backup,
 )
@@ -150,15 +153,29 @@ def download_backup(backup_id: int, db: Session = Depends(get_db)):
     job = db.get(BackupJob, backup_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Yedek kaydi bulunamadi.")
-    if job.status != "success" or not job.file_path:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu yedek indirilemez (henuz tamamlanmadi veya silindi).")
+    if job.status != "success":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Bu yedek indirilemez (durum: {job.status}).",
+        )
+    if not job.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Yedek dosya yolu kayitli degil.",
+        )
     p = Path(job.file_path)
     if not p.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Yedek dosyasi diskte yok.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Yedek dosyasi diskte yok: {p.name}",
+        )
+    # Content-Disposition acikca eklenir; tarayici dosyayi indirme dialogunda
+    # bu adla acar. octet-stream sayesinde tarayici icinde acmaya calismaz.
     return FileResponse(
         path=str(p),
         filename=p.name,
         media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{p.name}"'},
     )
 
 
@@ -186,6 +203,74 @@ def delete_backup(
     db.delete(job)
     db.commit()
     return None
+
+
+@router.post("/upload", response_model=BackupJobRead, status_code=status.HTTP_201_CREATED)
+async def upload_backup(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+    db: Session = Depends(get_db),
+):
+    """Kullanicinin daha onceden indirdigi .dump dosyasini yukle.
+
+    Dosya `BACKUP_DIR/uploaded-<timestamp>-<orig>.dump` olarak kaydedilir
+    ve bir BackupJob (job_type='uploaded', status='success') uretilir.
+    Boylece kullanici listede yedek olarak gorur ve normal Restore
+    butonuyla geri yukleyebilir.
+
+    Sadece pg_dump custom format (.dump) kabul edilir; uzanti kontrolu yapilir.
+    """
+    name = (file.filename or "uploaded.dump").strip()
+    if not name.lower().endswith(".dump"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sadece .dump uzantili pg_dump custom-format dosyasi kabul edilir.",
+        )
+    # Dosyayi diske yaz
+    now = datetime.now(timezone.utc)
+    safe = "".join(c for c in name if c.isalnum() or c in "._-")[:120] or "upload.dump"
+    target = get_backup_dir() / f"hsl-{now.strftime('%Y%m%d-%H%M%S')}-uploaded-{safe}"
+    try:
+        with open(target, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Dosya kaydedilemedi: {exc}",
+        )
+    try:
+        size = target.stat().st_size
+    except OSError:
+        size = None
+    job = BackupJob(
+        job_type="uploaded",
+        status="success",
+        file_path=str(target),
+        size_bytes=size,
+        created_by_username=current_user.username,
+        created_at=now,
+        completed_at=now,
+    )
+    db.add(job)
+    db.flush()
+    record_event(
+        db,
+        category="backup",
+        event_type="backup_uploaded",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Yedek dosyasi yuklendi (id={job.id}, {target.name})",
+        metadata={"backup_id": job.id, "size_bytes": size, "filename": target.name},
+        i18n_key="backup_uploaded",
+        i18n_params={"id": job.id, "name": target.name},
+    )
+    db.commit()
+    db.refresh(job)
+    return _to_read(job)
 
 
 @router.post("/{backup_id}/restore", status_code=status.HTTP_202_ACCEPTED)
