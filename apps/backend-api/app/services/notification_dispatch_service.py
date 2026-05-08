@@ -330,7 +330,11 @@ def _create_personal_web_notification(
             title=f"Alarm: {alarm.title}",
             body=alarm.description,
             link=f"/alarms#alarm-{alarm.id}",
-            metadata={"alarm_id": alarm.id, "device_id": alarm.device_id},
+            metadata={
+                "alarm_id": alarm.id,
+                "device_id": alarm.device_id,
+                "_title_i18n": {"key": "alarm_personal", "params": {"title": alarm.title or ""}},
+            },
         )
     except Exception:  # noqa: BLE001
         logger.exception("alarm_personal_web_notif_failed user=%s", user.username)

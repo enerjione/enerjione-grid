@@ -173,7 +173,7 @@ export function UserManagementPanel({
 
   const handleDeleteClick = async (user: UserRead) => {
     const approved = window.confirm(
-      `${user.full_name} adlı kullanıcıyı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+      t("engineering.users.delete.confirm", { name: user.full_name })
     );
     if (!approved) return;
     setSubmitError("");
@@ -195,11 +195,11 @@ export function UserManagementPanel({
     event.preventDefault();
     if (!passwordResetUser) return;
     if (resetPassword.length < 8) {
-      setSubmitError("Şifre en az 8 karakter olmalıdır.");
+      setSubmitError(t("engineering.users.resetPasswordMinLen"));
       return;
     }
     if (resetPassword !== resetPasswordConfirm) {
-      setSubmitError("Şifre tekrarı eşleşmiyor.");
+      setSubmitError(t("engineering.users.resetPasswordMismatch"));
       return;
     }
     setSubmitError("");
@@ -209,7 +209,7 @@ export function UserManagementPanel({
       setResetPassword("");
       setResetPasswordConfirm("");
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Şifre sıfırlanamadı.");
+      setSubmitError(error instanceof Error ? error.message : t("engineering.users.resetPasswordFail"));
     }
   };
 

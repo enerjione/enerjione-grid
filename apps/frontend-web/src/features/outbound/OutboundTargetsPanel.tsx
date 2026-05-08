@@ -830,36 +830,36 @@ export function OutboundTargetsPanel({
                       <button
                         type="button"
                         className="secondary-btn action-btn"
-                        title="SCADA için Excel sinyal listesi indir"
+                        title={t("outbound.downloadXlsxTitle")}
                         onClick={() => void handleDownloadXlsx(item)}
                       >
-                        Sinyal Listesi (Excel)
+                        {t("outbound.downloadXlsx")}
                       </button>
                     ) : null}
                     {isIec && onDownloadIec104Points ? (
                       <button
                         type="button"
                         className="secondary-btn action-btn"
-                        title="CSV (eski format)"
+                        title={t("outbound.downloadCsvTitle")}
                         onClick={() => void handleDownloadCsv(item)}
                       >
                         CSV
                       </button>
                     ) : null}
                     <button className="edit-btn action-btn" onClick={() => openEdit(item)}>
-                      Düzenle
+                      {t("common.edit")}
                     </button>
                     <button
                       className="danger-btn action-btn"
                       onClick={() => {
-                        if (window.confirm(`${item.name} hedefi silinsin mi?`)) {
+                        if (window.confirm(t("outbound.confirmDelete", { name: item.name }))) {
                           void onDelete(item.id).catch((err: unknown) => {
                             setError(err instanceof Error ? err.message : t("common.errorOccurred"));
                           });
                         }
                       }}
                     >
-                      Sil
+                      {t("common.delete")}
                     </button>
                   </td>
                 </tr>
@@ -868,7 +868,7 @@ export function OutboundTargetsPanel({
             {targets.length === 0 ? (
               <tr>
                 <td colSpan={6} className="helper-text" style={{ padding: 24, textAlign: "center" }}>
-                  Henüz outbound hedef yok. Üst sağdan + Hedef Ekle ile yeni bir hedef oluşturun.
+                  {t("outbound.emptyHint")}
                 </td>
               </tr>
             ) : null}

@@ -243,13 +243,37 @@ def assign_fault(
         region_name = region_row.name if region_row else None
         if current_user.username == target_username:
             notif_title = f"Bu arızayı kendi üstünüze aldınız: {line_name}"
+            title_i18n_key = "fault_assignment_self"
         else:
             notif_title = f"Size yeni bir arıza atandı: {line_name}"
+            title_i18n_key = "fault_assignment_other"
+        has_pole = f.from_pole_seq is not None and f.to_pole_seq is not None
+        if has_pole and region_name:
+            body_i18n_key = "fault_assignment_with_pole_region"
+            body_i18n_params = {
+                "line": line_name,
+                "region": region_name,
+                "from": f.from_pole_seq,
+                "to": f.to_pole_seq,
+            }
+        elif has_pole:
+            body_i18n_key = "fault_assignment_with_pole"
+            body_i18n_params = {
+                "line": line_name,
+                "from": f.from_pole_seq,
+                "to": f.to_pole_seq,
+            }
+        elif region_name:
+            body_i18n_key = "fault_assignment_with_region"
+            body_i18n_params = {"line": line_name, "region": region_name}
+        else:
+            body_i18n_key = "fault_assignment_simple"
+            body_i18n_params = {"line": line_name}
         body_text = (
             f"Hat: {line_name}"
             + (f" ({region_name})" if region_name else "")
             + (f", Direk #{f.from_pole_seq} ↔ #{f.to_pole_seq}"
-               if f.from_pole_seq is not None and f.to_pole_seq is not None else "")
+               if has_pole else "")
         )
         try:
             create_notification(
@@ -269,6 +293,8 @@ def assign_fault(
                     "region_name": region_name,
                     "from_pole_seq": f.from_pole_seq,
                     "to_pole_seq": f.to_pole_seq,
+                    "_title_i18n": {"key": title_i18n_key, "params": {"line": line_name}},
+                    "_body_i18n": {"key": body_i18n_key, "params": body_i18n_params},
                 },
             )
         except Exception:  # noqa: BLE001
@@ -438,6 +464,7 @@ def create_fault_comment(
                     "line_name": line_name,
                     "region_id": f.region_id,
                     "region_name": region_name,
+                    "_title_i18n": {"key": "fault_comment_new", "params": {"line": line_name}},
                 },
             )
         except Exception:  # noqa: BLE001

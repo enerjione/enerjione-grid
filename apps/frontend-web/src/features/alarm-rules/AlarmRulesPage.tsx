@@ -754,14 +754,14 @@ export function AlarmRulesPage({
                         className="secondary-btn"
                         onClick={() => startEdit(rule.id)}
                       >
-                        Düzenle
+                        {t("common.edit")}
                       </button>
                       <button
                         type="button"
                         className="danger-btn"
                         onClick={() => void handleDelete(rule.id)}
                       >
-                        Sil
+                        {t("common.delete")}
                       </button>
                     </div>
                   ) : null}

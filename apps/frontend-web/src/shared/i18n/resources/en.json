@@ -703,10 +703,13 @@
         "passwordResetHint": "Leave empty to keep the current password."
       },
       "delete": {
-        "confirm": "Are you sure you want to delete user {{name}}?",
+        "confirm": "Are you sure you want to delete user {{name}}? This action is irreversible.",
         "success": "User deleted.",
         "fail": "Failed to delete user."
       },
+      "resetPasswordMinLen": "Password must be at least 8 characters.",
+      "resetPasswordMismatch": "Password confirmation does not match.",
+      "resetPasswordFail": "Failed to reset password.",
       "roleNames": {
         "engineer": "Engineer",
         "installer": "Installer",
@@ -1123,7 +1126,12 @@
         "endpoint": "Endpoint",
         "status": "Status",
         "actions": "Action"
-      }
+      },
+      "downloadXlsx": "Signal List (Excel)",
+      "downloadXlsxTitle": "Download Excel signal list for SCADA",
+      "downloadCsvTitle": "CSV (legacy format)",
+      "confirmDelete": "Delete target {{name}}?",
+      "emptyHint": "No outbound targets yet. Click + Add Target on the top right to create one."
     },
     "grid": {
       "title": "Line Management",
@@ -1298,6 +1306,22 @@
     "badgeAssignment": "Assignment",
     "badgeComment": "Comment",
     "badgeFault": "Fault",
+    "titles": {
+      "alarm_new": "New alarm: {{title}}",
+      "alarm_assignment_self": "You assigned this alarm to yourself: {{title}}",
+      "alarm_assignment_other": "A new alarm was assigned to you: {{title}}",
+      "alarm_comment_new": "New comment: {{title}}",
+      "alarm_personal": "Alarm: {{title}}",
+      "fault_assignment_self": "You assigned this fault to yourself: {{line}}",
+      "fault_assignment_other": "A new fault was assigned to you: {{line}}",
+      "fault_comment_new": "New comment: {{line}}"
+    },
+    "bodies": {
+      "fault_assignment_with_pole_region": "Line: {{line}} ({{region}}), Pole #{{from}} ↔ #{{to}}",
+      "fault_assignment_with_pole": "Line: {{line}}, Pole #{{from}} ↔ #{{to}}",
+      "fault_assignment_with_region": "Line: {{line}} ({{region}})",
+      "fault_assignment_simple": "Line: {{line}}"
+    },
     "level": {
       "critical": "Critical",
       "warning": "Warning",

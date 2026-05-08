@@ -82,7 +82,7 @@ export function SignalsPage({
   const { t } = useTranslation();
   const canEdit = role === "installer";
   const dataTypeLabel = (type: SignalDataType): string =>
-    t(`liveValues.dataType.${type}`, { defaultValue: DATA_TYPE_LABEL[type] });
+    t(`engineering.liveValues.dataType.${type}`, { defaultValue: DATA_TYPE_LABEL[type] });
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [localError, setLocalError] = useState("");

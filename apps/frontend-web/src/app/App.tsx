@@ -1667,7 +1667,7 @@ export function App() {
                   className={engineeringPage === "live-values" ? "active" : ""}
                   onClick={() => setEngineeringPage("live-values")}
                 >
-                  Canlı Değerler
+                  {t("engineering.nav.liveValues")}
                 </button>
               ) : null}
               {session.role === "engineer" || session.role === "installer" ? (

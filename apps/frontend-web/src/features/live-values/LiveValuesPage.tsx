@@ -45,13 +45,13 @@ const SOURCE_LABEL: Record<string, string> = {
 // Auto refresh options — labels come from i18n at render time.
 type RefreshOpt = { value: number; labelKey: string; labelArgs?: Record<string, unknown> };
 const AUTO_REFRESH_OPTIONS: RefreshOpt[] = [
-  { value: 0, labelKey: "liveValues.autoRefreshOff" },
-  { value: 1, labelKey: "liveValues.secondsShort", labelArgs: { count: 1 } },
-  { value: 2, labelKey: "liveValues.secondsShort", labelArgs: { count: 2 } },
-  { value: 5, labelKey: "liveValues.secondsShort", labelArgs: { count: 5 } },
-  { value: 10, labelKey: "liveValues.secondsShort", labelArgs: { count: 10 } },
-  { value: 30, labelKey: "liveValues.secondsShort", labelArgs: { count: 30 } },
-  { value: 60, labelKey: "liveValues.minutesShort", labelArgs: { count: 1 } }
+  { value: 0, labelKey: "engineering.liveValues.autoRefreshOff" },
+  { value: 1, labelKey: "engineering.liveValues.secondsShort", labelArgs: { count: 1 } },
+  { value: 2, labelKey: "engineering.liveValues.secondsShort", labelArgs: { count: 2 } },
+  { value: 5, labelKey: "engineering.liveValues.secondsShort", labelArgs: { count: 5 } },
+  { value: 10, labelKey: "engineering.liveValues.secondsShort", labelArgs: { count: 10 } },
+  { value: 30, labelKey: "engineering.liveValues.secondsShort", labelArgs: { count: 30 } },
+  { value: 60, labelKey: "engineering.liveValues.minutesShort", labelArgs: { count: 1 } }
 ];
 
 const AUTO_REFRESH_STORAGE_KEY = "hsl.live-values.auto-refresh-sec";
@@ -120,9 +120,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const numberFmt = useMemo(() => makeNumberFormatter(localeTag), [localeTag]);
   const dataTypeLabel = (type: SignalDataType): string =>
-    t(`liveValues.dataType.${type}`, { defaultValue: type });
-  const binaryActive = t("liveValues.binaryActive");
-  const binaryInactive = t("liveValues.binaryInactive");
+    t(`engineering.liveValues.dataType.${type}`, { defaultValue: type });
+  const binaryActive = t("engineering.liveValues.binaryActive");
+  const binaryInactive = t("engineering.liveValues.binaryInactive");
   // device_code -> gateway_code mapping (cihazdan gateway'e gitmek icin)
   const deviceGwMap = useMemo(() => {
     const m = new Map<string, string | undefined>();
@@ -288,7 +288,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           className={`signals-type-tab ${activeTab === "all" ? "active" : ""}`}
           onClick={() => setActiveTab("all")}
         >
-          <span className="stt-label">{t("liveValues.all")}</span>
+          <span className="stt-label">{t("engineering.liveValues.all")}</span>
           <span className="stt-count">{totalCount}</span>
         </button>
         {DATA_TYPES.map((type) => (
@@ -307,7 +307,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         <input
           className="signals-search"
           type="search"
-          placeholder={t("liveValues.search")}
+          placeholder={t("engineering.liveValues.search")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -316,9 +316,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             className="live-filter-select"
             value={deviceFilter}
             onChange={(event) => setDeviceFilter(event.target.value)}
-            title={t("liveValues.filter.device")}
+            title={t("engineering.liveValues.filter.device")}
           >
-            <option value="all">{t("liveValues.filter.allDevices")}</option>
+            <option value="all">{t("engineering.liveValues.filter.allDevices")}</option>
             {deviceOptions.map((opt) => (
               <option key={opt.code} value={opt.code}>
                 {opt.name} · {opt.code}
@@ -329,9 +329,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             className="live-filter-select"
             value={sourceFilter}
             onChange={(event) => setSourceFilter(event.target.value)}
-            title={t("liveValues.filter.source")}
+            title={t("engineering.liveValues.filter.source")}
           >
-            <option value="all">{t("liveValues.filter.allSources")}</option>
+            <option value="all">{t("engineering.liveValues.filter.allSources")}</option>
             {sourceOptions.map((src) => (
               <option key={src} value={src}>
                 {SOURCE_LABEL[src] ?? src}
@@ -342,22 +342,22 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             className="live-filter-select"
             value={qualityFilter}
             onChange={(event) => setQualityFilter(event.target.value)}
-            title={t("liveValues.filter.quality")}
+            title={t("engineering.liveValues.filter.quality")}
           >
-            <option value="all">{t("liveValues.filter.allQualities")}</option>
-            <option value="good">{t("liveValues.filter.qualityGood")}</option>
-            <option value="bad">{t("liveValues.filter.qualityBad")}</option>
-            <option value="comm_lost">{t("liveValues.filter.qualityCommLost")}</option>
-            <option value="pending">{t("liveValues.filter.qualityPending")}</option>
+            <option value="all">{t("engineering.liveValues.filter.allQualities")}</option>
+            <option value="good">{t("engineering.liveValues.filter.qualityGood")}</option>
+            <option value="bad">{t("engineering.liveValues.filter.qualityBad")}</option>
+            <option value="comm_lost">{t("engineering.liveValues.filter.qualityCommLost")}</option>
+            <option value="pending">{t("engineering.liveValues.filter.qualityPending")}</option>
           </select>
           {hasActiveFilter ? (
             <button
               type="button"
               className="secondary-btn live-filter-clear"
               onClick={handleClearFilters}
-              title={t("liveValues.filter.clearAll")}
+              title={t("engineering.liveValues.filter.clearAll")}
             >
-              {t("liveValues.filter.clear")}
+              {t("engineering.liveValues.filter.clear")}
             </button>
           ) : null}
         </div>
@@ -365,7 +365,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           {filtered.length} / {totalCount}
         </span>
         <label className="auto-refresh-control">
-          <span className="auto-refresh-label">{t("liveValues.autoRefresh")}</span>
+          <span className="auto-refresh-label">{t("engineering.liveValues.autoRefresh")}</span>
           <select
             className="auto-refresh-select"
             value={autoRefreshSec}
@@ -384,7 +384,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           onClick={() => void onRefresh()}
           disabled={loading}
         >
-          {loading ? t("liveValues.refreshing") : t("liveValues.refresh")}
+          {loading ? t("engineering.liveValues.refreshing") : t("engineering.liveValues.refresh")}
         </button>
       </div>
 
@@ -394,13 +394,13 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         <table className="values-table">
           <thead>
             <tr>
-              <th>{t("liveValues.table.device")}</th>
-              <th className="cell-center">{t("liveValues.table.source")}</th>
-              <th>{t("liveValues.table.signal")}</th>
-              <th className="cell-center">{t("liveValues.table.type")}</th>
-              <th>{t("liveValues.table.value")}</th>
-              <th className="cell-center">{t("liveValues.table.quality")}</th>
-              <th>{t("liveValues.table.time")}</th>
+              <th>{t("engineering.liveValues.table.device")}</th>
+              <th className="cell-center">{t("engineering.liveValues.table.source")}</th>
+              <th>{t("engineering.liveValues.table.signal")}</th>
+              <th className="cell-center">{t("engineering.liveValues.table.type")}</th>
+              <th>{t("engineering.liveValues.table.value")}</th>
+              <th className="cell-center">{t("engineering.liveValues.table.quality")}</th>
+              <th>{t("engineering.liveValues.table.time")}</th>
             </tr>
           </thead>
           <tbody>
@@ -466,7 +466,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             {filtered.length === 0 && !loading ? (
               <tr>
                 <td colSpan={7} className="helper-text" style={{ textAlign: "center" }}>
-                  {totalCount === 0 ? t("liveValues.noRowsInitial") : t("liveValues.noRows")}
+                  {totalCount === 0 ? t("engineering.liveValues.noRowsInitial") : t("engineering.liveValues.noRows")}
                 </td>
               </tr>
             ) : null}
@@ -480,7 +480,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
-          itemLabel={t("liveValues.itemLabel")}
+          itemLabel={t("engineering.liveValues.itemLabel")}
         />
       ) : null}
     </section>

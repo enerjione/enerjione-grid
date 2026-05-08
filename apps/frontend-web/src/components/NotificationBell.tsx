@@ -107,6 +107,11 @@ function fmtNumber(v: number | null | undefined): string {
   return _NUM_FMT.format(v);
 }
 
+type I18nRef = {
+  key?: string | null;
+  params?: Record<string, unknown> | null;
+};
+
 type AlarmMetadata = {
   alarm_id?: number | null;
   device_code?: string | null;
@@ -123,6 +128,8 @@ type AlarmMetadata = {
   threshold?: number | null;
   operator?: string | null;
   source_timestamp?: string | null;
+  _title_i18n?: I18nRef | null;
+  _body_i18n?: I18nRef | null;
 };
 
 function parseMetadata(raw: string | null | undefined): AlarmMetadata | null {
@@ -353,13 +360,21 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 // alarm: Test alarmi" -> body "Test alarmi"). Tekrari gizle.
                 // Atama/yorum bildirimlerinde body genellikle anlamli ek bilgi
                 // (atayan, hat aciklamasi, yorum metni) — koruyalim.
+                // Backend metadata._body_i18n varsa cevirili govde gosterilir.
+                const localizedBody = (() => {
+                  const ref = meta?._body_i18n;
+                  if (ref && typeof ref.key === "string" && ref.key) {
+                    const params = (ref.params ?? {}) as Record<string, unknown>;
+                    return t(`notifications.bodies.${ref.key}`, params);
+                  }
+                  return item.body ?? null;
+                })();
                 const bodyToShow = (() => {
-                  if (!item.body) return null;
-                  const body = item.body.trim();
+                  if (!localizedBody) return null;
+                  const body = localizedBody.trim();
                   if (!body) return null;
-                  const title = item.title.trim();
+                  const title = localizedTitle.trim();
                   if (title === body) return null;
-                  // "Yeni alarm: X" basligindaki X = body ise tekrar — gizle.
                   if (title.endsWith(`: ${body}`)) return null;
                   return body;
                 })();
@@ -368,16 +383,26 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 // Baslik formati: "Yeni alarm: <Alarm adi>" -> ust satira
                 // "Yeni alarm" kucuk eyebrow, alta buyuk alarm adi.
                 // Format uymuyorsa baslik tek parca gosterilir.
+                // Backend metadata._title_i18n varsa onceligi alir (cevirili
+                // baslik elde edilir); aksi halde DB'deki TR baslik kullanilir.
+                const localizedTitle = (() => {
+                  const ref = meta?._title_i18n;
+                  if (ref && typeof ref.key === "string" && ref.key) {
+                    const params = (ref.params ?? {}) as Record<string, unknown>;
+                    return t(`notifications.titles.${ref.key}`, params);
+                  }
+                  return item.title;
+                })();
                 const titleParts = (() => {
-                  const t = item.title.trim();
-                  const idx = t.indexOf(":");
-                  if (idx > 0 && idx < t.length - 1) {
+                  const raw = localizedTitle.trim();
+                  const idx = raw.indexOf(":");
+                  if (idx > 0 && idx < raw.length - 1) {
                     return {
-                      eyebrow: t.slice(0, idx).trim(),
-                      main: t.slice(idx + 1).trim(),
+                      eyebrow: raw.slice(0, idx).trim(),
+                      main: raw.slice(idx + 1).trim(),
                     };
                   }
-                  return { eyebrow: null as string | null, main: t };
+                  return { eyebrow: null as string | null, main: raw };
                 })();
                 return (
                   <li

@@ -40,8 +40,10 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
     if new_assignee and new_assignee != previous_assignee:
         if new_assignee == actor_username:
             title = f"Bu alarmı kendi üstünüze aldınız: {alarm.title}"
+            title_i18n_key = "alarm_assignment_self"
         else:
             title = f"Size yeni bir alarm atandı: {alarm.title}"
+            title_i18n_key = "alarm_assignment_other"
         create_notification(
             db,
             recipient_username=new_assignee,
@@ -51,7 +53,11 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
             body=alarm.description,
             actor_username=actor_username,
             link=f"/alarms#alarm-{alarm.id}",
-            metadata={"alarm_id": alarm.id, "level": alarm.level},
+            metadata={
+                "alarm_id": alarm.id,
+                "level": alarm.level,
+                "_title_i18n": {"key": title_i18n_key, "params": {"title": alarm.title}},
+            },
         )
         # E-posta bildirimi: kullanicinin email_enabled tercihi acik VE
         # NotificationSettings.smtp_enabled ise atanan kisiye HTML mail.
@@ -181,7 +187,11 @@ def create_alarm_comment(db: Session, alarm_id: int, comment: str, current_user:
             body=comment_text,
             actor_username=current_user.username,
             link=f"/alarms#alarm-{alarm.id}",
-            metadata={"alarm_id": alarm.id, "comment_id": None},
+            metadata={
+                "alarm_id": alarm.id,
+                "comment_id": None,
+                "_title_i18n": {"key": "alarm_comment_new", "params": {"title": alarm.title}},
+            },
         )
         # Email bildirimi: kullanici email tercihi acik VE SMTP enabled ise.
         try:

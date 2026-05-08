@@ -703,10 +703,13 @@
         "passwordResetHint": "Boş bırakırsanız şifre değişmez."
       },
       "delete": {
-        "confirm": "{{name}} kullanıcısını silmek istediğinize emin misiniz?",
+        "confirm": "{{name}} adlı kullanıcıyı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.",
         "success": "Kullanıcı silindi.",
         "fail": "Kullanıcı silinemedi."
       },
+      "resetPasswordMinLen": "Şifre en az 8 karakter olmalıdır.",
+      "resetPasswordMismatch": "Şifre tekrarı eşleşmiyor.",
+      "resetPasswordFail": "Şifre sıfırlanamadı.",
       "roleNames": {
         "engineer": "Mühendis",
         "installer": "Kurulumcu",
@@ -1123,7 +1126,12 @@
         "endpoint": "Adres",
         "status": "Durum",
         "actions": "İşlem"
-      }
+      },
+      "downloadXlsx": "Sinyal Listesi (Excel)",
+      "downloadXlsxTitle": "SCADA için Excel sinyal listesi indir",
+      "downloadCsvTitle": "CSV (eski format)",
+      "confirmDelete": "{{name}} hedefi silinsin mi?",
+      "emptyHint": "Henüz outbound hedef yok. Üst sağdan + Hedef Ekle ile yeni bir hedef oluşturun."
     },
     "grid": {
       "title": "Hat Yönetimi",
@@ -1298,6 +1306,22 @@
     "badgeAssignment": "Atama",
     "badgeComment": "Yorum",
     "badgeFault": "Arıza",
+    "titles": {
+      "alarm_new": "Yeni alarm: {{title}}",
+      "alarm_assignment_self": "Bu alarmı kendi üstünüze aldınız: {{title}}",
+      "alarm_assignment_other": "Size yeni bir alarm atandı: {{title}}",
+      "alarm_comment_new": "Yeni yorum: {{title}}",
+      "alarm_personal": "Alarm: {{title}}",
+      "fault_assignment_self": "Bu arızayı kendi üstünüze aldınız: {{line}}",
+      "fault_assignment_other": "Size yeni bir arıza atandı: {{line}}",
+      "fault_comment_new": "Yeni yorum: {{line}}"
+    },
+    "bodies": {
+      "fault_assignment_with_pole_region": "Hat: {{line}} ({{region}}), Direk #{{from}} ↔ #{{to}}",
+      "fault_assignment_with_pole": "Hat: {{line}}, Direk #{{from}} ↔ #{{to}}",
+      "fault_assignment_with_region": "Hat: {{line}} ({{region}})",
+      "fault_assignment_simple": "Hat: {{line}}"
+    },
     "level": {
       "critical": "Kritik",
       "warning": "Uyarı",

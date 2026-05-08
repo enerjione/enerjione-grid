@@ -275,6 +275,7 @@ def ingest_alarm(
             "source_timestamp": payload.source_timestamp.isoformat()
             if payload.source_timestamp
             else None,
+            "_title_i18n": {"key": "alarm_new", "params": {"title": payload.title}},
         },
     )
     # Ariza listesini yeniden hesapla — yeni alarm hatta etkili olabilir.
