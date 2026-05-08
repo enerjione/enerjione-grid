@@ -151,6 +151,8 @@ def create_region(
         actor_username=current_user.username,
         message=f"Bölge eklendi: {row.name} ({row.code})",
         metadata={"region_id": row.id},
+        i18n_key="region_created",
+        i18n_params={"name": row.name, "code": row.code},
     )
     db.commit()
     db.refresh(row)
@@ -175,6 +177,8 @@ def update_region(
         actor_username=current_user.username,
         message=f"Bölge güncellendi: {row.name}",
         metadata={"region_id": row.id, "fields": list(changes.keys())},
+        i18n_key="region_updated",
+        i18n_params={"name": row.name},
     )
     db.commit()
     db.refresh(row)
@@ -197,6 +201,8 @@ def delete_region(
         actor_username=current_user.username,
         message=f"Bölge silindi: {name} ({code})",
         metadata={"region_id": region_id},
+        i18n_key="region_deleted",
+        i18n_params={"name": name, "code": code},
     )
     db.commit()
     return None
@@ -300,6 +306,8 @@ def create_line(
         actor_username=current_user.username,
         message=f"Hat eklendi: {row.name} ({row.code})",
         metadata={"line_id": row.id, "region_id": row.region_id},
+        i18n_key="line_created",
+        i18n_params={"name": row.name, "code": row.code},
     )
     db.commit()
     db.refresh(row)
@@ -327,6 +335,8 @@ def update_line(
         actor_username=current_user.username,
         message=f"Hat güncellendi: {row.name}",
         metadata={"line_id": row.id, "fields": list(changes.keys())},
+        i18n_key="line_updated",
+        i18n_params={"name": row.name},
     )
     db.commit()
     db.refresh(row)
@@ -349,6 +359,8 @@ def delete_line(
         actor_username=current_user.username,
         message=f"Hat silindi: {name} ({code})",
         metadata={"line_id": line_id},
+        i18n_key="line_deleted",
+        i18n_params={"name": name, "code": code},
     )
     db.commit()
     return None

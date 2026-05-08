@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type { DeviceRow, Iec104RuntimeStatus, OutboundTarget } from "../../shared/types";
@@ -61,6 +62,7 @@ export function OutboundTargetsPanel({
   onAutoAssignDeviceCa,
   onFetchIec104Runtime
 }: Props) {
+  const { t } = useTranslation();
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<OutboundTarget | null>(null);
   const [error, setError] = useState("");
@@ -367,9 +369,9 @@ export function OutboundTargetsPanel({
   return (
     <section className="tab-panel">
       <div className="panel-head">
-        <h3>Outbound Hedefleri</h3>
+        <h3>{t("engineering.outbound.title")}</h3>
         <button className="add-user-btn" onClick={() => setCreateOpen(true)}>
-          + Hedef Ekle
+          + {t("engineering.outbound.newTarget")}
         </button>
       </div>
       {error ? <p className="error-text">{error}</p> : null}

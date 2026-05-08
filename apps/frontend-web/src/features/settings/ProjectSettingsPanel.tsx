@@ -5,6 +5,7 @@
  * (login + header) ProjectSettingsProvider uzerinden yansir.
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import type { ProjectSettings } from "../../shared/types";
@@ -28,6 +29,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export function ProjectSettingsPanel({ onSave }: Props) {
+  const { t } = useTranslation();
   const { settings, refresh } = useProjectSettings();
 
   const [projectName, setProjectName] = useState("");
@@ -128,7 +130,7 @@ export function ProjectSettingsPanel({ onSave }: Props) {
   return (
     <section className="tab-panel project-settings-panel">
       <div className="panel-head">
-        <h3>Proje Ayarları</h3>
+        <h3>{t("engineering.nav.projectSettings")}</h3>
       </div>
       <p className="helper-text">
         Müşteri logosu burada güncellendiğinde hem login ekranı hem de üst

@@ -93,6 +93,12 @@ def create_manual_backup(
             else f"Manuel yedek başarısız: {job.error_message or '-'}"
         ),
         metadata={"backup_id": job.id, "size_bytes": job.size_bytes},
+        i18n_key="backup_created" if job.status == "success" else "backup_failed",
+        i18n_params={
+            "id": job.id,
+            "size": job.size_bytes or "-",
+            "error": job.error_message or "-",
+        },
     )
     db.commit()
     return _to_read(job)
@@ -132,6 +138,7 @@ def update_schedule(
             "interval_hours": sch.interval_hours,
             "retention_count": sch.retention_count,
         },
+        i18n_key="backup_schedule_updated",
     )
     db.commit()
     db.refresh(sch)
@@ -173,6 +180,8 @@ def delete_backup(
         actor_username=current_user.username,
         message=f"Yedek silindi (id={job.id})",
         metadata={"backup_id": job.id},
+        i18n_key="backup_deleted",
+        i18n_params={"id": job.id},
     )
     db.delete(job)
     db.commit()
@@ -198,6 +207,8 @@ def restore(
         actor_username=current_user.username,
         message=f"Yedek geri yukleme baslatildi (id={job.id})",
         metadata={"backup_id": job.id},
+        i18n_key="backup_restore_started",
+        i18n_params={"id": job.id},
     )
     db.commit()
     ok, err = restore_backup(db, job)
@@ -213,6 +224,8 @@ def restore(
             else f"Yedek geri yukleme hatasi: {err[:200]}"
         ),
         metadata={"backup_id": job.id, "error": err if not ok else None},
+        i18n_key="backup_restore_finished" if ok else "backup_restore_failed",
+        i18n_params={"id": job.id, "error": (err or "")[:200]},
     )
     db.commit()
     if not ok:

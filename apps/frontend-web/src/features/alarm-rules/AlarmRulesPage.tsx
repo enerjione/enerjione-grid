@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type {
@@ -97,6 +98,7 @@ export function AlarmRulesPage({
   onUpdate,
   onDelete
 }: Props) {
+  const { t } = useTranslation();
   const canEdit = role === "installer";
 
   const signalByKey = useMemo(() => {
@@ -649,7 +651,7 @@ export function AlarmRulesPage({
         <input
           type="search"
           className="rules-search"
-          placeholder="Kural ara (ad, sinyal, açıklama)..."
+          placeholder={t("common.searchPlaceholder")}
           value={ruleSearch}
           onChange={(e) => setRuleSearch(e.target.value)}
         />
@@ -658,7 +660,7 @@ export function AlarmRulesPage({
             value={ruleLevelFilter}
             onChange={(e) => setRuleLevelFilter(e.target.value as typeof ruleLevelFilter)}
           >
-            <option value="all">Tüm seviyeler</option>
+            <option value="all">{t("alarms.filterAllLevels")}</option>
             {LEVELS.map((lv) => (
               <option key={lv} value={lv}>
                 {LEVEL_LABEL[lv]}
@@ -671,7 +673,7 @@ export function AlarmRulesPage({
         </span>
         {canEdit ? (
           <button type="button" className="primary-btn rules-new-btn" onClick={startCreate}>
-            + Yeni Kural
+            + {t("engineering.alarmRules.newRule")}
           </button>
         ) : null}
       </div>
@@ -682,7 +684,7 @@ export function AlarmRulesPage({
         </p>
       ) : null}
 
-      {loading ? <p className="helper-text">Yükleniyor…</p> : null}
+      {loading ? <p className="helper-text">{t("common.loading")}</p> : null}
 
       <div className="rules-v3-list-wrap">
         {filteredRules.length === 0 ? (

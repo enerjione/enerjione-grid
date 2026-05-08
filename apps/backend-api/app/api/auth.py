@@ -32,6 +32,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         severity="info",
         actor_username=user.username,
         message=f"{user.username} sisteme giriş yaptı",
+        i18n_key="user_login",
+        i18n_params={"user": user.username},
     )
     db.commit()
     return TokenResponse(access_token=access_token, role=user.role, username=user.username)
@@ -90,6 +92,8 @@ def change_my_password(
         severity="info",
         actor_username=current_user.username,
         message=f"{current_user.username} şifresini değiştirdi",
+        i18n_key="password_changed",
+        i18n_params={"user": current_user.username},
     )
     db.commit()
     return None
@@ -104,6 +108,8 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
         severity="info",
         actor_username=current_user.username,
         message=f"{current_user.username} sistemden çıkış yaptı",
+        i18n_key="user_logout",
+        i18n_params={"user": current_user.username},
     )
     db.commit()
     return None

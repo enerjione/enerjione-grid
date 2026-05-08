@@ -10,6 +10,7 @@ import {
   severityLabelTr,
   severityPillClass
 } from "./eventDisplayLabels";
+import { formatEventMessage } from "./formatEventMessage";
 
 type Props = {
   events: SystemEvent[];
@@ -82,11 +83,15 @@ export function EventsPage({ events, loading, devices }: Props) {
     return events.filter((item) => {
       const categoryOk = categoryFilter === "all" ? true : item.category === categoryFilter;
       const severityOk = severityFilter === "all" ? true : item.severity === severityFilter;
-      const text = `${item.message} ${item.actor_username ?? ""} ${item.device_code ?? ""}`.toLowerCase();
+      // Arama, ham mesaj + cevrilmis mesaj uzerinden gecsin (kullanici hangi
+      // dilde aradigi bilinmiyor)
+      const translated = formatEventMessage(item);
+      const text = `${item.message} ${translated} ${item.actor_username ?? ""} ${item.device_code ?? ""}`.toLowerCase();
       const searchOk = search.trim() ? text.includes(search.trim().toLowerCase()) : true;
       return categoryOk && severityOk && searchOk;
     });
-  }, [events, categoryFilter, severityFilter, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, categoryFilter, severityFilter, search, i18n.language]);
 
   // Filtre/arama degisince ilk sayfaya don
   useEffect(() => {
@@ -101,7 +106,7 @@ export function EventsPage({ events, loading, devices }: Props) {
   const exportRows = filteredEvents.map((item) => ({
     oncelik: severityLabelTr(item.severity),
     kategori: categoryLabelTr(item.category),
-    mesaj: item.message,
+    mesaj: formatEventMessage(item),
     kullanici: item.actor_username ?? "-",
     cihaz: item.device_code ?? "-",
     tarih: new Date(item.created_at).toLocaleString(localeTag)
@@ -206,7 +211,7 @@ export function EventsPage({ events, loading, devices }: Props) {
                       {categoryLabelTr(item.category)}
                     </span>
                   </td>
-                  <td>{item.message}</td>
+                  <td>{formatEventMessage(item)}</td>
                   <td className="event-col-user">{item.actor_username ?? "-"}</td>
                   <td className="event-col-device">{renderDeviceCell(item)}</td>
                   <td className="event-col-source">{renderSourceCell(item)}</td>

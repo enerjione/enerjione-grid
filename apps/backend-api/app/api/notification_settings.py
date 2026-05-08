@@ -59,6 +59,7 @@ def update_notification_settings(
         severity="info",
         actor_username=current_user.username,
         message="Bildirim ayarları güncellendi",
+        i18n_key="notification_settings_updated",
     )
     db.commit()
     db.refresh(settings_row)

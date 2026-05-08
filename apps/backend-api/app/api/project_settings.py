@@ -69,6 +69,7 @@ def update_project_settings(
         actor_username=current_user.username,
         message=f"Proje ayarları güncellendi: {', '.join(summary_fields)}",
         metadata={"fields": list(updates.keys())},
+        i18n_key="project_settings_updated",
     )
     db.commit()
     db.refresh(row)

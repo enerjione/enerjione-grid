@@ -151,6 +151,8 @@ def create_gateway(
         actor_username=current_user.username,
         message=f"Gateway eklendi: {row.name} ({row.code})",
         metadata={"gateway_code": row.code},
+        i18n_key="gateway_created",
+        i18n_params={"name": row.name, "code": row.code},
     )
     db.commit()
     db.refresh(row)
@@ -178,6 +180,8 @@ def update_gateway(
         actor_username=current_user.username,
         message=f"Gateway güncellendi: {row.name} ({row.code})",
         metadata={"gateway_code": row.code, "fields": list(changes.keys())},
+        i18n_key="gateway_updated",
+        i18n_params={"name": row.name, "code": row.code},
     )
     db.commit()
     db.refresh(row)
@@ -216,6 +220,8 @@ def delete_gateway(
         actor_username=current_user.username,
         message=f"Gateway silindi: {name} ({code}); {deleted_devices} bağlı cihaz da kaldırıldı",
         metadata={"gateway_code": code, "deleted_devices": deleted_devices},
+        i18n_key="gateway_deleted",
+        i18n_params={"name": name, "code": code, "count": deleted_devices},
     )
     db.commit()
     # Best-effort RabbitMQ user temizligi response sonrasina ertelenir.
@@ -245,6 +251,8 @@ def enable_gateway(
             actor_username=current_user.username,
             message=f"{row.name} ({row.code}) gateway'i etkinleştirildi",
             metadata={"gateway_code": row.code, "gateway_name": row.name},
+            i18n_key="gateway_enabled",
+            i18n_params={"name": row.name, "code": row.code},
         )
     db.commit()
     db.refresh(row)
@@ -273,6 +281,8 @@ def disable_gateway(
             actor_username=current_user.username,
             message=f"{row.name} ({row.code}) gateway'i devre dışı bırakıldı",
             metadata={"gateway_code": row.code, "gateway_name": row.name},
+            i18n_key="gateway_disabled",
+            i18n_params={"name": row.name, "code": row.code},
         )
     db.commit()
     db.refresh(row)
@@ -312,6 +322,8 @@ def refresh_gateway_all_devices(
         actor_username=current_user.username,
         message=f"{row.name} ({row.code}) — tum cihazlara sorgu istegi (#{new_nonce})",
         metadata={"gateway_code": row.code, "refresh_nonce": new_nonce},
+        i18n_key="gateway_refresh_all_requested",
+        i18n_params={"name": row.name, "code": row.code, "nonce": new_nonce},
     )
     db.commit()
     db.refresh(row)

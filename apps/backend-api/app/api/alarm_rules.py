@@ -53,6 +53,8 @@ def create_alarm_rule(
         actor_username=current_user.username,
         message=f"Alarm kuralı eklendi: {row.name} ({row.signal_key})",
         metadata={"rule_id": row.id, "signal_key": row.signal_key, "level": row.level},
+        i18n_key="alarm_rule_created",
+        i18n_params={"name": row.name, "signal": row.signal_key},
     )
     db.commit()
     db.refresh(row)
@@ -80,6 +82,8 @@ def update_alarm_rule(
         actor_username=current_user.username,
         message=f"Alarm kuralı güncellendi: {row.name}",
         metadata={"rule_id": row.id, "fields": list(changes.keys())},
+        i18n_key="alarm_rule_updated",
+        i18n_params={"name": row.name},
     )
     db.commit()
     db.refresh(row)
@@ -106,6 +110,8 @@ def delete_alarm_rule(
         actor_username=current_user.username,
         message=f"Alarm kuralı silindi: {name} ({sig})",
         metadata={"rule_id": rule_id, "signal_key": sig},
+        i18n_key="alarm_rule_deleted",
+        i18n_params={"name": name, "signal": sig},
     )
     db.commit()
     return None

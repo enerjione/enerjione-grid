@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
@@ -190,15 +191,19 @@ const SOURCE_LABEL: Record<SourceKey, string> = {
   sat02: "Satellite 02"
 };
 
-function formatRelative(iso: string | null | undefined): string {
+function formatRelative(
+  iso: string | null | undefined,
+  localeTag: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
   if (!iso) return "—";
   const d = new Date(iso);
   const sec = Math.round((Date.now() - d.getTime()) / 1000);
-  if (sec < 5) return "şimdi";
-  if (sec < 60) return `${sec} sn önce`;
-  if (sec < 3600) return `${Math.round(sec / 60)} dk önce`;
-  if (sec < 86400) return `${Math.round(sec / 3600)} sa önce`;
-  return d.toLocaleString("tr-TR");
+  if (sec < 5) return t("common.now");
+  if (sec < 60) return t("common.secondsAgoShort", { count: sec });
+  if (sec < 3600) return t("common.minutesAgoShort", { count: Math.round(sec / 60) });
+  if (sec < 86400) return t("common.hoursAgoShort", { count: Math.round(sec / 3600) });
+  return d.toLocaleString(localeTag);
 }
 
 // Harita uzerinde tiklanan hat / direk icin sag-popup kart bilgisi.
@@ -220,6 +225,8 @@ type LineInfoCard = {
 };
 
 export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [poleInfo, setPoleInfo] = useState<PoleInfoCard | null>(null);
   const [lineInfo, setLineInfo] = useState<LineInfoCard | null>(null);
@@ -1090,7 +1097,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               type="button"
               className="map-info-card-close"
               onClick={() => setPoleInfo(null)}
-              aria-label="Kapat"
+              aria-label={t("dashboard.popup.close")}
             >
               <span className="material-symbols-outlined">close</span>
             </button>
@@ -1105,7 +1112,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                 )}
               </div>
               <div className="map-info-card-title">
-                <h4>{poleInfo.pole.name ?? `Direk #${poleInfo.pole.sequence_no}`}</h4>
+                <h4>{poleInfo.pole.name ?? t("dashboard.popup.poleDefault", { seq: poleInfo.pole.sequence_no })}</h4>
                 <span className="map-info-card-sub">
                   #{poleInfo.pole.sequence_no} · {poleInfo.lineName}
                 </span>
@@ -1113,37 +1120,37 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             </header>
             <ul className="map-info-card-rows">
               <li>
-                <span className="map-info-card-label">Tip</span>
+                <span className="map-info-card-label">{t("dashboard.popup.type")}</span>
                 <span className="map-info-card-value">
-                  {poleInfo.pole.pole_type === "transformer" ? "Trafo direği" : "Direk"}
+                  {poleInfo.pole.pole_type === "transformer" ? t("dashboard.popup.transformer") : t("dashboard.popup.pole")}
                 </span>
               </li>
               {poleInfo.isStart || poleInfo.isEnd ? (
                 <li>
-                  <span className="map-info-card-label">Konum</span>
+                  <span className="map-info-card-label">{t("dashboard.popup.location")}</span>
                   <span className="map-info-card-value">
-                    {poleInfo.isStart ? "Hat başı" : "Hat sonu"}
+                    {poleInfo.isStart ? t("dashboard.popup.poleStart") : t("dashboard.popup.poleEnd")}
                   </span>
                 </li>
               ) : null}
               {poleInfo.isBranchPoint && poleInfo.childLineNames.length > 0 ? (
                 <li>
-                  <span className="map-info-card-label">Branşman</span>
+                  <span className="map-info-card-label">{t("dashboard.popup.branch")}</span>
                   <span className="map-info-card-value" style={{ color: "#6366f1" }}>
-                    Ayrılan: {poleInfo.childLineNames.join(", ")}
+                    {t("dashboard.popup.branchSplit", { names: poleInfo.childLineNames.join(", ") })}
                   </span>
                 </li>
               ) : null}
               {poleInfo.isBranchEntry && poleInfo.branchParentLineName ? (
                 <li>
-                  <span className="map-info-card-label">Bağlı</span>
+                  <span className="map-info-card-label">{t("dashboard.popup.connected")}</span>
                   <span className="map-info-card-value" style={{ color: "#6366f1" }}>
                     {poleInfo.branchParentLineName}
                   </span>
                 </li>
               ) : null}
               <li>
-                <span className="map-info-card-label">Koordinat</span>
+                <span className="map-info-card-label">{t("dashboard.popup.coords")}</span>
                 <span className="map-info-card-value" style={{ fontFamily: "monospace", fontSize: 11 }}>
                   {poleInfo.pole.latitude.toFixed(6)}, {poleInfo.pole.longitude.toFixed(6)}
                 </span>
@@ -1159,7 +1166,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               type="button"
               className="map-info-card-close"
               onClick={() => setLineInfo(null)}
-              aria-label="Kapat"
+              aria-label={t("dashboard.popup.close")}
             >
               <span className="material-symbols-outlined">close</span>
             </button>
@@ -1168,7 +1175,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                 <span className="material-symbols-outlined">timeline</span>
               </div>
               <div className="map-info-card-title">
-                <h4>{lineInfo.name || "Hat"}</h4>
+                <h4>{lineInfo.name || t("dashboard.popup.lineDefault")}</h4>
                 {lineInfo.regionName ? (
                   <span className="map-info-card-sub">{lineInfo.regionName}</span>
                 ) : null}
@@ -1177,17 +1184,17 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             <ul className="map-info-card-rows">
               {lineInfo.regionName ? (
                 <li>
-                  <span className="map-info-card-label">Bölge</span>
+                  <span className="map-info-card-label">{t("dashboard.popup.region")}</span>
                   <span className="map-info-card-value">{lineInfo.regionName}</span>
                 </li>
               ) : null}
               <li>
-                <span className="map-info-card-label">Durum</span>
+                <span className="map-info-card-label">{t("dashboard.popup.status")}</span>
                 <span
                   className="map-info-card-value"
                   style={{ color: lineInfo.isFault ? FAULT_COLOR : HEALTHY_FAULT_LINE_COLOR }}
                 >
-                  {lineInfo.isFault ? "Tahmini arıza yeri" : "Sağlıklı"}
+                  {lineInfo.isFault ? t("dashboard.popup.lineFault") : t("dashboard.popup.lineHealthy")}
                 </span>
               </li>
             </ul>
@@ -1200,7 +1207,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               type="button"
               className="device-popup-close"
               onClick={() => onSelectDevice(0)}
-              aria-label="Kapat"
+              aria-label={t("dashboard.popup.close")}
             >
               <span className="material-symbols-outlined">close</span>
             </button>
@@ -1213,19 +1220,19 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               </div>
               <div className="device-popup-badges">
                 {selectedDevice.alarmActive ? (
-                  <span className="device-popup-alarm-badge" title="Aktif alarm var">
+                  <span className="device-popup-alarm-badge" title={t("dashboard.popup.alarmActive")}>
                     <span className="material-symbols-outlined">warning</span>
-                    Alarm
+                    {t("dashboard.popup.alarmBadge")}
                   </span>
                 ) : null}
                 <span
                   className={`device-popup-status ${
                     selectedDevice.communicationStatus === "online" ? "online" : "offline"
                   }`}
-                  title={selectedDevice.communicationStatus === "online" ? "Çevrimiçi" : "Çevrimdışı"}
+                  title={selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
                 >
                   <span className="device-popup-status-dot" />
-                  {selectedDevice.communicationStatus === "online" ? "Çevrimiçi" : "Çevrimdışı"}
+                  {selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
                 </span>
               </div>
             </header>
@@ -1235,7 +1242,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               <div className="device-popup-info-item">
                 <span className="material-symbols-outlined">place</span>
                 <div>
-                  <span className="device-popup-info-label">Konum</span>
+                  <span className="device-popup-info-label">{t("dashboard.popup.location")}</span>
                   <span className="device-popup-info-value">
                     {locateDevice(selectedDevice.latitude, selectedDevice.longitude).label}
                   </span>
@@ -1244,9 +1251,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               <div className="device-popup-info-item">
                 <span className="material-symbols-outlined">schedule</span>
                 <div>
-                  <span className="device-popup-info-label">Son veri</span>
+                  <span className="device-popup-info-label">{t("dashboard.popup.lastData")}</span>
                   <span className="device-popup-info-value">
-                    {formatRelative(selectedDevice.lastUpdateAt)}
+                    {formatRelative(selectedDevice.lastUpdateAt, localeTag, t)}
                   </span>
                 </div>
               </div>
@@ -1262,7 +1269,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   <div
                     key={src}
                     className={`device-popup-battery-card ${batteryClass(pct)}`}
-                    title={voltage !== null ? `${voltage.toFixed(2)} V` : "Veri yok"}
+                    title={voltage !== null ? `${voltage.toFixed(2)} V` : t("dashboard.popup.noData")}
                   >
                     <div className="device-popup-battery-card-head">
                       <span className={`badge badge-source badge-source-${src}`}>
@@ -1294,7 +1301,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               onClick={() => setDetailModalOpen(true)}
             >
               <span className="material-symbols-outlined">read_more</span>
-              Tüm detayları göster
+              {t("dashboard.popup.showAllDetails")}
             </button>
           </div>
         ) : null}
@@ -1319,37 +1326,35 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
 // ===================================================================
 
 // Per-source sinyal seti — her kaynak (Master / Sat01 / Sat02) icin ayni anahtar.
-// Durum + ariza yonu sinyalleri tek listede; UI bunlari grupluyor (durum ve yon).
-const PER_SOURCE_BINARY: { suffix: string; label: string; group?: "state" | "direction" }[] = [
-  { suffix: "overcurrent_tripped", label: "Aşırı akım", group: "state" },
-  { suffix: "delta_i_delta_t_tripped", label: "ΔI/Δt", group: "state" },
-  { suffix: "voltage_loss", label: "Gerilim kaybı", group: "state" },
-  { suffix: "current_loss", label: "Akım kaybı", group: "state" },
-  { suffix: "battery_status", label: "Pil durumu", group: "state" },
-  { suffix: "communication_status", label: "Haberleşme", group: "state" },
-  { suffix: "permanent_fault", label: "Kalıcı arıza", group: "state" },
-  { suffix: "momentary_fault", label: "Geçici arıza", group: "state" },
-  // Ariza yonu / akis yonu sinyalleri (A=Green, B=Red)
-  { suffix: "load_flow_direction_green_a", label: "Akış yönü A (yeşil)", group: "direction" },
-  { suffix: "load_flow_direction_red_b", label: "Akış yönü B (kırmızı)", group: "direction" },
-  { suffix: "overcurrent_fault_direction_green_a", label: "Aşırı akım arıza yönü A", group: "direction" },
-  { suffix: "overcurrent_fault_direction_red_b", label: "Aşırı akım arıza yönü B", group: "direction" },
-  { suffix: "delta_i_delta_t_fault_direction_green_a", label: "ΔI/Δt arıza yönü A", group: "direction" },
-  { suffix: "delta_i_delta_t_fault_direction_red_b", label: "ΔI/Δt arıza yönü B", group: "direction" }
+// Etiketler i18n key'leri olarak tutuluyor; renderda t() ile cozuluyor.
+const PER_SOURCE_BINARY: { suffix: string; labelKey: string; group?: "state" | "direction" }[] = [
+  { suffix: "overcurrent_tripped", labelKey: "dashboard.deviceDetail.overcurrent", group: "state" },
+  { suffix: "delta_i_delta_t_tripped", labelKey: "dashboard.deviceDetail.didt", group: "state" },
+  { suffix: "voltage_loss", labelKey: "dashboard.deviceDetail.voltageLoss", group: "state" },
+  { suffix: "current_loss", labelKey: "dashboard.deviceDetail.currentLoss", group: "state" },
+  { suffix: "battery_status", labelKey: "dashboard.deviceDetail.battery", group: "state" },
+  { suffix: "communication_status", labelKey: "dashboard.popup.lastData", group: "state" },
+  { suffix: "permanent_fault", labelKey: "dashboard.deviceDetail.permanentFault", group: "state" },
+  { suffix: "momentary_fault", labelKey: "dashboard.deviceDetail.temporaryFault", group: "state" },
+  { suffix: "load_flow_direction_green_a", labelKey: "dashboard.deviceDetail.flowDirA", group: "direction" },
+  { suffix: "load_flow_direction_red_b", labelKey: "dashboard.deviceDetail.flowDirB", group: "direction" },
+  { suffix: "overcurrent_fault_direction_green_a", labelKey: "dashboard.deviceDetail.overcurrentFaultDirA", group: "direction" },
+  { suffix: "overcurrent_fault_direction_red_b", labelKey: "dashboard.deviceDetail.overcurrentFaultDirB", group: "direction" },
+  { suffix: "delta_i_delta_t_fault_direction_green_a", labelKey: "dashboard.deviceDetail.didtFaultDirA", group: "direction" },
+  { suffix: "delta_i_delta_t_fault_direction_red_b", labelKey: "dashboard.deviceDetail.didtFaultDirB", group: "direction" }
 ];
 
-const PER_SOURCE_ANALOG: { suffix: string; label: string; unit: string; group?: "live" | "fault" }[] = [
-  { suffix: "actual_current", label: "Akım", unit: "mA", group: "live" },
-  { suffix: "actual_voltage", label: "Gerilim", unit: "V", group: "live" },
-  { suffix: "average_current", label: "Ort. akım", unit: "mA", group: "live" },
-  { suffix: "maximum_current", label: "Max. akım", unit: "mA", group: "live" },
-  { suffix: "conductor_temperature", label: "İletken sıc.", unit: "°C", group: "live" },
-  { suffix: "device_temperature", label: "Cihaz sıc.", unit: "°C", group: "live" },
-  // Ariza ile ilgili degerler — son arizada kaydedilen
-  { suffix: "fault_current", label: "Arıza akımı", unit: "mA", group: "fault" },
-  { suffix: "fault_duration", label: "Arıza süresi", unit: "ms", group: "fault" },
-  { suffix: "last_good_known_current", label: "Son iyi akım", unit: "mA", group: "fault" },
-  { suffix: "minimum_current", label: "Min. akım", unit: "mA", group: "fault" }
+const PER_SOURCE_ANALOG: { suffix: string; labelKey: string; unit: string; group?: "live" | "fault" }[] = [
+  { suffix: "actual_current", labelKey: "dashboard.deviceDetail.current", unit: "mA", group: "live" },
+  { suffix: "actual_voltage", labelKey: "dashboard.deviceDetail.voltage", unit: "V", group: "live" },
+  { suffix: "average_current", labelKey: "dashboard.deviceDetail.avgCurrent", unit: "mA", group: "live" },
+  { suffix: "maximum_current", labelKey: "dashboard.deviceDetail.maxCurrent", unit: "mA", group: "live" },
+  { suffix: "conductor_temperature", labelKey: "dashboard.deviceDetail.conductorTemp", unit: "°C", group: "live" },
+  { suffix: "device_temperature", labelKey: "dashboard.deviceDetail.deviceTemp", unit: "°C", group: "live" },
+  { suffix: "fault_current", labelKey: "dashboard.deviceDetail.faultCurrent", unit: "mA", group: "fault" },
+  { suffix: "fault_duration", labelKey: "dashboard.deviceDetail.faultDuration", unit: "ms", group: "fault" },
+  { suffix: "last_good_known_current", labelKey: "dashboard.deviceDetail.lastGoodCurrent", unit: "mA", group: "fault" },
+  { suffix: "minimum_current", labelKey: "dashboard.deviceDetail.minCurrent", unit: "mA", group: "fault" }
 ];
 
 const SOURCES: SourceKey[] = ["master", "sat01", "sat02"];
@@ -1370,6 +1375,7 @@ function DeviceDetailModal({
   gridSnapshot: GridSnapshot | null;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const deviceRows = liveValues.filter((r) => r.device_id === device.id);
   const valueByKey = new Map(deviceRows.map((r) => [r.signal_key, r]));
 
@@ -1408,16 +1414,16 @@ function DeviceDetailModal({
 
     const renderAnalogRow = ({
       suffix,
-      label,
+      labelKey,
       unit
-    }: { suffix: string; label: string; unit: string }) => {
+    }: { suffix: string; labelKey: string; unit: string }) => {
       const row = valueByKey.get(`${src}.${suffix}`);
       const v = row?.value;
       const display =
         typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "—";
       return (
         <div key={suffix} className="device-detail-col-analog-row">
-          <span className="lbl">{label}</span>
+          <span className="lbl">{t(labelKey)}</span>
           <span className="val">
             {display}
             <span className="unit"> {row?.unit ?? unit}</span>
@@ -1426,7 +1432,7 @@ function DeviceDetailModal({
       );
     };
 
-    const renderBinaryRow = ({ suffix, label }: { suffix: string; label: string }) => {
+    const renderBinaryRow = ({ suffix, labelKey }: { suffix: string; labelKey: string }) => {
       const row = valueByKey.get(`${src}.${suffix}`);
       if (!row) return null;
       const v = row.value;
@@ -1438,7 +1444,7 @@ function DeviceDetailModal({
           title={`${src}.${suffix}`}
         >
           <span className="dot" />
-          <span className="lbl">{label}</span>
+          <span className="lbl">{t(labelKey)}</span>
         </div>
       );
     };
@@ -1457,7 +1463,7 @@ function DeviceDetailModal({
           {/* Batarya — sag ust kosede pil ikonu (sidebar ile ayni stil) */}
           <div
             className={`device-battery device-battery-mini ${battLevelCls}`}
-            title={typeof battV === "number" ? `${battV.toFixed(2)} V` : "Voltaj —"}
+            title={typeof battV === "number" ? `${battV.toFixed(2)} V` : t("dashboard.popup.noData")}
           >
             <span className="device-battery-icon">
               <span
@@ -1476,14 +1482,14 @@ function DeviceDetailModal({
           <div className="device-detail-mini-counter is-permanent">
             <span className="material-symbols-outlined">error</span>
             <div>
-              <div className="lbl">Kalıcı</div>
+              <div className="lbl">{t("dashboard.deviceDetail.permanent")}</div>
               <div className="val">{permVal ?? "—"}</div>
             </div>
           </div>
           <div className="device-detail-mini-counter is-transient">
             <span className="material-symbols-outlined">flash_on</span>
             <div>
-              <div className="lbl">Geçici</div>
+              <div className="lbl">{t("dashboard.deviceDetail.temporary")}</div>
               <div className="val">{tempVal ?? "—"}</div>
             </div>
           </div>
@@ -1493,7 +1499,7 @@ function DeviceDetailModal({
         <div className="device-detail-col-section">
           <div className="device-detail-col-title">
             <span className="material-symbols-outlined">monitoring</span>
-            Ölçümler
+            {t("dashboard.deviceDetail.measurements")}
           </div>
           <div className="device-detail-col-analog">
             {liveAnalog.map(renderAnalogRow)}
@@ -1505,7 +1511,7 @@ function DeviceDetailModal({
           <div className="device-detail-col-section">
             <div className="device-detail-col-title">
               <span className="material-symbols-outlined">warning</span>
-              Arıza Ölçümleri
+              {t("dashboard.deviceDetail.faultMeasurements")}
             </div>
             <div className="device-detail-col-analog">
               {faultAnalog.map(renderAnalogRow)}
@@ -1517,7 +1523,7 @@ function DeviceDetailModal({
         <div className="device-detail-col-section">
           <div className="device-detail-col-title">
             <span className="material-symbols-outlined">flag</span>
-            Durum
+            {t("dashboard.deviceDetail.status")}
           </div>
           <div className="device-detail-col-binary">
             {stateBinary.map(renderBinaryRow)}
@@ -1529,7 +1535,7 @@ function DeviceDetailModal({
           <div className="device-detail-col-section">
             <div className="device-detail-col-title">
               <span className="material-symbols-outlined">explore</span>
-              Arıza Yönü
+              {t("dashboard.deviceDetail.faultDirection")}
             </div>
             <div className="device-detail-col-binary">
               {directionBinary.map(renderBinaryRow)}
@@ -1569,7 +1575,7 @@ function DeviceDetailModal({
               ) : (
                 <span className="device-detail-modal-meta-chip is-warn">
                   <span className="material-symbols-outlined">link_off</span>
-                  Hat atanmamış
+                  {t("dashboard.sidebar.noLine")}
                 </span>
               )}
             </div>
@@ -1578,7 +1584,7 @@ function DeviceDetailModal({
             type="button"
             className="device-detail-modal-close"
             onClick={onClose}
-            aria-label="Kapat"
+            aria-label={t("common.close")}
           >
             ✕
           </button>

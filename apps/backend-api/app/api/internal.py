@@ -202,6 +202,8 @@ def ingest_alarm(
             "signal_key": payload.signal_key,
             "alarm_id": alarm.id,
         },
+        i18n_key="alarm_triggered",
+        i18n_params={"title": payload.title},
     )
     # Broadcast bildirim — recipient_username=None ile tum aktif kullanicilara
     # zilde gosterilir. Spesifik atama assign_alarm'da yapilir; o zaman ek bir
@@ -385,6 +387,8 @@ def clear_alarm(
                 "source_gateway": payload.source_gateway,
                 "auto_deleted": True,
             },
+            i18n_key="alarm_auto_cleared_acked",
+            i18n_params={"title": alarm_title},
         )
         try:
             from app.services.fault_recompute_service import recompute_faults
@@ -411,6 +415,8 @@ def clear_alarm(
             "signal_key": payload.signal_key,
             "source_gateway": payload.source_gateway,
         },
+        i18n_key="alarm_auto_cleared",
+        i18n_params={"title": alarm_title},
     )
     try:
         from app.services.fault_recompute_service import recompute_faults

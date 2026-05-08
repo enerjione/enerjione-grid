@@ -82,6 +82,8 @@ def create_outbound_target(
         actor_username=current_user.username,
         message=f"Outbound hedef eklendi: {row.name} ({row.protocol.upper()})",
         metadata={"target_id": row.id, "protocol": row.protocol},
+        i18n_key="outbound_created",
+        i18n_params={"name": row.name, "protocol": row.protocol.upper()},
     )
     db.commit()
     db.refresh(row)
@@ -111,6 +113,8 @@ def update_outbound_target(
         actor_username=current_user.username,
         message=f"Outbound hedef güncellendi: {row.name}",
         metadata={"target_id": row.id, "fields": list(updates.keys())},
+        i18n_key="outbound_updated",
+        i18n_params={"name": row.name},
     )
     db.commit()
     db.refresh(row)
@@ -141,6 +145,8 @@ def delete_outbound_target(
         actor_username=current_user.username,
         message=f"Outbound hedef silindi: {name} ({proto.upper()})",
         metadata={"target_id": saved_id, "protocol": proto},
+        i18n_key="outbound_deleted",
+        i18n_params={"name": name, "protocol": proto.upper()},
     )
     db.commit()
     if was_iec104:

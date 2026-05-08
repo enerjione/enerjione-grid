@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
@@ -140,6 +141,7 @@ export function DeviceManagementPanel({
   onUpdate,
   onDelete
 }: Props) {
+  const { t } = useTranslation();
   const canManageGateways = role === "installer";
   const [selectedGatewayCode, setSelectedGatewayCode] = useState(gateways[0]?.code ?? "");
   const [selectedDeviceCode, setSelectedDeviceCode] = useState("");
@@ -508,14 +510,14 @@ export function DeviceManagementPanel({
     <section className="tab-panel device-management-panel">
       <div className="device-management-layout">
         <div className="device-management-left">
-          <h4>Gatewayler</h4>
+          <h4>{t("engineering.gateways.title")}</h4>
           {canManageGateways ? (
             <div className="section-actions">
               <button
                 className="secondary-btn action-btn full-width-btn"
                 onClick={() => setShowGatewayCreateModal(true)}
               >
-                Gateway Ekle
+                {t("engineering.gateways.addGateway")}
               </button>
             </div>
           ) : null}
@@ -551,8 +553,8 @@ export function DeviceManagementPanel({
                         type="button"
                         className="secondary-btn action-btn"
                         onClick={() => openComposeModal(gateway.code)}
-                        title="Docker Compose / .env indir"
-                        aria-label="Docker Compose indir"
+                        title={t("engineering.gateways.downloadCompose")}
+                        aria-label={t("engineering.gateways.downloadComposeShort")}
                         disabled={isDeletingThis || anotherDeleting}
                       >
                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -566,8 +568,8 @@ export function DeviceManagementPanel({
                         type="button"
                         className="secondary-btn action-btn"
                         onClick={() => handleStartGatewayEdit(gateway)}
-                        title="Gateway Düzenle"
-                        aria-label="Gateway Düzenle"
+                        title={t("engineering.gateways.edit")}
+                        aria-label={t("engineering.gateways.edit")}
                         disabled={isDeletingThis || anotherDeleting}
                       >
                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -582,8 +584,8 @@ export function DeviceManagementPanel({
                           type="button"
                           className="secondary-btn action-btn"
                           onClick={() => void onRefreshGatewayAll(gateway.code)}
-                          title="Tüm Cihazlara Sorgu At (Class 0+1+2+3 integrity poll)"
-                          aria-label="Tüm Cihazlara Sorgu At"
+                          title={t("engineering.gateways.refreshAll")}
+                          aria-label={t("engineering.gateways.refreshAllShort")}
                           disabled={isDeletingThis || anotherDeleting}
                         >
                           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
@@ -595,8 +597,8 @@ export function DeviceManagementPanel({
                         type="button"
                         className={`danger-btn action-btn gateway-delete-btn ${isDeletingThis ? "is-busy" : ""}`}
                         onClick={() => void handleDeleteGateway(gateway.code)}
-                        title={isDeletingThis ? "Siliniyor..." : "Gateway Sil"}
-                        aria-label="Gateway Sil"
+                        title={isDeletingThis ? t("engineering.gateways.deleting") : t("engineering.gateways.delete")}
+                        aria-label={t("engineering.gateways.delete")}
                         aria-busy={isDeletingThis || undefined}
                         disabled={isDeletingThis || anotherDeleting}
                       >
@@ -617,7 +619,7 @@ export function DeviceManagementPanel({
                 {isDeletingThis ? (
                   <div className="gateway-item-deleting-overlay" role="status" aria-live="polite">
                     <span className="btn-spinner gateway-deleting-spinner" aria-hidden="true" />
-                    <span className="gateway-deleting-text">Gateway siliniyor...</span>
+                    <span className="gateway-deleting-text">{t("engineering.gateways.deleting")}</span>
                   </div>
                 ) : null}
               </div>
@@ -628,10 +630,10 @@ export function DeviceManagementPanel({
         </div>
 
         <div className="device-management-middle">
-          <h4>Cihazlar</h4>
+          <h4>{t("engineering.devicesPanel.title")}</h4>
           <div className="section-actions">
             <button className="add-user-btn full-width-btn" onClick={() => setShowCreateModal(true)} disabled={!selectedGatewayCode}>
-              Cihaz Ekle
+              {t("engineering.devicesPanel.addDevice")}
             </button>
           </div>
           <div className="device-group-list">
@@ -649,7 +651,7 @@ export function DeviceManagementPanel({
                     <strong>{device.name}</strong>
                   </div>
                   <span className="device-status-sr-only">
-                    {effStatus === "online" ? "Haberleşme Var" : "Haberleşme Yok veya yoklama yok"}
+                    {effStatus === "online" ? t("engineering.devicesPanel.commOnline") : t("engineering.devicesPanel.commOffline")}
                   </span>
                 </div>
                 <div className="device-meta-row">
@@ -661,18 +663,18 @@ export function DeviceManagementPanel({
               </button>
               );
             })}
-            {devices.length === 0 ? <p className="helper-text">Bu gateway altında henüz cihaz yok.</p> : null}
+            {devices.length === 0 ? <p className="helper-text">{t("engineering.devicesPanel.noDevicesUnderGateway")}</p> : null}
           </div>
         </div>
 
         <div className="device-management-right">
-          <h4>Cihaz Özellikleri</h4>
+          <h4>{t("engineering.devicesPanel.properties")}</h4>
           {!selectedDevice ? (
-            <p className="helper-text">Sağ panelde düzenlemek için soldan bir cihaz seçin.</p>
+            <p className="helper-text">{t("engineering.devicesPanel.selectHint")}</p>
           ) : (
             <div className="device-detail-form device-detail-form--tabbed">
               <div className="device-detail-form-fixed-header">
-                <div className="device-props-tabs" role="tablist" aria-label="Cihaz özellik sekmeleri">
+                <div className="device-props-tabs" role="tablist" aria-label={t("engineering.devicesPanel.tabsAria")}>
                   <button
                     type="button"
                     role="tab"
@@ -681,7 +683,7 @@ export function DeviceManagementPanel({
                     className={devicePropsTab === "system" ? "active" : ""}
                     onClick={() => setDevicePropsTab("system")}
                   >
-                    Sistem
+                    {t("engineering.devicesPanel.tabSystem")}
                   </button>
                   <button
                     type="button"
@@ -691,7 +693,7 @@ export function DeviceManagementPanel({
                     className={devicePropsTab === "comms" ? "active" : ""}
                     onClick={() => setDevicePropsTab("comms")}
                   >
-                    Haberleşme
+                    {t("engineering.devicesPanel.tabComms")}
                   </button>
                 </div>
               </div>
@@ -871,7 +873,7 @@ export function DeviceManagementPanel({
       {showGatewayCreateModal ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleCreateGateway}>
-            <h3>Yeni Gateway Ekle</h3>
+            <h3>{t("engineering.gateways.newGatewayModal")}</h3>
             <label>
               Gateway Kodu
               <input
@@ -991,7 +993,7 @@ export function DeviceManagementPanel({
       {showCreateModal ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal device-create-modal" onSubmit={handleCreateDevice}>
-            <h3>Yeni Cihaz Ekle</h3>
+            <h3>{t("engineering.devicesPanel.newDeviceModal")}</h3>
             <label>
               Cihaz Kodu
               <input value={createCode} onChange={(event) => setCreateCode(event.target.value)} required />
@@ -1108,7 +1110,7 @@ export function DeviceManagementPanel({
       {showGatewayEditModal ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleUpdateGateway}>
-            <h3>Gateway Düzenle</h3>
+            <h3>{t("engineering.gateways.editGatewayModal")}</h3>
             <label>
               Gateway Kodu
               <input value={editGatewayCode} disabled readOnly />

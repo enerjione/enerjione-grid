@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type {
@@ -55,6 +56,7 @@ export function ResponsibilityAreasPage({
   onAddLine,
   onRemoveLine
 }: Props) {
+  const { t } = useTranslation();
   const canEdit = role === "engineer" || role === "installer";
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ResponsibilityAreaDetail | null>(null);
@@ -341,18 +343,18 @@ export function ResponsibilityAreasPage({
         {/* Sol: alanlar listesi */}
         <aside className="responsibility-sidebar">
           <div className="responsibility-sidebar-header">
-            <h3>Ekipler</h3>
+            <h3>{t("engineering.nav.responsibilityAreas")}</h3>
             {canEdit ? (
               <button
                 type="button"
                 className="primary-btn responsibility-new-btn"
                 onClick={() => setShowCreateModal(true)}
               >
-                + Yeni
+                + {t("common.add")}
               </button>
             ) : null}
           </div>
-          {loading ? <p className="helper-text">Yükleniyor...</p> : null}
+          {loading ? <p className="helper-text">{t("common.loading")}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
           <ul className="responsibility-list">
             {areas.map((area) => (

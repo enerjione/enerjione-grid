@@ -234,6 +234,14 @@ def recompute_faults(db: Session) -> None:
                         "first_green_device_id": fault.first_green_device_id,
                         "assigned_to": picked.username if picked else None,
                     },
+                    i18n_key="fault_opened",
+                    i18n_params={
+                        "line": line.name,
+                        "region": region_obj.name if region_obj else "",
+                        "from_seq": fault.from_pole_seq,
+                        "to_seq": fault.to_pole_seq,
+                        "device": last_red_label,
+                    },
                 )
             except Exception:  # noqa: BLE001
                 logger.exception("fault_record_event_failed")
@@ -281,6 +289,11 @@ def recompute_faults(db: Session) -> None:
                     "line_id": line_id,
                     "line_name": line_name,
                     "region_name": region_obj.name if region_obj else None,
+                },
+                i18n_key="fault_resolved",
+                i18n_params={
+                    "line": line_name,
+                    "region": region_obj.name if region_obj else "",
                 },
             )
         except Exception:  # noqa: BLE001

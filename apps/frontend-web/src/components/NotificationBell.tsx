@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   fetchNotifications,
@@ -14,27 +15,6 @@ type Props = {
 };
 
 const POLL_INTERVAL_MS = 30_000; // 30 sn
-
-function categoryLabel(cat: string): string {
-  switch (cat) {
-    case "alarm":
-      return "Alarm";
-    case "alarm_assignment":
-      return "Atama";
-    case "alarm_comment":
-      return "Yorum";
-    case "system":
-      return "Sistem";
-    case "warning":
-      return "Uyarı";
-    case "error":
-      return "Hata";
-    case "info":
-      return "Bilgi";
-    default:
-      return cat;
-  }
-}
 
 function severityClass(severity: string): string {
   const s = (severity || "info").toLowerCase();
@@ -66,14 +46,18 @@ function categoryIcon(cat: string): string {
   }
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(
+  iso: string,
+  localeTag: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
   const dt = new Date(iso).getTime();
   if (!Number.isFinite(dt)) return "";
   const diffSec = Math.max(0, Math.floor((Date.now() - dt) / 1000));
-  if (diffSec < 60) return `${diffSec}s önce`;
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}dk önce`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}sa önce`;
-  return new Date(iso).toLocaleString("tr-TR");
+  if (diffSec < 60) return t("notifications.timeAgo.seconds", { count: diffSec });
+  if (diffSec < 3600) return t("notifications.timeAgo.minutes", { count: Math.floor(diffSec / 60) });
+  if (diffSec < 86400) return t("notifications.timeAgo.hours", { count: Math.floor(diffSec / 3600) });
+  return new Date(iso).toLocaleString(localeTag);
 }
 
 // Sinyal kaynagi (master / sat01 / sat02 / ...) frontend dostu etikete cevir.
@@ -89,15 +73,17 @@ function sourceLabel(src: string | null | undefined): string | null {
   return _SOURCE_LABEL[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-// Alarm seviyesini Turkce etikete cevir.
-function levelLabelTr(level: string | null | undefined): string | null {
+// Alarm seviyesini i18n etiketine cevir.
+function levelLabelTr(
+  level: string | null | undefined,
+  t: (key: string) => string,
+): string | null {
   if (!level) return null;
   const k = level.toLowerCase();
-  if (k === "critical" || k === "high") return "Kritik";
-  if (k === "warning" || k === "warn" || k === "medium") return "Uyarı";
-  if (k === "info" || k === "low") return "Bilgi";
-  if (k === "error") return "Hata";
-  // Bilinmeyen — ilk harf büyük
+  if (k === "critical" || k === "high") return t("notifications.level.critical");
+  if (k === "warning" || k === "warn" || k === "medium") return t("notifications.level.warning");
+  if (k === "info" || k === "low") return t("notifications.level.info");
+  if (k === "error") return t("notifications.level.error");
   return k.charAt(0).toUpperCase() + k.slice(1);
 }
 
@@ -151,6 +137,8 @@ function parseMetadata(raw: string | null | undefined): AlarmMetadata | null {
 }
 
 export function NotificationBell({ token, onNavigate }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -211,7 +199,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
       setItems(filtered);
       setUnread(filtered.length);
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "Bildirimler alınamadı.");
+      setError(exc instanceof Error ? exc.message : t("notifications.fetchFail"));
     } finally {
       setLoading(false);
     }
@@ -249,7 +237,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
       setItems([]);
       setUnread(0);
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "İşlem başarısız.");
+      setError(exc instanceof Error ? exc.message : t("notifications.markFail"));
     }
   };
 
@@ -286,8 +274,8 @@ export function NotificationBell({ token, onNavigate }: Props) {
         type="button"
         className={`notif-bell-btn ${unread > 0 ? "notif-bell-btn--active" : ""}`}
         onClick={handleToggle}
-        title="Bildirimler"
-        aria-label="Bildirimler"
+        title={t("notifications.title")}
+        aria-label={t("notifications.title")}
       >
         <span className="material-symbols-outlined">notifications</span>
         {unread > 0 ? (
@@ -298,21 +286,21 @@ export function NotificationBell({ token, onNavigate }: Props) {
       {open ? (
         <div className="notif-dropdown">
           <header className="notif-dropdown-head">
-            <strong>Bildirimler</strong>
+            <strong>{t("notifications.title")}</strong>
             {items.length > 0 ? (
               <button type="button" className="notif-mark-all" onClick={() => void handleMarkAll()}>
-                Hepsini okundu işaretle
+                {t("notifications.markAllRead")}
               </button>
             ) : null}
           </header>
 
-          {loading ? <div className="notif-empty">Yükleniyor…</div> : null}
+          {loading ? <div className="notif-empty">{t("notifications.loading")}</div> : null}
           {error && !loading ? <div className="notif-error">{error}</div> : null}
 
           {!loading && !error && items.length === 0 ? (
             <div className="notif-empty">
               <span className="material-symbols-outlined">notifications_off</span>
-              Henüz bildirim yok
+              {t("notifications.emptyHint")}
             </div>
           ) : null}
 
@@ -360,7 +348,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                 const thresholdDisplay = meta?.threshold !== null && meta?.threshold !== undefined
                   ? fmtNumber(meta.threshold)
                   : null;
-                const levelTr = levelLabelTr(meta?.level ?? item.severity);
+                const levelTr = levelLabelTr(meta?.level ?? item.severity, t);
                 // body alarm bildiriminde basligin kopyasi olabiliyor ("Yeni
                 // alarm: Test alarmi" -> body "Test alarmi"). Tekrari gizle.
                 // Atama/yorum bildirimlerinde body genellikle anlamli ek bilgi
@@ -418,11 +406,11 @@ export function NotificationBell({ token, onNavigate }: Props) {
                               - alarm_comment / fault_comment: "Yorum"
                               - fault: "Arıza" */}
                           {isAssignment ? (
-                            <span className="notif-level-badge notif-badge-assignment">Atama</span>
+                            <span className="notif-level-badge notif-badge-assignment">{t("notifications.badgeAssignment")}</span>
                           ) : isComment ? (
-                            <span className="notif-level-badge notif-badge-comment">Yorum</span>
+                            <span className="notif-level-badge notif-badge-comment">{t("notifications.badgeComment")}</span>
                           ) : item.category === "fault" ? (
-                            <span className="notif-level-badge notif-badge-fault">Arıza</span>
+                            <span className="notif-level-badge notif-badge-fault">{t("notifications.badgeFault")}</span>
                           ) : levelTr ? (
                             <span className={`notif-level-badge ${sevCls}`}>{levelTr}</span>
                           ) : null}
@@ -430,8 +418,8 @@ export function NotificationBell({ token, onNavigate }: Props) {
                             <button
                               type="button"
                               className="notif-item-mark-btn"
-                              title="Bu bildirimi okundu işaretle"
-                              aria-label="Okundu işaretle"
+                              title={t("notifications.markRead")}
+                              aria-label={t("notifications.markReadShort")}
                               onClick={(e) => void handleMarkOne(e, item)}
                             >
                               <span className="material-symbols-outlined">done</span>
@@ -446,7 +434,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                           {deviceLabel ? (
                             <div className="notif-row">
                               <span className="notif-row-icon material-symbols-outlined">router</span>
-                              <span className="notif-row-label">Cihaz</span>
+                              <span className="notif-row-label">{t("notifications.rowDevice")}</span>
                               <span className="notif-row-value" title={deviceCode ?? undefined}>
                                 {deviceLabel}
                               </span>
@@ -455,7 +443,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                           {srcLabel ? (
                             <div className="notif-row">
                               <span className="notif-row-icon material-symbols-outlined">satellite_alt</span>
-                              <span className="notif-row-label">Kaynak</span>
+                              <span className="notif-row-label">{t("notifications.rowSource")}</span>
                               <span className={`notif-row-value notif-row-value--src notif-row-value--src-${(meta?.signal_source ?? "").toLowerCase()}`}>
                                 {srcLabel}
                               </span>
@@ -464,7 +452,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                           {lineLabel ? (
                             <div className="notif-row">
                               <span className="notif-row-icon material-symbols-outlined">power</span>
-                              <span className="notif-row-label">Hat</span>
+                              <span className="notif-row-label">{t("notifications.rowLine")}</span>
                               <span className="notif-row-value" title={meta?.line_code ?? undefined}>
                                 {lineLabel}
                               </span>
@@ -473,7 +461,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                           {regionLabel ? (
                             <div className="notif-row">
                               <span className="notif-row-icon material-symbols-outlined">map</span>
-                              <span className="notif-row-label">Bölge</span>
+                              <span className="notif-row-label">{t("notifications.rowRegion")}</span>
                               <span className="notif-row-value">{regionLabel}</span>
                             </div>
                           ) : null}
@@ -492,7 +480,7 @@ export function NotificationBell({ token, onNavigate }: Props) {
                         {item.actor_username ? (
                           <span className="notif-item-actor">{item.actor_username}</span>
                         ) : null}
-                        <span className="notif-item-time">{timeAgo(item.created_at)}</span>
+                        <span className="notif-item-time">{timeAgo(item.created_at, localeTag, t)}</span>
                       </div>
                     </div>
                   </li>

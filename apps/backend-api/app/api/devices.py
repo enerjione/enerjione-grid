@@ -64,6 +64,8 @@ def create_device(
         device_code=device.code,
         message=f"Cihaz eklendi: {device.name} ({device.code})",
         metadata={"device_id": device.id, "gateway_code": device.gateway_code},
+        i18n_key="device_created",
+        i18n_params={"name": device.name, "code": device.code},
     )
     db.commit()
     return device
@@ -92,6 +94,8 @@ def update_device(
         device_code=updated.code,
         message=f"Cihaz güncellendi: {updated.name} ({updated.code})",
         metadata={"device_id": updated.id, "fields": list(changes.keys())},
+        i18n_key="device_updated",
+        i18n_params={"name": updated.name, "code": updated.code},
     )
     db.commit()
     return updated
@@ -120,6 +124,8 @@ def delete_device(
         device_code=code,
         message=f"Cihaz silindi: {name} ({code})",
         metadata={"device_id": device_id},
+        i18n_key="device_deleted",
+        i18n_params={"name": name, "code": code},
     )
     db.commit()
     return None

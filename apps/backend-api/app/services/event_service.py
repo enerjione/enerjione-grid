@@ -17,7 +17,19 @@ def record_event(
     actor_username: str | None = None,
     device_code: str | None = None,
     metadata: dict[str, Any] | None = None,
+    i18n_key: str | None = None,
+    i18n_params: dict[str, Any] | None = None,
 ) -> None:
+    """System event yaz.
+
+    i18n_key + i18n_params verilirse, frontend bu anahtari kendi resource
+    dosyalarinda (`events.message.<key>`) cevirip gosterir; backward-compat
+    icin `message` (genelde TR) yine yazilir ve frontend i18n_key yoksa
+    fallback olarak onu kullanir.
+    """
+    md: dict[str, Any] = dict(metadata) if metadata else {}
+    if i18n_key:
+        md["_i18n"] = {"key": i18n_key, "params": i18n_params or {}}
     row = SystemEvent(
         category=category,
         event_type=event_type,
@@ -25,7 +37,7 @@ def record_event(
         message=message,
         actor_username=actor_username,
         device_code=device_code,
-        metadata_json=json.dumps(metadata, ensure_ascii=False) if metadata else None,
+        metadata_json=json.dumps(md, ensure_ascii=False) if md else None,
         created_at=datetime.now(timezone.utc),
     )
     db.add(row)
