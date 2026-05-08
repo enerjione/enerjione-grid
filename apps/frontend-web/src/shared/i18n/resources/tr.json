@@ -1321,6 +1321,16 @@
       "confirm": "Evet, Geri Yükle",
       "success": "Geri yükleme tamamlandı. Sistem verileri güncellendi.",
       "fail": "Geri yükleme başarısız."
+    },
+    "restart": {
+      "btn": "Sistemi Yeniden Başlat",
+      "title": "Sistemi Yeniden Başlat",
+      "warning": "Geri yüklemenin tüm servislerde tam etkili olması için sistemi yeniden başlatmak iyi olur. Bu işlem backend uygulamasını kapatıp yeniden açar.",
+      "downtime": "Yaklaşık 5 saniye servis kesintisi olur. Sayfa otomatik olarak yenilenir.",
+      "confirm": "Evet, Yeniden Başlat",
+      "inProgress": "Yeniden başlatılıyor...",
+      "success": "Sistem yeniden başlatılıyor. Sayfa birazdan otomatik yenilenecek.",
+      "fail": "Sistem yeniden başlatılamadı."
     }
   },
   "notifications": {

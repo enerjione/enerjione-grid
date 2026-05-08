@@ -232,13 +232,28 @@ def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:
 
     UYARI: Mevcut DB icerigi tamamen degisir. Cagiran tarafin kullanici
     onayi alip, audit event yazip cagirmasi gerekir.
+
+    pg_restore --clean DB'deki tum tablolari DROP edip yeniden olusturur;
+    SQLAlchemy connection pool'undaki acik connection'lar bu yuzden stale
+    kalir (cached prepared statement'lar gecersiz olur). Restore basariliysa
+    pool'u tamamen dispose edip yeni connection'larin temiz acilmasini
+    saglariz; aksi halde sonraki sorgular 'cached plan must not change
+    result type' veya benzeri PG hatasi alabilir.
     """
     if not job.file_path:
         return False, "Yedek dosya yolu yok."
     p = Path(job.file_path)
     if not p.exists():
         return False, f"Yedek dosyasi bulunamadi: {p.name}"
-    return run_pg_restore(p)
+    ok, msg = run_pg_restore(p)
+    if ok:
+        try:
+            from app.db.session import engine as _engine
+            _engine.dispose()
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("engine_dispose_after_restore_failed")
+    return ok, msg
 
 
 def apply_retention(db: Session, retention_count: int) -> int:

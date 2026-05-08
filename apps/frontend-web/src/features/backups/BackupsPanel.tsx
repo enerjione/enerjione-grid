@@ -7,6 +7,7 @@ import {
   downloadBackupFile,
   fetchBackups,
   fetchBackupSchedule,
+  restartBackend,
   restoreBackup,
   updateBackupSchedule,
   uploadBackupFile
@@ -54,6 +55,8 @@ export function BackupsPanel({ accessToken }: Props) {
   const [confirmRestoreId, setConfirmRestoreId] = useState<number | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const reload = async () => {
@@ -149,10 +152,37 @@ export function BackupsPanel({ accessToken }: Props) {
       await restoreBackup(accessToken, id);
       toast.success(t("backups.restore.success"));
       await reload();
+      // pg_restore --clean DB schema'yi DROP + CREATE eder; backend
+      // engine.dispose() yaptiktan sonra cogu durumda calismaya devam eder.
+      // Ancak worker servisleri (tag-engine, alarm-service vs.) ayri
+      // process'lerdir; bazen tam temizlik icin sistem yeniden baslatilmali.
+      // Kullaniciya soralim — auto-restart yerine bilincli onay.
+      setConfirmRestart(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("backups.restore.fail"));
     } finally {
       setRestoringId(null);
+    }
+  };
+
+  const handleRestart = async () => {
+    setRestarting(true);
+    try {
+      await restartBackend(accessToken);
+      toast.success(t("backups.restart.success"));
+      // Backend ~5sn icinde geri kalkar; otomatik bir yenileme kullaniciyi
+      // hizla geri getirir. 7sn sonra reload dene; basarisiz olursa kullanici
+      // F5 yapar.
+      window.setTimeout(() => {
+        try {
+          window.location.reload();
+        } catch {
+          // ignore
+        }
+      }, 7000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("backups.restart.fail"));
+      setRestarting(false);
     }
   };
 
@@ -216,6 +246,16 @@ export function BackupsPanel({ accessToken }: Props) {
           />
           <button
             type="button"
+            className="secondary-btn backups-action-btn backups-restart-btn"
+            onClick={() => setConfirmRestart(true)}
+            title={t("backups.restart.title")}
+            disabled={restarting}
+          >
+            <span className="material-symbols-outlined">power_settings_new</span>
+            {t("backups.restart.btn")}
+          </button>
+          <button
+            type="button"
             className="secondary-btn backups-action-btn"
             onClick={() => setScheduleModalOpen(true)}
             title={t("backups.schedule.title")}
@@ -251,12 +291,14 @@ export function BackupsPanel({ accessToken }: Props) {
           <h4>{t("backups.history")}</h4>
           <button
             type="button"
-            className="secondary-btn"
+            className={`backups-refresh-btn ${loading ? "is-spinning" : ""}`}
             onClick={() => void reload()}
             disabled={loading}
+            title={t("backups.refresh")}
+            aria-label={t("backups.refresh")}
           >
-            <span className="material-symbols-outlined">refresh</span>
-            {t("backups.refresh")}
+            <span className="material-symbols-outlined backups-refresh-icon">refresh</span>
+            <span className="backups-refresh-label">{t("backups.refresh")}</span>
           </button>
         </div>
         {loading && backups.length === 0 ? (
@@ -490,6 +532,48 @@ export function BackupsPanel({ accessToken }: Props) {
                 onClick={() => void handleRestoreConfirmed()}
               >
                 {t("backups.restore.confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Sistem yeniden baslatma onay modali */}
+      {confirmRestart ? (
+        <div
+          className="backups-confirm-backdrop"
+          onClick={() => !restarting && setConfirmRestart(false)}
+        >
+          <div
+            className="backups-confirm-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="backups-confirm-icon">
+              <span className="material-symbols-outlined">power_settings_new</span>
+            </div>
+            <h3>{t("backups.restart.title")}</h3>
+            <p>{t("backups.restart.warning")}</p>
+            <p className="backups-confirm-warn">{t("backups.restart.downtime")}</p>
+            <div className="backups-confirm-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setConfirmRestart(false)}
+                disabled={restarting}
+              >
+                {t("backups.restore.cancel")}
+              </button>
+              <button
+                type="button"
+                className="primary-btn backups-confirm-restore"
+                onClick={() => void handleRestart()}
+                disabled={restarting}
+              >
+                {restarting
+                  ? t("backups.restart.inProgress")
+                  : t("backups.restart.confirm")}
               </button>
             </div>
           </div>

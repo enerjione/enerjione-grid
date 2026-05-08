@@ -18384,6 +18384,72 @@ main.content.engineering-content:has(.device-management-panel) {
   margin-bottom: 8px;
 }
 
+/* Yedek listesi yenile butonu — sik gradyan, hover'da ikon donsun. */
+.backups-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: linear-gradient(135deg, #eef2ff 0%, #ffffff 80%);
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: transform 120ms ease, box-shadow 180ms ease,
+    background 180ms ease, border-color 180ms ease;
+}
+.backups-refresh-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #e0e7ff 0%, #f5f3ff 80%);
+  border-color: rgba(79, 70, 229, 0.45);
+  box-shadow: 0 3px 8px rgba(79, 70, 229, 0.18);
+  transform: translateY(-1px);
+}
+.backups-refresh-btn:hover:not(:disabled) .backups-refresh-icon {
+  transform: rotate(180deg);
+}
+.backups-refresh-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.backups-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.backups-refresh-icon {
+  font-size: 18px;
+  transition: transform 400ms ease;
+}
+.backups-refresh-btn.is-spinning .backups-refresh-icon {
+  animation: backups-spin 900ms linear infinite;
+}
+@keyframes backups-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.backups-refresh-label {
+  letter-spacing: 0.01em;
+}
+
+/* Sistem yeniden başlat butonu — turuncu vurgu, dikkat çeker ama tehlike
+   degil. Hover'da hafif yukselir. */
+.backups-restart-btn {
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: linear-gradient(135deg, #fff7ed 0%, #ffffff 80%);
+  color: #b45309;
+}
+.backups-restart-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ffedd5 0%, #fff7ed 80%);
+  border-color: rgba(217, 119, 6, 0.7);
+  box-shadow: 0 3px 8px rgba(217, 119, 6, 0.18);
+  transform: translateY(-1px);
+}
+.backups-restart-btn .material-symbols-outlined {
+  color: #d97706;
+}
+
 .backups-stats {
   display: flex;
   gap: 10px;

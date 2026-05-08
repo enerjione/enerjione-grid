@@ -1321,6 +1321,16 @@
       "confirm": "Yes, Restore",
       "success": "Restore completed. System data has been updated.",
       "fail": "Restore failed."
+    },
+    "restart": {
+      "btn": "Restart System",
+      "title": "Restart System",
+      "warning": "Restart the system so the restore takes full effect across all services. This stops and starts the backend application.",
+      "downtime": "Approximately 5 seconds of downtime. The page reloads automatically.",
+      "confirm": "Yes, Restart",
+      "inProgress": "Restarting...",
+      "success": "System is restarting. The page will reload shortly.",
+      "fail": "Failed to restart the system."
     }
   },
   "notifications": {

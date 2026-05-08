@@ -439,6 +439,17 @@ export async function restoreBackup(token: string, backupId: number): Promise<vo
   if (!response.ok) throw await buildApiError(response, "Yedek geri yüklenemedi.");
 }
 
+/** Backend container'ini yeniden baslat. Yanit ~1.5sn sonra container exit
+ * eder, Docker `restart: unless-stopped` policy'si ile yeniden baslar.
+ * Toplam downtime ~5sn. Native kurulumda exit otomatik kalkis vermez. */
+export async function restartBackend(token: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/admin/system/restart`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sistem yeniden başlatılamadı.");
+}
+
 /** Yedek dosyasini indirme — backend FileResponse doner. */
 export function backupDownloadUrl(backupId: number): string {
   return `${API_BASE_URL}/admin/backups/${backupId}/download`;
