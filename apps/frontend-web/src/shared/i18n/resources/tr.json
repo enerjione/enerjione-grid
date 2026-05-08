@@ -816,8 +816,8 @@
       "downloadCompose": "Docker Compose / .env indir",
       "downloadComposeShort": "Docker Compose indir",
       "edit": "Gateway Düzenle",
-      "refreshAll": "Tüm Cihazlara Sorgu At (Class 0+1+2+3 integrity poll)",
-      "refreshAllShort": "Tüm Cihazlara Sorgu At",
+      "refreshAll": "Yenile",
+      "refreshAllShort": "Yenile",
       "delete": "Gateway Sil",
       "form": {
         "code": "Gateway Kodu",

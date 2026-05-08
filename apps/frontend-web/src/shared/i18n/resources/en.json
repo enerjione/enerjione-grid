@@ -816,8 +816,8 @@
       "downloadCompose": "Download Docker Compose / .env",
       "downloadComposeShort": "Download Docker Compose",
       "edit": "Edit Gateway",
-      "refreshAll": "Refresh All Devices (Class 0+1+2+3 integrity poll)",
-      "refreshAllShort": "Refresh All Devices",
+      "refreshAll": "Refresh",
+      "refreshAllShort": "Refresh",
       "delete": "Delete Gateway",
       "form": {
         "code": "Gateway Code",

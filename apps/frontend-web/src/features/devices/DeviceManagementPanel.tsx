@@ -591,7 +591,7 @@ export function DeviceManagementPanel({
                           disabled={isDeletingThis || anotherDeleting}
                         >
                           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                            sync
+                            refresh
                           </span>
                         </button>
                       ) : null}
