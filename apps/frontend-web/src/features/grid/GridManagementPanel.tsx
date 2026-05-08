@@ -17,6 +17,7 @@
  *   - Her direk satırının altında o direkten sonraki segment + atanmış cihaz
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -110,6 +111,7 @@ function midpoint(a: Pole | undefined, b: Pole | undefined): [number, number] | 
 
 export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Props) {
   const toast = useToast();
+  const { t } = useTranslation();
 
   // ----- Veri state -----
   const [regions, setRegions] = useState<Region[]>([]);
@@ -1814,6 +1816,7 @@ function SegmentContextMenu({
   onDeleteSegment: (seg: LineSegment) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   // Goruntu modlari: 'list' = mevcut cihazlar listesi (default),
   //                  'add'  = yeni cihaz secme arama paneli,
   //                  'move' = bir cihazi baska segmente tasi (movingSeg ile)
@@ -1975,7 +1978,7 @@ function SegmentContextMenu({
             <span className="material-symbols-outlined">search</span>
             <input
               type="search"
-              placeholder="Cihaz ara: ad, kod veya gateway"
+              placeholder={t("engineering.grid.deviceSearch")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
@@ -2064,7 +2067,7 @@ function SegmentContextMenu({
             <span className="material-symbols-outlined">search</span>
             <input
               type="search"
-              placeholder="Hedef segment ara: sıra no veya direk adı"
+              placeholder={t("engineering.grid.segmentSearch")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
@@ -2158,20 +2161,21 @@ function RegionModal({
       color, is_active: isActive
     });
   };
+  const { t } = useTranslation();
   return (
     <div className="settings-modal-backdrop">
       <form className="settings-modal" onSubmit={submit}>
-        <h3>{initial ? "Bölgeyi Düzenle" : "Yeni Bölge"}</h3>
-        <label>Ad <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
-        <label>Açıklama <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-        <label>Renk <input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></label>
+        <h3>{initial ? t("engineering.grid.regionEditTitle") : t("engineering.grid.newRegion")}</h3>
+        <label>{t("engineering.grid.name")} <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
+        <label>{t("engineering.grid.description")} <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+        <label>{t("engineering.grid.color")} <input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></label>
         <label className="notify-option">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-          Aktif
+          {t("engineering.grid.active")}
         </label>
         <div className="settings-actions">
-          <button type="button" onClick={onClose} disabled={busy}>İptal</button>
-          <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : "Kaydet"}</button>
+          <button type="button" onClick={onClose} disabled={busy}>{t("engineering.grid.cancel")}</button>
+          <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : t("engineering.grid.save")}</button>
         </div>
       </form>
     </div>
@@ -2224,18 +2228,18 @@ function LineModal({
       branched_from_pole_id: isBranch && typeof parentPoleId === "number" ? parentPoleId : null
     });
   };
+  const { t } = useTranslation();
   return (
     <div className="settings-modal-backdrop">
       <form className="settings-modal" onSubmit={submit}>
-        <h3>{initial ? "Hattı Düzenle" : "Yeni Hat"}</h3>
-        <label>Ad <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
-        <label>Açıklama <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+        <h3>{initial ? t("engineering.grid.lineEditTitle") : t("engineering.grid.newLine")}</h3>
+        <label>{t("engineering.grid.name")} <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
+        <label>{t("engineering.grid.description")} <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
         <label className="notify-option">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-          Aktif
+          {t("engineering.grid.active")}
         </label>
 
-        {/* Branşman secimi */}
         <fieldset className="line-branch-fieldset">
           <legend>
             <label className="notify-option">
@@ -2250,13 +2254,13 @@ function LineModal({
                   }
                 }}
               />
-              Branşman olarak ekle (başka bir hattın direğine bağla)
+              {t("engineering.grid.isBranch")}
             </label>
           </legend>
           {isBranch ? (
             <div className="line-branch-grid">
               <label>
-                Ana hat
+                {t("engineering.grid.parentLine")}
                 <select
                   value={parentLineId === "" ? "" : String(parentLineId)}
                   onChange={(e) => {
@@ -2266,14 +2270,14 @@ function LineModal({
                   }}
                   required={isBranch}
                 >
-                  <option value="">— seçin —</option>
+                  <option value="">{t("engineering.grid.selectPlaceholder")}</option>
                   {branchableLines.map((l) => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
                 </select>
               </label>
               <label>
-                Bağlanılacak direk
+                {t("engineering.grid.parentPole")}
                 <select
                   value={parentPoleId === "" ? "" : String(parentPoleId)}
                   onChange={(e) => {
@@ -2283,10 +2287,10 @@ function LineModal({
                   required={isBranch}
                   disabled={parentLineId === "" || parentPoles.length === 0}
                 >
-                  <option value="">— seçin —</option>
+                  <option value="">{t("engineering.grid.selectPlaceholder")}</option>
                   {parentPoles.map((p) => (
                     <option key={p.id} value={p.id}>
-                      Direk #{p.sequence_no}{p.name ? ` · ${p.name}` : ""}
+                      {t("dashboard.popup.poleDefault", { seq: p.sequence_no })}{p.name ? ` · ${p.name}` : ""}
                     </option>
                   ))}
                 </select>
@@ -2294,13 +2298,12 @@ function LineModal({
             </div>
           ) : null}
           <p className="helper-text" style={{ marginTop: 6, fontSize: 11 }}>
-            Branşman, bir hattın belirli bir direğine bağlanan dal hattıdır.
-            Arıza algoritması ana hat ile dalı birlikte değerlendirir.
+            {t("engineering.grid.branchHint")}
           </p>
         </fieldset>
         <div className="settings-actions">
-          <button type="button" onClick={onClose} disabled={busy}>İptal</button>
-          <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : "Kaydet"}</button>
+          <button type="button" onClick={onClose} disabled={busy}>{t("engineering.grid.cancel")}</button>
+          <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : t("engineering.grid.save")}</button>
         </div>
       </form>
     </div>
@@ -2329,17 +2332,18 @@ function PoleEditModal({
       pole_type: poleType as Pole["pole_type"]
     });
   };
-  const typeOptions: { value: string; label: string; icon: string }[] = [
-    { value: "pole", label: "Direk", icon: "📍" },
-    { value: "transformer", label: "Trafo", icon: "⚡" }
+  const { t } = useTranslation();
+  const typeOptions: { value: string; labelKey: string; icon: string }[] = [
+    { value: "pole", labelKey: "engineering.grid.typePole", icon: "📍" },
+    { value: "transformer", labelKey: "engineering.grid.typeTransformer", icon: "⚡" }
   ];
   return (
     <div className="settings-modal-backdrop">
       <form className="settings-modal" onSubmit={submit}>
-        <h3>Direk Düzenle (#{pole.sequence_no})</h3>
-        <label>İsim <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Direk-47" /></label>
+        <h3>{t("engineering.grid.poleEditTitle", { seq: pole.sequence_no })}</h3>
+        <label>{t("engineering.grid.poleNameLabel")} <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("engineering.grid.poleNamePlaceholder")} /></label>
         <fieldset className="pole-type-fieldset">
-          <legend>Sembol Tipi</legend>
+          <legend>{t("engineering.grid.symbolType")}</legend>
           <div className="pole-type-options">
             {typeOptions.map((opt) => (
               <label
@@ -2354,21 +2358,21 @@ function PoleEditModal({
                   onChange={() => setPoleType(opt.value)}
                 />
                 <span className="pole-type-icon">{opt.icon}</span>
-                <span>{opt.label}</span>
+                <span>{t(opt.labelKey)}</span>
               </label>
             ))}
           </div>
         </fieldset>
-        <label>Enlem
+        <label>{t("engineering.grid.latitude")}
           <input type="number" step="0.000001" value={latitude} onChange={(e) => setLatitude(e.target.value)} required />
         </label>
-        <label>Boylam
+        <label>{t("engineering.grid.longitude")}
           <input type="number" step="0.000001" value={longitude} onChange={(e) => setLongitude(e.target.value)} required />
         </label>
-        <p className="helper-text">Sıra numarası "Sırayı Tersine Çevir" veya direk satırlarını sürükleyerek değişir.</p>
+        <p className="helper-text">{t("engineering.grid.polePosHint")}</p>
         <div className="settings-actions">
-          <button type="button" onClick={onClose} disabled={busy}>İptal</button>
-          <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : "Kaydet"}</button>
+          <button type="button" onClick={onClose} disabled={busy}>{t("engineering.grid.cancel")}</button>
+          <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : t("engineering.grid.save")}</button>
         </div>
       </form>
     </div>
