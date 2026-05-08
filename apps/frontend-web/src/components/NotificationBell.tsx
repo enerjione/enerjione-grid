@@ -356,6 +356,21 @@ export function NotificationBell({ token, onNavigate }: Props) {
                   ? fmtNumber(meta.threshold)
                   : null;
                 const levelTr = levelLabelTr(meta?.level ?? item.severity, t);
+                const lineLabel = meta?.line_name ?? meta?.line_code ?? null;
+                const regionLabel = meta?.region_name ?? null;
+                // Baslik formati: "Yeni alarm: <Alarm adi>" -> ust satira
+                // "Yeni alarm" kucuk eyebrow, alta buyuk alarm adi.
+                // Format uymuyorsa baslik tek parca gosterilir.
+                // Backend metadata._title_i18n varsa onceligi alir (cevirili
+                // baslik elde edilir); aksi halde DB'deki TR baslik kullanilir.
+                const localizedTitle = (() => {
+                  const ref = meta?._title_i18n;
+                  if (ref && typeof ref.key === "string" && ref.key) {
+                    const params = (ref.params ?? {}) as Record<string, unknown>;
+                    return t(`notifications.titles.${ref.key}`, params);
+                  }
+                  return item.title;
+                })();
                 // body alarm bildiriminde basligin kopyasi olabiliyor ("Yeni
                 // alarm: Test alarmi" -> body "Test alarmi"). Tekrari gizle.
                 // Atama/yorum bildirimlerinde body genellikle anlamli ek bilgi
@@ -377,21 +392,6 @@ export function NotificationBell({ token, onNavigate }: Props) {
                   if (title === body) return null;
                   if (title.endsWith(`: ${body}`)) return null;
                   return body;
-                })();
-                const lineLabel = meta?.line_name ?? meta?.line_code ?? null;
-                const regionLabel = meta?.region_name ?? null;
-                // Baslik formati: "Yeni alarm: <Alarm adi>" -> ust satira
-                // "Yeni alarm" kucuk eyebrow, alta buyuk alarm adi.
-                // Format uymuyorsa baslik tek parca gosterilir.
-                // Backend metadata._title_i18n varsa onceligi alir (cevirili
-                // baslik elde edilir); aksi halde DB'deki TR baslik kullanilir.
-                const localizedTitle = (() => {
-                  const ref = meta?._title_i18n;
-                  if (ref && typeof ref.key === "string" && ref.key) {
-                    const params = (ref.params ?? {}) as Record<string, unknown>;
-                    return t(`notifications.titles.${ref.key}`, params);
-                  }
-                  return item.title;
                 })();
                 const titleParts = (() => {
                   const raw = localizedTitle.trim();
