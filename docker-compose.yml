@@ -125,8 +125,11 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       RABBITMQ_EXCHANGE: hsl.events
       RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      # Backend system-status, tag-engine icin 8011 portunu probe eder.
+      # Bu portu container disindan erisilebilir hale getirmek icin
+      # WORKER_HEALTH_HOST=0.0.0.0 olarak set edilir.
       WORKER_HEALTH_HOST: 0.0.0.0
-      WORKER_HEALTH_PORT: 8013
+      WORKER_HEALTH_PORT: 8011
     networks:
       - hsl-net
 
@@ -151,7 +154,7 @@ services:
       BACKEND_INTERNAL_ALARM_CLEAR_URL: http://backend-api:8000/api/v1/internal/alarms/clear
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WORKER_HEALTH_HOST: 0.0.0.0
-      WORKER_HEALTH_PORT: 8011
+      WORKER_HEALTH_PORT: 8012
     networks:
       - hsl-net
 
@@ -172,7 +175,7 @@ services:
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WORKER_HEALTH_HOST: 0.0.0.0
-      WORKER_HEALTH_PORT: 8012
+      WORKER_HEALTH_PORT: 8013
     networks:
       - hsl-net
 
