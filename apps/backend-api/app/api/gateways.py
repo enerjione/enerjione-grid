@@ -279,6 +279,45 @@ def disable_gateway(
     return row
 
 
+@router.post("/{gateway_code}/refresh-all", response_model=GatewayRead)
+def refresh_gateway_all_devices(
+    gateway_code: str,
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    """Operator tetikli "tum cihazlara sorgu at" — gateway tarafinda Class
+    0+1+2+3 integrity poll yapilir, tum sinyallerin guncel degeri DB'ye
+    yazilir.
+
+    Mekanizma: gateways.refresh_nonce sayaci 1 artirilir. Gateway her config
+    refresh dongusunde (default 30sn) bu degeri okur; en son gordugu degerden
+    farkliysa reader.refresh_all_devices() cagirir.
+
+    Bu nedenle yanit anlik degildir: kullanici butona basinca bayrak DB'ye
+    yazilir, gateway en gec config_refresh_sec icinde tetigi yakalar (cogu
+    kurulumda <30sn) ve ardindan integrity frame'leri cihazlardan toplar.
+
+    HTTP 200: bayrak set edildi (gateway tetigi yakalayacak).
+    """
+    row = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    new_nonce = int(getattr(row, "refresh_nonce", 0) or 0) + 1
+    row.refresh_nonce = new_nonce
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_refresh_all_requested",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"{row.name} ({row.code}) — tum cihazlara sorgu istegi (#{new_nonce})",
+        metadata={"gateway_code": row.code, "refresh_nonce": new_nonce},
+    )
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 @router.get("/{gateway_code}/docker-compose")
 def download_gateway_compose(
     gateway_code: str,
@@ -579,4 +618,5 @@ def get_gateway_config(
         devices=config_devices,
         signals=config_signals,
         config_version=config_version,
+        refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
     )

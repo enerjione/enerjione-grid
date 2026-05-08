@@ -390,6 +390,95 @@ export async function fetchAlarmEvents(token: string): Promise<AlarmEvent[]> {
   return (await response.json()) as AlarmEvent[];
 }
 
+// ============= DB Yedekler =============
+
+export async function fetchBackups(
+  token: string
+): Promise<import("./types").BackupJob[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/backups`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek listesi alınamadı.");
+  return (await response.json()) as import("./types").BackupJob[];
+}
+
+export async function createManualBackup(
+  token: string
+): Promise<import("./types").BackupJob> {
+  const response = await fetch(`${API_BASE_URL}/admin/backups`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek alınamadı.");
+  return (await response.json()) as import("./types").BackupJob;
+}
+
+export async function deleteBackup(token: string, backupId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/admin/backups/${backupId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek silinemedi.");
+}
+
+export async function restoreBackup(token: string, backupId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/admin/backups/${backupId}/restore`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek geri yüklenemedi.");
+}
+
+/** Yedek dosyasini indirme — backend FileResponse doner. */
+export function backupDownloadUrl(backupId: number): string {
+  return `${API_BASE_URL}/admin/backups/${backupId}/download`;
+}
+
+export async function downloadBackupFile(
+  token: string,
+  backupId: number,
+  filename: string
+): Promise<void> {
+  // Authorization header'i ile fetch -> blob -> link click ile dosya indir.
+  // Direkt <a href> kullanamiyoruz cunku endpoint'te token gerekiyor.
+  const response = await fetch(backupDownloadUrl(backupId), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek indirilemedi.");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function fetchBackupSchedule(
+  token: string
+): Promise<import("./types").BackupSchedule> {
+  const response = await fetch(`${API_BASE_URL}/admin/backups/schedule`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek programı alınamadı.");
+  return (await response.json()) as import("./types").BackupSchedule;
+}
+
+export async function updateBackupSchedule(
+  token: string,
+  payload: Partial<import("./types").BackupSchedule>
+): Promise<import("./types").BackupSchedule> {
+  const response = await fetch(`${API_BASE_URL}/admin/backups/schedule`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yedek programı güncellenemedi.");
+  return (await response.json()) as import("./types").BackupSchedule;
+}
+
 // ============= Hat Arızaları (Faults) — ticket sistemi =============
 
 export async function fetchFaults(
@@ -666,6 +755,29 @@ export async function deleteGateway(token: string, gatewayCode: string): Promise
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Gateway silinemedi.");
+}
+
+/** Gateway'e "tum cihazlara sorgu at" tetigi gonderir.
+ *
+ *  Backend gateways.refresh_nonce sayacini 1 artirir. Gateway en gec
+ *  config_refresh_sec icinde tetigi yakalar (default 30sn) ve Class
+ *  0+1+2+3 integrity poll yapar. Yanit anlik DEGILDIR — kullaniciya
+ *  "istek gonderildi" geri bildirim verilir.
+ */
+export async function refreshGatewayAllDevices(
+  token: string,
+  gatewayCode: string
+): Promise<Gateway> {
+  const response = await fetch(
+    `${API_BASE_URL}/gateways/${gatewayCode}/refresh-all`,
+    {
+      method: "POST",
+      headers: authHeaders(token)
+    }
+  );
+  if (!response.ok)
+    throw await buildApiError(response, "Tüm cihazlara sorgu isteği gönderilemedi.");
+  return (await response.json()) as Gateway;
 }
 
 export type GatewayComposeDownloadOptions = {

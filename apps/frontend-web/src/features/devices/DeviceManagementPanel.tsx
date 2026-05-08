@@ -80,6 +80,8 @@ type Props = {
     payload: { name?: string; host?: string; listen_port?: number; token?: string }
   ) => Promise<void>;
   onDeleteGateway: (gatewayCode: string) => Promise<void>;
+  /** Gateway'e "tum cihazlara sorgu at" tetigi. */
+  onRefreshGatewayAll?: (gatewayCode: string) => Promise<void>;
   onDownloadCompose: (
     gatewayCode: string,
     params: { backendUrl: string; hostPort: number; fmt: "compose" | "env" }
@@ -132,6 +134,7 @@ export function DeviceManagementPanel({
   onCreateGateway,
   onUpdateGateway,
   onDeleteGateway,
+  onRefreshGatewayAll,
   onDownloadCompose,
   onCreate,
   onUpdate,
@@ -574,6 +577,20 @@ export function DeviceManagementPanel({
                           />
                         </svg>
                       </button>
+                      {onRefreshGatewayAll ? (
+                        <button
+                          type="button"
+                          className="secondary-btn action-btn"
+                          onClick={() => void onRefreshGatewayAll(gateway.code)}
+                          title="Tüm Cihazlara Sorgu At (Class 0+1+2+3 integrity poll)"
+                          aria-label="Tüm Cihazlara Sorgu At"
+                          disabled={isDeletingThis || anotherDeleting}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                            sync
+                          </span>
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className={`danger-btn action-btn gateway-delete-btn ${isDeletingThis ? "is-busy" : ""}`}

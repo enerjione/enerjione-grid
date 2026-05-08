@@ -43,3 +43,10 @@ class Gateway(Base):
     # gerekli. Default 0 (sadece listening, cogu kurulum). Kullanici initiating
     # cihaz ekleyecegi zaman frontend formundan artirir.
     initiating_port_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Operator "tum cihazlara sorgu at" tetiklerse bu sayac artar.
+    # Gateway config refresh sirasinda en son gordugu degerle kıyaslayarak
+    # yeni bir tetik var mi anlar; varsa Class 0+1+2+3 integrity poll yapar.
+    # Counter -> tetik kaybolmaz (gateway o sirada offline olsa bile sonraki
+    # config refresh'te yakalar).
+    refresh_nonce: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

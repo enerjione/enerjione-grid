@@ -5,6 +5,7 @@ import { LoginForm } from "../features/auth/LoginForm";
 import { UserManagementPanel } from "../features/auth/UserManagementPanel";
 import { AlarmsPage } from "../features/alarms/AlarmsPage";
 import { FaultListPage } from "../features/faults/FaultListPage";
+import { BackupsPanel } from "../features/backups/BackupsPanel";
 import { ResponsibilityAreasPage } from "../features/responsibility-areas/ResponsibilityAreasPage";
 import { EventsPage } from "../features/events/EventsPage";
 import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
@@ -34,6 +35,7 @@ import {
   deleteAlarmRule,
   deleteDevice,
   deleteGateway,
+  refreshGatewayAllDevices,
   downloadGatewayCompose,
   deleteSignal,
   deleteUser,
@@ -143,7 +145,8 @@ type EngineeringPage =
   | "outbound"
   | "notifications"
   | "project-settings"
-  | "grid";
+  | "grid"
+  | "backups";
 
 const ROUTE_STORAGE_KEY = "hsl.route.v1";
 const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering"];
@@ -157,7 +160,8 @@ const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "outbound",
   "notifications",
   "project-settings",
-  "grid"
+  "grid",
+  "backups"
 ];
 type PersistedRoute = {
   pageMode: PageMode;
@@ -1033,6 +1037,21 @@ export function App() {
     }
   };
 
+  const handleRefreshGatewayAll = async (gatewayCode: string) => {
+    if (!session) return;
+    const gateway = gateways.find((g) => g.code === gatewayCode);
+    const displayName = gateway?.name ?? gatewayCode;
+    try {
+      await refreshGatewayAllDevices(session.accessToken, gatewayCode);
+      toast.success(
+        `"${displayName}" gateway'i en kısa sürede tüm cihazları sorgulayacak.`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "İstek gönderilemedi.";
+      toast.error(`Tüm cihazlara sorgu gönderilemedi: ${msg}`);
+    }
+  };
+
   const handleUpdateGateway = async (
     gatewayCode: string,
     payload: { name?: string; host?: string; listen_port?: number; token?: string }
@@ -1684,6 +1703,12 @@ export function App() {
                   >
                     Hat Yönetimi
                   </button>
+                  <button
+                    className={engineeringPage === "backups" ? "active" : ""}
+                    onClick={() => setEngineeringPage("backups")}
+                  >
+                    Yedekler
+                  </button>
                 </>
               ) : null}
             </div>
@@ -1699,6 +1724,7 @@ export function App() {
                 onCreateGateway={handleCreateGateway}
                 onUpdateGateway={handleUpdateGateway}
                 onDeleteGateway={handleDeleteGateway}
+                onRefreshGatewayAll={handleRefreshGatewayAll}
                 onDownloadCompose={handleDownloadGatewayCompose}
                 onCreate={handleCreateDevice}
                 onUpdate={handleUpdateDevice}
@@ -1816,6 +1842,10 @@ export function App() {
             {engineeringPage === "grid" &&
             (session.role === "engineer" || session.role === "installer") ? (
               <GridManagementPanel accessToken={session.accessToken} devices={devices} gridSnapshot={gridSnapshot} />
+            ) : null}
+            {engineeringPage === "backups" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <BackupsPanel accessToken={session.accessToken} />
             ) : null}
           </main>
         ) : pageMode !== "home" ? (

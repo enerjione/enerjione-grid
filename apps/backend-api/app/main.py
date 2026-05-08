@@ -4,15 +4,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select as _select, text
 
-from app.api import alarm_rules, alarms, auth, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, auth, backups, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.models import alarm, alarm_rule, device, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
+from app.models import alarm, alarm_rule, backup as backup_model, device, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
-from app.services import alarm_reconciliation, telemetry_consumer, telemetry_retention
+from app.services import alarm_reconciliation, backup_scheduler, telemetry_consumer, telemetry_retention
 
 app = FastAPI(title=settings.app_name)
 
@@ -55,6 +55,7 @@ app.include_router(project_settings_api.router, prefix=settings.api_prefix)
 app.include_router(grid_topology.router, prefix=settings.api_prefix)
 app.include_router(system_status.router, prefix=settings.api_prefix)
 app.include_router(notifications_api.router, prefix=settings.api_prefix)
+app.include_router(backups.router, prefix=settings.api_prefix)
 # WebSocket endpoint: api_prefix altinda /ws/live-values
 app.include_router(ws_live.router, prefix=settings.api_prefix)
 
@@ -109,6 +110,12 @@ def create_tables():
         # kullanici frontend formundan deger artirir.
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS initiating_port_count INTEGER NOT NULL DEFAULT 0")
+        )
+        # Operator "tum cihazlara sorgu at" sayaci. Gateway config refresh
+        # akisinda kendi en son gordugu degerle kiyaslayip integrity poll
+        # tetikler.
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS refresh_nonce INTEGER NOT NULL DEFAULT 0")
         )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS description VARCHAR(500)"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS gateway_code VARCHAR(50)"))
@@ -584,3 +591,16 @@ def start_alarm_reconciliation():
 @app.on_event("shutdown")
 def stop_alarm_reconciliation():
     alarm_reconciliation.stop()
+
+
+@app.on_event("startup")
+def start_backup_scheduler():
+    """Periyodik DB yedek alma worker'i. BackupSchedule tablosuna bakar;
+    enabled=True ise interval_hours kadar surede bir pg_dump yapar ve
+    retention_count'a gore eski yedekleri siler."""
+    backup_scheduler.start()
+
+
+@app.on_event("shutdown")
+def stop_backup_scheduler():
+    backup_scheduler.stop()

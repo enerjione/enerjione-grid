@@ -111,3 +111,8 @@ class GatewayConfigResponse(BaseModel):
     devices: list[GatewayConfigDevice]
     signals: list[GatewayConfigSignal]
     config_version: str
+    # Operator/SCADA tarafindan tetiklenen "tum cihazlara sorgu at" sayaci.
+    # Gateway her config refresh'te bu degeri okur; en son gordugu degerden
+    # buyukse reader.refresh_all_devices() cagirir (Class 0+1+2+3 integrity
+    # poll). Default 0 (hic tetiklenmedi).
+    refresh_nonce: int = 0
