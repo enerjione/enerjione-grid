@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type { DeviceModelOption, SignalCatalogRow, SignalDataType, SignalSource, UserRole } from "../../shared/types";
 
@@ -78,7 +79,10 @@ export function SignalsPage({
   error,
   onUpdate
 }: Props) {
+  const { t } = useTranslation();
   const canEdit = role === "installer";
+  const dataTypeLabel = (type: SignalDataType): string =>
+    t(`liveValues.dataType.${type}`, { defaultValue: DATA_TYPE_LABEL[type] });
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [localError, setLocalError] = useState("");
@@ -233,7 +237,7 @@ export function SignalsPage({
         mqtt_topic: editMqttTopic.trim() || null
       });
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Sinyal güncellenemedi.");
+      setLocalError(err instanceof Error ? err.message : t("engineering.signals.form.saveFail"));
     } finally {
       setSavingEdit(false);
     }
@@ -280,7 +284,7 @@ export function SignalsPage({
             className={`signals-type-tab stt-${type} ${activeTab === type ? "active" : ""}`}
             onClick={() => setActiveTab(type)}
           >
-            <span className="stt-label">{DATA_TYPE_LABEL[type]}</span>
+            <span className="stt-label">{dataTypeLabel(type)}</span>
             <span className="stt-count">{countsByType.get(type) ?? 0}</span>
           </button>
         ))}
@@ -291,7 +295,7 @@ export function SignalsPage({
         <input
           className="signals-search"
           type="search"
-          placeholder="Ara (etiket, key veya açıklama)..."
+          placeholder={t("engineering.signals.search")}
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
         />
@@ -301,7 +305,7 @@ export function SignalsPage({
             className={`chip ${sourceFilter === "all" ? "chip-active" : ""}`}
             onClick={() => setSourceFilter("all")}
           >
-            Tüm Kaynaklar
+            {t("engineering.signals.allSources")}
           </button>
           {SOURCES.map((src) => (
             <button
@@ -318,13 +322,13 @@ export function SignalsPage({
           {visibleCount} / {totalCount}
         </span>
         {!canEdit ? (
-          <span className="helper-text signals-toolbar-readonly">Düzenleme: kurulumcu</span>
+          <span className="helper-text signals-toolbar-readonly">{t("engineering.signals.readOnlyHint")}</span>
         ) : null}
       </div>
 
       <div className="signals-main-layout">
         <div className="signals-list-column">
-          {loading ? <p className="helper-text">Yükleniyor...</p> : null}
+          {loading ? <p className="helper-text">{t("common.loading")}</p> : null}
           <div className="signals-list-wrap">
             <ul className="signals-card-list">
               {filteredSignals.map((signal) => {
@@ -354,11 +358,11 @@ export function SignalsPage({
                         {DATA_TYPE_SHORT[signal.data_type]}
                       </span>
                       {iec104On ? (
-                        <span className="signal-card-iec104 signal-card-iec104--on" title="IEC 104 yayinda">
+                        <span className="signal-card-iec104 signal-card-iec104--on" title={t("engineering.signals.iec104OnTitle")}>
                           104
                         </span>
                       ) : iec104Off ? (
-                        <span className="signal-card-iec104 signal-card-iec104--off" title="IEC 104 yayindan kaldirildi">
+                        <span className="signal-card-iec104 signal-card-iec104--off" title={t("engineering.signals.iec104OffTitle")}>
                           104·off
                         </span>
                       ) : null}
@@ -367,7 +371,7 @@ export function SignalsPage({
                       </span>
                       {signal.unit ? <span className="signal-card-unit">{signal.unit}</span> : null}
                       {!signal.is_active ? (
-                        <span className="signal-card-inactive-flag">pasif</span>
+                        <span className="signal-card-inactive-flag">{t("engineering.signals.inactive")}</span>
                       ) : null}
                     </div>
                     <div className="signal-card-name">{signal.label}</div>
@@ -378,8 +382,8 @@ export function SignalsPage({
               {filteredSignals.length === 0 && !loading ? (
                 <li className="signals-empty-cell">
                   {totalCount === 0
-                    ? "Henüz sinyal tanımlı değil."
-                    : "Filtreye uygun sinyal bulunamadı."}
+                    ? t("engineering.signals.noSignals")
+                    : t("engineering.signals.noResults")}
                 </li>
               ) : null}
             </ul>
@@ -390,7 +394,7 @@ export function SignalsPage({
           <div className="signals-detail-card">
             <div className="signals-detail-head">
               <div className="signals-detail-title">
-                <h4>{selected ? selected.label : "Sinyal özellikleri"}</h4>
+                <h4>{selected ? selected.label : t("engineering.signals.selectHint")}</h4>
                 {selected ? <code className="detail-key">{selected.key}</code> : null}
               </div>
               {selected ? (
@@ -405,14 +409,14 @@ export function SignalsPage({
                     checked={editIsActive}
                     onChange={setEditIsActive}
                     disabled={!canEdit}
-                    title="Pasif sinyaller gateway tarafından okunmaz; tarihçede kalır."
+                    title={t("engineering.signals.labelInactiveTitle")}
                   />
                 </div>
               ) : null}
             </div>
 
             {!selected ? (
-              <p className="helper-text signals-detail-empty">Listeden bir sinyal seçin; özellikler burada düzenlenir.</p>
+              <p className="helper-text signals-detail-empty">{t("engineering.signals.selectListHint")}</p>
             ) : (
               <div className="signals-detail-form-scroll">
                 <div className="signal-detail-tabs" role="tablist">
@@ -423,7 +427,7 @@ export function SignalsPage({
                     className={`signal-detail-tab ${detailTab === "general" ? "active" : ""}`}
                     onClick={() => setDetailTab("general")}
                   >
-                    Genel
+                    {t("engineering.signals.tabGeneral")}
                   </button>
                   <button
                     type="button"
@@ -432,39 +436,39 @@ export function SignalsPage({
                     className={`signal-detail-tab ${detailTab === "iec104" ? "active" : ""}`}
                     onClick={() => setDetailTab("iec104")}
                   >
-                    Outbound · IEC 104
+                    {t("engineering.signals.tabOutboundIec104")}
                   </button>
                 </div>
                 <div className="signals-detail-form-v2">
                   {detailTab === "general" ? (
                   <>
                   <fieldset className="signal-fieldset" disabled={!canEdit}>
-                    <legend>Tanım</legend>
+                    <legend>{t("engineering.signals.fieldsetDef")}</legend>
                     <label className="signal-field signal-field--wide">
-                      <span>Etiket</span>
+                      <span>{t("engineering.signals.labelEtiket")}</span>
                       <input
                         value={editLabel}
                         onChange={(event) => setEditLabel(event.target.value)}
                       />
                     </label>
                     <label className="signal-field signal-field--wide">
-                      <span>Açıklama</span>
+                      <span>{t("engineering.signals.labelDescription")}</span>
                       <input
                         value={editDescription}
                         onChange={(event) => setEditDescription(event.target.value)}
-                        placeholder="Bu sinyalin amacını kısaca yazın..."
+                        placeholder={t("engineering.signals.form.descriptionPlaceholder")}
                       />
                     </label>
                     <label className="signal-field">
-                      <span>Birim</span>
+                      <span>{t("engineering.signals.labelUnit")}</span>
                       <input
                         value={editUnit}
                         onChange={(event) => setEditUnit(event.target.value)}
-                        placeholder="V, A, °C..."
+                        placeholder={t("engineering.signals.form.unitPlaceholder")}
                       />
                     </label>
                     <label className="signal-field">
-                      <span>Kaynak</span>
+                      <span>{t("engineering.signals.labelSource")}</span>
                       <select
                         value={editSource}
                         onChange={(event) => setEditSource(event.target.value as SignalSource)}
@@ -477,14 +481,14 @@ export function SignalsPage({
                       </select>
                     </label>
                     <label className="signal-field signal-field--wide">
-                      <span>Veri Tipi</span>
+                      <span>{t("engineering.signals.labelDataType")}</span>
                       <select
                         value={editDataType}
                         onChange={(event) => setEditDataType(event.target.value as SignalDataType)}
                       >
                         {DATA_TYPES.map((type) => (
                           <option key={type} value={type}>
-                            {DATA_TYPE_LABEL[type]}
+                            {dataTypeLabel(type)}
                           </option>
                         ))}
                       </select>
@@ -492,33 +496,30 @@ export function SignalsPage({
                   </fieldset>
 
                   <fieldset className="signal-fieldset" disabled={!canEdit}>
-                    <legend>DNP3 Adres</legend>
+                    <legend>{t("engineering.signals.fieldsetDnp3")}</legend>
                     <label className="signal-field">
-                      <span>DNP3 Class</span>
+                      <span>{t("engineering.signals.labelDnp3Class")}</span>
                       <input
                         value={editDnp3Class}
                         onChange={(event) => setEditDnp3Class(event.target.value)}
-                        placeholder="Class 1 / 2 / 3"
+                        placeholder={t("engineering.signals.form.dnp3ClassPlaceholder")}
                       />
                     </label>
                     <label className="signal-field">
-                      <span>Nokta (Index)</span>
+                      <span>{t("engineering.signals.labelDnp3Index")}</span>
                       <input
                         type="number"
                         value={editIndex}
                         onChange={(event) => setEditIndex(event.target.value)}
                       />
                     </label>
-                    <p className="signal-fieldset-hint">
-                      DNP3 nesne grubu, seçilen veri tipine göre otomatik atanır
-                      (Analog=30, Binary=1, Counter=20, String=110).
-                    </p>
+                    <p className="signal-fieldset-hint">{t("engineering.signals.dnp3Hint")}</p>
                   </fieldset>
 
                   <fieldset className="signal-fieldset" disabled={!canEdit}>
-                    <legend>Ölçeklendirme</legend>
+                    <legend>{t("engineering.signals.fieldsetScale")}</legend>
                     <label className="signal-field">
-                      <span>Scale</span>
+                      <span>{t("engineering.signals.labelScale")}</span>
                       <input
                         type="number"
                         step="0.0001"
@@ -527,7 +528,7 @@ export function SignalsPage({
                       />
                     </label>
                     <label className="signal-field">
-                      <span>Offset</span>
+                      <span>{t("engineering.signals.labelOffset")}</span>
                       <input
                         type="number"
                         step="0.0001"
@@ -535,9 +536,7 @@ export function SignalsPage({
                         onChange={(event) => setEditOffset(event.target.value)}
                       />
                     </label>
-                    <p className="signal-fieldset-hint">
-                      Ham değer = scale × ham + offset. Birim sahaya göre uygulanır.
-                    </p>
+                    <p className="signal-fieldset-hint">{t("engineering.signals.scaleHint")}</p>
                   </fieldset>
                   </>
                   ) : null}
@@ -545,16 +544,16 @@ export function SignalsPage({
                   {detailTab === "iec104" ? (
                   <>
                   <fieldset className="signal-fieldset" disabled={!canEdit}>
-                    <legend>IEC 60870-5-104</legend>
+                    <legend>{t("engineering.signals.fieldsetIec104")}</legend>
                     <div className="signal-iec104-toggle-row">
                       <span className="signal-iec104-toggle-label">
-                        {editIec104Enabled ? "Yayında" : "Yayından kaldırıldı"}
+                        {editIec104Enabled ? t("engineering.signals.iec104Published") : t("engineering.signals.iec104Unpublished")}
                       </span>
                       <ActiveSwitch
                         checked={editIec104Enabled}
                         onChange={setEditIec104Enabled}
                         disabled={!canEdit}
-                        title="IEC 104 outbound yayını sinyal bazında kapatılabilir."
+                        title={t("engineering.signals.iec104ToggleTitle")}
                       />
                     </div>
                     <div
@@ -562,46 +561,44 @@ export function SignalsPage({
                       aria-hidden={!editIec104Enabled}
                     >
                       <label className="signal-field signal-field--wide">
-                        <span>ASDU Type ID</span>
+                        <span>{t("engineering.signals.iec104TypeId")}</span>
                         <select
                           value={editIec104TypeId}
                           onChange={(event) => setEditIec104TypeId(event.target.value)}
                           disabled={!canEdit || !editIec104Enabled}
                         >
-                          <option value="">— Yayinlama —</option>
+                          <option value="">{t("engineering.signals.iec104NoPublish")}</option>
                           {IEC104_MONITOR_TYPES.filter(
-                            (t) => t.dataTypes.includes(editDataType)
-                          ).map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.id} · {t.code} — {t.desc}
+                            (item) => item.dataTypes.includes(editDataType)
+                          ).map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.id} · {item.code} — {item.desc}
                             </option>
                           ))}
-                          <optgroup label="Diger (uyumsuz veri tipi)">
+                          <optgroup label={t("engineering.signals.iec104OtherGroup")}>
                             {IEC104_MONITOR_TYPES.filter(
-                              (t) => !t.dataTypes.includes(editDataType)
-                            ).map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.id} · {t.code} — {t.desc}
+                              (item) => !item.dataTypes.includes(editDataType)
+                            ).map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.id} · {item.code} — {item.desc}
                               </option>
                             ))}
                           </optgroup>
                         </select>
                       </label>
                       <label className="signal-field">
-                        <span>IOA (Information Object Address)</span>
+                        <span>{t("engineering.signals.iec104Ioa")}</span>
                         <input
                           type="number"
                           min={0}
                           max={16777215}
                           value={editIec104Ioa}
                           onChange={(event) => setEditIec104Ioa(event.target.value)}
-                          placeholder="örn. 1001"
+                          placeholder={t("engineering.signals.form.iec104IoaPlaceholder")}
                           disabled={!canEdit || !editIec104Enabled}
                         />
                       </label>
-                      {/* CP56Time2a zaman etiketi: dijital sinyallerde event'in
-                          olustugu tam zamani SCADA bilsin diye onerilir.
-                          Analog'larda (Type 13) genelde gereksiz yuk. */}
+                      {/* CP56Time2a zaman etiketi */}
                       <label className="signal-field signal-field--checkbox">
                         <input
                           type="checkbox"
@@ -610,18 +607,16 @@ export function SignalsPage({
                           disabled={!canEdit || !editIec104Enabled}
                         />
                         <span>
-                          Zaman etiketi gönder (CP56Time2a)
+                          {t("engineering.signals.iec104WithTs")}
                           <small className="signal-field-help">
-                            Aktifse Type 1 → 30 (M_SP_TB_1), 13 → 36 (M_ME_TF_1) olur.
-                            Dijital (binary) sinyallerde önerilir; SCADA olayın oluştuğu
-                            anı bilir. Analoglarda ek yük olmasın diye kapalı bırakın.
+                            {t("engineering.signals.iec104WithTsHelp")}
                           </small>
                         </span>
                       </label>
                       <p className="signal-fieldset-hint">
                         {editIec104Enabled
-                          ? "Bu sinyal IEC 104 outbound master'a yayınlanırken kullanılır. ASDU Common Address (CA) ise cihaz bazlı; Cihazlar sayfasından ayarlanır. Type ID boş bırakılırsa bu sinyal yayınlanmaz."
-                          : "Yayın kapalı. Sinyali yayına almak için yukarıdaki anahtarı açın."}
+                          ? t("engineering.signals.iec104EnabledHint")
+                          : t("engineering.signals.iec104DisabledHint")}
                       </p>
                     </div>
                   </fieldset>
@@ -636,7 +631,7 @@ export function SignalsPage({
                         onClick={() => void handleSave()}
                         disabled={savingEdit}
                       >
-                        {savingEdit ? "Kaydediliyor..." : "Kaydet"}
+                        {savingEdit ? t("engineering.signals.form.saving") : t("engineering.signals.form.save")}
                       </button>
                     </div>
                   ) : null}

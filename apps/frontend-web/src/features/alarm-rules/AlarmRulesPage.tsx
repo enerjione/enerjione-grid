@@ -297,7 +297,7 @@ export function AlarmRulesPage({
     try {
       await onUpdate(rule.id, { is_active: !rule.is_active });
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Durum güncellenemedi.");
+      setLocalError(err instanceof Error ? err.message : t("engineering.alarmRules.statusUpdateFail"));
     }
   };
 
@@ -311,14 +311,16 @@ export function AlarmRulesPage({
         <div className="rules-v3-form-shell">
           <header className="rules-v3-form-header">
             <button type="button" className="secondary-btn rules-v3-back" onClick={cancel}>
-              ← Geri
+              {t("engineering.alarmRules.back")}
             </button>
-            <h3>{mode === "create" ? "Yeni Alarm Kuralı" : `Düzenle: ${selectedRule?.name ?? ""}`}</h3>
+            <h3>{mode === "create"
+              ? t("engineering.alarmRules.newRuleTitle")
+              : t("engineering.alarmRules.editRuleTitle", { name: selectedRule?.name ?? "" })}</h3>
             <div className="rules-v3-form-header-actions">
               <ActiveSwitch
                 checked={form.is_active}
                 onChange={(v) => setForm({ ...form, is_active: v })}
-                title="Pasif kurallar değerlendirilmez."
+                title={t("engineering.alarmRules.ruleInactiveTitle")}
               />
             </div>
           </header>
@@ -328,7 +330,7 @@ export function AlarmRulesPage({
               {/* SOL: Sinyal seçici (yalnızca create modunda aktif) */}
               <aside className="rules-v3-picker">
                 <h4 className="rules-v3-section-title">
-                  {mode === "create" ? "1. Sinyal Seçin" : "Sinyal"}
+                  {mode === "create" ? t("engineering.alarmRules.step1Signal") : t("engineering.alarmRules.signalLabel")}
                 </h4>
                 {mode === "create" ? (
                   <>
@@ -340,7 +342,7 @@ export function AlarmRulesPage({
                           className={`signal-picker-tab ${pickerSource === src ? "active" : ""}`}
                           onClick={() => setPickerSource(src)}
                         >
-                          <span>{src === "all" ? "Tümü" : SOURCE_SHORT[src]}</span>
+                          <span>{src === "all" ? t("engineering.alarmRules.all") : SOURCE_SHORT[src]}</span>
                           <span className="signal-picker-tab-count">
                             {src === "all" ? signals.length : sourceCounts[src] ?? 0}
                           </span>
@@ -350,14 +352,14 @@ export function AlarmRulesPage({
                     <input
                       type="search"
                       className="signal-picker-search"
-                      placeholder="Sinyal ara..."
+                      placeholder={t("engineering.alarmRules.signalSearch")}
                       value={pickerSearch}
                       onChange={(e) => setPickerSearch(e.target.value)}
                     />
                     <ul className="rules-v2-signal-list">
                       {filteredSignalsForPicker.length === 0 ? (
                         <li className="signal-picker-empty">
-                          {signals.length === 0 ? "Sinyal yok." : "Aramaya uygun sinyal yok."}
+                          {signals.length === 0 ? t("engineering.alarmRules.noSignals") : t("engineering.alarmRules.noResults")}
                         </li>
                       ) : (
                         filteredSignalsForPicker.map((sig) => {
@@ -397,7 +399,7 @@ export function AlarmRulesPage({
                     ) : (
                       <span>{form.signal_key}</span>
                     )}
-                    <small className="rule-hint">Sinyal sonradan değiştirilemez.</small>
+                    <small className="rule-hint">{t("engineering.alarmRules.signalLocked")}</small>
                   </div>
                 )}
               </aside>
@@ -405,40 +407,40 @@ export function AlarmRulesPage({
               {/* SAĞ: Alarm özellikleri */}
               <div className="rules-v3-properties">
                 <h4 className="rules-v3-section-title">
-                  {mode === "create" ? "2. Alarm Özellikleri" : "Alarm Özellikleri"}
+                  {mode === "create" ? t("engineering.alarmRules.step2Properties") : t("engineering.alarmRules.propertiesLabel")}
                 </h4>
 
                 {mode === "create" && !pickerSelectedKey ? (
                   <div className="rules-v3-properties-empty">
-                    <p className="helper-text">Önce soldan bir sinyal seçin.</p>
+                    <p className="helper-text">{t("engineering.alarmRules.selectSignalFirst")}</p>
                   </div>
                 ) : (
                   <div className="rules-v3-properties-body">
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>Tanım</legend>
+                      <legend>{t("engineering.alarmRules.fieldsetDef")}</legend>
                       <label className="rule-field">
-                        <span>Kural Adı</span>
+                        <span>{t("engineering.alarmRules.ruleName")}</span>
                         <input
                           value={form.name}
                           onChange={(e) => setForm({ ...form, name: e.target.value })}
                           required
-                          placeholder="Örn: Akım üst eşiği"
+                          placeholder={t("engineering.alarmRules.ruleNamePlaceholder")}
                         />
                       </label>
                       <label className="rule-field">
-                        <span>Açıklama</span>
+                        <span>{t("engineering.alarmRules.description")}</span>
                         <textarea
                           className="rule-textarea"
                           rows={2}
                           value={form.description ?? ""}
                           onChange={(e) => setForm({ ...form, description: e.target.value })}
-                          placeholder="Bu alarmın amacını / aksiyonunu kısaca yazın..."
+                          placeholder={t("engineering.alarmRules.descriptionPlaceholder")}
                         />
                       </label>
                     </fieldset>
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>Önem Derecesi</legend>
+                      <legend>{t("engineering.alarmRules.fieldsetSeverity")}</legend>
                       <div className="rule-level-picker">
                         {LEVELS.map((lv) => (
                           <button
@@ -455,9 +457,9 @@ export function AlarmRulesPage({
                     </fieldset>
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>Koşul</legend>
+                      <legend>{t("engineering.alarmRules.fieldsetCondition")}</legend>
                       <label className="rule-field">
-                        <span>Karşılaştırma</span>
+                        <span>{t("engineering.alarmRules.comparator")}</span>
                         <select
                           value={form.comparator}
                           onChange={(e) =>
@@ -476,7 +478,7 @@ export function AlarmRulesPage({
                         <div className={isRangeComparator(form.comparator) ? "rule-grid-2" : ""}>
                           <label className="rule-field">
                             <span>
-                              {isRangeComparator(form.comparator) ? "Alt sınır" : "Eşik değer"}
+                              {isRangeComparator(form.comparator) ? t("engineering.alarmRules.lowerLimit") : t("engineering.alarmRules.thresholdValue")}
                               {formSignalUnit ? ` (${formSignalUnit})` : ""}
                             </span>
                             <input
@@ -490,7 +492,7 @@ export function AlarmRulesPage({
                           </label>
                           {isRangeComparator(form.comparator) ? (
                             <label className="rule-field">
-                              <span>Üst sınır{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
+                              <span>{t("engineering.alarmRules.upperLimit")}{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
                               <input
                                 type="number"
                                 step="0.0001"
@@ -504,19 +506,17 @@ export function AlarmRulesPage({
                         </div>
                       ) : (
                         <p className="rule-hint">
-                          Boolean koşul için eşik değeri gerekmez — sinyal{" "}
-                          {form.comparator === "boolean_true" ? "TRUE" : "FALSE"} olduğunda alarm
-                          tetiklenir.
+                          {t("engineering.alarmRules.booleanHint", { state: form.comparator === "boolean_true" ? "TRUE" : "FALSE" })}
                         </p>
                       )}
                     </fieldset>
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>Davranış</legend>
+                      <legend>{t("engineering.alarmRules.fieldsetBehavior")}</legend>
                       <div className="rule-grid-2">
                         {!isBooleanComparator(form.comparator) ? (
                           <label className="rule-field">
-                            <span>Histerezis{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
+                            <span>{t("engineering.alarmRules.hysteresis")}{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
                             <input
                               type="number"
                               step="0.0001"
@@ -526,12 +526,12 @@ export function AlarmRulesPage({
                               }
                             />
                             <small className="rule-hint">
-                              Salınım engellemek için tampon — alarm sıfırlama eşiği.
+                              {t("engineering.alarmRules.hysteresisHint")}
                             </small>
                           </label>
                         ) : null}
                         <label className="rule-field">
-                          <span>Debounce (sn)</span>
+                          <span>{t("engineering.alarmRules.debounce")}</span>
                           <input
                             type="number"
                             min={0}
@@ -541,34 +541,33 @@ export function AlarmRulesPage({
                             }
                           />
                           <small className="rule-hint">
-                            Koşul bu süre boyunca sürerse alarm üretilir.
+                            {t("engineering.alarmRules.debounceHint")}
                           </small>
                         </label>
                       </div>
                     </fieldset>
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>Kapsam</legend>
+                      <legend>{t("engineering.alarmRules.fieldsetScope")}</legend>
                       <label className="rule-field">
-                        <span>Cihaz Kodu Filtresi</span>
+                        <span>{t("engineering.alarmRules.deviceFilter")}</span>
                         <input
                           value={form.device_code_filter ?? ""}
                           onChange={(e) =>
                             setForm({ ...form, device_code_filter: e.target.value })
                           }
-                          placeholder="örn: GW01-D1, GW01-D2  (boş = tüm cihazlar)"
+                          placeholder={t("engineering.alarmRules.deviceFilterPlaceholder")}
                         />
                         <small className="rule-hint">
-                          Virgülle ayırın. Boş bırakırsanız kural tüm cihazlara uygulanır.
+                          {t("engineering.alarmRules.deviceFilterHint")}
                         </small>
                       </label>
                     </fieldset>
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>Bildirim Kanalları</legend>
+                      <legend>{t("engineering.alarmRules.fieldsetChannels")}</legend>
                       <p className="rule-hint" style={{ margin: "0 0 10px" }}>
-                        Bu kural tetiklendiğinde web bildirimi her zaman üretilir.
-                        Aşağıdakilerden seçili olanlar ek olarak gönderilir.
+                        {t("engineering.alarmRules.channelsHint")}
                       </p>
                       <div className="rule-channel-grid">
                         <label className="rule-channel-option">
@@ -581,8 +580,8 @@ export function AlarmRulesPage({
                           />
                           <span className="rule-channel-icon material-symbols-outlined">mail</span>
                           <span className="rule-channel-label">
-                            <strong>E-posta</strong>
-                            <small>Sorumlu kullanıcılara HTML şablonlu mail.</small>
+                            <strong>{t("engineering.alarmRules.channelEmail")}</strong>
+                            <small>{t("engineering.alarmRules.channelEmailHint")}</small>
                           </span>
                         </label>
                         <label className="rule-channel-option">
@@ -595,8 +594,8 @@ export function AlarmRulesPage({
                           />
                           <span className="rule-channel-icon material-symbols-outlined">sms</span>
                           <span className="rule-channel-label">
-                            <strong>SMS</strong>
-                            <small>Telefon numarası kayıtlı kullanıcılara kısa mesaj.</small>
+                            <strong>{t("engineering.alarmRules.channelSms")}</strong>
+                            <small>{t("engineering.alarmRules.channelSmsHint")}</small>
                           </span>
                         </label>
                         <label className="rule-channel-option">
@@ -609,8 +608,8 @@ export function AlarmRulesPage({
                           />
                           <span className="rule-channel-icon material-symbols-outlined">send</span>
                           <span className="rule-channel-label">
-                            <strong>Telegram</strong>
-                            <small>Bildirim Ayarları'nda tanımlı tüm chat'lere gönderilir.</small>
+                            <strong>{t("engineering.alarmRules.channelTelegram")}</strong>
+                            <small>{t("engineering.alarmRules.channelTelegramHint")}</small>
                           </span>
                         </label>
                       </div>
@@ -626,7 +625,7 @@ export function AlarmRulesPage({
 
             <footer className="rules-v3-form-footer">
               <button type="button" className="secondary-btn" onClick={cancel} disabled={saving}>
-                İptal
+                {t("engineering.alarmRules.cancel")}
               </button>
               {canEdit ? (
                 <button
@@ -634,7 +633,7 @@ export function AlarmRulesPage({
                   className="primary-btn"
                   disabled={saving || (mode === "create" && !pickerSelectedKey)}
                 >
-                  {saving ? "Kaydediliyor..." : mode === "create" ? "Oluştur" : "Güncelle"}
+                  {saving ? t("engineering.alarmRules.saving") : mode === "create" ? t("engineering.alarmRules.create") : t("engineering.alarmRules.update")}
                 </button>
               ) : null}
             </footer>
@@ -680,7 +679,7 @@ export function AlarmRulesPage({
 
       {!canEdit ? (
         <p className="helper-text rules-readonly-hint">
-          Alarm kurallarını yalnızca <strong>kurulumcu</strong> rolü düzenleyebilir.
+          {t("engineering.alarmRules.readonlyHint")}
         </p>
       ) : null}
 
@@ -690,13 +689,13 @@ export function AlarmRulesPage({
         {filteredRules.length === 0 ? (
           <div className="rules-v3-empty">
             <span className="material-symbols-outlined rules-v3-empty-icon">notifications_off</span>
-            <h3>Henüz alarm kuralı yok</h3>
+            <h3>{t("engineering.alarmRules.emptyHeading")}</h3>
             <p className="helper-text">
               {rules.length === 0
                 ? canEdit
-                  ? "“+ Yeni Kural” ile ilk kuralı tanımlayın."
-                  : "Kurulumcu hesabıyla giriş yapan kişi yeni kural tanımlayabilir."
-                : "Filtreye uygun kural bulunamadı."}
+                  ? t("engineering.alarmRules.emptyHintInstaller")
+                  : t("engineering.alarmRules.emptyHintViewer")
+                : t("engineering.alarmRules.emptyHintNoMatch")}
             </p>
           </div>
         ) : (
