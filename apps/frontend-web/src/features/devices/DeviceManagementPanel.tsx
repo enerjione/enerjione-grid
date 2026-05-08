@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import i18n from "../../shared/i18n";
 import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
@@ -15,25 +16,26 @@ type GatewayLiveness = {
 function formatTrRel(iso: string): string {
   const d = new Date(iso);
   const s = Math.round((Date.now() - d.getTime()) / 1000);
-  if (s < 5) return "şimdi";
-  if (s < 60) return `${s} sn önce`;
-  if (s < 3600) return `${Math.round(s / 60)} dk önce`;
-  if (s < 86400) return `${Math.round(s / 3600)} sa önce`;
-  return d.toLocaleString("tr-TR");
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
+  if (s < 5) return i18n.t("common.now");
+  if (s < 60) return i18n.t("common.secondsAgoShort", { count: s });
+  if (s < 3600) return i18n.t("common.minutesAgoShort", { count: Math.round(s / 60) });
+  if (s < 86400) return i18n.t("common.hoursAgoShort", { count: Math.round(s / 3600) });
+  return d.toLocaleString(localeTag);
 }
 
 function getGatewayLiveness(gateway: Gateway): GatewayLiveness {
   if (!gateway.is_active) {
-    return { className: "inactive", title: "Pasif (yayın kapalı)" };
+    return { className: "inactive", title: i18n.t("engineering.gatewayLive.inactive") };
   }
   if (!gateway.last_seen_at) {
-    return { className: "never", title: "Merkezle temas yok" };
+    return { className: "never", title: i18n.t("engineering.gatewayLive.never") };
   }
   const sec = (Date.now() - new Date(gateway.last_seen_at).getTime()) / 1000;
   if (sec < GATEWAY_LIVE_SEC) {
-    return { className: "online", title: "Çevrimiçi" };
+    return { className: "online", title: i18n.t("engineering.gatewayLive.online") };
   }
-  return { className: "offline", title: "Bağlı değil (son sinyal eski)" };
+  return { className: "offline", title: i18n.t("engineering.gatewayLive.offline") };
 }
 
 function deviceCommDotClass(status: DeviceRow["communicationStatus"]): "online" | "offline" {
@@ -188,7 +190,7 @@ export function DeviceManagementPanel({
       });
       // Modal acik kalir — kullanici docker komutunu kopyalamak isteyebilir.
     } catch (err) {
-      setComposeError(err instanceof Error ? err.message : "Dosya indirilemedi.");
+      setComposeError(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
       setComposeBusy(false);
     }
@@ -364,7 +366,7 @@ export function DeviceManagementPanel({
         await onSelectGateway(targetGateway);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cihaz güncellenemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
   };
 
@@ -376,7 +378,7 @@ export function DeviceManagementPanel({
       await onDelete(selectedDevice.code);
       setSelectedDeviceCode("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cihaz silinemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
   };
 
@@ -419,7 +421,7 @@ export function DeviceManagementPanel({
       setCreateLatitude("0");
       setCreateLongitude("0");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cihaz oluşturulamadı.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
   };
 
@@ -453,7 +455,7 @@ export function DeviceManagementPanel({
       setGatewayToken("");
       openComposeModal(createdCode);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gateway oluşturulamadı.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
   };
 
@@ -471,7 +473,7 @@ export function DeviceManagementPanel({
       setSelectedGatewayCode("");
       setSelectedDeviceCode("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gateway silinemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
       setDeletingGatewayCode(null);
     }
@@ -502,7 +504,7 @@ export function DeviceManagementPanel({
         await onSelectGateway(editGatewayCode);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gateway güncellenemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
   };
 
@@ -707,21 +709,21 @@ export function DeviceManagementPanel({
                 >
                   <div className="device-detail-form-grid">
                     <label>
-                      Cihaz Kodu
+                      {t("engineering.devicesPanel.form.code")}
                       <input value={selectedDevice.code} disabled readOnly />
                     </label>
                     <label>
-                      İsim
+                      {t("engineering.devicesPanel.form.nameShort")}
                       <input value={name} onChange={(event) => setName(event.target.value)} />
                     </label>
                     <label>
-                      Gateway
+                      {t("engineering.devicesPanel.form.gateway")}
                       <select
                         value={deviceGatewayCode}
                         onChange={(event) => setDeviceGatewayCode(event.target.value)}
                       >
                         {gateways.length === 0 ? (
-                          <option value="">— Gateway yok —</option>
+                          <option value="">{t("engineering.devicesPanel.form.noGateway")}</option>
                         ) : (
                           gateways.map((gw) => (
                             <option key={gw.code} value={gw.code}>
@@ -732,7 +734,7 @@ export function DeviceManagementPanel({
                       </select>
                     </label>
                     <label>
-                      Model
+                      {t("engineering.devicesPanel.form.model")}
                       <select value={model} onChange={(event) => setModel(event.target.value)}>
                         {deviceModels.length === 0 ? (
                           <option value={model}>{model}</option>
@@ -746,7 +748,7 @@ export function DeviceManagementPanel({
                       </select>
                     </label>
                     <label>
-                      Açıklama
+                      {t("engineering.devicesPanel.form.description")}
                       <input value={description} onChange={(event) => setDescription(event.target.value)} />
                     </label>
                   </div>
@@ -761,7 +763,7 @@ export function DeviceManagementPanel({
                   <div className="device-props-comms-scroll">
                     <div className="device-detail-form-grid">
                       <label>
-                        Outstation IP
+                        {t("engineering.devicesPanel.form.ipShort")}
                         <input
                           value={ipAddress}
                           onChange={(event) => setIpAddress(event.target.value)}
@@ -769,7 +771,7 @@ export function DeviceManagementPanel({
                         />
                       </label>
                       <label>
-                        Outstation port
+                        {t("engineering.devicesPanel.form.port")}
                         <input
                           type="number"
                           min={1}
@@ -779,7 +781,7 @@ export function DeviceManagementPanel({
                         />
                       </label>
                       <label>
-                        DNP3 Outstation adresi
+                        {t("engineering.devicesPanel.form.dnp3Address")}
                         <input
                           type="number"
                           value={dnp3Address}
@@ -787,7 +789,7 @@ export function DeviceManagementPanel({
                         />
                       </label>
                       <label>
-                        Poll aralığı (sn)
+                        {t("engineering.devicesPanel.form.pollInterval")}
                         <input
                           type="number"
                           min={1}
@@ -797,7 +799,7 @@ export function DeviceManagementPanel({
                         />
                       </label>
                       <label>
-                        Timeout (ms)
+                        {t("engineering.devicesPanel.form.timeout")}
                         <input
                           type="number"
                           min={100}
@@ -807,7 +809,7 @@ export function DeviceManagementPanel({
                         />
                       </label>
                       <label>
-                        Retry
+                        {t("engineering.devicesPanel.form.retry")}
                         <input
                           type="number"
                           min={0}
@@ -842,24 +844,24 @@ export function DeviceManagementPanel({
                     return (
                       <span className={`device-comms-pill device-comms-pill--${deviceCommDotClass(eff)}`}>
                         {eff === "online"
-                          ? "OK"
+                          ? t("engineering.devicesPanel.footer.ok")
                           : gwOffline
-                            ? "Gateway bağlı değil"
-                            : "Kesik / bekleniyor"}
+                            ? t("engineering.devicesPanel.footer.gwDisconnected")
+                            : t("engineering.devicesPanel.footer.stale")}
                       </span>
                     );
                   })()}
                   {selectedDevice.lastUpdateAt ? (
-                    <span className="device-comms-meta"> · Son veri: {formatTrRel(selectedDevice.lastUpdateAt)}</span>
+                    <span className="device-comms-meta"> · {t("engineering.devicesPanel.footer.lastData")} {formatTrRel(selectedDevice.lastUpdateAt)}</span>
                   ) : null}
                   {selectedGateway ? <span className="device-comms-meta"> · {selectedGateway.name}</span> : null}
                 </div>
                 <div className="device-form-actions">
                   <button type="button" className="primary-btn" onClick={() => void handleSaveDevice()}>
-                    Kaydet
+                    {t("engineering.devicesPanel.save")}
                   </button>
                   <button type="button" className="danger-btn" onClick={() => void handleDeleteDevice()}>
-                    Sil
+                    {t("engineering.devicesPanel.delete")}
                   </button>
                 </div>
               </div>
@@ -875,25 +877,25 @@ export function DeviceManagementPanel({
           <form className="settings-modal" onSubmit={handleCreateGateway}>
             <h3>{t("engineering.gateways.newGatewayModal")}</h3>
             <label>
-              Gateway Kodu
+              {t("engineering.gateways.form.code")}
               <input
                 value={gatewayCode}
                 onChange={(event) => setGatewayCode(event.target.value)}
                 required
-                placeholder="GW-001"
+                placeholder={t("engineering.gateways.form.codePlaceholder")}
               />
             </label>
             <label>
-              Gateway Adı
+              {t("engineering.gateways.form.name")}
               <input
                 value={gatewayName}
                 onChange={(event) => setGatewayName(event.target.value)}
                 required
-                placeholder="Örn: Saha A SCADA"
+                placeholder={t("engineering.gateways.form.namePlaceholder")}
               />
             </label>
             <label>
-              Token
+              {t("engineering.gateways.form.token")}
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <input
                   style={{ flex: 1 }}
@@ -901,19 +903,19 @@ export function DeviceManagementPanel({
                   onChange={(event) => setGatewayToken(event.target.value)}
                   required
                   minLength={16}
-                  placeholder="En az 16 karakter (Üret butonu rastgele 48 karakter üretir)"
+                  placeholder={t("engineering.gateways.form.tokenPlaceholder")}
                 />
                 <button type="button" className="secondary-btn" onClick={generateGatewayToken}>
-                  Üret
+                  {t("engineering.gateways.form.generate")}
                 </button>
               </div>
             </label>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowGatewayCreateModal(false)}>
-                İptal
+                {t("engineering.gateways.form.cancel")}
               </button>
               <button type="submit" className="primary-btn">
-                Oluştur
+                {t("engineering.gateways.form.create")}
               </button>
             </div>
           </form>
@@ -937,7 +939,7 @@ export function DeviceManagementPanel({
             return (
               <div className="settings-modal-backdrop">
                 <form className="settings-modal" onSubmit={handleDownloadComposeSubmit}>
-                  <h3>Docker Compose İndir — {composeFor}</h3>
+                  <h3>{t("engineering.gateways.compose.title", { code: composeFor })}</h3>
                   <div className="compose-cmd-row">
                     <code className="compose-cmd-text">{composeCmd}</code>
                     <button
@@ -945,15 +947,15 @@ export function DeviceManagementPanel({
                       className="secondary-btn compose-cmd-copy"
                       onClick={() => void copyCmd()}
                     >
-                      {composeCopied ? "Kopyalandı" : "Kopyala"}
+                      {composeCopied ? t("engineering.gateways.compose.copied") : t("engineering.gateways.compose.copy")}
                     </button>
                   </div>
                   <label>
-                    Çatı Yazılımın IP Adresi
+                    {t("engineering.gateways.compose.backendIp")}
                     <input
                       value={composeBackendIp}
                       onChange={(event) => setComposeBackendIp(event.target.value)}
-                      placeholder="192.168.1.50"
+                      placeholder={t("engineering.gateways.compose.backendIpPlaceholder")}
                       required
                     />
                   </label>
@@ -961,10 +963,10 @@ export function DeviceManagementPanel({
                     <div className={`compose-gw-status compose-gw-status--${composeLive.className}`}>
                       <span className="compose-gw-status-dot" aria-hidden="true" />
                       <span>
-                        Gateway durumu: <strong>{composeLive.title}</strong>
+                        {t("engineering.gateways.compose.gwStatus")} <strong>{composeLive.title}</strong>
                         {composeGw?.last_seen_at ? (
                           <span className="compose-gw-status-meta">
-                            {" "}· son sinyal {formatTrRel(composeGw.last_seen_at)}
+                            {" "}· {t("engineering.gateways.compose.lastSignal", { at: formatTrRel(composeGw.last_seen_at) })}
                           </span>
                         ) : null}
                       </span>
@@ -978,10 +980,10 @@ export function DeviceManagementPanel({
                       onClick={() => setComposeFor(null)}
                       disabled={composeBusy}
                     >
-                      Kapat
+                      {t("engineering.gateways.compose.close")}
                     </button>
                     <button type="submit" className="primary-btn" disabled={composeBusy}>
-                      {composeBusy ? "İndiriliyor..." : "İndir"}
+                      {composeBusy ? t("engineering.gateways.compose.downloading") : t("engineering.gateways.compose.download")}
                     </button>
                   </div>
                 </form>
@@ -995,15 +997,15 @@ export function DeviceManagementPanel({
           <form className="settings-modal device-create-modal" onSubmit={handleCreateDevice}>
             <h3>{t("engineering.devicesPanel.newDeviceModal")}</h3>
             <label>
-              Cihaz Kodu
+              {t("engineering.devicesPanel.form.code")}
               <input value={createCode} onChange={(event) => setCreateCode(event.target.value)} required />
             </label>
             <label>
-              Cihaz Adı
+              {t("engineering.devicesPanel.form.name")}
               <input value={createName} onChange={(event) => setCreateName(event.target.value)} required />
             </label>
             <label>
-              Model
+              {t("engineering.devicesPanel.form.model")}
               <select value={createModel} onChange={(event) => setCreateModel(event.target.value)} required>
                 {deviceModels.length === 0 ? (
                   <option value={createModel}>{createModel}</option>
@@ -1017,11 +1019,11 @@ export function DeviceManagementPanel({
               </select>
             </label>
             <label>
-              Açıklama
+              {t("engineering.devicesPanel.form.description")}
               <input value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} />
             </label>
             <label>
-              Outstation IP adresi
+              {t("engineering.devicesPanel.form.ipAddress")}
               <input
                 value={createIpAddress}
                 onChange={(event) => setCreateIpAddress(event.target.value)}
@@ -1030,7 +1032,7 @@ export function DeviceManagementPanel({
               />
             </label>
             <label>
-              Outstation port
+              {t("engineering.devicesPanel.form.port")}
               <input
                 type="number"
                 min={1}
@@ -1041,7 +1043,7 @@ export function DeviceManagementPanel({
               />
             </label>
             <label>
-              DNP3 Outstation adresi
+              {t("engineering.devicesPanel.form.dnp3Address")}
               <input
                 type="number"
                 min={1}
@@ -1059,7 +1061,7 @@ export function DeviceManagementPanel({
                 .filter((p) => p > 0)}
             />
             <label>
-              Poll aralığı (sn)
+              {t("engineering.devicesPanel.form.pollInterval")}
               <input
                 type="number"
                 min={1}
@@ -1070,7 +1072,7 @@ export function DeviceManagementPanel({
               />
             </label>
             <label>
-              Timeout (ms)
+              {t("engineering.devicesPanel.form.timeout")}
               <input
                 type="number"
                 min={100}
@@ -1081,7 +1083,7 @@ export function DeviceManagementPanel({
               />
             </label>
             <label>
-              Retry
+              {t("engineering.devicesPanel.form.retry")}
               <input
                 type="number"
                 min={0}
@@ -1091,16 +1093,13 @@ export function DeviceManagementPanel({
                 required
               />
             </label>
-            <p className="helper-text">
-              Konum, cihaz bir hat segmentine atandığında otomatik belirlenir.
-              Atama için <strong>Mühendislik &gt; Hat Yönetimi</strong> sayfasını kullanın.
-            </p>
+            <p className="helper-text">{t("engineering.devicesPanel.form.locationHint")}</p>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowCreateModal(false)}>
-                İptal
+                {t("engineering.devicesPanel.form.cancel")}
               </button>
               <button type="submit" className="primary-btn">
-                Oluştur
+                {t("engineering.devicesPanel.form.create")}
               </button>
             </div>
           </form>
@@ -1112,19 +1111,19 @@ export function DeviceManagementPanel({
           <form className="settings-modal" onSubmit={handleUpdateGateway}>
             <h3>{t("engineering.gateways.editGatewayModal")}</h3>
             <label>
-              Gateway Kodu
+              {t("engineering.gateways.form.code")}
               <input value={editGatewayCode} disabled readOnly />
             </label>
             <label>
-              Gateway Adı
+              {t("engineering.gateways.form.name")}
               <input value={editGatewayName} onChange={(event) => setEditGatewayName(event.target.value)} required />
             </label>
             <label>
-              Host
+              {t("engineering.gateways.form.host")}
               <input value={editGatewayHost} onChange={(event) => setEditGatewayHost(event.target.value)} required />
             </label>
             <label>
-              Port
+              {t("engineering.gateways.form.port")}
               <input
                 type="number"
                 min={1}
@@ -1135,15 +1134,15 @@ export function DeviceManagementPanel({
               />
             </label>
             <label>
-              Token
+              {t("engineering.gateways.form.token")}
               <input value={editGatewayToken} onChange={(event) => setEditGatewayToken(event.target.value)} required />
             </label>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowGatewayEditModal(false)}>
-                İptal
+                {t("engineering.gateways.form.cancel")}
               </button>
               <button type="submit" className="primary-btn">
-                Kaydet
+                {t("engineering.gateways.form.save")}
               </button>
             </div>
           </form>

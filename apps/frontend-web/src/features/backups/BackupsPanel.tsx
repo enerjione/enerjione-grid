@@ -329,7 +329,7 @@ export function BackupsPanel({ accessToken }: Props) {
           </button>
         </div>
         {loading && backups.length === 0 ? (
-          <div className="backups-empty">Yükleniyor…</div>
+          <div className="backups-empty">{t("common.loading")}</div>
         ) : backups.length === 0 ? (
           <div className="backups-empty">
             Henüz yedek yok. Üstten "Yeni Yedek Al" butonu ile başlayabilirsiniz.

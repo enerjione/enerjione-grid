@@ -593,6 +593,36 @@
   },
   "engineering": {
     "title": "Mühendislik",
+    "gatewayLive": {
+      "inactive": "Pasif (yayın kapalı)",
+      "never": "Merkezle temas yok",
+      "online": "Çevrimiçi",
+      "offline": "Bağlı değil (son sinyal eski)"
+    },
+    "dnp3": {
+      "title": "DNP3 oturum ayarları",
+      "endpointType": "Bağlantı modu",
+      "modeListening": "Listening (cihaz dinler, gateway bağlanır)",
+      "modeInitiating": "Initiating (cihaz gateway'e bağlanır — 4G/SIM)",
+      "masterIp": "Master IP adresi",
+      "masterIpPlaceholder": "0.0.0.0",
+      "masterIpInitPlaceholder": "Çatı yazılım sunucu IP",
+      "masterPort": "Master IP portu",
+      "masterPortInitTooltip": "Initiating modunda port otomatik atanır",
+      "masterAddr": "Master adres",
+      "unsolicited": "İstenmeyen raporlama (Unsolicited)",
+      "unsolicitedStartup": "Başlangıçta istenmeyen raporlama",
+      "unsolicitedClassMask": "İstenmeyen sınıf maskesi ID",
+      "linkStatus": "DNP3 bağlantı durumu periyodu",
+      "selfAddress": "Self adresi etkinleştir",
+      "validateSrc": "Kaynak adresini doğrula",
+      "sessionTimeout": "Oturum zaman aşımı (dinleyen uç)",
+      "socketTimeout": "Soket dinleme zaman aşımı",
+      "on": "Açık",
+      "off": "Kapalı",
+      "minutes": "dk",
+      "seconds": "s"
+    },
     "nav": {
       "devices": "Cihazlar",
       "liveValues": "Canlı Değerler",
@@ -676,7 +706,33 @@
       "edit": "Gateway Düzenle",
       "refreshAll": "Tüm Cihazlara Sorgu At (Class 0+1+2+3 integrity poll)",
       "refreshAllShort": "Tüm Cihazlara Sorgu At",
-      "delete": "Gateway Sil"
+      "delete": "Gateway Sil",
+      "form": {
+        "code": "Gateway Kodu",
+        "codePlaceholder": "GW-001",
+        "name": "Gateway Adı",
+        "namePlaceholder": "Örn: Saha A SCADA",
+        "token": "Token",
+        "tokenPlaceholder": "En az 16 karakter (Üret butonu rastgele 48 karakter üretir)",
+        "generate": "Üret",
+        "host": "Host",
+        "port": "Port",
+        "cancel": "İptal",
+        "create": "Oluştur",
+        "save": "Kaydet"
+      },
+      "compose": {
+        "title": "Docker Compose İndir — {{code}}",
+        "backendIp": "Çatı Yazılımın IP Adresi",
+        "backendIpPlaceholder": "192.168.1.50",
+        "gwStatus": "Gateway durumu:",
+        "lastSignal": "son sinyal {{at}}",
+        "copy": "Kopyala",
+        "copied": "Kopyalandı",
+        "close": "Kapat",
+        "download": "İndir",
+        "downloading": "İndiriliyor..."
+      }
     },
     "devicesPanel": {
       "title": "Cihazlar",
@@ -694,7 +750,33 @@
       "save": "Kaydet",
       "saving": "Kaydediliyor...",
       "delete": "Sil",
-      "deleteConfirm": "Bu cihaz silinecek. Devam edilsin mi?"
+      "deleteConfirm": "Bu cihaz silinecek. Devam edilsin mi?",
+      "form": {
+        "code": "Cihaz Kodu",
+        "name": "Cihaz Adı",
+        "nameShort": "İsim",
+        "gateway": "Gateway",
+        "noGateway": "— Gateway yok —",
+        "model": "Model",
+        "description": "Açıklama",
+        "ipAddress": "Outstation IP adresi",
+        "ipShort": "Outstation IP",
+        "port": "Outstation port",
+        "dnp3Address": "DNP3 Outstation adresi",
+        "pollInterval": "Poll aralığı (sn)",
+        "timeout": "Timeout (ms)",
+        "retry": "Retry",
+        "locationHint": "Konum, cihaz bir hat segmentine atandığında otomatik belirlenir. Atama için Mühendislik > Hat Yönetimi sayfasını kullanın.",
+        "cancel": "İptal",
+        "create": "Oluştur",
+        "save": "Kaydet"
+      },
+      "footer": {
+        "ok": "OK",
+        "gwDisconnected": "Gateway bağlı değil",
+        "stale": "Kesik / bekleniyor",
+        "lastData": "Son veri:"
+      }
     },
     "devices": {
       "title": "Cihaz Yönetimi",
@@ -757,8 +839,49 @@
     },
     "liveValues": {
       "title": "Canlı Değerler",
-      "search": "Sinyal / cihaz ara...",
-      "noData": "Veri akışı bekleniyor…"
+      "search": "Ara (cihaz, etiket, key)...",
+      "noData": "Veri akışı bekleniyor…",
+      "all": "Tümü",
+      "dataType": {
+        "analog": "Analog Input",
+        "binary": "Binary Input",
+        "counter": "Counter",
+        "string": "String"
+      },
+      "filter": {
+        "device": "Cihaza göre filtrele",
+        "allDevices": "Tüm cihazlar",
+        "source": "Kaynağa göre filtrele (Master / Satellite)",
+        "allSources": "Tüm kaynaklar",
+        "quality": "Kaliteye göre filtrele",
+        "allQualities": "Tüm kaliteler",
+        "qualityGood": "İyi (good)",
+        "qualityBad": "Kötü (bad)",
+        "qualityCommLost": "Haberleşme kayıp",
+        "qualityPending": "Henüz veri yok",
+        "clear": "Temizle",
+        "clearAll": "Tüm filtreleri temizle"
+      },
+      "autoRefresh": "Otomatik yenile",
+      "autoRefreshOff": "Kapalı",
+      "secondsShort": "{{count}} sn",
+      "minutesShort": "{{count}} dk",
+      "refresh": "Yenile",
+      "refreshing": "Yenileniyor...",
+      "table": {
+        "device": "Cihaz",
+        "source": "Kaynak",
+        "signal": "Sinyal",
+        "type": "Tip",
+        "value": "Değer",
+        "quality": "Kalite",
+        "time": "Zaman"
+      },
+      "binaryActive": "AKTİF (1)",
+      "binaryInactive": "PASİF (0)",
+      "noRows": "Filtreye uygun satır bulunamadı.",
+      "noRowsInitial": "Gösterilecek satır yok: en az bir cihaz ve aktif sinyal kataloğu gerekir. Cihaz eklediğinizde tüm sinyal satırları burada listelenir; değerler telemetri geldikçe dolacaktır.",
+      "itemLabel": "sinyal"
     }
   },
   "backups": {
@@ -939,6 +1062,16 @@
   },
   "globalLoading": {
     "message": "Yükleniyor…"
+  },
+  "pagination": {
+    "size": "Sayfa boyutu",
+    "first": "İlk sayfa",
+    "previous": "Önceki sayfa",
+    "next": "Sonraki sayfa",
+    "last": "Son sayfa",
+    "info": "{{start}}–{{end}} / {{total}} {{label}}",
+    "infoZero": "0 {{label}}",
+    "defaultItem": "kayıt"
   },
   "errors": {
     "network": "Sunucuya ulaşılamıyor",

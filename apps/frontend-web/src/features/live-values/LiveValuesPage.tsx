@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TablePagination } from "../../components/TablePagination";
 import type {
   DeviceRow,
@@ -35,30 +36,22 @@ const DATA_TYPES: SignalDataType[] = [
   "counter"
 ];
 
-const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
-  analog: "Analog Input",
-  binary: "Binary Input",
-  counter: "Counter",
-  // 'string' tipi sistemde gosterilmiyor (cihaz konfigurasyonunda Class 0
-  // disinda atanmis, okunamiyor). Tipte yine taniml ki SignalCatalog seed'i
-  // bozulmasin, ama UI'de filtre/tab listesinden kaldirildi.
-  string: "String"
-};
-
 const SOURCE_LABEL: Record<string, string> = {
   master: "Master",
   sat01: "Satellite 01",
   sat02: "Satellite 02"
 };
 
-const AUTO_REFRESH_OPTIONS: { value: number; label: string }[] = [
-  { value: 0, label: "Kapalı" },
-  { value: 1, label: "1 sn" },
-  { value: 2, label: "2 sn" },
-  { value: 5, label: "5 sn" },
-  { value: 10, label: "10 sn" },
-  { value: 30, label: "30 sn" },
-  { value: 60, label: "1 dk" }
+// Auto refresh options — labels come from i18n at render time.
+type RefreshOpt = { value: number; labelKey: string; labelArgs?: Record<string, unknown> };
+const AUTO_REFRESH_OPTIONS: RefreshOpt[] = [
+  { value: 0, labelKey: "liveValues.autoRefreshOff" },
+  { value: 1, labelKey: "liveValues.secondsShort", labelArgs: { count: 1 } },
+  { value: 2, labelKey: "liveValues.secondsShort", labelArgs: { count: 2 } },
+  { value: 5, labelKey: "liveValues.secondsShort", labelArgs: { count: 5 } },
+  { value: 10, labelKey: "liveValues.secondsShort", labelArgs: { count: 10 } },
+  { value: 30, labelKey: "liveValues.secondsShort", labelArgs: { count: 30 } },
+  { value: 60, labelKey: "liveValues.minutesShort", labelArgs: { count: 1 } }
 ];
 
 const AUTO_REFRESH_STORAGE_KEY = "hsl.live-values.auto-refresh-sec";
@@ -76,27 +69,23 @@ function readStoredAutoRefresh(): number {
   return AUTO_REFRESH_OPTIONS.some((opt) => opt.value === parsed) ? parsed : AUTO_REFRESH_DEFAULT_SEC;
 }
 
-function formatBinaryValue(value: number): string {
-  return value ? "AKTİF (1)" : "PASİF (0)";
+function makeNumberFormatter(localeTag: string): Intl.NumberFormat {
+  return new Intl.NumberFormat(localeTag, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+    useGrouping: false
+  });
 }
 
-// Sayisal degeri tr-TR locale ile (virgullu), max 6 ondalik basamak ve
-// gereksiz trailing-zero olmadan formatlar. Ornek: 216.87 -> "216,87",
-// 216.000 -> "216", 216.870000 -> "216,87" (anlamli digit korunur).
-const NUMBER_FORMATTER = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 6,
-  useGrouping: false
-});
-
-function formatValue(
+function formatValueWith(
   value: number | null,
   dataType: SignalDataType | undefined,
-  unit?: string | null,
-  valueString?: string | null
+  unit: string | null | undefined,
+  valueString: string | null | undefined,
+  numberFmt: Intl.NumberFormat,
+  binaryActive: string,
+  binaryInactive: string,
 ) {
-  // String tipli sinyaller (DNP3 Group 110 / Octet String) — gateway numeric
-  // value=null yollar; gercek metin value_string'tedir.
   if (dataType === "string") {
     const txt = (valueString ?? "").trim();
     return txt.length > 0 ? txt : "—";
@@ -105,28 +94,35 @@ function formatValue(
     return "—";
   }
   if (dataType === "binary") {
-    return formatBinaryValue(value);
+    return value ? binaryActive : binaryInactive;
   }
   const text = Number.isFinite(value)
     ? dataType === "counter"
       ? Math.round(value).toString()
-      : NUMBER_FORMATTER.format(value)
+      : numberFmt.format(value)
     : String(value);
   return unit ? `${text} ${unit}` : text;
 }
 
-function formatTimestamp(ts: string | null): string {
+function formatTimestamp(ts: string | null, localeTag: string): string {
   if (!ts) {
     return "—";
   }
   try {
-    return new Date(ts).toLocaleString("tr-TR");
+    return new Date(ts).toLocaleString(localeTag);
   } catch {
     return ts;
   }
 }
 
 export function LiveValuesPage({ values, signals, devices, gateways, loading, error, onRefresh }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
+  const numberFmt = useMemo(() => makeNumberFormatter(localeTag), [localeTag]);
+  const dataTypeLabel = (type: SignalDataType): string =>
+    t(`liveValues.dataType.${type}`, { defaultValue: type });
+  const binaryActive = t("liveValues.binaryActive");
+  const binaryInactive = t("liveValues.binaryInactive");
   // device_code -> gateway_code mapping (cihazdan gateway'e gitmek icin)
   const deviceGwMap = useMemo(() => {
     const m = new Map<string, string | undefined>();
@@ -206,9 +202,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
       }
     }
     return Array.from(seen, ([code, name]) => ({ code, name })).sort((a, b) =>
-      a.name.localeCompare(b.name, "tr")
+      a.name.localeCompare(b.name, localeTag)
     );
-  }, [values]);
+  }, [values, localeTag]);
 
   const sourceOptions = useMemo(() => {
     const set = new Set<string>();
@@ -292,7 +288,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           className={`signals-type-tab ${activeTab === "all" ? "active" : ""}`}
           onClick={() => setActiveTab("all")}
         >
-          <span className="stt-label">Tümü</span>
+          <span className="stt-label">{t("liveValues.all")}</span>
           <span className="stt-count">{totalCount}</span>
         </button>
         {DATA_TYPES.map((type) => (
@@ -301,7 +297,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             className={`signals-type-tab stt-${type} ${activeTab === type ? "active" : ""}`}
             onClick={() => setActiveTab(type)}
           >
-            <span className="stt-label">{DATA_TYPE_LABEL[type]}</span>
+            <span className="stt-label">{dataTypeLabel(type)}</span>
             <span className="stt-count">{countsByType.get(type) ?? 0}</span>
           </button>
         ))}
@@ -311,7 +307,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         <input
           className="signals-search"
           type="search"
-          placeholder="Ara (cihaz, etiket, key)..."
+          placeholder={t("liveValues.search")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -320,9 +316,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             className="live-filter-select"
             value={deviceFilter}
             onChange={(event) => setDeviceFilter(event.target.value)}
-            title="Cihaza göre filtrele"
+            title={t("liveValues.filter.device")}
           >
-            <option value="all">Tüm cihazlar</option>
+            <option value="all">{t("liveValues.filter.allDevices")}</option>
             {deviceOptions.map((opt) => (
               <option key={opt.code} value={opt.code}>
                 {opt.name} · {opt.code}
@@ -333,9 +329,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             className="live-filter-select"
             value={sourceFilter}
             onChange={(event) => setSourceFilter(event.target.value)}
-            title="Kaynağa göre filtrele (Master / Satellite)"
+            title={t("liveValues.filter.source")}
           >
-            <option value="all">Tüm kaynaklar</option>
+            <option value="all">{t("liveValues.filter.allSources")}</option>
             {sourceOptions.map((src) => (
               <option key={src} value={src}>
                 {SOURCE_LABEL[src] ?? src}
@@ -346,22 +342,22 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             className="live-filter-select"
             value={qualityFilter}
             onChange={(event) => setQualityFilter(event.target.value)}
-            title="Kaliteye göre filtrele"
+            title={t("liveValues.filter.quality")}
           >
-            <option value="all">Tüm kaliteler</option>
-            <option value="good">İyi (good)</option>
-            <option value="bad">Kötü (bad)</option>
-            <option value="comm_lost">Haberleşme kayıp</option>
-            <option value="pending">Henüz veri yok</option>
+            <option value="all">{t("liveValues.filter.allQualities")}</option>
+            <option value="good">{t("liveValues.filter.qualityGood")}</option>
+            <option value="bad">{t("liveValues.filter.qualityBad")}</option>
+            <option value="comm_lost">{t("liveValues.filter.qualityCommLost")}</option>
+            <option value="pending">{t("liveValues.filter.qualityPending")}</option>
           </select>
           {hasActiveFilter ? (
             <button
               type="button"
               className="secondary-btn live-filter-clear"
               onClick={handleClearFilters}
-              title="Tüm filtreleri temizle"
+              title={t("liveValues.filter.clearAll")}
             >
-              Temizle
+              {t("liveValues.filter.clear")}
             </button>
           ) : null}
         </div>
@@ -369,7 +365,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           {filtered.length} / {totalCount}
         </span>
         <label className="auto-refresh-control">
-          <span className="auto-refresh-label">Otomatik yenile</span>
+          <span className="auto-refresh-label">{t("liveValues.autoRefresh")}</span>
           <select
             className="auto-refresh-select"
             value={autoRefreshSec}
@@ -377,7 +373,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           >
             {AUTO_REFRESH_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
-                {opt.label}
+                {t(opt.labelKey, opt.labelArgs ?? {})}
               </option>
             ))}
           </select>
@@ -388,7 +384,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           onClick={() => void onRefresh()}
           disabled={loading}
         >
-          {loading ? "Yenileniyor..." : "Yenile"}
+          {loading ? t("liveValues.refreshing") : t("liveValues.refresh")}
         </button>
       </div>
 
@@ -398,13 +394,13 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         <table className="values-table">
           <thead>
             <tr>
-              <th>Cihaz</th>
-              <th className="cell-center">Kaynak</th>
-              <th>Sinyal</th>
-              <th className="cell-center">Tip</th>
-              <th>Değer</th>
-              <th className="cell-center">Kalite</th>
-              <th>Zaman</th>
+              <th>{t("liveValues.table.device")}</th>
+              <th className="cell-center">{t("liveValues.table.source")}</th>
+              <th>{t("liveValues.table.signal")}</th>
+              <th className="cell-center">{t("liveValues.table.type")}</th>
+              <th>{t("liveValues.table.value")}</th>
+              <th className="cell-center">{t("liveValues.table.quality")}</th>
+              <th>{t("liveValues.table.time")}</th>
             </tr>
           </thead>
           <tbody>
@@ -431,7 +427,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                   </td>
                   <td className="cell-center">
                     {dataType ? (
-                      <span className={`badge badge-${dataType}`}>{DATA_TYPE_LABEL[dataType]}</span>
+                      <span className={`badge badge-${dataType}`}>{dataTypeLabel(dataType)}</span>
                     ) : (
                       <span className="helper-text">-</span>
                     )}
@@ -450,7 +446,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                         return <span className="live-string-chip" title={txt}>{txt}</span>;
                       })()
                     ) : (
-                      formatValue(row.value, dataType, row.unit, row.value_string)
+                      formatValueWith(row.value, dataType, row.unit, row.value_string, numberFmt, binaryActive, binaryInactive)
                     )}
                   </td>
                   <td className="cell-center">
@@ -463,16 +459,14 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                       );
                     })()}
                   </td>
-                  <td>{formatTimestamp(row.source_timestamp)}</td>
+                  <td>{formatTimestamp(row.source_timestamp, localeTag)}</td>
                 </tr>
               );
             })}
             {filtered.length === 0 && !loading ? (
               <tr>
                 <td colSpan={7} className="helper-text" style={{ textAlign: "center" }}>
-                  {totalCount === 0
-                    ? "Gösterilecek satır yok: en az bir cihaz ve aktif sinyal kataloğu gerekir. Cihaz eklediğinizde tüm sinyal satırları burada listelenir; değerler telemetri geldikçe dolacaktır."
-                    : "Filtreye uygun satır bulunamadı."}
+                  {totalCount === 0 ? t("liveValues.noRowsInitial") : t("liveValues.noRows")}
                 </td>
               </tr>
             ) : null}
@@ -486,7 +480,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
-          itemLabel="sinyal"
+          itemLabel={t("liveValues.itemLabel")}
         />
       ) : null}
     </section>

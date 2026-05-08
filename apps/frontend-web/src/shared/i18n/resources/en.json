@@ -593,6 +593,36 @@
   },
   "engineering": {
     "title": "Engineering",
+    "gatewayLive": {
+      "inactive": "Inactive (publishing off)",
+      "never": "Never contacted server",
+      "online": "Online",
+      "offline": "Disconnected (last signal stale)"
+    },
+    "dnp3": {
+      "title": "DNP3 session settings",
+      "endpointType": "Connection mode",
+      "modeListening": "Listening (device listens, gateway connects)",
+      "modeInitiating": "Initiating (device connects to gateway — 4G/SIM)",
+      "masterIp": "Master IP address",
+      "masterIpPlaceholder": "0.0.0.0",
+      "masterIpInitPlaceholder": "Backend server IP",
+      "masterPort": "Master IP port",
+      "masterPortInitTooltip": "In Initiating mode the port is auto-assigned",
+      "masterAddr": "Master address",
+      "unsolicited": "Unsolicited reporting",
+      "unsolicitedStartup": "Unsolicited reporting on startup",
+      "unsolicitedClassMask": "Unsolicited class mask ID",
+      "linkStatus": "DNP3 link status period",
+      "selfAddress": "Enable self address",
+      "validateSrc": "Validate source address",
+      "sessionTimeout": "Session timeout (listening end)",
+      "socketTimeout": "Socket listening timeout",
+      "on": "On",
+      "off": "Off",
+      "minutes": "min",
+      "seconds": "s"
+    },
     "nav": {
       "devices": "Devices",
       "liveValues": "Live Values",
@@ -676,7 +706,33 @@
       "edit": "Edit Gateway",
       "refreshAll": "Refresh All Devices (Class 0+1+2+3 integrity poll)",
       "refreshAllShort": "Refresh All Devices",
-      "delete": "Delete Gateway"
+      "delete": "Delete Gateway",
+      "form": {
+        "code": "Gateway Code",
+        "codePlaceholder": "GW-001",
+        "name": "Gateway Name",
+        "namePlaceholder": "e.g. Site A SCADA",
+        "token": "Token",
+        "tokenPlaceholder": "At least 16 chars (Generate produces a random 48-char token)",
+        "generate": "Generate",
+        "host": "Host",
+        "port": "Port",
+        "cancel": "Cancel",
+        "create": "Create",
+        "save": "Save"
+      },
+      "compose": {
+        "title": "Download Docker Compose — {{code}}",
+        "backendIp": "Backend IP Address",
+        "backendIpPlaceholder": "192.168.1.50",
+        "gwStatus": "Gateway status:",
+        "lastSignal": "last signal {{at}}",
+        "copy": "Copy",
+        "copied": "Copied",
+        "close": "Close",
+        "download": "Download",
+        "downloading": "Downloading..."
+      }
     },
     "devicesPanel": {
       "title": "Devices",
@@ -694,7 +750,33 @@
       "save": "Save",
       "saving": "Saving...",
       "delete": "Delete",
-      "deleteConfirm": "This device will be deleted. Continue?"
+      "deleteConfirm": "This device will be deleted. Continue?",
+      "form": {
+        "code": "Device Code",
+        "name": "Device Name",
+        "nameShort": "Name",
+        "gateway": "Gateway",
+        "noGateway": "— No gateway —",
+        "model": "Model",
+        "description": "Description",
+        "ipAddress": "Outstation IP address",
+        "ipShort": "Outstation IP",
+        "port": "Outstation port",
+        "dnp3Address": "DNP3 Outstation address",
+        "pollInterval": "Poll interval (s)",
+        "timeout": "Timeout (ms)",
+        "retry": "Retry",
+        "locationHint": "Location is determined automatically when the device is assigned to a line segment. Use Engineering > Line Management to assign.",
+        "cancel": "Cancel",
+        "create": "Create",
+        "save": "Save"
+      },
+      "footer": {
+        "ok": "OK",
+        "gwDisconnected": "Gateway not connected",
+        "stale": "Disconnected / waiting",
+        "lastData": "Last data:"
+      }
     },
     "devices": {
       "title": "Device Management",
@@ -757,8 +839,49 @@
     },
     "liveValues": {
       "title": "Live Values",
-      "search": "Search signal / device...",
-      "noData": "Waiting for data stream…"
+      "search": "Search (device, label, key)...",
+      "noData": "Waiting for data stream…",
+      "all": "All",
+      "dataType": {
+        "analog": "Analog Input",
+        "binary": "Binary Input",
+        "counter": "Counter",
+        "string": "String"
+      },
+      "filter": {
+        "device": "Filter by device",
+        "allDevices": "All devices",
+        "source": "Filter by source (Master / Satellite)",
+        "allSources": "All sources",
+        "quality": "Filter by quality",
+        "allQualities": "All qualities",
+        "qualityGood": "Good",
+        "qualityBad": "Bad",
+        "qualityCommLost": "Comm lost",
+        "qualityPending": "No data yet",
+        "clear": "Clear",
+        "clearAll": "Clear all filters"
+      },
+      "autoRefresh": "Auto refresh",
+      "autoRefreshOff": "Off",
+      "secondsShort": "{{count}}s",
+      "minutesShort": "{{count}}m",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "table": {
+        "device": "Device",
+        "source": "Source",
+        "signal": "Signal",
+        "type": "Type",
+        "value": "Value",
+        "quality": "Quality",
+        "time": "Time"
+      },
+      "binaryActive": "ACTIVE (1)",
+      "binaryInactive": "INACTIVE (0)",
+      "noRows": "No rows match the filter.",
+      "noRowsInitial": "No rows to display: at least one device and an active signal catalog are required. Once devices are added, all signal rows are listed here; values populate as telemetry arrives.",
+      "itemLabel": "signal"
     }
   },
   "backups": {
@@ -939,6 +1062,16 @@
   },
   "globalLoading": {
     "message": "Loading…"
+  },
+  "pagination": {
+    "size": "Page size",
+    "first": "First page",
+    "previous": "Previous page",
+    "next": "Next page",
+    "last": "Last page",
+    "info": "{{start}}–{{end}} of {{total}} {{label}}",
+    "infoZero": "0 {{label}}",
+    "defaultItem": "items"
   },
   "errors": {
     "network": "Cannot reach server",

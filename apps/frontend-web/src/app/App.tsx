@@ -2112,7 +2112,6 @@ export function App() {
 
       <GlobalLoading
         show={loadingData || alarmsLoading || dashboardAreaLoading}
-        message="Yükleniyor…"
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   totalItems: number;
@@ -19,8 +20,11 @@ export function TablePagination({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = DEFAULT_OPTIONS,
-  itemLabel = "kayıt"
+  itemLabel
 }: Props) {
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
+  const label = itemLabel ?? t("pagination.defaultItem");
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
   const startIndex = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
@@ -32,12 +36,17 @@ export function TablePagination({
     <div className="table-pagination">
       <div className="table-pagination-info">
         {totalItems === 0
-          ? `0 ${itemLabel}`
-          : `${startIndex.toLocaleString("tr-TR")}–${endIndex.toLocaleString("tr-TR")} / ${totalItems.toLocaleString("tr-TR")} ${itemLabel}`}
+          ? t("pagination.infoZero", { label })
+          : t("pagination.info", {
+              start: startIndex.toLocaleString(localeTag),
+              end: endIndex.toLocaleString(localeTag),
+              total: totalItems.toLocaleString(localeTag),
+              label,
+            })}
       </div>
       <div className="table-pagination-controls">
         <label className="table-pagination-size">
-          Sayfa boyutu
+          {t("pagination.size")}
           <select
             value={pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
@@ -56,8 +65,8 @@ export function TablePagination({
             className="pagination-btn"
             onClick={() => onPageChange(1)}
             disabled={safePage <= 1}
-            aria-label="İlk sayfa"
-            title="İlk sayfa"
+            aria-label={t("pagination.first")}
+            title={t("pagination.first")}
           >
             «
           </button>
@@ -66,8 +75,8 @@ export function TablePagination({
             className="pagination-btn"
             onClick={() => onPageChange(safePage - 1)}
             disabled={safePage <= 1}
-            aria-label="Önceki sayfa"
-            title="Önceki sayfa"
+            aria-label={t("pagination.previous")}
+            title={t("pagination.previous")}
           >
             ‹
           </button>
@@ -94,8 +103,8 @@ export function TablePagination({
             className="pagination-btn"
             onClick={() => onPageChange(safePage + 1)}
             disabled={safePage >= totalPages}
-            aria-label="Sonraki sayfa"
-            title="Sonraki sayfa"
+            aria-label={t("pagination.next")}
+            title={t("pagination.next")}
           >
             ›
           </button>
@@ -104,8 +113,8 @@ export function TablePagination({
             className="pagination-btn"
             onClick={() => onPageChange(totalPages)}
             disabled={safePage >= totalPages}
-            aria-label="Son sayfa"
-            title="Son sayfa"
+            aria-label={t("pagination.last")}
+            title={t("pagination.last")}
           >
             »
           </button>

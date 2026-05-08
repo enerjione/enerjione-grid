@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { Dnp3ExtendedSettings } from "../../shared/types";
 
@@ -36,6 +37,7 @@ function BoolSelect({
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <label className="dnp3-field" htmlFor={id}>
       <span className="dnp3-label">{label}</span>
@@ -44,14 +46,15 @@ function BoolSelect({
         value={value ? "1" : "0"}
         onChange={(e) => onChange(e.target.value === "1")}
       >
-        <option value="1">Açık</option>
-        <option value="0">Kapalı</option>
+        <option value="1">{t("engineering.dnp3.on")}</option>
+        <option value="0">{t("engineering.dnp3.off")}</option>
       </select>
     </label>
   );
 }
 
 export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Props) {
+  const { t } = useTranslation();
   const v = value;
   const set = onChange;
 
@@ -80,33 +83,33 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
 
   return (
     <div className="dnp3-settings-form">
-      <h5 className="dnp3-settings-title">DNP3 oturum ayarları</h5>
+      <h5 className="dnp3-settings-title">{t("engineering.dnp3.title")}</h5>
       <div className="dnp3-settings-grid">
         <label className="dnp3-field">
           <span className="dnp3-label">
-            Bağlantı modu <Req />
+            {t("engineering.dnp3.endpointType")} <Req />
           </span>
           <select
             value={v.ip_endpoint_type}
             onChange={(e) => set({ ip_endpoint_type: e.target.value as "listening" | "initiating" })}
           >
-            <option value="listening">Listening (cihaz dinler, gateway bağlanır)</option>
-            <option value="initiating">Initiating (cihaz gateway'e bağlanır — 4G/SIM)</option>
+            <option value="listening">{t("engineering.dnp3.modeListening")}</option>
+            <option value="initiating">{t("engineering.dnp3.modeInitiating")}</option>
           </select>
         </label>
         <label className="dnp3-field">
           <span className="dnp3-label">
-            Master IP adresi <Req />
+            {t("engineering.dnp3.masterIp")} <Req />
           </span>
           <input
             value={v.master_ip_address}
             onChange={(e) => set({ master_ip_address: e.target.value })}
-            placeholder={isInitiating ? "Çatı yazılım sunucu IP" : "0.0.0.0"}
+            placeholder={isInitiating ? t("engineering.dnp3.masterIpInitPlaceholder") : t("engineering.dnp3.masterIpPlaceholder")}
           />
         </label>
         <label className="dnp3-field">
           <span className="dnp3-label">
-            Master IP portu {isInitiating ? null : <Req />}
+            {t("engineering.dnp3.masterPort")} {isInitiating ? null : <Req />}
           </span>
           <input
             type="number"
@@ -115,12 +118,12 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
             value={v.master_ip_port}
             onChange={(e) => set({ master_ip_port: Number(e.target.value) || 1 })}
             disabled={isInitiating}
-            title={isInitiating ? "Initiating modunda port otomatik atanır" : undefined}
+            title={isInitiating ? t("engineering.dnp3.masterPortInitTooltip") : undefined}
           />
         </label>
         <label className="dnp3-field">
           <span className="dnp3-label">
-            Master adres <Req />
+            {t("engineering.dnp3.masterAddr")} <Req />
           </span>
           <input
             type="number"
@@ -132,19 +135,19 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
         </label>
         <BoolSelect
           id="dnp3-unsol"
-          label="İstenmeyen raporlama (Unsolicited)"
+          label={t("engineering.dnp3.unsolicited")}
           value={v.unsolicited_reporting}
           onChange={(b) => set({ unsolicited_reporting: b })}
         />
         <BoolSelect
           id="dnp3-unsol-start"
-          label="Başlangıçta istenmeyen raporlama"
+          label={t("engineering.dnp3.unsolicitedStartup")}
           value={v.unsolicited_on_startup}
           onChange={(b) => set({ unsolicited_on_startup: b })}
         />
         <label className="dnp3-field">
           <span className="dnp3-label">
-            İstenmeyen sınıf maskesi ID <Req />
+            {t("engineering.dnp3.unsolicitedClassMask")} <Req />
           </span>
           <input
             type="number"
@@ -155,7 +158,7 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
           />
         </label>
         <label className="dnp3-field dnp3-field-with-unit">
-          <span className="dnp3-label">DNP3 bağlantı durumu periyodu</span>
+          <span className="dnp3-label">{t("engineering.dnp3.linkStatus")}</span>
           <span className="dnp3-input-unit">
             <input
               type="number"
@@ -163,23 +166,23 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
               value={v.link_status_period_min}
               onChange={(e) => set({ link_status_period_min: Number(e.target.value) || 0 })}
             />
-            <span className="dnp3-unit">dk</span>
+            <span className="dnp3-unit">{t("engineering.dnp3.minutes")}</span>
           </span>
         </label>
         <BoolSelect
           id="dnp3-self-addr"
-          label="Self adresi etkinleştir"
+          label={t("engineering.dnp3.selfAddress")}
           value={v.enable_self_address}
           onChange={(b) => set({ enable_self_address: b })}
         />
         <BoolSelect
           id="dnp3-val-src"
-          label="Kaynak adresini doğrula"
+          label={t("engineering.dnp3.validateSrc")}
           value={v.validate_source_address}
           onChange={(b) => set({ validate_source_address: b })}
         />
         <label className="dnp3-field dnp3-field-with-unit">
-          <span className="dnp3-label">Oturum zaman aşımı (dinleyen uç)</span>
+          <span className="dnp3-label">{t("engineering.dnp3.sessionTimeout")}</span>
           <span className="dnp3-input-unit">
             <input
               type="number"
@@ -188,11 +191,11 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
               value={v.session_timeout_listening_sec}
               onChange={(e) => set({ session_timeout_listening_sec: Number(e.target.value) || 1 })}
             />
-            <span className="dnp3-unit">s</span>
+            <span className="dnp3-unit">{t("engineering.dnp3.seconds")}</span>
           </span>
         </label>
         <label className="dnp3-field dnp3-field-with-unit">
-          <span className="dnp3-label">Soket dinleme zaman aşımı</span>
+          <span className="dnp3-label">{t("engineering.dnp3.socketTimeout")}</span>
           <span className="dnp3-input-unit">
             <input
               type="number"
@@ -201,7 +204,7 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
               value={v.socket_listening_timeout_sec}
               onChange={(e) => set({ socket_listening_timeout_sec: Number(e.target.value) || 1 })}
             />
-            <span className="dnp3-unit">s</span>
+            <span className="dnp3-unit">{t("engineering.dnp3.seconds")}</span>
           </span>
         </label>
       </div>
