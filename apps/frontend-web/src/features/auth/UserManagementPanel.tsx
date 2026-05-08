@@ -114,7 +114,7 @@ export function UserManagementPanel({
       setSmsNotify(false);
       setCreateModalOpen(false);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Kullanıcı oluşturulamadı.");
+      setSubmitError(error instanceof Error ? error.message : t("common.errorOccurred"));
     }
   };
 
@@ -161,14 +161,14 @@ export function UserManagementPanel({
       setEmailNotify(true);
       setSmsNotify(false);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Kullanıcı güncellenemedi.");
+      setSubmitError(error instanceof Error ? error.message : t("common.errorOccurred"));
     }
   };
 
   const getRoleLabel = (value: UserRead["role"]) => {
-    if (value === "engineer") return "Mühendis";
-    if (value === "installer") return "Kurulumcu";
-    return "Operatör";
+    if (value === "engineer") return t("engineering.users.roleNames.engineer");
+    if (value === "installer") return t("engineering.users.roleNames.installer");
+    return t("engineering.users.roleNames.operator");
   };
 
   const handleDeleteClick = async (user: UserRead) => {
@@ -180,7 +180,7 @@ export function UserManagementPanel({
     try {
       await onDelete(user.id);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Kullanıcı silinemedi.");
+      setSubmitError(error instanceof Error ? error.message : t("engineering.users.delete.fail"));
     }
   };
 
@@ -226,7 +226,7 @@ export function UserManagementPanel({
             setCreateModalOpen(true);
           }}
         >
-          + {t("engineering.users.newUser")}
+          {t("engineering.users.newUser")}
         </button>
       </div>
       {/* Modal kapalıyken (toplu işlem hataları için) panelde gösterilir.
@@ -238,49 +238,49 @@ export function UserManagementPanel({
       {isCreateModalOpen ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleSubmit}>
-            <h3>Yeni Kullanıcı</h3>
+            <h3>{t("engineering.users.newUserModal")}</h3>
             <label>
-              Kullanıcı adı
+              {t("engineering.users.form.usernameLow")}
               <input value={username} onChange={(event) => setUsername(event.target.value)} required />
             </label>
             <label>
-              E-posta
+              {t("engineering.users.form.email")}
               <input value={email} onChange={(event) => setEmail(event.target.value)} required />
             </label>
             <label>
-              Ad Soyad
+              {t("engineering.users.form.fullName")}
               <input value={fullName} onChange={(event) => setFullName(event.target.value)} required />
             </label>
             <label>
-              Telefon Numarası
+              {t("engineering.users.form.phone")}
               <input
                 type="tel"
                 value={phoneNumber}
                 onChange={(event) => setPhoneNumber(event.target.value)}
-                placeholder="+90 5xx xxx xx xx"
+                placeholder={t("engineering.users.phonePlaceholder")}
               />
             </label>
             <label>
-              Şifre
+              {t("engineering.users.form.password")}
               <input value={password} onChange={(event) => setPassword(event.target.value)} required />
             </label>
             <label>
-              Rol
+              {t("engineering.users.form.role")}
               <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
-                <option value="operator">Operatör</option>
-                <option value="engineer">Mühendis</option>
-                {allowInstallerRole ? <option value="installer">Kurulumcu (Süper Admin)</option> : null}
+                <option value="operator">{t("engineering.users.roleNames.operator")}</option>
+                <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
+                {allowInstallerRole ? <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option> : null}
               </select>
             </label>
             <fieldset className="notify-group">
-              <legend>Bildirim Tercihleri</legend>
+              <legend>{t("engineering.users.notifPrefs")}</legend>
               <label className="notify-option">
                 <input type="checkbox" checked={emailNotify} onChange={(event) => setEmailNotify(event.target.checked)} />
-                E-posta bildirimi
+                {t("engineering.users.notifEmail")}
               </label>
               <label className="notify-option">
                 <input type="checkbox" checked={smsNotify} onChange={(event) => setSmsNotify(event.target.checked)} />
-                SMS bildirimi
+                {t("engineering.users.notifSms")}
               </label>
             </fieldset>
             {submitError ? <p className="error-text modal-error">{submitError}</p> : null}
@@ -292,9 +292,9 @@ export function UserManagementPanel({
                   setSubmitError("");
                 }}
               >
-                Vazgeç
+                {t("engineering.users.cancel")}
               </button>
-              <button type="submit">Kaydet</button>
+              <button type="submit">{t("engineering.users.saveBtn")}</button>
             </div>
           </form>
         </div>
@@ -303,53 +303,53 @@ export function UserManagementPanel({
       {editingUserId !== null ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleEditSubmit}>
-            <h3>Kullanıcı Düzenle</h3>
+            <h3>{t("engineering.users.editUserModal")}</h3>
             <label>
-              Kullanıcı Adı
+              {t("engineering.users.form.username")}
               <input value={editUsername} disabled readOnly />
             </label>
             <label>
-              E-posta
+              {t("engineering.users.form.email")}
               <input value={email} onChange={(event) => setEmail(event.target.value)} required />
             </label>
             <label>
-              Ad Soyad
+              {t("engineering.users.form.fullName")}
               <input value={fullName} onChange={(event) => setFullName(event.target.value)} required />
             </label>
             <label>
-              Telefon Numarası
+              {t("engineering.users.form.phone")}
               <input
                 type="tel"
                 value={phoneNumber}
                 onChange={(event) => setPhoneNumber(event.target.value)}
-                placeholder="+90 5xx xxx xx xx"
+                placeholder={t("engineering.users.phonePlaceholder")}
               />
             </label>
             <label>
-              Rol
+              {t("engineering.users.form.role")}
               <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
-                <option value="operator">Operatör</option>
-                <option value="engineer">Mühendis</option>
-                {allowInstallerRole ? <option value="installer">Kurulumcu (Süper Admin)</option> : null}
+                <option value="operator">{t("engineering.users.roleNames.operator")}</option>
+                <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
+                {allowInstallerRole ? <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option> : null}
               </select>
             </label>
             <fieldset className="notify-group">
-              <legend>Bildirim Tercihleri</legend>
+              <legend>{t("engineering.users.notifPrefs")}</legend>
               <label className="notify-option">
                 <input type="checkbox" checked={emailNotify} onChange={(event) => setEmailNotify(event.target.checked)} />
-                E-posta bildirimi
+                {t("engineering.users.notifEmail")}
               </label>
               <label className="notify-option">
                 <input type="checkbox" checked={smsNotify} onChange={(event) => setSmsNotify(event.target.checked)} />
-                SMS bildirimi
+                {t("engineering.users.notifSms")}
               </label>
             </fieldset>
             {submitError ? <p className="error-text modal-error">{submitError}</p> : null}
             <div className="settings-actions">
               <button type="button" onClick={() => setEditingUserId(null)}>
-                Vazgeç
+                {t("engineering.users.cancel")}
               </button>
-              <button type="submit">Güncelle</button>
+              <button type="submit">{t("engineering.users.updateBtn")}</button>
             </div>
           </form>
         </div>
@@ -358,10 +358,10 @@ export function UserManagementPanel({
       {passwordResetUser ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleResetPasswordSubmit}>
-            <h3>Şifre Sıfırla</h3>
-            <p className="helper-text">{passwordResetUser.full_name} için yeni şifre belirleyin.</p>
+            <h3>{t("engineering.users.resetPasswordModal")}</h3>
+            <p className="helper-text">{t("engineering.users.resetPasswordHint", { name: passwordResetUser.full_name })}</p>
             <label>
-              Yeni Şifre
+              {t("engineering.users.form.newPassword")}
               <input
                 type="password"
                 value={resetPassword}
@@ -371,7 +371,7 @@ export function UserManagementPanel({
               />
             </label>
             <label>
-              Yeni Şifre Tekrar
+              {t("engineering.users.newPasswordRepeat")}
               <input
                 type="password"
                 value={resetPasswordConfirm}
@@ -383,9 +383,9 @@ export function UserManagementPanel({
             {submitError ? <p className="error-text modal-error">{submitError}</p> : null}
             <div className="settings-actions">
               <button type="button" onClick={() => setPasswordResetUser(null)}>
-                Vazgeç
+                {t("engineering.users.cancel")}
               </button>
-              <button type="submit">Şifreyi Sıfırla</button>
+              <button type="submit">{t("engineering.users.resetBtn")}</button>
             </div>
           </form>
         </div>
@@ -415,8 +415,8 @@ export function UserManagementPanel({
               <td className="notify-cell">
                 <span
                   className={`status-toggle ${notificationPrefs[user.id]?.email ? "on" : "off"}`}
-                  title={notificationPrefs[user.id]?.email ? "Açık" : "Kapalı"}
-                  aria-label={`E-posta bildirimi ${notificationPrefs[user.id]?.email ? "açık" : "kapalı"}`}
+                  title={notificationPrefs[user.id]?.email ? t("engineering.users.notifOn") : t("engineering.users.notifOff")}
+                  aria-label={t("engineering.users.emailNotifAria", { state: notificationPrefs[user.id]?.email ? t("engineering.users.notifOn") : t("engineering.users.notifOff") })}
                 >
                   {notificationPrefs[user.id]?.email ? "⏽" : "⭘"}
                 </span>
@@ -424,26 +424,26 @@ export function UserManagementPanel({
               <td className="notify-cell">
                 <span
                   className={`status-toggle ${notificationPrefs[user.id]?.sms ? "on" : "off"}`}
-                  title={notificationPrefs[user.id]?.sms ? "Açık" : "Kapalı"}
-                  aria-label={`SMS bildirimi ${notificationPrefs[user.id]?.sms ? "açık" : "kapalı"}`}
+                  title={notificationPrefs[user.id]?.sms ? t("engineering.users.notifOn") : t("engineering.users.notifOff")}
+                  aria-label={t("engineering.users.smsNotifAria", { state: notificationPrefs[user.id]?.sms ? t("engineering.users.notifOn") : t("engineering.users.notifOff") })}
                 >
                   {notificationPrefs[user.id]?.sms ? "⏽" : "⭘"}
                 </span>
               </td>
               <td className="actions-cell">
                 <button className="edit-btn action-btn" onClick={() => startEdit(user)}>
-                  Düzenle
+                  {t("engineering.users.edit")}
                 </button>
                 <button className="secondary-btn action-btn" onClick={() => openResetPasswordModal(user)}>
-                  Şifre Sıfırla
+                  {t("engineering.users.resetPwd")}
                 </button>
                 <button
                   className="danger-btn action-btn"
                   onClick={() => void handleDeleteClick(user)}
                   disabled={currentUserId === user.id}
-                  title={currentUserId === user.id ? "Kendinizi silemezsiniz" : "Kullanıcıyı sil"}
+                  title={currentUserId === user.id ? t("engineering.users.selfDeleteHint") : t("engineering.users.deleteTooltip")}
                 >
-                  Sil
+                  {t("engineering.users.delete")}
                 </button>
               </td>
             </tr>

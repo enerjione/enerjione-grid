@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { NotificationSettings } from "../../shared/types";
 
@@ -48,6 +49,7 @@ export function NotificationSettingsPanel({
   onTestSms,
   onTestTelegram
 }: Props) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<NotificationSettings>(EMPTY_SETTINGS);
   const [submitError, setSubmitError] = useState("");
   const [smtpTestEmail, setSmtpTestEmail] = useState("");
@@ -153,11 +155,11 @@ export function NotificationSettingsPanel({
   };
 
   const channels: ChannelDef[] = [
-    { key: "smtp", label: "E-posta (SMTP)", icon: "mail", enabled: form.smtp_enabled },
-    { key: "sms", label: "SMS", icon: "sms", enabled: form.sms_enabled },
+    { key: "smtp", label: t("notifications.settings.channelEmail"), icon: "mail", enabled: form.smtp_enabled },
+    { key: "sms", label: t("notifications.settings.channelSms"), icon: "sms", enabled: form.sms_enabled },
     {
       key: "telegram",
-      label: "Telegram Bot",
+      label: t("notifications.settings.channelTelegram"),
       icon: "send",
       enabled: form.telegram_enabled === true
     }
@@ -167,11 +169,9 @@ export function NotificationSettingsPanel({
     <section className="tab-panel notification-tab-panel">
       <div className="panel-head notification-panel-head">
         <div>
-          <h3>Bildirim Ayarları</h3>
+          <h3>{t("notifications.settings.title")}</h3>
           <p className="helper-text" style={{ margin: "4px 0 0 0" }}>
-            Sistem geneli bildirim kanalları. Bir alarm kuralı tetiklendiğinde
-            kuraldaki "E-posta / SMS / Telegram" seçenekleri bu sayfada
-            <strong> aktif</strong> olan kanallardan gönderilir.
+            {t("notifications.settings.subtitle")}
           </p>
         </div>
         <button
@@ -179,18 +179,16 @@ export function NotificationSettingsPanel({
           className="primary-btn notification-save-top"
           disabled={saving}
           onClick={() => {
-            // Form submit'i tetikle (form ref yerine event dispatch)
             void handleSubmit({
               preventDefault: () => undefined
             } as unknown as FormEvent<HTMLFormElement>);
           }}
         >
           <span className="material-symbols-outlined">save</span>
-          {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}
+          {saving ? t("notifications.settings.saving") : t("notifications.settings.saveAll")}
         </button>
       </div>
 
-      {/* Kanal durum ozeti — kullanici tek bakista hangi kanal acik gorur */}
       <div className="notif-status-row">
         {channels.map((ch) => (
           <div
@@ -199,7 +197,7 @@ export function NotificationSettingsPanel({
           >
             <span className="material-symbols-outlined">{ch.icon}</span>
             <span className="notif-status-label">{ch.label}</span>
-            <span className="notif-status-state">{ch.enabled ? "Aktif" : "Pasif"}</span>
+            <span className="notif-status-state">{ch.enabled ? t("notifications.settings.channelActive") : t("notifications.settings.channelPassive")}</span>
           </div>
         ))}
       </div>
@@ -213,8 +211,8 @@ export function NotificationSettingsPanel({
                 <span className="material-symbols-outlined">mail</span>
               </div>
               <div className="notification-card-titles">
-                <h4>E-posta (SMTP)</h4>
-                <small>HTML şablonlu alarm bildirim e-postaları.</small>
+                <h4>{t("notifications.settings.channelEmail")}</h4>
+                <small>{t("notifications.settings.channelEmailSub")}</small>
               </div>
               <label className="notif-toggle">
                 <input
@@ -230,17 +228,17 @@ export function NotificationSettingsPanel({
             <div className="notification-card-body">
               <div className="notif-field-grid">
                 <label className="notif-field">
-                  <span>SMTP Sunucu</span>
+                  <span>{t("notifications.settings.fields.smtpHost")}</span>
                   <input
                     value={form.smtp_host}
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, smtp_host: event.target.value }))
                     }
-                    placeholder="smtp.ornek.com"
+                    placeholder={t("notifications.settings.fields.smtpHostPlaceholder")}
                   />
                 </label>
                 <label className="notif-field notif-field--narrow">
-                  <span>Port</span>
+                  <span>{t("notifications.settings.fields.smtpPort")}</span>
                   <input
                     type="number"
                     min={1}
@@ -255,18 +253,18 @@ export function NotificationSettingsPanel({
                   />
                 </label>
                 <label className="notif-field notif-field--full">
-                  <span>Kullanıcı Adı</span>
+                  <span>{t("notifications.settings.fields.smtpUser")}</span>
                   <input
                     value={form.smtp_username}
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, smtp_username: event.target.value }))
                     }
                     autoComplete="off"
-                    placeholder="kullanici@firma.com"
+                    placeholder={t("notifications.settings.fields.smtpUserPlaceholder")}
                   />
                 </label>
                 <label className="notif-field notif-field--full">
-                  <span>Şifre</span>
+                  <span>{t("notifications.settings.fields.smtpPassword")}</span>
                   <input
                     type="password"
                     value={form.smtp_password}
@@ -278,14 +276,14 @@ export function NotificationSettingsPanel({
                   />
                 </label>
                 <label className="notif-field notif-field--full">
-                  <span>Gönderen E-posta</span>
+                  <span>{t("notifications.settings.fields.smtpFrom")}</span>
                   <input
                     type="email"
                     value={form.smtp_from_email}
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, smtp_from_email: event.target.value }))
                     }
-                    placeholder="alarm@firma.com"
+                    placeholder={t("notifications.settings.fields.smtpFromPlaceholder")}
                   />
                 </label>
               </div>
@@ -293,14 +291,14 @@ export function NotificationSettingsPanel({
             <div className="notification-card-test">
               <div className="notif-test-title">
                 <span className="material-symbols-outlined">science</span>
-                <span>Test Gönder</span>
+                <span>{t("notifications.settings.testGroup")}</span>
               </div>
               <div className="notif-test-row">
                 <input
                   type="email"
                   value={smtpTestEmail}
                   onChange={(event) => setSmtpTestEmail(event.target.value)}
-                  placeholder="test@firma.com"
+                  placeholder={t("notifications.settings.fields.smtpTestPlaceholder")}
                 />
                 <button
                   type="button"
@@ -308,7 +306,7 @@ export function NotificationSettingsPanel({
                   onClick={handleSmtpTest}
                   disabled={testingSmtp}
                 >
-                  {testingSmtp ? "Gönderiliyor..." : "Test"}
+                  {testingSmtp ? t("notifications.settings.testSending") : t("notifications.settings.testBtn")}
                 </button>
               </div>
               {testResult && testResult.channel === "smtp" ? (
@@ -332,8 +330,8 @@ export function NotificationSettingsPanel({
                 <span className="material-symbols-outlined">sms</span>
               </div>
               <div className="notification-card-titles">
-                <h4>SMS</h4>
-                <small>Telefon numarası kayıtlı kullanıcılara kısa mesaj.</small>
+                <h4>{t("notifications.settings.channelSms")}</h4>
+                <small>{t("notifications.settings.channelSmsSub")}</small>
               </div>
               <label className="notif-toggle">
                 <input
@@ -349,27 +347,27 @@ export function NotificationSettingsPanel({
             <div className="notification-card-body">
               <div className="notif-field-grid">
                 <label className="notif-field notif-field--full">
-                  <span>SMS Sağlayıcı</span>
+                  <span>{t("notifications.settings.fields.smsProvider")}</span>
                   <input
                     value={form.sms_provider}
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, sms_provider: event.target.value }))
                     }
-                    placeholder="mock / netgsm / twilio"
+                    placeholder={t("notifications.settings.fields.smsProviderPlaceholder")}
                   />
                 </label>
                 <label className="notif-field notif-field--full">
-                  <span>API URL</span>
+                  <span>{t("notifications.settings.fields.smsApiUrl")}</span>
                   <input
                     value={form.sms_api_url}
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, sms_api_url: event.target.value }))
                     }
-                    placeholder="https://api.netgsm.com.tr/sms/send"
+                    placeholder={t("notifications.settings.fields.smsApiUrlPlaceholder")}
                   />
                 </label>
                 <label className="notif-field notif-field--full">
-                  <span>API Key</span>
+                  <span>{t("notifications.settings.fields.smsApiKey")}</span>
                   <input
                     type="password"
                     value={form.sms_api_key}
@@ -384,13 +382,13 @@ export function NotificationSettingsPanel({
             <div className="notification-card-test">
               <div className="notif-test-title">
                 <span className="material-symbols-outlined">science</span>
-                <span>Test Gönder</span>
+                <span>{t("notifications.settings.testGroup")}</span>
               </div>
               <div className="notif-test-row">
                 <input
                   value={smsTestPhone}
                   onChange={(event) => setSmsTestPhone(event.target.value)}
-                  placeholder="+90 5xx xxx xx xx"
+                  placeholder={t("notifications.settings.fields.smsTestPlaceholder")}
                 />
                 <button
                   type="button"
@@ -398,7 +396,7 @@ export function NotificationSettingsPanel({
                   onClick={handleSmsTest}
                   disabled={testingSms}
                 >
-                  {testingSms ? "Gönderiliyor..." : "Test"}
+                  {testingSms ? t("notifications.settings.testSending") : t("notifications.settings.testBtn")}
                 </button>
               </div>
               {testResult && testResult.channel === "sms" ? (
@@ -424,8 +422,8 @@ export function NotificationSettingsPanel({
                 <span className="material-symbols-outlined">send</span>
               </div>
               <div className="notification-card-titles">
-                <h4>Telegram Bot</h4>
-                <small>Bot ile kanal/grup chat'lerine HTML mesaj.</small>
+                <h4>{t("notifications.settings.channelTelegram")}</h4>
+                <small>{t("notifications.settings.channelTelegramSub")}</small>
               </div>
               <label className="notif-toggle">
                 <input
@@ -441,7 +439,7 @@ export function NotificationSettingsPanel({
             <div className="notification-card-body">
               <div className="notif-field-grid">
                 <label className="notif-field notif-field--full">
-                  <span>Bot Token</span>
+                  <span>{t("notifications.settings.fields.telegramBotToken")}</span>
                   <input
                     type="password"
                     value={form.telegram_bot_token ?? ""}
@@ -452,22 +450,20 @@ export function NotificationSettingsPanel({
                     autoComplete="off"
                   />
                   <small className="helper-text">
-                    Token <code>@BotFather</code>'dan alınır. Boş bırakılırsa Telegram
-                    bildirimi devre dışıdır.
+                    {t("notifications.settings.fields.telegramBotTokenHint")}
                   </small>
                 </label>
                 <label className="notif-field notif-field--full">
-                  <span>Chat ID Listesi</span>
+                  <span>{t("notifications.settings.fields.telegramChatIds")}</span>
                   <input
                     value={form.telegram_chat_ids ?? ""}
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, telegram_chat_ids: event.target.value }))
                     }
-                    placeholder="-1001234567890, 123456789"
+                    placeholder={t("notifications.settings.fields.telegramChatIdsPlaceholder")}
                   />
                   <small className="helper-text">
-                    Virgülle ayırın. Grup ID'leri <code>-100</code> ile başlar; kişisel
-                    chat ID'leri <code>@userinfobot</code>'tan öğrenilir.
+                    {t("notifications.settings.fields.telegramChatIdsHint")}
                   </small>
                 </label>
               </div>
@@ -475,13 +471,13 @@ export function NotificationSettingsPanel({
             <div className="notification-card-test">
               <div className="notif-test-title">
                 <span className="material-symbols-outlined">science</span>
-                <span>Test Gönder</span>
+                <span>{t("notifications.settings.testGroup")}</span>
               </div>
               <div className="notif-test-row">
                 <input
                   value={telegramTestChat}
                   onChange={(event) => setTelegramTestChat(event.target.value)}
-                  placeholder="-1001234567890"
+                  placeholder={t("notifications.settings.fields.telegramTestPlaceholder")}
                 />
                 <button
                   type="button"
@@ -489,7 +485,7 @@ export function NotificationSettingsPanel({
                   onClick={handleTelegramTest}
                   disabled={testingTelegram || !onTestTelegram}
                 >
-                  {testingTelegram ? "Gönderiliyor..." : "Test"}
+                  {testingTelegram ? t("notifications.settings.testSending") : t("notifications.settings.testBtn")}
                 </button>
               </div>
               {testResult && testResult.channel === "telegram" ? (
@@ -509,7 +505,7 @@ export function NotificationSettingsPanel({
 
         {loading ? (
           <p className="helper-text" style={{ textAlign: "center" }}>
-            Ayarlar yükleniyor...
+            {t("notifications.settings.loading")}
           </p>
         ) : null}
         {error ? <p className="error-text">{error}</p> : null}

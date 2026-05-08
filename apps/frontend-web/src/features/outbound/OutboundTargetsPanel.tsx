@@ -143,7 +143,7 @@ export function OutboundTargetsPanel({
       resetForm();
       setCreateOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Outbound hedef eklenemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
   };
 
@@ -194,7 +194,7 @@ export function OutboundTargetsPanel({
       });
       setEditing(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Outbound hedef güncellenemedi.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
   };
 
@@ -214,7 +214,7 @@ export function OutboundTargetsPanel({
 
   const handleAutoAssign = async (target: OutboundTarget, overwrite: boolean) => {
     if (!onAutoAssignDeviceCa) return;
-    if (overwrite && !window.confirm("Tüm cihazlara 1, 2, 3... şeklinde sırayla yeniden ASDU adresi atanacak. Devam edilsin mi?")) {
+    if (overwrite && !window.confirm(t("engineering.outbound.asdu.resetAllTitle") + " — " + t("common.confirm") + "?")) {
       return;
     }
     setAutoAssigning(true);
@@ -222,7 +222,7 @@ export function OutboundTargetsPanel({
     try {
       await onAutoAssignDeviceCa(target.id, overwrite);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Otomatik atama başarısız.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
       setAutoAssigning(false);
     }
@@ -322,7 +322,7 @@ export function OutboundTargetsPanel({
         const data = await onFetchIec104Runtime(runtimeTarget.id);
         if (!cancelled) setRuntime(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Runtime alınamadı.");
+        if (!cancelled) setError(err instanceof Error ? err.message : t("common.errorOccurred"));
       } finally {
         if (!cancelled) setRuntimeLoading(false);
       }
@@ -374,6 +374,8 @@ export function OutboundTargetsPanel({
           + {t("engineering.outbound.newTarget")}
         </button>
       </div>
+      {/* Modal labels */}
+      {/* (i18n çevirileri aşağıdaki modal blok ile birlikte) */}
       {error ? <p className="error-text">{error}</p> : null}
 
       {(isCreateOpen || editing) && (
@@ -382,15 +384,15 @@ export function OutboundTargetsPanel({
             className={`settings-modal ${(isCreatingIec104 || isEditingIec104) ? "iec104-edit-modal" : ""}`}
             onSubmit={editing ? handleEdit : handleCreate}
           >
-            <h3>{editing ? "Hedef Düzenle" : "Yeni Outbound Hedef"}</h3>
+            <h3>{editing ? t("engineering.outbound.editTargetModal") : t("engineering.outbound.newTargetModal")}</h3>
             {!editing ? (
               <>
                 <label>
-                  Hedef Adı
+                  {t("engineering.outbound.form.name")}
                   <input value={name} onChange={(event) => setName(event.target.value)} required />
                 </label>
                 <label>
-                  Protokol
+                  {t("engineering.outbound.form.protocol")}
                   <select value={protocol} onChange={(event) => setProtocol(event.target.value as Protocol)}>
                     <option value="rest">REST</option>
                     <option value="mqtt">MQTT</option>
@@ -401,11 +403,11 @@ export function OutboundTargetsPanel({
             ) : (
               <>
                 <label>
-                  Hedef Adı
+                  {t("engineering.outbound.form.name")}
                   <input value={editing.name} readOnly disabled />
                 </label>
                 <label>
-                  Protokol
+                  {t("engineering.outbound.form.protocol")}
                   <input value={editing.protocol.toUpperCase()} readOnly disabled />
                 </label>
               </>
@@ -413,11 +415,10 @@ export function OutboundTargetsPanel({
 
             {(isCreatingIec104 || isEditingIec104) ? (
               <div className="iec104-edit-grid">
-                {/* SOL KOLON — Server parametreleri */}
                 <div className="iec104-edit-col">
-                  <h4 className="iec104-edit-col-title">Sunucu</h4>
+                  <h4 className="iec104-edit-col-title">{t("engineering.outbound.iec104.serverColTitle")}</h4>
                   <label>
-                    Listen Host
+                    {t("engineering.outbound.iec104.listenHost")}
                     <input
                       value={listenHost}
                       onChange={(event) => setListenHost(event.target.value)}
@@ -425,7 +426,7 @@ export function OutboundTargetsPanel({
                     />
                   </label>
                   <label>
-                    Listen Port
+                    {t("engineering.outbound.iec104.listenPort")}
                     <input
                       type="number"
                       min={1}
@@ -436,27 +437,24 @@ export function OutboundTargetsPanel({
                     />
                   </label>
                   <p className="helper-text">
-                    Her cihazın ASDU adresini ayrı atamak için hedef satırının
-                    yanındaki <strong>Cihaz ASDU Adresleri</strong> butonunu kullanın.
+                    {t("engineering.outbound.iec104.deviceCaHint")}
                   </p>
                 </div>
 
-                {/* SAG KOLON — IP whitelist yonetimi */}
                 <div className="iec104-edit-col iec104-whitelist-col">
                   <div className="iec104-whitelist-head">
-                    <h4 className="iec104-edit-col-title">İzinli SCADA IP'leri</h4>
+                    <h4 className="iec104-edit-col-title">{t("engineering.outbound.iec104.whitelistTitle")}</h4>
                     <span
                       className={`iec104-whitelist-status ${allowedPeerList.length > 0 ? "iec104-whitelist-status--active" : "iec104-whitelist-status--open"}`}
                     >
                       <span className="status-dot" />
                       {allowedPeerList.length > 0
-                        ? `${allowedPeerList.length} IP izinli`
-                        : "Whitelist kapalı"}
+                        ? t("engineering.outbound.iec104.whitelistActive", { count: allowedPeerList.length })
+                        : t("engineering.outbound.iec104.whitelistOff")}
                     </span>
                   </div>
                   <p className="helper-text">
-                    Liste boş ise <strong>her IP bağlanabilir</strong>. IP eklediğinizde
-                    yalnız listedeki IP'lerden TCP kabul edilir.
+                    {t("engineering.outbound.iec104.whitelistHint")}
                   </p>
                   <div className="iec104-peer-input-row">
                     <input
@@ -472,7 +470,7 @@ export function OutboundTargetsPanel({
                           handleAddPeerIp();
                         }
                       }}
-                      placeholder="192.168.1.10"
+                      placeholder={t("engineering.outbound.iec104.ipPlaceholder")}
                       pattern="^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
                     />
                     <button
@@ -481,7 +479,7 @@ export function OutboundTargetsPanel({
                       onClick={handleAddPeerIp}
                       disabled={!newPeerIp.trim()}
                     >
-                      Ekle
+                      {t("engineering.outbound.iec104.ipAdd")}
                     </button>
                   </div>
                   {peerError ? <p className="error-text iec104-peer-error">{peerError}</p> : null}
@@ -489,7 +487,7 @@ export function OutboundTargetsPanel({
                   <div className="iec104-peer-list">
                     {allowedPeerList.length === 0 ? (
                       <div className="iec104-peer-empty">
-                        Henüz IP eklenmedi. Liste boş bırakılırsa her bağlantı kabul edilir.
+                        {t("engineering.outbound.iec104.ipEmpty")}
                       </div>
                     ) : (
                       allowedPeerList.map((ip, idx) => (
@@ -500,8 +498,8 @@ export function OutboundTargetsPanel({
                             type="button"
                             className="iec104-peer-chip-remove"
                             onClick={() => handleRemovePeerIp(ip)}
-                            title="Listeden kaldır"
-                            aria-label={`${ip} kaldır`}
+                            title={t("engineering.outbound.iec104.ipRemoveTitle")}
+                            aria-label={t("engineering.outbound.iec104.ipRemoveAria", { ip })}
                           >
                             ×
                           </button>
@@ -514,31 +512,31 @@ export function OutboundTargetsPanel({
             ) : (
               <>
                 <label>
-                  Endpoint
+                  {t("engineering.outbound.form.endpoint")}
                   <input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} required />
                 </label>
                 <label>
-                  Topic (MQTT)
-                  <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="horstman/events" />
+                  {t("engineering.outbound.form.topic")}
+                  <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={t("engineering.outbound.form.topicPlaceholder")} />
                 </label>
                 <label>
-                  Event Filtresi
+                  {t("engineering.outbound.form.eventFilter")}
                   <select value={eventFilter} onChange={(event) => setEventFilter(event.target.value as "all" | "telemetry" | "alarm")}>
-                    <option value="all">Tümü</option>
-                    <option value="telemetry">Telemetry</option>
-                    <option value="alarm">Alarm</option>
+                    <option value="all">{t("engineering.outbound.form.filterAll")}</option>
+                    <option value="telemetry">{t("engineering.outbound.form.filterTelemetry")}</option>
+                    <option value="alarm">{t("engineering.outbound.form.filterAlarm")}</option>
                   </select>
                 </label>
                 <label>
-                  Auth Header
-                  <input value={authHeader} onChange={(event) => setAuthHeader(event.target.value)} placeholder="Authorization" />
+                  {t("engineering.outbound.form.authHeader")}
+                  <input value={authHeader} onChange={(event) => setAuthHeader(event.target.value)} placeholder={t("engineering.outbound.form.authHeaderPlaceholder")} />
                 </label>
                 <label>
-                  Auth Token
+                  {t("engineering.outbound.form.authToken")}
                   <input value={authToken} onChange={(event) => setAuthToken(event.target.value)} />
                 </label>
                 <label>
-                  MQTT QoS
+                  {t("engineering.outbound.form.qos")}
                   <input
                     type="number"
                     min={0}
@@ -549,16 +547,16 @@ export function OutboundTargetsPanel({
                 </label>
                 <label className="notify-option">
                   <input type="checkbox" checked={retain} onChange={(event) => setRetain(event.target.checked)} />
-                  MQTT Retain
+                  {t("engineering.outbound.form.retain")}
                 </label>
               </>
             )}
             <ActiveSwitch checked={isActive} onChange={setIsActive} />
             <div className="settings-actions">
               <button type="button" onClick={() => (editing ? setEditing(null) : setCreateOpen(false))}>
-                Vazgeç
+                {t("engineering.outbound.form.cancel")}
               </button>
-              <button type="submit">{editing ? "Güncelle" : "Kaydet"}</button>
+              <button type="submit">{editing ? t("engineering.outbound.form.update") : t("engineering.outbound.form.save")}</button>
             </div>
           </form>
         </div>
@@ -570,16 +568,16 @@ export function OutboundTargetsPanel({
           <div className="settings-modal asdu-modal">
             <div className="asdu-modal-head">
               <div>
-                <h3 className="asdu-modal-title">Cihaz ASDU Adresleri</h3>
+                <h3 className="asdu-modal-title">{t("engineering.outbound.asdu.title")}</h3>
                 <p className="asdu-modal-sub">
-                  {asduModalTarget.name} · {sortedDevices.length} cihaz · {assignedCount} adres atandı
+                  {t("engineering.outbound.asdu.subtitle", { name: asduModalTarget.name, count: sortedDevices.length, assigned: assignedCount })}
                 </p>
               </div>
               <button
                 type="button"
                 className="asdu-modal-close"
                 onClick={() => setAsduModalTarget(null)}
-                aria-label="Kapat"
+                aria-label={t("common.close")}
               >
                 ×
               </button>
@@ -589,7 +587,7 @@ export function OutboundTargetsPanel({
               <input
                 className="asdu-search"
                 type="search"
-                placeholder="Cihaz ara (ad, kod, ASDU adresi)..."
+                placeholder={t("engineering.outbound.asdu.search")}
                 value={caSearch}
                 onChange={(event) => setCaSearch(event.target.value)}
               />
@@ -600,18 +598,18 @@ export function OutboundTargetsPanel({
                     className="secondary-btn"
                     disabled={autoAssigning}
                     onClick={() => void handleAutoAssign(asduModalTarget, false)}
-                    title="Adres atanmamış cihazlara sırayla 1, 2, 3... ata"
+                    title={t("engineering.outbound.asdu.autoFillTitle")}
                   >
-                    {autoAssigning ? "Atanıyor..." : "Boşları Otomatik Doldur"}
+                    {autoAssigning ? t("engineering.outbound.asdu.autoFillBusy") : t("engineering.outbound.asdu.autoFill")}
                   </button>
                   <button
                     type="button"
                     className="secondary-btn"
                     disabled={autoAssigning}
                     onClick={() => void handleAutoAssign(asduModalTarget, true)}
-                    title="Tüm cihazlara baştan 1, 2, 3... ata (mevcutlar ezilir)"
+                    title={t("engineering.outbound.asdu.resetAllTitle")}
                   >
-                    Tümünü Sıfırla
+                    {t("engineering.outbound.asdu.resetAll")}
                   </button>
                 </div>
               ) : null}
@@ -622,17 +620,17 @@ export function OutboundTargetsPanel({
                 <thead>
                   <tr>
                     <th style={{ width: 60 }}>#</th>
-                    <th>Cihaz</th>
-                    <th>Kod</th>
-                    <th style={{ width: 160 }}>ASDU Adresi</th>
-                    <th style={{ width: 110 }}>İşlem</th>
+                    <th>{t("engineering.outbound.asdu.tableDevice")}</th>
+                    <th>{t("engineering.outbound.asdu.tableCode")}</th>
+                    <th style={{ width: 160 }}>{t("engineering.outbound.asdu.tableAsdu")}</th>
+                    <th style={{ width: 110 }}>{t("engineering.outbound.asdu.tableActions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCaDevices.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="asdu-empty">
-                        {sortedDevices.length === 0 ? "Henüz cihaz yok." : "Aramaya uygun cihaz bulunamadı."}
+                        {sortedDevices.length === 0 ? t("engineering.outbound.asdu.noDevices") : t("engineering.outbound.asdu.noResults")}
                       </td>
                     </tr>
                   ) : null}
@@ -672,7 +670,7 @@ export function OutboundTargetsPanel({
                             disabled={!dirty || isSaving}
                             onClick={() => void handleSaveDeviceCa(d.code)}
                           >
-                            {isSaving ? "..." : "Kaydet"}
+                            {isSaving ? t("engineering.outbound.asdu.saving") : t("engineering.outbound.asdu.save")}
                           </button>
                         </td>
                       </tr>
@@ -684,7 +682,7 @@ export function OutboundTargetsPanel({
 
             <div className="asdu-modal-foot">
               <button type="button" className="secondary-btn" onClick={() => setAsduModalTarget(null)}>
-                Kapat
+                {t("engineering.outbound.asdu.close")}
               </button>
             </div>
           </div>
@@ -695,29 +693,29 @@ export function OutboundTargetsPanel({
       {runtimeTarget ? (
         <div className="settings-modal-backdrop">
           <div className="settings-modal iec104-runtime-modal">
-            <h3>Bağlantı Durumu — {runtimeTarget.name}</h3>
-            {runtimeLoading && !runtime ? <p className="helper-text">Yükleniyor...</p> : null}
+            <h3>{t("engineering.outbound.runtime.title", { name: runtimeTarget.name })}</h3>
+            {runtimeLoading && !runtime ? <p className="helper-text">{t("engineering.outbound.runtime.loading")}</p> : null}
             {runtime ? (
               <>
                 <div className="iec104-runtime-summary">
                   <div>
                     <span className={`status-dot ${runtime.server_running ? "status-dot--ok" : "status-dot--bad"}`} />
-                    <strong>Sunucu:</strong>{" "}
-                    {runtime.server_running ? "Çalışıyor" : "Kapalı"}
+                    <strong>{t("engineering.outbound.runtime.server")}</strong>{" "}
+                    {runtime.server_running ? t("engineering.outbound.runtime.running") : t("engineering.outbound.runtime.stopped")}
                   </div>
                   <div>
-                    <strong>Whitelist:</strong>{" "}
+                    <strong>{t("engineering.outbound.runtime.whitelistLabel")}</strong>{" "}
                     {runtime.whitelist_active
-                      ? `aktif (${runtime.allowed_peers.length} IP)`
-                      : "kapalı (her IP serbest)"}
+                      ? t("engineering.outbound.runtime.whitelistActive", { count: runtime.allowed_peers.length })
+                      : t("engineering.outbound.runtime.whitelistOff")}
                   </div>
                   <div>
-                    <strong>Bağlı SCADA:</strong> {runtime.connected_clients.length}
+                    <strong>{t("engineering.outbound.runtime.connected")}</strong> {runtime.connected_clients.length}
                   </div>
                 </div>
                 {runtime.whitelist_active ? (
                   <details className="iec104-runtime-allowed">
-                    <summary>İzinli IP'ler ({runtime.allowed_peers.length})</summary>
+                    <summary>{t("engineering.outbound.runtime.allowedSummary", { count: runtime.allowed_peers.length })}</summary>
                     <ul>
                       {runtime.allowed_peers.map((ip) => (
                         <li key={ip}><code>{ip}</code></li>
@@ -725,28 +723,28 @@ export function OutboundTargetsPanel({
                     </ul>
                   </details>
                 ) : null}
-                <h4 className="iec104-runtime-clients-title">Bağlı Client'lar</h4>
+                <h4 className="iec104-runtime-clients-title">{t("engineering.outbound.runtime.connected")}</h4>
                 <table className="values-table">
                   <thead>
                     <tr>
                       <th>Peer</th>
-                      <th>Durum</th>
-                      <th>Bağlandı</th>
+                      <th>{t("common.status")}</th>
+                      <th>{t("common.time")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {runtime.connected_clients.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="helper-text">Henüz bağlı client yok.</td>
+                        <td colSpan={3} className="helper-text">{t("common.noData")}</td>
                       </tr>
                     ) : null}
                     {runtime.connected_clients.map((c) => (
                       <tr key={c.peer}>
                         <td><code>{c.peer}</code></td>
-                        <td>{c.started ? "STARTDT (yayında)" : "Hazır değil"}</td>
+                        <td>{c.started ? "STARTDT" : "—"}</td>
                         <td>
                           {c.connected_at
-                            ? new Date(c.connected_at).toLocaleString("tr-TR")
+                            ? new Date(c.connected_at).toLocaleString()
                             : "—"}
                         </td>
                       </tr>
@@ -757,7 +755,7 @@ export function OutboundTargetsPanel({
             ) : null}
             <div className="settings-actions">
               <button type="button" onClick={() => { setRuntimeTarget(null); setRuntime(null); }}>
-                Kapat
+                {t("engineering.outbound.asdu.close")}
               </button>
             </div>
           </div>
@@ -770,12 +768,12 @@ export function OutboundTargetsPanel({
         <table className="values-table outbound-modern-table">
           <thead>
             <tr>
-              <th style={{ width: 70 }}>Aktif</th>
-              <th>Ad</th>
-              <th style={{ width: 110 }}>Protokol</th>
-              <th>Endpoint / Listen</th>
-              <th style={{ width: 130 }}>Bağlı</th>
-              <th className="actions-header">İşlem</th>
+              <th style={{ width: 70 }}>{t("engineering.outbound.runtime.connected")}</th>
+              <th>{t("engineering.outbound.table.name")}</th>
+              <th style={{ width: 110 }}>{t("engineering.outbound.table.protocol")}</th>
+              <th>{t("engineering.outbound.table.endpoint")}</th>
+              <th style={{ width: 130 }}>{t("engineering.outbound.table.status")}</th>
+              <th className="actions-header">{t("engineering.outbound.table.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -792,7 +790,7 @@ export function OutboundTargetsPanel({
                       className={`outbound-active-pill ${item.is_active ? "outbound-active-pill--on" : "outbound-active-pill--off"}`}
                     >
                       <span className="status-dot" />
-                      {item.is_active ? "Aktif" : "Pasif"}
+                      {item.is_active ? t("common.active") : t("common.inactive")}
                     </span>
                   </td>
                   <td className="outbound-name-cell">{item.name}</td>
@@ -856,7 +854,7 @@ export function OutboundTargetsPanel({
                       onClick={() => {
                         if (window.confirm(`${item.name} hedefi silinsin mi?`)) {
                           void onDelete(item.id).catch((err: unknown) => {
-                            setError(err instanceof Error ? err.message : "Outbound hedef silinemedi.");
+                            setError(err instanceof Error ? err.message : t("common.errorOccurred"));
                           });
                         }
                       }}
