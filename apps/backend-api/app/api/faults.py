@@ -228,6 +228,8 @@ def assign_fault(
         actor_username=current_user.username,
         message=f"Ariza atandi: fault {fault_id} -> {target_username or '(boş)'}",
         metadata={"fault_id": fault_id, "assigned_to": target_username},
+        i18n_key="fault_assigned",
+        i18n_params={"fault_id": fault_id, "user": target_username or "—"},
     )
     # Atanan kisi degistiyse (yeni kisi varsa) web bildirim + email gonder.
     # Aynı kisiye yeniden atama bildirim spam'i olusturmasin.
@@ -325,6 +327,8 @@ def update_fault_status(
         actor_username=current_user.username,
         message=f"Ariza durumu: fault {fault_id} -> {new_status}",
         metadata={"fault_id": fault_id, "status": new_status},
+        i18n_key="fault_status_changed",
+        i18n_params={"fault_id": fault_id, "status": new_status},
     )
     db.commit()
     db.refresh(f)
@@ -406,6 +410,8 @@ def create_fault_comment(
         actor_username=current_user.username,
         message=f"Ariza yorumu eklendi: fault {fault_id}",
         metadata={"fault_id": fault_id},
+        i18n_key="fault_comment_added",
+        i18n_params={"fault_id": fault_id},
     )
     # Atanan kullanici varsa ve yorum sahibi degilse: web bildirim + email.
     if f.assigned_to_username and f.assigned_to_username != current_user.username:

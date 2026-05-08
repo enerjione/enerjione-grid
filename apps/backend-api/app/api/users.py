@@ -76,6 +76,8 @@ def create_user(
         actor_username=current_user.username,
         message=f"{current_user.username} yeni kullanıcı oluşturdu: {user.username}",
         metadata={"target_username": user.username, "target_role": user.role.value},
+        i18n_key="user_created",
+        i18n_params={"actor": current_user.username, "user": user.username},
     )
     db.commit()
     db.refresh(user)
@@ -105,6 +107,8 @@ def delete_user(
         actor_username=current_user.username,
         message=f"{current_user.username} kullanıcı sildi: {deleted_username}",
         metadata={"target_username": deleted_username},
+        i18n_key="user_deleted",
+        i18n_params={"actor": current_user.username, "user": deleted_username},
     )
     db.commit()
     return None
@@ -134,6 +138,8 @@ def update_user(
         actor_username=current_user.username,
         message=f"{current_user.username} kullanıcı güncelledi: {target.username}",
         metadata={"target_username": target.username, "target_role": target.role.value},
+        i18n_key="user_updated",
+        i18n_params={"actor": current_user.username, "user": target.username},
     )
     db.commit()
     db.refresh(target)
@@ -161,6 +167,8 @@ def reset_password(
         actor_username=current_user.username,
         message=f"{current_user.username}, {target.username} için şifre sıfırladı",
         metadata={"target_username": target.username},
+        i18n_key="password_reset",
+        i18n_params={"actor": current_user.username, "user": target.username},
     )
     db.commit()
     return None

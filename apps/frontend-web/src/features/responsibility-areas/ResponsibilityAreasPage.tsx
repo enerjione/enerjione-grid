@@ -343,14 +343,14 @@ export function ResponsibilityAreasPage({
         {/* Sol: alanlar listesi */}
         <aside className="responsibility-sidebar">
           <div className="responsibility-sidebar-header">
-            <h3>{t("engineering.nav.responsibilityAreas")}</h3>
+            <h3>{t("engineering.responsibilityAreas.title")}</h3>
             {canEdit ? (
               <button
                 type="button"
                 className="primary-btn responsibility-new-btn"
                 onClick={() => setShowCreateModal(true)}
               >
-                + {t("common.add")}
+                + {t("engineering.responsibilityAreas.newButton")}
               </button>
             ) : null}
           </div>
@@ -366,7 +366,7 @@ export function ResponsibilityAreasPage({
                 <div className="responsibility-list-top">
                   <span className="responsibility-list-name">{area.name}</span>
                   {!area.is_active ? (
-                    <span className="responsibility-pill responsibility-pill--off">Pasif</span>
+                    <span className="responsibility-pill responsibility-pill--off">{t("engineering.responsibilityAreas.passive")}</span>
                   ) : null}
                 </div>
                 <div className="responsibility-list-code">{area.code}</div>
@@ -396,18 +396,15 @@ export function ResponsibilityAreasPage({
           {detailLoading ? (
             <div className="panel-loading-overlay" aria-live="polite">
               <span className="panel-loading-spinner" aria-hidden="true" />
-              <span>Yükleniyor…</span>
+              <span>{t("engineering.responsibilityAreas.loading")}</span>
             </div>
           ) : null}
           {localError ? <p className="error-text">{localError}</p> : null}
           {!detail && !detailLoading ? (
             <div className="responsibility-empty-detail">
               <span className="material-symbols-outlined responsibility-empty-icon">folder_open</span>
-              <h3>Bir alan seçin</h3>
-              <p className="helper-text">
-                Soldan bir ekip seçin ya da yeni bir alan oluşturun. Seçilen alana
-                kullanıcı ve cihaz ekleyebilirsiniz.
-              </p>
+              <h3>{t("engineering.responsibilityAreas.selectHint")}</h3>
+              <p className="helper-text">{t("engineering.responsibilityAreas.selectHintBody")}</p>
             </div>
           ) : null}
           {detail ? (
@@ -415,7 +412,7 @@ export function ResponsibilityAreasPage({
               <header className="responsibility-detail-header">
                 <div className="responsibility-detail-titlebar">
                   <div className="responsibility-detail-title">
-                    <h2>{detail.name || "Yeni Alan"}</h2>
+                    <h2>{detail.name || t("engineering.responsibilityAreas.newAreaName")}</h2>
                   </div>
                   {canEdit ? (
                     <div className="responsibility-detail-actions">
@@ -423,18 +420,18 @@ export function ResponsibilityAreasPage({
                         checked={editIsActive}
                         onChange={setEditIsActive}
                         disabled={busy}
-                        title="Pasif yapıldığında bu alan listelerde görünmeye devam eder; yeni atamalara kapatılır."
+                        title={t("engineering.responsibilityAreas.activeTitle")}
                       />
                       <button type="button" className="primary-btn" disabled={busy} onClick={() => void handleSaveEdits()}>
-                        Kaydet
+                        {t("engineering.responsibilityAreas.save")}
                       </button>
                       <button type="button" className="danger-btn" disabled={busy} onClick={() => void handleDelete()}>
-                        Sil
+                        {t("engineering.responsibilityAreas.delete")}
                       </button>
                     </div>
                   ) : (
                     <span className={`responsibility-pill ${detail.is_active ? "responsibility-pill--on" : "responsibility-pill--off"}`}>
-                      {detail.is_active ? "Aktif" : "Pasif"}
+                      {detail.is_active ? t("engineering.responsibilityAreas.active") : t("engineering.responsibilityAreas.passive")}
                     </span>
                   )}
                 </div>
@@ -446,7 +443,7 @@ export function ResponsibilityAreasPage({
                     onClick={() => setActiveTab("general")}
                   >
                     <span className="material-symbols-outlined">tune</span>
-                    <span className="responsibility-tab-label">Genel</span>
+                    <span className="responsibility-tab-label">{t("engineering.responsibilityAreas.tabGeneral")}</span>
                   </button>
                   <button
                     type="button"
@@ -455,7 +452,7 @@ export function ResponsibilityAreasPage({
                     onClick={() => setActiveTab("users")}
                   >
                     <span className="material-symbols-outlined">group</span>
-                    <span className="responsibility-tab-label">Kullanıcılar</span>
+                    <span className="responsibility-tab-label">{t("engineering.responsibilityAreas.tabUsers")}</span>
                     <span className="responsibility-tab-count">{detail.users.length}</span>
                   </button>
                   <button
@@ -465,7 +462,7 @@ export function ResponsibilityAreasPage({
                     onClick={() => setActiveTab("regions")}
                   >
                     <span className="material-symbols-outlined">map</span>
-                    <span className="responsibility-tab-label">Bölgeler</span>
+                    <span className="responsibility-tab-label">{t("engineering.responsibilityAreas.tabRegions")}</span>
                     <span className="responsibility-tab-count">{detail.regions?.length ?? 0}</span>
                   </button>
                   <button
@@ -475,7 +472,7 @@ export function ResponsibilityAreasPage({
                     onClick={() => setActiveTab("lines")}
                   >
                     <span className="material-symbols-outlined">cable</span>
-                    <span className="responsibility-tab-label">Hatlar</span>
+                    <span className="responsibility-tab-label">{t("engineering.responsibilityAreas.tabLines")}</span>
                     <span className="responsibility-tab-count">{detail.lines?.length ?? 0}</span>
                   </button>
                 </nav>
@@ -486,21 +483,21 @@ export function ResponsibilityAreasPage({
                   <div className="responsibility-section">
                     <div className="responsibility-detail-fields">
                       <label className="responsibility-field">
-                        <span>Alan Adı</span>
+                        <span>{t("engineering.responsibilityAreas.fieldName")}</span>
                         <input value={editName} onChange={(e) => setEditName(e.target.value)} disabled={!canEdit || busy} />
                       </label>
                       <label className="responsibility-field responsibility-field--readonly">
-                        <span>Kod</span>
+                        <span>{t("engineering.responsibilityAreas.fieldCode")}</span>
                         <input value={detail.code} disabled readOnly />
                       </label>
                       <label className="responsibility-field responsibility-field--wide responsibility-field--description">
-                        <span>Açıklama</span>
+                        <span>{t("engineering.responsibilityAreas.fieldDescription")}</span>
                         <textarea
                           className="responsibility-textarea"
                           value={editDescription}
                           onChange={(e) => setEditDescription(e.target.value)}
                           disabled={!canEdit || busy}
-                          placeholder="Bu alanın amacını kısaca yazın..."
+                          placeholder={t("engineering.responsibilityAreas.descriptionPlaceholder")}
                           rows={5}
                         />
                       </label>
@@ -511,17 +508,17 @@ export function ResponsibilityAreasPage({
                 {activeTab === "users" ? (
                   <div className="responsibility-section">
                     <p className="helper-text responsibility-section-hint-block">
-                      Solda eklenebilir, sağda bu alana atanmış kullanıcılar.
+                      {t("engineering.responsibilityAreas.usersHint")}
                     </p>
                     <div className="responsibility-transfer-grid">
                   <div className="transfer-pane transfer-pane--source">
                     <div className="transfer-pane-titlebar">
-                      <span className="transfer-pane-title">Eklenebilir</span>
+                      <span className="transfer-pane-title">{t("engineering.responsibilityAreas.addable")}</span>
                       <span className="transfer-pane-count">{availableUsers.length}</span>
                     </div>
                     <input
                       className="transfer-search"
-                      placeholder="Kullanıcı ara..."
+                      placeholder={t("engineering.responsibilityAreas.userSearch")}
                       value={searchUser}
                       onChange={(e) => setSearchUser(e.target.value)}
                     />
@@ -537,8 +534,8 @@ export function ResponsibilityAreasPage({
                             <button
                               type="button"
                               className="icon-btn icon-btn-add"
-                              title="Alana ekle"
-                              aria-label="Alana ekle"
+                              title={t("engineering.responsibilityAreas.addToArea")}
+                              aria-label={t("engineering.responsibilityAreas.addToArea")}
                               disabled={busy}
                               onClick={() => void handleAddUser(u.id)}
                             >
@@ -549,14 +546,14 @@ export function ResponsibilityAreasPage({
                       ))}
                       {availableUsers.length === 0 ? (
                         <li className="transfer-empty">
-                          {searchUser ? "Aramaya uygun kullanıcı yok." : "Eklenebilecek kullanıcı kalmadı."}
+                          {searchUser ? t("engineering.responsibilityAreas.noUsersSearch") : t("engineering.responsibilityAreas.noUsersLeft")}
                         </li>
                       ) : null}
                     </ul>
                   </div>
                   <div className="transfer-pane transfer-pane--target">
                     <div className="transfer-pane-titlebar">
-                      <span className="transfer-pane-title">Bu Alanda</span>
+                      <span className="transfer-pane-title">{t("engineering.responsibilityAreas.inThisArea")}</span>
                       <span className="transfer-pane-count transfer-pane-count--target">{detail.users.length}</span>
                     </div>
                     <ul className="transfer-list">
@@ -566,8 +563,8 @@ export function ResponsibilityAreasPage({
                             <button
                               type="button"
                               className="icon-btn icon-btn-remove"
-                              title="Alandan çıkar"
-                              aria-label="Alandan çıkar"
+                              title={t("engineering.responsibilityAreas.removeFromArea")}
+                              aria-label={t("engineering.responsibilityAreas.removeFromArea")}
                               disabled={busy}
                               onClick={() => void handleRemoveUser(u.id)}
                             >
@@ -583,7 +580,7 @@ export function ResponsibilityAreasPage({
                       ))}
                       {detail.users.length === 0 ? (
                         <li className="transfer-empty">
-                          Henüz kullanıcı yok. Soldan + butonu ile ekleyin.
+                          {t("engineering.responsibilityAreas.emptyUsers")}
                         </li>
                       ) : null}
                     </ul>
@@ -595,17 +592,17 @@ export function ResponsibilityAreasPage({
                 {activeTab === "regions" ? (
                 <div className="responsibility-section">
                   <p className="helper-text responsibility-section-hint-block">
-                    Bölge eklendiğinde o bölgenin tüm hatları ve cihazları otomatik kapsama girer.
+                    {t("engineering.responsibilityAreas.regionsHint")}
                   </p>
                   <div className="responsibility-transfer-grid">
                     <div className="transfer-pane transfer-pane--source">
                       <div className="transfer-pane-titlebar">
-                        <span className="transfer-pane-title">Eklenebilir</span>
+                        <span className="transfer-pane-title">{t("engineering.responsibilityAreas.addable")}</span>
                         <span className="transfer-pane-count">{availableRegions.length}</span>
                       </div>
                       <input
                         className="transfer-search"
-                        placeholder="Bölge ara..."
+                        placeholder={t("engineering.responsibilityAreas.regionSearch")}
                         value={searchRegion}
                         onChange={(e) => setSearchRegion(e.target.value)}
                       />
@@ -621,8 +618,8 @@ export function ResponsibilityAreasPage({
                               <button
                                 type="button"
                                 className="icon-btn icon-btn-add"
-                                title="Alana ekle"
-                                aria-label="Alana ekle"
+                                title={t("engineering.responsibilityAreas.addToArea")}
+                                aria-label={t("engineering.responsibilityAreas.addToArea")}
                                 disabled={busy}
                                 onClick={() => void handleAddRegion(r.id)}
                               >
@@ -633,14 +630,14 @@ export function ResponsibilityAreasPage({
                         ))}
                         {availableRegions.length === 0 ? (
                           <li className="transfer-empty">
-                            {searchRegion ? "Aramaya uygun bölge yok." : "Eklenebilecek bölge kalmadı."}
+                            {searchRegion ? t("engineering.responsibilityAreas.noRegionsSearch") : t("engineering.responsibilityAreas.noRegionsLeft")}
                           </li>
                         ) : null}
                       </ul>
                     </div>
                     <div className="transfer-pane transfer-pane--target">
                       <div className="transfer-pane-titlebar">
-                        <span className="transfer-pane-title">Bu Alanda</span>
+                        <span className="transfer-pane-title">{t("engineering.responsibilityAreas.inThisArea")}</span>
                         <span className="transfer-pane-count transfer-pane-count--target">{detail.regions?.length ?? 0}</span>
                       </div>
                       <ul className="transfer-list">
@@ -650,8 +647,8 @@ export function ResponsibilityAreasPage({
                               <button
                                 type="button"
                                 className="icon-btn icon-btn-remove"
-                                title="Alandan çıkar"
-                                aria-label="Alandan çıkar"
+                                title={t("engineering.responsibilityAreas.removeFromArea")}
+                                aria-label={t("engineering.responsibilityAreas.removeFromArea")}
                                 disabled={busy}
                                 onClick={() => void handleRemoveRegion(r.id)}
                               >
@@ -666,7 +663,7 @@ export function ResponsibilityAreasPage({
                           </li>
                         ))}
                         {(detail.regions?.length ?? 0) === 0 ? (
-                          <li className="transfer-empty">Bu alana henüz bölge atanmadı.</li>
+                          <li className="transfer-empty">{t("engineering.responsibilityAreas.emptyRegions")}</li>
                         ) : null}
                       </ul>
                     </div>
@@ -677,17 +674,17 @@ export function ResponsibilityAreasPage({
                 {activeTab === "lines" ? (
                 <div className="responsibility-section">
                   <p className="helper-text responsibility-section-hint-block">
-                    Hat eklendiğinde o hattaki tüm cihazlar otomatik kapsama girer (bölgeden daha spesifik).
+                    {t("engineering.responsibilityAreas.linesHint")}
                   </p>
                   <div className="responsibility-transfer-grid">
                     <div className="transfer-pane transfer-pane--source">
                       <div className="transfer-pane-titlebar">
-                        <span className="transfer-pane-title">Eklenebilir</span>
+                        <span className="transfer-pane-title">{t("engineering.responsibilityAreas.addable")}</span>
                         <span className="transfer-pane-count">{availableLines.length}</span>
                       </div>
                       <input
                         className="transfer-search"
-                        placeholder="Hat ara..."
+                        placeholder={t("engineering.responsibilityAreas.lineSearch")}
                         value={searchLine}
                         onChange={(e) => setSearchLine(e.target.value)}
                       />
@@ -703,8 +700,8 @@ export function ResponsibilityAreasPage({
                               <button
                                 type="button"
                                 className="icon-btn icon-btn-add"
-                                title="Alana ekle"
-                                aria-label="Alana ekle"
+                                title={t("engineering.responsibilityAreas.addToArea")}
+                                aria-label={t("engineering.responsibilityAreas.addToArea")}
                                 disabled={busy}
                                 onClick={() => void handleAddLine(l.id)}
                               >
@@ -715,14 +712,14 @@ export function ResponsibilityAreasPage({
                         ))}
                         {availableLines.length === 0 ? (
                           <li className="transfer-empty">
-                            {searchLine ? "Aramaya uygun hat yok." : "Eklenebilecek hat kalmadı."}
+                            {searchLine ? t("engineering.responsibilityAreas.noLinesSearch") : t("engineering.responsibilityAreas.noLinesLeft")}
                           </li>
                         ) : null}
                       </ul>
                     </div>
                     <div className="transfer-pane transfer-pane--target">
                       <div className="transfer-pane-titlebar">
-                        <span className="transfer-pane-title">Bu Alanda</span>
+                        <span className="transfer-pane-title">{t("engineering.responsibilityAreas.inThisArea")}</span>
                         <span className="transfer-pane-count transfer-pane-count--target">{detail.lines?.length ?? 0}</span>
                       </div>
                       <ul className="transfer-list">
@@ -732,8 +729,8 @@ export function ResponsibilityAreasPage({
                               <button
                                 type="button"
                                 className="icon-btn icon-btn-remove"
-                                title="Alandan çıkar"
-                                aria-label="Alandan çıkar"
+                                title={t("engineering.responsibilityAreas.removeFromArea")}
+                                aria-label={t("engineering.responsibilityAreas.removeFromArea")}
                                 disabled={busy}
                                 onClick={() => void handleRemoveLine(l.id)}
                               >
@@ -748,7 +745,7 @@ export function ResponsibilityAreasPage({
                           </li>
                         ))}
                         {(detail.lines?.length ?? 0) === 0 ? (
-                          <li className="transfer-empty">Bu alana henüz hat atanmadı.</li>
+                          <li className="transfer-empty">{t("engineering.responsibilityAreas.emptyLines")}</li>
                         ) : null}
                       </ul>
                     </div>
@@ -765,26 +762,26 @@ export function ResponsibilityAreasPage({
       {showCreateModal ? (
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleCreate}>
-            <h3>Yeni Ekip</h3>
+            <h3>{t("engineering.responsibilityAreas.newAreaModalTitle")}</h3>
             <label>
-              Kod (kısaltma, benzersiz)
+              {t("engineering.responsibilityAreas.fieldCodePlaceholder")}
               <input value={createCode} onChange={(e) => setCreateCode(e.target.value)} required />
             </label>
             <label>
-              Alan Adı
+              {t("engineering.responsibilityAreas.fieldName")}
               <input value={createName} onChange={(e) => setCreateName(e.target.value)} required />
             </label>
             <label>
-              Açıklama
+              {t("engineering.responsibilityAreas.fieldDescription")}
               <input value={createDescription} onChange={(e) => setCreateDescription(e.target.value)} />
             </label>
             {localError ? <p className="error-text">{localError}</p> : null}
             <div className="settings-actions">
               <button type="button" onClick={() => setShowCreateModal(false)} disabled={busy}>
-                İptal
+                {t("engineering.responsibilityAreas.modalCancel")}
               </button>
               <button type="submit" className="primary-btn" disabled={busy}>
-                Oluştur
+                {t("engineering.responsibilityAreas.modalCreate")}
               </button>
             </div>
           </form>

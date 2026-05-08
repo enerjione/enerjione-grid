@@ -133,98 +133,100 @@ export function ProjectSettingsPanel({ onSave }: Props) {
         <h3>{t("engineering.nav.projectSettings")}</h3>
       </div>
       <p className="helper-text">
-        Müşteri logosu burada güncellendiğinde hem login ekranı hem de üst
-        navigasyondaki logo otomatik değişir. Logolar PNG/JPG/SVG/WebP olabilir,
-        max 1 MB.
+        {t("engineering.projectSettings.subtitle")}
       </p>
 
       <div className="project-settings-grid">
         <div className="project-settings-field">
           <label>
-            Proje Adı
+            {t("engineering.projectSettings.projectName")}
             <input
               type="text"
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
-              placeholder="Örn: Aras EDAŞ Smart Logger"
+              placeholder={t("engineering.projectSettings.projectNamePlaceholder")}
             />
           </label>
           <label>
-            Müşteri Adı
+            {t("engineering.projectSettings.customerName")}
             <input
               type="text"
               value={customerName}
               onChange={(event) => setCustomerName(event.target.value)}
-              placeholder="Örn: Aras EDAŞ"
+              placeholder={t("engineering.projectSettings.customerNamePlaceholder")}
             />
           </label>
           <label>
-            Tarayıcı Sekme Başlığı
+            {t("engineering.projectSettings.siteTitle")}
             <input
               type="text"
               value={siteTitle}
               onChange={(event) => setSiteTitle(event.target.value)}
-              placeholder="Örn: Aras EDAŞ Smart Logger"
+              placeholder={t("engineering.projectSettings.siteTitlePlaceholder")}
               maxLength={200}
             />
             <small className="helper-text">
-              Tarayıcı sekmesinde ve yer imlerinde gözükür. Boş bırakılırsa
-              varsayılan "Horstmann Smart Logger" kullanılır.
+              {t("engineering.projectSettings.siteTitleHint")}
             </small>
           </label>
         </div>
 
         <div className="project-settings-logo-grid">
           <LogoBox
-            title="Login Logosu (Büyük)"
-            description="Giriş ekranında merkezde gösterilir. Açık zeminli versiyon."
+            title={t("engineering.projectSettings.loginLogoTitle")}
+            description={t("engineering.projectSettings.loginLogoDesc")}
             value={customerLogo}
             onPick={(file) => void handlePickLogo(file, setCustomerLogo)}
             onClear={() => setCustomerLogo(null)}
             previewClass="project-settings-logo-preview project-settings-logo-preview--light"
+            buttonLabel={t("engineering.projectSettings.pickLogoBtn")}
+            emptyLabel={t("engineering.projectSettings.emptyLogo")}
+            removeLabel={t("engineering.projectSettings.remove")}
           />
           <LogoBox
-            title="Header Logosu (Koyu Zemin)"
-            description="Üst navigasyon koyu arka plana uyumlu sürümü. Boş bırakılırsa login logosu kullanılır."
+            title={t("engineering.projectSettings.headerLogoTitle")}
+            description={t("engineering.projectSettings.headerLogoDesc")}
             value={customerLogoLight}
             onPick={(file) => void handlePickLogo(file, setCustomerLogoLight)}
             onClear={() => setCustomerLogoLight(null)}
             previewClass="project-settings-logo-preview project-settings-logo-preview--dark"
+            buttonLabel={t("engineering.projectSettings.pickLogoBtn")}
+            emptyLabel={t("engineering.projectSettings.emptyLogo")}
+            removeLabel={t("engineering.projectSettings.remove")}
           />
           <LogoBox
-            title="Tarayıcı İkonu (Favicon)"
-            description="Tarayıcı sekmesinde başlığın yanında gözükür. ICO, PNG veya SVG. Kare format ve 16-128 px arası önerilir."
+            title={t("engineering.projectSettings.faviconTitle")}
+            description={t("engineering.projectSettings.faviconDesc")}
             value={favicon}
             onPick={(file) => void handlePickLogo(file, setFavicon, MAX_FILE_SIZE)}
             onClear={() => setFavicon(null)}
             previewClass="project-settings-logo-preview project-settings-favicon-preview"
             accept={ACCEPT_FAVICON}
-            buttonLabel="Favicon Seç"
-            emptyLabel="Varsayılan favicon kullanılıyor"
+            buttonLabel={t("engineering.projectSettings.pickFaviconBtn")}
+            emptyLabel={t("engineering.projectSettings.emptyFavicon")}
+            removeLabel={t("engineering.projectSettings.remove")}
           />
           <LogoBox
-            title="Giriş Ekranı Görseli"
-            description="Giriş ekranının sağ tarafındaki dekoratif görsel. Kaldırılırsa varsayılan görsel kullanılır. Geniş ekran (örn. 1200×800) önerilir."
+            title={t("engineering.projectSettings.loginImageTitle")}
+            description={t("engineering.projectSettings.loginImageDesc")}
             value={loginImage}
             onPick={(file) => void handlePickLogo(file, setLoginImage, MAX_LOGIN_IMAGE_SIZE)}
             onClear={() => setLoginImage(null)}
             previewClass="project-settings-logo-preview project-settings-login-image-preview"
-            buttonLabel="Görsel Seç"
-            emptyLabel="Henüz görsel yüklenmedi"
+            buttonLabel={t("engineering.projectSettings.pickImageBtn")}
+            emptyLabel={t("engineering.projectSettings.emptyImage")}
+            removeLabel={t("engineering.projectSettings.remove")}
           />
         </div>
 
         <div className="project-settings-battery-box">
-          <h4>Batarya Voltaj Eşikleri</h4>
+          <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
           <p className="helper-text">
-            Cihaz batarya yüzdesi <code>master.battery_voltage_satellite</code>{" "}
-            sinyalinden hesaplanır. Bu eşikler dışındaki değerlerde sırasıyla %0
-            ve %100 atanır; arada lineer interpolasyon. Boş bırakılırsa varsayılan
-            (3.40 V / 3.71 V) kullanılır.
+            {t("engineering.projectSettings.batteryHint")}
           </p>
           <div className="project-settings-battery-grid">
             <label>
-              Düşük Voltaj (%0) — V
+              {t("engineering.projectSettings.batteryLow")}
               <input
                 type="number"
                 step="0.01"
@@ -236,7 +238,7 @@ export function ProjectSettingsPanel({ onSave }: Props) {
               />
             </label>
             <label>
-              Tam Voltaj (%100) — V
+              {t("engineering.projectSettings.batteryFull")}
               <input
                 type="number"
                 step="0.01"
@@ -261,7 +263,7 @@ export function ProjectSettingsPanel({ onSave }: Props) {
           disabled={saving}
           onClick={() => void handleSave()}
         >
-          {saving ? "Kaydediliyor..." : "Kaydet"}
+          {saving ? t("engineering.projectSettings.saving") : t("engineering.projectSettings.save")}
         </button>
       </div>
     </section>
@@ -276,8 +278,9 @@ type LogoBoxProps = {
   onClear: () => void;
   previewClass: string;
   accept?: string;
-  buttonLabel?: string;
-  emptyLabel?: string;
+  buttonLabel: string;
+  emptyLabel: string;
+  removeLabel: string;
 };
 
 function LogoBox({
@@ -288,8 +291,9 @@ function LogoBox({
   onClear,
   previewClass,
   accept = ACCEPT,
-  buttonLabel = "Logo Seç",
-  emptyLabel = "Henüz logo yüklenmedi"
+  buttonLabel,
+  emptyLabel,
+  removeLabel
 }: LogoBoxProps) {
   return (
     <div className="project-settings-logo-box">
@@ -297,7 +301,7 @@ function LogoBox({
         <h4>{title}</h4>
         {value ? (
           <button type="button" className="text-btn" onClick={onClear}>
-            Kaldır
+            {removeLabel}
           </button>
         ) : null}
       </div>

@@ -89,6 +89,8 @@ def test_smtp_settings(
             severity="info",
             actor_username=current_user.username,
             message=f"SMTP test başarılı: {payload.recipient_email}",
+            i18n_key="notification_smtp_test_ok",
+            i18n_params={"recipient": payload.recipient_email},
         )
         db.commit()
         return NotificationTestResult(ok=True, detail="SMTP test mesajı gönderildi.")
@@ -100,6 +102,8 @@ def test_smtp_settings(
             severity="error",
             actor_username=current_user.username,
             message=f"SMTP test başarısız: {ex}",
+            i18n_key="notification_smtp_test_failed",
+            i18n_params={"error": str(ex)},
         )
         db.commit()
         return NotificationTestResult(ok=False, detail=f"SMTP test başarısız: {ex}")
@@ -126,6 +130,8 @@ def test_sms_settings(
             severity="info",
             actor_username=current_user.username,
             message=f"SMS test başarılı: {payload.recipient_phone}",
+            i18n_key="notification_sms_test_ok",
+            i18n_params={"recipient": payload.recipient_phone},
         )
         db.commit()
         detail = (
@@ -142,6 +148,8 @@ def test_sms_settings(
             severity="error",
             actor_username=current_user.username,
             message=f"SMS test başarısız: {ex}",
+            i18n_key="notification_sms_test_failed",
+            i18n_params={"error": str(ex)},
         )
         db.commit()
         return NotificationTestResult(ok=False, detail=f"SMS test başarısız: {ex}")
@@ -169,6 +177,8 @@ def test_telegram_settings(
             severity="info",
             actor_username=current_user.username,
             message=f"Telegram test başarılı: chat={payload.chat_id}",
+            i18n_key="notification_telegram_test_ok",
+            i18n_params={"chat": payload.chat_id},
         )
         db.commit()
         return NotificationTestResult(ok=True, detail="Telegram test mesajı gönderildi.")
@@ -180,6 +190,8 @@ def test_telegram_settings(
             severity="error",
             actor_username=current_user.username,
             message=f"Telegram test başarısız: {ex}",
+            i18n_key="notification_telegram_test_failed",
+            i18n_params={"error": str(ex)},
         )
         db.commit()
         return NotificationTestResult(ok=False, detail=f"Telegram test başarısız: {ex}")

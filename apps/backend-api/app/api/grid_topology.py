@@ -426,6 +426,8 @@ def create_pole(
         actor_username=current_user.username,
         message=f"Direk eklendi: {row.name or '(adsız)'} (#{row.sequence_no})",
         metadata={"pole_id": row.id, "line_id": row.line_id, "shifted": len(existing_at_or_after)},
+        i18n_key="pole_created",
+        i18n_params={"name": row.name or "(—)", "seq": row.sequence_no},
     )
     db.commit()
     db.refresh(row)
@@ -461,6 +463,8 @@ def update_pole(
         actor_username=current_user.username,
         message=f"Direk güncellendi: #{row.sequence_no}",
         metadata={"pole_id": row.id, "fields": list(changes.keys())},
+        i18n_key="pole_updated",
+        i18n_params={"seq": row.sequence_no},
     )
     db.commit()
     db.refresh(row)
@@ -502,6 +506,8 @@ def delete_pole(
         actor_username=current_user.username,
         message=f"Direk silindi: #{seq}",
         metadata={"pole_id": pole_id, "line_id": line_id, "renumbered": len(affected)},
+        i18n_key="pole_deleted",
+        i18n_params={"seq": seq},
     )
     db.commit()
     return None
@@ -558,6 +564,8 @@ def reorder_poles(
         actor_username=current_user.username,
         message=f"Hat direkleri yeniden sıralandı (line {line_id}, {len(payload.items)} direk)",
         metadata={"line_id": line_id, "count": len(payload.items)},
+        i18n_key="poles_reordered",
+        i18n_params={"line_id": line_id, "count": len(payload.items)},
     )
     db.commit()
     # Yeni sırayla döndür
@@ -595,6 +603,8 @@ def reverse_poles(
         actor_username=current_user.username,
         message=f"Hat sırası tersine çevrildi (line {line_id})",
         metadata={"line_id": line_id, "count": n},
+        i18n_key="poles_reversed",
+        i18n_params={"line_id": line_id},
     )
     db.commit()
     return list(db.scalars(
@@ -802,6 +812,8 @@ def create_segment(
             "from_pole_id": row.from_pole_id, "to_pole_id": row.to_pole_id,
             "device_id": row.device_id,
         },
+        i18n_key="segment_created",
+        i18n_params={"line_id": row.line_id},
     )
     db.commit()
     db.refresh(row)
@@ -850,6 +862,8 @@ def update_segment(
         actor_username=current_user.username,
         message=f"Hat segmenti güncellendi (segment {row.id})",
         metadata={"segment_id": row.id, "fields": list(changes.keys())},
+        i18n_key="segment_updated",
+        i18n_params={"segment_id": row.id},
     )
     db.commit()
     db.refresh(row)
@@ -877,6 +891,8 @@ def delete_segment(
         actor_username=current_user.username,
         message=f"Hat segmenti silindi (segment {segment_id})",
         metadata={"segment_id": segment_id, "line_id": line_id},
+        i18n_key="segment_deleted",
+        i18n_params={"segment_id": segment_id},
     )
     db.commit()
     return None

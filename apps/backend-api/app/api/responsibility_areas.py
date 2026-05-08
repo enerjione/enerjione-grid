@@ -121,6 +121,8 @@ def create_area(
         actor_username=current_user.username,
         message=f"Sorumluluk alanı eklendi: {row.name} ({row.code})",
         metadata={"area_id": row.id},
+        i18n_key="area_created",
+        i18n_params={"name": row.name, "code": row.code},
     )
     db.commit()
     db.refresh(row)
@@ -224,6 +226,8 @@ def update_area(
         actor_username=current_user.username,
         message=f"Sorumluluk alanı güncellendi: {area.name}",
         metadata={"area_id": area.id, "fields": list(changes.keys())},
+        i18n_key="area_updated",
+        i18n_params={"name": area.name},
     )
     db.commit()
     db.refresh(area)
@@ -251,6 +255,8 @@ def delete_area(
         actor_username=current_user.username,
         message=f"Sorumluluk alanı silindi: {name} ({code})",
         metadata={"area_id": area_id},
+        i18n_key="area_deleted",
+        i18n_params={"name": name, "code": code},
     )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -293,6 +299,8 @@ def add_user_to_area(
             actor_username=current_user.username,
             message=f"{user.username} kullanıcısı '{area.name}' sorumluluk alanına eklendi",
             metadata={"area_id": area_id, "area_name": area.name, "user_id": user_id, "username": user.username},
+            i18n_key="area_user_added",
+            i18n_params={"user": user.username, "area": area.name},
         )
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -322,6 +330,8 @@ def remove_user_from_area(
             actor_username=current_user.username,
             message=f"{user.username} kullanıcısı '{area.name}' sorumluluk alanından çıkarıldı",
             metadata={"area_id": area_id, "area_name": area.name, "user_id": user_id, "username": user.username},
+            i18n_key="area_user_removed",
+            i18n_params={"user": user.username, "area": area.name},
         )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -357,6 +367,8 @@ def add_device_to_area(
             device_code=device.code,
             message=f"{device.name} cihazı '{area.name}' sorumluluk alanına eklendi",
             metadata={"area_id": area_id, "area_name": area.name, "device_id": device_id, "device_code": device.code},
+            i18n_key="area_device_added",
+            i18n_params={"device": device.name, "area": area.name},
         )
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -387,6 +399,8 @@ def remove_device_from_area(
             device_code=device.code,
             message=f"{device.name} cihazı '{area.name}' sorumluluk alanından çıkarıldı",
             metadata={"area_id": area_id, "area_name": area.name, "device_id": device_id, "device_code": device.code},
+            i18n_key="area_device_removed",
+            i18n_params={"device": device.name, "area": area.name},
         )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -449,6 +463,8 @@ def add_region_to_area(
                 "region_name": region.name,
                 "auto_added_lines": added_line_count,
             },
+            i18n_key="area_region_added",
+            i18n_params={"region": region.name, "area": area.name},
         )
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -478,6 +494,8 @@ def remove_region_from_area(
             actor_username=current_user.username,
             message=f"'{region.name}' bölgesi '{area.name}' sorumluluk alanından çıkarıldı",
             metadata={"area_id": area_id, "area_name": area.name, "region_id": region_id, "region_name": region.name},
+            i18n_key="area_region_removed",
+            i18n_params={"region": region.name, "area": area.name},
         )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -512,6 +530,8 @@ def add_line_to_area(
             actor_username=current_user.username,
             message=f"'{line.name}' hattı '{area.name}' sorumluluk alanına eklendi",
             metadata={"area_id": area_id, "area_name": area.name, "line_id": line_id, "line_name": line.name},
+            i18n_key="area_line_added",
+            i18n_params={"line": line.name, "area": area.name},
         )
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -541,6 +561,8 @@ def remove_line_from_area(
             actor_username=current_user.username,
             message=f"'{line.name}' hattı '{area.name}' sorumluluk alanından çıkarıldı",
             metadata={"area_id": area_id, "area_name": area.name, "line_id": line_id, "line_name": line.name},
+            i18n_key="area_line_removed",
+            i18n_params={"line": line.name, "area": area.name},
         )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
