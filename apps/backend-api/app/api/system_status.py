@@ -23,6 +23,7 @@ import os
 import platform
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
 import psutil
@@ -334,28 +335,44 @@ def _check_worker(
     override = os.environ.get(f"{env_prefix}_HEALTH_HOST", "").strip()
     candidate_hosts: tuple[str, ...] = (override,) if override else default_hosts
 
+    # Aday hostlari PARALEL probe et — eski ardisik versiyonda DNS cozunmeyen
+    # her aday icin 1.0sn timeout yiyordu (4 host = 4sn / worker; 4 worker =
+    # 16sn). Paralel'de toplam sure tek timeout (1sn) ile sinirli kaliyor;
+    # frontend "Checking services…" durumunda takilmiyor.
+    tried: list[str] = [h for h in candidate_hosts if h]
+    if not tried:
+        return ServiceStatus(
+            name=name,
+            role="worker",
+            healthy=False,
+            latency_ms=0.0,
+            endpoint=f":{port}",
+            detail="Aday host yok.",
+        )
+
     last_err: str | None = None
     last_ms: float = 0.0
-    chosen_host: str = candidate_hosts[0] if candidate_hosts else "127.0.0.1"
-    tried: list[str] = []
-    for host in candidate_hosts:
-        if not host:
-            continue
-        tried.append(host)
-        ok, ms, err = _tcp_probe(host, int(port))
-        chosen_host = host
-        last_err = err
-        last_ms = ms
-        if ok:
-            return ServiceStatus(
-                name=name,
-                role="worker",
-                healthy=True,
-                latency_ms=ms,
-                endpoint=f"{host}:{port}",
-            )
-    # Hiçbiri cevap vermedi — denenen tum host'lari ve son hatayi raporla,
-    # böylece kullanici hangi adlarin denendigini gorur.
+    chosen_host: str = tried[0]
+    with ThreadPoolExecutor(max_workers=max(1, len(tried))) as ex:
+        future_to_host = {ex.submit(_tcp_probe, h, int(port)): h for h in tried}
+        for fut in as_completed(future_to_host):
+            host = future_to_host[fut]
+            try:
+                ok, ms, err = fut.result()
+            except Exception as exc:  # noqa: BLE001
+                ok, ms, err = False, 0.0, str(exc)
+            if ok:
+                return ServiceStatus(
+                    name=name,
+                    role="worker",
+                    healthy=True,
+                    latency_ms=ms,
+                    endpoint=f"{host}:{port}",
+                )
+            last_err = err
+            last_ms = ms
+            chosen_host = host
+
     detail = last_err or "TCP probe basarisiz."
     if len(tried) > 1:
         detail = f"{detail} | Denenen: {', '.join(tried)}"
@@ -379,63 +396,90 @@ def get_services_status(
     Worker servisleri (tag-engine, alarm-service, notification-worker, iec104-outbound)
     ayri proseslerdir; her birinin kendi /health portu vardir.
     """
-    services: list[ServiceStatus] = []
-
     # Backend (kendisi) - bu cagri zaten basariliysa backend ayakta.
-    services.append(
-        ServiceStatus(
-            name="Backend API",
-            role="self",
-            healthy=True,
-            latency_ms=0.0,
-            endpoint=f"{os.environ.get('BACKEND_HOST', '127.0.0.1')}:{os.environ.get('BACKEND_PORT', '8000')}",
-        )
+    self_status = ServiceStatus(
+        name="Backend API",
+        role="self",
+        healthy=True,
+        latency_ms=0.0,
+        endpoint=f"{os.environ.get('BACKEND_HOST', '127.0.0.1')}:{os.environ.get('BACKEND_PORT', '8000')}",
     )
 
-    services.append(_check_database())
-    services.append(_check_rabbitmq())
-
-    # Worker'lar — Docker compose ortaminda her servis kendi hostname'iyle
-    # baglanir; native kurulumda 127.0.0.1 fallback'i devreye girer. Servis
-    # ismi varyasyonlari (orn. tag-engine vs tag_engine) ortak compose
-    # adlandirmalarina denk gelir; ilk cevap veren kazanir. Port default'lari
-    # worker main.py'lardaki sabitlerden alinir.
-    services.append(
-        _check_worker(
-            "Tag Engine",
-            env_prefix="TAG_ENGINE",
-            default_hosts=("tag-engine", "tag_engine", "hsl-tag-engine", "127.0.0.1"),
-            default_port=8011,
-        )
-    )
-    services.append(
-        _check_worker(
-            "Alarm Service",
-            env_prefix="ALARM_SERVICE",
-            default_hosts=("alarm-service", "alarm_service", "hsl-alarm-service", "127.0.0.1"),
-            default_port=8012,
-        )
-    )
-    services.append(
-        _check_worker(
-            "Notification Worker",
-            env_prefix="NOTIFICATION_WORKER",
-            default_hosts=(
-                "notification-worker",
-                "notification_worker",
-                "hsl-notification-worker",
-                "127.0.0.1",
+    # Tum probe'lari PARALEL calistir. Eskiden ardisikta 4 worker × 4 host ×
+    # 1sn timeout = 16sn'ye kadar bekleyebiliyordu; frontend bu surede sadece
+    # "Checking services…" gosterip duruyordu. Paralel'de toplam sure ~1sn'ye
+    # iniyor (en yavas tek probe kadar).
+    probe_jobs: list[tuple[str, callable]] = [  # type: ignore[name-defined]
+        ("database", _check_database),
+        ("rabbitmq", _check_rabbitmq),
+        (
+            "tag_engine",
+            lambda: _check_worker(
+                "Tag Engine",
+                env_prefix="TAG_ENGINE",
+                default_hosts=("tag-engine", "tag_engine", "hsl-tag-engine", "127.0.0.1"),
+                default_port=8011,
             ),
-            default_port=8013,
-        )
-    )
-    services.append(
-        _check_worker(
-            "IEC104 Outbound",
-            env_prefix="IEC104_OUTBOUND",
-            default_hosts=("iec104-outbound", "iec104_outbound", "hsl-iec104-outbound", "127.0.0.1"),
-            default_port=8014,
-        )
-    )
+        ),
+        (
+            "alarm_service",
+            lambda: _check_worker(
+                "Alarm Service",
+                env_prefix="ALARM_SERVICE",
+                default_hosts=("alarm-service", "alarm_service", "hsl-alarm-service", "127.0.0.1"),
+                default_port=8012,
+            ),
+        ),
+        (
+            "notification_worker",
+            lambda: _check_worker(
+                "Notification Worker",
+                env_prefix="NOTIFICATION_WORKER",
+                default_hosts=(
+                    "notification-worker",
+                    "notification_worker",
+                    "hsl-notification-worker",
+                    "127.0.0.1",
+                ),
+                default_port=8013,
+            ),
+        ),
+        (
+            "iec104_outbound",
+            lambda: _check_worker(
+                "IEC104 Outbound",
+                env_prefix="IEC104_OUTBOUND",
+                default_hosts=("iec104-outbound", "iec104_outbound", "hsl-iec104-outbound", "127.0.0.1"),
+                default_port=8014,
+            ),
+        ),
+    ]
+
+    results: dict[str, ServiceStatus] = {}
+    with ThreadPoolExecutor(max_workers=len(probe_jobs)) as ex:
+        future_map = {ex.submit(fn): key for key, fn in probe_jobs}
+        for fut in as_completed(future_map):
+            key = future_map[fut]
+            try:
+                results[key] = fut.result()
+            except Exception as exc:  # noqa: BLE001
+                results[key] = ServiceStatus(
+                    name=key,
+                    role="worker",
+                    healthy=False,
+                    latency_ms=0.0,
+                    endpoint="",
+                    detail=str(exc),
+                )
+
+    services: list[ServiceStatus] = [
+        self_status,
+        results["database"],
+        results["rabbitmq"],
+        results["tag_engine"],
+        results["alarm_service"],
+        results["notification_worker"],
+        results["iec104_outbound"],
+    ]
 
     return ServicesReport(services=services, sampled_at=time.time())
