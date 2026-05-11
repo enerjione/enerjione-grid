@@ -1012,7 +1012,12 @@
       "errors": {
         "pickSignal": "Bir sinyal seçin.",
         "addAtLeastOneTerm": "Gelişmiş kuralda en az bir terim ekleyin.",
-        "termMissingSignal": "{{idx}}. terim için sinyal seçin."
+        "termMissingSignal": "{{idx}}. terim için sinyal seçin.",
+        "formulaEmpty": "{{idx}}. terim formülü boş olamaz.",
+        "formulaNoVars": "{{idx}}. terim için en az bir değişken tanımlayın.",
+        "formulaBadName": "{{idx}}. terim: değişken adları harfle başlamalı; harf/rakam/alt çizgi olabilir.",
+        "formulaDupName": "{{idx}}. terim: değişken adları benzersiz olmalı.",
+        "formulaVarNoSignal": "{{idx}}. terim: her değişken için sinyal seçin."
       },
       "composite": {
         "logicLabel": "Birleşim",
@@ -1029,6 +1034,16 @@
         "kindCompareHint": "Sinyalin son anlık değerine bakar.",
         "kindAgg": "Pencere",
         "kindAggHint": "Son N saniyenin ortalaması / min / max / sayısı.",
+        "kindFormula": "Formül",
+        "kindFormulaHint": "Aritmetik ifade: sinyalleri değişken olarak kullan.",
+        "formulaExpr": "Formül",
+        "formulaExprPlaceholder": "Örn: (I_a + I_b + I_c) / 3",
+        "formulaAllowed": "İzinli: +, −, ×, ÷, %, **, parantez, min/max/abs ve aşağıda tanımlanan değişkenler.",
+        "formulaVars": "Değişkenler",
+        "formulaVarName": "Değişken adı",
+        "formulaVarAdd": "Değişken Ekle",
+        "formulaVarRemove": "Değişkeni kaldır",
+        "formulaResultHint": "{{idx}}. terim: formül sonucu seçtiğiniz karşılaştırmaya girer.",
         "aggFn": "Hesaplama",
         "aggAvg": "Ortalama (avg)",
         "aggMin": "Minimum (min)",

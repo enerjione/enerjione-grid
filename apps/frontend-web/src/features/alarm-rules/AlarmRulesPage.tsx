@@ -7,6 +7,7 @@ import type {
   AlarmComparator,
   AlarmCompositeExpression,
   AlarmCompositeTerm,
+  AlarmFormulaVar,
   AlarmLevel,
   AlarmRuleKind,
   AlarmRuleRow,
@@ -260,8 +261,9 @@ export function AlarmRulesPage({
         logic: form.expression.logic,
         terms: form.expression.terms.map((tm) => {
           const isAgg = tm.kind === "agg";
+          const isFormula = tm.kind === "formula";
           return {
-            kind: isAgg ? "agg" : "compare",
+            kind: isFormula ? "formula" : isAgg ? "agg" : "compare",
             signal_key: tm.signal_key,
             device_code: tm.device_code?.trim() || "*",
             comparator: tm.comparator,
@@ -274,7 +276,15 @@ export function AlarmRulesPage({
                 : Number(tm.threshold_high),
             agg_fn: isAgg ? (tm.agg_fn ?? "avg") : null,
             agg_window_sec: isAgg ? Number(tm.agg_window_sec || 60) : 60,
-            agg_arg: isAgg ? Number(tm.agg_arg || 0) : 0
+            agg_arg: isAgg ? Number(tm.agg_arg || 0) : 0,
+            formula_expr: isFormula ? (tm.formula_expr ?? "").trim() : null,
+            formula_vars: isFormula
+              ? (tm.formula_vars ?? []).map((fv) => ({
+                  name: fv.name.trim(),
+                  signal_key: fv.signal_key,
+                  device_code: fv.device_code?.trim() || "*"
+                }))
+              : []
           } as AlarmCompositeTerm;
         })
       };
@@ -315,6 +325,34 @@ export function AlarmRulesPage({
       if (empty !== -1) {
         setLocalError(t("engineering.alarmRules.errors.termMissingSignal", { idx: empty + 1 }));
         return;
+      }
+      // Formula terimleri: ifade + en az 1 degisken + benzersiz isimler
+      for (let i = 0; i < terms.length; i++) {
+        const tm = terms[i];
+        if (tm.kind !== "formula") continue;
+        const expr = (tm.formula_expr ?? "").trim();
+        if (!expr) {
+          setLocalError(t("engineering.alarmRules.errors.formulaEmpty", { idx: i + 1 }));
+          return;
+        }
+        const vars = tm.formula_vars ?? [];
+        if (vars.length === 0) {
+          setLocalError(t("engineering.alarmRules.errors.formulaNoVars", { idx: i + 1 }));
+          return;
+        }
+        const names = vars.map((v) => v.name.trim());
+        if (names.some((n) => !n || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))) {
+          setLocalError(t("engineering.alarmRules.errors.formulaBadName", { idx: i + 1 }));
+          return;
+        }
+        if (new Set(names).size !== names.length) {
+          setLocalError(t("engineering.alarmRules.errors.formulaDupName", { idx: i + 1 }));
+          return;
+        }
+        if (vars.some((v) => !v.signal_key)) {
+          setLocalError(t("engineering.alarmRules.errors.formulaVarNoSignal", { idx: i + 1 }));
+          return;
+        }
       }
     }
     setSaving(true);
@@ -827,9 +865,11 @@ export function AlarmRulesPage({
                       const baseLbl = tmSig?.label ?? tm.signal_key;
                       // agg ise "avg(signal, 60sn)" formatinda goster
                       const lbl =
-                        tm.kind === "agg" && tm.agg_fn
-                          ? `${tm.agg_fn}(${baseLbl}, ${tm.agg_window_sec ?? 60}s)`
-                          : baseLbl;
+                        tm.kind === "formula"
+                          ? `ƒ(${tm.formula_expr ?? ""})`
+                          : tm.kind === "agg" && tm.agg_fn
+                            ? `${tm.agg_fn}(${baseLbl}, ${tm.agg_window_sec ?? 60}s)`
+                            : baseLbl;
                       if (isBooleanComparator(tm.comparator)) {
                         return `${lbl} ${tm.comparator === "boolean_true" ? "= TRUE" : "= FALSE"}`;
                       }
@@ -1008,11 +1048,11 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                 {idx > 0 ? (
                   <span className="rule-composite-term-joint">{expression.logic}</span>
                 ) : null}
-                {/* kind toggle: Anlik | Pencere */}
+                {/* kind toggle: Anlik | Pencere | Formul */}
                 <div className="rule-composite-kind-toggle">
                   <button
                     type="button"
-                    className={`rule-mode-btn rule-mode-btn--compact ${!isAgg ? "is-active" : ""}`}
+                    className={`rule-mode-btn rule-mode-btn--compact ${tm.kind !== "agg" && tm.kind !== "formula" ? "is-active" : ""}`}
                     onClick={() =>
                       updateTerm(idx, { kind: "compare", agg_fn: null })
                     }
@@ -1039,6 +1079,25 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                     <span className="material-symbols-outlined">timeline</span>
                     {t("engineering.alarmRules.composite.kindAgg")}
                   </button>
+                  <button
+                    type="button"
+                    className={`rule-mode-btn rule-mode-btn--compact ${tm.kind === "formula" ? "is-active" : ""}`}
+                    onClick={() =>
+                      updateTerm(idx, {
+                        kind: "formula",
+                        formula_expr: tm.formula_expr ?? "",
+                        formula_vars:
+                          tm.formula_vars && tm.formula_vars.length > 0
+                            ? tm.formula_vars
+                            : [{ name: "X", signal_key: tm.signal_key || "", device_code: "*" }]
+                      })
+                    }
+                    disabled={!canEdit}
+                    title={t("engineering.alarmRules.composite.kindFormulaHint")}
+                  >
+                    <span className="material-symbols-outlined">function</span>
+                    {t("engineering.alarmRules.composite.kindFormula")}
+                  </button>
                 </div>
                 <span className="rule-composite-term-spacer" />
                 {expression.terms.length > 1 ? (
@@ -1055,34 +1114,38 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                 ) : null}
               </div>
               <div className="rule-composite-term-row">
-                <label className="rule-field rule-composite-field-signal">
-                  <span>{t("engineering.alarmRules.composite.termSignal")}</span>
-                  <select
-                    value={tm.signal_key}
-                    onChange={(e) => updateTerm(idx, { signal_key: e.target.value })}
-                    disabled={!canEdit}
-                  >
-                    <option value="">
-                      {t("engineering.alarmRules.composite.termSignalPlaceholder")}
-                    </option>
-                    {signals.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {SOURCE_SHORT[s.source] ?? s.source} · {s.label} ({s.key})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="rule-field rule-composite-field-device">
-                  <span>{t("engineering.alarmRules.composite.termDevice")}</span>
-                  <input
-                    type="text"
-                    value={tm.device_code ?? "*"}
-                    onChange={(e) => updateTerm(idx, { device_code: e.target.value })}
-                    placeholder="*"
-                    disabled={!canEdit}
-                    title={t("engineering.alarmRules.composite.termDeviceHint")}
-                  />
-                </label>
+                {tm.kind !== "formula" ? (
+                  <>
+                    <label className="rule-field rule-composite-field-signal">
+                      <span>{t("engineering.alarmRules.composite.termSignal")}</span>
+                      <select
+                        value={tm.signal_key}
+                        onChange={(e) => updateTerm(idx, { signal_key: e.target.value })}
+                        disabled={!canEdit}
+                      >
+                        <option value="">
+                          {t("engineering.alarmRules.composite.termSignalPlaceholder")}
+                        </option>
+                        {signals.map((s) => (
+                          <option key={s.key} value={s.key}>
+                            {SOURCE_SHORT[s.source] ?? s.source} · {s.label} ({s.key})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="rule-field rule-composite-field-device">
+                      <span>{t("engineering.alarmRules.composite.termDevice")}</span>
+                      <input
+                        type="text"
+                        value={tm.device_code ?? "*"}
+                        onChange={(e) => updateTerm(idx, { device_code: e.target.value })}
+                        placeholder="*"
+                        disabled={!canEdit}
+                        title={t("engineering.alarmRules.composite.termDeviceHint")}
+                      />
+                    </label>
+                  </>
+                ) : null}
                 {isAgg ? (
                   <>
                     <label className="rule-field">
@@ -1191,6 +1254,16 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                   })}
                 </p>
               ) : null}
+              {tm.kind === "formula" ? (
+                <FormulaEditor
+                  term={tm}
+                  idx={idx}
+                  signals={signals}
+                  canEdit={canEdit}
+                  onChange={(patch) => updateTerm(idx, patch)}
+                  t={t}
+                />
+              ) : null}
             </li>
           );
         })}
@@ -1214,6 +1287,144 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
           })}
         </span>
       </div>
+    </div>
+  );
+}
+
+
+// =============================================================================
+// FORMULA EDITOR — Faz 3: aritmetik ifade + degisken eslemeleri
+// =============================================================================
+
+type FormulaEditorProps = {
+  term: AlarmCompositeTerm;
+  idx: number;
+  signals: SignalCatalogRow[];
+  canEdit: boolean;
+  onChange: (patch: Partial<AlarmCompositeTerm>) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+};
+
+function FormulaEditor({ term, idx, signals, canEdit, onChange, t }: FormulaEditorProps) {
+  const vars = term.formula_vars ?? [];
+  const expr = term.formula_expr ?? "";
+
+  const updateVar = (i: number, patch: Partial<AlarmFormulaVar>) => {
+    const next = vars.map((v, j) => (j === i ? { ...v, ...patch } : v));
+    onChange({ formula_vars: next });
+  };
+  const addVar = () => {
+    if (vars.length >= 16) return;
+    // Otomatik benzersiz isim: X, X2, X3...
+    const taken = new Set(vars.map((v) => v.name));
+    let name = "X";
+    let n = 1;
+    while (taken.has(name)) {
+      n += 1;
+      name = `X${n}`;
+    }
+    onChange({
+      formula_vars: [...vars, { name, signal_key: "", device_code: "*" }]
+    });
+  };
+  const removeVar = (i: number) => {
+    if (vars.length <= 1) return;
+    onChange({ formula_vars: vars.filter((_, j) => j !== i) });
+  };
+
+  return (
+    <div className="rule-formula-editor">
+      <label className="rule-field rule-formula-expr">
+        <span>
+          {t("engineering.alarmRules.composite.formulaExpr")}
+        </span>
+        <input
+          type="text"
+          value={expr}
+          onChange={(e) => onChange({ formula_expr: e.target.value })}
+          placeholder={t("engineering.alarmRules.composite.formulaExprPlaceholder")}
+          disabled={!canEdit}
+          spellCheck={false}
+        />
+      </label>
+      <p className="rule-hint rule-formula-help">
+        {t("engineering.alarmRules.composite.formulaAllowed")}
+      </p>
+
+      <div className="rule-formula-vars">
+        <div className="rule-formula-vars-head">
+          <strong>{t("engineering.alarmRules.composite.formulaVars")}</strong>
+          <span className="rule-hint">{vars.length}/16</span>
+        </div>
+        <ul className="rule-formula-vars-list">
+          {vars.map((v, i) => (
+            <li key={i} className="rule-formula-var">
+              <label className="rule-field rule-formula-var-name">
+                <span>{t("engineering.alarmRules.composite.formulaVarName")}</span>
+                <input
+                  type="text"
+                  value={v.name}
+                  onChange={(e) => updateVar(i, { name: e.target.value })}
+                  placeholder="X"
+                  disabled={!canEdit}
+                  spellCheck={false}
+                />
+              </label>
+              <label className="rule-field rule-formula-var-signal">
+                <span>{t("engineering.alarmRules.composite.termSignal")}</span>
+                <select
+                  value={v.signal_key}
+                  onChange={(e) => updateVar(i, { signal_key: e.target.value })}
+                  disabled={!canEdit}
+                >
+                  <option value="">
+                    {t("engineering.alarmRules.composite.termSignalPlaceholder")}
+                  </option>
+                  {signals.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {SOURCE_SHORT[s.source] ?? s.source} · {s.label} ({s.key})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="rule-field rule-formula-var-device">
+                <span>{t("engineering.alarmRules.composite.termDevice")}</span>
+                <input
+                  type="text"
+                  value={v.device_code ?? "*"}
+                  onChange={(e) => updateVar(i, { device_code: e.target.value })}
+                  placeholder="*"
+                  disabled={!canEdit}
+                />
+              </label>
+              {vars.length > 1 ? (
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-danger rule-formula-var-rm"
+                  title={t("engineering.alarmRules.composite.formulaVarRemove")}
+                  aria-label={t("engineering.alarmRules.composite.formulaVarRemove")}
+                  onClick={() => removeVar(i)}
+                  disabled={!canEdit}
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          className="secondary-btn rule-formula-var-add"
+          onClick={addVar}
+          disabled={!canEdit || vars.length >= 16}
+        >
+          <span className="material-symbols-outlined">add</span>
+          {t("engineering.alarmRules.composite.formulaVarAdd")}
+        </button>
+      </div>
+      <p className="rule-hint rule-composite-term-hint">
+        {t("engineering.alarmRules.composite.formulaResultHint", { idx: idx + 1 })}
+      </p>
     </div>
   );
 }

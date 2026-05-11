@@ -14,20 +14,35 @@ CompositeLogic = Literal["AND", "OR"]
 AggFn = Literal["avg", "min", "max", "sum", "count_above", "count_below"]
 
 
+class FormulaVar(BaseModel):
+    """Formul ifadesindeki bir degisken (Faz 3).
+
+    Su an sadece 'signal' kaynagi destekleniyor: degisken anlik sinyal
+    degerine bagli. İleride 'agg' (pencere) da eklenebilir; mimari ayni
+    kalir."""
+
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    signal_key: str = Field(min_length=1, max_length=80)
+    device_code: str = Field(default="*", min_length=1, max_length=80)
+
+
 class CompositeTerm(BaseModel):
     """Composite kuralda tek bir terim (AND/OR'in argumani).
 
-    İki tür terim destekli (Faz 2):
+    Uc tur terim destekli:
       - kind='compare' (default): anlik sinyal -> comparator(threshold)
       - kind='agg'             : son N saniyede ortalama/min/max/sum/count
+                                  -> comparator(threshold)
+      - kind='formula' (Faz 3)  : aritmetik ifade (degiskenler sinyallerdir)
                                   -> comparator(threshold)
     """
 
     # Faz 1 ile geriye uyum: alan yoksa 'compare' kabul edilir.
-    kind: Literal["compare", "agg"] = "compare"
+    kind: Literal["compare", "agg", "formula"] = "compare"
 
-    # Hem 'compare' hem 'agg' icin: kuralin tetiklendigi sinyal-anahtar
-    # (agg modunda pencere bu sinyal/cihaz icin hesaplanir).
+    # 'compare' ve 'agg' icin: kuralin tetiklendigi sinyal-anahtar.
+    # 'formula' icin yine bir sinyal-anahtari beklenir (kural cache'inde
+    # rules_by_signal map'i icin); ifadede gerekirse bu sinyal kullanilir.
     signal_key: str = Field(min_length=1, max_length=80)
     # "*" => kuralin tetikleyicisi olan anchor cihaz. Spesifik cihaz kodu
     # vermek istersek dogrudan yazariz.
@@ -43,10 +58,26 @@ class CompositeTerm(BaseModel):
     # kullanilmaz.
     agg_arg: float = 0.0
 
+    # 'formula' icin: ifade + degisken eslemeleri.
+    # Ifade orn: "(I_a + I_b + I_c) / 3" veya "max(V1, V2) - min(V1, V2)".
+    # Izinli sozdizimi: +, -, *, /, %, **, unary -, parantez, sayi sabitleri,
+    # tanimli degisken adlari, ve whitelist fonksiyonlar (min, max, abs).
+    formula_expr: str | None = Field(default=None, max_length=500)
+    formula_vars: list[FormulaVar] = Field(default_factory=list, max_length=16)
+
     @model_validator(mode="after")
     def _validate_kind(self):
         if self.kind == "agg" and self.agg_fn is None:
             raise ValueError("agg term requires 'agg_fn'")
+        if self.kind == "formula":
+            if not self.formula_expr or not self.formula_expr.strip():
+                raise ValueError("formula term requires non-empty 'formula_expr'")
+            if not self.formula_vars:
+                raise ValueError("formula term requires at least one 'formula_vars' entry")
+            # Degisken adlari unique olmali.
+            names = [v.name for v in self.formula_vars]
+            if len(set(names)) != len(names):
+                raise ValueError("formula_vars names must be unique")
         return self
 
 

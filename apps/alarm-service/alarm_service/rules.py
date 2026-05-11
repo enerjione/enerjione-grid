@@ -1,5 +1,6 @@
 """Alarm kurali cekmeyi ve degerlendirmeyi yoneten yardimci modul."""
 
+import ast
 import json
 import logging
 from dataclasses import dataclass, field
@@ -12,13 +13,25 @@ _log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class FormulaVar:
+    """Formul ifadesindeki bir degisken (Faz 3)."""
+
+    name: str
+    signal_key: str
+    device_code: str  # "*" => anchor cihaz
+
+
+@dataclass(frozen=True)
 class CompositeTerm:
     """Composite kuraldaki tek bir terim.
 
-    kind='compare' : anlik sinyal degerine comparator + threshold uygulanir.
-    kind='agg'     : son agg_window_sec saniyedeki pencere uzerinden
-                     agg_fn (avg/min/max/sum/count_above/count_below)
-                     hesaplanir; sonra comparator + threshold uygulanir.
+    kind='compare'  : anlik sinyal degerine comparator + threshold uygulanir.
+    kind='agg'      : son agg_window_sec saniyedeki pencere uzerinden
+                      agg_fn (avg/min/max/sum/count_above/count_below)
+                      hesaplanir; sonra comparator + threshold uygulanir.
+    kind='formula'  : guvenli aritmetik ifade hesaplanir (formula_expr),
+                      degiskenler formula_vars'taki signal/device'lerden
+                      anlik degerle cozulur; sonra comparator + threshold.
     """
 
     signal_key: str
@@ -26,10 +39,12 @@ class CompositeTerm:
     comparator: str
     threshold: float
     threshold_high: float | None
-    kind: str = "compare"  # "compare" | "agg"
+    kind: str = "compare"  # "compare" | "agg" | "formula"
     agg_fn: str | None = None
     agg_window_sec: int = 60
     agg_arg: float = 0.0
+    formula_expr: str | None = None
+    formula_vars: tuple[FormulaVar, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -123,7 +138,15 @@ class AlarmRuleCache:
                     )
                     continue
                 # Her terimin sinyal_key'i katalogda olmali; yoksa atla.
-                missing = [t.signal_key for t in expression.terms if t.signal_key not in alarmable]
+                # Formula terimleri icin: ayni kontrol formula_vars'taki tum
+                # sinyallere de yapilir.
+                checked: list[str] = []
+                for tm in expression.terms:
+                    checked.append(tm.signal_key)
+                    if tm.kind == "formula":
+                        for fv in tm.formula_vars:
+                            checked.append(fv.signal_key)
+                missing = [k for k in checked if k not in alarmable]
                 if missing:
                     _log.warning(
                         "composite_rule_skipped rule_id=%s reason=missing_signals %s",
@@ -131,7 +154,14 @@ class AlarmRuleCache:
                         missing,
                     )
                     continue
-                composite_keys = tuple({t.signal_key for t in expression.terms})
+                # composite_signal_keys: term.signal_key + formula degiskenleri.
+                ck_set: set[str] = set()
+                for tm in expression.terms:
+                    ck_set.add(tm.signal_key)
+                    if tm.kind == "formula":
+                        for fv in tm.formula_vars:
+                            ck_set.add(fv.signal_key)
+                composite_keys = tuple(ck_set)
             rule = AlarmRule(
                 id=int(item["id"]),
                 signal_key=item["signal_key"],
@@ -288,8 +318,32 @@ def _parse_composite_expression(raw: Any) -> CompositeExpression | None:
         except (TypeError, ValueError):
             agg_arg = 0.0
         if kind == "agg" and agg_fn not in {"avg", "min", "max", "sum", "count_above", "count_below"}:
-            # Bilinmeyen agg fonksiyonu — bu kurali atla.
             return None
+        formula_expr = t.get("formula_expr") if kind == "formula" else None
+        formula_vars: tuple[FormulaVar, ...] = ()
+        if kind == "formula":
+            if not isinstance(formula_expr, str) or not formula_expr.strip():
+                return None
+            raw_vars = t.get("formula_vars") or []
+            if not isinstance(raw_vars, list) or not raw_vars:
+                return None
+            parsed_vars: list[FormulaVar] = []
+            for v in raw_vars:
+                if not isinstance(v, dict):
+                    return None
+                vn = v.get("name")
+                vs = v.get("signal_key")
+                if not isinstance(vn, str) or not isinstance(vs, str) or not vn or not vs:
+                    return None
+                parsed_vars.append(
+                    FormulaVar(name=vn, signal_key=vs, device_code=(v.get("device_code") or "*"))
+                )
+            formula_vars = tuple(parsed_vars)
+            # Ifade onceden derlenip whitelist edilebiliyor mu? — bozuk ifade
+            # kurali siliyor olmali.
+            if _compile_formula(formula_expr, {v.name for v in formula_vars}) is None:
+                _log.warning("composite_rule_invalid_formula expr=%r", formula_expr)
+                return None
         terms.append(
             CompositeTerm(
                 signal_key=sig,
@@ -297,10 +351,12 @@ def _parse_composite_expression(raw: Any) -> CompositeExpression | None:
                 comparator=cmp,
                 threshold=th,
                 threshold_high=th_hi,
-                kind=kind if kind in ("compare", "agg") else "compare",
+                kind=kind if kind in ("compare", "agg", "formula") else "compare",
                 agg_fn=agg_fn if kind == "agg" else None,
                 agg_window_sec=max(1, min(agg_window, 86400)),
                 agg_arg=agg_arg,
+                formula_expr=formula_expr,
+                formula_vars=formula_vars,
             )
         )
     return CompositeExpression(logic=logic, terms=tuple(terms))
@@ -336,6 +392,135 @@ def _eval_compare(cmp: str, value: float, threshold: float, threshold_high: floa
     return False
 
 
+# ---------------------------------------------------------------------------
+# Safe formula evaluator (Faz 3)
+# ---------------------------------------------------------------------------
+
+# Whitelist: yalnizca bu node tiplerine ve operatorlere izin verilir.
+_ALLOWED_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.Pow, ast.FloorDiv)
+_ALLOWED_UNARY = (ast.UAdd, ast.USub)
+_ALLOWED_FUNCS = {"min", "max", "abs"}
+
+
+def _validate_formula_node(node: ast.AST, allowed_names: set[str]) -> bool:
+    """Recursive: ifadenin tum AST node'lari whitelist'e uyuyorsa True."""
+    if isinstance(node, ast.Expression):
+        return _validate_formula_node(node.body, allowed_names)
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (int, float))
+    if isinstance(node, ast.Num):  # py<3.12 backward
+        return True
+    if isinstance(node, ast.Name):
+        return node.id in allowed_names
+    if isinstance(node, ast.BinOp):
+        if not isinstance(node.op, _ALLOWED_BINOPS):
+            return False
+        return _validate_formula_node(node.left, allowed_names) and _validate_formula_node(
+            node.right, allowed_names
+        )
+    if isinstance(node, ast.UnaryOp):
+        if not isinstance(node.op, _ALLOWED_UNARY):
+            return False
+        return _validate_formula_node(node.operand, allowed_names)
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name):
+            return False
+        if node.func.id not in _ALLOWED_FUNCS:
+            return False
+        if node.keywords:
+            return False
+        return all(_validate_formula_node(a, allowed_names) for a in node.args)
+    return False
+
+
+def _compile_formula(expr: str, allowed_names: set[str]) -> ast.Expression | None:
+    """Ifadeyi parse eder, whitelist'ten geçerse derlenmis ast.Expression
+    doner; aksi halde None (bozuk/kotu niyetli ifade)."""
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError:
+        return None
+    if not _validate_formula_node(tree, allowed_names):
+        return None
+    return tree
+
+
+def _eval_formula_ast(node: ast.AST, scope: dict[str, float]) -> float | None:
+    """Whitelist'ten gecmis bir AST'yi scope ile evaluate eder. Sayisal
+    domain disinda kalan herhangi bir durumda (None deger, division by zero
+    vb.) None doner — kural sessizce atlanir."""
+    if isinstance(node, ast.Expression):
+        return _eval_formula_ast(node.body, scope)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float)):
+            return float(node.value)
+        return None
+    if isinstance(node, ast.Num):  # py<3.12 backward
+        return float(node.n)
+    if isinstance(node, ast.Name):
+        v = scope.get(node.id)
+        if v is None:
+            return None
+        return float(v)
+    if isinstance(node, ast.BinOp):
+        left = _eval_formula_ast(node.left, scope)
+        right = _eval_formula_ast(node.right, scope)
+        if left is None or right is None:
+            return None
+        try:
+            if isinstance(node.op, ast.Add):
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.Div):
+                if right == 0:
+                    return None
+                return left / right
+            if isinstance(node.op, ast.FloorDiv):
+                if right == 0:
+                    return None
+                return left // right
+            if isinstance(node.op, ast.Mod):
+                if right == 0:
+                    return None
+                return left % right
+            if isinstance(node.op, ast.Pow):
+                # Ust sinir: kotu niyetli '2 ** 999999' karsi.
+                if abs(right) > 32:
+                    return None
+                return left ** right
+        except (ValueError, OverflowError, ZeroDivisionError):
+            return None
+        return None
+    if isinstance(node, ast.UnaryOp):
+        v = _eval_formula_ast(node.operand, scope)
+        if v is None:
+            return None
+        if isinstance(node.op, ast.UAdd):
+            return +v
+        if isinstance(node.op, ast.USub):
+            return -v
+        return None
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        args: list[float] = []
+        for a in node.args:
+            v = _eval_formula_ast(a, scope)
+            if v is None:
+                return None
+            args.append(v)
+        if not args:
+            return None
+        if node.func.id == "min":
+            return min(args)
+        if node.func.id == "max":
+            return max(args)
+        if node.func.id == "abs":
+            return abs(args[0])
+    return None
+
+
 def evaluate_composite(
     rule: AlarmRule,
     *,
@@ -368,6 +553,25 @@ def evaluate_composite(
                 term.agg_window_sec,
                 term.agg_arg,
             )
+        elif term.kind == "formula":
+            if not term.formula_expr or not term.formula_vars:
+                return None
+            # Tum degiskenler icin canli deger topla; biri eksikse atla.
+            scope: dict[str, float] = {}
+            missing = False
+            for fv in term.formula_vars:
+                fv_dev = anchor_device_code if fv.device_code == "*" else fv.device_code
+                fv_val = live_value(fv.signal_key, fv_dev)
+                if fv_val is None:
+                    missing = True
+                    break
+                scope[fv.name] = float(fv_val)
+            if missing:
+                return None
+            tree = _compile_formula(term.formula_expr, set(scope.keys()))
+            if tree is None:
+                return None
+            v = _eval_formula_ast(tree, scope)
         else:
             v = live_value(term.signal_key, dev)
         if v is None:

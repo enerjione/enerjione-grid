@@ -520,10 +520,19 @@ export type AlarmAggFn =
   | "count_above"
   | "count_below";
 
-/** Composite kuraldaki tek bir terim. kind='compare' (Faz 1, varsayilan)
- *  veya kind='agg' (Faz 2: son N saniyenin penceresi). */
+/** Formul ifadesindeki bir degisken (Faz 3). */
+export type AlarmFormulaVar = {
+  name: string;
+  signal_key: string;
+  device_code: string;
+};
+
+/** Composite kuraldaki tek bir terim.
+ *   kind='compare' : Faz 1 — anlik sinyal degeri.
+ *   kind='agg'     : Faz 2 — son N saniyenin penceresi.
+ *   kind='formula' : Faz 3 — guvenli aritmetik ifade (degiskenler sinyaller). */
 export type AlarmCompositeTerm = {
-  kind?: "compare" | "agg";
+  kind?: "compare" | "agg" | "formula";
   signal_key: string;
   /** "*" => kuralin anchor cihazi. Spesifik cihaz kodu da yazilabilir. */
   device_code: string;
@@ -535,6 +544,9 @@ export type AlarmCompositeTerm = {
   agg_window_sec?: number;
   /** count_above / count_below icin sayilacak deger. */
   agg_arg?: number;
+  /** kind === 'formula' icin ifade ve degiskenler. */
+  formula_expr?: string | null;
+  formula_vars?: AlarmFormulaVar[];
 };
 
 /** Composite kural ifadesi. */

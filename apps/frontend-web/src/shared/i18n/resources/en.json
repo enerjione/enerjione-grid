@@ -1012,7 +1012,12 @@
       "errors": {
         "pickSignal": "Pick a signal.",
         "addAtLeastOneTerm": "Add at least one term in advanced mode.",
-        "termMissingSignal": "Select a signal for term #{{idx}}."
+        "termMissingSignal": "Select a signal for term #{{idx}}.",
+        "formulaEmpty": "Formula for term #{{idx}} cannot be empty.",
+        "formulaNoVars": "Add at least one variable for term #{{idx}}.",
+        "formulaBadName": "Term #{{idx}}: variable names must start with a letter and contain only letters, digits, underscore.",
+        "formulaDupName": "Term #{{idx}}: variable names must be unique.",
+        "formulaVarNoSignal": "Term #{{idx}}: pick a signal for every variable."
       },
       "composite": {
         "logicLabel": "Combine",
@@ -1029,6 +1034,16 @@
         "kindCompareHint": "Compares against the latest live value.",
         "kindAgg": "Window",
         "kindAggHint": "Average / min / max / count over the last N seconds.",
+        "kindFormula": "Formula",
+        "kindFormulaHint": "Arithmetic expression with signals as variables.",
+        "formulaExpr": "Formula",
+        "formulaExprPlaceholder": "e.g. (I_a + I_b + I_c) / 3",
+        "formulaAllowed": "Allowed: +, −, ×, ÷, %, **, parentheses, min/max/abs and variables defined below.",
+        "formulaVars": "Variables",
+        "formulaVarName": "Variable name",
+        "formulaVarAdd": "Add Variable",
+        "formulaVarRemove": "Remove variable",
+        "formulaResultHint": "Term #{{idx}}: formula result is compared with the chosen comparator.",
         "aggFn": "Aggregate",
         "aggAvg": "Average (avg)",
         "aggMin": "Minimum (min)",

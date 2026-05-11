@@ -12503,6 +12503,73 @@ main.content.engineering-content:has(.device-management-panel) {
   border: 1px solid #e2e8f0;
   border-radius: 7px;
 }
+
+/* Formul editoru (Faz 3) */
+.rule-formula-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px dashed #c7d2fe;
+  border-radius: 8px;
+}
+.rule-formula-expr input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+.rule-formula-help {
+  margin: 0;
+  font-size: 11px;
+  color: #6366f1;
+}
+.rule-formula-vars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rule-formula-vars-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #475569;
+}
+.rule-formula-vars-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rule-formula-var {
+  display: grid;
+  grid-template-columns: 80px 1fr 100px auto;
+  gap: 6px;
+  align-items: end;
+}
+.rule-formula-var-name input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-weight: 600;
+  color: #4338ca;
+}
+.rule-formula-var-rm {
+  align-self: end;
+  margin-bottom: 2px;
+}
+.rule-formula-var-add {
+  align-self: flex-start;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .rule-formula-var {
+    grid-template-columns: 1fr 1fr;
+  }
+}
 .rule-composite-term-hint {
   margin-top: 4px;
   font-style: italic;
