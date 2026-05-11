@@ -76,15 +76,32 @@ def _send_email_notifications(settings_row: NotificationSettings, users: list[Us
 
 
 def _send_sms_notifications(settings_row: NotificationSettings, users: list[User], body: str) -> None:
-    if settings_row.sms_provider == "mock":
+    provider = (settings_row.sms_provider or "mock").strip().lower()
+    if provider == "mock":
         return
-    if not settings_row.sms_api_url or not settings_row.sms_api_key:
-        return
-
     recipients = [user.phone_number for user in users if user.phone_number]
     if not recipients:
         return
 
+    if provider == "twilio":
+        # Twilio API tek alici kabul eder — her recipient icin ayri POST.
+        # send_sms_test fonksiyonu tek mesaj icin tum logigi tasidigi icin
+        # onu yeniden cagirip recipient basina dongu yapariz; hata tek
+        # numarayi kessin, digerleri devam etsin (best effort).
+        from app.services.notification_test_service import _send_sms_via_twilio
+        for phone in recipients:
+            try:
+                _send_sms_via_twilio(settings_row, recipient_phone=phone, message=body)
+            except Exception:  # noqa: BLE001
+                import logging as _logging
+                _logging.getLogger(__name__).exception(
+                    "twilio_sms_failed phone=%s", phone
+                )
+        return
+
+    # Generic JSON-POST (netgsm vb)
+    if not settings_row.sms_api_url or not settings_row.sms_api_key:
+        return
     payload = json.dumps(
         {
             "api_key": settings_row.sms_api_key,

@@ -27,6 +27,8 @@ const EMPTY_SETTINGS: NotificationSettings = {
   sms_provider: "mock",
   sms_api_url: "",
   sms_api_key: "",
+  sms_account_sid: "",
+  sms_from_number: "",
   telegram_enabled: false,
   telegram_bot_token: "",
   telegram_chat_ids: ""
@@ -348,35 +350,86 @@ export function NotificationSettingsPanel({
               <div className="notif-field-grid">
                 <label className="notif-field notif-field--full">
                   <span>{t("notifications.settings.fields.smsProvider")}</span>
-                  <input
-                    value={form.sms_provider}
+                  <select
+                    value={(form.sms_provider || "mock").toLowerCase()}
                     onChange={(event) =>
                       setForm((prev) => ({ ...prev, sms_provider: event.target.value }))
                     }
-                    placeholder={t("notifications.settings.fields.smsProviderPlaceholder")}
-                  />
+                  >
+                    <option value="mock">{t("notifications.settings.fields.smsProviderMock")}</option>
+                    <option value="twilio">{t("notifications.settings.fields.smsProviderTwilio")}</option>
+                    <option value="netgsm">{t("notifications.settings.fields.smsProviderNetgsm")}</option>
+                    <option value="generic">{t("notifications.settings.fields.smsProviderGeneric")}</option>
+                  </select>
                 </label>
-                <label className="notif-field notif-field--full">
-                  <span>{t("notifications.settings.fields.smsApiUrl")}</span>
-                  <input
-                    value={form.sms_api_url}
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, sms_api_url: event.target.value }))
-                    }
-                    placeholder={t("notifications.settings.fields.smsApiUrlPlaceholder")}
-                  />
-                </label>
-                <label className="notif-field notif-field--full">
-                  <span>{t("notifications.settings.fields.smsApiKey")}</span>
-                  <input
-                    type="password"
-                    value={form.sms_api_key}
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, sms_api_key: event.target.value }))
-                    }
-                    autoComplete="new-password"
-                  />
-                </label>
+                {(form.sms_provider || "").toLowerCase() === "twilio" ? (
+                  <>
+                    <label className="notif-field notif-field--full">
+                      <span>{t("notifications.settings.fields.twilioAccountSid")}</span>
+                      <input
+                        value={form.sms_account_sid ?? ""}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, sms_account_sid: event.target.value }))
+                        }
+                        placeholder={t("notifications.settings.fields.twilioAccountSidPlaceholder")}
+                        spellCheck={false}
+                      />
+                    </label>
+                    <label className="notif-field notif-field--full">
+                      <span>{t("notifications.settings.fields.twilioAuthToken")}</span>
+                      <input
+                        type="password"
+                        value={form.sms_api_key}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, sms_api_key: event.target.value }))
+                        }
+                        placeholder={t("notifications.settings.fields.twilioAuthTokenPlaceholder")}
+                        autoComplete="new-password"
+                      />
+                    </label>
+                    <label className="notif-field notif-field--full">
+                      <span>{t("notifications.settings.fields.twilioFromNumber")}</span>
+                      <input
+                        value={form.sms_from_number ?? ""}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, sms_from_number: event.target.value }))
+                        }
+                        placeholder={t("notifications.settings.fields.twilioFromNumberPlaceholder")}
+                      />
+                    </label>
+                    <p className="helper-text notif-field--full">
+                      {t("notifications.settings.fields.twilioHint")}
+                    </p>
+                  </>
+                ) : (form.sms_provider || "").toLowerCase() !== "mock" ? (
+                  <>
+                    <label className="notif-field notif-field--full">
+                      <span>{t("notifications.settings.fields.smsApiUrl")}</span>
+                      <input
+                        value={form.sms_api_url}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, sms_api_url: event.target.value }))
+                        }
+                        placeholder={t("notifications.settings.fields.smsApiUrlPlaceholder")}
+                      />
+                    </label>
+                    <label className="notif-field notif-field--full">
+                      <span>{t("notifications.settings.fields.smsApiKey")}</span>
+                      <input
+                        type="password"
+                        value={form.sms_api_key}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, sms_api_key: event.target.value }))
+                        }
+                        autoComplete="new-password"
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <p className="helper-text notif-field--full">
+                    {t("notifications.settings.fields.smsProviderMockHint")}
+                  </p>
+                )}
               </div>
             </div>
             <div className="notification-card-test">

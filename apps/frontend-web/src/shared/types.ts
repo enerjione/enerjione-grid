@@ -287,6 +287,33 @@ export type Iec104RuntimeStatus = {
   connected_clients: { peer: string; started: boolean; connected_at: string }[];
 };
 
+// ===== Public API — Personal Access Token (PAT) =====
+// Kullanici Postman/curl/script ile dis erisim icin token uretir. Token plain
+// hali yalniz olusturma cevabinda bir kez doner; sonra DB'de sha256 hash kalir.
+
+export type ApiKey = {
+  id: number;
+  name: string;
+  token_prefix: string;
+  scopes: string[];
+  created_at: string;
+  expires_at?: string | null;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+  allowed_ips?: string[] | null;
+  is_active: boolean;
+};
+
+/** /api-keys POST yaniti — ApiKey alanlari + plain token (bir kerelik). */
+export type ApiKeyCreated = ApiKey & { token: string };
+
+export type ApiKeyCreatePayload = {
+  name: string;
+  scopes?: string[];
+  expires_at?: string | null;
+  allowed_ips?: string[] | null;
+};
+
 // ===== Sebeke topolojisi =====
 
 export type Region = {
@@ -379,6 +406,9 @@ export type NotificationSettings = {
   sms_provider: string;
   sms_api_url: string;
   sms_api_key: string;
+  /** Twilio'ya ozel — Account SID (AC...) ve gonderen numara (E.164). */
+  sms_account_sid?: string;
+  sms_from_number?: string;
   /** Telegram Bot ile bildirim gondermek icin. */
   telegram_enabled?: boolean;
   telegram_bot_token?: string;

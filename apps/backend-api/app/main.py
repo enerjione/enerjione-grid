@@ -4,17 +4,44 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select as _select, text
 
-from app.api import alarm_rules, alarms, auth, backups, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, responsibility_areas, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.models import alarm, alarm_rule, backup as backup_model, device, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
+from app.models import alarm, alarm_rule, api_key as api_key_model, backup as backup_model, device, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
 from app.services import alarm_reconciliation, backup_scheduler, telemetry_consumer, telemetry_retention
 
-app = FastAPI(title=settings.app_name)
+app = FastAPI(
+    title=settings.app_name,
+    description=(
+        "Horstmann Smart Logger backend. Web/mobile için JWT, dış sistemler için "
+        "**API Key (Personal Access Token)** desteği var.\n\n"
+        "**Public API:** `/api/v1/public/*` altında, `Authorization: Bearer hsl_pat_<token>` "
+        "ile çağrılır. Token yönetimi için `/api/v1/api-keys` endpoint'lerine bakın.\n\n"
+        "Detaylı rehber: [API Reference (GitBook)](https://hsl-docs.formelektrik.com/api/)."
+    ),
+    openapi_tags=[
+        {"name": "auth", "description": "Kullanıcı oturumu (JWT)."},
+        {"name": "api-keys", "description": "Kullanıcının Personal Access Token (PAT) yönetimi."},
+        {
+            "name": "public-api",
+            "description": (
+                "Dış sistemler için read-only REST endpoint'leri. API Key ile korunur. "
+                "Path: `/api/v1/public/*`."
+            ),
+        },
+        {"name": "devices", "description": "Cihaz yönetimi (web UI)."},
+        {"name": "signals", "description": "Sinyal kataloğu yönetimi (web UI)."},
+        {"name": "alarms", "description": "Alarm event ve yorumlar."},
+        {"name": "alarm-rules", "description": "Alarm kuralları."},
+        {"name": "outbound-targets", "description": "Outbound hedef (REST/MQTT/IEC104)."},
+        {"name": "gateways", "description": "Gateway yönetimi."},
+        {"name": "internal", "description": "Servis-token korumalı internal endpoint'ler."},
+    ],
+)
 
 _cors_origins = settings.cors_origin_list
 if "*" in _cors_origins:
@@ -57,6 +84,11 @@ app.include_router(system_status.router, prefix=settings.api_prefix)
 app.include_router(notifications_api.router, prefix=settings.api_prefix)
 app.include_router(backups.router, prefix=settings.api_prefix)
 app.include_router(system_admin.router, prefix=settings.api_prefix)
+# API Key yonetimi (kullanici kendi PAT'larini olusturup revoke eder).
+app.include_router(api_keys.router, prefix=settings.api_prefix)
+# Public REST API (dis sistemlerin tukettigi, API Key korumali, read-only).
+# Path: /api/v1/public/* — versiyonlama icin ileride /api/v2/public... acilabilir.
+app.include_router(public.router, prefix=settings.api_prefix)
 # WebSocket endpoint: api_prefix altinda /ws/live-values
 app.include_router(ws_live.router, prefix=settings.api_prefix)
 
@@ -216,6 +248,13 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS telegram_chat_ids VARCHAR(2000) NOT NULL DEFAULT ''")
         )
+        # Twilio destegi — Account SID + From Number.
+        connection.execute(
+            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_account_sid VARCHAR(120) NOT NULL DEFAULT ''")
+        )
+        connection.execute(
+            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_from_number VARCHAR(40) NOT NULL DEFAULT ''")
+        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS outbound_targets ("
@@ -297,6 +336,29 @@ def create_tables():
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_processed_message_consumer_msg "
                 "ON processed_messages (consumer_name, message_id)"
             )
+        )
+        # API Key (PAT) tablosu: kullanici-bazli, scope'lu, revoke edilebilir
+        # token'lar. Token'in plain hali sadece olusturulurken gosterilir;
+        # DB'de sha256 hash saklanir.
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS api_keys ("
+                "id SERIAL PRIMARY KEY, "
+                "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+                "name VARCHAR(120) NOT NULL, "
+                "token_hash VARCHAR(64) UNIQUE NOT NULL, "
+                "token_prefix VARCHAR(20) NOT NULL, "
+                "scopes VARCHAR(500) NOT NULL DEFAULT '', "
+                "created_at TIMESTAMPTZ NOT NULL, "
+                "expires_at TIMESTAMPTZ, "
+                "last_used_at TIMESTAMPTZ, "
+                "revoked_at TIMESTAMPTZ, "
+                "allowed_ips VARCHAR(500), "
+                "is_active BOOLEAN NOT NULL DEFAULT TRUE)"
+            )
+        )
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)")
         )
         connection.execute(
             text(

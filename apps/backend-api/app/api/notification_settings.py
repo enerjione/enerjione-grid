@@ -49,6 +49,8 @@ def update_notification_settings(
     settings_row.sms_provider = payload.sms_provider
     settings_row.sms_api_url = payload.sms_api_url
     settings_row.sms_api_key = payload.sms_api_key
+    settings_row.sms_account_sid = payload.sms_account_sid
+    settings_row.sms_from_number = payload.sms_from_number
     settings_row.telegram_enabled = payload.telegram_enabled
     settings_row.telegram_bot_token = payload.telegram_bot_token
     settings_row.telegram_chat_ids = payload.telegram_chat_ids

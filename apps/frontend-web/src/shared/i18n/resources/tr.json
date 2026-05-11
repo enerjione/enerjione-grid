@@ -645,7 +645,8 @@
       "responsibilityAreas": "Ekip Yönetimi",
       "signals": "Sinyaller",
       "alarmRules": "Alarm Yönetimi",
-      "outboundTargets": "Outbound",
+      "outboundTargets": "Webhook & Outbound",
+      "apiAccess": "API Erişimi",
       "notificationSettings": "Bildirim Ayarları",
       "projectSettings": "Proje Ayarları",
       "grid": "Hat Yönetimi",
@@ -1119,10 +1120,20 @@
       }
     },
     "outbound": {
-      "title": "Outbound Hedefleri",
+      "title": "Webhook & Outbound Hedefleri",
       "newTarget": "Hedef Ekle",
       "newTargetModal": "Yeni Outbound Hedef",
       "editTargetModal": "Hedef Düzenle",
+      "proto": {
+        "rest": "Webhook (REST)",
+        "mqtt": "MQTT",
+        "iec104": "IEC 60870-5-104"
+      },
+      "webhook": {
+        "hintToggle": "Sizin tarafınızda ne göreceksiniz?",
+        "payloadTitle": "Örnek payload (sistemden size gelir):",
+        "receiverTitle": "Örnek alıcı (Python FastAPI):"
+      },
       "form": {
         "name": "Hedef Adı",
         "protocol": "Protokol",
@@ -1321,6 +1332,79 @@
       "itemLabel": "sinyal"
     }
   },
+  "apiAccess": {
+    "title": "API Erişimi (Personal Access Token)",
+    "intro": "Dış sistemler için Postman, curl veya kendi yazılımınızdan kullanılacak token oluşturup yönetin. Her token belirli scope'lara sahiptir ve istediğinizde iptal edilebilir.",
+    "newToken": "Yeni Token",
+    "empty": "Henüz token oluşturulmamış. Yukarıdan yeni bir tane ekleyin.",
+    "showExamples": "Örnekler",
+    "hideExamples": "Örnekleri Gizle",
+    "disable": "Devre Dışı",
+    "enable": "Etkinleştir",
+    "revoke": "İptal Et",
+    "confirmRevoke": "'{{name}}' token'ı kalıcı olarak iptal edilecek. Devam edilsin mi?",
+    "cols": {
+      "name": "İsim",
+      "tokenPrefix": "Token",
+      "scopes": "Yetkiler",
+      "created": "Oluşturuldu",
+      "expires": "Bitiş",
+      "lastUsed": "Son kullanım",
+      "status": "Durum",
+      "actions": "İşlemler"
+    },
+    "status": {
+      "active": "Aktif",
+      "disabled": "Devre dışı",
+      "expired": "Süresi doldu",
+      "revoked": "İptal edildi"
+    },
+    "errors": {
+      "scopeRequired": "En az bir scope seçilmeli."
+    },
+    "modal": {
+      "title": "Yeni API Token Oluştur",
+      "create": "Oluştur",
+      "creating": "Oluşturuluyor..."
+    },
+    "fields": {
+      "name": "Token İsmi",
+      "namePlaceholder": "Postman dev, Müşteri X entegrasyonu...",
+      "scopes": "Yetkiler (scope'lar)",
+      "scopesHint": "Token sadece seçtiğiniz scope'lardaki endpoint'lere erişebilir. En az ayrıcalık prensibi: ihtiyacınız olmayanı seçmeyin.",
+      "expiresAt": "Bitiş Tarihi (opsiyonel)",
+      "expiresHint": "Boş bırakırsanız süresiz. Üretim için 90 gün önerilir.",
+      "allowedIps": "İzinli IP'ler (opsiyonel)",
+      "allowedIpsHint": "Virgülle ayrılmış IP listesi. Boş = her yerden erişilebilir."
+    },
+    "created": {
+      "title": "Token Oluşturuldu",
+      "oneTimeWarning": "Bu token sadece BURADA gösterilecek. Lütfen şimdi kopyalayıp güvenli bir yere kaydedin; daha sonra geri çağrılamaz.",
+      "copy": "Kopyala",
+      "copied": "Kopyalandı",
+      "firstCall": "İlk çağrı için hazır örnekler:",
+      "closeWithoutCopy": "Token'ı kopyalamadan kapatıyorsunuz. Emin misiniz?"
+    },
+    "examples": {
+      "placeholderHint": "Tokeni shell değişkenine yazın:",
+      "me": {
+        "title": "Token testi",
+        "desc": "Token çalışıyor mu?"
+      },
+      "devices": {
+        "title": "Cihaz listesi",
+        "desc": "Tüm cihazları çek"
+      },
+      "telemetry": {
+        "title": "Anlık telemetri",
+        "desc": "Bir cihazın son tüm sinyal değerleri"
+      },
+      "alarms": {
+        "title": "Açık kritik alarmlar",
+        "desc": "Reset olmamış kritik alarmlar"
+      }
+    }
+  },
   "backups": {
     "title": "Yedekler",
     "manualBackup": "Yeni Yedek Al",
@@ -1487,9 +1571,21 @@
         "smtpTestPlaceholder": "test@firma.com",
         "smsProvider": "SMS Sağlayıcı",
         "smsProviderPlaceholder": "mock / netgsm / twilio",
+        "smsProviderMock": "Mock (sahte — sadece yerel test)",
+        "smsProviderMockHint": "Mock sağlayıcı seçildiğinde gerçek SMS gönderilmez; testler yerel olarak başarılı sayılır.",
+        "smsProviderTwilio": "Twilio",
+        "smsProviderNetgsm": "Netgsm",
+        "smsProviderGeneric": "Diğer (JSON API)",
         "smsApiUrl": "API URL",
         "smsApiUrlPlaceholder": "https://api.netgsm.com.tr/sms/send",
         "smsApiKey": "API Key",
+        "twilioAccountSid": "Twilio Account SID",
+        "twilioAccountSidPlaceholder": "AC… (Twilio Console > Account Info)",
+        "twilioAuthToken": "Twilio Auth Token",
+        "twilioAuthTokenPlaceholder": "Auth Token (Twilio Console'dan)",
+        "twilioFromNumber": "Gönderen Numara (From)",
+        "twilioFromNumberPlaceholder": "+14057769058",
+        "twilioHint": "Account SID ve Auth Token'ı Twilio Console > Account Info'dan alabilirsiniz. Numara E.164 formatında olmalıdır (+ ülke kodu ile başlamalı). Twilio her başarılı gönderim için kontör düşer.",
         "smsTestPlaceholder": "+90 5xx xxx xx xx",
         "telegramBotToken": "Bot Token",
         "telegramBotTokenHint": "Token @BotFather'dan alınır. Boş bırakılırsa Telegram bildirimi devre dışıdır.",

@@ -645,7 +645,8 @@
       "responsibilityAreas": "Team Management",
       "signals": "Signals",
       "alarmRules": "Alarm Rules",
-      "outboundTargets": "Outbound",
+      "outboundTargets": "Webhooks & Outbound",
+      "apiAccess": "API Access",
       "notificationSettings": "Notification Settings",
       "projectSettings": "Project Settings",
       "grid": "Line Management",
@@ -1119,10 +1120,20 @@
       }
     },
     "outbound": {
-      "title": "Outbound Targets",
+      "title": "Webhooks & Outbound Targets",
       "newTarget": "Add Target",
       "newTargetModal": "New Outbound Target",
       "editTargetModal": "Edit Target",
+      "proto": {
+        "rest": "Webhook (REST)",
+        "mqtt": "MQTT",
+        "iec104": "IEC 60870-5-104"
+      },
+      "webhook": {
+        "hintToggle": "What will you see on your side?",
+        "payloadTitle": "Sample payload (you will receive):",
+        "receiverTitle": "Sample receiver (Python FastAPI):"
+      },
       "form": {
         "name": "Target Name",
         "protocol": "Protocol",
@@ -1321,6 +1332,79 @@
       "itemLabel": "signal"
     }
   },
+  "apiAccess": {
+    "title": "API Access (Personal Access Tokens)",
+    "intro": "Create and manage tokens for external systems (Postman, curl, your own code). Each token has specific scopes and can be revoked anytime.",
+    "newToken": "New Token",
+    "empty": "No tokens yet. Create one above.",
+    "showExamples": "Examples",
+    "hideExamples": "Hide Examples",
+    "disable": "Disable",
+    "enable": "Enable",
+    "revoke": "Revoke",
+    "confirmRevoke": "Token '{{name}}' will be permanently revoked. Continue?",
+    "cols": {
+      "name": "Name",
+      "tokenPrefix": "Token",
+      "scopes": "Scopes",
+      "created": "Created",
+      "expires": "Expires",
+      "lastUsed": "Last used",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "errors": {
+      "scopeRequired": "Select at least one scope."
+    },
+    "modal": {
+      "title": "Create New API Token",
+      "create": "Create",
+      "creating": "Creating..."
+    },
+    "fields": {
+      "name": "Token Name",
+      "namePlaceholder": "Postman dev, Customer X integration...",
+      "scopes": "Scopes (permissions)",
+      "scopesHint": "Token will only access endpoints matching the selected scopes. Least-privilege principle: don't pick scopes you don't need.",
+      "expiresAt": "Expiry (optional)",
+      "expiresHint": "Empty = no expiry. 90 days recommended for production.",
+      "allowedIps": "Allowed IPs (optional)",
+      "allowedIpsHint": "Comma-separated IP list. Empty = accessible from anywhere."
+    },
+    "created": {
+      "title": "Token Created",
+      "oneTimeWarning": "This token is shown only HERE, once. Copy it now and store it securely; it cannot be retrieved later.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "firstCall": "Ready-to-use examples for your first call:",
+      "closeWithoutCopy": "You are closing without copying the token. Are you sure?"
+    },
+    "examples": {
+      "placeholderHint": "Export the token to a shell variable:",
+      "me": {
+        "title": "Token test",
+        "desc": "Is the token working?"
+      },
+      "devices": {
+        "title": "Device list",
+        "desc": "Fetch all devices"
+      },
+      "telemetry": {
+        "title": "Live telemetry",
+        "desc": "Latest values for a device"
+      },
+      "alarms": {
+        "title": "Open critical alarms",
+        "desc": "Critical alarms not yet reset"
+      }
+    }
+  },
   "backups": {
     "title": "Backups",
     "manualBackup": "New Backup",
@@ -1487,9 +1571,21 @@
         "smtpTestPlaceholder": "test@company.com",
         "smsProvider": "SMS Provider",
         "smsProviderPlaceholder": "mock / netgsm / twilio",
+        "smsProviderMock": "Mock (no real SMS — local test only)",
+        "smsProviderMockHint": "When Mock is selected no real SMS is sent; tests are reported as success locally.",
+        "smsProviderTwilio": "Twilio",
+        "smsProviderNetgsm": "Netgsm",
+        "smsProviderGeneric": "Other (JSON API)",
         "smsApiUrl": "API URL",
         "smsApiUrlPlaceholder": "https://api.netgsm.com.tr/sms/send",
         "smsApiKey": "API Key",
+        "twilioAccountSid": "Twilio Account SID",
+        "twilioAccountSidPlaceholder": "AC… (Twilio Console > Account Info)",
+        "twilioAuthToken": "Twilio Auth Token",
+        "twilioAuthTokenPlaceholder": "Auth Token (from Twilio Console)",
+        "twilioFromNumber": "Sender Number (From)",
+        "twilioFromNumberPlaceholder": "+14057769058",
+        "twilioHint": "Account SID and Auth Token are available at Twilio Console > Account Info. The number must be in E.164 format (must start with + and country code). Twilio charges credits for each successful send.",
         "smsTestPlaceholder": "+90 5xx xxx xx xx",
         "telegramBotToken": "Bot Token",
         "telegramBotTokenHint": "Get the token from @BotFather. Leaving empty disables Telegram notifications.",

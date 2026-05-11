@@ -15,9 +15,17 @@ class NotificationSettings(Base):
     smtp_password: Mapped[str] = mapped_column(String(255), default="")
     smtp_from_email: Mapped[str] = mapped_column(String(255), default="")
     sms_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 'mock' | 'netgsm' | 'twilio' | 'generic' — UI'da seclir.
     sms_provider: Mapped[str] = mapped_column(String(80), default="mock")
+    # Generic JSON-POST sagayicilar (eski 'netgsm/jsonpost' davranisi) icin
+    # endpoint URL; Twilio'da kullanilmaz (URL Twilio API'sinden hesaplanir).
     sms_api_url: Mapped[str] = mapped_column(String(500), default="")
+    # Generic sagayicilarda API key; Twilio'da Auth Token olarak kullanilir.
     sms_api_key: Mapped[str] = mapped_column(String(255), default="")
+    # Twilio'ya ozel: Account SID (AC.. ile baslayan) ve gonderen numara
+    # (E.164 formatinda, orn. +14057769058). Diger sagayicilarda bos kalir.
+    sms_account_sid: Mapped[str] = mapped_column(String(120), default="")
+    sms_from_number: Mapped[str] = mapped_column(String(40), default="")
     # Telegram Bot API. Kanal/grup chat_id'leri virgulle ayrilmis liste.
     # Bot tokeni @BotFather'dan alinir; chat_id'ler @userinfobot veya
     # bot'un /getUpdates endpoint'inden ogrenilir.

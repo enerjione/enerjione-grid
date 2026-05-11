@@ -1,6 +1,9 @@
+import base64
 import json
 import smtplib
 import ssl
+import urllib.error
+import urllib.parse
 import urllib.request
 from email.message import EmailMessage
 
@@ -122,13 +125,28 @@ def send_sms_test(
     recipient_phone: str,
     message: str,
 ) -> None:
-    if settings_row.sms_provider == "mock":
+    """SMS test gonderir. Provider'a gore farkli akis kullanir:
+
+    - 'mock'    : hicbir sey yapma (lokal test akisi).
+    - 'twilio'  : Twilio Programmable Messaging REST API. HTTPS form-encoded
+                  POST + HTTP Basic Auth (Account SID : Auth Token).
+                  URL Twilio API'sinden hesaplanir (sms_api_url kullanilmaz).
+    - 'netgsm'/'generic' veya digerleri: eski JSON-POST davranisi —
+                  sms_api_url'e JSON body gonder (api_key + to + message).
+    """
+    provider = (settings_row.sms_provider or "mock").strip().lower()
+    if provider == "mock":
         return
+
+    if provider == "twilio":
+        _send_sms_via_twilio(settings_row, recipient_phone=recipient_phone, message=message)
+        return
+
+    # Generic JSON-POST (netgsm, vb)
     if not settings_row.sms_api_url:
         raise ValueError("SMS API URL boş.")
     if not settings_row.sms_api_key:
         raise ValueError("SMS API Key boş.")
-
     payload = json.dumps(
         {
             "api_key": settings_row.sms_api_key,
@@ -144,3 +162,70 @@ def send_sms_test(
     )
     with urllib.request.urlopen(req, timeout=12):
         pass
+
+
+def _send_sms_via_twilio(
+    settings_row: NotificationSettings,
+    *,
+    recipient_phone: str,
+    message: str,
+) -> None:
+    """Twilio Programmable Messaging REST API uzerinden tek SMS gonderir.
+
+    Curl esdegeri:
+      curl 'https://api.twilio.com/2010-04-01/Accounts/<AccountSID>/Messages.json' -X POST \\
+        --data-urlencode 'To=+905050809924' \\
+        --data-urlencode 'From=+14057769058' \\
+        --data-urlencode 'Body=test' \\
+        -u <AccountSID>:<AuthToken>
+
+    sms_account_sid = Account SID (AC...)
+    sms_api_key     = Auth Token
+    sms_from_number = Sender (E.164, orn. +14057769058)
+    """
+    account_sid = (settings_row.sms_account_sid or "").strip()
+    auth_token = (settings_row.sms_api_key or "").strip()
+    from_number = (settings_row.sms_from_number or "").strip()
+    if not account_sid:
+        raise ValueError("Twilio Account SID boş.")
+    if not auth_token:
+        raise ValueError("Twilio Auth Token boş.")
+    if not from_number:
+        raise ValueError("Twilio gönderen numarası (From) boş.")
+    if not recipient_phone:
+        raise ValueError("Alıcı numarası boş.")
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{urllib.parse.quote(account_sid, safe='')}/Messages.json"
+    body = urllib.parse.urlencode(
+        {
+            "To": recipient_phone,
+            "From": from_number,
+            "Body": message or "",
+        }
+    ).encode("utf-8")
+    basic = base64.b64encode(f"{account_sid}:{auth_token}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {basic}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            # Twilio basarili gonderimde 201 doner. 200/202 de kabul edilir.
+            if resp.status not in (200, 201, 202):
+                raise RuntimeError(f"Twilio HTTP {resp.status}")
+    except urllib.error.HTTPError as exc:
+        # Twilio hata gövdesinde JSON {code, message, more_info} doner —
+        # kullaniciya anlamli hata mesaji yansit.
+        try:
+            err_body = exc.read().decode("utf-8", errors="replace")
+            err_json = json.loads(err_body)
+            msg = err_json.get("message") or err_body
+            code = err_json.get("code")
+            raise RuntimeError(f"Twilio API hatası ({code}): {msg}") from exc
+        except (ValueError, json.JSONDecodeError):
+            raise RuntimeError(f"Twilio HTTP {exc.code}") from exc
