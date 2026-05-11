@@ -1213,6 +1213,8 @@
       "filter": {
         "device": "Cihaza göre filtrele",
         "allDevices": "Tüm cihazlar",
+        "deviceSearchPlaceholder": "Cihaz ara: ad veya kod...",
+        "deviceSearchEmpty": "Eşleşen cihaz yok",
         "source": "Kaynağa göre filtrele (Master / Satellite)",
         "allSources": "Tüm kaynaklar",
         "quality": "Kaliteye göre filtrele",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TablePagination } from "../../components/TablePagination";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import type {
   DeviceRow,
   Gateway,
@@ -312,19 +313,21 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           onChange={(event) => setSearch(event.target.value)}
         />
         <div className="live-filter-group">
-          <select
-            className="live-filter-select"
+          <SearchableSelect
+            className="live-filter-select live-filter-select--searchable"
             value={deviceFilter}
-            onChange={(event) => setDeviceFilter(event.target.value)}
+            onChange={setDeviceFilter}
+            options={deviceOptions.map((opt) => ({
+              value: opt.code,
+              label: opt.name,
+              secondary: opt.code,
+            }))}
+            allValue="all"
+            allLabel={t("engineering.liveValues.filter.allDevices")}
             title={t("engineering.liveValues.filter.device")}
-          >
-            <option value="all">{t("engineering.liveValues.filter.allDevices")}</option>
-            {deviceOptions.map((opt) => (
-              <option key={opt.code} value={opt.code}>
-                {opt.name} · {opt.code}
-              </option>
-            ))}
-          </select>
+            searchPlaceholder={t("engineering.liveValues.filter.deviceSearchPlaceholder")}
+            emptyText={t("engineering.liveValues.filter.deviceSearchEmpty")}
+          />
           <select
             className="live-filter-select"
             value={sourceFilter}

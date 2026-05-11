@@ -14517,6 +14517,130 @@ main.content.engineering-content:has(.device-management-panel) {
   font-weight: 600;
 }
 
+/* Aranabilir combobox — 600+ secenekli filtreler icin native <select>
+   yerine. Trigger gorunumu native filtre alanlariyla ayni kalir; popover
+   trigger'in altinda yuzer. */
+.searchable-select {
+  position: relative;
+  display: inline-block;
+}
+.searchable-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.searchable-select-trigger:hover {
+  border-color: #cbd5e1;
+}
+.searchable-select.is-open .searchable-select-trigger {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+.searchable-select-trigger-label {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.searchable-select-trigger-chev {
+  font-size: 18px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+.searchable-select-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+  min-width: 240px;
+}
+.searchable-select-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.searchable-select-search .material-symbols-outlined {
+  font-size: 18px;
+  color: #94a3b8;
+}
+.searchable-select-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: #0f172a;
+}
+.searchable-select-empty {
+  padding: 14px 12px;
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+}
+.searchable-select-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+.searchable-select-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #1e293b;
+}
+.searchable-select-item.is-active {
+  background: #eef2ff;
+}
+.searchable-select-item.is-selected {
+  background: #e0e7ff;
+  color: #4338ca;
+  font-weight: 600;
+}
+.searchable-select-item.is-selected.is-active {
+  background: #c7d2fe;
+}
+.searchable-select-item-label {
+  line-height: 1.2;
+}
+.searchable-select-item-secondary {
+  font-size: 11px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+.searchable-select-item.is-selected .searchable-select-item-secondary {
+  color: #6366f1;
+}
+
+/* LiveValues toolbar uyumlu boyut. */
+.live-values-toolbar .live-filter-select--searchable {
+  min-width: 200px;
+  max-width: 260px;
+}
+
 /* Login formu — "Beni hatırla" checkbox.
  * .login-card label varsayılanı `display: grid` (etiket üstte, input altta);
  * burada checkbox + yazı yan yana olsun diye flex'e zorluyoruz. */

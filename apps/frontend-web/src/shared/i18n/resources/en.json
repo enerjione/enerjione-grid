@@ -1213,6 +1213,8 @@
       "filter": {
         "device": "Filter by device",
         "allDevices": "All devices",
+        "deviceSearchPlaceholder": "Search device: name or code...",
+        "deviceSearchEmpty": "No matching device",
         "source": "Filter by source (Master / Satellite)",
         "allSources": "All sources",
         "quality": "Filter by quality",
