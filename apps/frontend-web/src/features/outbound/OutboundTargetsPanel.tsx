@@ -1026,6 +1026,15 @@ async def hsl_webhook(
     }
   };
 
+  const activeTitle =
+    activeTab === "payload"
+      ? t("engineering.outbound.webhook.payloadTitle")
+      : t("engineering.outbound.webhook.receiverTitle");
+  const activeDesc =
+    activeTab === "payload"
+      ? t("engineering.outbound.webhook.payloadDesc")
+      : t("engineering.outbound.webhook.receiverDesc");
+
   return (
     <div className={`webhook-hint-card ${open ? "is-open" : ""}`}>
       <button
@@ -1047,38 +1056,54 @@ async def hsl_webhook(
       </button>
       {open ? (
         <div className="webhook-hint-card-body">
-          <div className="webhook-hint-tabs">
+          {/* Segmented tab secici */}
+          <div className="webhook-hint-tabs" role="tablist">
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === "payload"}
               className={`webhook-hint-tab ${activeTab === "payload" ? "is-active" : ""}`}
               onClick={() => setActiveTab("payload")}
             >
               <span className="material-symbols-outlined">data_object</span>
-              {t("engineering.outbound.webhook.payloadTitle")}
+              <span>{t("engineering.outbound.webhook.payloadTitle")}</span>
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === "receiver"}
               className={`webhook-hint-tab ${activeTab === "receiver" ? "is-active" : ""}`}
               onClick={() => setActiveTab("receiver")}
             >
               <span className="material-symbols-outlined">code</span>
-              {t("engineering.outbound.webhook.receiverTitle")}
-            </button>
-            <button
-              type="button"
-              className="webhook-hint-copy"
-              onClick={() => void copy()}
-              title={t("common.copy")}
-            >
-              <span className="material-symbols-outlined">
-                {copied ? "check" : "content_copy"}
-              </span>
-              {copied ? t("common.copied") : t("common.copy")}
+              <span>{t("engineering.outbound.webhook.receiverTitle")}</span>
             </button>
           </div>
-          <pre className="webhook-hint-pre">
-            <code>{currentText}</code>
-          </pre>
+
+          {/* Aktif sekmenin aciklamasi + floating copy butonlu kod bloğu */}
+          <div className="webhook-hint-pane">
+            <div className="webhook-hint-pane-head">
+              <div className="webhook-hint-pane-meta">
+                <strong>{activeTitle}</strong>
+                <small>{activeDesc}</small>
+              </div>
+              <button
+                type="button"
+                className={`webhook-hint-copy ${copied ? "is-copied" : ""}`}
+                onClick={() => void copy()}
+                title={t("common.copy")}
+                aria-label={t("common.copy")}
+              >
+                <span className="material-symbols-outlined">
+                  {copied ? "check" : "content_copy"}
+                </span>
+                {copied ? t("common.copied") : t("common.copy")}
+              </button>
+            </div>
+            <pre className="webhook-hint-pre">
+              <code>{currentText}</code>
+            </pre>
+          </div>
         </div>
       ) : null}
     </div>

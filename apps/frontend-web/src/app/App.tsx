@@ -64,6 +64,8 @@ import {
   fetchFaultComments,
   addFaultComment,
   fetchMyNotificationPrefs,
+  fetchUserNotificationPrefs,
+  updateUserNotificationPrefs,
   updateMyNotificationPrefs,
   fetchAlarmRules,
   fetchDeviceModels,
@@ -83,6 +85,7 @@ import {
   fetchMyApiKeys,
   createApiKey,
   revokeApiKey,
+  purgeApiKey,
   setApiKeyActive,
   fetchGridSnapshot,
   type GridSnapshot,
@@ -1265,10 +1268,30 @@ export function App() {
     try {
       const rows = await fetchMyApiKeys(session.accessToken);
       setApiKeys(rows);
+    } catch (err) {
+      // Sessizce yutmak yerine kullaniciya gosterelim — onceden olusturulmus
+      // tokenlar 'gozukmuyor' sikayetini engellemek icin: backend'den gelen
+      // hata mesaji burada loglanir ve toast olarak yansir.
+      console.error("api_keys_fetch_failed", err);
+      toast.error(
+        err instanceof Error ? err.message : t("common.errorOccurred")
+      );
     } finally {
       setApiKeysLoading(false);
     }
   };
+
+  // API Erisimi paneli her acildiginda (veya kullanici degisince) listeyi
+  // otomatik yukle. Onceden olusturulmus tokenlar refresh edilirken kullanici
+  // 'liste bos gozukuyor' sikayeti yasamasin. Tab tiklamasinda da reload var
+  // ama ilk acilis + sayfa F5 senaryolarinda kritik.
+  useEffect(() => {
+    if (!session) return;
+    if (engineeringPage !== "api-access") return;
+    if (session.role !== "installer") return;
+    void reloadApiKeys();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, engineeringPage]);
 
   const handleCreateApiKey = async (payload: {
     name: string;
@@ -1283,6 +1306,11 @@ export function App() {
   const handleRevokeApiKey = async (keyId: number) => {
     if (!session) throw new Error("Oturum yok.");
     await revokeApiKey(session.accessToken, keyId);
+  };
+
+  const handlePurgeApiKey = async (keyId: number) => {
+    if (!session) throw new Error("Oturum yok.");
+    await purgeApiKey(session.accessToken, keyId);
   };
 
   const handleToggleApiKeyActive = async (keyId: number, active: boolean) => {
@@ -1912,6 +1940,12 @@ export function App() {
                 onDelete={handleDeleteUser}
                 onUpdate={handleUpdateUser}
                 onResetPassword={handleResetUserPassword}
+                onFetchUserPrefs={(userId) =>
+                  fetchUserNotificationPrefs(session.accessToken, userId)
+                }
+                onUpdateUserPrefs={(userId, payload) =>
+                  updateUserNotificationPrefs(session.accessToken, userId, payload)
+                }
               />
             ) : null}
             {engineeringPage === "responsibility-areas" &&
@@ -1962,6 +1996,7 @@ export function App() {
                 onRefresh={reloadApiKeys}
                 onCreate={handleCreateApiKey}
                 onRevoke={handleRevokeApiKey}
+                onPurge={handlePurgeApiKey}
                 onToggleActive={handleToggleApiKeyActive}
               />
             ) : null}

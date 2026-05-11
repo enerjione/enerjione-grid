@@ -663,8 +663,23 @@
       "newPasswordRepeat": "New Password (Confirm)",
       "phonePlaceholder": "+90 5xx xxx xx xx",
       "notifPrefs": "Notification Preferences",
+      "notifPrefsHint": "Control which channels deliver alerts to this user. Channels turned off here are never used.",
+      "notifWeb": "Web notifications",
       "notifEmail": "Email notifications",
       "notifSms": "SMS notifications",
+      "notifTelegram": "Telegram notifications",
+      "notifCols": {
+        "web": "Web",
+        "email": "Email",
+        "sms": "SMS",
+        "telegram": "Telegram"
+      },
+      "notifAria": {
+        "web": "Web notifications {{state}}",
+        "email": "Email notifications {{state}}",
+        "sms": "SMS notifications {{state}}",
+        "telegram": "Telegram notifications {{state}}"
+      },
       "cancel": "Cancel",
       "saveBtn": "Save",
       "updateBtn": "Update",
@@ -1346,6 +1361,9 @@
     "enable": "Enable",
     "revoke": "Revoke",
     "confirmRevoke": "Token '{{name}}' will be permanently revoked. Continue?",
+    "purge": "Delete",
+    "purgeTitle": "Permanently remove this revoked token from the list",
+    "confirmPurge": "Token '{{name}}' will be PERMANENTLY removed from the list. This cannot be undone. Continue?",
     "cols": {
       "name": "Name",
       "tokenPrefix": "Token",

@@ -41,6 +41,9 @@ type Props = {
     allowed_ips: string[] | null;
   }) => Promise<ApiKeyCreated>;
   onRevoke: (keyId: number) => Promise<void>;
+  /** Revoke edilmis anahtari listeden tamamen sil. Aktif anahtarlarda
+   *  buton gosterilmez; sadece zaten iptal edilmis kayitlar icin. */
+  onPurge?: (keyId: number) => Promise<void>;
   onToggleActive: (keyId: number, active: boolean) => Promise<void>;
 };
 
@@ -51,6 +54,7 @@ export function ApiAccessPanel({
   onRefresh,
   onCreate,
   onRevoke,
+  onPurge,
   onToggleActive
 }: Props) {
   const { t } = useTranslation();
@@ -123,6 +127,17 @@ export function ApiAccessPanel({
     if (!window.confirm(t("apiAccess.confirmRevoke", { name: k.name }))) return;
     try {
       await onRevoke(k.id);
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+    }
+  };
+
+  const handlePurge = async (k: ApiKey) => {
+    if (!onPurge) return;
+    if (!window.confirm(t("apiAccess.confirmPurge", { name: k.name }))) return;
+    try {
+      await onPurge(k.id);
       await onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorOccurred"));
@@ -266,6 +281,16 @@ export function ApiAccessPanel({
                           onClick={() => void handleRevoke(k)}
                         >
                           {t("apiAccess.revoke")}
+                        </button>
+                      ) : onPurge ? (
+                        <button
+                          type="button"
+                          className="danger-btn action-btn"
+                          onClick={() => void handlePurge(k)}
+                          title={t("apiAccess.purgeTitle")}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: "-3px", marginRight: 4 }}>delete</span>
+                          {t("apiAccess.purge")}
                         </button>
                       ) : null}
                     </td>

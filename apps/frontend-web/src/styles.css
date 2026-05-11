@@ -9677,6 +9677,83 @@ main.content.engineering-content:has(.device-management-panel) {
   color: #b91c1c;
 }
 
+/* Kullanici tablosunda 4 kanal (Web/Email/SMS/Telegram) icin sade dot. */
+.notify-col {
+  text-align: center !important;
+  width: 64px;
+  white-space: nowrap;
+}
+.notif-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+.notif-dot .material-symbols-outlined {
+  font-size: 20px;
+  line-height: 1;
+}
+.notif-dot.is-on {
+  background: #ecfdf5;
+  color: #047857;
+}
+.notif-dot.is-off {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Modal'da 4'lu kanal toggle grup (Web/Email/SMS/Telegram). */
+.notify-group--4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  padding: 12px 14px;
+}
+.notify-group--4 legend {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  padding: 0 6px;
+}
+.notify-group--4 .rule-hint {
+  grid-column: 1 / -1;
+}
+.notify-group--4 .notify-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.notify-group--4 .notify-option:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.notify-group--4 .notify-option:has(input:checked) {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+.notify-group--4 .notify-option input[type="checkbox"] {
+  margin: 0;
+  accent-color: #4f46e5;
+}
+.notify-group--4 .notify-option .material-symbols-outlined {
+  font-size: 18px;
+  color: #475569;
+}
+.notify-group--4 .notify-option:has(input:checked) .material-symbols-outlined {
+  color: #4f46e5;
+}
+@media (max-width: 520px) {
+  .notify-group--4 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .login-page {
   position: relative; /* .login-lang-bar absolute konumunun referansi */
   height: 100vh;
@@ -19765,9 +19842,9 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .api-key-create-modal { width: 92vw; max-width: 640px; }
 .api-key-created-modal {
-  width: 92vw;
-  max-width: 780px;
-  max-height: 90vh;
+  width: 96vw;
+  max-width: 1180px;
+  max-height: 92vh;
   overflow-y: auto;
 }
 
@@ -20259,18 +20336,32 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .curl-block-code {
   margin: 0;
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
   color: #e2e8f0;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.6;
+  /* Yatay scroll yerine satir sonunda kelime kir — uzun tek-satir cURL
+     komutlari dar modalde bile rahatca okunur. Kopya butonu zaten tek
+     tikla tam komutu panoya alir. */
   overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .curl-block-code code {
   background: transparent;
   color: inherit;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Token Olusturuldu modal'inda kod bloklari biraz daha buyuk gosterilsin */
+.api-key-created-modal .curl-block-code {
+  font-size: 13.5px;
+}
+.api-key-created-modal .api-key-token-display code {
+  font-size: 14px;
 }
 
 /* ===== Outbound webhook formu icindeki payload/receiver hint ===== */

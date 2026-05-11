@@ -632,6 +632,37 @@ export async function updateMyNotificationPrefs(
   return (await response.json()) as import("./types").UserNotificationPreferences;
 }
 
+/** Admin: bir kullanicinin bildirim tercihlerini cek (engineer/installer). */
+export async function fetchUserNotificationPrefs(
+  token: string,
+  userId: number
+): Promise<import("./types").UserNotificationPreferences> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}/notification-preferences`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Bildirim tercihleri alınamadı.");
+  return (await response.json()) as import("./types").UserNotificationPreferences;
+}
+
+/** Admin: bir kullanicinin bildirim tercihlerini guncelle. */
+export async function updateUserNotificationPrefs(
+  token: string,
+  userId: number,
+  payload: Partial<Omit<import("./types").UserNotificationPreferences, "user_id">>
+): Promise<import("./types").UserNotificationPreferences> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}/notification-preferences`,
+    {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload)
+    }
+  );
+  if (!response.ok) throw await buildApiError(response, "Bildirim tercihleri güncellenemedi.");
+  return (await response.json()) as import("./types").UserNotificationPreferences;
+}
+
 export async function assignAlarm(token: string, alarmId: number, assignedTo: string | null): Promise<AlarmEvent> {
   const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}/assign`, {
     method: "PATCH",
@@ -1590,4 +1621,14 @@ export async function setApiKeyActive(
   });
   if (!response.ok) throw await buildApiError(response, "API anahtarı güncellenemedi.");
   return (await response.json()) as import("./types").ApiKey;
+}
+
+/** Revoke edilmis API anahtarini listeden kalici sil. Aktif/pasif kayitlar
+ *  reddedilir; once iptal edilmis olmali. */
+export async function purgeApiKey(token: string, keyId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api-keys/${keyId}/purge`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "API anahtarı silinemedi.");
 }

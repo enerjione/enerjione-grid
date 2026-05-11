@@ -663,8 +663,23 @@
       "newPasswordRepeat": "Yeni Şifre Tekrar",
       "phonePlaceholder": "+90 5xx xxx xx xx",
       "notifPrefs": "Bildirim Tercihleri",
+      "notifPrefsHint": "Bu kullanıcıya hangi kanallardan bildirim gönderileceğini buradan kontrol edebilirsiniz. Kapalı olan kanaldan asla bildirim atılmaz.",
+      "notifWeb": "Web bildirimi",
       "notifEmail": "E-posta bildirimi",
       "notifSms": "SMS bildirimi",
+      "notifTelegram": "Telegram bildirimi",
+      "notifCols": {
+        "web": "Web",
+        "email": "E-posta",
+        "sms": "SMS",
+        "telegram": "Telegram"
+      },
+      "notifAria": {
+        "web": "Web bildirimi {{state}}",
+        "email": "E-posta bildirimi {{state}}",
+        "sms": "SMS bildirimi {{state}}",
+        "telegram": "Telegram bildirimi {{state}}"
+      },
       "cancel": "Vazgeç",
       "saveBtn": "Kaydet",
       "updateBtn": "Güncelle",
@@ -1346,6 +1361,9 @@
     "enable": "Etkinleştir",
     "revoke": "İptal Et",
     "confirmRevoke": "'{{name}}' token'ı kalıcı olarak iptal edilecek. Devam edilsin mi?",
+    "purge": "Sil",
+    "purgeTitle": "İptal edilmiş bu token'ı listeden tamamen sil",
+    "confirmPurge": "'{{name}}' token'ı listeden TAMAMEN silinecek. Geri alınamaz. Devam edilsin mi?",
     "cols": {
       "name": "İsim",
       "tokenPrefix": "Token",

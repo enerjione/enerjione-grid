@@ -227,3 +227,37 @@ def enable_api_key(
         db.commit()
     db.refresh(row)
     return _row_to_read(row)
+
+
+@router.delete(
+    "/{key_id}/purge",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke edilmis anahtari listeden tamamen sil",
+    description=(
+        "Sadece revoke edilmis (revoked_at != NULL) anahtarlari kalici "
+        "olarak DB'den siler. Aktif veya gecici pasif anahtarlar reddedilir. "
+        "Audit gerekiyorsa system_events tablosunda kayit kalir; api_keys "
+        "satiri silinmis olur."
+    ),
+)
+def purge_api_key(
+    key_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = _load_with_owner_check(key_id, user, db)
+    if row.revoked_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sadece iptal edilmis (revoked) anahtarlar silinebilir. Once 'Iptal Et' butonunu kullanin.",
+        )
+    name = row.name
+    record_event(
+        db, category="security", event_type="api_key_purged",
+        severity="warning", actor_username=user.username,
+        message=f"API anahtarı kalıcı olarak silindi: {name}",
+        metadata={"api_key_id": row.id, "owner_user_id": row.user_id},
+    )
+    db.delete(row)
+    db.commit()
+    return None

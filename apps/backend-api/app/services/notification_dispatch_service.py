@@ -435,12 +435,16 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     """Verilen alarm icin ilgili kullanicilara web/email/sms/telegram gonder.
 
     KURAL-BAZLI KANAL SECIMI:
-      - Web bildirimi her zaman gider (kullanici tercihi acik ise).
-      - Email/SMS/Telegram sadece kuraldaki notify_email / notify_sms /
-        notify_telegram TRUE ise gonderilir. Kullanici tercihi de etkilidir.
-      - Kural bulunamadiysa (eski alarm, manuel test) eski davranis: sadece
-        web bildirimi.
-      - Telegram global broadcast (kullanici-bazli degil, ayar listesi).
+      - Web bildirimi: kuraldan bagimsiz; kullanici tercihi (web_enabled)
+        acik ise olusturulur.
+      - Email/SMS/Telegram: hem kuralda ilgili notify_* AKTIF olmali HEM
+        kullanicinin kendi tercihi (email_enabled / sms_enabled /
+        telegram_enabled) acik olmali.
+      - Telegram: bot tek bir kanaldan broadcast eder ama scope'taki
+        kullanicilardan EN AZ BIRI telegram_enabled=True olmali. Hicbiri
+        acik degilse Telegram atilmaz (gereksiz bildirim engellenir).
+      - Kural bulunamadiysa (eski alarm, manuel test) eski davranis:
+        sadece web bildirimi.
     """
     if alarm.device_id is None:
         return
@@ -455,6 +459,7 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     rule_sms = bool(rule and rule.notify_sms)
     rule_telegram = bool(rule and rule.notify_telegram)
     alarm_rank = _level_rank(alarm.level)
+    any_telegram_optin = False
     for user in recipients:
         pref = _get_pref(db, user.id)
         # Min seviye filtresi
@@ -468,8 +473,14 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
         # SMS: kuralda notify_sms AND kullanici tercihi acik
         if rule_sms and pref.sms_enabled:
             _send_sms_for_user(settings, user, alarm)
-    # Telegram global (kullanici-bazli degil)
-    if rule_telegram:
+        # Telegram: kullanici tercihi opt-in oldu mu?
+        if getattr(pref, "telegram_enabled", False):
+            any_telegram_optin = True
+    # Telegram: kural izin verdi + en az 1 kullanici opt-in oldu ise
+    # global broadcast. Bot tek bir kanaldan yayin yapar (ayar listesi
+    # icinde tanimli chat_ids), bu yuzden kisi-bazli filtre yapamayiz
+    # ama opt-in olan yoksa gondermeyiz.
+    if rule_telegram and any_telegram_optin:
         _send_telegram_broadcast(settings, alarm)
 
 

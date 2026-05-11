@@ -71,6 +71,7 @@ app.include_router(telemetry.router, prefix=settings.api_prefix)
 app.include_router(alarms.router, prefix=settings.api_prefix)
 app.include_router(faults.router, prefix=settings.api_prefix)
 app.include_router(user_notification_preferences.router, prefix=settings.api_prefix)
+app.include_router(user_notification_preferences.admin_router, prefix=settings.api_prefix)
 app.include_router(events.router, prefix=settings.api_prefix)
 app.include_router(users.router, prefix=settings.api_prefix)
 app.include_router(notification_settings.router, prefix=settings.api_prefix)
@@ -254,6 +255,12 @@ def create_tables():
         )
         connection.execute(
             text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_from_number VARCHAR(40) NOT NULL DEFAULT ''")
+        )
+        # Kullanici bildirim tercihlerine Telegram kanali — varsayilan FALSE
+        # (opt-in: kullanici bot'a /start atmadan Telegram bildirimi
+        # tetiklenmesin).
+        connection.execute(
+            text("ALTER TABLE user_notification_preferences ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE")
         )
         # Twilio WhatsApp modu — opsiyonel ContentSid (template mesaj).
         connection.execute(

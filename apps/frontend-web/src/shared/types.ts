@@ -210,6 +210,7 @@ export type UserNotificationPreferences = {
   web_enabled: boolean;
   email_enabled: boolean;
   sms_enabled: boolean;
+  telegram_enabled?: boolean;
   min_level_rank: number;
 };
 
