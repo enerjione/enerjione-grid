@@ -119,6 +119,100 @@ def send_telegram_test(
             raise RuntimeError(f"Telegram API HTTP {resp.status}")
 
 
+def discover_telegram_chats(bot_token: str) -> list[dict]:
+    """Telegram Bot API'nin /getUpdates metodu uzerinden bot'a yazilmis
+    son mesajlardan benzersiz chat'leri toplar.
+
+    Telegram getUpdates calismak icin sart: bot Polling modunda olmali —
+    yani webhook ayarlanmamis olmali. Webhook tanimliysa getUpdates 409
+    Conflict doner; bu durumu kullaniciya net bildiririz.
+
+    Donus formati:
+      [
+        {"id": "<chat_id>", "type": "group|private|channel|supergroup",
+         "title": "<grup adi veya kullanici adi>"},
+        ...
+      ]
+    Benzersiz chat_id'ler. En son mesajdan eski uzeri sirali (yeni en
+    ustte).
+    """
+    token = (bot_token or "").strip()
+    if not token:
+        raise ValueError("Telegram bot token boş.")
+
+    # offset=-100 son 100 update'i alir; limit 100 max. allowed_updates
+    # bos -> tum tipleri al.
+    url = f"https://api.telegram.org/bot{token}/getUpdates?limit=100&timeout=0"
+    try:
+        with urllib.request.urlopen(url, timeout=12) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        try:
+            err_body = exc.read().decode("utf-8", errors="replace")
+            err_json = json.loads(err_body)
+            desc = err_json.get("description") or err_body
+            if exc.code == 409 or "webhook" in desc.lower():
+                raise RuntimeError(
+                    "Bot webhook moduna ayarlanmış — getUpdates kullanılamaz. "
+                    "Önce webhook'u silin (deleteWebhook) veya BotFather'dan "
+                    "bot ayarlarını kontrol edin."
+                ) from exc
+            if exc.code == 401:
+                raise RuntimeError("Bot Token geçersiz (Telegram 401).") from exc
+            raise RuntimeError(f"Telegram API hatası: {desc}") from exc
+        except (ValueError, json.JSONDecodeError):
+            raise RuntimeError(f"Telegram HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Telegram'a ulaşılamadı: {exc}") from exc
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        raise RuntimeError("Telegram cevabı JSON parse edilemedi.")
+    if not isinstance(data, dict) or not data.get("ok"):
+        desc = (data or {}).get("description", "bilinmeyen hata")
+        raise RuntimeError(f"Telegram getUpdates başarısız: {desc}")
+
+    results = data.get("result") or []
+    seen: dict[str, dict] = {}
+    # En yeni update'ler listenin sonunda; ters sirayla itererek 'son mesaj
+    # bilgisi' her chat icin korunur.
+    for upd in reversed(results):
+        # Birden fazla mesaj turune bak: message, edited_message,
+        # channel_post, edited_channel_post, my_chat_member (gruba ekleme).
+        msg = (
+            upd.get("message")
+            or upd.get("edited_message")
+            or upd.get("channel_post")
+            or upd.get("edited_channel_post")
+            or upd.get("my_chat_member")
+            or {}
+        )
+        chat = msg.get("chat") if isinstance(msg, dict) else None
+        if not isinstance(chat, dict):
+            continue
+        chat_id = chat.get("id")
+        if chat_id is None:
+            continue
+        cid = str(chat_id)
+        if cid in seen:
+            continue
+        chat_type = str(chat.get("type") or "private")
+        # Baslik tercihi: grup/kanal => 'title'; ozel => username veya
+        # 'first_name last_name'.
+        title = chat.get("title")
+        if not title:
+            uname = chat.get("username")
+            first = chat.get("first_name") or ""
+            last = chat.get("last_name") or ""
+            full = (first + " " + last).strip()
+            title = (uname and f"@{uname}") or full or cid
+        seen[cid] = {"id": cid, "type": chat_type, "title": title}
+    # En yeni mesajdan eskiye sirali liste (reversed sonrasi insertion
+    # sirasi).
+    return list(seen.values())
+
+
 def send_sms_test(
     settings_row: NotificationSettings,
     *,

@@ -117,6 +117,7 @@ import {
   testNotificationSms,
   testNotificationSmtp,
   testNotificationTelegram,
+  discoverTelegramChats,
   updateNotificationSettings as updateNotificationSettingsApi,
   updateUser,
   updateMyProfile,
@@ -1465,6 +1466,13 @@ export function App() {
     return testNotificationTelegram(session.accessToken, payload);
   };
 
+  const handleDiscoverTelegramChats = async (payload?: { bot_token?: string }) => {
+    if (!session) {
+      throw new Error("Oturum bulunamadı.");
+    }
+    return discoverTelegramChats(session.accessToken, payload);
+  };
+
   const handleOpenSettings = () => {
     if (currentUser) {
       setSettingsFullName(currentUser.full_name);
@@ -1967,6 +1975,7 @@ export function App() {
                 onTestSmtp={handleTestNotificationSmtp}
                 onTestSms={handleTestNotificationSms}
                 onTestTelegram={handleTestNotificationTelegram}
+                onDiscoverTelegramChats={handleDiscoverTelegramChats}
               />
             ) : null}
             {engineeringPage === "project-settings" && session.role === "installer" ? (

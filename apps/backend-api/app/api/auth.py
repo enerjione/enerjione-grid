@@ -2,10 +2,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
+
 from app.db.session import get_db
 from app.models.user import User
+from app.models.user_fcm_token import UserFcmToken
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import LanguageUpdateRequest, SelfPasswordChangeRequest, SelfProfileUpdateRequest, UserRead
+
+
+class FcmTokenRegisterRequest(BaseModel):
+    token: str
+    platform: str | None = None
+    device_label: str | None = None
+
+
+class FcmTokenDeleteRequest(BaseModel):
+    token: str
 
 # Frontend i18n ile uyumlu desteklenen diller. Yeni dil eklerken hem
 # bu listeye hem de frontend resources/<code>.json dosyasina ekle.
@@ -112,4 +125,58 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
         i18n_params={"user": current_user.username},
     )
     db.commit()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# FCM TOKEN MANAGEMENT (mobile push)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/me/fcm-token", status_code=status.HTTP_204_NO_CONTENT)
+def register_fcm_token(
+    payload: FcmTokenRegisterRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mobil cihaz token'ini kullaniciya kaydeder (idempotent).
+
+    Ayni token zaten varsa user'a (yeni veya degisen sahibe) atanir ve
+    last_seen guncellenir.
+    """
+    token = (payload.token or "").strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="token is empty")
+    existing = db.scalar(select(UserFcmToken).where(UserFcmToken.token == token))
+    if existing:
+        existing.user_id = current_user.id
+        existing.platform = payload.platform or existing.platform
+        existing.device_label = payload.device_label or existing.device_label
+    else:
+        db.add(UserFcmToken(
+            user_id=current_user.id,
+            token=token,
+            platform=payload.platform,
+            device_label=payload.device_label,
+        ))
+    db.commit()
+    return None
+
+
+@router.delete("/me/fcm-token", status_code=status.HTTP_204_NO_CONTENT)
+def delete_fcm_token(
+    payload: FcmTokenDeleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Logout sirasinda mobil app kendi token'ini siler."""
+    token = (payload.token or "").strip()
+    if not token:
+        return None
+    row = db.scalar(select(UserFcmToken).where(
+        UserFcmToken.token == token, UserFcmToken.user_id == current_user.id
+    ))
+    if row is not None:
+        db.delete(row)
+        db.commit()
     return None

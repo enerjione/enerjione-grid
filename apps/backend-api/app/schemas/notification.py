@@ -63,6 +63,25 @@ class NotificationTelegramTestRequest(BaseModel):
     message: str | None = None
 
 
+class TelegramDiscoveredChat(BaseModel):
+    id: str
+    type: str
+    title: str
+
+
+class TelegramDiscoverChatsRequest(BaseModel):
+    """Bot token kayitli degilse veya gecici bir token denemek icin
+    payload'da override edilebilir. Bos gelirse kayitli token kullanilir."""
+
+    bot_token: str | None = None
+
+
+class TelegramDiscoverChatsResult(BaseModel):
+    ok: bool
+    detail: str = ""
+    chats: list[TelegramDiscoveredChat] = []
+
+
 class NotificationTestResult(BaseModel):
     ok: bool
     detail: str

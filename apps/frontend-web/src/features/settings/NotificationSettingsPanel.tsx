@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import type { NotificationSettings } from "../../shared/types";
 
+export type DiscoveredChat = { id: string; type: string; title: string };
+
 type Props = {
   initialSettings: NotificationSettings | null;
   loading: boolean;
@@ -14,6 +16,11 @@ type Props = {
   /** Telegram bot test gonderimi. Alarm akisindaki bot tokeni ve verilen
    *  chat_id ile sade bir test mesaji yollar. */
   onTestTelegram?: (payload: { chat_id: string; message?: string }) => Promise<{ ok: boolean; detail: string }>;
+  /** Telegram bot'a yazmis chat'leri otomatik tespit eder. Opsiyonel
+   *  bot_token verilirse o kullanilir, aksi halde kayitli token. */
+  onDiscoverTelegramChats?: (
+    payload?: { bot_token?: string }
+  ) => Promise<{ ok: boolean; detail: string; chats: DiscoveredChat[] }>;
 };
 
 const EMPTY_SETTINGS: NotificationSettings = {
@@ -52,7 +59,8 @@ export function NotificationSettingsPanel({
   onSave,
   onTestSmtp,
   onTestSms,
-  onTestTelegram
+  onTestTelegram,
+  onDiscoverTelegramChats
 }: Props) {
   const { t } = useTranslation();
   const [form, setForm] = useState<NotificationSettings>(EMPTY_SETTINGS);
@@ -60,6 +68,11 @@ export function NotificationSettingsPanel({
   const [smtpTestEmail, setSmtpTestEmail] = useState("");
   const [smsTestPhone, setSmsTestPhone] = useState("");
   const [telegramTestChat, setTelegramTestChat] = useState("");
+  // Telegram chat keşfi
+  const [discoveringChats, setDiscoveringChats] = useState(false);
+  const [discoveredChats, setDiscoveredChats] = useState<DiscoveredChat[] | null>(null);
+  const [discoverDetail, setDiscoverDetail] = useState("");
+  const [discoverError, setDiscoverError] = useState("");
   // Test sonucu kanal-bazli ayri tutuluyor; her kart kendi banner'inda
   // basari/hata gosterir (tek "testInfo" string'i karistirici idi).
   const [testResult, setTestResult] = useState<
@@ -157,6 +170,47 @@ export function NotificationSettingsPanel({
     } finally {
       setTestingTelegram(false);
     }
+  };
+
+  const handleDiscoverChats = async () => {
+    if (!onDiscoverTelegramChats) return;
+    setDiscoveringChats(true);
+    setDiscoverError("");
+    setDiscoverDetail("");
+    try {
+      // Form'daki token degisikligi kaydedilmemis olabilir; backend'e
+      // payload'la birlikte gondererek 'unsaved token'i da deneyelim.
+      const result = await onDiscoverTelegramChats({
+        bot_token: (form.telegram_bot_token ?? "").trim() || undefined
+      });
+      if (!result.ok) {
+        setDiscoverError(result.detail);
+        setDiscoveredChats([]);
+      } else {
+        setDiscoveredChats(result.chats);
+        setDiscoverDetail(result.detail);
+      }
+    } catch (err) {
+      setDiscoverError(
+        err instanceof Error ? err.message : t("notifications.settings.fields.telegramDiscoverFail")
+      );
+    } finally {
+      setDiscoveringChats(false);
+    }
+  };
+
+  const addChatIdToList = (chatId: string) => {
+    const current = (form.telegram_chat_ids ?? "").trim();
+    const existing = new Set(
+      current
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+    if (existing.has(chatId)) return;
+    existing.add(chatId);
+    const next = Array.from(existing).join(", ");
+    setForm((prev) => ({ ...prev, telegram_chat_ids: next }));
   };
 
   const channels: ChannelDef[] = [
@@ -595,6 +649,97 @@ export function NotificationSettingsPanel({
                     {t("notifications.settings.fields.telegramChatIdsHint")}
                   </small>
                 </label>
+
+                {/* Otomatik chat ID kesfi — bot'a yazmis chat'leri listele */}
+                {onDiscoverTelegramChats ? (
+                  <div className="notif-field notif-field--full telegram-discover-card">
+                    <div className="telegram-discover-head">
+                      <span className="material-symbols-outlined">auto_fix_high</span>
+                      <div className="telegram-discover-head-text">
+                        <strong>
+                          {t("notifications.settings.fields.telegramDiscoverTitle")}
+                        </strong>
+                        <small>
+                          {t("notifications.settings.fields.telegramDiscoverDesc")}
+                        </small>
+                      </div>
+                      <button
+                        type="button"
+                        className="primary-btn telegram-discover-btn"
+                        onClick={() => void handleDiscoverChats()}
+                        disabled={
+                          discoveringChats ||
+                          !(form.telegram_bot_token ?? "").trim()
+                        }
+                      >
+                        <span className="material-symbols-outlined">
+                          {discoveringChats ? "hourglass_top" : "search"}
+                        </span>
+                        {discoveringChats
+                          ? t("notifications.settings.fields.telegramDiscovering")
+                          : t("notifications.settings.fields.telegramDiscoverBtn")}
+                      </button>
+                    </div>
+                    {discoverError ? (
+                      <div className="telegram-discover-error" role="alert">
+                        <span className="material-symbols-outlined">error</span>
+                        {discoverError}
+                      </div>
+                    ) : null}
+                    {discoveredChats !== null && discoveredChats.length === 0 && !discoverError ? (
+                      <div className="telegram-discover-empty">
+                        <span className="material-symbols-outlined">info</span>
+                        {discoverDetail || t("notifications.settings.fields.telegramDiscoverEmpty")}
+                      </div>
+                    ) : null}
+                    {discoveredChats && discoveredChats.length > 0 ? (
+                      <>
+                        <div className="telegram-discover-detail">
+                          {discoverDetail}
+                        </div>
+                        <ul className="telegram-discover-list">
+                          {discoveredChats.map((chat) => {
+                            const alreadyAdded = (form.telegram_chat_ids ?? "")
+                              .split(",")
+                              .map((s) => s.trim())
+                              .includes(chat.id);
+                            return (
+                              <li key={chat.id} className="telegram-discover-item">
+                                <span
+                                  className={`telegram-discover-type telegram-discover-type--${chat.type}`}
+                                  title={chat.type}
+                                >
+                                  {chat.type === "group" || chat.type === "supergroup"
+                                    ? "👥"
+                                    : chat.type === "channel"
+                                    ? "📢"
+                                    : "👤"}
+                                </span>
+                                <div className="telegram-discover-info">
+                                  <strong>{chat.title}</strong>
+                                  <code>{chat.id}</code>
+                                </div>
+                                <button
+                                  type="button"
+                                  className={`telegram-discover-add ${alreadyAdded ? "is-added" : ""}`}
+                                  onClick={() => addChatIdToList(chat.id)}
+                                  disabled={alreadyAdded}
+                                >
+                                  <span className="material-symbols-outlined">
+                                    {alreadyAdded ? "check" : "add"}
+                                  </span>
+                                  {alreadyAdded
+                                    ? t("notifications.settings.fields.telegramDiscoverAdded")
+                                    : t("notifications.settings.fields.telegramDiscoverAdd")}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="notification-card-test">

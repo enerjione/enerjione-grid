@@ -1227,6 +1227,34 @@ export async function testNotificationTelegram(
   return (await response.json()) as { ok: boolean; detail: string };
 }
 
+export type TelegramDiscoveredChat = {
+  id: string;
+  type: string;
+  title: string;
+};
+
+/** Telegram getUpdates üzerinden bot'a yazılmış chat'leri listele.
+ *  bot_token opsiyonel — verilmezse backend kayıtlı token'i kullanır. */
+export async function discoverTelegramChats(
+  token: string,
+  payload?: { bot_token?: string }
+): Promise<{ ok: boolean; detail: string; chats: TelegramDiscoveredChat[] }> {
+  const response = await fetch(
+    `${API_BASE_URL}/notification-settings/discover-telegram-chats`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload ?? {})
+    }
+  );
+  if (!response.ok) throw await buildApiError(response, "Telegram chat keşfi başarısız.");
+  return (await response.json()) as {
+    ok: boolean;
+    detail: string;
+    chats: TelegramDiscoveredChat[];
+  };
+}
+
 // ----- Signal Catalog -----
 export async function fetchSignals(token: string, model?: string): Promise<SignalCatalogRow[]> {
   const url = model

@@ -12,10 +12,14 @@ from app.schemas.notification import (
     NotificationSmtpTestRequest,
     NotificationTelegramTestRequest,
     NotificationTestResult,
+    TelegramDiscoverChatsRequest,
+    TelegramDiscoverChatsResult,
+    TelegramDiscoveredChat,
 )
 from app.services.event_service import record_event
 from app.services.notification_settings_service import get_or_create_notification_settings
 from app.services.notification_test_service import (
+    discover_telegram_chats,
     send_sms_test,
     send_smtp_test,
     send_telegram_test,
@@ -200,3 +204,52 @@ def test_telegram_settings(
         )
         db.commit()
         return NotificationTestResult(ok=False, detail=f"Telegram test başarısız: {ex}")
+
+
+@router.post("/discover-telegram-chats", response_model=TelegramDiscoverChatsResult)
+def discover_chats(
+    payload: TelegramDiscoverChatsRequest,
+    _: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Telegram bot'a son yazilmis benzersiz chat'leri listeler.
+
+    Kullanici 'Chat ID'leri otomatik bul' butonuna basinca cagrilir.
+    Kullanim akisi:
+      1) Bot'u BotFather'dan olustur, token'i ayara kaydet.
+      2) Bildirim almak istedigin grup/kanal'a bot'u ekle veya bota
+         direkt mesaj at (`/start` yeterli).
+      3) Bu endpoint'i cagir; bot'a yazan tum benzersiz chat'lerin
+         id + tip + baslik'i listelenir.
+      4) Kullanici tikladigi chat'i 'Chat ID Listesi' alanina ekler.
+
+    Webhook ayarli botlarda getUpdates kullanilamaz — bu durumda servis
+    kullaniciya 'webhook'u kapatip tekrar deneyin' diye geri doner.
+    """
+    settings_row = get_or_create_notification_settings(db)
+    token = (payload.bot_token or "").strip() or settings_row.telegram_bot_token
+    if not token:
+        return TelegramDiscoverChatsResult(
+            ok=False,
+            detail="Telegram Bot Token tanımlı değil. Önce token'i kaydedin.",
+            chats=[],
+        )
+    try:
+        chats = discover_telegram_chats(token)
+    except Exception as ex:  # noqa: BLE001
+        return TelegramDiscoverChatsResult(ok=False, detail=str(ex), chats=[])
+    if not chats:
+        return TelegramDiscoverChatsResult(
+            ok=True,
+            detail=(
+                "Bota henüz mesaj yazan kimse yok. Lütfen bota /start "
+                "atın veya bildirim göndermek istediğiniz gruba bot'u "
+                "ekleyip bir mesaj yazın, ardından tekrar deneyin."
+            ),
+            chats=[],
+        )
+    return TelegramDiscoverChatsResult(
+        ok=True,
+        detail=f"{len(chats)} chat bulundu.",
+        chats=[TelegramDiscoveredChat(**c) for c in chats],
+    )

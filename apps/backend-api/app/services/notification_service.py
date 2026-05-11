@@ -14,6 +14,7 @@ Mantik:
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -21,6 +22,49 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.notification import Notification
+from app.models.user import User
+from app.models.user_fcm_token import UserFcmToken
+from app.services.fcm import send_push_to_tokens
+
+logger = logging.getLogger(__name__)
+
+
+def _send_fcm_for_user(
+    db: Session,
+    username: str | None,
+    title: str,
+    body: str | None,
+    metadata: dict[str, Any] | None,
+) -> None:
+    """Verilen kullanicinin tum FCM token'larina push gonder. Hata varsa loglar
+    ama caller'i bozmaz."""
+    try:
+        if not username:
+            return
+        user = db.scalar(select(User).where(User.username == username))
+        if user is None:
+            return
+        tokens = list(db.scalars(
+            select(UserFcmToken.token).where(UserFcmToken.user_id == user.id)
+        ))
+        if not tokens:
+            return
+        data = {}
+        if metadata:
+            # data payload yalniz string degerler aliyor; ozelleri kaydet
+            for k, v in metadata.items():
+                if v is not None:
+                    data[k] = str(v)
+        _, invalid = send_push_to_tokens(
+            tokens, title=title, body=body or "", data=data
+        )
+        if invalid:
+            for tok in invalid:
+                db.execute(
+                    UserFcmToken.__table__.delete().where(UserFcmToken.token == tok)
+                )
+    except Exception:  # noqa: BLE001
+        logger.exception("FCM push gonderiminde beklenmeyen hata")
 
 
 def create_notification(
@@ -39,6 +83,10 @@ def create_notification(
 
     `recipient_username=None` ise broadcast olarak yazilir (frontend kullanici
     fark etmeksizin gosterir).
+
+    NOT: Aliciya FCM push da gonderir (varsa cihaz token'i). Commit'ten once
+    cagrilir; commit fail olsa bile push gider — bu daha hizli (gerçek-zamanli)
+    deneyim icin kabul edilebilir.
     """
     row = Notification(
         recipient_username=recipient_username,
@@ -53,6 +101,9 @@ def create_notification(
         created_at=datetime.now(timezone.utc),
     )
     db.add(row)
+    # Push goder (alici varsa) — broadcast (recipient_username=None) icin atla
+    if recipient_username:
+        _send_fcm_for_user(db, recipient_username, title, body, metadata)
     return row
 
 

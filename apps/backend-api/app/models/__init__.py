@@ -13,9 +13,11 @@ from app.models.signal_catalog import SignalCatalog
 from app.models.system_event import SystemEvent
 from app.models.telemetry import Telemetry
 from app.models.user import User
+from app.models.user_fcm_token import UserFcmToken
 
 __all__ = [
     "User",
+    "UserFcmToken",
     "Device",
     "Gateway",
     "GatewayIngestBatch",
