@@ -422,9 +422,9 @@ export function OutboundTargetsPanel({
                       value={protocol}
                       onChange={(event) => setProtocol(event.target.value as Protocol)}
                     >
-                      <option value="rest">REST</option>
-                      <option value="mqtt">MQTT</option>
-                      <option value="iec104">IEC 60870-5-104</option>
+                      <option value="rest">{t("engineering.outbound.proto.rest")}</option>
+                      <option value="mqtt">{t("engineering.outbound.proto.mqtt")}</option>
+                      <option value="iec104">{t("engineering.outbound.proto.iec104")}</option>
                     </select>
                   </label>
                 </>
@@ -570,7 +570,7 @@ export function OutboundTargetsPanel({
                   </select>
                 </label>
 
-                {/* REST'e ozel: auth header + token. */}
+                {/* REST'e ozel: auth header + token + receiver kod ornegi. */}
                 {isRestForm ? (
                   <>
                     <label>
@@ -588,6 +588,10 @@ export function OutboundTargetsPanel({
                         onChange={(event) => setAuthToken(event.target.value)}
                       />
                     </label>
+                    <WebhookReceiverHint
+                      authHeader={authHeader.trim() || "Authorization"}
+                      authToken={authToken.trim() || "your-shared-secret"}
+                    />
                   </>
                 ) : null}
 
@@ -952,5 +956,117 @@ export function OutboundTargetsPanel({
         </table>
       </div>
     </section>
+  );
+}
+
+// ===========================================================================
+// WebhookReceiverHint — REST/Webhook formunda kullaniciya "sizin tarafiniza
+// soyle bir POST geliyor" ornek payload + Python FastAPI receiver kod ornegi
+// gosterir. Iki kod blogu, her birinde kopyalama butonu.
+// ===========================================================================
+
+function WebhookReceiverHint({
+  authHeader,
+  authToken
+}: {
+  authHeader: string;
+  authToken: string;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const samplePayload = JSON.stringify(
+    {
+      message_id: "uuid-1234-5678",
+      correlation_id: "uuid-1234-5678",
+      source_gateway: "GW-001",
+      device_code: "DEV-001",
+      signal_key: "master.voltage_a",
+      value: 231.45,
+      quality: "good",
+      status: "online",
+      source_timestamp: "2026-05-08T14:23:17Z",
+      processed_at: "2026-05-08T14:23:18Z"
+    },
+    null,
+    2
+  );
+
+  const receiverCode = `# Python (FastAPI) — kendi tarafinizda webhook'u alacak ornek:
+from fastapi import FastAPI, Header, HTTPException, Request
+import secrets
+
+EXPECTED_TOKEN = "${authToken}"
+app = FastAPI()
+
+@app.post("/hsl-webhook")
+async def hsl_webhook(
+    request: Request,
+    auth: str | None = Header(default=None, alias="${authHeader}"),
+):
+    if not auth or not secrets.compare_digest(auth, EXPECTED_TOKEN):
+        raise HTTPException(status_code=401)
+    payload = await request.json()
+    # payload: {"device_code": "...", "signal_key": "...", "value": ..., ...}
+    print("HSL webhook:", payload)
+    return {"status": "ok"}
+`;
+
+  const copy = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div className="webhook-hint">
+      <button
+        type="button"
+        className="webhook-hint-toggle"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? "▼" : "▶"} {t("engineering.outbound.webhook.hintToggle")}
+      </button>
+      {open ? (
+        <div className="webhook-hint-body">
+          <div className="webhook-hint-block">
+            <div className="webhook-hint-head">
+              <strong>{t("engineering.outbound.webhook.payloadTitle")}</strong>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void copy("payload", samplePayload)}
+              >
+                {copiedKey === "payload" ? "✓ " + t("common.copied") : t("common.copy")}
+              </button>
+            </div>
+            <pre className="curl-block-code">
+              <code>{samplePayload}</code>
+            </pre>
+          </div>
+
+          <div className="webhook-hint-block">
+            <div className="webhook-hint-head">
+              <strong>{t("engineering.outbound.webhook.receiverTitle")}</strong>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void copy("receiver", receiverCode)}
+              >
+                {copiedKey === "receiver" ? "✓ " + t("common.copied") : t("common.copy")}
+              </button>
+            </div>
+            <pre className="curl-block-code">
+              <code>{receiverCode}</code>
+            </pre>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

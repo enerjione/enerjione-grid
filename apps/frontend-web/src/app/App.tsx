@@ -12,6 +12,7 @@ import { EventsPage } from "../features/events/EventsPage";
 import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
+import { ApiAccessPanel } from "../features/api-access/ApiAccessPanel";
 import { NotificationSettingsPanel } from "../features/settings/NotificationSettingsPanel";
 import { ProjectSettingsPanel } from "../features/settings/ProjectSettingsPanel";
 import { GridManagementPanel } from "../features/grid/GridManagementPanel";
@@ -79,6 +80,10 @@ import {
   fetchMe,
   fetchNotificationSettings,
   fetchOutboundTargets,
+  fetchMyApiKeys,
+  createApiKey,
+  revokeApiKey,
+  setApiKeyActive,
   fetchGridSnapshot,
   type GridSnapshot,
   fetchSignals,
@@ -123,6 +128,7 @@ import type {
   AlarmComment,
   AlarmEvent,
   AlarmRuleRow,
+  ApiKey,
   AuthSession,
   DeviceModelOption,
   Dnp3ExtendedSettings,
@@ -224,6 +230,9 @@ export function App() {
   /** Cihazlar sekmesinde listelenen gateway (kapsam); yenileme ve yoklama bunu kullanır */
   const [devicePanelGatewayCode, setDevicePanelGatewayCode] = useState<string>("");
   const [outboundTargets, setOutboundTargets] = useState<OutboundTarget[]>([]);
+  // Public API icin kullanici PAT'lari. ApiAccessPanel kullanir.
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
   const [gridSnapshot, setGridSnapshot] = useState<GridSnapshot | null>(null);
   const [alarmsLoading, setAlarmsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
@@ -1249,6 +1258,37 @@ export function App() {
     toast.success(t("toasts.deviceDeleted"));
   };
 
+  const reloadApiKeys = async () => {
+    if (!session) return;
+    setApiKeysLoading(true);
+    try {
+      const rows = await fetchMyApiKeys(session.accessToken);
+      setApiKeys(rows);
+    } finally {
+      setApiKeysLoading(false);
+    }
+  };
+
+  const handleCreateApiKey = async (payload: {
+    name: string;
+    scopes: string[];
+    expires_at: string | null;
+    allowed_ips: string[] | null;
+  }) => {
+    if (!session) throw new Error("Oturum yok.");
+    return await createApiKey(session.accessToken, payload);
+  };
+
+  const handleRevokeApiKey = async (keyId: number) => {
+    if (!session) throw new Error("Oturum yok.");
+    await revokeApiKey(session.accessToken, keyId);
+  };
+
+  const handleToggleApiKeyActive = async (keyId: number, active: boolean) => {
+    if (!session) throw new Error("Oturum yok.");
+    await setApiKeyActive(session.accessToken, keyId, active);
+  };
+
   const reloadOutboundTargets = async () => {
     if (!session || session.role !== "installer") return;
     const rows = await fetchOutboundTargets(session.accessToken);
@@ -1755,6 +1795,15 @@ export function App() {
                     {t("engineering.nav.outboundTargets")}
                   </button>
                   <button
+                    className={engineeringPage === "api-access" ? "active" : ""}
+                    onClick={() => {
+                      setEngineeringPage("api-access");
+                      void reloadApiKeys();
+                    }}
+                  >
+                    {t("engineering.nav.apiAccess")}
+                  </button>
+                  <button
                     className={engineeringPage === "notifications" ? "active" : ""}
                     onClick={() => {
                       setEngineeringPage("notifications");
@@ -1895,6 +1944,17 @@ export function App() {
                   if (!session) throw new Error("Oturum yok.");
                   return fetchIec104Runtime(session.accessToken, id);
                 }}
+              />
+            ) : null}
+            {engineeringPage === "api-access" && session.role === "installer" ? (
+              <ApiAccessPanel
+                apiBaseUrl={API_BASE_URL}
+                keys={apiKeys}
+                loading={apiKeysLoading}
+                onRefresh={reloadApiKeys}
+                onCreate={handleCreateApiKey}
+                onRevoke={handleRevokeApiKey}
+                onToggleActive={handleToggleApiKeyActive}
               />
             ) : null}
             {engineeringPage === "notifications" && session.role === "installer" ? (
