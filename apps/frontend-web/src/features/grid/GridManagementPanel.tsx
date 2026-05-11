@@ -493,7 +493,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         name: null
       } as Pole;
       setDraftPoleAdds((prev) => [...prev, draftPole]);
-      toast.success(`Direk #${nextSeq} taslakta — Kaydet ile uygulayın.`);
+      toast.success(t("toasts.poleDraftAdded", { seq: nextSeq }));
       return;
     }
 
@@ -506,11 +506,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         longitude: lon,
         name: null
       });
-      toast.success(`Direk #${nextSeq} eklendi.`);
+      toast.success(t("toasts.poleAdded", { seq: nextSeq }));
       await reloadDetail(selectedLine.id);
       if (selectedRegionId !== null) await reloadLines(selectedRegionId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Direk eklenemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.poleAddFail"));
     } finally {
       setBusy(false);
     }
@@ -538,7 +538,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       await reloadDetail(selectedLine.id);
       if (selectedRegionId !== null) await reloadLines(selectedRegionId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cihaz atanamadı.");
+      toast.error(err instanceof Error ? err.message : t("toasts.deviceAssignFail"));
     } finally {
       setBusy(false);
     }
@@ -556,7 +556,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       toast.success(t("engineering.grid.deviceDetached"));
       await reloadDetail(selectedLine.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cihaz kaldırılamadı.");
+      toast.error(err instanceof Error ? err.message : t("toasts.deviceDetachFail"));
     } finally {
       setBusy(false);
     }
@@ -586,7 +586,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       toast.success(t("engineering.grid.deviceMoved"));
       await reloadDetail(selectedLine.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cihaz taşınamadı.");
+      toast.error(err instanceof Error ? err.message : t("toasts.deviceMoveFail"));
     } finally {
       setBusy(false);
     }
@@ -598,10 +598,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     setSegmentMenu(null);
     try {
       await deleteSegment(accessToken, segment.id);
-      toast.success("Segment silindi.");
+      toast.success(t("toasts.segmentDeleted"));
       if (selectedLine) await reloadDetail(selectedLine.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Segment silinemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.segmentDeleteFail"));
     } finally {
       setBusy(false);
     }
@@ -613,10 +613,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     setBusy(true);
     try {
       await reversePoles(accessToken, selectedLine.id);
-      toast.success("Hat sırası tersine çevrildi.");
+      toast.success(t("toasts.lineReversed"));
       await reloadDetail(selectedLine.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Tersine çevirme başarısız.");
+      toast.error(err instanceof Error ? err.message : t("toasts.lineReverseFail"));
     } finally {
       setBusy(false);
     }
@@ -644,10 +644,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     setBusy(true);
     try {
       await reorderPoles(accessToken, selectedLine.id, items);
-      toast.success("Sıra güncellendi.");
+      toast.success(t("toasts.orderUpdated"));
       await reloadDetail(selectedLine.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sıra güncellenemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.orderUpdateFail"));
     } finally {
       setBusy(false);
     }
@@ -1475,15 +1475,15 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
             try {
               if (editingRegion) {
                 await updateRegion(accessToken, editingRegion.id, payload);
-                toast.success("Bölge güncellendi.");
+                toast.success(t("toasts.regionUpdated"));
               } else {
                 await createRegion(accessToken, payload);
-                toast.success("Bölge eklendi.");
+                toast.success(t("toasts.regionAdded"));
               }
               setRegionModalOpen(false);
               await reloadRegions();
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Bölge kaydedilemedi.");
+              toast.error(err instanceof Error ? err.message : t("toasts.regionSaveFail"));
             } finally { setBusy(false); }
           }}
         />
@@ -1502,15 +1502,15 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
             try {
               if (editingLine) {
                 await updateLine(accessToken, editingLine.id, payload);
-                toast.success("Hat güncellendi.");
+                toast.success(t("toasts.lineUpdated"));
               } else {
                 await createLine(accessToken, payload);
-                toast.success("Hat eklendi.");
+                toast.success(t("toasts.lineAdded"));
               }
               setLineModalOpen(false);
               await reloadLines(selectedRegion.id);
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Hat kaydedilemedi.");
+              toast.error(err instanceof Error ? err.message : t("toasts.lineSaveFail"));
             } finally { setBusy(false); }
           }}
         />
@@ -1525,11 +1525,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
               await import("../../shared/api").then((m) =>
                 m.updatePole(accessToken, editingPole.id, payload)
               );
-              toast.success("Direk güncellendi.");
+              toast.success(t("toasts.poleUpdated"));
               setEditingPole(null);
               if (selectedLine) await reloadDetail(selectedLine.id);
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Direk güncellenemedi.");
+              toast.error(err instanceof Error ? err.message : t("toasts.poleUpdateFail"));
             } finally { setBusy(false); }
           }}
         />
@@ -1539,25 +1539,25 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
   // ----- silme yardimcilari -----
   async function handleDeleteRegion(r: Region) {
-    if (!window.confirm(`"${r.name}" bölgesi ve altındaki tüm hatlar/direkler/segmentler silinsin mi?`)) return;
+    if (!window.confirm(t("toasts.regionDeleteConfirm", { name: r.name }))) return;
     try {
       await deleteRegion(accessToken, r.id);
-      toast.success("Bölge silindi.");
+      toast.success(t("toasts.regionDeleted"));
       if (selectedRegionId === r.id) setSelectedRegionId(null);
       await reloadRegions();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Bölge silinemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.regionDeleteFail"));
     }
   }
   async function handleDeleteLine(l: Line) {
-    if (!window.confirm(`"${l.name}" hattı ve altındaki tüm direkler/segmentler silinsin mi?`)) return;
+    if (!window.confirm(t("toasts.lineDeleteConfirm", { name: l.name }))) return;
     try {
       await deleteLine(accessToken, l.id);
-      toast.success("Hat silindi.");
+      toast.success(t("toasts.lineDeleted"));
       if (selectedLineId === l.id) setSelectedLineId(null);
       if (selectedRegionId !== null) await reloadLines(selectedRegionId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Hat silinemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.lineDeleteFail"));
     }
   }
   async function handleDeletePole(p: Pole) {
@@ -1565,7 +1565,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     if (editMode) {
       if (p.id < 0) {
         setDraftPoleAdds((prev) => prev.filter((x) => x.id !== p.id));
-        toast.success("Taslaktan çıkarıldı.");
+        toast.success(t("toasts.poleDraftRemoved"));
       } else {
         setDraftPoleDeletes((prev) => new Set(prev).add(p.id));
         // Taslakta sadece bu direğin override'ı varsa o da artık anlamsız — temizle.
@@ -1575,17 +1575,17 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
           next.delete(p.id);
           return next;
         });
-        toast.success("Direk silinmek üzere işaretlendi — Kaydet ile uygulayın.");
+        toast.success(t("toasts.poleDraftDeleted"));
       }
       return;
     }
-    if (!window.confirm(`Direk #${p.sequence_no} silinsin mi? Bağlı segmentler de kaldırılır.`)) return;
+    if (!window.confirm(t("toasts.poleDeleteConfirm", { seq: p.sequence_no }))) return;
     try {
       await deletePole(accessToken, p.id);
-      toast.success("Direk silindi.");
+      toast.success(t("toasts.poleDeleted"));
       if (selectedLineId !== null) await reloadDetail(selectedLineId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Direk silinemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.poleDeleteFail"));
     }
   }
 
@@ -1643,7 +1643,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       await reloadDetail(selectedLine.id);
       if (selectedRegionId !== null) await reloadLines(selectedRegionId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Direk eklenemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.poleAddFail"));
     } finally {
       setBusy(false);
     }
@@ -1699,7 +1699,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
           device_position_t: ov.device_position_t
         });
       }
-      toast.success("Değişiklikler kaydedildi.");
+      toast.success(t("toasts.changesSaved"));
       setDraftPoleAdds([]);
       setDraftPoleEdits(new Map());
       setDraftPoleDeletes(new Set());
@@ -1723,7 +1723,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     setDraftPoleEdits(new Map());
     setDraftPoleDeletes(new Set());
     setDraftDevicePositions(new Map());
-    toast.success("Taslak değişiklikler geri alındı.");
+    toast.success(t("toasts.draftReverted"));
   }
 }
 

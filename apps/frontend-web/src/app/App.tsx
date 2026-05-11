@@ -478,8 +478,8 @@ export function App() {
   useEffect(() => {
     const onExpired = () => {
       if (!session) return; // zaten login ekranindayiz
-      toast.warning("Oturum süresi doldu, lütfen tekrar giriş yapın.", {
-        title: "Oturum sona erdi"
+      toast.warning(t("toasts.sessionExpiredBody"), {
+        title: t("toasts.sessionExpiredTitle")
       });
       handleLogout();
       setAuthError("Oturum süresi doldu. Lütfen tekrar giriş yapın.");
@@ -620,7 +620,7 @@ export function App() {
     if (!session) return;
     await createSignal(session.accessToken, payload);
     await reloadSignals();
-    toast.success("Sinyal eklendi.");
+    toast.success(t("toasts.signalAdded"));
   };
 
   const handleUpdateSignal = async (
@@ -630,14 +630,14 @@ export function App() {
     if (!session) return;
     await updateSignal(session.accessToken, signalKey, payload);
     await reloadSignals();
-    toast.success("Sinyal güncellendi.");
+    toast.success(t("toasts.signalUpdated"));
   };
 
   const handleDeleteSignal = async (signalKey: string) => {
     if (!session) return;
     await deleteSignal(session.accessToken, signalKey);
     await reloadSignals();
-    toast.success("Sinyal silindi.");
+    toast.success(t("toasts.signalDeleted"));
   };
 
   const handleRefreshSignalLive = useCallback(async () => {
@@ -720,7 +720,7 @@ export function App() {
     if (!session) return;
     await createAlarmRule(session.accessToken, payload);
     await reloadAlarmRules();
-    toast.success("Alarm kuralı eklendi.");
+    toast.success(t("toasts.alarmRuleAdded"));
   };
 
   const handleUpdateAlarmRule = async (
@@ -730,14 +730,14 @@ export function App() {
     if (!session) return;
     await updateAlarmRule(session.accessToken, ruleId, payload);
     await reloadAlarmRules();
-    toast.success("Alarm kuralı güncellendi.");
+    toast.success(t("toasts.alarmRuleUpdated"));
   };
 
   const handleDeleteAlarmRule = async (ruleId: number) => {
     if (!session) return;
     await deleteAlarmRule(session.accessToken, ruleId);
     await reloadAlarmRules();
-    toast.success("Alarm kuralı silindi.");
+    toast.success(t("toasts.alarmRuleDeleted"));
   };
 
   const reloadUsers = async () => {
@@ -758,14 +758,14 @@ export function App() {
     if (!session) return;
     await createUser(session.accessToken, payload);
     await reloadUsers();
-    toast.success(`Kullanıcı "${payload.username}" eklendi.`);
+    toast.success(t("toasts.userAdded", { username: payload.username }));
   };
 
   const handleDeleteUser = async (userId: number) => {
     if (!session) return;
     await deleteUser(session.accessToken, userId);
     await reloadUsers();
-    toast.success("Kullanıcı silindi.");
+    toast.success(t("toasts.userDeleted"));
   };
 
   const handleUpdateUser = async (
@@ -775,20 +775,24 @@ export function App() {
     if (!session) return;
     await updateUser(session.accessToken, userId, payload);
     await reloadUsers();
-    toast.success("Kullanıcı güncellendi.");
+    toast.success(t("toasts.userUpdated"));
   };
 
   const handleResetUserPassword = async (userId: number, newPassword: string) => {
     if (!session) return;
     await resetUserPassword(session.accessToken, userId, newPassword);
-    toast.success("Kullanıcı şifresi sıfırlandı.");
+    toast.success(t("toasts.userPasswordReset"));
   };
 
   const handleAssignAlarm = async (alarmId: number, assignedTo: string | null) => {
     if (!session) return;
     const updated = await assignAlarm(session.accessToken, alarmId, assignedTo);
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-    toast.success(assignedTo ? `Alarm ${assignedTo} kullanıcısına atandı.` : "Alarm ataması kaldırıldı.");
+    toast.success(
+      assignedTo
+        ? t("toasts.alarmAssigned", { username: assignedTo })
+        : t("toasts.alarmAssignCleared")
+    );
   };
 
   // ===== Hat Arizalari (Fault) ticket handlers =====
@@ -796,19 +800,23 @@ export function App() {
     if (!session) return;
     const updated = await assignFault(session.accessToken, faultId, username);
     setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-    toast.success(username ? `Arıza ${username} kullanıcısına atandı.` : "Arıza ataması kaldırıldı.");
+    toast.success(
+      username
+        ? t("toasts.faultAssigned", { username })
+        : t("toasts.faultAssignCleared")
+    );
   };
   const handleUpdateFaultStatus = async (faultId: number, newStatus: string) => {
     if (!session) return;
     const updated = await updateFaultStatus(session.accessToken, faultId, newStatus);
     setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-    toast.success("Arıza durumu güncellendi.");
+    toast.success(t("toasts.faultStatusUpdated"));
   };
   const handleUpdateFaultNote = async (faultId: number, note: string | null) => {
     if (!session) return;
     const updated = await updateFaultNote(session.accessToken, faultId, note);
     setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-    toast.success("Not kaydedildi.");
+    toast.success(t("toasts.noteSaved"));
   };
   const handleLoadFaultComments = async (faultId: number): Promise<FaultComment[]> => {
     if (!session) return [];
@@ -823,7 +831,7 @@ export function App() {
         f.id === faultId ? { ...f, comment_count: (f.comment_count ?? 0) + 1 } : f
       )
     );
-    toast.success("Yorum eklendi.");
+    toast.success(t("toasts.commentAdded"));
   };
 
   const handleLoadAlarmComments = async (alarmId: number): Promise<AlarmComment[]> => {
@@ -834,42 +842,42 @@ export function App() {
   const handleAddAlarmComment = async (alarmId: number, comment: string) => {
     if (!session) return;
     await addAlarmComment(session.accessToken, alarmId, comment);
-    toast.success("Yorum eklendi.");
+    toast.success(t("toasts.commentAdded"));
   };
 
   const handleAcknowledgeAlarm = async (alarmId: number) => {
     if (!session) return;
     const updated = await acknowledgeAlarm(session.accessToken, alarmId);
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-    toast.success("Alarm onaylandı.");
+    toast.success(t("toasts.alarmAcknowledged"));
   };
 
   const handleResetAlarm = async (alarmId: number) => {
     if (!session) return;
     const updated = await resetAlarm(session.accessToken, alarmId);
     setAlarms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-    toast.success("Alarm sıfırlandı.");
+    toast.success(t("toasts.alarmReset"));
   };
 
   const handleDeleteAlarm = async (alarmId: number) => {
     if (!session) return;
     await deleteAlarm(session.accessToken, alarmId);
     setAlarms((prev) => prev.filter((item) => item.id !== alarmId));
-    toast.success("Alarm silindi.");
+    toast.success(t("toasts.alarmDeleted"));
   };
 
   const handleAcknowledgeAllAlarms = async () => {
     if (!session) return;
     const updated = await acknowledgeAllAlarms(session.accessToken);
     setAlarms(updated);
-    toast.success("Tüm alarmlar onaylandı.");
+    toast.success(t("toasts.allAlarmsAcked"));
   };
 
   const handleResetAllAlarms = async () => {
     if (!session) return;
     const updated = await resetAllAlarms(session.accessToken);
     setAlarms(updated);
-    toast.success("Tüm alarmlar sıfırlandı.");
+    toast.success(t("toasts.allAlarmsReset"));
   };
 
   const reloadResponsibilityAreas = async () => {
@@ -887,7 +895,7 @@ export function App() {
     if (!session) return;
     await createResponsibilityArea(session.accessToken, payload);
     await reloadResponsibilityAreas();
-    toast.success("Sorumluluk alanı oluşturuldu.");
+    toast.success(t("toasts.areaCreated"));
   };
 
   const handleUpdateArea = async (
@@ -897,70 +905,70 @@ export function App() {
     if (!session) return;
     await updateResponsibilityArea(session.accessToken, areaId, payload);
     await reloadResponsibilityAreas();
-    toast.success("Sorumluluk alanı güncellendi.");
+    toast.success(t("toasts.areaUpdated"));
   };
 
   const handleDeleteArea = async (areaId: number) => {
     if (!session) return;
     await deleteResponsibilityArea(session.accessToken, areaId);
     await reloadResponsibilityAreas();
-    toast.success("Sorumluluk alanı silindi.");
+    toast.success(t("toasts.areaDeleted"));
   };
 
   const handleAddUserToArea = async (areaId: number, userId: number) => {
     if (!session) return;
     await addUserToArea(session.accessToken, areaId, userId);
     await reloadResponsibilityAreas();
-    toast.success("Kullanıcı alana eklendi.");
+    toast.success(t("toasts.areaUserAdded"));
   };
 
   const handleRemoveUserFromArea = async (areaId: number, userId: number) => {
     if (!session) return;
     await removeUserFromArea(session.accessToken, areaId, userId);
     await reloadResponsibilityAreas();
-    toast.success("Kullanıcı alandan çıkarıldı.");
+    toast.success(t("toasts.areaUserRemoved"));
   };
 
   const handleAddDeviceToArea = async (areaId: number, deviceId: number) => {
     if (!session) return;
     await addDeviceToArea(session.accessToken, areaId, deviceId);
     await reloadResponsibilityAreas();
-    toast.success("Cihaz alana eklendi.");
+    toast.success(t("toasts.areaDeviceAdded"));
   };
 
   const handleRemoveDeviceFromArea = async (areaId: number, deviceId: number) => {
     if (!session) return;
     await removeDeviceFromArea(session.accessToken, areaId, deviceId);
     await reloadResponsibilityAreas();
-    toast.success("Cihaz alandan çıkarıldı.");
+    toast.success(t("toasts.areaDeviceRemoved"));
   };
 
   const handleAddRegionToArea = async (areaId: number, regionId: number) => {
     if (!session) return;
     await addRegionToArea(session.accessToken, areaId, regionId);
     await reloadResponsibilityAreas();
-    toast.success("Bölge alana eklendi.");
+    toast.success(t("toasts.areaRegionAdded"));
   };
 
   const handleRemoveRegionFromArea = async (areaId: number, regionId: number) => {
     if (!session) return;
     await removeRegionFromArea(session.accessToken, areaId, regionId);
     await reloadResponsibilityAreas();
-    toast.success("Bölge alandan çıkarıldı.");
+    toast.success(t("toasts.areaRegionRemoved"));
   };
 
   const handleAddLineToArea = async (areaId: number, lineId: number) => {
     if (!session) return;
     await addLineToArea(session.accessToken, areaId, lineId);
     await reloadResponsibilityAreas();
-    toast.success("Hat alana eklendi.");
+    toast.success(t("toasts.areaLineAdded"));
   };
 
   const handleRemoveLineFromArea = async (areaId: number, lineId: number) => {
     if (!session) return;
     await removeLineFromArea(session.accessToken, areaId, lineId);
     await reloadResponsibilityAreas();
-    toast.success("Hat alandan çıkarıldı.");
+    toast.success(t("toasts.areaLineRemoved"));
   };
 
   const reloadGateways = async () => {
@@ -989,7 +997,7 @@ export function App() {
     if (!session) return;
     await createGateway(session.accessToken, payload);
     await reloadGateways();
-    toast.success(`Gateway "${payload.name}" eklendi.`);
+    toast.success(t("toasts.gatewayAdded", { name: payload.name }));
   };
 
   const handleDownloadGatewayCompose = async (
@@ -1010,7 +1018,7 @@ export function App() {
     a.click();
     a.remove();
     window.URL.revokeObjectURL(url);
-    toast.success(`${filename} indirildi.`);
+    toast.success(t("toasts.gatewayDownloaded", { filename }));
   };
 
   const handleDeleteGateway = async (gatewayCode: string) => {
@@ -1048,10 +1056,10 @@ export function App() {
         setDevicePanelGatewayCode("");
         setDevicesByGateway([]);
       }
-      toast.success(`Gateway "${displayName}" silindi.`);
+      toast.success(t("toasts.gatewayDeleted", { name: displayName }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Gateway silinemedi.";
-      toast.error(`Gateway silinemedi: ${msg}`);
+      toast.error(t("toasts.gatewayDeleteFail", { msg }));
       throw err; // DeviceManagementPanel'in busy state'i de finally'de kapanir
     }
   };
@@ -1062,12 +1070,10 @@ export function App() {
     const displayName = gateway?.name ?? gatewayCode;
     try {
       await refreshGatewayAllDevices(session.accessToken, gatewayCode);
-      toast.success(
-        `"${displayName}" gateway'i en kısa sürede tüm cihazları sorgulayacak.`
-      );
+      toast.success(t("toasts.gatewayRefreshQueued", { name: displayName }));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "İstek gönderilemedi.";
-      toast.error(`Tüm cihazlara sorgu gönderilemedi: ${msg}`);
+      const msg = err instanceof Error ? err.message : t("toasts.requestSendFail");
+      toast.error(t("toasts.gatewayRefreshFail", { msg }));
     }
   };
 
@@ -1078,7 +1084,7 @@ export function App() {
     if (!session) return;
     await updateGateway(session.accessToken, gatewayCode, payload);
     await reloadGateways();
-    toast.success("Gateway güncellendi.");
+    toast.success(t("toasts.gatewayUpdated"));
   };
 
   const handleSelectGatewayForDevices = useCallback(
@@ -1176,7 +1182,7 @@ export function App() {
       // sinyal listesi tazelense iyi, canlı matrisin etiketleriyle uyum kalsin
     }
     await handleRefreshSignalLive();
-    toast.success(`Cihaz "${payload.name}" eklendi.`);
+    toast.success(t("toasts.deviceAdded", { name: payload.name }));
   };
 
   const handleUpdateDevice = async (
@@ -1208,7 +1214,7 @@ export function App() {
     } else {
       setDevicesByGateway(all);
     }
-    toast.success("Cihaz güncellendi.");
+    toast.success(t("toasts.deviceUpdated"));
   };
 
   const handleDeleteDevice = async (deviceCode: string) => {
@@ -1218,7 +1224,7 @@ export function App() {
     setDevices(all);
     setDevicesByGateway((prev) => prev.filter((item) => item.code !== deviceCode));
     await handleRefreshSignalLive();
-    toast.success("Cihaz silindi.");
+    toast.success(t("toasts.deviceDeleted"));
   };
 
   const reloadOutboundTargets = async () => {
@@ -1246,7 +1252,7 @@ export function App() {
     if (!session) return;
     await createOutboundTarget(session.accessToken, payload);
     await reloadOutboundTargets();
-    toast.success(`Outbound hedef "${payload.name}" eklendi.`);
+    toast.success(t("toasts.outboundAdded", { name: payload.name }));
   };
 
   const handleUpdateOutboundTarget = async (
@@ -1269,14 +1275,14 @@ export function App() {
     if (!session) return;
     await updateOutboundTarget(session.accessToken, targetId, payload);
     await reloadOutboundTargets();
-    toast.success("Outbound hedef güncellendi.");
+    toast.success(t("toasts.outboundUpdated"));
   };
 
   const handleDeleteOutboundTarget = async (targetId: number) => {
     if (!session) return;
     await deleteOutboundTarget(session.accessToken, targetId);
     await reloadOutboundTargets();
-    toast.success("Outbound hedef silindi.");
+    toast.success(t("toasts.outboundDeleted"));
   };
 
   const handleDownloadIec104Points = async (targetId: number, suggestedName: string) => {
@@ -1284,16 +1290,14 @@ export function App() {
     try {
       const count = await downloadIec104PointsCsv(session.accessToken, targetId, suggestedName);
       if (count === 0) {
-        toast.warning(
-          "CSV indirildi ama içinde nokta yok. Sinyaller sayfasından her sinyal için Outbound · IEC 104 sekmesinde Type ID + IOA giriniz."
-        );
+        toast.warning(t("toasts.iec104DownloadedEmpty"));
       } else if (count !== null) {
-        toast.success(`IEC 104 point list indirildi (${count} nokta).`);
+        toast.success(t("toasts.iec104DownloadedCount", { count }));
       } else {
-        toast.success("IEC 104 point list indirildi.");
+        toast.success(t("toasts.iec104Downloaded"));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Point list indirilemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.iec104DownloadFail"));
     }
   };
 
@@ -1302,7 +1306,7 @@ export function App() {
     await updateDevice(session.accessToken, deviceCode, { iec104_common_address: ca });
     const all = await fetchDevices(session.accessToken);
     setDevices(all);
-    toast.success(`${deviceCode} ASDU adresi kaydedildi.`);
+    toast.success(t("toasts.asduAddressSaved", { deviceCode }));
   };
 
   const handleAutoAssignDeviceCa = async (targetId: number, overwrite: boolean) => {
@@ -1312,11 +1316,11 @@ export function App() {
       const all = await fetchDevices(session.accessToken);
       setDevices(all);
       const msg = overwrite
-        ? `${result.assigned} cihaza yeni ASDU adresi atandı.`
-        : `${result.assigned} cihaza adres atandı, ${result.skipped} cihaz korundu.`;
+        ? t("toasts.asduAutoAssignOverwrite", { assigned: result.assigned })
+        : t("toasts.asduAutoAssignNew", { assigned: result.assigned, skipped: result.skipped });
       toast.success(msg);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Otomatik atama başarısız.");
+      toast.error(err instanceof Error ? err.message : t("toasts.autoAssignFail"));
     }
   };
 
@@ -1325,7 +1329,7 @@ export function App() {
     await updateProjectSettings(session.accessToken, payload);
     // Provider'i yenile — Login + Header logosu hemen guncellensin diye.
     await projectSettings.refresh();
-    toast.success("Proje ayarları kaydedildi.");
+    toast.success(t("toasts.projectSettingsSaved"));
   };
 
   const handleDownloadIec104Xlsx = async (targetId: number, suggestedName: string) => {
@@ -1333,16 +1337,14 @@ export function App() {
     try {
       const count = await downloadIec104PointsXlsx(session.accessToken, targetId, suggestedName);
       if (count === 0) {
-        toast.warning(
-          "Excel indirildi ama içinde nokta yok. Sinyaller sayfasından her sinyal için Outbound · IEC 104 sekmesinden Type ID + IOA giriniz."
-        );
+        toast.warning(t("toasts.signalListDownloadedEmpty"));
       } else if (count !== null) {
-        toast.success(`Sinyal listesi indirildi (${count} nokta).`);
+        toast.success(t("toasts.signalListDownloadedCount", { count }));
       } else {
-        toast.success("Sinyal listesi indirildi.");
+        toast.success(t("toasts.signalListDownloaded"));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sinyal listesi indirilemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.signalListDownloadFail"));
     }
   };
 
@@ -1367,7 +1369,7 @@ export function App() {
     try {
       const updated = await updateNotificationSettingsApi(session.accessToken, payload);
       setNotificationSettings(updated);
-      toast.success("Bildirim ayarları kaydedildi.");
+      toast.success(t("toasts.notificationSettingsSaved"));
     } catch (error) {
       setNotificationSettingsError(error instanceof Error ? error.message : "Bildirim ayarları kaydedilemedi.");
       throw error;
@@ -1432,7 +1434,7 @@ export function App() {
       const updated = await updateMyNotificationPrefs(session.accessToken, next);
       setNotifPrefs(updated);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Tercih kaydedilemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.preferenceSaveFail"));
     } finally {
       setNotifPrefsSaving(false);
     }
@@ -1450,7 +1452,7 @@ export function App() {
     } catch (err) {
       if (isSupportedLanguage(previous)) setI18nLanguage(previous);
       setCurrentUser((u) => (u ? { ...u, language: previous } : u));
-      toast.error(err instanceof Error ? err.message : "Dil tercihi kaydedilemedi.");
+      toast.error(err instanceof Error ? err.message : t("toasts.languagePrefSaveFail"));
     }
   };
 
