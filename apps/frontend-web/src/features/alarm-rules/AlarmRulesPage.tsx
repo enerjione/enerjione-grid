@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
@@ -1601,7 +1602,10 @@ function DevicePickerModal({
     onConfirm(Array.from(selected));
   };
 
-  return (
+  // Modal'i body'ye portallayalim: form/section icindeki overflow:hidden veya
+  // transform sahibi parent'lar fixed elemani kestiginde modal acilmiyor
+  // gibi gozukuyordu — portal bu stacking sorunlarini ortadan kaldirir.
+  return createPortal(
     <div
       className="settings-modal-backdrop rule-device-picker-backdrop"
       onClick={onCancel}
@@ -1675,6 +1679,7 @@ function DevicePickerModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
