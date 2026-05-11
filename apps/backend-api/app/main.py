@@ -263,6 +263,9 @@ def create_tables():
             text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_twilio_content_sid VARCHAR(64) NOT NULL DEFAULT ''")
         )
         connection.execute(
+            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_twilio_content_vars VARCHAR(2000) NOT NULL DEFAULT ''")
+        )
+        connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS outbound_targets ("
                 "id SERIAL PRIMARY KEY, "

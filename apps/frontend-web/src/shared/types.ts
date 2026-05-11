@@ -415,6 +415,9 @@ export type NotificationSettings = {
    *  Bu alanlar sadece Twilio sagayicisinda anlamli. */
   sms_twilio_use_whatsapp?: boolean;
   sms_twilio_content_sid?: string;
+  /** Content Template degiskenleri — JSON string. Ornek: '{"1":"deger"}'.
+   *  Bos string varsayilan {} olarak gonderilir. */
+  sms_twilio_content_vars?: string;
   /** Telegram Bot ile bildirim gondermek icin. */
   telegram_enabled?: boolean;
   telegram_bot_token?: string;

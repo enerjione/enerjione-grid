@@ -31,6 +31,7 @@ const EMPTY_SETTINGS: NotificationSettings = {
   sms_from_number: "",
   sms_twilio_use_whatsapp: false,
   sms_twilio_content_sid: "",
+  sms_twilio_content_vars: "",
   telegram_enabled: false,
   telegram_bot_token: "",
   telegram_chat_ids: ""
@@ -446,6 +447,26 @@ export function NotificationSettingsPanel({
                               {t("notifications.settings.fields.twilioContentSidHint")}
                             </small>
                           </label>
+                          {(form.sms_twilio_content_sid ?? "").trim() ? (
+                            <label className="notif-field notif-field--full">
+                              <span>{t("notifications.settings.fields.twilioContentVars")}</span>
+                              <input
+                                value={form.sms_twilio_content_vars ?? ""}
+                                onChange={(event) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    sms_twilio_content_vars: event.target.value
+                                  }))
+                                }
+                                placeholder={t("notifications.settings.fields.twilioContentVarsPlaceholder")}
+                                spellCheck={false}
+                                style={{ fontFamily: "ui-monospace, monospace" }}
+                              />
+                              <small className="helper-text">
+                                {t("notifications.settings.fields.twilioContentVarsHint")}
+                              </small>
+                            </label>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>

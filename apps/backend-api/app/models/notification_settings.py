@@ -33,6 +33,10 @@ class NotificationSettings(Base):
     # ContentVariables ile request yapilir.
     sms_twilio_use_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sms_twilio_content_sid: Mapped[str] = mapped_column(String(64), default="")
+    # Twilio Content Template degisken haritasi — JSON string. Ornek:
+    # '{"1": "Alarm tetiklendi", "2": "DEV-001"}'. Bos string varsayilan
+    # ('{}') kabul edilir. Degiskensiz template'de bos kalir.
+    sms_twilio_content_vars: Mapped[str] = mapped_column(String(2000), default="")
     # Telegram Bot API. Kanal/grup chat_id'leri virgulle ayrilmis liste.
     # Bot tokeni @BotFather'dan alinir; chat_id'ler @userinfobot veya
     # bot'un /getUpdates endpoint'inden ogrenilir.

@@ -17,6 +17,7 @@ class NotificationSettingsRead(BaseModel):
     sms_from_number: str = ""
     sms_twilio_use_whatsapp: bool = False
     sms_twilio_content_sid: str = ""
+    sms_twilio_content_vars: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""
@@ -40,6 +41,7 @@ class NotificationSettingsUpdate(BaseModel):
     sms_from_number: str = ""
     sms_twilio_use_whatsapp: bool = False
     sms_twilio_content_sid: str = ""
+    sms_twilio_content_vars: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""

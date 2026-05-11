@@ -205,6 +205,7 @@ def _send_sms_via_twilio(
     from_number = (settings_row.sms_from_number or "").strip()
     use_wa = bool(getattr(settings_row, "sms_twilio_use_whatsapp", False))
     content_sid = (getattr(settings_row, "sms_twilio_content_sid", "") or "").strip()
+    content_vars_raw = (getattr(settings_row, "sms_twilio_content_vars", "") or "").strip()
 
     if not account_sid:
         raise ValueError("Twilio Account SID boş.")
@@ -228,10 +229,25 @@ def _send_sms_via_twilio(
         "From": _wa(from_number),
     }
     if use_wa and content_sid:
-        # Template (Business-initiated) mesaj: ContentSid + bos
-        # ContentVariables. Degisken icermeyen template'ler icin yeterli.
+        # Template (Business-initiated) mesaj: ContentSid + ContentVariables.
+        # Kullanici JSON yazmissa olduğu gibi geçir; bos veya bozuksa {}
+        # gonder (degisken icermeyen template'ler icin yeterli).
         fields["ContentSid"] = content_sid
-        fields["ContentVariables"] = "{}"
+        cv: str = "{}"
+        if content_vars_raw:
+            try:
+                # Geçerli JSON oldugunu dogrula — gecersiz JSON Twilio
+                # tarafindan reddedilir; biz dogrulayip bos olana dusurelim.
+                parsed = json.loads(content_vars_raw)
+                if isinstance(parsed, dict):
+                    cv = json.dumps(parsed, ensure_ascii=False)
+            except (ValueError, json.JSONDecodeError):
+                # Bozuk JSON — kullaniciya net hata mesaji ver.
+                raise ValueError(
+                    "Twilio Content Variables alanı geçerli JSON değil. "
+                    "Örnek: {\"1\": \"değer\", \"2\": \"değer2\"}"
+                )
+        fields["ContentVariables"] = cv
     else:
         fields["Body"] = message or ""
 
@@ -254,12 +270,25 @@ def _send_sms_via_twilio(
                 raise RuntimeError(f"Twilio HTTP {resp.status}")
     except urllib.error.HTTPError as exc:
         # Twilio hata gövdesinde JSON {code, message, more_info} doner —
-        # kullaniciya anlamli hata mesaji yansit.
+        # kullaniciya anlamli hata mesaji yansit. WhatsApp'a ozel bilinen
+        # hata kodlari icin ek aciklama ekle.
         try:
             err_body = exc.read().decode("utf-8", errors="replace")
             err_json = json.loads(err_body)
             msg = err_json.get("message") or err_body
             code = err_json.get("code")
-            raise RuntimeError(f"Twilio API hatası ({code}): {msg}") from exc
+            extra = ""
+            if code == 63016:
+                # 24-saat conversation window disinda free-form Body.
+                extra = (
+                    " — WhatsApp 24 saatlik konuşma penceresi dışında "
+                    "Body gönderilemez; onaylanmış bir Content Template "
+                    "(HX...) kullanın."
+                )
+            elif code == 63018:
+                extra = " — Twilio hız limiti aşıldı (kısa süre sonra tekrar deneyin)."
+            elif code == 63007:
+                extra = " — From numarası WhatsApp için kayıtlı/onaylanmış değil."
+            raise RuntimeError(f"Twilio API hatası ({code}): {msg}{extra}") from exc
         except (ValueError, json.JSONDecodeError):
             raise RuntimeError(f"Twilio HTTP {exc.code}") from exc

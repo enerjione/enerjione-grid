@@ -14,3 +14,10 @@ build/
 Thumbs.db
 .idea/
 .vscode/
+
+# Firebase Admin SDK service account dosyalari — ASLA commit edilmemeli
+# (private key icerir). Backend runtime'da yerel dosyadan veya env ile okur.
+fcm-service-account.json
+**/fcm-service-account.json
+**/*service-account*.json
+**/firebase-adminsdk*.json
