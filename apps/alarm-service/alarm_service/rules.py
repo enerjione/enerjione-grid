@@ -1,10 +1,31 @@
 """Alarm kurali cekmeyi ve degerlendirmeyi yoneten yardimci modul."""
 
-from dataclasses import dataclass
+import json
+import logging
+from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
 import requests
+
+_log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CompositeTerm:
+    """Composite kuraldaki tek bir karsilastirma terimi (Faz 1)."""
+
+    signal_key: str
+    device_code: str  # "*" => anchor cihaz
+    comparator: str
+    threshold: float
+    threshold_high: float | None
+
+
+@dataclass(frozen=True)
+class CompositeExpression:
+    logic: str  # "AND" | "OR"
+    terms: tuple[CompositeTerm, ...]
 
 
 @dataclass(frozen=True)
@@ -21,6 +42,13 @@ class AlarmRule:
     debounce_sec: int
     device_code_filter: str | None
     is_active: bool
+    # Faz 1: composite kural destegi (geriye uyumlu, default simple).
+    rule_kind: str = "simple"
+    expression: CompositeExpression | None = None
+    # Composite icin: ifadede atifta bulunulan tum anchor (her terimin
+    # signal_key'i). Hangi sinyal-anahtarlari geldiginde bu kural yeniden
+    # degerlendirilmeli? Anchor liste main.py'de cache lookup'a yardimci olur.
+    composite_signal_keys: tuple[str, ...] = field(default_factory=tuple)
 
     def device_codes(self) -> set[str]:
         if not self.device_code_filter:
@@ -72,6 +100,28 @@ class AlarmRuleCache:
             if item["signal_key"] not in alarmable:
                 # Sinyal katalogdan tamamen silinmis -> kural anlamsiz, atla.
                 continue
+            rule_kind = item.get("rule_kind") or "simple"
+            expression: CompositeExpression | None = None
+            composite_keys: tuple[str, ...] = ()
+            if rule_kind == "composite":
+                expression = _parse_composite_expression(item.get("expression"))
+                if expression is None:
+                    # Bozuk / eksik expression — composite kurali degerlendiremeyiz.
+                    _log.warning(
+                        "composite_rule_skipped rule_id=%s reason=invalid_expression",
+                        item.get("id"),
+                    )
+                    continue
+                # Her terimin sinyal_key'i katalogda olmali; yoksa atla.
+                missing = [t.signal_key for t in expression.terms if t.signal_key not in alarmable]
+                if missing:
+                    _log.warning(
+                        "composite_rule_skipped rule_id=%s reason=missing_signals %s",
+                        item.get("id"),
+                        missing,
+                    )
+                    continue
+                composite_keys = tuple({t.signal_key for t in expression.terms})
             rule = AlarmRule(
                 id=int(item["id"]),
                 signal_key=item["signal_key"],
@@ -85,8 +135,18 @@ class AlarmRuleCache:
                 debounce_sec=int(item.get("debounce_sec") or 0),
                 device_code_filter=item.get("device_code_filter"),
                 is_active=True,
+                rule_kind=rule_kind,
+                expression=expression,
+                composite_signal_keys=composite_keys,
             )
+            # Anchor signal_key + composite expression'daki tum sinyaller icin
+            # rules_by_signal'a kayit at; engine herhangi biri geldiginde bu
+            # kurali yeniden degerlendirir.
             by_signal.setdefault(rule.signal_key, []).append(rule)
+            for ck in composite_keys:
+                if ck == rule.signal_key:
+                    continue
+                by_signal.setdefault(ck, []).append(rule)
         with self._lock:
             self._rules_by_signal = by_signal
             self._alarmable_keys = alarmable
@@ -162,3 +222,122 @@ def evaluate_rule(rule: AlarmRule, value: float, *, prev_active: bool) -> bool:
     if cmp == "boolean_false":
         return value < 0.5
     return False
+
+
+# ---------------------------------------------------------------------------
+# Composite (Faz 1: AND/OR mantiksal birlesim)
+# ---------------------------------------------------------------------------
+
+
+def _parse_composite_expression(raw: Any) -> CompositeExpression | None:
+    """Backend'den gelen 'expression' alanini CompositeExpression'a cevirir.
+
+    Backend dict olarak doner (Pydantic model_dump). Bazi durumlarda string
+    JSON da gelebilir (eski client). Her ikisini de destekler.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, dict):
+        return None
+    logic = (raw.get("logic") or "AND").upper()
+    if logic not in ("AND", "OR"):
+        return None
+    raw_terms = raw.get("terms") or []
+    if not isinstance(raw_terms, list) or not raw_terms:
+        return None
+    terms: list[CompositeTerm] = []
+    for t in raw_terms:
+        if not isinstance(t, dict):
+            return None
+        sig = t.get("signal_key")
+        cmp = t.get("comparator")
+        if not isinstance(sig, str) or not isinstance(cmp, str):
+            return None
+        try:
+            th = float(t.get("threshold") or 0.0)
+        except (TypeError, ValueError):
+            return None
+        th_hi_raw = t.get("threshold_high")
+        try:
+            th_hi = float(th_hi_raw) if th_hi_raw is not None else None
+        except (TypeError, ValueError):
+            return None
+        terms.append(
+            CompositeTerm(
+                signal_key=sig,
+                device_code=(t.get("device_code") or "*"),
+                comparator=cmp,
+                threshold=th,
+                threshold_high=th_hi,
+            )
+        )
+    return CompositeExpression(logic=logic, terms=tuple(terms))
+
+
+def _eval_compare(cmp: str, value: float, threshold: float, threshold_high: float | None) -> bool:
+    """Tek bir terim icin karsilastirma (composite — hysteresis YOK, kullanici
+    isterse simple modda ekleyebilir)."""
+    if cmp == "gt":
+        return value > threshold
+    if cmp == "gte":
+        return value >= threshold
+    if cmp == "lt":
+        return value < threshold
+    if cmp == "lte":
+        return value <= threshold
+    if cmp == "eq":
+        return value == threshold
+    if cmp == "ne":
+        return value != threshold
+    if cmp == "between":
+        if threshold_high is None:
+            return False
+        return threshold <= value <= threshold_high
+    if cmp == "outside":
+        if threshold_high is None:
+            return False
+        return value < threshold or value > threshold_high
+    if cmp == "boolean_true":
+        return value >= 0.5
+    if cmp == "boolean_false":
+        return value < 0.5
+    return False
+
+
+def evaluate_composite(
+    rule: AlarmRule,
+    *,
+    anchor_device_code: str,
+    live_value: "LiveValueLookup",
+) -> bool | None:
+    """Composite kurali degerlendirir.
+
+    `live_value(signal_key, device_code)` -> float | None : son canli deger
+    yoksa None doner. Eger gerekli sinyallerden herhangi biri henuz gelmediyse
+    sonuc None doner (engine kurali atlar, yarim degerlendirme yapmaz).
+    """
+    expr = rule.expression
+    if expr is None or not expr.terms:
+        return None
+    results: list[bool] = []
+    for term in expr.terms:
+        dev = anchor_device_code if term.device_code == "*" else term.device_code
+        v = live_value(term.signal_key, dev)
+        if v is None:
+            # Bilinmeyen veri — kurali bu turda atla (yanlis tetikleme yapma).
+            return None
+        results.append(_eval_compare(term.comparator, v, term.threshold, term.threshold_high))
+    if expr.logic == "AND":
+        return all(results)
+    return any(results)
+
+
+# Tip yardimcisi — main.py'de live-value cache'in cagri imzasi.
+from typing import Callable, Optional
+
+LiveValueLookup = Callable[[str, str], Optional[float]]

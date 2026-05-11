@@ -4,7 +4,10 @@ import { useTranslation } from "react-i18next";
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type {
   AlarmComparator,
+  AlarmCompositeExpression,
+  AlarmCompositeTerm,
   AlarmLevel,
+  AlarmRuleKind,
   AlarmRuleRow,
   SignalCatalogRow,
   UserRole
@@ -54,6 +57,8 @@ const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   name: "",
   description: "",
   level: "warning",
+  rule_kind: "simple",
+  expression: null,
   comparator: "gt",
   threshold: 0,
   threshold_high: null,
@@ -65,6 +70,16 @@ const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   notify_sms: false,
   notify_telegram: false
 };
+
+function makeEmptyTerm(signalKey = ""): AlarmCompositeTerm {
+  return {
+    signal_key: signalKey,
+    device_code: "*",
+    comparator: "gt",
+    threshold: 0,
+    threshold_high: null
+  };
+}
 
 function isBooleanComparator(c: AlarmComparator): boolean {
   return c === "boolean_true" || c === "boolean_false";
@@ -178,6 +193,8 @@ export function AlarmRulesPage({
         name: selectedRule.name,
         description: selectedRule.description ?? "",
         level: selectedRule.level,
+        rule_kind: selectedRule.rule_kind ?? "simple",
+        expression: selectedRule.expression ?? null,
         comparator: selectedRule.comparator,
         threshold: selectedRule.threshold,
         threshold_high: selectedRule.threshold_high,
@@ -234,27 +251,63 @@ export function AlarmRulesPage({
     setLocalError("");
   };
 
-  const buildPayload = (): Omit<AlarmRuleRow, "id"> => ({
-    ...form,
-    description: form.description?.toString().trim() || null,
-    device_code_filter: form.device_code_filter?.toString().trim() || null,
-    threshold: isBooleanComparator(form.comparator) ? 0 : Number(form.threshold),
-    threshold_high:
-      !isRangeComparator(form.comparator) ||
-      form.threshold_high === null ||
-      form.threshold_high === undefined
-        ? null
-        : Number(form.threshold_high),
-    hysteresis: isBooleanComparator(form.comparator) ? 0 : Number(form.hysteresis),
-    debounce_sec: Number(form.debounce_sec)
-  });
+  const buildPayload = (): Omit<AlarmRuleRow, "id"> => {
+    const isComposite = (form.rule_kind ?? "simple") === "composite";
+    let expression: AlarmCompositeExpression | null = null;
+    if (isComposite && form.expression) {
+      expression = {
+        logic: form.expression.logic,
+        terms: form.expression.terms.map((tm) => ({
+          signal_key: tm.signal_key,
+          device_code: tm.device_code?.trim() || "*",
+          comparator: tm.comparator,
+          threshold: isBooleanComparator(tm.comparator) ? 0 : Number(tm.threshold),
+          threshold_high:
+            !isRangeComparator(tm.comparator) ||
+            tm.threshold_high === null ||
+            tm.threshold_high === undefined
+              ? null
+              : Number(tm.threshold_high)
+        }))
+      };
+    }
+    return {
+      ...form,
+      description: form.description?.toString().trim() || null,
+      device_code_filter: form.device_code_filter?.toString().trim() || null,
+      rule_kind: isComposite ? "composite" : "simple",
+      expression,
+      threshold: isBooleanComparator(form.comparator) ? 0 : Number(form.threshold),
+      threshold_high:
+        !isRangeComparator(form.comparator) ||
+        form.threshold_high === null ||
+        form.threshold_high === undefined
+          ? null
+          : Number(form.threshold_high),
+      hysteresis: isBooleanComparator(form.comparator) ? 0 : Number(form.hysteresis),
+      debounce_sec: Number(form.debounce_sec)
+    };
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit) return;
     if (!form.signal_key) {
-      setLocalError("Bir sinyal seçin.");
+      setLocalError(t("engineering.alarmRules.errors.pickSignal"));
       return;
+    }
+    const isComposite = (form.rule_kind ?? "simple") === "composite";
+    if (isComposite) {
+      const terms = form.expression?.terms ?? [];
+      if (terms.length === 0) {
+        setLocalError(t("engineering.alarmRules.errors.addAtLeastOneTerm"));
+        return;
+      }
+      const empty = terms.findIndex((tm) => !tm.signal_key);
+      if (empty !== -1) {
+        setLocalError(t("engineering.alarmRules.errors.termMissingSignal", { idx: empty + 1 }));
+        return;
+      }
     }
     setSaving(true);
     setLocalError("");
@@ -458,56 +511,112 @@ export function AlarmRulesPage({
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
                       <legend>{t("engineering.alarmRules.fieldsetCondition")}</legend>
-                      <label className="rule-field">
-                        <span>{t("engineering.alarmRules.comparator")}</span>
-                        <select
-                          value={form.comparator}
-                          onChange={(e) =>
-                            setForm({ ...form, comparator: e.target.value as AlarmComparator })
+                      {/* Mod toggle: Basit (tek sinyal) | Gelişmiş (AND/OR
+                          birden fazla terim). Composite mod ana sinyal
+                          tetikleyicisi degismez; ek terimler expression
+                          icinde tutulur. */}
+                      <div className="rule-mode-toggle">
+                        <button
+                          type="button"
+                          className={`rule-mode-btn ${(form.rule_kind ?? "simple") === "simple" ? "is-active" : ""}`}
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              rule_kind: "simple" as AlarmRuleKind,
+                              expression: null
+                            })
                           }
+                          disabled={!canEdit}
                         >
-                          {COMPARATORS.map((item) => (
-                            <option key={item.value} value={item.value}>
-                              {item.symbol}  {item.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      {!isBooleanComparator(form.comparator) ? (
-                        <div className={isRangeComparator(form.comparator) ? "rule-grid-2" : ""}>
-                          <label className="rule-field">
-                            <span>
-                              {isRangeComparator(form.comparator) ? t("engineering.alarmRules.lowerLimit") : t("engineering.alarmRules.thresholdValue")}
-                              {formSignalUnit ? ` (${formSignalUnit})` : ""}
-                            </span>
-                            <input
-                              type="number"
-                              step="0.0001"
-                              value={form.threshold}
-                              onChange={(e) =>
-                                setForm({ ...form, threshold: Number(e.target.value) })
+                          <span className="material-symbols-outlined">looks_one</span>
+                          {t("engineering.alarmRules.modeSimple")}
+                        </button>
+                        <button
+                          type="button"
+                          className={`rule-mode-btn ${form.rule_kind === "composite" ? "is-active" : ""}`}
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              rule_kind: "composite" as AlarmRuleKind,
+                              expression: form.expression ?? {
+                                logic: "AND",
+                                terms: [
+                                  makeEmptyTerm(form.signal_key),
+                                  makeEmptyTerm("")
+                                ]
                               }
-                            />
+                            })
+                          }
+                          disabled={!canEdit}
+                        >
+                          <span className="material-symbols-outlined">account_tree</span>
+                          {t("engineering.alarmRules.modeComposite")}
+                        </button>
+                      </div>
+
+                      {(form.rule_kind ?? "simple") === "simple" ? (
+                        <>
+                          <label className="rule-field">
+                            <span>{t("engineering.alarmRules.comparator")}</span>
+                            <select
+                              value={form.comparator}
+                              onChange={(e) =>
+                                setForm({ ...form, comparator: e.target.value as AlarmComparator })
+                              }
+                            >
+                              {COMPARATORS.map((item) => (
+                                <option key={item.value} value={item.value}>
+                                  {item.symbol}  {item.label}
+                                </option>
+                              ))}
+                            </select>
                           </label>
-                          {isRangeComparator(form.comparator) ? (
-                            <label className="rule-field">
-                              <span>{t("engineering.alarmRules.upperLimit")}{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
-                              <input
-                                type="number"
-                                step="0.0001"
-                                value={form.threshold_high ?? 0}
-                                onChange={(e) =>
-                                  setForm({ ...form, threshold_high: Number(e.target.value) })
-                                }
-                              />
-                            </label>
-                          ) : null}
-                        </div>
+
+                          {!isBooleanComparator(form.comparator) ? (
+                            <div className={isRangeComparator(form.comparator) ? "rule-grid-2" : ""}>
+                              <label className="rule-field">
+                                <span>
+                                  {isRangeComparator(form.comparator) ? t("engineering.alarmRules.lowerLimit") : t("engineering.alarmRules.thresholdValue")}
+                                  {formSignalUnit ? ` (${formSignalUnit})` : ""}
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.0001"
+                                  value={form.threshold}
+                                  onChange={(e) =>
+                                    setForm({ ...form, threshold: Number(e.target.value) })
+                                  }
+                                />
+                              </label>
+                              {isRangeComparator(form.comparator) ? (
+                                <label className="rule-field">
+                                  <span>{t("engineering.alarmRules.upperLimit")}{formSignalUnit ? ` (${formSignalUnit})` : ""}</span>
+                                  <input
+                                    type="number"
+                                    step="0.0001"
+                                    value={form.threshold_high ?? 0}
+                                    onChange={(e) =>
+                                      setForm({ ...form, threshold_high: Number(e.target.value) })
+                                    }
+                                  />
+                                </label>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="rule-hint">
+                              {t("engineering.alarmRules.booleanHint", { state: form.comparator === "boolean_true" ? "TRUE" : "FALSE" })}
+                            </p>
+                          )}
+                        </>
                       ) : (
-                        <p className="rule-hint">
-                          {t("engineering.alarmRules.booleanHint", { state: form.comparator === "boolean_true" ? "TRUE" : "FALSE" })}
-                        </p>
+                        /* COMPOSITE MOD — AND/OR ile birden fazla terim */
+                        <CompositeEditor
+                          expression={form.expression ?? { logic: "AND", terms: [makeEmptyTerm(form.signal_key)] }}
+                          signals={signals}
+                          canEdit={canEdit}
+                          onChange={(next) => setForm({ ...form, expression: next })}
+                          t={t}
+                        />
                       )}
                     </fieldset>
 
@@ -702,13 +811,28 @@ export function AlarmRulesPage({
           <ul className="rules-v3-list">
             {filteredRules.map((rule) => {
               const sig = signalByKey.get(rule.signal_key);
-              const conditionText = isBooleanComparator(rule.comparator)
-                ? rule.comparator === "boolean_true"
-                  ? "= TRUE"
-                  : "= FALSE"
-                : isRangeComparator(rule.comparator)
-                  ? `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold} … ${rule.threshold_high ?? "?"}`
-                  : `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold}${sig?.unit ? ` ${sig.unit}` : ""}`;
+              const isComposite = (rule.rule_kind ?? "simple") === "composite";
+              const conditionText = isComposite && rule.expression
+                ? rule.expression.terms
+                    .map((tm) => {
+                      const tmSig = signalByKey.get(tm.signal_key);
+                      const lbl = tmSig?.label ?? tm.signal_key;
+                      if (isBooleanComparator(tm.comparator)) {
+                        return `${lbl} ${tm.comparator === "boolean_true" ? "= TRUE" : "= FALSE"}`;
+                      }
+                      if (isRangeComparator(tm.comparator)) {
+                        return `${lbl} ${COMPARATOR_SYMBOL[tm.comparator]} ${tm.threshold}…${tm.threshold_high ?? "?"}`;
+                      }
+                      return `${lbl} ${COMPARATOR_SYMBOL[tm.comparator]} ${tm.threshold}`;
+                    })
+                    .join(rule.expression.logic === "AND" ? "  ∧  " : "  ∨  ")
+                : isBooleanComparator(rule.comparator)
+                  ? rule.comparator === "boolean_true"
+                    ? "= TRUE"
+                    : "= FALSE"
+                  : isRangeComparator(rule.comparator)
+                    ? `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold} … ${rule.threshold_high ?? "?"}`
+                    : `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold}${sig?.unit ? ` ${sig.unit}` : ""}`;
               return (
                 <li
                   key={rule.id}
@@ -720,6 +844,17 @@ export function AlarmRulesPage({
                         {LEVEL_LABEL[rule.level]}
                       </span>
                       <strong>{rule.name}</strong>
+                      {isComposite ? (
+                        <span
+                          className="rules-v3-row-kind"
+                          title={t("engineering.alarmRules.compositeBadgeHint", {
+                            logic: rule.expression?.logic ?? "AND"
+                          })}
+                        >
+                          <span className="material-symbols-outlined">account_tree</span>
+                          {rule.expression?.logic ?? "AND"}
+                        </span>
+                      ) : null}
                       {!rule.is_active ? (
                         <span className="rules-v3-row-flag">{t("common.inactive")}</span>
                       ) : null}
@@ -774,5 +909,206 @@ export function AlarmRulesPage({
 
       {(localError || error) ? <p className="error-text">{localError || error}</p> : null}
     </section>
+  );
+}
+
+
+// =============================================================================
+// COMPOSITE EDITOR — AND/OR ile birden fazla terim
+// =============================================================================
+
+type CompositeEditorProps = {
+  expression: AlarmCompositeExpression;
+  signals: SignalCatalogRow[];
+  canEdit: boolean;
+  onChange: (next: AlarmCompositeExpression) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+};
+
+function CompositeEditor({ expression, signals, canEdit, onChange, t }: CompositeEditorProps) {
+  const signalByKey = useMemo(() => {
+    const m = new Map<string, SignalCatalogRow>();
+    for (const s of signals) m.set(s.key, s);
+    return m;
+  }, [signals]);
+
+  const updateTerm = (idx: number, patch: Partial<AlarmCompositeTerm>) => {
+    const next = expression.terms.map((tm, i) => (i === idx ? { ...tm, ...patch } : tm));
+    onChange({ ...expression, terms: next });
+  };
+
+  const removeTerm = (idx: number) => {
+    const next = expression.terms.filter((_, i) => i !== idx);
+    onChange({ ...expression, terms: next });
+  };
+
+  const addTerm = () => {
+    if (expression.terms.length >= 8) return;
+    onChange({ ...expression, terms: [...expression.terms, makeEmptyTerm("")] });
+  };
+
+  const setLogic = (logic: "AND" | "OR") => onChange({ ...expression, logic });
+
+  return (
+    <div className="rule-composite-editor">
+      {/* AND/OR secici */}
+      <div className="rule-composite-logic">
+        <span className="rule-composite-logic-label">
+          {t("engineering.alarmRules.composite.logicLabel")}
+        </span>
+        <div className="rule-composite-logic-toggle">
+          <button
+            type="button"
+            className={`rule-mode-btn rule-mode-btn--compact ${expression.logic === "AND" ? "is-active" : ""}`}
+            onClick={() => setLogic("AND")}
+            disabled={!canEdit}
+          >
+            AND
+          </button>
+          <button
+            type="button"
+            className={`rule-mode-btn rule-mode-btn--compact ${expression.logic === "OR" ? "is-active" : ""}`}
+            onClick={() => setLogic("OR")}
+            disabled={!canEdit}
+          >
+            OR
+          </button>
+        </div>
+        <span className="rule-hint rule-composite-logic-hint">
+          {expression.logic === "AND"
+            ? t("engineering.alarmRules.composite.andHint")
+            : t("engineering.alarmRules.composite.orHint")}
+        </span>
+      </div>
+
+      {/* Terim listesi */}
+      <ul className="rule-composite-terms">
+        {expression.terms.map((tm, idx) => {
+          const sig = signalByKey.get(tm.signal_key);
+          const isBool = tm.comparator === "boolean_true" || tm.comparator === "boolean_false";
+          const isRange = tm.comparator === "between" || tm.comparator === "outside";
+          return (
+            <li key={idx} className="rule-composite-term">
+              <div className="rule-composite-term-head">
+                <span className="rule-composite-term-idx">#{idx + 1}</span>
+                {idx > 0 ? (
+                  <span className="rule-composite-term-joint">{expression.logic}</span>
+                ) : null}
+                <span className="rule-composite-term-spacer" />
+                {expression.terms.length > 1 ? (
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-danger"
+                    title={t("engineering.alarmRules.composite.removeTerm")}
+                    aria-label={t("engineering.alarmRules.composite.removeTerm")}
+                    onClick={() => removeTerm(idx)}
+                    disabled={!canEdit}
+                  >
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                ) : null}
+              </div>
+              <div className="rule-composite-term-row">
+                <label className="rule-field rule-composite-field-signal">
+                  <span>{t("engineering.alarmRules.composite.termSignal")}</span>
+                  <select
+                    value={tm.signal_key}
+                    onChange={(e) => updateTerm(idx, { signal_key: e.target.value })}
+                    disabled={!canEdit}
+                  >
+                    <option value="">
+                      {t("engineering.alarmRules.composite.termSignalPlaceholder")}
+                    </option>
+                    {signals.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {SOURCE_SHORT[s.source] ?? s.source} · {s.label} ({s.key})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="rule-field rule-composite-field-device">
+                  <span>{t("engineering.alarmRules.composite.termDevice")}</span>
+                  <input
+                    type="text"
+                    value={tm.device_code ?? "*"}
+                    onChange={(e) => updateTerm(idx, { device_code: e.target.value })}
+                    placeholder="*"
+                    disabled={!canEdit}
+                    title={t("engineering.alarmRules.composite.termDeviceHint")}
+                  />
+                </label>
+                <label className="rule-field rule-composite-field-cmp">
+                  <span>{t("engineering.alarmRules.comparator")}</span>
+                  <select
+                    value={tm.comparator}
+                    onChange={(e) => updateTerm(idx, { comparator: e.target.value as AlarmComparator })}
+                    disabled={!canEdit}
+                  >
+                    {COMPARATORS.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.symbol} {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {!isBool ? (
+                  <label className="rule-field rule-composite-field-th">
+                    <span>
+                      {isRange
+                        ? t("engineering.alarmRules.lowerLimit")
+                        : t("engineering.alarmRules.thresholdValue")}
+                      {sig?.unit ? ` (${sig.unit})` : ""}
+                    </span>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={tm.threshold}
+                      onChange={(e) => updateTerm(idx, { threshold: Number(e.target.value) })}
+                      disabled={!canEdit}
+                    />
+                  </label>
+                ) : null}
+                {isRange ? (
+                  <label className="rule-field rule-composite-field-th">
+                    <span>
+                      {t("engineering.alarmRules.upperLimit")}
+                      {sig?.unit ? ` (${sig.unit})` : ""}
+                    </span>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={tm.threshold_high ?? 0}
+                      onChange={(e) =>
+                        updateTerm(idx, { threshold_high: Number(e.target.value) })
+                      }
+                      disabled={!canEdit}
+                    />
+                  </label>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Ekle butonu (max 8 terim) */}
+      <div className="rule-composite-actions">
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={addTerm}
+          disabled={!canEdit || expression.terms.length >= 8}
+        >
+          <span className="material-symbols-outlined">add</span>
+          {t("engineering.alarmRules.composite.addTerm")}
+        </button>
+        <span className="rule-hint">
+          {t("engineering.alarmRules.composite.maxTermsHint", {
+            count: expression.terms.length,
+            max: 8
+          })}
+        </span>
+      </div>
+    </div>
   );
 }

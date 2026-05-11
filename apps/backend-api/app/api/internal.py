@@ -36,8 +36,12 @@ def list_alarm_rules_internal(
 ):
     """Alarm-service'in aktif kurallari cekmesi icin internal endpoint."""
     _require_service_token(x_service_token)
+    # _row_to_read composite kurallarda expression_json'i parse edip
+    # AlarmRuleRead.expression alanini doldurur. alarm-service worker'i
+    # bu alani kullanarak AND/OR mantiksal kuralları degerlendirir.
+    from app.api.alarm_rules import _row_to_read
     stmt = select(AlarmRule).where(AlarmRule.is_active.is_(True))
-    return list(db.scalars(stmt).all())
+    return [_row_to_read(r) for r in db.scalars(stmt).all()]
 
 
 @router.get("/signals", response_model=list[SignalCatalogRead])

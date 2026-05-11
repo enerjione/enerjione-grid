@@ -9,7 +9,7 @@ from uuid import uuid4
 import pika
 import requests
 
-from alarm_service.rules import AlarmRuleCache, evaluate_rule
+from alarm_service.rules import AlarmRuleCache, evaluate_composite, evaluate_rule
 
 RABBIT_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "hsl.events")
@@ -107,6 +107,40 @@ class _QualityState:
 
 
 _QUALITY_STATE = _QualityState()
+
+
+# Composite kurallar icin son sinyal degerlerinin in-memory cache'i. Bir
+# (signal_key, device_code) pair'i her gelen telemetride guncellenir; composite
+# evaluator diger terimlerin son degerlerini buradan okur. Yalnizca alarm-service
+# process'inde tutulur — restart sonrasi tum hucreler bos baslar, yeni telemetri
+# geldikce dolar. Yarim degerlendirmeyi onlemek icin evaluator None'da kurali atlar.
+class _LiveValueCache:
+    def __init__(self) -> None:
+        self._lock = Lock()
+        # (signal_key, device_code) -> (value, monotonic_ts)
+        self._values: dict[tuple[str, str], tuple[float, float]] = {}
+
+    def put(self, signal_key: str, device_code: str, value: float, now: float) -> None:
+        with self._lock:
+            self._values[(signal_key, device_code)] = (value, now)
+
+    def get(self, signal_key: str, device_code: str, *, max_age_sec: float = 600.0, now: float | None = None) -> float | None:
+        """Belirtilen sinyalin/cihazin son degerini doner. max_age_sec'ten eski
+        degerler 'taze degil' kabul edilip None doner — kural eski veriyle
+        yanlislikla tetiklenmesin."""
+        if now is None:
+            now = time.monotonic()
+        with self._lock:
+            entry = self._values.get((signal_key, device_code))
+        if entry is None:
+            return None
+        value, ts = entry
+        if (now - ts) > max_age_sec:
+            return None
+        return value
+
+
+_LIVE = _LiveValueCache()
 
 _CACHE = AlarmRuleCache(
     base_url=BACKEND_API_BASE,
@@ -304,10 +338,28 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
         return
 
     now = time.monotonic()
+    # Live-value cache'i her telemetri ile guncelle; composite kurallar diger
+    # terimlerin son degerlerini buradan okuyacak.
+    _LIVE.put(str(signal_key), str(device_code or ""), value, now)
+
     for rule in _CACHE.rules_for(str(signal_key), str(device_code) if device_code else None):
+        # Composite kural ise anchor cihazi tetikleyen telemetri'nin
+        # device_code'u olur; tum terimler bu cihaz uzerinden ("*") veya
+        # explicit cihaz koduyla cozulur.
         key = (rule.id, str(device_code or ""), rule.signal_key)
         prev_active = _STATE.get_active(key)
-        should_be_active = evaluate_rule(rule, value, prev_active=prev_active)
+        if rule.rule_kind == "composite" and rule.expression is not None:
+            decision = evaluate_composite(
+                rule,
+                anchor_device_code=str(device_code or ""),
+                live_value=lambda sk, dc, _now=now: _LIVE.get(sk, dc, now=_now),
+            )
+            if decision is None:
+                # Henuz tum terimler icin veri yok — bu turda kuralı atla.
+                continue
+            should_be_active = decision
+        else:
+            should_be_active = evaluate_rule(rule, value, prev_active=prev_active)
 
         if should_be_active and not prev_active:
             if rule.debounce_sec > 0:

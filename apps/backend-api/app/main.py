@@ -76,6 +76,13 @@ def create_tables():
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS reset_at TIMESTAMPTZ"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS signal_key VARCHAR(120)"))
+        # Alarm kurali bileşik (AND/OR) destegi — Faz 1.
+        connection.execute(
+            text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS rule_kind VARCHAR(20) NOT NULL DEFAULT 'simple'")
+        )
+        connection.execute(
+            text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS expression_json TEXT")
+        )
         connection.execute(
             text(
                 "ALTER TABLE gateways ADD COLUMN IF NOT EXISTS upstream_url VARCHAR(500) "

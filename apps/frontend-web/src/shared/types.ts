@@ -507,12 +507,34 @@ export type AlarmComparator =
   | "boolean_true"
   | "boolean_false";
 
+/** Kural tipi: 'simple' = tek sinyal + tek karsilastirma (legacy/varsayilan).
+ *  'composite' = AND/OR ile birden fazla terim (Faz 1). */
+export type AlarmRuleKind = "simple" | "composite";
+
+/** Composite kuraldaki tek bir terim. */
+export type AlarmCompositeTerm = {
+  signal_key: string;
+  /** "*" => kuralin anchor cihazi. Spesifik cihaz kodu da yazilabilir. */
+  device_code: string;
+  comparator: AlarmComparator;
+  threshold: number;
+  threshold_high?: number | null;
+};
+
+/** Composite kural ifadesi. */
+export type AlarmCompositeExpression = {
+  logic: "AND" | "OR";
+  terms: AlarmCompositeTerm[];
+};
+
 export type AlarmRuleRow = {
   id: number;
   signal_key: string;
   name: string;
   description?: string | null;
   level: AlarmLevel;
+  rule_kind?: AlarmRuleKind;
+  expression?: AlarmCompositeExpression | null;
   comparator: AlarmComparator;
   threshold: number;
   threshold_high?: number | null;

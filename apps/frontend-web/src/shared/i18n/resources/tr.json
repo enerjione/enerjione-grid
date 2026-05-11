@@ -1006,6 +1006,26 @@
       "descriptionPlaceholder": "Bu alarmın amacını / aksiyonunu kısaca yazın...",
       "fieldsetSeverity": "Önem Derecesi",
       "fieldsetCondition": "Koşul",
+      "modeSimple": "Basit (Tek Sinyal)",
+      "modeComposite": "Gelişmiş (AND / OR)",
+      "compositeBadgeHint": "Bileşik kural — {{logic}} mantığıyla birden fazla terim",
+      "errors": {
+        "pickSignal": "Bir sinyal seçin.",
+        "addAtLeastOneTerm": "Gelişmiş kuralda en az bir terim ekleyin.",
+        "termMissingSignal": "{{idx}}. terim için sinyal seçin."
+      },
+      "composite": {
+        "logicLabel": "Birleşim",
+        "andHint": "TÜM terimler sağlandığında alarm tetiklenir.",
+        "orHint": "HERHANGİ BİR terim sağlandığında alarm tetiklenir.",
+        "termSignal": "Sinyal",
+        "termSignalPlaceholder": "— sinyal seçin —",
+        "termDevice": "Cihaz",
+        "termDeviceHint": "Tetikleyici cihazı kullanmak için '*' bırakın; belirli bir cihaz için kodunu yazın.",
+        "addTerm": "Terim Ekle",
+        "removeTerm": "Terimi kaldır",
+        "maxTermsHint": "{{count}}/{{max}} terim"
+      },
       "comparator": "Karşılaştırma",
       "lowerLimit": "Alt sınır",
       "upperLimit": "Üst sınır",

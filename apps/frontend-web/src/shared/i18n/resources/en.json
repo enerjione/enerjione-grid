@@ -1006,6 +1006,26 @@
       "descriptionPlaceholder": "Briefly describe the purpose / action of this alarm...",
       "fieldsetSeverity": "Severity",
       "fieldsetCondition": "Condition",
+      "modeSimple": "Simple (Single Signal)",
+      "modeComposite": "Advanced (AND / OR)",
+      "compositeBadgeHint": "Composite rule — multiple terms joined with {{logic}}",
+      "errors": {
+        "pickSignal": "Pick a signal.",
+        "addAtLeastOneTerm": "Add at least one term in advanced mode.",
+        "termMissingSignal": "Select a signal for term #{{idx}}."
+      },
+      "composite": {
+        "logicLabel": "Combine",
+        "andHint": "Triggers when ALL terms are true.",
+        "orHint": "Triggers when ANY term is true.",
+        "termSignal": "Signal",
+        "termSignalPlaceholder": "— pick a signal —",
+        "termDevice": "Device",
+        "termDeviceHint": "Use '*' for the trigger device; type a device code for a specific one.",
+        "addTerm": "Add Term",
+        "removeTerm": "Remove term",
+        "maxTermsHint": "{{count}}/{{max}} terms"
+      },
       "comparator": "Comparator",
       "lowerLimit": "Lower limit",
       "upperLimit": "Upper limit",
