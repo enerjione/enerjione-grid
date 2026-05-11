@@ -20,8 +20,20 @@ from threading import Lock
 from typing import Any
 
 import requests
-from google.auth.transport.requests import Request as GAuthRequest
-from google.oauth2 import service_account
+
+# google-auth lazy import — paket yuklu degilse backend yine ayaga kalksin,
+# sadece push gonderim cagrilari devre disi olsun. Sebep: bazi prod
+# ortamlarinda requirements.txt cache'i nedeniyle paket eksik kalabiliyor;
+# bu durumda tum app'in ImportError ile patlamasi yerine FCM'i kapatip
+# diger kanallari (email/SMS/Telegram) calismaya devam ettiriyoruz.
+try:
+    from google.auth.transport.requests import Request as GAuthRequest  # type: ignore
+    from google.oauth2 import service_account  # type: ignore
+    _GOOGLE_AUTH_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    GAuthRequest = None  # type: ignore[assignment,misc]
+    service_account = None  # type: ignore[assignment]
+    _GOOGLE_AUTH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +51,9 @@ class _FcmClient:
         self._load()
 
     def _load(self) -> None:
+        if not _GOOGLE_AUTH_AVAILABLE:
+            logger.info("google-auth paketi yuklu degil; FCM push devre disi.")
+            return
         path = os.environ.get("FCM_SERVICE_ACCOUNT_PATH", "").strip()
         if not path:
             # backend-api/ repo root'unu dene (app/services/fcm.py uzaginda)
