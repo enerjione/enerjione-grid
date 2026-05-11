@@ -1199,7 +1199,12 @@
       "downloadXlsxTitle": "Download Excel signal list for SCADA",
       "downloadCsvTitle": "CSV (legacy format)",
       "confirmDelete": "Delete target {{name}}?",
-      "emptyHint": "No outbound targets yet. Click + Add Target on the top right to create one."
+      "emptyHint": "No outbound targets yet. Click + Add Target on the top right to create one.",
+      "asduDevicesBtn": "Device ASDU Addresses",
+      "asduDevicesBtnTitle": "Per-device ASDU address assignment",
+      "scadaListTitle": "View connected SCADA clients",
+      "scadaConnected": "{{count}} connected",
+      "scadaOff": "Offline"
     },
     "grid": {
       "title": "Line Management",

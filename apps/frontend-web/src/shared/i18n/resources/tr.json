@@ -1199,7 +1199,12 @@
       "downloadXlsxTitle": "SCADA için Excel sinyal listesi indir",
       "downloadCsvTitle": "CSV (eski format)",
       "confirmDelete": "{{name}} hedefi silinsin mi?",
-      "emptyHint": "Henüz outbound hedef yok. Üst sağdan + Hedef Ekle ile yeni bir hedef oluşturun."
+      "emptyHint": "Henüz outbound hedef yok. Üst sağdan + Hedef Ekle ile yeni bir hedef oluşturun.",
+      "asduDevicesBtn": "Cihaz ASDU Adresleri",
+      "asduDevicesBtnTitle": "Cihaz başına ASDU adres atama",
+      "scadaListTitle": "Bağlı SCADA listesini gör",
+      "scadaConnected": "{{count}} bağlı",
+      "scadaOff": "Kapalı"
     },
     "grid": {
       "title": "Hat Yönetimi",

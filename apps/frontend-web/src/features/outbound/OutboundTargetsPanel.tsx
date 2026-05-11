@@ -124,16 +124,22 @@ export function OutboundTargetsPanel({
     setError("");
     try {
       const isIec104 = protocol === "iec104";
+      const isRest = protocol === "rest";
+      const isMqtt = protocol === "mqtt";
       await onCreate({
         name,
         protocol,
         endpoint: isIec104 ? "" : endpoint,
-        topic: topic.trim() ? topic.trim() : null,
+        // Topic yalniz MQTT icin anlamli; REST/IEC104'te gonderme.
+        topic: isMqtt && topic.trim() ? topic.trim() : null,
         event_filter: eventFilter,
-        auth_header: !isIec104 && authHeader.trim() ? authHeader.trim() : null,
-        auth_token: !isIec104 && authToken.trim() ? authToken.trim() : null,
-        qos,
-        retain,
+        // Auth header/token yalniz REST icin; MQTT broker auth ayri akis,
+        // IEC104'te zaten anlamsiz.
+        auth_header: isRest && authHeader.trim() ? authHeader.trim() : null,
+        auth_token: isRest && authToken.trim() ? authToken.trim() : null,
+        // QoS + retain yalniz MQTT icin; REST/IEC104 sifir/false gonderir.
+        qos: isMqtt ? qos : 0,
+        retain: isMqtt ? retain : false,
         is_active: isActive,
         listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : null,
         listen_port: isIec104 ? Number(listenPort) || 2404 : null,
@@ -178,14 +184,19 @@ export function OutboundTargetsPanel({
     setError("");
     try {
       const isIec104 = editing.protocol === "iec104";
+      const isRest = editing.protocol === "rest";
+      const isMqtt = editing.protocol === "mqtt";
       await onUpdate(editing.id, {
         endpoint: isIec104 ? "" : endpoint,
-        topic: topic.trim() ? topic.trim() : null,
+        // Topic yalniz MQTT'de anlamli.
+        topic: isMqtt && topic.trim() ? topic.trim() : null,
         event_filter: eventFilter,
-        auth_header: !isIec104 && authHeader.trim() ? authHeader.trim() : null,
-        auth_token: !isIec104 && authToken.trim() ? authToken.trim() : null,
-        qos,
-        retain,
+        // Auth yalniz REST.
+        auth_header: isRest && authHeader.trim() ? authHeader.trim() : null,
+        auth_token: isRest && authToken.trim() ? authToken.trim() : null,
+        // QoS + retain yalniz MQTT.
+        qos: isMqtt ? qos : 0,
+        retain: isMqtt ? retain : false,
         is_active: isActive,
         listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : undefined,
         listen_port: isIec104 ? Number(listenPort) || 2404 : undefined,
@@ -261,6 +272,12 @@ export function OutboundTargetsPanel({
 
   const isCreatingIec104 = protocol === "iec104";
   const isEditingIec104 = editing?.protocol === "iec104";
+  // Aktif protokol — edit'te target.protocol (kilitli), create'de kullanici secimi.
+  // Form alanlari hangi blokta gosterilecek diye bu degisken kullanilir; kullanici
+  // REST sectiyse MQTT alanlari, MQTT sectiyse REST alanlari gizlenir.
+  const activeProtocol: Protocol = editing ? (editing.protocol as Protocol) : protocol;
+  const isMqttForm = activeProtocol === "mqtt";
+  const isRestForm = activeProtocol === "rest";
 
   useEffect(() => {
     if (!asduModalTarget) return;
@@ -385,33 +402,45 @@ export function OutboundTargetsPanel({
             onSubmit={editing ? handleEdit : handleCreate}
           >
             <h3>{editing ? t("engineering.outbound.editTargetModal") : t("engineering.outbound.newTargetModal")}</h3>
-            {!editing ? (
-              <>
-                <label>
-                  {t("engineering.outbound.form.name")}
-                  <input value={name} onChange={(event) => setName(event.target.value)} required />
-                </label>
-                <label>
-                  {t("engineering.outbound.form.protocol")}
-                  <select value={protocol} onChange={(event) => setProtocol(event.target.value as Protocol)}>
-                    <option value="rest">REST</option>
-                    <option value="mqtt">MQTT</option>
-                    <option value="iec104">IEC 60870-5-104</option>
-                  </select>
-                </label>
-              </>
-            ) : (
-              <>
-                <label>
-                  {t("engineering.outbound.form.name")}
-                  <input value={editing.name} readOnly disabled />
-                </label>
-                <label>
-                  {t("engineering.outbound.form.protocol")}
-                  <input value={editing.protocol.toUpperCase()} readOnly disabled />
-                </label>
-              </>
-            )}
+            {/* Name + Protocol — kompakt yan yana iki sutun. IEC104 edit
+                modali genisken altta gelen Server | Whitelist grid'i ile
+                hizalanir; REST/MQTT modallarinda da daha az dikey alan kaplar. */}
+            <div className="outbound-form-headrow">
+              {!editing ? (
+                <>
+                  <label className="outbound-form-headcell">
+                    {t("engineering.outbound.form.name")}
+                    <input
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="outbound-form-headcell">
+                    {t("engineering.outbound.form.protocol")}
+                    <select
+                      value={protocol}
+                      onChange={(event) => setProtocol(event.target.value as Protocol)}
+                    >
+                      <option value="rest">REST</option>
+                      <option value="mqtt">MQTT</option>
+                      <option value="iec104">IEC 60870-5-104</option>
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="outbound-form-headcell">
+                    {t("engineering.outbound.form.name")}
+                    <input value={editing.name} readOnly disabled />
+                  </label>
+                  <label className="outbound-form-headcell">
+                    {t("engineering.outbound.form.protocol")}
+                    <input value={editing.protocol.toUpperCase()} readOnly disabled />
+                  </label>
+                </>
+              )}
+            </div>
 
             {(isCreatingIec104 || isEditingIec104) ? (
               <div className="iec104-edit-grid">
@@ -511,44 +540,89 @@ export function OutboundTargetsPanel({
               </div>
             ) : (
               <>
+                {/* Endpoint: REST = base URL, MQTT = broker host. Her ikisi icin de gerekli. */}
                 <label>
                   {t("engineering.outbound.form.endpoint")}
-                  <input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} required />
+                  <input
+                    value={endpoint}
+                    onChange={(event) => setEndpoint(event.target.value)}
+                    required
+                    placeholder={
+                      isMqttForm
+                        ? "mqtt-broker.example.com"
+                        : "https://musteri.example.com/webhook"
+                    }
+                  />
                 </label>
-                <label>
-                  {t("engineering.outbound.form.topic")}
-                  <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={t("engineering.outbound.form.topicPlaceholder")} />
-                </label>
+
+                {/* Event filter — REST + MQTT ortak. */}
                 <label>
                   {t("engineering.outbound.form.eventFilter")}
-                  <select value={eventFilter} onChange={(event) => setEventFilter(event.target.value as "all" | "telemetry" | "alarm")}>
+                  <select
+                    value={eventFilter}
+                    onChange={(event) =>
+                      setEventFilter(event.target.value as "all" | "telemetry" | "alarm")
+                    }
+                  >
                     <option value="all">{t("engineering.outbound.form.filterAll")}</option>
                     <option value="telemetry">{t("engineering.outbound.form.filterTelemetry")}</option>
                     <option value="alarm">{t("engineering.outbound.form.filterAlarm")}</option>
                   </select>
                 </label>
-                <label>
-                  {t("engineering.outbound.form.authHeader")}
-                  <input value={authHeader} onChange={(event) => setAuthHeader(event.target.value)} placeholder={t("engineering.outbound.form.authHeaderPlaceholder")} />
-                </label>
-                <label>
-                  {t("engineering.outbound.form.authToken")}
-                  <input value={authToken} onChange={(event) => setAuthToken(event.target.value)} />
-                </label>
-                <label>
-                  {t("engineering.outbound.form.qos")}
-                  <input
-                    type="number"
-                    min={0}
-                    max={2}
-                    value={qos}
-                    onChange={(event) => setQos(Number(event.target.value) || 0)}
-                  />
-                </label>
-                <label className="notify-option">
-                  <input type="checkbox" checked={retain} onChange={(event) => setRetain(event.target.checked)} />
-                  {t("engineering.outbound.form.retain")}
-                </label>
+
+                {/* REST'e ozel: auth header + token. */}
+                {isRestForm ? (
+                  <>
+                    <label>
+                      {t("engineering.outbound.form.authHeader")}
+                      <input
+                        value={authHeader}
+                        onChange={(event) => setAuthHeader(event.target.value)}
+                        placeholder={t("engineering.outbound.form.authHeaderPlaceholder")}
+                      />
+                    </label>
+                    <label>
+                      {t("engineering.outbound.form.authToken")}
+                      <input
+                        value={authToken}
+                        onChange={(event) => setAuthToken(event.target.value)}
+                      />
+                    </label>
+                  </>
+                ) : null}
+
+                {/* MQTT'ye ozel: topic + QoS + retain. */}
+                {isMqttForm ? (
+                  <>
+                    <label>
+                      {t("engineering.outbound.form.topic")}
+                      <input
+                        value={topic}
+                        onChange={(event) => setTopic(event.target.value)}
+                        placeholder={t("engineering.outbound.form.topicPlaceholder")}
+                        required
+                      />
+                    </label>
+                    <label>
+                      {t("engineering.outbound.form.qos")}
+                      <input
+                        type="number"
+                        min={0}
+                        max={2}
+                        value={qos}
+                        onChange={(event) => setQos(Number(event.target.value) || 0)}
+                      />
+                    </label>
+                    <label className="notify-option">
+                      <input
+                        type="checkbox"
+                        checked={retain}
+                        onChange={(event) => setRetain(event.target.checked)}
+                      />
+                      {t("engineering.outbound.form.retain")}
+                    </label>
+                  </>
+                ) : null}
               </>
             )}
             <ActiveSwitch checked={isActive} onChange={setIsActive} />
@@ -806,10 +880,12 @@ export function OutboundTargetsPanel({
                         type="button"
                         className={`iec104-badge ${badge.running ? "iec104-badge--ok" : "iec104-badge--bad"}`}
                         onClick={() => onFetchIec104Runtime && setRuntimeTarget(item)}
-                        title="Bağlı SCADA listesini gör"
+                        title={t("engineering.outbound.scadaListTitle")}
                       >
                         <span className="status-dot" />
-                        {badge.running ? `${badge.clients} bağlı` : "kapalı"}
+                        {badge.running
+                          ? t("engineering.outbound.scadaConnected", { count: badge.clients })
+                          : t("engineering.outbound.scadaOff")}
                       </button>
                     ) : (
                       <span className="helper-text">—</span>
@@ -820,27 +896,27 @@ export function OutboundTargetsPanel({
                       <button
                         type="button"
                         className="secondary-btn action-btn"
-                        title="Cihaz başına ASDU adres atama"
+                        title={t("engineering.outbound.asduDevicesBtnTitle")}
                         onClick={() => setAsduModalTarget(item)}
                       >
-                        Cihaz ASDU Adresleri
+                        {t("engineering.outbound.asduDevicesBtn")}
                       </button>
                     ) : null}
                     {isIec && onDownloadIec104Xlsx ? (
                       <button
                         type="button"
                         className="secondary-btn action-btn"
-                        title={t("outbound.downloadXlsxTitle")}
+                        title={t("engineering.outbound.downloadXlsxTitle")}
                         onClick={() => void handleDownloadXlsx(item)}
                       >
-                        {t("outbound.downloadXlsx")}
+                        {t("engineering.outbound.downloadXlsx")}
                       </button>
                     ) : null}
                     {isIec && onDownloadIec104Points ? (
                       <button
                         type="button"
                         className="secondary-btn action-btn"
-                        title={t("outbound.downloadCsvTitle")}
+                        title={t("engineering.outbound.downloadCsvTitle")}
                         onClick={() => void handleDownloadCsv(item)}
                       >
                         CSV
@@ -852,7 +928,7 @@ export function OutboundTargetsPanel({
                     <button
                       className="danger-btn action-btn"
                       onClick={() => {
-                        if (window.confirm(t("outbound.confirmDelete", { name: item.name }))) {
+                        if (window.confirm(t("engineering.outbound.confirmDelete", { name: item.name }))) {
                           void onDelete(item.id).catch((err: unknown) => {
                             setError(err instanceof Error ? err.message : t("common.errorOccurred"));
                           });
@@ -868,7 +944,7 @@ export function OutboundTargetsPanel({
             {targets.length === 0 ? (
               <tr>
                 <td colSpan={6} className="helper-text" style={{ padding: 24, textAlign: "center" }}>
-                  {t("outbound.emptyHint")}
+                  {t("engineering.outbound.emptyHint")}
                 </td>
               </tr>
             ) : null}
