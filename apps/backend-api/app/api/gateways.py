@@ -30,6 +30,7 @@ from app.services.event_service import record_event
 from app.services.gateway_compose import (
     ComposeRenderError,
     ComposeRenderInput,
+    derive_nats_url,
     derive_rabbitmq_url,
     filename_for,
     normalize_backend_url_for_container,
@@ -116,26 +117,11 @@ def create_gateway(
     existing = db.scalar(select(Gateway).where(Gateway.code == payload.code))
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Gateway code already exists")
-    # RabbitMQ'da gateway icin ayri bir kullanici otomatik olusturulur. Bu
-    # sayede sahaya kurulum yapan kullanici bir manuel rabbitmqctl/admin
-    # paneli adimi yapmak zorunda kalmaz; compose dosyasi indirilir
-    # indirilmez "docker compose up -d" ile saglikli baglantiya gecer.
-    rmq_user: RabbitMqUser | None = None
-    try:
-        rmq_user = _rmq_admin().create_gateway_user(gateway_code=payload.code)
-    except RabbitMqAdminError as exc:
-        # RabbitMQ ulasilmiyorsa gateway yine de yaratilir; ama compose
-        # indirilirken fallback olarak global guest cred kullanilir ve
-        # uyari verilir. Production'da Management API up olmasi beklenir.
-        logger.warning(
-            "rabbitmq_admin_unavailable_at_create gateway=%s error=%s",
-            payload.code,
-            exc,
-        )
+    # NOT: Gateway artik telemetriyi NATS JetStream'e yayinliyor; RabbitMQ
+    # cred provisioning kaldirildi. NATS open-by-default (anonymous publish
+    # subject yetkisi) ile calisiyor; ileride TLS/auth eklemek istenirse
+    # ayri bir mekanizma kullanilacak.
     data = payload.model_dump()
-    if rmq_user is not None:
-        data["rabbitmq_username"] = rmq_user.username
-        data["rabbitmq_password"] = rmq_user.password
     # Otomatik port araligi atama: aynı host'ta birden fazla gateway calistirilabilsin
     # diye her gateway'e benzersiz bir 1000'lik blok atanir. Frontend manuel
     # belirleme yapmaz; bu mantik backend'de.
@@ -189,11 +175,13 @@ def update_gateway(
 
 
 def _cleanup_rabbitmq_user(gateway_code: str) -> None:
-    """Background task: RabbitMQ user temizligi. HTTP response sonrasinda calisir."""
+    """Eski deploylar icin: gateway artik RabbitMQ kullanmiyor, bu cleanup
+    no-op'a indirildi. Eski olusturulmus user'lari silmek istenirse, manual
+    olarak (rabbitmqctl) yapilabilir; bizim icin pasif kalmalari yeterli."""
     try:
         _rmq_admin().delete_gateway_user(gateway_code=gateway_code)
-    except RabbitMqAdminError as exc:
-        logger.warning("rabbitmq_user_cleanup_failed gateway=%s error=%s", gateway_code, exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("rabbitmq_user_cleanup_skipped gateway=%s error=%s", gateway_code, exc)
 
 
 @router.delete("/{gateway_code}", status_code=status.HTTP_204_NO_CONTENT)
@@ -339,7 +327,11 @@ def download_gateway_compose(
     ),
     rabbitmq_url: str | None = Query(
         None,
-        description="(Opsiyonel) RabbitMQ AMQP URL. Verilmezse backend_url'in host kismindan otomatik turetilir (amqp://hsl:hsl@<host>:5672/).",
+        description="(LEGACY/Deprecated) Gateway artik RabbitMQ kullanmiyor; bu parametre goz ardi edilir.",
+    ),
+    nats_url: str | None = Query(
+        None,
+        description="(Opsiyonel) NATS JetStream URL (orn. nats://hsl.example.com:4222). Verilmezse backend_url'in host kismindan otomatik turetilir (nats://<host>:4222).",
     ),
     host_port: int | None = Query(
         None,
@@ -378,42 +370,15 @@ def download_gateway_compose(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
     # Container icinden erisim icin localhost/127.0.0.1 -> host.docker.internal
     effective_backend_url = normalize_backend_url_for_container(backend_url)
-    # RabbitMQ URL onceligi:
-    #   1) caller endpoint'e ?rabbitmq_url= ile explicit override gondermisse
-    #   2) gateway icin DB'de saklanan dedicated cred (otomatik provisionlanmis)
-    #   3) global guest fallback (Management API erisilemediyse — saha kurulumu
-    #      icin uyari logu yazilir)
-    if (rabbitmq_url or "").strip():
-        effective_rabbitmq_url = rabbitmq_url.strip()
-    elif gateway.rabbitmq_username and gateway.rabbitmq_password:
-        parsed = urlparse(effective_backend_url)
-        host = parsed.hostname or "host.docker.internal"
-        rmq_user = RabbitMqUser(
-            username=gateway.rabbitmq_username,
-            password=gateway.rabbitmq_password,
-        )
-        effective_rabbitmq_url = build_amqp_url(host=host, user=rmq_user)
+    # NATS URL onceligi:
+    #   1) caller endpoint'e ?nats_url= ile explicit override gondermisse
+    #   2) aksi halde backend host'undan otomatik turetilir (nats://<host>:4222)
+    # Eski rabbitmq_url parametresi DEPRECATED — sessizce goz ardi edilir.
+    _ = rabbitmq_url  # legacy param, kullanilmiyor
+    if (nats_url or "").strip():
+        effective_nats_url = nats_url.strip()
     else:
-        # Cred yoksa (RabbitMQ Management API down idiyse veya eski kayit)
-        # son care: gateway'i simdi provisionlamayi bir kez daha denemek
-        try:
-            user = _rmq_admin().create_gateway_user(gateway_code=gateway.code)
-            gateway.rabbitmq_username = user.username
-            gateway.rabbitmq_password = user.password
-            db.commit()
-            from urllib.parse import urlparse as _urlparse
-
-            parsed = _urlparse(effective_backend_url)
-            host = parsed.hostname or "host.docker.internal"
-            effective_rabbitmq_url = build_amqp_url(host=host, user=user)
-        except RabbitMqAdminError as exc:
-            logger.warning(
-                "rabbitmq_admin_unavailable_at_compose_render gateway=%s error=%s "
-                "(falling back to guest cred — saha tarafinda calismayabilir)",
-                gateway.code,
-                exc,
-            )
-            effective_rabbitmq_url = derive_rabbitmq_url(backend_url)
+        effective_nats_url = derive_nats_url(backend_url)
     if host_port is None:
         # Gateway'in olusturulma sirasina gore 8020 + index. Birden fazla gateway
         # ayni host'ta calisirsa health portlari catismaz. Frontend kullanicisi
@@ -440,7 +405,7 @@ def download_gateway_compose(
             token=gateway.token,
             name=gateway.name,
             backend_url=effective_backend_url,
-            rabbitmq_url=effective_rabbitmq_url,
+            nats_url=effective_nats_url,
             host_port=effective_host_port,
             image=image,
             app_environment=app_environment,

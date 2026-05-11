@@ -1,24 +1,24 @@
-"""RabbitMQ tuketicisi - tag-engine'den gelen `telemetry.received` mesajlarini
-IEC 104 server manager'a koprü ile aktarir.
+"""NATS JetStream tuketicisi — tag-engine'den gelen `telemetry.normalized.<gw>`
+mesajlarini IEC 104 server manager'a koprü ile aktarir.
 
-Tasarim: pika BlockingConnection kendi thread'inde calisir. asyncio loop
-ana thread'de calisir; consumer her mesaj icin `manager.update_point_threadsafe`
-cagirisi yaparak loop'a tasi. Boylece IEC 104 server async dunyasinda kalir,
-mesaj IO ise senkron pika ile yapilir (kucuk ve kararli desen).
+Tasarim: NATS asyncio loop kendi thread'inde calisir. Ana thread'de IEC 104
+asyncio loop var; consumer her mesaj icin `manager.update_point_threadsafe`
+cagirisi yaparak ana loop'a tasi. Boylece IEC 104 server async dunyasinda kalir,
+mesaj IO ise ayri bir async dunyada (NATS) yapilir.
 
-Reconnect: baglanti koparsa exponential backoff yok; sabit 3sn ile yeniden
-dener. Tag engine'inkiyle ayni desen.
+Reconnect: NATS dustugunde expo backoff (2s -> 60s cap). Durable consumer ile
+process restart'ta kaldigi yerden devam eder.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-import time
 from datetime import datetime
 from threading import Event, Thread
 
-import pika
+import nats
 
 from iec104_outbound.config import Settings
 from iec104_outbound.server import IEC104ServerManager
@@ -53,7 +53,7 @@ def _parse_iso_timestamp(raw: str | None) -> datetime | None:
 
 
 class TelemetryConsumer:
-    """Tek thread, BlockingConnection. `start()` daemon thread'i baslatir."""
+    """JetStream consumer; kendi asyncio loop'unda calisir, daemon thread."""
 
     def __init__(self, *, settings: Settings, manager: IEC104ServerManager) -> None:
         self.settings = settings
@@ -67,7 +67,7 @@ class TelemetryConsumer:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        thread = Thread(target=self._run, name="iec104-rabbit-consumer", daemon=True)
+        thread = Thread(target=self._run, name="iec104-nats-consumer", daemon=True)
         thread.start()
         self._thread = thread
 
@@ -83,67 +83,75 @@ class TelemetryConsumer:
         return self._last_error
 
     def _run(self) -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._consume())
+        finally:
+            loop.close()
+
+    async def _consume(self) -> None:
         s = self.settings
+        backoff = 2
         while not self._stop.is_set():
-            connection = None
+            nc = None
             try:
-                connection = pika.BlockingConnection(pika.URLParameters(s.rabbit_url))
-                channel = connection.channel()
-                channel.exchange_declare(
-                    exchange=s.exchange, exchange_type="topic", durable=True,
+                nc = await nats.connect(
+                    servers=[s.nats_url],
+                    max_reconnect_attempts=-1,
+                    reconnect_time_wait=2,
+                    name="hsl-iec104-outbound",
                 )
-                channel.exchange_declare(
-                    exchange=s.dlx_exchange, exchange_type="topic", durable=True,
-                )
-                channel.queue_declare(
-                    queue=s.queue_name,
-                    durable=True,
-                    arguments={
-                        "x-dead-letter-exchange": s.dlx_exchange,
-                        "x-dead-letter-routing-key": f"{s.incoming_topic}.dead",
-                    },
-                )
-                channel.queue_bind(
-                    exchange=s.exchange, queue=s.queue_name,
-                    routing_key=s.incoming_topic,
-                )
-                channel.basic_qos(prefetch_count=s.prefetch_count)
-                channel.basic_consume(
-                    queue=s.queue_name, on_message_callback=self._on_message,
+                js = nc.jetstream()
+
+                async def _on_message(msg) -> None:  # noqa: ANN001
+                    try:
+                        payload = json.loads(msg.data.decode("utf-8"))
+                        self._handle_payload(payload)
+                        await msg.ack()
+                        self._messages_processed += 1
+                    except Exception as exc:  # noqa: BLE001
+                        self._last_error = str(exc)
+                        logger.exception("iec104_consumer_handler_error")
+                        try:
+                            await msg.nak()
+                        except Exception:  # noqa: BLE001
+                            pass
+
+                sub = await js.subscribe(
+                    subject=s.nats_subject,
+                    durable=s.nats_durable,
+                    cb=_on_message,
+                    manual_ack=True,
                 )
                 logger.info(
-                    "iec104_consumer_running queue=%s topic=%s prefetch=%d",
-                    s.queue_name, s.incoming_topic, s.prefetch_count,
+                    "iec104_consumer_running subject=%s durable=%s url=%s",
+                    s.nats_subject,
+                    s.nats_durable,
+                    s.nats_url,
                 )
-                # start_consuming bloklar; stop edilince exception ile cikariz.
+                backoff = 2
                 while not self._stop.is_set():
-                    connection.process_data_events(time_limit=1.0)
-            except Exception as exc:
+                    await asyncio.sleep(1)
+                await sub.unsubscribe()
+            except Exception as exc:  # noqa: BLE001
+                if self._stop.is_set():
+                    break
                 self._last_error = str(exc)
-                logger.warning("iec104_consumer_reconnect error=%s", exc)
-                time.sleep(3)
+                logger.warning(
+                    "iec104_consumer_reconnect error=%s backoff=%ds url=%s",
+                    exc,
+                    backoff,
+                    s.nats_url,
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
             finally:
-                if connection is not None:
+                if nc is not None:
                     try:
-                        connection.close()
-                    except Exception:
+                        await nc.drain()
+                    except Exception:  # noqa: BLE001
                         pass
-
-    def _on_message(self, ch, method, properties, body) -> None:  # noqa: ANN001
-        _ = properties
-        try:
-            payload = json.loads(body.decode("utf-8"))
-        except Exception:
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            return
-        try:
-            self._handle_payload(payload)
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            self._messages_processed += 1
-        except Exception as exc:
-            self._last_error = str(exc)
-            logger.exception("iec104_consumer_handler_error")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     def _handle_payload(self, payload: dict) -> None:
         device_code = payload.get("device_code")

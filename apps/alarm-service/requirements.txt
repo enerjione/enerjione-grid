@@ -1,2 +1,4 @@
+# Alarm-service: telemetri JetStream'den, alarm.created RabbitMQ'da.
+nats-py>=2.6,<3
 pika
 requests

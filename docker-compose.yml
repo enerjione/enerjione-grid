@@ -60,6 +60,36 @@ services:
     networks:
       - hsl-net
 
+  # NATS JetStream — yuksek hacimli telemetri akisi icin RabbitMQ'nun yaninda
+  # calisir. Baslangicta dual-publish modu: gateway hem RabbitMQ'ya hem JetStream'e
+  # yazar; tuketiciler hangisinden okuyacagini feature flag ile secer.
+  # NATS_DUAL_PUBLISH_ENABLED=false oldugu surece bu servis bos durur ve mevcut
+  # akisi etkilemez. Cutover sonrasi alarm/bildirim RabbitMQ'da kalmaya devam eder.
+  nats:
+    image: nats:2.10-alpine
+    container_name: hsl-nats
+    restart: unless-stopped
+    command:
+      - "-js"
+      - "--store_dir=/data"
+      - "--http_port=8222"
+      - "--name=hsl-nats-1"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8222/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    ports:
+      # NATS client port — uzaktaki gateway'ler (leaf node veya dogrudan) buraya
+      # baglanir. Guvenlik: cluster icinde TLS+auth eklenmeli (ileride).
+      - "4222:4222"
+      # HTTP monitoring (varz/connz/jsz) — sadece localhost'tan.
+      - "127.0.0.1:8222:8222"
+    networks:
+      - hsl-net
+
   backend-api:
     build:
       context: ./apps/backend-api
@@ -71,6 +101,13 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
+        # Alarm akisi (alarm.created) RabbitMQ uzerinden gectigi icin
+        # rabbitmq saglikli olmali; telemetri akisi NATS'tan gelir.
+        condition: service_healthy
+      nats:
+        # Telemetri akisinin tek yolu; backend startup'inda stream'leri ensure
+        # eder. NATS gelmeden persister consumer baslayamaz (yine de backend
+        # ayagi kalir, NATS gelince consumer reconnect dongusunde baglanir).
         condition: service_healthy
     environment:
       APP_ENV: production
@@ -81,6 +118,9 @@ services:
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       RABBITMQ_ADMIN_USERNAME: ${RABBITMQ_USER:-hsl}
       RABBITMQ_ADMIN_PASSWORD: ${RABBITMQ_PASSWORD}
+      # NATS JetStream — telemetri akisinin PRIMARY rotasi. Backend startup'ta
+      # stream'leri otomatik ensure eder (TELEMETRY_RAW, TELEMETRY_NORMALIZED).
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN .env'de olmali}
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-43200}
       TELEMETRY_RETENTION_MINUTES: ${TELEMETRY_RETENTION_MINUTES:-30}
@@ -119,15 +159,14 @@ services:
     container_name: hsl-tag-engine
     restart: unless-stopped
     depends_on:
-      rabbitmq:
+      nats:
         condition: service_healthy
     environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-      RABBITMQ_EXCHANGE: hsl.events
-      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      # Tag-engine artik tamamen NATS JetStream uzerinde calisiyor.
+      # In: TELEMETRY_RAW stream (hsl.telemetry.raw.>)
+      # Out: hsl.telemetry.normalized.<gw> (TELEMETRY_NORMALIZED stream'e gider)
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
       # Backend system-status, tag-engine icin 8011 portunu probe eder.
-      # Bu portu container disindan erisilebilir hale getirmek icin
-      # WORKER_HEALTH_HOST=0.0.0.0 olarak set edilir.
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8011
     networks:
@@ -145,7 +184,12 @@ services:
         condition: service_healthy
       backend-api:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
+      # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      # Alarm yayini: RabbitMQ (notification-worker buradan tuketiyor).
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       RABBITMQ_EXCHANGE: hsl.events
       RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
@@ -187,14 +231,13 @@ services:
     container_name: hsl-iec104-outbound
     restart: unless-stopped
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       backend-api:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-      RABBITMQ_EXCHANGE: hsl.events
-      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WORKER_HEALTH_HOST: 0.0.0.0
@@ -234,4 +277,5 @@ networks:
 volumes:
   postgres-data:
   rabbitmq-data:
+  nats-data:
   backup-data:

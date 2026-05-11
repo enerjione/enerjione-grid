@@ -1,20 +1,23 @@
-"""Backend-api icinde calisan RabbitMQ telemetri tuketicisi.
+"""Backend-api telemetri tuketicisi — NATS JetStream uzerinden.
 
-Gateway'den `hsl.events` exchange'ine `telemetry.raw_received` routing key'i ile
-yayinlanan her sinyali DB'ye yazar; cihazin communication_status ve
-last_update_at alanlarini guncel tutar. Bu islem yapilmadigi surece
-"Canli Degerler" ekrani bos kalir ve cihazlar "Kesik / bekleniyor" gorunur.
+Gateway'ler artik telemetriyi `hsl.telemetry.raw.<gateway_code>` subject'ine
+JetStream'e basar. Bu modul TELEMETRY_RAW stream'inden okuyup her sinyali
+DB'ye yazar; cihazin communication_status ve last_update_at alanlarini
+guncel tutar. Bu islem yapilmadigi surece "Canli Degerler" ekrani bos kalir
+ve cihazlar "Kesik / bekleniyor" gorunur.
 
-Tag-engine'in cikis topic'i ('telemetry.received') yerine ham topic'i
+Tag-engine cikis topic'i ('telemetry.normalized.*') yerine ham topic'i
 dinliyoruz: tag-engine ayakta olmasa bile persist akisi calismaya devam eder
 ve frontend cihaz durumunu kaybetmez. Quality normalizasyonu zaten
 `process_telemetry_reading` icinde yapiliyor.
 
-Tek thread halinde, daemon olarak FastAPI startup'inda baslatilir.
+Asyncio loop ayri bir thread'de calisir; NATS reconnect ve durable consumer
+sayesinde process restart'inda kaldigi yerden devam eder.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import threading
@@ -23,8 +26,6 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-import pika
-from pika.exceptions import AMQPError
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -40,10 +41,6 @@ from app.services.ws_broadcaster import broadcaster as ws_broadcaster
 logger = logging.getLogger(__name__)
 
 CONSUMER_NAME = "backend-api.telemetry-persister"
-INCOMING_TOPIC = "telemetry.raw_received"
-QUEUE_NAME = "hsl.backend.telemetry_persist"
-DLX_ROUTING_KEY = "telemetry.raw_received.persist.dead"
-PREFETCH_COUNT = 20
 RECONNECT_DELAY_SEC = 3
 
 _stop_event = threading.Event()
@@ -143,70 +140,105 @@ def _persist_message(payload: dict[str, Any]) -> None:
 
 
 def _consume_loop() -> None:
-    while not _stop_event.is_set():
-        connection: pika.BlockingConnection | None = None
-        try:
-            connection = pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
-            channel = connection.channel()
-            channel.exchange_declare(
-                exchange=settings.rabbitmq_exchange, exchange_type="topic", durable=True
-            )
-            channel.exchange_declare(
-                exchange=settings.rabbitmq_dlx_exchange, exchange_type="topic", durable=True
-            )
-            channel.queue_declare(
-                queue=QUEUE_NAME,
-                durable=True,
-                arguments={
-                    "x-dead-letter-exchange": settings.rabbitmq_dlx_exchange,
-                    "x-dead-letter-routing-key": DLX_ROUTING_KEY,
-                },
-            )
-            channel.queue_bind(
-                exchange=settings.rabbitmq_exchange,
-                queue=QUEUE_NAME,
-                routing_key=INCOMING_TOPIC,
-            )
-            channel.basic_qos(prefetch_count=PREFETCH_COUNT)
+    """JetStream'den `hsl.telemetry.raw.>` subject'ini dinler.
 
-            def _on_message(ch, method, properties, body):  # noqa: ANN001
-                _ = properties
-                try:
-                    payload = json.loads(body.decode("utf-8"))
-                    # WS broadcast ONCE: frontend cihaz degerini anlik gorur.
-                    # DB persist sonrasinda yapilirsa, DB lock/yavaslama frontend'i
-                    # de yavaslatir. WS sadece in-memory queue'ya put_nowait
-                    # (~mikro saniyeler), persist baska is parcaciginda gibi
-                    # davranir. Tutarsizlik riski kucuk: snapshot fetch
-                    # /signals/live DB'den okudugu icin her halukarda ayni
-                    # row'u gosterir; WS push erken gelir, polling 2sn sonra
-                    # ayni veriyi tekrar dogrular.
+    Durable consumer ile process restart'inda kaldigi yerden devam eder.
+    NATS gelmediyse veya bagklanti koparsa kendi icinde exponential backoff
+    ile yeniden baglanir.
+    """
+    try:
+        import nats as _nats  # type: ignore[import-not-found]
+    except ImportError:
+        logger.error(
+            "telemetry_consumer_jetstream_disabled reason=nats_py_missing "
+            "(pip install nats-py>=2.6). Telemetri DB'ye YAZILMIYOR!"
+        )
+        return
+
+    async def _run() -> None:
+        backoff = 2
+        while not _stop_event.is_set():
+            nc = None
+            try:
+                nc = await _nats.connect(
+                    servers=[settings.nats_url],
+                    connect_timeout=settings.nats_connect_timeout_sec,
+                    max_reconnect_attempts=-1,
+                    reconnect_time_wait=2,
+                    name="hsl-backend-api-consumer",
+                )
+                js = nc.jetstream()
+
+                async def _handle(msg) -> None:  # noqa: ANN001
                     try:
-                        ws_broadcaster.broadcast(payload)
-                    except Exception:  # noqa: BLE001 — WS hatasi consume akisini bozmasin
-                        logger.debug("ws_broadcast_failed", exc_info=True)
-                    _persist_message(payload)
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("telemetry-consumer-failed error=%s", exc)
-                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                        payload = json.loads(msg.data.decode("utf-8"))
+                        # WS broadcast ONCE: frontend cihaz degerini anlik gorur.
+                        # DB persist sonrasinda yapilirsa, DB lock/yavaslama frontend'i
+                        # de yavaslatir. WS sadece in-memory queue'ya put_nowait
+                        # (~mikro saniyeler), persist baska is parcaciginda gibi
+                        # davranir.
+                        try:
+                            ws_broadcaster.broadcast(payload)
+                        except Exception:  # noqa: BLE001 — WS hatasi consume akisini bozmasin
+                            logger.debug("ws_broadcast_failed", exc_info=True)
+                        _persist_message(payload)
+                        await msg.ack()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "telemetry-consumer-failed error=%s subject=%s",
+                            exc,
+                            getattr(msg, "subject", "?"),
+                        )
+                        # nak: JetStream redeliver edecek (backoff'la). Poison
+                        # mesajlar max_deliver'a takilinca dead-letter'a duser.
+                        try:
+                            await msg.nak()
+                        except Exception:  # noqa: BLE001
+                            logger.debug("js_nak_failed", exc_info=True)
 
-            channel.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_message)
-            logger.info("telemetry-consumer-running queue=%s", QUEUE_NAME)
-            channel.start_consuming()
-        except (AMQPError, OSError) as exc:
-            if not _stop_event.is_set():
-                logger.warning("telemetry-consumer-reconnect error=%s", exc)
-                time.sleep(RECONNECT_DELAY_SEC)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("telemetry-consumer-crashed error=%s", exc)
-            time.sleep(RECONNECT_DELAY_SEC)
-        finally:
-            if connection is not None and not connection.is_closed:
-                try:
-                    connection.close()
-                except Exception:  # noqa: BLE001
-                    pass
+                # Durable push consumer — subject pattern'i dinliyoruz.
+                # Backend startup'ta jetstream_bus.start_bus_if_enabled() stream'leri
+                # ensure ediyor olmali; consumer subscribe ederken stream var olmali.
+                sub = await js.subscribe(
+                    subject=settings.nats_subject_telemetry_raw,
+                    durable=settings.nats_consumer_telemetry_persist,
+                    cb=_handle,
+                    manual_ack=True,
+                )
+                logger.info(
+                    "telemetry_consumer_running subject=%s durable=%s url=%s",
+                    settings.nats_subject_telemetry_raw,
+                    settings.nats_consumer_telemetry_persist,
+                    settings.nats_url,
+                )
+                backoff = 2  # connect basarili — backoff sifirla
+                while not _stop_event.is_set():
+                    await asyncio.sleep(1)
+                await sub.unsubscribe()
+            except Exception as exc:  # noqa: BLE001
+                if _stop_event.is_set():
+                    break
+                logger.warning(
+                    "telemetry_consumer_reconnect error=%s backoff=%ds url=%s",
+                    exc,
+                    backoff,
+                    settings.nats_url,
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+            finally:
+                if nc is not None:
+                    try:
+                        await nc.drain()
+                    except Exception:  # noqa: BLE001
+                        logger.debug("js_drain_error", exc_info=True)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_run())
+    finally:
+        loop.close()
 
 
 def start() -> None:
@@ -215,7 +247,7 @@ def start() -> None:
         return
     _stop_event.clear()
     _thread = threading.Thread(
-        target=_consume_loop, name="telemetry-consumer", daemon=True
+        target=_consume_loop, name="telemetry-consumer-jetstream", daemon=True
     )
     _thread.start()
 

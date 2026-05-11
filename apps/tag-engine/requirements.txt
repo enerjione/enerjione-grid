@@ -1,1 +1,3 @@
-pika
+# Tag-engine: telemetri akisini NATS JetStream uzerinde normalize eder.
+# RabbitMQ telemetri akisindan kaldirildi; pika artik gerekli degil.
+nats-py>=2.6,<3

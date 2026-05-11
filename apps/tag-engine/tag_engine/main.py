@@ -1,20 +1,39 @@
+"""Tag-engine — NATS JetStream uzerinde ham telemetri akisini normalize eder.
+
+Akis:
+  hsl.telemetry.raw.<gw>          (gateway'lerin yaylinladigi ham)
+    -> tag-engine consume
+    -> normalize (quality, status, processed_at)
+    -> publish: hsl.telemetry.normalized.<gw>
+       (alarm-service ve iec104-outbound buradan tuketir)
+
+RabbitMQ'dan tamamen kaldirildi. Telemetri akisi tamamen JetStream uzerinden
+ilerler; alarm.created akisi backend tarafinda RabbitMQ'da kalir (tag-engine
+onunla ilgilenmez).
+"""
+
+import asyncio
 import json
 import os
-import time
+import signal
+import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 from uuid import uuid4
 
-import pika
+import nats
 
-
-RABBIT_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "hsl.events")
-INCOMING_TOPIC = os.getenv("TAG_ENGINE_INCOMING_TOPIC", "telemetry.raw_received")
-OUTGOING_TOPIC = os.getenv("TAG_ENGINE_OUTGOING_TOPIC", "telemetry.received")
-QUEUE_NAME = os.getenv("TAG_ENGINE_QUEUE", "hsl.tag_engine.raw")
-DLX_EXCHANGE = os.getenv("RABBITMQ_DLX_EXCHANGE", "hsl.events.dlx")
+NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
+# Stream isimleri — backend'in olusturdugu stream'lerle ayni olmali.
+STREAM_NORMALIZED = os.getenv("NATS_STREAM_TELEMETRY_NORMALIZED", "TELEMETRY_NORMALIZED")
+# Consumer subject pattern (incoming) — backend'in TELEMETRY_RAW stream'ine bind.
+SUBJECT_RAW = os.getenv("NATS_SUBJECT_TELEMETRY_RAW", "hsl.telemetry.raw.>")
+# Outgoing subject prefix — konkre subject: hsl.telemetry.normalized.<gw>
+SUBJECT_NORMALIZED_PREFIX = os.getenv(
+    "NATS_SUBJECT_NORMALIZED_PREFIX", "hsl.telemetry.normalized"
+)
+DURABLE_NAME = os.getenv("NATS_TAG_ENGINE_DURABLE", "tag-engine-normalize")
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8011"))
 
@@ -76,31 +95,34 @@ def _build_processed_payload(payload: dict) -> dict:
     }
 
 
-def main() -> None:
-    _start_health_server()
-    print("tag-engine-starting")
-    while True:
-        connection = None
-        try:
-            connection = pika.BlockingConnection(pika.URLParameters(RABBIT_URL))
-            channel = connection.channel()
-            channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
-            channel.exchange_declare(exchange=DLX_EXCHANGE, exchange_type="topic", durable=True)
-            channel.queue_declare(
-                queue=QUEUE_NAME,
-                durable=True,
-                arguments={
-                    "x-dead-letter-exchange": DLX_EXCHANGE,
-                    "x-dead-letter-routing-key": "telemetry.raw_received.dead",
-                },
-            )
-            channel.queue_bind(exchange=EXCHANGE, queue=QUEUE_NAME, routing_key=INCOMING_TOPIC)
-            channel.basic_qos(prefetch_count=20)
+_stop_event = threading.Event()
 
-            def _on_message(ch, method, properties, body):  # noqa: ANN001
-                _ = properties
+
+def _install_signal_handlers() -> None:
+    def _handler(signum, _frame):  # noqa: ANN001
+        print(f"tag-engine-shutdown signal={signum}")
+        _stop_event.set()
+
+    signal.signal(signal.SIGINT, _handler)
+    signal.signal(signal.SIGTERM, _handler)
+
+
+async def _run() -> None:
+    backoff = 2
+    while not _stop_event.is_set():
+        nc = None
+        try:
+            nc = await nats.connect(
+                servers=[NATS_URL],
+                max_reconnect_attempts=-1,
+                reconnect_time_wait=2,
+                name="hsl-tag-engine",
+            )
+            js = nc.jetstream()
+
+            async def _on_message(msg) -> None:  # noqa: ANN001
                 try:
-                    payload = json.loads(body.decode("utf-8"))
+                    payload = json.loads(msg.data.decode("utf-8"))
                     processed = _build_processed_payload(payload)
                     if processed["source_gateway"] == "unknown":
                         # Sadece anomali (eksik gateway) durumunda log; her mesajda
@@ -110,39 +132,64 @@ def main() -> None:
                             "tag-engine-warning missing source_gateway "
                             f"msg={processed['message_id']} dev={processed['device_code']}"
                         )
-                    channel.basic_publish(
-                        exchange=EXCHANGE,
-                        routing_key=OUTGOING_TOPIC,
-                        body=json.dumps(processed, ensure_ascii=False).encode("utf-8"),
-                        properties=pika.BasicProperties(
-                            content_type="application/json",
-                            delivery_mode=2,
-                            message_id=processed["message_id"],
-                            correlation_id=processed["correlation_id"],
-                            headers={
-                                "source_gateway": processed["source_gateway"],
-                                "device_code": processed.get("device_code") or "",
-                                "signal_key": processed.get("signal_key") or "",
-                            },
-                        ),
+                    out_subject = (
+                        f"{SUBJECT_NORMALIZED_PREFIX}.{processed['source_gateway']}"
                     )
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                except Exception as ex:
+                    # Nats-Msg-Id: stream-side dedup (2dk pencerede ayni id'yi tek alir).
+                    headers = {
+                        "Nats-Msg-Id": processed["message_id"],
+                        "X-Correlation-Id": str(processed.get("correlation_id") or ""),
+                        "source_gateway": str(processed["source_gateway"]),
+                        "device_code": str(processed.get("device_code") or ""),
+                        "signal_key": str(processed.get("signal_key") or ""),
+                    }
+                    await js.publish(
+                        out_subject,
+                        json.dumps(processed, ensure_ascii=False).encode("utf-8"),
+                        headers=headers,
+                    )
+                    await msg.ack()
+                except Exception as ex:  # noqa: BLE001
                     print(f"tag-engine-failed error={ex}")
-                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                    try:
+                        await msg.nak()
+                    except Exception:  # noqa: BLE001
+                        pass
 
-            channel.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_message)
-            print("tag-engine-running")
-            channel.start_consuming()
-        except Exception as ex:
-            print(f"tag-engine-reconnect error={ex}")
-            time.sleep(3)
+            sub = await js.subscribe(
+                subject=SUBJECT_RAW,
+                durable=DURABLE_NAME,
+                cb=_on_message,
+                manual_ack=True,
+            )
+            print(
+                f"tag-engine-running url={NATS_URL} in={SUBJECT_RAW} "
+                f"out={SUBJECT_NORMALIZED_PREFIX}.<gw> durable={DURABLE_NAME}"
+            )
+            backoff = 2  # connect basarili
+            while not _stop_event.is_set():
+                await asyncio.sleep(1)
+            await sub.unsubscribe()
+        except Exception as ex:  # noqa: BLE001
+            if _stop_event.is_set():
+                break
+            print(f"tag-engine-reconnect error={ex} backoff={backoff}s url={NATS_URL}")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)
         finally:
-            if connection is not None:
+            if nc is not None:
                 try:
-                    connection.close()
-                except Exception:
+                    await nc.drain()
+                except Exception:  # noqa: BLE001
                     pass
+
+
+def main() -> None:
+    _start_health_server()
+    _install_signal_handlers()
+    print("tag-engine-starting")
+    asyncio.run(_run())
+    print("tag-engine-stopped")
 
 
 if __name__ == "__main__":

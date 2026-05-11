@@ -38,6 +38,36 @@ class Settings(BaseSettings):
     rabbitmq_queue_alarm: str = "hsl.alarm.telemetry.received"
     rabbitmq_queue_outbound_alarm: str = "hsl.outbound.alarm.created"
     rabbitmq_queue_outbound_telemetry: str = "hsl.outbound.telemetry.received"
+
+    # ----- NATS JetStream (telemetri akisinin primary rotasi) ----------------
+    # Telemetri akisi (gateway -> tag-engine -> persister/iec104/alarm-service)
+    # tamamen JetStream uzerinden gider. RabbitMQ sadece alarm.created icin
+    # kullanilir. Stream'ler backend startup'inda OTOMATIK ensure edilir
+    # (idempotent: varsa dokunulmaz, yoksa olusturulur).
+    nats_url: str = "nats://localhost:4222"
+    # Bu iki flag DEPRECATED: NATS her zaman aktif. Eski .env'lerin kirilmamasi
+    # icin field'lar tutulur ama runtime davranisi etkilemezler.
+    nats_dual_publish_enabled: bool = True
+    nats_consume_enabled: bool = True
+    # Stream isimleri: TELEMETRY_RAW ham cihaz okumalari (gateway -> stream),
+    # TELEMETRY_NORMALIZED tag-engine cikisi (tag-engine -> stream).
+    nats_stream_telemetry_raw: str = "TELEMETRY_RAW"
+    nats_stream_telemetry_normalized: str = "TELEMETRY_NORMALIZED"
+    # Subject pattern'leri — wildcard ile gateway bazinda filtreleme.
+    # Konkre: hsl.telemetry.raw.GW-001, hsl.telemetry.normalized.GW-001
+    nats_subject_telemetry_raw: str = "hsl.telemetry.raw.>"
+    nats_subject_telemetry_normalized: str = "hsl.telemetry.normalized.>"
+    # Stream retention (gun) — JetStream WAL'in disk'te kalma suresi. 7 gun raw,
+    # 30 gun normalized: backfill/replay icin yeterli, disk dolusunu sinirlar.
+    nats_stream_raw_max_age_days: int = 7
+    nats_stream_normalized_max_age_days: int = 30
+    # Connect timeout — kisa tutulur; backend startup'i NATS yokken bloklanmasin.
+    # NATS gelene kadar consumer hatasi atar ama backend ayagi kalir; NATS gelince
+    # consumer kendi reconnect dongusunde devam eder.
+    nats_connect_timeout_sec: int = 5
+    # Durable consumer adi (backend-api telemetry persister icin).
+    nats_consumer_telemetry_persist: str = "backend-api-telemetry-persist"
+
     internal_service_token: str = "change-me-internal-token"
     smtp_enabled: bool = False
     smtp_host: str = "localhost"

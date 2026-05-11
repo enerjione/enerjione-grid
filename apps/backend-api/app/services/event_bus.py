@@ -55,6 +55,26 @@ class RabbitMqEventBus:
         self._subscribers: dict[str, list[EventHandler]] = {}
 
     def publish_event(self, topic: str, payload: dict[str, Any], *, message_id: str = "") -> None:
+        # Topic-bazli routing:
+        #   - telemetry.*  -> NATS JetStream (yuksek hacim, replay destekli)
+        #   - diger (alarm.*, vs.) -> RabbitMQ (DLQ/retry semantik, dusuk hacim)
+        # Boylece tek bir publish_event arayuzu uzerinden iki broker'a route ediliyor;
+        # caller kod (alarm-service, outbox_service, vs.) topic-broker eslemesini
+        # bilmek zorunda kalmaz.
+        if topic.startswith("telemetry."):
+            self._publish_to_jetstream(topic, payload, message_id=message_id)
+        else:
+            self._publish_to_rabbitmq(topic, payload, message_id=message_id)
+
+        # In-process subscriber'lar (eski davranis korunur — InProcessEventBus
+        # taklit modu icin gerekli).
+        for handler in self._subscribers.get(topic, []):
+            handler(payload)
+
+    def _publish_to_rabbitmq(
+        self, topic: str, payload: dict[str, Any], *, message_id: str
+    ) -> None:
+        """Alarm + diger event'ler icin RabbitMQ. DLX/retry semantigi korunur."""
         connection = pika.BlockingConnection(pika.URLParameters(self._url))
         try:
             channel = connection.channel()
@@ -72,8 +92,40 @@ class RabbitMqEventBus:
             )
         finally:
             connection.close()
-        for handler in self._subscribers.get(topic, []):
-            handler(payload)
+
+    def _publish_to_jetstream(
+        self, topic: str, payload: dict[str, Any], *, message_id: str
+    ) -> None:
+        """Telemetry akisi icin NATS JetStream. Yuksek throughput, replay'li.
+
+        JetStream bus yoksa/baglanti yoksa ERROR loglar ama exception YAYMAZ
+        (event_bus.publish_event'i cagiranlar — orn. outbox_service — bunu
+        yutsun istemiyoruz ama bozulmasin da). Bu noktada outbox akisi
+        (outbox_events tablosu) zaten DB-side at-least-once veriyor — outbox
+        publisher tekrar deneyecek.
+        """
+        try:
+            from app.services.jetstream_bus import get_bus
+
+            bus = get_bus()
+            if bus is None:
+                logger = __import__("logging").getLogger(__name__)
+                logger.error(
+                    "jetstream_bus_unavailable topic=%s message_id=%s — "
+                    "telemetri JetStream'e gonderilemedi. Outbox tekrar deneyecek.",
+                    topic,
+                    message_id,
+                )
+                return
+            bus.publish_event(topic, payload, message_id=message_id)
+        except Exception as exc:  # noqa: BLE001
+            logger = __import__("logging").getLogger(__name__)
+            logger.warning(
+                "jetstream_publish_failed topic=%s message_id=%s error=%s",
+                topic,
+                message_id,
+                exc,
+            )
 
     def consume_event(self, topic: str, handler: EventHandler, *, config: ConsumerConfig | None = None) -> None:
         handlers = self._subscribers.setdefault(topic, [])

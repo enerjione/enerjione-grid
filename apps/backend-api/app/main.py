@@ -634,45 +634,15 @@ def create_tables():
 
 @app.on_event("startup")
 async def reapply_gateway_rabbitmq_permissions():
-    """Onceden olusturulmus gateway'lerin RabbitMQ izinlerini yeniden uygular.
+    """Eski sistem icin gateway RabbitMQ user permission yenileme.
 
-    Permission semasi degistirildiyse (orn. "configure" alani genisletildi)
-    DB'de saklanan eski parolayi koruyarak izinleri guncelleriz. Yeni bir
-    deploy/upgrade'de manuel rabbitmqctl cagrisi yapmaya gerek kalmaz.
-    Best-effort: RabbitMQ Management API ulasilamiyorsa sadece warn loglar.
+    Gateway artik telemetriyi JetStream'e basiyor, RabbitMQ kullanmiyor;
+    bu task'in islevi yok. Geriye uyumluluk icin no-op olarak birakildi
+    (eski .env'lerde RABBITMQ_ADMIN_* set edilmis olsa bile baska bir
+    sebebe sebep olmasin). Eski olusturulan RabbitMQ user'lar pasif kalir;
+    operator istiyorsa rabbitmqctl ile elle silebilir.
     """
-    import logging
-
-    from app.api.gateways import _rmq_admin
-    from app.models.gateway import Gateway as _Gateway
-    from app.services.rabbitmq_admin import RabbitMqAdminError
-
-    log = logging.getLogger(__name__)
-    db = SessionLocal()
-    try:
-        rows = list(db.scalars(_select(_Gateway)).all())
-        if not rows:
-            return
-        client = _rmq_admin()
-        if not client.ping():
-            log.warning("rabbitmq_management_unreachable_at_startup gateways=%d", len(rows))
-            return
-        for gw in rows:
-            if not gw.rabbitmq_username or not gw.rabbitmq_password:
-                continue
-            try:
-                # Mevcut parolayi koru, sadece kullanici/permission'i tazele
-                client.create_gateway_user(
-                    gateway_code=gw.code,
-                    existing_password=gw.rabbitmq_password,
-                )
-            except RabbitMqAdminError as exc:
-                log.warning("rabbitmq_reapply_failed gateway=%s error=%s", gw.code, exc)
-        log.info("rabbitmq_permissions_reapplied gateways=%d", len(rows))
-    except Exception:  # noqa: BLE001
-        log.exception("rabbitmq_reapply_startup_failed")
-    finally:
-        db.close()
+    pass
 
 
 @app.on_event("startup")
@@ -707,6 +677,40 @@ async def stop_iec104_servers():
         await iec104_undeploy_all()
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception("iec104_shutdown_failed")
+
+
+@app.on_event("startup")
+def start_jetstream_bus():
+    """NATS JetStream — dual-publish/dual-consume aktifse baslatir.
+
+    NATS_DUAL_PUBLISH_ENABLED ve NATS_CONSUME_ENABLED ikisi de kapali ise
+    bu fonksiyon hicbir sey yapmaz (log: skipped). nats-py paketi yoksa
+    veya NATS server'a baglanilamiyorsa warning log + skip — backend
+    calismaya devam eder, RabbitMQ akisi etkilenmez.
+
+    Telemetry consumer'dan ONCE baslatilir ki consume tarafi acildiginda
+    bus hazir olsun.
+    """
+    import logging
+
+    try:
+        from app.services.jetstream_bus import start_bus_if_enabled
+
+        start_bus_if_enabled()
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("jetstream_bus_startup_unexpected_error")
+
+
+@app.on_event("shutdown")
+def stop_jetstream_bus():
+    import logging
+
+    try:
+        from app.services.jetstream_bus import stop_bus
+
+        stop_bus()
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).debug("jetstream_bus_shutdown_error", exc_info=True)
 
 
 @app.on_event("startup")

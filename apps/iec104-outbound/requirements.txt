@@ -1,2 +1,4 @@
-pika
+# iec104-outbound: telemetri JetStream'den, backend HTTP'den config.
+# RabbitMQ kullanilmiyor (pika kaldirildi).
+nats-py>=2.6,<3
 requests

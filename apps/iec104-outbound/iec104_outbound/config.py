@@ -25,7 +25,15 @@ def _get_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    # ---- RabbitMQ ----------------------------------------------------------
+    # ---- NATS JetStream (telemetri kaynagi) -------------------------------
+    # tag-engine cikisini (telemetry.normalized.<gw>) tuketir; IEC 104 server
+    # manager'a koprü ile aktarir.
+    nats_url: str
+    nats_subject: str  # wildcard: hsl.telemetry.normalized.>
+    nats_durable: str  # consumer durable adi
+
+    # ---- RabbitMQ (LEGACY — telemetri akisi JetStream'e tasindi) ----------
+    # Asagidaki alanlar geriye uyumluluk icin saklaniyor; runtime'da kullanilmiyor.
     rabbit_url: str
     exchange: str
     incoming_topic: str
@@ -56,7 +64,12 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            rabbit_url=os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+            nats_url=os.getenv("NATS_URL", "nats://localhost:4222"),
+            nats_subject=os.getenv(
+                "NATS_SUBJECT_TELEMETRY_NORMALIZED", "hsl.telemetry.normalized.>"
+            ),
+            nats_durable=os.getenv("NATS_IEC104_DURABLE", "iec104-outbound-bridge"),
+            rabbit_url=os.getenv("RABBITMQ_URL", ""),
             exchange=os.getenv("RABBITMQ_EXCHANGE", "hsl.events"),
             incoming_topic=os.getenv("IEC104_INCOMING_TOPIC", "telemetry.received"),
             queue_name=os.getenv("IEC104_QUEUE", "hsl.iec104_outbound.telemetry"),

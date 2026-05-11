@@ -26,3 +26,9 @@ Pillow>=10.0,<11
 # REST'e POST atiyoruz; firebase-admin SDK'sinin tum stack'i (RTDB, Auth)
 # yerine sadece push gerektigi icin daha hafif olsun.
 google-auth>=2.0,<3
+# NATS JetStream — telemetri akisinin RabbitMQ ile paralel yan yana
+# calistirilabilmesi icin. Default'ta dual-publish KAPALI olsa da paket
+# yine de container'a kurulur; runtime'da `nats_dual_publish_enabled`
+# ve `nats_consume_enabled` flag'lerine gore aktive olur. Lazy import:
+# paket yoksa bile backend ayaga kalkar (jetstream_bus.py warning log atar).
+nats-py>=2.6,<3

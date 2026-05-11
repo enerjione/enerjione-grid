@@ -145,7 +145,9 @@ class ComposeRenderInput:
     token: str
     name: str
     backend_url: str
-    rabbitmq_url: str
+    # NATS JetStream URL — gateway'in tek telemetri yayinlama yolu. Eski
+    # `rabbitmq_url` parametresi kaldirildi (gateway artik RabbitMQ kullanmiyor).
+    nats_url: str
     host_port: int = 8020
     image: str = "ghcr.io/fikretsafak/horstmann-dnp3-gateway:latest"
     app_environment: Literal["development", "staging", "production"] = "production"
@@ -174,8 +176,8 @@ def _validate(args: ComposeRenderInput) -> None:
         raise ComposeRenderError(f"host_port aralik disi: {args.host_port}")
     if not args.backend_url.strip():
         raise ComposeRenderError("backend_url bos olamaz")
-    if not args.rabbitmq_url.strip():
-        raise ComposeRenderError("rabbitmq_url bos olamaz")
+    if not args.nats_url.strip():
+        raise ComposeRenderError("nats_url bos olamaz")
     if args.initiating_port_count < 0 or args.initiating_port_count > 1000:
         raise ComposeRenderError(
             f"initiating_port_count gecersiz: {args.initiating_port_count} (0-1000)"
@@ -215,7 +217,7 @@ def _replacements(args: ComposeRenderInput) -> dict[str, str]:
         "GATEWAY_TOKEN": args.token,
         "GATEWAY_NAME": args.name,
         "BACKEND_API_URL": args.backend_url.rstrip("/"),
-        "RABBITMQ_URL": args.rabbitmq_url,
+        "NATS_URL": args.nats_url,
         "HOST_HEALTH_PORT": str(args.host_port),
         "IMAGE": args.image,
         "APP_ENVIRONMENT": args.app_environment,
@@ -267,12 +269,19 @@ def normalize_backend_url_for_container(url: str) -> str:
 
 
 def derive_rabbitmq_url(backend_url: str) -> str:
-    """Backend URL'inden ayni hostname uzerinde guest cred ile AMQP URL turetir.
-
-    Backend ile RabbitMQ ayni host'ta dusunulur; kurulum kolayligi icin
-    fallback. Production'da Management API uzerinden gateway'e ozel cred
-    olusturulur ve compose dosyasina gomulur.
-    """
+    """LEGACY — geriye uyumluluk icin. Gateway artik RabbitMQ kullanmiyor."""
     parsed = urlparse(backend_url.strip())
     host = parsed.hostname or "localhost"
     return f"amqp://hsl:hsl@{host}:5672/"
+
+
+def derive_nats_url(backend_url: str) -> str:
+    """Backend URL'inden ayni hostname uzerinde NATS URL turetir.
+
+    Gateway compose dosyasi indirilirken default fallback olarak kullanilir.
+    Production'da kullanici endpoint'e ?nats_url= ile explicit override
+    gonderebilir; aksi halde backend ile ayni host'ta NATS oldugu varsayilir.
+    """
+    parsed = urlparse(backend_url.strip())
+    host = parsed.hostname or "localhost"
+    return f"nats://{host}:4222"

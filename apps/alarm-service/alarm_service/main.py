@@ -1,21 +1,30 @@
+import asyncio
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Event, Lock, Thread
 from uuid import uuid4
 
+import nats
 import pika
 import requests
 
 from alarm_service.rules import AlarmRuleCache, evaluate_composite, evaluate_rule
 
+# ----- Telemetri kaynagi: NATS JetStream (gateway -> tag-engine -> JetStream) -
+NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
+NATS_SUBJECT_NORMALIZED = os.getenv(
+    "NATS_SUBJECT_TELEMETRY_NORMALIZED", "hsl.telemetry.normalized.>"
+)
+NATS_DURABLE = os.getenv("NATS_ALARM_DURABLE", "alarm-service-evaluator")
+
+# ----- Alarm yayini: RabbitMQ (notification-worker, internal alarm endpoint) --
 RABBIT_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "hsl.events")
-INCOMING_TOPIC = os.getenv("ALARM_INCOMING_TOPIC", "telemetry.received")
 OUTGOING_TOPIC = os.getenv("ALARM_OUTGOING_TOPIC", "alarm.created")
-QUEUE_NAME = os.getenv("ALARM_QUEUE", "hsl.alarm_service.telemetry")
 DLX_EXCHANGE = os.getenv("RABBITMQ_DLX_EXCHANGE", "hsl.events.dlx")
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8012"))
@@ -452,7 +461,13 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 threshold=rule.threshold,
                 operator=rule.comparator,
             )
-            _publish_alarm(channel, alarm_payload)
+            # NOT: `channel` artik gercek RabbitMQ kanali degil (JetStream'den
+            # consume ediyoruz). Alarm yayini icin thread-safe singleton
+            # publisher kullaniyoruz.
+            try:
+                _publish_alarm_to_rabbitmq(alarm_payload)
+            except Exception as exc:  # noqa: BLE001
+                print(f"alarm-service-publish-error rule_id={rule.id} error={exc}")
             try:
                 _notify_backend(alarm_payload)
             except Exception as exc:  # noqa: BLE001
@@ -493,6 +508,162 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                         print(f"alarm-service-clear-error rule_id={rule.id} error={exc}")
 
 
+class _RabbitAlarmPublisher:
+    """Alarm.created mesajlarini RabbitMQ'ya publish eden thread-safe wrapper.
+
+    Telemetri tarafi JetStream'e gecti ama alarm.created akisi RabbitMQ'da
+    kaliyor (notification-worker buradan tuketiyor, DLX/retry semantiki
+    daha olgun). Bagklanti dustugunde otomatik reconnect; publish ederken
+    lazy connect.
+    """
+
+    def __init__(self, url: str, exchange: str, dlx_exchange: str) -> None:
+        self.url = url
+        self.exchange = exchange
+        self.dlx_exchange = dlx_exchange
+        self._connection = None
+        self._channel = None
+        self._lock = Lock()
+
+    def _ensure_channel(self):
+        if self._connection is None or self._connection.is_closed:
+            self._connection = pika.BlockingConnection(pika.URLParameters(self.url))
+            self._channel = None
+        if self._channel is None or self._channel.is_closed:
+            ch = self._connection.channel()
+            ch.exchange_declare(exchange=self.exchange, exchange_type="topic", durable=True)
+            ch.exchange_declare(exchange=self.dlx_exchange, exchange_type="topic", durable=True)
+            self._channel = ch
+        return self._channel
+
+    def publish(self, alarm_payload: dict) -> None:
+        with self._lock:
+            try:
+                ch = self._ensure_channel()
+                _publish_alarm(ch, alarm_payload)
+            except Exception:
+                # Reset connection, raise — caller decides retry (rules loop
+                # zaten exception'i log'lar ve devam eder).
+                try:
+                    if self._connection is not None:
+                        self._connection.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._connection = None
+                self._channel = None
+                raise
+
+    def close(self) -> None:
+        with self._lock:
+            try:
+                if self._connection is not None and not self._connection.is_closed:
+                    self._connection.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._connection = None
+            self._channel = None
+
+
+_ALARM_PUBLISHER: _RabbitAlarmPublisher | None = None
+
+
+def _publish_alarm_to_rabbitmq(alarm_payload: dict) -> None:
+    """`_process_rules_for_payload` icinden cagrilan adapter — channel yerine
+    thread-safe publisher singleton kullaniyor."""
+    global _ALARM_PUBLISHER
+    if _ALARM_PUBLISHER is None:
+        _ALARM_PUBLISHER = _RabbitAlarmPublisher(RABBIT_URL, EXCHANGE, DLX_EXCHANGE)
+    _ALARM_PUBLISHER.publish(alarm_payload)
+
+
+_stop_event = threading.Event()
+
+
+async def _consume_jetstream() -> None:
+    """Telemetry.normalized JetStream'i dinler, kural motoruna besler.
+
+    Reconnect: NATS gelmediyse / dustuyse expo backoff. Durable consumer ile
+    process restart'inda kaldigi yerden devam.
+    """
+    backoff = 2
+    while not _stop_event.is_set():
+        nc = None
+        try:
+            nc = await nats.connect(
+                servers=[NATS_URL],
+                max_reconnect_attempts=-1,
+                reconnect_time_wait=2,
+                name="hsl-alarm-service",
+            )
+            js = nc.jetstream()
+
+            async def _on_message(msg) -> None:  # noqa: ANN001
+                try:
+                    payload = json.loads(msg.data.decode("utf-8"))
+                    # NOT: Otomatik "Haberleşme arızası" alarmı uretmiyoruz —
+                    # kullanici kendi kurallari uzerinden bu durumu tanimliyor.
+                    # Sadece tanimli alarm kurallarini degerlendir. publish-
+                    # alarm RabbitMQ'da; rules loop _publish_alarm_to_rabbitmq
+                    # adapter'ini cagiriyor olacak.
+                    _process_rules_for_payload_jetstream(payload)
+                    await msg.ack()
+                except Exception as ex:  # noqa: BLE001
+                    print(f"alarm-service-failed error={ex}")
+                    try:
+                        await msg.nak()
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            sub = await js.subscribe(
+                subject=NATS_SUBJECT_NORMALIZED,
+                durable=NATS_DURABLE,
+                cb=_on_message,
+                manual_ack=True,
+            )
+            print(
+                f"alarm-service-running subject={NATS_SUBJECT_NORMALIZED} "
+                f"durable={NATS_DURABLE} url={NATS_URL}"
+            )
+            backoff = 2
+            while not _stop_event.is_set():
+                await asyncio.sleep(1)
+            await sub.unsubscribe()
+        except Exception as ex:  # noqa: BLE001
+            if _stop_event.is_set():
+                break
+            print(f"alarm-service-reconnect error={ex} backoff={backoff}s url={NATS_URL}")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+        finally:
+            if nc is not None:
+                try:
+                    await nc.drain()
+                except Exception:  # noqa: BLE001
+                    pass
+
+
+def _process_rules_for_payload_jetstream(payload: dict) -> None:
+    """JetStream wrapper: eski _process_rules_for_payload imzasi `channel`
+    aliyordu (RabbitMQ). Yeni mimaride publish ayri bir publisher uzerinden.
+    Bu fonksiyon publish cagri yerini soyutluyor: _publish_alarm calls
+    _publish_alarm_to_rabbitmq via channel=None marker.
+    """
+    # Mevcut _process_rules_for_payload'i bozulmadan kullanmak icin
+    # channel parametresine "publisher proxy" gibi davranan bir obje versek
+    # de refactor genis olur. Burada in-place: payload uzerinde once kural
+    # eval edip alarm uretilirse RabbitMQ'ya publish'i adapter'la yapariz.
+    # _publish_alarm'i monkey-patch etmeden, yine `channel` arguman tipi
+    # disinda davranan minimal bir proxy verelim.
+    class _ChannelProxy:
+        def basic_publish(self, **_kwargs) -> None:
+            # Hicbir zaman buraya dusmemeli — _publish_alarm imzasi degisti
+            # (artik basic_publish'i RabbitAlarmPublisher uzerinden cagiriyoruz).
+            # Backward compat icin sessiz.
+            pass
+
+    _process_rules_for_payload(_ChannelProxy(), payload)
+
+
 def main() -> None:
     _start_health_server()
     stop_event = Event()
@@ -506,49 +677,23 @@ def main() -> None:
         time.sleep(0.5)
 
     print(f"alarm-service-starting rules_ready={_CACHE.is_ready()}")
-    while True:
-        connection = None
-        try:
-            connection = pika.BlockingConnection(pika.URLParameters(RABBIT_URL))
-            channel = connection.channel()
-            channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
-            channel.exchange_declare(exchange=DLX_EXCHANGE, exchange_type="topic", durable=True)
-            channel.queue_declare(
-                queue=QUEUE_NAME,
-                durable=True,
-                arguments={
-                    "x-dead-letter-exchange": DLX_EXCHANGE,
-                    "x-dead-letter-routing-key": "telemetry.received.dead",
-                },
-            )
-            channel.queue_bind(exchange=EXCHANGE, queue=QUEUE_NAME, routing_key=INCOMING_TOPIC)
-            channel.basic_qos(prefetch_count=20)
 
-            def _on_message(ch, method, properties, body):  # noqa: ANN001
-                _ = properties
-                try:
-                    payload = json.loads(body.decode("utf-8"))
-                    # NOT: Otomatik "Haberleşme arızası" alarmı uretmiyoruz —
-                    # kullanici kendi kurallari uzerinden bu durumu tanimliyor.
-                    # Sadece tanimli alarm kurallarini degerlendir.
-                    _process_rules_for_payload(channel, payload)
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                except Exception as ex:  # noqa: BLE001
-                    print(f"alarm-service-failed error={ex}")
-                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+    def _signal_handler(signum, _frame):  # noqa: ANN001
+        print(f"alarm-service-shutdown signal={signum}")
+        _stop_event.set()
+        stop_event.set()
 
-            channel.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_message)
-            print("alarm-service-running")
-            channel.start_consuming()
-        except Exception as ex:  # noqa: BLE001
-            print(f"alarm-service-reconnect error={ex}")
-            time.sleep(3)
-        finally:
-            if connection is not None:
-                try:
-                    connection.close()
-                except Exception:
-                    pass
+    import signal as _signal
+
+    _signal.signal(_signal.SIGINT, _signal_handler)
+    _signal.signal(_signal.SIGTERM, _signal_handler)
+
+    try:
+        asyncio.run(_consume_jetstream())
+    finally:
+        if _ALARM_PUBLISHER is not None:
+            _ALARM_PUBLISHER.close()
+        print("alarm-service-stopped")
 
 
 if __name__ == "__main__":
