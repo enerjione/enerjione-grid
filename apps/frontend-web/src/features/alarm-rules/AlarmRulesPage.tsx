@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type {
+  AlarmAggFn,
   AlarmComparator,
   AlarmCompositeExpression,
   AlarmCompositeTerm,
@@ -257,18 +258,25 @@ export function AlarmRulesPage({
     if (isComposite && form.expression) {
       expression = {
         logic: form.expression.logic,
-        terms: form.expression.terms.map((tm) => ({
-          signal_key: tm.signal_key,
-          device_code: tm.device_code?.trim() || "*",
-          comparator: tm.comparator,
-          threshold: isBooleanComparator(tm.comparator) ? 0 : Number(tm.threshold),
-          threshold_high:
-            !isRangeComparator(tm.comparator) ||
-            tm.threshold_high === null ||
-            tm.threshold_high === undefined
-              ? null
-              : Number(tm.threshold_high)
-        }))
+        terms: form.expression.terms.map((tm) => {
+          const isAgg = tm.kind === "agg";
+          return {
+            kind: isAgg ? "agg" : "compare",
+            signal_key: tm.signal_key,
+            device_code: tm.device_code?.trim() || "*",
+            comparator: tm.comparator,
+            threshold: isBooleanComparator(tm.comparator) ? 0 : Number(tm.threshold),
+            threshold_high:
+              !isRangeComparator(tm.comparator) ||
+              tm.threshold_high === null ||
+              tm.threshold_high === undefined
+                ? null
+                : Number(tm.threshold_high),
+            agg_fn: isAgg ? (tm.agg_fn ?? "avg") : null,
+            agg_window_sec: isAgg ? Number(tm.agg_window_sec || 60) : 60,
+            agg_arg: isAgg ? Number(tm.agg_arg || 0) : 0
+          } as AlarmCompositeTerm;
+        })
       };
     }
     return {
@@ -816,7 +824,12 @@ export function AlarmRulesPage({
                 ? rule.expression.terms
                     .map((tm) => {
                       const tmSig = signalByKey.get(tm.signal_key);
-                      const lbl = tmSig?.label ?? tm.signal_key;
+                      const baseLbl = tmSig?.label ?? tm.signal_key;
+                      // agg ise "avg(signal, 60sn)" formatinda goster
+                      const lbl =
+                        tm.kind === "agg" && tm.agg_fn
+                          ? `${tm.agg_fn}(${baseLbl}, ${tm.agg_window_sec ?? 60}s)`
+                          : baseLbl;
                       if (isBooleanComparator(tm.comparator)) {
                         return `${lbl} ${tm.comparator === "boolean_true" ? "= TRUE" : "= FALSE"}`;
                       }
@@ -987,6 +1000,7 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
           const sig = signalByKey.get(tm.signal_key);
           const isBool = tm.comparator === "boolean_true" || tm.comparator === "boolean_false";
           const isRange = tm.comparator === "between" || tm.comparator === "outside";
+          const isAgg = tm.kind === "agg";
           return (
             <li key={idx} className="rule-composite-term">
               <div className="rule-composite-term-head">
@@ -994,6 +1008,38 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                 {idx > 0 ? (
                   <span className="rule-composite-term-joint">{expression.logic}</span>
                 ) : null}
+                {/* kind toggle: Anlik | Pencere */}
+                <div className="rule-composite-kind-toggle">
+                  <button
+                    type="button"
+                    className={`rule-mode-btn rule-mode-btn--compact ${!isAgg ? "is-active" : ""}`}
+                    onClick={() =>
+                      updateTerm(idx, { kind: "compare", agg_fn: null })
+                    }
+                    disabled={!canEdit}
+                    title={t("engineering.alarmRules.composite.kindCompareHint")}
+                  >
+                    <span className="material-symbols-outlined">bolt</span>
+                    {t("engineering.alarmRules.composite.kindCompare")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`rule-mode-btn rule-mode-btn--compact ${isAgg ? "is-active" : ""}`}
+                    onClick={() =>
+                      updateTerm(idx, {
+                        kind: "agg",
+                        agg_fn: tm.agg_fn ?? "avg",
+                        agg_window_sec: tm.agg_window_sec ?? 60,
+                        agg_arg: tm.agg_arg ?? 0
+                      })
+                    }
+                    disabled={!canEdit}
+                    title={t("engineering.alarmRules.composite.kindAggHint")}
+                  >
+                    <span className="material-symbols-outlined">timeline</span>
+                    {t("engineering.alarmRules.composite.kindAgg")}
+                  </button>
+                </div>
                 <span className="rule-composite-term-spacer" />
                 {expression.terms.length > 1 ? (
                   <button
@@ -1037,6 +1083,57 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                     title={t("engineering.alarmRules.composite.termDeviceHint")}
                   />
                 </label>
+                {isAgg ? (
+                  <>
+                    <label className="rule-field">
+                      <span>{t("engineering.alarmRules.composite.aggFn")}</span>
+                      <select
+                        value={tm.agg_fn ?? "avg"}
+                        onChange={(e) =>
+                          updateTerm(idx, { agg_fn: e.target.value as AlarmAggFn })
+                        }
+                        disabled={!canEdit}
+                      >
+                        <option value="avg">{t("engineering.alarmRules.composite.aggAvg")}</option>
+                        <option value="min">{t("engineering.alarmRules.composite.aggMin")}</option>
+                        <option value="max">{t("engineering.alarmRules.composite.aggMax")}</option>
+                        <option value="sum">{t("engineering.alarmRules.composite.aggSum")}</option>
+                        <option value="count_above">{t("engineering.alarmRules.composite.aggCountAbove")}</option>
+                        <option value="count_below">{t("engineering.alarmRules.composite.aggCountBelow")}</option>
+                      </select>
+                    </label>
+                    <label className="rule-field">
+                      <span>{t("engineering.alarmRules.composite.windowSec")}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={86400}
+                        value={tm.agg_window_sec ?? 60}
+                        onChange={(e) =>
+                          updateTerm(idx, { agg_window_sec: Number(e.target.value) })
+                        }
+                        disabled={!canEdit}
+                      />
+                    </label>
+                    {tm.agg_fn === "count_above" || tm.agg_fn === "count_below" ? (
+                      <label className="rule-field">
+                        <span>
+                          {t("engineering.alarmRules.composite.aggArg")}
+                          {sig?.unit ? ` (${sig.unit})` : ""}
+                        </span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={tm.agg_arg ?? 0}
+                          onChange={(e) =>
+                            updateTerm(idx, { agg_arg: Number(e.target.value) })
+                          }
+                          disabled={!canEdit}
+                        />
+                      </label>
+                    ) : null}
+                  </>
+                ) : null}
                 <label className="rule-field rule-composite-field-cmp">
                   <span>{t("engineering.alarmRules.comparator")}</span>
                   <select
@@ -1057,7 +1154,7 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                       {isRange
                         ? t("engineering.alarmRules.lowerLimit")
                         : t("engineering.alarmRules.thresholdValue")}
-                      {sig?.unit ? ` (${sig.unit})` : ""}
+                      {sig?.unit && !isAgg ? ` (${sig.unit})` : ""}
                     </span>
                     <input
                       type="number"
@@ -1072,7 +1169,7 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                   <label className="rule-field rule-composite-field-th">
                     <span>
                       {t("engineering.alarmRules.upperLimit")}
-                      {sig?.unit ? ` (${sig.unit})` : ""}
+                      {sig?.unit && !isAgg ? ` (${sig.unit})` : ""}
                     </span>
                     <input
                       type="number"
@@ -1086,6 +1183,14 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
                   </label>
                 ) : null}
               </div>
+              {isAgg ? (
+                <p className="rule-hint rule-composite-term-hint">
+                  {t("engineering.alarmRules.composite.aggHint", {
+                    fn: tm.agg_fn ?? "avg",
+                    win: tm.agg_window_sec ?? 60
+                  })}
+                </p>
+              ) : null}
             </li>
           );
         })}

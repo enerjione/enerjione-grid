@@ -11,13 +11,23 @@ RuleKind = Literal["simple", "composite"]
 CompositeLogic = Literal["AND", "OR"]
 
 
+AggFn = Literal["avg", "min", "max", "sum", "count_above", "count_below"]
+
+
 class CompositeTerm(BaseModel):
     """Composite kuralda tek bir terim (AND/OR'in argumani).
 
-    Faz 1: kind = 'compare' (sadelik icin field olarak tasimiyoruz, hep
-    compare kabul ediyoruz). Faz 2'de 'agg' ve Faz 3'te 'formula' eklenir.
+    İki tür terim destekli (Faz 2):
+      - kind='compare' (default): anlik sinyal -> comparator(threshold)
+      - kind='agg'             : son N saniyede ortalama/min/max/sum/count
+                                  -> comparator(threshold)
     """
 
+    # Faz 1 ile geriye uyum: alan yoksa 'compare' kabul edilir.
+    kind: Literal["compare", "agg"] = "compare"
+
+    # Hem 'compare' hem 'agg' icin: kuralin tetiklendigi sinyal-anahtar
+    # (agg modunda pencere bu sinyal/cihaz icin hesaplanir).
     signal_key: str = Field(min_length=1, max_length=80)
     # "*" => kuralin tetikleyicisi olan anchor cihaz. Spesifik cihaz kodu
     # vermek istersek dogrudan yazariz.
@@ -25,6 +35,19 @@ class CompositeTerm(BaseModel):
     comparator: AlarmComparator
     threshold: float = 0.0
     threshold_high: float | None = None
+
+    # 'agg' icin ek alanlar:
+    agg_fn: AggFn | None = None
+    agg_window_sec: int = Field(default=60, ge=1, le=86400)  # 1 sn .. 1 gun
+    # count_above / count_below icin esik (sayilacak deger). avg/min/max/sum'da
+    # kullanilmaz.
+    agg_arg: float = 0.0
+
+    @model_validator(mode="after")
+    def _validate_kind(self):
+        if self.kind == "agg" and self.agg_fn is None:
+            raise ValueError("agg term requires 'agg_fn'")
+        return self
 
 
 class CompositeExpression(BaseModel):

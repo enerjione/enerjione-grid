@@ -142,6 +142,76 @@ class _LiveValueCache:
 
 _LIVE = _LiveValueCache()
 
+
+# Composite agg terimleri (Faz 2): son N saniyenin ortalamasi/min/max/sum/
+# count_above/count_below hesaplari icin (signal_key, device_code) basina
+# zaman damgali ornekler tutuyoruz. Bellek koruma: pencere max 24 saat, ama
+# samples ust limit 5000/sinyal (yuksek frekanslı sinyaller icin).
+from collections import deque
+from typing import Deque
+
+
+class _SamplesCache:
+    MAX_PER_KEY = 5000
+    MAX_RETAIN_SEC = 86400  # 24 saat
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        # (signal_key, device_code) -> deque[(monotonic_ts, value)]
+        self._buf: dict[tuple[str, str], Deque[tuple[float, float]]] = {}
+
+    def put(self, signal_key: str, device_code: str, value: float, now: float) -> None:
+        with self._lock:
+            key = (signal_key, device_code)
+            dq = self._buf.get(key)
+            if dq is None:
+                dq = deque(maxlen=self.MAX_PER_KEY)
+                self._buf[key] = dq
+            dq.append((now, value))
+            # Geriye dogru cok eski ornekleri sil (24 saat oncesi). deque
+            # FIFO oldugu icin sol bastan pop yeterli.
+            cutoff = now - self.MAX_RETAIN_SEC
+            while dq and dq[0][0] < cutoff:
+                dq.popleft()
+
+    def lookup(
+        self,
+        signal_key: str,
+        device_code: str,
+        agg_fn: str,
+        window_sec: int,
+        agg_arg: float,
+        *,
+        now: float | None = None,
+    ) -> float | None:
+        if now is None:
+            now = time.monotonic()
+        cutoff = now - max(1, int(window_sec))
+        with self._lock:
+            dq = self._buf.get((signal_key, device_code))
+            if not dq:
+                return None
+            # Pencere disinda kalanlari atla (deque sirali, sol bastan).
+            samples = [v for ts, v in dq if ts >= cutoff]
+        if not samples:
+            return None
+        if agg_fn == "avg":
+            return sum(samples) / len(samples)
+        if agg_fn == "min":
+            return min(samples)
+        if agg_fn == "max":
+            return max(samples)
+        if agg_fn == "sum":
+            return sum(samples)
+        if agg_fn == "count_above":
+            return float(sum(1 for v in samples if v > agg_arg))
+        if agg_fn == "count_below":
+            return float(sum(1 for v in samples if v < agg_arg))
+        return None
+
+
+_SAMPLES = _SamplesCache()
+
 _CACHE = AlarmRuleCache(
     base_url=BACKEND_API_BASE,
     service_token=INTERNAL_SERVICE_TOKEN,
@@ -338,9 +408,10 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
         return
 
     now = time.monotonic()
-    # Live-value cache'i her telemetri ile guncelle; composite kurallar diger
-    # terimlerin son degerlerini buradan okuyacak.
+    # Live-value + samples cache'i her telemetri ile guncelle; composite
+    # kurallar (Faz 1 compare + Faz 2 agg) bu cache'lerden okur.
     _LIVE.put(str(signal_key), str(device_code or ""), value, now)
+    _SAMPLES.put(str(signal_key), str(device_code or ""), value, now)
 
     for rule in _CACHE.rules_for(str(signal_key), str(device_code) if device_code else None):
         # Composite kural ise anchor cihazi tetikleyen telemetri'nin
@@ -353,6 +424,9 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 rule,
                 anchor_device_code=str(device_code or ""),
                 live_value=lambda sk, dc, _now=now: _LIVE.get(sk, dc, now=_now),
+                agg_lookup=lambda sk, dc, fn, win, arg, _now=now: _SAMPLES.lookup(
+                    sk, dc, fn, win, arg, now=_now
+                ),
             )
             if decision is None:
                 # Henuz tum terimler icin veri yok — bu turda kuralı atla.

@@ -12495,6 +12495,19 @@ main.content.engineering-content:has(.device-management-panel) {
 .rule-composite-term-spacer {
   flex: 1;
 }
+.rule-composite-kind-toggle {
+  display: inline-flex;
+  gap: 3px;
+  padding: 2px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+}
+.rule-composite-term-hint {
+  margin-top: 4px;
+  font-style: italic;
+  color: #4338ca;
+}
 .rule-composite-term-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

@@ -13,13 +13,23 @@ _log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class CompositeTerm:
-    """Composite kuraldaki tek bir karsilastirma terimi (Faz 1)."""
+    """Composite kuraldaki tek bir terim.
+
+    kind='compare' : anlik sinyal degerine comparator + threshold uygulanir.
+    kind='agg'     : son agg_window_sec saniyedeki pencere uzerinden
+                     agg_fn (avg/min/max/sum/count_above/count_below)
+                     hesaplanir; sonra comparator + threshold uygulanir.
+    """
 
     signal_key: str
     device_code: str  # "*" => anchor cihaz
     comparator: str
     threshold: float
     threshold_high: float | None
+    kind: str = "compare"  # "compare" | "agg"
+    agg_fn: str | None = None
+    agg_window_sec: int = 60
+    agg_arg: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -267,6 +277,19 @@ def _parse_composite_expression(raw: Any) -> CompositeExpression | None:
             th_hi = float(th_hi_raw) if th_hi_raw is not None else None
         except (TypeError, ValueError):
             return None
+        kind = t.get("kind") or "compare"
+        agg_fn = t.get("agg_fn")
+        try:
+            agg_window = int(t.get("agg_window_sec") or 60)
+        except (TypeError, ValueError):
+            agg_window = 60
+        try:
+            agg_arg = float(t.get("agg_arg") or 0.0)
+        except (TypeError, ValueError):
+            agg_arg = 0.0
+        if kind == "agg" and agg_fn not in {"avg", "min", "max", "sum", "count_above", "count_below"}:
+            # Bilinmeyen agg fonksiyonu — bu kurali atla.
+            return None
         terms.append(
             CompositeTerm(
                 signal_key=sig,
@@ -274,6 +297,10 @@ def _parse_composite_expression(raw: Any) -> CompositeExpression | None:
                 comparator=cmp,
                 threshold=th,
                 threshold_high=th_hi,
+                kind=kind if kind in ("compare", "agg") else "compare",
+                agg_fn=agg_fn if kind == "agg" else None,
+                agg_window_sec=max(1, min(agg_window, 86400)),
+                agg_arg=agg_arg,
             )
         )
     return CompositeExpression(logic=logic, terms=tuple(terms))
@@ -314,12 +341,16 @@ def evaluate_composite(
     *,
     anchor_device_code: str,
     live_value: "LiveValueLookup",
+    agg_lookup: "AggLookup | None" = None,
 ) -> bool | None:
     """Composite kurali degerlendirir.
 
     `live_value(signal_key, device_code)` -> float | None : son canli deger
-    yoksa None doner. Eger gerekli sinyallerden herhangi biri henuz gelmediyse
-    sonuc None doner (engine kurali atlar, yarim degerlendirme yapmaz).
+    yoksa None doner.
+    `agg_lookup(signal_key, device_code, agg_fn, window_sec, agg_arg)` ->
+      float | None : pencere icindeki istatistik. Yeterli veri yoksa None.
+    Eger gerekli sinyallerden herhangi biri henuz gelmediyse sonuc None
+    doner (engine kurali atlar, yarim degerlendirme yapmaz).
     """
     expr = rule.expression
     if expr is None or not expr.terms:
@@ -327,7 +358,18 @@ def evaluate_composite(
     results: list[bool] = []
     for term in expr.terms:
         dev = anchor_device_code if term.device_code == "*" else term.device_code
-        v = live_value(term.signal_key, dev)
+        if term.kind == "agg":
+            if agg_lookup is None or term.agg_fn is None:
+                return None
+            v = agg_lookup(
+                term.signal_key,
+                dev,
+                term.agg_fn,
+                term.agg_window_sec,
+                term.agg_arg,
+            )
+        else:
+            v = live_value(term.signal_key, dev)
         if v is None:
             # Bilinmeyen veri — kurali bu turda atla (yanlis tetikleme yapma).
             return None
@@ -337,7 +379,9 @@ def evaluate_composite(
     return any(results)
 
 
-# Tip yardimcisi — main.py'de live-value cache'in cagri imzasi.
+# Tip yardimcilari — main.py'de live-value cache + ring buffer'in cagri imzasi.
 from typing import Callable, Optional
 
 LiveValueLookup = Callable[[str, str], Optional[float]]
+# agg_lookup(signal_key, device_code, agg_fn, window_sec, agg_arg) -> value | None
+AggLookup = Callable[[str, str, str, int, float], Optional[float]]

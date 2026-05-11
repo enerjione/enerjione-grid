@@ -511,14 +511,30 @@ export type AlarmComparator =
  *  'composite' = AND/OR ile birden fazla terim (Faz 1). */
 export type AlarmRuleKind = "simple" | "composite";
 
-/** Composite kuraldaki tek bir terim. */
+/** Composite kuralda agg fonksiyonlari (Faz 2). */
+export type AlarmAggFn =
+  | "avg"
+  | "min"
+  | "max"
+  | "sum"
+  | "count_above"
+  | "count_below";
+
+/** Composite kuraldaki tek bir terim. kind='compare' (Faz 1, varsayilan)
+ *  veya kind='agg' (Faz 2: son N saniyenin penceresi). */
 export type AlarmCompositeTerm = {
+  kind?: "compare" | "agg";
   signal_key: string;
   /** "*" => kuralin anchor cihazi. Spesifik cihaz kodu da yazilabilir. */
   device_code: string;
   comparator: AlarmComparator;
   threshold: number;
   threshold_high?: number | null;
+  /** kind === 'agg' icin pencere fonksiyonu. */
+  agg_fn?: AlarmAggFn | null;
+  agg_window_sec?: number;
+  /** count_above / count_below icin sayilacak deger. */
+  agg_arg?: number;
 };
 
 /** Composite kural ifadesi. */
