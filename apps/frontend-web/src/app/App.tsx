@@ -152,6 +152,7 @@ type EngineeringPage =
   | "users"
   | "responsibility-areas"
   | "outbound"
+  | "api-access"
   | "notifications"
   | "project-settings"
   | "grid"
@@ -167,6 +168,7 @@ const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "users",
   "responsibility-areas",
   "outbound",
+  "api-access",
   "notifications",
   "project-settings",
   "grid",
@@ -225,7 +227,6 @@ export function App() {
   const [gridSnapshot, setGridSnapshot] = useState<GridSnapshot | null>(null);
   const [alarmsLoading, setAlarmsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
-  const [authError, setAuthError] = useState<string>();
 
   // i18n: kullanici tercihi degistiginde (login sonrasi me yuklenince veya
   // ayarlardan dil secildiginde) react-i18next'i ona gore senkronize et.
@@ -413,7 +414,9 @@ export function App() {
           setGridSnapshot(null);
         }
       } catch {
-        setAuthError("Oturum geçersiz veya API erişilemiyor.");
+        toast.error(t("toasts.sessionInvalidBody"), {
+          title: t("toasts.sessionInvalidTitle")
+        });
       } finally {
         setAlarmsLoading(false);
         setLoadingData(false);
@@ -433,7 +436,6 @@ export function App() {
 
   const handleLogin = async (username: string, password: string, remember: boolean) => {
     setLoadingLogin(true);
-    setAuthError(undefined);
     try {
       const nextSession = await login(username, password);
       saveSession(nextSession, remember);
@@ -441,7 +443,28 @@ export function App() {
       setPageMode("home");
       setEngineeringPage("devices");
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Giriş başarısız.");
+      // Backend tipik olarak 401 'Invalid username or password' donderir; bunu
+      // dile uygun toast'a cevir. Network/server hatasi farkli ele alinir.
+      const msg = error instanceof Error ? error.message : "";
+      // api.ts login() artik 'Kullanıcı adı veya şifre hatalı.' donderir
+      // (eski sabit TR string). Hangi dilde olursak olalim bunu detect edip
+      // i18n karsiligina cevir. Backend'den gelen anlamli baska bir mesaj
+      // (orn. backend-side login validator) varsa olduğu gibi goster.
+      let body: string;
+      if (
+        /invalid username or password|incorrect|hatali|hatalı|kullanıcı adı veya şifre/i.test(msg)
+      ) {
+        body = t("toasts.loginInvalidCredentials");
+      } else if (
+        /failed to fetch|network|cannot reach|sunucu(?:ya)?\s*ula/i.test(msg)
+      ) {
+        body = t("toasts.loginNetworkFail");
+      } else if (msg) {
+        body = msg;
+      } else {
+        body = t("toasts.loginGenericFail");
+      }
+      toast.error(body, { title: t("toasts.loginFailedTitle") });
     } finally {
       setLoadingLogin(false);
     }
@@ -482,7 +505,6 @@ export function App() {
         title: t("toasts.sessionExpiredTitle")
       });
       handleLogout();
-      setAuthError("Oturum süresi doldu. Lütfen tekrar giriş yapın.");
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
@@ -1649,7 +1671,7 @@ export function App() {
   };
 
   if (!session) {
-    return <LoginForm onSubmit={handleLogin} loading={loadingLogin} error={authError} />;
+    return <LoginForm onSubmit={handleLogin} loading={loadingLogin} />;
   }
 
   return (

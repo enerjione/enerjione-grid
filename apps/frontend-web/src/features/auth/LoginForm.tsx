@@ -13,12 +13,11 @@ import {
 type Props = {
   onSubmit: (username: string, password: string, remember: boolean) => Promise<void>;
   loading: boolean;
-  error?: string;
 };
 
 const REMEMBER_STORAGE_KEY = "hsl.login.remember";
 
-export function LoginForm({ onSubmit, loading, error }: Props) {
+export function LoginForm({ onSubmit, loading }: Props) {
   const { settings } = useProjectSettings();
   const { t, i18n } = useTranslation();
   const activeLang: SupportedLanguage = isSupportedLanguage(i18n.language)
@@ -135,7 +134,6 @@ export function LoginForm({ onSubmit, loading, error }: Props) {
               />
               <span>{t("login.remember")}</span>
             </label>
-            {error ? <p className="error-text">{error}</p> : null}
             <button type="submit" disabled={loading}>
               {loading ? t("login.submitting") : t("login.submit")}
             </button>

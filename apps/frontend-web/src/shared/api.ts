@@ -1518,3 +1518,48 @@ export async function removeLineFromArea(token: string, areaId: number, lineId: 
   });
   if (!response.ok) throw await buildApiError(response, "Hat alandan çıkarılamadı.");
 }
+
+// ===== API Keys (Personal Access Token) =====
+// Backend: app/api/api_keys.py — JWT korumali; her kullanici kendi tokenlarini
+// yonetir, INSTALLER /all ile herkese erisir.
+
+export async function fetchMyApiKeys(token: string): Promise<import("./types").ApiKey[]> {
+  const response = await fetch(`${API_BASE_URL}/api-keys`, { headers: authHeaders(token) });
+  if (!response.ok) throw await buildApiError(response, "API anahtarları alınamadı.");
+  return (await response.json()) as import("./types").ApiKey[];
+}
+
+export async function createApiKey(
+  token: string,
+  payload: import("./types").ApiKeyCreatePayload
+): Promise<import("./types").ApiKeyCreated> {
+  const response = await fetch(`${API_BASE_URL}/api-keys`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "API anahtarı oluşturulamadı.");
+  return (await response.json()) as import("./types").ApiKeyCreated;
+}
+
+export async function revokeApiKey(token: string, keyId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api-keys/${keyId}`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "API anahtarı iptal edilemedi.");
+}
+
+export async function setApiKeyActive(
+  token: string,
+  keyId: number,
+  active: boolean
+): Promise<import("./types").ApiKey> {
+  const action = active ? "enable" : "disable";
+  const response = await fetch(`${API_BASE_URL}/api-keys/${keyId}/${action}`, {
+    method: "PATCH",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "API anahtarı güncellenemedi.");
+  return (await response.json()) as import("./types").ApiKey;
+}

@@ -1584,6 +1584,12 @@
   "toasts": {
     "sessionExpiredTitle": "Session ended",
     "sessionExpiredBody": "Your session has expired, please sign in again.",
+    "loginFailedTitle": "Sign-in failed",
+    "loginInvalidCredentials": "Username or password is incorrect.",
+    "loginNetworkFail": "Cannot reach the server. Check your connection and try again.",
+    "loginGenericFail": "Could not sign in. Check your credentials and try again.",
+    "sessionInvalidTitle": "Session invalid",
+    "sessionInvalidBody": "Session is invalid or the server is unreachable.",
     "signalAdded": "Signal added.",
     "signalUpdated": "Signal updated.",
     "signalDeleted": "Signal deleted.",

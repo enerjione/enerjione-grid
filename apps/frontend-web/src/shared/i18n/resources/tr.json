@@ -1584,6 +1584,12 @@
   "toasts": {
     "sessionExpiredTitle": "Oturum sona erdi",
     "sessionExpiredBody": "Oturum süresi doldu, lütfen tekrar giriş yapın.",
+    "loginFailedTitle": "Giriş başarısız",
+    "loginInvalidCredentials": "Kullanıcı adı veya şifre hatalı.",
+    "loginNetworkFail": "Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.",
+    "loginGenericFail": "Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.",
+    "sessionInvalidTitle": "Oturum geçersiz",
+    "sessionInvalidBody": "Oturum geçersiz veya sunucuya ulaşılamıyor.",
     "signalAdded": "Sinyal eklendi.",
     "signalUpdated": "Sinyal güncellendi.",
     "signalDeleted": "Sinyal silindi.",
