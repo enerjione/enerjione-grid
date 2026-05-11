@@ -559,7 +559,16 @@ function CurlExamples({
   tokenPrefix: string;
 }) {
   const { t } = useTranslation();
-  const base = apiBaseUrl.replace(/\/+$/, "");
+  // apiBaseUrl uretimde "/api/v1" gibi rölatif gelir (ayni-origin). cURL
+  // ornegini disaridan copy-paste eden kullanici icin scheme+host eklemek
+  // zorundayiz; aksi halde "/api/v1/public/me" gibi URL kullanilamaz.
+  const base = (() => {
+    const trimmed = apiBaseUrl.replace(/\/+$/, "");
+    if (trimmed.startsWith("/") && typeof window !== "undefined") {
+      return `${window.location.origin}${trimmed}`;
+    }
+    return trimmed;
+  })();
   // Token'in gercek mi placeholder mi oldugu: "hsl_pat_" ile basliyorsa ve
   // gercek uzunlukta ise (>20 char) direkt yapistirilabilir, aksi halde
   // kullanicidan tokenini yazmasini iste.
