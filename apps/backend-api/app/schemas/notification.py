@@ -15,6 +15,8 @@ class NotificationSettingsRead(BaseModel):
     # Twilio'ya ozel (diger sagayicilarda bos kalir).
     sms_account_sid: str = ""
     sms_from_number: str = ""
+    sms_twilio_use_whatsapp: bool = False
+    sms_twilio_content_sid: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""
@@ -36,6 +38,8 @@ class NotificationSettingsUpdate(BaseModel):
     sms_api_key: str
     sms_account_sid: str = ""
     sms_from_number: str = ""
+    sms_twilio_use_whatsapp: bool = False
+    sms_twilio_content_sid: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""

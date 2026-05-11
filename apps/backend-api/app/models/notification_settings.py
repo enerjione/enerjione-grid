@@ -26,6 +26,13 @@ class NotificationSettings(Base):
     # (E.164 formatinda, orn. +14057769058). Diger sagayicilarda bos kalir.
     sms_account_sid: Mapped[str] = mapped_column(String(120), default="")
     sms_from_number: Mapped[str] = mapped_column(String(40), default="")
+    # Twilio WhatsApp modu: True ise hem 'From' hem 'To' numaralarinin
+    # basina otomatik 'whatsapp:' prefixi eklenir. Twilio WhatsApp business
+    # 24 saat penceresi disinda template mesaj kullanir; bu durumda
+    # sms_twilio_content_sid bos degilse Body yerine ContentSid + bos
+    # ContentVariables ile request yapilir.
+    sms_twilio_use_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sms_twilio_content_sid: Mapped[str] = mapped_column(String(64), default="")
     # Telegram Bot API. Kanal/grup chat_id'leri virgulle ayrilmis liste.
     # Bot tokeni @BotFather'dan alinir; chat_id'ler @userinfobot veya
     # bot'un /getUpdates endpoint'inden ogrenilir.

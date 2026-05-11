@@ -170,22 +170,42 @@ def _send_sms_via_twilio(
     recipient_phone: str,
     message: str,
 ) -> None:
-    """Twilio Programmable Messaging REST API uzerinden tek SMS gonderir.
+    """Twilio Programmable Messaging REST API uzerinden tek mesaj gonderir.
 
-    Curl esdegeri:
-      curl 'https://api.twilio.com/2010-04-01/Accounts/<AccountSID>/Messages.json' -X POST \\
-        --data-urlencode 'To=+905050809924' \\
-        --data-urlencode 'From=+14057769058' \\
-        --data-urlencode 'Body=test' \\
-        -u <AccountSID>:<AuthToken>
+    Iki mod destekli — settings_row.sms_twilio_use_whatsapp:
+      - False (SMS): Body parametresi ile duz SMS. To/From dogrudan E.164.
+      - True (WhatsApp): 'whatsapp:' prefixi otomatik eklenir. Eger
+        sms_twilio_content_sid dolu ise template mesaj atilir
+        (ContentSid + bos ContentVariables); aksi halde Body ile sade
+        WhatsApp mesaji (24h pencereyi gerektirir).
 
-    sms_account_sid = Account SID (AC...)
-    sms_api_key     = Auth Token
-    sms_from_number = Sender (E.164, orn. +14057769058)
+    Curl esdegerleri:
+      SMS:
+        curl 'https://api.twilio.com/2010-04-01/Accounts/<SID>/Messages.json' -X POST \\
+          --data-urlencode 'To=<E.164>' \\
+          --data-urlencode 'From=<E.164>' \\
+          --data-urlencode 'Body=test' \\
+          -u <SID>:<AuthToken>
+      WhatsApp (template):
+        curl 'https://api.twilio.com/2010-04-01/Accounts/<SID>/Messages.json' -X POST \\
+          --data-urlencode 'To=whatsapp:<E.164>' \\
+          --data-urlencode 'From=whatsapp:<E.164>' \\
+          --data-urlencode 'ContentSid=HX...' \\
+          --data-urlencode 'ContentVariables={}' \\
+          -u <SID>:<AuthToken>
+
+    sms_account_sid          = Account SID (AC...)
+    sms_api_key              = Auth Token
+    sms_from_number          = Sender (E.164, prefix otomatik eklenir)
+    sms_twilio_use_whatsapp  = SMS yerine WhatsApp gonder
+    sms_twilio_content_sid   = (opsiyonel) onaylanmis template ID (HX...)
     """
     account_sid = (settings_row.sms_account_sid or "").strip()
     auth_token = (settings_row.sms_api_key or "").strip()
     from_number = (settings_row.sms_from_number or "").strip()
+    use_wa = bool(getattr(settings_row, "sms_twilio_use_whatsapp", False))
+    content_sid = (getattr(settings_row, "sms_twilio_content_sid", "") or "").strip()
+
     if not account_sid:
         raise ValueError("Twilio Account SID boş.")
     if not auth_token:
@@ -195,14 +215,28 @@ def _send_sms_via_twilio(
     if not recipient_phone:
         raise ValueError("Alıcı numarası boş.")
 
+    # 'whatsapp:' prefixi: kullanici hem ham E.164 hem 'whatsapp:+...' yazmis
+    # olabilir. WhatsApp modunda eksikse ekle, varsa olduğu gibi kullan.
+    def _wa(num: str) -> str:
+        s = num.strip()
+        if not use_wa:
+            return s
+        return s if s.lower().startswith("whatsapp:") else f"whatsapp:{s}"
+
+    fields: dict[str, str] = {
+        "To": _wa(recipient_phone),
+        "From": _wa(from_number),
+    }
+    if use_wa and content_sid:
+        # Template (Business-initiated) mesaj: ContentSid + bos
+        # ContentVariables. Degisken icermeyen template'ler icin yeterli.
+        fields["ContentSid"] = content_sid
+        fields["ContentVariables"] = "{}"
+    else:
+        fields["Body"] = message or ""
+
     url = f"https://api.twilio.com/2010-04-01/Accounts/{urllib.parse.quote(account_sid, safe='')}/Messages.json"
-    body = urllib.parse.urlencode(
-        {
-            "To": recipient_phone,
-            "From": from_number,
-            "Body": message or "",
-        }
-    ).encode("utf-8")
+    body = urllib.parse.urlencode(fields).encode("utf-8")
     basic = base64.b64encode(f"{account_sid}:{auth_token}".encode("utf-8")).decode("ascii")
     req = urllib.request.Request(
         url,

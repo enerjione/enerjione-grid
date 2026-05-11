@@ -409,6 +409,12 @@ export type NotificationSettings = {
   /** Twilio'ya ozel — Account SID (AC...) ve gonderen numara (E.164). */
   sms_account_sid?: string;
   sms_from_number?: string;
+  /** Twilio WhatsApp modu: True ise 'whatsapp:' prefixi otomatik eklenir.
+   *  sms_twilio_content_sid doluysa ContentSid + ContentVariables ile
+   *  template mesaj atilir (business-initiated 24h penceresi).
+   *  Bu alanlar sadece Twilio sagayicisinda anlamli. */
+  sms_twilio_use_whatsapp?: boolean;
+  sms_twilio_content_sid?: string;
   /** Telegram Bot ile bildirim gondermek icin. */
   telegram_enabled?: boolean;
   telegram_bot_token?: string;

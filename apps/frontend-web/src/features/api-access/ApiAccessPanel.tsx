@@ -369,27 +369,51 @@ export function ApiAccessPanel({
       {createdToken ? (
         <div className="settings-modal-backdrop">
           <div className="settings-modal api-key-created-modal">
-            <h3>{t("apiAccess.created.title")}</h3>
-            <p className="api-key-created-warning">
-              ⚠️ {t("apiAccess.created.oneTimeWarning")}
-            </p>
+            <header className="api-key-created-head">
+              <div className="api-key-created-head-icon">
+                <span className="material-symbols-outlined">vpn_key</span>
+              </div>
+              <div className="api-key-created-head-text">
+                <h3>{t("apiAccess.created.title")}</h3>
+                <p>{t("apiAccess.created.headSub")}</p>
+              </div>
+            </header>
+
+            <div className="api-key-created-warning">
+              <span className="material-symbols-outlined">warning</span>
+              <span>{t("apiAccess.created.oneTimeWarning")}</span>
+            </div>
+
+            <label className="api-key-created-label">
+              {t("apiAccess.created.tokenLabel")}
+            </label>
             <div className="api-key-token-display">
               <code>{createdToken.token}</code>
               <button
                 type="button"
-                className="primary-btn"
+                className="api-key-token-copy"
                 onClick={() => void copyToClipboard(createdToken.token)}
+                title={t("apiAccess.created.copy")}
               >
-                {copied ? "✓ " + t("apiAccess.created.copied") : t("apiAccess.created.copy")}
+                <span className="material-symbols-outlined">
+                  {copied ? "check" : "content_copy"}
+                </span>
+                {copied ? t("apiAccess.created.copied") : t("apiAccess.created.copy")}
               </button>
             </div>
 
-            <h4 style={{ marginBottom: 8 }}>{t("apiAccess.created.firstCall")}</h4>
-            <CurlExamples apiBaseUrl={apiBaseUrl} tokenPrefix={createdToken.token} />
+            <div className="api-key-created-examples">
+              <div className="api-key-created-examples-head">
+                <span className="material-symbols-outlined">terminal</span>
+                <h4>{t("apiAccess.created.firstCall")}</h4>
+              </div>
+              <CurlExamples apiBaseUrl={apiBaseUrl} tokenPrefix={createdToken.token} />
+            </div>
 
-            <div className="settings-actions">
+            <div className="settings-actions api-key-created-actions">
               <button
                 type="button"
+                className="primary-btn"
                 onClick={() => {
                   if (
                     !copied &&
@@ -497,14 +521,20 @@ function CurlBlock({
   return (
     <div className="curl-block">
       <div className="curl-block-head">
-        <div>
+        <div className="curl-block-head-text">
           <strong>{title}</strong>
-          <span className="helper-text" style={{ marginLeft: 8 }}>
-            {desc}
-          </span>
+          <span className="curl-block-head-desc">{desc}</span>
         </div>
-        <button type="button" className="secondary-btn" onClick={() => void copy()}>
-          {copied ? "✓ " + t("apiAccess.created.copied") : t("apiAccess.created.copy")}
+        <button
+          type="button"
+          className={`curl-block-copy ${copied ? "is-copied" : ""}`}
+          onClick={() => void copy()}
+          title={t("apiAccess.created.copy")}
+        >
+          <span className="material-symbols-outlined">
+            {copied ? "check" : "content_copy"}
+          </span>
+          {copied ? t("apiAccess.created.copied") : t("apiAccess.created.copy")}
         </button>
       </div>
       <pre className="curl-block-code">

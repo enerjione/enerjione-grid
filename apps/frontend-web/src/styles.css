@@ -2626,6 +2626,70 @@ main.content.engineering-content:has(.device-management-panel) {
 .notif-field--narrow input {
   text-align: center;
 }
+
+/* Twilio WhatsApp kart: yesil tonlu, ikon + toggle + acilan body */
+.twilio-whatsapp-card {
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.twilio-whatsapp-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+.twilio-whatsapp-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #16a34a;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.twilio-whatsapp-toggle-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+}
+.twilio-whatsapp-icon {
+  font-size: 22px !important;
+  color: #16a34a;
+  background: #fff;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid #bbf7d0;
+  flex-shrink: 0;
+}
+.twilio-whatsapp-toggle-text span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.twilio-whatsapp-toggle-text strong {
+  color: #14532d;
+  font-size: 13px;
+}
+.twilio-whatsapp-toggle-text small {
+  color: #166534;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.twilio-whatsapp-body {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed #bbf7d0;
+}
+.twilio-whatsapp-body .helper-text {
+  color: #166534;
+}
 .notif-field input {
   padding: 9px 11px;
   border: 1px solid #cbd5e1;
@@ -6308,6 +6372,29 @@ main.content.engineering-content:has(.device-management-panel) {
   background: #fef3c7;
   color: #92400e;
   border-color: #fcd34d;
+}
+
+/* ===== Outbound modal: Target Name + Protocol — kompakt yan yana iki sutun.
+   Bu blok REST/MQTT/IEC104 modallarinin hepsinde kullanilir; IEC104 edit
+   modali genis (max-width: 880px) oldugu icin de oraya iyi oturur. ===== */
+.outbound-form-headrow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 4px 0 6px;
+}
+
+.outbound-form-headcell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .outbound-form-headrow {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===== IEC 104 Hedef Duzenle modal'i — iki kolon ===== */
@@ -19444,4 +19531,388 @@ main.content.engineering-content:has(.device-management-panel) {
 .header-customer-logo--placeholder {
   background: transparent;
   border: none;
+}
+
+/* ===== API Access Panel — Personal Access Token (PAT) yonetimi ===== */
+.api-access-panel .api-keys-table-wrap {
+  margin-top: 16px;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+.api-key-prefix {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.api-key-name-cell strong {
+  display: block;
+}
+.scope-chip {
+  display: inline-block;
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin: 2px 3px 2px 0;
+  font-size: 11px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.api-key-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.api-key-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.api-key-status--active {
+  background: #dcfce7;
+  color: #15803d;
+}
+.api-key-status--active .status-dot { background: #22c55e; }
+.api-key-status--disabled {
+  background: #fef3c7;
+  color: #92400e;
+}
+.api-key-status--disabled .status-dot { background: #f59e0b; }
+.api-key-status--expired,
+.api-key-status--revoked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.api-key-status--expired .status-dot,
+.api-key-status--revoked .status-dot { background: #ef4444; }
+
+.api-key-create-modal { width: 92vw; max-width: 640px; }
+.api-key-created-modal {
+  width: 92vw;
+  max-width: 780px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Modal basligi — yuvarlak ikon + baslik + alt yazi */
+.api-key-created-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.api-key-created-head-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+  flex-shrink: 0;
+}
+.api-key-created-head-icon .material-symbols-outlined {
+  font-size: 24px;
+}
+.api-key-created-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.api-key-created-head-text h3 {
+  margin: 0 0 2px;
+  font-size: 18px;
+  color: #0f172a;
+}
+.api-key-created-head-text p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.api-key-created-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fbbf24;
+  border-radius: 10px;
+  padding: 11px 14px;
+  color: #78350f;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+.api-key-created-warning .material-symbols-outlined {
+  font-size: 20px;
+  color: #b45309;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.api-key-created-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.api-key-token-display {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  padding: 10px 10px 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 22px;
+  border: 1px solid #334155;
+}
+.api-key-token-display code {
+  flex: 1;
+  color: #f1f5f9;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  min-width: 0;
+}
+.api-key-token-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.1s;
+}
+.api-key-token-copy:hover {
+  background: #4f46e5;
+}
+.api-key-token-copy:active {
+  transform: scale(0.97);
+}
+.api-key-token-copy .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* "İlk çağrı için hazır örnekler" bölgesi */
+.api-key-created-examples {
+  margin-top: 4px;
+}
+.api-key-created-examples-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.api-key-created-examples-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 600;
+}
+.api-key-created-examples-head .material-symbols-outlined {
+  font-size: 18px;
+  color: #6366f1;
+}
+
+.api-key-created-actions {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+  justify-content: flex-end;
+}
+.scope-fieldset {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+}
+.scope-fieldset legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.scope-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.scope-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.scope-checkbox:hover {
+  background: #f9fafb;
+}
+.scope-checkbox code {
+  font-size: 12px;
+}
+.api-key-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 640px) {
+  .api-key-form-row { grid-template-columns: 1fr; }
+}
+
+/* ===== Curl ornek blogu — ApiAccessPanel + webhook receiver hint ===== */
+.curl-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f8fafc;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.curl-examples-hint {
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+.curl-examples-hint code {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #1e293b;
+}
+.curl-block {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.18s, border-color 0.18s;
+}
+.curl-block:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+.curl-block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+.curl-block-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.curl-block-head-text strong {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 600;
+}
+.curl-block-head-desc {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+}
+.curl-block-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.curl-block-copy:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+.curl-block-copy.is-copied {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+}
+.curl-block-copy .material-symbols-outlined {
+  font-size: 14px;
+}
+.curl-block-code {
+  margin: 0;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  color: #e2e8f0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-x: auto;
+}
+.curl-block-code code {
+  background: transparent;
+  color: inherit;
+  white-space: pre;
+}
+
+/* ===== Outbound webhook formu icindeki payload/receiver hint ===== */
+.webhook-hint {
+  margin: 6px 0;
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 10px;
+}
+.webhook-hint-toggle {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+.webhook-hint-toggle:hover {
+  text-decoration: underline;
+}
+.webhook-hint-body {
+  margin-top: 8px;
+}
+.webhook-hint-block {
+  margin-bottom: 12px;
+}
+.webhook-hint-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
 }

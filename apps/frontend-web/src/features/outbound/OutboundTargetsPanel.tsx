@@ -974,7 +974,8 @@ function WebhookReceiverHint({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"payload" | "receiver">("payload");
+  const [copied, setCopied] = useState(false);
 
   const samplePayload = JSON.stringify(
     {
@@ -1013,58 +1014,71 @@ async def hsl_webhook(
     return {"status": "ok"}
 `;
 
-  const copy = async (key: string, text: string) => {
+  const currentText = activeTab === "payload" ? samplePayload : receiverCode;
+
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 2000);
+      await navigator.clipboard.writeText(currentText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
       /* ignore */
     }
   };
 
   return (
-    <div className="webhook-hint">
+    <div className={`webhook-hint-card ${open ? "is-open" : ""}`}>
       <button
         type="button"
-        className="webhook-hint-toggle"
+        className="webhook-hint-card-head"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
       >
-        {open ? "▼" : "▶"} {t("engineering.outbound.webhook.hintToggle")}
+        <span className="webhook-hint-card-icon material-symbols-outlined">
+          integration_instructions
+        </span>
+        <span className="webhook-hint-card-title">
+          <strong>{t("engineering.outbound.webhook.hintToggle")}</strong>
+          <small>{t("engineering.outbound.webhook.hintSubtitle")}</small>
+        </span>
+        <span className="webhook-hint-card-chev material-symbols-outlined">
+          {open ? "expand_less" : "expand_more"}
+        </span>
       </button>
       {open ? (
-        <div className="webhook-hint-body">
-          <div className="webhook-hint-block">
-            <div className="webhook-hint-head">
-              <strong>{t("engineering.outbound.webhook.payloadTitle")}</strong>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => void copy("payload", samplePayload)}
-              >
-                {copiedKey === "payload" ? "✓ " + t("common.copied") : t("common.copy")}
-              </button>
-            </div>
-            <pre className="curl-block-code">
-              <code>{samplePayload}</code>
-            </pre>
+        <div className="webhook-hint-card-body">
+          <div className="webhook-hint-tabs">
+            <button
+              type="button"
+              className={`webhook-hint-tab ${activeTab === "payload" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("payload")}
+            >
+              <span className="material-symbols-outlined">data_object</span>
+              {t("engineering.outbound.webhook.payloadTitle")}
+            </button>
+            <button
+              type="button"
+              className={`webhook-hint-tab ${activeTab === "receiver" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("receiver")}
+            >
+              <span className="material-symbols-outlined">code</span>
+              {t("engineering.outbound.webhook.receiverTitle")}
+            </button>
+            <button
+              type="button"
+              className="webhook-hint-copy"
+              onClick={() => void copy()}
+              title={t("common.copy")}
+            >
+              <span className="material-symbols-outlined">
+                {copied ? "check" : "content_copy"}
+              </span>
+              {copied ? t("common.copied") : t("common.copy")}
+            </button>
           </div>
-
-          <div className="webhook-hint-block">
-            <div className="webhook-hint-head">
-              <strong>{t("engineering.outbound.webhook.receiverTitle")}</strong>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => void copy("receiver", receiverCode)}
-              >
-                {copiedKey === "receiver" ? "✓ " + t("common.copied") : t("common.copy")}
-              </button>
-            </div>
-            <pre className="curl-block-code">
-              <code>{receiverCode}</code>
-            </pre>
-          </div>
+          <pre className="webhook-hint-pre">
+            <code>{currentText}</code>
+          </pre>
         </div>
       ) : null}
     </div>

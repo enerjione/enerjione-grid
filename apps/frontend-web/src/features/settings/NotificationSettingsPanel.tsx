@@ -29,6 +29,8 @@ const EMPTY_SETTINGS: NotificationSettings = {
   sms_api_key: "",
   sms_account_sid: "",
   sms_from_number: "",
+  sms_twilio_use_whatsapp: false,
+  sms_twilio_content_sid: "",
   telegram_enabled: false,
   telegram_bot_token: "",
   telegram_chat_ids: ""
@@ -394,11 +396,64 @@ export function NotificationSettingsPanel({
                         onChange={(event) =>
                           setForm((prev) => ({ ...prev, sms_from_number: event.target.value }))
                         }
-                        placeholder={t("notifications.settings.fields.twilioFromNumberPlaceholder")}
+                        placeholder={
+                          form.sms_twilio_use_whatsapp
+                            ? t("notifications.settings.fields.twilioWhatsappFromPlaceholder")
+                            : t("notifications.settings.fields.twilioFromNumberPlaceholder")
+                        }
                       />
                     </label>
+
+                    {/* WhatsApp toggle + opsiyonel ContentSid */}
+                    <div className="notif-field notif-field--full twilio-whatsapp-card">
+                      <label className="twilio-whatsapp-toggle">
+                        <input
+                          type="checkbox"
+                          checked={!!form.sms_twilio_use_whatsapp}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              sms_twilio_use_whatsapp: event.target.checked
+                            }))
+                          }
+                        />
+                        <span className="twilio-whatsapp-toggle-text">
+                          <span className="material-symbols-outlined twilio-whatsapp-icon">
+                            chat
+                          </span>
+                          <span>
+                            <strong>{t("notifications.settings.fields.twilioUseWhatsapp")}</strong>
+                            <small>{t("notifications.settings.fields.twilioUseWhatsappHint")}</small>
+                          </span>
+                        </span>
+                      </label>
+                      {form.sms_twilio_use_whatsapp ? (
+                        <div className="twilio-whatsapp-body">
+                          <label className="notif-field notif-field--full">
+                            <span>{t("notifications.settings.fields.twilioContentSid")}</span>
+                            <input
+                              value={form.sms_twilio_content_sid ?? ""}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  sms_twilio_content_sid: event.target.value
+                                }))
+                              }
+                              placeholder={t("notifications.settings.fields.twilioContentSidPlaceholder")}
+                              spellCheck={false}
+                            />
+                            <small className="helper-text">
+                              {t("notifications.settings.fields.twilioContentSidHint")}
+                            </small>
+                          </label>
+                        </div>
+                      ) : null}
+                    </div>
+
                     <p className="helper-text notif-field--full">
-                      {t("notifications.settings.fields.twilioHint")}
+                      {form.sms_twilio_use_whatsapp
+                        ? t("notifications.settings.fields.twilioWhatsappHint")
+                        : t("notifications.settings.fields.twilioHint")}
                     </p>
                   </>
                 ) : (form.sms_provider || "").toLowerCase() !== "mock" ? (
