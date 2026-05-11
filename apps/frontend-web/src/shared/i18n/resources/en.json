@@ -1130,9 +1130,12 @@
         "iec104": "IEC 60870-5-104"
       },
       "webhook": {
-        "hintToggle": "What will you see on your side?",
-        "payloadTitle": "Sample payload (you will receive):",
-        "receiverTitle": "Sample receiver (Python FastAPI):"
+        "hintToggle": "Integration Helper",
+        "hintSubtitle": "What the webhook looks like on your side — sample payload and receiver code",
+        "payloadTitle": "Sample Payload",
+        "payloadDesc": "JSON body delivered to your endpoint",
+        "receiverTitle": "Sample Receiver",
+        "receiverDesc": "Python (FastAPI) — with token validation"
       },
       "form": {
         "name": "Target Name",
@@ -1333,7 +1336,7 @@
     }
   },
   "apiAccess": {
-    "title": "API Access (Personal Access Tokens)",
+    "title": "API Access",
     "intro": "Create and manage tokens for external systems (Postman, curl, your own code). Each token has specific scopes and can be revoked anytime.",
     "newToken": "New Token",
     "empty": "No tokens yet. Create one above.",
@@ -1370,12 +1373,26 @@
     "fields": {
       "name": "Token Name",
       "namePlaceholder": "Postman dev, Customer X integration...",
-      "scopes": "Scopes (permissions)",
-      "scopesHint": "Token will only access endpoints matching the selected scopes. Least-privilege principle: don't pick scopes you don't need.",
+      "scopes": "Scopes",
+      "scopesHint": "Token only accesses endpoints matching the selected scopes. Least-privilege principle: don't enable what you don't need.",
+      "scopesSelectAll": "Select All",
+      "scopesClear": "Clear",
+      "scopesSelectedCount": "{{count}} scope(s) selected",
       "expiresAt": "Expiry (optional)",
       "expiresHint": "Empty = no expiry. 90 days recommended for production.",
       "allowedIps": "Allowed IPs (optional)",
       "allowedIpsHint": "Comma-separated IP list. Empty = accessible from anywhere."
+    },
+    "scopeDescriptions": {
+      "devices:read": "Device list & metadata",
+      "signals:read": "Signal catalog (type, unit, description)",
+      "telemetry:read": "Telemetry & live measurement values",
+      "alarms:read": "Open and closed alarm events",
+      "system:read": "System status (host metrics, service health)"
+    },
+    "examplesModal": {
+      "title": "{{name}} — Example Calls",
+      "subtitle": "Copy these cURL examples and run them in your terminal or Postman."
     },
     "created": {
       "title": "Token Created",

@@ -19939,6 +19939,223 @@ main.content.engineering-content:has(.device-management-panel) {
 .scope-checkbox code {
   font-size: 12px;
 }
+
+/* Yeni scope (yetki) kart secici — modal icindeki 'Yetkiler' alani */
+.scope-fieldset--cards {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px 12px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+.scope-fieldset--cards legend {
+  font-weight: 700;
+  padding: 0 8px;
+  color: #1e293b;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.scope-fieldset-intro {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #475569;
+}
+.scope-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.scope-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.scope-card:hover {
+  border-color: #a5b4fc;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.1);
+}
+.scope-card.is-selected {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 100%);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+}
+.scope-card input[type="checkbox"] {
+  /* Native checkbox gizli — kart kendisi tıklanır. */
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.scope-card-check .material-symbols-outlined {
+  font-size: 22px;
+  color: #cbd5e1;
+  transition: color 0.15s;
+}
+.scope-card.is-selected .scope-card-check .material-symbols-outlined {
+  color: #4f46e5;
+}
+.scope-card-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.scope-card.is-selected .scope-card-icon {
+  background: #fff;
+  border: 1px solid #c7d2fe;
+}
+.scope-card-icon .material-symbols-outlined {
+  font-size: 18px;
+  color: #475569;
+}
+.scope-card.is-selected .scope-card-icon .material-symbols-outlined {
+  color: #4f46e5;
+}
+.scope-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.scope-card-text code {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  background: transparent;
+  padding: 0;
+}
+.scope-card.is-selected .scope-card-text code {
+  color: #4338ca;
+}
+.scope-card-text small {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.scope-card-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e2e8f0;
+  flex-wrap: wrap;
+}
+.scope-card-bulk-btn {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.scope-card-bulk-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+.scope-card-bulk-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.scope-card-bulk-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: #4f46e5;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Ornekler popup modal */
+.api-key-examples-modal {
+  width: min(820px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+.api-key-examples-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 14px;
+}
+.api-key-examples-head-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  display: grid;
+  place-items: center;
+  color: #f1f5f9;
+  flex-shrink: 0;
+}
+.api-key-examples-head-icon .material-symbols-outlined {
+  font-size: 22px;
+}
+.api-key-examples-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.api-key-examples-head-text h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  color: #0f172a;
+}
+.api-key-examples-head-text p {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+.api-key-examples-close {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #64748b;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.api-key-examples-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.api-key-examples-close .material-symbols-outlined {
+  font-size: 18px;
+}
+.api-key-examples-body {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.api-key-examples-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  justify-content: flex-end;
+}
 .api-key-form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

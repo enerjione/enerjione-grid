@@ -1130,9 +1130,12 @@
         "iec104": "IEC 60870-5-104"
       },
       "webhook": {
-        "hintToggle": "Sizin tarafınızda ne göreceksiniz?",
-        "payloadTitle": "Örnek payload (sistemden size gelir):",
-        "receiverTitle": "Örnek alıcı (Python FastAPI):"
+        "hintToggle": "Entegrasyon Yardımcısı",
+        "hintSubtitle": "Webhook tarafınızda nasıl görünür — örnek payload ve alıcı kodu",
+        "payloadTitle": "Örnek Payload",
+        "payloadDesc": "Sistemden tarafınıza gelen JSON gövdesi",
+        "receiverTitle": "Örnek Alıcı",
+        "receiverDesc": "Python (FastAPI) — token doğrulamalı"
       },
       "form": {
         "name": "Hedef Adı",
@@ -1333,7 +1336,7 @@
     }
   },
   "apiAccess": {
-    "title": "API Erişimi (Personal Access Token)",
+    "title": "API Erişimi",
     "intro": "Dış sistemler için Postman, curl veya kendi yazılımınızdan kullanılacak token oluşturup yönetin. Her token belirli scope'lara sahiptir ve istediğinizde iptal edilebilir.",
     "newToken": "Yeni Token",
     "empty": "Henüz token oluşturulmamış. Yukarıdan yeni bir tane ekleyin.",
@@ -1370,12 +1373,26 @@
     "fields": {
       "name": "Token İsmi",
       "namePlaceholder": "Postman dev, Müşteri X entegrasyonu...",
-      "scopes": "Yetkiler (scope'lar)",
-      "scopesHint": "Token sadece seçtiğiniz scope'lardaki endpoint'lere erişebilir. En az ayrıcalık prensibi: ihtiyacınız olmayanı seçmeyin.",
+      "scopes": "Yetkiler",
+      "scopesHint": "Token sadece seçtiğiniz yetkilerdeki endpoint'lere erişir. En az ayrıcalık prensibi: ihtiyacın olmayan kutuyu işaretleme.",
+      "scopesSelectAll": "Hepsini Seç",
+      "scopesClear": "Temizle",
+      "scopesSelectedCount": "{{count}} yetki seçili",
       "expiresAt": "Bitiş Tarihi (opsiyonel)",
       "expiresHint": "Boş bırakırsanız süresiz. Üretim için 90 gün önerilir.",
       "allowedIps": "İzinli IP'ler (opsiyonel)",
       "allowedIpsHint": "Virgülle ayrılmış IP listesi. Boş = her yerden erişilebilir."
+    },
+    "scopeDescriptions": {
+      "devices:read": "Cihaz listesi ve metadata",
+      "signals:read": "Sinyal kataloğu (tip, birim, açıklama)",
+      "telemetry:read": "Telemetri ve anlık ölçüm değerleri",
+      "alarms:read": "Açık/kapalı alarm olayları",
+      "system:read": "Sistem durumu (host kaynak metrikleri, servis sağlığı)"
+    },
+    "examplesModal": {
+      "title": "{{name}} — Örnek Çağrılar",
+      "subtitle": "Aşağıdaki cURL örneklerini doğrudan kopyalayıp terminal veya Postman'da kullanabilirsiniz."
     },
     "created": {
       "title": "Token Oluşturuldu",

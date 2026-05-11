@@ -14,13 +14,18 @@ import { useTranslation } from "react-i18next";
 
 import type { ApiKey, ApiKeyCreated } from "../../shared/types";
 
-const ALL_SCOPES = [
-  "devices:read",
-  "signals:read",
-  "telemetry:read",
-  "alarms:read",
-  "system:read"
-] as const;
+type ScopeDef = {
+  id: string;
+  icon: string;
+};
+
+const ALL_SCOPES: ScopeDef[] = [
+  { id: "devices:read", icon: "router" },
+  { id: "signals:read", icon: "rss_feed" },
+  { id: "telemetry:read", icon: "monitoring" },
+  { id: "alarms:read", icon: "warning" },
+  { id: "system:read", icon: "settings_suggest" }
+];
 
 const DEFAULT_SELECTED_SCOPES: string[] = ["devices:read", "telemetry:read", "alarms:read"];
 
@@ -239,13 +244,9 @@ export function ApiAccessPanel({
                       <button
                         type="button"
                         className="secondary-btn action-btn"
-                        onClick={() =>
-                          setExampleTokenId(exampleTokenId === k.id ? null : k.id)
-                        }
+                        onClick={() => setExampleTokenId(k.id)}
                       >
-                        {exampleTokenId === k.id
-                          ? t("apiAccess.hideExamples")
-                          : t("apiAccess.showExamples")}
+                        {t("apiAccess.showExamples")}
                       </button>
                       {!isRevoked ? (
                         <button
@@ -269,16 +270,6 @@ export function ApiAccessPanel({
                       ) : null}
                     </td>
                   </tr>
-                  {exampleTokenId === k.id ? (
-                    <tr key={`${k.id}-examples`}>
-                      <td colSpan={8} style={{ padding: 0 }}>
-                        <CurlExamples
-                          apiBaseUrl={apiBaseUrl}
-                          tokenPrefix={k.token_prefix}
-                        />
-                      </td>
-                    </tr>
-                  ) : null}
                 </>
               );
             })}
@@ -302,22 +293,66 @@ export function ApiAccessPanel({
               />
             </label>
 
-            <fieldset className="scope-fieldset">
+            <fieldset className="scope-fieldset scope-fieldset--cards">
               <legend>{t("apiAccess.fields.scopes")}</legend>
-              <p className="helper-text" style={{ marginTop: 0 }}>
+              <p className="helper-text scope-fieldset-intro">
                 {t("apiAccess.fields.scopesHint")}
               </p>
-              <div className="scope-checkboxes">
-                {ALL_SCOPES.map((s) => (
-                  <label key={s} className="scope-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedScopes.includes(s)}
-                      onChange={() => toggleScope(s)}
-                    />
-                    <code>{s}</code>
-                  </label>
-                ))}
+              <div className="scope-cards">
+                {ALL_SCOPES.map((s) => {
+                  const checked = selectedScopes.includes(s.id);
+                  return (
+                    <label
+                      key={s.id}
+                      className={`scope-card ${checked ? "is-selected" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleScope(s.id)}
+                      />
+                      <span className="scope-card-check">
+                        <span className="material-symbols-outlined">
+                          {checked ? "check_circle" : "radio_button_unchecked"}
+                        </span>
+                      </span>
+                      <span className="scope-card-icon">
+                        <span className="material-symbols-outlined">{s.icon}</span>
+                      </span>
+                      <span className="scope-card-text">
+                        <code>{s.id}</code>
+                        <small>
+                          {t(`apiAccess.scopeDescriptions.${s.id}`, {
+                            defaultValue: ""
+                          })}
+                        </small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="scope-card-bulk">
+                <button
+                  type="button"
+                  className="scope-card-bulk-btn"
+                  onClick={() => setSelectedScopes(ALL_SCOPES.map((s) => s.id))}
+                  disabled={selectedScopes.length === ALL_SCOPES.length}
+                >
+                  {t("apiAccess.fields.scopesSelectAll")}
+                </button>
+                <button
+                  type="button"
+                  className="scope-card-bulk-btn"
+                  onClick={() => setSelectedScopes([])}
+                  disabled={selectedScopes.length === 0}
+                >
+                  {t("apiAccess.fields.scopesClear")}
+                </button>
+                <span className="scope-card-bulk-count">
+                  {t("apiAccess.fields.scopesSelectedCount", {
+                    count: selectedScopes.length
+                  })}
+                </span>
               </div>
             </fieldset>
 
@@ -430,6 +465,57 @@ export function ApiAccessPanel({
           </div>
         </div>
       ) : null}
+
+      {/* ===== Ornekler modal'i — kullanici tabloda 'Ornekler' butonuna basinca ===== */}
+      {exampleTokenId !== null ? (() => {
+        const key = sortedKeys.find((k) => k.id === exampleTokenId);
+        if (!key) return null;
+        return (
+          <div
+            className="settings-modal-backdrop"
+            onClick={() => setExampleTokenId(null)}
+          >
+            <div
+              className="settings-modal api-key-examples-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <header className="api-key-examples-head">
+                <div className="api-key-examples-head-icon">
+                  <span className="material-symbols-outlined">terminal</span>
+                </div>
+                <div className="api-key-examples-head-text">
+                  <h3>{t("apiAccess.examplesModal.title", { name: key.name })}</h3>
+                  <p>{t("apiAccess.examplesModal.subtitle")}</p>
+                </div>
+                <button
+                  type="button"
+                  className="api-key-examples-close"
+                  onClick={() => setExampleTokenId(null)}
+                  aria-label={t("common.close")}
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </header>
+
+              <div className="api-key-examples-body">
+                <CurlExamples apiBaseUrl={apiBaseUrl} tokenPrefix={key.token_prefix} />
+              </div>
+
+              <div className="settings-actions api-key-examples-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => setExampleTokenId(null)}
+                >
+                  {t("common.close")}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
     </section>
   );
 }
@@ -456,30 +542,31 @@ function CurlExamples({
     tokenPrefix.startsWith("hsl_pat_") && tokenPrefix.length > 20 && !tokenPrefix.includes("…");
   const tokenForCurl = isRealToken ? tokenPrefix : "$HSL_TOKEN";
 
+  // Windows CMD '\' satir devamini DESTEKLEMEZ — iki satira boldugumuzde
+  // Bearer ile URL arasi bosluk kayboluyor (kullanici sikayet ediyor).
+  // Tek satir cURL hem Windows hem Linux/macOS hem PowerShell'de calisir.
+  // Uzun komut olsalar bile kopyala butonu zaten saglandigi icin elle
+  // yazim derdi yok.
   const examples = [
     {
       title: t("apiAccess.examples.me.title"),
       desc: t("apiAccess.examples.me.desc"),
-      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" \\
-  ${base}/public/me`
+      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" "${base}/public/me"`
     },
     {
       title: t("apiAccess.examples.devices.title"),
       desc: t("apiAccess.examples.devices.desc"),
-      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" \\
-  "${base}/public/devices?limit=50"`
+      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" "${base}/public/devices?limit=50"`
     },
     {
       title: t("apiAccess.examples.telemetry.title"),
       desc: t("apiAccess.examples.telemetry.desc"),
-      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" \\
-  ${base}/public/telemetry/DEV-001/latest`
+      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" "${base}/public/telemetry/DEV-001/latest"`
     },
     {
       title: t("apiAccess.examples.alarms.title"),
       desc: t("apiAccess.examples.alarms.desc"),
-      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" \\
-  "${base}/public/alarms?open_only=true&level=critical"`
+      curl: `curl -H "Authorization: Bearer ${tokenForCurl}" "${base}/public/alarms?open_only=true&level=critical"`
     }
   ];
 
