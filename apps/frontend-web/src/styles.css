@@ -12547,9 +12547,205 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 .rule-formula-var {
   display: grid;
-  grid-template-columns: 80px 1fr 100px auto;
+  grid-template-columns: 80px 1fr auto;
   gap: 6px;
   align-items: end;
+}
+
+/* Kural Kapsami: chip listesi + 'Cihazlari Sec' butonu. */
+.rule-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rule-scope-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rule-scope-head strong {
+  font-size: 13px;
+  color: #1e293b;
+}
+.rule-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  letter-spacing: 0.02em;
+}
+.rule-scope-badge--all {
+  background: #ecfdf5;
+  color: #047857;
+}
+.rule-scope-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rule-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 10px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #1e293b;
+}
+.rule-scope-chip .material-symbols-outlined {
+  font-size: 14px;
+  color: #6366f1;
+}
+.rule-scope-chip-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-weight: 600;
+}
+.rule-scope-chip-rm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+.rule-scope-chip-rm:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.rule-scope-chip-rm .material-symbols-outlined {
+  font-size: 14px;
+  color: inherit;
+}
+.rule-scope-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rule-scope-clear {
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.rule-scope-clear:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.rule-scope-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Cihaz secim modali — scrollable liste */
+.rule-device-picker-backdrop {
+  /* settings-modal-backdrop temeli kullanir; arka plan zaten orada. */
+}
+.rule-device-picker {
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rule-device-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+.rule-device-picker-search .material-symbols-outlined {
+  font-size: 18px;
+  color: #94a3b8;
+}
+.rule-device-picker-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+}
+.rule-device-picker-bulk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rule-device-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  max-height: 50vh;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+}
+.rule-device-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+}
+.rule-device-picker-row:last-child {
+  border-bottom: none;
+}
+.rule-device-picker-row:hover {
+  background: #f8fafc;
+}
+.rule-device-picker-row.is-selected {
+  background: #eef2ff;
+}
+.rule-device-picker-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.rule-device-picker-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.rule-device-picker-row-main strong {
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.2;
+}
+.rule-device-picker-row-main small {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+.rule-device-picker-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
 }
 .rule-formula-var-name input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;

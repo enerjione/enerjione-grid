@@ -11,6 +11,7 @@ import type {
   AlarmLevel,
   AlarmRuleKind,
   AlarmRuleRow,
+  DeviceRow,
   SignalCatalogRow,
   UserRole
 } from "../../shared/types";
@@ -19,6 +20,10 @@ type Props = {
   role: UserRole;
   rules: AlarmRuleRow[];
   signals: SignalCatalogRow[];
+  /** Kapsam alanindaki "Cihazlari Sec" modali icin tum cihazlar.
+   *  Bos gecilirse modal acilamaz, kapsam alani yine de manuel kod girmeye
+   *  imkan verir (geri uyumluluk). */
+  devices?: DeviceRow[];
   loading: boolean;
   error?: string;
   onCreate: (payload: Omit<AlarmRuleRow, "id">) => Promise<void>;
@@ -109,6 +114,7 @@ export function AlarmRulesPage({
   role,
   rules,
   signals,
+  devices,
   loading,
   error,
   onCreate,
@@ -117,6 +123,7 @@ export function AlarmRulesPage({
 }: Props) {
   const { t } = useTranslation();
   const canEdit = role === "installer";
+  const [devicePickerOpen, setDevicePickerOpen] = useState(false);
 
   const signalByKey = useMemo(() => {
     const map = new Map<string, SignalCatalogRow>();
@@ -704,19 +711,16 @@ export function AlarmRulesPage({
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
                       <legend>{t("engineering.alarmRules.fieldsetScope")}</legend>
-                      <label className="rule-field">
-                        <span>{t("engineering.alarmRules.deviceFilter")}</span>
-                        <input
-                          value={form.device_code_filter ?? ""}
-                          onChange={(e) =>
-                            setForm({ ...form, device_code_filter: e.target.value })
-                          }
-                          placeholder={t("engineering.alarmRules.deviceFilterPlaceholder")}
-                        />
-                        <small className="rule-hint">
-                          {t("engineering.alarmRules.deviceFilterHint")}
-                        </small>
-                      </label>
+                      <ScopeDevicePicker
+                        deviceCodeFilter={form.device_code_filter ?? ""}
+                        onChange={(next) =>
+                          setForm({ ...form, device_code_filter: next })
+                        }
+                        canEdit={canEdit}
+                        onOpenPicker={() => setDevicePickerOpen(true)}
+                        devicesAvailable={!!devices && devices.length > 0}
+                        t={t}
+                      />
                     </fieldset>
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
@@ -961,6 +965,22 @@ export function AlarmRulesPage({
       </div>
 
       {(localError || error) ? <p className="error-text">{localError || error}</p> : null}
+
+      {devicePickerOpen && devices ? (
+        <DevicePickerModal
+          devices={devices}
+          selectedCodes={parseDeviceCodes(form.device_code_filter)}
+          onCancel={() => setDevicePickerOpen(false)}
+          onConfirm={(codes) => {
+            setForm({
+              ...form,
+              device_code_filter: codes.length === 0 ? "" : codes.join(", ")
+            });
+            setDevicePickerOpen(false);
+          }}
+          t={t}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1115,36 +1135,23 @@ function CompositeEditor({ expression, signals, canEdit, onChange, t }: Composit
               </div>
               <div className="rule-composite-term-row">
                 {tm.kind !== "formula" ? (
-                  <>
-                    <label className="rule-field rule-composite-field-signal">
-                      <span>{t("engineering.alarmRules.composite.termSignal")}</span>
-                      <select
-                        value={tm.signal_key}
-                        onChange={(e) => updateTerm(idx, { signal_key: e.target.value })}
-                        disabled={!canEdit}
-                      >
-                        <option value="">
-                          {t("engineering.alarmRules.composite.termSignalPlaceholder")}
+                  <label className="rule-field rule-composite-field-signal">
+                    <span>{t("engineering.alarmRules.composite.termSignal")}</span>
+                    <select
+                      value={tm.signal_key}
+                      onChange={(e) => updateTerm(idx, { signal_key: e.target.value })}
+                      disabled={!canEdit}
+                    >
+                      <option value="">
+                        {t("engineering.alarmRules.composite.termSignalPlaceholder")}
+                      </option>
+                      {signals.map((s) => (
+                        <option key={s.key} value={s.key}>
+                          {SOURCE_SHORT[s.source] ?? s.source} · {s.label} ({s.key})
                         </option>
-                        {signals.map((s) => (
-                          <option key={s.key} value={s.key}>
-                            {SOURCE_SHORT[s.source] ?? s.source} · {s.label} ({s.key})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="rule-field rule-composite-field-device">
-                      <span>{t("engineering.alarmRules.composite.termDevice")}</span>
-                      <input
-                        type="text"
-                        value={tm.device_code ?? "*"}
-                        onChange={(e) => updateTerm(idx, { device_code: e.target.value })}
-                        placeholder="*"
-                        disabled={!canEdit}
-                        title={t("engineering.alarmRules.composite.termDeviceHint")}
-                      />
-                    </label>
-                  </>
+                      ))}
+                    </select>
+                  </label>
                 ) : null}
                 {isAgg ? (
                   <>
@@ -1387,16 +1394,6 @@ function FormulaEditor({ term, idx, signals, canEdit, onChange, t }: FormulaEdit
                   ))}
                 </select>
               </label>
-              <label className="rule-field rule-formula-var-device">
-                <span>{t("engineering.alarmRules.composite.termDevice")}</span>
-                <input
-                  type="text"
-                  value={v.device_code ?? "*"}
-                  onChange={(e) => updateVar(i, { device_code: e.target.value })}
-                  placeholder="*"
-                  disabled={!canEdit}
-                />
-              </label>
               {vars.length > 1 ? (
                 <button
                   type="button"
@@ -1425,6 +1422,259 @@ function FormulaEditor({ term, idx, signals, canEdit, onChange, t }: FormulaEdit
       <p className="rule-hint rule-composite-term-hint">
         {t("engineering.alarmRules.composite.formulaResultHint", { idx: idx + 1 })}
       </p>
+    </div>
+  );
+}
+
+
+// =============================================================================
+// SCOPE — Kapsam: cihaz_code_filter "kod1, kod2, ..." string'ini chip listesi
+// olarak gosterir + 'Cihazlari Sec' butonuyla modal acar.
+// =============================================================================
+
+function parseDeviceCodes(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+type ScopeDevicePickerProps = {
+  deviceCodeFilter: string;
+  onChange: (next: string) => void;
+  canEdit: boolean;
+  onOpenPicker: () => void;
+  devicesAvailable: boolean;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+};
+
+function ScopeDevicePicker({
+  deviceCodeFilter,
+  onChange,
+  canEdit,
+  onOpenPicker,
+  devicesAvailable,
+  t,
+}: ScopeDevicePickerProps) {
+  const codes = parseDeviceCodes(deviceCodeFilter);
+
+  const removeCode = (code: string) => {
+    const next = codes.filter((c) => c !== code);
+    onChange(next.join(", "));
+  };
+
+  return (
+    <div className="rule-scope">
+      <div className="rule-scope-head">
+        <strong>{t("engineering.alarmRules.scope.title")}</strong>
+        {codes.length === 0 ? (
+          <span className="rule-scope-badge rule-scope-badge--all">
+            {t("engineering.alarmRules.scope.allDevices")}
+          </span>
+        ) : (
+          <span className="rule-scope-badge">
+            {t("engineering.alarmRules.scope.selectedCount", { count: codes.length })}
+          </span>
+        )}
+      </div>
+      <p className="rule-hint">{t("engineering.alarmRules.scope.hint")}</p>
+      {codes.length > 0 ? (
+        <ul className="rule-scope-chips">
+          {codes.map((code) => (
+            <li key={code} className="rule-scope-chip">
+              <span className="material-symbols-outlined">router</span>
+              <span className="rule-scope-chip-code">{code}</span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="rule-scope-chip-rm"
+                  onClick={() => removeCode(code)}
+                  title={t("engineering.alarmRules.scope.removeChip")}
+                  aria-label={t("engineering.alarmRules.scope.removeChip")}
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="rule-scope-actions">
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={onOpenPicker}
+          disabled={!canEdit || !devicesAvailable}
+          title={
+            !devicesAvailable
+              ? t("engineering.alarmRules.scope.noDevicesYet")
+              : t("engineering.alarmRules.scope.pickBtnTitle")
+          }
+        >
+          <span className="material-symbols-outlined">checklist</span>
+          {codes.length === 0
+            ? t("engineering.alarmRules.scope.pickBtn")
+            : t("engineering.alarmRules.scope.editBtn")}
+        </button>
+        {codes.length > 0 ? (
+          <button
+            type="button"
+            className="rule-scope-clear"
+            onClick={() => onChange("")}
+            disabled={!canEdit}
+          >
+            {t("engineering.alarmRules.scope.clearAll")}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+
+// =============================================================================
+// CIHAZ SECIM MODAL — birden fazla cihazi aranabilir + tikla-sec ile sec.
+// =============================================================================
+
+type DevicePickerModalProps = {
+  devices: DeviceRow[];
+  selectedCodes: string[];
+  onCancel: () => void;
+  onConfirm: (codes: string[]) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+};
+
+function DevicePickerModal({
+  devices,
+  selectedCodes,
+  onCancel,
+  onConfirm,
+  t,
+}: DevicePickerModalProps) {
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(selectedCodes)
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const sorted = [...devices].sort((a, b) =>
+      (a.name || a.code).localeCompare(b.name || b.code, "tr")
+    );
+    if (!q) return sorted;
+    return sorted.filter(
+      (d) =>
+        (d.name ?? "").toLowerCase().includes(q) ||
+        d.code.toLowerCase().includes(q)
+    );
+  }, [devices, search]);
+
+  const toggle = (code: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const d of filtered) next.add(d.code);
+      return next;
+    });
+  };
+
+  const deselectAllVisible = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const d of filtered) next.delete(d.code);
+      return next;
+    });
+  };
+
+  const confirm = () => {
+    // Ekrandaki cihaz listesinde olmayan eski kodlari da koru (kullanici
+    // elle yazip kaydetmis olabilir).
+    onConfirm(Array.from(selected));
+  };
+
+  return (
+    <div
+      className="settings-modal-backdrop rule-device-picker-backdrop"
+      onClick={onCancel}
+    >
+      <div
+        className="settings-modal rule-device-picker"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <h3>{t("engineering.alarmRules.scope.modalTitle")}</h3>
+        <p className="helper-text">
+          {t("engineering.alarmRules.scope.modalHint")}
+        </p>
+        <div className="rule-device-picker-search">
+          <span className="material-symbols-outlined">search</span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("engineering.alarmRules.scope.searchPlaceholder")}
+            autoFocus
+          />
+        </div>
+        <div className="rule-device-picker-bulk">
+          <button type="button" className="rule-scope-clear" onClick={selectAllVisible}>
+            {t("engineering.alarmRules.scope.selectAllVisible")}
+          </button>
+          <button type="button" className="rule-scope-clear" onClick={deselectAllVisible}>
+            {t("engineering.alarmRules.scope.deselectAllVisible")}
+          </button>
+          <span className="rule-scope-badge" style={{ marginLeft: "auto" }}>
+            {t("engineering.alarmRules.scope.selectedCount", { count: selected.size })}
+          </span>
+        </div>
+        <ul className="rule-device-picker-list">
+          {filtered.length === 0 ? (
+            <li className="rule-device-picker-empty">
+              {t("engineering.alarmRules.scope.noResults")}
+            </li>
+          ) : (
+            filtered.map((d) => {
+              const isSel = selected.has(d.code);
+              return (
+                <li
+                  key={d.code}
+                  className={`rule-device-picker-row ${isSel ? "is-selected" : ""}`}
+                  onClick={() => toggle(d.code)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSel}
+                    readOnly
+                    tabIndex={-1}
+                  />
+                  <div className="rule-device-picker-row-main">
+                    <strong>{d.name || d.code}</strong>
+                    <small>{d.code}</small>
+                  </div>
+                </li>
+              );
+            })
+          )}
+        </ul>
+        <div className="settings-actions">
+          <button type="button" onClick={onCancel}>
+            {t("engineering.alarmRules.cancel")}
+          </button>
+          <button type="button" className="primary-btn" onClick={confirm}>
+            {t("engineering.alarmRules.scope.confirmBtn")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

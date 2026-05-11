@@ -1587,6 +1587,19 @@ export function App() {
     return { total, online, offline: total - online, alarm };
   }, [devices]);
 
+  // Anasayfa otomatik secim: hicbir cihaz secili degilse (selectedDeviceId=0)
+  // veya secili cihaz mevcut filtrelenmis listede yoksa, listenin ilk elemanini
+  // sec. Boylece anasayfa ilk acildiginda harita o cihaza yaklasir (DeviceMapTab
+  // selectedDevice degisince flyTo cagiriyor) ve sidebar'da cihaz vurgulanir.
+  // Liste bos olunca dokunulmaz (0 kalir, secim olmaz).
+  useEffect(() => {
+    if (filteredDashboardDevices.length === 0) return;
+    const stillVisible = filteredDashboardDevices.some((d) => d.id === selectedDeviceId);
+    if (!stillVisible) {
+      setSelectedDeviceId(filteredDashboardDevices[0].id);
+    }
+  }, [filteredDashboardDevices, selectedDeviceId]);
+
   // LiveValuesPage'e geçilecek filtrelenmiş canlı değer satırları.
   const filteredDashboardLiveValues = useMemo(() => {
     const allowedIds = new Set(filteredDashboardDevices.map((d) => d.id));
@@ -1801,6 +1814,7 @@ export function App() {
                 role={session.role}
                 rules={alarmRules}
                 signals={signalCatalog}
+                devices={devices}
                 loading={alarmRulesLoading}
                 error={alarmRulesError}
                 onCreate={handleCreateAlarmRule}
