@@ -75,10 +75,33 @@ git pull --ff-only
 NEW_HEAD="$(git rev-parse --short HEAD)"
 e1_ok "Yeni HEAD: ${NEW_HEAD}"
 
-# NATS auth conf yoksa render (install.sh mantigini cagiramayiz cunku
-# yeniden full kurulum yapmamali; sadece eksik artefact'i tamamla).
+# Docker bind mount kazasi koruma: compose `./infra/nats/nats-server.conf:
+# /etc/nats/nats-server.conf:ro` mount'u, host'ta dosya YOKSA Docker bunu
+# DIZIN olarak yaratir. Sonra render `sed` "not a regular file" hatasi verir.
+# `nats-server.conf` mevcut ama dizin ise NATS container'i durdur + dizini sil.
+if [[ -d infra/nats/nats-server.conf ]]; then
+  e1_warn "infra/nats/nats-server.conf DIZIN (Docker bind mount kazasi). Temizleniyor..."
+  docker compose stop nats 2>/dev/null || true
+  docker compose rm -f nats 2>/dev/null || true
+  rm -rf infra/nats/nats-server.conf
+fi
+
+# NATS auth conf yoksa veya tema (worker permissions vs.) degistiyse render.
+# update.sh degisikligi sonrasi WORKER izinlerine $JS.API.STREAM.NAMES eklendi;
+# eski render edilmis conf bunu icermez, alarm-service "permissions violation"
+# alir. Cozum: template hash'i ile mevcut conf hash'ini karsilastir, fark
+# varsa yeniden render.
+NEED_NATS_RENDER=0
 if [[ ! -f infra/nats/nats-server.conf ]]; then
-  e1_info "NATS auth conf yok, yeniden render ediliyor..."
+  NEED_NATS_RENDER=1
+elif ! grep -q '$JS.API.STREAM.NAMES' infra/nats/nats-server.conf; then
+  # Eski conf — worker stream listeleme izni yok. Yeniden render gerek.
+  e1_info "NATS auth conf eski (worker $JS.API.STREAM.NAMES izni yok), yeniden render ediliyor..."
+  NEED_NATS_RENDER=1
+fi
+
+if [[ $NEED_NATS_RENDER -eq 1 ]]; then
+  e1_info "NATS auth conf render ediliyor..."
   if ! python3 -c "import bcrypt" 2>/dev/null; then
     DEBIAN_FRONTEND=noninteractive apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-bcrypt
@@ -96,6 +119,11 @@ if [[ ! -f infra/nats/nats-server.conf ]]; then
   sed -i "s|{{NATS_WORKER_BCRYPT_HASH}}|${HASH_W//&/\\&}|" infra/nats/nats-server.conf
   e1_chown_target infra/nats/nats-server.conf
   e1_ok "NATS auth render edildi."
+  # NATS container conf'i yeniden okusun
+  if docker compose ps nats --status running --quiet 2>/dev/null | grep -q .; then
+    e1_info "NATS container restart ediliyor (yeni conf icin)..."
+    docker compose up -d --force-recreate nats
+  fi
 fi
 
 # ---- 4/4: Build + up ------------------------------------------------------
