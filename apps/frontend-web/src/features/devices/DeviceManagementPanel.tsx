@@ -590,9 +590,14 @@ export function DeviceManagementPanel({
                           aria-label={t("engineering.gateways.refreshAllShort")}
                           disabled={isDeletingThis || anotherDeleting}
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                            refresh
-                          </span>
+                          {/* Inline SVG — Material Icons font yuklenmezse de gozukur.
+                              VDS HTTP ortaminda Google Fonts CDN bloklanabiliyor. */}
+                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <path
+                              fill="currentColor"
+                              d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+                            />
+                          </svg>
                         </button>
                       ) : null}
                       <button
@@ -928,12 +933,43 @@ export function DeviceManagementPanel({
             const composeLive = composeGw ? getGatewayLiveness(composeGw) : null;
             const composeCmd = `docker compose -f e1-gw-${composeFor.toLowerCase()}.yml up -d`;
             const copyCmd = async () => {
+              // Iki katmanli copy: modern Clipboard API (HTTPS gerekir) ve eski
+              // execCommand fallback'i (HTTP ortamlari + IE/eski tarayicilar icin).
+              // VDS HTTPS'siz erisimde Clipboard API silent fail eder; fallback kritik.
+              let ok = false;
               try {
-                await navigator.clipboard.writeText(composeCmd);
+                if (navigator.clipboard && window.isSecureContext) {
+                  await navigator.clipboard.writeText(composeCmd);
+                  ok = true;
+                }
+              } catch {
+                ok = false;
+              }
+              if (!ok) {
+                // Fallback: hidden textarea + execCommand("copy"). Deprecated
+                // ama hala butun major tarayicilarda calisir.
+                try {
+                  const ta = document.createElement("textarea");
+                  ta.value = composeCmd;
+                  ta.style.position = "fixed";
+                  ta.style.top = "0";
+                  ta.style.left = "0";
+                  ta.style.opacity = "0";
+                  document.body.appendChild(ta);
+                  ta.focus();
+                  ta.select();
+                  ok = document.execCommand("copy");
+                  document.body.removeChild(ta);
+                } catch {
+                  ok = false;
+                }
+              }
+              if (ok) {
                 setComposeCopied(true);
                 window.setTimeout(() => setComposeCopied(false), 1500);
-              } catch {
-                /* clipboard yoksa sessiz gec */
+              } else {
+                // Kullaniciya sessiz kalmayalim — manuel kopyalamasi icin uyari
+                window.alert("Kopyalama basarisiz. Asagidaki komutu elle secip kopyalayin:\n\n" + composeCmd);
               }
             };
             return (
