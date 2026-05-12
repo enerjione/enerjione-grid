@@ -881,7 +881,7 @@ export async function downloadGatewayCompose(
   const headerName = response.headers.get("X-Filename");
   const disposition = response.headers.get("Content-Disposition") || "";
   const match = /filename="?([^";]+)"?/i.exec(disposition);
-  const fallback = `hsl-gw-${gatewayCode.toLowerCase()}.${opts.fmt === "env" ? "env" : "yml"}`;
+  const fallback = `e1-gw-${gatewayCode.toLowerCase()}.${opts.fmt === "env" ? "env" : "yml"}`;
   const filename = headerName || (match ? match[1] : fallback);
   const blob = await response.blob();
   return { blob, filename };

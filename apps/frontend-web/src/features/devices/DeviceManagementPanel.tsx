@@ -926,7 +926,7 @@ export function DeviceManagementPanel({
         ? (() => {
             const composeGw = gateways.find((g) => g.code === composeFor);
             const composeLive = composeGw ? getGatewayLiveness(composeGw) : null;
-            const composeCmd = `docker compose -f hsl-gw-${composeFor.toLowerCase()}.yml up -d`;
+            const composeCmd = `docker compose -f e1-gw-${composeFor.toLowerCase()}.yml up -d`;
             const copyCmd = async () => {
               try {
                 await navigator.clipboard.writeText(composeCmd);

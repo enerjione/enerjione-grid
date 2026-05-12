@@ -352,7 +352,7 @@ export function GatewayManagementPanel({
               Bu dosyayı sunucuya kopyalayıp aşağıdaki komutla başlatın. Docker hem Linux hem
               Windows&apos;ta (Docker Desktop) aynı şekilde çalışır:
               <br />
-              <code>docker compose -f hsl-gw-{downloadFor.toLowerCase()}.yml up -d</code>
+              <code>docker compose -f e1-gw-{downloadFor.toLowerCase()}.yml up -d</code>
             </p>
             <label>
               Çatı Yazılım Adresi (Backend URL)

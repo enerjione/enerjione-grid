@@ -32,15 +32,15 @@ _PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 # Sablon: gateway repo'sundaki ``docker/compose.template.yml`` ile birebir
 # eslesmeli — gateway tarafina disardan erisim olmadigi icin string sabit.
 _COMPOSE_TEMPLATE = """\
-# Horstmann Smart Logger DNP3 Gateway — {{GATEWAY_CODE}}
-# Kurulum: docker compose -f hsl-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
+# EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
+# Kurulum: docker compose -f e1-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
 
-name: hsl-gateway-{{GATEWAY_CODE_LOWER}}
+name: e1-gateway-{{GATEWAY_CODE_LOWER}}
 
 services:
   gateway:
     image: {{IMAGE}}
-    container_name: hsl-gw-{{GATEWAY_CODE_LOWER}}
+    container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped
     environment:
       GATEWAY_CODE: "{{GATEWAY_CODE}}"
@@ -50,9 +50,9 @@ services:
       GATEWAY_MODE: "dnp3"
       BACKEND_API_URL: "{{BACKEND_API_URL}}"
       BACKEND_API_VERIFY_SSL: "true"
-      RABBITMQ_URL: "{{RABBITMQ_URL}}"
-      RABBITMQ_EXCHANGE: "hsl.events"
-      RABBITMQ_ROUTING_KEY: "telemetry.raw_received"
+      # NATS JetStream — gateway'in telemetri yayin yolu (RabbitMQ kaldirildi).
+      NATS_URL: "{{NATS_URL}}"
+      NATS_SUBJECT_PREFIX: "e1.telemetry.raw"
       WORKER_HEALTH_HOST: "0.0.0.0"
       WORKER_HEALTH_PORT: "8020"
       DEFAULT_POLL_INTERVAL_SEC: "1"
@@ -73,7 +73,7 @@ services:
     volumes:
       - state:/app/.gateway_state
     networks:
-      - hsl
+      - e1
     logging:
       driver: json-file
       options:
@@ -88,19 +88,19 @@ services:
 
 volumes:
   state:
-    name: hsl-gw-{{GATEWAY_CODE_LOWER}}-state
+    name: e1-gw-{{GATEWAY_CODE_LOWER}}-state
 
 networks:
-  hsl:
-    name: hsl
+  e1:
+    name: e1
     external: false
     enable_ipv6: false
 """
 
 
 _ENV_TEMPLATE = """\
-# Horstmann Smart Logger DNP3 Gateway — {{GATEWAY_CODE}}
-# Docker disinda calistirma: python -m dnp3_gateway --env-file ./hsl-gw-{{GATEWAY_CODE_LOWER}}.env
+# EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
+# Docker disinda calistirma: python -m dnp3_gateway --env-file ./e1-gw-{{GATEWAY_CODE_LOWER}}.env
 
 GATEWAY_CODE={{GATEWAY_CODE}}
 GATEWAY_TOKEN={{GATEWAY_TOKEN}}
@@ -114,9 +114,9 @@ BACKEND_API_URL={{BACKEND_API_URL}}
 BACKEND_API_VERIFY_SSL=true
 CONFIG_REFRESH_SEC=30
 
-RABBITMQ_URL={{RABBITMQ_URL}}
-RABBITMQ_EXCHANGE=hsl.events
-RABBITMQ_ROUTING_KEY=telemetry.raw_received
+# NATS JetStream — gateway'in telemetri yayin yolu (RabbitMQ kaldirildi).
+NATS_URL={{NATS_URL}}
+NATS_SUBJECT_PREFIX=e1.telemetry.raw
 
 WORKER_HEALTH_HOST=0.0.0.0
 WORKER_HEALTH_PORT=8020
@@ -246,9 +246,9 @@ def render_env(args: ComposeRenderInput) -> str:
 
 
 def filename_for(args: ComposeRenderInput, *, kind: Literal["compose", "env"]) -> str:
-    """Indirilecek dosyanin adi: hsl-gw-<code>.yml veya hsl-gw-<code>.env."""
+    """Indirilecek dosyanin adi: e1-gw-<code>.yml veya e1-gw-<code>.env."""
     suffix = "yml" if kind == "compose" else "env"
-    return f"hsl-gw-{args.code.lower()}.{suffix}"
+    return f"e1-gw-{args.code.lower()}.{suffix}"
 
 
 def normalize_backend_url_for_container(url: str) -> str:
