@@ -85,18 +85,53 @@ echo "[3/4] Servisler ayaga kaldiriliyor..."
 docker compose up -d
 
 echo "[4/4] Backend hazir olana kadar bekleniyor..."
-for i in $(seq 1 30); do
+backend_ready=0
+for i in $(seq 1 60); do
   if docker compose exec -T backend-api curl -fsS http://localhost:8000/api/v1/health >/dev/null 2>&1; then
-    echo "      backend-api hazir."
+    echo "      backend-api hazir (${i}. denemede)."
+    backend_ready=1
     break
   fi
   sleep 2
 done
 
+if [[ $backend_ready -eq 1 ]]; then
+  # Default installer hesabini idempotent olarak olustur. Zaten varsa script
+  # no-op'tur. Manuel asama kalmasin diye otomatik cagriyoruz; ilk girisinde
+  # operator sifreyi degistirir.
+  echo "[4.5/4] Default installer hesabi olusturuluyor/dogrulaniyor..."
+  if docker compose exec -T backend-api python -m scripts.seed_installer 2>&1; then
+    echo "      Installer hesabi hazir."
+  else
+    echo "      UYARI: seed_installer basarisiz oldu. Manuel calistirin:"
+    echo "        docker compose exec backend-api python -m scripts.seed_installer"
+  fi
+else
+  echo "UYARI: backend-api 2 dakika icinde hazir olmadi. Loglara bakin:"
+  echo "  docker compose logs backend-api"
+  echo "Installer hesabini manuel kurmak icin:"
+  echo "  docker compose exec backend-api python -m scripts.seed_installer"
+fi
+
+# Kurulum sonrasi rehberi — operator hangi adresi acmali, hangi credentials
+# ile girmeli, gateway nasil eklemeli.
+VPS_IP=$(curl -fsS --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "<vds-ip>")
 echo
-echo "Default installer hesabini olusturmak/sifirlamak icin:"
-echo "  docker compose exec backend-api python -m scripts.seed_installer"
+echo "============================================================"
+echo "Kurulum tamamlandi. Sahip oldugun servisler:"
+echo "  * Frontend     : http://${VPS_IP}/"
+echo "  * Backend API  : http://${VPS_IP}:8000/api/v1"
+echo "  * NATS         : nats://${VPS_IP}:4222 (auth: gateway/backend/worker)"
+echo "  * RabbitMQ UI  : http://${VPS_IP}:15672 (yalnizca localhost'tan)"
 echo
-echo "Sonra browser'dan acin:  http://<vds-ip>/"
-echo "  Kullanici: installer"
-echo "  Sifre:    ChangeMe123!  (giriste mutlaka degistirin)"
+echo "Ilk giris:"
+echo "  Kullanici : installer"
+echo "  Sifre     : ChangeMe123!"
+echo "  >>> Giriste sifreni MUTLAKA degistir <<<"
+echo
+echo "Yeni gateway eklemek icin (sahaya kurulacak DNP3 gateway):"
+echo "  1. Frontend > Muhendislik > Gateway Yonetimi > 'Yeni Gateway'"
+echo "  2. Kod ve isim ver, 'Olustur'"
+echo "  3. 'Compose dosyasini indir' butonu — dosya OTOMATIK olarak NATS"
+echo "     parola gomulu halde gelir, sahaya yukle ve 'docker compose up -d'."
+echo "============================================================"
