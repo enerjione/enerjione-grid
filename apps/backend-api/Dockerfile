@@ -39,7 +39,11 @@ COPY requirements.txt .
 # Hash icermeyen satir varsa pip --require-hashes'i ignore eder ve standart kurar
 # (geriye uyumluluk). Operator hash-locked requirements icin:
 #   pip install pip-tools && pip-compile --generate-hashes requirements.in
-RUN if grep -q -- '--hash=' requirements.txt; then \
+# grep yorumlar (#-prefix) HARIC sadece veri satirlarinda `--hash=` arar.
+# Eski mantik: `grep -q -- '--hash='` requirements.txt'in usteki yorum
+# bloguna takiliyordu ("# Once requirements.txt contains `--hash=sha256:...`")
+# -> --require-hashes koluna giriyor -> ilk unhashed satirda fail.
+RUN if grep -qE '^[^#]*--hash=' requirements.txt; then \
         pip install --require-hashes -r requirements.txt; \
     else \
         pip install -r requirements.txt; \
