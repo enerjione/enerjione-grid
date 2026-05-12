@@ -65,21 +65,20 @@ export function LoginForm({ onSubmit, loading }: Props) {
       </div>
       <div className="login-shell">
         <form className="login-card" onSubmit={handleSubmit} autoComplete="off">
-          {/* Logo:
-              - Cache'ten / backend'ten gelen DB logosu varsa onu goster.
-              - Hic logo bilgisi yoksa (cache miss + henuz fetch tamamlanmadi
-                veya backend'de kayit yok) statik default PNG gosterilir.
-              Eski problem: ayarlar yuklenirken placeholder div'i gosteriyorduk
-              ve cache hit oldugunda da logo gozukmuyordu. Artik: settings
-              senkron cache'ten geliyor; customer_logo varsa anında render. */}
-          <img
-            className="customer-logo"
-            src={settings.customer_logo || "/customer-logo.png"}
-            alt={settings.customer_name || t("login.customerLogoAlt")}
-            onError={(event) => {
-              event.currentTarget.src = "/customer-logo-placeholder.svg";
-            }}
-          />
+          {/* Customer logosu yalnizca proje ayarlarinda kullanici yukledigi
+              zaman gosterilir. Bos ise hic render edilmez (ilk kurulumda
+              placeholder gozukmesin; EnerjiOne markasi alt-logoda zaten var). */}
+          {settings.customer_logo && (
+            <img
+              className="customer-logo"
+              src={settings.customer_logo}
+              alt={settings.customer_name || t("login.customerLogoAlt")}
+              onError={(event) => {
+                // Yukleme basarisiz olursa img'i gizle (broken-image yerine)
+                event.currentTarget.style.display = "none";
+              }}
+            />
+          )}
           <div className="login-form-fields">
             <h2>{t("login.title")}</h2>
             <label>

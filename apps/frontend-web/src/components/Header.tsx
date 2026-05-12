@@ -66,24 +66,25 @@ export function Header({
         <div className="brand-logo-wrap">
           <img src="/logo.png" alt="EnerjiOne" className="logo" />
         </div>
-        <span className="header-divider" />
-        <div className="customer-logo-wrap">
-          {/* Cache hit ise senkron olarak DB logosu; cache miss + ilk fetch
-              tamamlanmamissa statik default light PNG. Boylece flash yok ve
-              login sonrasi da boslukta degil dogru logo gorunur. */}
-          <img
-            className="header-customer-logo"
-            src={
-              settings.customer_logo_light ||
-              settings.customer_logo ||
-              "/customer-logo-light.png"
-            }
-            alt={settings.customer_name || t("header.customerLogoAlt")}
-            onError={(event) => {
-              event.currentTarget.src = "/customer-logo-placeholder.svg";
-            }}
-          />
-        </div>
+        {/* Customer logosu yalnizca proje ayarlarinda kullanici yukledigi
+            zaman gosterilir. Bos ise divider + logo blogu hic render edilmez
+            (header daha temiz gorunur, ilk kurulumda placeholder spam yok). */}
+        {(settings.customer_logo_light || settings.customer_logo) && (
+          <>
+            <span className="header-divider" />
+            <div className="customer-logo-wrap">
+              <img
+                className="header-customer-logo"
+                src={settings.customer_logo_light || settings.customer_logo}
+                alt={settings.customer_name || t("header.customerLogoAlt")}
+                onError={(event) => {
+                  // Yukleme basarisiz olursa img'i gizle (broken-image yerine)
+                  event.currentTarget.style.display = "none";
+                }}
+              />
+            </div>
+          </>
+        )}
         <nav className="header-nav header-nav--framed">
           <button className={activePage === "home" ? "active" : ""} onClick={() => onChangePage("home")}>
             {t("header.home")}
