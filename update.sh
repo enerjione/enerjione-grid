@@ -86,6 +86,30 @@ if [[ -d infra/nats/nats-server.conf ]]; then
   rm -rf infra/nats/nats-server.conf
 fi
 
+# Ayni koruma fcm-service-account.json icin. Yeni compose mount eklendigi
+# icin eski kurulumlarda dosya yoksa Docker dizin yaratacak.
+if [[ -d fcm-service-account.json ]]; then
+  e1_warn "fcm-service-account.json DIZIN (Docker bind mount kazasi). Temizleniyor..."
+  docker compose stop backend-api 2>/dev/null || true
+  docker compose rm -f backend-api 2>/dev/null || true
+  rm -rf fcm-service-account.json
+fi
+if [[ ! -e fcm-service-account.json ]]; then
+  e1_info "fcm-service-account.json yok — disabled placeholder olusturuluyor (FCM devre disi)."
+  cat > fcm-service-account.json <<'PLACEHOLDER'
+{
+  "_comment": "FCM disabled placeholder — gercek service account icin Firebase Console'dan indirin.",
+  "type": "service_account",
+  "project_id": "",
+  "private_key": "",
+  "client_email": "",
+  "_disabled": true
+}
+PLACEHOLDER
+  chmod 600 fcm-service-account.json
+  e1_chown_target fcm-service-account.json
+fi
+
 # NATS auth conf yoksa veya tema (worker permissions vs.) degistiyse render.
 # update.sh degisikligi sonrasi WORKER izinlerine $JS.API.STREAM.NAMES eklendi;
 # eski render edilmis conf bunu icermez, alarm-service "permissions violation"

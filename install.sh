@@ -236,6 +236,36 @@ chmod 600 .env
 e1_chown_target .env
 e1_ok ".env hazir (chmod 600, sahip: $(e1_target_user || echo root))."
 
+# FCM service account JSON — mobil app push bildirim icin. Opsiyonel:
+# yoksa FCM devre disi kalir (email/SMS calismaya devam eder).
+# Ama compose mount edebilmek icin dosya MUTLAKA var olmali (yoksa Docker
+# bind mount'u DIZIN olarak yaratir, NATS conf kazasi gibi).
+# Cozum: dosya yoksa "disabled placeholder" yarat — fcm.py JSON parse
+# basarisiz olur, "FCM yuklenirken hata" log atar ama devam eder.
+if [[ ! -f fcm-service-account.json ]]; then
+  e1_info "fcm-service-account.json yok — placeholder olusturuluyor (FCM devre disi)."
+  e1_info "Mobil push icin Firebase Console > Project Settings > Service Accounts >"
+  e1_info "Generate new private key, indirilen JSON'u ${INSTALL_DIR}/fcm-service-account.json"
+  e1_info "olarak kaydedin, sonra: sudo bash update.sh backend"
+  cat > fcm-service-account.json <<'PLACEHOLDER'
+{
+  "_comment": "FCM service account placeholder. Bu dosya bos JSON; backend fcm.py bunu yukleyemez ve FCM'i devre disi birakir. Gercek service account icin Firebase Console'dan indirip uzerine yazin.",
+  "type": "service_account",
+  "project_id": "",
+  "private_key_id": "",
+  "private_key": "",
+  "client_email": "",
+  "client_id": "",
+  "_disabled": true
+}
+PLACEHOLDER
+  chmod 600 fcm-service-account.json
+  e1_chown_target fcm-service-account.json
+  e1_warn "FCM placeholder yaratildi. Gercek JSON yuklenmeden mobil push CALISMAZ."
+else
+  e1_info "fcm-service-account.json mevcut — FCM aktif olacak."
+fi
+
 # NATS bcrypt hash render — host python3 + bcrypt ile.
 if [[ ! -f infra/nats/nats-server.conf ]]; then
   e1_info "NATS bcrypt hash'leri uretiliyor (python3 + bcrypt)..."
