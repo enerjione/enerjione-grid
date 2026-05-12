@@ -112,7 +112,7 @@ class _FcmClient:
                 "android": {
                     "priority": "HIGH",
                     "notification": {
-                        "channel_id": "horstmann_alerts",
+                        "channel_id": "enerjione_alerts",
                         "sound": "default",
                     },
                 },

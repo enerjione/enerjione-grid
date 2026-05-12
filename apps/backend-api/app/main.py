@@ -22,11 +22,10 @@ from app.services import alarm_reconciliation, backup_scheduler, telemetry_consu
 app = FastAPI(
     title=settings.app_name,
     description=(
-        "Horstmann Smart Logger backend. Web/mobile için JWT, dış sistemler için "
+        "EnerjiOne Grid backend. Web/mobile için JWT, dış sistemler için "
         "**API Key (Personal Access Token)** desteği var.\n\n"
         "**Public API:** `/api/v1/public/*` altında, `Authorization: Bearer hsl_pat_<token>` "
-        "ile çağrılır. Token yönetimi için `/api/v1/api-keys` endpoint'lerine bakın.\n\n"
-        "Detaylı rehber: [API Reference (GitBook)](https://hsl-docs.formelektrik.com/api/)."
+        "ile çağrılır. Token yönetimi için `/api/v1/api-keys` endpoint'lerine bakın."
     ),
     openapi_tags=[
         {"name": "auth", "description": "Kullanıcı oturumu (JWT)."},

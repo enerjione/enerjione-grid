@@ -256,7 +256,7 @@ async def upload_backup(
     # Dosyayi diske yaz
     now = datetime.now(timezone.utc)
     safe = "".join(c for c in name if c.isalnum() or c in "._-")[:120] or "upload.dump"
-    target = get_backup_dir() / f"hsl-{now.strftime('%Y%m%d-%H%M%S')}-uploaded-{safe}"
+    target = get_backup_dir() / f"e1-{now.strftime('%Y%m%d-%H%M%S')}-uploaded-{safe}"
     try:
         with open(target, "wb") as out:
             while True:

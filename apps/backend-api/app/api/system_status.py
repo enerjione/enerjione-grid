@@ -246,7 +246,7 @@ def _http_probe(url: str) -> tuple[bool, float, str | None]:
 
     started = time.perf_counter()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "hsl-system-status"})
+        req = urllib.request.Request(url, headers={"User-Agent": "e1-system-status"})
         with urllib.request.urlopen(req, timeout=_TCP_PROBE_TIMEOUT_SEC) as resp:
             elapsed = (time.perf_counter() - started) * 1000.0
             ok = 200 <= resp.status < 300
@@ -442,7 +442,7 @@ def get_services_status(
             lambda: _check_worker(
                 "Tag Engine",
                 env_prefix="TAG_ENGINE",
-                default_hosts=("tag-engine", "tag_engine", "e1-tag-engine", "hsl-tag-engine", "127.0.0.1"),
+                default_hosts=("tag-engine", "tag_engine", "e1-tag-engine", "127.0.0.1"),
                 default_port=8011,
             ),
         ),
@@ -451,7 +451,7 @@ def get_services_status(
             lambda: _check_worker(
                 "Alarm Service",
                 env_prefix="ALARM_SERVICE",
-                default_hosts=("alarm-service", "alarm_service", "e1-alarm-service", "hsl-alarm-service", "127.0.0.1"),
+                default_hosts=("alarm-service", "alarm_service", "e1-alarm-service", "127.0.0.1"),
                 default_port=8012,
             ),
         ),
@@ -464,7 +464,6 @@ def get_services_status(
                     "notification-worker",
                     "notification_worker",
                     "e1-notification-worker",
-                    "hsl-notification-worker",
                     "127.0.0.1",
                 ),
                 default_port=8013,
@@ -475,7 +474,7 @@ def get_services_status(
             lambda: _check_worker(
                 "IEC104 Outbound",
                 env_prefix="IEC104_OUTBOUND",
-                default_hosts=("iec104-outbound", "iec104_outbound", "e1-iec104-outbound", "hsl-iec104-outbound", "127.0.0.1"),
+                default_hosts=("iec104-outbound", "iec104_outbound", "e1-iec104-outbound", "127.0.0.1"),
                 default_port=8014,
             ),
         ),

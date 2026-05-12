@@ -366,7 +366,7 @@ def download_gateway_compose(
     Akis:
         1. Operator/installer arayuzde gateway kaydi olusturur (POST /gateways).
         2. Frontend bu endpoint'i cagirir, dosyayi indirir.
-        3. Dosya hedef sunucuya kopyalanir; ``docker compose -f hsl-gw-XXX.yml up -d``.
+        3. Dosya hedef sunucuya kopyalanir; ``docker compose -f e1-gw-XXX.yml up -d``.
 
     Donus: ``Content-Disposition: attachment`` ile dosya. Token gateway DB'den
     cekilir, frontend'e ayrica gostermeye gerek yoktur (compose icinde gomulu gelir).

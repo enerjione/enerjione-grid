@@ -7,7 +7,7 @@
     enabled, interval_hours, retention_count.
 
 Yedek dosyalari sunucu diskinde BACKUP_DIR (env, default
-/var/lib/horstmann/backups) altinda tutulur. pg_dump ciktisi
+/var/lib/e1-backups) altinda tutulur. pg_dump ciktisi
 custom format (.dump) — pg_restore ile geri yuklenir.
 """
 

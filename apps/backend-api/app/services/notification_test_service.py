@@ -33,7 +33,7 @@ def send_smtp_test(
     if settings_row.smtp_port <= 0:
         raise ValueError("SMTP port geçersiz.")
 
-    sender = settings_row.smtp_from_email or settings_row.smtp_username or "noreply@horstman.local"
+    sender = settings_row.smtp_from_email or settings_row.smtp_username or "noreply@enerjione.local"
     mail = EmailMessage()
     mail["From"] = sender
     mail["To"] = recipient_email

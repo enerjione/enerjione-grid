@@ -16,13 +16,13 @@ def try_bootstrap() -> int:
             )
             conn.autocommit = True
             cur = conn.cursor()
-            cur.execute("SELECT 1 FROM pg_database WHERE datname='horstman'")
+            cur.execute("SELECT 1 FROM pg_database WHERE datname='enerjione'")
             exists = cur.fetchone() is not None
             if not exists:
-                cur.execute("CREATE DATABASE horstman")
-                print("Database created: horstman")
+                cur.execute("CREATE DATABASE enerjione")
+                print("Database created: enerjione")
             else:
-                print("Database already exists: horstman")
+                print("Database already exists: enerjione")
             print(f"Working postgres password found: '{password}'")
             cur.close()
             conn.close()

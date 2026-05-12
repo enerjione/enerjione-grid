@@ -126,7 +126,7 @@ def get_backup_dir() -> Path:
     """Yedek dosyalari icin diskte hedef dizin (.dump cikti yolu).
 
     BACKUP_DIR env ile override edilebilir; container'da volume olarak
-    /var/lib/hsl-backups baglanir.
+    /var/lib/e1-backups baglanir.
     """
     raw = os.getenv("BACKUP_DIR", "./backups")
     p = Path(raw).resolve()
@@ -154,7 +154,7 @@ def _parse_db_url(url: str) -> dict:
         "port": str(u.port or 5432),
         "user": unquote(u.username or ""),
         "password": unquote(u.password or ""),
-        "dbname": (u.path or "/").lstrip("/") or "horstman",
+        "dbname": (u.path or "/").lstrip("/") or "enerjione",
     }
 
 
@@ -342,7 +342,7 @@ def create_backup(
 ) -> BackupJob:
     """Yeni bir BackupJob kaydi olustur ve pg_dump'i calistir."""
     now = datetime.now(timezone.utc)
-    fname = f"hsl-{now.strftime('%Y%m%d-%H%M%S')}-{job_type}.dump"
+    fname = f"e1-{now.strftime('%Y%m%d-%H%M%S')}-{job_type}.dump"
     target = _backup_dir() / fname
     job = BackupJob(
         job_type=job_type,
