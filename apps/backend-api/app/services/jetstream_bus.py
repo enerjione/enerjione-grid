@@ -100,9 +100,15 @@ class JetStreamBus:
         self._subject_raw = subject_raw_pattern
         self._subject_normalized = subject_normalized_pattern
         self._subject_dlq = subject_dlq_pattern
-        self._max_age_raw_ns = max_age_days_raw * 24 * 60 * 60 * 1_000_000_000
-        self._max_age_normalized_ns = max_age_days_normalized * 24 * 60 * 60 * 1_000_000_000
-        self._max_age_dlq_ns = max_age_days_dlq * 24 * 60 * 60 * 1_000_000_000
+        # NOT: nats-py StreamConfig `max_age` field'ini SANIYE olarak alir
+        # (yorumda "in seconds"). `as_dict()` icinde otomatik `_to_nanoseconds`
+        # ile NATS wire format'a cevirilir. Onceden burada manuel nanosaniyeye
+        # cevriyorduk → as_dict bir kere daha cevirip int64 tasiriyor, NATS
+        # server `BadRequestError code=400 err_code=10025 "invalid JSON"`
+        # ile reddediyordu. Saniye olarak vermek dogru kullanim.
+        self._max_age_raw_sec = max_age_days_raw * 24 * 60 * 60
+        self._max_age_normalized_sec = max_age_days_normalized * 24 * 60 * 60
+        self._max_age_dlq_sec = max_age_days_dlq * 24 * 60 * 60
         self._connect_timeout = connect_timeout_sec
 
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -214,12 +220,12 @@ class JetStreamBus:
         await self._ensure_stream(
             name=self._stream_raw,
             subject=self._subject_raw,
-            max_age_ns=self._max_age_raw_ns,
+            max_age_sec=self._max_age_raw_sec,
         )
         await self._ensure_stream(
             name=self._stream_normalized,
             subject=self._subject_normalized,
-            max_age_ns=self._max_age_normalized_ns,
+            max_age_sec=self._max_age_normalized_sec,
         )
         # DLQ stream — workerlarin max_deliver'a takilan "poison" mesajlari
         # manual publish ile buraya tasinir. NATS default'unda max_deliver
@@ -228,7 +234,7 @@ class JetStreamBus:
         await self._ensure_stream(
             name=self._stream_dlq,
             subject=self._subject_dlq,
-            max_age_ns=self._max_age_dlq_ns,
+            max_age_sec=self._max_age_dlq_sec,
         )
 
     async def _disconnect(self) -> None:
@@ -238,7 +244,7 @@ class JetStreamBus:
             except Exception:  # noqa: BLE001
                 logger.debug("jetstream_drain_error", exc_info=True)
 
-    async def _ensure_stream(self, *, name: str, subject: str, max_age_ns: int) -> None:
+    async def _ensure_stream(self, *, name: str, subject: str, max_age_sec: int) -> None:
         """Stream yoksa olustur; varsa subject/retention farkliysa otomatik
         update_stream cagrir.
 
@@ -256,21 +262,27 @@ class JetStreamBus:
         # ediyor ama None gondersek field bos kalmiyor — bizim eski `-1`
         # sentinel'i seriyi koparmis. 0 ile geceriz, max_age ZATEN retention'i
         # saglar.
+        # nats-py StreamConfig.max_age SANIYE bekler ("# in seconds" — api.py).
+        # `as_dict()` cagrisi otomatik nanosaniyeye cevirir. Burada saniye
+        # gondermeliyiz, aksi halde iki kere nano cevrilip int64 tasiyor
+        # → server BadRequestError code=10025 "invalid JSON".
         cfg = StreamConfig(  # type: ignore[union-attr]
             name=name,
             subjects=[subject],
             retention=RetentionPolicy.LIMITS,  # type: ignore[union-attr]
             storage=StorageType.FILE,  # type: ignore[union-attr]
-            max_age=max_age_ns,
+            max_age=max_age_sec,
             max_msgs=0,
             max_bytes=0,
         )
         try:
             info = await self._js.stream_info(name)
-            # Stream var — config drift kontrolu
+            # Stream var — config drift kontrolu. info.config.max_age da
+            # `from_response`'da _convert_nanoseconds ile saniyeye cevrilmis;
+            # ikisi de saniye, dogrudan karsilastirilir.
             existing_subjects = list(getattr(info.config, "subjects", []) or [])
             existing_max_age = int(getattr(info.config, "max_age", 0) or 0)
-            if sorted(existing_subjects) == sorted([subject]) and existing_max_age == max_age_ns:
+            if sorted(existing_subjects) == sorted([subject]) and existing_max_age == max_age_sec:
                 # Drift yok — dokunma
                 return
             # Drift var — update_stream ile yenile
