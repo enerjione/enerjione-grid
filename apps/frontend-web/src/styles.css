@@ -83,10 +83,10 @@ body {
   border-radius: 8px;
 }
 .header-nav.header-nav--framed button.active {
-  background: rgba(59, 130, 246, 0.22);
-  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(255, 140, 0, 0.22);
+  border-color: rgba(255, 140, 0, 0.45);
   color: #fff;
-  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 1px 4px rgba(255, 140, 0, 0.2);
 }
 
 .header-nav button {
@@ -109,7 +109,7 @@ body {
 
 .header-nav button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
+  box-shadow: 0 0 0 3px rgba(253, 197, 147, 0.35);
 }
 
 .header-nav button.active {
@@ -145,7 +145,7 @@ body {
 
 .engineering-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
+  box-shadow: 0 0 0 3px rgba(253, 197, 147, 0.35);
 }
 
 .engineering-btn.active {
@@ -777,7 +777,7 @@ body {
   background: linear-gradient(135deg, #ff8c00 0%, #e67c00 100%);
   color: #fff;
   border-color: #cc7000;
-  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.20);
+  box-shadow: 0 2px 4px rgba(230, 124, 0, 0.20);
 }
 
 /* Kritik bildirim rozetinde hafif nabiz efekti — kullanici dikkatini ceksin */
@@ -844,7 +844,7 @@ body {
 
 .profile-trigger:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
+  box-shadow: 0 0 0 3px rgba(253, 197, 147, 0.35);
 }
 
 .profile-text {
@@ -1037,7 +1037,7 @@ body {
 .settings-modal select:focus {
   outline: none;
   border-color: #e67c00;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.16);
 }
 
 .settings-actions {
@@ -1066,7 +1066,7 @@ body {
 
 .settings-actions button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.25);
 }
 
 .panel-head {
@@ -1087,7 +1087,7 @@ body {
   border-radius: 10px;
   padding: 8px 14px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 8px 18px rgba(230, 124, 0, 0.25);
   cursor: pointer;
   transition: transform 0.12s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
@@ -1098,12 +1098,12 @@ body {
 
 .add-user-btn:active {
   transform: scale(0.97);
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.24);
+  box-shadow: 0 4px 10px rgba(230, 124, 0, 0.24);
 }
 
 .add-user-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.25);
 }
 
 .edit-btn {
@@ -1725,7 +1725,7 @@ body {
 
 .device-group-item.active {
   border-color: #e67c00;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 2px rgba(230, 124, 0, 0.15);
   background: #eff6ff;
 }
 
@@ -1913,7 +1913,7 @@ body {
   background: #e67c00;
   border-color: #cc7000;
   color: #fff;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 6px rgba(230, 124, 0, 0.25);
 }
 
 .device-props-panel--system {
@@ -1980,7 +1980,7 @@ body {
 .device-detail-form input:focus {
   outline: none;
   border-color: #e67c00;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.16);
 }
 
 .device-detail-form select {
@@ -2194,7 +2194,7 @@ body {
 
 .filter-chip:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.2);
 }
 
 .filter-chip.active {
@@ -2306,7 +2306,7 @@ main.content.engineering-content:has(.device-management-panel) {
   background: #e67c00;
   color: #fff;
   border-color: #cc7000;
-  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.28);
+  box-shadow: 0 6px 14px rgba(230, 124, 0, 0.28);
 }
 
 .tabs {
@@ -2366,14 +2366,14 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .tabs button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.22);
 }
 
 .tabs button.active {
   background: linear-gradient(135deg, #e67c00 0%, #cc7000 100%);
   border-color: #cc7000;
   color: #fff;
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.26);
+  box-shadow: 0 6px 16px rgba(230, 124, 0, 0.26);
 }
 
 .selected-device {
@@ -6637,7 +6637,7 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .iec104-whitelist-status--active .status-dot {
   background: #e67c00;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 0 0 2px rgba(230, 124, 0, 0.25);
 }
 
 .iec104-whitelist-status--open {
@@ -6714,7 +6714,7 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .iec104-peer-chip:hover {
   border-color: #93c5fd;
-  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 1px 4px rgba(230, 124, 0, 0.08);
 }
 
 .iec104-peer-chip-idx {
@@ -9152,7 +9152,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .dashboard-filter-tab.active {
   background: linear-gradient(135deg, #e67c00, #cc7000);
   color: #fff;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 1px 3px rgba(230, 124, 0, 0.3);
 }
 
 /* Harita üstündeki ince filtre çubuğu — ana sayfa harita sekmesi */
@@ -9932,7 +9932,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .user-form select:focus {
   outline: none;
   border-color: #e67c00;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.18);
   background: #fff;
 }
 
@@ -9947,7 +9947,7 @@ main.content.engineering-content:has(.device-management-panel) {
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.2s ease, filter 0.2s ease;
-  box-shadow: 0 6px 16px rgba(29, 78, 216, 0.28);
+  box-shadow: 0 6px 16px rgba(204, 112, 0, 0.28);
 }
 
 .login-card button:not(.password-toggle-btn):hover,
@@ -9961,14 +9961,14 @@ main.content.engineering-content:has(.device-management-panel) {
 .user-form button:active,
 .danger-btn:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.24);
+  box-shadow: 0 2px 8px rgba(204, 112, 0, 0.24);
 }
 
 .login-card button:not(.password-toggle-btn):focus-visible,
 .user-form button:focus-visible,
 .danger-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.25);
 }
 
 .login-card button:not(.password-toggle-btn):disabled {
@@ -10638,7 +10638,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .signals-model-select:focus {
   outline: none;
   border-color: #e67c00;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.15);
 }
 
 .signals-toolbar {
@@ -10681,7 +10681,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .signals-search:focus {
   outline: none;
   border-color: #ff8c00;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.18);
 }
 
 .signals-source-chips {
@@ -11109,7 +11109,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .detail-form-wide select:focus {
   outline: none;
   border-color: #ff8c00;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.18);
 }
 
 .detail-form-wide input:disabled,
@@ -11354,7 +11354,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .auto-refresh-select:focus {
   outline: none;
   border-color: #e67c00;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.15);
 }
 
 /* ===== Sorumluluk Alanlari sayfasi ===== */
@@ -11436,7 +11436,7 @@ main.content.engineering-content:has(.device-management-panel) {
 .responsibility-list-item.active {
   background: linear-gradient(180deg, #eff6ff, #dbeafe);
   border-color: #ff8c00;
-  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 1px 4px rgba(230, 124, 0, 0.18);
 }
 
 .responsibility-list-item.inactive {
@@ -17447,9 +17447,9 @@ main.content.engineering-content:has(.device-management-panel) {
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
 }
 .faults-card.selected {
-  outline: 2px solid rgba(59, 130, 246, 0.55);
+  outline: 2px solid rgba(255, 140, 0, 0.55);
   outline-offset: -2px;
-  background: rgba(59, 130, 246, 0.04);
+  background: rgba(255, 140, 0, 0.04);
 }
 .faults-card-row {
   display: flex;
@@ -17611,10 +17611,10 @@ main.content.engineering-content:has(.device-management-panel) {
   transition: background 0.12s ease;
 }
 .faults-row:hover {
-  background: rgba(59, 130, 246, 0.06);
+  background: rgba(255, 140, 0, 0.06);
 }
 .faults-row.selected {
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(255, 140, 0, 0.12);
 }
 .faults-cell-date {
   font-variant-numeric: tabular-nums;
@@ -19662,7 +19662,7 @@ main.content.engineering-content:has(.device-management-panel) {
   transition: background 0.15s, color 0.15s;
 }
 .lang-switcher__btn:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(255, 140, 0, 0.08);
   color: #a85800;
 }
 .lang-switcher__btn.is-active {
@@ -19767,9 +19767,9 @@ main.content.engineering-content:has(.device-management-panel) {
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .profile-dropdown__lang-btn:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(255, 140, 0, 0.08);
   color: #a85800;
-  border-color: rgba(37, 99, 235, 0.5);
+  border-color: rgba(230, 124, 0, 0.5);
 }
 .profile-dropdown__lang-btn.is-active {
   background: #e67c00;
