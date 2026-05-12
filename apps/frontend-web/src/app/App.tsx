@@ -2191,26 +2191,26 @@ export function App() {
                 kapatirsa sistem cap'inda etkin olsa bile bildirim almaz. */}
             {notifPrefs ? (
               <div className="notif-prefs-section">
-                <h4>Bildirim Tercihleri</h4>
+                <h4>{t("settings.notifPrefs.title")}</h4>
                 <div className="notif-prefs-row">
                   <div className="notif-prefs-row-label">
-                    <strong>Web bildirimi</strong>
-                    <span>Tarayıcıda zilde uyarı görünsün.</span>
+                    <strong>{t("settings.notifPrefs.web")}</strong>
+                    <span>{t("settings.notifPrefs.webHint")}</span>
                   </div>
                   <button
                     type="button"
                     className={`notif-prefs-toggle ${notifPrefs.web_enabled ? "on" : ""}`}
                     onClick={() => void handleToggleNotifPref("web_enabled")}
                     disabled={notifPrefsSaving}
-                    aria-label="Web bildirimi"
+                    aria-label={t("settings.notifPrefs.web")}
                   />
                 </div>
                 <div className="notif-prefs-row">
                   <div className="notif-prefs-row-label">
-                    <strong>E-posta</strong>
+                    <strong>{t("settings.notifPrefs.email")}</strong>
                     <span>
-                      Alarm/arıza durumlarında e-posta gönderilsin.
-                      {currentUser?.email ? "" : " (E-posta eklenmemiş.)"}
+                      {t("settings.notifPrefs.emailHint")}
+                      {currentUser?.email ? "" : t("settings.notifPrefs.emailMissing")}
                     </span>
                   </div>
                   <button
@@ -2218,15 +2218,15 @@ export function App() {
                     className={`notif-prefs-toggle ${notifPrefs.email_enabled ? "on" : ""}`}
                     onClick={() => void handleToggleNotifPref("email_enabled")}
                     disabled={notifPrefsSaving}
-                    aria-label="E-posta bildirimi"
+                    aria-label={t("settings.notifPrefs.email")}
                   />
                 </div>
                 <div className="notif-prefs-row">
                   <div className="notif-prefs-row-label">
-                    <strong>SMS</strong>
+                    <strong>{t("settings.notifPrefs.sms")}</strong>
                     <span>
-                      Acil/kritik durumlar için SMS.
-                      {currentUser?.phone_number ? "" : " (Telefon numarası eklenmemiş.)"}
+                      {t("settings.notifPrefs.smsHint")}
+                      {currentUser?.phone_number ? "" : t("settings.notifPrefs.smsMissing")}
                     </span>
                   </div>
                   <button
@@ -2234,16 +2234,16 @@ export function App() {
                     className={`notif-prefs-toggle ${notifPrefs.sms_enabled ? "on" : ""}`}
                     onClick={() => void handleToggleNotifPref("sms_enabled")}
                     disabled={notifPrefsSaving}
-                    aria-label="SMS bildirimi"
+                    aria-label={t("settings.notifPrefs.sms")}
                   />
                 </div>
               </div>
             ) : null}
 
             <div className="settings-actions">
-              <button onClick={() => setSettingsOpen(false)}>Vazgeç</button>
+              <button onClick={() => setSettingsOpen(false)}>{t("settings.actions.cancel")}</button>
               <button onClick={handleSaveSettings} disabled={settingsSaving}>
-                {settingsSaving ? "Kaydediliyor..." : "Kaydet"}
+                {settingsSaving ? t("settings.actions.saving") : t("settings.actions.save")}
               </button>
             </div>
           </div>

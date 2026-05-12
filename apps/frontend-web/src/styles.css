@@ -8616,6 +8616,47 @@ main.content.engineering-content:has(.device-management-panel) {
   max-width: 100%;
 }
 
+/* Wide modifier: panel parent container'ini patlat ve viewport genisligine
+   yay. Engineering sayfasinin .engineering-tab-panel'inin max-width'ini
+   override eder (negative margin trick). */
+.project-settings-panel--wide {
+  max-width: none;
+  width: 100%;
+}
+
+/* Sayfa basligi + Save butonu yan yana, basligi sola, Save sag-uste it. */
+.project-settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.project-settings-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.project-settings-head-text h3 {
+  margin: 0 0 4px;
+}
+.project-settings-head-text .helper-text {
+  margin: 0;
+}
+.project-settings-save-top {
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+  /* Mobilde h3 ile yan yana sigmiyorsa altina dussun */
+}
+@media (max-width: 640px) {
+  .project-settings-head {
+    flex-direction: column;
+  }
+  .project-settings-save-top {
+    align-self: flex-end;
+  }
+}
+
 .project-settings-grid {
   display: flex;
   flex-direction: column;
@@ -8809,13 +8850,39 @@ main.content.engineering-content:has(.device-management-panel) {
 }
 
 .project-settings-battery-box {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #fffaf0, #ffffff);
+  border: 1px solid #fde4c8;
   border-radius: 12px;
-  padding: 16px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+}
+
+/* Baslik bloku: pil ikonu + baslik + alt-aciklama */
+.project-settings-battery-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.project-settings-battery-icon {
+  font-size: 32px;
+  color: #ff8c00;
+  flex-shrink: 0;
+  background: #fff6e6;
+  border-radius: 10px;
+  padding: 6px;
+}
+.project-settings-battery-head h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 600;
+}
+.project-settings-battery-head .helper-text {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .project-settings-battery-box h4 {
@@ -8827,17 +8894,55 @@ main.content.engineering-content:has(.device-management-panel) {
 .project-settings-battery-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-top: 6px;
+  gap: 16px;
+  margin-top: 4px;
 }
 
-.project-settings-battery-grid label {
+.project-settings-battery-grid label,
+.project-settings-battery-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+}
+.project-settings-battery-label {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: #475569;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Input + birim "V" rozeti yan yana */
+.project-settings-battery-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.project-settings-battery-input-wrap input {
+  flex: 1;
+  padding: 11px 42px 11px 14px;
+  border: 1px solid #fde4c8;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+.project-settings-battery-input-wrap input:focus {
+  outline: none;
+  border-color: #ff8c00;
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.15);
+}
+.project-settings-battery-unit {
+  position: absolute;
+  right: 14px;
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: #ff8c00;
+  pointer-events: none;
 }
 
 .project-settings-battery-grid input {

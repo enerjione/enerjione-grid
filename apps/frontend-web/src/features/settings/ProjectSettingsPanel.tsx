@@ -128,13 +128,25 @@ export function ProjectSettingsPanel({ onSave }: Props) {
   };
 
   return (
-    <section className="tab-panel project-settings-panel">
-      <div className="panel-head">
-        <h3>{t("engineering.nav.projectSettings")}</h3>
+    <section className="tab-panel project-settings-panel project-settings-panel--wide">
+      <div className="panel-head project-settings-head">
+        <div className="project-settings-head-text">
+          <h3>{t("engineering.nav.projectSettings")}</h3>
+          <p className="helper-text">
+            {t("engineering.projectSettings.subtitle")}
+          </p>
+        </div>
+        {/* Save butonu sag-ust koseye tasindi — uzun sayfanin altina scroll
+            etmeden kaydetmek icin. error/success durumu altta gosterilir. */}
+        <button
+          type="button"
+          className="primary-btn project-settings-save-top"
+          disabled={saving}
+          onClick={() => void handleSave()}
+        >
+          {saving ? t("engineering.projectSettings.saving") : t("engineering.projectSettings.save")}
+        </button>
       </div>
-      <p className="helper-text">
-        {t("engineering.projectSettings.subtitle")}
-      </p>
 
       <div className="project-settings-grid">
         <div className="project-settings-field">
@@ -220,34 +232,51 @@ export function ProjectSettingsPanel({ onSave }: Props) {
         </div>
 
         <div className="project-settings-battery-box">
-          <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
-          <p className="helper-text">
-            {t("engineering.projectSettings.batteryHint")}
-          </p>
+          <div className="project-settings-battery-head">
+            <span className="project-settings-battery-icon material-symbols-outlined" aria-hidden="true">
+              battery_charging_full
+            </span>
+            <div>
+              <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
+              <p className="helper-text">
+                {t("engineering.projectSettings.batteryHint")}
+              </p>
+            </div>
+          </div>
           <div className="project-settings-battery-grid">
-            <label>
-              {t("engineering.projectSettings.batteryLow")}
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                max={10}
-                placeholder="3.40"
-                value={batteryLow}
-                onChange={(event) => setBatteryLow(event.target.value)}
-              />
+            <label className="project-settings-battery-field">
+              <span className="project-settings-battery-label">
+                {t("engineering.projectSettings.batteryLow")}
+              </span>
+              <div className="project-settings-battery-input-wrap">
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={10}
+                  placeholder="3.40"
+                  value={batteryLow}
+                  onChange={(event) => setBatteryLow(event.target.value)}
+                />
+                <span className="project-settings-battery-unit">V</span>
+              </div>
             </label>
-            <label>
-              {t("engineering.projectSettings.batteryFull")}
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                max={10}
-                placeholder="3.71"
-                value={batteryFull}
-                onChange={(event) => setBatteryFull(event.target.value)}
-              />
+            <label className="project-settings-battery-field">
+              <span className="project-settings-battery-label">
+                {t("engineering.projectSettings.batteryFull")}
+              </span>
+              <div className="project-settings-battery-input-wrap">
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={10}
+                  placeholder="3.71"
+                  value={batteryFull}
+                  onChange={(event) => setBatteryFull(event.target.value)}
+                />
+                <span className="project-settings-battery-unit">V</span>
+              </div>
             </label>
           </div>
         </div>
@@ -255,17 +284,6 @@ export function ProjectSettingsPanel({ onSave }: Props) {
 
       {error ? <p className="error-text">{error}</p> : null}
       {success ? <p className="success-text">{success}</p> : null}
-
-      <div className="settings-actions">
-        <button
-          type="button"
-          className="primary-btn"
-          disabled={saving}
-          onClick={() => void handleSave()}
-        >
-          {saving ? t("engineering.projectSettings.saving") : t("engineering.projectSettings.save")}
-        </button>
-      </div>
     </section>
   );
 }

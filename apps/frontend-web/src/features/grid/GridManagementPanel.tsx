@@ -809,20 +809,20 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       className={`grid-mgmt-tool-btn ${addPoleMode ? "is-active" : ""}`}
                       onClick={() => setAddPoleMode(!addPoleMode)}
                       disabled={busy}
-                      title={addPoleMode ? "Haritaya tıklayarak direk ekleyin" : "Direk ekleme modu"}
+                      title={addPoleMode ? "Click on the map to add a pole" : "Add pole mode"}
                     >
                       <span className="material-symbols-outlined">add_location_alt</span>
-                      Direk Ekle
+                      Add Pole
                     </button>
 
                     <button
                       className="grid-mgmt-tool-btn"
                       disabled={sortedPoles.length < 2 || busy}
                       onClick={() => void handleReverseOrder()}
-                      title="Direklerin sırasını tersine çevir"
+                      title="Reverse pole order"
                     >
                       <span className="material-symbols-outlined">swap_horiz</span>
-                      Tersine Çevir
+                      Reverse
                     </button>
 
                     <span className="grid-mgmt-toolbar-sep" />
@@ -831,19 +831,19 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       className="grid-mgmt-tool-btn is-undo"
                       onClick={() => handleUndoDraft()}
                       disabled={!hasUnsavedDraft || busy}
-                      title="Tüm taslak değişiklikleri geri al"
+                      title="Discard all draft changes"
                     >
                       <span className="material-symbols-outlined">undo</span>
-                      Geri Al
+                      Undo
                     </button>
                     <button
                       className="grid-mgmt-tool-btn is-save"
                       onClick={() => void handleSaveDraft()}
                       disabled={!hasUnsavedDraft || busy}
-                      title="Taslak değişiklikleri kalıcı olarak kaydet"
+                      title="Save draft changes"
                     >
                       <span className="material-symbols-outlined">save</span>
-                      Kaydet
+                      Save
                       {hasUnsavedDraft ? (
                         <span className="grid-mgmt-draft-badge">
                           {draftPoleAdds.length + draftPoleEdits.size + draftPoleDeletes.size + draftDevicePositions.size}
@@ -1217,10 +1217,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   >
                     <div className="map-ctx-menu-head">
                       {mapContextMenu.type === "pole"
-                        ? `Direk #${mapContextMenu.poleSeq}`
+                        ? `Pole #${mapContextMenu.poleSeq}`
                         : mapContextMenu.type === "line"
-                          ? "Hat üzerinde"
-                          : "Harita konumu"}
+                          ? "On line"
+                          : "Map location"}
                       <button
                         type="button"
                         className="map-ctx-menu-close"
@@ -1240,7 +1240,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">add_location</span>
-                          Sona direk ekle
+                          Add pole at end
                         </button>
                       </>
                     ) : null}
@@ -1256,7 +1256,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">edit</span>
-                          Direk düzenle
+                          Edit pole
                         </button>
                         <button
                           type="button"
@@ -1270,7 +1270,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">arrow_upward</span>
-                          Bu direğin önüne yeni direk ekle
+                          Insert pole before this one
                         </button>
                         <button
                           type="button"
@@ -1283,7 +1283,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">arrow_downward</span>
-                          Bu direğin sonrasına yeni direk ekle
+                          Insert pole after this one
                         </button>
                         <button
                           type="button"
@@ -1295,7 +1295,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">delete</span>
-                          Direği sil
+                          Delete pole
                         </button>
                       </>
                     ) : null}
@@ -1313,10 +1313,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   onClick={() => void handleReverseOrder()}
                 >
                   <span className="material-symbols-outlined">swap_horiz</span>
-                  Sırayı Tersine Çevir
+                  Reverse Order
                 </button>
                 <span className="helper-text">
-                  Direkleri sıralamak için satırları, cihazları taşımak için cihaz kartlarını sürükleyin.
+                  Drag rows to reorder poles, or drag device cards to move them.
                 </span>
               </div>
 
@@ -2149,16 +2149,19 @@ function RegionModal({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [color, setColor] = useState(initial?.color ?? DEFAULT_REGION_COLOR);
-  const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     // Yeni kayitsa otomatik kod uret; mevcut kayitsa eski kodu koru.
     const code = initial?.code ?? autoCodeFromName(name, "BOLGE");
+    // color + is_active alanlari UI'dan kaldirildi (kullanici secimine gerek yok).
+    // Backend default'lari: color=null (sistem genelinde standart renkler kullanilir),
+    // is_active=true. Mevcut kayitta degerleri koru, yeni kayitta default.
     await onSubmit({
-      code, name: name.trim(),
+      code,
+      name: name.trim(),
       description: description.trim() || null,
-      color, is_active: isActive
+      color: initial?.color ?? null,
+      is_active: initial?.is_active ?? true,
     });
   };
   const { t } = useTranslation();
@@ -2168,11 +2171,6 @@ function RegionModal({
         <h3>{initial ? t("engineering.grid.regionEditTitle") : t("engineering.grid.newRegion")}</h3>
         <label>{t("engineering.grid.name")} <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
         <label>{t("engineering.grid.description")} <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-        <label>{t("engineering.grid.color")} <input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></label>
-        <label className="notify-option">
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-          {t("engineering.grid.active")}
-        </label>
         <div className="settings-actions">
           <button type="button" onClick={onClose} disabled={busy}>{t("engineering.grid.cancel")}</button>
           <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : t("engineering.grid.save")}</button>
@@ -2193,7 +2191,8 @@ function LineModal({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [isActive, setIsActive] = useState(initial?.is_active ?? true);
+  // is_active UI'dan kaldirildi (gereksiz toggle). Yeni kayitlar default
+  // true; mevcut kayitlarda eski deger korunur.
   // Bransman: bu hat baska bir hattin diregine bagli mi?
   const [isBranch, setIsBranch] = useState<boolean>(
     initial?.branched_from_pole_id !== undefined && initial?.branched_from_pole_id !== null
@@ -2224,7 +2223,7 @@ function LineModal({
       // color alani sistem genelinde standartlasti (saglikli=yesil, ariza=kirmizi);
       // kullanici secimine gerek yok. Backend'e null gonderiliyor.
       color: null,
-      is_active: isActive,
+      is_active: initial?.is_active ?? true,
       branched_from_pole_id: isBranch && typeof parentPoleId === "number" ? parentPoleId : null
     });
   };
@@ -2235,10 +2234,6 @@ function LineModal({
         <h3>{initial ? t("engineering.grid.lineEditTitle") : t("engineering.grid.newLine")}</h3>
         <label>{t("engineering.grid.name")} <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
         <label>{t("engineering.grid.description")} <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-        <label className="notify-option">
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-          {t("engineering.grid.active")}
-        </label>
 
         <fieldset className="line-branch-fieldset">
           <legend>
