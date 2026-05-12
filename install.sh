@@ -147,17 +147,34 @@ else
 fi
 
 # Helper: bir key yoksa ekler, varsa placeholder ise gercek deger ile doldurur.
+# Placeholder kaliplari: bos, please-change-me*, change-me*, change-this*.
+# `sed` replacement icin `|` ayraci kullaniyoruz; degerde `&` varsa escape.
 _ensure_env_var() {
   local key="$1"
   local value="$2"
+  local escaped_value="${value//&/\\&}"
   if grep -qE "^${key}=" .env; then
-    if grep -qE "^${key}=$|^${key}=please-change-me|^${key}=change-me" .env; then
-      sed -i "s|^${key}=.*|${key}=${value}|" .env
+    if grep -qE "^${key}=$|^${key}=please-change-me|^${key}=change-me|^${key}=change-this" .env; then
+      sed -i "s|^${key}=.*|${key}=${escaped_value}|" .env
       e1_info "${key} guncellendi (placeholder -> rastgele)."
     fi
   else
     echo "${key}=${value}" >> .env
     e1_info "${key} eklendi (.env'de yoktu)."
+  fi
+}
+
+# Helper: bir env key'i kesin olarak target value'ya ayarlar (placeholder
+# olsun olmasin, var olsun olmasin). CORS_ORIGINS gibi `*` default'unu
+# overwrite etmek icin gerekli.
+_set_env_var() {
+  local key="$1"
+  local value="$2"
+  local escaped_value="${value//&/\\&}"
+  if grep -qE "^${key}=" .env; then
+    sed -i "s|^${key}=.*|${key}=${escaped_value}|" .env
+  else
+    echo "${key}=${value}" >> .env
   fi
 }
 
@@ -175,6 +192,40 @@ _ensure_env_var "RABBITMQ_PASSWORD" "$RP"
 _ensure_env_var "NATS_BACKEND_PASSWORD" "$NB"
 _ensure_env_var "NATS_WORKER_PASSWORD" "$NW"
 _ensure_env_var "NATS_GATEWAY_PASSWORD" "$NG"
+
+# APP_ENV — install.sh production deploy yapiyor, default production.
+# CORS_ORIGINS '*' bu env'de backend tarafindan reddedilir (config.py guard).
+# VPS IP'sini otomatik tespit edip whitelist'e koyariz; kullanici sonradan
+# domain ekleyince .env'i elle duzenler.
+_set_env_var "APP_ENV" "production"
+
+# CORS_ORIGINS: VPS IP + localhost. Default '*' production'da reddedilir.
+DETECTED_IP="$(e1_detect_ip 2>/dev/null || true)"
+if [[ -z "$DETECTED_IP" ]] || [[ "$DETECTED_IP" == "<vds-ip>" ]]; then
+  CORS_DEFAULT="http://localhost,http://127.0.0.1"
+  e1_warn "VPS IP otomatik tespit edilemedi; CORS_ORIGINS sadece localhost."
+  e1_warn "Disardan erisim icin .env'de CORS_ORIGINS'u duzenleyin."
+else
+  CORS_DEFAULT="http://${DETECTED_IP},http://localhost,http://127.0.0.1"
+fi
+# Sadece placeholder/yildiz/bos ise overwrite et; kullanici manuel girdiyse koru.
+CURRENT_CORS="$(grep -E '^CORS_ORIGINS=' .env | cut -d= -f2- || echo '')"
+if [[ -z "$CURRENT_CORS" ]] || [[ "$CURRENT_CORS" == "*" ]]; then
+  _set_env_var "CORS_ORIGINS" "$CORS_DEFAULT"
+  e1_info "CORS_ORIGINS: ${CORS_DEFAULT}"
+else
+  e1_info "CORS_ORIGINS korundu (manuel set): ${CURRENT_CORS}"
+fi
+
+# Sanity check: hicbir kritik secret hala placeholder olmasin.
+for k in SECRET_KEY INTERNAL_SERVICE_TOKEN POSTGRES_PASSWORD RABBITMQ_PASSWORD \
+         NATS_BACKEND_PASSWORD NATS_WORKER_PASSWORD NATS_GATEWAY_PASSWORD; do
+  v="$(grep -E "^${k}=" .env | cut -d= -f2- || echo '')"
+  if [[ -z "$v" ]] || [[ "$v" == please-change-me* ]] || [[ "$v" == change-me* ]] || [[ "$v" == change-this* ]]; then
+    e1_die "${k} hala placeholder/bos! .env'i kontrol edin: ${INSTALL_DIR}/.env"
+  fi
+done
+
 chmod 600 .env
 e1_chown_target .env
 e1_ok ".env hazir (chmod 600, sahip: $(e1_target_user || echo root))."
