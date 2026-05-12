@@ -5,36 +5,54 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Helper: .env'de bir env satiri yoksa ekler, varsa value'su bos/placeholder
+# ise gercek deger ile doldurur (idempotent). Eski deploylarda .env onceden
+# olusturulmus olabilir; sonradan eklenen yeni env'ler (orn. NATS_*_PASSWORD)
+# orada hic olmayabilir — `set -u` ile sourced'da unbound variable patlar.
+_ensure_env_var() {
+  local key="$1"
+  local value="$2"
+  if grep -qE "^${key}=" .env; then
+    # Var ama bos veya placeholder ise doldur (please-change-me-* veya bos)
+    if grep -qE "^${key}=$|^${key}=please-change-me" .env; then
+      sed -i "s|^${key}=.*|${key}=${value}|" .env
+      echo "      ${key} guncellendi (placeholder -> rastgele)."
+    fi
+  else
+    # Yok — yeni satir ekle
+    echo "${key}=${value}" >> .env
+    echo "      ${key} eklendi (.env'de yoktu)."
+  fi
+}
+
 if [[ ! -f .env ]]; then
   echo "[1/4] .env dosyasi olusturuluyor (rastgele secret'larla)..."
   cp .env.example .env
-  # Rastgele secret'lar uret
-  SK=$(openssl rand -hex 32)
-  IT=$(openssl rand -hex 32)
-  PP=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
-  RP=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
-  # NATS (gateway / backend / worker) sifreleri
-  NB=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
-  NW=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
-  NG=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
-  sed -i "s|^SECRET_KEY=.*|SECRET_KEY=${SK}|" .env
-  sed -i "s|^INTERNAL_SERVICE_TOKEN=.*|INTERNAL_SERVICE_TOKEN=${IT}|" .env
-  sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${PP}|" .env
-  sed -i "s|^RABBITMQ_PASSWORD=.*|RABBITMQ_PASSWORD=${RP}|" .env
-  sed -i "s|^NATS_BACKEND_PASSWORD=.*|NATS_BACKEND_PASSWORD=${NB}|" .env
-  sed -i "s|^NATS_WORKER_PASSWORD=.*|NATS_WORKER_PASSWORD=${NW}|" .env
-  sed -i "s|^NATS_GATEWAY_PASSWORD=.*|NATS_GATEWAY_PASSWORD=${NG}|" .env
-  # Secret leak koruma: .env dosyasini sadece sahibi okuyabilsin.
-  # Multi-user host'larda umask=022 (default) world-readable yapardi.
   chmod 600 .env
-  echo "      Olusturuldu: $(realpath .env) (chmod 600)"
-else
-  echo "[1/4] .env zaten var, atlandi."
-  # Eski .env'in izinleri laxsa sertlestir (idempotent).
-  if [[ "$(stat -c %a .env 2>/dev/null)" != "600" ]]; then
-    chmod 600 .env
-    echo "      .env izinleri 600'e dusuruldu."
-  fi
+fi
+# Idempotent: .env zaten olsa bile eksik / placeholder secret'lari doldur.
+# Boylece eski deploylar yeni eklenen env'leri (NATS_*_PASSWORD vb.) otomatik
+# kazanir. Random secret'lar her cagrida YENIDEN URETILMEZ — yalniz eksikse.
+echo "[1/4] .env secret kontrolu (idempotent)..."
+SK=$(openssl rand -hex 32)
+IT=$(openssl rand -hex 32)
+PP=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
+RP=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
+NB=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
+NW=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
+NG=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
+_ensure_env_var "SECRET_KEY" "$SK"
+_ensure_env_var "INTERNAL_SERVICE_TOKEN" "$IT"
+_ensure_env_var "POSTGRES_PASSWORD" "$PP"
+_ensure_env_var "RABBITMQ_PASSWORD" "$RP"
+_ensure_env_var "NATS_BACKEND_PASSWORD" "$NB"
+_ensure_env_var "NATS_WORKER_PASSWORD" "$NW"
+_ensure_env_var "NATS_GATEWAY_PASSWORD" "$NG"
+# Secret leak koruma: .env dosyasini sadece sahibi okuyabilsin.
+# Multi-user host'larda umask=022 (default) world-readable yapardi.
+if [[ "$(stat -c %a .env 2>/dev/null)" != "600" ]]; then
+  chmod 600 .env
+  echo "      .env izinleri 600'e dusuruldu."
 fi
 
 # NATS server.conf rendering — `.env` cleartext password'lerini bcrypt'leyip
