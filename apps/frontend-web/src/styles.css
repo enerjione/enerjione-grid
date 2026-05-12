@@ -9012,6 +9012,18 @@ main.content.engineering-content:has(.device-management-panel) {
   line-height: 1.35;
 }
 
+/* Disabled (parent IEC104 off ise) — kart gri'ye duser, kullaniciya
+   etkilesimsiz oldugu acik gozukur. */
+.signal-toggle-card:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f1f5f9;
+}
+.signal-toggle-card:has(input:disabled) .signal-toggle-title,
+.signal-toggle-card:has(input:disabled) .signal-toggle-hint {
+  color: #94a3b8;
+}
+
 .signal-form-actions {
   display: flex;
   justify-content: flex-end;

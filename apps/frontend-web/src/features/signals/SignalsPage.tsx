@@ -601,19 +601,26 @@ export function SignalsPage({
                           disabled={!canEdit || !editIec104Enabled}
                         />
                       </label>
-                      {/* CP56Time2a zaman etiketi */}
-                      <label className="signal-field signal-field--checkbox">
+                      {/* CP56Time2a zaman etiketi — kart stili (signal-toggle-card),
+                          aktifken yesil glow. Genel checkbox+label hizasizligini
+                          duzelten "iki sutun" pattern: input solda, baslik+aciklama
+                          dikey hizada sagda. */}
+                      <label
+                        className={`signal-toggle-card${editIec104WithTimestamp ? " signal-toggle-card-on" : ""}`}
+                      >
                         <input
                           type="checkbox"
                           checked={editIec104WithTimestamp}
                           onChange={(event) => setEditIec104WithTimestamp(event.target.checked)}
                           disabled={!canEdit || !editIec104Enabled}
                         />
-                        <span>
-                          {t("engineering.signals.iec104WithTs")}
-                          <small className="signal-field-help">
+                        <span className="signal-toggle-text">
+                          <span className="signal-toggle-title">
+                            {t("engineering.signals.iec104WithTs")}
+                          </span>
+                          <span className="signal-toggle-hint">
                             {t("engineering.signals.iec104WithTsHelp")}
-                          </small>
+                          </span>
                         </span>
                       </label>
                       <p className="signal-fieldset-hint">
