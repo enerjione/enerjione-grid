@@ -9,65 +9,75 @@ Iki dağıtım modu:
 
 ---
 
-## Production: Linux + Docker (VDS / sunucu)
+## Production: Linux + Docker
 
 Tek komutla sıfırdan ayağa kalkar. Ubuntu 22.04 / 24.04 ve Debian 12 üzerinde test edilmiştir.
 
-### Sıfırdan tek-komut kurulum (yeni VDS)
+### Tek-komut kurulum (yeni VPS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/infra/scripts/linux/quick-install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
 ```
 
-Bu komut sırayla:
-1. `git` + `curl` yoksa kurar (apt).
-2. Docker Engine + Compose plugin yoksa kurar (`install-docker.sh`).
-3. Repo'yu `/opt/EnerjiOneGrid` altına klonlar (branch: `docker-linux-deploy`).
-4. `bootstrap.sh` ile `.env` üretir, NATS bcrypt hash'lerini host Python ile renderler, tüm imajları build eder, servisleri ayağa kaldırır, installer hesabını otomatik oluşturur.
+Script tertemiz VPS'i (Ubuntu/Debian) sıfırdan üretim hazır hâle getirir:
 
-Bittikten sonra tarayıcıdan `http://<vds-ip>/` — login: `installer` / `ChangeMe123!` (ilk girişte değiştir).
+1. Pre-req paketler (`git`, `curl`, `openssl`)
+2. Docker Engine + Compose plugin
+3. Repo klonlama: `/opt/enerjione` (override: `INSTALL_DIR`)
+4. `.env` üretimi — tüm secret değerleri rastgele (Postgres / RabbitMQ / NATS x3 / SECRET_KEY / INTERNAL_SERVICE_TOKEN)
+5. NATS auth konfigürasyonu (`nats-server.conf`) — host Python + bcrypt ile render
+6. Imaj build + servisleri ayağa kaldırma
+7. Backend healthy bekleme + `installer` hesabını otomatik seed
 
-İstersen farklı branch/dizin verebilirsin:
+Bittikten sonra tarayıcıdan `http://<vps-ip>/` — login `installer` / `ChangeMe123!` (ilk girişte mutlaka değiştir).
+
+Repo'yu manuel klonladıysan aynı script kök dizinde:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/infra/scripts/linux/quick-install.sh \
-  | sudo BRANCH=main INSTALL_DIR=/srv/enerjione bash
+sudo bash install.sh
 ```
 
-### Manuel kurulum (alternatif, adım adım)
+Override örnekleri:
 
 ```bash
-sudo bash infra/scripts/linux/install-docker.sh
-# Sudo kullanicisini docker grubuna eklediyse, tekrar SSH ile gir.
+# Farklı hedef dizin + branch
+curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh \
+  | sudo INSTALL_DIR=/srv/enerjione BRANCH=main bash
 
-git clone https://github.com/fikretsafak/EnerjiOneGrid.git
-cd EnerjiOneGrid
-sudo bash infra/scripts/linux/bootstrap.sh
+# Interaktif olmayan tam otomatik
+sudo ASSUME_YES=1 bash install.sh
 ```
 
-`bootstrap.sh` tek seferde şunları yapar (idempotent — birden fazla çalıştırılabilir):
-- `.env.example`'dan `.env` üretir. Tüm secret değerlerini rastgele üretir:
-  `SECRET_KEY`, `INTERNAL_SERVICE_TOKEN`, `POSTGRES_PASSWORD`,
-  `RABBITMQ_PASSWORD`, `NATS_GATEWAY_PASSWORD`, `NATS_BACKEND_PASSWORD`,
-  `NATS_WORKER_PASSWORD`. Mevcut `.env` varsa **eksik** olan satırları doldurur,
-  dolu olanları korur.
-- NATS auth: `nats-server.conf.template`'i `.env`'deki cleartext parolaların
-  bcrypt hash'leriyle render eder. Üç user yetkilendirilir:
-  - `gateway`: sadece `e1.telemetry.raw.>` publish (saha cihazları)
-  - `backend`: stream yönetimi + tüm subject'lere full access
-  - `worker`: tag-engine + alarm-service + iec104-outbound
-- Tüm imajları build eder (`docker compose build --pull`).
-- Servisleri ayağa kaldırır (`docker compose up -d`).
-- backend-api hazır olana kadar bekler.
-- **Default `installer` hesabını otomatik olarak oluşturur** (manuel adım yok).
+### Güncelleme
 
-### 3. Browser'dan aç
-
-```
-http://<vds-ip>/
+```bash
+cd /opt/enerjione
+sudo bash update.sh                # tum servisler
+sudo bash update.sh frontend       # sadece frontend-web
+sudo bash update.sh backend        # sadece backend-api
+sudo bash update.sh alarm          # alarm-service
+sudo bash update.sh tag            # tag-engine
+sudo bash update.sh notification   # notification-worker
+sudo bash update.sh iec            # iec104-outbound
 ```
 
-Kullanıcı: `installer` / Şifre: `ChangeMe123!` — **ilk girişte mutlaka değiştir.**
+`update.sh` git pull öncesi otomatik DB yedeği alır (`backups/auto-pre-update-*.sql.gz`), sonra seçilen servisleri build + force-recreate eder.
+
+### Kaldırma
+
+```bash
+cd /opt/enerjione
+sudo bash uninstall.sh                       # interaktif onayli, dizini korur
+sudo bash uninstall.sh --yes                 # tum onaylari atla
+sudo bash uninstall.sh --keep-images         # sadece data sil, image'lari koru
+sudo bash uninstall.sh --yes --purge-dir     # dizini de sil (full nuke)
+```
+
+Geri yüklemek için (sıfırdan yeniden kur):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+```
 
 ### Servisler ve portlar
 
@@ -78,18 +88,20 @@ Kullanıcı: `installer` / Şifre: `ChangeMe123!` — **ilk girişte mutlaka de�
 | postgres | — | Sadece compose network'unde |
 | rabbitmq AMQP | — | Sadece compose network'unde |
 | rabbitmq Management UI | 127.0.0.1:15672 | SSH tüneliyle erişim |
-| iec104-outbound | 2404, 2405, 2406 | Dış SCADA master bağlantısı |
+| NATS | **4222** | Gateway → telemetri publish |
+| NATS monitoring | 127.0.0.1:8222 | SSH tüneliyle erişim |
+| iec104-outbound | **2404-2406** | Dış SCADA master bağlantısı |
 
 ### Yaygın komutlar
 
 ```bash
+cd /opt/enerjione
 docker compose ps                              # durum
 docker compose logs -f backend-api             # log akışı
 docker compose restart backend-api             # servis restart
 docker compose down                            # tümünü durdur (volume'ler kalir)
-docker compose down -v                         # volume'leri de sil (DB silinir!)
-docker compose pull && docker compose up -d    # imajlari guncelle
-sudo bash infra/scripts/linux/update.sh        # git pull + build + recreate
+sudo bash update.sh                            # git pull + build + recreate
+sudo bash uninstall.sh                         # tamamen kaldır
 ```
 
 ### Saha gateway'i ekleme (DNP3)
@@ -105,20 +117,6 @@ Frontend'den **Mühendislik → Gateway Yönetimi → Yeni Gateway**:
 Gateway, backend `.env`'inde tanımlı `NATS_GATEWAY_PASSWORD`'ü kullanır;
 bu parola backend'in `derive_nats_url()` fonksiyonu tarafından compose'a
 gömülür ([`gateway_compose.py`](apps/backend-api/app/services/gateway_compose.py)).
-
-### Sıfırdan kurulum (her şeyi silip baştan)
-
-```bash
-# VPS'te — DB ve tüm volume'leri sıfırlar (geri dönüşü yok!)
-cd ~/EnerjiOneGrid
-docker compose down -v
-rm -f .env infra/nats/nats-server.conf
-sudo bash infra/scripts/linux/bootstrap.sh
-```
-
-`bootstrap.sh` yeniden çağrıldığında rastgele yeni parolalar üretir, NATS
-auth'u sıfırdan kurar, tüm imajları build eder, installer hesabını otomatik
-oluşturur.
 
 ### HTTPS (opsiyonel, domain varsa)
 
