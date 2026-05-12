@@ -74,6 +74,14 @@ else
 fi
 echo "      Repo hazir: $(git rev-parse --short HEAD) (${BRANCH})"
 
+# Sahiplik: sudo ile cagrildiysa clone'lanan dizin root:root oldu. Cagiran
+# kullaniciya devret ki sonradan non-sudo `docker compose` komutlari .env'i
+# (chmod 600) okuyabilsin, `git pull` yapabilsin, log yazabilsin.
+if [[ -n "${SUDO_USER:-}" ]] && id -u "$SUDO_USER" >/dev/null 2>&1; then
+  echo "      Dizin sahipligi '${SUDO_USER}' kullanicisina devrediliyor..."
+  chown -R "$(id -u "$SUDO_USER"):$(id -g "$SUDO_USER")" "${INSTALL_DIR}"
+fi
+
 # --- 3. Docker kur (yoksa) ---
 echo "[3/4] Docker kontrol ediliyor..."
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then

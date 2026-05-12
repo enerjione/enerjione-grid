@@ -5,6 +5,27 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Sudo ile cagrildiysa (SUDO_USER set), `.env` ve uretilecek dosyalarin
+# sahibini root degil cagiran kullanici yap. Aksi halde:
+#   * .env chmod 600 + root:root → non-root shell'den `docker compose` "open .env:
+#     permission denied" verir.
+#   * `infra/nats/nats-server.conf` da root sahipli olur, ileride update.sh
+#     git pull sirasinda bu dosyaya dokunamaz.
+# `INSTALL_USER` env override'i da kabul ederiz (advance kullanim).
+TARGET_USER="${INSTALL_USER:-${SUDO_USER:-}}"
+TARGET_UID=""
+TARGET_GID=""
+if [[ -n "$TARGET_USER" ]] && id -u "$TARGET_USER" >/dev/null 2>&1; then
+  TARGET_UID="$(id -u "$TARGET_USER")"
+  TARGET_GID="$(id -g "$TARGET_USER")"
+fi
+# Sonradan secret dosyalarinin sahipligini hizaya getiren helper.
+_chown_target() {
+  if [[ -n "$TARGET_UID" && -n "$TARGET_GID" ]]; then
+    chown "${TARGET_UID}:${TARGET_GID}" "$@" 2>/dev/null || true
+  fi
+}
+
 # Helper: .env'de bir env satiri yoksa ekler, varsa value'su bos/placeholder
 # ise gercek deger ile doldurur (idempotent). Eski deploylarda .env onceden
 # olusturulmus olabilir; sonradan eklenen yeni env'ler (orn. NATS_*_PASSWORD)
@@ -29,6 +50,7 @@ if [[ ! -f .env ]]; then
   echo "[1/4] .env dosyasi olusturuluyor (rastgele secret'larla)..."
   cp .env.example .env
   chmod 600 .env
+  _chown_target .env
 fi
 # Idempotent: .env zaten olsa bile eksik / placeholder secret'lari doldur.
 # Boylece eski deploylar yeni eklenen env'leri (NATS_*_PASSWORD vb.) otomatik
@@ -54,6 +76,10 @@ if [[ "$(stat -c %a .env 2>/dev/null)" != "600" ]]; then
   chmod 600 .env
   echo "      .env izinleri 600'e dusuruldu."
 fi
+# Sahiplik hizalama: sudo ile cagrildiysa .env root:root olmasin; aksi halde
+# cagiran kullanici (`fikretsafak` vs.) `docker compose` ile .env'i okuyamaz
+# (compose .env'i client tarafinda okur, container'a mount etmez).
+_chown_target .env
 
 # NATS server.conf rendering — `.env` cleartext password'lerini bcrypt'leyip
 # template'e gomer. Production deploy oncesi zorunlu; aksi halde NATS auth
@@ -103,6 +129,7 @@ if [[ ! -f infra/nats/nats-server.conf ]] || [[ "${1:-}" == "--rerender-nats" ]]
   sed -i "s|{{NATS_GATEWAY_BCRYPT_HASH}}|${HASH_G//&/\\&}|" infra/nats/nats-server.conf
   sed -i "s|{{NATS_BACKEND_BCRYPT_HASH}}|${HASH_B//&/\\&}|" infra/nats/nats-server.conf
   sed -i "s|{{NATS_WORKER_BCRYPT_HASH}}|${HASH_W//&/\\&}|" infra/nats/nats-server.conf
+  _chown_target infra/nats/nats-server.conf
   echo "      nats-server.conf render edildi."
 fi
 
