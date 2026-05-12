@@ -126,7 +126,7 @@ def test_smtp_settings(
             event_type="notification_smtp_test_ok",
             severity="info",
             actor_username=current_user.username,
-            message=f"SMTP test başarılı: {payload.recipient_email}",
+            message=f"SMTP test succeeded: {payload.recipient_email}",
             i18n_key="notification_smtp_test_ok",
             i18n_params={"recipient": payload.recipient_email},
         )
@@ -139,7 +139,7 @@ def test_smtp_settings(
             event_type="notification_smtp_test_failed",
             severity="error",
             actor_username=current_user.username,
-            message=f"SMTP test başarısız: {ex}",
+            message=f"SMTP test failed: {ex}",
             i18n_key="notification_smtp_test_failed",
             i18n_params={"error": str(ex)},
         )
@@ -167,7 +167,7 @@ def test_sms_settings(
             event_type="notification_sms_test_ok",
             severity="info",
             actor_username=current_user.username,
-            message=f"SMS test başarılı: {payload.recipient_phone}",
+            message=f"SMS test succeeded: {payload.recipient_phone}",
             i18n_key="notification_sms_test_ok",
             i18n_params={"recipient": payload.recipient_phone},
         )
@@ -185,7 +185,7 @@ def test_sms_settings(
             event_type="notification_sms_test_failed",
             severity="error",
             actor_username=current_user.username,
-            message=f"SMS test başarısız: {ex}",
+            message=f"SMS test failed: {ex}",
             i18n_key="notification_sms_test_failed",
             i18n_params={"error": str(ex)},
         )
@@ -214,7 +214,7 @@ def test_telegram_settings(
             event_type="notification_telegram_test_ok",
             severity="info",
             actor_username=current_user.username,
-            message=f"Telegram test başarılı: chat={payload.chat_id}",
+            message=f"Telegram test succeeded: chat={payload.chat_id}",
             i18n_key="notification_telegram_test_ok",
             i18n_params={"chat": payload.chat_id},
         )
@@ -227,7 +227,7 @@ def test_telegram_settings(
             event_type="notification_telegram_test_failed",
             severity="error",
             actor_username=current_user.username,
-            message=f"Telegram test başarısız: {ex}",
+            message=f"Telegram test failed: {ex}",
             i18n_key="notification_telegram_test_failed",
             i18n_params={"error": str(ex)},
         )

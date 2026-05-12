@@ -90,7 +90,7 @@ def create_api_key(
         db, category="security", event_type="api_key_created",
         severity="info",
         actor_username=user.username,
-        message=f"API anahtarı oluşturuldu: {payload.name}",
+        message=f"API key created: {payload.name}",
         metadata={
             "api_key_id": row.id,
             "scopes": scopes_csv,
@@ -164,7 +164,7 @@ def revoke_api_key(
             db, category="security", event_type="api_key_revoked",
             severity="warning",
             actor_username=user.username,
-            message=f"API anahtarı revoke edildi: {row.name}",
+            message=f"API key revoked: {row.name}",
             metadata={"api_key_id": row.id, "owner_user_id": row.user_id},
         )
         db.commit()
@@ -192,7 +192,7 @@ def disable_api_key(
         record_event(
             db, category="security", event_type="api_key_disabled",
             severity="info", actor_username=user.username,
-            message=f"API anahtarı devre dışı: {row.name}",
+            message=f"API key disabled: {row.name}",
             metadata={"api_key_id": row.id},
         )
         db.commit()
@@ -221,7 +221,7 @@ def enable_api_key(
         record_event(
             db, category="security", event_type="api_key_enabled",
             severity="info", actor_username=user.username,
-            message=f"API anahtarı yeniden etkinleştirildi: {row.name}",
+            message=f"API key re-enabled: {row.name}",
             metadata={"api_key_id": row.id},
         )
         db.commit()
@@ -255,7 +255,7 @@ def purge_api_key(
     record_event(
         db, category="security", event_type="api_key_purged",
         severity="warning", actor_username=user.username,
-        message=f"API anahtarı kalıcı olarak silindi: {name}",
+        message=f"API key permanently deleted: {name}",
         metadata={"api_key_id": row.id, "owner_user_id": row.user_id},
     )
     db.delete(row)

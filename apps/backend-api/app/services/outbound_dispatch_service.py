@@ -49,7 +49,7 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
                 category="outbound",
                 event_type="outbound_delivered",
                 severity="info",
-                message=f"{target.name} hedefine {event_kind} eventi gönderildi",
+                message=f"Event {event_kind} sent to target {target.name}",
                 metadata={
                     "target": target.name,
                     "protocol": target.protocol,
@@ -68,7 +68,7 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
                     category="outbound",
                     event_type="outbound_retry_scheduled",
                     severity="warning",
-                    message=f"{target.name} için retry planlandı (deneme {attempt}/{MAX_RETRY})",
+                    message=f"Retry scheduled for {target.name} (attempt {attempt}/{MAX_RETRY})",
                     metadata={
                         "target": target.name,
                         "protocol": target.protocol,
@@ -86,7 +86,7 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
         category="outbound",
         event_type="outbound_dead_letter",
         severity="error",
-        message=f"{target.name} hedefine gönderim dead-letter kuyruğuna düştü",
+        message=f"Delivery to {target.name} moved to dead-letter queue",
         metadata={
             "target": target.name,
             "protocol": target.protocol,

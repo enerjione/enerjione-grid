@@ -107,7 +107,7 @@ def _resolve_alarm(db, alarm: AlarmEvent, reason: str) -> str:
             category="alarm",
             event_type="alarm_auto_cleared",
             severity="info",
-            message=f"Onaylanmış alarm normale döndü ve silindi (reconcile): {alarm.title}",
+            message=f"Acknowledged alarm cleared and removed (reconcile): {alarm.title}",
             metadata={
                 "alarm_id": alarm.id,
                 "device_id": alarm.device_id,
@@ -125,7 +125,7 @@ def _resolve_alarm(db, alarm: AlarmEvent, reason: str) -> str:
         category="alarm",
         event_type="alarm_auto_cleared",
         severity="info",
-        message=f"Alarm sahada normale döndü (reconcile): {alarm.title}",
+        message=f"Alarm cleared on site (reconcile): {alarm.title}",
         metadata={
             "alarm_id": alarm.id,
             "device_id": alarm.device_id,

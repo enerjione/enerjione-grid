@@ -226,7 +226,7 @@ def assign_fault(
         event_type="fault_assigned",
         severity="info",
         actor_username=current_user.username,
-        message=f"Ariza atandi: fault {fault_id} -> {target_username or '(boş)'}",
+        message=f"Fault assigned: fault {fault_id} -> {target_username or '(none)'}",
         metadata={"fault_id": fault_id, "assigned_to": target_username},
         i18n_key="fault_assigned",
         i18n_params={"fault_id": fault_id, "user": target_username or "—"},

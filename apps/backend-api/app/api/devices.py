@@ -110,7 +110,7 @@ def update_device(
         severity="info",
         actor_username=current_user.username,
         device_code=updated.code,
-        message=f"Cihaz güncellendi: {updated.name} ({updated.code})",
+        message=f"Device updated: {updated.name} ({updated.code})",
         metadata={"device_id": updated.id, "fields": list(changes.keys())},
         i18n_key="device_updated",
         i18n_params={"name": updated.name, "code": updated.code},

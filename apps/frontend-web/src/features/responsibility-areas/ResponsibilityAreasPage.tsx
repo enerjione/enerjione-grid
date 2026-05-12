@@ -156,8 +156,21 @@ export function ResponsibilityAreasPage({
     setBusy(true);
     setLocalError("");
     try {
+      // Code alanini kullanicidan istemiyoruz — name'den otomatik turetiyoruz.
+      // ASCII-slugify + 6 char hex suffix (cakisma engelleme; iki ayni isim
+      // team olsa bile farkli code'larla unique kalir).
+      const slug = createName
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40) || "team";
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const autoCode = `${slug}-${suffix}`;
       await onCreate({
-        code: createCode.trim(),
+        code: autoCode,
         name: createName.trim(),
         description: createDescription.trim() || null
       });
@@ -763,10 +776,9 @@ export function ResponsibilityAreasPage({
         <div className="settings-modal-backdrop">
           <form className="settings-modal" onSubmit={handleCreate}>
             <h3>{t("engineering.responsibilityAreas.newAreaModalTitle")}</h3>
-            <label>
-              {t("engineering.responsibilityAreas.fieldCodePlaceholder")}
-              <input value={createCode} onChange={(e) => setCreateCode(e.target.value)} required />
-            </label>
+            {/* Code alani kaldirildi — handleCreate icinde name'den otomatik
+                slugify + random suffix ile uretiliyor. Operator manuel
+                unique code uydurmak zorunda kalmasin. */}
             <label>
               {t("engineering.responsibilityAreas.fieldName")}
               <input value={createName} onChange={(e) => setCreateName(e.target.value)} required />

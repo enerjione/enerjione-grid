@@ -30,7 +30,7 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
         event_type="alarm_assigned",
         severity="info",
         actor_username=actor_username,
-        message=f"\"{alarm.title}\" alarmının ataması güncellendi",
+        message=f"Alarm \"{alarm.title}\" assignment updated",
         metadata={"alarm_id": alarm.id, "assigned_to": new_assignee, "previous_assignee": previous_assignee},
     )
     # Bildirim mantigi:
@@ -171,7 +171,7 @@ def create_alarm_comment(db: Session, alarm_id: int, comment: str, current_user:
         event_type="alarm_comment_added",
         severity="info",
         actor_username=current_user.username,
-        message=f"\"{alarm.title}\" alarmına yorum eklendi",
+        message=f"Comment added to alarm \"{alarm.title}\"",
         metadata={"alarm_id": alarm.id},
     )
     # Yorum bildirimi: alarmin atandigi kullaniciya (yorum yazandan farkli ise).
@@ -225,7 +225,7 @@ def acknowledge_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmE
         event_type="alarm_acknowledged",
         severity="info",
         actor_username=actor_username,
-        message=f"\"{alarm.title}\" alarmı onaylandı",
+        message=f"Alarm \"{alarm.title}\" acknowledged",
         metadata={"alarm_id": alarm.id},
     )
     db.commit()
@@ -245,7 +245,7 @@ def reset_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmEvent:
         event_type="alarm_reset",
         severity="warning",
         actor_username=actor_username,
-        message=f"\"{alarm.title}\" alarmı resetlendi",
+        message=f"Alarm \"{alarm.title}\" reset",
         metadata={"alarm_id": alarm.id},
     )
     db.commit()
@@ -311,7 +311,7 @@ def delete_alarm(db: Session, alarm_id: int, actor_username: str) -> None:
         event_type="alarm_deleted",
         severity="info",
         actor_username=actor_username,
-        message=f"\"{alarm_title}\" alarmı silindi",
+        message=f"Alarm \"{alarm_title}\" deleted",
         metadata={"alarm_id": alarm_id, "title": alarm_title},
     )
     db.commit()
@@ -351,7 +351,7 @@ def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
         event_type="alarm_created",
         severity="warning",
         device_code=payload.get("device_code"),
-        message=f"{device_name} için otomatik alarm üretildi",
+        message=f"Automatic alarm raised for {device_name}",
         metadata={"signal_key": signal_key, "quality": quality},
     )
     alarm_event_payload = {

@@ -149,7 +149,7 @@ def create_region(
     record_event(
         db, category="grid", event_type="region_created", severity="info",
         actor_username=current_user.username,
-        message=f"Bölge eklendi: {row.name} ({row.code})",
+        message=f"Region created: {row.name} ({row.code})",
         metadata={"region_id": row.id},
         i18n_key="region_created",
         i18n_params={"name": row.name, "code": row.code},
@@ -175,7 +175,7 @@ def update_region(
     record_event(
         db, category="grid", event_type="region_updated", severity="info",
         actor_username=current_user.username,
-        message=f"Bölge güncellendi: {row.name}",
+        message=f"Region updated: {row.name}",
         metadata={"region_id": row.id, "fields": list(changes.keys())},
         i18n_key="region_updated",
         i18n_params={"name": row.name},
@@ -199,7 +199,7 @@ def delete_region(
     record_event(
         db, category="grid", event_type="region_deleted", severity="warning",
         actor_username=current_user.username,
-        message=f"Bölge silindi: {name} ({code})",
+        message=f"Region deleted: {name} ({code})",
         metadata={"region_id": region_id},
         i18n_key="region_deleted",
         i18n_params={"name": name, "code": code},
@@ -333,7 +333,7 @@ def update_line(
     record_event(
         db, category="grid", event_type="line_updated", severity="info",
         actor_username=current_user.username,
-        message=f"Hat güncellendi: {row.name}",
+        message=f"Line updated: {row.name}",
         metadata={"line_id": row.id, "fields": list(changes.keys())},
         i18n_key="line_updated",
         i18n_params={"name": row.name},
@@ -424,7 +424,7 @@ def create_pole(
     record_event(
         db, category="grid", event_type="pole_created", severity="info",
         actor_username=current_user.username,
-        message=f"Direk eklendi: {row.name or '(adsız)'} (#{row.sequence_no})",
+        message=f"Pole added: {row.name or '(unnamed)'} (#{row.sequence_no})",
         metadata={"pole_id": row.id, "line_id": row.line_id, "shifted": len(existing_at_or_after)},
         i18n_key="pole_created",
         i18n_params={"name": row.name or "(—)", "seq": row.sequence_no},
@@ -461,7 +461,7 @@ def update_pole(
     record_event(
         db, category="grid", event_type="pole_updated", severity="info",
         actor_username=current_user.username,
-        message=f"Direk güncellendi: #{row.sequence_no}",
+        message=f"Pole updated: #{row.sequence_no}",
         metadata={"pole_id": row.id, "fields": list(changes.keys())},
         i18n_key="pole_updated",
         i18n_params={"seq": row.sequence_no},
@@ -562,7 +562,7 @@ def reorder_poles(
     record_event(
         db, category="grid", event_type="poles_reordered", severity="info",
         actor_username=current_user.username,
-        message=f"Hat direkleri yeniden sıralandı (line {line_id}, {len(payload.items)} direk)",
+        message=f"Line poles reordered (line {line_id}, {len(payload.items)} poles)",
         metadata={"line_id": line_id, "count": len(payload.items)},
         i18n_key="poles_reordered",
         i18n_params={"line_id": line_id, "count": len(payload.items)},
@@ -601,7 +601,7 @@ def reverse_poles(
     record_event(
         db, category="grid", event_type="poles_reversed", severity="info",
         actor_username=current_user.username,
-        message=f"Hat sırası tersine çevrildi (line {line_id})",
+        message=f"Line direction reversed (line {line_id})",
         metadata={"line_id": line_id, "count": n},
         i18n_key="poles_reversed",
         i18n_params={"line_id": line_id},
@@ -860,7 +860,7 @@ def update_segment(
     record_event(
         db, category="grid", event_type="segment_updated", severity="info",
         actor_username=current_user.username,
-        message=f"Hat segmenti güncellendi (segment {row.id})",
+        message=f"Line segment updated (segment {row.id})",
         metadata={"segment_id": row.id, "fields": list(changes.keys())},
         i18n_key="segment_updated",
         i18n_params={"segment_id": row.id},

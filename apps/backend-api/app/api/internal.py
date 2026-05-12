@@ -207,7 +207,7 @@ def ingest_alarm(
         event_type="alarm_triggered",
         severity="warning",
         device_code=payload.device_code,
-        message=f"Alarm kuralı gerçekleşti: {payload.title}",
+        message=f"Alarm rule triggered: {payload.title}",
         metadata={
             "message_id": payload.message_id,
             "correlation_id": payload.correlation_id,
@@ -398,7 +398,7 @@ def clear_alarm(
             event_type="alarm_auto_cleared",
             severity="info",
             device_code=payload.device_code,
-            message=f"Onaylanmış alarm normale döndü ve silindi: {alarm_title}",
+            message=f"Acknowledged alarm cleared and removed: {alarm_title}",
             metadata={
                 "alarm_id": alarm_id,
                 "rule_id": payload.rule_id,
@@ -427,7 +427,7 @@ def clear_alarm(
         event_type="alarm_auto_cleared",
         severity="info",
         device_code=payload.device_code,
-        message=f"Alarm sahada normale döndü: {alarm_title}",
+        message=f"Alarm cleared on site: {alarm_title}",
         metadata={
             "alarm_id": alarm_id,
             "rule_id": payload.rule_id,

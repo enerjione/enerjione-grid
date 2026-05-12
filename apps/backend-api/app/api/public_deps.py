@@ -120,7 +120,7 @@ def require_api_key(
             record_event(
                 db, category="security", event_type="api_key_auth_failed",
                 severity="warning",
-                message=f"Bilinmeyen API anahtarı ile erişim denemesi",
+                message=f"Access attempt with unknown API key",
                 metadata={"ip": ip, "path": str(request.url.path)},
             )
             db.commit()
@@ -132,7 +132,7 @@ def require_api_key(
             record_event(
                 db, category="security", event_type="api_key_auth_failed",
                 severity="warning",
-                message=f"Kullanılamaz API anahtarı: {reason}",
+                message=f"Unusable API key: {reason}",
                 metadata={
                     "api_key_id": row.id,
                     "user_id": row.user_id,
@@ -188,7 +188,7 @@ def require_scope(scope: str):
             record_event(
                 db, category="security", event_type="api_key_scope_denied",
                 severity="warning",
-                message=f"API anahtarı '{scope}' scope'una sahip değil",
+                message=f"API key lacks required scope: '{scope}'",
                 metadata={
                     "api_key_id": ctx.api_key.id,
                     "user_id": ctx.user.id,

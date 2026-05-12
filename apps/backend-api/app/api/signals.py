@@ -86,7 +86,7 @@ def update_signal(
         event_type="signal_updated",
         severity="info",
         actor_username=current_user.username,
-        message=f"Sinyal güncellendi: {row.label} ({row.key})",
+        message=f"Signal updated: {row.label} ({row.key})",
         metadata={"signal_key": row.key, "fields": list(changes.keys())},
     )
     db.commit()

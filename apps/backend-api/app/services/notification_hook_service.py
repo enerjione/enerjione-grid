@@ -43,7 +43,7 @@ def handle_alarm_created(payload: dict[str, Any]) -> None:
             category="notification",
             event_type="alarm_notification_failed",
             severity="error",
-            message=f"Alarm bildirimi gönderilemedi: {ex}",
+            message=f"Alarm notification delivery failed: {ex}",
         )
         db.commit()
     finally:

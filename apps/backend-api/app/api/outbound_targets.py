@@ -111,7 +111,7 @@ def update_outbound_target(
         event_type="outbound_updated",
         severity="info",
         actor_username=current_user.username,
-        message=f"Outbound hedef güncellendi: {row.name}",
+        message=f"Outbound target updated: {row.name}",
         metadata={"target_id": row.id, "fields": list(updates.keys())},
         i18n_key="outbound_updated",
         i18n_params={"name": row.name},

@@ -166,7 +166,7 @@ def update_project_settings(
         event_type="project_settings_updated",
         severity="info",
         actor_username=current_user.username,
-        message=f"Proje ayarları güncellendi: {', '.join(summary_fields)}",
+        message=f"Project settings updated: {', '.join(summary_fields)}",
         metadata={"fields": list(updates.keys())},
         i18n_key="project_settings_updated",
     )

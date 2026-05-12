@@ -44,7 +44,8 @@ export function EventsPage({ events, loading, devices }: Props) {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv");
+  const [exportFormat, setExportFormat] = useState<"csv" | "json" | "xlsx" | "pdf">("csv");
+  const [exportBusy, setExportBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -112,44 +113,52 @@ export function EventsPage({ events, loading, devices }: Props) {
     tarih: new Date(item.created_at).toLocaleString(localeTag)
   }));
 
-  const handleExport = () => {
-    const now = new Date().toISOString().replace(/[:.]/g, "-");
-    if (exportFormat === "json") {
-      const blob = new Blob([JSON.stringify(exportRows, null, 2)], { type: "application/json;charset=utf-8" });
+  const handleExport = async () => {
+    // xlsx ve pdf SADECE backend'de uretiliyor (openpyxl + reportlab).
+    // csv ve json icin de backend kullaniyoruz \u2014 filtreleri server-side ayni
+    // mantikta uyguladigi icin daha tutarli (UI'da page-limited degil tum
+    // filtreli set indirilebilir).
+    setExportBusy(true);
+    try {
+      const params = new URLSearchParams({ fmt: exportFormat });
+      if (categoryFilter !== "all") params.append("category", categoryFilter);
+      if (severityFilter !== "all") params.append("severity", severityFilter);
+      // search filtresi backend'de yok \u2014 client-side; xlsx/pdf'de search
+      // uygulanmaz (sadece kategori+severity backend filtresi). Kullanici
+      // search yapmissa CSV/JSON istemesi gerek (UI uyarisi gelecek turde).
+
+      const response = await fetch(`/api/v1/events/export?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const txt = await response.text();
+        throw new Error(`Export failed: HTTP ${response.status} \u2014 ${txt.slice(0, 200)}`);
+      }
+
+      const blob = await response.blob();
+      // Dosya adi: backend Content-Disposition header'inda gonderiyor
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = /filename="?([^";]+)"?/i.exec(disposition);
+      const now = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const fallbackBase = i18n.language?.startsWith("tr") ? "olaylar" : "events";
+      const filename = match
+        ? match[1]
+        : `${fallbackBase}-${now}.${exportFormat}`;
+
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      const baseJson = i18n.language?.startsWith("tr") ? "olaylar" : "events";
-      anchor.download = `${baseJson}-${now}.json`;
+      anchor.download = filename;
       anchor.click();
       URL.revokeObjectURL(url);
       setShowExportModal(false);
-      return;
+    } catch (err) {
+      // Kullaniciya alert + console \u2014 toast yoksa minimum geri bildirim
+      console.error("Event export failed", err);
+      window.alert(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExportBusy(false);
     }
-
-    const headers = [
-      t("events.table.priority"),
-      t("events.table.category"),
-      t("events.table.message"),
-      t("events.table.user"),
-      t("events.table.device"),
-      t("events.table.date"),
-    ];
-    const rows = exportRows.map((item) =>
-      [item.oncelik, item.kategori, item.mesaj, item.kullanici, item.cihaz, item.tarih]
-        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    const base = i18n.language?.startsWith("tr") ? "olaylar" : "events";
-    anchor.download = `${base}-${now}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setShowExportModal(false);
   };
 
   return (
@@ -239,17 +248,39 @@ export function EventsPage({ events, loading, devices }: Props) {
             <p className="helper-text">{t("events.export.hint")}</p>
             <label>
               {t("events.export.format")}
-              <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as "csv" | "json")}>
-                <option value="csv">CSV</option>
-                <option value="json">JSON</option>
+              <select
+                value={exportFormat}
+                onChange={(event) => setExportFormat(event.target.value as "csv" | "json" | "xlsx" | "pdf")}
+                disabled={exportBusy}
+              >
+                <option value="csv">CSV (Excel-compatible)</option>
+                <option value="xlsx">Excel Workbook (.xlsx)</option>
+                <option value="pdf">PDF Report (.pdf)</option>
+                <option value="json">JSON (raw data)</option>
               </select>
             </label>
+            {(exportFormat === "xlsx" || exportFormat === "pdf") && search.trim() ? (
+              <p className="helper-text" style={{ color: "#a85800" }}>
+                Note: text search filter is applied client-side; {exportFormat.toUpperCase()} export uses
+                category + severity filters only. To export search-filtered rows, use CSV or JSON.
+              </p>
+            ) : null}
             <div className="modal-actions">
-              <button type="button" className="secondary-btn" onClick={() => setShowExportModal(false)}>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setShowExportModal(false)}
+                disabled={exportBusy}
+              >
                 {t("common.cancel")}
               </button>
-              <button type="button" className="primary-btn" onClick={handleExport}>
-                {t("events.export.download")}
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => void handleExport()}
+                disabled={exportBusy}
+              >
+                {exportBusy ? "..." : t("events.export.download")}
               </button>
             </div>
           </div>

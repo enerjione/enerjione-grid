@@ -91,7 +91,7 @@ def login(
         event_type="user_login",
         severity="info",
         actor_username=user.username,
-        message=f"{user.username} sisteme giriş yaptı",
+        message=f"{user.username} signed in",
         i18n_key="user_login",
         i18n_params={"user": user.username},
     )
@@ -180,7 +180,7 @@ def change_my_password(
         event_type="password_changed",
         severity="info",
         actor_username=current_user.username,
-        message=f"{current_user.username} şifresini değiştirdi",
+        message=f"{current_user.username} changed password",
         i18n_key="password_changed",
         i18n_params={"user": current_user.username},
     )
@@ -233,7 +233,7 @@ def logout(
         event_type="user_logout",
         severity="info",
         actor_username=current_user.username,
-        message=f"{current_user.username} sistemden çıkış yaptı",
+        message=f"{current_user.username} signed out",
         i18n_key="user_logout",
         i18n_params={"user": current_user.username},
     )
