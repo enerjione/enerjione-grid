@@ -126,7 +126,10 @@ docker image prune -f 2>/dev/null || true
 # 4. Volume'lari sifirla (opsiyonel)
 # ===========================================================================
 log "[4/8] Volume durumu kontrol ediliyor..."
-VOLUMES=$(docker volume ls --format '{{.Name}}' | grep -E '(postgres-data|rabbitmq-data|nats-data|backup-data)' || true)
+# Hem eski compose proje adlariyla olusmus volume'lar (horstman-smart-logger_*,
+# horstman_*) hem de jenerik suffix'liler (postgres-data, rabbitmq-data, ...)
+# yakalanir. Yeni compose `name: enerjione` ile `enerjione_*` olusturur.
+VOLUMES=$(docker volume ls --format '{{.Name}}' | grep -E '(^horstman|_postgres-data|_rabbitmq-data|_nats-data|_backup-data|^postgres-data$|^rabbitmq-data$|^nats-data$|^backup-data$)' || true)
 
 if $KEEP_DB; then
   warn "DB volume'lari KORUNACAK (--keep-db). Eski POSTGRES_DB ismi (horstman)"

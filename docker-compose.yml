@@ -13,6 +13,12 @@
 #       --username admin --password 'StrongPassw0rd!' --full-name "Sistem Admin"
 #
 # (scripts/create_installer.py mevcutsa; degilse README'de manuel SQL adimi.)
+#
+# `name: enerjione` — Compose proje adi (volume + network prefix'i icin).
+# Repo dizin adi ne olursa olsun (Horstman-Smart-Logger, EnerjiOne-Smart-Logger, ...)
+# volume'lar `enerjione_postgres-data`, network `enerjione_e1-net` olarak olusur.
+# Boylece marka tutarliligi disk artefaktlarinda da saglanmis olur.
+name: enerjione
 
 services:
   postgres:
@@ -163,9 +169,11 @@ services:
         condition: service_healthy
     environment:
       # Tag-engine artik tamamen NATS JetStream uzerinde calisiyor.
-      # In: TELEMETRY_RAW stream (hsl.telemetry.raw.>)
-      # Out: hsl.telemetry.normalized.<gw> (TELEMETRY_NORMALIZED stream'e gider)
+      # In: TELEMETRY_RAW stream (e1.telemetry.raw.>)
+      # Out: e1.telemetry.normalized.<gw> (TELEMETRY_NORMALIZED stream'e gider)
       NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_SUBJECT_TELEMETRY_RAW: ${NATS_SUBJECT_TELEMETRY_RAW:-e1.telemetry.raw.>}
+      NATS_SUBJECT_NORMALIZED_PREFIX: ${NATS_SUBJECT_NORMALIZED_PREFIX:-e1.telemetry.normalized}
       # Backend system-status, tag-engine icin 8011 portunu probe eder.
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8011
@@ -189,6 +197,7 @@ services:
     environment:
       # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
       NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
       # Alarm yayini: RabbitMQ (notification-worker buradan tuketiyor).
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       RABBITMQ_EXCHANGE: hsl.events
@@ -238,6 +247,7 @@ services:
     environment:
       # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
       NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WORKER_HEALTH_HOST: 0.0.0.0
