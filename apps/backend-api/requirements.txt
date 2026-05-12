@@ -17,7 +17,11 @@ alembic>=1.13,<2
 
 python-jose[cryptography]>=3.3,<4
 passlib[bcrypt]>=1.7,<2
-bcrypt>=4.0,<5
+# bcrypt 4.x `__about__.__version__` attribute'unu kaldirdi; passlib 1.7.x
+# bunu okumaya calisip "(trapped) error reading bcrypt version" warning'i
+# basiyor. Hash algoritmasi zaten bcrypt; 3.x'e dusurunce passlib bagi
+# tutarli, gercek bcrypt islemi etkilenmiyor (mevcut DB hash'leri gecerli).
+bcrypt>=3.2,<4
 cryptography>=42.0,<46
 
 pydantic-settings>=2.0,<3
