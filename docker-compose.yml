@@ -1,4 +1,4 @@
-# Horstman Smart Logger — tek-komut Docker Compose dosyasi.
+# EnerjiOne Grid Dashboard — tek-komut Docker Compose dosyasi.
 #
 # Kurulum:
 #   1. cp .env.example .env
@@ -17,25 +17,25 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: hsl-postgres
+    container_name: e1-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-horstman}
-      POSTGRES_USER: ${POSTGRES_USER:-horstman}
+      POSTGRES_DB: ${POSTGRES_DB:-enerjione}
+      POSTGRES_USER: ${POSTGRES_USER:-enerjione}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env'de olmali}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-horstman} -d ${POSTGRES_DB:-horstman}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-enerjione} -d ${POSTGRES_DB:-enerjione}"]
       interval: 10s
       timeout: 5s
       retries: 10
     networks:
-      - hsl-net
+      - e1-net
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: hsl-rabbitmq
+    container_name: e1-rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hsl}
@@ -58,7 +58,7 @@ services:
       # Tunelle gormek icin: ssh -L 15672:localhost:15672 user@vds
       - "127.0.0.1:15672:15672"
     networks:
-      - hsl-net
+      - e1-net
 
   # NATS JetStream — yuksek hacimli telemetri akisi icin RabbitMQ'nun yaninda
   # calisir. Baslangicta dual-publish modu: gateway hem RabbitMQ'ya hem JetStream'e
@@ -67,13 +67,13 @@ services:
   # akisi etkilemez. Cutover sonrasi alarm/bildirim RabbitMQ'da kalmaya devam eder.
   nats:
     image: nats:2.10-alpine
-    container_name: hsl-nats
+    container_name: e1-nats
     restart: unless-stopped
     command:
       - "-js"
       - "--store_dir=/data"
       - "--http_port=8222"
-      - "--name=hsl-nats-1"
+      - "--name=e1-nats-1"
     volumes:
       - nats-data:/data
     healthcheck:
@@ -88,14 +88,14 @@ services:
       # HTTP monitoring (varz/connz/jsz) — sadece localhost'tan.
       - "127.0.0.1:8222:8222"
     networks:
-      - hsl-net
+      - e1-net
 
   backend-api:
     build:
       context: ./apps/backend-api
       dockerfile: Dockerfile
-    image: hsl/backend-api:latest
-    container_name: hsl-backend-api
+    image: e1/backend-api:latest
+    container_name: e1-backend-api
     restart: unless-stopped
     depends_on:
       postgres:
@@ -112,7 +112,7 @@ services:
     environment:
       APP_ENV: production
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY .env'de olmali}
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-horstman}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-horstman}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-enerjione}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-enerjione}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
@@ -130,10 +130,10 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@horstman.local}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@enerjione.local}
       # DB yedek dosyalari icin sabit dizin. backup-data volume'una baglanir
       # ki container yeniden olusturulsa da yedekler kaybolmaz.
-      BACKUP_DIR: /var/lib/hsl-backups
+      BACKUP_DIR: /var/lib/e1-backups
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -147,16 +147,16 @@ services:
       # ile zaten korunmali; ek olarak CORS_ORIGINS uretimde kisitlanmali).
       - "8000:8000"
     volumes:
-      - backup-data:/var/lib/hsl-backups
+      - backup-data:/var/lib/e1-backups
     networks:
-      - hsl-net
+      - e1-net
 
   tag-engine:
     build:
       context: ./apps/tag-engine
       dockerfile: Dockerfile
-    image: hsl/tag-engine:latest
-    container_name: hsl-tag-engine
+    image: e1/tag-engine:latest
+    container_name: e1-tag-engine
     restart: unless-stopped
     depends_on:
       nats:
@@ -170,14 +170,14 @@ services:
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8011
     networks:
-      - hsl-net
+      - e1-net
 
   alarm-service:
     build:
       context: ./apps/alarm-service
       dockerfile: Dockerfile
-    image: hsl/alarm-service:latest
-    container_name: hsl-alarm-service
+    image: e1/alarm-service:latest
+    container_name: e1-alarm-service
     restart: unless-stopped
     depends_on:
       rabbitmq:
@@ -200,14 +200,14 @@ services:
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8012
     networks:
-      - hsl-net
+      - e1-net
 
   notification-worker:
     build:
       context: ./apps/notification-worker
       dockerfile: Dockerfile
-    image: hsl/notification-worker:latest
-    container_name: hsl-notification-worker
+    image: e1/notification-worker:latest
+    container_name: e1-notification-worker
     restart: unless-stopped
     depends_on:
       rabbitmq:
@@ -221,14 +221,14 @@ services:
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8013
     networks:
-      - hsl-net
+      - e1-net
 
   iec104-outbound:
     build:
       context: ./apps/iec104-outbound
       dockerfile: Dockerfile
-    image: hsl/iec104-outbound:latest
-    container_name: hsl-iec104-outbound
+    image: e1/iec104-outbound:latest
+    container_name: e1-iec104-outbound
     restart: unless-stopped
     depends_on:
       backend-api:
@@ -252,14 +252,14 @@ services:
       - "2405:2405"
       - "2406:2406"
     networks:
-      - hsl-net
+      - e1-net
 
   frontend-web:
     build:
       context: ./apps/frontend-web
       dockerfile: Dockerfile
-    image: hsl/frontend-web:latest
-    container_name: hsl-frontend-web
+    image: e1/frontend-web:latest
+    container_name: e1-frontend-web
     restart: unless-stopped
     depends_on:
       - backend-api
@@ -268,10 +268,10 @@ services:
       # serve eder hem /api/* isteklerini backend-api:8000'e proxy eder.
       - "${FRONTEND_HTTP_PORT:-80}:80"
     networks:
-      - hsl-net
+      - e1-net
 
 networks:
-  hsl-net:
+  e1-net:
     driver: bridge
 
 volumes:

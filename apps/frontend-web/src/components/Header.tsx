@@ -64,7 +64,7 @@ export function Header({
     <header className="header">
       <div className="header-left">
         <div className="brand-logo-wrap">
-          <img src="/form-logo.png" alt="Form Elektrik" className="logo" />
+          <img src="/logo.png" alt="EnerjiOne" className="logo" />
         </div>
         <span className="header-divider" />
         <div className="customer-logo-wrap">

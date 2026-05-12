@@ -1,7 +1,7 @@
-# Horstman Smart Logger Platform
+# EnerjiOne Grid Dashboard
 
 **Version:** 2.24.4
-Industrial monitoring platform for Horstmann Smart Navigator 2.0 devices.
+Industrial monitoring platform for Horstmann Smart Navigator 2.0 fault-passage indicator devices.
 Iki dağıtım modu:
 
 - **Production / Linux + Docker** — VDS, sunucu kurulumları (asağıdaki bölüm).

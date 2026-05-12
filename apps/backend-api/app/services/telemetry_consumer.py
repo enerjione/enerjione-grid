@@ -165,7 +165,7 @@ def _consume_loop() -> None:
                     connect_timeout=settings.nats_connect_timeout_sec,
                     max_reconnect_attempts=-1,
                     reconnect_time_wait=2,
-                    name="hsl-backend-api-consumer",
+                    name="e1-backend-api-consumer",
                 )
                 js = nc.jetstream()
 

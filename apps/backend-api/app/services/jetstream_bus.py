@@ -196,7 +196,7 @@ class JetStreamBus:
             connect_timeout=self._connect_timeout,
             max_reconnect_attempts=-1,  # surekli reconnect dene
             reconnect_time_wait=2,
-            name="hsl-backend-api",
+            name="e1-backend-api",
         )
         self._js = self._nc.jetstream()
         await self._ensure_stream(

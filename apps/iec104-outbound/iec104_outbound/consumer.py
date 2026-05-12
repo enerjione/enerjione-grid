@@ -100,7 +100,7 @@ class TelemetryConsumer:
                     servers=[s.nats_url],
                     max_reconnect_attempts=-1,
                     reconnect_time_wait=2,
-                    name="hsl-iec104-outbound",
+                    name="e1-iec104-outbound",
                 )
                 js = nc.jetstream()
 

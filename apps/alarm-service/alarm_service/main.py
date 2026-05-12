@@ -593,7 +593,7 @@ async def _consume_jetstream() -> None:
                 servers=[NATS_URL],
                 max_reconnect_attempts=-1,
                 reconnect_time_wait=2,
-                name="hsl-alarm-service",
+                name="e1-alarm-service",
             )
             js = nc.jetstream()
 

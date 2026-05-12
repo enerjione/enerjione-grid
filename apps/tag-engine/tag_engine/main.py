@@ -116,7 +116,7 @@ async def _run() -> None:
                 servers=[NATS_URL],
                 max_reconnect_attempts=-1,
                 reconnect_time_wait=2,
-                name="hsl-tag-engine",
+                name="e1-tag-engine",
             )
             js = nc.jetstream()
 

@@ -138,7 +138,7 @@ export function LoginForm({ onSubmit, loading }: Props) {
               {loading ? t("login.submitting") : t("login.submit")}
             </button>
           </div>
-          <img className="form-logo-bottom" src="/form-logo.png" alt="Form Elektrik" />
+          <img className="form-logo-bottom" src="/logo.png" alt="EnerjiOne" />
         </form>
 
         <aside className="login-visual">

@@ -741,7 +741,7 @@
       "customerNamePlaceholder": "Örn: Aras EDAŞ",
       "siteTitle": "Tarayıcı Sekme Başlığı",
       "siteTitlePlaceholder": "Örn: Aras EDAŞ Smart Logger",
-      "siteTitleHint": "Tarayıcı sekmesinde ve yer imlerinde gözükür. Boş bırakılırsa varsayılan \"Horstmann Smart Logger\" kullanılır.",
+      "siteTitleHint": "Tarayıcı sekmesinde ve yer imlerinde gözükür. Boş bırakılırsa varsayılan \"EnerjiOne Grid Dashboard\" kullanılır.",
       "loginLogoTitle": "Login Logosu (Büyük)",
       "loginLogoDesc": "Giriş ekranında merkezde gösterilir. Açık zeminli versiyon.",
       "headerLogoTitle": "Header Logosu (Koyu Zemin)",

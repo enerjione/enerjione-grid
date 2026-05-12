@@ -78,13 +78,13 @@ export function ProjectSettingsProvider({ children }: { children: ReactNode }) {
   // anlik olarak sekme baslıgı yansır; sayfa yeniden yuklenmesine gerek yok.
   // Bos string gelirse fallback default kullanilir.
   useEffect(() => {
-    const fallback = "Horstmann Smart Logger";
+    const fallback = "EnerjiOne Grid Dashboard";
     const t = (settings.site_title ?? "").trim();
     document.title = t.length > 0 ? t : fallback;
   }, [settings.site_title]);
 
   // favicon degistiginde <link rel="icon"> elementini guncelle. data URL veya
-  // public path olabilir. Ayar bos ise public/favicon.ico fallback'i gerekir.
+  // public path olabilir. Ayar bos ise EnerjiOne default favicon kullanilir.
   useEffect(() => {
     const href = (settings.favicon ?? "").trim();
     // Mevcut ikon link'lerini topla (multiple olabilir: shortcut, apple-touch).
@@ -94,8 +94,8 @@ export function ProjectSettingsProvider({ children }: { children: ReactNode }) {
       link.rel = "icon";
       document.head.appendChild(link);
     }
-    // Bos ise default favicon.ico'ya don.
-    link.href = href.length > 0 ? href : "/favicon.ico";
+    // Bos ise EnerjiOne marka favicon'una don.
+    link.href = href.length > 0 ? href : "/favicon.png";
   }, [settings.favicon]);
 
   const applyLocal = useCallback((next: ProjectSettings) => {

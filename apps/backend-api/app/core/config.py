@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Horstman Smart Logger API"
+    app_name: str = "EnerjiOne Grid Dashboard API"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
     secret_key: str = "change-me-in-production"
@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     # Varsayılan 30 gün = 43200 dk. "Beni hatırla" tıklayan kullanıcı saha
     # ortamında hafta sonları boyunca tekrar giriş yapmak zorunda kalmasın.
     access_token_minutes: int = 43_200
-    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/horstman"
+    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/enerjione"
     # SQLAlchemy connection pool ayarlari (600 cihaz / 10K msg/sn olcekleri icin
     # default pool_size=5, max_overflow=10 yetersiz kalir; concurrent telemetry
     # consumer + alarm-service + tag-engine + frontend istekleri = 50-80 paralel
@@ -31,13 +31,13 @@ class Settings(BaseSettings):
     rabbitmq_management_url: str = "http://localhost:15672"
     rabbitmq_admin_username: str = "guest"
     rabbitmq_admin_password: str = "guest"
-    rabbitmq_exchange: str = "hsl.events"
+    rabbitmq_exchange: str = "e1.events"
     rabbitmq_prefetch_count: int = 20
-    rabbitmq_dlx_exchange: str = "hsl.events.dlx"
-    rabbitmq_queue_tag: str = "hsl.tag.telemetry.raw"
-    rabbitmq_queue_alarm: str = "hsl.alarm.telemetry.received"
-    rabbitmq_queue_outbound_alarm: str = "hsl.outbound.alarm.created"
-    rabbitmq_queue_outbound_telemetry: str = "hsl.outbound.telemetry.received"
+    rabbitmq_dlx_exchange: str = "e1.events.dlx"
+    rabbitmq_queue_tag: str = "e1.tag.telemetry.raw"
+    rabbitmq_queue_alarm: str = "e1.alarm.telemetry.received"
+    rabbitmq_queue_outbound_alarm: str = "e1.outbound.alarm.created"
+    rabbitmq_queue_outbound_telemetry: str = "e1.outbound.telemetry.received"
 
     # ----- NATS JetStream (telemetri akisinin primary rotasi) ----------------
     # Telemetri akisi (gateway -> tag-engine -> persister/iec104/alarm-service)
@@ -54,9 +54,9 @@ class Settings(BaseSettings):
     nats_stream_telemetry_raw: str = "TELEMETRY_RAW"
     nats_stream_telemetry_normalized: str = "TELEMETRY_NORMALIZED"
     # Subject pattern'leri — wildcard ile gateway bazinda filtreleme.
-    # Konkre: hsl.telemetry.raw.GW-001, hsl.telemetry.normalized.GW-001
-    nats_subject_telemetry_raw: str = "hsl.telemetry.raw.>"
-    nats_subject_telemetry_normalized: str = "hsl.telemetry.normalized.>"
+    # Konkre: e1.telemetry.raw.GW-001, e1.telemetry.normalized.GW-001
+    nats_subject_telemetry_raw: str = "e1.telemetry.raw.>"
+    nats_subject_telemetry_normalized: str = "e1.telemetry.normalized.>"
     # Stream retention (gun) — JetStream WAL'in disk'te kalma suresi. 7 gun raw,
     # 30 gun normalized: backfill/replay icin yeterli, disk dolusunu sinirlar.
     nats_stream_raw_max_age_days: int = 7
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     smtp_port: int = 25
     smtp_username: str = ""
     smtp_password: str = ""
-    smtp_from_email: str = "noreply@horstman.local"
+    smtp_from_email: str = "noreply@enerjione.local"
     sms_enabled: bool = False
     sms_provider: str = "mock"
     sms_api_url: str = ""
