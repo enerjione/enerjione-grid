@@ -56,9 +56,18 @@ git pull --ff-only
 # (please-change-me-) ise bootstrap.sh `.env` icindeki cleartext'leri rastgele
 # uretip yazar. nats-server.conf yoksa (veya bind mount kazasi sonucu dizin
 # olarak kalmissa) sil ve template'ten yeniden render et.
+#
+# Onemli: dir cleanup'tan ONCE NATS container'i DURDUR + KALDIR — aksi halde
+# (a) `rm -rf` mount'lu dizini silemez, (b) docker compose up sirasinda eski
+# mount referansiyla container halen ayakta diye "up to date" sayilir,
+# mount degisikligi alinmaz.
+nats_artefact_fixed=0
 if [[ -d infra/nats/nats-server.conf ]]; then
-  echo "[1.6/3] infra/nats/nats-server.conf yanlislikla DIZIN olarak duruyor (docker bind mount kazasi); siliniyor..."
+  echo "[1.6/3] infra/nats/nats-server.conf yanlislikla DIZIN olarak duruyor (docker bind mount kazasi); NATS container durduruluyor + dizin temizleniyor..."
+  docker compose stop nats 2>/dev/null || true
+  docker compose rm -f nats 2>/dev/null || true
   rm -rf infra/nats/nats-server.conf
+  nats_artefact_fixed=1
 fi
 need_bootstrap=0
 if [[ ! -f .env ]]; then
@@ -74,10 +83,17 @@ if [[ ! -f infra/nats/nats-server.conf ]]; then
 fi
 if [[ $need_bootstrap -eq 1 ]]; then
   bash infra/scripts/linux/bootstrap.sh --rerender-nats
-  # bootstrap.sh basarili olunca burada devam et — bootstrap kendi build/up yapar
-  # ama --rerender-nats sonrasi update.sh'in build/up mantigi ZATEN gerekli
-  # degildi: idempotent oldugu icin alttaki adimlar (build + up) yine calisir.
 fi
+# nats-server.conf'un dosya oldugundan emin ol — render edilmediyse veya
+# artefact halen orada ise compose up'i fail edecektir; erken hata daha iyi.
+if [[ ! -f infra/nats/nats-server.conf ]]; then
+  echo "HATA: infra/nats/nats-server.conf dosya olarak mevcut degil. bootstrap.sh basarisiz olmus olabilir."
+  exit 1
+fi
+# NATS container'i daha onceki recreate'de "up to date" diye atlanmasin diye
+# `up -d`'den once mount degisikligini fark etmesi icin compose'a explicit
+# force-recreate flag'i lazim. Asagida `docker compose up -d` cagrildiginda
+# bu container icin `--force-recreate` ekleyecegiz.
 
 case "$TARGET" in
   frontend|frontend-web|web)
@@ -108,11 +124,27 @@ case "$TARGET" in
     ;;
 esac
 
+# NATS artefact temizligi sonrasi compose'un mount degisikligini fark etmesi
+# icin nats container'ini explicit force-recreate ile yeniden olusturmaliyiz
+# (aksi halde "up to date" diye atlanir, eski mount referansi ile baslamaya
+# calisir, ayni hata).
+nats_recreate_args=()
+if [[ $nats_artefact_fixed -eq 1 ]]; then
+  nats_recreate_args=(--force-recreate)
+fi
+
 if [[ -z "$SVC" ]]; then
   echo "[2/3] Tum servisler build ediliyor..."
   docker compose build
   echo "[3/3] Servisler ayaga kaldiriliyor (degisenler yeniden olusturulur)..."
-  docker compose up -d
+  if [[ $nats_artefact_fixed -eq 1 ]]; then
+    # nats container'i baska container'lar onunde dururken recreate olsun;
+    # tum stack'i da ayni anda up et.
+    docker compose up -d --force-recreate nats
+    docker compose up -d
+  else
+    docker compose up -d
+  fi
 else
   echo "[2/3] Servis '$SVC' build ediliyor..."
   docker compose build "$SVC"
