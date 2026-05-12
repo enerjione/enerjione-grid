@@ -298,6 +298,30 @@ def _check_rabbitmq() -> ServiceStatus:
     )
 
 
+def _check_nats() -> ServiceStatus:
+    """NATS JetStream client portuna TCP probe.
+
+    NATS client portu (4222) telemetri akisinin tek yolu — backend, tag-engine,
+    alarm-service, iec104-outbound hepsi buraya baglanir. TCP probe yeterli
+    cunku NATS server protokolu "INFO" string'ini hemen gonderir; port acik =
+    server canli. HTTP monitoring (8222) ek bir test ama localhost-only bind
+    oldugu icin uzak deploy'larda erisilemez; client portu evrensel.
+    """
+    nats_url = getattr(settings, "nats_url", "nats://localhost:4222")
+    parsed = urlparse(nats_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 4222
+    ok, ms, err = _tcp_probe(host, port)
+    return ServiceStatus(
+        name="NATS JetStream",
+        role="broker",
+        healthy=ok,
+        latency_ms=ms,
+        endpoint=f"{host}:{port}",
+        detail=err,
+    )
+
+
 def _check_worker(
     name: str,
     *,
@@ -412,6 +436,7 @@ def get_services_status(
     probe_jobs: list[tuple[str, callable]] = [  # type: ignore[name-defined]
         ("database", _check_database),
         ("rabbitmq", _check_rabbitmq),
+        ("nats", _check_nats),
         (
             "tag_engine",
             lambda: _check_worker(
@@ -477,6 +502,7 @@ def get_services_status(
         self_status,
         results["database"],
         results["rabbitmq"],
+        results["nats"],
         results["tag_engine"],
         results["alarm_service"],
         results["notification_worker"],
