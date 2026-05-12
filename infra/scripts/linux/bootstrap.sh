@@ -58,16 +58,44 @@ fi
 # NATS server.conf rendering — `.env` cleartext password'lerini bcrypt'leyip
 # template'e gomer. Production deploy oncesi zorunlu; aksi halde NATS auth
 # bypass yapar veya server boot olmaz.
+#
+# Bcrypt uretimi: HOST'ta python3 + bcrypt modulu ile yapilir. Onceki versiyon
+# `docker run nats:2.10-alpine nats server passwd` cagiriyordu ama o komut
+# resmi nats-server image'inde YOKTUR (ayri `nats-cli` paketinde). Hash sessiz
+# bos doner, script "HATA" demeden ya da NATS auth bypass'la calismaya devam
+# edebiliyordu. Python bcrypt deterministic ve image'den bagimsiz — NATS
+# `$2a$...` formatini herhangi bcrypt uretiminden kabul eder.
 if [[ ! -f infra/nats/nats-server.conf ]] || [[ "${1:-}" == "--rerender-nats" ]]; then
-  echo "[1.5/4] NATS sifrelerinden bcrypt hash uretiliyor (docker run nats:2.10-alpine)..."
+  echo "[1.5/4] NATS sifrelerinden bcrypt hash uretiliyor (host python3 + bcrypt)..."
   # .env'den cleartext sifreleri oku (chmod 600 olmasi gerekli)
   set -a; source .env; set +a
-  # nats CLI tarafindan bcrypt uret. `-p` flag cleartext'i bcrypt'e cevirir.
-  HASH_G=$(docker run --rm nats:2.10-alpine nats server passwd -p "${NATS_GATEWAY_PASSWORD}" 2>/dev/null)
-  HASH_B=$(docker run --rm nats:2.10-alpine nats server passwd -p "${NATS_BACKEND_PASSWORD}" 2>/dev/null)
-  HASH_W=$(docker run --rm nats:2.10-alpine nats server passwd -p "${NATS_WORKER_PASSWORD}" 2>/dev/null)
+
+  # python3 + bcrypt modulu var mi kontrol et; yoksa apt ile yukle.
+  if ! python3 -c "import bcrypt" 2>/dev/null; then
+    echo "      python3-bcrypt eksik, apt ile kuruluyor..."
+    if command -v apt-get >/dev/null 2>&1; then
+      DEBIAN_FRONTEND=noninteractive apt-get update -qq
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-bcrypt
+    else
+      echo "HATA: apt-get bulunamadi. python3-bcrypt'i elle kurun:" >&2
+      echo "      pip3 install bcrypt   (veya distro paket yoneticinizle)" >&2
+      exit 1
+    fi
+  fi
+
+  # Python ile bcrypt uret. NATS server `$2a$...` veya `$2b$...` her ikisini
+  # kabul eder; bcrypt modulu default `$2b$` uretir, sorun yok.
+  # Cleartext'i stdin'den ver — komut satirinda sifre process listesinde
+  # gozukmesin (ps -ef ile baska kullanicilar yakalamasin).
+  _bcrypt() {
+    local pw="$1"
+    python3 -c "import sys, bcrypt; print(bcrypt.hashpw(sys.stdin.buffer.read().rstrip(b'\n'), bcrypt.gensalt(rounds=11)).decode())" <<<"$pw"
+  }
+  HASH_G=$(_bcrypt "${NATS_GATEWAY_PASSWORD}")
+  HASH_B=$(_bcrypt "${NATS_BACKEND_PASSWORD}")
+  HASH_W=$(_bcrypt "${NATS_WORKER_PASSWORD}")
   if [[ -z "$HASH_G" || -z "$HASH_B" || -z "$HASH_W" ]]; then
-    echo "HATA: NATS bcrypt hash uretilemedi. docker erisimi var mi?" >&2
+    echo "HATA: bcrypt hash uretilemedi (python3-bcrypt calismadi)." >&2
     exit 1
   fi
   # Template'i render et — `sed` ile placeholder'lari hash'lerle degistir.

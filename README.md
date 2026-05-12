@@ -11,18 +11,35 @@ Iki dağıtım modu:
 
 ## Production: Linux + Docker (VDS / sunucu)
 
-Tek komutla ayağa kalkar. Ubuntu 22.04 / 24.04 ve Debian 12 üzerinde test edilmiştir.
+Tek komutla sıfırdan ayağa kalkar. Ubuntu 22.04 / 24.04 ve Debian 12 üzerinde test edilmiştir.
 
-### 1. VDS'e Docker kur (yeni sunucu ise)
+### Sıfırdan tek-komut kurulum (yeni VDS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/infra/scripts/linux/quick-install.sh | sudo bash
+```
+
+Bu komut sırayla:
+1. `git` + `curl` yoksa kurar (apt).
+2. Docker Engine + Compose plugin yoksa kurar (`install-docker.sh`).
+3. Repo'yu `/opt/EnerjiOneGrid` altına klonlar (branch: `docker-linux-deploy`).
+4. `bootstrap.sh` ile `.env` üretir, NATS bcrypt hash'lerini host Python ile renderler, tüm imajları build eder, servisleri ayağa kaldırır, installer hesabını otomatik oluşturur.
+
+Bittikten sonra tarayıcıdan `http://<vds-ip>/` — login: `installer` / `ChangeMe123!` (ilk girişte değiştir).
+
+İstersen farklı branch/dizin verebilirsin:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/infra/scripts/linux/quick-install.sh \
+  | sudo BRANCH=main INSTALL_DIR=/srv/enerjione bash
+```
+
+### Manuel kurulum (alternatif, adım adım)
 
 ```bash
 sudo bash infra/scripts/linux/install-docker.sh
-# Eger sudo kullanicisini docker grubuna eklediyse, tekrar SSH ile gir.
-```
+# Sudo kullanicisini docker grubuna eklediyse, tekrar SSH ile gir.
 
-### 2. Repo'yu çek ve bootstrap
-
-```bash
 git clone https://github.com/fikretsafak/EnerjiOneGrid.git
 cd EnerjiOneGrid
 sudo bash infra/scripts/linux/bootstrap.sh
