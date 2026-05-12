@@ -50,6 +50,12 @@ services:
       GATEWAY_MODE: "dnp3"
       BACKEND_API_URL: "{{BACKEND_API_URL}}"
       BACKEND_API_VERIFY_SSL: "true"
+      # Public IP + HTTP icin gateway production guard'i 'https' bekler.
+      # TLS henuz kurulu degilse (Caddy/Traefik/Cloudflare yok) bu flag ile
+      # bilincli opt-out — gateway boot'ta WARN log atar, calismaya devam eder.
+      # Kullanici TLS terminator kurunca BACKEND_API_URL'i https:// yapip
+      # bu flag'i 'false' yapabilir.
+      GATEWAY_INSECURE_ALLOW_PLAINTEXT: "true"
       # NATS JetStream — gateway'in telemetri yayin yolu (RabbitMQ kaldirildi).
       NATS_URL: "{{NATS_URL}}"
       NATS_SUBJECT_PREFIX: "e1.telemetry.raw"
@@ -112,6 +118,9 @@ DNP3_LIBRARY=dnp3py
 
 BACKEND_API_URL={{BACKEND_API_URL}}
 BACKEND_API_VERIFY_SSL=true
+# Public IP + HTTP icin gateway production guard'i 'https' bekler. TLS
+# yokken bu flag ile bilincli opt-out — boot'ta WARN log atilir.
+GATEWAY_INSECURE_ALLOW_PLAINTEXT=true
 CONFIG_REFRESH_SEC=30
 
 # NATS JetStream — gateway'in telemetri yayin yolu (RabbitMQ kaldirildi).

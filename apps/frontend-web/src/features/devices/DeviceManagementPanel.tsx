@@ -179,9 +179,15 @@ export function DeviceManagementPanel({
     try {
       const ip = composeBackendIp.trim();
       // Kullanici sadece IP ya da hostname yazar; backend URL'i sabit sema +
-      // varsayilan port (8000) + /api/v1 ile tamamlanir. Boylece kullanici port
-      // ve path bilgileriyle ugrasmaz.
-      const backendUrl = `http://${ip}:8000/api/v1`;
+      // /api/v1 ile tamamlanir. Port DEFAULT 80 (http) — nginx reverse proxy
+      // `/api/*` isteklerini backend-api:8000'e forward eder. 8000 public
+      // expose edilmez, dogrudan baglanti calismaz.
+      // Kullanici full URL girdiyse (http:// veya https:// ile basliyorsa)
+      // oldugu gibi kullan; aksi halde 'http://<ip>/api/v1' formatla.
+      const backendUrl =
+        ip.startsWith("http://") || ip.startsWith("https://")
+          ? ip.replace(/\/+$/, "") + (ip.includes("/api/v1") ? "" : "/api/v1")
+          : `http://${ip}/api/v1`;
       await onDownloadCompose(composeFor, {
         backendUrl,
         // hostPort verilmezse backend gateway sirasina gore 8020/8021/... atar.
