@@ -53,6 +53,12 @@ class RabbitMqEventBus:
         self._url = url
         self._exchange = exchange
         self._subscribers: dict[str, list[EventHandler]] = {}
+        # Persistent connection — her event'te TCP handshake yapilirsa alarm
+        # firtinasinda RabbitMQ TIME_WAIT'le doluyor (ip_local_port_range
+        # tukenir). Tek connection + channel cache; thread-safe lock altinda.
+        self._conn_lock = threading.Lock()
+        self._connection: "pika.BlockingConnection | None" = None
+        self._channel: "Any | None" = None
 
     def publish_event(self, topic: str, payload: dict[str, Any], *, message_id: str = "") -> None:
         # Topic-bazli routing:
@@ -71,27 +77,64 @@ class RabbitMqEventBus:
         for handler in self._subscribers.get(topic, []):
             handler(payload)
 
+    def _ensure_channel(self) -> "Any":
+        """Persistent RabbitMQ channel. Connection dustugunde otomatik reconnect.
+
+        Caller `_conn_lock` altinda olmali. Returns channel.
+        """
+        # Eski connection broken ise sifirla
+        if self._connection is not None:
+            try:
+                if self._connection.is_closed:
+                    self._connection = None
+                    self._channel = None
+            except Exception:  # noqa: BLE001
+                self._connection = None
+                self._channel = None
+        if self._connection is None:
+            params = pika.URLParameters(self._url)
+            # Heartbeat + connection timeout — uzun idle pause sonrasi
+            # cevapsiz baglantilari otomatik kopart.
+            params.heartbeat = 30
+            params.blocked_connection_timeout = 10
+            self._connection = pika.BlockingConnection(params)
+            self._channel = None
+        if self._channel is None or self._channel.is_closed:
+            self._channel = self._connection.channel()
+            self._channel.exchange_declare(
+                exchange=self._exchange, exchange_type="topic", durable=True
+            )
+        return self._channel
+
     def _publish_to_rabbitmq(
         self, topic: str, payload: dict[str, Any], *, message_id: str
     ) -> None:
-        """Alarm + diger event'ler icin RabbitMQ. DLX/retry semantigi korunur."""
-        connection = pika.BlockingConnection(pika.URLParameters(self._url))
-        try:
-            channel = connection.channel()
-            channel.exchange_declare(exchange=self._exchange, exchange_type="topic", durable=True)
-            properties = pika.BasicProperties(
-                content_type="application/json",
-                delivery_mode=2,
-                message_id=message_id or payload.get("message_id", ""),
-            )
-            channel.basic_publish(
-                exchange=self._exchange,
-                routing_key=topic,
-                body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                properties=properties,
-            )
-        finally:
-            connection.close()
+        """Alarm + diger event'ler icin RabbitMQ. Persistent connection."""
+        properties = pika.BasicProperties(
+            content_type="application/json",
+            delivery_mode=2,
+            message_id=message_id or payload.get("message_id", ""),
+        )
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        with self._conn_lock:
+            try:
+                channel = self._ensure_channel()
+                channel.basic_publish(
+                    exchange=self._exchange,
+                    routing_key=topic,
+                    body=body,
+                    properties=properties,
+                )
+            except Exception:
+                # Connection drop — sifirla, bir sonraki call yeniden kursun.
+                try:
+                    if self._connection is not None:
+                        self._connection.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._connection = None
+                self._channel = None
+                raise
 
     def _publish_to_jetstream(
         self, topic: str, payload: dict[str, Any], *, message_id: str

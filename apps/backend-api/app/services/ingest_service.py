@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -14,6 +16,14 @@ from app.services.outbox_service import enqueue_outbox_event, flush_outbox
 from app.services.event_service import record_event
 
 
+def hash_gateway_token(token: str) -> str:
+    """Gateway token'in SHA-256 hex digest'i. DB'de plaintext yerine bu
+    saklanir; saldirgan DB read-only erisimi alsa bile reverse ile orijinal
+    token elde edemez.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def list_latest_telemetry(db: Session) -> list[Telemetry]:
     stmt = select(Telemetry).order_by(Telemetry.source_timestamp.desc()).limit(200)
     return list(db.scalars(stmt).all())
@@ -25,13 +35,54 @@ def ingest_direct_telemetry(db: Session, readings: list[TelemetryIn]) -> int:
     return accepted
 
 
-def validate_gateway_token(db: Session, gateway_code: str, x_gateway_token: str | None) -> Gateway:
+def validate_gateway_token(
+    db: Session,
+    gateway_code: str,
+    x_gateway_token: str | None,
+    *,
+    allow_inactive: bool = False,
+) -> Gateway:
+    """Gateway token'i timing-safe dogrula.
+
+    Karsilastirma sirasi:
+      1. gateway.token_hash varsa: SHA-256 hash + hmac.compare_digest
+         (production yolu — DB'de plaintext yok)
+      2. token_hash bos ise legacy: plaintext gateway.token ile
+         hmac.compare_digest (eski kayitlar; opportunistic migration —
+         basarili dogrulama sonrasi hash kolonu doldurulur, plaintext bir
+         sonraki release'te kaldirilir)
+
+    `allow_inactive=True`: is_active=False kayitlari icin 403 atma; caller
+    (ornek: `/gateways/{code}/config`) bu durumu 200 + is_active flag ile
+    handle eder, gateway polling'ini askiya alir.
+    """
     gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if gateway is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
-    if not gateway.is_active:
+    if not gateway.is_active and not allow_inactive:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Gateway is inactive")
-    if not x_gateway_token or x_gateway_token != gateway.token:
+    if not x_gateway_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid gateway token")
+
+    provided_hash = hash_gateway_token(x_gateway_token).encode("ascii")
+    ok = False
+    if gateway.token_hash:
+        ok = hmac.compare_digest(provided_hash, gateway.token_hash.encode("ascii"))
+    elif gateway.token:
+        # Legacy path: plaintext compare (timing-safe)
+        ok = hmac.compare_digest(
+            (x_gateway_token or "").encode("utf-8"),
+            (gateway.token or "").encode("utf-8"),
+        )
+        if ok:
+            # Opportunistic migration: dogrulanmis token'in hash'ini DB'ye yaz
+            # ki bir sonraki istek hash yolundan dogrulansin.
+            try:
+                gateway.token_hash = hash_gateway_token(x_gateway_token)
+                db.flush()
+            except Exception:  # noqa: BLE001
+                pass
+    if not ok:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid gateway token")
     return gateway
 

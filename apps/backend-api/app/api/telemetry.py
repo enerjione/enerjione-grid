@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -14,6 +14,11 @@ from app.services.ingest_service import (
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
+# Manuel ingest icin tek istekte kabul edilebilecek maksimum kayit sayisi.
+# Gercek telemetri akisi gateway → NATS uzerinden gelir; bu endpoint sadece
+# operator/test amaclidir, asiri buyuk batch'ler kabul edilmemeli.
+_MANUAL_INGEST_MAX_BATCH = 1000
+
 
 @router.get("/latest", response_model=list[TelemetryRead])
 def list_latest(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -21,7 +26,26 @@ def list_latest(db: Session = Depends(get_db), _: User = Depends(get_current_use
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
-def ingest(payload: list[TelemetryIn], db: Session = Depends(get_db)):
+def ingest(
+    payload: list[TelemetryIn] = Body(..., max_length=_MANUAL_INGEST_MAX_BATCH),
+    db: Session = Depends(get_db),
+    # Manuel/test ingest yolu: kullanici oturumu zorunlu. Sahte telemetri
+    # injection'i (anonim DB write + DoS) bu auth ile kapatildi. Gerçek
+    # gateway-batch akisi `/telemetry/gateway/{code}` endpoint'inde
+    # `X-Gateway-Token` header ile dogrulanir (auth oradan).
+    _user: User = Depends(get_current_user),
+):
+    """Manuel/test telemetri ingest (operator login'i gerektirir).
+
+    Production'da gateway'ler bu endpoint'i KULLANMAZ — telemetri NATS
+    JetStream uzerinden direkt yayinlanir. Bu route geriye uyumluluk +
+    operator UI test araclari icin tutulur.
+    """
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty telemetry batch",
+        )
     accepted = ingest_direct_telemetry(db, payload)
     return {"accepted": accepted}
 

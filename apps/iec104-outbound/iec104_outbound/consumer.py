@@ -112,17 +112,69 @@ class TelemetryConsumer:
                         self._messages_processed += 1
                     except Exception as exc:  # noqa: BLE001
                         self._last_error = str(exc)
-                        logger.exception("iec104_consumer_handler_error")
-                        try:
-                            await msg.nak()
-                        except Exception:  # noqa: BLE001
-                            pass
+                        # Son denemede DLQ'ya tasi; aksi halde nak ile redeliver.
+                        num_delivered = int(
+                            getattr(getattr(msg, "metadata", None), "num_delivered", 1) or 1
+                        )
+                        is_terminal = num_delivered >= s.nats_worker_max_deliver
+                        logger.warning(
+                            "iec104_consumer_handler_error error=%s delivery=%d/%d terminal=%s",
+                            exc,
+                            num_delivered,
+                            s.nats_worker_max_deliver,
+                            is_terminal,
+                        )
+                        if is_terminal:
+                            try:
+                                orig_subject = getattr(msg, "subject", "unknown")
+                                dlq_subject = (
+                                    f"{s.nats_subject_dlq_prefix}.{orig_subject}"
+                                )
+                                dlq_headers = {
+                                    "X-DLQ-Reason": "max_deliver_exceeded",
+                                    "X-DLQ-Service": "iec104-outbound",
+                                    "X-DLQ-Original-Subject": orig_subject,
+                                    "X-DLQ-Error": str(exc)[:500],
+                                    "X-DLQ-Delivery-Count": str(num_delivered),
+                                }
+                                await js.publish(
+                                    dlq_subject, msg.data, headers=dlq_headers
+                                )
+                                logger.error(
+                                    "iec104_consumer_dlq subject=%s error=%s",
+                                    dlq_subject,
+                                    exc,
+                                )
+                                await msg.ack()
+                            except Exception:  # noqa: BLE001
+                                logger.exception("iec104_consumer_dlq_publish_failed")
+                                try:
+                                    await msg.nak()
+                                except Exception:  # noqa: BLE001
+                                    pass
+                        else:
+                            try:
+                                await msg.nak()
+                            except Exception:  # noqa: BLE001
+                                pass
 
+                # Consumer parametreleri uretim icin sertlestirilmis (bkz.
+                # diger NATS subscribe noktalari icin ayni mantik).
+                from nats.js.api import ConsumerConfig, DeliverPolicy
+
+                consumer_cfg = ConsumerConfig(
+                    durable_name=s.nats_durable,
+                    deliver_policy=DeliverPolicy.NEW,
+                    ack_wait=60,
+                    max_ack_pending=10000,
+                    max_deliver=10,
+                )
                 sub = await js.subscribe(
                     subject=s.nats_subject,
                     durable=s.nats_durable,
                     cb=_on_message,
                     manual_ack=True,
+                    config=consumer_cfg,
                 )
                 logger.info(
                     "iec104_consumer_running subject=%s durable=%s url=%s",

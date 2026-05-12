@@ -36,6 +36,9 @@ haritasinda zaten daha sofistike — burada ozet/raporlama icin yeterli.
 from __future__ import annotations
 
 import logging
+import os
+import threading
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -47,6 +50,81 @@ from app.models.fault import FaultEvent
 from app.models.grid_topology import Line, LineSegment, Pole, Region
 
 logger = logging.getLogger(__name__)
+
+
+# Debounce: alarm firtinasinda (orn. tum hat offline -> 50 alarm 200ms icinde)
+# her POST /internal/alarms cagrisi recompute_faults'u tetikliyor. Bu fonksiyon
+# her line icin tum cihazlari + segmentleri + alarm sayisini scan ediyor; lock
+# contention'da DB connection pool tukenebilir. Coalescing strateji:
+#   - Bir recompute calismaya BASLAYINCA `_in_flight=True` set edilir.
+#   - Onun bittigi ana kadar gelen yeni cagrilar `_pending_request=True` set
+#     edip return eder (kendileri recompute YAPMAZ).
+#   - Recompute biterken `_pending_request` ise tekrar bir kez calistirilir.
+# Sonuc: 50 hizli cagri 2-3 calistirma yapar (ilk + son), 50 yerine.
+# Ayrica minimum interval (_MIN_INTERVAL_SEC) ile cok hizli back-to-back
+# trigger'lari engelleriz (son recompute'tan beri 0.5sn gecmemisse atla).
+_recompute_lock = threading.Lock()
+_in_flight = False
+_pending_request = False
+_last_completed_at: float = 0.0
+_MIN_INTERVAL_SEC = float(os.getenv("FAULT_RECOMPUTE_MIN_INTERVAL_SEC", "0.5"))
+
+
+def recompute_faults_debounced(db: Session) -> bool:
+    """Debounced trigger — alarm firtinasinda fault_recompute'i coalescing eder.
+
+    Returns:
+        True  -> recompute bu cagrida calistirildi (caller commit yapacak).
+        False -> recompute atlandi (zaten in-flight veya minimum interval
+                 dolmadi). Caller commit YAPABILIR ama recompute SONUCU
+                 bir sonraki tetikte yansiyacak. Caller'in flow'u DEGISMEZ
+                 (clear/create akisi devam eder).
+
+    NOT: `False` donen cagri icin alarm-service icin daha sonraki bir
+    tetikleyici (yeni alarm/clear) recompute'i tetikler. En kotu durumda
+    fault tablosu bir kac saniyelik gecikmeli senkron olur.
+    """
+    global _in_flight, _pending_request, _last_completed_at
+
+    with _recompute_lock:
+        if _in_flight:
+            _pending_request = True
+            logger.debug("recompute_faults_skipped_in_flight")
+            return False
+        # Minimum interval kontrolu — son recompute uzerinden _MIN_INTERVAL_SEC
+        # gecmemisse bir sonrakine birak.
+        now = time.monotonic()
+        elapsed = now - _last_completed_at
+        if elapsed < _MIN_INTERVAL_SEC:
+            _pending_request = True
+            logger.debug(
+                "recompute_faults_skipped_min_interval elapsed=%.3fs min=%.3fs",
+                elapsed,
+                _MIN_INTERVAL_SEC,
+            )
+            return False
+        _in_flight = True
+        _pending_request = False
+
+    try:
+        recompute_faults(db)
+    finally:
+        with _recompute_lock:
+            global _last_completed_at
+            _last_completed_at = time.monotonic()
+            _in_flight = False
+            had_pending = _pending_request
+            _pending_request = False
+        if had_pending:
+            # Pending request varsa hemen bir kez daha calistir — son alarm
+            # degisiklikleri yansisin. Sonsuz dongu olmasin: yine pending varsa
+            # min_interval onunu kesecek.
+            logger.debug("recompute_faults_pending_replay")
+            try:
+                recompute_faults_debounced(db)
+            except Exception:  # noqa: BLE001
+                logger.exception("recompute_faults_pending_replay_failed")
+    return True
 
 
 def recompute_faults(db: Session) -> None:

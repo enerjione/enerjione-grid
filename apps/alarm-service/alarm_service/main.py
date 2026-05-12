@@ -17,15 +17,22 @@ from alarm_service.rules import AlarmRuleCache, evaluate_composite, evaluate_rul
 # ----- Telemetri kaynagi: NATS JetStream (gateway -> tag-engine -> JetStream) -
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_SUBJECT_NORMALIZED = os.getenv(
-    "NATS_SUBJECT_TELEMETRY_NORMALIZED", "hsl.telemetry.normalized.>"
+    "NATS_SUBJECT_TELEMETRY_NORMALIZED", "e1.telemetry.normalized.>"
 )
 NATS_DURABLE = os.getenv("NATS_ALARM_DURABLE", "alarm-service-evaluator")
+# DLQ subject prefix — max_deliver'a takilan mesajlar buraya gider.
+SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.alarm-service")
+MAX_DELIVER = int(os.getenv("NATS_WORKER_MAX_DELIVER", "10"))
 
 # ----- Alarm yayini: RabbitMQ (notification-worker, internal alarm endpoint) --
-RABBIT_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "hsl.events")
+# RABBITMQ_URL default'u BOS — production'da `.env`'de zorunlu set edilmesi
+# gerekir. Eski "amqp://guest:guest@localhost:5672/" default'u dev'de bag
+# kuruyordu ama production'da yanlislikla aktif olursa guest credential ile
+# uretim broker'ina baglanma riski. Compose env zorunlu `${RABBITMQ_URL}`.
+RABBIT_URL = os.getenv("RABBITMQ_URL", "")
+EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "e1.events")
 OUTGOING_TOPIC = os.getenv("ALARM_OUTGOING_TOPIC", "alarm.created")
-DLX_EXCHANGE = os.getenv("RABBITMQ_DLX_EXCHANGE", "hsl.events.dlx")
+DLX_EXCHANGE = os.getenv("RABBITMQ_DLX_EXCHANGE", "e1.events.dlx")
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8012"))
 BACKEND_INTERNAL_URL = os.getenv("BACKEND_INTERNAL_ALARM_URL", "http://127.0.0.1:8000/api/v1/internal/alarms")
@@ -163,11 +170,18 @@ from typing import Deque
 class _SamplesCache:
     MAX_PER_KEY = 5000
     MAX_RETAIN_SEC = 86400  # 24 saat
+    # Key TTL: 24 saatte hic ornek gelmemis keys cache'ten silinir. Cihaz/sinyal
+    # backend'de silindiginde _buf dict'i sonsuza buyumesin diye periyodik
+    # cleanup. Worst case: 600 cihaz x 175 sinyal x 5000 sample = 525M tuple,
+    # ~8 GB. TTL ile silinen cihazlar disari atilir.
+    _CLEANUP_INTERVAL_SEC = 600  # 10 dakikada bir
 
     def __init__(self) -> None:
         self._lock = Lock()
         # (signal_key, device_code) -> deque[(monotonic_ts, value)]
         self._buf: dict[tuple[str, str], Deque[tuple[float, float]]] = {}
+        # Son cleanup zamani (periyodik prune icin)
+        self._last_cleanup: float = 0.0
 
     def put(self, signal_key: str, device_code: str, value: float, now: float) -> None:
         with self._lock:
@@ -182,6 +196,16 @@ class _SamplesCache:
             cutoff = now - self.MAX_RETAIN_SEC
             while dq and dq[0][0] < cutoff:
                 dq.popleft()
+            # Periyodik global cleanup: silinmis cihaz/sinyal'in key'lerini
+            # at. 10 dakika icinde guncellenmeyen tum key'leri kaldir.
+            if now - self._last_cleanup > self._CLEANUP_INTERVAL_SEC:
+                stale_keys = [
+                    k for k, q in self._buf.items()
+                    if not q or q[-1][0] < cutoff
+                ]
+                for k in stale_keys:
+                    self._buf.pop(k, None)
+                self._last_cleanup = now
 
     def lookup(
         self,
@@ -348,11 +372,24 @@ def _build_quality_alarm(payload: dict) -> dict:
     }
 
 
-def _notify_backend(payload: dict) -> None:
+def _notify_backend(payload: dict) -> int | None:
+    """Backend `/internal/alarms` POST eder; alarm row olusur veya
+    deduplicate edilir. Donus: backend'in atadigi `alarm_id` (notification-
+    worker bunu kullanarak dispatch tetikler) veya None (dedup/error).
+    """
     headers = {"X-Service-Token": INTERNAL_SERVICE_TOKEN}
     body = {k: v for k, v in payload.items() if k != "rule_id"}
     response = requests.post(BACKEND_INTERNAL_URL, json=body, headers=headers, timeout=8)
     response.raise_for_status()
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            alarm_id = data.get("alarm_id")
+            if isinstance(alarm_id, int):
+                return alarm_id
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 def _notify_backend_clear(
@@ -464,14 +501,23 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
             # NOT: `channel` artik gercek RabbitMQ kanali degil (JetStream'den
             # consume ediyoruz). Alarm yayini icin thread-safe singleton
             # publisher kullaniyoruz.
+            #
+            # SIRA ONEMLI: once backend'e POST et — yanitta alarm_id geri gelir;
+            # bunu RabbitMQ event'i icine koy. notification-worker RabbitMQ'dan
+            # alarm.created'i tukettiginde alarm_id ile backend dispatch'i
+            # cagirabilsin. Eski sira (publish once, backend sonra) alarm_id
+            # eksikligi yarattigi icin notification-worker isi yapamiyordu.
+            alarm_id: int | None = None
+            try:
+                alarm_id = _notify_backend(alarm_payload)
+            except Exception as exc:  # noqa: BLE001
+                print(f"alarm-service-backend-error rule_id={rule.id} error={exc}")
+            if alarm_id is not None:
+                alarm_payload["alarm_id"] = alarm_id
             try:
                 _publish_alarm_to_rabbitmq(alarm_payload)
             except Exception as exc:  # noqa: BLE001
                 print(f"alarm-service-publish-error rule_id={rule.id} error={exc}")
-            try:
-                _notify_backend(alarm_payload)
-            except Exception as exc:  # noqa: BLE001
-                print(f"alarm-service-backend-error rule_id={rule.id} error={exc}")
             print(
                 "alarm-service-raised "
                 f"rule_id={rule.id} signal={rule.signal_key} dev={device_code} value={value}"
@@ -608,17 +654,58 @@ async def _consume_jetstream() -> None:
                     _process_rules_for_payload_jetstream(payload)
                     await msg.ack()
                 except Exception as ex:  # noqa: BLE001
-                    print(f"alarm-service-failed error={ex}")
-                    try:
-                        await msg.nak()
-                    except Exception:  # noqa: BLE001
-                        pass
+                    # Son denemede DLQ'ya tasi; aksi halde nak ile redeliver.
+                    num_delivered = int(
+                        getattr(getattr(msg, "metadata", None), "num_delivered", 1) or 1
+                    )
+                    is_terminal = num_delivered >= MAX_DELIVER
+                    print(
+                        f"alarm-service-failed error={ex} "
+                        f"delivery={num_delivered}/{MAX_DELIVER} terminal={is_terminal}"
+                    )
+                    if is_terminal:
+                        try:
+                            orig_subject = getattr(msg, "subject", "unknown")
+                            dlq_subject = f"{SUBJECT_DLQ_PREFIX}.{orig_subject}"
+                            dlq_headers = {
+                                "X-DLQ-Reason": "max_deliver_exceeded",
+                                "X-DLQ-Service": "alarm-service",
+                                "X-DLQ-Original-Subject": orig_subject,
+                                "X-DLQ-Error": str(ex)[:500],
+                                "X-DLQ-Delivery-Count": str(num_delivered),
+                            }
+                            await js.publish(dlq_subject, msg.data, headers=dlq_headers)
+                            print(f"alarm-service-dlq subject={dlq_subject} error={ex}")
+                            await msg.ack()
+                        except Exception:  # noqa: BLE001
+                            try:
+                                await msg.nak()
+                            except Exception:  # noqa: BLE001
+                                pass
+                    else:
+                        try:
+                            await msg.nak()
+                        except Exception:  # noqa: BLE001
+                            pass
 
+            # Consumer parametreleri uretim icin sertlestirilmis. Alarm-service
+            # her telemetri'yi kural-eslestirme icin gezer; max_ack_pending
+            # buyuk tutulmali. max_deliver=10 poison handling.
+            from nats.js.api import ConsumerConfig, DeliverPolicy
+
+            consumer_cfg = ConsumerConfig(
+                durable_name=NATS_DURABLE,
+                deliver_policy=DeliverPolicy.NEW,
+                ack_wait=60,
+                max_ack_pending=10000,
+                max_deliver=10,
+            )
             sub = await js.subscribe(
                 subject=NATS_SUBJECT_NORMALIZED,
                 durable=NATS_DURABLE,
                 cb=_on_message,
                 manual_ack=True,
+                config=consumer_cfg,
             )
             print(
                 f"alarm-service-running subject={NATS_SUBJECT_NORMALIZED} "

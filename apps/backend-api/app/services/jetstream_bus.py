@@ -50,20 +50,25 @@ EventHandler = Callable[[dict[str, Any]], None]
 def topic_to_subject(topic: str, *, gateway_code: str | None = None) -> str:
     """RabbitMQ routing key'i JetStream subject'ine cevirir.
 
+    Cati 0.x cutover sonrasi tum servisler `e1.*` prefix kullanir
+    (eski `hsl.*` artik geriye uyumluluk icin de degil — gateway'ler
+    `e1.telemetry.raw.<gw>` basar, tag-engine `e1.telemetry.normalized.<gw>`
+    yayar). Prefix tutarsizligi production'da telemetri akisini koparir.
+
     Esleme:
-      - "telemetry.raw_received"  -> "hsl.telemetry.raw.<gw>"
-      - "telemetry.received"      -> "hsl.telemetry.normalized.<gw>"
-      - diger                      -> "hsl.events.<topic>" (fallback)
+      - "telemetry.raw_received"  -> "e1.telemetry.raw.<gw>"
+      - "telemetry.received"      -> "e1.telemetry.normalized.<gw>"
+      - diger                      -> "e1.events.<topic>" (fallback)
 
     gateway_code yoksa "unknown" kullanilir; consumer wildcard ile yine alir.
     """
     gw = gateway_code or "unknown"
     if topic == "telemetry.raw_received":
-        return f"hsl.telemetry.raw.{gw}"
+        return f"e1.telemetry.raw.{gw}"
     if topic == "telemetry.received":
-        return f"hsl.telemetry.normalized.{gw}"
+        return f"e1.telemetry.normalized.{gw}"
     safe_topic = topic.replace(".", "-")
-    return f"hsl.events.{safe_topic}"
+    return f"e1.events.{safe_topic}"
 
 
 class JetStreamBus:
@@ -79,19 +84,25 @@ class JetStreamBus:
         url: str,
         stream_raw: str,
         stream_normalized: str,
+        stream_dlq: str,
         subject_raw_pattern: str,
         subject_normalized_pattern: str,
+        subject_dlq_pattern: str,
         max_age_days_raw: int,
         max_age_days_normalized: int,
+        max_age_days_dlq: int,
         connect_timeout_sec: int,
     ) -> None:
         self._url = url
         self._stream_raw = stream_raw
         self._stream_normalized = stream_normalized
+        self._stream_dlq = stream_dlq
         self._subject_raw = subject_raw_pattern
         self._subject_normalized = subject_normalized_pattern
+        self._subject_dlq = subject_dlq_pattern
         self._max_age_raw_ns = max_age_days_raw * 24 * 60 * 60 * 1_000_000_000
         self._max_age_normalized_ns = max_age_days_normalized * 24 * 60 * 60 * 1_000_000_000
+        self._max_age_dlq_ns = max_age_days_dlq * 24 * 60 * 60 * 1_000_000_000
         self._connect_timeout = connect_timeout_sec
 
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -155,10 +166,11 @@ class JetStreamBus:
 
         self._ready.set()
         logger.info(
-            "jetstream_bus_ready url=%s streams=[%s, %s]",
+            "jetstream_bus_ready url=%s streams=[%s, %s, %s]",
             self._url,
             self._stream_raw,
             self._stream_normalized,
+            self._stream_dlq,
         )
         return True
 
@@ -209,6 +221,15 @@ class JetStreamBus:
             subject=self._subject_normalized,
             max_age_ns=self._max_age_normalized_ns,
         )
+        # DLQ stream — workerlarin max_deliver'a takilan "poison" mesajlari
+        # manual publish ile buraya tasinir. NATS default'unda max_deliver
+        # asildiginda mesaj sessizce kaybolur; DLQ ile operator gorebilir,
+        # root-cause sonra replay edebilir.
+        await self._ensure_stream(
+            name=self._stream_dlq,
+            subject=self._subject_dlq,
+            max_age_ns=self._max_age_dlq_ns,
+        )
 
     async def _disconnect(self) -> None:
         if self._nc is not None:
@@ -218,26 +239,72 @@ class JetStreamBus:
                 logger.debug("jetstream_drain_error", exc_info=True)
 
     async def _ensure_stream(self, *, name: str, subject: str, max_age_ns: int) -> None:
-        """Stream yoksa olustur, varsa subject/retention farkliysa update et."""
-        try:
-            await self._js.stream_info(name)
-            # Var; bu asamada subject/retention guncelleme yapmiyoruz —
-            # production'da operator manuel `nats stream update` yapsin.
-            return
-        except Exception:  # noqa: BLE001 - "stream not found" da dahil her durum
-            pass
+        """Stream yoksa olustur; varsa subject/retention farkliysa otomatik
+        update_stream cagrir.
 
+        Drift senaryosu: stream daha onceki cutover'da eski subject
+        (`hsl.telemetry.*`) ile olusturuldu; cati `e1.*`'ye gecti. Eger
+        sadece add_stream çağrılırsa "Stream already exists" hatası alınır
+        ve eski subject kalir → yeni mesajlar stream'e DUSEMEZ.
+
+        update_stream ile farkli subject/retention durumunda zorlanir.
+        """
+        # NOT: NATS 2.10 server `-1`'i max_msgs / max_bytes icin REDDEDIYOR
+        # (BadRequestError code=10025 err='invalid JSON'). Doğru konvansiyon
+        # `0 = unlimited` (sunucu pozitif veya 0 bekler; field eksikse
+        # default 0). nats-py StreamConfig dataclass `int | None` kabul
+        # ediyor ama None gondersek field bos kalmiyor — bizim eski `-1`
+        # sentinel'i seriyi koparmis. 0 ile geceriz, max_age ZATEN retention'i
+        # saglar.
         cfg = StreamConfig(  # type: ignore[union-attr]
             name=name,
             subjects=[subject],
             retention=RetentionPolicy.LIMITS,  # type: ignore[union-attr]
             storage=StorageType.FILE,  # type: ignore[union-attr]
             max_age=max_age_ns,
-            max_msgs=-1,
-            max_bytes=-1,
+            max_msgs=0,
+            max_bytes=0,
         )
-        await self._js.add_stream(cfg)
-        logger.info("jetstream_stream_created name=%s subject=%s", name, subject)
+        try:
+            info = await self._js.stream_info(name)
+            # Stream var — config drift kontrolu
+            existing_subjects = list(getattr(info.config, "subjects", []) or [])
+            existing_max_age = int(getattr(info.config, "max_age", 0) or 0)
+            if sorted(existing_subjects) == sorted([subject]) and existing_max_age == max_age_ns:
+                # Drift yok — dokunma
+                return
+            # Drift var — update_stream ile yenile
+            await self._js.update_stream(cfg)
+            logger.warning(
+                "jetstream_stream_updated name=%s old_subjects=%s new_subject=%s "
+                "(cutover drift duzeltildi)",
+                name,
+                existing_subjects,
+                subject,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            # Stream yok veya stream_info hata verdi → add_stream dene
+            err_msg = str(exc).lower()
+            if "not found" not in err_msg and "no stream" not in err_msg:
+                logger.debug("jetstream_stream_info_unexpected_error", exc_info=True)
+
+        try:
+            await self._js.add_stream(cfg)
+            logger.info("jetstream_stream_created name=%s subject=%s", name, subject)
+        except Exception as exc:  # noqa: BLE001
+            # add_stream da hata verdi (stream var olabilir race kondisyonu)
+            # → tekrar update dene; olmazsa kalk.
+            err_msg = str(exc).lower()
+            if "already" in err_msg or "exists" in err_msg:
+                await self._js.update_stream(cfg)
+                logger.warning(
+                    "jetstream_stream_updated_after_race name=%s subject=%s",
+                    name,
+                    subject,
+                )
+                return
+            raise
 
     # ---- Public sync API ----------------------------------------------------
     def publish_event(
@@ -319,10 +386,13 @@ def start_bus_if_enabled() -> None:
             url=settings.nats_url,
             stream_raw=settings.nats_stream_telemetry_raw,
             stream_normalized=settings.nats_stream_telemetry_normalized,
+            stream_dlq=settings.nats_stream_telemetry_dlq,
             subject_raw_pattern=settings.nats_subject_telemetry_raw,
             subject_normalized_pattern=settings.nats_subject_telemetry_normalized,
+            subject_dlq_pattern=settings.nats_subject_telemetry_dlq,
             max_age_days_raw=settings.nats_stream_raw_max_age_days,
             max_age_days_normalized=settings.nats_stream_normalized_max_age_days,
+            max_age_days_dlq=settings.nats_stream_dlq_max_age_days,
             connect_timeout_sec=settings.nats_connect_timeout_sec,
         )
         ok = bus.start()

@@ -109,6 +109,41 @@ class RabbitMqAdminClient:
             return False
         return r.status_code == 200
 
+    def ensure_vhost(self, vhost: str) -> None:
+        """Belirtilen vhost'u idempotent olarak yaratir.
+
+        Production'da default `/` vhost'u kullanmayiz — saldirgan baska bir
+        servisin (rabbitmq paylasimli kurulum) `/` vhost'una sizdiginda
+        bizim exchange/queue'lara erisemesin diye dedicated `e1` vhost'una
+        izole olunur. PUT /api/vhosts/<name> idempotent; vhost varsa
+        204/201 doner.
+        """
+        from urllib.parse import quote
+
+        vhost_enc = quote(vhost.lstrip("/"), safe="") if vhost != "/" else "%2F"
+        try:
+            self._request("PUT", f"/api/vhosts/{vhost_enc}")
+        except RabbitMqAdminError as exc:
+            # Vhost yaratamadiysak hata fatal — fallback yok.
+            logger.error("rabbitmq_vhost_ensure_failed vhost=%s error=%s", vhost, exc)
+            raise
+
+    def grant_admin_on_vhost(self, *, vhost: str, admin_username: str) -> None:
+        """Admin kullaniciya bir vhost uzerinde tam yetki ver.
+
+        ensure_vhost ile yeni yaratilan vhost'a default'unda admin user'in
+        yetkisi olmaz; sonraki queue/exchange declare'leri 403 doner.
+        Bu helper "configure=.*, write=.*, read=.*" izinleri verir.
+        """
+        from urllib.parse import quote
+
+        vhost_enc = quote(vhost.lstrip("/"), safe="") if vhost != "/" else "%2F"
+        self._request(
+            "PUT",
+            f"/api/permissions/{vhost_enc}/{admin_username}",
+            json={"configure": ".*", "write": ".*", "read": ".*"},
+        )
+
     def ensure_remote_logins_allowed(self) -> None:
         """`loopback_users` global parametresini "none" yapar.
 

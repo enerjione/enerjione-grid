@@ -186,8 +186,9 @@ class AlarmReconciliationWorker:
             # (manuel olusturulmus eski) alarmlarin da fault listesine
             # yansimasini saglar; ayrica fault_events drift'lerini onler.
             try:
-                from app.services.fault_recompute_service import recompute_faults
-                recompute_faults(db)
+                # Periyodik tick — debounced (alarm flow ile coalescing eder).
+                from app.services.fault_recompute_service import recompute_faults_debounced
+                recompute_faults_debounced(db)
                 db.commit()
             except Exception:  # noqa: BLE001
                 logger.exception("fault_recompute_failed_in_periodic_tick")
@@ -237,8 +238,8 @@ class AlarmReconciliationWorker:
             if cleared_count > 0:
                 # Reconcile sonrasi fault listesini de yenile
                 try:
-                    from app.services.fault_recompute_service import recompute_faults
-                    recompute_faults(db)
+                    from app.services.fault_recompute_service import recompute_faults_debounced
+                    recompute_faults_debounced(db)
                 except Exception:  # noqa: BLE001
                     logger.exception("fault_recompute_failed_after_reconcile")
                 db.commit()

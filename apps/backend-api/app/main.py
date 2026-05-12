@@ -2,7 +2,12 @@ import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select as _select, text
+
+from app.core.rate_limit import limiter
 
 from app.api import alarm_rules, alarms, api_keys, auth, backups, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
@@ -42,6 +47,13 @@ app = FastAPI(
         {"name": "internal", "description": "Servis-token korumalı internal endpoint'ler."},
     ],
 )
+
+# Rate limiter — login ve diger endpoint'lerde brute-force koruma.
+# Decorator (`@limiter.limit("5/minute")`) ile endpoint-specific limit;
+# default limit yok (sadece explicit isaretlenen route'lar kontrolde).
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 _cors_origins = settings.cors_origin_list
 if "*" in _cors_origins:
@@ -157,6 +169,15 @@ def create_tables():
         # tetikler.
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS refresh_nonce INTEGER NOT NULL DEFAULT 0")
+        )
+        # Gateway token hash kolonu — yeni gateway create'lerinde SHA-256 hash
+        # token'la birlikte yazilir. validate_gateway_token() once hash'a bakar,
+        # yoksa eski plaintext yoluna duser (geriye uyumluluk).
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS token_hash VARCHAR(128)")
+        )
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_gateways_token_hash ON gateways (token_hash)")
         )
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS description VARCHAR(500)"))
         connection.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS gateway_code VARCHAR(50)"))
@@ -631,6 +652,42 @@ def create_tables():
     finally:
         db.close()
 
+    # Alembic baseline stamp — `alembic_version` tablosu yoksa olustur ve
+    # head revision'a stamp et. Boylece sonraki `alembic upgrade head`
+    # mevcut deploy'larda da idempotent calisir; create_all + ALTER zinciri
+    # yerine Alembic versiyonlama zinciri geri donulemez sekilde devrede.
+    try:
+        with engine.connect() as connection:
+            has_alembic_version = connection.execute(
+                text(
+                    "SELECT to_regclass('public.alembic_version') IS NOT NULL"
+                )
+            ).scalar()
+            if not has_alembic_version:
+                import logging
+                from alembic import command as _alembic_cmd
+                from alembic.config import Config as _AlembicConfig
+                from pathlib import Path as _Path
+
+                _alembic_ini = _Path(__file__).resolve().parents[1] / "alembic.ini"
+                if _alembic_ini.exists():
+                    cfg = _AlembicConfig(str(_alembic_ini))
+                    # DB URL'i Settings'ten zaten env.py uzerinden okuyor.
+                    _alembic_cmd.stamp(cfg, "head")
+                    logging.getLogger(__name__).info(
+                        "alembic_baseline_stamped revision=head (existing schema marked)"
+                    )
+                else:
+                    logging.getLogger(__name__).warning(
+                        "alembic_ini_not_found path=%s — baseline atlandi", _alembic_ini
+                    )
+    except Exception:  # noqa: BLE001
+        # Alembic optional baseline stamp'i boot'u durdurmamali (eski deploy
+        # kosullarinda alembic paketi yoksa veya alembic.ini bulunamazsa).
+        import logging
+
+        logging.getLogger(__name__).exception("alembic_baseline_stamp_failed")
+
 
 @app.on_event("startup")
 async def reapply_gateway_rabbitmq_permissions():
@@ -699,6 +756,45 @@ def start_jetstream_bus():
         start_bus_if_enabled()
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception("jetstream_bus_startup_unexpected_error")
+
+    # RabbitMQ vhost izolasyonu — production'da `/` reddedilir, `e1` (veya
+    # operator'in tanimladigi) vhost dedicated. Backend startup'inda admin
+    # API uzerinden vhost'u idempotent olarak ensure edip kendi
+    # kullanicisina yetki verir. Yetersizse warning + devam (broker offline
+    # senaryosunda backend hala healthcheck ile yukselebilsin); ileride
+    # publish/consume cagrisi 403/404 atinca operator goruler.
+    try:
+        from app.core.config import settings as _s
+        from app.services.rabbitmq_admin import RabbitMqAdminClient
+
+        if _s.rabbitmq_vhost and _s.rabbitmq_vhost != "/":
+            admin = RabbitMqAdminClient(
+                management_url=_s.rabbitmq_management_url,
+                admin_username=_s.rabbitmq_admin_username,
+                admin_password=_s.rabbitmq_admin_password,
+            )
+            admin.ensure_vhost(_s.rabbitmq_vhost)
+            try:
+                admin.grant_admin_on_vhost(
+                    vhost=_s.rabbitmq_vhost,
+                    admin_username=_s.rabbitmq_admin_username,
+                )
+            except Exception:  # noqa: BLE001
+                logging.getLogger(__name__).debug(
+                    "rabbitmq_admin_grant_failed (idempotent ok if pre-existing)",
+                    exc_info=True,
+                )
+            logging.getLogger(__name__).info(
+                "rabbitmq_vhost_ensured vhost=%s", _s.rabbitmq_vhost
+            )
+    except Exception as exc:  # noqa: BLE001
+        # Vhost ensure starting'i bloklamasin — broker olmasa bile backend
+        # ayagi kalsin (health endpoint zaten broker durumunu raporlar).
+        logging.getLogger(__name__).warning(
+            "rabbitmq_vhost_ensure_failed error=%s "
+            "(broker reachable degil olabilir; vhost manual yaratilirsa devam eder)",
+            exc,
+        )
 
 
 @app.on_event("shutdown")

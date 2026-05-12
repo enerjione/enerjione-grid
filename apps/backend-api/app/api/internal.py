@@ -1,3 +1,4 @@
+import hmac
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -25,7 +26,15 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 
 def _require_service_token(token: str | None) -> None:
-    if token != settings.internal_service_token:
+    """Timing-safe `INTERNAL_SERVICE_TOKEN` dogrulamasi.
+
+    `hmac.compare_digest` karakter-karakter eslesme yerine sabit-zamanli
+    karsilastirma yapar; saldirgan timing-attack ile token enumerate edemez.
+    `token` None ise bos string ile karsilastirilir — yine 401 doner.
+    """
+    expected = (settings.internal_service_token or "").encode("utf-8")
+    actual = (token or "").encode("utf-8")
+    if not hmac.compare_digest(actual, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 
 
@@ -282,23 +291,28 @@ def ingest_alarm(
             "_title_i18n": {"key": "alarm_new", "params": {"title": payload.title}},
         },
     )
-    # Ariza listesini yeniden hesapla — yeni alarm hatta etkili olabilir.
+    # Ariza listesini yeniden hesapla — debounced (alarm firtinasinda
+    # her cagrida calismaz; 500ms min interval + coalescing).
     try:
-        from app.services.fault_recompute_service import recompute_faults
-        recompute_faults(db)
+        from app.services.fault_recompute_service import recompute_faults_debounced
+        recompute_faults_debounced(db)
     except Exception:  # noqa: BLE001
         # Fault recompute hatasi alarm akisini bozmasin — log yeterli.
         import logging as _logging
         _logging.getLogger(__name__).exception("fault_recompute_failed_after_ingest")
     # Notification dispatcher: ilgili kullanicilara web/email/sms gonder.
-    try:
-        from app.services.notification_dispatch_service import dispatch_alarm_notifications
-        dispatch_alarm_notifications(db, alarm)
-    except Exception:  # noqa: BLE001
-        import logging as _logging
-        _logging.getLogger(__name__).exception("notification_dispatch_failed")
+    # Feature flag ile devre disi birakilabilir — notification-worker
+    # production'a alindiginda buradaki cagri kapanir ve dispatch
+    # sorumlulugu tek olarak notification-worker'da olur.
+    if settings.notification_inline_dispatch_enabled:
+        try:
+            from app.services.notification_dispatch_service import dispatch_alarm_notifications
+            dispatch_alarm_notifications(db, alarm)
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).exception("notification_dispatch_failed")
     db.commit()
-    return {"status": "accepted"}
+    return {"status": "accepted", "alarm_id": alarm.id}
 
 
 @router.post("/alarms/clear", status_code=status.HTTP_202_ACCEPTED)
@@ -396,8 +410,8 @@ def clear_alarm(
             i18n_params={"title": alarm_title},
         )
         try:
-            from app.services.fault_recompute_service import recompute_faults
-            recompute_faults(db)
+            from app.services.fault_recompute_service import recompute_faults_debounced
+            recompute_faults_debounced(db)
         except Exception:  # noqa: BLE001
             import logging as _logging
             _logging.getLogger(__name__).exception("fault_recompute_failed_after_clear_ack")
@@ -424,13 +438,51 @@ def clear_alarm(
         i18n_params={"title": alarm_title},
     )
     try:
-        from app.services.fault_recompute_service import recompute_faults
-        recompute_faults(db)
+        from app.services.fault_recompute_service import recompute_faults_debounced
+        recompute_faults_debounced(db)
     except Exception:  # noqa: BLE001
         import logging as _logging
         _logging.getLogger(__name__).exception("fault_recompute_failed_after_clear")
     db.commit()
     return {"status": "cleared", "alarm_id": alarm_id}
+
+
+@router.post("/notifications/dispatch/{alarm_id}", status_code=status.HTTP_202_ACCEPTED)
+def dispatch_notification_for_alarm(
+    alarm_id: int,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """notification-worker bu endpoint'i `alarm.created` event'i RabbitMQ'dan
+    geldiginde cagirir; backend tarafindaki dispatch akisini yeniden tetikler.
+
+    Idempotent: ayni alarm icin tekrar cagrilirsa, backend'in kendi
+    dispatch state'i (notification kayitlari) duplicate gondermez.
+
+    Boylece notification-worker mikroservisi:
+      1. RabbitMQ'dan alarm.created mesajini tuketir (acl/audit korumasi)
+      2. Mesajda yer alan `alarm_id` icin bu endpoint'i cagirir
+      3. Backend `dispatch_alarm_notifications` ile SMTP/Telegram/SMS/FCM gonderir
+
+    Eski "sadece print" davranisi yerine gercek dispatch — production'da
+    bildirimler asla kaybolmasin.
+    """
+    _require_service_token(x_service_token)
+    alarm = db.scalar(select(AlarmEvent).where(AlarmEvent.id == alarm_id))
+    if alarm is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alarm not found")
+    try:
+        from app.services.notification_dispatch_service import dispatch_alarm_notifications
+        dispatch_alarm_notifications(db, alarm)
+    except Exception as exc:  # noqa: BLE001
+        import logging as _logging
+
+        _logging.getLogger(__name__).exception(
+            "notification_dispatch_via_worker_failed alarm_id=%s", alarm_id
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    db.commit()
+    return {"status": "dispatched", "alarm_id": alarm_id}
 
 
 @router.get("/gateways", response_model=list[GatewayRead])

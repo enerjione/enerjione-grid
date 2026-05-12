@@ -1,14 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
 
+from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User
 from app.models.user_fcm_token import UserFcmToken
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import LanguageUpdateRequest, SelfPasswordChangeRequest, SelfProfileUpdateRequest, UserRead
+
+
+# Auth cookie ismi — frontend Authorization header yerine bu cookie ile
+# gelirse `get_current_user` cookie'den okur. HttpOnly + Secure (production)
+# + SameSite=Strict: XSS sonrasi token cikartilamaz + CSRF zorlasir.
+_AUTH_COOKIE_NAME = "e1_session"
 
 
 class FcmTokenRegisterRequest(BaseModel):
@@ -31,13 +39,52 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(
+    request: Request,
+    response: Response,
+    payload: LoginRequest,
+    db: Session = Depends(get_db),
+):
+    """Login — brute-force koruma + HttpOnly cookie session.
+
+    5/dakika online brute force'u zorlastirir (1M parola = 138 gun).
+    6. istek 429 doner.
+
+    Cookie auth (yeni, onerilen): basarili login'de `Set-Cookie: e1_session`
+    HttpOnly + Secure (prod) + SameSite=Strict + Max-Age=access_token_minutes
+    ile gonderilir. XSS sonrasi JS `document.cookie` okuyamaz (HttpOnly),
+    token'i exfiltrate edemez. CSRF SameSite=Strict ile zorlasir.
+
+    Geriye uyumluluk: response body'sinde `access_token` da donulur — eski
+    frontend localStorage akisi calismaya devam eder. Bir sonraki major
+    release'te body'den access_token cikarilacak.
+
+    NOT: Reverse proxy arkasinda `X-Forwarded-For` spoof'a karsi koruma
+    icin uvicorn `--forwarded-allow-ips=*` ile baslatilmali (Dockerfile CMD).
+
+    Audit kaydi: yalnizca BASARILI login'de yazilir (DoS amplification onlemi).
+    """
+    _ = request  # slowapi key_func icin gerekli; kullanilmiyor
     stmt = select(User).where(User.username == payload.username)
     user = db.scalar(stmt)
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
     access_token = create_access_token(user.username)
+
+    # HttpOnly cookie — XSS sonrasi token exfiltrate olmaz.
+    is_prod = settings.app_env.strip().lower() in ("production", "prod")
+    response.set_cookie(
+        key=_AUTH_COOKIE_NAME,
+        value=access_token,
+        max_age=settings.access_token_minutes * 60,
+        httponly=True,
+        secure=is_prod,
+        samesite="strict",
+        path="/",
+    )
+
     record_event(
         db,
         category="auth",
@@ -55,6 +102,35 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserRead)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+class WsTicketResponse(BaseModel):
+    """WS handshake icin kisa-omurlu tek-kullanimlik bilet.
+
+    Frontend HTTP ile bilet ister (auth header/cookie), sonra WS'i
+    `?ticket=<TICKET>` ile acar. Eski yapida JWT URL query'sinde geliyordu
+    → nginx access log + browser history + Referer'a sizar. Ticket 30sn
+    TTL ve tek kullanim (consume sonrasi revoke).
+    """
+
+    ticket: str
+    expires_in_sec: int
+
+
+@router.post("/ws-ticket", response_model=WsTicketResponse)
+def create_ws_ticket(current_user: User = Depends(get_current_user)):
+    """WebSocket handshake icin tek-kullanimlik 30sn TTL bilet uretir.
+
+    Bilet `username` ile in-memory cache'te tutulur; WS endpoint'i bileti
+    consume edip revoke eder. Bu sayede:
+      * JWT URL'de gorunmez (Authorization header / cookie auth-suz konum)
+      * Ticket WS dosyalanmadan once revoke olur (replay yok)
+      * Multi-replica deploy'da Redis'e tasinmasi gerek (TODO).
+    """
+    from app.services.auth_service import issue_ws_ticket
+
+    ticket, ttl = issue_ws_ticket(current_user.username)
+    return WsTicketResponse(ticket=ticket, expires_in_sec=ttl)
 
 
 @router.patch("/me", response_model=UserRead)
@@ -113,7 +189,44 @@ def change_my_password(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Logout — JWT `jti` claim'ini revocation blacklist'ine ekle.
+
+    Header'daki JWT decode edilir, jti + exp okunur ve blacklist'e konulur.
+    Bu token'la yapilacak sonraki istekler 401 doner. Cati 0.x'te in-memory
+    blacklist; multi-replica deploy icin Redis backend gerek (TODO).
+    """
+    # Authorization header'dan JWT'yi al, jti + exp cikar
+    try:
+        from jose import jwt as _jwt
+
+        from app.core.config import settings as _settings
+        from app.services.auth_service import revoke_jti
+
+        auth_header = request.headers.get("authorization") or ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+            payload = _jwt.decode(
+                token, _settings.secret_key, algorithms=[_settings.algorithm]
+            )
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                revoke_jti(str(jti), float(exp))
+    except Exception:  # noqa: BLE001 — logout audit'i bozulmasin
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug("logout_jti_revoke_failed", exc_info=True)
+
+    # HttpOnly cookie'yi temizle — Set-Cookie ile expired tarih.
+    # path="/" mutlaka login'deki ile ayni olmali yoksa tarayici silmez.
+    response.delete_cookie(key=_AUTH_COOKIE_NAME, path="/")
+
     record_event(
         db,
         category="auth",

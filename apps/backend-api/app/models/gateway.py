@@ -18,7 +18,13 @@ class Gateway(Base):
     batch_interval_sec: Mapped[int] = mapped_column(Integer, default=5)
     max_devices: Mapped[int] = mapped_column(Integer, default=200)
     device_code_prefix: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # LEGACY: token plaintext olarak saklaniyor (geriye uyumluluk). Yeni
+    # gateway create'lerinde `token_hash` doldurulur; eski kayitlar batch
+    # migration ile hash'lenir. validate_gateway_token() once token_hash
+    # bakarsa SHA-256 ile hmac.compare_digest, yoksa eski plaintext yoluna
+    # duser. Tum kayitlar hash'lendiginde token kolonu kaldirilabilir.
     token: Mapped[str] = mapped_column(String(255), index=True)
+    token_hash: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 

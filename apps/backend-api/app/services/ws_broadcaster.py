@@ -52,6 +52,10 @@ class _Subscriber:
         # Filter: None -> tum cihazlar, set -> sadece bu kodlar
         self.device_codes: set[str] | None = device_codes
         self.dropped_messages: int = 0  # slow consumer kontrol
+        # Toplam alinan mesaj (dropped dahil) — drop oranini hesaplamak icin.
+        self.received_messages: int = 0
+        # Son uyari log epoch — saniyede bir uyari (logging flood koruma).
+        self.last_warn_at: float = 0.0
         self.alive: bool = True
 
 
@@ -116,9 +120,17 @@ class TelemetryWsBroadcaster:
 
     @staticmethod
     def _enqueue_safely(sub: _Subscriber, payload: dict[str, Any]) -> None:
-        """Async loop'da queue'ya put. Queue dolu ise eski mesaji at."""
+        """Async loop'da queue'ya put. Queue dolu ise eski mesaji at.
+
+        Slow-consumer telemetrisi:
+          - dropped_messages: client basina toplam drop sayisi (monotonik).
+          - received_messages: toplam denenen put (drop dahil).
+          - Drop orani %5'i asarsa WARNING log (1sn rate-limit) — operator
+            dashboard / log aggregator alarm kurabilir.
+        """
         if not sub.alive:
             return
+        sub.received_messages += 1
         try:
             sub.queue.put_nowait(payload)
         except asyncio.QueueFull:
@@ -133,13 +145,54 @@ class TelemetryWsBroadcaster:
                 sub.queue.put_nowait(payload)
             except asyncio.QueueFull:
                 pass
+            # Drop oranini takip et — esik asilirsa uyari (rate-limited).
+            import time as _t
+            now = _t.monotonic()
+            if (
+                sub.received_messages >= 200
+                and sub.dropped_messages * 20 >= sub.received_messages  # >%5
+                and (now - sub.last_warn_at) >= 1.0
+            ):
+                sub.last_warn_at = now
+                logger.warning(
+                    "ws_subscriber_slow_consumer dropped=%d received=%d ratio=%.1f%% "
+                    "filter_devices=%s — client process'i CPU/IO bottleneck'te "
+                    "veya internet zayif; frontend bunu UI'da gosterip "
+                    "reconnect'te /signals/live ile telafi etmeli.",
+                    sub.dropped_messages,
+                    sub.received_messages,
+                    (sub.dropped_messages / max(1, sub.received_messages)) * 100.0,
+                    "all" if sub.device_codes is None else len(sub.device_codes),
+                )
 
     def stats(self) -> dict[str, Any]:
+        """Toplam ve client basina detayli istatistik. Health endpoint icin."""
         with self._lock:
-            return {
-                "active_subscribers": len(self._subscribers),
-                "total_dropped_messages": sum(s.dropped_messages for s in self._subscribers),
-            }
+            subs = list(self._subscribers)
+        total_received = sum(s.received_messages for s in subs)
+        total_dropped = sum(s.dropped_messages for s in subs)
+        return {
+            "active_subscribers": len(subs),
+            "total_received_messages": total_received,
+            "total_dropped_messages": total_dropped,
+            "drop_ratio_percent": round(
+                (total_dropped / total_received) * 100.0 if total_received else 0.0,
+                2,
+            ),
+            # Per-subscriber summary (top 5 by drop count) — operator hangi
+            # client'in slow oldugunu görsün.
+            "top_droppers": [
+                {
+                    "dropped": s.dropped_messages,
+                    "received": s.received_messages,
+                    "filter_devices": (
+                        "all" if s.device_codes is None else len(s.device_codes)
+                    ),
+                }
+                for s in sorted(subs, key=lambda x: x.dropped_messages, reverse=True)[:5]
+                if s.dropped_messages > 0
+            ],
+        }
 
 
 # Singleton — main.py startup'inda referans paylasilir

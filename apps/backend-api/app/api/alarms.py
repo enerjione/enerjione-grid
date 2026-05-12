@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_roles
+from app.models.enums import UserRole
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.alarm import AlarmAssignRequest, AlarmCommentCreate, AlarmCommentRead, AlarmEventRead
@@ -106,8 +107,19 @@ def reset_all_alarms(db: Session = Depends(get_db), current_user: User = Depends
 
 
 @router.delete("/events/{alarm_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_alarm(alarm_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Resetlenmis alarmi siler. Acik alarm icin 409 doner."""
+def delete_alarm(
+    alarm_id: int,
+    db: Session = Depends(get_db),
+    # Sadece ENGINEER veya INSTALLER alarm silebilir. OPERATOR silmemeli —
+    # incident review icin audit trail gerek. Onceki davranis: herhangi
+    # login'li kullanici (OPERATOR dahil) silebilirdi → operator alarm'i
+    # accidentally veya deliberately silip kayit kaybi yaratabilirdi.
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+):
+    """Resetlenmis alarmi siler. Acik alarm icin 409 doner.
+
+    Yetki: ENGINEER veya INSTALLER. Operator silemez (audit trail koruma).
+    """
     _ensure_can_access_alarm(db, current_user, _load_alarm_or_404(db, alarm_id))
     delete_alarm_service(db, alarm_id, current_user.username)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

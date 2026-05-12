@@ -80,7 +80,11 @@ type Options = {
   enabled?: boolean;
 };
 
-function deriveWsUrl(apiBaseUrl: string, token: string, deviceCodes?: Set<string>): string {
+function deriveWsUrl(
+  apiBaseUrl: string,
+  authParam: { ticket: string } | { token: string },
+  deviceCodes?: Set<string>,
+): string {
   // apiBaseUrl: "http://x.com/api/v1" veya "/api/v1"
   let base = apiBaseUrl.trim();
   if (base.startsWith("/")) {
@@ -95,11 +99,36 @@ function deriveWsUrl(apiBaseUrl: string, token: string, deviceCodes?: Set<string
   }
   base = base.replace(/\/+$/, "");
   const params = new URLSearchParams();
-  params.set("token", token);
+  // Yeni yol: ticket query'de — JWT URL'de DEGIL. Ticket 30sn TTL + tek
+  // kullanim oldugu icin access log'a sizsa bile pratik degeri kalmaz.
+  // Legacy `token` icin geri uyumluluk yine destekleniyor.
+  if ("ticket" in authParam) {
+    params.set("ticket", authParam.ticket);
+  } else {
+    params.set("token", authParam.token);
+  }
   if (deviceCodes && deviceCodes.size > 0) {
     params.set("devices", Array.from(deviceCodes).join(","));
   }
   return `${base}/ws/live-values?${params.toString()}`;
+}
+
+/** WS ticket — POST /auth/ws-ticket'tan alinir, 30sn TTL + tek kullanim.
+ *  Cookie auth (e1_session) varsa kullanilir; yoksa Authorization header. */
+async function fetchWsTicket(apiBaseUrl: string, token: string): Promise<string> {
+  const url = `${apiBaseUrl.replace(/\/+$/, "")}/auth/ws-ticket`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers,
+    credentials: "include",  // HttpOnly cookie de gelsin
+  });
+  if (!resp.ok) {
+    throw new Error(`ws_ticket_fetch_failed status=${resp.status}`);
+  }
+  const data = (await resp.json()) as { ticket: string; expires_in_sec: number };
+  return data.ticket;
 }
 
 /**
@@ -144,16 +173,27 @@ export function useLiveValuesSocket(opts: Options): {
 
     explicitlyClosedRef.current = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (explicitlyClosedRef.current) return;
+      setConnectionState("connecting");
+      // Ticket akisi: WS handshake oncesi short-lived bilet al (30sn TTL,
+      // tek kullanim). JWT URL'de gorunmez → nginx access log + Referer
+      // sizinti yok. Eski client'lar icin fallback olarak token query'sini
+      // koruyoruz; backend ikisini de kabul ediyor.
       let url: string;
       try {
-        url = deriveWsUrl(apiBaseUrl, token, deviceCodes);
+        const ticket = await fetchWsTicket(apiBaseUrl, token);
+        url = deriveWsUrl(apiBaseUrl, { ticket }, deviceCodes);
       } catch {
-        setConnectionState("error");
-        return;
+        // Ticket alinamadi (cookie auth eksik, 401, network) → legacy token
+        // ile fallback. Bu yol bir sonraki release'te kaldirilacak.
+        try {
+          url = deriveWsUrl(apiBaseUrl, { token }, deviceCodes);
+        } catch {
+          setConnectionState("error");
+          return;
+        }
       }
-      setConnectionState("connecting");
       let ws: WebSocket;
       try {
         ws = new WebSocket(url);
@@ -204,11 +244,11 @@ export function useLiveValuesSocket(opts: Options): {
       const delay = Math.min(30_000, 1000 * Math.pow(2, attempt));
       reconnectTimerRef.current = window.setTimeout(() => {
         reconnectTimerRef.current = null;
-        connect();
+        void connect();
       }, delay);
     };
 
-    connect();
+    void connect();
 
     return () => {
       explicitlyClosedRef.current = true;

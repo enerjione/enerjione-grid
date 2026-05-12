@@ -1,0 +1,54 @@
+# pip-tools input — pinli ve hash-locked requirements.txt uretmek icin kaynak.
+#
+# Bu dosya elle yazilir; `make pin` veya:
+#   pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+# komutu requirements.txt'i otomatik uretir. CI/Docker build cikti requirements.txt'i
+# kullanir; bu sayede her ortam ayni transitive dependency tree'sini alir ve
+# supply-chain attack'lara karsi (typo-squat package, paket replace) hash dogrulamasi yapilir.
+#
+# Versiyonlar major+minor compatible range olarak yazilmistir; pip-compile her
+# uretiminde transitif paketleri de uygun versiyona kilitleyip hash uretir.
+#
+# Guncelleme akisi:
+#   1. Bu dosyada bir paketi degistir/ekle.
+#   2. `pip-compile --generate-hashes --upgrade-package <paket> requirements.in` calistir.
+#   3. Uretilen requirements.txt'i commit et.
+#   4. CI build'da pip install -r requirements.txt zaten --require-hashes calisir.
+
+# ---- Web framework ---------------------------------------------------------
+fastapi>=0.110,<1
+uvicorn[standard]>=0.27,<1
+python-multipart>=0.0.9,<1
+
+# ---- DB & ORM --------------------------------------------------------------
+sqlalchemy>=2.0,<3
+psycopg2-binary>=2.9,<3
+alembic>=1.13,<2
+
+# ---- Auth & crypto ---------------------------------------------------------
+python-jose[cryptography]>=3.3,<4
+passlib[bcrypt]>=1.7,<2
+bcrypt>=4.0,<5
+cryptography>=42.0,<46
+
+# ---- Validation ------------------------------------------------------------
+pydantic-settings>=2.0,<3
+email-validator>=2.0,<3
+
+# ---- Messaging -------------------------------------------------------------
+pika>=1.3,<2
+paho-mqtt>=2.0,<3
+nats-py>=2.6,<3
+
+# ---- HTTP / Excel / Image / Map -------------------------------------------
+requests>=2.31,<3
+openpyxl>=3.1,<4
+Pillow>=10.0,<11
+staticmap>=0.5.6,<1
+
+# ---- Observability / Push --------------------------------------------------
+psutil>=5.9,<7
+google-auth>=2.0,<3
+
+# ---- Rate limiting ---------------------------------------------------------
+slowapi>=0.1.9,<1

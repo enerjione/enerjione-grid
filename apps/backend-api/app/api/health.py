@@ -1,8 +1,227 @@
-from fastapi import APIRouter
+"""Health endpoint'i — gercek bagimliliklari probe eder.
+
+Endpoint'ler:
+  * GET /health         : Backwards-compatible (default). Gercek probe;
+                           DB/NATS/RabbitMQ saglikli ise 200; degilse 503.
+                           Operator / docker-compose healthcheck buradan
+                           bilgi alir. Yanit body'sinde her bagimlilik
+                           detayli durumu raporlar.
+  * GET /health/live    : Liveness probe (k8s). Sadece process up mu —
+                           dependency check YOK. 200 doner.
+  * GET /health/ready   : Readiness probe. /health ile esdeger; dependency
+                           saglikli olmadan trafik almasin.
+
+Tasarim notu: cevap suresi <500ms olmali; her probe'a kısa timeout.
+"""
+
+from __future__ import annotations
+
+import logging
+import socket
+import time
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.db.session import get_db
 
 router = APIRouter(prefix="/health", tags=["health"])
+logger = logging.getLogger(__name__)
+
+
+def _probe_db(db: Session) -> tuple[bool, str | None, float]:
+    """Postgres SELECT 1 — gercek query, baglantilik kontrolu yetmez."""
+    started = time.monotonic()
+    try:
+        db.execute(text("SELECT 1"))
+        return True, None, (time.monotonic() - started) * 1000
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)[:200], (time.monotonic() - started) * 1000
+
+
+def _probe_tcp(url: str, *, default_port: int, timeout: float = 1.0) -> tuple[bool, str | None, float]:
+    """URL'den host:port cikar ve TCP connect dene.
+
+    AMQP `connect` ve credential dogrulamasi pahali; basit TCP probe
+    broker'in up oldugunu yeterince soyler. RabbitMQ icin 5672, NATS
+    icin 4222 default.
+    """
+    started = time.monotonic()
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or default_port
+        with socket.create_connection((host, port), timeout=timeout):
+            return True, None, (time.monotonic() - started) * 1000
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)[:200], (time.monotonic() - started) * 1000
+
+
+def _probe_jetstream() -> tuple[bool, str | None]:
+    """Backend startup'ta start_bus_if_enabled() singleton bus olusturur;
+    `is_ready` flag'i true ise NATS bagli + JetStream context hazir demek."""
+    try:
+        from app.services.jetstream_bus import get_bus
+
+        bus = get_bus()
+        if bus is None:
+            return False, "bus_not_initialized"
+        # is_ready property (call yapma, attribute oku)
+        if not bus.is_ready:
+            return False, "bus_not_ready"
+        return True, None
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)[:200]
+
+
+def _build_health_body(db: Session) -> tuple[dict, int]:
+    """Tum probe'lari calistir; en kotu durumu HTTP status'a yansit.
+
+    Probe stratejisi:
+      * DB fail → 503 (critical; persist edilemez)
+      * NATS fail → 503 (telemetri akisi durur)
+      * RabbitMQ fail → 200 + degraded (alarm akisi etkilenir ama
+        telemetri persist + WS yine calisir; LB instance'i atmasin)
+    """
+    db_ok, db_err, db_ms = _probe_db(db)
+    js_ok, js_err = _probe_jetstream()
+    nats_ok, nats_err, nats_ms = _probe_tcp(settings.nats_url, default_port=4222)
+    rmq_ok, rmq_err, rmq_ms = _probe_tcp(settings.rabbitmq_url, default_port=5672)
+
+    deps = {
+        "database": {
+            "ok": db_ok,
+            "latency_ms": round(db_ms, 1),
+            **({"error": db_err} if db_err else {}),
+        },
+        "nats_tcp": {
+            "ok": nats_ok,
+            "latency_ms": round(nats_ms, 1),
+            **({"error": nats_err} if nats_err else {}),
+        },
+        "jetstream_bus": {
+            "ok": js_ok,
+            **({"error": js_err} if js_err else {}),
+        },
+        "rabbitmq_tcp": {
+            "ok": rmq_ok,
+            "latency_ms": round(rmq_ms, 1),
+            **({"error": rmq_err} if rmq_err else {}),
+        },
+    }
+
+    # Kritik: DB veya NATS down → 503 (trafik almasin).
+    # RabbitMQ down → 200 + degraded (alarm akisi bekler ama persist devam).
+    critical_down = (not db_ok) or (not nats_ok) or (not js_ok)
+    if critical_down:
+        body = {"status": "unhealthy", "dependencies": deps}
+        return body, status.HTTP_503_SERVICE_UNAVAILABLE
+    if not rmq_ok:
+        body = {"status": "degraded", "dependencies": deps}
+        return body, status.HTTP_200_OK
+    body = {"status": "ok", "dependencies": deps}
+    return body, status.HTTP_200_OK
 
 
 @router.get("")
-def healthcheck():
+def healthcheck(db: Session = Depends(get_db)):
+    """Backwards-compatible health endpoint — readiness ile esdeger.
+
+    docker-compose healthcheck ve uzaktan monitoring icin gercek probe.
+    Dependency saglikli olmadan 503 doner; orchestrator container'i
+    restart edebilir veya LB trafigi durdurabilir.
+    """
+    body, status_code = _build_health_body(db)
+    return JSONResponse(content=body, status_code=status_code)
+
+
+@router.get("/live")
+def liveness():
+    """Liveness probe (k8s `livenessProbe`). Process up mu — dependency
+    check YOK. DB/NATS down olsa bile process restart EDILMEZ; sadece
+    `/health` 503 doner ve readiness/LB devre disi birakir."""
     return {"status": "ok"}
+
+
+@router.get("/ready")
+def readiness(db: Session = Depends(get_db)):
+    """Readiness probe (k8s `readinessProbe`) — `/health` ile esdeger.
+
+    Ayri endpoint olmasinin sebebi: liveness ve readiness farkli
+    semantikler (liveness=restart, readiness=trafik yonlendirme).
+    """
+    body, status_code = _build_health_body(db)
+    return JSONResponse(content=body, status_code=status_code)
+
+
+@router.get("/ws-stats")
+def ws_broadcaster_stats():
+    """WebSocket broadcaster istatistikleri — slow-consumer izlemek icin.
+
+    Donen alanlar:
+      * active_subscribers: bagli WS client sayisi
+      * total_received_messages: tum client'lar icin denemeler toplami
+      * total_dropped_messages: queue full olunca drop edilen mesaj sayisi
+      * drop_ratio_percent: dropped / received yuzdesi (operator alarm
+        esigi: >5% slow consumer var demektir; frontend zaten reconnect
+        ile telafi eder ama UX bozuk olabilir).
+      * top_droppers: en cok drop yapan 5 client (filter ve sayilar).
+    """
+    try:
+        from app.services.ws_broadcaster import broadcaster
+
+        return broadcaster.stats()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)[:200]}
+
+
+@router.get("/dlq")
+def dlq_status():
+    """DLQ stream durumu — operator poison mesaj sayisini hizlica gorebilir.
+
+    Worker'lar max_deliver'a takilan mesajlari TELEMETRY_DLQ stream'ine
+    (subject: e1.dlq.>) tasiyor. Bu endpoint stream'in mesaj sayisini ve
+    son mesaj subject pattern'ini doner. Aktif izleme:
+      - messages > 0 = inceleme gerekir (poison payload, kod hatasi vs.)
+      - bytes buyuk: stream max_age'e gore retention; eski mesajlar kendi
+        kendine silinir.
+
+    DLQ stream yoksa (NATS olusmadi) {"available": false} doner.
+    """
+    try:
+        from app.services.jetstream_bus import get_bus
+
+        bus = get_bus()
+        if bus is None or not bus.is_ready:
+            return {"available": False, "reason": "jetstream_bus_not_ready"}
+
+        # Stream info'yu run_coroutine_threadsafe ile cek; bus'in kendi
+        # asyncio loop'unda calistirilir.
+        import asyncio
+
+        async def _fetch() -> dict:
+            try:
+                info = await bus._js.stream_info(bus._stream_dlq)
+                state = info.state
+                return {
+                    "available": True,
+                    "stream": bus._stream_dlq,
+                    "messages": int(getattr(state, "messages", 0) or 0),
+                    "bytes": int(getattr(state, "bytes", 0) or 0),
+                    "first_seq": int(getattr(state, "first_seq", 0) or 0),
+                    "last_seq": int(getattr(state, "last_seq", 0) or 0),
+                }
+            except Exception as exc:  # noqa: BLE001
+                return {"available": False, "reason": f"stream_info_failed: {exc}"}
+
+        loop = bus._loop
+        if loop is None:
+            return {"available": False, "reason": "loop_not_running"}
+        future = asyncio.run_coroutine_threadsafe(_fetch(), loop)
+        return future.result(timeout=3)
+    except Exception as exc:  # noqa: BLE001
+        return {"available": False, "reason": str(exc)[:200]}

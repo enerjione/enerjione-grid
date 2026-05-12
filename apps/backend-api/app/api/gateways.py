@@ -9,7 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role, require_roles
-from app.core.config import Settings
+from app.core.config import Settings, settings
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.enums import UserRole
@@ -126,6 +126,13 @@ def create_gateway(
     # diye her gateway'e benzersiz bir 1000'lik blok atanir. Frontend manuel
     # belirleme yapmaz; bu mantik backend'de.
     data.setdefault("initiating_port_base", _allocate_initiating_port_base(db))
+    # Token hash'ini hesapla (DB'de plaintext yerine SHA-256). Eski deploy'lardan
+    # gelen kayitlar token_hash bos olarak gelir; validate_gateway_token()
+    # opportunistic migration ile dogrulama sonrasi hash kolonu doldurur.
+    raw_token = data.get("token") or ""
+    if raw_token:
+        from app.services.ingest_service import hash_gateway_token
+        data["token_hash"] = hash_gateway_token(raw_token)
     row = Gateway(**data)
     db.add(row)
     db.flush()
@@ -378,7 +385,13 @@ def download_gateway_compose(
     if (nats_url or "").strip():
         effective_nats_url = nats_url.strip()
     else:
-        effective_nats_url = derive_nats_url(backend_url)
+        # Backend Settings'ten gateway user password'u oku — `infra/nats/
+        # nats-server.conf`'taki `gateway` user'ina karsilik gelir.
+        # Production'da bos olmamalı (validator boş varsa boot'ta fail eder).
+        effective_nats_url = derive_nats_url(
+            backend_url,
+            gateway_password=settings.nats_gateway_password,
+        )
     if host_port is None:
         # Gateway'in olusturulma sirasina gore 8020 + index. Birden fazla gateway
         # ayni host'ta calisirsa health portlari catismaz. Frontend kullanicisi
@@ -462,11 +475,17 @@ def get_gateway_config(
             detail="X-Gateway-Code does not match route gateway_code",
         )
     _ = x_gateway_instance_id, x_request_id  # reserved: future audit log / tracing
-    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
-    if gateway is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
-    if not x_gateway_token or x_gateway_token != gateway.token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid gateway token")
+    # validate_gateway_token: SHA-256 hash + hmac.compare_digest (timing-safe).
+    # `token_hash` kolonunu otomatik doldurur (opportunistic migration); eski
+    # plaintext compare yolu kaldirildi — bkz. ingest_service.py.
+    # `allow_inactive=True`: is_active=False ise 403 atma; gateway poll'i
+    # askiya almak icin 200 + is_active=False donmek istiyoruz (yorumda
+    # belirtilmis: collector enable/disable mantigi).
+    from app.services.ingest_service import validate_gateway_token
+
+    gateway = validate_gateway_token(
+        db, gateway_code, x_gateway_token, allow_inactive=True
+    )
     # NOT: is_active=False durumunda 403 atmak yerine 200 + is_active=False
     # donduruyoruz; collector bu bilgiyi gorup kendi polling'ini askiya alir.
     # Boylece "uzaktan durdurma" kontrol panelindeki enable/disable butonlariyla

@@ -20,6 +20,38 @@
 # Boylece marka tutarliligi disk artefaktlarinda da saglanmis olur.
 name: enerjione
 
+# Logging template: tum servisler default Docker json-file driver'i kullanir
+# ama rotate ayari yok → disk dolar. Bu anchor her servise eklendiginde
+# 10MB x 5 dosya cap koyar (toplam ~50MB / container). YAML anchor sayesinde
+# tek yerden yonetilir; servisi tek tek update etmek gerekmez.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Worker resource limits — alarm-service, tag-engine, notification-worker,
+# iec104-outbound icin makul cap. Bir worker memory leak ederse host'u
+# kilitlemez (OOM kill kendisini hedefler).
+x-worker-resources: &worker-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "1.0"
+        memory: 512M
+      reservations:
+        memory: 128M
+
+# Backend-api / postgres / nats / rabbitmq icin daha geniş cap.
+x-heavy-resources: &heavy-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "2.0"
+        memory: 2G
+      reservations:
+        memory: 512M
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -38,6 +70,8 @@ services:
       retries: 10
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *heavy-resources
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
@@ -65,36 +99,44 @@ services:
       - "127.0.0.1:15672:15672"
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *heavy-resources
 
-  # NATS JetStream — yuksek hacimli telemetri akisi icin RabbitMQ'nun yaninda
-  # calisir. Baslangicta dual-publish modu: gateway hem RabbitMQ'ya hem JetStream'e
-  # yazar; tuketiciler hangisinden okuyacagini feature flag ile secer.
-  # NATS_DUAL_PUBLISH_ENABLED=false oldugu surece bu servis bos durur ve mevcut
-  # akisi etkilemez. Cutover sonrasi alarm/bildirim RabbitMQ'da kalmaya devam eder.
+  # NATS JetStream — telemetri akisinin PRIMARY rotasi (gateway -> tag-engine
+  # -> alarm/iec104). RabbitMQ alarm.created icin paralel calismaya devam eder.
+  #
+  # Auth: infra/nats/nats-server.conf'ta tanimli 3 user (gateway, backend,
+  # worker) — her birinin sadece izinli subject'lere erisimi var. Compose env
+  # uzerinden NATS_URL'ler `nats://user:pass@nats:4222` format'inda.
+  #
+  # 4222 portu host'a expose ediliyor (uzak gateway'ler bagklanabilsin diye).
+  # Auth zorunlu; default permissions deny-all. TLS sonraki tur'a.
   nats:
     image: nats:2.10-alpine
     container_name: e1-nats
     restart: unless-stopped
     command:
-      - "-js"
-      - "--store_dir=/data"
-      - "--http_port=8222"
-      - "--name=e1-nats-1"
+      - "-c"
+      - "/etc/nats/nats-server.conf"
     volumes:
+      - ./infra/nats/nats-server.conf:/etc/nats/nats-server.conf:ro
       - nats-data:/data
     healthcheck:
+      # Auth aktif olunca /healthz auth-suz erisilebilir (NATS default).
       test: ["CMD", "wget", "-q", "-O-", "http://localhost:8222/healthz"]
       interval: 15s
       timeout: 5s
       retries: 10
     ports:
-      # NATS client port — uzaktaki gateway'ler (leaf node veya dogrudan) buraya
-      # baglanir. Guvenlik: cluster icinde TLS+auth eklenmeli (ileride).
+      # NATS client port — uzaktaki gateway'ler (leaf node veya dogrudan)
+      # `nats://gateway:<password>@<host>:4222` ile baglanir.
       - "4222:4222"
       # HTTP monitoring (varz/connz/jsz) — sadece localhost'tan.
       - "127.0.0.1:8222:8222"
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *heavy-resources
 
   backend-api:
     build:
@@ -120,13 +162,18 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY .env'de olmali}
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-enerjione}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-enerjione}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      # Vhost izolasyonu: kok `/` vhost'a degil dedicated `e1` (veya
+      # `${RABBITMQ_VHOST}`) altinda calisilir. Backend startup'ta admin
+      # API uzerinden idempotent ensure eder.
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/${RABBITMQ_VHOST:-e1}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-e1}
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       RABBITMQ_ADMIN_USERNAME: ${RABBITMQ_USER:-hsl}
       RABBITMQ_ADMIN_PASSWORD: ${RABBITMQ_PASSWORD}
       # NATS JetStream — telemetri akisinin PRIMARY rotasi. Backend startup'ta
       # stream'leri otomatik ensure eder (TELEMETRY_RAW, TELEMETRY_NORMALIZED).
-      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      # NATS server'da 3 user var (gateway/backend/worker); backend admin tam yetki.
+      NATS_URL: ${NATS_URL_BACKEND:-${NATS_URL:-nats://nats:4222}}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN .env'de olmali}
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-43200}
       TELEMETRY_RETENTION_MINUTES: ${TELEMETRY_RETENTION_MINUTES:-30}
@@ -146,16 +193,21 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-    ports:
-      # Uzaktaki gateway'ler dogrudan baglanabilsin diye 8000 host'a expose.
-      # Browser yine de port 80 (nginx) uzerinden /api/* proxy'sini kullanir;
-      # 8000 sadece gateway'in REST cagrilari icindir (internal service token
-      # ile zaten korunmali; ek olarak CORS_ORIGINS uretimde kisitlanmali).
-      - "8000:8000"
+    # NOT: 8000 host'a EXPOSE EDILMEZ. Browser ve uzak gateway'ler trafigini
+    # nginx (frontend-web) uzerinden 80/443'e atar; nginx `/api/*` istegini
+    # backend-api:8000'e (compose internal network) proxy eder. Bu sayede:
+    #   - Tek public attack surface (nginx),
+    #   - HTTPS terminator (Caddy/Traefik) ekleyince herkes ayni yolda,
+    #   - 8000 brute-force/recon'a kapali.
+    # Gateway'ler `BACKEND_API_URL=https://<vds-domain>/api/v1` ile baglanir.
+    # Yerel dev'de host'tan 8000'e dogrudan erismek isteyenler nginx'in 80'i
+    # uzerinden ulasabilir; veya `docker compose exec backend-api curl ...`.
     volumes:
       - backup-data:/var/lib/e1-backups
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *heavy-resources
 
   tag-engine:
     build:
@@ -167,11 +219,15 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      # Backend stream'leri ensure ediyor (jetstream_bus.start_bus_if_enabled).
+      # Tag-engine subscribe ederken stream var olmali; backend healthy bekle.
+      backend-api:
+        condition: service_healthy
     environment:
       # Tag-engine artik tamamen NATS JetStream uzerinde calisiyor.
       # In: TELEMETRY_RAW stream (e1.telemetry.raw.>)
       # Out: e1.telemetry.normalized.<gw> (TELEMETRY_NORMALIZED stream'e gider)
-      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
       NATS_SUBJECT_TELEMETRY_RAW: ${NATS_SUBJECT_TELEMETRY_RAW:-e1.telemetry.raw.>}
       NATS_SUBJECT_NORMALIZED_PREFIX: ${NATS_SUBJECT_NORMALIZED_PREFIX:-e1.telemetry.normalized}
       # Backend system-status, tag-engine icin 8011 portunu probe eder.
@@ -179,6 +235,8 @@ services:
       WORKER_HEALTH_PORT: 8011
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *worker-resources
 
   alarm-service:
     build:
@@ -196,12 +254,16 @@ services:
         condition: service_healthy
     environment:
       # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
-      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
       NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
       # Alarm yayini: RabbitMQ (notification-worker buradan tuketiyor).
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-      RABBITMQ_EXCHANGE: hsl.events
-      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      # Vhost izolasyonu: kok `/` vhost'a degil dedicated `e1` (veya
+      # `${RABBITMQ_VHOST}`) altinda calisilir. Backend startup'ta admin
+      # API uzerinden idempotent ensure eder.
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/${RABBITMQ_VHOST:-e1}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-e1}
+      RABBITMQ_EXCHANGE: e1.events
+      RABBITMQ_DLX_EXCHANGE: e1.events.dlx
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       BACKEND_INTERNAL_ALARM_URL: http://backend-api:8000/api/v1/internal/alarms
       BACKEND_INTERNAL_ALARM_CLEAR_URL: http://backend-api:8000/api/v1/internal/alarms/clear
@@ -210,6 +272,8 @@ services:
       WORKER_HEALTH_PORT: 8012
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *worker-resources
 
   notification-worker:
     build:
@@ -221,16 +285,26 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      # Backend `/internal/notifications/dispatch/{alarm_id}` cagriliyor;
+      # backend healthy olmadan worker mesajlari requeue eder, broker doluyu.
+      backend-api:
+        condition: service_healthy
     environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-      RABBITMQ_EXCHANGE: hsl.events
-      RABBITMQ_DLX_EXCHANGE: hsl.events.dlx
+      # Vhost izolasyonu: kok `/` vhost'a degil dedicated `e1` (veya
+      # `${RABBITMQ_VHOST}`) altinda calisilir. Backend startup'ta admin
+      # API uzerinden idempotent ensure eder.
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hsl}:${RABBITMQ_PASSWORD}@rabbitmq:5672/${RABBITMQ_VHOST:-e1}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-e1}
+      RABBITMQ_EXCHANGE: e1.events
+      RABBITMQ_DLX_EXCHANGE: e1.events.dlx
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8013
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *worker-resources
 
   iec104-outbound:
     build:
@@ -246,7 +320,7 @@ services:
         condition: service_healthy
     environment:
       # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
-      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
       NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
@@ -263,6 +337,8 @@ services:
       - "2406:2406"
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *worker-resources
 
   frontend-web:
     build:
@@ -272,13 +348,21 @@ services:
     container_name: e1-frontend-web
     restart: unless-stopped
     depends_on:
-      - backend-api
+      # Healthy bekle: backend yukselemeden frontend baslarsa nginx /api/*
+      # icin 502 doner, kullanici bos beyaz ekran gorur. start_period 30sn
+      # backend-api healthcheck'inde tanimli.
+      backend-api:
+        condition: service_healthy
     ports:
       # VDS'in 80 portu — kullanici browser'i buraya baglanir; nginx hem SPA'i
       # serve eder hem /api/* isteklerini backend-api:8000'e proxy eder.
-      - "${FRONTEND_HTTP_PORT:-80}:80"
+      # Container icinde nginx-unprivileged 8080'de calisir (non-root uid 101);
+      # host'a hala 80 (varsayilan) ile expose ediyoruz.
+      - "${FRONTEND_HTTP_PORT:-80}:8080"
     networks:
       - e1-net
+    logging: *default-logging
+    <<: *worker-resources
 
 networks:
   e1-net:

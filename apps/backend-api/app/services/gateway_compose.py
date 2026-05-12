@@ -275,13 +275,21 @@ def derive_rabbitmq_url(backend_url: str) -> str:
     return f"amqp://hsl:hsl@{host}:5672/"
 
 
-def derive_nats_url(backend_url: str) -> str:
+def derive_nats_url(backend_url: str, *, gateway_password: str = "") -> str:
     """Backend URL'inden ayni hostname uzerinde NATS URL turetir.
 
     Gateway compose dosyasi indirilirken default fallback olarak kullanilir.
     Production'da kullanici endpoint'e ?nats_url= ile explicit override
     gonderebilir; aksi halde backend ile ayni host'ta NATS oldugu varsayilir.
+
+    NATS auth: `infra/nats/nats-server.conf`'ta `gateway` user var ve sadece
+    `e1.telemetry.raw.>` publish edebilir. `gateway_password` Settings'tan
+    okunur; URL'e gomulerek gateway compose indirilirken otomatik auth saglanir.
+    Bos password ile uretilen URL anonimdir → NATS deny-all ile reddeder.
     """
     parsed = urlparse(backend_url.strip())
     host = parsed.hostname or "localhost"
+    if gateway_password.strip():
+        return f"nats://gateway:{gateway_password.strip()}@{host}:4222"
+    # Anonim fallback — production'da reddedilir; sadece dev/test icin.
     return f"nats://{host}:4222"

@@ -55,6 +55,13 @@ def _send_email_notifications(settings_row: NotificationSettings, users: list[Us
     if not recipients or not settings_row.smtp_host:
         return
 
+    # SMTP password DB'de Fernet sifreli (`enc:v1:...`) saklanir; dispatch
+    # oncesi plaintext'e decrypt ediyoruz. Row mutate edilmez.
+    from app.services.notification_settings_service import decrypt_notification_credentials
+
+    creds = decrypt_notification_credentials(settings_row)
+    smtp_password = creds.smtp_password or ""
+
     mail = EmailMessage()
     mail["From"] = settings_row.smtp_from_email
     mail["To"] = ", ".join(recipients)
@@ -64,14 +71,14 @@ def _send_email_notifications(settings_row: NotificationSettings, users: list[Us
     if settings_row.smtp_port == 465:
         with smtplib.SMTP_SSL(settings_row.smtp_host, settings_row.smtp_port, context=ssl.create_default_context()) as server:
             if settings_row.smtp_username:
-                server.login(settings_row.smtp_username, settings_row.smtp_password)
+                server.login(settings_row.smtp_username, smtp_password)
             server.send_message(mail)
     else:
         with smtplib.SMTP(settings_row.smtp_host, settings_row.smtp_port) as server:
             server.ehlo()
             if settings_row.smtp_username:
                 server.starttls(context=ssl.create_default_context())
-                server.login(settings_row.smtp_username, settings_row.smtp_password)
+                server.login(settings_row.smtp_username, smtp_password)
             server.send_message(mail)
 
 
@@ -102,9 +109,13 @@ def _send_sms_notifications(settings_row: NotificationSettings, users: list[User
     # Generic JSON-POST (netgsm vb)
     if not settings_row.sms_api_url or not settings_row.sms_api_key:
         return
+    # api_key DB'de sifreli; plaintext'e decrypt et.
+    from app.services.notification_settings_service import decrypt_notification_credentials
+
+    creds = decrypt_notification_credentials(settings_row)
     payload = json.dumps(
         {
-            "api_key": settings_row.sms_api_key,
+            "api_key": creds.sms_api_key or "",
             "to": recipients,
             "message": body,
         }

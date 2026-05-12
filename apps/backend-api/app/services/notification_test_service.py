@@ -67,10 +67,15 @@ def send_smtp_test(
             # Tek attachment hatasi tum maili dusurmesin
             continue
 
+    # SMTP password decrypt (DB'de `enc:v1:...` Fernet sifreli).
+    from app.services.notification_settings_service import decrypt_notification_credentials
+
+    smtp_password = decrypt_notification_credentials(settings_row).smtp_password or ""
+
     if settings_row.smtp_port == 465:
         with smtplib.SMTP_SSL(settings_row.smtp_host, settings_row.smtp_port, context=ssl.create_default_context()) as server:
             if settings_row.smtp_username:
-                server.login(settings_row.smtp_username, settings_row.smtp_password)
+                server.login(settings_row.smtp_username, smtp_password)
             server.send_message(mail)
         return
 
@@ -78,7 +83,7 @@ def send_smtp_test(
         server.ehlo()
         if settings_row.smtp_username:
             server.starttls(context=ssl.create_default_context())
-            server.login(settings_row.smtp_username, settings_row.smtp_password)
+            server.login(settings_row.smtp_username, smtp_password)
         server.send_message(mail)
 
 
@@ -94,7 +99,10 @@ def send_telegram_test(
     settings_row.telegram_bot_token zorunlu. parse_mode "HTML" veya
     "MarkdownV2" olabilir; default "HTML" cunku alarm sablonlari HTML uretir.
     """
-    token = (settings_row.telegram_bot_token or "").strip()
+    # telegram_bot_token DB'de Fernet sifreli; decrypt et.
+    from app.services.notification_settings_service import decrypt_notification_credentials
+
+    token = (decrypt_notification_credentials(settings_row).telegram_bot_token or "").strip()
     if not token:
         raise ValueError("Telegram bot token boş.")
     if not chat_id:
@@ -236,14 +244,17 @@ def send_sms_test(
         _send_sms_via_twilio(settings_row, recipient_phone=recipient_phone, message=message)
         return
 
-    # Generic JSON-POST (netgsm, vb)
+    # Generic JSON-POST (netgsm, vb) — sms_api_key DB'de sifreli.
     if not settings_row.sms_api_url:
         raise ValueError("SMS API URL boş.")
     if not settings_row.sms_api_key:
         raise ValueError("SMS API Key boş.")
+    from app.services.notification_settings_service import decrypt_notification_credentials
+
+    api_key = decrypt_notification_credentials(settings_row).sms_api_key or ""
     payload = json.dumps(
         {
-            "api_key": settings_row.sms_api_key,
+            "api_key": api_key,
             "to": [recipient_phone],
             "message": message,
         }
@@ -294,8 +305,12 @@ def _send_sms_via_twilio(
     sms_twilio_use_whatsapp  = SMS yerine WhatsApp gonder
     sms_twilio_content_sid   = (opsiyonel) onaylanmis template ID (HX...)
     """
-    account_sid = (settings_row.sms_account_sid or "").strip()
-    auth_token = (settings_row.sms_api_key or "").strip()
+    # Twilio account_sid + auth_token (sms_api_key) DB'de Fernet sifreli.
+    from app.services.notification_settings_service import decrypt_notification_credentials
+
+    _creds = decrypt_notification_credentials(settings_row)
+    account_sid = (_creds.sms_account_sid or "").strip()
+    auth_token = (_creds.sms_api_key or "").strip()
     from_number = (settings_row.sms_from_number or "").strip()
     use_wa = bool(getattr(settings_row, "sms_twilio_use_whatsapp", False))
     content_sid = (getattr(settings_row, "sms_twilio_content_sid", "") or "").strip()

@@ -417,13 +417,61 @@ class IEC104Server:
         return None
 
     async def _send_i(self, session: _ClientSession, asdu: bytes) -> None:
-        frame = build_i_frame_asdu(asdu=asdu, ns=session.ns, nr=session.nr)
-        session.ns += 1
-        session.unacked += 1
+        # K window backpressure: unacked >= 12 ise yeni I-frame yollama,
+        # SCADA S-frame ile ack atana kadar bekle (max 1 sn).
+        # IEC 60870-5-104 spec'i: k aşılırsa master pause etmeli.
+        # Sonsuz beklemek yerine drop + log — slow SCADA tum kuyrugu tikamasin.
+        if session.unacked >= 12:
+            logger.warning(
+                "iec104_k_window_full name=%s peer=%s unacked=%d — frame drop",
+                self.name,
+                session.peer,
+                session.unacked,
+            )
+            return
+        # ns wrap: IEC 60870-5-104'te sequence number 15-bit (mod 32768).
+        # Eski kod `session.ns += 1` 32768'de build_i_frame_asdu ValueError
+        # firlatiyor; session bozuk hale geliyor. Mod ile wrap.
         try:
+            frame = build_i_frame_asdu(asdu=asdu, ns=session.ns, nr=session.nr)
+        except ValueError as exc:
+            logger.warning(
+                "iec104_frame_build_failed name=%s peer=%s ns=%d error=%s — ns reset",
+                self.name,
+                session.peer,
+                session.ns,
+                exc,
+            )
+            session.ns = 0
+            return
+        session.ns = (session.ns + 1) & 0x7FFF  # 15-bit mask
+        session.unacked += 1
+        # Writer kapaliysa send'e gitme — dead session leak'i onle.
+        try:
+            if session.writer is None or session.writer.is_closing():
+                # Session bozuk; sessions setinden cikar (idempotent discard).
+                self._sessions.discard(session)
+                logger.info(
+                    "iec104_session_discarded_closed name=%s peer=%s",
+                    self.name,
+                    session.peer,
+                )
+                return
             await session.send(frame)
-        except Exception:
-            logger.warning("iec104_send_failed name=%s peer=%s", self.name, session.peer)
+        except (ConnectionResetError, BrokenPipeError, OSError) as exc:
+            logger.warning(
+                "iec104_send_failed name=%s peer=%s error=%s — session removed",
+                self.name,
+                session.peer,
+                exc,
+            )
+            # TCP fault: session'i cikar + writer kapat.
+            self._sessions.discard(session)
+            try:
+                if session.writer is not None:
+                    session.writer.close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 class IEC104ServerManager:

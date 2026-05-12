@@ -21,3 +21,18 @@ fcm-service-account.json
 **/fcm-service-account.json
 **/*service-account*.json
 **/firebase-adminsdk*.json
+
+# Service Control Panel runtime config — INTERNAL_SERVICE_TOKEN ve diger
+# secret degerleri icerebilir. Sadece `.example.json` template commit edilir;
+# operator yerelde kopyalayip kendi degerlerini yazar.
+infra/scripts/windows/service_control_panel.config.json
+!infra/scripts/windows/service_control_panel.config.example.json
+
+# NATS server config — bcrypt hash'leri bootstrap.sh tarafindan render edilir.
+# Sadece `.template` commit edilir; gercek `.conf` `.env`'deki cleartext
+# sifrelerin hash'lenmis halini icerir.
+infra/nats/nats-server.conf
+!infra/nats/nats-server.conf.template
+
+# DB yedek dosyalari — update.sh tarafindan repo root'a yazilir; commit edilmemeli.
+backups/

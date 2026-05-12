@@ -172,38 +172,102 @@ def _consume_loop() -> None:
                 async def _handle(msg) -> None:  # noqa: ANN001
                     try:
                         payload = json.loads(msg.data.decode("utf-8"))
-                        # WS broadcast ONCE: frontend cihaz degerini anlik gorur.
-                        # DB persist sonrasinda yapilirsa, DB lock/yavaslama frontend'i
-                        # de yavaslatir. WS sadece in-memory queue'ya put_nowait
-                        # (~mikro saniyeler), persist baska is parcaciginda gibi
-                        # davranir.
+                        # SIRA ONEMLI: persist ONCE, sonra WS broadcast.
+                        # Eski sira (WS once) DB hatasi durumunda nak() ->
+                        # JetStream redeliver -> WS ayni degeri ikinci kez
+                        # yayinlar (duplicate frontend goruntusu). Persist
+                        # succeed olmadan WS yapilmaz; idempotent davranis.
+                        _persist_message(payload)
                         try:
                             ws_broadcaster.broadcast(payload)
                         except Exception:  # noqa: BLE001 — WS hatasi consume akisini bozmasin
                             logger.debug("ws_broadcast_failed", exc_info=True)
-                        _persist_message(payload)
                         await msg.ack()
                     except Exception as exc:  # noqa: BLE001
+                        # Mesajin kacinci delivery oldugunu kontrol et — son
+                        # denemede DLQ'ya tasi, aksi halde nak ile redeliver.
+                        # NATS max_deliver'a takilinca mesaji sessizce discard
+                        # eder; DLQ ile operator gorebilir, root-cause sonra
+                        # replay edebilir.
+                        num_delivered = int(
+                            getattr(getattr(msg, "metadata", None), "num_delivered", 1) or 1
+                        )
+                        is_terminal = num_delivered >= settings.nats_worker_max_deliver
                         logger.warning(
-                            "telemetry-consumer-failed error=%s subject=%s",
+                            "telemetry-consumer-failed error=%s subject=%s "
+                            "delivery=%d/%d terminal=%s",
                             exc,
                             getattr(msg, "subject", "?"),
+                            num_delivered,
+                            settings.nats_worker_max_deliver,
+                            is_terminal,
                         )
-                        # nak: JetStream redeliver edecek (backoff'la). Poison
-                        # mesajlar max_deliver'a takilinca dead-letter'a duser.
-                        try:
-                            await msg.nak()
-                        except Exception:  # noqa: BLE001
-                            logger.debug("js_nak_failed", exc_info=True)
+                        if is_terminal:
+                            # DLQ'ya manuel publish — orijinal mesaj + hata
+                            # metadata'si. Sonra ack ki JetStream redeliver
+                            # etmesin (max_deliver bekleme).
+                            try:
+                                orig_subject = getattr(msg, "subject", "unknown")
+                                dlq_subject = f"e1.dlq.backend-api.{orig_subject}"
+                                dlq_headers = {
+                                    "X-DLQ-Reason": "max_deliver_exceeded",
+                                    "X-DLQ-Service": "backend-api",
+                                    "X-DLQ-Original-Subject": orig_subject,
+                                    "X-DLQ-Error": str(exc)[:500],
+                                    "X-DLQ-Delivery-Count": str(num_delivered),
+                                }
+                                await js.publish(
+                                    dlq_subject, msg.data, headers=dlq_headers
+                                )
+                                logger.error(
+                                    "telemetry-consumer-dlq subject=%s error=%s",
+                                    dlq_subject,
+                                    exc,
+                                )
+                                await msg.ack()
+                            except Exception:  # noqa: BLE001
+                                logger.exception("dlq_publish_failed")
+                                try:
+                                    await msg.nak()
+                                except Exception:  # noqa: BLE001
+                                    logger.debug("js_nak_failed", exc_info=True)
+                        else:
+                            try:
+                                await msg.nak()
+                            except Exception:  # noqa: BLE001
+                                logger.debug("js_nak_failed", exc_info=True)
 
                 # Durable push consumer — subject pattern'i dinliyoruz.
                 # Backend startup'ta jetstream_bus.start_bus_if_enabled() stream'leri
                 # ensure ediyor olmali; consumer subscribe ederken stream var olmali.
+                #
+                # Consumer parametreleri (nats-py default'lari uretim icin yetersiz):
+                #   * max_ack_pending=10000: 600 cihaz x 10 msg/s = ~6000 inflight;
+                #     default 1000 yetersiz, ack'lemeyi yetistiremeyince broker
+                #     subscriber'i suspend eder.
+                #   * max_deliver=10: poison message sonsuza dek redeliver edilmez;
+                #     10 deneme sonrasi NACK -> DLQ benzeri davranis (max_deliver
+                #     asimi mesaji discard eder; production'da DLQ stream'i ileride
+                #     eklenebilir).
+                #   * deliver_policy=NEW: durable consumer ilk olusurken sadece
+                #     yeni mesajlardan baslar. Aksi halde 7 gunluk history'yi
+                #     baslangicta replay eder ve persister gec kalir.
+                #   * ack_wait=60s: persist + WS broadcast tipik <100ms; 60sn cap
+                #     network gecikmesi icin defansif.
+                from nats.js.api import ConsumerConfig, DeliverPolicy
+                consumer_cfg = ConsumerConfig(
+                    durable_name=settings.nats_consumer_telemetry_persist,
+                    deliver_policy=DeliverPolicy.NEW,
+                    ack_wait=60,
+                    max_ack_pending=10000,
+                    max_deliver=10,
+                )
                 sub = await js.subscribe(
                     subject=settings.nats_subject_telemetry_raw,
                     durable=settings.nats_consumer_telemetry_persist,
                     cb=_handle,
                     manual_ack=True,
+                    config=consumer_cfg,
                 )
                 logger.info(
                     "telemetry_consumer_running subject=%s durable=%s url=%s",

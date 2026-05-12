@@ -1,10 +1,10 @@
 """Tag-engine — NATS JetStream uzerinde ham telemetri akisini normalize eder.
 
 Akis:
-  hsl.telemetry.raw.<gw>          (gateway'lerin yaylinladigi ham)
+  e1.telemetry.raw.<gw>          (gateway'lerin yaylinladigi ham)
     -> tag-engine consume
     -> normalize (quality, status, processed_at)
-    -> publish: hsl.telemetry.normalized.<gw>
+    -> publish: e1.telemetry.normalized.<gw>
        (alarm-service ve iec104-outbound buradan tuketir)
 
 RabbitMQ'dan tamamen kaldirildi. Telemetri akisi tamamen JetStream uzerinden
@@ -14,6 +14,7 @@ onunla ilgilenmez).
 
 import asyncio
 import json
+import logging
 import os
 import signal
 import threading
@@ -24,16 +25,29 @@ from uuid import uuid4
 
 import nats
 
+# Yapilandirilabilir logging — eski `print()` cagrilari structured log'a
+# tasindi. LOG_LEVEL env ile kontrol (INFO/WARNING/ERROR/DEBUG).
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-5s tag-engine %(message)s",
+)
+logger = logging.getLogger("tag-engine")
+
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 # Stream isimleri — backend'in olusturdugu stream'lerle ayni olmali.
 STREAM_NORMALIZED = os.getenv("NATS_STREAM_TELEMETRY_NORMALIZED", "TELEMETRY_NORMALIZED")
 # Consumer subject pattern (incoming) — backend'in TELEMETRY_RAW stream'ine bind.
-SUBJECT_RAW = os.getenv("NATS_SUBJECT_TELEMETRY_RAW", "hsl.telemetry.raw.>")
-# Outgoing subject prefix — konkre subject: hsl.telemetry.normalized.<gw>
+# Cati 0.x cutover sonrasi `e1.*` prefix kullanilir (gateway+backend ile tutarli).
+SUBJECT_RAW = os.getenv("NATS_SUBJECT_TELEMETRY_RAW", "e1.telemetry.raw.>")
+# Outgoing subject prefix — konkre subject: e1.telemetry.normalized.<gw>
 SUBJECT_NORMALIZED_PREFIX = os.getenv(
-    "NATS_SUBJECT_NORMALIZED_PREFIX", "hsl.telemetry.normalized"
+    "NATS_SUBJECT_NORMALIZED_PREFIX", "e1.telemetry.normalized"
 )
 DURABLE_NAME = os.getenv("NATS_TAG_ENGINE_DURABLE", "tag-engine-normalize")
+# DLQ subject prefix — max_deliver'a takilan mesajlar buraya gider.
+# Subject: e1.dlq.tag-engine.<original-subject>
+SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.tag-engine")
+MAX_DELIVER = int(os.getenv("NATS_WORKER_MAX_DELIVER", "10"))
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8011"))
 
@@ -100,7 +114,7 @@ _stop_event = threading.Event()
 
 def _install_signal_handlers() -> None:
     def _handler(signum, _frame):  # noqa: ANN001
-        print(f"tag-engine-shutdown signal={signum}")
+        logger.info("tag-engine-shutdown signal=%s", signum)
         _stop_event.set()
 
     signal.signal(signal.SIGINT, _handler)
@@ -125,12 +139,11 @@ async def _run() -> None:
                     payload = json.loads(msg.data.decode("utf-8"))
                     processed = _build_processed_payload(payload)
                     if processed["source_gateway"] == "unknown":
-                        # Sadece anomali (eksik gateway) durumunda log; her mesajda
-                        # print yapmak Docker stdout fsync ile per-message gecikme
-                        # uretiyordu (saniyede 200+ mesajda toplam yavaslama).
-                        print(
-                            "tag-engine-warning missing source_gateway "
-                            f"msg={processed['message_id']} dev={processed['device_code']}"
+                        # Sadece anomali (eksik gateway) durumunda log.
+                        logger.warning(
+                            "missing_source_gateway msg=%s dev=%s",
+                            processed["message_id"],
+                            processed["device_code"],
                         )
                     out_subject = (
                         f"{SUBJECT_NORMALIZED_PREFIX}.{processed['source_gateway']}"
@@ -150,21 +163,75 @@ async def _run() -> None:
                     )
                     await msg.ack()
                 except Exception as ex:  # noqa: BLE001
-                    print(f"tag-engine-failed error={ex}")
-                    try:
-                        await msg.nak()
-                    except Exception:  # noqa: BLE001
-                        pass
+                    # Son denemede DLQ'ya tasi; aksi halde nak ile redeliver.
+                    # max_deliver asilinca NATS mesaji sessizce discard eder —
+                    # DLQ ile operator gorebilir ve root-cause sonra replay edebilir.
+                    num_delivered = int(
+                        getattr(getattr(msg, "metadata", None), "num_delivered", 1) or 1
+                    )
+                    is_terminal = num_delivered >= MAX_DELIVER
+                    logger.warning(
+                        "tag-engine-failed error=%s delivery=%d/%d terminal=%s",
+                        ex,
+                        num_delivered,
+                        MAX_DELIVER,
+                        is_terminal,
+                    )
+                    if is_terminal:
+                        try:
+                            orig_subject = getattr(msg, "subject", "unknown")
+                            dlq_subject = f"{SUBJECT_DLQ_PREFIX}.{orig_subject}"
+                            dlq_headers = {
+                                "X-DLQ-Reason": "max_deliver_exceeded",
+                                "X-DLQ-Service": "tag-engine",
+                                "X-DLQ-Original-Subject": orig_subject,
+                                "X-DLQ-Error": str(ex)[:500],
+                                "X-DLQ-Delivery-Count": str(num_delivered),
+                            }
+                            await js.publish(dlq_subject, msg.data, headers=dlq_headers)
+                            logger.error(
+                                "tag-engine-dlq subject=%s error=%s", dlq_subject, ex
+                            )
+                            await msg.ack()
+                        except Exception:  # noqa: BLE001
+                            logger.exception("dlq_publish_failed")
+                            try:
+                                await msg.nak()
+                            except Exception:  # noqa: BLE001
+                                pass
+                    else:
+                        try:
+                            await msg.nak()
+                        except Exception:  # noqa: BLE001
+                            pass
 
+            # Consumer parametreleri uretim icin sertlestirilmis (bkz.
+            # telemetry_consumer.py'daki ayni konfig). max_ack_pending=10000
+            # 600 cihaz x 10 msg/s yukunde suspend onler; max_deliver=10 poison
+            # mesaji discard eder; DeliverPolicy.NEW restart sonrasi 7gunluk
+            # history replay'i engeller.
+            from nats.js.api import ConsumerConfig, DeliverPolicy
+
+            consumer_cfg = ConsumerConfig(
+                durable_name=DURABLE_NAME,
+                deliver_policy=DeliverPolicy.NEW,
+                ack_wait=60,
+                max_ack_pending=10000,
+                max_deliver=10,
+            )
             sub = await js.subscribe(
                 subject=SUBJECT_RAW,
                 durable=DURABLE_NAME,
                 cb=_on_message,
                 manual_ack=True,
+                config=consumer_cfg,
             )
-            print(
-                f"tag-engine-running url={NATS_URL} in={SUBJECT_RAW} "
-                f"out={SUBJECT_NORMALIZED_PREFIX}.<gw> durable={DURABLE_NAME}"
+            logger.info(
+                "tag-engine-running url=%s in=%s out=%s.<gw> durable=%s",
+                NATS_URL,
+                SUBJECT_RAW,
+                SUBJECT_NORMALIZED_PREFIX,
+                DURABLE_NAME,
             )
             backoff = 2  # connect basarili
             while not _stop_event.is_set():
@@ -173,7 +240,9 @@ async def _run() -> None:
         except Exception as ex:  # noqa: BLE001
             if _stop_event.is_set():
                 break
-            print(f"tag-engine-reconnect error={ex} backoff={backoff}s url={NATS_URL}")
+            logger.warning(
+                "tag-engine-reconnect error=%s backoff=%ds url=%s", ex, backoff, NATS_URL
+            )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)
         finally:
@@ -187,9 +256,9 @@ async def _run() -> None:
 def main() -> None:
     _start_health_server()
     _install_signal_handlers()
-    print("tag-engine-starting")
+    logger.info("tag-engine-starting")
     asyncio.run(_run())
-    print("tag-engine-stopped")
+    logger.info("tag-engine-stopped")
 
 
 if __name__ == "__main__":

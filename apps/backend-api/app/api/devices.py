@@ -71,6 +71,23 @@ def create_device(
     return device
 
 
+def _ensure_device_visible(db: Session, current_user: User, device) -> None:
+    """Object-level authz: engineer kendi sorumluluk alanindaki cihazlari
+    duzenleyebilir; installer her cihaza erisebilir.
+
+    `get_visible_device_ids` engineer icin `responsibility_areas` tablosundan
+    izinli device id'leri doner. Installer icin None doner (sinirsiz).
+    IDOR koruma: device_code bilen engineer baska bolgenin cihazini
+    update/delete edemez.
+    """
+    visible = get_visible_device_ids(db, current_user)
+    if visible is not None and device.id not in visible:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu cihaza erişim yetkiniz yok (responsibility scope dışı)",
+        )
+
+
 @router.patch("/{device_code}", response_model=DeviceRead)
 def update_device(
     device_code: str,
@@ -82,6 +99,7 @@ def update_device(
     device = repository.get_by_code(device_code)
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    _ensure_device_visible(db, current_user, device)
     # Hangi alanlar degisti — operator/muhendis paneli icin event'e koy.
     changes = payload.model_dump(exclude_none=True)
     updated = repository.update(device, payload)
@@ -111,6 +129,7 @@ def delete_device(
     device = repository.get_by_code(device_code)
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    _ensure_device_visible(db, current_user, device)
     name = device.name
     code = device.code
     device_id = device.id

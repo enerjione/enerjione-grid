@@ -1,4 +1,16 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Production'da reddedilen placeholder secret degerleri. Settings constructor
+# `app_env in ("production","prod")` durumunda bu degerlerden birinin set
+# edilmis oldugu durumda RuntimeError firlatir — boylece operator yanlislikla
+# default secret'larla prod'a deploy edemez.
+_PLACEHOLDER_SECRETS: set[str] = {
+    "change-me-in-production",
+    "change-me-internal-token",
+    "",
+}
 
 
 class Settings(BaseSettings):
@@ -22,8 +34,22 @@ class Settings(BaseSettings):
     db_pool_recycle_sec: int = 3600
     db_pool_timeout_sec: int = 30
     cors_origins: str = "*"
-    event_bus_backend: str = "inprocess"
-    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    # Event bus backend secimi:
+    #   "rabbitmq" (default, production): outbox -> event_bus.publish_event ->
+    #     RabbitMqEventBus -> hsl.events exchange. notification-worker,
+    #     iec104-outbound vb. consumer'lar mesaji alir.
+    #   "inprocess": sadece dev/test; mesajlar in-process subscriber'a gider,
+    #     baska bir servis HIC alamaz. Production'da kullanilmamali — boot'ta
+    #     validator uyari atar.
+    event_bus_backend: str = "rabbitmq"
+    # NOT: production'da `amqp://...:5672/` (kok `/` vhost) reddedilir;
+    # default vhost paylasimli/eski olabilir ve baska bir tenant'a sizinti
+    # riski olur. Dedicated `e1` vhost (veya operator tarafindan secilen
+    # baska bir izole vhost) zorunlu — bkz. `_validate_production_safeguards`.
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/e1"
+    # Backend startup'inda admin user ile bu vhost olusturulur (idempotent);
+    # ayrica gateway/backend kullanicilari bu vhost altinda permission alir.
+    rabbitmq_vhost: str = "e1"
     # Management API: gateway eklendiginde otomatik dedicated user yaratmak
     # icin kullanilir (manuel rabbitmqctl gerektirmez). Default Windows
     # installer'inda 15672'de aciktir. Production'da ozel admin kullanicisi
@@ -61,14 +87,47 @@ class Settings(BaseSettings):
     # 30 gun normalized: backfill/replay icin yeterli, disk dolusunu sinirlar.
     nats_stream_raw_max_age_days: int = 7
     nats_stream_normalized_max_age_days: int = 30
+    # DLQ (dead-letter queue): worker max_deliver'a takilan "poison" mesajlari
+    # buraya tasinir. Sessizce kaybolmaz; operator JetStream UI'dan veya `nats
+    # stream view TELEMETRY_DLQ` ile inceler, root-cause sonra replay eder.
+    # Subject: `e1.dlq.<service>.<original-subject>` — service adi DLQ'ya
+    # publish eden worker'in hangisi oldugunu gosterir.
+    nats_stream_telemetry_dlq: str = "TELEMETRY_DLQ"
+    nats_subject_telemetry_dlq: str = "e1.dlq.>"
+    nats_stream_dlq_max_age_days: int = 30
+    # Worker max_deliver — bir mesaj kac kez nack'lendikten sonra DLQ'ya
+    # tasinir. 10 makul: gecici DB hatasi/lock contention 10 retry'da gecer;
+    # poison payload (parse error vb.) hep nack'leyecektir, 10. nack'te DLQ.
+    nats_worker_max_deliver: int = 10
     # Connect timeout — kisa tutulur; backend startup'i NATS yokken bloklanmasin.
     # NATS gelene kadar consumer hatasi atar ama backend ayagi kalir; NATS gelince
     # consumer kendi reconnect dongusunde devam eder.
     nats_connect_timeout_sec: int = 5
     # Durable consumer adi (backend-api telemetry persister icin).
     nats_consumer_telemetry_persist: str = "backend-api-telemetry-persist"
+    # Gateway compose dosyasi indirilirken gateway user/password URL'e gomuluyor.
+    # `infra/nats/nats-server.conf`'taki `gateway` user'inin cleartext sifresi.
+    # bootstrap.sh urettiginde .env'e yazar; backend bu degeri okuyup compose
+    # template'e gomer. Bos ise gateway compose URL'i anonim kalir ve NATS server
+    # deny-all ile reddeder — production'da set EDILMEDIGI surece gateway calismaz.
+    nats_gateway_password: str = ""
 
     internal_service_token: str = "change-me-internal-token"
+    # DB'de saklanan secret'lar (SMTP/SMS/Telegram credentials, outbound auth
+    # token) icin Fernet sifreleme anahtari. Bos ise SECRET_KEY'den HKDF ile
+    # deriv edilir (geriye uyumlu). Production'da explicit ayri bir anahtar
+    # set edilmesi onerilir cunku SECRET_KEY rotasyonu yapildiginda eski
+    # sifrelenen veriler decrypt edilemez.
+    # Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+    secrets_master_key: str = ""
+    # Backend `/internal/alarms` endpoint'i alarm olusturduktan sonra
+    # `dispatch_alarm_notifications` cagirir mi? notification-worker ayri
+    # dispatcher servisi production'a alindiginda bu flag False olmali —
+    # boylece cift dispatch (backend + worker) onlenir.
+    # Default False: production'da notification-worker tek dispatcher;
+    # backend inline dispatch SADECE dev/test icin. Operator backend'i
+    # standalone (worker'siz) calistirsin istiyorsa env: True override.
+    notification_inline_dispatch_enabled: bool = False
     smtp_enabled: bool = False
     smtp_host: str = "localhost"
     smtp_port: int = 25
@@ -89,6 +148,91 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @model_validator(mode="after")
+    def _validate_production_safeguards(self) -> "Settings":
+        """Production / staging ortaminda guvenlik kontrolleri.
+
+        Operator yanlislikla default placeholder secret'larla prod'a deploy
+        etmesin diye boot'ta RuntimeError firlatir. Mesaj net: operator hangi
+        env degiskenini set etmesi gerektigini anlar.
+
+        Kontroller (app_env in ('production', 'prod') iken):
+          * `secret_key` placeholder olamaz (JWT forge engellenir)
+          * `internal_service_token` placeholder olamaz (internal endpoint'ler
+            taklit edilemez)
+          * `event_bus_backend == 'inprocess'` olamaz (mikroservis-arasi
+            iletisim kopar — alarm.created event'leri notification-worker'a
+            ulasmaz)
+          * `cors_origins == '*'` olamaz (CORS spec ihlali; credential leak)
+        """
+        env = (self.app_env or "development").strip().lower()
+        if env not in ("production", "prod"):
+            return self
+        errors: list[str] = []
+        if self.secret_key.strip() in _PLACEHOLDER_SECRETS:
+            errors.append(
+                "SECRET_KEY .env'de set edilmemis (default placeholder); JWT "
+                "imzalama icin >=32 byte yuksek-entropy bir deger zorunlu."
+            )
+        if self.internal_service_token.strip() in _PLACEHOLDER_SECRETS:
+            errors.append(
+                "INTERNAL_SERVICE_TOKEN .env'de set edilmemis (default "
+                "placeholder); mikroservis-arasi auth icin >=32 byte deger zorunlu."
+            )
+        if self.event_bus_backend.strip().lower() == "inprocess":
+            errors.append(
+                "EVENT_BUS_BACKEND=inprocess production'da kullanilamaz. "
+                "RabbitMQ backend zorunlu (`rabbitmq`); aksi takdirde alarm "
+                "event'leri notification-worker'a ulasmaz."
+            )
+        if "*" in self.cors_origin_list:
+            errors.append(
+                "CORS_ORIGINS production'da '*' olamaz. Explicit origin "
+                "whitelist belirtin (orn: https://app.example.com)."
+            )
+        # NATS URL credentials check — anonim baglanti NATS server tarafindan
+        # deny-all ile reddedilir; backend silent fail eder ve telemetri akmaz.
+        # Production'da `nats://user:password@host:port` formatinda olmali.
+        if "@" not in self.nats_url:
+            errors.append(
+                "NATS_URL production'da 'nats://user:password@host:port' "
+                "formatinda olmali. Anonim baglanti NATS server tarafindan "
+                "reddedilir (deny-all). bootstrap.sh `.env`'e NATS_BACKEND_PASSWORD "
+                "uretir; backend NATS_URL'i `nats://backend:${NATS_BACKEND_PASSWORD}@nats:4222` "
+                "olarak set edin."
+            )
+        # RabbitMQ vhost izolasyonu — production'da kok `/` vhost reddedilir.
+        # `/` vhost paylasimli/default oldugu icin saldirgan baska bir tenant
+        # uzerinden bizim queue/exchange'lere erisebilir; dedicated izolasyon
+        # icin operator `e1` (veya benzeri ozel) vhost'unu URL'e koymalidir.
+        from urllib.parse import urlparse as _urlparse
+
+        try:
+            _amqp = _urlparse(self.rabbitmq_url)
+            _vhost = (_amqp.path or "").lstrip("/")
+            if not _vhost or _vhost == "" or _vhost == "/":
+                errors.append(
+                    "RABBITMQ_URL production'da kok `/` vhost'u kullanamaz "
+                    "(paylasimli/default vhost; saldirgan baska tenant uzerinden "
+                    "queue'lara erisebilir). Dedicated bir vhost belirtin "
+                    "(orn: `amqp://user:pass@host:5672/e1`). Backend startup'i "
+                    "bu vhost'u idempotent olarak yaratir."
+                )
+        except Exception:  # noqa: BLE001
+            errors.append("RABBITMQ_URL parse edilemedi; gecerli AMQP URL girin.")
+        if not self.nats_gateway_password.strip():
+            errors.append(
+                "NATS_GATEWAY_PASSWORD production'da bos olamaz. Gateway compose "
+                "template'i bu sifreyle URL uretir; bos ise gateway anonim "
+                "baglanip NATS deny-all ile reddedilir, telemetri akmaz."
+            )
+        if errors:
+            joined = "\n  - ".join(errors)
+            raise RuntimeError(
+                f"GUVENLIK: APP_ENV={env} ortaminda asagidaki ayarlar gecersiz:\n  - {joined}"
+            )
+        return self
 
 
 settings = Settings()

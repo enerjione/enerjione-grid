@@ -1,0 +1,109 @@
+# EnerjiOne Grid Dashboard — NATS JetStream server konfigurasyonu.
+#
+# Bu dosya docker-compose `nats` servisinde read-only mount edilir:
+#   - ./infra/nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+# Compose `command`: `-c /etc/nats/nats-server.conf -js --store_dir=/data ...`
+#
+# Auth modeli:
+#   * `gateway` user: gateway'ler `e1.telemetry.raw.>` subject'ine publish eder.
+#       Sadece raw subject yetkisi; normalized/event'lere yazamaz.
+#   * `backend` user: backend-api raw'i consume + normalized'i consume +
+#       stream yonetimi (ensure, update). Tam yetki.
+#   * `worker` user: tag-engine + alarm-service + iec104-outbound. Normalized
+#       publish (tag-engine) ve subscribe (alarm/iec104).
+#
+# Production'da bu dosya secret degerlerle override edilmeli. Sifreler
+# `${NATS_*_PASSWORD}` env-substituted DEGIL — nats-server.conf bunu
+# desteklemiyor. Operator deploy oncesi gercek hash'lerle dolduruyor;
+# `.gitignore`'da nats-server.conf private varyantlar engellenir.
+
+server_name: e1-nats-1
+http_port: 8222
+
+jetstream {
+    store_dir: "/data"
+    # Disk doluluk korumasi — disk'in %95'i dolarsa publish'leri reddeder.
+    # 600 cihaz x 7 gun raw telemetri tipik 5-20GB; production'da disk'i
+    # genis tutun veya bu degeri buyutmek isteyebilirsiniz.
+    max_file_store: 50GB
+    max_memory_store: 1GB
+}
+
+# Authorization — placeholder sifreler. Production'da bcrypt hash zorunlu:
+#   nats server passwd
+#   (veya `nats-server -DV` ile dogrula).
+# `bcrypt` format: `$2a$...` ile basliyor. Cleartext sifre kullanmayin —
+# bu dosya repo'ya commit'lenebildigi icin hash sart.
+authorization {
+    # Default permissions: hicbiri (deny-all). Acik yetki gerekli.
+    default_permissions = {
+        publish = { deny = [">"] }
+        subscribe = { deny = [">"] }
+    }
+
+    users = [
+        {
+            user: "gateway"
+            # bootstrap.sh tarafindan render edilir — `.env`'deki cleartext
+            # NATS_GATEWAY_PASSWORD'i bcrypt'leyip bu placeholder'a yazar.
+            password: "{{NATS_GATEWAY_BCRYPT_HASH}}"
+            permissions = {
+                # Gateway'ler sadece raw telemetri publish edebilir.
+                publish = {
+                    allow = [
+                        "e1.telemetry.raw.>"
+                    ]
+                }
+                # Gateway hicbir subject'i dinlemez (telemetri tek yon).
+                # `_INBOX.>` connect/ping icin gerekli.
+                subscribe = {
+                    allow = ["_INBOX.>"]
+                }
+            }
+        },
+        {
+            user: "backend"
+            password: "{{NATS_BACKEND_BCRYPT_HASH}}"
+            permissions = {
+                # Backend stream yonetimi + tum subject'lere full access.
+                publish = { allow = ["e1.>", "$JS.>"] }
+                subscribe = { allow = ["e1.>", "_INBOX.>", "$JS.>"] }
+            }
+        },
+        {
+            user: "worker"
+            password: "{{NATS_WORKER_BCRYPT_HASH}}"
+            permissions = {
+                # Tag-engine raw subscribe + normalized publish.
+                # Alarm-service / iec104-outbound normalized subscribe.
+                publish = {
+                    allow = [
+                        "e1.telemetry.normalized.>",
+                        "$JS.API.CONSUMER.>",
+                        "$JS.ACK.>"
+                    ]
+                }
+                subscribe = {
+                    allow = [
+                        "e1.telemetry.raw.>",
+                        "e1.telemetry.normalized.>",
+                        "_INBOX.>",
+                        "$JS.>"
+                    ]
+                }
+            }
+        }
+    ]
+}
+
+# TLS (opsiyonel, sonraki tur):
+#   tls {
+#     cert_file: "/etc/nats/certs/server.crt"
+#     key_file:  "/etc/nats/certs/server.key"
+#     ca_file:   "/etc/nats/certs/ca.crt"
+#     verify:    true
+#   }
+
+# Limit DoS:
+max_payload: 1MB
+max_connections: 1000

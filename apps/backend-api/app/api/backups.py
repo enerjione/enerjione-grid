@@ -37,6 +37,7 @@ from app.services.backup_service import (
     get_backup_dir,
     get_or_create_schedule,
     restore_backup,
+    validate_dump_file,
 )
 from app.services.event_service import record_event
 
@@ -163,7 +164,33 @@ def download_backup(backup_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Yedek dosya yolu kayitli degil.",
         )
-    p = Path(job.file_path)
+    # Path traversal guard: BackupJob.file_path DB'de saklanir; SQL injection
+    # veya audit miss durumunda saldirgan `/etc/passwd` gibi mutlak yol set
+    # edebilir → FileResponse istenen dosyayi serve eder. Resolved path'in
+    # get_backup_dir() altinda oldugundan emin ol.
+    from app.services.backup_service import get_backup_dir
+
+    backup_root = get_backup_dir().resolve()
+    try:
+        p = Path(job.file_path).resolve()
+        # Python 3.9+ is_relative_to. Mutlak yol get_backup_dir() icinde mi?
+        if not p.is_relative_to(backup_root):
+            import logging as _logging
+
+            _logging.getLogger(__name__).error(
+                "backup_download_path_traversal_attempt backup_id=%s file_path=%r",
+                backup_id,
+                job.file_path,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Gecersiz yedek dosya yolu (path traversal koruma).",
+            )
+    except (ValueError, OSError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Yedek dosya yolu cozumlenemedi: {exc}",
+        )
     if not p.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -241,6 +268,18 @@ async def upload_backup(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Dosya kaydedilemedi: {exc}",
+        )
+    # Format + tehlikeli SQL pattern validation — gecmezse dosyayi sil ve 400 don.
+    # Saldirgan engineer rolunu ele gecirip RCE icin malicious dump yukleyemesin.
+    valid, validation_err = validate_dump_file(target)
+    if not valid:
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Yedek dosyasi reddedildi: {validation_err}",
         )
     try:
         size = target.stat().st_size

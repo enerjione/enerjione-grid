@@ -65,22 +65,75 @@ def _validate_token(token: str | None) -> str | None:
         return None
 
 
+_ALLOWED_WS_ORIGINS_FALLBACK = ("http://localhost", "http://127.0.0.1")
+
+
+def _is_origin_allowed(origin: str | None) -> bool:
+    """WebSocket Origin header'i izinli listede mi?
+
+    Production'da `CORS_ORIGINS` env'inde tanimli origin'ler kabul edilir.
+    Localhost / 127.0.0.1 her zaman izinli (dev). Origin yoksa (curl/postman
+    veya non-browser client) ticket auth zaten zorunlu oldugu icin izin
+    veriyoruz — CSWSH browser'dan gelir; non-browser zaten ticket alamaz.
+    """
+    if not origin:
+        return True
+    from app.core.config import settings as _s
+
+    origin_lower = origin.strip().lower()
+    if origin_lower.startswith(_ALLOWED_WS_ORIGINS_FALLBACK):
+        return True
+    for allowed in _s.cors_origin_list:
+        if allowed.strip().lower() == origin_lower or allowed.strip() == "*":
+            return True
+    return False
+
+
 @router.websocket("/ws/live-values")
 async def live_values_ws(
     websocket: WebSocket,
-    token: str = Query(..., description="JWT access token (login response'undan)"),
+    ticket: str | None = Query(
+        default=None,
+        description="WS ticket (POST /auth/ws-ticket ile alinan kisa omurlu bilet — onerilen)",
+    ),
+    token: str | None = Query(
+        default=None,
+        description="(LEGACY) JWT access token URL'de. Yeni client'lar ticket kullansin; bu yol nginx access_log'a sizar.",
+    ),
     devices: str | None = Query(
         default=None,
         description="(Opsiyonel) Virgulle ayrilmis cihaz kodlari; sadece bu cihazlarin telemetrisi gelir. Bos = hepsi.",
     ),
 ):
     """Canli telemetry akisi. Authenticate edilmis user kendi scope'undaki
-    tum cihazlarin (veya filter'a uygun olanlarin) anlik degerlerini alir."""
+    tum cihazlarin (veya filter'a uygun olanlarin) anlik degerlerini alir.
 
-    username = _validate_token(token)
+    Auth: `?ticket=<TICKET>` (yeni, onerilen) veya `?token=<JWT>` (legacy).
+    Ticket /auth/ws-ticket'tan alinir, 30sn TTL + tek kullanim.
+
+    Origin guard: CSWSH'i (Cross-Site WebSocket Hijacking) onlemek icin
+    Origin header'i CORS whitelist'iyle karsilastirilir. Browser bu header'i
+    spoof edemez (servlet kontrolu); non-browser client'lar zaten ticket
+    alamadigi icin etkilenmez.
+    """
+    # Origin check — CSWSH koruma.
+    origin = websocket.headers.get("origin")
+    if not _is_origin_allowed(origin):
+        await websocket.close(code=1008, reason="origin_not_allowed")
+        return
+
+    username: str | None = None
+    if ticket:
+        # Yeni yol: ticket consume (tek kullanim, 30sn TTL).
+        from app.services.auth_service import consume_ws_ticket
+
+        username = consume_ws_ticket(ticket)
+    if username is None and token:
+        # Legacy: JWT URL query. Bir sonraki release'te kaldirilacak.
+        username = _validate_token(token)
     if username is None:
-        # WebSocket spec: 1008 = policy violation; 4401 custom code da kullanilabilir.
-        await websocket.close(code=1008, reason="invalid_token")
+        # WebSocket spec: 1008 = policy violation.
+        await websocket.close(code=1008, reason="invalid_credentials")
         return
 
     # Cihaz filtresi: ?devices=DEV001,DEV002 -> sadece bu kodlar

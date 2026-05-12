@@ -32,6 +32,9 @@ from typing import Callable
 
 
 CONFIG_FILE = Path(__file__).with_name("service_control_panel.config.json")
+# Template fallback: gercek config dosyasi .gitignore'da; ilk calistirmada yoksa
+# .example.json'i ornek olarak kullanip kopyalanmasini istiyoruz.
+CONFIG_EXAMPLE_FILE = Path(__file__).with_name("service_control_panel.config.example.json")
 # Proje kökü: infra/scripts/windows/service_control_panel.py → parents[3] = repo kökü.
 # working_dir göreli yazılırsa (örn. "apps/backend-api") bu köke göre çözülür; böylece
 # proje farklı bir dizine taşındığında config'i elle güncellemeye gerek kalmaz.
@@ -1874,9 +1877,34 @@ class ServiceControlPanel:
             pass
 
 
+def _ensure_config_file() -> None:
+    """Config dosyasi yoksa .example.json template'ini kopyala.
+
+    Gercek config dosyasi `.gitignore`'da; secret degerleri commit'e
+    sizmasin diye sadece `.example.json` repo'da. Ilk calistirmada
+    operator dosyayi gormez ise template'i kopyalayip uyari verir.
+    """
+    if CONFIG_FILE.exists():
+        return
+    if not CONFIG_EXAMPLE_FILE.exists():
+        raise FileNotFoundError(
+            f"Config dosyasi yok: {CONFIG_FILE}\n"
+            f"Ornek template'i de bulunamadi: {CONFIG_EXAMPLE_FILE}\n"
+            "Repo'dan service_control_panel.config.example.json'i kopyalayin."
+        )
+    import shutil
+
+    shutil.copyfile(CONFIG_EXAMPLE_FILE, CONFIG_FILE)
+    print(
+        f"[panel] Config dosyasi olusturuldu: {CONFIG_FILE}\n"
+        f"        Template kullanildi: {CONFIG_EXAMPLE_FILE.name}\n"
+        "        ONEMLI: INTERNAL_SERVICE_TOKEN ve diger placeholder degerleri\n"
+        "        production icin .env'inizdeki gercek degerlere gore guncelleyin."
+    )
+
+
 def main() -> None:
-    if not CONFIG_FILE.exists():
-        raise FileNotFoundError(f"Config file not found: {CONFIG_FILE}")
+    _ensure_config_file()
     services, gateways, backend_settings = read_config()
     root = tk.Tk()
     app = ServiceControlPanel(root, services, gateways, backend_settings)

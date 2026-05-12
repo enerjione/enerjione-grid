@@ -29,8 +29,13 @@ class Settings:
     # tag-engine cikisini (telemetry.normalized.<gw>) tuketir; IEC 104 server
     # manager'a koprü ile aktarir.
     nats_url: str
-    nats_subject: str  # wildcard: hsl.telemetry.normalized.>
+    nats_subject: str  # wildcard: e1.telemetry.normalized.>
     nats_durable: str  # consumer durable adi
+    # DLQ subject prefix — worker max_deliver'a takilan mesajlari buraya tasiyor
+    # (NATS default'unda mesaj sessizce discard olur). Subject:
+    # e1.dlq.iec104-outbound.<original-subject>
+    nats_subject_dlq_prefix: str
+    nats_worker_max_deliver: int
 
     # ---- RabbitMQ (LEGACY — telemetri akisi JetStream'e tasindi) ----------
     # Asagidaki alanlar geriye uyumluluk icin saklaniyor; runtime'da kullanilmiyor.
@@ -66,9 +71,13 @@ class Settings:
         return cls(
             nats_url=os.getenv("NATS_URL", "nats://localhost:4222"),
             nats_subject=os.getenv(
-                "NATS_SUBJECT_TELEMETRY_NORMALIZED", "hsl.telemetry.normalized.>"
+                "NATS_SUBJECT_TELEMETRY_NORMALIZED", "e1.telemetry.normalized.>"
             ),
             nats_durable=os.getenv("NATS_IEC104_DURABLE", "iec104-outbound-bridge"),
+            nats_subject_dlq_prefix=os.getenv(
+                "NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.iec104-outbound"
+            ),
+            nats_worker_max_deliver=_get_int("NATS_WORKER_MAX_DELIVER", 10),
             rabbit_url=os.getenv("RABBITMQ_URL", ""),
             exchange=os.getenv("RABBITMQ_EXCHANGE", "hsl.events"),
             incoming_topic=os.getenv("IEC104_INCOMING_TOPIC", "telemetry.received"),

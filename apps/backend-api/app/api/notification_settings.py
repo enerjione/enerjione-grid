@@ -24,6 +24,32 @@ from app.services.notification_test_service import (
     send_smtp_test,
     send_telegram_test,
 )
+from app.services.secrets_vault import decrypt_secret, encrypt_secret
+
+
+# Bu alanlar DB'de Fernet ile sifrelenmis (`enc:v1:...`) saklanir.
+# update endpoint write'ta encrypt, read endpoint'inde decrypt yapilir.
+# Idempotent re-encrypt: PUT'ta zaten sifreli gelen deger dokunulmaz (UI
+# "***" gosterse de re-encrypt edip yeniden yazmamis olur).
+_ENCRYPTED_FIELDS = (
+    "smtp_password",
+    "sms_api_key",
+    "sms_account_sid",
+    "telegram_bot_token",
+)
+
+
+def _decrypted_view(row):
+    """Read tarafinda DB row'un sifreli alanlarini decrypt edip frontend'e
+    yansiyacak hali doner. Pydantic `from_attributes` ile NotificationSettingsRead
+    olusturulurken bu method'un cikti'sini geciriyoruz."""
+    # SQLAlchemy row'i mutate etmiyoruz (transaction state'i bozulmasin);
+    # dict snapshot uzerinde decrypt.
+    snapshot = {c.name: getattr(row, c.name) for c in row.__table__.columns}
+    for field in _ENCRYPTED_FIELDS:
+        if field in snapshot:
+            snapshot[field] = decrypt_secret(snapshot[field])
+    return snapshot
 
 router = APIRouter(prefix="/notification-settings", tags=["notification-settings"])
 
@@ -33,7 +59,8 @@ def get_notification_settings(
     _: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    return get_or_create_notification_settings(db)
+    row = get_or_create_notification_settings(db)
+    return NotificationSettingsRead.model_validate(_decrypted_view(row))
 
 
 @router.put("", response_model=NotificationSettingsRead)
@@ -47,19 +74,21 @@ def update_notification_settings(
     settings_row.smtp_host = payload.smtp_host
     settings_row.smtp_port = payload.smtp_port
     settings_row.smtp_username = payload.smtp_username
-    settings_row.smtp_password = payload.smtp_password
+    # Encrypt secret alanlari — Fernet (`enc:v1:...`). Idempotent: zaten
+    # encrypted gelen deger re-encrypt edilmez.
+    settings_row.smtp_password = encrypt_secret(payload.smtp_password)
     settings_row.smtp_from_email = payload.smtp_from_email
     settings_row.sms_enabled = payload.sms_enabled
     settings_row.sms_provider = payload.sms_provider
     settings_row.sms_api_url = payload.sms_api_url
-    settings_row.sms_api_key = payload.sms_api_key
-    settings_row.sms_account_sid = payload.sms_account_sid
+    settings_row.sms_api_key = encrypt_secret(payload.sms_api_key)
+    settings_row.sms_account_sid = encrypt_secret(payload.sms_account_sid)
     settings_row.sms_from_number = payload.sms_from_number
     settings_row.sms_twilio_use_whatsapp = payload.sms_twilio_use_whatsapp
     settings_row.sms_twilio_content_sid = payload.sms_twilio_content_sid
     settings_row.sms_twilio_content_vars = payload.sms_twilio_content_vars
     settings_row.telegram_enabled = payload.telegram_enabled
-    settings_row.telegram_bot_token = payload.telegram_bot_token
+    settings_row.telegram_bot_token = encrypt_secret(payload.telegram_bot_token)
     settings_row.telegram_chat_ids = payload.telegram_chat_ids
     record_event(
         db,
@@ -72,7 +101,7 @@ def update_notification_settings(
     )
     db.commit()
     db.refresh(settings_row)
-    return settings_row
+    return NotificationSettingsRead.model_validate(_decrypted_view(settings_row))
 
 
 @router.post("/test-smtp", response_model=NotificationTestResult)
@@ -227,7 +256,11 @@ def discover_chats(
     kullaniciya 'webhook'u kapatip tekrar deneyin' diye geri doner.
     """
     settings_row = get_or_create_notification_settings(db)
-    token = (payload.bot_token or "").strip() or settings_row.telegram_bot_token
+    # DB'de Fernet sifreli; getUpdates icin plaintext gerek.
+    from app.services.notification_settings_service import decrypt_notification_credentials
+
+    stored_token = decrypt_notification_credentials(settings_row).telegram_bot_token or ""
+    token = (payload.bot_token or "").strip() or stored_token
     if not token:
         return TelegramDiscoverChatsResult(
             ok=False,

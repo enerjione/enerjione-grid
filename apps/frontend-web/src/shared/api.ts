@@ -67,11 +67,24 @@ type ApiErrorResponse = {
 };
 
 function authHeaders(token: string): HeadersInit {
+  // GERIYE UYUMLULUK: Token bos string ise (HttpOnly cookie kullaniliyor)
+  // Authorization header'i koymayiz; backend cookie'den okur. Cookie yokken
+  // (eski localStorage akisi) token degeri ile Bearer header'i kullanir.
+  if (!token) {
+    return { "Content-Type": "application/json" };
+  }
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json"
   };
 }
+
+// HttpOnly cookie ile auth: `credentials: 'include'` tum fetch'lere eklenir
+// ki tarayici e1_session cookie'sini istekle gondersin. Same-origin (nginx
+// proxy ediyor) icin gerek yok aslinda — ama Vite dev server farkli portta
+// olunca cross-origin oluyor ve include zorunlu. Helper ile tek yerden
+// yonetim.
+const FETCH_CREDENTIALS: RequestCredentials = "include";
 
 const SESSION_401_TURKISH =
   "Oturum süresi doldu veya geçerli değil. Lütfen sağ üstten çıkış yapıp tekrar giriş yapın.";
@@ -165,7 +178,10 @@ export function clearSession(): void {
 export async function logout(token: string): Promise<void> {
   await fetch(`${API_BASE_URL}/auth/logout`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: authHeaders(token),
+    // Cookie (e1_session) backend tarafindan delete_cookie ile temizlenir;
+    // credentials zorunlu yoksa Set-Cookie atilmaz.
+    credentials: FETCH_CREDENTIALS
   });
 }
 
@@ -173,7 +189,10 @@ export async function login(username: string, password: string): Promise<AuthSes
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password }),
+    // Cookie auth: backend `Set-Cookie: e1_session` ile dondurur; credentials
+    // include olmadan tarayici cookie'yi saklamaz. Future-ready.
+    credentials: FETCH_CREDENTIALS
   });
   if (!response.ok) {
     throw new Error("Kullanıcı adı veya şifre hatalı.");
