@@ -69,22 +69,27 @@ export function Header({
         {/* Customer logosu yalnizca proje ayarlarinda kullanici yukledigi
             zaman gosterilir. Bos ise divider + logo blogu hic render edilmez
             (header daha temiz gorunur, ilk kurulumda placeholder spam yok). */}
-        {(settings.customer_logo_light || settings.customer_logo) && (
-          <>
-            <span className="header-divider" />
-            <div className="customer-logo-wrap">
-              <img
-                className="header-customer-logo"
-                src={settings.customer_logo_light || settings.customer_logo}
-                alt={settings.customer_name || t("header.customerLogoAlt")}
-                onError={(event) => {
-                  // Yukleme basarisiz olursa img'i gizle (broken-image yerine)
-                  event.currentTarget.style.display = "none";
-                }}
-              />
-            </div>
-          </>
-        )}
+        {(() => {
+          const customerLogoSrc =
+            settings.customer_logo_light || settings.customer_logo || "";
+          if (!customerLogoSrc) return null;
+          return (
+            <>
+              <span className="header-divider" />
+              <div className="customer-logo-wrap">
+                <img
+                  className="header-customer-logo"
+                  src={customerLogoSrc}
+                  alt={settings.customer_name || t("header.customerLogoAlt")}
+                  onError={(event) => {
+                    // Yukleme basarisiz olursa img'i gizle (broken-image yerine)
+                    event.currentTarget.style.display = "none";
+                  }}
+                />
+              </div>
+            </>
+          );
+        })()}
         <nav className="header-nav header-nav--framed">
           <button className={activePage === "home" ? "active" : ""} onClick={() => onChangePage("home")}>
             {t("header.home")}

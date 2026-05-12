@@ -68,17 +68,21 @@ export function LoginForm({ onSubmit, loading }: Props) {
           {/* Customer logosu yalnizca proje ayarlarinda kullanici yukledigi
               zaman gosterilir. Bos ise hic render edilmez (ilk kurulumda
               placeholder gozukmesin; EnerjiOne markasi alt-logoda zaten var). */}
-          {settings.customer_logo && (
-            <img
-              className="customer-logo"
-              src={settings.customer_logo}
-              alt={settings.customer_name || t("login.customerLogoAlt")}
-              onError={(event) => {
-                // Yukleme basarisiz olursa img'i gizle (broken-image yerine)
-                event.currentTarget.style.display = "none";
-              }}
-            />
-          )}
+          {(() => {
+            const customerLogoSrc = settings.customer_logo || "";
+            if (!customerLogoSrc) return null;
+            return (
+              <img
+                className="customer-logo"
+                src={customerLogoSrc}
+                alt={settings.customer_name || t("login.customerLogoAlt")}
+                onError={(event) => {
+                  // Yukleme basarisiz olursa img'i gizle (broken-image yerine)
+                  event.currentTarget.style.display = "none";
+                }}
+              />
+            );
+          })()}
           <div className="login-form-fields">
             <h2>{t("login.title")}</h2>
             <label>
