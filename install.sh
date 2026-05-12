@@ -200,12 +200,18 @@ _ensure_env_var "NATS_GATEWAY_PASSWORD" "$NG"
 _set_env_var "APP_ENV" "production"
 
 # CORS_ORIGINS: VPS IP + localhost. Default '*' production'da reddedilir.
+# IP tespiti kritik: bos donerse browser'in WS Origin check'ini gecemez (403).
+# Bu yuzden detect basarisiz olursa fail-fast yap, kullanici elle girsin.
 DETECTED_IP="$(e1_detect_ip 2>/dev/null || true)"
-if [[ -z "$DETECTED_IP" ]] || [[ "$DETECTED_IP" == "<vds-ip>" ]]; then
+if [[ -z "$DETECTED_IP" ]] || [[ "$DETECTED_IP" == "<vds-ip>" ]] || [[ "$DETECTED_IP" == "127.0.0.1" ]]; then
+  e1_warn "VPS IP otomatik tespit edilemedi (hostname -I + ifconfig.me ikisi de basarisiz)."
+  e1_warn "CORS_ORIGINS sadece localhost olacak — browser'dan VPS IP ile baglanan kullanici"
+  e1_warn "WebSocket origin check'i gecemez. .env'i elle duzenleyip:"
+  e1_warn "  CORS_ORIGINS=http://<vps-ip>,http://localhost,http://127.0.0.1"
+  e1_warn "satirini ekleyip backend-api'yi restart edin."
   CORS_DEFAULT="http://localhost,http://127.0.0.1"
-  e1_warn "VPS IP otomatik tespit edilemedi; CORS_ORIGINS sadece localhost."
-  e1_warn "Disardan erisim icin .env'de CORS_ORIGINS'u duzenleyin."
 else
+  e1_info "VPS IP tespit edildi: ${DETECTED_IP}"
   CORS_DEFAULT="http://${DETECTED_IP},http://localhost,http://127.0.0.1"
 fi
 # Sadece placeholder/yildiz/bos ise overwrite et; kullanici manuel girdiyse koru.

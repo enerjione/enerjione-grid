@@ -107,9 +107,24 @@ e1_chown_target_recursive() {
   fi
 }
 
-# VDS IP'sini bul — banner sonu rehber icin.
+# VDS IP'sini bul — once `hostname -I` (local interface, instant, offline-safe),
+# yoksa veya invalid ise public IP icin curl ifconfig.me. Bash `||` zincirinde
+# bos string'in exit=0 dondurmesi tuzak; her adimi explicit kontrol et.
 e1_detect_ip() {
-  curl -fsS --max-time 3 ifconfig.me 2>/dev/null \
-    || hostname -I 2>/dev/null | awk '{print $1}' \
-    || echo "<vds-ip>"
+  local ip=""
+  # 1. hostname -I — Linux'ta her zaman calisir, network olmasa bile
+  #    aktif interface IP'sini doner. Birden fazla varsa ilkini al.
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  if [[ -n "$ip" ]] && [[ "$ip" != "127.0.0.1" ]] && [[ "$ip" != "<vds-ip>" ]]; then
+    echo "$ip"
+    return 0
+  fi
+  # 2. Fallback: ifconfig.me public IP (network gerektirir, NAT arkasinda VPS
+  #    icin gercek public IP'yi verir).
+  ip="$(curl -fsS --max-time 3 ifconfig.me 2>/dev/null || true)"
+  if [[ -n "$ip" ]]; then
+    echo "$ip"
+    return 0
+  fi
+  echo "<vds-ip>"
 }

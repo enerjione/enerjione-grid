@@ -68,6 +68,32 @@ def _validate_token(token: str | None) -> str | None:
 _ALLOWED_WS_ORIGINS_FALLBACK = ("http://localhost", "http://127.0.0.1")
 
 
+def _normalize_origin(origin: str) -> str:
+    """Origin'i karsilastirma icin normalize et.
+
+    - lowercase scheme + host
+    - default portlari (80 http, 443 https) kaldir
+    - trailing slash kaldir
+    Boylece `http://1.2.3.4` ile `http://1.2.3.4:80/` ayni sayilir.
+    """
+    from urllib.parse import urlparse
+
+    s = origin.strip().lower().rstrip("/")
+    try:
+        p = urlparse(s)
+    except Exception:  # noqa: BLE001
+        return s
+    if not p.scheme or not p.hostname:
+        return s
+    # Port default'sa kaldir
+    port = p.port
+    if (p.scheme == "http" and port == 80) or (p.scheme == "https" and port == 443):
+        return f"{p.scheme}://{p.hostname}"
+    if port is None:
+        return f"{p.scheme}://{p.hostname}"
+    return f"{p.scheme}://{p.hostname}:{port}"
+
+
 def _is_origin_allowed(origin: str | None) -> bool:
     """WebSocket Origin header'i izinli listede mi?
 
@@ -75,17 +101,33 @@ def _is_origin_allowed(origin: str | None) -> bool:
     Localhost / 127.0.0.1 her zaman izinli (dev). Origin yoksa (curl/postman
     veya non-browser client) ticket auth zaten zorunlu oldugu icin izin
     veriyoruz — CSWSH browser'dan gelir; non-browser zaten ticket alamaz.
+
+    Origin normalize edilir (default port + trailing slash kaldirilir) ki
+    `http://1.2.3.4` ile `http://1.2.3.4:80/` ayni sayilsin.
     """
     if not origin:
         return True
     from app.core.config import settings as _s
 
-    origin_lower = origin.strip().lower()
-    if origin_lower.startswith(_ALLOWED_WS_ORIGINS_FALLBACK):
-        return True
-    for allowed in _s.cors_origin_list:
-        if allowed.strip().lower() == origin_lower or allowed.strip() == "*":
+    norm_origin = _normalize_origin(origin)
+    # Loopback fallback — dev/staging icin hep izinli.
+    for fallback in _ALLOWED_WS_ORIGINS_FALLBACK:
+        if norm_origin == _normalize_origin(fallback) or norm_origin.startswith(
+            _normalize_origin(fallback) + ":"
+        ):
             return True
+    for allowed in _s.cors_origin_list:
+        if allowed.strip() == "*":
+            return True
+        if _normalize_origin(allowed) == norm_origin:
+            return True
+    # Eslesme yok — teshis icin neyin neyle karsilastirildigini logla.
+    logger.warning(
+        "ws_origin_rejected origin=%r normalized=%r allowed=%r",
+        origin,
+        norm_origin,
+        [_normalize_origin(a) for a in _s.cors_origin_list],
+    )
     return False
 
 
