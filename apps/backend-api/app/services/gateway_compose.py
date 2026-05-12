@@ -149,7 +149,7 @@ class ComposeRenderInput:
     # `rabbitmq_url` parametresi kaldirildi (gateway artik RabbitMQ kullanmiyor).
     nats_url: str
     host_port: int = 8020
-    image: str = "ghcr.io/fikretsafak/horstmann-dnp3-gateway:latest"
+    image: str = "ghcr.io/fikretsafak/enerjionegrid-dnp3-gateway:latest"
     app_environment: Literal["development", "staging", "production"] = "production"
     # Initiating cihaz portu icin host tarafi baslangic (multi-gateway port
     # catismasi onleme — her gateway'e benzersiz blok 20100, 21100, ...).

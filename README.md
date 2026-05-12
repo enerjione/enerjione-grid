@@ -23,8 +23,8 @@ sudo bash infra/scripts/linux/install-docker.sh
 ### 2. Repo'yu çek ve bootstrap
 
 ```bash
-git clone https://github.com/<KULLANICI>/horstman-smart-logger.git
-cd horstman-smart-logger
+git clone https://github.com/fikretsafak/EnerjiOneGrid.git
+cd EnerjiOneGrid
 sudo bash infra/scripts/linux/bootstrap.sh
 ```
 
@@ -93,7 +93,7 @@ gömülür ([`gateway_compose.py`](apps/backend-api/app/services/gateway_compose
 
 ```bash
 # VPS'te — DB ve tüm volume'leri sıfırlar (geri dönüşü yok!)
-cd ~/horstman-smart-logger
+cd ~/EnerjiOneGrid
 docker compose down -v
 rm -f .env infra/nats/nats-server.conf
 sudo bash infra/scripts/linux/bootstrap.sh

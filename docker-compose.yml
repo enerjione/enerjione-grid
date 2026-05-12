@@ -15,7 +15,7 @@
 # (scripts/create_installer.py mevcutsa; degilse README'de manuel SQL adimi.)
 #
 # `name: enerjione` — Compose proje adi (volume + network prefix'i icin).
-# Repo dizin adi ne olursa olsun (Horstman-Smart-Logger, EnerjiOne-Smart-Logger, ...)
+# Repo dizin adi ne olursa olsun (EnerjiOneGrid, baska bir clone adi, ...)
 # volume'lar `enerjione_postgres-data`, network `enerjione_e1-net` olarak olusur.
 # Boylece marka tutarliligi disk artefaktlarinda da saglanmis olur.
 name: enerjione

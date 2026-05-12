@@ -142,7 +142,7 @@ def create_gateway(
         event_type="gateway_created",
         severity="info",
         actor_username=current_user.username,
-        message=f"Gateway eklendi: {row.name} ({row.code})",
+        message=f"Gateway created: {row.name} ({row.code})",
         metadata={"gateway_code": row.code},
         i18n_key="gateway_created",
         i18n_params={"name": row.name, "code": row.code},
@@ -347,7 +347,7 @@ def download_gateway_compose(
         description="(Opsiyonel) Host'ta health/metrics endpoint icin acilacak port. Verilmezse gateway sirasina gore 8020/8021/... olarak otomatik atanir.",
     ),
     image: str = Query(
-        "ghcr.io/fikretsafak/horstmann-dnp3-gateway:latest",
+        "ghcr.io/fikretsafak/enerjionegrid-dnp3-gateway:latest",
         description="Docker image tag (registry/name:tag). Varsayilan GHCR public paketidir; ozel registry kullanilacaksa override edilir.",
     ),
     app_environment: Literal["development", "staging", "production"] = Query(
