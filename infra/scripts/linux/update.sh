@@ -52,6 +52,33 @@ fi
 echo "[1/3] git pull..."
 git pull --ff-only
 
+# Bootstrap idempotency: .env yoksa olusturulur; NATS sifreleri placeholder'da
+# (please-change-me-) ise bootstrap.sh `.env` icindeki cleartext'leri rastgele
+# uretip yazar. nats-server.conf yoksa (veya bind mount kazasi sonucu dizin
+# olarak kalmissa) sil ve template'ten yeniden render et.
+if [[ -d infra/nats/nats-server.conf ]]; then
+  echo "[1.6/3] infra/nats/nats-server.conf yanlislikla DIZIN olarak duruyor (docker bind mount kazasi); siliniyor..."
+  rm -rf infra/nats/nats-server.conf
+fi
+need_bootstrap=0
+if [[ ! -f .env ]]; then
+  echo "[1.7/3] .env yok — bootstrap.sh ile rastgele sifreler uretiliyor."
+  need_bootstrap=1
+elif grep -qE '^NATS_(GATEWAY|BACKEND|WORKER)_PASSWORD=please-change-me' .env; then
+  echo "[1.7/3] .env'de NATS sifreleri hala placeholder — bootstrap.sh ile dolduruluyor."
+  need_bootstrap=1
+fi
+if [[ ! -f infra/nats/nats-server.conf ]]; then
+  echo "[1.8/3] nats-server.conf yok — bootstrap.sh ile template'ten render edilecek."
+  need_bootstrap=1
+fi
+if [[ $need_bootstrap -eq 1 ]]; then
+  bash infra/scripts/linux/bootstrap.sh --rerender-nats
+  # bootstrap.sh basarili olunca burada devam et — bootstrap kendi build/up yapar
+  # ama --rerender-nats sonrasi update.sh'in build/up mantigi ZATEN gerekli
+  # degildi: idempotent oldugu icin alttaki adimlar (build + up) yine calisir.
+fi
+
 case "$TARGET" in
   frontend|frontend-web|web)
     SVC="frontend-web"
