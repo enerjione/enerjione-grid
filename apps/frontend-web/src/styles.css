@@ -154,21 +154,29 @@ body {
 }
 
 .header-customer-logo {
+  /* EnerjiOne logosu (height 44px) ile gorsel olarak ayni agirlikta dursun
+     diye musteri logosu da ayni yukseklikte. width: auto + object-fit:contain
+     orani korur — kare logo kare gozukur, yatay logo da rahat sigar. */
   height: 44px;
   width: auto;
   max-width: 100%;
+  object-fit: contain;
   display: block;
 }
 
 .customer-logo-wrap {
+  /* max-width 190px -> 280px: kare musteri logosu artik 44px x 44px gozukse
+     bile yan-bos alan az olur; yatay musteri logosu 280px'e kadar genisleyebilir.
+     EnerjiOne ~220px oldugu icin total header logo bloku ~500px civarinda
+     dengeli. */
   height: 56px;
   width: auto;
   min-width: 0;
-  max-width: 190px;
+  max-width: 280px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 6px;
+  padding: 2px 8px;
   overflow: hidden;
 }
 
