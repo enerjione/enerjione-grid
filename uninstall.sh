@@ -4,7 +4,7 @@
 # ===========================================================================
 # Sistemi tamamen kaldirir:
 #   - docker compose down -v  (container + volume = TUM VERI silinir)
-#   - hsl-*, e1-* container'lari ve image'leri sil
+#   - e1/* docker image'larini sil (--keep-images ile koru)
 #   - opsiyonel: install dizinini de sil (--purge-dir)
 #
 # Kullanim (repo kokunde):
@@ -56,10 +56,10 @@ echo
 
 if [[ $ASSUME_YES -ne 1 ]]; then
   e1_warn "Silinecekler:"
-  e1_warn "  * Tum container'lar (e1-*, hsl-*)"
+  e1_warn "  * Tum e1-* container'lar"
   e1_warn "  * postgres-data, rabbitmq-data, nats-data, backup-data volume'lari"
   e1_warn "  * Tum telemetri, alarm, kullanici, gateway, sinyal verileri"
-  [[ $KEEP_IMAGES -ne 1 ]] && e1_warn "  * Docker image'lari (e1/*, hsl/*)"
+  [[ $KEEP_IMAGES -ne 1 ]] && e1_warn "  * Docker image'lari (e1/*)"
   [[ $PURGE_DIR -eq 1 ]]   && e1_warn "  * ${SCRIPT_DIR} dizini (.env DAHIL)"
   echo
   if ! e1_confirm "Gercekten devam edilsin mi?"; then
@@ -79,26 +79,15 @@ else
   e1_warn "docker-compose.yml bulunamadi, atlandi."
 fi
 
-# ---- 2/5: Eski hsl-* artefact'lari ---------------------------------------
-e1_step "Eski hsl-* container ve image'lari temizleniyor..."
-OLD_CONTAINERS=$(docker ps -a --filter "name=^hsl-" --format '{{.Names}}' 2>/dev/null || true)
-if [[ -n "$OLD_CONTAINERS" ]]; then
-  echo "$OLD_CONTAINERS" | while read -r name; do
-    docker stop "$name" 2>/dev/null || true
-    docker rm "$name" 2>/dev/null || true
-  done
-  e1_ok "Eski hsl-* container'lar silindi."
-else
-  e1_ok "Eski hsl-* container yok."
-fi
-
+# ---- 2/5: Image'lar ------------------------------------------------------
+e1_step "Docker image'lari..."
 if [[ $KEEP_IMAGES -ne 1 ]]; then
-  OLD_IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E '^(hsl|e1)/' || true)
+  OLD_IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E '^e1/' || true)
   if [[ -n "$OLD_IMAGES" ]]; then
     echo "$OLD_IMAGES" | while read -r img; do
       docker rmi -f "$img" 2>/dev/null || true
     done
-    e1_ok "Image'lar silindi (hsl/*, e1/*)."
+    e1_ok "Image'lar silindi (e1/*)."
   else
     e1_ok "Silinecek image yok."
   fi
@@ -106,10 +95,16 @@ else
   e1_info "Image'lar korundu (--keep-images)."
 fi
 
-# ---- 3/5: Orphan volume'lar (eski compose isimleriyle olusmus) -----------
+# Dangling image temizligi (build cache'i ile birlikte sislenmis layer'lar)
+docker image prune -f >/dev/null 2>&1 || true
+
+# ---- 3/5: Orphan volume'lar ----------------------------------------------
+# Eski compose proje adlariyla (enerjione_*) olusmus volume'lar — compose
+# down -v genelde silmis olur ama eski proje adi degisikligi sonrasi takintilar
+# kalabilir. Yeni proje adi 'enerjione' (docker-compose.yml: `name: enerjione`).
 e1_step "Orphan volume'lar taraniyor..."
 ORPHAN_VOLS=$(docker volume ls --format '{{.Name}}' 2>/dev/null \
-  | grep -E '(^horstman|^enerjione|^hsl)' \
+  | grep -E '^enerjione_' \
   | grep -E '(postgres-data|rabbitmq-data|nats-data|backup-data)$' || true)
 if [[ -n "$ORPHAN_VOLS" ]]; then
   echo "$ORPHAN_VOLS" | while read -r vol; do
@@ -122,7 +117,7 @@ fi
 
 # ---- 4/5: Network temizligi ----------------------------------------------
 e1_step "Network temizligi..."
-OLD_NETS=$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -E '^(enerjione|hsl|horstman)' || true)
+OLD_NETS=$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -E '^enerjione' || true)
 if [[ -n "$OLD_NETS" ]]; then
   echo "$OLD_NETS" | while read -r net; do
     docker network rm "$net" 2>/dev/null || true
