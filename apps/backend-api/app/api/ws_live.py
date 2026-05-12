@@ -94,38 +94,65 @@ def _normalize_origin(origin: str) -> str:
     return f"{p.scheme}://{p.hostname}:{port}"
 
 
-def _is_origin_allowed(origin: str | None) -> bool:
+def _is_origin_allowed(origin: str | None, host: str | None = None) -> bool:
     """WebSocket Origin header'i izinli listede mi?
 
-    Production'da `CORS_ORIGINS` env'inde tanimli origin'ler kabul edilir.
-    Localhost / 127.0.0.1 her zaman izinli (dev). Origin yoksa (curl/postman
-    veya non-browser client) ticket auth zaten zorunlu oldugu icin izin
-    veriyoruz — CSWSH browser'dan gelir; non-browser zaten ticket alamaz.
+    Sira:
+      1) Origin yok → izin ver (curl/postman, non-browser zaten ticket alamaz).
+      2) Loopback (localhost / 127.0.0.1) → izin ver (dev).
+      3) **Same-origin**: Origin'in host kismi == Host header → izin ver.
+         Browser tarayicidan ayni host'tan gelen WS = CSWSH degil per definition.
+         Bu sayede kullanici `.env`'e CORS_ORIGINS yazmadan da WS calisir;
+         `http://77.83.37.44`, `https://app.example.com` vb. otomatik kabul.
+      4) CORS_ORIGINS whitelist'inde tam eslesme → izin ver. (Cross-origin
+         senaryolar: mobil app, ayri admin domain'i, vb.)
+      5) Hicbiri tutmazsa reddet + diagnostic log.
 
-    Origin normalize edilir (default port + trailing slash kaldirilir) ki
-    `http://1.2.3.4` ile `http://1.2.3.4:80/` ayni sayilsin.
+    CSWSH koruma'nin orijinal amaci: attacker.com sayfasi kullanicinin tarayicisini
+    kullanip target backend'e WS acmasin. Same-origin'de attacker.com'dan istek
+    cikamaz, dolayisi ile bu kontrol guvenli.
     """
     if not origin:
         return True
     from app.core.config import settings as _s
+    from urllib.parse import urlparse
 
     norm_origin = _normalize_origin(origin)
+
     # Loopback fallback — dev/staging icin hep izinli.
     for fallback in _ALLOWED_WS_ORIGINS_FALLBACK:
         if norm_origin == _normalize_origin(fallback) or norm_origin.startswith(
             _normalize_origin(fallback) + ":"
         ):
             return True
+
+    # Same-origin: Origin'in host kismi Host header ile ayni mi? Browser
+    # cross-site WS'i suspect eden CSWSH koruma BURADA degil — attacker.com
+    # tarayicidan WS acsa Origin attacker.com olur, Host bizim host'umuz; not
+    # equal. Bizim Host'umuza Origin = bizim Host = same-origin demektir.
+    if host:
+        try:
+            origin_host = urlparse(norm_origin).hostname
+            # Host header port iceriyor olabilir (ornek "1.2.3.4:80")
+            host_only = host.split(":", 1)[0].strip().lower()
+            if origin_host and origin_host == host_only:
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+
+    # CORS_ORIGINS whitelist — ekstra (cross-origin) durumlari icin.
     for allowed in _s.cors_origin_list:
         if allowed.strip() == "*":
             return True
         if _normalize_origin(allowed) == norm_origin:
             return True
+
     # Eslesme yok — teshis icin neyin neyle karsilastirildigini logla.
     logger.warning(
-        "ws_origin_rejected origin=%r normalized=%r allowed=%r",
+        "ws_origin_rejected origin=%r normalized=%r host=%r allowed=%r",
         origin,
         norm_origin,
+        host,
         [_normalize_origin(a) for a in _s.cors_origin_list],
     )
     return False
@@ -158,9 +185,11 @@ async def live_values_ws(
     spoof edemez (servlet kontrolu); non-browser client'lar zaten ticket
     alamadigi icin etkilenmez.
     """
-    # Origin check — CSWSH koruma.
+    # Origin check — CSWSH koruma. Same-origin (Origin host == Host header)
+    # her zaman izinli; cross-origin CORS_ORIGINS whitelist'ten gecmek zorunda.
     origin = websocket.headers.get("origin")
-    if not _is_origin_allowed(origin):
+    host = websocket.headers.get("host")
+    if not _is_origin_allowed(origin, host):
         await websocket.close(code=1008, reason="origin_not_allowed")
         return
 
