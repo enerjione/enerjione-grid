@@ -110,7 +110,6 @@ def recompute_faults_debounced(db: Session) -> bool:
         recompute_faults(db)
     finally:
         with _recompute_lock:
-            global _last_completed_at
             _last_completed_at = time.monotonic()
             _in_flight = False
             had_pending = _pending_request
