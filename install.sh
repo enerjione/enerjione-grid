@@ -277,12 +277,29 @@ for i in $(seq 1 60); do
 done
 
 if [[ $backend_ready -eq 1 ]]; then
-  e1_info "Installer hesabi olusturuluyor/dogrulaniyor..."
-  if docker compose exec -T backend-api python -m scripts.seed_installer >/dev/null 2>&1; then
-    e1_ok "Installer hesabi hazir."
-  else
-    e1_warn "seed_installer basarisiz oldu. Manuel:"
-    e1_warn "  docker compose exec backend-api python -m scripts.seed_installer"
+  e1_info "Installer hesabi olusturuluyor (5 deneme, her birinde stdout/stderr gosterilir)..."
+  # Backend healthy olsa bile schema/migration 1-2 saniye sonrasi tamamlanabilir.
+  # 5 kez 3 saniye arayla dene. Cikti gizlenmez — kullanici hata sebebini gorur.
+  seed_ok=0
+  for attempt in 1 2 3 4 5; do
+    # Subshell + `|| true` ile `set -e` altinda kirilmaz; cikti tee ile gosterilir.
+    seed_output="$(docker compose exec -T backend-api python -m scripts.seed_installer 2>&1)" || true
+    if echo "$seed_output" | grep -qE 'Installer user (created|password reset)'; then
+      echo "$seed_output" | grep -E 'Installer user' | sed 's/^/      /'
+      e1_ok "Installer hesabi hazir (${attempt}. denemede)."
+      seed_ok=1
+      break
+    fi
+    e1_warn "seed_installer denemesi ${attempt}/5 basarisiz. Cikti:"
+    echo "$seed_output" | sed 's/^/      /'
+    if [[ $attempt -lt 5 ]]; then
+      sleep 3
+    fi
+  done
+  if [[ $seed_ok -eq 0 ]]; then
+    e1_warn "Installer hesabi otomatik olusturulamadi. Manuel calistirin:"
+    e1_warn "  cd ${INSTALL_DIR}"
+    e1_warn "  sudo docker compose exec -T backend-api python -m scripts.seed_installer"
   fi
 else
   e1_warn "backend-api 2 dakikada hazir olmadi. Loglara bakin:"
