@@ -76,10 +76,21 @@ authorization {
             permissions = {
                 # Tag-engine raw subscribe + normalized publish.
                 # Alarm-service / iec104-outbound normalized subscribe.
+                #
+                # JetStream API izinleri: worker'lar consumer create/delete +
+                # stream metadata sorgulama yapabilmeli. Aksi halde
+                # `permissions violation for publish to $JS.API.STREAM.NAMES`
+                # alirlar (subscribe oncesi "stream var mi?" sorgu). Stream
+                # YONETIMI (add/update/delete) backend'e ozel; worker'lar
+                # sadece OKU + consumer baglan.
                 publish = {
                     allow = [
                         "e1.telemetry.normalized.>",
                         "$JS.API.CONSUMER.>",
+                        "$JS.API.STREAM.NAMES",
+                        "$JS.API.STREAM.LIST",
+                        "$JS.API.STREAM.INFO.>",
+                        "$JS.API.STREAM.MSG.GET.>",
                         "$JS.ACK.>"
                     ]
                 }

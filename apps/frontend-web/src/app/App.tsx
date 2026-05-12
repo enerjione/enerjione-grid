@@ -273,8 +273,11 @@ export function App() {
   const [dashboardAreaDeviceIds, setDashboardAreaDeviceIds] = useState<Set<number> | null>(null);
   const [dashboardAreaLoading, setDashboardAreaLoading] = useState(false);
   const [dashboardLocationFilter, setDashboardLocationFilter] = useState<string>("all");
-  const [dashboardRegionId, setDashboardRegionId] = useState<number | "all">("all");
-  const [dashboardLineId, setDashboardLineId] = useState<number | "all">("all");
+  // "unassigned" = topolojiye dahil olmayan cihazlar (hat/bolge atanmamis).
+  // Kullanici saha ekipmaninin gridSnapshot'a baglanmamis olanlari haritada
+  // gormek isterse bu seceneği seçer.
+  const [dashboardRegionId, setDashboardRegionId] = useState<number | "all" | "unassigned">("all");
+  const [dashboardLineId, setDashboardLineId] = useState<number | "all" | "unassigned">("all");
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("hsl.dashboard.sidebar-collapsed") === "1";
@@ -1654,11 +1657,20 @@ export function App() {
       }
       if (dashboardRegionId !== "all") {
         const info = deviceTopologyInfo.get(d.id);
-        if (!info || info.regionId !== dashboardRegionId) return false;
+        if (dashboardRegionId === "unassigned") {
+          // Topoloji bilgisi yok = hicbir hat'in segmentine baglanmamis cihaz
+          if (info) return false;
+        } else {
+          if (!info || info.regionId !== dashboardRegionId) return false;
+        }
       }
       if (dashboardLineId !== "all") {
         const info = deviceTopologyInfo.get(d.id);
-        if (!info || info.lineId !== dashboardLineId) return false;
+        if (dashboardLineId === "unassigned") {
+          if (info) return false;
+        } else {
+          if (!info || info.lineId !== dashboardLineId) return false;
+        }
       }
       if (q) {
         const text = `${d.name} ${d.code}`.toLowerCase();

@@ -144,6 +144,7 @@
       "allRegions": "All regions",
       "line": "Line",
       "allLines": "All lines",
+      "unassigned": "Unassigned",
       "loading": "Loading…",
       "deviceCount": "{{visible}} / {{total}} devices",
       "clear": "Clear",

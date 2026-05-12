@@ -13,11 +13,11 @@ type Props = {
   areaId: number | "all";
   onAreaIdChange: (value: number | "all") => void;
   responsibilityAreas?: ResponsibilityAreaRow[];
-  /** Şebeke topolojisi filtreleri */
-  regionId: number | "all";
-  onRegionIdChange: (value: number | "all") => void;
-  lineId: number | "all";
-  onLineIdChange: (value: number | "all") => void;
+  /** Şebeke topolojisi filtreleri. "unassigned" = hat/bölge atanmamış cihazlar. */
+  regionId: number | "all" | "unassigned";
+  onRegionIdChange: (value: number | "all" | "unassigned") => void;
+  lineId: number | "all" | "unassigned";
+  onLineIdChange: (value: number | "all" | "unassigned") => void;
   regions?: Region[];
   lines?: Line[];
   /** Sayım rozetleri için pre-computed değerler (filtreden geçmemiş ham toplam). */
@@ -65,10 +65,13 @@ export function DashboardFilterBar({
     lineId !== "all" ||
     search.trim().length > 0;
 
-  // Bölge seçimine göre hat dropdown filtrele
-  const visibleLines = (lines ?? []).filter(
-    (l) => regionId === "all" || l.region_id === regionId
-  );
+  // Bölge seçimine göre hat dropdown filtrele.
+  // "unassigned" bölge seçildiyse hat dropdown'unda anlamlı seçim kalmaz
+  // (atanmamış cihazlar zaten hiçbir hat'a bağlı değildir) — boş bırakılır.
+  const visibleLines =
+    regionId === "unassigned"
+      ? []
+      : (lines ?? []).filter((l) => regionId === "all" || l.region_id === regionId);
 
   return (
     <div className="dashboard-filter-bar">
@@ -149,10 +152,11 @@ export function DashboardFilterBar({
       <label className="map-filter-area">
         <span>{t("dashboard.filter.region")}</span>
         <select
-          value={regionId === "all" ? "all" : String(regionId)}
+          value={regionId === "all" ? "all" : regionId === "unassigned" ? "unassigned" : String(regionId)}
           onChange={(event) => {
             const v = event.target.value;
-            const next = v === "all" ? "all" : Number(v);
+            const next: number | "all" | "unassigned" =
+              v === "all" ? "all" : v === "unassigned" ? "unassigned" : Number(v);
             onRegionIdChange(next);
             // Bölge değişirse hat filtresini sıfırla (uyumsuz olabilir)
             if (lineId !== "all") onLineIdChange("all");
@@ -160,6 +164,7 @@ export function DashboardFilterBar({
           disabled={!regions || regions.length === 0}
         >
           <option value="all">{t("dashboard.filter.allRegions")}</option>
+          <option value="unassigned">{t("dashboard.filter.unassigned")}</option>
           {(regions ?? [])
             .filter((r) => r.is_active)
             .map((r) => (
@@ -173,14 +178,17 @@ export function DashboardFilterBar({
       <label className="map-filter-area">
         <span>{t("dashboard.filter.line")}</span>
         <select
-          value={lineId === "all" ? "all" : String(lineId)}
+          value={lineId === "all" ? "all" : lineId === "unassigned" ? "unassigned" : String(lineId)}
           onChange={(event) => {
             const v = event.target.value;
-            onLineIdChange(v === "all" ? "all" : Number(v));
+            const next: number | "all" | "unassigned" =
+              v === "all" ? "all" : v === "unassigned" ? "unassigned" : Number(v);
+            onLineIdChange(next);
           }}
-          disabled={visibleLines.length === 0}
+          disabled={regionId === "unassigned"}
         >
           <option value="all">{t("dashboard.filter.allLines")}</option>
+          <option value="unassigned">{t("dashboard.filter.unassigned")}</option>
           {visibleLines
             .filter((l) => l.is_active)
             .map((l) => (

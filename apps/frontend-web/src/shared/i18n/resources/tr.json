@@ -144,6 +144,7 @@
       "allRegions": "Tüm bölgeler",
       "line": "Hat",
       "allLines": "Tüm hatlar",
+      "unassigned": "Atanmamış",
       "loading": "Yükleniyor…",
       "deviceCount": "{{visible}} / {{total}} cihaz",
       "clear": "Temizle",
