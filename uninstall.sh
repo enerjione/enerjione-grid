@@ -45,7 +45,7 @@ cd "$SCRIPT_DIR"
 
 # ---- Banner ---------------------------------------------------------------
 clear 2>/dev/null || true
-e1_banner "Uninstall"
+e1_banner
 echo "  ${E1_RED}${E1_BOLD}DIKKAT:${E1_RESET} Bu islem TUM verilerinizi silecek!"
 echo
 echo "  ${E1_DIM}Dizin       :${E1_RESET} ${SCRIPT_DIR}"

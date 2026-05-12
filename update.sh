@@ -31,7 +31,7 @@ cd "$SCRIPT_DIR"
 
 # ---- Banner ---------------------------------------------------------------
 clear 2>/dev/null || true
-e1_banner "Update"
+e1_banner
 echo "  ${E1_DIM}Dizin       :${E1_RESET} ${SCRIPT_DIR}"
 echo "  ${E1_DIM}Hedef       :${E1_RESET} ${TARGET}"
 echo "  ${E1_DIM}Branch      :${E1_RESET} $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"

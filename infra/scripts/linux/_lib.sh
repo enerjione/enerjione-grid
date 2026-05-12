@@ -19,21 +19,25 @@ fi
 # Banner — repo kokunde aynisini yazmak yerine tek yerden basariz.
 # Tire + alt-cizgi karisik, "ENERJIONE GRID" stilize.
 e1_banner() {
-  local subtitle="${1:-}"
-  cat <<BANNER
-${E1_CYAN}${E1_BOLD}
- _____ _   _ _____ ____    _ _____ ___  _   _ _____    ____ ____  ___ ____
-| ____| \\ | | ____|  _ \\  | |_   _/ _ \\| \\ | | ____|  / ___|  _ \\|_ _|  _ \\
-|  _| |  \\| |  _| | |_) | | | | || | | |  \\| |  _|   | |  _| |_) || || | | |
-| |___| |\\  | |___|  _ <  | | | || |_| | |\\  | |___  | |_| |  _ < | || |_| |
-|_____|_| \\_|_____|_| \\_\\_/ | |_| \\___/|_| \\_|_____|  \\____|_| \\_\\___|____/
-                       |__/
-${E1_RESET}${E1_DIM}                Industrial Grid Monitoring Platform${E1_RESET}
+  # 'subtitle' parametresi geriye uyumluluk icin alinir ama yazdirilmaz —
+  # banner sade olsun, alt-baslik sahip oldugu adim/durum mesaji yeterli.
+  cat <<'BANNER'
 BANNER
-  if [[ -n "$subtitle" ]]; then
-    echo "${E1_DIM}                $(printf '%*s' $(( (60 - ${#subtitle}) / 2 )) '')${subtitle}${E1_RESET}"
-  fi
-  echo
+  printf '%s%s\n' "${E1_CYAN}" "${E1_BOLD}"
+  printf '  ███████╗███╗   ██╗███████╗██████╗      ██╗██╗ ██████╗ ███╗   ██╗███████╗\n'
+  printf '  ██╔════╝████╗  ██║██╔════╝██╔══██╗     ██║██║██╔═══██╗████╗  ██║██╔════╝\n'
+  printf '  █████╗  ██╔██╗ ██║█████╗  ██████╔╝     ██║██║██║   ██║██╔██╗ ██║█████╗  \n'
+  printf '  ██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██   ██║██║██║   ██║██║╚██╗██║██╔══╝  \n'
+  printf '  ███████╗██║ ╚████║███████╗██║  ██║╚█████╔╝██║╚██████╔╝██║ ╚████║███████╗\n'
+  printf '  ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚════╝ ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝\n'
+  printf '                         ██████╗ ██████╗ ██╗██████╗ \n'
+  printf '                        ██╔════╝ ██╔══██╗██║██╔══██╗\n'
+  printf '                        ██║  ███╗██████╔╝██║██║  ██║\n'
+  printf '                        ██║   ██║██╔══██╗██║██║  ██║\n'
+  printf '                        ╚██████╔╝██║  ██║██║██████╔╝\n'
+  printf '                         ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝ \n'
+  printf '%s' "${E1_RESET}"
+  printf '%s             Industrial Grid Monitoring Platform%s\n\n' "${E1_DIM}" "${E1_RESET}"
 }
 
 # Adim sayisi — ana adimlar [1/5] tarzi prefix icin.

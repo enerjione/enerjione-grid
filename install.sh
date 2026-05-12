@@ -67,7 +67,7 @@ e1_require_root "$@"
 
 # ---- Banner ---------------------------------------------------------------
 clear 2>/dev/null || true
-e1_banner "Production Installer"
+e1_banner
 echo "  ${E1_DIM}Hedef dizin :${E1_RESET} ${INSTALL_DIR}"
 echo "  ${E1_DIM}Branch      :${E1_RESET} ${BRANCH}"
 echo "  ${E1_DIM}Repo        :${E1_RESET} ${REPO_URL}"
