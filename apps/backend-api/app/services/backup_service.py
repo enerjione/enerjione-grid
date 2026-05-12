@@ -50,8 +50,9 @@ _PG_DUMP_CUSTOM_MAGIC = b"PGDMP"
 # + restricted postgres role (no SUPERUSER, no pg_execute_server_program)
 # olmali. Bu kontrol best-effort defansif derinlik.
 _DUMP_DANGEROUS_PATTERNS = (
-    b"COPY ",         # COPY FROM PROGRAM tek tehlikeli, ama TOC ham gormiyor
-                       # — bu yerine daha ozel pattern'leri arayalim
+    # NOT: Cipla "COPY " pattern'i KULLANILMAZ — her pg_dump dosyasinda
+    # `COPY <table> FROM stdin` satirlari var (veri yukleme standardi).
+    # Sadece RCE vektoru olan `FROM PROGRAM` ifadesini hedefle.
     b"FROM PROGRAM",
     b"LANGUAGE plpython3u",
     b"LANGUAGE plpythonu",
