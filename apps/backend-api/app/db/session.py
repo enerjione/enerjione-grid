@@ -24,6 +24,11 @@ engine = create_engine(
     max_overflow=settings.db_max_overflow,
     pool_recycle=settings.db_pool_recycle_sec,
     pool_timeout=settings.db_pool_timeout_sec,
+    # application_name ile Postgres pg_stat_activity'de bu connection'i 'e1_backend'
+    # olarak tani. Restore sirasinda backup_service'in terminate loop'u
+    # `application_name NOT LIKE 'e1_%'` filtre ile bizim baglantilarimizi
+    # korur, sadece worker servislerini (tag-engine vs.) kill eder.
+    connect_args={"application_name": "e1_backend"},
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

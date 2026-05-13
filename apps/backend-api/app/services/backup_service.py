@@ -520,13 +520,16 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
         """
         psql_path = os.getenv("PSQL", "psql")
         dbname = db["dbname"]
-        # pg_restore'un application_name = 'e1_restore_session' set ettik (env
-        # PGAPPNAME ile). Onu da terminate disinda tut.
+        # Filtre: pg_restore session'i (application_name='e1_restore_session')
+        # ve backend kendi connection'lari ('e1_backend') KORUNUR. Sadece
+        # worker servisleri (tag-engine, alarm-service, vb. — application_name
+        # default veya farkli) kill edilir.
+        # 'e1_%' prefix'i ile her iki kategoriyi tek pattern'de yakalariz.
         sql = (
             f"SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
             f"WHERE datname='{dbname}' "
             f"AND pid <> pg_backend_pid() "
-            f"AND COALESCE(application_name, '') <> 'e1_restore_session';"
+            f"AND COALESCE(application_name, '') NOT LIKE 'e1_%';"
         )
         while not stop_terminate_loop.wait(1.5):
             try:
@@ -575,6 +578,22 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     reader_t.join(timeout=2)
 
     full_stderr = "\n".join(stderr_lines)
+
+    # Asil pg_restore stderr'ini /var/lib/e1-backups/restore-stderr.log'a yaz.
+    # Audit event INSERT'i DB tarafinda fail etse bile (column overflow,
+    # connection drop) operator bu dosyada GERCEK hatayi gorebilir.
+    try:
+        stderr_log = get_backup_dir() / "last-restore-stderr.log"
+        with open(stderr_log, "w", encoding="utf-8") as f:
+            f.write(f"# pg_restore exit code: {rc}\n")
+            f.write(f"# command: {' '.join(cmd)}\n")
+            f.write(f"# file: {file_path}\n\n")
+            f.write(full_stderr)
+        logger.info("pg_restore stderr written to %s (rc=%d, %d lines)",
+                    stderr_log, rc, len(stderr_lines))
+    except Exception:  # noqa: BLE001
+        logger.exception("pg_restore_stderr_write_failed")
+
     if rc != 0:
         return False, (full_stderr or "pg_restore failed")[:1900]
     return True, full_stderr[:500]
