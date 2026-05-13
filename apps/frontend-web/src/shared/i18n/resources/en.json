@@ -557,6 +557,10 @@
   },
   "systemStatus": {
     "title": "System Status",
+    "liveSocket": {
+      "title": "Live data connection",
+      "hint": "Live telemetry WebSocket stream"
+    },
     "kpi": {
       "totalDevices": "Total devices",
       "totalDevicesSub": "{{percent}}% online",

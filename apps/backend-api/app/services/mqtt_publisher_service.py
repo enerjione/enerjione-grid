@@ -161,8 +161,13 @@ def _resolve_data_type(signal_key: str) -> str:
 
 
 def _render_topic_template(template: str, *, prefix: str, customer: str, device: str,
-                            source: str, datatype: str, signal: str) -> str:
-    """{var} pattern'lerini value'larla degistir. Bilinmeyen var'lar literal kalir."""
+                            source: str, datatype: str) -> str:
+    """{var} pattern'lerini value'larla degistir. Bilinmeyen var'lar literal kalir.
+
+    Cihaz-bazli yayim: topic seviyesinde sinyal ayrimi YOK; ayni cihazin tum
+    sinyalleri (event_filter'a uyan) ayni topic'e tek payload olarak gider.
+    Eski sablonlardan kalan {signal} placeholder'i bos string'e indirgenir.
+    """
     return (
         template
         .replace("{prefix}", prefix)
@@ -170,7 +175,8 @@ def _render_topic_template(template: str, *, prefix: str, customer: str, device:
         .replace("{device}", device)
         .replace("{source}", source)
         .replace("{datatype}", datatype)
-        .replace("{signal}", signal)
+        .replace("/{signal}", "")
+        .replace("{signal}", "")
     )
 
 
@@ -202,7 +208,7 @@ def _resolve_topics_for_reading(
             continue
         topic = _render_topic_template(
             m["topic"], prefix=prefix, customer=customer, device=device,
-            source=source, datatype=datatype, signal=signal,
+            source=source, datatype=datatype,
         )
         qos = m["qos"] if m["qos"] is not None else snapshot["qos"]
         retain = m["retain"] if m["retain"] is not None else snapshot["retain"]
@@ -216,7 +222,7 @@ def _resolve_topics_for_reading(
     template = snapshot["mqtt_topic_template"] or DEFAULT_MQTT_TOPIC_TEMPLATE
     topic = _render_topic_template(
         template, prefix=prefix, customer=customer, device=device,
-        source=source, datatype=datatype, signal=signal,
+        source=source, datatype=datatype,
     )
     return [(topic, snapshot["qos"], snapshot["retain"])]
 

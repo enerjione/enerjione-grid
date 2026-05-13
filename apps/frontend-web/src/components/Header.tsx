@@ -118,7 +118,8 @@ export function Header({
       </div>
 
       <div className="header-right">
-        {wsState ? <WsStatusBadge state={wsState} /> : null}
+        {/* WsStatusBadge buradan kaldirildi — Sistem Durumu sayfasinda
+            gosteriliyor; header'da yer karistirmasin diye. */}
         {role === "engineer" || role === "installer" ? (
           <button
             className={`engineering-btn ${isEngineeringView ? "active" : ""}`}

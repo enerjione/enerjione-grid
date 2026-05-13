@@ -226,13 +226,8 @@ export function NotificationSettingsPanel({
 
   return (
     <section className="tab-panel notification-tab-panel">
-      <div className="panel-head notification-panel-head">
-        <div>
-          <h3>{t("notifications.settings.title")}</h3>
-          <p className="helper-text" style={{ margin: "4px 0 0 0" }}>
-            {t("notifications.settings.subtitle")}
-          </p>
-        </div>
+      <div className="panel-head notification-panel-head notification-panel-head--minimal">
+        <div />
         <button
           type="button"
           className="primary-btn notification-save-top"
@@ -390,7 +385,6 @@ export function NotificationSettingsPanel({
               </div>
               <div className="notification-card-titles">
                 <h4>{t("notifications.settings.channelSms")}</h4>
-                <small>{t("notifications.settings.channelSmsSub")}</small>
               </div>
               <label className="notif-toggle">
                 <input
@@ -606,7 +600,6 @@ export function NotificationSettingsPanel({
               </div>
               <div className="notification-card-titles">
                 <h4>{t("notifications.settings.channelTelegram")}</h4>
-                <small>{t("notifications.settings.channelTelegramSub")}</small>
               </div>
               <label className="notif-toggle">
                 <input

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+﻿import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
@@ -329,7 +330,7 @@ export function OutboundTargetsPanel({
 
   const handleAutoAssign = async (target: OutboundTarget, overwrite: boolean) => {
     if (!onAutoAssignDeviceCa) return;
-    if (overwrite && !window.confirm(t("engineering.outbound.asdu.resetAllTitle") + " — " + t("common.confirm") + "?")) {
+    if (overwrite && !await asyncConfirm(t("engineering.outbound.asdu.resetAllTitle") + " — " + t("common.confirm") + "?")) {
       return;
     }
     setAutoAssigning(true);
@@ -385,6 +386,9 @@ export function OutboundTargetsPanel({
 
   // Topic template card icin editing mode + canli preview
   const [topicTemplateEditing, setTopicTemplateEditing] = useState(false);
+  // Cihaz-bazli topic: bir cihazin tum sinyalleri (event_filter'a uyan)
+  // tek mesaj/JSON payload icinde topic'e gonderilir. {signal} variable'i
+  // YOKTUR — sinyaller mesaj govdesindedir, topic'e degil.
   const DEFAULT_MQTT_TEMPLATE =
     "{prefix}/{customer}/{device}/{source}/{datatype}/telemetry";
   const effectiveTemplate = (mqttTopicTemplate || "").trim() || DEFAULT_MQTT_TEMPLATE;
@@ -397,8 +401,7 @@ export function OutboundTargetsPanel({
       .replace(/\{customer\}/g, customer)
       .replace(/\{device\}/g, sampleDevice)
       .replace(/\{source\}/g, "master")
-      .replace(/\{datatype\}/g, "analog")
-      .replace(/\{signal\}/g, "master.voltage_a");
+      .replace(/\{datatype\}/g, "analog");
   }, [effectiveTemplate, mqttTopicPrefix, mqttCustomerId, devices]);
 
   useEffect(() => {
@@ -520,7 +523,7 @@ export function OutboundTargetsPanel({
       {(isCreateOpen || editing) && (
         <div className="settings-modal-backdrop">
           <form
-            className={`settings-modal ${(isCreatingIec104 || isEditingIec104) ? "iec104-edit-modal" : ""}`}
+            className={`settings-modal ${(isCreatingIec104 || isEditingIec104) ? "iec104-edit-modal" : ""} ${activeProtocol === "mqtt" ? "mqtt-edit-modal" : ""}`}
             onSubmit={editing ? handleEdit : handleCreate}
           >
             <h3>{editing ? t("engineering.outbound.editTargetModal") : t("engineering.outbound.newTargetModal")}</h3>
@@ -934,7 +937,7 @@ export function OutboundTargetsPanel({
                               />
                             </label>
                             <div className="mqtt-topic-vars">
-                              {["{prefix}", "{customer}", "{device}", "{source}", "{datatype}", "{signal}"].map(
+                              {["{prefix}", "{customer}", "{device}", "{source}", "{datatype}"].map(
                                 (v) => (
                                   <button
                                     type="button"
@@ -1322,7 +1325,7 @@ export function OutboundTargetsPanel({
                     <button
                       className="danger-btn action-btn"
                       onClick={() => {
-                        if (window.confirm(t("engineering.outbound.confirmDelete", { name: item.name }))) {
+                        if (await asyncConfirm(t("engineering.outbound.confirmDelete", { name: item.name }))) {
                           void onDelete(item.id).catch((err: unknown) => {
                             setError(err instanceof Error ? err.message : t("common.errorOccurred"));
                           });

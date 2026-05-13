@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { asyncConfirm } from "../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 import { Header } from "../components/Header";
 import { useToast } from "../components/ToastProvider";
@@ -1075,7 +1076,7 @@ export function App() {
             `"${displayName}" gateway kalıcı olarak silinecek.`,
             "Bu işlem geri alınamaz. Onaylıyor musunuz?"
           ].join("\n\n");
-    if (!window.confirm(message)) return;
+    if (!await asyncConfirm(message)) return;
     try {
       await deleteGateway(session.accessToken, gatewayCode);
       // Gateway listesi ve "tum cihazlar" listesi birbirinden bagimsiz —
@@ -2101,6 +2102,7 @@ export function App() {
                 alarms={alarms}
                 loading={loadingData}
                 onRefresh={handleRefreshSystemStatus}
+                wsState={liveSocket.connectionState}
               />
             ) : null}
           </main>

@@ -388,12 +388,10 @@ body {
 }
 .notif-item.notif-sev-warning {
   border-left-color: #f59e0b;
-  background: linear-gradient(90deg, #fffbeb 0%, #fff 30%);
 }
 .notif-item.notif-sev-critical {
   border-left-color: #dc2626;
-  background: linear-gradient(90deg, #fef2f2 0%, #fff 35%);
-  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.08), inset 2px 0 0 rgba(220, 38, 38, 0.05);
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.08);
 }
 .notif-item.notif-sev-critical:hover {
   box-shadow: 0 6px 18px rgba(220, 38, 38, 0.18);
@@ -406,7 +404,6 @@ body {
 .notif-item.notif-cat-fault-assignment {
   /* mor/indigo — atama her zaman dikkat istiyor ama alarm degil */
   border-left-color: #6366f1;
-  background: linear-gradient(90deg, #eef2ff 0%, #fff 35%);
   box-shadow: 0 1px 2px rgba(99, 102, 241, 0.08);
 }
 .notif-item.notif-cat-alarm-assignment:hover,
@@ -430,7 +427,6 @@ body {
 .notif-item.notif-cat-fault-comment {
   /* turkuaz — yorum: bilgilendirici, olumlu ton */
   border-left-color: #14b8a6;
-  background: linear-gradient(90deg, #f0fdfa 0%, #fff 35%);
 }
 .notif-item.notif-cat-alarm-comment .notif-item-icon,
 .notif-item.notif-cat-fault-comment .notif-item-icon {
@@ -470,7 +466,7 @@ body {
   border-left-width: 5px;
 }
 .notif-item--unread.notif-sev-critical {
-  background: linear-gradient(90deg, #fee2e2 0%, #fff 40%);
+  border-left-color: #b91c1c;
 }
 
 .notif-item-icon {
@@ -4359,6 +4355,37 @@ main.content.engineering-content:has(.device-management-panel) {
 
 .sys-hero-btn .material-symbols-outlined {
   font-size: 18px;
+}
+
+/* ----- LIVE WEBSOCKET STATUS BAR (header'dan tasindi) ----- */
+.sys-ws-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 12px;
+}
+.sys-ws-status-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sys-ws-status-label .material-symbols-outlined {
+  font-size: 20px;
+  color: #ff8c00;
+  font-variation-settings: "FILL" 1;
+}
+.sys-ws-status-label strong {
+  font-size: 13px;
+  color: #1e293b;
+}
+.sys-ws-status-label small {
+  color: #64748b;
+  font-size: 12px;
 }
 
 /* ----- KPI GRID ----- */
@@ -21164,17 +21191,27 @@ th.event-col-category {
 /* =====================================================================
    MQTT outbound form v2 — 2-sutun panel layout, topic card, cert upload
    ===================================================================== */
+/* MQTT modal — REST/IEC104 gibi 520px dar olunca 2-sutun form sigmiyordu.
+   Daha genis (900px) bir variant + topic card row tam genislik. */
+.settings-modal.mqtt-edit-modal {
+  width: min(960px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+}
 .mqtt-form-v2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
   margin-top: 12px;
+  align-items: start;
 }
 .mqtt-form-v2-panel {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
 }
 .mqtt-panel-heading {
   display: flex;
@@ -21499,11 +21536,30 @@ th.event-col-category {
   padding: 10px 12px;
   border-radius: 6px;
   border: 1px solid #f1f5f9;
+  grid-column: 1 / -1;
+}
+.mqtt-form-v2 > .mqtt-advanced-toggle {
+  grid-column: 1 / -1;
+  justify-self: flex-start;
+}
+
+/* Panel grid dar sutunlarda 1-sutuna dussun (Event Filter + Retain stack). */
+.mqtt-form-v2-panel .mqtt-panel-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+/* TLS pasifken sag panel cok kisa kaliyordu — minimum yukseklik ile
+   sol panelle ayni hizada hissedilsin. */
+.mqtt-form-v2-panel {
+  min-height: 220px;
 }
 
 /* Responsive: < 720px tek-sutuna dus */
 @media (max-width: 720px) {
   .mqtt-form-v2 {
     grid-template-columns: 1fr;
+  }
+  .mqtt-form-v2-panel {
+    min-height: unset;
   }
 }

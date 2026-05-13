@@ -23,29 +23,6 @@ function severityClass(severity: string): string {
   return "notif-sev-info";
 }
 
-function categoryIcon(cat: string): string {
-  switch (cat) {
-    case "alarm":
-      return "warning";
-    case "alarm_assignment":
-    case "fault_assignment":
-      return "assignment_ind";
-    case "alarm_comment":
-    case "fault_comment":
-      return "chat";
-    case "fault":
-      return "bolt";
-    case "system":
-      return "settings";
-    case "error":
-      return "error";
-    case "warning":
-      return "warning";
-    default:
-      return "notifications";
-  }
-}
-
 function timeAgo(
   iso: string,
   localeTag: string,
@@ -410,9 +387,6 @@ export function NotificationBell({ token, onNavigate }: Props) {
                     className={`notif-item ${item.is_read ? "" : "notif-item--unread"} ${sevCls} ${catCls}`}
                     onClick={() => void handleItemClick(item)}
                   >
-                    <span className={`notif-item-icon ${sevCls}`}>
-                      <span className="material-symbols-outlined">{categoryIcon(item.category)}</span>
-                    </span>
                     <div className="notif-item-body">
                       {/* Ust satir: baslik + sag tarafta seviye rozeti + onay butonu.
                           Eski mavi okunmadi yuvarlagi kaldirildi; sol kalin renk

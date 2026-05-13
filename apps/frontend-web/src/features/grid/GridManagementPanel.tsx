@@ -1,4 +1,4 @@
-/** Mühendislik > Hat Yönetimi.
+﻿/** Mühendislik > Hat Yönetimi.
  *
  * Hiyerarsi: Bolge -> Hat -> Direk (sirali) -> Segment (iki direk arasi).
  *
@@ -18,6 +18,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -593,7 +594,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
   };
 
   const handleDeleteSegment = async (segment: LineSegment) => {
-    if (!window.confirm(t("engineering.grid.confirmDeleteSegment"))) return;
+    if (!await asyncConfirm(t("engineering.grid.confirmDeleteSegment"))) return;
     setBusy(true);
     setSegmentMenu(null);
     try {
@@ -609,7 +610,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
   const handleReverseOrder = async () => {
     if (!selectedLine) return;
-    if (!window.confirm(t("engineering.grid.confirmReverse"))) return;
+    if (!await asyncConfirm(t("engineering.grid.confirmReverse"))) return;
     setBusy(true);
     try {
       await reversePoles(accessToken, selectedLine.id);
@@ -694,10 +695,6 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 className={`grid-mgmt-list-item ${selectedRegionId === r.id ? "active" : ""}`}
                 onClick={() => setSelectedRegionId(r.id)}
               >
-                <span
-                  className="grid-mgmt-color-dot"
-                  style={{ background: r.color || DEFAULT_REGION_COLOR }}
-                />
                 <div className="grid-mgmt-list-item-main">
                   <strong>{r.name}</strong>
                 </div>
@@ -731,8 +728,6 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 className={`grid-mgmt-list-item ${selectedLineId === l.id ? "active" : ""}`}
                 onClick={() => setSelectedLineId(l.id)}
               >
-                <span className="grid-mgmt-color-dot"
-                  style={{ background: l.color || selectedRegion?.color || DEFAULT_REGION_COLOR }} />
                 <div className="grid-mgmt-list-item-main">
                   <strong>{l.name}</strong>
                 </div>
@@ -777,7 +772,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                     className={`grid-mgmt-tool-btn ${editMode ? "is-active" : ""}`}
                     onClick={() => {
                       if (editMode && hasUnsavedDraft) {
-                        if (!window.confirm(t("engineering.grid.editModeUnsavedConfirm"))) return;
+                        if (!await asyncConfirm(t("engineering.grid.editModeUnsavedConfirm"))) return;
                         setDraftPoleAdds([]);
                         setDraftPoleEdits(new Map());
                         setDraftPoleDeletes(new Set());
@@ -1542,7 +1537,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
   // ----- silme yardimcilari -----
   async function handleDeleteRegion(r: Region) {
-    if (!window.confirm(t("toasts.regionDeleteConfirm", { name: r.name }))) return;
+    if (!await asyncConfirm(t("toasts.regionDeleteConfirm", { name: r.name }))) return;
     try {
       await deleteRegion(accessToken, r.id);
       toast.success(t("toasts.regionDeleted"));
@@ -1553,7 +1548,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     }
   }
   async function handleDeleteLine(l: Line) {
-    if (!window.confirm(t("toasts.lineDeleteConfirm", { name: l.name }))) return;
+    if (!await asyncConfirm(t("toasts.lineDeleteConfirm", { name: l.name }))) return;
     try {
       await deleteLine(accessToken, l.id);
       toast.success(t("toasts.lineDeleted"));
@@ -1582,7 +1577,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       }
       return;
     }
-    if (!window.confirm(t("toasts.poleDeleteConfirm", { seq: p.sequence_no }))) return;
+    if (!await asyncConfirm(t("toasts.poleDeleteConfirm", { seq: p.sequence_no }))) return;
     try {
       await deletePole(accessToken, p.id);
       toast.success(t("toasts.poleDeleted"));
@@ -1721,7 +1716,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       setEditMode(false);
       return;
     }
-    if (!window.confirm("Tüm taslak değişiklikler geri alınsın mı?")) return;
+    if (!await asyncConfirm("Tüm taslak değişiklikler geri alınsın mı?")) return;
     setDraftPoleAdds([]);
     setDraftPoleEdits(new Map());
     setDraftPoleDeletes(new Set());

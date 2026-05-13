@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchHostStatus, fetchServicesStatus, loadSession } from "../../shared/api";
+import { WsStatusBadge } from "../../components/WsStatusBadge";
+import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
 import type {
   AlarmEvent,
   DeviceRow,
@@ -17,6 +19,8 @@ type Props = {
   alarms: AlarmEvent[];
   loading?: boolean;
   onRefresh?: () => void | Promise<void>;
+  /** Live telemetry WebSocket baglantisi durumu — header'dan tasindi. */
+  wsState?: WsConnectionState;
 };
 
 /** Sunucu kaynak / servis durumu yenileme aralığı (sn). */
@@ -172,7 +176,7 @@ function serviceRoleIcon(role: ServiceStatus["role"]): string {
   }
 }
 
-export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh }: Props) {
+export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh, wsState }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const isTr = i18n.language?.startsWith("tr");
@@ -324,6 +328,18 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           </span>
           <span>{showSpinner ? t("common.refreshing") : t("common.refresh")}</span>
         </button>
+      ) : null}
+
+      {/* Canli telemetri WebSocket baglantisi rozeti — header'dan tasindi */}
+      {wsState ? (
+        <section className="sys-ws-status-bar">
+          <div className="sys-ws-status-label">
+            <span className="material-symbols-outlined">sync_alt</span>
+            <strong>{t("systemStatus.liveSocket.title")}</strong>
+            <small>{t("systemStatus.liveSocket.hint")}</small>
+          </div>
+          <WsStatusBadge state={wsState} />
+        </section>
       ) : null}
 
       {/* KPI: 4 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm */}

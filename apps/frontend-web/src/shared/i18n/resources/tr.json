@@ -557,6 +557,10 @@
   },
   "systemStatus": {
     "title": "Sistem Durumu",
+    "liveSocket": {
+      "title": "Canlı veri bağlantısı",
+      "hint": "Canlı ölçüm WebSocket akışı"
+    },
     "kpi": {
       "totalDevices": "Toplam cihaz",
       "totalDevicesSub": "{{percent}}% çevrimiçi",
