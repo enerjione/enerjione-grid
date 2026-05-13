@@ -2221,26 +2221,26 @@ export function App() {
                 kapatirsa sistem cap'inda etkin olsa bile bildirim almaz. */}
             {notifPrefs ? (
               <div className="notif-prefs-section">
-                <h4>{t("settings.notifPrefs.title")}</h4>
+                <h4>{t("userSettings.notifPrefs.title")}</h4>
                 <div className="notif-prefs-row">
                   <div className="notif-prefs-row-label">
-                    <strong>{t("settings.notifPrefs.web")}</strong>
-                    <span>{t("settings.notifPrefs.webHint")}</span>
+                    <strong>{t("userSettings.notifPrefs.web")}</strong>
+                    <span>{t("userSettings.notifPrefs.webHint")}</span>
                   </div>
                   <button
                     type="button"
                     className={`notif-prefs-toggle ${notifPrefs.web_enabled ? "on" : ""}`}
                     onClick={() => void handleToggleNotifPref("web_enabled")}
                     disabled={notifPrefsSaving}
-                    aria-label={t("settings.notifPrefs.web")}
+                    aria-label={t("userSettings.notifPrefs.web")}
                   />
                 </div>
                 <div className="notif-prefs-row">
                   <div className="notif-prefs-row-label">
-                    <strong>{t("settings.notifPrefs.email")}</strong>
+                    <strong>{t("userSettings.notifPrefs.email")}</strong>
                     <span>
-                      {t("settings.notifPrefs.emailHint")}
-                      {currentUser?.email ? "" : t("settings.notifPrefs.emailMissing")}
+                      {t("userSettings.notifPrefs.emailHint")}
+                      {currentUser?.email ? "" : t("userSettings.notifPrefs.emailMissing")}
                     </span>
                   </div>
                   <button
@@ -2248,15 +2248,15 @@ export function App() {
                     className={`notif-prefs-toggle ${notifPrefs.email_enabled ? "on" : ""}`}
                     onClick={() => void handleToggleNotifPref("email_enabled")}
                     disabled={notifPrefsSaving}
-                    aria-label={t("settings.notifPrefs.email")}
+                    aria-label={t("userSettings.notifPrefs.email")}
                   />
                 </div>
                 <div className="notif-prefs-row">
                   <div className="notif-prefs-row-label">
-                    <strong>{t("settings.notifPrefs.sms")}</strong>
+                    <strong>{t("userSettings.notifPrefs.sms")}</strong>
                     <span>
-                      {t("settings.notifPrefs.smsHint")}
-                      {currentUser?.phone_number ? "" : t("settings.notifPrefs.smsMissing")}
+                      {t("userSettings.notifPrefs.smsHint")}
+                      {currentUser?.phone_number ? "" : t("userSettings.notifPrefs.smsMissing")}
                     </span>
                   </div>
                   <button
@@ -2264,16 +2264,16 @@ export function App() {
                     className={`notif-prefs-toggle ${notifPrefs.sms_enabled ? "on" : ""}`}
                     onClick={() => void handleToggleNotifPref("sms_enabled")}
                     disabled={notifPrefsSaving}
-                    aria-label={t("settings.notifPrefs.sms")}
+                    aria-label={t("userSettings.notifPrefs.sms")}
                   />
                 </div>
               </div>
             ) : null}
 
             <div className="settings-actions">
-              <button onClick={() => setSettingsOpen(false)}>{t("settings.actions.cancel")}</button>
+              <button onClick={() => setSettingsOpen(false)}>{t("userSettings.actions.cancel")}</button>
               <button onClick={handleSaveSettings} disabled={settingsSaving}>
-                {settingsSaving ? t("settings.actions.saving") : t("settings.actions.save")}
+                {settingsSaving ? t("userSettings.actions.saving") : t("userSettings.actions.save")}
               </button>
             </div>
           </div>

@@ -47,14 +47,25 @@ export function GridOverviewPage({
     return m;
   }, [alarms]);
 
-  // Cihazları bölge → hat altına grupla
+  // Cihazları bölge → hat → direk(segment) altına grupla.
+  // 4 seviyeli ağaç: Region -> Line -> PoleSegment -> Device.
+  // Aynı line içindeki her segment ayrı bir "Direk #N → #M" dalı olur;
+  // ariza varsa dal kirmizi vurgulanir.
   const grouped = useMemo(() => {
+    type PoleSegmentGroup = {
+      // Segment key — "from-to" pole seq pair; -1 = topology yok
+      segmentKey: string;
+      segmentLabel: string;
+      fromPoleSeq: number | null;
+      toPoleSeq: number | null;
+      devices: { device: DeviceRow }[];
+    };
     type LineGroup = {
       lineId: number;
       lineName: string;
       lineCode: string;
       lineColor: string | null;
-      devices: { device: DeviceRow; segmentLabel: string | null }[];
+      segments: Map<string, PoleSegmentGroup>;
     };
     type RegionGroup = {
       regionId: number | null;
@@ -91,7 +102,9 @@ export function GridOverviewPage({
         lineName: string | null;
         lineCode: string | null;
         lineColor: string | null;
-        segmentLabel: string | null;
+        segmentLabel: string;
+        fromPoleSeq: number | null;
+        toPoleSeq: number | null;
       }
     >();
 
@@ -102,7 +115,7 @@ export function GridOverviewPage({
       const segLabel =
         seg.from_pole_seq !== null && seg.to_pole_seq !== null
           ? t("dashboard.overview.segmentLabel", { from: seg.from_pole_seq, to: seg.to_pole_seq })
-          : null;
+          : t("dashboard.overview.unassignedSegment");
       deviceMeta.set(seg.device_id, {
         regionId: region?.id ?? null,
         regionName: region?.name ?? t("dashboard.overview.noRegionGroup"),
@@ -111,7 +124,9 @@ export function GridOverviewPage({
         lineName: line?.name ?? null,
         lineCode: line?.code ?? null,
         lineColor: line?.color ?? region?.color ?? null,
-        segmentLabel: segLabel
+        segmentLabel: segLabel,
+        fromPoleSeq: seg.from_pole_seq,
+        toPoleSeq: seg.to_pole_seq,
       });
     }
 
@@ -130,11 +145,26 @@ export function GridOverviewPage({
           lineName: meta?.lineName ?? t("dashboard.overview.noLineGroup"),
           lineCode: meta?.lineCode ?? "",
           lineColor: meta?.lineColor ?? null,
-          devices: []
+          segments: new Map(),
         };
         region.lines.set(lineKey, line);
       }
-      line.devices.push({ device: dev, segmentLabel: meta?.segmentLabel ?? null });
+      // Segment grupla — aynı segmentteki cihazlar tek dal altında
+      const segKey = meta?.fromPoleSeq != null && meta?.toPoleSeq != null
+        ? `${meta.fromPoleSeq}-${meta.toPoleSeq}`
+        : "unassigned";
+      let segment = line.segments.get(segKey);
+      if (!segment) {
+        segment = {
+          segmentKey: segKey,
+          segmentLabel: meta?.segmentLabel ?? t("dashboard.overview.unassignedSegment"),
+          fromPoleSeq: meta?.fromPoleSeq ?? null,
+          toPoleSeq: meta?.toPoleSeq ?? null,
+          devices: [],
+        };
+        line.segments.set(segKey, segment);
+      }
+      segment.devices.push({ device: dev });
     }
 
     // Map → sıralı array (bölgesiz en sona düşsün)
@@ -149,14 +179,23 @@ export function GridOverviewPage({
         if (a.lineId === -1) return 1;
         if (b.lineId === -1) return -1;
         return a.lineName.localeCompare(b.lineName, localeTag);
-      })
+      }).map((l) => ({
+        ...l,
+        segments: Array.from(l.segments.values()).sort((a, b) => {
+          // unassigned en sona
+          if (a.segmentKey === "unassigned") return 1;
+          if (b.segmentKey === "unassigned") return -1;
+          return (a.fromPoleSeq ?? 0) - (b.fromPoleSeq ?? 0);
+        }),
+      })),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devices, gridSnapshot, i18n.language]);
 
-  // Hangi bölge/hat açık (default hepsi açık)
+  // Hangi bölge/hat/segment açık (default hepsi açık)
   const [collapsedRegions, setCollapsedRegions] = useState<Set<number | "none">>(new Set());
   const [collapsedLines, setCollapsedLines] = useState<Set<string>>(new Set()); // "regionId-lineId"
+  const [collapsedSegments, setCollapsedSegments] = useState<Set<string>>(new Set()); // "regionId-lineId-segmentKey"
 
   const toggleRegion = (key: number | "none") => {
     setCollapsedRegions((prev) => {
@@ -177,6 +216,20 @@ export function GridOverviewPage({
     });
   };
 
+  const toggleSegment = (
+    regionKey: number | "none",
+    lineKey: number | "none",
+    segKey: string
+  ) => {
+    const k = `${regionKey}-${lineKey}-${segKey}`;
+    setCollapsedSegments((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
+
   // Toplam istatistikler
   const stats = useMemo(() => {
     let total = 0;
@@ -184,10 +237,12 @@ export function GridOverviewPage({
     let onlineCount = 0;
     for (const r of grouped) {
       for (const l of r.lines) {
-        for (const item of l.devices) {
-          total++;
-          if (item.device.communicationStatus === "online") onlineCount++;
-          if ((deviceFaults.get(item.device.id)?.length ?? 0) > 0) alarmCount++;
+        for (const seg of l.segments) {
+          for (const item of seg.devices) {
+            total++;
+            if (item.device.communicationStatus === "online") onlineCount++;
+            if ((deviceFaults.get(item.device.id)?.length ?? 0) > 0) alarmCount++;
+          }
         }
       }
     }
@@ -225,17 +280,29 @@ export function GridOverviewPage({
         {grouped.map((region) => {
           const regionKey: number | "none" = region.regionId ?? "none";
           const regionCollapsed = collapsedRegions.has(regionKey);
-          const regionDeviceCount = region.lines.reduce((s, l) => s + l.devices.length, 0);
+          const regionDeviceCount = region.lines.reduce(
+            (s, l) => s + l.segments.reduce((ss, seg) => ss + seg.devices.length, 0),
+            0
+          );
           const regionAlarmCount = region.lines.reduce(
             (s, l) =>
               s +
-              l.devices.filter(
-                (d) => (deviceFaults.get(d.device.id)?.length ?? 0) > 0
-              ).length,
+              l.segments.reduce(
+                (ss, seg) =>
+                  ss +
+                  seg.devices.filter(
+                    (d) => (deviceFaults.get(d.device.id)?.length ?? 0) > 0
+                  ).length,
+                0
+              ),
             0
           );
+          const regionHasAlarm = regionAlarmCount > 0;
           return (
-            <div key={String(regionKey)} className="grid-overview-region">
+            <div
+              key={String(regionKey)}
+              className={`grid-overview-region${regionHasAlarm ? " has-alarm" : ""}`}
+            >
               <button
                 type="button"
                 className="grid-overview-region-head"
@@ -263,11 +330,23 @@ export function GridOverviewPage({
                 ? region.lines.map((line) => {
                     const lineKey: number | "none" = line.lineId === -1 ? "none" : line.lineId;
                     const lineCollapsed = collapsedLines.has(`${regionKey}-${lineKey}`);
-                    const lineAlarmCount = line.devices.filter(
-                      (d) => (deviceFaults.get(d.device.id)?.length ?? 0) > 0
-                    ).length;
+                    const lineDeviceCount = line.segments.reduce(
+                      (s, seg) => s + seg.devices.length, 0
+                    );
+                    const lineAlarmCount = line.segments.reduce(
+                      (s, seg) =>
+                        s +
+                        seg.devices.filter(
+                          (d) => (deviceFaults.get(d.device.id)?.length ?? 0) > 0
+                        ).length,
+                      0
+                    );
+                    const lineHasAlarm = lineAlarmCount > 0;
                     return (
-                      <div key={String(lineKey)} className="grid-overview-line">
+                      <div
+                        key={String(lineKey)}
+                        className={`grid-overview-line${lineHasAlarm ? " has-alarm" : ""}`}
+                      >
                         <button
                           type="button"
                           className="grid-overview-line-head"
@@ -287,7 +366,7 @@ export function GridOverviewPage({
                             ) : null}
                           </span>
                           <span className="grid-overview-line-stats">
-                            {t("dashboard.overview.lineDeviceCount", { count: line.devices.length })}
+                            {t("dashboard.overview.lineDeviceCount", { count: lineDeviceCount })}
                             {lineAlarmCount > 0 ? (
                               <span className="grid-overview-alarm-pill">
                                 {t("dashboard.overview.faultCount", { count: lineAlarmCount })}
@@ -296,101 +375,140 @@ export function GridOverviewPage({
                           </span>
                         </button>
 
-                        {!lineCollapsed ? (
-                          <table className="grid-overview-table">
-                            <thead>
-                              <tr>
-                                <th style={{ width: 40 }}>{t("dashboard.overview.tableStatus")}</th>
-                                <th>{t("dashboard.overview.tableDevice")}</th>
-                                <th>{t("dashboard.overview.tableSegment")}</th>
-                                <th>{t("dashboard.overview.tableFault")}</th>
-                                <th style={{ width: 90 }}>{t("dashboard.overview.tableBattery")}</th>
-                                <th style={{ width: 140 }}>{t("dashboard.overview.tableLastData")}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {line.devices.map(({ device, segmentLabel }) => {
-                                const faults = deviceFaults.get(device.id) ?? [];
-                                const isOnline = device.communicationStatus === "online";
-                                const isAlarmed = faults.length > 0;
-                                const isSelected = selectedDeviceId === device.id;
-                                return (
-                                  <tr
-                                    key={device.id}
-                                    className={`grid-overview-row ${
-                                      isAlarmed ? "is-alarm" : ""
-                                    } ${isSelected ? "is-selected" : ""}`}
-                                    onClick={() => onSelectDevice?.(device.id)}
+                        {!lineCollapsed
+                          ? line.segments.map((seg) => {
+                              const segCollapsed = collapsedSegments.has(
+                                `${regionKey}-${lineKey}-${seg.segmentKey}`
+                              );
+                              const segAlarmCount = seg.devices.filter(
+                                (d) => (deviceFaults.get(d.device.id)?.length ?? 0) > 0
+                              ).length;
+                              const segHasAlarm = segAlarmCount > 0;
+                              return (
+                                <div
+                                  key={seg.segmentKey}
+                                  className={`grid-overview-segment-block${segHasAlarm ? " has-alarm" : ""}`}
+                                >
+                                  <button
+                                    type="button"
+                                    className="grid-overview-segment-head"
+                                    onClick={() => toggleSegment(regionKey, lineKey, seg.segmentKey)}
                                   >
-                                    <td className="grid-overview-status">
-                                      <span
-                                        className={`grid-overview-status-dot ${
-                                          isAlarmed
-                                            ? "is-alarm"
-                                            : isOnline
-                                              ? "is-online"
-                                              : "is-offline"
-                                        }`}
-                                        title={
-                                          isAlarmed
-                                            ? t("dashboard.overview.tooltipFault")
-                                            : isOnline
-                                              ? t("dashboard.overview.tooltipOnline")
-                                              : t("dashboard.overview.tooltipOffline")
-                                        }
-                                      />
-                                    </td>
-                                    <td>
-                                      <div className="grid-overview-device">
-                                        <strong>{device.name}</strong>
-                                        <code>{device.code}</code>
-                                      </div>
-                                    </td>
-                                    <td className="grid-overview-segment">
-                                      {segmentLabel ?? <span className="helper-text">—</span>}
-                                    </td>
-                                    <td>
-                                      {faults.length > 0 ? (
-                                        <div className="grid-overview-faults">
-                                          {faults.slice(0, 2).map((f, idx) => (
-                                            <span
-                                              key={idx}
-                                              className={`grid-overview-fault grid-overview-fault--${f.level.toLowerCase()}`}
-                                              title={f.signalKey ?? ""}
-                                            >
-                                              {f.title}
-                                            </span>
-                                          ))}
-                                          {faults.length > 2 ? (
-                                            <span className="grid-overview-fault-more">
-                                              +{faults.length - 2}
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                      ) : (
-                                        <span className="helper-text">—</span>
-                                      )}
-                                    </td>
-                                    <td>
-                                      {typeof device.batteryPercent === "number" ? (
-                                        <span className="grid-overview-battery">
-                                          %{Math.round(device.batteryPercent)}
+                                    <span className="grid-overview-chevron">
+                                      {segCollapsed ? "▶" : "▼"}
+                                    </span>
+                                    <span className="grid-overview-segment-icon">
+                                      <span className="material-symbols-outlined">
+                                        {segHasAlarm ? "warning" : "electrical_services"}
+                                      </span>
+                                    </span>
+                                    <span className="grid-overview-segment-label">
+                                      {seg.segmentLabel}
+                                    </span>
+                                    <span className="grid-overview-segment-stats">
+                                      {t("dashboard.overview.segmentDeviceCount", { count: seg.devices.length })}
+                                      {segAlarmCount > 0 ? (
+                                        <span className="grid-overview-alarm-pill">
+                                          {t("dashboard.overview.faultCount", { count: segAlarmCount })}
                                         </span>
-                                      ) : (
-                                        <span className="helper-text">—</span>
-                                      )}
-                                    </td>
-                                    <td className="grid-overview-last">
-                                      {device.lastUpdateAt
-                                        ? formatRelative(device.lastUpdateAt, localeTag, t)
-                                        : <span className="helper-text">—</span>}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        ) : null}
+                                      ) : null}
+                                    </span>
+                                  </button>
+                                  {!segCollapsed ? (
+                                    <table className="grid-overview-table">
+                                      <thead>
+                                        <tr>
+                                          <th style={{ width: 40 }}>{t("dashboard.overview.tableStatus")}</th>
+                                          <th>{t("dashboard.overview.tableDevice")}</th>
+                                          <th>{t("dashboard.overview.tableFault")}</th>
+                                          <th style={{ width: 90 }}>{t("dashboard.overview.tableBattery")}</th>
+                                          <th style={{ width: 140 }}>{t("dashboard.overview.tableLastData")}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {seg.devices.map(({ device }) => {
+                                          const faults = deviceFaults.get(device.id) ?? [];
+                                          const isOnline = device.communicationStatus === "online";
+                                          const isAlarmed = faults.length > 0;
+                                          const isSelected = selectedDeviceId === device.id;
+                                          return (
+                                            <tr
+                                              key={device.id}
+                                              className={`grid-overview-row ${
+                                                isAlarmed ? "is-alarm" : ""
+                                              } ${isSelected ? "is-selected" : ""}`}
+                                              onClick={() => onSelectDevice?.(device.id)}
+                                            >
+                                              <td className="grid-overview-status">
+                                                <span
+                                                  className={`grid-overview-status-dot ${
+                                                    isAlarmed
+                                                      ? "is-alarm"
+                                                      : isOnline
+                                                        ? "is-online"
+                                                        : "is-offline"
+                                                  }`}
+                                                  title={
+                                                    isAlarmed
+                                                      ? t("dashboard.overview.tooltipFault")
+                                                      : isOnline
+                                                        ? t("dashboard.overview.tooltipOnline")
+                                                        : t("dashboard.overview.tooltipOffline")
+                                                  }
+                                                />
+                                              </td>
+                                              <td>
+                                                <div className="grid-overview-device">
+                                                  <strong>{device.name}</strong>
+                                                  <code>{device.code}</code>
+                                                </div>
+                                              </td>
+                                              <td>
+                                                {faults.length > 0 ? (
+                                                  <div className="grid-overview-faults">
+                                                    {faults.slice(0, 2).map((f, idx) => (
+                                                      <span
+                                                        key={idx}
+                                                        className={`grid-overview-fault grid-overview-fault--${f.level.toLowerCase()}`}
+                                                        title={f.signalKey ?? ""}
+                                                      >
+                                                        {f.title}
+                                                      </span>
+                                                    ))}
+                                                    {faults.length > 2 ? (
+                                                      <span className="grid-overview-fault-more">
+                                                        +{faults.length - 2}
+                                                      </span>
+                                                    ) : null}
+                                                  </div>
+                                                ) : (
+                                                  <span className="helper-text">—</span>
+                                                )}
+                                              </td>
+                                              <td>
+                                                {typeof device.batteryPercent === "number" ? (
+                                                  <span className="grid-overview-battery">
+                                                    %{Math.round(device.batteryPercent)}
+                                                  </span>
+                                                ) : (
+                                                  <span className="helper-text">—</span>
+                                                )}
+                                              </td>
+                                              <td className="grid-overview-last">
+                                                {device.lastUpdateAt
+                                                  ? formatRelative(device.lastUpdateAt, localeTag, t)
+                                                  : <span className="helper-text">—</span>}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  ) : null}
+                                </div>
+                              );
+                            })
+                          : null}
                       </div>
                     );
                   })

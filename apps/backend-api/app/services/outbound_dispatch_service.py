@@ -68,6 +68,8 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
                     "event_id": event_id,
                     "correlation_id": correlation_id,
                 },
+                i18n_key="outbound_delivered",
+                i18n_params={"event_kind": event_kind, "target": target.name},
             )
             return
         except Exception as ex:
@@ -89,6 +91,8 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
                         "event_id": event_id,
                         "correlation_id": correlation_id,
                     },
+                    i18n_key="outbound_retry_scheduled",
+                    i18n_params={"target": target.name, "attempt": attempt, "max": MAX_RETRY},
                 )
                 time.sleep(wait_seconds)
 
@@ -107,6 +111,8 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
             "correlation_id": correlation_id,
             "payload": payload,
         },
+        i18n_key="outbound_dead_letter",
+        i18n_params={"target": target.name},
     )
 
 
