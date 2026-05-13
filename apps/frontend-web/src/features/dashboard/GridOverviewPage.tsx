@@ -125,8 +125,8 @@ export function GridOverviewPage({
         lineCode: line?.code ?? null,
         lineColor: line?.color ?? region?.color ?? null,
         segmentLabel: segLabel,
-        fromPoleSeq: seg.from_pole_seq,
-        toPoleSeq: seg.to_pole_seq,
+        fromPoleSeq: seg.from_pole_seq ?? null,
+        toPoleSeq: seg.to_pole_seq ?? null,
       });
     }
 

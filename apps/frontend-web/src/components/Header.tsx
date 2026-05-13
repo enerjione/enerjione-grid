@@ -3,13 +3,17 @@ import { useTranslation } from "react-i18next";
 
 import { NotificationBell } from "./NotificationBell";
 import { useProjectSettings } from "./ProjectSettingsProvider";
+import { WsStatusBadge } from "./WsStatusBadge";
 import type { UserRole } from "../shared/types";
+import type { WsConnectionState } from "../shared/useLiveValuesSocket";
 
 type Props = {
   fullName?: string;
   role?: UserRole;
   /** Bildirim merkezi icin oturum token'i; varsa zil header'da gozukur. */
   accessToken?: string;
+  /** Canli veri WS baglantisinin durumu — header'da rozet olarak gosterilir. */
+  wsState?: WsConnectionState;
   onLogout?: () => void;
   onSettings?: () => void;
   isEngineeringView?: boolean;
@@ -22,6 +26,7 @@ export function Header({
   fullName,
   role,
   accessToken,
+  wsState,
   onLogout,
   onSettings,
   isEngineeringView,
@@ -113,6 +118,7 @@ export function Header({
       </div>
 
       <div className="header-right">
+        {wsState ? <WsStatusBadge state={wsState} /> : null}
         {role === "engineer" || role === "installer" ? (
           <button
             className={`engineering-btn ${isEngineeringView ? "active" : ""}`}
