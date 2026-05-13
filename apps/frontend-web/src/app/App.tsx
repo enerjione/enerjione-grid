@@ -1358,10 +1358,11 @@ export function App() {
     iec104_common_address?: number | null;
     iec104_allowed_peers?: string | null;
   }) => {
-    if (!session) return;
-    await createOutboundTarget(session.accessToken, payload);
+    if (!session) return undefined;
+    const created = await createOutboundTarget(session.accessToken, payload);
     await reloadOutboundTargets();
     toast.success(t("toasts.outboundAdded", { name: payload.name }));
+    return created;
   };
 
   const handleUpdateOutboundTarget = async (

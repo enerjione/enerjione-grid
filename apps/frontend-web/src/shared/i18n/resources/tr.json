@@ -1264,6 +1264,7 @@
         "autoTopicsCopyOne": "Topic'i kopyala",
         "autoTopicsCopied": "Kopyalandı",
         "autoTopicsNoMatch": "Arama eşleşmedi.",
+        "certUploadOnSave": "Sertifikalar 'Kaydet' butonuna basıldığında yüklenecek.",
         "mapping": {
           "title": "Özel Topic Eşleme",
           "subtitle": "{{name}} hedefi için cihaz/sinyal bazlı özel topic'ler",

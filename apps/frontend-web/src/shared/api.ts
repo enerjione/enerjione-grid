@@ -1107,13 +1107,14 @@ export async function createOutboundTarget(
     iec104_common_address?: number | null;
     iec104_allowed_peers?: string | null;
   } & MqttPayloadFields
-): Promise<void> {
+): Promise<import("./types").OutboundTarget> {
   const response = await apiFetch(`${API_BASE_URL}/outbound-targets`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
   });
   if (!response.ok) throw await buildApiError(response, "Outbound hedef oluşturulamadı.");
+  return (await response.json()) as import("./types").OutboundTarget;
 }
 
 export async function updateOutboundTarget(

@@ -1264,6 +1264,7 @@
         "autoTopicsCopyOne": "Copy topic",
         "autoTopicsCopied": "Copied",
         "autoTopicsNoMatch": "No matches.",
+        "certUploadOnSave": "Certificates will be uploaded when you press 'Save'.",
         "mapping": {
           "title": "Custom Topic Mapping",
           "subtitle": "Per-device/per-signal custom topics for {{name}}",

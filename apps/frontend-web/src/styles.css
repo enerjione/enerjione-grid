@@ -21560,10 +21560,110 @@ th.event-col-category {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
-/* TLS pasifken sag panel cok kisa kaliyordu — minimum yukseklik ile
-   sol panelle ayni hizada hissedilsin. */
-.mqtt-form-v2-panel {
+/* MQTT form v3: 2-sutun, sutunlar stretch, panel'lerin min-yukseklik'i
+   icerige gore (sabit degil). Sol = baglanti+tls+cert; sag = yayin+topic. */
+.mqtt-form-v3 .mqtt-form-v2-panel {
+  min-height: unset;
+}
+/* v2 (eski/iec104 senaryolari icin) min-height korunur */
+.mqtt-form-v2:not(.mqtt-form-v3) .mqtt-form-v2-panel {
   min-height: 220px;
+}
+/* Topic card sag-sutun varianti: tam genislik degil, sag sutuna sigsin */
+.mqtt-form-v3 .mqtt-topic-card--right-col {
+  grid-column: 2 / 3;
+  margin-top: 0;
+}
+@media (max-width: 720px) {
+  .mqtt-form-v3 .mqtt-topic-card--right-col {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Pending cert (yeni-kayit) — kompakt 3-satir liste */
+.mqtt-cert-pending-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.mqtt-cert-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+}
+.mqtt-cert-pending.is-selected {
+  border-style: solid;
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.mqtt-cert-pending-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mqtt-cert-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mqtt-cert-pending-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  cursor: pointer;
+  font-size: 12px;
+}
+.mqtt-cert-pending-pick:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+.mqtt-cert-pending-pick .material-symbols-outlined {
+  font-size: 14px;
+}
+.mqtt-cert-pending-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #166534;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mqtt-cert-pending-name .material-symbols-outlined {
+  font-size: 14px;
+}
+.mqtt-cert-pending-hint {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+  font-style: italic;
+}
+
+/* Edit mode'da MqttCertUploader'i da kompaktlastir (sol panelde duruyor) */
+.mqtt-cert-upload-grid--compact {
+  gap: 6px;
+}
+.mqtt-cert-upload-grid--compact .mqtt-cert-uploader {
+  padding: 8px 10px;
+}
+.mqtt-cert-upload-grid--compact .mqtt-cert-uploader-label {
+  font-size: 11px;
 }
 
 /* Responsive: < 720px tek-sutuna dus */

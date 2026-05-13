@@ -1,11 +1,11 @@
-﻿import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type { DeviceRow, Iec104RuntimeStatus, OutboundTarget } from "../../shared/types";
 import type { MqttPayloadFields, OutboundRuntimeStatus, OutboundAutoTopic } from "../../shared/api";
-import { fetchOutboundRuntimeStatus, fetchOutboundAutoTopics } from "../../shared/api";
+import { fetchOutboundRuntimeStatus, fetchOutboundAutoTopics, uploadMqttCert } from "../../shared/api";
 import { MqttTopicMappingModal } from "./MqttTopicMappingModal";
 import { MqttCertUploader } from "./MqttCertUploader";
 
@@ -47,7 +47,7 @@ type Props = {
   targets: OutboundTarget[];
   devices?: DeviceRow[];
   accessToken: string;
-  onCreate: (payload: CreatePayload) => Promise<void>;
+  onCreate: (payload: CreatePayload) => Promise<OutboundTarget | undefined>;
   onUpdate: (targetId: number, payload: UpdatePayload) => Promise<void>;
   onDelete: (targetId: number) => Promise<void>;
   onDownloadIec104Points?: (targetId: number, suggestedName: string) => Promise<void>;
@@ -91,6 +91,12 @@ export function OutboundTargetsPanel({
 
   // REST/MQTT runtime status (Durum sutunu)
   const [outboundRuntime, setOutboundRuntime] = useState<Record<number, OutboundRuntimeStatus>>({});
+  // Create mode'da TLS sertifikalari icin pending file state — kayit
+  // basariyla atildiktan sonra new target id ile uploadMqttCert cagrilir.
+  const [pendingCertCa, setPendingCertCa] = useState<File | null>(null);
+  const [pendingCertCert, setPendingCertCert] = useState<File | null>(null);
+  const [pendingCertKey, setPendingCertKey] = useState<File | null>(null);
+
   // Otomatik Topic'ler popup
   const [autoTopicsTarget, setAutoTopicsTarget] = useState<OutboundTarget | null>(null);
   const [autoTopics, setAutoTopics] = useState<OutboundAutoTopic[] | null>(null);
@@ -172,6 +178,9 @@ export function OutboundTargetsPanel({
     setMqttTopicPrefix("e1");
     setMqttCustomerId("");
     setShowMqttAdvanced(false);
+    setPendingCertCa(null);
+    setPendingCertCert(null);
+    setPendingCertKey(null);
   };
 
   /** MQTT alanlarini payload'a ekle. createPayload'a ve updatePayload'a
@@ -221,7 +230,7 @@ export function OutboundTargetsPanel({
       const isIec104 = protocol === "iec104";
       const isRest = protocol === "rest";
       const isMqtt = protocol === "mqtt";
-      await onCreate({
+      const created = await onCreate({
         name,
         protocol,
         endpoint: isIec104 ? "" : endpoint,
@@ -242,6 +251,25 @@ export function OutboundTargetsPanel({
         iec104_allowed_peers: isIec104 ? (allowedPeerList.join(",") || null) : null,
         ...collectMqttPayload(),
       });
+      // MQTT + TLS + pending sertifika dosyalari varsa: yeni target id ile
+      // arka arkaya upload at. Hata olursa kullaniciya goster ama target zaten
+      // olusturuldugu icin modal'i kapatma (operator edit'e gecip tekrar deneyebilir).
+      if (isMqtt && mqttTlsEnabled && created) {
+        const uploads: Promise<unknown>[] = [];
+        if (pendingCertCa) uploads.push(uploadMqttCert(accessToken, created.id, "ca", pendingCertCa));
+        if (pendingCertCert) uploads.push(uploadMqttCert(accessToken, created.id, "cert", pendingCertCert));
+        if (pendingCertKey) uploads.push(uploadMqttCert(accessToken, created.id, "key", pendingCertKey));
+        if (uploads.length > 0) {
+          try {
+            await Promise.all(uploads);
+          } catch (certErr) {
+            setError(
+              certErr instanceof Error ? certErr.message : t("common.errorOccurred")
+            );
+            return;
+          }
+        }
+      }
       resetForm();
       setCreateOpen(false);
     } catch (err) {
@@ -780,10 +808,13 @@ export function OutboundTargetsPanel({
                   </>
                 ) : null}
 
-                {/* MQTT'ye ozel: 2-sutun panel + topic card + cert upload */}
+                {/* MQTT'ye ozel: 2-sutun panel + topic card + cert upload
+                    YENI YAPI:
+                    SOL: Baglanti + TLS + Sertifika (TLS aktifken kompakt cert area)
+                    SAG: Yayin Ayarlari + Topic Sablonu (tek panel ust uste) */}
                 {isMqttForm ? (
-                  <div className="mqtt-form-v2">
-                    {/* SOL PANEL: Baglanti */}
+                  <div className="mqtt-form-v2 mqtt-form-v3">
+                    {/* SOL PANEL: Baglanti + TLS + Sertifika */}
                     <div className="mqtt-form-v2-panel">
                       <div className="mqtt-panel-heading">
                         <span className="material-symbols-outlined">link</span>
@@ -827,11 +858,9 @@ export function OutboundTargetsPanel({
                           />
                         </label>
                       </div>
-                    </div>
 
-                    {/* SAG PANEL: TLS + Yayin Ayarlari (event filter dahil) */}
-                    <div className="mqtt-form-v2-panel">
-                      <div className="mqtt-panel-heading">
+                      {/* TLS + Sertifika — SOL PANEL'IN ALT KISMI */}
+                      <div className="mqtt-panel-heading mqtt-panel-heading--with-margin">
                         <span className="material-symbols-outlined">lock</span>
                         {t("engineering.outbound.mqtt.section.tls")}
                       </div>
@@ -854,7 +883,7 @@ export function OutboundTargetsPanel({
                             {t("engineering.outbound.mqtt.tlsInsecure")}
                           </label>
                           {editing ? (
-                            <div className="mqtt-cert-upload-grid">
+                            <div className="mqtt-cert-upload-grid mqtt-cert-upload-grid--compact">
                               <MqttCertUploader
                                 accessToken={accessToken}
                                 targetId={editing.id}
@@ -884,16 +913,37 @@ export function OutboundTargetsPanel({
                               />
                             </div>
                           ) : (
-                            <div className="mqtt-cert-upload-hint">
-                              <span className="material-symbols-outlined">info</span>
-                              {t("engineering.outbound.mqtt.certUploadAfterSave")}
+                            <div className="mqtt-cert-pending-grid">
+                              <PendingCertInput
+                                label={t("engineering.outbound.mqtt.tlsCaPath")}
+                                file={pendingCertCa}
+                                onChange={setPendingCertCa}
+                                t={t}
+                              />
+                              <PendingCertInput
+                                label={t("engineering.outbound.mqtt.tlsCertPath")}
+                                file={pendingCertCert}
+                                onChange={setPendingCertCert}
+                                t={t}
+                              />
+                              <PendingCertInput
+                                label={t("engineering.outbound.mqtt.tlsKeyPath")}
+                                file={pendingCertKey}
+                                onChange={setPendingCertKey}
+                                t={t}
+                              />
+                              <small className="mqtt-cert-pending-hint">
+                                {t("engineering.outbound.mqtt.certUploadOnSave")}
+                              </small>
                             </div>
                           )}
                         </>
                       ) : null}
+                    </div>
 
-                      {/* Yayin Ayarlari */}
-                      <div className="mqtt-panel-heading mqtt-panel-heading--with-margin">
+                    {/* SAG PANEL: Yayin Ayarlari + Topic Sablonu */}
+                    <div className="mqtt-form-v2-panel">
+                      <div className="mqtt-panel-heading">
                         <span className="material-symbols-outlined">send</span>
                         {t("engineering.outbound.mqtt.section.publish")}
                       </div>
@@ -942,8 +992,8 @@ export function OutboundTargetsPanel({
                       </div>
                     </div>
 
-                    {/* TOPIC TEMPLATE CARD (alt satir, tam genislik) */}
-                    <div className="mqtt-topic-card">
+                    {/* TOPIC TEMPLATE CARD (sag panelin altinda, sadece sag sutunda) */}
+                    <div className="mqtt-topic-card mqtt-topic-card--right-col">
                       <div className="mqtt-topic-card-head">
                         <div>
                           <div className="mqtt-topic-card-title">
@@ -1141,11 +1191,11 @@ export function OutboundTargetsPanel({
               <table className="asdu-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 60 }}>#</th>
-                    <th>{t("engineering.outbound.asdu.tableDevice")}</th>
-                    <th>{t("engineering.outbound.asdu.tableCode")}</th>
-                    <th style={{ width: 160 }}>{t("engineering.outbound.asdu.tableAsdu")}</th>
-                    <th style={{ width: 110 }}>{t("engineering.outbound.asdu.tableActions")}</th>
+                    <th scope="col" style={{ width: 60 }}>#</th>
+                    <th scope="col">{t("engineering.outbound.asdu.tableDevice")}</th>
+                    <th scope="col">{t("engineering.outbound.asdu.tableCode")}</th>
+                    <th scope="col" style={{ width: 160 }}>{t("engineering.outbound.asdu.tableAsdu")}</th>
+                    <th scope="col" style={{ width: 110 }}>{t("engineering.outbound.asdu.tableActions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1249,9 +1299,9 @@ export function OutboundTargetsPanel({
                 <table className="values-table">
                   <thead>
                     <tr>
-                      <th>Peer</th>
-                      <th>{t("common.status")}</th>
-                      <th>{t("common.time")}</th>
+                      <th scope="col">Peer</th>
+                      <th scope="col">{t("common.status")}</th>
+                      <th scope="col">{t("common.time")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1290,12 +1340,12 @@ export function OutboundTargetsPanel({
         <table className="values-table outbound-modern-table">
           <thead>
             <tr>
-              <th style={{ width: 70 }}>{t("engineering.outbound.runtime.connected")}</th>
-              <th>{t("engineering.outbound.table.name")}</th>
-              <th style={{ width: 110 }}>{t("engineering.outbound.table.protocol")}</th>
-              <th>{t("engineering.outbound.table.endpoint")}</th>
-              <th style={{ width: 130 }}>{t("engineering.outbound.table.status")}</th>
-              <th className="actions-header">{t("engineering.outbound.table.actions")}</th>
+              <th scope="col" style={{ width: 70 }}>{t("engineering.outbound.runtime.connected")}</th>
+              <th scope="col">{t("engineering.outbound.table.name")}</th>
+              <th scope="col" style={{ width: 110 }}>{t("engineering.outbound.table.protocol")}</th>
+              <th scope="col">{t("engineering.outbound.table.endpoint")}</th>
+              <th scope="col" style={{ width: 130 }}>{t("engineering.outbound.table.status")}</th>
+              <th scope="col" className="actions-header">{t("engineering.outbound.table.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1638,6 +1688,70 @@ export function OutboundTargetsPanel({
         );
       })() : null}
     </section>
+  );
+}
+
+
+/** Yeni-kayit (create) modunda kullanilan KOMPAKT sertifika dosyasi
+ *  secici. Henuz target id olmadigi icin dosyayi state'te tutar; save
+ *  basariyla atildiktan sonra parent uploadMqttCert(targetId, kind, file)
+ *  ile yukler. */
+function PendingCertInput({
+  label,
+  file,
+  onChange,
+  t,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+  t: (k: string) => string;
+}) {
+  const inputId = `pending-cert-${label.replace(/\s+/g, "_")}`;
+  return (
+    <div className={`mqtt-cert-pending ${file ? "is-selected" : ""}`}>
+      <label htmlFor={inputId} className="mqtt-cert-pending-label">
+        {label}
+      </label>
+      <div className="mqtt-cert-pending-row">
+        <input
+          id={inputId}
+          type="file"
+          accept=".pem,.crt,.key,.cer"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            onChange(f);
+            // Ayni dosya tekrar secilebilsin
+            e.target.value = "";
+          }}
+        />
+        {file ? (
+          <>
+            <span className="mqtt-cert-pending-name" title={file.name}>
+              <span className="material-symbols-outlined">description</span>
+              {file.name}
+            </span>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => onChange(null)}
+            >
+              {t("common.remove") || "Kaldır"}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="mqtt-cert-pending-pick"
+            onClick={() => document.getElementById(inputId)?.click()}
+          >
+            <span className="material-symbols-outlined">upload_file</span>
+            {t("engineering.outbound.mqtt.certUploadCta")}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
