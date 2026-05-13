@@ -397,6 +397,12 @@ def restore(
             ok, err = restore_backup(thread_db, j)
             # Audit event (finish/fail)
             try:
+                # NOT: pg_restore stderr binlerce karakter olabilir; DB
+                # system_events.message ve metadata_json column'lari sinirli.
+                # Hem message hem metadata.error'u 500 char'a truncate ederiz.
+                # Tam stderr restore_status_tracker.logs icinde frontend modal'a
+                # zaten yansiyor — operator orada gorur.
+                err_short = (err or "")[:500]
                 record_event(
                     thread_db,
                     category="backup",
@@ -406,11 +412,11 @@ def restore(
                     message=(
                         f"Yedek geri yukleme tamamlandi (id={j.id})"
                         if ok
-                        else f"Yedek geri yukleme hatasi: {err[:200]}"
+                        else f"Yedek geri yukleme hatasi: {err_short[:200]}"
                     ),
-                    metadata={"backup_id": j.id, "error": err if not ok else None},
+                    metadata={"backup_id": j.id, "error": err_short if not ok else None},
                     i18n_key="backup_restore_finished" if ok else "backup_restore_failed",
-                    i18n_params={"id": j.id, "error": (err or "")[:200]},
+                    i18n_params={"id": j.id, "error": err_short[:200]},
                 )
                 thread_db.commit()
             except Exception:  # noqa: BLE001
