@@ -146,6 +146,12 @@ export function DeviceManagementPanel({
 }: Props) {
   const { t } = useTranslation();
   const canManageGateways = role === "installer";
+  // DNP3 adresleri (outstation port + dnp3_address + advanced master/IP) sadece
+  // installer'a goz onunde. Engineer cihaz ekleyip kaldirabilir ama DNP3
+  // adres detaylarini goremez/duzenleyemez. (Backend tarafinda da yazma
+  // yetkisi `_EDIT_ROLES`'a esit oldugu icin engineer bir POST yaparsa
+  // alanlar default/mevcut deger ile kalir.)
+  const canSeeDnp3 = role === "installer";
   const [selectedGatewayCode, setSelectedGatewayCode] = useState(gateways[0]?.code ?? "");
   const [selectedDeviceCode, setSelectedDeviceCode] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -671,7 +677,8 @@ export function DeviceManagementPanel({
                 <div className="device-meta-row">
                   <span>{device.code}</span>
                   <span className="device-ip-text">
-                    {device.ipAddress ?? "-"}:{device.dnp3OutstationPort ?? 20001}
+                    {device.ipAddress ?? "-"}
+                    {canSeeDnp3 ? `:${device.dnp3OutstationPort ?? 20001}` : ""}
                   </span>
                 </div>
               </button>
@@ -782,24 +789,28 @@ export function DeviceManagementPanel({
                           required
                         />
                       </label>
-                      <label>
-                        {t("engineering.devicesPanel.form.port")}
-                        <input
-                          type="number"
-                          min={1}
-                          max={65535}
-                          value={dnp3OutstationPort}
-                          onChange={(event) => setDnp3OutstationPort(event.target.value)}
-                        />
-                      </label>
-                      <label>
-                        {t("engineering.devicesPanel.form.dnp3Address")}
-                        <input
-                          type="number"
-                          value={dnp3Address}
-                          onChange={(event) => setDnp3Address(event.target.value)}
-                        />
-                      </label>
+                      {canSeeDnp3 ? (
+                        <>
+                          <label>
+                            {t("engineering.devicesPanel.form.port")}
+                            <input
+                              type="number"
+                              min={1}
+                              max={65535}
+                              value={dnp3OutstationPort}
+                              onChange={(event) => setDnp3OutstationPort(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            {t("engineering.devicesPanel.form.dnp3Address")}
+                            <input
+                              type="number"
+                              value={dnp3Address}
+                              onChange={(event) => setDnp3Address(event.target.value)}
+                            />
+                          </label>
+                        </>
+                      ) : null}
                       <label>
                         {t("engineering.devicesPanel.form.pollInterval")}
                         <input
@@ -831,18 +842,20 @@ export function DeviceManagementPanel({
                         />
                       </label>
                     </div>
-                    <Dnp3SettingsForm
-                      value={dnp3Ext}
-                      onChange={(patch) => setDnp3Ext((prev) => ({ ...prev, ...patch }))}
-                      usedMasterPorts={devices
-                        .filter(
-                          (x) =>
-                            x.code !== selectedDevice?.code &&
-                            x.dnp3Extended?.ip_endpoint_type === "initiating"
-                        )
-                        .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
-                        .filter((p) => p > 0)}
-                    />
+                    {canSeeDnp3 ? (
+                      <Dnp3SettingsForm
+                        value={dnp3Ext}
+                        onChange={(patch) => setDnp3Ext((prev) => ({ ...prev, ...patch }))}
+                        usedMasterPorts={devices
+                          .filter(
+                            (x) =>
+                              x.code !== selectedDevice?.code &&
+                              x.dnp3Extended?.ip_endpoint_type === "initiating"
+                          )
+                          .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
+                          .filter((p) => p > 0)}
+                      />
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -1074,35 +1087,39 @@ export function DeviceManagementPanel({
                 required
               />
             </label>
-            <label>
-              {t("engineering.devicesPanel.form.port")}
-              <input
-                type="number"
-                min={1}
-                max={65535}
-                value={createDnp3OutstationPort}
-                onChange={(event) => setCreateDnp3OutstationPort(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              {t("engineering.devicesPanel.form.dnp3Address")}
-              <input
-                type="number"
-                min={1}
-                value={createDnp3Address}
-                onChange={(event) => setCreateDnp3Address(event.target.value)}
-                required
-              />
-            </label>
-            <Dnp3SettingsForm
-              value={createDnp3Ext}
-              onChange={(patch) => setCreateDnp3Ext((prev) => ({ ...prev, ...patch }))}
-              usedMasterPorts={devices
-                .filter((x) => x.dnp3Extended?.ip_endpoint_type === "initiating")
-                .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
-                .filter((p) => p > 0)}
-            />
+            {canSeeDnp3 ? (
+              <>
+                <label>
+                  {t("engineering.devicesPanel.form.port")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={createDnp3OutstationPort}
+                    onChange={(event) => setCreateDnp3OutstationPort(event.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  {t("engineering.devicesPanel.form.dnp3Address")}
+                  <input
+                    type="number"
+                    min={1}
+                    value={createDnp3Address}
+                    onChange={(event) => setCreateDnp3Address(event.target.value)}
+                    required
+                  />
+                </label>
+                <Dnp3SettingsForm
+                  value={createDnp3Ext}
+                  onChange={(patch) => setCreateDnp3Ext((prev) => ({ ...prev, ...patch }))}
+                  usedMasterPorts={devices
+                    .filter((x) => x.dnp3Extended?.ip_endpoint_type === "initiating")
+                    .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
+                    .filter((p) => p > 0)}
+                />
+              </>
+            ) : null}
             <label>
               {t("engineering.devicesPanel.form.pollInterval")}
               <input

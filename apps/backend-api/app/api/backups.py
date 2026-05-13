@@ -386,9 +386,10 @@ async def upload_backup(
 @router.post("/{backup_id}/restore", status_code=status.HTTP_202_ACCEPTED)
 def restore(
     backup_id: int,
-    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
+    """Restore SADECE installer rolu (engineer yedek alabilir ama geri yukleyemez)."""
     """Restore'u arka plan thread'inde tetikle, anlik 202 don.
 
     Frontend `GET /admin/backups/restore/status` ile polling yapip kullaniciya

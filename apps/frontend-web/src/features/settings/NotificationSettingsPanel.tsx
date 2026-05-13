@@ -226,34 +226,37 @@ export function NotificationSettingsPanel({
 
   return (
     <section className="tab-panel notification-tab-panel">
-      <div className="panel-head notification-panel-head notification-panel-head--minimal">
-        <div />
+      {/* Tek satir: SOL pasif/aktif rozetleri, SAG 'Tum Ayarlari Kaydet' butonu */}
+      <div className="notification-toolbar">
+        <div className="notif-status-row">
+          {channels.map((ch) => (
+            <div
+              key={ch.key}
+              className={`notif-status-pill ${ch.enabled ? "is-on" : "is-off"}`}
+            >
+              <span className="material-symbols-outlined">{ch.icon}</span>
+              <span className="notif-status-label">{ch.label}</span>
+              <span className="notif-status-state">
+                {ch.enabled
+                  ? t("notifications.settings.channelActive")
+                  : t("notifications.settings.channelPassive")}
+              </span>
+            </div>
+          ))}
+        </div>
         <button
           type="button"
           className="primary-btn notification-save-top"
           disabled={saving}
           onClick={() => {
             void handleSubmit({
-              preventDefault: () => undefined
+              preventDefault: () => undefined,
             } as unknown as FormEvent<HTMLFormElement>);
           }}
         >
           <span className="material-symbols-outlined">save</span>
           {saving ? t("notifications.settings.saving") : t("notifications.settings.saveAll")}
         </button>
-      </div>
-
-      <div className="notif-status-row">
-        {channels.map((ch) => (
-          <div
-            key={ch.key}
-            className={`notif-status-pill ${ch.enabled ? "is-on" : "is-off"}`}
-          >
-            <span className="material-symbols-outlined">{ch.icon}</span>
-            <span className="notif-status-label">{ch.label}</span>
-            <span className="notif-status-state">{ch.enabled ? t("notifications.settings.channelActive") : t("notifications.settings.channelPassive")}</span>
-          </div>
-        ))}
       </div>
 
       <form className="notification-settings-panel notification-form-v2" onSubmit={handleSubmit}>

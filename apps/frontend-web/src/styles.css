@@ -2439,6 +2439,22 @@ main.content.engineering-content:has(.device-management-panel) {
    sonuncusu altta yetim kaliyordu. v2 auto-fit ile responsive (1/2/3 sutun)
    ve kartlar esit yukseklikte (grid-row 1fr). */
 
+/* Tek-satir toolbar: SOL durum rozetleri, SAG 'Tum Ayarlari Kaydet' butonu.
+   Bildirim kartlarinin yukari cikmasi icin alttaki marginin yerini bu aliyor. */
+.notification-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.notification-toolbar .notif-status-row {
+  margin-bottom: 0;
+}
+.notification-toolbar .notification-save-top {
+  flex-shrink: 0;
+}
 .notif-status-row {
   display: flex;
   flex-wrap: wrap;

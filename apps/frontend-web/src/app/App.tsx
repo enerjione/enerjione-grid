@@ -1963,6 +1963,8 @@ export function App() {
               ) : null}
               {session.role === "installer" ? (
                 <>
+                  {/* Bildirim Ayarlari: sistem geneli SMTP/SMS/Telegram konfigi —
+                      sadece installer yapabilir. */}
                   <button
                     className={engineeringPage === "notifications" ? "active" : ""}
                     onClick={() => {
@@ -1980,13 +1982,17 @@ export function App() {
                   >
                     {t("engineering.nav.projectSettings")}
                   </button>
-                  <button
-                    className={engineeringPage === "backups" ? "active" : ""}
-                    onClick={() => setEngineeringPage("backups")}
-                  >
-                    {t("engineering.nav.backups")}
-                  </button>
                 </>
+              ) : null}
+              {/* Yedekler: installer + engineer (engineer sadece alma; restore butonu
+                  BackupsPanel'de role'e gore disabled). */}
+              {session.role === "installer" || session.role === "engineer" ? (
+                <button
+                  className={engineeringPage === "backups" ? "active" : ""}
+                  onClick={() => setEngineeringPage("backups")}
+                >
+                  {t("engineering.nav.backups")}
+                </button>
               ) : null}
             </div>
 
@@ -2153,7 +2159,7 @@ export function App() {
             ) : null}
             {engineeringPage === "backups" &&
             (session.role === "engineer" || session.role === "installer") ? (
-              <BackupsPanel accessToken={session.accessToken} />
+              <BackupsPanel accessToken={session.accessToken} currentRole={session.role} />
             ) : null}
           </main>
         ) : pageMode !== "home" ? (

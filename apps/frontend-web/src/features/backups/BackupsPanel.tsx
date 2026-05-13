@@ -20,6 +20,9 @@ import { useToast } from "../../components/ToastProvider";
 
 type Props = {
   accessToken: string;
+  /** Mevcut kullanici rolu — engineer ise 'Geri Yukle' butonu disabled.
+   *  Engineer yedek alabilir (POST /backups/create) ama restore yapamaz. */
+  currentRole?: "operator" | "engineer" | "installer" | "ops_manager";
 };
 
 function fmtBytes(n: number | null | undefined): string {
@@ -45,7 +48,8 @@ const STATUS_COLOR: Record<string, string> = {
   failed: "#ef4444"
 };
 
-export function BackupsPanel({ accessToken }: Props) {
+export function BackupsPanel({ accessToken, currentRole }: Props) {
+  const canRestore = currentRole !== "engineer";
   const toast = useToast();
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
@@ -430,9 +434,13 @@ export function BackupsPanel({ accessToken }: Props) {
                         <button
                           type="button"
                           className="icon-btn icon-btn-warn"
-                          title={t("backups.actions.restore")}
+                          title={
+                            canRestore
+                              ? t("backups.actions.restore")
+                              : t("backups.actions.restoreEngineerForbidden")
+                          }
                           aria-label={t("backups.actions.restore")}
-                          disabled={b.status !== "success" || restoringId === b.id}
+                          disabled={!canRestore || b.status !== "success" || restoringId === b.id}
                           onClick={() => setConfirmRestoreId(b.id)}
                         >
                           {restoringId === b.id ? (
