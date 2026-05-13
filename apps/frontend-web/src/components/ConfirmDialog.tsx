@@ -1,7 +1,7 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+﻿import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 /**
- * ConfirmDialog — `window.confirm()` yerine kullanılan stillendirilmiş onay diyaloğu.
+ * ConfirmDialog — `await asyncConfirm()` yerine kullanılan stillendirilmiş onay diyaloğu.
  *
  * Kullanım:
  *   const { confirm } = useConfirm();
@@ -36,6 +36,11 @@ interface PendingItem extends ConfirmOptions {
   resolve: (ok: boolean) => void;
 }
 
+// Global confirm referansi — `window.confirm` override icin. ConfirmProvider
+// mount edilince burayi guncelleriz; eski `await asyncConfirm(...)` cagrilari da
+// stillendirilmis dialog'a gider. Provider yoksa fallback native confirm'a duser.
+let _globalConfirm: ((opts: ConfirmOptions) => Promise<boolean>) | null = null;
+
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<PendingItem | null>(null);
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -45,6 +50,23 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
       setPending({ ...opts, resolve });
     });
   }, []);
+
+  // window.confirm override — eski 24 callsite'i tek tek migrate etmeden
+  // stillendirilmis dialog'a yonlendir. Promise donmedigi icin senkron
+  // davranis simule edilemez; bu yuzden `await asyncConfirm(...)` async kullanim
+  // gerektirir. Bu sistem icindeki kullanimlarin TUMU async fonksiyon icinde
+  // (async event handler) cagriliyor → Promise donmesi sorun degil.
+  useEffect(() => {
+    _globalConfirm = confirm;
+    const original = window.confirm.bind(window);
+    // Senkron API ile uyumsuz oldugu icin global override yapmiyoruz; bunun
+    // yerine useConfirm() hook'unun "no provider" fallback'i guncellenir.
+    // Eski callsite'lerin migrate edilmesi gerek — bu hook ile minimum efor.
+    return () => {
+      _globalConfirm = null;
+      void original;
+    };
+  }, [confirm]);
 
   const finish = useCallback((ok: boolean) => {
     if (pending) {
@@ -161,11 +183,28 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
 export function useConfirm(): ConfirmContextValue {
   const ctx = useContext(ConfirmContext);
-  if (!ctx) {
-    // Provider yoksa native fallback — eski callsite'ler yine çalışır.
-    return {
-      confirm: async (opts) => window.confirm(opts.message),
-    };
-  }
-  return ctx;
+  if (ctx) return ctx;
+  // Provider yoksa: oncelikle global confirm referansini dene (mount sirasi
+  // problemi olursa). Yine yoksa native window.confirm fallback.
+  return {
+    confirm: async (opts) => {
+      if (_globalConfirm) return _globalConfirm(opts);
+      return window.confirm(opts.message);
+    },
+  };
+}
+
+/** Global async confirm — `window.confirm` cagrisi yerine yazilmadan
+ * once async fonksiyon icinde kullanilir. Provider mount edilmemisse
+ * native fallback'e duser.
+ *
+ * Migration kolayligi icin: `if (await asyncConfirm(msg)) { ... }` ->
+ * `if (await asyncConfirm(msg)) { ... }`.
+ */
+export async function asyncConfirm(messageOrOpts: string | ConfirmOptions): Promise<boolean> {
+  const opts: ConfirmOptions =
+    typeof messageOrOpts === "string" ? { message: messageOrOpts } : messageOrOpts;
+  if (_globalConfirm) return _globalConfirm(opts);
+  // Provider mount edilmemis — native confirm'a dus.
+  return window.confirm(opts.message);
 }

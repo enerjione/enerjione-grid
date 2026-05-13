@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Public REST API erisimi yonetim paneli.
  *
  * Iki bolum:
@@ -11,6 +11,7 @@
  */
 import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 
 import type { ApiKey, ApiKeyCreated } from "../../shared/types";
 
@@ -124,7 +125,7 @@ export function ApiAccessPanel({
   };
 
   const handleRevoke = async (k: ApiKey) => {
-    if (!window.confirm(t("apiAccess.confirmRevoke", { name: k.name }))) return;
+    if (!await asyncConfirm(t("apiAccess.confirmRevoke", { name: k.name }))) return;
     try {
       await onRevoke(k.id);
       await onRefresh();
@@ -135,7 +136,7 @@ export function ApiAccessPanel({
 
   const handlePurge = async (k: ApiKey) => {
     if (!onPurge) return;
-    if (!window.confirm(t("apiAccess.confirmPurge", { name: k.name }))) return;
+    if (!await asyncConfirm(t("apiAccess.confirmPurge", { name: k.name }))) return;
     try {
       await onPurge(k.id);
       await onRefresh();
@@ -474,10 +475,10 @@ export function ApiAccessPanel({
               <button
                 type="button"
                 className="primary-btn"
-                onClick={() => {
+                onClick={async () => {
                   if (
                     !copied &&
-                    !window.confirm(t("apiAccess.created.closeWithoutCopy"))
+                    !(await asyncConfirm(t("apiAccess.created.closeWithoutCopy")))
                   ) {
                     return;
                   }

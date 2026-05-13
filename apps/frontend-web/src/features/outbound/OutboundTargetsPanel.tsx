@@ -1324,7 +1324,7 @@ export function OutboundTargetsPanel({
                     </button>
                     <button
                       className="danger-btn action-btn"
-                      onClick={() => {
+                      onClick={async () => {
                         if (await asyncConfirm(t("engineering.outbound.confirmDelete", { name: item.name }))) {
                           void onDelete(item.id).catch((err: unknown) => {
                             setError(err instanceof Error ? err.message : t("common.errorOccurred"));

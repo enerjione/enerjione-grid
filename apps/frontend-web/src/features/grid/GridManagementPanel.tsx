@@ -770,9 +770,9 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 <div className="grid-mgmt-toolbar-group grid-mgmt-toolbar-left">
                   <button
                     className={`grid-mgmt-tool-btn ${editMode ? "is-active" : ""}`}
-                    onClick={() => {
+                    onClick={async () => {
                       if (editMode && hasUnsavedDraft) {
-                        if (!await asyncConfirm(t("engineering.grid.editModeUnsavedConfirm"))) return;
+                        if (!(await asyncConfirm(t("engineering.grid.editModeUnsavedConfirm")))) return;
                         setDraftPoleAdds([]);
                         setDraftPoleEdits(new Map());
                         setDraftPoleDeletes(new Set());
@@ -824,7 +824,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
                     <button
                       className="grid-mgmt-tool-btn is-undo"
-                      onClick={() => handleUndoDraft()}
+                      onClick={() => void handleUndoDraft()}
                       disabled={!hasUnsavedDraft || busy}
                       title="Discard all draft changes"
                     >
@@ -1711,12 +1711,12 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     }
   }
 
-  function handleUndoDraft() {
+  async function handleUndoDraft() {
     if (!hasUnsavedDraft) {
       setEditMode(false);
       return;
     }
-    if (!await asyncConfirm("Tüm taslak değişiklikler geri alınsın mı?")) return;
+    if (!(await asyncConfirm("Tüm taslak değişiklikler geri alınsın mı?"))) return;
     setDraftPoleAdds([]);
     setDraftPoleEdits(new Map());
     setDraftPoleDeletes(new Set());
