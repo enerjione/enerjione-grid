@@ -1768,6 +1768,7 @@ export function App() {
         fullName={currentUser?.full_name ?? session.username}
         role={session.role}
         accessToken={session.accessToken}
+        wsState={liveSocket.connectionState}
         activePage={pageMode}
         onChangePage={setPageMode}
         isEngineeringView={pageMode === "engineering"}
@@ -1779,12 +1780,35 @@ export function App() {
         {pageMode === "engineering" ? (
           <main className="content engineering-content">
             <div className="tabs">
+              {/* ===== GRUP 1: TOPOLOJI & KURULUM =====
+                  Saha kurulumu sirasi: once cihazlar -> sinyal katalogu -> hat topolojisi */}
               <button
                 className={engineeringPage === "devices" ? "active" : ""}
                 onClick={() => setEngineeringPage("devices")}
               >
                 {t("engineering.nav.devices")}
               </button>
+              {session.role === "installer" ? (
+                <button
+                  className={engineeringPage === "signals" ? "active" : ""}
+                  onClick={() => {
+                    setEngineeringPage("signals");
+                    void reloadSignals();
+                  }}
+                >
+                  {t("engineering.nav.signals")}
+                </button>
+              ) : null}
+              {session.role === "installer" ? (
+                <button
+                  className={engineeringPage === "grid" ? "active" : ""}
+                  onClick={() => setEngineeringPage("grid")}
+                >
+                  {t("engineering.nav.grid")}
+                </button>
+              ) : null}
+
+              {/* ===== GRUP 2: IZLEME & ALARMLAR ===== */}
               {session.role === "engineer" || session.role === "installer" ? (
                 <button
                   className={engineeringPage === "live-values" ? "active" : ""}
@@ -1793,6 +1817,20 @@ export function App() {
                   {t("engineering.nav.liveValues")}
                 </button>
               ) : null}
+              {session.role === "installer" ? (
+                <button
+                  className={engineeringPage === "alarm-rules" ? "active" : ""}
+                  onClick={() => {
+                    setEngineeringPage("alarm-rules");
+                    void reloadAlarmRules();
+                    void reloadSignals();
+                  }}
+                >
+                  {t("engineering.nav.alarmRules")}
+                </button>
+              ) : null}
+
+              {/* ===== GRUP 3: ERISIM & EKIP YONETIMI ===== */}
               {session.role === "engineer" || session.role === "installer" ? (
                 <button
                   className={engineeringPage === "users" ? "active" : ""}
@@ -1815,27 +1853,10 @@ export function App() {
                   {t("engineering.nav.responsibilityAreas")}
                 </button>
               ) : null}
+
               {session.role === "installer" ? (
                 <>
-                  <button
-                    className={engineeringPage === "signals" ? "active" : ""}
-                    onClick={() => {
-                      setEngineeringPage("signals");
-                      void reloadSignals();
-                    }}
-                  >
-                    {t("engineering.nav.signals")}
-                  </button>
-                  <button
-                    className={engineeringPage === "alarm-rules" ? "active" : ""}
-                    onClick={() => {
-                      setEngineeringPage("alarm-rules");
-                      void reloadAlarmRules();
-                      void reloadSignals();
-                    }}
-                  >
-                    {t("engineering.nav.alarmRules")}
-                  </button>
+                  {/* ===== GRUP 4: ENTEGRASYONLAR & BILDIRIM ===== */}
                   <button
                     className={engineeringPage === "outbound" ? "active" : ""}
                     onClick={() => setEngineeringPage("outbound")}
@@ -1860,17 +1881,13 @@ export function App() {
                   >
                     {t("engineering.nav.notificationSettings")}
                   </button>
+
+                  {/* ===== GRUP 5: PROJE & SISTEM YONETIMI ===== */}
                   <button
                     className={engineeringPage === "project-settings" ? "active" : ""}
                     onClick={() => setEngineeringPage("project-settings")}
                   >
                     {t("engineering.nav.projectSettings")}
-                  </button>
-                  <button
-                    className={engineeringPage === "grid" ? "active" : ""}
-                    onClick={() => setEngineeringPage("grid")}
-                  >
-                    {t("engineering.nav.grid")}
                   </button>
                   <button
                     className={engineeringPage === "backups" ? "active" : ""}

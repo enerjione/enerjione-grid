@@ -175,20 +175,23 @@ def _pg_env() -> dict[str, str]:
 # alarm_rules, outbound_targets, notification_settings, project_settings,
 # responsibility_areas, user_notification_preferences) tam veri ile yedeklenir.
 EXCLUDED_DATA_TABLES = (
+    # Yuksek-hacimli operasyonel veriler — saniyede 600+ satir yazilir,
+    # yedek dosyasini sisirir ve restore sirasinda gereksiz uzun surer.
+    # Restore sonrasi sistem yeniden veri toplamaya devam eder.
     "telemetry",
-    "alarm_events",
-    "alarm_comments",
-    "fault_events",
-    "fault_comments",
-    "system_events",
-    "notifications",
     "outbox_events",
     "processed_messages",
     "gateway_ingest_batches",
-    # backup_jobs ve backup_schedule kendisi de geri yuklenince eski
-    # gecmisi getirir; karisikligi onlemek icin de schema-only.
+    # backup_jobs/backup_schedule — restore sonrasi reindex_backup_jobs_from_disk
+    # ile disk'ten yeniden uretilir; data yedeklemek karisiklik yapar.
     "backup_jobs",
     "backup_schedule",
+    # NOT: ASAGIDAKILER artik YEDEK ALINIR (eski listeden cikarildi):
+    #   alarm_events, alarm_comments  — operator alarm gecmisi
+    #   fault_events, fault_comments  — ariza yonetimi (workflow durumu)
+    #   system_events                 — audit/event log (kim ne yapti?)
+    #   notifications                 — kullanici bildirim gecmisi
+    # Kullanici "event kayitlari da cok onemli, sadece config degil" dedi.
 )
 
 
@@ -627,6 +630,12 @@ def create_backup(
         job.status = "success"
         job.size_bytes = size
         job.completed_at = datetime.now(timezone.utc)
+        # Off-site copy — BACKUP_OFFSITE_DIR env set edilmisse (ikinci disk,
+        # USB drive, NAS SMB mount vb.) yedeği oraya da kopyala. Disk failure
+        # / cryptolocker durumunda fiziksel olarak ayri kopya kalir.
+        # Best-effort: kopyalama hatasi backup'i basarisiz saymaz, sadece
+        # job.error_message'a not duser.
+        _offsite_copy(target, job)
     else:
         job.status = "failed"
         job.error_message = err
@@ -640,6 +649,44 @@ def create_backup(
         job.file_path = None
     db.commit()
     return job
+
+
+def _offsite_copy(source: Path, job: BackupJob) -> None:
+    """Backup dosyasini BACKUP_OFFSITE_DIR'a kopyala (yapilandirilmissa).
+
+    Best-effort: hata olursa job basarisiz sayilmaz; sadece warning loglanir
+    ve job.error_message'a (varsa) not eklenir. Asil backup gecerlidir, sadece
+    off-site kopya yapilamadi.
+
+    Env:
+      BACKUP_OFFSITE_DIR — hedef dizin; bos veya unset ise off-site atlanir.
+
+    LAN ortaminda SMB share mount edip o yolu vermek tipik kullanim:
+      Windows: `BACKUP_OFFSITE_DIR=\\\\nas\\backups\\enerjione`
+      Linux:   `BACKUP_OFFSITE_DIR=/mnt/nas/backups/enerjione`
+    """
+    raw = os.getenv("BACKUP_OFFSITE_DIR", "").strip()
+    if not raw:
+        return
+    import shutil
+
+    try:
+        offsite_dir = Path(raw)
+        offsite_dir.mkdir(parents=True, exist_ok=True)
+        dest = offsite_dir / source.name
+        shutil.copy2(source, dest)
+        logger.info("backup_offsite_copy_ok source=%s dest=%s", source.name, dest)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "backup_offsite_copy_failed source=%s dir=%s error=%s",
+            source.name,
+            raw,
+            exc,
+        )
+        # job.error_message dolu olabilir; mevcuti koru, sadece not ekle.
+        existing = (job.error_message or "").strip()
+        note = f"offsite copy failed: {type(exc).__name__}"
+        job.error_message = f"{existing} | {note}" if existing else note
 
 
 def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:

@@ -739,3 +739,146 @@ def delete_topic_mapping(
     db.commit()
     _refresh_mqtt_target(target_id)
     return None
+
+
+# ===========================================================================
+# MQTT TLS Sertifika upload
+# ===========================================================================
+#
+# Operator UI'da TLS toggle'i acinca 3 sertifika dosyasi (CA, client cert,
+# client key) upload edebilir. Backend bunlari host'ta sabit dizine yazar
+# ve target'in mqtt_tls_*_path alanini otomatik gunceller. Operator path
+# manuel yazmak zorunda kalmaz.
+#
+# Dosya saklama dizini: get_backup_dir().parent / "mqtt-certs" / "{target_id}"
+# Yani container'da /var/lib/e1-backups/../mqtt-certs/{id}/  = /var/lib/mqtt-certs
+# Volume mount disinda — sadece backend container'da gecerli. Container
+# yeniden olusturulursa kaybolur; operator yeniden upload eder. Production
+# icin docker-compose'da bind mount eklenebilir.
+
+# Cert tipleri ile model field mapping
+_CERT_KINDS = {
+    "ca": "mqtt_tls_ca_path",
+    "cert": "mqtt_tls_cert_path",
+    "key": "mqtt_tls_key_path",
+}
+
+# Sertifika dizini — backup-data volume'unun parent'i icinde sabit dizin.
+# /var/lib/e1-backups -> parent /var/lib -> mqtt-certs.
+def _mqtt_cert_dir(target_id: int) -> Path:
+    from app.services.backup_service import get_backup_dir
+    root = Path(os.getenv("MQTT_CERT_DIR", str(get_backup_dir().parent / "mqtt-certs")))
+    target_dir = root / str(target_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    return target_dir
+
+
+@router.post("/{target_id}/mqtt-cert/{kind}", response_model=OutboundTargetRead)
+async def upload_mqtt_cert(
+    target_id: int,
+    kind: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """MQTT TLS sertifikasi upload — CA / cert / key.
+
+    Yuklenen dosya disk'e yazilir, target'in ilgili mqtt_tls_*_path alani
+    otomatik atanir. mqtt_publisher_service hot-reload tetiklenir.
+
+    Boyut limiti: 100 KB (PEM/CRT/KEY dosyalari tipik 1-10 KB).
+    """
+    target = _ensure_mqtt_target(db, target_id)
+    if kind not in _CERT_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Gecersiz cert tipi: {kind}. Gecerli: ca, cert, key",
+        )
+    field_name = _CERT_KINDS[kind]
+
+    # Dosyayi oku + boyut check
+    content = await file.read()
+    if len(content) > 100 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Sertifika dosyasi cok buyuk ({len(content)} byte). Max 100 KB.",
+        )
+    # PEM kontrolu — basit (BEGIN/END marker arariz)
+    text_preview = content[:200].decode("ascii", errors="ignore")
+    if "-----BEGIN" not in text_preview:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dosya PEM formatinda gorunmuyor (BEGIN marker yok). .crt/.pem/.key bekleniyor.",
+        )
+
+    # Dosyayi yaz
+    cert_dir = _mqtt_cert_dir(target_id)
+    ext = {"ca": "ca.crt", "cert": "client.crt", "key": "client.key"}[kind]
+    target_path = cert_dir / ext
+    try:
+        target_path.write_bytes(content)
+        os.chmod(target_path, 0o600)  # key dosyasi sadece backend user okuyabilsin
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Sertifika kaydedilemedi: {exc}",
+        )
+
+    # Target field'ini guncelle
+    setattr(target, field_name, str(target_path))
+    record_event(
+        db,
+        category="outbound",
+        event_type="mqtt_cert_uploaded",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"MQTT TLS sertifikasi yuklendi: {target.name} ({kind})",
+        metadata={
+            "target_id": target_id,
+            "kind": kind,
+            "path": str(target_path),
+            "size": len(content),
+            "filename": file.filename,
+        },
+    )
+    db.commit()
+    db.refresh(target)
+    _refresh_mqtt_target(target_id)
+    return target
+
+
+@router.delete("/{target_id}/mqtt-cert/{kind}", response_model=OutboundTargetRead)
+def delete_mqtt_cert(
+    target_id: int,
+    kind: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Yuklenen MQTT TLS sertifikasini sil — disk + target field NULL."""
+    target = _ensure_mqtt_target(db, target_id)
+    if kind not in _CERT_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Gecersiz cert tipi: {kind}",
+        )
+    field_name = _CERT_KINDS[kind]
+    current_path = getattr(target, field_name)
+    if current_path:
+        try:
+            Path(current_path).unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
+            logger.exception("mqtt_cert_unlink_failed path=%s", current_path)
+    setattr(target, field_name, None)
+    record_event(
+        db,
+        category="outbound",
+        event_type="mqtt_cert_deleted",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"MQTT TLS sertifikasi silindi: {target.name} ({kind})",
+        metadata={"target_id": target_id, "kind": kind},
+    )
+    db.commit()
+    db.refresh(target)
+    _refresh_mqtt_target(target_id)
+    return target

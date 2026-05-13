@@ -33,6 +33,42 @@ const IEC104_MONITOR_TYPES: { id: number; code: string; desc: string; dataTypes:
   { id: 37, code: "M_IT_TB_1", desc: "Counter + CP56Time2a",           dataTypes: ["counter"] }
 ];
 
+// IEC 104 type id <-> CP56Time2a variant mapping. Operator "Zaman etiketi
+// gonder" toggle'ini acinca sec ilgili Type ID otomatik time-tag varyantina
+// donusur; kapatinca tekrar non-time-tag varyantina. Boylece operator iki
+// secimi de elle yapmak zorunda kalmaz, tutarsiz konfigurasyon olusmaz.
+const TYPE_ID_TIME_TAG_MAP: Record<number, number> = {
+  1: 30,   // M_SP_NA_1 -> M_SP_TB_1
+  3: 31,   // M_DP_NA_1 -> M_DP_TB_1
+  9: 34,   // M_ME_NA_1 -> M_ME_TD_1
+  11: 35,  // M_ME_NB_1 -> M_ME_TE_1
+  13: 36,  // M_ME_NC_1 -> M_ME_TF_1
+  15: 37,  // M_IT_NA_1 -> M_IT_TB_1
+};
+const TYPE_ID_NO_TIME_TAG_MAP: Record<number, number> = Object.fromEntries(
+  Object.entries(TYPE_ID_TIME_TAG_MAP).map(([k, v]) => [v, Number(k)])
+);
+
+function convertTypeIdForTimeTag(currentTypeId: number | null, withTimeTag: boolean): number | null {
+  if (currentTypeId === null) return null;
+  if (withTimeTag) {
+    // Zaman etiketi acildi: non-time-tag -> time-tag varyantina cevir
+    return TYPE_ID_TIME_TAG_MAP[currentTypeId] ?? currentTypeId;
+  } else {
+    // Kapatildi: time-tag -> non-time-tag varyantina cevir
+    return TYPE_ID_NO_TIME_TAG_MAP[currentTypeId] ?? currentTypeId;
+  }
+}
+
+// Bos string veya invalid sayi icin null doner. Module-level helper —
+// onChange callback'inden ve handleSave icinden ayni mantik kullanilir.
+function parseIntOrNullModule(v: string): number | null {
+  const t = v.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+
 const DATA_TYPES: SignalDataType[] = [
   "analog",
   "binary",
@@ -611,7 +647,18 @@ export function SignalsPage({
                         <input
                           type="checkbox"
                           checked={editIec104WithTimestamp}
-                          onChange={(event) => setEditIec104WithTimestamp(event.target.checked)}
+                          onChange={(event) => {
+                            const newWithTs = event.target.checked;
+                            setEditIec104WithTimestamp(newWithTs);
+                            // Type ID'yi otomatik karsi varyanta cevir
+                            // (1 <-> 30, 9 <-> 34, 13 <-> 36, vb).
+                            // Operator iki ayri secim yapmak zorunda kalmaz.
+                            const currentId = parseIntOrNullModule(editIec104TypeId);
+                            const newId = convertTypeIdForTimeTag(currentId, newWithTs);
+                            if (newId !== currentId) {
+                              setEditIec104TypeId(newId === null ? "" : String(newId));
+                            }
+                          }}
                           disabled={!canEdit || !editIec104Enabled}
                         />
                         <span className="signal-toggle-text">

@@ -120,12 +120,12 @@ async function buildApiError(response: Response, fallbackMessage: string): Promi
     const data = (await response.json()) as ApiErrorResponse;
     const detail = data.detail;
     if (typeof detail === "string" && detail.trim()) {
-      return new Error(detail);
+      return new Error(sanitizeErrorDetail(detail, response.status, fallbackMessage));
     }
     if (Array.isArray(detail) && detail.length > 0) {
       const first = detail[0];
       if (typeof first === "string" && first.trim()) {
-        return new Error(first);
+        return new Error(sanitizeErrorDetail(first, response.status, fallbackMessage));
       }
       if (first && typeof first === "object") {
         const field = first.loc ? String(first.loc[first.loc.length - 1]) : "alan";
@@ -137,6 +137,37 @@ async function buildApiError(response: Response, fallbackMessage: string): Promi
     // ignore body parse error and use fallback
   }
   return new Error(fallbackMessage);
+}
+
+/**
+ * Backend `detail` mesajini kullaniciya gostermeden once sanitize et.
+ *
+ * Eski davranis: backend'in donen `detail` string'i (potansiyel olarak
+ * SQL hatasi, dosya yolu, baglanti string'i, ic stack trace icerigi)
+ * dogrudan toast'a basiliyordu. Bu IP/host disclosure + recon ipucu
+ * verir.
+ *
+ * Yeni davranis: 4xx kullanici hatalari (Validation/RBAC/quota) icin
+ * mesaj olduğu gibi gosterilir (kullaniciya yol gosterici). 5xx ve
+ * suphell pattern'li mesajlar (path, port, connection string, stack
+ * trace) generic fallback'e cevrilir.
+ */
+function sanitizeErrorDetail(detail: string, status: number, fallback: string): string {
+  // Kullanici dostu kisa mesajlar (kanonik kullanim) — pass-through.
+  // Tipik durumlar: "Invalid credentials", "Quota exceeded", "Not found",
+  // "Account temporarily locked", Turkce kullanici mesajlari.
+  if (status < 500 && detail.length <= 200) {
+    // Su pattern'ler iceren mesajlari generic'e cevir (icsel detay sizintisi):
+    //  - "Traceback", "File \"...\"", "line N" → stack trace
+    //  - "psql:", "psycopg2.", "sqlalchemy.", "asyncpg" → DB driver iz
+    //  - "HTTPConnection", "ConnectionRefusedError" → backend ag detayi
+    //  - "/usr/", "C:\\", "/var/" → dosya yolu
+    const suspicious = /Traceback|File "|psql:|psycopg2|sqlalchemy|asyncpg|HTTPConnection|ConnectionRefused|\/usr\/|\/var\/|C:\\\\/i;
+    if (suspicious.test(detail)) return fallback;
+    return detail;
+  }
+  // 5xx → her zaman generic. Detay backend log'unda kalsin.
+  return fallback;
 }
 
 // "Beni hatırla" semantiği:
@@ -173,6 +204,19 @@ export function saveSession(session: AuthSession, remember: boolean = true): voi
 export function clearSession(): void {
   sessionStorage.removeItem(AUTH_STORAGE_KEY);
   localStorage.removeItem(AUTH_STORAGE_KEY);
+  // Eski "hsl." prefix'li (Horstmann Smart Logger doneminden kalma) anahtarlari
+  // + halen aktif olarak yazilan kullanici-ozel tercih anahtarlarini logout'ta
+  // temizle. Paylasimli PC'de bir sonraki kullanici onceki PII'ye erismesin.
+  // Sabit listede gozukmeyen ama "hsl." veya "e1.user." prefix'li tum anahtarlar
+  // toplu silinir.
+  const PREFIXES_TO_CLEAR = ["hsl.", "e1.user.", "sidebar-collapsed", "route.v1"];
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    if (PREFIXES_TO_CLEAR.some((p) => key === p || key.startsWith(p))) {
+      localStorage.removeItem(key);
+    }
+  }
 }
 
 export async function logout(token: string): Promise<void> {
@@ -1099,6 +1143,45 @@ export async function deleteTopicMapping(
     { method: "DELETE", headers: authHeaders(token) }
   );
   if (!response.ok) throw await buildApiError(response, "Topic mapping silinemedi.");
+}
+
+// ---- MQTT TLS Cert upload ------------------------------------------------
+
+export type MqttCertKind = "ca" | "cert" | "key";
+
+export async function uploadMqttCert(
+  token: string,
+  targetId: number,
+  kind: MqttCertKind,
+  file: File
+): Promise<import("./types").OutboundTarget> {
+  const form = new FormData();
+  form.append("file", file);
+  // FormData icin Content-Type'i tarayici otomatik (boundary ile) set eder;
+  // authHeaders sadece Authorization veriyor zaten.
+  const response = await fetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/mqtt-cert/${kind}`,
+    {
+      method: "POST",
+      headers: authHeaders(token),  // Sadece Authorization; Content-Type otomatik
+      body: form,
+    }
+  );
+  if (!response.ok) throw await buildApiError(response, "Sertifika yuklenemedi.");
+  return (await response.json()) as import("./types").OutboundTarget;
+}
+
+export async function deleteMqttCert(
+  token: string,
+  targetId: number,
+  kind: MqttCertKind
+): Promise<import("./types").OutboundTarget> {
+  const response = await fetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/mqtt-cert/${kind}`,
+    { method: "DELETE", headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Sertifika silinemedi.");
+  return (await response.json()) as import("./types").OutboundTarget;
 }
 
 export async function fetchIec104Runtime(token: string, targetId: number) {
