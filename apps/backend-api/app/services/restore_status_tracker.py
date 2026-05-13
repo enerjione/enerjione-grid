@@ -84,6 +84,16 @@ def set_step(step: str, message: str = "") -> None:
         _state.logs.append(_log_entry(step, _state.message, "info"))
 
 
+def update_message(message: str, level: str = "info") -> None:
+    """Sub-step mesaji — current_step degisiklik YOK, sadece message + log
+    guncellenir. Restore icinde 'restoring' uzun bir adim; pg_restore'un
+    pre-flight asamalarini (connection terminate, dispose, command launch)
+    UI'da gostermek icin bu kullanilir."""
+    with _lock:
+        _state.message = message
+        _state.logs.append(_log_entry(_state.current_step, message, level))
+
+
 def fail(error: str) -> None:
     """Restore basarisiz oldu."""
     with _lock:

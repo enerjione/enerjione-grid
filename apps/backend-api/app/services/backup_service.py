@@ -293,61 +293,209 @@ def _ensure_legacy_roles_exist(db_conn_info: dict) -> None:
             logger.debug("ensure_legacy_role_failed role=%s error=%s", role, exc)
 
 
+def _terminate_other_connections(db_conn_info: dict) -> int:
+    """Hedef DB'deki TUM diger connection'lari kill et (kendimiz haric).
+
+    pg_restore --clean DROP TABLE/DATABASE icin EXCLUSIVE LOCK ister. Backend
+    pool'u + worker servisleri (tag-engine, alarm-service, notification-worker,
+    iec104-outbound) DB'ye baglantili oldugu icin DROP'lar lock kuyrugunda
+    sonsuza kadar bekler — kullanici "restore takildi" goruyor.
+
+    Cozum: pg_terminate_backend ile aktif backend'leri ZORLA kapat. Worker
+    servisleri otomatik reconnect ederler (psycopg2 default behavior).
+
+    Returns: kac connection terminate edildi.
+    """
+    psql = os.getenv("PSQL", "psql")
+    dbname = db_conn_info["dbname"]
+    # pg_stat_activity + pg_terminate_backend — kendimiz haric. pid != pg_backend_pid()
+    sql = (
+        f"SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
+        f"WHERE datname='{dbname}' AND pid <> pg_backend_pid();"
+    )
+    try:
+        completed = subprocess.run(
+            [
+                psql,
+                "-h", db_conn_info["host"],
+                "-p", db_conn_info["port"],
+                "-U", db_conn_info["user"],
+                "-d", "postgres",  # SISTEM DB — kendi DB'mizden ayri baglani
+                "-t", "-A",  # tuples only, no align (sadece sayi doner)
+                "-c", sql,
+            ],
+            env=_pg_env(),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if completed.returncode != 0:
+            logger.warning("pg_terminate_backend failed: %s", completed.stderr[:200])
+            return 0
+        try:
+            return int((completed.stdout or "0").strip() or "0")
+        except ValueError:
+            return 0
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pg_terminate_backend exception: %s", exc)
+        return 0
+
+
 def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     """pg_restore calistir — mevcut tablolarin uzerine clean+create modunda
     yazar. UYARI: Mevcut tum DB icerigi silinir.
 
+    Performans + kilitlenme dayanikligi:
+      1. Backend engine pool'u dispose edilir (kendi connection'larimizi serbest birak).
+      2. Hedef DB'deki tum diger backend'ler pg_terminate_backend ile kill edilir
+         (worker servisleri auto-reconnect eder; ama restore sirasinda DROP'lara
+         lock vermek zorundalar).
+      3. pg_restore --single-transaction (atomic, hata olursa rollback) +
+         --jobs=4 (paralel COPY + INDEX) + --exit-on-error (kismi yarim restore
+         olmasin).
+
     Eski (rebrand oncesi) yedeklerle uyumluluk: restore'dan once olasi eski
-    role isimlerini (horstman/hsl) gecici olarak yaratiyoruz. Boylece dump
-    icindeki GRANT/OWNER referanslari "role does not exist" hatasi atmiyor.
+    role isimlerini (horstman/hsl) gecici olarak yaratiyoruz.
     """
     db = _parse_db_url(settings.database_url)
-    # Legacy-aware: eski yedeklerdeki horstman/hsl role'lerini gecici olarak
-    # yarat (idempotent, NOLOGIN). Yeni yedeklerde no-op.
+
+    # tracker import — pre-flight sub-step mesajlari icin
+    try:
+        from app.services import restore_status_tracker as _tracker
+    except ImportError:
+        _tracker = None  # type: ignore
+
+    def _sub(msg: str) -> None:
+        if _tracker is not None:
+            try:
+                _tracker.update_message(msg)
+            except Exception:  # noqa: BLE001
+                pass
+
+    # 1. Kendi pool'umuzu dispose et — DROP'lar lock alabilsin.
+    _sub("Backend bağlantı havuzu serbest bırakılıyor...")
+    try:
+        from app.db.session import engine as _engine
+        _engine.dispose()
+        logger.info("backup_restore_pre_dispose_done")
+    except Exception:  # noqa: BLE001
+        logger.exception("engine_dispose_before_restore_failed")
+
+    # 2. Worker connection'larini kill et — auto-reconnect ederler.
+    _sub("Aktif veritabanı bağlantıları kapatılıyor (worker'lar reconnect olacak)...")
+    terminated = _terminate_other_connections(db)
+    if terminated > 0:
+        logger.info("backup_restore_terminated_connections count=%d", terminated)
+        _sub(f"{terminated} aktif bağlantı kapatıldı; pg_restore başlatılıyor...")
+    else:
+        _sub("Aktif bağlantı yok; pg_restore başlatılıyor...")
+
+    # 3. Legacy role'leri ensure
     _ensure_legacy_roles_exist(db)
+
     pg_restore = os.getenv("PG_RESTORE", "pg_restore")
+    # NOT: --single-transaction ve --jobs birlikte KULLANILAMAZ (pg_restore kurali).
+    # Single-transaction tercih: atomic + lock konsantrasyonu sayesinde her tablo icin
+    # yeni lock istemek yerine baslangicta bir kez ister, cok daha hizli.
     cmd = [
         pg_restore,
         "-h", db["host"],
         "-p", db["port"],
         "-U", db["user"],
         "-d", db["dbname"],
-        "--clean",  # mevcut objeleri DROP et
-        "--if-exists",  # yoksa hata verme
+        "--clean",          # mevcut objeleri DROP et
+        "--if-exists",      # yoksa hata verme
         "--no-owner",
         "--no-acl",
+        "--single-transaction",  # atomic restore, hata olursa rollback; lock'lar tek seferde
+        "--exit-on-error",  # kismi restore yerine ilk hatada dur
+        "--verbose",        # progress goz onunde
         str(file_path),
     ]
+    # Lock bekleme suresi — DROP/CREATE icin 60sn. Default sonsuz; sinir
+    # koyarak kullanici "30 dk takildi" durumunu yasamaz, fail-fast hata gorur.
+    env = _pg_env()
+    env["PGOPTIONS"] = "-c statement_timeout=600000 -c lock_timeout=60000"
+
+    # pg_restore'u Popen ile baslat; stderr'i satir satir oku, tracker'a
+    # sub-step mesaji olarak yansit. --verbose ile pg_restore "creating TABLE
+    # devices", "processing data for ..." gibi satirlar basar.
+    import threading as _threading
+    _sub("pg_restore başlatılıyor (--single-transaction, --exit-on-error)...")
     try:
-        completed = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            env=_pg_env(),
-            capture_output=True,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=1200,
+            bufsize=1,
         )
-        # pg_restore kismi hatalar icin non-zero donebilir; kritik bir
-        # error olmadigi surece basari sayalim. Ama yine de stderr loglanir.
-        # `role ... does not exist` ve `permission denied` benzeri hatalar
-        # --no-owner/--no-acl ile zaten atlanmasi gerekiyor, ama bazi dump
-        # versiyonlarinda yine cikabilir; bunlari non-kritik sayiyoruz.
-        stderr_lower = (completed.stderr or "").lower()
-        fatal_error = (
-            "fatal" in stderr_lower
-            or "could not connect" in stderr_lower
-            or "database does not exist" in stderr_lower
-        )
-        if completed.returncode != 0 and fatal_error:
-            return False, (completed.stderr or "pg_restore connection error")[:1900]
-        # Stderr varsa truncate edip basari mesaji ile birlikte don
-        # (kullanici warning'leri gorsun istiyorsa).
-        return True, (completed.stderr or "")[:500]
     except FileNotFoundError:
         return False, "pg_restore bulunamadı (PATH'te olmali veya PG_RESTORE env ile yol verin)."
-    except subprocess.TimeoutExpired:
-        return False, "pg_restore zaman aşımı."
     except Exception as exc:  # noqa: BLE001
-        return False, f"pg_restore hatasi: {exc}"
+        return False, f"pg_restore baslatilamadi: {exc}"
+
+    stderr_lines: list[str] = []
+    last_pretty_msg = [""]
+
+    def _stderr_reader() -> None:
+        """stderr satir satir oku, pg_restore'un --verbose ciktilarini tracker'a yolla."""
+        if proc.stderr is None:
+            return
+        try:
+            for raw_line in proc.stderr:
+                line = raw_line.rstrip()
+                if not line:
+                    continue
+                stderr_lines.append(line)
+                # pg_restore --verbose ornek satirlar:
+                #   pg_restore: connecting to database for restore
+                #   pg_restore: dropping TABLE devices
+                #   pg_restore: creating TABLE "public.devices"
+                #   pg_restore: processing data for table "public.devices"
+                #   pg_restore: creating INDEX "ix_devices_code"
+                low = line.lower()
+                pretty: str | None = None
+                if "dropping " in low:
+                    obj = line.split("dropping", 1)[1].strip()
+                    pretty = f"DROP: {obj[:80]}"
+                elif "creating " in low:
+                    obj = line.split("creating", 1)[1].strip()
+                    pretty = f"CREATE: {obj[:80]}"
+                elif "processing data" in low:
+                    obj = line.split("processing data", 1)[1].strip()
+                    pretty = f"COPY: {obj[:80]}"
+                elif "executing " in low:
+                    obj = line.split("executing", 1)[1].strip()
+                    pretty = f"EXEC: {obj[:80]}"
+                if pretty and pretty != last_pretty_msg[0]:
+                    last_pretty_msg[0] = pretty
+                    _sub(pretty)
+        except Exception:  # noqa: BLE001
+            pass
+
+    reader_t = _threading.Thread(target=_stderr_reader, daemon=True)
+    reader_t.start()
+
+    try:
+        rc = proc.wait(timeout=1200)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except Exception:  # noqa: BLE001
+            pass
+        return False, "pg_restore zaman aşımı (20 dk)."
+
+    # stderr okuma thread'i bitsin (pipe kapanir kapanmaz return eder)
+    reader_t.join(timeout=2)
+
+    full_stderr = "\n".join(stderr_lines)
+    if rc != 0:
+        return False, (full_stderr or "pg_restore failed")[:1900]
+    return True, full_stderr[:500]
 
 
 def create_backup(
