@@ -311,6 +311,46 @@ def ingest_alarm(
         except Exception:  # noqa: BLE001
             import logging as _logging
             _logging.getLogger(__name__).exception("notification_dispatch_failed")
+
+    # Outbound dispatcher: REST webhook / MQTT / IEC 104 hedeflerine alarm
+    # payload'unu yolla. OutboundTarget'lar (is_active=true) icin retry'li
+    # gonderim yapar; tablonun is_active=false ya da event_filter='telemetry'
+    # olanlari otomatik atlar. Bu cagri tasarim eksiğiydi — webhook
+    # kurulu olsa bile alarm gelse hicbir POST atilmiyordu.
+    try:
+        from app.services.outbound_dispatch_service import dispatch_event
+        outbound_payload = {
+            "message_id": f"alarm-{alarm.id}",
+            "correlation_id": f"alarm-{alarm.id}",
+            "event_kind": "alarm",
+            "alarm_id": alarm.id,
+            "device_code": payload.device_code,
+            "device_name": device_name,
+            "signal_key": payload.signal_key,
+            "signal_source": signal_source,
+            "source_gateway": payload.source_gateway,
+            "title": payload.title,
+            "description": payload.description,
+            "level": payload.level,
+            "severity": severity_for_notif,
+            "value": payload.value,
+            "value_string": payload.value_string,
+            "threshold": payload.threshold,
+            "operator": payload.operator,
+            "line_name": line_name,
+            "line_code": line_code,
+            "region_name": region_name,
+            "source_timestamp": payload.source_timestamp.isoformat()
+            if payload.source_timestamp
+            else None,
+            "created_at": alarm.created_at.isoformat() if alarm.created_at else None,
+        }
+        dispatch_event(db, event_kind="alarm", payload=outbound_payload)
+    except Exception:  # noqa: BLE001
+        # Outbound hatasi alarm akisini bozmasin — log + devam.
+        import logging as _logging
+        _logging.getLogger(__name__).exception("outbound_dispatch_failed alarm_id=%s", alarm.id)
+
     db.commit()
     return {"status": "accepted", "alarm_id": alarm.id}
 
@@ -474,13 +514,19 @@ def dispatch_notification_for_alarm(
     try:
         from app.services.notification_dispatch_service import dispatch_alarm_notifications
         dispatch_alarm_notifications(db, alarm)
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         import logging as _logging
 
+        # Stack trace sadece server log'una; client'a generic mesaj.
+        # Eski davranis `detail=str(exc)` icerinde DB conn string, fcm token,
+        # smtp credential gibi hassas alan sizdirabilirdi.
         _logging.getLogger(__name__).exception(
             "notification_dispatch_via_worker_failed alarm_id=%s", alarm_id
         )
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="notification dispatch failed",
+        )
     db.commit()
     return {"status": "dispatched", "alarm_id": alarm_id}
 
