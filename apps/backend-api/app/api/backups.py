@@ -36,6 +36,7 @@ from app.services.backup_service import (
     delete_backup_file,
     get_backup_dir,
     get_or_create_schedule,
+    reindex_backup_jobs_from_disk,
     restore_backup,
     validate_dump_file,
 )
@@ -74,7 +75,50 @@ def list_backups(db: Session = Depends(get_db)):
     rows = list(
         db.scalars(select(BackupJob).order_by(BackupJob.created_at.desc())).all()
     )
+    # Self-healing: DB'de kayit yok ama diskte .dump var ise (typically
+    # restore sonrasi backup_jobs tablosu schema-only oldugu icin bos kalir)
+    # otomatik olarak diskten yeniden index'le. Bir sonraki GET'te yedek
+    # listesi geri gelmis olur.
+    if not rows:
+        try:
+            backup_dir = get_backup_dir()
+            has_dumps = any(
+                p.is_file() and p.name.lower().endswith(".dump")
+                for p in backup_dir.iterdir()
+            ) if backup_dir.exists() else False
+        except Exception:  # noqa: BLE001
+            has_dumps = False
+        if has_dumps:
+            added = reindex_backup_jobs_from_disk(db)
+            if added > 0:
+                rows = list(
+                    db.scalars(select(BackupJob).order_by(BackupJob.created_at.desc())).all()
+                )
     return [_to_read(j) for j in rows]
+
+
+@router.post("/reindex", response_model=dict)
+def reindex_backups(
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+    db: Session = Depends(get_db),
+):
+    """Manuel reindex — diskteki .dump dosyalarini tarayip DB kayitlarini
+    eksik olanlar icin yeniden yarat. Restore sonrasi otomatik calisir,
+    bu endpoint operator'un elle tetikleyebilmesi icin."""
+    added = reindex_backup_jobs_from_disk(db)
+    record_event(
+        db,
+        category="backup",
+        event_type="backup_jobs_reindexed",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Backup listesi yeniden indexlendi: {added} kayit eklendi",
+        metadata={"added": added},
+        i18n_key="backup_jobs_reindexed",
+        i18n_params={"count": added},
+    )
+    db.commit()
+    return {"added": added}
 
 
 @router.post("", response_model=BackupJobRead, status_code=status.HTTP_201_CREATED)

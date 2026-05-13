@@ -689,7 +689,7 @@ def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:
         _tracker.fail(msg)
         return False, msg
 
-    # Adim 4: finalizing — connection pool dispose
+    # Adim 4: finalizing — connection pool dispose + backup_jobs re-index
     _tracker.set_step("finalizing", "Baglantilar yenileniyor...")
     try:
         from app.db.session import engine as _engine
@@ -698,8 +698,106 @@ def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:
         import logging as _logging
         _logging.getLogger(__name__).exception("engine_dispose_after_restore_failed")
 
+    # backup_jobs tablosu EXCLUDED_DATA_TABLES'ta schema-only oldugu icin
+    # restore sonrasi BOS kalir. Diskte fiilen duran .dump dosyalarini
+    # tarayarak DB kayitlarini geri yarat — kullanici tum yedek gecmisini
+    # listede gormeye devam etsin (restore yapilan yedek dahil).
+    try:
+        from app.db.session import SessionLocal as _SessionLocal
+        reindex_db = _SessionLocal()
+        try:
+            added = reindex_backup_jobs_from_disk(reindex_db)
+            if added > 0:
+                _tracker.update_message(
+                    f"Yedek listesi yeniden olusturuldu ({added} dosya bulundu)..."
+                )
+        finally:
+            reindex_db.close()
+    except Exception:  # noqa: BLE001
+        logger.exception("backup_jobs_reindex_failed")
+
     _tracker.finish_ok()
     return True, ""
+
+
+def reindex_backup_jobs_from_disk(db: Session) -> int:
+    """Diskteki `.dump` dosyalarini tarayip DB'de eksik olan BackupJob
+    kayitlarini otomatik yarat.
+
+    Restore sonrasi senaryosu: pg_restore --clean backup_jobs tablosunu
+    DROP + CREATE yapar; ama dump dosyalari `EXCLUDED_DATA_TABLES` listesinde
+    schema-only oldugu icin satir verisi yok → tablo bos. Kullanici "yedek
+    listem nereye gitti?" diye soruyor. Bu fonksiyon diskte fiilen duran
+    dump dosyalarini tarayarak BackupJob satirlarini geri yarar.
+
+    Idempotent: ayni file_path icin tekrar kayit eklenmez (DB'de varsa atla).
+
+    Returns: yeniden index'lenen kayit sayisi.
+    """
+    backup_dir = get_backup_dir()
+    if not backup_dir.exists():
+        return 0
+    # Mevcut DB kayitlarinin file_path setini al — dupes engellemek icin.
+    existing_paths: set[str] = set()
+    try:
+        for j in db.scalars(select(BackupJob)).all():
+            if j.file_path:
+                existing_paths.add(str(Path(j.file_path).resolve()))
+    except Exception:  # noqa: BLE001
+        logger.exception("reindex_backup_jobs_existing_query_failed")
+        return 0
+
+    added = 0
+    try:
+        for entry in backup_dir.iterdir():
+            if not entry.is_file():
+                continue
+            if not entry.name.lower().endswith(".dump"):
+                continue
+            resolved = str(entry.resolve())
+            if resolved in existing_paths:
+                continue
+            # Dosya adi formatlari (uretim akislari):
+            #   e1-YYYYMMDD-HHMMSS-manual.dump
+            #   e1-YYYYMMDD-HHMMSS-scheduled.dump
+            #   e1-YYYYMMDD-HHMMSS-uploaded-<orig>.dump
+            name = entry.stem
+            job_type = "manual"
+            if "-scheduled" in name:
+                job_type = "scheduled"
+            elif "-uploaded" in name:
+                job_type = "uploaded"
+            # created_at: dosya mtime'i kullan (cok dogru olmasa da mantikli).
+            try:
+                mtime = datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc)
+            except Exception:  # noqa: BLE001
+                mtime = datetime.now(timezone.utc)
+            try:
+                size = entry.stat().st_size
+            except OSError:
+                size = None
+            db.add(BackupJob(
+                job_type=job_type,
+                status="success",
+                file_path=resolved,
+                size_bytes=size,
+                error_message=None,
+                created_by_username="system-reindex",
+                created_at=mtime,
+                completed_at=mtime,
+            ))
+            added += 1
+        if added > 0:
+            db.commit()
+            logger.info("reindex_backup_jobs added=%d", added)
+    except Exception:  # noqa: BLE001
+        logger.exception("reindex_backup_jobs_failed")
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+    return added
 
 
 def apply_retention(db: Session, retention_count: int) -> int:
