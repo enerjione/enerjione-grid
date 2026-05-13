@@ -6,6 +6,7 @@
     "delete": "Delete",
     "edit": "Edit",
     "done": "Done",
+    "drag": "Drag",
     "add": "Add",
     "close": "Close",
     "open": "Open",
@@ -1303,6 +1304,11 @@
       "regions": "Regions",
       "lines": "Lines",
       "poles": "Poles",
+      "listTab": {
+        "reverseOrder": "Reverse Order",
+        "dragHint": "Drag rows to reorder poles, or drag device cards to move them.",
+        "emptyHint": "No poles yet. Switch to the Map tab to add poles."
+      },
       "newRegion": "New Region",
       "newLine": "New Line",
       "newPole": "New Pole",

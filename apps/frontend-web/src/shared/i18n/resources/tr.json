@@ -6,6 +6,7 @@
     "delete": "Sil",
     "edit": "Düzenle",
     "done": "Tamam",
+    "drag": "Sürükle",
     "add": "Ekle",
     "close": "Kapat",
     "open": "Aç",
@@ -1303,6 +1304,11 @@
       "regions": "Bölgeler",
       "lines": "Hatlar",
       "poles": "Direkler",
+      "listTab": {
+        "reverseOrder": "Sırayı Tersine Çevir",
+        "dragHint": "Sıralamayı değiştirmek için satırları sürükleyin, cihazları başka direklere taşımak için cihaz kartlarını sürükleyin.",
+        "emptyHint": "Henüz direk yok. Harita sekmesine geçip direk ekleyin."
+      },
       "newRegion": "Yeni Bölge",
       "newLine": "Yeni Hat",
       "newPole": "Yeni Direk",

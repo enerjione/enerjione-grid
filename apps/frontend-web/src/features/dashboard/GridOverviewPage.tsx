@@ -1,6 +1,8 @@
 /** Anasayfa "Tablo" görünümü — Sebeke özeti.
  *
- * Bolge -> Hat -> Cihaz hiyerarsisi. Her satirda durum, arıza, segment, son veri.
+ * 4-seviyeli ağaç: Bolge -> Hat -> Direk (segment) -> Cihaz.
+ * Arızası olan direk + bölge + hat satırları renkli vurgulanır (kırmızı band)
+ * — operator hangi noktada problem oldugunu hızlıca ayırır.
  * Liste daraltilabilir/genisletilebilir. Filtre cubuğundan gelen Bolge/Hat/durum
  * filtrelerine saygi gosterir (devices listesi App tarafindan filtrelenmis).
  */

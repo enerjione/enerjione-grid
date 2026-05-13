@@ -1313,16 +1313,16 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   onClick={() => void handleReverseOrder()}
                 >
                   <span className="material-symbols-outlined">swap_horiz</span>
-                  Reverse Order
+                  {t("engineering.grid.listTab.reverseOrder")}
                 </button>
                 <span className="helper-text">
-                  Drag rows to reorder poles, or drag device cards to move them.
+                  {t("engineering.grid.listTab.dragHint")}
                 </span>
               </div>
 
-              <div className="grid-mgmt-tree">
+              <div className="grid-mgmt-tree grid-mgmt-tree-scroll">
                 {sortedPoles.length === 0 ? (
-                  <p className="helper-text">Henüz direk yok. Harita sekmesine geçip direk ekleyin.</p>
+                  <p className="helper-text">{t("engineering.grid.listTab.emptyHint")}</p>
                 ) : null}
                 {sortedPoles.map((p, idx) => {
                   const isStart = idx === 0;
@@ -1331,7 +1331,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   const dev = nextSlot?.segment?.device_id
                     ? devices.find((d) => d.id === nextSlot.segment!.device_id)
                     : null;
-                  const symbol = p.pole_type === "transformer" ? "⚡" : "📍";
+                  // Material icon — pin/lightning emoji yerine. SVG-tabanli,
+                  // tarayicilar arasi tutarli, renklendirme CSS'ten gelir.
+                  const iconName =
+                    p.pole_type === "transformer" ? "bolt" : "location_on";
                   const isDeviceDropTarget =
                     draggedDeviceSegId !== null &&
                     nextSlot &&
@@ -1347,13 +1350,13 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => void handleDrop(p.id)}
                       >
-                        <span className="grid-mgmt-pole-card-handle" title="Sürükle">
+                        <span className="grid-mgmt-pole-card-handle" title={t("common.drag")}>
                           <span className="material-symbols-outlined">drag_indicator</span>
                         </span>
                         <span className={`grid-mgmt-pole-card-icon ${
                           p.pole_type === "transformer" ? "is-transformer" : ""
                         }`}>
-                          {symbol}
+                          <span className="material-symbols-outlined">{iconName}</span>
                         </span>
                         <div className="grid-mgmt-pole-card-main">
                           <div className="grid-mgmt-pole-card-title">
@@ -2328,9 +2331,10 @@ function PoleEditModal({
     });
   };
   const { t } = useTranslation();
+  // Material icon adlari (SVG-tabanli, emoji yerine).
   const typeOptions: { value: string; labelKey: string; icon: string }[] = [
-    { value: "pole", labelKey: "engineering.grid.typePole", icon: "📍" },
-    { value: "transformer", labelKey: "engineering.grid.typeTransformer", icon: "⚡" }
+    { value: "pole", labelKey: "engineering.grid.typePole", icon: "location_on" },
+    { value: "transformer", labelKey: "engineering.grid.typeTransformer", icon: "bolt" }
   ];
   return (
     <div className="settings-modal-backdrop">
@@ -2352,7 +2356,9 @@ function PoleEditModal({
                   checked={poleType === opt.value}
                   onChange={() => setPoleType(opt.value)}
                 />
-                <span className="pole-type-icon">{opt.icon}</span>
+                <span className="pole-type-icon">
+                  <span className="material-symbols-outlined">{opt.icon}</span>
+                </span>
                 <span>{t(opt.labelKey)}</span>
               </label>
             ))}
