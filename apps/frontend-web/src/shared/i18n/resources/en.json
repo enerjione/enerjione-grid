@@ -145,7 +145,12 @@
       "saved": "Template saved: {{name}}",
       "deleted": "Template deleted.",
       "deleteBtn": "Delete template",
-      "deleteConfirm": "Delete template {{name}}?"
+      "deleteConfirm": "Delete template {{name}}?",
+      "listTitle": "Saved Templates",
+      "emptyHint": "No templates yet. Compose a message and use 'Save as Template' to create one.",
+      "loadBtn": "Load",
+      "loadBtnTitle": "Load this template and go to step 1",
+      "noTargetSaved": "Recipient selection not saved"
     },
     "steps": {
       "message": "Message",

@@ -701,6 +701,77 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
           )}
         </div>
       </div>
+
+      {/* ALT BOLUM: Kaydedilmis Sablonlar — onizleme + yukle butonu */}
+      <div className="bulk-notify-templates-section">
+        <div className="bulk-notify-card-head">
+          <span className="material-symbols-outlined">bookmark</span>
+          <strong>{t("bulkNotify.template.listTitle")}</strong>
+          <span className="bulk-notify-count-badge">{templates.length}</span>
+        </div>
+        {templates.length === 0 ? (
+          <p className="helper-text" style={{ padding: "24px 0", textAlign: "center" }}>
+            {t("bulkNotify.template.emptyHint")}
+          </p>
+        ) : (
+          <ul className="bulk-notify-template-grid">
+            {templates.map((tpl) => {
+              const targetSummary = tpl.target
+                ? tpl.target.send_to_all
+                  ? t("bulkNotify.sendToAll")
+                  : `${tpl.target.team_ids.length} ${t("bulkNotify.teams").toLowerCase()} · ${tpl.target.user_ids.length} ${t("bulkNotify.users").toLowerCase()}`
+                : t("bulkNotify.template.noTargetSaved");
+              return (
+                <li key={tpl.id} className="bulk-notify-template-card">
+                  <div className="bulk-notify-template-card-head">
+                    <strong className="bulk-notify-template-card-name">{tpl.name}</strong>
+                    <div className="bulk-notify-template-card-actions">
+                      <button
+                        type="button"
+                        className="primary-btn bulk-notify-template-load"
+                        onClick={() => {
+                          applyTemplate(tpl.id);
+                          setStep(1);
+                        }}
+                        title={t("bulkNotify.template.loadBtnTitle")}
+                      >
+                        <span className="material-symbols-outlined">file_open</span>
+                        {t("bulkNotify.template.loadBtn")}
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-danger"
+                        onClick={() => void handleDeleteTemplate(tpl.id)}
+                        title={t("bulkNotify.template.deleteBtn")}
+                      >
+                        <span className="material-symbols-outlined">delete</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="bulk-notify-template-card-meta">
+                    {tpl.channels.map((c) => (
+                      <span key={c} className={`bulk-notify-template-chip bulk-notify-template-chip--${c}`}>
+                        <span className="material-symbols-outlined">
+                          {c === "web" ? "notifications" : c === "email" ? "mail" : "sms"}
+                        </span>
+                        {t(`bulkNotify.channel.${c}`)}
+                      </span>
+                    ))}
+                    <span className="bulk-notify-template-target">
+                      <span className="material-symbols-outlined">group</span>
+                      {targetSummary}
+                    </span>
+                  </div>
+                  <div className="bulk-notify-template-preview">
+                    <strong>{tpl.subject}</strong>
+                    <p>{tpl.message.length > 200 ? tpl.message.slice(0, 200) + "…" : tpl.message}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

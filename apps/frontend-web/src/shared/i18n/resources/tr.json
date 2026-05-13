@@ -145,7 +145,12 @@
       "saved": "Şablon kaydedildi: {{name}}",
       "deleted": "Şablon silindi.",
       "deleteBtn": "Şablonu sil",
-      "deleteConfirm": "{{name}} şablonunu silmek istiyor musun?"
+      "deleteConfirm": "{{name}} şablonunu silmek istiyor musun?",
+      "listTitle": "Kayıtlı Şablonlar",
+      "emptyHint": "Henüz şablon kaydedilmedi. Mesaj yazıp 'Şablon Olarak Kaydet' ile ilk şablonunu oluştur.",
+      "loadBtn": "Yükle",
+      "loadBtnTitle": "Bu şablonu yükle ve adım 1'e geç",
+      "noTargetSaved": "Hedef seçimi kaydedilmedi"
     },
     "steps": {
       "message": "Mesaj",

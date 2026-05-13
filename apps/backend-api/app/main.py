@@ -911,6 +911,19 @@ def stop_mqtt_publisher():
 
 
 @app.on_event("startup")
+def start_bulk_notification_scheduler():
+    """Zamanlanmis toplu bildirim scheduler — her 30sn'de bir due job'lari isler."""
+    from app.services import bulk_notification_scheduler
+    bulk_notification_scheduler.start()
+
+
+@app.on_event("shutdown")
+def stop_bulk_notification_scheduler():
+    from app.services import bulk_notification_scheduler
+    bulk_notification_scheduler.stop()
+
+
+@app.on_event("startup")
 def start_telemetry_retention():
     """Telemetri tablosu kayan pencere — eskileri otomatik temizle.
 
