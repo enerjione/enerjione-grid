@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   AlarmComment,
   AlarmEvent,
   AlarmRuleRow,
@@ -52,6 +52,7 @@ type LoginResponse = {
   token_type: string;
   role: UserRole;
   username: string;
+  must_change_password?: boolean;
 };
 
 type ApiErrorDetail =
@@ -269,8 +270,67 @@ export async function login(username: string, password: string): Promise<AuthSes
   return {
     accessToken: data.access_token,
     username: data.username,
-    role: data.role
+    role: data.role,
+    mustChangePassword: data.must_change_password === true,
   };
+}
+
+/** Davet token'i ile yeni sifre belirle. Auth gerekmez — token zaten secret. */
+export async function setupPassword(token: string, newPassword: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/auth/setup-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "Sifre belirleme basarisiz oldu.");
+  }
+}
+
+export type InviteUserPayload = {
+  username: string;
+  email: string;
+  full_name: string;
+  phone_number?: string;
+  role: UserRole;
+  send_email: boolean;
+};
+
+export type InviteUserResponse = {
+  user_id: number;
+  username: string;
+  setup_url: string;
+  expires_at: string;
+  email_sent: boolean;
+};
+
+export async function inviteUser(
+  token: string,
+  payload: InviteUserPayload,
+): Promise<InviteUserResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/users/invite`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "Davet gonderilemedi.");
+  }
+  return (await response.json()) as InviteUserResponse;
+}
+
+export async function resendInvite(
+  token: string,
+  userId: number,
+): Promise<InviteUserResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/users/${userId}/resend-invite`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "Davet tekrar gonderilemedi.");
+  }
+  return (await response.json()) as InviteUserResponse;
 }
 
 export async function fetchDevices(token: string, gatewayCode?: string): Promise<DeviceRow[]> {
@@ -1249,6 +1309,46 @@ export async function deleteMqttCert(
   );
   if (!response.ok) throw await buildApiError(response, "Sertifika silinemedi.");
   return (await response.json()) as import("./types").OutboundTarget;
+}
+
+// ============================================================
+// BULK NOTIFICATIONS (toplu bildirim — ops_manager / installer / engineer)
+// ============================================================
+
+export type BulkNotifyChannel = "web" | "email" | "sms";
+
+export type BulkNotifyRequest = {
+  subject: string;
+  message: string;
+  channels: BulkNotifyChannel[];
+  user_ids?: number[];
+  team_ids?: number[];
+  send_to_all?: boolean;
+};
+
+export type BulkNotifyResult = {
+  recipients_count: number;
+  web_sent: number;
+  email_sent: number;
+  email_failed: number;
+  sms_sent: number;
+  sms_failed: number;
+  skipped_no_email: number;
+  skipped_no_phone: number;
+  errors: string[];
+};
+
+export async function sendBulkNotification(
+  token: string,
+  payload: BulkNotifyRequest
+): Promise<BulkNotifyResult> {
+  const response = await apiFetch(`${API_BASE_URL}/bulk-notifications`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await buildApiError(response, "Toplu bildirim gönderilemedi.");
+  return (await response.json()) as BulkNotifyResult;
 }
 
 export async function fetchIec104Runtime(token: string, targetId: number) {

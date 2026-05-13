@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asyncConfirm } from "../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
+import { ChangePasswordModal } from "../components/ChangePasswordModal";
 import { Header } from "../components/Header";
 import { useToast } from "../components/ToastProvider";
 import { LoginForm } from "../features/auth/LoginForm";
@@ -11,6 +12,7 @@ import { BackupsPanel } from "../features/backups/BackupsPanel";
 import { ResponsibilityAreasPage } from "../features/responsibility-areas/ResponsibilityAreasPage";
 import { EventsPage } from "../features/events/EventsPage";
 import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
+import { BulkNotificationPage } from "../features/bulk-notify/BulkNotificationPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
 import { ApiAccessPanel } from "../features/api-access/ApiAccessPanel";
@@ -154,7 +156,7 @@ import type {
 } from "../shared/types";
 
 type TabId = "map" | "values";
-type PageMode = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
+type PageMode = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering" | "bulk-notify";
 type EngineeringPage =
   | "devices"
   | "signals"
@@ -170,7 +172,7 @@ type EngineeringPage =
   | "backups";
 
 const ROUTE_STORAGE_KEY = "hsl.route.v1";
-const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering"];
+const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering", "bulk-notify"];
 const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "devices",
   "signals",
@@ -444,12 +446,24 @@ export function App() {
 
   useEffect(() => {
     if (!session) return;
-    const canAccessEngineering = session.role === "engineer" || session.role === "installer";
+    const canAccessEngineering =
+      session.role === "engineer" ||
+      session.role === "installer" ||
+      session.role === "ops_manager";
     if (!canAccessEngineering && pageMode === "engineering") {
       setPageMode("home");
       setEngineeringPage("devices");
     }
-  }, [session, pageMode]);
+    // ops_manager: yalnizca users + responsibility-areas tabi'larina erisebilir
+    if (
+      session.role === "ops_manager" &&
+      pageMode === "engineering" &&
+      engineeringPage !== "users" &&
+      engineeringPage !== "responsibility-areas"
+    ) {
+      setEngineeringPage("users");
+    }
+  }, [session, pageMode, engineeringPage]);
 
   const handleLogin = async (username: string, password: string, remember: boolean) => {
     setLoadingLogin(true);
@@ -1765,6 +1779,18 @@ export function App() {
 
   return (
     <div className="layout">
+      {session.mustChangePassword ? (
+        <ChangePasswordModal
+          forceful
+          accessToken={session.accessToken}
+          onSuccess={() => {
+            // Backend basariyla sifreyi degistirdi; flag'i temizle ve devam et.
+            const cleared = { ...session, mustChangePassword: false };
+            saveSession(cleared, true);
+            setSession(cleared);
+          }}
+        />
+      ) : null}
       <Header
         fullName={currentUser?.full_name ?? session.username}
         role={session.role}
@@ -1783,12 +1809,14 @@ export function App() {
             <div className="tabs">
               {/* ===== GRUP 1: TOPOLOJI & KURULUM =====
                   Saha kurulumu sirasi: once cihazlar -> sinyal katalogu -> hat topolojisi */}
-              <button
-                className={engineeringPage === "devices" ? "active" : ""}
-                onClick={() => setEngineeringPage("devices")}
-              >
-                {t("engineering.nav.devices")}
-              </button>
+              {session.role !== "ops_manager" ? (
+                <button
+                  className={engineeringPage === "devices" ? "active" : ""}
+                  onClick={() => setEngineeringPage("devices")}
+                >
+                  {t("engineering.nav.devices")}
+                </button>
+              ) : null}
               {session.role === "installer" ? (
                 <button
                   className={engineeringPage === "signals" ? "active" : ""}
@@ -1832,7 +1860,7 @@ export function App() {
               ) : null}
 
               {/* ===== GRUP 3: ERISIM & EKIP YONETIMI ===== */}
-              {session.role === "engineer" || session.role === "installer" ? (
+              {session.role === "engineer" || session.role === "installer" || session.role === "ops_manager" ? (
                 <button
                   className={engineeringPage === "users" ? "active" : ""}
                   onClick={() => {
@@ -1843,7 +1871,7 @@ export function App() {
                   {t("engineering.nav.users")}
                 </button>
               ) : null}
-              {session.role === "engineer" || session.role === "installer" ? (
+              {session.role === "engineer" || session.role === "installer" || session.role === "ops_manager" ? (
                 <button
                   className={engineeringPage === "responsibility-areas" ? "active" : ""}
                   onClick={() => {
@@ -1961,11 +1989,12 @@ export function App() {
                 onDelete={handleDeleteAlarmRule}
               />
             ) : null}
-            {engineeringPage === "users" && (session.role === "engineer" || session.role === "installer") ? (
+            {engineeringPage === "users" && (session.role === "engineer" || session.role === "installer" || session.role === "ops_manager") ? (
               <UserManagementPanel
                 users={users}
                 currentUserId={currentUser?.id}
                 allowInstallerRole={session.role === "installer"}
+                restrictToOperator={session.role === "ops_manager"}
                 onCreate={handleCreateUser}
                 onDelete={handleDeleteUser}
                 onUpdate={handleUpdateUser}
@@ -2103,6 +2132,12 @@ export function App() {
                 loading={loadingData}
                 onRefresh={handleRefreshSystemStatus}
                 wsState={liveSocket.connectionState}
+              />
+            ) : null}
+            {pageMode === "bulk-notify" && session ? (
+              <BulkNotificationPage
+                accessToken={session.accessToken}
+                currentRole={session.role}
               />
             ) : null}
           </main>

@@ -104,6 +104,7 @@
     "engineer": "Mühendis",
     "installer": "Kurulumcu",
     "operator": "Operatör",
+    "ops_manager": "Operasyon Yöneticisi",
     "user": "Kullanıcı"
   },
   "header": {
@@ -113,10 +114,42 @@
     "events": "Olaylar",
     "systemStatus": "Sistem Durumu",
     "engineering": "Mühendislik",
+    "bulkNotify": "Toplu Bildirim",
     "settings": "Ayarlar",
     "logout": "Çıkış Yap",
     "user": "Kullanıcı",
     "customerLogoAlt": "Müşteri Logosu"
+  },
+  "bulkNotify": {
+    "title": "Toplu Bildirim",
+    "subtitle": "Seçilen ekip ve kullanıcılara web, e-posta veya SMS ile duyuru gönder.",
+    "subtitleOpsManager": "Operatör kullanıcılara web/e-posta/SMS ile duyuru gönderin. Diğer rollere mesaj gönderilemez.",
+    "messageSection": "Mesaj",
+    "channelsSection": "Kanallar",
+    "recipientsSection": "Alıcılar",
+    "subject": "Başlık",
+    "subjectPlaceholder": "Örn: Planlı kesinti bilgilendirmesi",
+    "message": "Mesaj",
+    "messagePlaceholder": "Detaylı mesaj metnini buraya yazın…",
+    "sendToAll": "Tüm kullanıcılara gönder",
+    "sendToAllOperators": "Tüm operatörlere gönder",
+    "teams": "Ekipler",
+    "users": "Kullanıcılar",
+    "searchTeams": "Ekip ara…",
+    "searchUsers": "Kullanıcı ara (ad/eposta)…",
+    "noTeams": "Ekip bulunamadı.",
+    "noUsers": "Kullanıcı bulunamadı.",
+    "channel": {
+      "web": "Web Bildirim",
+      "email": "E-posta",
+      "sms": "SMS"
+    },
+    "send": "Gönder",
+    "sending": "Gönderiliyor…",
+    "completeForm": "Başlık, mesaj, kanal ve hedef seç.",
+    "resultTitle": "{{count}} kişiye gönderildi",
+    "resultDetail": "Web: {{web}} · E-posta: {{email}} · SMS: {{sms}}",
+    "resultFail": "Başarısız → e-posta: {{emailFail}}, SMS: {{smsFail}}"
   },
   "login": {
     "title": "Giriş Yap",

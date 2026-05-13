@@ -9,7 +9,7 @@ from sqlalchemy import select as _select, text
 
 from app.core.rate_limit import limiter
 
-from app.api import alarm_rules, alarms, api_keys, auth, backups, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -86,6 +86,7 @@ app.include_router(user_notification_preferences.admin_router, prefix=settings.a
 app.include_router(events.router, prefix=settings.api_prefix)
 app.include_router(users.router, prefix=settings.api_prefix)
 app.include_router(notification_settings.router, prefix=settings.api_prefix)
+app.include_router(bulk_notifications.router, prefix=settings.api_prefix)
 app.include_router(outbound_targets.router, prefix=settings.api_prefix)
 app.include_router(signals.router, prefix=settings.api_prefix)
 app.include_router(alarm_rules.router, prefix=settings.api_prefix)
@@ -107,16 +108,40 @@ app.include_router(ws_live.router, prefix=settings.api_prefix)
 
 @app.on_event("startup")
 def create_tables():
+    """LEGACY BOOTSTRAP — production'da Alembic baseline tamamlandi (2026-05-12).
+    Bu fonksiyon mevcut sahalardaki eski sema'lari Alembic'e kavusturmadan
+    once eksik kolonlari ekleyen idempotent ALTER TABLE listesini calistirir.
+
+    YENI SCHEMA DEGISIKLIKLERI ICIN BUNU KULLANMAYIN. Onun yerine:
+        alembic revision -m "kolon_eklendi"
+        # alembic_migrations/versions/ icinde upgrade()/downgrade() yazin
+        # alembic upgrade head ile yeni satira gec
+
+    Bu blok 2026-05-13 itibariyle FREEZED — yeni satir ekleme yapmayin.
+    Burada listelenen ALTER'lar mevcut sahalarda calismaya devam etmesi
+    icin kalir; backend her boot'ta bunlari calistirir (PostgreSQL
+    `IF NOT EXISTS` ile no-op).
+    """
     Base.metadata.create_all(bind=engine)
     # ALTER TYPE ADD VALUE transaction icinde calistirilamaz; autocommit kullan.
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as ac_conn:
         ac_conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'INSTALLER'"))
+        # ops_manager rolu — alembic 0002'de de var, mevcut deploylarda da
+        # idempotent calisabilsin diye burada da garantili eklenir.
+        ac_conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'OPS_MANAGER'"))
     with engine.begin() as connection:
-        # Keep Windows-first setup easy by ensuring newly added columns exist.
+        # FREEZED 2026-05-13. Yeni kolon: alembic_migrations/versions/'a yaz.
         connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number VARCHAR(32)"))
         # Brute-force koruma kolonlari (account lockout)
         connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_count INTEGER NOT NULL DEFAULT 0"))
         connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ"))
+        # Sifre yonetimi: default-pwd zorla degistir + davet token akisi
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE"))
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_hash VARCHAR(128)"))
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_expires_at TIMESTAMPTZ"))
+        # Davet edilmis ama sifre belirlememis user'lar icin hashed_password
+        # NULL olabilmeli (eski kayitlarda NOT NULL idi).
+        connection.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS assigned_to VARCHAR(120)"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS acknowledged BOOLEAN NOT NULL DEFAULT FALSE"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS reset BOOLEAN NOT NULL DEFAULT FALSE"))

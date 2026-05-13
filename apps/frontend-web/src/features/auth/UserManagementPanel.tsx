@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import type { UserNotificationPreferences, UserRead, UserRole } from "../../shared/types";
@@ -14,6 +15,8 @@ type Props = {
   users: UserRead[];
   /** false: mühendis — sadece operatör/mühendis oluşturulabilir; kurulumcu rolü atanamaz */
   allowInstallerRole?: boolean;
+  /** true: ops_manager — SADECE operator rolu yaratip/silebilir/listeleyebilir. */
+  restrictToOperator?: boolean;
   currentUserId?: number;
   onCreate: (payload: {
     username: string;
@@ -41,6 +44,7 @@ type Props = {
 export function UserManagementPanel({
   users,
   allowInstallerRole = true,
+  restrictToOperator = false,
   currentUserId,
   onCreate,
   onDelete,
@@ -208,7 +212,7 @@ export function UserManagementPanel({
   };
 
   const handleDeleteClick = async (user: UserRead) => {
-    const approved = window.confirm(
+    const approved = await asyncConfirm(
       t("engineering.users.delete.confirm", { name: user.full_name })
     );
     if (!approved) return;
@@ -302,10 +306,18 @@ export function UserManagementPanel({
             </label>
             <label>
               {t("engineering.users.form.role")}
-              <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value as UserRole)}
+                disabled={restrictToOperator}
+              >
                 <option value="operator">{t("engineering.users.roleNames.operator")}</option>
-                <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
-                {allowInstallerRole ? <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option> : null}
+                {!restrictToOperator ? (
+                  <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
+                ) : null}
+                {!restrictToOperator && allowInstallerRole ? (
+                  <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option>
+                ) : null}
               </select>
             </label>
             <fieldset className="notify-group notify-group--4">
@@ -378,10 +390,18 @@ export function UserManagementPanel({
             </label>
             <label>
               {t("engineering.users.form.role")}
-              <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value as UserRole)}
+                disabled={restrictToOperator}
+              >
                 <option value="operator">{t("engineering.users.roleNames.operator")}</option>
-                <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
-                {allowInstallerRole ? <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option> : null}
+                {!restrictToOperator ? (
+                  <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
+                ) : null}
+                {!restrictToOperator && allowInstallerRole ? (
+                  <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option>
+                ) : null}
               </select>
             </label>
             <fieldset className="notify-group notify-group--4">
@@ -460,16 +480,16 @@ export function UserManagementPanel({
       <table className="values-table user-table">
         <thead>
           <tr>
-            <th>{t("engineering.users.table.fullName")}</th>
-            <th>{t("engineering.users.table.username")}</th>
-            <th>{t("engineering.users.table.role")}</th>
-            <th>{t("engineering.users.table.email")}</th>
-            <th>{t("engineering.users.table.phone")}</th>
-            <th className="notify-col">{t("engineering.users.notifCols.web")}</th>
-            <th className="notify-col">{t("engineering.users.notifCols.email")}</th>
-            <th className="notify-col">{t("engineering.users.notifCols.sms")}</th>
-            <th className="notify-col">{t("engineering.users.notifCols.telegram")}</th>
-            <th className="actions-header">{t("engineering.users.table.actions")}</th>
+            <th scope="col">{t("engineering.users.table.fullName")}</th>
+            <th scope="col">{t("engineering.users.table.username")}</th>
+            <th scope="col">{t("engineering.users.table.role")}</th>
+            <th scope="col">{t("engineering.users.table.email")}</th>
+            <th scope="col">{t("engineering.users.table.phone")}</th>
+            <th scope="col" className="notify-col">{t("engineering.users.notifCols.web")}</th>
+            <th scope="col" className="notify-col">{t("engineering.users.notifCols.email")}</th>
+            <th scope="col" className="notify-col">{t("engineering.users.notifCols.sms")}</th>
+            <th scope="col" className="notify-col">{t("engineering.users.notifCols.telegram")}</th>
+            <th scope="col" className="actions-header">{t("engineering.users.table.actions")}</th>
           </tr>
         </thead>
         <tbody>

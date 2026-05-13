@@ -104,7 +104,7 @@ def list_areas(
 @router.post("", response_model=ResponsibilityAreaRead, status_code=status.HTTP_201_CREATED)
 def create_area(
     payload: ResponsibilityAreaCreate,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     existing = db.scalar(select(ResponsibilityArea).where(ResponsibilityArea.code == payload.code))
@@ -209,7 +209,7 @@ def get_area(
 def update_area(
     area_id: int,
     payload: ResponsibilityAreaUpdate,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -237,7 +237,7 @@ def update_area(
 @router.delete("/{area_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_area(
     area_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -268,7 +268,7 @@ def delete_area(
 def add_user_to_area(
     area_id: int,
     user_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -310,7 +310,7 @@ def add_user_to_area(
 def remove_user_from_area(
     area_id: int,
     user_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -343,7 +343,7 @@ def remove_user_from_area(
 def add_device_to_area(
     area_id: int,
     device_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -378,7 +378,7 @@ def add_device_to_area(
 def remove_device_from_area(
     area_id: int,
     device_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -412,7 +412,7 @@ def remove_device_from_area(
 def add_region_to_area(
     area_id: int,
     region_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -474,7 +474,7 @@ def add_region_to_area(
 def remove_region_from_area(
     area_id: int,
     region_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -507,7 +507,7 @@ def remove_region_from_area(
 def add_line_to_area(
     area_id: int,
     line_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)
@@ -541,7 +541,7 @@ def add_line_to_area(
 def remove_line_from_area(
     area_id: int,
     line_id: int,
-    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER])),
     db: Session = Depends(get_db),
 ):
     area = db.get(ResponsibilityArea, area_id)

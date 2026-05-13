@@ -18,8 +18,8 @@ type Props = {
   onSettings?: () => void;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
-  activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
-  onChangePage: (page: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering") => void;
+  activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering" | "bulk-notify";
+  onChangePage: (page: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering" | "bulk-notify") => void;
 };
 
 export function Header({
@@ -63,6 +63,8 @@ export function Header({
       ? t("roles.engineer")
       : role === "operator"
       ? t("roles.operator")
+      : role === "ops_manager"
+      ? t("roles.ops_manager")
       : t("roles.user");
 
   return (
@@ -114,13 +116,22 @@ export function Header({
           >
             {t("header.systemStatus")}
           </button>
+          {/* Toplu Bildirim — ops_manager / installer / engineer icin. */}
+          {role === "ops_manager" || role === "installer" || role === "engineer" ? (
+            <button
+              className={activePage === "bulk-notify" ? "active" : ""}
+              onClick={() => onChangePage("bulk-notify")}
+            >
+              {t("header.bulkNotify")}
+            </button>
+          ) : null}
         </nav>
       </div>
 
       <div className="header-right">
         {/* WsStatusBadge buradan kaldirildi — Sistem Durumu sayfasinda
             gosteriliyor; header'da yer karistirmasin diye. */}
-        {role === "engineer" || role === "installer" ? (
+        {role === "engineer" || role === "installer" || role === "ops_manager" ? (
           <button
             className={`engineering-btn ${isEngineeringView ? "active" : ""}`}
             onClick={() => onToggleEngineering?.()}

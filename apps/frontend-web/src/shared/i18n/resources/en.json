@@ -104,6 +104,7 @@
     "engineer": "Engineer",
     "installer": "Installer",
     "operator": "Operator",
+    "ops_manager": "Operations Manager",
     "user": "User"
   },
   "header": {
@@ -113,10 +114,42 @@
     "events": "Events",
     "systemStatus": "System Status",
     "engineering": "Engineering",
+    "bulkNotify": "Bulk Notification",
     "settings": "Settings",
     "logout": "Log Out",
     "user": "User",
     "customerLogoAlt": "Customer Logo"
+  },
+  "bulkNotify": {
+    "title": "Bulk Notification",
+    "subtitle": "Send announcements to selected teams and users via web, email, or SMS.",
+    "subtitleOpsManager": "Send announcements to operator users via web/email/SMS. Cannot target other roles.",
+    "messageSection": "Message",
+    "channelsSection": "Channels",
+    "recipientsSection": "Recipients",
+    "subject": "Subject",
+    "subjectPlaceholder": "e.g. Planned outage notice",
+    "message": "Message",
+    "messagePlaceholder": "Type the detailed message here…",
+    "sendToAll": "Send to all users",
+    "sendToAllOperators": "Send to all operators",
+    "teams": "Teams",
+    "users": "Users",
+    "searchTeams": "Search teams…",
+    "searchUsers": "Search users (name/email)…",
+    "noTeams": "No teams found.",
+    "noUsers": "No users found.",
+    "channel": {
+      "web": "Web",
+      "email": "Email",
+      "sms": "SMS"
+    },
+    "send": "Send",
+    "sending": "Sending…",
+    "completeForm": "Provide subject, message, channel, and target.",
+    "resultTitle": "Sent to {{count}} recipients",
+    "resultDetail": "Web: {{web}} · Email: {{email}} · SMS: {{sms}}",
+    "resultFail": "Failed → email: {{emailFail}}, SMS: {{smsFail}}"
   },
   "login": {
     "title": "Sign In",

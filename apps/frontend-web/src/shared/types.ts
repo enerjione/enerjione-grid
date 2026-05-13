@@ -74,12 +74,16 @@ export type DeviceRow = {
   iec104CommonAddress?: number | null;
 };
 
-export type UserRole = "operator" | "engineer" | "installer";
+export type UserRole = "operator" | "engineer" | "installer" | "ops_manager";
 
 export type AuthSession = {
   accessToken: string;
   username: string;
   role: UserRole;
+  /** Backend `must_change_password=true` dondurduyse frontend zorla
+   * ChangePasswordModal acar; kullanici sifresini degistirene kadar
+   * diger sayfalara navigation yapamamali. */
+  mustChangePassword?: boolean;
 };
 
 export type ApiDevice = {
@@ -114,6 +118,9 @@ export type UserRead = {
   full_name: string;
   role: UserRole;
   language?: string | null;
+  /** true = davet edildi ama henuz sifre belirlemedi (hashed_password=NULL).
+   *  UI'da "Davet bekliyor" rozeti + "Daveti yeniden gonder" butonu gosterir. */
+  pending_invitation?: boolean;
 };
 
 export type AlarmEvent = {
