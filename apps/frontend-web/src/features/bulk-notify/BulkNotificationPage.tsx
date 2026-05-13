@@ -286,7 +286,7 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
 
   return (
     <section className="tab-panel bulk-notify-panel bulk-notify-wizard">
-      <div className="panel-head">
+      <div className="panel-head bulk-notify-page-head">
         <div>
           <h3>
             <span className="material-symbols-outlined">campaign</span>
@@ -300,24 +300,64 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         </div>
       </div>
 
-      {/* Stepper */}
-      <ol className="bulk-notify-stepper">
-        {[1, 2, 3, 4].map((n) => {
-          const labels: Record<number, string> = {
-            1: t("bulkNotify.steps.message"),
-            2: t("bulkNotify.steps.channels"),
-            3: t("bulkNotify.steps.recipients"),
-            4: t("bulkNotify.steps.review"),
-          };
-          const state = n === step ? "current" : n < step ? "done" : "todo";
-          return (
-            <li key={n} className={`bulk-notify-step bulk-notify-step--${state}`}>
-              <span className="bulk-notify-step-num">{n < step ? "✓" : n}</span>
-              <span className="bulk-notify-step-label">{labels[n]}</span>
-            </li>
-          );
-        })}
-      </ol>
+      {/* Stepper + nav butonlari: Geri stepper'in SOL ucu, Ileri/Gonder SAG ucu.
+          Her adimda ayni yerde — kullanici aramasin. */}
+      <div className="bulk-notify-stepper-row">
+        <button
+          type="button"
+          className="secondary-btn bulk-notify-stepper-btn"
+          onClick={goBack}
+          disabled={submitting || step === 1}
+          title={t("bulkNotify.back")}
+        >
+          <span className="material-symbols-outlined">chevron_left</span>
+          {t("bulkNotify.back")}
+        </button>
+
+        <ol className="bulk-notify-stepper">
+          {[1, 2, 3, 4].map((n) => {
+            const labels: Record<number, string> = {
+              1: t("bulkNotify.steps.message"),
+              2: t("bulkNotify.steps.channels"),
+              3: t("bulkNotify.steps.recipients"),
+              4: t("bulkNotify.steps.review"),
+            };
+            const state = n === step ? "current" : n < step ? "done" : "todo";
+            return (
+              <li key={n} className={`bulk-notify-step bulk-notify-step--${state}`}>
+                <span className="bulk-notify-step-num">{n < step ? "✓" : n}</span>
+                <span className="bulk-notify-step-label">{labels[n]}</span>
+              </li>
+            );
+          })}
+        </ol>
+
+        {step < 4 ? (
+          <button
+            type="button"
+            className="primary-btn bulk-notify-stepper-btn"
+            onClick={goNext}
+            disabled={
+              (step === 1 && !step1Valid) ||
+              (step === 2 && !step2Valid) ||
+              (step === 3 && !step3Valid)
+            }
+          >
+            {t("bulkNotify.next")}
+            <span className="material-symbols-outlined">chevron_right</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="primary-btn bulk-notify-stepper-btn"
+            onClick={() => void handleSubmit()}
+            disabled={!canSubmit}
+          >
+            <span className="material-symbols-outlined">send</span>
+            {submitting ? t("bulkNotify.sending") : t("bulkNotify.send")}
+          </button>
+        )}
+      </div>
 
       <div className="bulk-notify-form">
         {/* --- ADIM 1: MESAJ --- */}
@@ -354,19 +394,8 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
                     <span className="material-symbols-outlined">delete</span>
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => {
-                    setTemplateNameInput(subject.trim().slice(0, 80) || "");
-                    setSaveTemplateOpen(true);
-                  }}
-                  disabled={!subject.trim() || !message.trim()}
-                  title={t("bulkNotify.template.saveAs")}
-                >
-                  <span className="material-symbols-outlined">bookmark_add</span>
-                  {t("bulkNotify.template.saveAs")}
-                </button>
+                {/* 'Sablon Olarak Kaydet' adim 4 (Onay)'a tasindi — burada
+                    sadece sablon YUKLEME yapilir. */}
               </div>
             </div>
             <label className="bulk-notify-field">
@@ -661,45 +690,31 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
                 <span className="bulk-notify-review-value">{targetSummaryCount}</span>
               </div>
             </div>
+
+            {/* Onay adiminda: 'Sablon Olarak Kaydet' butonu — gondermeden once
+                bu mesaji ileride tekrar kullanmak icin kaydet. */}
+            <div className="bulk-notify-review-save-template">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => {
+                  setTemplateNameInput(subject.trim().slice(0, 80) || "");
+                  setSaveTemplateOpen(true);
+                }}
+                disabled={!subject.trim() || !message.trim()}
+                title={t("bulkNotify.template.saveAs")}
+              >
+                <span className="material-symbols-outlined">bookmark_add</span>
+                {t("bulkNotify.template.saveAs")}
+              </button>
+              <small className="helper-text">
+                {t("bulkNotify.template.saveAsHintReview")}
+              </small>
+            </div>
           </div>
         ) : null}
 
-        {/* Nav butonlari */}
-        <div className="bulk-notify-actions">
-          {step > 1 ? (
-            <button type="button" className="secondary-btn" onClick={goBack} disabled={submitting}>
-              <span className="material-symbols-outlined">chevron_left</span>
-              {t("bulkNotify.back")}
-            </button>
-          ) : (
-            <span />
-          )}
-          {step < 4 ? (
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={goNext}
-              disabled={
-                (step === 1 && !step1Valid) ||
-                (step === 2 && !step2Valid) ||
-                (step === 3 && !step3Valid)
-              }
-            >
-              {t("bulkNotify.next")}
-              <span className="material-symbols-outlined">chevron_right</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => void handleSubmit()}
-              disabled={!canSubmit}
-            >
-              <span className="material-symbols-outlined">send</span>
-              {submitting ? t("bulkNotify.sending") : t("bulkNotify.send")}
-            </button>
-          )}
-        </div>
+        {/* Nav butonlari sayfa head'inde — her adimda ayni yerde */}
       </div>
 
       {/* ALT BOLUM: Kaydedilmis Sablonlar — onizleme + yukle butonu */}

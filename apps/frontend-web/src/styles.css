@@ -153,6 +153,19 @@ body {
   border-color: #e67c00;
 }
 
+/* ops_manager icin icon-only varyanti: 'Muhendislik' yazisi yerine cark ikonu */
+.engineering-btn--icon-only {
+  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+.engineering-btn--icon-only .material-symbols-outlined {
+  font-size: 20px;
+}
+
 .header-customer-logo {
   /* EnerjiOne logosu (height 44px) ile gorsel olarak ayni agirlikta dursun
      diye musteri logosu da ayni yukseklikte. width: auto + object-fit:contain
@@ -21961,6 +21974,60 @@ th.event-col-category {
   gap: 16px;
   padding: 16px;
 }
+/* Stepper satiri: SOL Geri butonu, ORTA stepper bar (flex-1), SAG Ileri/Gonder.
+   Her adimda butonlar ayni yerde — kullanici aramaz. */
+.bulk-notify-stepper-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bulk-notify-stepper-row .bulk-notify-stepper {
+  flex: 1 1 auto;
+  margin: 0;
+}
+.bulk-notify-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 16px;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.bulk-notify-stepper-btn.secondary-btn {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+.bulk-notify-stepper-btn.secondary-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+.bulk-notify-stepper-btn.primary-btn {
+  background: #ff8c00;
+  border: 0;
+  color: #fff;
+  font-weight: 700;
+}
+.bulk-notify-stepper-btn.primary-btn:hover:not(:disabled) {
+  background: #ea7c00;
+}
+.bulk-notify-stepper-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.bulk-notify-stepper-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Sayfa head'i: artik sadece baslik + aciklama (butonlar stepper'a tasindi) */
+.bulk-notify-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
 .bulk-notify-panel .panel-head h3 {
   display: inline-flex;
   align-items: center;
@@ -22327,6 +22394,43 @@ th.event-col-category {
 }
 .bulk-notify-review-targets strong {
   color: #475569;
+}
+/* Review adiminin alt kismi: 'Sablon Olarak Kaydet' butonu + ipucu */
+.bulk-notify-review-save-template {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bulk-notify-review-save-template .secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+}
+.bulk-notify-review-save-template .secondary-btn:hover:not(:disabled) {
+  background: #fff7ed;
+  border-color: #ff8c00;
+  color: #c2410c;
+}
+.bulk-notify-review-save-template .secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.bulk-notify-review-save-template .secondary-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+.bulk-notify-review-save-template .helper-text {
+  margin: 0;
+  font-size: 12px;
 }
 
 /* Wizard nav butonlari — primary saga, back sola */

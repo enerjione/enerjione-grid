@@ -124,12 +124,23 @@ export function Header({
       <div className="header-right">
         {/* WsStatusBadge buradan kaldirildi — Sistem Durumu sayfasinda
             gosteriliyor; header'da yer karistirmasin diye. */}
-        {role === "engineer" || role === "installer" || role === "ops_manager" ? (
+        {role === "engineer" || role === "installer" ? (
           <button
             className={`engineering-btn ${isEngineeringView ? "active" : ""}`}
             onClick={() => onToggleEngineering?.()}
           >
             {t("header.engineering")}
+          </button>
+        ) : role === "ops_manager" ? (
+          /* Operasyon Yoneticisi icin 'Muhendislik' yazisi yerine settings
+             cark ikonu — ayarlar oldugu belli. Tooltip ile aciklama. */
+          <button
+            className={`engineering-btn engineering-btn--icon-only ${isEngineeringView ? "active" : ""}`}
+            onClick={() => onToggleEngineering?.()}
+            title={t("header.opsSettings")}
+            aria-label={t("header.opsSettings")}
+          >
+            <span className="material-symbols-outlined">settings</span>
           </button>
         ) : null}
 
