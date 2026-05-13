@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip } from "react-leaflet";
+import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
 
 import type { GridSnapshot } from "../../shared/api";
@@ -541,7 +541,21 @@ export function FaultDetailModal({
                     doubleClickZoom={false}
                     attributionControl={false}
                   >
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <LayersControl position="topright">
+                      <LayersControl.BaseLayer checked name="Sokak">
+                        <TileLayer
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          attribution='&copy; OpenStreetMap'
+                        />
+                      </LayersControl.BaseLayer>
+                      <LayersControl.BaseLayer name="Uydu">
+                        <TileLayer
+                          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                          attribution="Tiles &copy; Esri"
+                          maxZoom={19}
+                        />
+                      </LayersControl.BaseLayer>
+                    </LayersControl>
                     {/* Sırayla: pre yeşil, ariza kirmizi kesik, post yeşil.
                         Üç parça hattin gercek geometrisini takip eder; eski
                         from->to duz cizgi yanlistı. */}

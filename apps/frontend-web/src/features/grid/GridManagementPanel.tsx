@@ -19,7 +19,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { asyncConfirm } from "../../components/ConfirmDialog";
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import {
@@ -862,7 +862,28 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   className="grid-mgmt-map"
                   scrollWheelZoom
                 >
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  <LayersControl position="topright">
+                    <LayersControl.BaseLayer checked name="Sokak (OSM)">
+                      <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      />
+                    </LayersControl.BaseLayer>
+                    <LayersControl.BaseLayer name="Uydu (Esri)">
+                      <TileLayer
+                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                        attribution="Tiles &copy; Esri"
+                        maxZoom={19}
+                      />
+                    </LayersControl.BaseLayer>
+                    <LayersControl.BaseLayer name="Topografya">
+                      <TileLayer
+                        url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+                        maxZoom={17}
+                      />
+                    </LayersControl.BaseLayer>
+                  </LayersControl>
 
                   {/* Hat secildiginde haritayi otomatik olarak hattin tum
                       direklerini kapsayan alana zoomla. */}

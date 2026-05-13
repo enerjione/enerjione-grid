@@ -77,7 +77,7 @@ def _schedule_iec104_redeploy(db: Session, target_id: int) -> None:
 
 @router.get("", response_model=list[OutboundTargetRead])
 def list_outbound_targets(
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     from sqlalchemy.orm import selectinload
@@ -91,7 +91,7 @@ def list_outbound_targets(
 
 @router.get("/runtime-status")
 def outbound_runtime_status(
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
 ):
     """UI 'Durum' sutunu icin canli rozet verisi.
 
@@ -115,7 +115,7 @@ def outbound_runtime_status(
 @router.get("/{target_id}/auto-topics")
 def outbound_auto_topics(
     target_id: int,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     """MQTT target icin uretilecek otomatik topic listesi.
@@ -140,7 +140,7 @@ def outbound_auto_topics(
 @router.post("", response_model=OutboundTargetRead, status_code=status.HTTP_201_CREATED)
 def create_outbound_target(
     payload: OutboundTargetCreate,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     existing = db.scalar(select(OutboundTarget).where(OutboundTarget.name == payload.name))
@@ -173,7 +173,7 @@ def create_outbound_target(
 def update_outbound_target(
     target_id: int,
     payload: OutboundTargetUpdate,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     row = db.get(OutboundTarget, target_id)
@@ -205,7 +205,7 @@ def update_outbound_target(
 @router.delete("/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_outbound_target(
     target_id: int,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     row = db.get(OutboundTarget, target_id)
@@ -557,7 +557,7 @@ def export_iec104_points_xlsx(
 def auto_assign_device_ca(
     target_id: int,
     payload: dict | None = None,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     """Bu hedef altinda CA'si bos cihazlara sirayla 1, 2, 3... atar.
@@ -673,7 +673,7 @@ def _ensure_mqtt_target(db: Session, target_id: int) -> OutboundTarget:
 )
 def list_topic_mappings(
     target_id: int,
-    _: User = Depends(require_role(UserRole.INSTALLER)),
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     _ensure_mqtt_target(db, target_id)
@@ -694,7 +694,7 @@ def list_topic_mappings(
 def create_topic_mapping(
     target_id: int,
     payload: OutboundTopicMappingCreate,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     target = _ensure_mqtt_target(db, target_id)
@@ -730,7 +730,7 @@ def update_topic_mapping(
     target_id: int,
     mapping_id: int,
     payload: OutboundTopicMappingUpdate,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     _ensure_mqtt_target(db, target_id)
@@ -766,7 +766,7 @@ def update_topic_mapping(
 def delete_topic_mapping(
     target_id: int,
     mapping_id: int,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     _ensure_mqtt_target(db, target_id)
@@ -826,7 +826,7 @@ async def upload_mqtt_cert(
     target_id: int,
     kind: str,
     file: UploadFile = File(...),
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     """MQTT TLS sertifikasi upload — CA / cert / key.
@@ -899,7 +899,7 @@ async def upload_mqtt_cert(
 def delete_mqtt_cert(
     target_id: int,
     kind: str,
-    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
     """Yuklenen MQTT TLS sertifikasini sil — disk + target field NULL."""

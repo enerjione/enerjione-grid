@@ -1939,24 +1939,30 @@ export function App() {
                 </button>
               ) : null}
 
+              {/* ===== GRUP 4: ENTEGRASYONLAR & BILDIRIM ===== */}
+              {/* Outbound + API erisimi: engineer + installer. Cihaz CRUD ve
+                  yayin ozellikleri muhendisin yetkisi dahilinde. */}
+              {session.role === "installer" || session.role === "engineer" ? (
+                <button
+                  className={engineeringPage === "outbound" ? "active" : ""}
+                  onClick={() => setEngineeringPage("outbound")}
+                >
+                  {t("engineering.nav.outboundTargets")}
+                </button>
+              ) : null}
+              {session.role === "installer" || session.role === "engineer" ? (
+                <button
+                  className={engineeringPage === "api-access" ? "active" : ""}
+                  onClick={() => {
+                    setEngineeringPage("api-access");
+                    void reloadApiKeys();
+                  }}
+                >
+                  {t("engineering.nav.apiAccess")}
+                </button>
+              ) : null}
               {session.role === "installer" ? (
                 <>
-                  {/* ===== GRUP 4: ENTEGRASYONLAR & BILDIRIM ===== */}
-                  <button
-                    className={engineeringPage === "outbound" ? "active" : ""}
-                    onClick={() => setEngineeringPage("outbound")}
-                  >
-                    {t("engineering.nav.outboundTargets")}
-                  </button>
-                  <button
-                    className={engineeringPage === "api-access" ? "active" : ""}
-                    onClick={() => {
-                      setEngineeringPage("api-access");
-                      void reloadApiKeys();
-                    }}
-                  >
-                    {t("engineering.nav.apiAccess")}
-                  </button>
                   <button
                     className={engineeringPage === "notifications" ? "active" : ""}
                     onClick={() => {
@@ -2095,7 +2101,7 @@ export function App() {
                 currentRole={session.role}
               />
             ) : null}
-            {engineeringPage === "outbound" && session.role === "installer" ? (
+            {engineeringPage === "outbound" && (session.role === "installer" || session.role === "engineer") ? (
               <OutboundTargetsPanel
                 targets={outboundTargets}
                 devices={devices}
@@ -2113,7 +2119,7 @@ export function App() {
                 }}
               />
             ) : null}
-            {engineeringPage === "api-access" && session.role === "installer" ? (
+            {engineeringPage === "api-access" && (session.role === "installer" || session.role === "engineer") ? (
               <ApiAccessPanel
                 apiBaseUrl={API_BASE_URL}
                 keys={apiKeys}

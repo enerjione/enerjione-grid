@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
@@ -1017,7 +1017,36 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     <section className="map-full">
       <div className="world-map-shell">
         <MapContainer className="world-map" center={[39.0, 35.0]} zoom={5} scrollWheelZoom>
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <LayersControl position="topright">
+            <LayersControl.BaseLayer checked name="Sokak (OSM)">
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              />
+            </LayersControl.BaseLayer>
+            <LayersControl.BaseLayer name="Uydu (Esri)">
+              <TileLayer
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+                maxZoom={19}
+              />
+            </LayersControl.BaseLayer>
+            <LayersControl.BaseLayer name="Topografya (OpenTopoMap)">
+              <TileLayer
+                url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+                attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM | Style: <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'
+                maxZoom={17}
+              />
+            </LayersControl.BaseLayer>
+            <LayersControl.BaseLayer name="Karanlık (CARTO)">
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                subdomains="abcd"
+                maxZoom={19}
+              />
+            </LayersControl.BaseLayer>
+          </LayersControl>
           <FlyToSelected
             selectedDevice={selectedDevice}
             override={selectedDevice ? deviceLocationOverride.get(selectedDevice.id) : undefined}
