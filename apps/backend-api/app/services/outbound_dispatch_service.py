@@ -19,6 +19,13 @@ except ImportError:  # pragma: no cover
 
 
 def dispatch_event(db: Session, *, event_kind: str, payload: dict) -> None:
+    """Outbound dispatcher entry point.
+
+    NOT: telemetry event'leri icin REST/MQTT hedefleri ATLANIR —
+    `outbound_telemetry_batcher` ayni readings'i 5sn pencerede dedup edip
+    batch POST yolluyor (kullanici tercihi). Burada sadece IEC104 anlik
+    gunceller. Alarm event'leri tum protocol'lerde anlik gonderilir.
+    """
     stmt = select(OutboundTarget).where(OutboundTarget.is_active.is_(True))
     targets = list(db.scalars(stmt).all())
     for target in targets:
@@ -28,6 +35,10 @@ def dispatch_event(db: Session, *, event_kind: str, payload: dict) -> None:
         # sonraki interrogation ya da spontaneous transmission otomatik devreye girer.
         if target.protocol == "iec104":
             _dispatch_iec104(db=db, target=target, event_kind=event_kind, payload=payload)
+            continue
+        # Telemetry icin REST/MQTT = batcher sorumlulugu. Ayni readings'i iki
+        # kez gondermemek icin burada atla.
+        if event_kind == "telemetry" and target.protocol in ("rest", "mqtt"):
             continue
         _dispatch_with_retry(db=db, target=target, event_kind=event_kind, payload=payload)
 

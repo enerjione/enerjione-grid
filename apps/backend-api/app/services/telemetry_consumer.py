@@ -136,16 +136,17 @@ def _persist_message(payload: dict[str, Any]) -> None:
             # unique index hatasini bastiriyoruz — istenen davranis budur.
             db.rollback()
 
-        # Outbound dispatch: REST/MQTT/IEC104 hedeflerine telemetry payload'i.
-        # OutboundTarget tablosunda event_filter='telemetry' veya 'all' olan +
-        # is_active=true target'lar tetiklenir. IEC104 zaten point registry
-        # uzerinden gunceller; REST/MQTT POST/publish yapilir.
+        # Outbound dispatch — iki ayri yol:
+        #   1) IEC 104 hedefleri: dispatch_event ile ANLIK point registry guncellemesi
+        #      (SCADA master surekli yeni degeri gormeli, batch kabul edilmez).
+        #   2) REST / MQTT hedefleri: outbound_telemetry_batcher'a submit edilir;
+        #      batcher 5sn pencerede DEGISIK readings'i biriktirir + tek POST
+        #      olarak gonderir. Ayni device+signal icin ayni value tekrar gelirse
+        #      dedup ile atlanir.
         #
-        # NOT: telemetry yuksek frekansli (600 cihaz x N sinyal x saniyede).
-        # Webhook target'larina sel yapabilir — operator UI'da event_filter'i
-        # 'alarm' yaparsa veya devre disi birakirsa dispatch atlar.
+        # Alarm event'leri (separate akis: /internal/alarms) batch'e GIRMEZ —
+        # anlik gonderilir.
         try:
-            from app.services.outbound_dispatch_service import dispatch_event
             # signal_source: signal_key prefix'inden turet (master.voltage_a -> master)
             sig_source = None
             if reading.signal_key and "." in reading.signal_key:
@@ -165,7 +166,18 @@ def _persist_message(payload: dict[str, Any]) -> None:
                 "source_timestamp": reading.source_timestamp.isoformat() if reading.source_timestamp else None,
                 "processed_at": datetime.now(timezone.utc).isoformat(),
             }
+            # 1) IEC 104 anlik — sadece IEC protocol'lu aktif target'lara push.
+            from app.services.outbound_dispatch_service import dispatch_event
             dispatch_event(db, event_kind="telemetry", payload=outbound_payload)
+            # NOT: dispatch_event REST/MQTT/IEC tum protocol'lere tek tek POST
+            # atar. Ama biz REST/MQTT'i batch'e tasiyoruz; iki kez gondermesin
+            # diye outbound_dispatch_service simdi sadece IEC104'u isleyecek
+            # (telemetry icin REST/MQTT skipped). Detay: outbound_dispatch_service.py
+            # _dispatch_with_retry icine `event_kind == 'telemetry' and protocol
+            # in ('rest', 'mqtt')` filter eklendi.
+            # 2) REST / MQTT batch — ayni payload, batcher dedup + buffer + flush.
+            from app.services.outbound_telemetry_batcher import submit as batch_submit
+            batch_submit(outbound_payload)
         except Exception:  # noqa: BLE001
             # Outbound hatasi telemetri akisini bozmasin — sadece log.
             logger.exception("outbound_dispatch_failed_telemetry msg=%s", message_id)

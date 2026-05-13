@@ -819,6 +819,20 @@ def stop_telemetry_consumer():
 
 
 @app.on_event("startup")
+def start_outbound_telemetry_batcher():
+    """Telemetry webhook/MQTT batch dispatcher — 5sn pencerede degisik
+    readings'i biriktirir ve aktif outbound target'lara tek POST/publish atar."""
+    from app.services import outbound_telemetry_batcher
+    outbound_telemetry_batcher.start()
+
+
+@app.on_event("shutdown")
+def stop_outbound_telemetry_batcher():
+    from app.services import outbound_telemetry_batcher
+    outbound_telemetry_batcher.stop()
+
+
+@app.on_event("startup")
 def start_telemetry_retention():
     """Telemetri tablosu kayan pencere — eskileri otomatik temizle.
 
