@@ -80,6 +80,15 @@ class BackupSchedulerWorker:
                 elapsed_h = (now - last).total_seconds() / 3600.0
                 if elapsed_h < sch.interval_hours:
                     return
+            # Disk-full proaktif alert — backup almadan once disk doluluk
+            # oranini kontrol et. %85'in uzerinde ise warning event yaz +
+            # log'la; %95'in uzerinde ise backup'i atla (disk-full hatasi
+            # cikisini bekleyip recovery zorlamasi yerine).
+            try:
+                _check_backup_disk_usage(db)
+            except Exception:  # noqa: BLE001
+                logger.exception("backup_disk_check_failed")
+
             # Zamani geldi — scheduled yedek al
             logger.info("backup_scheduler_running_job interval_hours=%d", sch.interval_hours)
             create_backup(db, job_type="scheduled", username="(system)")
@@ -95,6 +104,80 @@ class BackupSchedulerWorker:
                 logger.exception("backup_retention_failed")
         finally:
             db.close()
+
+
+# Disk threshold: %85 warn, %95 hard stop. Cogu sahada yedek dizini ayri
+# bir disk degil; postgres data ile ayni volume — backup almak postgres
+# yazimlarini da etkiler (transient slow query + ENOSPC riski).
+_DISK_WARN_THRESHOLD = 0.85
+_DISK_BLOCK_THRESHOLD = 0.95
+
+
+def _check_backup_disk_usage(db) -> None:
+    """Backup dizininin disk doluluk oranini kontrol et + alert yaz.
+
+    %85+ : warning event (kullanici dashboard'da gorur).
+    %95+ : RuntimeError fırlat — backup atlanir; admin disk acmadan
+           cron tekrar denesin.
+    """
+    import shutil as _shutil
+
+    from app.services.backup_service import get_backup_dir
+    from app.services.event_service import record_event
+
+    try:
+        backup_dir = get_backup_dir()
+        usage = _shutil.disk_usage(str(backup_dir))
+    except OSError as exc:
+        logger.warning("backup_disk_usage_check_failed error=%s", exc)
+        return
+
+    if usage.total <= 0:
+        return
+    used_ratio = 1.0 - (usage.free / usage.total)
+    used_pct = round(used_ratio * 100, 1)
+
+    if used_ratio >= _DISK_BLOCK_THRESHOLD:
+        logger.error(
+            "backup_disk_critical used_pct=%.1f%% threshold=%.1f%% — backup blokladi",
+            used_pct,
+            _DISK_BLOCK_THRESHOLD * 100,
+        )
+        record_event(
+            db,
+            category="backup",
+            event_type="backup_disk_critical",
+            severity="critical",
+            actor_username="(system)",
+            message=(
+                f"Yedek dizini %{used_pct} dolu — scheduled backup atlandi. "
+                f"Disk acmadan yedek alinmayacak."
+            ),
+            metadata={"used_pct": used_pct, "threshold_pct": _DISK_BLOCK_THRESHOLD * 100},
+            i18n_key="backup_disk_critical",
+            i18n_params={"pct": used_pct},
+        )
+        db.commit()
+        raise RuntimeError(f"Backup dizini %{used_pct} dolu — backup atlandi")
+
+    if used_ratio >= _DISK_WARN_THRESHOLD:
+        logger.warning(
+            "backup_disk_warning used_pct=%.1f%% threshold=%.1f%%",
+            used_pct,
+            _DISK_WARN_THRESHOLD * 100,
+        )
+        record_event(
+            db,
+            category="backup",
+            event_type="backup_disk_warning",
+            severity="warning",
+            actor_username="(system)",
+            message=f"Yedek dizini %{used_pct} dolu — yer acilmazsa backup'lar duracak.",
+            metadata={"used_pct": used_pct, "threshold_pct": _DISK_WARN_THRESHOLD * 100},
+            i18n_key="backup_disk_warning",
+            i18n_params={"pct": used_pct},
+        )
+        db.commit()
 
 
 _worker = BackupSchedulerWorker()

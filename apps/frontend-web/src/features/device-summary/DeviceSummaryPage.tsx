@@ -78,7 +78,7 @@ function formatValue(
 function formatTimestamp(ts: string | null): string {
   if (!ts) return "—";
   try {
-    return new Date(ts).toLocaleString("tr-TR");
+    return new Date(ts).toLocaleString(undefined);
   } catch {
     return ts;
   }

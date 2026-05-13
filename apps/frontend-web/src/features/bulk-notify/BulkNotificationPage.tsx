@@ -1,21 +1,25 @@
 /**
- * Toplu Bildirim sayfasi — ops_manager / installer / engineer kullanır.
+ * Toplu Bildirim sayfasi — WIZARD modunda (4 adim):
+ *   1) Mesaj      — baslik + govde
+ *   2) Kanallar   — web / email / sms
+ *   3) Hedef      — tum kullanicilara / ekipler / kullanicilar
+ *   4) Onay       — secimleri ozetler, "Gonder" butonu
  *
- * Hedef secimi: kullanici/ekip/herkes (kombine olabilir).
- * Kanallar: web push (NotificationBell), email, sms (kullanici telefon/email
- * tanimliysa).
+ * Sonuc bilgilendirmesi sayfa altinda banner olarak DEGIL, toast olarak verilir
+ * (kullanici talebi). Hatalar da toast.
  *
- * Backend filter: ops_manager hedeflerden operator-DISI rolu otomatik kirpar.
+ * Backend filter: ops_manager hedeflerden operator-DISI rolu otomatik kirpar
+ * (defense-in-depth — UI'da zaten secemiyor).
  */
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useToast } from "../../components/ToastProvider";
 import {
   fetchResponsibilityAreas,
   fetchUsers,
   sendBulkNotification,
   type BulkNotifyChannel,
-  type BulkNotifyResult,
 } from "../../shared/api";
 import type { ResponsibilityAreaRow, UserRead, UserRole } from "../../shared/types";
 
@@ -26,13 +30,17 @@ type Props = {
 
 const ALL_CHANNELS: BulkNotifyChannel[] = ["web", "email", "sms"];
 
+type WizardStep = 1 | 2 | 3 | 4;
+
 export function BulkNotificationPage({ accessToken, currentRole }: Props) {
   const { t } = useTranslation();
+  const toast = useToast();
 
   const [users, setUsers] = useState<UserRead[]>([]);
   const [areas, setAreas] = useState<ResponsibilityAreaRow[]>([]);
-  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const [step, setStep] = useState<WizardStep>(1);
 
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -42,8 +50,6 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
   const [sendToAll, setSendToAll] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const [result, setResult] = useState<BulkNotifyResult | null>(null);
 
   const [userSearch, setUserSearch] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
@@ -56,11 +62,10 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         if (cancelled) return;
         setUsers(u);
         setAreas(a);
-        setLoadError("");
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : t("common.errorOccurred"));
+        toast.error(err instanceof Error ? err.message : t("common.errorOccurred"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -68,7 +73,7 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, t]);
+  }, [accessToken, t, toast]);
 
   const toggleChannel = (ch: BulkNotifyChannel) => {
     setChannels((prev) => {
@@ -116,22 +121,44 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
     );
   }, [areas, areaSearch]);
 
-  const targetCount = sendToAll
-    ? "*"
-    : `${selectedUserIds.size + selectedAreaIds.size}`;
+  // Adim gecerlilik kurallari — "ileri" butonunu disable etmek icin
+  const step1Valid = subject.trim().length > 0 && message.trim().length > 0;
+  const step2Valid = channels.size > 0;
+  const step3Valid = sendToAll || selectedUserIds.size > 0 || selectedAreaIds.size > 0;
+  const canSubmit = step1Valid && step2Valid && step3Valid && !submitting;
 
-  const canSubmit =
-    !submitting &&
-    subject.trim().length > 0 &&
-    message.trim().length > 0 &&
-    channels.size > 0 &&
-    (sendToAll || selectedUserIds.size > 0 || selectedAreaIds.size > 0);
+  // Onay adiminda gosterilecek hedef ozeti
+  const selectedAreasList = useMemo(
+    () => areas.filter((a) => selectedAreaIds.has(a.id)),
+    [areas, selectedAreaIds]
+  );
+  const selectedUsersList = useMemo(
+    () => users.filter((u) => selectedUserIds.has(u.id)),
+    [users, selectedUserIds]
+  );
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const goNext = () => {
+    if (step === 1 && !step1Valid) return;
+    if (step === 2 && !step2Valid) return;
+    if (step === 3 && !step3Valid) return;
+    setStep((s) => (Math.min(4, s + 1) as WizardStep));
+  };
+  const goBack = () => setStep((s) => (Math.max(1, s - 1) as WizardStep));
+
+  const resetWizard = () => {
+    setStep(1);
+    setSubject("");
+    setMessage("");
+    setChannels(new Set<BulkNotifyChannel>(["web"]));
+    setSelectedUserIds(new Set<number>());
+    setSelectedAreaIds(new Set<number>());
+    setSendToAll(false);
+    setUserSearch("");
+    setAreaSearch("");
+  };
+
+  const handleSubmit = async () => {
     if (!canSubmit) return;
-    setSubmitError("");
-    setResult(null);
     setSubmitting(true);
     try {
       const res = await sendBulkNotification(accessToken, {
@@ -142,21 +169,37 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         team_ids: Array.from(selectedAreaIds),
         send_to_all: sendToAll,
       });
-      setResult(res);
-      // Basari sonrasi formu temizlemiyoruz; kullanici tekrar gondermek
-      // isteyebilir. Hedefleri sifirlamak yeterli — guvenli default.
-      setSelectedUserIds(new Set<number>());
-      setSelectedAreaIds(new Set<number>());
-      setSendToAll(false);
+      // Sonucu TOAST olarak goster
+      const okMsg = t("bulkNotify.resultTitle", { count: res.recipients_count });
+      const detail = t("bulkNotify.resultDetail", {
+        web: res.web_sent,
+        email: res.email_sent,
+        sms: res.sms_sent,
+      });
+      toast.success(`${okMsg} — ${detail}`);
+      if (res.email_failed || res.sms_failed) {
+        toast.error(
+          t("bulkNotify.resultFail", {
+            emailFail: res.email_failed,
+            smsFail: res.sms_failed,
+          })
+        );
+      }
+      resetWizard();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : t("common.errorOccurred"));
+      toast.error(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Toplam hedef sayisi (onay icin)
+  const targetSummaryCount = sendToAll
+    ? "*"
+    : `${selectedAreaIds.size + selectedUserIds.size}`;
+
   return (
-    <section className="tab-panel bulk-notify-panel">
+    <section className="tab-panel bulk-notify-panel bulk-notify-wizard">
       <div className="panel-head">
         <div>
           <h3>
@@ -171,211 +214,305 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         </div>
       </div>
 
-      {loadError ? <p className="error-text">{loadError}</p> : null}
+      {/* Stepper */}
+      <ol className="bulk-notify-stepper">
+        {[1, 2, 3, 4].map((n) => {
+          const labels: Record<number, string> = {
+            1: t("bulkNotify.steps.message"),
+            2: t("bulkNotify.steps.channels"),
+            3: t("bulkNotify.steps.recipients"),
+            4: t("bulkNotify.steps.review"),
+          };
+          const state = n === step ? "current" : n < step ? "done" : "todo";
+          return (
+            <li key={n} className={`bulk-notify-step bulk-notify-step--${state}`}>
+              <span className="bulk-notify-step-num">{n < step ? "✓" : n}</span>
+              <span className="bulk-notify-step-label">{labels[n]}</span>
+            </li>
+          );
+        })}
+      </ol>
 
-      <form className="bulk-notify-form" onSubmit={handleSubmit}>
-        {/* Mesaj kismi */}
-        <div className="bulk-notify-card">
-          <div className="bulk-notify-card-head">
-            <span className="material-symbols-outlined">edit_note</span>
-            <strong>{t("bulkNotify.messageSection")}</strong>
-          </div>
-          <label className="bulk-notify-field">
-            <span>{t("bulkNotify.subject")}</span>
-            <input
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              maxLength={200}
-              placeholder={t("bulkNotify.subjectPlaceholder")}
-            />
-          </label>
-          <label className="bulk-notify-field">
-            <span>{t("bulkNotify.message")}</span>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              maxLength={2000}
-              rows={5}
-              placeholder={t("bulkNotify.messagePlaceholder")}
-            />
-          </label>
-        </div>
-
-        {/* Kanallar */}
-        <div className="bulk-notify-card">
-          <div className="bulk-notify-card-head">
-            <span className="material-symbols-outlined">send</span>
-            <strong>{t("bulkNotify.channelsSection")}</strong>
-          </div>
-          <div className="bulk-notify-channels">
-            {ALL_CHANNELS.map((ch) => (
-              <label
-                key={ch}
-                className={`bulk-notify-channel ${channels.has(ch) ? "is-on" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={channels.has(ch)}
-                  onChange={() => toggleChannel(ch)}
-                />
-                <span className="material-symbols-outlined">
-                  {ch === "web" ? "notifications" : ch === "email" ? "mail" : "sms"}
-                </span>
-                <span className="bulk-notify-channel-label">
-                  {t(`bulkNotify.channel.${ch}`)}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Hedef secimi */}
-        <div className="bulk-notify-card">
-          <div className="bulk-notify-card-head">
-            <span className="material-symbols-outlined">group</span>
-            <strong>{t("bulkNotify.recipientsSection")}</strong>
-            <span className="bulk-notify-count-badge">{targetCount}</span>
-          </div>
-
-          <label className="bulk-notify-all-toggle">
-            <input
-              type="checkbox"
-              checked={sendToAll}
-              onChange={(e) => setSendToAll(e.target.checked)}
-            />
-            <span>
-              {currentRole === "ops_manager"
-                ? t("bulkNotify.sendToAllOperators")
-                : t("bulkNotify.sendToAll")}
-            </span>
-          </label>
-
-          {!sendToAll ? (
-            <div className="bulk-notify-targets-grid">
-              {/* Ekipler */}
-              <div className="bulk-notify-targets-col">
-                <div className="bulk-notify-targets-head">
-                  <strong>{t("bulkNotify.teams")}</strong>
-                  <small>{selectedAreaIds.size}</small>
-                </div>
-                <input
-                  type="search"
-                  className="bulk-notify-search"
-                  placeholder={t("bulkNotify.searchTeams")}
-                  value={areaSearch}
-                  onChange={(e) => setAreaSearch(e.target.value)}
-                />
-                <div className="bulk-notify-list">
-                  {loading ? (
-                    <p className="helper-text">{t("common.loading")}</p>
-                  ) : filteredAreas.length === 0 ? (
-                    <p className="helper-text">{t("bulkNotify.noTeams")}</p>
-                  ) : (
-                    filteredAreas.map((a) => (
-                      <label
-                        key={a.id}
-                        className={`bulk-notify-list-item ${selectedAreaIds.has(a.id) ? "is-on" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedAreaIds.has(a.id)}
-                          onChange={() => toggleArea(a.id)}
-                        />
-                        <span className="bulk-notify-list-item-main">
-                          <strong>{a.name}</strong>
-                          <small>{a.code}</small>
-                        </span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Kullanicilar */}
-              <div className="bulk-notify-targets-col">
-                <div className="bulk-notify-targets-head">
-                  <strong>{t("bulkNotify.users")}</strong>
-                  <small>{selectedUserIds.size}</small>
-                </div>
-                <input
-                  type="search"
-                  className="bulk-notify-search"
-                  placeholder={t("bulkNotify.searchUsers")}
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                />
-                <div className="bulk-notify-list">
-                  {loading ? (
-                    <p className="helper-text">{t("common.loading")}</p>
-                  ) : filteredUsers.length === 0 ? (
-                    <p className="helper-text">{t("bulkNotify.noUsers")}</p>
-                  ) : (
-                    filteredUsers.map((u) => (
-                      <label
-                        key={u.id}
-                        className={`bulk-notify-list-item ${selectedUserIds.has(u.id) ? "is-on" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedUserIds.has(u.id)}
-                          onChange={() => toggleUser(u.id)}
-                        />
-                        <span className="bulk-notify-list-item-main">
-                          <strong>{u.full_name || u.username}</strong>
-                          <small>
-                            {u.username}
-                            {u.email ? ` · ${u.email}` : ""}
-                            {u.role ? ` · ${u.role}` : ""}
-                          </small>
-                        </span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
+      <div className="bulk-notify-form">
+        {/* --- ADIM 1: MESAJ --- */}
+        {step === 1 ? (
+          <div className="bulk-notify-card">
+            <div className="bulk-notify-card-head">
+              <span className="material-symbols-outlined">edit_note</span>
+              <strong>{t("bulkNotify.messageSection")}</strong>
             </div>
-          ) : null}
-        </div>
+            <label className="bulk-notify-field">
+              <span>{t("bulkNotify.subject")}</span>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                maxLength={200}
+                placeholder={t("bulkNotify.subjectPlaceholder")}
+                autoFocus
+              />
+            </label>
+            <label className="bulk-notify-field">
+              <span>{t("bulkNotify.message")}</span>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                maxLength={2000}
+                rows={7}
+                placeholder={t("bulkNotify.messagePlaceholder")}
+              />
+            </label>
+          </div>
+        ) : null}
 
-        {/* Submit */}
-        {submitError ? <p className="error-text">{submitError}</p> : null}
-        {result ? (
-          <div className="bulk-notify-result">
-            <span className="material-symbols-outlined">check_circle</span>
-            <div>
-              <strong>
-                {t("bulkNotify.resultTitle", { count: result.recipients_count })}
-              </strong>
-              <small>
-                {t("bulkNotify.resultDetail", {
-                  web: result.web_sent,
-                  email: result.email_sent,
-                  sms: result.sms_sent,
-                })}
-                {result.email_failed || result.sms_failed
-                  ? ` · ${t("bulkNotify.resultFail", {
-                      emailFail: result.email_failed,
-                      smsFail: result.sms_failed,
-                    })}`
-                  : ""}
-              </small>
+        {/* --- ADIM 2: KANALLAR --- */}
+        {step === 2 ? (
+          <div className="bulk-notify-card">
+            <div className="bulk-notify-card-head">
+              <span className="material-symbols-outlined">send</span>
+              <strong>{t("bulkNotify.channelsSection")}</strong>
+            </div>
+            <div className="bulk-notify-channels">
+              {ALL_CHANNELS.map((ch) => (
+                <label
+                  key={ch}
+                  className={`bulk-notify-channel ${channels.has(ch) ? "is-on" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={channels.has(ch)}
+                    onChange={() => toggleChannel(ch)}
+                  />
+                  <span className="material-symbols-outlined">
+                    {ch === "web" ? "notifications" : ch === "email" ? "mail" : "sms"}
+                  </span>
+                  <span className="bulk-notify-channel-label">
+                    {t(`bulkNotify.channel.${ch}`)}
+                  </span>
+                </label>
+              ))}
             </div>
           </div>
         ) : null}
 
+        {/* --- ADIM 3: HEDEF --- */}
+        {step === 3 ? (
+          <div className="bulk-notify-card">
+            <div className="bulk-notify-card-head">
+              <span className="material-symbols-outlined">group</span>
+              <strong>{t("bulkNotify.recipientsSection")}</strong>
+              <span className="bulk-notify-count-badge">
+                {sendToAll ? "*" : selectedAreaIds.size + selectedUserIds.size}
+              </span>
+            </div>
+
+            <label className="bulk-notify-all-toggle">
+              <input
+                type="checkbox"
+                checked={sendToAll}
+                onChange={(e) => setSendToAll(e.target.checked)}
+              />
+              <span>
+                {currentRole === "ops_manager"
+                  ? t("bulkNotify.sendToAllOperators")
+                  : t("bulkNotify.sendToAll")}
+              </span>
+            </label>
+
+            {!sendToAll ? (
+              <div className="bulk-notify-targets-grid">
+                <div className="bulk-notify-targets-col">
+                  <div className="bulk-notify-targets-head">
+                    <strong>{t("bulkNotify.teams")}</strong>
+                    <small>{selectedAreaIds.size}</small>
+                  </div>
+                  <input
+                    type="search"
+                    className="bulk-notify-search"
+                    placeholder={t("bulkNotify.searchTeams")}
+                    value={areaSearch}
+                    onChange={(e) => setAreaSearch(e.target.value)}
+                  />
+                  <div className="bulk-notify-list">
+                    {loading ? (
+                      <p className="helper-text">{t("common.loading")}</p>
+                    ) : filteredAreas.length === 0 ? (
+                      <p className="helper-text">{t("bulkNotify.noTeams")}</p>
+                    ) : (
+                      filteredAreas.map((a) => (
+                        <label
+                          key={a.id}
+                          className={`bulk-notify-list-item ${selectedAreaIds.has(a.id) ? "is-on" : ""}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAreaIds.has(a.id)}
+                            onChange={() => toggleArea(a.id)}
+                          />
+                          <span className="bulk-notify-list-item-main">
+                            <strong>{a.name}</strong>
+                            <small>{a.code}</small>
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="bulk-notify-targets-col">
+                  <div className="bulk-notify-targets-head">
+                    <strong>{t("bulkNotify.users")}</strong>
+                    <small>{selectedUserIds.size}</small>
+                  </div>
+                  <input
+                    type="search"
+                    className="bulk-notify-search"
+                    placeholder={t("bulkNotify.searchUsers")}
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                  />
+                  <div className="bulk-notify-list">
+                    {loading ? (
+                      <p className="helper-text">{t("common.loading")}</p>
+                    ) : filteredUsers.length === 0 ? (
+                      <p className="helper-text">{t("bulkNotify.noUsers")}</p>
+                    ) : (
+                      filteredUsers.map((u) => (
+                        <label
+                          key={u.id}
+                          className={`bulk-notify-list-item ${selectedUserIds.has(u.id) ? "is-on" : ""}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIds.has(u.id)}
+                            onChange={() => toggleUser(u.id)}
+                          />
+                          <span className="bulk-notify-list-item-main">
+                            <strong>{u.full_name || u.username}</strong>
+                            <small>
+                              {u.username}
+                              {u.email ? ` · ${u.email}` : ""}
+                              {u.role ? ` · ${u.role}` : ""}
+                            </small>
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* --- ADIM 4: ONAY --- */}
+        {step === 4 ? (
+          <div className="bulk-notify-card">
+            <div className="bulk-notify-card-head">
+              <span className="material-symbols-outlined">checklist</span>
+              <strong>{t("bulkNotify.reviewSection")}</strong>
+            </div>
+            <div className="bulk-notify-review">
+              <div className="bulk-notify-review-row">
+                <span className="bulk-notify-review-label">
+                  {t("bulkNotify.subject")}
+                </span>
+                <span className="bulk-notify-review-value">{subject}</span>
+              </div>
+              <div className="bulk-notify-review-row">
+                <span className="bulk-notify-review-label">
+                  {t("bulkNotify.message")}
+                </span>
+                <span className="bulk-notify-review-value bulk-notify-review-value--multiline">
+                  {message}
+                </span>
+              </div>
+              <div className="bulk-notify-review-row">
+                <span className="bulk-notify-review-label">
+                  {t("bulkNotify.channelsSection")}
+                </span>
+                <span className="bulk-notify-review-value">
+                  {Array.from(channels)
+                    .map((c) => t(`bulkNotify.channel.${c}`))
+                    .join(", ")}
+                </span>
+              </div>
+              <div className="bulk-notify-review-row">
+                <span className="bulk-notify-review-label">
+                  {t("bulkNotify.recipientsSection")}
+                </span>
+                <span className="bulk-notify-review-value">
+                  {sendToAll ? (
+                    currentRole === "ops_manager"
+                      ? t("bulkNotify.sendToAllOperators")
+                      : t("bulkNotify.sendToAll")
+                  ) : (
+                    <span className="bulk-notify-review-targets">
+                      {selectedAreasList.length > 0 ? (
+                        <span>
+                          <strong>{t("bulkNotify.teams")}: </strong>
+                          {selectedAreasList.map((a) => a.name).join(", ")}
+                        </span>
+                      ) : null}
+                      {selectedUsersList.length > 0 ? (
+                        <span>
+                          <strong>{t("bulkNotify.users")}: </strong>
+                          {selectedUsersList
+                            .map((u) => u.full_name || u.username)
+                            .join(", ")}
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="bulk-notify-review-row">
+                <span className="bulk-notify-review-label">
+                  {t("bulkNotify.reviewTargetCount")}
+                </span>
+                <span className="bulk-notify-review-value">{targetSummaryCount}</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Nav butonlari */}
         <div className="bulk-notify-actions">
-          <button
-            type="submit"
-            className="primary-btn"
-            disabled={!canSubmit}
-            title={!canSubmit ? t("bulkNotify.completeForm") : undefined}
-          >
-            <span className="material-symbols-outlined">send</span>
-            {submitting ? t("bulkNotify.sending") : t("bulkNotify.send")}
-          </button>
+          {step > 1 ? (
+            <button type="button" className="secondary-btn" onClick={goBack} disabled={submitting}>
+              <span className="material-symbols-outlined">chevron_left</span>
+              {t("bulkNotify.back")}
+            </button>
+          ) : (
+            <span />
+          )}
+          {step < 4 ? (
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={goNext}
+              disabled={
+                (step === 1 && !step1Valid) ||
+                (step === 2 && !step2Valid) ||
+                (step === 3 && !step3Valid)
+              }
+            >
+              {t("bulkNotify.next")}
+              <span className="material-symbols-outlined">chevron_right</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => void handleSubmit()}
+              disabled={!canSubmit}
+            >
+              <span className="material-symbols-outlined">send</span>
+              {submitting ? t("bulkNotify.sending") : t("bulkNotify.send")}
+            </button>
+          )}
         </div>
-      </form>
+      </div>
     </section>
   );
 }

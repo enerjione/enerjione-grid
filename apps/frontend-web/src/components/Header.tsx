@@ -18,8 +18,8 @@ type Props = {
   onSettings?: () => void;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
-  activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering" | "bulk-notify";
-  onChangePage: (page: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering" | "bulk-notify") => void;
+  activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
+  onChangePage: (page: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering") => void;
 };
 
 export function Header({
@@ -116,15 +116,8 @@ export function Header({
           >
             {t("header.systemStatus")}
           </button>
-          {/* Toplu Bildirim — ops_manager / installer / engineer icin. */}
-          {role === "ops_manager" || role === "installer" || role === "engineer" ? (
-            <button
-              className={activePage === "bulk-notify" ? "active" : ""}
-              onClick={() => onChangePage("bulk-notify")}
-            >
-              {t("header.bulkNotify")}
-            </button>
-          ) : null}
+          {/* Toplu Bildirim ana menuden kaldirildi — Muhendislik > Toplu Bildirim
+              tab'ina tasindi (ops_manager / installer / engineer icin). */}
         </nav>
       </div>
 

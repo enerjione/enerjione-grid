@@ -95,9 +95,15 @@ def get_users_in_scope_for_device(db: Session, device_id: int) -> list[User]:
     """
     from app.models.device import Device
     user_ids: set[int] = set()
-    # Engineer + Installer (kisitsiz)
+    # Engineer + Installer (kisitsiz) — ama davet edilmis ve henuz sifre
+    # belirlememis user'lara bildirim gitmesin (hashed_password=NULL).
+    # Pending invitation kullanicilar hesabini aktive etmeden operasyonel
+    # veri (alarm icerigi, cihaz adi) email/SMS ile sizmasin.
     for u in db.scalars(
-        select(User).where(User.role.in_([UserRole.ENGINEER, UserRole.INSTALLER]))
+        select(User).where(
+            User.role.in_([UserRole.ENGINEER, UserRole.INSTALLER]),
+            User.hashed_password.isnot(None),
+        )
     ).all():
         user_ids.add(u.id)
     # Cihaza dogrudan bagli operatorler

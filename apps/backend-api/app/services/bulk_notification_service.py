@@ -74,6 +74,10 @@ def _resolve_recipients(
             return
         if actor.role == UserRole.OPS_MANAGER and u.role != UserRole.OPERATOR:
             return  # ops_manager yalnizca operator'e atabilir
+        # Davet edilmis ama henuz sifre belirlememis kullaniciya bildirim
+        # atma (hesabi aktif olmadan operasyonel veri sizmasin).
+        if u.hashed_password is None:
+            return
         seen.add(u.id)
         result.append(u)
 

@@ -56,6 +56,16 @@ def _assert_engineer_may_use_installer_role(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Kurulumcu rolü yalnızca kurulumcu tarafından atanabilir.",
         )
+    if target is not None and target.role == UserRole.OPS_MANAGER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operasyon Yöneticisi hesaplarını yalnızca kurulumcu yönetebilir.",
+        )
+    if new_role == UserRole.OPS_MANAGER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operasyon Yöneticisi rolü yalnızca kurulumcu tarafından atanabilir.",
+        )
 
 
 def _assert_ops_manager_only_operator(

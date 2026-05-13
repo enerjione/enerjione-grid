@@ -1,4 +1,4 @@
-﻿# EnerjiOne Grid Dashboard — tek-komut Docker Compose dosyasi.
+# EnerjiOne Grid Dashboard — tek-komut Docker Compose dosyasi.
 #
 # Kurulum:
 #   1. cp .env.example .env
@@ -51,6 +51,22 @@ x-heavy-resources: &heavy-resources
         memory: 2G
       reservations:
         memory: 512M
+
+# Container hardening — stateless worker'lar icin defense-in-depth.
+# `no-new-privileges`: setuid binary'leri ile yetki yukseltme blok.
+# `cap_drop: ALL`: Linux capability'leri (CAP_NET_BIND, CAP_SYS_ADMIN, ...) sifirla.
+# Workers TCP socket bind etmiyor (sadece outbound), root yetki gerek yok.
+# `read_only: true`: filesystem read-only; tmpfs /tmp gerekiyorsa caller ekler.
+# Worker'lar (tag-engine, alarm-service, notification-worker, iec104-outbound)
+# state'siz; gecici dosya ihtiyaclari icin tmpfs /tmp acilir.
+x-hardened-worker: &hardened-worker
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:rw,size=64m,mode=1777
 
 services:
   postgres:
@@ -254,7 +270,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *worker-resources
+    <<: [*worker-resources, *hardened-worker]
 
   alarm-service:
     build:
@@ -291,7 +307,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *worker-resources
+    <<: [*worker-resources, *hardened-worker]
 
   notification-worker:
     build:
@@ -322,7 +338,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *worker-resources
+    <<: [*worker-resources, *hardened-worker]
 
   iec104-outbound:
     build:
@@ -356,7 +372,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *worker-resources
+    <<: [*worker-resources, *hardened-worker]
 
   frontend-web:
     build:
@@ -380,7 +396,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *worker-resources
+    <<: [*worker-resources, *hardened-worker]
 
 networks:
   e1-net:

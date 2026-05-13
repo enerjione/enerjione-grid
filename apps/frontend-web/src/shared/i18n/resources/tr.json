@@ -127,6 +127,16 @@
     "messageSection": "Mesaj",
     "channelsSection": "Kanallar",
     "recipientsSection": "Alıcılar",
+    "reviewSection": "Onay",
+    "reviewTargetCount": "Hedef sayısı",
+    "back": "Geri",
+    "next": "İleri",
+    "steps": {
+      "message": "Mesaj",
+      "channels": "Kanallar",
+      "recipients": "Alıcılar",
+      "review": "Onay"
+    },
     "subject": "Başlık",
     "subjectPlaceholder": "Örn: Planlı kesinti bilgilendirmesi",
     "message": "Mesaj",
@@ -430,6 +440,7 @@
       "outbound_delivered": "{{event_kind}} olayı {{target}} hedefine gönderildi",
       "outbound_retry_scheduled": "{{target}} için yeniden deneme planlandı ({{attempt}}/{{max}})",
       "outbound_dead_letter": "{{target}} hedefine teslim başarısız — kuyruğa alındı (dead-letter)",
+      "bulk_notification_sent": "{{actor}} toplu bildirim gönderdi — {{count}} kişiye ulaştı",
       "notification_settings_updated": "Bildirim ayarları güncellendi",
       "notification_smtp_test_ok": "SMTP test başarılı: {{recipient}}",
       "notification_smtp_test_failed": "SMTP test başarısız: {{error}}",
@@ -688,6 +699,7 @@
       "liveValues": "Canlı Değerler",
       "users": "Kullanıcılar",
       "responsibilityAreas": "Ekip Yönetimi",
+      "bulkNotify": "Toplu Bildirim",
       "signals": "Sinyaller",
       "alarmRules": "Alarm Yönetimi",
       "outboundTargets": "Webhook & Outbound",
@@ -775,6 +787,7 @@
         "engineer": "Mühendis",
         "installer": "Kurulumcu",
         "operator": "Operatör",
+        "ops_manager": "Operasyon Yöneticisi",
         "installerSuper": "Kurulumcu (Süper Admin)"
       }
     },

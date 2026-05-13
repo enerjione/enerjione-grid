@@ -22196,6 +22196,150 @@ th.event-col-category {
   }
 }
 
+/* Wizard — stepper bar */
+.bulk-notify-wizard .bulk-notify-stepper {
+  list-style: none;
+  margin: 0 0 12px 0;
+  padding: 0;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+.bulk-notify-step {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #94a3b8;
+  position: relative;
+  padding: 4px 8px;
+}
+.bulk-notify-step + .bulk-notify-step::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 2px;
+  background: #cbd5e1;
+}
+.bulk-notify-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.bulk-notify-step-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bulk-notify-step--current {
+  color: #c2410c;
+  font-weight: 700;
+}
+.bulk-notify-step--current .bulk-notify-step-num {
+  background: #ff8c00;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.18);
+}
+.bulk-notify-step--done {
+  color: #15803d;
+}
+.bulk-notify-step--done .bulk-notify-step-num {
+  background: #16a34a;
+  color: #fff;
+}
+
+/* Review screen */
+.bulk-notify-review {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bulk-notify-review-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.bulk-notify-review-row:last-child {
+  border-bottom: 0;
+}
+.bulk-notify-review-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.bulk-notify-review-value {
+  font-size: 13px;
+  color: #1e293b;
+}
+.bulk-notify-review-value--multiline {
+  white-space: pre-wrap;
+}
+.bulk-notify-review-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bulk-notify-review-targets strong {
+  color: #475569;
+}
+
+/* Wizard nav butonlari — primary saga, back sola */
+.bulk-notify-wizard .bulk-notify-actions {
+  justify-content: space-between;
+}
+.bulk-notify-actions .secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.bulk-notify-actions .secondary-btn:hover {
+  background: #f8fafc;
+}
+.bulk-notify-actions .secondary-btn:disabled,
+.bulk-notify-actions .primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.bulk-notify-actions .material-symbols-outlined {
+  font-size: 18px;
+}
+
+@media (max-width: 720px) {
+  .bulk-notify-review-row {
+    grid-template-columns: 1fr;
+  }
+  .bulk-notify-stepper {
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 720px) {
   .auto-topics-card {
     grid-template-columns: 1fr auto;

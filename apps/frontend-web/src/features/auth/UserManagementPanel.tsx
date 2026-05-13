@@ -11,6 +11,14 @@ type NotificationPrefs = {
   telegram: boolean;
 };
 
+type InviteResult = {
+  user_id: number;
+  username: string;
+  setup_url: string;
+  expires_at: string;
+  email_sent: boolean;
+};
+
 type Props = {
   users: UserRead[];
   /** false: mühendis — sadece operatör/mühendis oluşturulabilir; kurulumcu rolü atanamaz */
@@ -26,6 +34,17 @@ type Props = {
     password: string;
     role: UserRole;
   }) => Promise<void>;
+  /** Davet akisi — sifre belirlemeden user yarat, token uretilir. */
+  onInvite?: (payload: {
+    username: string;
+    email: string;
+    phone_number?: string | null;
+    full_name: string;
+    role: UserRole;
+    send_email: boolean;
+  }) => Promise<InviteResult | null>;
+  /** Pending davet token'ini yenile + mail tekrar gonder. */
+  onResendInvite?: (userId: number) => Promise<InviteResult | null>;
   onDelete: (userId: number) => Promise<void>;
   onUpdate: (
     userId: number,
@@ -47,6 +66,8 @@ export function UserManagementPanel({
   restrictToOperator = false,
   currentUserId,
   onCreate,
+  onInvite,
+  onResendInvite,
   onDelete,
   onUpdate,
   onResetPassword,
@@ -55,6 +76,18 @@ export function UserManagementPanel({
 }: Props) {
   const { t } = useTranslation();
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
+  // Davet akisi state'i
+  const [isInviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteUsername, setInviteUsername] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteFullName, setInviteFullName] = useState("");
+  const [invitePhone, setInvitePhone] = useState("");
+  const [inviteRole, setInviteRole] = useState<UserRole>("operator");
+  const [inviteSendEmail, setInviteSendEmail] = useState(true);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteResult, setInviteResult] = useState<InviteResult | null>(null);
+  const [inviteUrlCopied, setInviteUrlCopied] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<UserRead | null>(null);
   const [username, setUsername] = useState("");
@@ -208,6 +241,7 @@ export function UserManagementPanel({
   const getRoleLabel = (value: UserRead["role"]) => {
     if (value === "engineer") return t("engineering.users.roleNames.engineer");
     if (value === "installer") return t("engineering.users.roleNames.installer");
+    if (value === "ops_manager") return t("engineering.users.roleNames.ops_manager");
     return t("engineering.users.roleNames.operator");
   };
 
@@ -259,16 +293,158 @@ export function UserManagementPanel({
         <div>
           <h3>{t("engineering.users.title")}</h3>
         </div>
-        <button
-          className="add-user-btn"
-          onClick={() => {
-            setSubmitError("");
-            setCreateModalOpen(true);
-          }}
-        >
-          {t("engineering.users.newUser")}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {onInvite ? (
+            <button
+              className="add-user-btn"
+              onClick={() => {
+                setInviteError("");
+                setInviteResult(null);
+                setInviteUsername("");
+                setInviteEmail("");
+                setInviteFullName("");
+                setInvitePhone("");
+                setInviteRole("operator");
+                setInviteSendEmail(true);
+                setInviteModalOpen(true);
+              }}
+              title={t("engineering.users.inviteHint", { defaultValue: "Sifre belirlemeden kullaniciya davet linki gonder" })}
+            >
+              {t("engineering.users.invite", { defaultValue: "Davet Et" })}
+            </button>
+          ) : null}
+          <button
+            className="add-user-btn"
+            onClick={() => {
+              setSubmitError("");
+              setCreateModalOpen(true);
+            }}
+          >
+            {t("engineering.users.newUser")}
+          </button>
+        </div>
       </div>
+
+      {/* Davet modali */}
+      {isInviteModalOpen ? (
+        <div className="settings-modal-backdrop">
+          <form
+            className="settings-modal"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!onInvite) return;
+              setInviteError("");
+              setInviteSubmitting(true);
+              try {
+                const result = await onInvite({
+                  username: inviteUsername.trim(),
+                  email: inviteEmail.trim(),
+                  full_name: inviteFullName.trim(),
+                  phone_number: invitePhone.trim() || null,
+                  role: inviteRole,
+                  send_email: inviteSendEmail,
+                });
+                if (result) {
+                  setInviteResult(result);
+                } else {
+                  setInviteModalOpen(false);
+                }
+              } catch (err) {
+                setInviteError(err instanceof Error ? err.message : "Davet gonderilemedi");
+              } finally {
+                setInviteSubmitting(false);
+              }
+            }}
+          >
+            <h3>{t("engineering.users.invite", { defaultValue: "Kullanici Davet Et" })}</h3>
+
+            {!inviteResult ? (
+              <>
+                <p style={{ fontSize: "0.85rem", color: "#6b7280", marginTop: 0 }}>
+                  {t("engineering.users.inviteInfo", {
+                    defaultValue: "Kullanici sifre belirlemeden olusturulur. Davet linki uretilir; SMTP yapilandirilmissa otomatik mail gider, aksi halde link panelde gosterilir.",
+                  })}
+                </p>
+                <label>
+                  {t("engineering.users.form.usernameLow", { defaultValue: "Kullanici adi" })}
+                  <input value={inviteUsername} onChange={(e) => setInviteUsername(e.target.value)} required minLength={3} />
+                </label>
+                <label>
+                  {t("engineering.users.form.email", { defaultValue: "E-posta" })}
+                  <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} required />
+                </label>
+                <label>
+                  {t("engineering.users.form.fullName", { defaultValue: "Ad Soyad" })}
+                  <input value={inviteFullName} onChange={(e) => setInviteFullName(e.target.value)} required />
+                </label>
+                <label>
+                  {t("engineering.users.form.phone", { defaultValue: "Telefon (opsiyonel)" })}
+                  <input value={invitePhone} onChange={(e) => setInvitePhone(e.target.value)} />
+                </label>
+                <label>
+                  {t("engineering.users.form.role", { defaultValue: "Rol" })}
+                  <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as UserRole)}>
+                    {!restrictToOperator ? (
+                      <>
+                        <option value="operator">operator</option>
+                        <option value="engineer">engineer</option>
+                        {allowInstallerRole ? <option value="installer">installer</option> : null}
+                        <option value="ops_manager">ops_manager</option>
+                      </>
+                    ) : (
+                      <option value="operator">operator</option>
+                    )}
+                  </select>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input type="checkbox" checked={inviteSendEmail} onChange={(e) => setInviteSendEmail(e.target.checked)} />
+                  <span>{t("engineering.users.sendEmail", { defaultValue: "E-posta ile davet linki gonder (SMTP aktif olmali)" })}</span>
+                </label>
+                {inviteError ? <p className="error-text">{inviteError}</p> : null}
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                  <button type="button" onClick={() => setInviteModalOpen(false)} disabled={inviteSubmitting}>
+                    {t("common.cancel", { defaultValue: "Iptal" })}
+                  </button>
+                  <button type="submit" disabled={inviteSubmitting}>
+                    {inviteSubmitting ? t("common.loading", { defaultValue: "Gonderiliyor..." }) : t("engineering.users.invite", { defaultValue: "Davet Et" })}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ color: inviteResult.email_sent ? "#065f46" : "#92400e", background: inviteResult.email_sent ? "#d1fae5" : "#fef3c7", padding: "0.5rem 0.75rem", borderRadius: 6, fontSize: "0.875rem" }}>
+                  {inviteResult.email_sent
+                    ? t("engineering.users.inviteSentMail", { defaultValue: "Davet maili gonderildi. Kullanici link uzerinden sifre belirleyince hesap aktif olur." })
+                    : t("engineering.users.inviteSentNoMail", { defaultValue: "Davet linki olusturuldu. SMTP aktif degil; asagidaki linki kopyalayip kullaniciya iletin." })}
+                </p>
+                <label>
+                  {t("engineering.users.setupUrl", { defaultValue: "Setup linki (tek kullanim, 7 gun gecerli)" })}
+                  <textarea readOnly value={inviteResult.setup_url} rows={3} onClick={(e) => (e.target as HTMLTextAreaElement).select()} style={{ fontFamily: "monospace", fontSize: "0.8rem" }} />
+                </label>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(inviteResult.setup_url);
+                        setInviteUrlCopied(true);
+                        setTimeout(() => setInviteUrlCopied(false), 2000);
+                      } catch {
+                        // fallback yok; kullanici elle kopyalar
+                      }
+                    }}
+                  >
+                    {inviteUrlCopied ? t("common.copied", { defaultValue: "Kopyalandi!" }) : t("common.copyLink", { defaultValue: "Linki Kopyala" })}
+                  </button>
+                  <button type="button" onClick={() => { setInviteModalOpen(false); setInviteResult(null); }}>
+                    {t("common.close", { defaultValue: "Kapat" })}
+                  </button>
+                </div>
+              </>
+            )}
+          </form>
+        </div>
+      ) : null}
       {/* Modal kapalıyken (toplu işlem hataları için) panelde gösterilir.
           Modal açıkken modalin içinde de gösteriliyor. */}
       {submitError && !isCreateModalOpen && editingUserId === null && !passwordResetUser ? (
@@ -314,6 +490,9 @@ export function UserManagementPanel({
                 <option value="operator">{t("engineering.users.roleNames.operator")}</option>
                 {!restrictToOperator ? (
                   <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
+                ) : null}
+                {!restrictToOperator ? (
+                  <option value="ops_manager">{t("engineering.users.roleNames.ops_manager")}</option>
                 ) : null}
                 {!restrictToOperator && allowInstallerRole ? (
                   <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option>
@@ -398,6 +577,9 @@ export function UserManagementPanel({
                 <option value="operator">{t("engineering.users.roleNames.operator")}</option>
                 {!restrictToOperator ? (
                   <option value="engineer">{t("engineering.users.roleNames.engineer")}</option>
+                ) : null}
+                {!restrictToOperator ? (
+                  <option value="ops_manager">{t("engineering.users.roleNames.ops_manager")}</option>
                 ) : null}
                 {!restrictToOperator && allowInstallerRole ? (
                   <option value="installer">{t("engineering.users.roleNames.installerSuper")}</option>

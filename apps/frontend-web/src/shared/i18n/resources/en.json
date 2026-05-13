@@ -127,6 +127,16 @@
     "messageSection": "Message",
     "channelsSection": "Channels",
     "recipientsSection": "Recipients",
+    "reviewSection": "Review",
+    "reviewTargetCount": "Target count",
+    "back": "Back",
+    "next": "Next",
+    "steps": {
+      "message": "Message",
+      "channels": "Channels",
+      "recipients": "Recipients",
+      "review": "Review"
+    },
     "subject": "Subject",
     "subjectPlaceholder": "e.g. Planned outage notice",
     "message": "Message",
@@ -430,6 +440,7 @@
       "outbound_delivered": "{{event_kind}} event sent to {{target}}",
       "outbound_retry_scheduled": "Retry scheduled for {{target}} ({{attempt}}/{{max}})",
       "outbound_dead_letter": "Delivery to {{target}} failed — moved to dead-letter queue",
+      "bulk_notification_sent": "{{actor}} sent a bulk notification — reached {{count}} recipients",
       "notification_settings_updated": "Notification settings updated",
       "notification_smtp_test_ok": "SMTP test successful: {{recipient}}",
       "notification_smtp_test_failed": "SMTP test failed: {{error}}",
@@ -688,6 +699,7 @@
       "liveValues": "Live Values",
       "users": "Users",
       "responsibilityAreas": "Team Management",
+      "bulkNotify": "Bulk Notify",
       "signals": "Signals",
       "alarmRules": "Alarm Rules",
       "outboundTargets": "Webhooks & Outbound",
@@ -775,6 +787,7 @@
         "engineer": "Engineer",
         "installer": "Installer",
         "operator": "Operator",
+        "ops_manager": "Operations Manager",
         "installerSuper": "Installer (Super Admin)"
       }
     },

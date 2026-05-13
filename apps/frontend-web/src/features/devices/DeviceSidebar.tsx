@@ -44,7 +44,7 @@ function formatRelative(iso: string | null | undefined): string {
   if (sec < 60) return `${sec} sn önce`;
   if (sec < 3600) return `${Math.round(sec / 60)} dk önce`;
   if (sec < 86400) return `${Math.round(sec / 3600)} sa önce`;
-  return d.toLocaleString("tr-TR");
+  return d.toLocaleString(undefined);
 }
 
 function batteryClass(percent: number | null | undefined): string {
@@ -176,7 +176,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
                 <span className="material-symbols-outlined">schedule</span>
                 <span className="device-row-last-text">
                   {device.lastUpdateAt
-                    ? new Date(device.lastUpdateAt).toLocaleString("tr-TR", {
+                    ? new Date(device.lastUpdateAt).toLocaleString(undefined, {
                         day: "2-digit",
                         month: "2-digit",
                         year: "numeric",

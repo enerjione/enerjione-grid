@@ -44,6 +44,8 @@ import {
   createDevice,
   createSignal,
   createUser,
+  inviteUser,
+  resendInvite,
   deleteAlarmRule,
   deleteDevice,
   deleteGateway,
@@ -156,7 +158,7 @@ import type {
 } from "../shared/types";
 
 type TabId = "map" | "values";
-type PageMode = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering" | "bulk-notify";
+type PageMode = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
 type EngineeringPage =
   | "devices"
   | "signals"
@@ -164,6 +166,7 @@ type EngineeringPage =
   | "alarm-rules"
   | "users"
   | "responsibility-areas"
+  | "bulk-notify"
   | "outbound"
   | "api-access"
   | "notifications"
@@ -172,7 +175,7 @@ type EngineeringPage =
   | "backups";
 
 const ROUTE_STORAGE_KEY = "hsl.route.v1";
-const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering", "bulk-notify"];
+const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering"];
 const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "devices",
   "signals",
@@ -180,6 +183,7 @@ const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "alarm-rules",
   "users",
   "responsibility-areas",
+  "bulk-notify",
   "outbound",
   "api-access",
   "notifications",
@@ -454,12 +458,14 @@ export function App() {
       setPageMode("home");
       setEngineeringPage("devices");
     }
-    // ops_manager: yalnizca users + responsibility-areas tabi'larina erisebilir
+    // ops_manager: yalnizca users + responsibility-areas + bulk-notify
+    // tabi'larina erisebilir
     if (
       session.role === "ops_manager" &&
       pageMode === "engineering" &&
       engineeringPage !== "users" &&
-      engineeringPage !== "responsibility-areas"
+      engineeringPage !== "responsibility-areas" &&
+      engineeringPage !== "bulk-notify"
     ) {
       setEngineeringPage("users");
     }
@@ -812,6 +818,47 @@ export function App() {
     await createUser(session.accessToken, payload);
     await reloadUsers();
     toast.success(t("toasts.userAdded", { username: payload.username }));
+  };
+
+  /** Davet akisi — admin sifre belirlemeden user yaratir. Backend token uretip
+   * setup_url doner; SMTP aktif ise mail otomatik gider. Aksi halde URL
+   * admin'e dondurulur, admin panodan kopyalar. */
+  const handleInviteUser = async (payload: {
+    username: string;
+    email: string;
+    phone_number?: string | null;
+    full_name: string;
+    role: UserRole;
+    send_email: boolean;
+  }) => {
+    if (!session) return null;
+    const resp = await inviteUser(session.accessToken, {
+      username: payload.username,
+      email: payload.email,
+      full_name: payload.full_name,
+      phone_number: payload.phone_number ?? undefined,
+      role: payload.role,
+      send_email: payload.send_email,
+    });
+    await reloadUsers();
+    toast.success(
+      resp.email_sent
+        ? t("toasts.userInvited", { username: payload.username, defaultValue: `${payload.username} davet edildi. Mail gonderildi.` })
+        : t("toasts.userInvitedNoMail", { username: payload.username, defaultValue: `${payload.username} davet edildi. Setup linki UI'da gosteriliyor.` })
+    );
+    return resp;
+  };
+
+  const handleResendInvite = async (userId: number) => {
+    if (!session) return null;
+    const resp = await resendInvite(session.accessToken, userId);
+    await reloadUsers();
+    toast.success(
+      resp.email_sent
+        ? t("toasts.inviteResentMail", { defaultValue: "Davet maili yeniden gonderildi." })
+        : t("toasts.inviteResentLink", { defaultValue: "Yeni davet linki uretildi." })
+    );
+    return resp;
   };
 
   const handleDeleteUser = async (userId: number) => {
@@ -1829,7 +1876,7 @@ export function App() {
                   {t("engineering.nav.signals")}
                 </button>
               ) : null}
-              {session.role === "installer" ? (
+              {session.role === "installer" || session.role === "engineer" ? (
                 <button
                   className={engineeringPage === "grid" ? "active" : ""}
                   onClick={() => setEngineeringPage("grid")}
@@ -1881,6 +1928,14 @@ export function App() {
                   }}
                 >
                   {t("engineering.nav.responsibilityAreas")}
+                </button>
+              ) : null}
+              {session.role === "engineer" || session.role === "installer" || session.role === "ops_manager" ? (
+                <button
+                  className={engineeringPage === "bulk-notify" ? "active" : ""}
+                  onClick={() => setEngineeringPage("bulk-notify")}
+                >
+                  {t("engineering.nav.bulkNotify")}
                 </button>
               ) : null}
 
@@ -1997,6 +2052,8 @@ export function App() {
                 allowInstallerRole={session.role === "installer"}
                 restrictToOperator={session.role === "ops_manager"}
                 onCreate={handleCreateUser}
+                onInvite={handleInviteUser}
+                onResendInvite={handleResendInvite}
                 onDelete={handleDeleteUser}
                 onUpdate={handleUpdateUser}
                 onResetPassword={handleResetUserPassword}
@@ -2009,7 +2066,7 @@ export function App() {
               />
             ) : null}
             {engineeringPage === "responsibility-areas" &&
-            (session.role === "engineer" || session.role === "installer") ? (
+            (session.role === "engineer" || session.role === "installer" || session.role === "ops_manager") ? (
               <ResponsibilityAreasPage
                 role={session.role}
                 areas={responsibilityAreas}
@@ -2029,6 +2086,13 @@ export function App() {
                 onRemoveRegion={handleRemoveRegionFromArea}
                 onAddLine={handleAddLineToArea}
                 onRemoveLine={handleRemoveLineFromArea}
+              />
+            ) : null}
+            {engineeringPage === "bulk-notify" &&
+            (session.role === "engineer" || session.role === "installer" || session.role === "ops_manager") ? (
+              <BulkNotificationPage
+                accessToken={session.accessToken}
+                currentRole={session.role}
               />
             ) : null}
             {engineeringPage === "outbound" && session.role === "installer" ? (
@@ -2133,12 +2197,6 @@ export function App() {
                 loading={loadingData}
                 onRefresh={handleRefreshSystemStatus}
                 wsState={liveSocket.connectionState}
-              />
-            ) : null}
-            {pageMode === "bulk-notify" && session ? (
-              <BulkNotificationPage
-                accessToken={session.accessToken}
-                currentRole={session.role}
               />
             ) : null}
           </main>

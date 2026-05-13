@@ -197,7 +197,7 @@ export function GatewayManagementPanel({
               <td>{gateway.max_devices}</td>
               <td>{gateway.batch_interval_sec}</td>
               <td>{gateway.is_active ? "Aktif" : "Pasif"}</td>
-              <td>{gateway.last_seen_at ? new Date(gateway.last_seen_at).toLocaleString("tr-TR") : "-"}</td>
+              <td>{gateway.last_seen_at ? new Date(gateway.last_seen_at).toLocaleString(undefined) : "-"}</td>
               <td className="actions-cell">
                 <button
                   className="secondary-btn action-btn"

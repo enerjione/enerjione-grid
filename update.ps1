@@ -56,7 +56,10 @@ if ($Version) {
     $envPath = Join-Path $InstallDir ".env"
     $content = Get-Content $envPath -Raw -Encoding utf8
     $content = [regex]::Replace($content, 'E1_VERSION=[^\r\n]*', "E1_VERSION=$Version")
-    Set-Content -Path $envPath -Value $content -Encoding utf8 -NoNewline
+    # UTF-8 BOM'suz yaz — PowerShell 5.1 -Encoding utf8 BOM ekler, Docker
+    # Compose .env parser'i BOM'u ilk variable adinin parcasi sayar.
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($envPath, $content, $enc)
     Write-Ok "E1_VERSION=$Version"
 }
 

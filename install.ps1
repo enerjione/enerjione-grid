@@ -49,6 +49,21 @@ function New-RandomHex {
     return -join ($b | ForEach-Object { $_.ToString("x2") })
 }
 
+# UTF-8 BOM'suz dosya yazma. PowerShell 5.1'in -Encoding utf8 parametresi
+# BOM EKLER (EF BB BF); Docker Compose'un .env parser'i bu BOM'u ilk
+# environment variable adinin parcasi sayar (`?SECRET_KEY` olur) ve
+# kurulum tum servislerde "secret yok" hatasiyla patlar. Bu helper
+# .NET API'sini kullanarak BOM-suz UTF-8 yazar; tum dosya yazimlarinda
+# Set-Content yerine bunu kullaniyoruz.
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Content
+    )
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $enc)
+}
+
 # ---- Banner ----
 Clear-Host
 Write-Host ""
@@ -147,7 +162,7 @@ if (-not (Test-Path $envPath)) {
         $content = $content -replace 'APP_ENV=development', 'APP_ENV=production'
     }
 
-    Set-Content -Path $envPath -Value $content -Encoding utf8 -NoNewline
+    Write-Utf8NoBom -Path $envPath -Content $content
     Write-Ok "Rastgele secret'lar uretildi ve .env'e yazildi"
     Write-Warn2 "GUVENLIK: .env dosyasi hassas secret'lar iceriyor — paylasma."
 } else {
@@ -182,7 +197,7 @@ if (-not (Test-Path $fcmPath)) {
         project_id = "DISABLED-no-fcm-configured"
         comment = "Bu placeholder dosya - mobil push gondermek icin Firebase Admin SDK JSON dosyasini buraya kopyalayin"
     } | ConvertTo-Json
-    Set-Content -Path $fcmPath -Value $placeholder -Encoding utf8
+    Write-Utf8NoBom -Path $fcmPath -Content $placeholder
     Write-Warn2 "FCM placeholder olusturuldu. MOBIL PUSH CALISMAZ — gercek JSON yukleyin."
 } else {
     Write-Ok "fcm-service-account.json mevcut"

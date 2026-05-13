@@ -29,6 +29,11 @@ export function ChangePasswordModal({ forceful = true, onClose, onSuccess, acces
   const [confirmPwd, setConfirmPwd] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Tum sifre inputlarini plain text yap (goz ikonu).
+   *  Tek toggle — 3 input ayni anda goz/gizle olur (ergonomi).
+   *  Default false (mask) — varsayilan guvenli. */
+  const [showPasswords, setShowPasswords] = useState(false);
+  const inputType = showPasswords ? "text" : "password";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +122,7 @@ export function ChangePasswordModal({ forceful = true, onClose, onSuccess, acces
             Mevcut Sifre
           </span>
           <input
-            type="password"
+            type={inputType}
             required
             autoFocus
             autoComplete="current-password"
@@ -132,7 +137,7 @@ export function ChangePasswordModal({ forceful = true, onClose, onSuccess, acces
             Yeni Sifre (min 8 karakter)
           </span>
           <input
-            type="password"
+            type={inputType}
             required
             minLength={8}
             autoComplete="new-password"
@@ -142,12 +147,12 @@ export function ChangePasswordModal({ forceful = true, onClose, onSuccess, acces
           />
         </label>
 
-        <label style={{ display: "block", marginBottom: "1rem" }}>
+        <label style={{ display: "block", marginBottom: "0.75rem" }}>
           <span style={{ display: "block", fontSize: "0.875rem", color: "#374151", marginBottom: 4 }}>
             Yeni Sifre (Tekrar)
           </span>
           <input
-            type="password"
+            type={inputType}
             required
             minLength={8}
             autoComplete="new-password"
@@ -155,6 +160,27 @@ export function ChangePasswordModal({ forceful = true, onClose, onSuccess, acces
             onChange={(e) => setConfirmPwd(e.target.value)}
             style={{ width: "100%", padding: "0.5rem 0.75rem", border: "1px solid #d1d5db", borderRadius: 6, fontSize: "0.875rem" }}
           />
+        </label>
+
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: "1rem",
+            fontSize: "0.8125rem",
+            color: "#374151",
+            cursor: "pointer",
+            userSelect: "none",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showPasswords}
+            onChange={(e) => setShowPasswords(e.target.checked)}
+            style={{ margin: 0 }}
+          />
+          <span>{showPasswords ? "Sifreleri gizle" : "Sifreleri goster"}</span>
         </label>
 
         {error ? (

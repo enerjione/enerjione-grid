@@ -543,30 +543,50 @@ def clear_alarm(
     return {"status": "cleared", "alarm_id": alarm_id}
 
 
+_IDEMPOTENCY_CONSUMER_INTERNAL_DISPATCH = "internal-dispatch"
+
+
 @router.post("/notifications/dispatch/{alarm_id}", status_code=status.HTTP_202_ACCEPTED)
 def dispatch_notification_for_alarm(
     alarm_id: int,
     db: Session = Depends(get_db),
     x_service_token: str | None = Header(default=None),
+    x_message_id: str | None = Header(default=None, alias="X-Message-Id"),
 ):
     """notification-worker bu endpoint'i `alarm.created` event'i RabbitMQ'dan
     geldiginde cagirir; backend tarafindaki dispatch akisini yeniden tetikler.
 
-    Idempotent: ayni alarm icin tekrar cagrilirsa, backend'in kendi
-    dispatch state'i (notification kayitlari) duplicate gondermez.
+    Idempotency: worker requeue + retry sonrasi ayni alarm icin tekrar
+    cagrilirsa duplicate mail/SMS/FCM gondermesin diye `X-Message-Id`
+    header'i ile dedup. Worker her mesaj icin unique id uretir; backend
+    `processed_messages` tablosunda hash'i tutar. Header eksik gelirse
+    fallback olarak `alarm_id` ile dedup (eski davranis — bir alarm icin
+    sadece bir kez dispatch).
 
-    Boylece notification-worker mikroservisi:
       1. RabbitMQ'dan alarm.created mesajini tuketir (acl/audit korumasi)
-      2. Mesajda yer alan `alarm_id` icin bu endpoint'i cagirir
+      2. Mesajda yer alan `alarm_id` icin bu endpoint'i cagirir + X-Message-Id
       3. Backend `dispatch_alarm_notifications` ile SMTP/Telegram/SMS/FCM gonderir
 
     Eski "sadece print" davranisi yerine gercek dispatch — production'da
-    bildirimler asla kaybolmasin.
+    bildirimler asla kaybolmasin ama duplicate da gitmesin.
     """
     _require_service_token(x_service_token)
     alarm = db.scalar(select(AlarmEvent).where(AlarmEvent.id == alarm_id))
     if alarm is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alarm not found")
+
+    # Idempotency check — X-Message-Id varsa onu kullan, yoksa alarm_id ile
+    # dedup et (her alarm icin tek dispatch).
+    msg_id = (x_message_id or "").strip() or f"alarm-{alarm_id}"
+    from app.services.idempotency_service import is_processed, mark_processed
+
+    if is_processed(
+        db,
+        consumer_name=_IDEMPOTENCY_CONSUMER_INTERNAL_DISPATCH,
+        message_id=msg_id,
+    ):
+        return {"status": "duplicate_ignored", "alarm_id": alarm_id, "message_id": msg_id}
+
     try:
         from app.services.notification_dispatch_service import dispatch_alarm_notifications
         dispatch_alarm_notifications(db, alarm)
@@ -574,8 +594,6 @@ def dispatch_notification_for_alarm(
         import logging as _logging
 
         # Stack trace sadece server log'una; client'a generic mesaj.
-        # Eski davranis `detail=str(exc)` icerinde DB conn string, fcm token,
-        # smtp credential gibi hassas alan sizdirabilirdi.
         _logging.getLogger(__name__).exception(
             "notification_dispatch_via_worker_failed alarm_id=%s", alarm_id
         )
@@ -583,6 +601,11 @@ def dispatch_notification_for_alarm(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="notification dispatch failed",
         )
+    mark_processed(
+        db,
+        consumer_name=_IDEMPOTENCY_CONSUMER_INTERNAL_DISPATCH,
+        message_id=msg_id,
+    )
     db.commit()
     return {"status": "dispatched", "alarm_id": alarm_id}
 

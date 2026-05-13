@@ -367,23 +367,39 @@ def logout(
     Bu token'la yapilacak sonraki istekler 401 doner. Cati 0.x'te in-memory
     blacklist; multi-replica deploy icin Redis backend gerek (TODO).
     """
-    # Authorization header'dan JWT'yi al, jti + exp cikar
+    # JWT'yi HEM Authorization header'dan HEM cookie'den dene — cookie-only
+    # frontend kullanicilari icin cookie'deki jti'yi de revoke et. Yoksa
+    # cookie silinse bile token TTL bitene kadar Bearer ile yeniden
+    # kullanilabilirdi. Iki kaynaktan da decode ederiz; ayni jti olsa bile
+    # revoke_jti idempotent (set'e ekler).
     try:
         from jose import jwt as _jwt
 
         from app.core.config import settings as _settings
         from app.services.auth_service import revoke_jti
 
+        tokens_to_revoke: list[str] = []
         auth_header = request.headers.get("authorization") or ""
         if auth_header.lower().startswith("bearer "):
-            token = auth_header[7:].strip()
-            payload = _jwt.decode(
-                token, _settings.secret_key, algorithms=[_settings.algorithm]
-            )
-            jti = payload.get("jti")
-            exp = payload.get("exp")
-            if jti and exp:
-                revoke_jti(str(jti), float(exp))
+            tokens_to_revoke.append(auth_header[7:].strip())
+        cookie_token = request.cookies.get(_AUTH_COOKIE_NAME)
+        if cookie_token:
+            tokens_to_revoke.append(cookie_token.strip())
+
+        for token in tokens_to_revoke:
+            if not token:
+                continue
+            try:
+                payload = _jwt.decode(
+                    token, _settings.secret_key, algorithms=[_settings.algorithm]
+                )
+                jti = payload.get("jti")
+                exp = payload.get("exp")
+                if jti and exp:
+                    revoke_jti(str(jti), float(exp))
+            except Exception:  # noqa: BLE001
+                # Tek bir token decode hatasi diger token'lari engellemesin
+                pass
     except Exception:  # noqa: BLE001 — logout audit'i bozulmasin
         import logging as _logging
 
