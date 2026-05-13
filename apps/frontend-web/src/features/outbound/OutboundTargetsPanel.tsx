@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type { DeviceRow, Iec104RuntimeStatus, OutboundTarget } from "../../shared/types";
-import type { MqttPayloadFields } from "../../shared/api";
+import type { MqttPayloadFields, OutboundRuntimeStatus, OutboundAutoTopic } from "../../shared/api";
+import { fetchOutboundRuntimeStatus, fetchOutboundAutoTopics } from "../../shared/api";
 import { MqttTopicMappingModal } from "./MqttTopicMappingModal";
 import { MqttCertUploader } from "./MqttCertUploader";
 
@@ -87,6 +88,13 @@ export function OutboundTargetsPanel({
   const [runtimeLoading, setRuntimeLoading] = useState(false);
 
   const [runtimeBadges, setRuntimeBadges] = useState<Record<number, { running: boolean; clients: number }>>({});
+
+  // REST/MQTT runtime status (Durum sutunu)
+  const [outboundRuntime, setOutboundRuntime] = useState<Record<number, OutboundRuntimeStatus>>({});
+  // Otomatik Topic'ler popup
+  const [autoTopicsTarget, setAutoTopicsTarget] = useState<OutboundTarget | null>(null);
+  const [autoTopics, setAutoTopics] = useState<OutboundAutoTopic[] | null>(null);
+  const [autoTopicsLoading, setAutoTopicsLoading] = useState(false);
 
   // Form state
   const [name, setName] = useState("");
@@ -507,6 +515,53 @@ export function OutboundTargetsPanel({
       window.clearInterval(interval);
     };
   }, [targets, onFetchIec104Runtime]);
+
+  // REST/MQTT runtime status — 'Durum' sutunu icin 5sn poll
+  useEffect(() => {
+    const restMqttIds = targets.filter((t) => t.protocol !== "iec104").map((t) => t.id);
+    if (restMqttIds.length === 0) {
+      setOutboundRuntime({});
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const data = await fetchOutboundRuntimeStatus(accessToken);
+        if (!cancelled) setOutboundRuntime(data);
+      } catch {
+        // sessiz: bildirim spamlamasin
+      }
+    };
+    void tick();
+    const interval = window.setInterval(() => void tick(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [targets, accessToken]);
+
+  // Otomatik Topic'ler popup acildiginda backend'den cek
+  useEffect(() => {
+    if (!autoTopicsTarget) {
+      setAutoTopics(null);
+      return;
+    }
+    let cancelled = false;
+    setAutoTopicsLoading(true);
+    fetchOutboundAutoTopics(accessToken, autoTopicsTarget.id)
+      .then((res) => {
+        if (!cancelled) setAutoTopics(res.topics);
+      })
+      .catch(() => {
+        if (!cancelled) setAutoTopics([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAutoTopicsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [autoTopicsTarget, accessToken]);
 
   return (
     <section className="tab-panel">
@@ -1274,6 +1329,62 @@ export function OutboundTargetsPanel({
                           ? t("engineering.outbound.scadaConnected", { count: badge.clients })
                           : t("engineering.outbound.scadaOff")}
                       </button>
+                    ) : item.protocol === "mqtt" ? (
+                      (() => {
+                        const rt = outboundRuntime[item.id];
+                        const connected = !!rt?.connected;
+                        const last = rt?.last_publish_at || rt?.last_success_at;
+                        const lastStr = last
+                          ? new Date(last).toLocaleTimeString()
+                          : null;
+                        return (
+                          <span
+                            className={`outbound-runtime-pill ${connected ? "outbound-runtime-pill--ok" : "outbound-runtime-pill--off"}`}
+                            title={
+                              rt?.last_error
+                                ? `${t("engineering.outbound.runtime.lastError")}: ${rt.last_error}`
+                                : lastStr
+                                ? `${t("engineering.outbound.runtime.lastPublish")}: ${lastStr}`
+                                : undefined
+                            }
+                          >
+                            <span className="status-dot" />
+                            {connected
+                              ? t("engineering.outbound.runtime.mqttConnected")
+                              : t("engineering.outbound.runtime.mqttDisconnected")}
+                            {lastStr ? <small> · {lastStr}</small> : null}
+                          </span>
+                        );
+                      })()
+                    ) : item.protocol === "rest" ? (
+                      (() => {
+                        const rt = outboundRuntime[item.id];
+                        const ok = !!rt?.last_success_at;
+                        const last = rt?.last_success_at || rt?.last_failure_at;
+                        const lastStr = last
+                          ? new Date(last).toLocaleTimeString()
+                          : null;
+                        return ok ? (
+                          <span
+                            className="outbound-runtime-pill outbound-runtime-pill--ok"
+                            title={`${t("engineering.outbound.runtime.lastSuccess")}: ${lastStr}`}
+                          >
+                            <span className="status-dot" />
+                            {t("engineering.outbound.runtime.webhookOk")}
+                            {lastStr ? <small> · {lastStr}</small> : null}
+                          </span>
+                        ) : rt?.last_failure_at ? (
+                          <span
+                            className="outbound-runtime-pill outbound-runtime-pill--bad"
+                            title={rt.last_error || undefined}
+                          >
+                            <span className="status-dot" />
+                            {t("engineering.outbound.runtime.webhookFailed")}
+                          </span>
+                        ) : (
+                          <span className="helper-text">—</span>
+                        );
+                      })()
                     ) : (
                       <span className="helper-text">—</span>
                     )}
@@ -1310,14 +1421,24 @@ export function OutboundTargetsPanel({
                       </button>
                     ) : null}
                     {item.protocol === "mqtt" ? (
-                      <button
-                        type="button"
-                        className="secondary-btn action-btn"
-                        title={t("engineering.outbound.mqtt.mappingBtnTitle")}
-                        onClick={() => setMappingModalTarget(item)}
-                      >
-                        {t("engineering.outbound.mqtt.mappingBtn")}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="secondary-btn action-btn"
+                          title={t("engineering.outbound.mqtt.autoTopicsBtnTitle")}
+                          onClick={() => setAutoTopicsTarget(item)}
+                        >
+                          {t("engineering.outbound.mqtt.autoTopicsBtn")}
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-btn action-btn"
+                          title={t("engineering.outbound.mqtt.mappingBtnTitle")}
+                          onClick={() => setMappingModalTarget(item)}
+                        >
+                          {t("engineering.outbound.mqtt.mappingBtn")}
+                        </button>
+                      </>
                     ) : null}
                     <button className="edit-btn action-btn" onClick={() => openEdit(item)}>
                       {t("common.edit")}
@@ -1357,6 +1478,63 @@ export function OutboundTargetsPanel({
           devices={devices ?? []}
           onClose={() => setMappingModalTarget(null)}
         />
+      ) : null}
+
+      {/* Otomatik Topic'ler modal — MQTT target icin uretilecek topic'leri gosterir */}
+      {autoTopicsTarget ? (
+        <div className="settings-modal-backdrop" onClick={() => setAutoTopicsTarget(null)}>
+          <div
+            className="settings-modal auto-topics-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3>
+              <span className="material-symbols-outlined">topic</span>
+              {t("engineering.outbound.mqtt.autoTopicsTitle", { name: autoTopicsTarget.name })}
+            </h3>
+            <p className="helper-text">
+              {t("engineering.outbound.mqtt.autoTopicsHint")}
+            </p>
+            {autoTopicsLoading ? (
+              <p className="helper-text">{t("common.loading")}</p>
+            ) : autoTopics && autoTopics.length > 0 ? (
+              <div className="auto-topics-list">
+                <table className="users-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 80 }}>#</th>
+                      <th>{t("engineering.outbound.mqtt.autoTopicsDevice")}</th>
+                      <th>{t("engineering.outbound.mqtt.autoTopicsTopic")}</th>
+                      <th style={{ width: 90 }}>{t("engineering.outbound.mqtt.autoTopicsKind")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {autoTopics.map((row, idx) => (
+                      <tr key={`${row.device_code}-${row.topic}-${idx}`}>
+                        <td>{idx + 1}</td>
+                        <td className="outbound-name-cell">{row.device_code}</td>
+                        <td><code className="auto-topics-code">{row.topic}</code></td>
+                        <td>
+                          <span className={row.is_custom ? "auto-topics-tag auto-topics-tag--custom" : "auto-topics-tag"}>
+                            {row.is_custom
+                              ? t("engineering.outbound.mqtt.autoTopicsCustom")
+                              : t("engineering.outbound.mqtt.autoTopicsDefault")}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="helper-text">{t("engineering.outbound.mqtt.autoTopicsEmpty")}</p>
+            )}
+            <div className="settings-actions">
+              <button type="button" onClick={() => setAutoTopicsTarget(null)}>
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   );

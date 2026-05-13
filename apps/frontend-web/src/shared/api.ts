@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AlarmComment,
   AlarmEvent,
   AlarmRuleRow,
@@ -82,9 +82,23 @@ function authHeaders(token: string): HeadersInit {
 // HttpOnly cookie ile auth: `credentials: 'include'` tum fetch'lere eklenir
 // ki tarayici e1_session cookie'sini istekle gondersin. Same-origin (nginx
 // proxy ediyor) icin gerek yok aslinda — ama Vite dev server farkli portta
-// olunca cross-origin oluyor ve include zorunlu. Helper ile tek yerden
-// yonetim.
+// olunca cross-origin oluyor ve include zorunlu.
 const FETCH_CREDENTIALS: RequestCredentials = "include";
+
+// Global fetch wrapper — tum API_BASE_URL istekleri otomatik `credentials:
+// include` alir. Boylece her fetch callsite'ini guncelemeden cookie auth
+// her cagrida zorla calisir. authHeaders("") kullanildiginda Authorization
+// header'i gitmez; backend e1_session cookie'sinden kullaniciyi cozer.
+//
+// Backward-compatible: caller `credentials: 'omit'` gibi explicit deger
+// gecirirse onu korur (override edilmez); aksi halde 'include' eklenir.
+function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const opts: RequestInit = {
+    ...init,
+    credentials: init.credentials ?? FETCH_CREDENTIALS,
+  };
+  return fetch(input, opts);
+}
 
 const SESSION_401_TURKISH =
   "Oturum süresi doldu veya geçerli değil. Lütfen sağ üstten çıkış yapıp tekrar giriş yapın.";
@@ -193,7 +207,17 @@ export function saveSession(session: AuthSession, remember: boolean = true): voi
   // Önce her iki depolamayı da temizle ki birden fazla kayıt birbirine karışmasın.
   sessionStorage.removeItem(AUTH_STORAGE_KEY);
   localStorage.removeItem(AUTH_STORAGE_KEY);
-  const payload = JSON.stringify(session);
+  // GUVENLIK: accessToken'i artik sakLAMIYORUZ — backend HttpOnly cookie
+  // (e1_session) ile auth saglar. XSS olursa JS `document.cookie` okuyamaz,
+  // token exfiltrate edilemez. Sadece UI kararlari icin gereken username +
+  // role bilgisi kalir. authHeaders("") zaten Authorization header gondermez,
+  // tarayici cookie'yi otomatik gonderir (`credentials: 'include'`).
+  const safe: AuthSession = {
+    accessToken: "",
+    username: session.username,
+    role: session.role,
+  };
+  const payload = JSON.stringify(safe);
   if (remember) {
     localStorage.setItem(AUTH_STORAGE_KEY, payload);
   } else {
@@ -220,7 +244,7 @@ export function clearSession(): void {
 }
 
 export async function logout(token: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/auth/logout`, {
+  await apiFetch(`${API_BASE_URL}/auth/logout`, {
     method: "POST",
     headers: authHeaders(token),
     // Cookie (e1_session) backend tarafindan delete_cookie ile temizlenir;
@@ -230,7 +254,7 @@ export async function logout(token: string): Promise<void> {
 }
 
 export async function login(username: string, password: string): Promise<AuthSession> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -251,7 +275,7 @@ export async function login(username: string, password: string): Promise<AuthSes
 
 export async function fetchDevices(token: string, gatewayCode?: string): Promise<DeviceRow[]> {
   const endpoint = gatewayCode ? `${API_BASE_URL}/devices?gateway_code=${encodeURIComponent(gatewayCode)}` : `${API_BASE_URL}/devices`;
-  const response = await fetch(endpoint, {
+  const response = await apiFetch(endpoint, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Cihaz listesi alınamadı.");
@@ -282,7 +306,7 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
 }
 
 export async function fetchDeviceModels(token: string): Promise<DeviceModelOption[]> {
-  const response = await fetch(`${API_BASE_URL}/device-models`, {
+  const response = await apiFetch(`${API_BASE_URL}/device-models`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Cihaz modeli listesi alınamadı.");
@@ -310,7 +334,7 @@ export async function createDevice(
     iec104_common_address?: number | null;
   }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/devices`, {
+  const response = await apiFetch(`${API_BASE_URL}/devices`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -338,7 +362,7 @@ export async function updateDevice(
     iec104_common_address?: number | null;
   }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/devices/${deviceCode}`, {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceCode}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -347,7 +371,7 @@ export async function updateDevice(
 }
 
 export async function deleteDevice(token: string, deviceCode: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/devices/${deviceCode}`, {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceCode}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -356,7 +380,7 @@ export async function deleteDevice(token: string, deviceCode: string): Promise<v
 
 
 export async function fetchUsers(token: string): Promise<UserRead[]> {
-  const response = await fetch(`${API_BASE_URL}/users`, {
+  const response = await apiFetch(`${API_BASE_URL}/users`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Kullanıcılar alınamadı.");
@@ -364,7 +388,7 @@ export async function fetchUsers(token: string): Promise<UserRead[]> {
 }
 
 export async function fetchMe(token: string): Promise<UserRead> {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/me`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Kullanıcı bilgisi alınamadı.");
@@ -375,7 +399,7 @@ export async function updateMyProfile(
   token: string,
   payload: { full_name: string; email: string }
 ): Promise<UserRead> {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/me`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -388,7 +412,7 @@ export async function changeMyPassword(
   token: string,
   payload: { current_password: string; new_password: string }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/auth/me/change-password`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/me/change-password`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -397,7 +421,7 @@ export async function changeMyPassword(
 }
 
 export async function updateMyLanguage(token: string, language: string): Promise<UserRead> {
-  const response = await fetch(`${API_BASE_URL}/auth/me/language`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/me/language`, {
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify({ language })
@@ -417,7 +441,7 @@ export async function createUser(
     role: UserRole;
   }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/users`, {
+  const response = await apiFetch(`${API_BASE_URL}/users`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -426,7 +450,7 @@ export async function createUser(
 }
 
 export async function deleteUser(token: string, userId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/users/${userId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -438,7 +462,7 @@ export async function updateUser(
   userId: number,
   payload: { email: string; phone_number?: string | null; full_name: string; role: UserRole }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/users/${userId}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -447,7 +471,7 @@ export async function updateUser(
 }
 
 export async function resetUserPassword(token: string, userId: number, newPassword: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/users/${userId}/reset-password`, {
+  const response = await apiFetch(`${API_BASE_URL}/users/${userId}/reset-password`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ new_password: newPassword })
@@ -456,7 +480,7 @@ export async function resetUserPassword(token: string, userId: number, newPasswo
 }
 
 export async function fetchAlarmEvents(token: string): Promise<AlarmEvent[]> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Alarmlar alınamadı.");
@@ -468,7 +492,7 @@ export async function fetchAlarmEvents(token: string): Promise<AlarmEvent[]> {
 export async function fetchBackups(
   token: string
 ): Promise<import("./types").BackupJob[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/backups`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Yedek listesi alınamadı.");
@@ -478,7 +502,7 @@ export async function fetchBackups(
 export async function createManualBackup(
   token: string
 ): Promise<import("./types").BackupJob> {
-  const response = await fetch(`${API_BASE_URL}/admin/backups`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -487,7 +511,7 @@ export async function createManualBackup(
 }
 
 export async function deleteBackup(token: string, backupId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/admin/backups/${backupId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups/${backupId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -495,7 +519,7 @@ export async function deleteBackup(token: string, backupId: number): Promise<voi
 }
 
 export async function restoreBackup(token: string, backupId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/admin/backups/${backupId}/restore`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups/${backupId}/restore`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -522,7 +546,7 @@ export type RestoreStatus = {
 };
 
 export async function getRestoreStatus(token: string): Promise<RestoreStatus> {
-  const response = await fetch(`${API_BASE_URL}/admin/backups/restore/status`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups/restore/status`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Restore durumu alınamadı.");
@@ -533,7 +557,7 @@ export async function getRestoreStatus(token: string): Promise<RestoreStatus> {
  * eder, Docker `restart: unless-stopped` policy'si ile yeniden baslar.
  * Toplam downtime ~5sn. Native kurulumda exit otomatik kalkis vermez. */
 export async function restartBackend(token: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/admin/system/restart`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/system/restart`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -554,7 +578,7 @@ export async function uploadBackupFile(
 ): Promise<import("./types").BackupJob> {
   const fd = new FormData();
   fd.append("file", file);
-  const response = await fetch(`${API_BASE_URL}/admin/backups/upload`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups/upload`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` }, // Content-Type FormData ile auto
     body: fd
@@ -570,7 +594,7 @@ export async function downloadBackupFile(
 ): Promise<void> {
   // Authorization header'i ile fetch -> blob -> link click ile dosya indir.
   // Direkt <a href> kullanamiyoruz cunku endpoint'te token gerekiyor.
-  const response = await fetch(backupDownloadUrl(backupId), {
+  const response = await apiFetch(backupDownloadUrl(backupId), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw await buildApiError(response, "Yedek indirilemedi.");
@@ -588,7 +612,7 @@ export async function downloadBackupFile(
 export async function fetchBackupSchedule(
   token: string
 ): Promise<import("./types").BackupSchedule> {
-  const response = await fetch(`${API_BASE_URL}/admin/backups/schedule`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups/schedule`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Yedek programı alınamadı.");
@@ -599,7 +623,7 @@ export async function updateBackupSchedule(
   token: string,
   payload: Partial<import("./types").BackupSchedule>
 ): Promise<import("./types").BackupSchedule> {
-  const response = await fetch(`${API_BASE_URL}/admin/backups/schedule`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/backups/schedule`, {
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -615,7 +639,7 @@ export async function fetchFaults(
   status: "active" | "all" | "open" | "closed" = "active"
 ): Promise<import("./types").FaultEvent[]> {
   const url = `${API_BASE_URL}/faults?status=${encodeURIComponent(status)}`;
-  const response = await fetch(url, { headers: authHeaders(token) });
+  const response = await apiFetch(url, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Arızalar alınamadı.");
   return (await response.json()) as import("./types").FaultEvent[];
 }
@@ -623,7 +647,7 @@ export async function fetchFaults(
 export async function fetchFaultStats(
   token: string
 ): Promise<import("./types").FaultStats> {
-  const response = await fetch(`${API_BASE_URL}/faults/stats`, {
+  const response = await apiFetch(`${API_BASE_URL}/faults/stats`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Arıza istatistikleri alınamadı.");
@@ -635,7 +659,7 @@ export async function assignFault(
   faultId: number,
   username: string | null
 ): Promise<import("./types").FaultEvent> {
-  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/assign`, {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/assign`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ assigned_to_username: username })
@@ -649,7 +673,7 @@ export async function updateFaultStatus(
   faultId: number,
   newStatus: string
 ): Promise<import("./types").FaultEvent> {
-  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/status`, {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/status`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ status: newStatus })
@@ -663,7 +687,7 @@ export async function updateFaultNote(
   faultId: number,
   note: string | null
 ): Promise<import("./types").FaultEvent> {
-  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/note`, {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/note`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ note })
@@ -676,7 +700,7 @@ export async function fetchFaultComments(
   token: string,
   faultId: number
 ): Promise<import("./types").FaultComment[]> {
-  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/comments`, {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/comments`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Arıza yorumları alınamadı.");
@@ -688,7 +712,7 @@ export async function addFaultComment(
   faultId: number,
   body: string
 ): Promise<import("./types").FaultComment> {
-  const response = await fetch(`${API_BASE_URL}/faults/${faultId}/comments`, {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/comments`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ body })
@@ -702,7 +726,7 @@ export async function addFaultComment(
 export async function fetchMyNotificationPrefs(
   token: string
 ): Promise<import("./types").UserNotificationPreferences> {
-  const response = await fetch(`${API_BASE_URL}/me/notification-preferences`, {
+  const response = await apiFetch(`${API_BASE_URL}/me/notification-preferences`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Bildirim tercihleri alınamadı.");
@@ -713,7 +737,7 @@ export async function updateMyNotificationPrefs(
   token: string,
   payload: Partial<Omit<import("./types").UserNotificationPreferences, "user_id">>
 ): Promise<import("./types").UserNotificationPreferences> {
-  const response = await fetch(`${API_BASE_URL}/me/notification-preferences`, {
+  const response = await apiFetch(`${API_BASE_URL}/me/notification-preferences`, {
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -727,7 +751,7 @@ export async function fetchUserNotificationPrefs(
   token: string,
   userId: number
 ): Promise<import("./types").UserNotificationPreferences> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/users/${userId}/notification-preferences`,
     { headers: authHeaders(token) }
   );
@@ -741,7 +765,7 @@ export async function updateUserNotificationPrefs(
   userId: number,
   payload: Partial<Omit<import("./types").UserNotificationPreferences, "user_id">>
 ): Promise<import("./types").UserNotificationPreferences> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/users/${userId}/notification-preferences`,
     {
       method: "PUT",
@@ -754,7 +778,7 @@ export async function updateUserNotificationPrefs(
 }
 
 export async function assignAlarm(token: string, alarmId: number, assignedTo: string | null): Promise<AlarmEvent> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}/assign`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/${alarmId}/assign`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ assigned_to: assignedTo })
@@ -764,7 +788,7 @@ export async function assignAlarm(token: string, alarmId: number, assignedTo: st
 }
 
 export async function fetchAlarmComments(token: string, alarmId: number): Promise<AlarmComment[]> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}/comments`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/${alarmId}/comments`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Alarm yorumları alınamadı.");
@@ -772,7 +796,7 @@ export async function fetchAlarmComments(token: string, alarmId: number): Promis
 }
 
 export async function addAlarmComment(token: string, alarmId: number, comment: string): Promise<AlarmComment> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}/comments`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/${alarmId}/comments`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ comment })
@@ -782,7 +806,7 @@ export async function addAlarmComment(token: string, alarmId: number, comment: s
 }
 
 export async function acknowledgeAlarm(token: string, alarmId: number): Promise<AlarmEvent> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}/ack`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/${alarmId}/ack`, {
     method: "PATCH",
     headers: authHeaders(token)
   });
@@ -791,7 +815,7 @@ export async function acknowledgeAlarm(token: string, alarmId: number): Promise<
 }
 
 export async function resetAlarm(token: string, alarmId: number): Promise<AlarmEvent> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}/reset`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/${alarmId}/reset`, {
     method: "PATCH",
     headers: authHeaders(token)
   });
@@ -800,7 +824,7 @@ export async function resetAlarm(token: string, alarmId: number): Promise<AlarmE
 }
 
 export async function deleteAlarm(token: string, alarmId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/${alarmId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/${alarmId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -808,7 +832,7 @@ export async function deleteAlarm(token: string, alarmId: number): Promise<void>
 }
 
 export async function acknowledgeAllAlarms(token: string): Promise<AlarmEvent[]> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/ack-all`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/ack-all`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -817,7 +841,7 @@ export async function acknowledgeAllAlarms(token: string): Promise<AlarmEvent[]>
 }
 
 export async function resetAllAlarms(token: string): Promise<AlarmEvent[]> {
-  const response = await fetch(`${API_BASE_URL}/alarms/events/reset-all`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/reset-all`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -826,7 +850,7 @@ export async function resetAllAlarms(token: string): Promise<AlarmEvent[]> {
 }
 
 export async function fetchSystemEvents(token: string): Promise<SystemEvent[]> {
-  const response = await fetch(`${API_BASE_URL}/events`, {
+  const response = await apiFetch(`${API_BASE_URL}/events`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Sistem olayları alınamadı.");
@@ -834,7 +858,7 @@ export async function fetchSystemEvents(token: string): Promise<SystemEvent[]> {
 }
 
 export async function fetchGateways(token: string): Promise<Gateway[]> {
-  const response = await fetch(`${API_BASE_URL}/gateways`, {
+  const response = await apiFetch(`${API_BASE_URL}/gateways`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Gateway listesi alınamadı.");
@@ -859,7 +883,7 @@ export async function createGateway(
     initiating_port_count?: number;
   }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/gateways`, {
+  const response = await apiFetch(`${API_BASE_URL}/gateways`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -885,7 +909,7 @@ export async function updateGateway(
     initiating_port_count?: number;
   }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/gateways/${gatewayCode}`, {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -894,7 +918,7 @@ export async function updateGateway(
 }
 
 export async function enableGateway(token: string, gatewayCode: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/gateways/${gatewayCode}/enable`, {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/enable`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -902,7 +926,7 @@ export async function enableGateway(token: string, gatewayCode: string): Promise
 }
 
 export async function disableGateway(token: string, gatewayCode: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/gateways/${gatewayCode}/disable`, {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/disable`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -910,7 +934,7 @@ export async function disableGateway(token: string, gatewayCode: string): Promis
 }
 
 export async function deleteGateway(token: string, gatewayCode: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/gateways/${gatewayCode}`, {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -928,7 +952,7 @@ export async function refreshGatewayAllDevices(
   token: string,
   gatewayCode: string
 ): Promise<Gateway> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/gateways/${gatewayCode}/refresh-all`,
     {
       method: "POST",
@@ -962,7 +986,7 @@ export async function downloadGatewayCompose(
   if (opts.fmt) params.set("fmt", opts.fmt);
   if (opts.rabbitmqUrl) params.set("rabbitmq_url", opts.rabbitmqUrl);
 
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/gateways/${gatewayCode}/docker-compose?${params.toString()}`,
     { headers: authHeaders(token) }
   );
@@ -978,7 +1002,7 @@ export async function downloadGatewayCompose(
 }
 
 export async function fetchOutboundTargets(token: string): Promise<OutboundTarget[]> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Outbound hedefleri alınamadı.");
@@ -1024,7 +1048,7 @@ export async function createOutboundTarget(
     iec104_allowed_peers?: string | null;
   } & MqttPayloadFields
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1050,7 +1074,7 @@ export async function updateOutboundTarget(
     iec104_allowed_peers?: string | null;
   } & MqttPayloadFields
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1059,7 +1083,7 @@ export async function updateOutboundTarget(
 }
 
 export async function deleteOutboundTarget(token: string, targetId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1076,7 +1100,7 @@ export async function fetchTopicMappings(
   token: string,
   targetId: number
 ): Promise<OutboundTopicMapping[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings`,
     { headers: authHeaders(token) }
   );
@@ -1096,7 +1120,7 @@ export async function createTopicMapping(
     is_active: boolean;
   }
 ): Promise<OutboundTopicMapping> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings`,
     {
       method: "POST",
@@ -1121,7 +1145,7 @@ export async function updateTopicMapping(
     is_active?: boolean;
   }
 ): Promise<OutboundTopicMapping> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings/${mappingId}`,
     {
       method: "PATCH",
@@ -1138,7 +1162,7 @@ export async function deleteTopicMapping(
   targetId: number,
   mappingId: number
 ): Promise<void> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings/${mappingId}`,
     { method: "DELETE", headers: authHeaders(token) }
   );
@@ -1157,13 +1181,16 @@ export async function uploadMqttCert(
 ): Promise<import("./types").OutboundTarget> {
   const form = new FormData();
   form.append("file", file);
-  // FormData icin Content-Type'i tarayici otomatik (boundary ile) set eder;
-  // authHeaders sadece Authorization veriyor zaten.
-  const response = await fetch(
+  // KRITIK: Multipart icin Content-Type'i set ETME — tarayici boundary ile
+  // otomatik set eder. authHeaders('application/json' iceriyor) → multipart
+  // body'yi JSON gibi parse ettiriyordu, FastAPI 'file required' donuyor.
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const response = await apiFetch(
     `${API_BASE_URL}/outbound-targets/${targetId}/mqtt-cert/${kind}`,
     {
       method: "POST",
-      headers: authHeaders(token),  // Sadece Authorization; Content-Type otomatik
+      headers,
       body: form,
     }
   );
@@ -1171,12 +1198,52 @@ export async function uploadMqttCert(
   return (await response.json()) as import("./types").OutboundTarget;
 }
 
+export type OutboundRuntimeStatus = {
+  connected?: boolean;
+  last_publish_at?: string | null;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+  last_error?: string | null;
+  sent_total?: number;
+  failed_total?: number;
+};
+
+export type OutboundAutoTopic = {
+  device_code: string;
+  source: string;
+  datatype: string;
+  topic: string;
+  is_custom: boolean;
+};
+
+export async function fetchOutboundRuntimeStatus(
+  token: string
+): Promise<Record<number, OutboundRuntimeStatus>> {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/runtime-status`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) throw await buildApiError(response, "Durum bilgisi alinamadi.");
+  return (await response.json()) as Record<number, OutboundRuntimeStatus>;
+}
+
+export async function fetchOutboundAutoTopics(
+  token: string,
+  targetId: number
+): Promise<{ target_id: number; device_count: number; topics: OutboundAutoTopic[] }> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/auto-topics`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Otomatik topic listesi alinamadi.");
+  return await response.json();
+}
+
 export async function deleteMqttCert(
   token: string,
   targetId: number,
   kind: MqttCertKind
 ): Promise<import("./types").OutboundTarget> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/outbound-targets/${targetId}/mqtt-cert/${kind}`,
     { method: "DELETE", headers: authHeaders(token) }
   );
@@ -1185,7 +1252,7 @@ export async function deleteMqttCert(
 }
 
 export async function fetchIec104Runtime(token: string, targetId: number) {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-runtime`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-runtime`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "IEC 104 runtime alınamadı.");
@@ -1200,7 +1267,7 @@ export async function downloadIec104PointsXlsx(
   targetId: number,
   suggestedName: string
 ): Promise<number | null> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.xlsx`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.xlsx`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Sinyal listesi indirilemedi.");
@@ -1224,7 +1291,7 @@ export async function autoAssignDeviceCa(
   targetId: number,
   overwrite: boolean
 ): Promise<{ assigned: number; skipped: number; devices: { code: string; ca: number }[] }> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/auto-assign-device-ca`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/auto-assign-device-ca`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ overwrite, start_at: 1 })
@@ -1240,7 +1307,7 @@ export async function downloadIec104PointsCsv(
   targetId: number,
   suggestedName: string
 ): Promise<number | null> {
-  const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.csv`, {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-points.csv`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "IEC 104 point list indirilemedi.");
@@ -1278,32 +1345,32 @@ export type GridSnapshot = {
 };
 
 export async function fetchGridSnapshot(token: string): Promise<GridSnapshot> {
-  const r = await fetch(`${API_BASE_URL}/grid/snapshot`, { headers: authHeaders(token) });
+  const r = await apiFetch(`${API_BASE_URL}/grid/snapshot`, { headers: authHeaders(token) });
   if (!r.ok) throw await buildApiError(r, "Şebeke topolojisi alınamadı.");
   return (await r.json()) as GridSnapshot;
 }
 
 export async function fetchRegions(token: string): Promise<_Region[]> {
-  const r = await fetch(`${API_BASE_URL}/grid/regions`, { headers: authHeaders(token) });
+  const r = await apiFetch(`${API_BASE_URL}/grid/regions`, { headers: authHeaders(token) });
   if (!r.ok) throw await buildApiError(r, "Bölgeler alınamadı.");
   return (await r.json()) as _Region[];
 }
 export async function createRegion(token: string, payload: Partial<_Region>): Promise<_Region> {
-  const r = await fetch(`${API_BASE_URL}/grid/regions`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/regions`, {
     method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Bölge oluşturulamadı.");
   return (await r.json()) as _Region;
 }
 export async function updateRegion(token: string, id: number, payload: Partial<_Region>): Promise<_Region> {
-  const r = await fetch(`${API_BASE_URL}/grid/regions/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/regions/${id}`, {
     method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Bölge güncellenemedi.");
   return (await r.json()) as _Region;
 }
 export async function deleteRegion(token: string, id: number): Promise<void> {
-  const r = await fetch(`${API_BASE_URL}/grid/regions/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/regions/${id}`, {
     method: "DELETE", headers: authHeaders(token)
   });
   if (!r.ok) throw await buildApiError(r, "Bölge silinemedi.");
@@ -1311,52 +1378,52 @@ export async function deleteRegion(token: string, id: number): Promise<void> {
 
 export async function fetchLines(token: string, regionId?: number): Promise<_Line[]> {
   const url = regionId ? `${API_BASE_URL}/grid/lines?region_id=${regionId}` : `${API_BASE_URL}/grid/lines`;
-  const r = await fetch(url, { headers: authHeaders(token) });
+  const r = await apiFetch(url, { headers: authHeaders(token) });
   if (!r.ok) throw await buildApiError(r, "Hatlar alınamadı.");
   return (await r.json()) as _Line[];
 }
 export async function fetchLineDetail(token: string, lineId: number): Promise<_LineDetail> {
-  const r = await fetch(`${API_BASE_URL}/grid/lines/${lineId}`, { headers: authHeaders(token) });
+  const r = await apiFetch(`${API_BASE_URL}/grid/lines/${lineId}`, { headers: authHeaders(token) });
   if (!r.ok) throw await buildApiError(r, "Hat detayı alınamadı.");
   return (await r.json()) as _LineDetail;
 }
 export async function createLine(token: string, payload: Partial<_Line>): Promise<_Line> {
-  const r = await fetch(`${API_BASE_URL}/grid/lines`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/lines`, {
     method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Hat oluşturulamadı.");
   return (await r.json()) as _Line;
 }
 export async function updateLine(token: string, id: number, payload: Partial<_Line>): Promise<_Line> {
-  const r = await fetch(`${API_BASE_URL}/grid/lines/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/lines/${id}`, {
     method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Hat güncellenemedi.");
   return (await r.json()) as _Line;
 }
 export async function deleteLine(token: string, id: number): Promise<void> {
-  const r = await fetch(`${API_BASE_URL}/grid/lines/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/lines/${id}`, {
     method: "DELETE", headers: authHeaders(token)
   });
   if (!r.ok) throw await buildApiError(r, "Hat silinemedi.");
 }
 
 export async function createPole(token: string, payload: Partial<_Pole>): Promise<_Pole> {
-  const r = await fetch(`${API_BASE_URL}/grid/poles`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/poles`, {
     method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Direk oluşturulamadı.");
   return (await r.json()) as _Pole;
 }
 export async function updatePole(token: string, id: number, payload: Partial<_Pole>): Promise<_Pole> {
-  const r = await fetch(`${API_BASE_URL}/grid/poles/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/poles/${id}`, {
     method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Direk güncellenemedi.");
   return (await r.json()) as _Pole;
 }
 export async function deletePole(token: string, id: number): Promise<void> {
-  const r = await fetch(`${API_BASE_URL}/grid/poles/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/poles/${id}`, {
     method: "DELETE", headers: authHeaders(token)
   });
   if (!r.ok) throw await buildApiError(r, "Direk silinemedi.");
@@ -1367,7 +1434,7 @@ export async function reorderPoles(
   lineId: number,
   items: { pole_id: number; sequence_no: number }[]
 ): Promise<_Pole[]> {
-  const r = await fetch(`${API_BASE_URL}/grid/lines/${lineId}/reorder-poles`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/lines/${lineId}/reorder-poles`, {
     method: "POST", headers: authHeaders(token),
     body: JSON.stringify({ line_id: lineId, items })
   });
@@ -1376,7 +1443,7 @@ export async function reorderPoles(
 }
 
 export async function reversePoles(token: string, lineId: number): Promise<_Pole[]> {
-  const r = await fetch(`${API_BASE_URL}/grid/lines/${lineId}/reverse-poles`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/lines/${lineId}/reverse-poles`, {
     method: "POST", headers: authHeaders(token)
   });
   if (!r.ok) throw await buildApiError(r, "Hat sırası tersine çevrilemedi.");
@@ -1384,21 +1451,21 @@ export async function reversePoles(token: string, lineId: number): Promise<_Pole
 }
 
 export async function createSegment(token: string, payload: Partial<_Segment>): Promise<_Segment> {
-  const r = await fetch(`${API_BASE_URL}/grid/segments`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/segments`, {
     method: "POST", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Segment oluşturulamadı.");
   return (await r.json()) as _Segment;
 }
 export async function updateSegment(token: string, id: number, payload: Partial<_Segment>): Promise<_Segment> {
-  const r = await fetch(`${API_BASE_URL}/grid/segments/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/segments/${id}`, {
     method: "PATCH", headers: authHeaders(token), body: JSON.stringify(payload)
   });
   if (!r.ok) throw await buildApiError(r, "Segment güncellenemedi.");
   return (await r.json()) as _Segment;
 }
 export async function deleteSegment(token: string, id: number): Promise<void> {
-  const r = await fetch(`${API_BASE_URL}/grid/segments/${id}`, {
+  const r = await apiFetch(`${API_BASE_URL}/grid/segments/${id}`, {
     method: "DELETE", headers: authHeaders(token)
   });
   if (!r.ok) throw await buildApiError(r, "Segment silinemedi.");
@@ -1408,7 +1475,7 @@ export async function deleteSegment(token: string, id: number): Promise<void> {
 // GET auth-siz kullanilabilsin; bazi yerlerde token vermeden de cagiriyoruz
 // (login ekrani, header initial fetch). Backend GET /project-settings public.
 export async function fetchProjectSettings(): Promise<import("./types").ProjectSettings> {
-  const response = await fetch(`${API_BASE_URL}/project-settings`);
+  const response = await apiFetch(`${API_BASE_URL}/project-settings`);
   if (!response.ok) throw await buildApiError(response, "Proje ayarları alınamadı.");
   return (await response.json()) as import("./types").ProjectSettings;
 }
@@ -1417,7 +1484,7 @@ export async function updateProjectSettings(
   token: string,
   payload: import("./types").ProjectSettings
 ): Promise<import("./types").ProjectSettings> {
-  const response = await fetch(`${API_BASE_URL}/project-settings`, {
+  const response = await apiFetch(`${API_BASE_URL}/project-settings`, {
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1427,7 +1494,7 @@ export async function updateProjectSettings(
 }
 
 export async function fetchNotificationSettings(token: string): Promise<NotificationSettings> {
-  const response = await fetch(`${API_BASE_URL}/notification-settings`, {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Bildirim ayarları alınamadı.");
@@ -1438,7 +1505,7 @@ export async function updateNotificationSettings(
   token: string,
   payload: NotificationSettings
 ): Promise<NotificationSettings> {
-  const response = await fetch(`${API_BASE_URL}/notification-settings`, {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings`, {
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1451,7 +1518,7 @@ export async function testNotificationSmtp(
   token: string,
   payload: { recipient_email: string; subject?: string; message?: string }
 ): Promise<{ ok: boolean; detail: string }> {
-  const response = await fetch(`${API_BASE_URL}/notification-settings/test-smtp`, {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/test-smtp`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1464,7 +1531,7 @@ export async function testNotificationSms(
   token: string,
   payload: { recipient_phone: string; message?: string }
 ): Promise<{ ok: boolean; detail: string }> {
-  const response = await fetch(`${API_BASE_URL}/notification-settings/test-sms`, {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/test-sms`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1477,7 +1544,7 @@ export async function testNotificationTelegram(
   token: string,
   payload: { chat_id: string; message?: string }
 ): Promise<{ ok: boolean; detail: string }> {
-  const response = await fetch(`${API_BASE_URL}/notification-settings/test-telegram`, {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/test-telegram`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1498,7 +1565,7 @@ export async function discoverTelegramChats(
   token: string,
   payload?: { bot_token?: string }
 ): Promise<{ ok: boolean; detail: string; chats: TelegramDiscoveredChat[] }> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/notification-settings/discover-telegram-chats`,
     {
       method: "POST",
@@ -1519,7 +1586,7 @@ export async function fetchSignals(token: string, model?: string): Promise<Signa
   const url = model
     ? `${API_BASE_URL}/signals?model=${encodeURIComponent(model)}`
     : `${API_BASE_URL}/signals`;
-  const response = await fetch(url, { headers: authHeaders(token) });
+  const response = await apiFetch(url, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Sinyal listesi alınamadı.");
   return (await response.json()) as SignalCatalogRow[];
 }
@@ -1528,7 +1595,7 @@ export async function createSignal(
   token: string,
   payload: Omit<SignalCatalogRow, "id">
 ): Promise<SignalCatalogRow> {
-  const response = await fetch(`${API_BASE_URL}/signals`, {
+  const response = await apiFetch(`${API_BASE_URL}/signals`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1542,7 +1609,7 @@ export async function updateSignal(
   signalKey: string,
   payload: Partial<Omit<SignalCatalogRow, "id" | "key">>
 ): Promise<SignalCatalogRow> {
-  const response = await fetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1552,7 +1619,7 @@ export async function updateSignal(
 }
 
 export async function deleteSignal(token: string, signalKey: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1560,7 +1627,7 @@ export async function deleteSignal(token: string, signalKey: string): Promise<vo
 }
 
 export async function fetchSignalLiveValues(token: string): Promise<SignalLiveRow[]> {
-  const response = await fetch(`${API_BASE_URL}/signals/live`, { headers: authHeaders(token) });
+  const response = await apiFetch(`${API_BASE_URL}/signals/live`, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Canlı sinyal değerleri alınamadı.");
   return (await response.json()) as SignalLiveRow[];
 }
@@ -1569,7 +1636,7 @@ export async function fetchSignalLiveValues(token: string): Promise<SignalLiveRo
  *  metriklerini getirir. Sayfa kapali iken cagirilmaz; psutil hesaplamasi
  *  cok hizli oldugu icin polling 5-10 sn'de tekrarlanabilir. */
 export async function fetchHostStatus(token: string): Promise<HostStatus> {
-  const response = await fetch(`${API_BASE_URL}/system-status/host`, {
+  const response = await apiFetch(`${API_BASE_URL}/system-status/host`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Sunucu kaynak metrikleri alınamadı.");
@@ -1581,7 +1648,7 @@ export async function fetchHostStatus(token: string): Promise<HostStatus> {
  *  paralel kontrol etmez (sirayla, kucuk timeout'la); pratikte 200ms altinda
  *  toplam suren bir cevap doner. */
 export async function fetchServicesStatus(token: string): Promise<ServicesReport> {
-  const response = await fetch(`${API_BASE_URL}/system-status/services`, {
+  const response = await apiFetch(`${API_BASE_URL}/system-status/services`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Servis durumlari alınamadı.");
@@ -1598,7 +1665,7 @@ export async function fetchNotifications(
   if (options?.onlyUnread) params.set("only_unread", "true");
   if (options?.limit != null) params.set("limit", String(options.limit));
   const qs = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(`${API_BASE_URL}/notifications${qs}`, {
+  const response = await apiFetch(`${API_BASE_URL}/notifications${qs}`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Bildirimler alınamadı.");
@@ -1606,7 +1673,7 @@ export async function fetchNotifications(
 }
 
 export async function fetchNotificationUnreadCount(token: string): Promise<number> {
-  const response = await fetch(`${API_BASE_URL}/notifications/unread-count`, {
+  const response = await apiFetch(`${API_BASE_URL}/notifications/unread-count`, {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Okunmamış bildirim sayısı alınamadı.");
@@ -1615,7 +1682,7 @@ export async function fetchNotificationUnreadCount(token: string): Promise<numbe
 }
 
 export async function markNotificationRead(token: string, notificationId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+  const response = await apiFetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -1623,7 +1690,7 @@ export async function markNotificationRead(token: string, notificationId: number
 }
 
 export async function markAllNotificationsRead(token: string): Promise<number> {
-  const response = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+  const response = await apiFetch(`${API_BASE_URL}/notifications/read-all`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -1638,7 +1705,7 @@ export async function resetSignalsToDefaults(token: string): Promise<{
   updated: number;
   total_defaults: number;
 }> {
-  const response = await fetch(`${API_BASE_URL}/signals/reset-to-defaults`, {
+  const response = await apiFetch(`${API_BASE_URL}/signals/reset-to-defaults`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -1653,7 +1720,7 @@ export async function resetSignalsToDefaults(token: string): Promise<{
 
 // ----- Alarm Rules -----
 export async function fetchAlarmRules(token: string): Promise<AlarmRuleRow[]> {
-  const response = await fetch(`${API_BASE_URL}/alarm-rules`, { headers: authHeaders(token) });
+  const response = await apiFetch(`${API_BASE_URL}/alarm-rules`, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Alarm kuralları alınamadı.");
   return (await response.json()) as AlarmRuleRow[];
 }
@@ -1662,7 +1729,7 @@ export async function createAlarmRule(
   token: string,
   payload: Omit<AlarmRuleRow, "id">
 ): Promise<AlarmRuleRow> {
-  const response = await fetch(`${API_BASE_URL}/alarm-rules`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarm-rules`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1676,7 +1743,7 @@ export async function updateAlarmRule(
   ruleId: number,
   payload: Partial<Omit<AlarmRuleRow, "id" | "signal_key">>
 ): Promise<AlarmRuleRow> {
-  const response = await fetch(`${API_BASE_URL}/alarm-rules/${ruleId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarm-rules/${ruleId}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1686,7 +1753,7 @@ export async function updateAlarmRule(
 }
 
 export async function deleteAlarmRule(token: string, ruleId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/alarm-rules/${ruleId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/alarm-rules/${ruleId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1696,13 +1763,13 @@ export async function deleteAlarmRule(token: string, ruleId: number): Promise<vo
 
 // ----- Responsibility Areas -----
 export async function fetchResponsibilityAreas(token: string): Promise<ResponsibilityAreaRow[]> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas`, { headers: authHeaders(token) });
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas`, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Sorumluluk alanları alınamadı.");
   return (await response.json()) as ResponsibilityAreaRow[];
 }
 
 export async function fetchResponsibilityAreaDetail(token: string, areaId: number): Promise<ResponsibilityAreaDetail> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, { headers: authHeaders(token) });
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "Sorumluluk alanı detayı alınamadı.");
   return (await response.json()) as ResponsibilityAreaDetail;
 }
@@ -1711,7 +1778,7 @@ export async function createResponsibilityArea(
   token: string,
   payload: { code: string; name: string; description?: string | null; is_active?: boolean }
 ): Promise<ResponsibilityAreaRow> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1725,7 +1792,7 @@ export async function updateResponsibilityArea(
   areaId: number,
   payload: { name?: string; description?: string | null; is_active?: boolean }
 ): Promise<ResponsibilityAreaRow> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1735,7 +1802,7 @@ export async function updateResponsibilityArea(
 }
 
 export async function deleteResponsibilityArea(token: string, areaId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1743,7 +1810,7 @@ export async function deleteResponsibilityArea(token: string, areaId: number): P
 }
 
 export async function addUserToArea(token: string, areaId: number, userId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/users/${userId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/users/${userId}`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -1751,7 +1818,7 @@ export async function addUserToArea(token: string, areaId: number, userId: numbe
 }
 
 export async function removeUserFromArea(token: string, areaId: number, userId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/users/${userId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/users/${userId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1759,7 +1826,7 @@ export async function removeUserFromArea(token: string, areaId: number, userId: 
 }
 
 export async function addDeviceToArea(token: string, areaId: number, deviceId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/devices/${deviceId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/devices/${deviceId}`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -1767,7 +1834,7 @@ export async function addDeviceToArea(token: string, areaId: number, deviceId: n
 }
 
 export async function removeDeviceFromArea(token: string, areaId: number, deviceId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/devices/${deviceId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/devices/${deviceId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1775,7 +1842,7 @@ export async function removeDeviceFromArea(token: string, areaId: number, device
 }
 
 export async function addRegionToArea(token: string, areaId: number, regionId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/regions/${regionId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/regions/${regionId}`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -1783,7 +1850,7 @@ export async function addRegionToArea(token: string, areaId: number, regionId: n
 }
 
 export async function removeRegionFromArea(token: string, areaId: number, regionId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/regions/${regionId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/regions/${regionId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1791,7 +1858,7 @@ export async function removeRegionFromArea(token: string, areaId: number, region
 }
 
 export async function addLineToArea(token: string, areaId: number, lineId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/lines/${lineId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/lines/${lineId}`, {
     method: "POST",
     headers: authHeaders(token)
   });
@@ -1799,7 +1866,7 @@ export async function addLineToArea(token: string, areaId: number, lineId: numbe
 }
 
 export async function removeLineFromArea(token: string, areaId: number, lineId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/responsibility-areas/${areaId}/lines/${lineId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/responsibility-areas/${areaId}/lines/${lineId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1811,7 +1878,7 @@ export async function removeLineFromArea(token: string, areaId: number, lineId: 
 // yonetir, INSTALLER /all ile herkese erisir.
 
 export async function fetchMyApiKeys(token: string): Promise<import("./types").ApiKey[]> {
-  const response = await fetch(`${API_BASE_URL}/api-keys`, { headers: authHeaders(token) });
+  const response = await apiFetch(`${API_BASE_URL}/api-keys`, { headers: authHeaders(token) });
   if (!response.ok) throw await buildApiError(response, "API anahtarları alınamadı.");
   return (await response.json()) as import("./types").ApiKey[];
 }
@@ -1820,7 +1887,7 @@ export async function createApiKey(
   token: string,
   payload: import("./types").ApiKeyCreatePayload
 ): Promise<import("./types").ApiKeyCreated> {
-  const response = await fetch(`${API_BASE_URL}/api-keys`, {
+  const response = await apiFetch(`${API_BASE_URL}/api-keys`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -1830,7 +1897,7 @@ export async function createApiKey(
 }
 
 export async function revokeApiKey(token: string, keyId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api-keys/${keyId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api-keys/${keyId}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });
@@ -1843,7 +1910,7 @@ export async function setApiKeyActive(
   active: boolean
 ): Promise<import("./types").ApiKey> {
   const action = active ? "enable" : "disable";
-  const response = await fetch(`${API_BASE_URL}/api-keys/${keyId}/${action}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api-keys/${keyId}/${action}`, {
     method: "PATCH",
     headers: authHeaders(token)
   });
@@ -1854,7 +1921,7 @@ export async function setApiKeyActive(
 /** Revoke edilmis API anahtarini listeden kalici sil. Aktif/pasif kayitlar
  *  reddedilir; once iptal edilmis olmali. */
 export async function purgeApiKey(token: string, keyId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api-keys/${keyId}/purge`, {
+  const response = await apiFetch(`${API_BASE_URL}/api-keys/${keyId}/purge`, {
     method: "DELETE",
     headers: authHeaders(token)
   });

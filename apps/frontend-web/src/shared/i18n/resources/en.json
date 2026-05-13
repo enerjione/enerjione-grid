@@ -1216,6 +1216,16 @@
         "legacyTopicHelp": "Old single-topic field — replaced by mapping/template",
         "mappingBtn": "Custom Topic Mapping",
         "mappingBtnTitle": "Per-device/per-signal custom topic mapping for this MQTT target",
+        "autoTopicsBtn": "Auto Topics",
+        "autoTopicsBtnTitle": "Show topics that will be auto-generated from device list",
+        "autoTopicsTitle": "Auto Topics — {{name}}",
+        "autoTopicsHint": "Topics that will be generated for current devices using the active template. Custom mappings are listed separately at the bottom.",
+        "autoTopicsDevice": "Device",
+        "autoTopicsTopic": "Topic",
+        "autoTopicsKind": "Type",
+        "autoTopicsDefault": "Template",
+        "autoTopicsCustom": "Custom",
+        "autoTopicsEmpty": "No devices found or no active template for this target.",
         "mapping": {
           "title": "Custom Topic Mapping",
           "subtitle": "Per-device/per-signal custom topics for {{name}}",
@@ -1288,7 +1298,14 @@
         "whitelistActive": "active ({{count}} IPs)",
         "whitelistOff": "off (any IP allowed)",
         "connected": "Connected SCADA:",
-        "allowedSummary": "Allowed IPs ({{count}})"
+        "allowedSummary": "Allowed IPs ({{count}})",
+        "mqttConnected": "Connected",
+        "mqttDisconnected": "Disconnected",
+        "webhookOk": "Active",
+        "webhookFailed": "Failed",
+        "lastPublish": "Last publish",
+        "lastSuccess": "Last success",
+        "lastError": "Last error"
       },
       "table": {
         "name": "Name",

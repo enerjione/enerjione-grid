@@ -21571,3 +21571,91 @@ th.event-col-category {
     min-height: unset;
   }
 }
+
+/* =====================================================================
+   Outbound 'Durum' sutunu — runtime rozet (MQTT bagli / REST son basari)
+   ===================================================================== */
+.outbound-runtime-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+.outbound-runtime-pill small {
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0;
+  color: inherit;
+  opacity: 0.85;
+}
+.outbound-runtime-pill--ok {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+.outbound-runtime-pill--ok .status-dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+.outbound-runtime-pill--off {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+.outbound-runtime-pill--off .status-dot {
+  background: #94a3b8;
+}
+.outbound-runtime-pill--bad {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+.outbound-runtime-pill--bad .status-dot {
+  background: #dc2626;
+}
+
+/* Auto-topics modal */
+.auto-topics-modal {
+  width: min(820px, 96vw);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.auto-topics-modal h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.auto-topics-modal h3 .material-symbols-outlined {
+  color: #ff8c00;
+  font-variation-settings: "FILL" 1;
+}
+.auto-topics-list {
+  margin-top: 8px;
+}
+.auto-topics-code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #1e293b;
+  word-break: break-all;
+}
+.auto-topics-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #e0e7ff;
+  color: #4338ca;
+}
+.auto-topics-tag--custom {
+  background: #fef3c7;
+  color: #92400e;
+}

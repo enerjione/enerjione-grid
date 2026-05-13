@@ -74,6 +74,9 @@ class _TargetWorker:
     thread: threading.Thread | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
     connected: bool = False
+    last_publish_at: str | None = None  # ISO timestamp — UI durum sutunu icin
+    sent_total: int = 0
+    failed_total: int = 0
 
 
 # Global registry — target_id -> _TargetWorker
@@ -359,37 +362,64 @@ def _flush_once(worker: _TargetWorker) -> None:
     sent = 0
     failed = 0
     for (topic, qos, retain), readings in groups.items():
-        payload = {
-            "event_kind": "telemetry_batch",
-            "count": len(readings),
-            "sent_at": datetime.now(timezone.utc).isoformat(),
-            "readings": readings,
-        }
-        try:
-            result = worker.client.publish(
-                topic, payload=json.dumps(payload, ensure_ascii=False),
-                qos=qos, retain=retain,
-            )
-            if result.rc != 0:
+        # Flat payload: {device_name, timestamp, <signal_name>: <value>, ...}
+        # Sinyal listesi degil, anahtar-deger eslemesi (operator tercihi).
+        # Birden fazla device ayni topic'e dustuyse her birini tek mesajda
+        # birlestirmek anlamli olmaz — kullanici device-bazli yapi istiyor.
+        # Bu yuzden ayni topic icindeki readings'i device_code'a gore alt-gruplara
+        # boluyoruz; her device icin ayri mesaj publish edilir.
+        by_device: dict[str, list[dict[str, Any]]] = {}
+        for r in readings:
+            by_device.setdefault(str(r.get("device_code") or ""), []).append(r)
+        for device_code, dev_readings in by_device.items():
+            # En son source_timestamp'i mesajin timestamp'i olarak kullan;
+            # yoksa flush zamani.
+            latest_ts = None
+            for r in dev_readings:
+                ts = r.get("source_timestamp") or r.get("processed_at")
+                if ts and (latest_ts is None or ts > latest_ts):
+                    latest_ts = ts
+            payload: dict[str, Any] = {
+                "device_name": device_code,
+                "timestamp": latest_ts or datetime.now(timezone.utc).isoformat(),
+            }
+            for r in dev_readings:
+                sk = str(r.get("signal_key") or "")
+                if not sk:
+                    continue
+                val = r.get("value")
+                if val is None:
+                    val = r.get("value_string")
+                payload[sk] = val
+            try:
+                result = worker.client.publish(
+                    topic, payload=json.dumps(payload, ensure_ascii=False),
+                    qos=qos, retain=retain,
+                )
+                if result.rc != 0:
+                    failed += 1
+                    logger.warning(
+                        "mqtt_publish_failed target=%s topic=%s device=%s rc=%d",
+                        snap["name"], topic, device_code, result.rc,
+                    )
+                else:
+                    sent += 1
+            except Exception as exc:  # noqa: BLE001
                 failed += 1
                 logger.warning(
-                    "mqtt_publish_failed target=%s topic=%s rc=%d",
-                    snap["name"], topic, result.rc,
+                    "mqtt_publish_error target=%s topic=%s device=%s error=%s",
+                    snap["name"], topic, device_code, exc,
                 )
-            else:
-                sent += 1
-        except Exception as exc:  # noqa: BLE001
-            failed += 1
-            logger.warning(
-                "mqtt_publish_error target=%s topic=%s error=%s",
-                snap["name"], topic, exc,
-            )
 
     if sent or failed:
         logger.info(
             "mqtt_publisher_flush target=%s groups=%d sent=%d failed=%d",
             snap["name"], len(groups), sent, failed,
         )
+    if sent:
+        worker.last_publish_at = datetime.now(timezone.utc).isoformat()
+    worker.sent_total += sent
+    worker.failed_total += failed
 
 
 # Module-level sentinel — None de gecerli value olabilir.
@@ -479,6 +509,104 @@ def _spawn_worker(target_id: int, snapshot: dict[str, Any],
     with _workers_lock:
         _workers[target_id] = worker
     thread.start()
+
+
+def runtime_status() -> dict[int, dict[str, Any]]:
+    """UI icin canli durum: per-target connected + son publish."""
+    out: dict[int, dict[str, Any]] = {}
+    with _workers_lock:
+        worker_list = list(_workers.items())
+    for tid, w in worker_list:
+        out[tid] = {
+            "connected": bool(w.connected),
+            "last_publish_at": getattr(w, "last_publish_at", None),
+            "sent_total": getattr(w, "sent_total", 0),
+            "failed_total": getattr(w, "failed_total", 0),
+        }
+    return out
+
+
+def auto_topics_for_target(target_id: int, devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Verilen cihaz listesi icin default template ile uretilen topic'leri don.
+
+    UI'daki 'Otomatik Topic'ler' butonu icin. Gercek runtime'da resolver
+    custom mapping varsa onlari da kullanir; bu fonksiyon DEFAULT template
+    onizlemesi icin (operator hangi topic'lerin olusacagini bilsin).
+    """
+    with _workers_lock:
+        worker = _workers.get(target_id)
+    snapshot: dict[str, Any]
+    mappings: list[dict[str, Any]]
+    if worker is not None:
+        snapshot = worker.target_snapshot
+        mappings = worker.mappings
+    else:
+        # Worker aktif degil (passive target) — DB'den oku
+        db = SessionLocal()
+        try:
+            snap, maps = _load_target_with_mappings(db, target_id)
+        finally:
+            db.close()
+        if snap is None:
+            return []
+        snapshot = snap
+        mappings = maps
+
+    prefix = snapshot["mqtt_topic_prefix"]
+    customer = snapshot["mqtt_customer_id"]
+    template = snapshot["mqtt_topic_template"] or DEFAULT_MQTT_TOPIC_TEMPLATE
+
+    seen: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    for dev in devices:
+        device_code = str(dev.get("code") or "")
+        if not device_code:
+            continue
+        # Source/datatype topic'i etkilemiyorsa default tek satir; etkiliyorsa
+        # her tipik kombinasyonu uret.
+        combos: list[tuple[str, str]]
+        if "{source}" in template or "{datatype}" in template:
+            combos = [
+                ("master", "analog"),
+                ("master", "binary"),
+                ("master", "counter"),
+            ]
+        else:
+            combos = [("master", "analog")]
+        for source, datatype in combos:
+            topic = _render_topic_template(
+                template,
+                prefix=prefix, customer=customer, device=device_code,
+                source=source, datatype=datatype,
+            )
+            if topic in seen:
+                continue
+            seen.add(topic)
+            rows.append({
+                "device_code": device_code,
+                "source": source,
+                "datatype": datatype,
+                "topic": topic,
+                "is_custom": False,
+            })
+
+    # Custom mapping'leri de listeye ekle (matched device subset varsa)
+    for m in mappings:
+        topic = _render_topic_template(
+            m["topic"],
+            prefix=prefix, customer=customer,
+            device=", ".join(m["device_codes"]) if m["device_codes"] else "*",
+            source="*", datatype="*",
+        )
+        rows.append({
+            "device_code": ", ".join(m["device_codes"]) or "(tum cihazlar)",
+            "source": "*",
+            "datatype": "*",
+            "topic": topic,
+            "is_custom": True,
+        })
+
+    return rows
 
 
 def refresh_target(target_id: int) -> None:

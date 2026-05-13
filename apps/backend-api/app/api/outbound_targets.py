@@ -89,6 +89,54 @@ def list_outbound_targets(
     return list(db.scalars(stmt).unique().all())
 
 
+@router.get("/runtime-status")
+def outbound_runtime_status(
+    _: User = Depends(require_role(UserRole.INSTALLER)),
+):
+    """UI 'Durum' sutunu icin canli rozet verisi.
+
+    Donen yapi: {target_id: {protocol_specific_fields}}.
+    - MQTT: connected, last_publish_at, sent_total, failed_total
+    - REST/MQTT_dispatch: last_success_at, last_failure_at, last_error, sent_total, failed_total
+    """
+    from app.services import mqtt_publisher_service
+    from app.services.outbound_dispatch_service import delivery_status_snapshot
+
+    mqtt_runtime = mqtt_publisher_service.runtime_status()
+    delivery = delivery_status_snapshot()
+    out: dict[int, dict] = {}
+    for tid, st in mqtt_runtime.items():
+        out.setdefault(tid, {}).update(st)
+    for tid, st in delivery.items():
+        out.setdefault(tid, {}).update(st)
+    return out
+
+
+@router.get("/{target_id}/auto-topics")
+def outbound_auto_topics(
+    target_id: int,
+    _: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """MQTT target icin uretilecek otomatik topic listesi.
+
+    Devices tablosundan tum cihazlari okur, target'in template'ine
+    gore her cihaz icin olusacak topic'leri donderir.
+    """
+    target = db.scalar(select(OutboundTarget).where(OutboundTarget.id == target_id))
+    if target is None:
+        raise HTTPException(status_code=404, detail="Target bulunamadi")
+    if target.protocol != "mqtt":
+        raise HTTPException(status_code=400, detail="Bu endpoint sadece MQTT target icin")
+
+    devices = list(db.scalars(select(Device).order_by(Device.code.asc())).all())
+    device_dicts = [{"code": d.code, "name": d.name} for d in devices]
+
+    from app.services import mqtt_publisher_service
+    rows = mqtt_publisher_service.auto_topics_for_target(target_id, device_dicts)
+    return {"target_id": target_id, "device_count": len(device_dicts), "topics": rows}
+
+
 @router.post("", response_model=OutboundTargetRead, status_code=status.HTTP_201_CREATED)
 def create_outbound_target(
     payload: OutboundTargetCreate,

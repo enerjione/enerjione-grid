@@ -1216,6 +1216,16 @@
         "legacyTopicHelp": "Eski tek topic alanı — yeni mapping/template ile değiştirildi",
         "mappingBtn": "Özel Topic Eşleme",
         "mappingBtnTitle": "Bu MQTT hedefi için cihaz/sinyal bazlı özel topic eşleme",
+        "autoTopicsBtn": "Otomatik Topic'ler",
+        "autoTopicsBtnTitle": "Bu hedef için cihazlara göre üretilecek topic listesini göster",
+        "autoTopicsTitle": "Otomatik Topic'ler — {{name}}",
+        "autoTopicsHint": "Mevcut cihazlar için aktif şablonla üretilecek topic'ler. Özel eşleme kuralları ayrı bir liste olarak en altta gösterilir.",
+        "autoTopicsDevice": "Cihaz",
+        "autoTopicsTopic": "Topic",
+        "autoTopicsKind": "Tip",
+        "autoTopicsDefault": "Şablon",
+        "autoTopicsCustom": "Özel",
+        "autoTopicsEmpty": "Cihaz bulunamadı veya hedefte aktif şablon yok.",
         "mapping": {
           "title": "Özel Topic Eşleme",
           "subtitle": "{{name}} hedefi için cihaz/sinyal bazlı özel topic'ler",
@@ -1288,7 +1298,14 @@
         "whitelistActive": "aktif ({{count}} IP)",
         "whitelistOff": "kapalı (her IP serbest)",
         "connected": "Bağlı SCADA:",
-        "allowedSummary": "İzinli IP'ler ({{count}})"
+        "allowedSummary": "İzinli IP'ler ({{count}})",
+        "mqttConnected": "Bağlı",
+        "mqttDisconnected": "Bağlı değil",
+        "webhookOk": "Aktif",
+        "webhookFailed": "Hata",
+        "lastPublish": "Son yayın",
+        "lastSuccess": "Son başarı",
+        "lastError": "Son hata"
       },
       "table": {
         "name": "Ad",

@@ -1,6 +1,9 @@
 import json
+import threading
 import time
 import urllib.request
+from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +14,36 @@ from app.services.iec104.server import manager as iec104_manager
 
 MAX_RETRY = 3
 BASE_BACKOFF_SECONDS = 0.7
+
+# UI 'Durum' sutunu icin in-memory delivery tracker.
+# Restart sonrasi sifir — bilincli (calisan target'lar 1. event'te kendini gosterir).
+_delivery_status: dict[int, dict[str, Any]] = {}
+_delivery_lock = threading.Lock()
+
+
+def _record_delivery(target_id: int, *, ok: bool, error: str | None = None) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with _delivery_lock:
+        cur = _delivery_status.setdefault(target_id, {
+            "last_success_at": None,
+            "last_failure_at": None,
+            "last_error": None,
+            "sent_total": 0,
+            "failed_total": 0,
+        })
+        if ok:
+            cur["last_success_at"] = now
+            cur["sent_total"] += 1
+        else:
+            cur["last_failure_at"] = now
+            cur["last_error"] = error
+            cur["failed_total"] += 1
+
+
+def delivery_status_snapshot() -> dict[int, dict[str, Any]]:
+    """UI'ya `{target_id: {...}}` snapshot don."""
+    with _delivery_lock:
+        return {tid: dict(v) for tid, v in _delivery_status.items()}
 
 try:
     import paho.mqtt.publish as mqtt_publish
@@ -71,6 +104,7 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
                 i18n_key="outbound_delivered",
                 i18n_params={"event_kind": event_kind, "target": target.name},
             )
+            _record_delivery(target.id, ok=True)
             return
         except Exception as ex:
             last_error = ex
@@ -114,6 +148,7 @@ def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str
         i18n_key="outbound_dead_letter",
         i18n_params={"target": target.name},
     )
+    _record_delivery(target.id, ok=False, error=str(last_error) if last_error else "unknown")
 
 
 def _send_rest(target: OutboundTarget, payload: dict) -> None:

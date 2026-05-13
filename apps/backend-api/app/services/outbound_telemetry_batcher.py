@@ -178,29 +178,64 @@ def _flush_once() -> None:
         if not eligible:
             return
 
-        payload = {
-            "event_kind": "telemetry_batch",
-            "count": len(readings),
-            "window_seconds": FLUSH_WINDOW_SEC,
-            "sent_at": datetime.now(timezone.utc).isoformat(),
-            "readings": readings,
-        }
+        # Cihaz-bazli flat payload: {device_name, timestamp, <signal>: <value>, ...}
+        # Operator tercihi — readings array yerine her cihaz icin tek dict.
+        per_device: dict[str, dict[str, Any]] = {}
+        per_device_ts: dict[str, str] = {}
+        for r in readings:
+            device_code = str(r.get("device_code") or "")
+            if not device_code:
+                continue
+            d = per_device.setdefault(device_code, {})
+            sk = str(r.get("signal_key") or "")
+            if not sk:
+                continue
+            val = r.get("value")
+            if val is None:
+                val = r.get("value_string")
+            d[sk] = val
+            ts = r.get("source_timestamp") or r.get("processed_at")
+            if ts:
+                cur = per_device_ts.get(device_code)
+                if cur is None or ts > cur:
+                    per_device_ts[device_code] = ts
 
+        from app.services.outbound_dispatch_service import _record_delivery
         for target in eligible:
-            try:
-                if target.protocol == "rest":
+            # MQTT batcher mqtt_publisher_service tarafindan ele aliniyor;
+            # telemetry batcher SADECE REST webhook'lara mesaj atar.
+            if target.protocol != "rest":
+                continue
+            ok_count = 0
+            fail_count = 0
+            last_err: str | None = None
+            for device_code, signals in per_device.items():
+                payload: dict[str, Any] = {
+                    "device_name": device_code,
+                    "timestamp": per_device_ts.get(device_code, datetime.now(timezone.utc).isoformat()),
+                    **signals,
+                }
+                try:
                     _send_rest_batch(target, payload)
-                elif target.protocol == "mqtt":
-                    _send_mqtt_batch(target, payload)
-                logger.info(
-                    "outbound_batch_delivered target=%s protocol=%s count=%d",
-                    target.name, target.protocol, len(readings),
-                )
+                    ok_count += 1
+                except Exception as exc:  # noqa: BLE001
+                    fail_count += 1
+                    last_err = str(exc)
+            try:
+                if ok_count:
+                    logger.info(
+                        "outbound_batch_delivered target=%s protocol=rest devices=%d failed=%d",
+                        target.name, ok_count, fail_count,
+                    )
+                    _record_delivery(target.id, ok=True)
+                if fail_count:
+                    raise RuntimeError(last_err or "rest batch failed")
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "outbound_batch_failed target=%s protocol=%s count=%d error=%s",
-                    target.name, target.protocol, len(readings), exc,
+                    "outbound_batch_failed target=%s protocol=rest devices=%d error=%s",
+                    target.name, fail_count, exc,
                 )
+                _record_delivery(target.id, ok=False, error=str(exc))
                 # DB event log — operator UI'da gorebilsin.
                 try:
                     record_event(
