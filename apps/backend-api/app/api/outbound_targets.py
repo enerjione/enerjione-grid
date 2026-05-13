@@ -12,10 +12,17 @@ from app.api.deps import require_role, require_roles
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.enums import UserRole
-from app.models.outbound_target import OutboundTarget
+from app.models.outbound_target import OutboundTarget, OutboundTopicMapping
 from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
-from app.schemas.outbound import OutboundTargetCreate, OutboundTargetRead, OutboundTargetUpdate
+from app.schemas.outbound import (
+    OutboundTargetCreate,
+    OutboundTargetRead,
+    OutboundTargetUpdate,
+    OutboundTopicMappingCreate,
+    OutboundTopicMappingRead,
+    OutboundTopicMappingUpdate,
+)
 from app.services.event_service import record_event
 from app.services.iec104.bootstrap import redeploy_target
 from app.services.iec104.registry import build_point_registry
@@ -23,6 +30,19 @@ from app.services.iec104.server import manager as iec104_manager
 
 router = APIRouter(prefix="/outbound-targets", tags=["outbound-targets"])
 logger = logging.getLogger(__name__)
+
+
+def _refresh_mqtt_target(target_id: int) -> None:
+    """MQTT target degisikligi sonrasi mqtt_publisher_service'i hot-reload et.
+
+    Worker thread'leri DB'den fresh snapshot okumaz — explicit refresh
+    cagirmak gerek. Refresh kendi icinde eski worker'i kapatip yenisini acar.
+    """
+    try:
+        from app.services import mqtt_publisher_service
+        mqtt_publisher_service.refresh_target(target_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("mqtt_publisher_refresh_failed target_id=%s", target_id)
 
 
 def _schedule_iec104_redeploy(db: Session, target_id: int) -> None:
@@ -58,8 +78,13 @@ def list_outbound_targets(
     _: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    stmt = select(OutboundTarget).order_by(OutboundTarget.name.asc())
-    return list(db.scalars(stmt).all())
+    from sqlalchemy.orm import selectinload
+    stmt = (
+        select(OutboundTarget)
+        .options(selectinload(OutboundTarget.topic_mappings))
+        .order_by(OutboundTarget.name.asc())
+    )
+    return list(db.scalars(stmt).unique().all())
 
 
 @router.post("", response_model=OutboundTargetRead, status_code=status.HTTP_201_CREATED)
@@ -89,6 +114,8 @@ def create_outbound_target(
     db.refresh(row)
     if row.protocol == "iec104":
         _schedule_iec104_redeploy(db, row.id)
+    elif row.protocol == "mqtt":
+        _refresh_mqtt_target(row.id)
     return row
 
 
@@ -120,6 +147,8 @@ def update_outbound_target(
     db.refresh(row)
     if row.protocol == "iec104":
         _schedule_iec104_redeploy(db, row.id)
+    elif row.protocol == "mqtt":
+        _refresh_mqtt_target(row.id)
     return row
 
 
@@ -154,6 +183,10 @@ def delete_outbound_target(
         loop = iec104_manager._loop  # noqa: SLF001
         if loop is not None:
             asyncio.run_coroutine_threadsafe(iec104_manager.undeploy(saved_id), loop)
+    elif proto == "mqtt":
+        # MQTT worker'i temizle — refresh_target target yoksa sadece eski
+        # worker'i durdurur (silinmis target icin yeni acmaz).
+        _refresh_mqtt_target(saved_id)
     return None
 
 
@@ -554,3 +587,153 @@ def auto_assign_device_ca(
     # IEC 104 server'i yeniden deploy et — CA degisikligi nokta haritasini etkiler.
     _schedule_iec104_redeploy(db, target.id)
     return {"assigned": assigned, "skipped": skipped, "devices": result_list}
+
+
+# ===========================================================================
+# MQTT Custom Topic Mapping CRUD
+# ===========================================================================
+#
+# Her MQTT outbound target icin operator UI'da "Custom Topic Mapping" modal
+# acabilir; cihaz + sinyal listesi -> ozel topic eslestirmesi yapar. Default
+# template (`{prefix}/{customer}/{device}/{source}/{datatype}/telemetry`)
+# bypass edilir. Birden fazla mapping ayni reading'i yakalarsa hepsine
+# publish edilir.
+#
+# Routes:
+#   GET    /outbound-targets/{tid}/topic-mappings        -> list
+#   POST   /outbound-targets/{tid}/topic-mappings        -> create
+#   PATCH  /outbound-targets/{tid}/topic-mappings/{mid}  -> update
+#   DELETE /outbound-targets/{tid}/topic-mappings/{mid}  -> delete
+
+def _ensure_mqtt_target(db: Session, target_id: int) -> OutboundTarget:
+    target = db.get(OutboundTarget, target_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found")
+    if target.protocol != "mqtt":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Topic mapping yalniz MQTT target'lar icin gecerli.",
+        )
+    return target
+
+
+@router.get(
+    "/{target_id}/topic-mappings",
+    response_model=list[OutboundTopicMappingRead],
+)
+def list_topic_mappings(
+    target_id: int,
+    _: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    _ensure_mqtt_target(db, target_id)
+    return list(
+        db.scalars(
+            select(OutboundTopicMapping)
+            .where(OutboundTopicMapping.target_id == target_id)
+            .order_by(OutboundTopicMapping.id.asc())
+        ).all()
+    )
+
+
+@router.post(
+    "/{target_id}/topic-mappings",
+    response_model=OutboundTopicMappingRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_topic_mapping(
+    target_id: int,
+    payload: OutboundTopicMappingCreate,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    target = _ensure_mqtt_target(db, target_id)
+    row = OutboundTopicMapping(target_id=target_id, **payload.model_dump())
+    db.add(row)
+    db.flush()
+    record_event(
+        db,
+        category="outbound",
+        event_type="mqtt_topic_mapping_created",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"MQTT topic mapping eklendi: {target.name} -> {row.topic}",
+        metadata={
+            "target_id": target_id,
+            "mapping_id": row.id,
+            "topic": row.topic,
+            "device_codes": row.device_codes,
+            "signal_keys": row.signal_keys,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    _refresh_mqtt_target(target_id)
+    return row
+
+
+@router.patch(
+    "/{target_id}/topic-mappings/{mapping_id}",
+    response_model=OutboundTopicMappingRead,
+)
+def update_topic_mapping(
+    target_id: int,
+    mapping_id: int,
+    payload: OutboundTopicMappingUpdate,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    _ensure_mqtt_target(db, target_id)
+    row = db.get(OutboundTopicMapping, mapping_id)
+    if row is None or row.target_id != target_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic mapping not found")
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(row, key, value)
+    record_event(
+        db,
+        category="outbound",
+        event_type="mqtt_topic_mapping_updated",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"MQTT topic mapping guncellendi: {row.topic}",
+        metadata={
+            "target_id": target_id,
+            "mapping_id": mapping_id,
+            "fields": list(updates.keys()),
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    _refresh_mqtt_target(target_id)
+    return row
+
+
+@router.delete(
+    "/{target_id}/topic-mappings/{mapping_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_topic_mapping(
+    target_id: int,
+    mapping_id: int,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    _ensure_mqtt_target(db, target_id)
+    row = db.get(OutboundTopicMapping, mapping_id)
+    if row is None or row.target_id != target_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic mapping not found")
+    topic_snapshot = row.topic
+    db.delete(row)
+    record_event(
+        db,
+        category="outbound",
+        event_type="mqtt_topic_mapping_deleted",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"MQTT topic mapping silindi: {topic_snapshot}",
+        metadata={"target_id": target_id, "mapping_id": mapping_id, "topic": topic_snapshot},
+    )
+    db.commit()
+    _refresh_mqtt_target(target_id)
+    return None

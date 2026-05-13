@@ -1987,6 +1987,7 @@ export function App() {
               <OutboundTargetsPanel
                 targets={outboundTargets}
                 devices={devices}
+                accessToken={session.accessToken}
                 onCreate={handleCreateOutboundTarget}
                 onUpdate={handleUpdateOutboundTarget}
                 onDelete={handleDeleteOutboundTarget}

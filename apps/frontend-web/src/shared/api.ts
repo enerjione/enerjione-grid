@@ -941,6 +941,26 @@ export async function fetchOutboundTargets(token: string): Promise<OutboundTarge
   return (await response.json()) as OutboundTarget[];
 }
 
+/** MQTT-specific alanlar create + update payload'larina opsiyonel eklenir.
+ *  Tum alanlar opsiyonel — REST/IEC104 target'larda gonderilmez. */
+export type MqttPayloadFields = {
+  mqtt_port?: number | null;
+  mqtt_username?: string | null;
+  mqtt_password?: string | null;
+  mqtt_client_id?: string | null;
+  mqtt_tls_enabled?: boolean;
+  mqtt_tls_insecure?: boolean;
+  mqtt_tls_ca_path?: string | null;
+  mqtt_tls_cert_path?: string | null;
+  mqtt_tls_key_path?: string | null;
+  mqtt_keepalive_sec?: number;
+  mqtt_connect_timeout_sec?: number;
+  mqtt_publish_interval_sec?: number;
+  mqtt_topic_template?: string | null;
+  mqtt_topic_prefix?: string;
+  mqtt_customer_id?: string | null;
+};
+
 export async function createOutboundTarget(
   token: string,
   payload: {
@@ -958,7 +978,7 @@ export async function createOutboundTarget(
     listen_port?: number | null;
     iec104_common_address?: number | null;
     iec104_allowed_peers?: string | null;
-  }
+  } & MqttPayloadFields
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/outbound-targets`, {
     method: "POST",
@@ -984,7 +1004,7 @@ export async function updateOutboundTarget(
     listen_port?: number | null;
     iec104_common_address?: number | null;
     iec104_allowed_peers?: string | null;
-  }
+  } & MqttPayloadFields
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/outbound-targets/${targetId}`, {
     method: "PATCH",
@@ -1000,6 +1020,85 @@ export async function deleteOutboundTarget(token: string, targetId: number): Pro
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "Outbound hedef silinemedi.");
+}
+
+// ===========================================================================
+// MQTT custom topic mappings — operator UI "Custom Topic Mapping" modal
+// ===========================================================================
+
+import type { OutboundTopicMapping } from "./types";
+
+export async function fetchTopicMappings(
+  token: string,
+  targetId: number
+): Promise<OutboundTopicMapping[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Topic mapping listesi alınamadı.");
+  return (await response.json()) as OutboundTopicMapping[];
+}
+
+export async function createTopicMapping(
+  token: string,
+  targetId: number,
+  payload: {
+    topic: string;
+    device_codes: string;
+    signal_keys: string;
+    qos?: number | null;
+    retain?: boolean | null;
+    is_active: boolean;
+  }
+): Promise<OutboundTopicMapping> {
+  const response = await fetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) throw await buildApiError(response, "Topic mapping eklenemedi.");
+  return (await response.json()) as OutboundTopicMapping;
+}
+
+export async function updateTopicMapping(
+  token: string,
+  targetId: number,
+  mappingId: number,
+  payload: {
+    topic?: string;
+    device_codes?: string;
+    signal_keys?: string;
+    qos?: number | null;
+    retain?: boolean | null;
+    is_active?: boolean;
+  }
+): Promise<OutboundTopicMapping> {
+  const response = await fetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings/${mappingId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) throw await buildApiError(response, "Topic mapping güncellenemedi.");
+  return (await response.json()) as OutboundTopicMapping;
+}
+
+export async function deleteTopicMapping(
+  token: string,
+  targetId: number,
+  mappingId: number
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/topic-mappings/${mappingId}`,
+    { method: "DELETE", headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Topic mapping silinemedi.");
 }
 
 export async function fetchIec104Runtime(token: string, targetId: number) {

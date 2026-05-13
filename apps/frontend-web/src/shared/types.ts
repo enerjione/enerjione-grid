@@ -260,6 +260,20 @@ export type Gateway = {
   initiating_port_count?: number;
 };
 
+/** MQTT outbound target icin custom topic mapping satiri.
+ *  Operator UI "Custom Topic Mapping" modal'inda her satir bir mapping.
+ *  device_codes/signal_keys CSV (bos = tum cihazlar/sinyaller). */
+export type OutboundTopicMapping = {
+  id: number;
+  target_id: number;
+  topic: string;
+  device_codes: string;
+  signal_keys: string;
+  qos: number | null;
+  retain: boolean | null;
+  is_active: boolean;
+};
+
 export type OutboundTarget = {
   id: number;
   name: string;
@@ -278,6 +292,26 @@ export type OutboundTarget = {
   iec104_common_address?: number | null;
   /** Virgulle ayrilmis IP whitelist; bos = serbest. */
   iec104_allowed_peers?: string | null;
+  // MQTT hedefi icin (protocol === "mqtt"):
+  mqtt_port?: number | null;
+  mqtt_username?: string | null;
+  mqtt_password?: string | null;
+  mqtt_client_id?: string | null;
+  mqtt_tls_enabled?: boolean;
+  mqtt_tls_insecure?: boolean;
+  mqtt_tls_ca_path?: string | null;
+  mqtt_tls_cert_path?: string | null;
+  mqtt_tls_key_path?: string | null;
+  mqtt_keepalive_sec?: number;
+  mqtt_connect_timeout_sec?: number;
+  /** Per-target periyodik publish saniye. 0 = anlik. */
+  mqtt_publish_interval_sec?: number;
+  /** Topic template — variables: {prefix} {customer} {device} {source} {datatype} {signal}. */
+  mqtt_topic_template?: string | null;
+  mqtt_topic_prefix?: string;
+  mqtt_customer_id?: string | null;
+  /** Liste sayfasinda mapping'ler de yuklenir (selectinload). */
+  topic_mappings?: OutboundTopicMapping[];
 };
 
 export type Iec104RuntimeStatus = {
