@@ -1145,14 +1145,6 @@
         "mqtt": "MQTT",
         "iec104": "IEC 60870-5-104"
       },
-      "webhook": {
-        "hintToggle": "Integration Helper",
-        "hintSubtitle": "What the webhook looks like on your side — sample payload and receiver code",
-        "payloadTitle": "Sample Payload",
-        "payloadDesc": "JSON body delivered to your endpoint",
-        "receiverTitle": "Sample Receiver",
-        "receiverDesc": "Python (FastAPI) — with token validation"
-      },
       "form": {
         "name": "Target Name",
         "protocol": "Protocol",

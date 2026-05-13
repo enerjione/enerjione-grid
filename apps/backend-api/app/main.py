@@ -114,6 +114,9 @@ def create_tables():
     with engine.begin() as connection:
         # Keep Windows-first setup easy by ensuring newly added columns exist.
         connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number VARCHAR(32)"))
+        # Brute-force koruma kolonlari (account lockout)
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_count INTEGER NOT NULL DEFAULT 0"))
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS assigned_to VARCHAR(120)"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS acknowledged BOOLEAN NOT NULL DEFAULT FALSE"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS reset BOOLEAN NOT NULL DEFAULT FALSE"))
@@ -318,6 +321,41 @@ def create_tables():
         # Whitelist (NULL/'' = serbest)
         connection.execute(
             text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS iec104_allowed_peers VARCHAR(2000)")
+        )
+        # MQTT auth/TLS/topic-template/periyot kolonlari (yeni)
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_port INTEGER"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_username VARCHAR(255)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_password VARCHAR(500)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_client_id VARCHAR(255)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_tls_enabled BOOLEAN NOT NULL DEFAULT FALSE"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_tls_insecure BOOLEAN NOT NULL DEFAULT FALSE"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_tls_ca_path VARCHAR(500)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_tls_cert_path VARCHAR(500)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_tls_key_path VARCHAR(500)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_keepalive_sec INTEGER NOT NULL DEFAULT 60"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_connect_timeout_sec INTEGER NOT NULL DEFAULT 10"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_publish_interval_sec INTEGER NOT NULL DEFAULT 10"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_topic_template VARCHAR(500)"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_topic_prefix VARCHAR(60) NOT NULL DEFAULT 'e1'"))
+        connection.execute(text("ALTER TABLE outbound_targets ADD COLUMN IF NOT EXISTS mqtt_customer_id VARCHAR(120)"))
+        # MQTT custom topic mapping tablosu (ORM Base.metadata.create_all
+        # yapmis olabilir; idempotent CREATE IF NOT EXISTS yine de garanti).
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS outbound_topic_mappings ("
+                "id SERIAL PRIMARY KEY, "
+                "target_id INTEGER NOT NULL REFERENCES outbound_targets(id) ON DELETE CASCADE, "
+                "topic VARCHAR(500) NOT NULL, "
+                "device_codes TEXT NOT NULL DEFAULT '', "
+                "signal_keys TEXT NOT NULL DEFAULT '', "
+                "qos INTEGER, "
+                "retain BOOLEAN, "
+                "is_active BOOLEAN NOT NULL DEFAULT TRUE"
+                ")"
+            )
+        )
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_outbound_topic_mappings_target_id ON outbound_topic_mappings(target_id)")
         )
         # Proje ayarlari (singleton; logo + isimler + batarya esikleri)
         connection.execute(
@@ -820,8 +858,8 @@ def stop_telemetry_consumer():
 
 @app.on_event("startup")
 def start_outbound_telemetry_batcher():
-    """Telemetry webhook/MQTT batch dispatcher — 5sn pencerede degisik
-    readings'i biriktirir ve aktif outbound target'lara tek POST/publish atar."""
+    """Telemetry REST webhook batch dispatcher — 5sn pencerede degisik
+    readings'i biriktirir ve aktif REST outbound target'lara tek POST atar."""
     from app.services import outbound_telemetry_batcher
     outbound_telemetry_batcher.start()
 
@@ -830,6 +868,21 @@ def start_outbound_telemetry_batcher():
 def stop_outbound_telemetry_batcher():
     from app.services import outbound_telemetry_batcher
     outbound_telemetry_batcher.stop()
+
+
+@app.on_event("startup")
+def start_mqtt_publisher():
+    """MQTT outbound publisher — her aktif MQTT target icin persistent client
+    + per-target periyodik flush (publish_interval_sec). Custom topic mapping
+    + template engine icerir."""
+    from app.services import mqtt_publisher_service
+    mqtt_publisher_service.start()
+
+
+@app.on_event("shutdown")
+def stop_mqtt_publisher():
+    from app.services import mqtt_publisher_service
+    mqtt_publisher_service.stop()
 
 
 @app.on_event("startup")

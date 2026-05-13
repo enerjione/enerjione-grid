@@ -1145,14 +1145,6 @@
         "mqtt": "MQTT",
         "iec104": "IEC 60870-5-104"
       },
-      "webhook": {
-        "hintToggle": "Entegrasyon Yardımcısı",
-        "hintSubtitle": "Webhook tarafınızda nasıl görünür — örnek payload ve alıcı kodu",
-        "payloadTitle": "Örnek Payload",
-        "payloadDesc": "Sistemden tarafınıza gelen JSON gövdesi",
-        "receiverTitle": "Örnek Alıcı",
-        "receiverDesc": "Python (FastAPI) — token doğrulamalı"
-      },
       "form": {
         "name": "Hedef Adı",
         "protocol": "Protokol",

@@ -4,7 +4,7 @@ from app.models.device import Device
 from app.models.gateway import Gateway
 from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.notification_settings import NotificationSettings
-from app.models.outbound_target import OutboundTarget
+from app.models.outbound_target import OutboundTarget, OutboundTopicMapping
 from app.models.outbox_event import OutboxEvent
 from app.models.grid_topology import Line, LineSegment, Pole, Region
 from app.models.processed_message import ProcessedMessage
@@ -23,6 +23,7 @@ __all__ = [
     "GatewayIngestBatch",
     "NotificationSettings",
     "OutboundTarget",
+    "OutboundTopicMapping",
     "OutboxEvent",
     "ProcessedMessage",
     "ProjectSettings",
