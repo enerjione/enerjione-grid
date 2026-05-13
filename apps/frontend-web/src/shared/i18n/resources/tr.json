@@ -131,6 +131,22 @@
     "reviewTargetCount": "Hedef sayısı",
     "back": "Geri",
     "next": "İleri",
+    "template": {
+      "pickLabel": "Şablon",
+      "none": "— Seçilmedi —",
+      "saveAs": "Şablon Olarak Kaydet",
+      "saveModalTitle": "Şablon Olarak Kaydet",
+      "saveModalHint": "Bu mesajı ve kanal seçimlerini kaydet, sonra tek tıkla yeniden kullan.",
+      "nameLabel": "Şablon Adı",
+      "namePlaceholder": "Örn: Planlı Kesinti Duyurusu",
+      "nameRequired": "Şablon adı boş olamaz.",
+      "subjectMessageRequired": "Şablon kaydetmek için önce başlık ve mesaj girilmeli.",
+      "saveWithTarget": "Mevcut hedef seçimini de kaydet (ekipler / kullanıcılar)",
+      "saved": "Şablon kaydedildi: {{name}}",
+      "deleted": "Şablon silindi.",
+      "deleteBtn": "Şablonu sil",
+      "deleteConfirm": "{{name}} şablonunu silmek istiyor musun?"
+    },
     "steps": {
       "message": "Mesaj",
       "channels": "Kanallar",

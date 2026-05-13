@@ -1,5 +1,6 @@
 from app.models.alarm import AlarmComment, AlarmEvent
 from app.models.alarm_rule import AlarmRule
+from app.models.bulk_notification_template import BulkNotificationTemplate
 from app.models.device import Device
 from app.models.gateway import Gateway
 from app.models.gateway_ingest_batch import GatewayIngestBatch
@@ -37,4 +38,5 @@ __all__ = [
     "AlarmEvent",
     "AlarmComment",
     "SystemEvent",
+    "BulkNotificationTemplate",
 ]

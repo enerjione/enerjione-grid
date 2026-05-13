@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 
 import {
   createLine,
@@ -884,6 +885,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       />
                     </LayersControl.BaseLayer>
                   </LayersControl>
+                  <MapLayerSwitchFix />
 
                   {/* Hat secildiginde haritayi otomatik olarak hattin tum
                       direklerini kapsayan alana zoomla. */}

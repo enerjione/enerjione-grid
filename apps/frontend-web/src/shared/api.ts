@@ -1352,6 +1352,67 @@ export async function sendBulkNotification(
   return (await response.json()) as BulkNotifyResult;
 }
 
+// ---- Templates ----
+
+export type BulkNotifyTemplateTarget = {
+  user_ids: number[];
+  team_ids: number[];
+  send_to_all: boolean;
+};
+
+export type BulkNotifyTemplate = {
+  id: number;
+  name: string;
+  subject: string;
+  message: string;
+  channels: BulkNotifyChannel[];
+  target: BulkNotifyTemplateTarget | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BulkNotifyTemplateCreate = {
+  name: string;
+  subject: string;
+  message: string;
+  channels: BulkNotifyChannel[];
+  target?: BulkNotifyTemplateTarget | null;
+};
+
+export async function listBulkNotifyTemplates(
+  token: string
+): Promise<BulkNotifyTemplate[]> {
+  const response = await apiFetch(`${API_BASE_URL}/bulk-notifications/templates`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablonlar alınamadı.");
+  return (await response.json()) as BulkNotifyTemplate[];
+}
+
+export async function createBulkNotifyTemplate(
+  token: string,
+  payload: BulkNotifyTemplateCreate
+): Promise<BulkNotifyTemplate> {
+  const response = await apiFetch(`${API_BASE_URL}/bulk-notifications/templates`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablon kaydedilemedi.");
+  return (await response.json()) as BulkNotifyTemplate;
+}
+
+export async function deleteBulkNotifyTemplate(
+  token: string,
+  templateId: number
+): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/bulk-notifications/templates/${templateId}`,
+    { method: "DELETE", headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Şablon silinemedi.");
+}
+
 export async function fetchIec104Runtime(token: string, targetId: number) {
   const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-runtime`, {
     headers: authHeaders(token)

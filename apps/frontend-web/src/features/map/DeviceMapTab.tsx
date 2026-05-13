@@ -5,6 +5,7 @@ import L from "leaflet";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
 import type { GridSnapshot } from "../../shared/api";
+import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { locateDevice } from "../../shared/geoLookup";
 
@@ -129,6 +130,7 @@ function MapInvalidator({ deps }: { deps: unknown[] }) {
   }, deps);
   return null;
 }
+
 
 /**
  * Sayfa ilk yüklendiğinde (cihaz / topoloji konum bilgileri geldiği anda)
@@ -1052,6 +1054,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             override={selectedDevice ? deviceLocationOverride.get(selectedDevice.id) : undefined}
           />
           <MapInvalidator deps={[devices.length]} />
+          <MapLayerSwitchFix />
           <AutoFitOnLoad points={autoFitPoints} hasSelection={Boolean(selectedDevice)} />
 
           {/* Hat polylineları (her edge bagimsiz):

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
+import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 
 import type { GridSnapshot } from "../../shared/api";
 import type { AlarmEvent, DeviceRow, FaultComment, FaultEvent, UserRead } from "../../shared/types";
@@ -556,6 +557,7 @@ export function FaultDetailModal({
                         />
                       </LayersControl.BaseLayer>
                     </LayersControl>
+                    <MapLayerSwitchFix />
                     {/* Sırayla: pre yeşil, ariza kirmizi kesik, post yeşil.
                         Üç parça hattin gercek geometrisini takip eder; eski
                         from->to duz cizgi yanlistı. */}

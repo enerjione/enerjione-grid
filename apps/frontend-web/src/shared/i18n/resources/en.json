@@ -131,6 +131,22 @@
     "reviewTargetCount": "Target count",
     "back": "Back",
     "next": "Next",
+    "template": {
+      "pickLabel": "Template",
+      "none": "— None —",
+      "saveAs": "Save as Template",
+      "saveModalTitle": "Save as Template",
+      "saveModalHint": "Save this message and channel choices to reuse with a single click.",
+      "nameLabel": "Template name",
+      "namePlaceholder": "e.g. Planned Outage Announcement",
+      "nameRequired": "Template name is required.",
+      "subjectMessageRequired": "Enter subject and message before saving as template.",
+      "saveWithTarget": "Also save current recipient selection (teams / users)",
+      "saved": "Template saved: {{name}}",
+      "deleted": "Template deleted.",
+      "deleteBtn": "Delete template",
+      "deleteConfirm": "Delete template {{name}}?"
+    },
     "steps": {
       "message": "Message",
       "channels": "Channels",

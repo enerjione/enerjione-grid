@@ -15,11 +15,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useToast } from "../../components/ToastProvider";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import {
+  createBulkNotifyTemplate,
+  deleteBulkNotifyTemplate,
   fetchResponsibilityAreas,
   fetchUsers,
+  listBulkNotifyTemplates,
   sendBulkNotification,
   type BulkNotifyChannel,
+  type BulkNotifyTemplate,
 } from "../../shared/api";
 import type { ResponsibilityAreaRow, UserRead, UserRole } from "../../shared/types";
 
@@ -54,14 +59,28 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
   const [userSearch, setUserSearch] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
 
+  // Sablonlar
+  const [templates, setTemplates] = useState<BulkNotifyTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | "">("");
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateNameInput, setTemplateNameInput] = useState("");
+  const [templateSaving, setTemplateSaving] = useState(false);
+  // Hedef de sablonla kaydedilsin mi (opsiyonel)
+  const [saveWithTarget, setSaveWithTarget] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchUsers(accessToken), fetchResponsibilityAreas(accessToken)])
-      .then(([u, a]) => {
+    Promise.all([
+      fetchUsers(accessToken),
+      fetchResponsibilityAreas(accessToken),
+      listBulkNotifyTemplates(accessToken).catch(() => [] as BulkNotifyTemplate[]),
+    ])
+      .then(([u, a, tpl]) => {
         if (cancelled) return;
         setUsers(u);
         setAreas(a);
+        setTemplates(tpl);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -74,6 +93,73 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
       cancelled = true;
     };
   }, [accessToken, t, toast]);
+
+  const applyTemplate = (id: number | "") => {
+    setSelectedTemplateId(id);
+    if (id === "") return;
+    const tpl = templates.find((x) => x.id === id);
+    if (!tpl) return;
+    setSubject(tpl.subject);
+    setMessage(tpl.message);
+    setChannels(new Set(tpl.channels));
+    if (tpl.target) {
+      setSelectedUserIds(new Set(tpl.target.user_ids));
+      setSelectedAreaIds(new Set(tpl.target.team_ids));
+      setSendToAll(Boolean(tpl.target.send_to_all));
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    const name = templateNameInput.trim();
+    if (!name) {
+      toast.error(t("bulkNotify.template.nameRequired"));
+      return;
+    }
+    if (!subject.trim() || !message.trim()) {
+      toast.error(t("bulkNotify.template.subjectMessageRequired"));
+      return;
+    }
+    setTemplateSaving(true);
+    try {
+      const target = saveWithTarget
+        ? {
+            user_ids: Array.from(selectedUserIds),
+            team_ids: Array.from(selectedAreaIds),
+            send_to_all: sendToAll,
+          }
+        : null;
+      const created = await createBulkNotifyTemplate(accessToken, {
+        name,
+        subject: subject.trim(),
+        message: message.trim(),
+        channels: Array.from(channels),
+        target,
+      });
+      setTemplates((prev) => [created, ...prev]);
+      setSelectedTemplateId(created.id);
+      setTemplateNameInput("");
+      setSaveTemplateOpen(false);
+      toast.success(t("bulkNotify.template.saved", { name: created.name }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.errorOccurred"));
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: number) => {
+    const tpl = templates.find((x) => x.id === id);
+    if (!tpl) return;
+    if (!(await asyncConfirm(t("bulkNotify.template.deleteConfirm", { name: tpl.name })))) return;
+    try {
+      await deleteBulkNotifyTemplate(accessToken, id);
+      setTemplates((prev) => prev.filter((x) => x.id !== id));
+      if (selectedTemplateId === id) setSelectedTemplateId("");
+      toast.success(t("bulkNotify.template.deleted"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.errorOccurred"));
+    }
+  };
 
   const toggleChannel = (ch: BulkNotifyChannel) => {
     setChannels((prev) => {
@@ -240,6 +326,48 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
             <div className="bulk-notify-card-head">
               <span className="material-symbols-outlined">edit_note</span>
               <strong>{t("bulkNotify.messageSection")}</strong>
+              <div className="bulk-notify-template-controls">
+                <label className="bulk-notify-template-pick">
+                  <span>{t("bulkNotify.template.pickLabel")}</span>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      applyTemplate(v === "" ? "" : Number(v));
+                    }}
+                  >
+                    <option value="">{t("bulkNotify.template.none")}</option>
+                    {templates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedTemplateId !== "" ? (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    title={t("bulkNotify.template.deleteBtn")}
+                    onClick={() => void handleDeleteTemplate(selectedTemplateId as number)}
+                  >
+                    <span className="material-symbols-outlined">delete</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => {
+                    setTemplateNameInput(subject.trim().slice(0, 80) || "");
+                    setSaveTemplateOpen(true);
+                  }}
+                  disabled={!subject.trim() || !message.trim()}
+                  title={t("bulkNotify.template.saveAs")}
+                >
+                  <span className="material-symbols-outlined">bookmark_add</span>
+                  {t("bulkNotify.template.saveAs")}
+                </button>
+              </div>
             </div>
             <label className="bulk-notify-field">
               <span>{t("bulkNotify.subject")}</span>
@@ -262,6 +390,66 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
                 placeholder={t("bulkNotify.messagePlaceholder")}
               />
             </label>
+          </div>
+        ) : null}
+
+        {/* Sablon kaydet modal */}
+        {saveTemplateOpen ? (
+          <div className="settings-modal-backdrop" onClick={() => setSaveTemplateOpen(false)}>
+            <div
+              className="settings-modal"
+              style={{ width: "min(440px, 92vw)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3>{t("bulkNotify.template.saveModalTitle")}</h3>
+              <p className="helper-text">{t("bulkNotify.template.saveModalHint")}</p>
+              <label className="bulk-notify-field">
+                <span>{t("bulkNotify.template.nameLabel")}</span>
+                <input
+                  type="text"
+                  value={templateNameInput}
+                  onChange={(e) => setTemplateNameInput(e.target.value)}
+                  maxLength={120}
+                  autoFocus
+                  placeholder={t("bulkNotify.template.namePlaceholder")}
+                />
+              </label>
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 13,
+                  color: "#475569",
+                  marginTop: 8,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={saveWithTarget}
+                  onChange={(e) => setSaveWithTarget(e.target.checked)}
+                />
+                <span>{t("bulkNotify.template.saveWithTarget")}</span>
+              </label>
+              <div className="settings-actions">
+                <button
+                  type="button"
+                  onClick={() => setSaveTemplateOpen(false)}
+                  disabled={templateSaving}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => void handleSaveTemplate()}
+                  disabled={templateSaving || !templateNameInput.trim()}
+                >
+                  {templateSaving ? t("common.saving") : t("common.save")}
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
 
