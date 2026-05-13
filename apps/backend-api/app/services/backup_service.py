@@ -398,14 +398,15 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     except Exception:  # noqa: BLE001
         logger.exception("engine_dispose_before_restore_failed")
 
-    # 2. Hedef DB'ye yeni connection acilmasini engelle (worker'lar reconnect
-    # denerse reddedilir). Aksi halde terminate sonrasi hemen yeniden baglanip
-    # DROP lock'larini bloklarlar.
-    _sub("Veritabanına yeni bağlantı kabul etmek geçici olarak kapatıldı...")
-    _set_db_allow_connections(db, False)
-
-    # 3. Worker connection'larini kill et — yeni connection blocked oldugu icin
-    # bu kez geri donemezler, pg_restore TEMIZ lock'a sahip olur.
+    # 2. Worker connection'larini kill et.
+    # NOT: ALLOW_CONNECTIONS=false KULLANMIYORUZ — superuser olmayan user'larla
+    # pg_restore'un kendisi de bu DB'ye baglanamaz, FATAL hata alir
+    # ("database is not currently accepting connections"). Worker'larin
+    # reconnect denemesini engelleyecek baska bir mekanizma yok; bunun
+    # yerine arka plan thread'i pg_restore boyunca her 1sn worker'lari
+    # terminate eder. Kisa loop sayesinde worker reconnect olur olmaz tekrar
+    # kill edilir, lock'a girip pg_restore'u bloklayamaz.
+    _sub("Aktif veritabanı bağlantıları kapatılıyor (worker'lar restore boyunca block'lu)...")
     terminated = _terminate_other_connections(db)
     if terminated > 0:
         logger.info("backup_restore_terminated_connections count=%d", terminated)
@@ -413,7 +414,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     else:
         _sub("Aktif bağlantı yok; pg_restore başlatılıyor...")
 
-    # 4. Legacy role'leri ensure
+    # 3. Legacy role'leri ensure
     _ensure_legacy_roles_exist(db)
 
     pg_restore = os.getenv("PG_RESTORE", "pg_restore")
@@ -447,7 +448,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     # sub-step mesaji olarak yansit. --verbose ile pg_restore "creating TABLE
     # devices", "processing data for ..." gibi satirlar basar.
     import threading as _threading
-    _sub("pg_restore başlatılıyor (--single-transaction, --exit-on-error)...")
+    _sub("pg_restore başlatılıyor (--jobs=4, --verbose)...")
     try:
         proc = subprocess.Popen(
             cmd,
@@ -464,6 +465,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
 
     stderr_lines: list[str] = []
     last_pretty_msg = [""]
+    stop_terminate_loop = _threading.Event()
 
     def _stderr_reader() -> None:
         """stderr satir satir oku, pg_restore'un --verbose ciktilarini tracker'a yolla."""
@@ -501,8 +503,59 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
         except Exception:  # noqa: BLE001
             pass
 
+    def _terminate_loop() -> None:
+        """pg_restore calistigi sure boyunca her 1.5sn'de worker connection'larini
+        yeniden kill et. Worker'lar (tag-engine/alarm-service/...) auto-reconnect
+        eder; yeni baglantilar DROP TABLE/CONSTRAINT lock'larini bloklar. Loop
+        sayesinde reconnect olur olmaz tekrar kapatilirlar — pg_restore TEMIZ
+        lock alabilir. pg_restore'un kendi connection'i (psql user) hep ayakta,
+        cunku _terminate_other_connections pid != pg_backend_pid() filtresi
+        ile cagiran psql baglantisini korur; pg_restore subprocess'i de baska
+        bir pid'le baglanir, terminate edilir? — Cevap: terminate sorgusu
+        'postgres' DB'sine baglani, hedef DB'deki backend'leri tarar. pg_restore
+        'enerjione' DB'sine baglani, kendi pid'i farkli; ama BIZ filtre olarak
+        sadece 'pg_backend_pid()' (psql'imizin pid'i) hariç tutuyoruz, pg_restore
+        DAHIL kill ediyoruz. Bu YANLIS. Fix: pg_restore'un application_name'ini
+        belirleyip onu da filtre et.
+        """
+        psql_path = os.getenv("PSQL", "psql")
+        dbname = db["dbname"]
+        # pg_restore'un application_name = 'e1_restore_session' set ettik (env
+        # PGAPPNAME ile). Onu da terminate disinda tut.
+        sql = (
+            f"SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
+            f"WHERE datname='{dbname}' "
+            f"AND pid <> pg_backend_pid() "
+            f"AND COALESCE(application_name, '') <> 'e1_restore_session';"
+        )
+        while not stop_terminate_loop.wait(1.5):
+            try:
+                subprocess.run(
+                    [
+                        psql_path,
+                        "-h", db["host"],
+                        "-p", db["port"],
+                        "-U", db["user"],
+                        "-d", "postgres",
+                        "-t", "-A",
+                        "-c", sql,
+                    ],
+                    env=_pg_env(),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+            except Exception:  # noqa: BLE001
+                pass  # gecici hata, bir sonraki tick'te tekrar
+
+    # pg_restore'a unique application_name ver ki terminate loop onu kill etmesin.
+    env["PGAPPNAME"] = "e1_restore_session"
+
     reader_t = _threading.Thread(target=_stderr_reader, daemon=True)
+    terminate_t = _threading.Thread(target=_terminate_loop, daemon=True)
     reader_t.start()
+    terminate_t.start()
 
     try:
         rc = proc.wait(timeout=1200)
@@ -512,9 +565,13 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
             proc.wait(timeout=5)
         except Exception:  # noqa: BLE001
             pass
+        stop_terminate_loop.set()
+        terminate_t.join(timeout=2)
         return False, "pg_restore zaman aşımı (20 dk)."
 
-    # stderr okuma thread'i bitsin (pipe kapanir kapanmaz return eder)
+    # Loop'lari durdur
+    stop_terminate_loop.set()
+    terminate_t.join(timeout=2)
     reader_t.join(timeout=2)
 
     full_stderr = "\n".join(stderr_lines)
@@ -608,15 +665,7 @@ def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:
 
     # Adim 3: pg_restore (en uzun adim — 30 sn ile 10 dk arasi)
     _tracker.set_step("restoring", "pg_restore calisiyor (uzun surebilir)...")
-    # NOT: run_pg_restore icinde DB ALLOW_CONNECTIONS=false yapildi. Hata
-    # olsa bile bu finally bloku ile geri True'ya cekilmeli, aksi halde
-    # ileride kullanici/worker hicbir zaman baglanamaz.
-    db_conn_info = _parse_db_url(settings.database_url)
-    try:
-        ok, msg = run_pg_restore(p)
-    finally:
-        _set_db_allow_connections(db_conn_info, True)
-        logger.info("backup_restore_db_connections_re_enabled")
+    ok, msg = run_pg_restore(p)
     if not ok:
         _tracker.fail(msg)
         return False, msg
