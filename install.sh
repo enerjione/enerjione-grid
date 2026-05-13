@@ -259,11 +259,22 @@ if [[ ! -f fcm-service-account.json ]]; then
   "_disabled": true
 }
 PLACEHOLDER
-  chmod 600 fcm-service-account.json
+  # chmod 644: container'daki backend user'i (uid genelde 10001/appuser)
+  # host uid 1000'in chmod 600 dosyasini okuyamaz → PermissionError. 644
+  # dosyayi world-readable yapar (key icerigine erisim icin zaten host
+  # erisimi gerek; multi-tenant host'ta degiliz, single-app deployment).
+  chmod 644 fcm-service-account.json
   e1_chown_target fcm-service-account.json
   e1_warn "FCM placeholder yaratildi. Gercek JSON yuklenmeden mobil push CALISMAZ."
 else
   e1_info "fcm-service-account.json mevcut — FCM aktif olacak."
+  # Mevcut dosya chmod 600 olabilir (eski install veya elle scp'lendi).
+  # Container okuyamaz; 644'e cek.
+  current_mode="$(stat -c %a fcm-service-account.json 2>/dev/null || echo 600)"
+  if [[ "$current_mode" != "644" ]]; then
+    chmod 644 fcm-service-account.json
+    e1_info "fcm-service-account.json chmod 644 yapildi (container erisimi icin)."
+  fi
 fi
 
 # NATS bcrypt hash render — host python3 + bcrypt ile.

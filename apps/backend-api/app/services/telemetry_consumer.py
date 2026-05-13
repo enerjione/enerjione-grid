@@ -135,6 +135,40 @@ def _persist_message(payload: dict[str, Any]) -> None:
             # Paralel consumer veya retry'ta ayni mesaj iki kez gelirse
             # unique index hatasini bastiriyoruz — istenen davranis budur.
             db.rollback()
+
+        # Outbound dispatch: REST/MQTT/IEC104 hedeflerine telemetry payload'i.
+        # OutboundTarget tablosunda event_filter='telemetry' veya 'all' olan +
+        # is_active=true target'lar tetiklenir. IEC104 zaten point registry
+        # uzerinden gunceller; REST/MQTT POST/publish yapilir.
+        #
+        # NOT: telemetry yuksek frekansli (600 cihaz x N sinyal x saniyede).
+        # Webhook target'larina sel yapabilir — operator UI'da event_filter'i
+        # 'alarm' yaparsa veya devre disi birakirsa dispatch atlar.
+        try:
+            from app.services.outbound_dispatch_service import dispatch_event
+            # signal_source: signal_key prefix'inden turet (master.voltage_a -> master)
+            sig_source = None
+            if reading.signal_key and "." in reading.signal_key:
+                sig_source = reading.signal_key.split(".", 1)[0].lower()
+            outbound_payload = {
+                "message_id": message_id,
+                "correlation_id": reading.correlation_id or message_id,
+                "event_kind": "telemetry",
+                "device_code": reading.device_code,
+                "signal_key": reading.signal_key,
+                "signal_source": sig_source,
+                "source_gateway": reading.source_gateway,
+                "value": reading.value,
+                "value_string": reading.value_string,
+                "quality": reading.quality,
+                "status": device.communication_status.value if hasattr(device.communication_status, "value") else str(device.communication_status),
+                "source_timestamp": reading.source_timestamp.isoformat() if reading.source_timestamp else None,
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            dispatch_event(db, event_kind="telemetry", payload=outbound_payload)
+        except Exception:  # noqa: BLE001
+            # Outbound hatasi telemetri akisini bozmasin — sadece log.
+            logger.exception("outbound_dispatch_failed_telemetry msg=%s", message_id)
     finally:
         db.close()
 

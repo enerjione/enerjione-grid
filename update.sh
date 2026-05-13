@@ -106,8 +106,20 @@ if [[ ! -e fcm-service-account.json ]]; then
   "_disabled": true
 }
 PLACEHOLDER
-  chmod 600 fcm-service-account.json
+  # chmod 644: container backend user'i (appuser/10001) host uid 1000'in
+  # chmod 600 dosyasini okuyamaz → PermissionError. Single-app deployment
+  # icin guvenli (host erisimi zaten gerekli).
+  chmod 644 fcm-service-account.json
   e1_chown_target fcm-service-account.json
+fi
+# Mevcut dosya chmod 600 olabilir (eski install veya elle scp'lendi). Backend
+# container icindeki user okuyamaz. 644'e cek.
+if [[ -f fcm-service-account.json ]]; then
+  current_mode="$(stat -c %a fcm-service-account.json 2>/dev/null || echo 600)"
+  if [[ "$current_mode" != "644" ]]; then
+    chmod 644 fcm-service-account.json
+    e1_info "fcm-service-account.json chmod 644 yapildi (container erisimi icin)."
+  fi
 fi
 
 # NATS auth conf yoksa veya tema (worker permissions vs.) degistiyse render.
