@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
@@ -205,7 +206,7 @@ export function ResponsibilityAreasPage({
 
   const handleDelete = async () => {
     if (!detail) return;
-    if (!window.confirm(`"${detail.name}" ekip silinsin mi?`)) return;
+    if (!await asyncConfirm(`"${detail.name}" ekip silinsin mi?`)) return;
     setBusy(true);
     setLocalError("");
     try {

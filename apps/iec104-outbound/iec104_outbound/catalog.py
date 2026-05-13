@@ -43,7 +43,7 @@ class CatalogClient:
         self.base_url = base_url.rstrip("/")
         self.service_token = service_token
         self.timeout_sec = timeout_sec
-        self._headers = {"X-Service-Token": service_token}
+        self._headers = { "X-Service-Token": service_token, "X-Service-Name": "iec104-outbound" }
 
     def _get(self, path: str) -> list[dict[str, Any]] | None:
         url = f"{self.base_url}{path}"

@@ -169,16 +169,16 @@ export function GatewayManagementPanel({
       <table className="values-table">
         <thead>
           <tr>
-            <th>Kod</th>
-            <th>Ad</th>
-            <th>DNP3 Host:Port</th>
-            <th>Kontrol Adresi</th>
-            <th>Kapsam</th>
-            <th>Maks. Cihaz</th>
-            <th>Batch (sn)</th>
-            <th>Durum</th>
-            <th>Son Görülme</th>
-            <th>İşlem</th>
+            <th scope="col">Kod</th>
+            <th scope="col">Ad</th>
+            <th scope="col">DNP3 Host:Port</th>
+            <th scope="col">Kontrol Adresi</th>
+            <th scope="col">Kapsam</th>
+            <th scope="col">Maks. Cihaz</th>
+            <th scope="col">Batch (sn)</th>
+            <th scope="col">Durum</th>
+            <th scope="col">Son Görülme</th>
+            <th scope="col">İşlem</th>
           </tr>
         </thead>
         <tbody>

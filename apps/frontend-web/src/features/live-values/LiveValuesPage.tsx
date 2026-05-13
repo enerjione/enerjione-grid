@@ -397,13 +397,13 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         <table className="values-table">
           <thead>
             <tr>
-              <th>{t("engineering.liveValues.table.device")}</th>
-              <th className="cell-center">{t("engineering.liveValues.table.source")}</th>
-              <th>{t("engineering.liveValues.table.signal")}</th>
-              <th className="cell-center">{t("engineering.liveValues.table.type")}</th>
-              <th>{t("engineering.liveValues.table.value")}</th>
-              <th className="cell-center">{t("engineering.liveValues.table.quality")}</th>
-              <th>{t("engineering.liveValues.table.time")}</th>
+              <th scope="col">{t("engineering.liveValues.table.device")}</th>
+              <th scope="col" className="cell-center">{t("engineering.liveValues.table.source")}</th>
+              <th scope="col">{t("engineering.liveValues.table.signal")}</th>
+              <th scope="col" className="cell-center">{t("engineering.liveValues.table.type")}</th>
+              <th scope="col">{t("engineering.liveValues.table.value")}</th>
+              <th scope="col" className="cell-center">{t("engineering.liveValues.table.quality")}</th>
+              <th scope="col">{t("engineering.liveValues.table.time")}</th>
             </tr>
           </thead>
           <tbody>

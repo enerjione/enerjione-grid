@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_roles
+from app.core.rate_limit import limiter
 from app.db.session import get_db
+from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.telemetry import GatewayTelemetryBatch, TelemetryIn, TelemetryRead
 from app.services.ingest_service import (
@@ -26,21 +28,26 @@ def list_latest(db: Session = Depends(get_db), _: User = Depends(get_current_use
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 def ingest(
+    request: Request,
     payload: list[TelemetryIn] = Body(..., max_length=_MANUAL_INGEST_MAX_BATCH),
     db: Session = Depends(get_db),
-    # Manuel/test ingest yolu: kullanici oturumu zorunlu. Sahte telemetri
-    # injection'i (anonim DB write + DoS) bu auth ile kapatildi. Gerçek
-    # gateway-batch akisi `/telemetry/gateway/{code}` endpoint'inde
+    # Manuel/test ingest yolu: ENGINEER veya INSTALLER zorunlu. OPERATOR
+    # rolu sahte telemetri injection ile alarm motorunu tetikleyemesin.
+    # Gercek gateway akisi `/telemetry/gateway/{code}` endpoint'inde
     # `X-Gateway-Token` header ile dogrulanir (auth oradan).
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
 ):
-    """Manuel/test telemetri ingest (operator login'i gerektirir).
+    """Manuel/test telemetri ingest (engineer+ rolu gerektirir).
 
     Production'da gateway'ler bu endpoint'i KULLANMAZ — telemetri NATS
     JetStream uzerinden direkt yayinlanir. Bu route geriye uyumluluk +
-    operator UI test araclari icin tutulur.
+    operator UI test araclari icin tutulur. OPERATOR rolu reddedilir;
+    rate-limit 10/dakika ile downstream fan-out (alarm-service,
+    iec104-outbound) flood'u onlenir.
     """
+    _ = request  # slowapi key_func icin gerekli
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

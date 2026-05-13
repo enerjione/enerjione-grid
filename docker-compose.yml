@@ -1,4 +1,4 @@
-# EnerjiOne Grid Dashboard — tek-komut Docker Compose dosyasi.
+﻿# EnerjiOne Grid Dashboard — tek-komut Docker Compose dosyasi.
 #
 # Kurulum:
 #   1. cp .env.example .env
@@ -142,7 +142,7 @@ services:
     build:
       context: ./apps/backend-api
       dockerfile: Dockerfile
-    image: e1/backend-api:latest
+    image: e1/backend-api:${E1_VERSION:-latest}
     container_name: e1-backend-api
     restart: unless-stopped
     depends_on:
@@ -231,7 +231,7 @@ services:
     build:
       context: ./apps/tag-engine
       dockerfile: Dockerfile
-    image: e1/tag-engine:latest
+    image: e1/tag-engine:${E1_VERSION:-latest}
     container_name: e1-tag-engine
     restart: unless-stopped
     depends_on:
@@ -260,7 +260,7 @@ services:
     build:
       context: ./apps/alarm-service
       dockerfile: Dockerfile
-    image: e1/alarm-service:latest
+    image: e1/alarm-service:${E1_VERSION:-latest}
     container_name: e1-alarm-service
     restart: unless-stopped
     depends_on:
@@ -297,7 +297,7 @@ services:
     build:
       context: ./apps/notification-worker
       dockerfile: Dockerfile
-    image: e1/notification-worker:latest
+    image: e1/notification-worker:${E1_VERSION:-latest}
     container_name: e1-notification-worker
     restart: unless-stopped
     depends_on:
@@ -328,7 +328,7 @@ services:
     build:
       context: ./apps/iec104-outbound
       dockerfile: Dockerfile
-    image: e1/iec104-outbound:latest
+    image: e1/iec104-outbound:${E1_VERSION:-latest}
     container_name: e1-iec104-outbound
     restart: unless-stopped
     depends_on:
@@ -362,7 +362,7 @@ services:
     build:
       context: ./apps/frontend-web
       dockerfile: Dockerfile
-    image: e1/frontend-web:latest
+    image: e1/frontend-web:${E1_VERSION:-latest}
     container_name: e1-frontend-web
     restart: unless-stopped
     depends_on:

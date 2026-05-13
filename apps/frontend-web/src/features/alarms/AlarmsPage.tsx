@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import { TablePagination } from "../../components/TablePagination";
@@ -235,7 +236,7 @@ export function AlarmsPage({
   const handleAcknowledge = async (alarmId: number) => {
     const alarm = alarms.find((a) => a.id === alarmId);
     const label = alarm ? `"${alarm.title}"` : t("alarms.confirmAckThis");
-    if (!window.confirm(t("alarms.confirmAck", { label }))) return;
+    if (!await asyncConfirm(t("alarms.confirmAck", { label }))) return;
     setSaving(true);
     setError("");
     try {
@@ -260,7 +261,7 @@ export function AlarmsPage({
   };
 
   const handleDelete = async (alarmId: number) => {
-    if (!window.confirm(t("alarms.confirmDelete"))) return;
+    if (!await asyncConfirm(t("alarms.confirmDelete"))) return;
     setSaving(true);
     setError("");
     try {
@@ -290,7 +291,7 @@ export function AlarmsPage({
       pendingCount > 0
         ? t("alarms.confirmAckAllPending", { active: activeCount, pending: pendingCount })
         : t("alarms.confirmAckAllActive", { active: activeCount });
-    if (!window.confirm(message)) return;
+    if (!await asyncConfirm(message)) return;
     setSaving(true);
     setError("");
     try {
@@ -547,14 +548,14 @@ export function AlarmsPage({
             <table className="values-table alarms-page-table">
               <thead>
                 <tr>
-                  <th>{t("alarms.table.date")}</th>
-                  <th>{t("alarms.table.level")}</th>
-                  <th>{t("alarms.table.device")}</th>
-                  <th>{t("alarms.table.source")}</th>
-                  <th>{t("alarms.table.alarm")}</th>
-                  <th>{t("alarms.table.status")}</th>
-                  <th>{t("alarms.table.assignee")}</th>
-                  <th className="alarm-actions-th">{t("alarms.table.actions")}</th>
+                  <th scope="col">{t("alarms.table.date")}</th>
+                  <th scope="col">{t("alarms.table.level")}</th>
+                  <th scope="col">{t("alarms.table.device")}</th>
+                  <th scope="col">{t("alarms.table.source")}</th>
+                  <th scope="col">{t("alarms.table.alarm")}</th>
+                  <th scope="col">{t("alarms.table.status")}</th>
+                  <th scope="col">{t("alarms.table.assignee")}</th>
+                  <th scope="col" className="alarm-actions-th">{t("alarms.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -671,13 +672,13 @@ export function AlarmsPage({
             <table className="values-table alarms-page-table">
               <thead>
                 <tr>
-                  <th>{t("alarms.table.date")}</th>
-                  <th>{t("alarms.table.level")}</th>
-                  <th>{t("alarms.table.device")}</th>
-                  <th>{t("alarms.table.source")}</th>
-                  <th>{t("alarms.table.alarm")}</th>
-                  <th>{t("alarms.table.assignee")}</th>
-                  <th className="alarm-actions-th">{t("alarms.table.actions")}</th>
+                  <th scope="col">{t("alarms.table.date")}</th>
+                  <th scope="col">{t("alarms.table.level")}</th>
+                  <th scope="col">{t("alarms.table.device")}</th>
+                  <th scope="col">{t("alarms.table.source")}</th>
+                  <th scope="col">{t("alarms.table.alarm")}</th>
+                  <th scope="col">{t("alarms.table.assignee")}</th>
+                  <th scope="col" className="alarm-actions-th">{t("alarms.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>

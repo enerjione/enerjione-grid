@@ -197,13 +197,13 @@ export function EventsPage({ events, loading, devices }: Props) {
           <table className="values-table events-table">
             <thead>
               <tr>
-                <th className="event-col-date">{t("events.table.date")}</th>
-                <th className="event-col-priority">{t("events.table.priority")}</th>
-                <th className="event-col-category">{t("events.table.category")}</th>
-                <th>{t("events.table.message")}</th>
-                <th className="event-col-user">{t("events.table.user")}</th>
-                <th className="event-col-device">{t("events.table.device")}</th>
-                <th className="event-col-source">{t("events.table.source")}</th>
+                <th scope="col" className="event-col-date">{t("events.table.date")}</th>
+                <th scope="col" className="event-col-priority">{t("events.table.priority")}</th>
+                <th scope="col" className="event-col-category">{t("events.table.category")}</th>
+                <th scope="col">{t("events.table.message")}</th>
+                <th scope="col" className="event-col-user">{t("events.table.user")}</th>
+                <th scope="col" className="event-col-device">{t("events.table.device")}</th>
+                <th scope="col" className="event-col-source">{t("events.table.source")}</th>
               </tr>
             </thead>
             <tbody>

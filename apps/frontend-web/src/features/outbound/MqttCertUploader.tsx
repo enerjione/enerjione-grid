@@ -10,6 +10,7 @@
  */
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 
 import { deleteMqttCert, uploadMqttCert, type MqttCertKind } from "../../shared/api";
 
@@ -63,7 +64,7 @@ export function MqttCertUploader({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(t("engineering.outbound.mqtt.certDeleteConfirm"))) return;
+    if (!await asyncConfirm(t("engineering.outbound.mqtt.certDeleteConfirm"))) return;
     setError(null);
     setBusy(true);
     try {

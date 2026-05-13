@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Public REST API erisimi yonetim paneli.
  *
  * Iki bolum:
@@ -189,14 +189,14 @@ export function ApiAccessPanel({
         <table className="values-table">
           <thead>
             <tr>
-              <th>{t("apiAccess.cols.name")}</th>
-              <th>{t("apiAccess.cols.tokenPrefix")}</th>
-              <th>{t("apiAccess.cols.scopes")}</th>
-              <th>{t("apiAccess.cols.created")}</th>
-              <th>{t("apiAccess.cols.expires")}</th>
-              <th>{t("apiAccess.cols.lastUsed")}</th>
-              <th>{t("apiAccess.cols.status")}</th>
-              <th className="actions-header">{t("apiAccess.cols.actions")}</th>
+              <th scope="col">{t("apiAccess.cols.name")}</th>
+              <th scope="col">{t("apiAccess.cols.tokenPrefix")}</th>
+              <th scope="col">{t("apiAccess.cols.scopes")}</th>
+              <th scope="col">{t("apiAccess.cols.created")}</th>
+              <th scope="col">{t("apiAccess.cols.expires")}</th>
+              <th scope="col">{t("apiAccess.cols.lastUsed")}</th>
+              <th scope="col">{t("apiAccess.cols.status")}</th>
+              <th scope="col" className="actions-header">{t("apiAccess.cols.actions")}</th>
             </tr>
           </thead>
           <tbody>

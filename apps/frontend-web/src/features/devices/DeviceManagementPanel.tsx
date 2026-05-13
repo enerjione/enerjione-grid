@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 import i18n from "../../shared/i18n";
 import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
@@ -378,7 +379,7 @@ export function DeviceManagementPanel({
 
   const handleDeleteDevice = async () => {
     if (!selectedDevice) return;
-    if (!window.confirm(`"${selectedDevice.name}" cihazı silinsin mi?`)) return;
+    if (!await asyncConfirm(`"${selectedDevice.name}" cihazı silinsin mi?`)) return;
     setError("");
     try {
       await onDelete(selectedDevice.code);

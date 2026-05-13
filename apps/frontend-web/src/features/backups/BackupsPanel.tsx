@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -129,7 +130,7 @@ export function BackupsPanel({ accessToken }: Props) {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm(t("backups.deleteConfirm"))) {
+    if (!await asyncConfirm(t("backups.deleteConfirm"))) {
       return;
     }
     try {
@@ -377,13 +378,13 @@ export function BackupsPanel({ accessToken }: Props) {
           <table className="backups-table">
             <thead>
               <tr>
-                <th>{t("backups.table.createdAt")}</th>
-                <th>{t("backups.table.type")}</th>
-                <th>{t("backups.table.status")}</th>
-                <th>{t("backups.table.size")}</th>
-                <th>{t("backups.table.createdBy")}</th>
-                <th>{t("backups.table.filename")}</th>
-                <th>{t("backups.table.actions")}</th>
+                <th scope="col">{t("backups.table.createdAt")}</th>
+                <th scope="col">{t("backups.table.type")}</th>
+                <th scope="col">{t("backups.table.status")}</th>
+                <th scope="col">{t("backups.table.size")}</th>
+                <th scope="col">{t("backups.table.createdBy")}</th>
+                <th scope="col">{t("backups.table.filename")}</th>
+                <th scope="col">{t("backups.table.actions")}</th>
               </tr>
             </thead>
             <tbody>

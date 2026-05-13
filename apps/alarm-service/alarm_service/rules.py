@@ -97,7 +97,7 @@ class AlarmRuleCache:
     def refresh(self) -> bool:
         rules_url = f"{self.base_url}/internal/alarm-rules"
         signals_url = f"{self.base_url}/internal/signals"
-        headers = {"X-Service-Token": self.service_token}
+        headers = { "X-Service-Token": self.service_token, "X-Service-Name": "alarm-service" }
         try:
             rules_resp = requests.get(rules_url, headers=headers, timeout=self.timeout_sec)
             signals_resp = requests.get(signals_url, headers=headers, timeout=self.timeout_sec)

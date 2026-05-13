@@ -124,8 +124,37 @@ async def _async_main() -> None:
             pass
 
 
+def _validate_required_secrets() -> None:
+    """Placeholder/bos secret tespit edip fail-fast yap.
+
+    Operator env unutursa worker default 'change-me-internal-token' ile devam
+    eder, backend 401 doner, sessiz retry loop'a girer.
+    """
+    _PLACEHOLDER_PREFIXES = ("change-me", "please-change-me", "change-this", "your-secret")
+
+    def _is_placeholder(value: str) -> bool:
+        v = (value or "").strip().lower()
+        return (not v) or v.startswith(_PLACEHOLDER_PREFIXES)
+
+    errors: list[str] = []
+    if _is_placeholder(SETTINGS.internal_service_token):
+        errors.append(
+            "INTERNAL_SERVICE_TOKEN .env'de set edilmemis veya placeholder; "
+            "backend 401 doner ve servis catalog yukleyemez."
+        )
+    # iec104 worker NATS uzerinden tuketir (rabbit fallback'i opsiyonel).
+    # nats_url placeholder kontrolu (NATS_URL bos veya anonim ise prod'da hata).
+    if not (SETTINGS.nats_url or "").strip():
+        errors.append("NATS_URL .env'de set edilmemis; telemetri akisi alinamaz.")
+    if errors:
+        msg = "\n  - ".join(errors)
+        print(f"iec104-outbound ZORUNLU KONFIGURASYON EKSIK:\n  - {msg}", flush=True)
+        raise SystemExit(2)
+
+
 def main() -> None:
     _configure_logging()
+    _validate_required_secrets()
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:

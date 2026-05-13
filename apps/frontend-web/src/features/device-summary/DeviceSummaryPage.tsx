@@ -328,12 +328,12 @@ export function DeviceSummaryPage({
         <table className="values-table device-summary-table">
           <thead>
             <tr>
-              {activeTab === "all" ? <th className="cell-center">Kaynak</th> : null}
-              <th>Sinyal</th>
-              <th className="cell-center">Tip</th>
-              <th>Değer</th>
-              <th className="cell-center">Kalite</th>
-              <th>Zaman</th>
+              {activeTab === "all" ? <th scope="col" className="cell-center">Kaynak</th> : null}
+              <th scope="col">Sinyal</th>
+              <th scope="col" className="cell-center">Tip</th>
+              <th scope="col">Değer</th>
+              <th scope="col" className="cell-center">Kalite</th>
+              <th scope="col">Zaman</th>
             </tr>
           </thead>
           <tbody>

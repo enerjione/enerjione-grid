@@ -23,6 +23,14 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
+
+from app.api.deps import require_roles
+from app.models.enums import UserRole
+
+# Health endpoint'lerinin bir alt grubu (ws-stats, dlq) hassas telemetri
+# dondurur — anonim leak engellensin. /health, /health/live, /health/ready
+# probe icin auth'suz kalir.
+_require_engineer_or_installer = require_roles([UserRole.INSTALLER, UserRole.ENGINEER])
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -159,7 +167,11 @@ def readiness(db: Session = Depends(get_db)):
 
 
 @router.get("/ws-stats")
-def ws_broadcaster_stats():
+def ws_broadcaster_stats(
+    # ENGINEER+ yetkisi: subscriber count, NATS stream isimleri, slow consumer
+    # detaylari operator telemetrisidir — anonim erisilirse recon ipucu olur.
+    _user=Depends(_require_engineer_or_installer),
+):
     """WebSocket broadcaster istatistikleri — slow-consumer izlemek icin.
 
     Donen alanlar:
@@ -175,12 +187,18 @@ def ws_broadcaster_stats():
         from app.services.ws_broadcaster import broadcaster
 
         return broadcaster.stats()
-    except Exception as exc:  # noqa: BLE001
-        return {"error": str(exc)[:200]}
+    except Exception:  # noqa: BLE001
+        # Hata detayini caller'a sizdirma; sunucu log'una yaz.
+        logging.getLogger(__name__).exception("ws_broadcaster_stats_failed")
+        return {"error": "stats unavailable"}
 
 
 @router.get("/dlq")
-def dlq_status():
+def dlq_status(
+    # DLQ stream isimleri, mesaj subject pattern'i, byte sayilari operator
+    # telemetrisi. Anonim leak engellensin.
+    _user=Depends(_require_engineer_or_installer),
+):
     """DLQ stream durumu — operator poison mesaj sayisini hizlica gorebilir.
 
     Worker'lar max_deliver'a takilan mesajlari TELEMETRY_DLQ stream'ine

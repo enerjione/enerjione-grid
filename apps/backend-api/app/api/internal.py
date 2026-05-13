@@ -25,17 +25,39 @@ from app.services.notification_service import create_notification
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 
-def _require_service_token(token: str | None) -> None:
+def _extract_service_name(request) -> str:
+    """X-Service-Name header'indan caller servisini cikar (FastAPI Request)."""
+    try:
+        return request.headers.get("x-service-name", "unknown")
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+def _require_service_token(token: str | None, service_name: str | None = None) -> None:
     """Timing-safe `INTERNAL_SERVICE_TOKEN` dogrulamasi.
 
     `hmac.compare_digest` karakter-karakter eslesme yerine sabit-zamanli
     karsilastirma yapar; saldirgan timing-attack ile token enumerate edemez.
     `token` None ise bos string ile karsilastirilir — yine 401 doner.
+
+    `service_name` parametresi `X-Service-Name` header'indan gelir. Tek
+    paylasilan internal token oldugu icin breach forensic'inde hangi servis
+    geldi log'a yazilir. Worker'lar `_validate_required_secrets`'lerde
+    bu header'i set etmeli (alarm-service, notification-worker, iec104-outbound).
     """
     expected = (settings.internal_service_token or "").encode("utf-8")
     actual = (token or "").encode("utf-8")
     if not hmac.compare_digest(actual, expected):
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "internal_token_invalid svc=%s", service_name or "unknown"
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
+    # Basarili cagri — caller'i logla (debug/audit icin)
+    import logging as _logging
+    _logging.getLogger(__name__).info(
+        "internal_call_ok svc=%s", service_name or "unknown"
+    )
 
 
 @router.get("/alarm-rules", response_model=list[AlarmRuleRead])
@@ -97,6 +119,9 @@ def list_outbound_targets_internal(
     return list(db.scalars(stmt).all())
 
 
+_IDEMPOTENCY_CONSUMER_INTERNAL_ALARMS = "internal-alarms"
+
+
 @router.post("/alarms", status_code=status.HTTP_202_ACCEPTED)
 def ingest_alarm(
     payload: InternalAlarmIngest,
@@ -104,6 +129,21 @@ def ingest_alarm(
     x_service_token: str | None = Header(default=None),
 ):
     _require_service_token(x_service_token)
+
+    # Idempotency: alarm-service 5xx sonrasi retry yaparsa ayni mesaji tekrar
+    # yollar; mevcut content-dedup (device + level + title + signal_key) farkli
+    # signal_key veya kararsiz title icin yetersiz kalir. processed_messages
+    # tablosu uzerinden message_id bazli dedup ekle. Worker yeni mesajda her
+    # zaman unique message_id ureteceginden duplicate alarm satiri olusmaz.
+    if payload.message_id:
+        from app.services.idempotency_service import is_processed
+
+        if is_processed(
+            db,
+            consumer_name=_IDEMPOTENCY_CONSUMER_INTERNAL_ALARMS,
+            message_id=payload.message_id,
+        ):
+            return {"status": "duplicate_ignored", "message_id": payload.message_id}
 
     device_id = payload.device_id
     if device_id is None and payload.device_code:
@@ -141,6 +181,14 @@ def ingest_alarm(
         # Eski kayit signal_key olmadan acilmissa, yeni payload'tan tamamla.
         if payload.signal_key and not existing.signal_key:
             existing.signal_key = payload.signal_key
+        if payload.message_id:
+            from app.services.idempotency_service import mark_processed
+
+            mark_processed(
+                db,
+                consumer_name=_IDEMPOTENCY_CONSUMER_INTERNAL_ALARMS,
+                message_id=payload.message_id,
+            )
         db.commit()
         return {"status": "deduplicated", "alarm_id": existing.id}
 
@@ -351,6 +399,14 @@ def ingest_alarm(
         import logging as _logging
         _logging.getLogger(__name__).exception("outbound_dispatch_failed alarm_id=%s", alarm.id)
 
+    if payload.message_id:
+        from app.services.idempotency_service import mark_processed
+
+        mark_processed(
+            db,
+            consumer_name=_IDEMPOTENCY_CONSUMER_INTERNAL_ALARMS,
+            message_id=payload.message_id,
+        )
     db.commit()
     return {"status": "accepted", "alarm_id": alarm.id}
 

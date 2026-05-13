@@ -1,4 +1,4 @@
-﻿import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 /**
  * ConfirmDialog — `await asyncConfirm()` yerine kullanılan stillendirilmiş onay diyaloğu.

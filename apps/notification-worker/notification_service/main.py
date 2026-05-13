@@ -79,7 +79,7 @@ def _build_http_session() -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry, pool_connections=5, pool_maxsize=10)
     s.mount("http://", adapter)
     s.mount("https://", adapter)
-    s.headers.update({"X-Service-Token": INTERNAL_SERVICE_TOKEN})
+    s.headers.update({ "X-Service-Token": INTERNAL_SERVICE_TOKEN, "X-Service-Name": "notification-worker" })
     return s
 
 
@@ -139,11 +139,38 @@ def _is_retryable(error_msg: str | None) -> bool:
     return False
 
 
+def _validate_required_secrets() -> None:
+    """Worker baslamadan placeholder/bos secret tespit edip fail-fast yap.
+
+    Operator env unutursa worker default 'change-me-internal-token' ile devam
+    eder, backend 401 doner, retry loop sessizce dosya boy log uretir.
+    """
+    _PLACEHOLDER_PREFIXES = ("change-me", "please-change-me", "change-this", "your-secret")
+
+    def _is_placeholder(value: str) -> bool:
+        v = (value or "").strip().lower()
+        return (not v) or v.startswith(_PLACEHOLDER_PREFIXES)
+
+    errors: list[str] = []
+    if _is_placeholder(INTERNAL_SERVICE_TOKEN):
+        errors.append(
+            "INTERNAL_SERVICE_TOKEN .env'de set edilmemis veya placeholder; "
+            "backend 401 doner ve worker calismaz."
+        )
+    if not RABBIT_URL.strip():
+        errors.append("RABBITMQ_URL .env'de set edilmemis; mesaj kuyruguna baglanilamaz.")
+    if errors:
+        msg = "\n  - ".join(errors)
+        print(f"notification-worker ZORUNLU KONFIGURASYON EKSIK:\n  - {msg}", flush=True)
+        raise SystemExit(2)
+
+
 def main() -> None:
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)-5s %(name)s %(message)s",
     )
+    _validate_required_secrets()
     _start_health_server()
     logger.info(
         "notification-worker-starting backend=%s prefetch=%d",

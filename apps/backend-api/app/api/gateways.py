@@ -605,7 +605,7 @@ def get_gateway_config(
         for signal in signals_rows
     ]
 
-    return GatewayConfigResponse(
+    config_resp = GatewayConfigResponse(
         gateway_code=gateway.code,
         gateway_name=gateway.name,
         batch_interval_sec=gateway.batch_interval_sec,
@@ -615,4 +615,43 @@ def get_gateway_config(
         signals=config_signals,
         config_version=config_version,
         refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
+    )
+
+    # HMAC signature — payload integrity koruma (MITM / backend kompromize).
+    # KRITIK: HMAC byte'larin DETERMINISTIK olmasi sart, yoksa gateway her
+    # request'te imzayi reject eder. Sorun: FastAPI default JSON renderer'i
+    # pydantic'in `model_dump_json()` ciktisindan FARKLI byte uretir
+    # (jsonable_encoder + json.dumps separators=(",",": ") + ensure_ascii=True
+    # iken pydantic separators=(",",":") + ensure_ascii=False kullanir).
+    # Bu nedenle manuel olarak ayni byte'lari Response icine yazip imzayi
+    # o byte'lardan hesapliyoruz. Boylece gateway 1:1 dogrulayabilir.
+    body_bytes = config_resp.model_dump_json().encode("utf-8")
+    headers: dict[str, str] = {
+        # Mevcut response.headers icindeki ETag/Cache-Control gibi header'lari
+        # da yansit (eger varsa).
+    }
+    for k, v in response.headers.items():
+        headers[k] = v
+    try:
+        import hashlib as _hashlib
+        import hmac as _hmac
+
+        sig = _hmac.new(
+            gateway.token.encode("utf-8"),
+            body_bytes,
+            _hashlib.sha256,
+        ).hexdigest()
+        headers["X-Config-Signature"] = sig
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).exception(
+            "config_signature_failed gateway=%s", gateway.code
+        )
+
+    from fastapi.responses import Response as _Response
+
+    return _Response(
+        content=body_bytes,
+        media_type="application/json",
+        headers=headers,
     )

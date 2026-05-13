@@ -2,15 +2,34 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Production'da reddedilen placeholder secret degerleri. Settings constructor
-# `app_env in ("production","prod")` durumunda bu degerlerden birinin set
-# edilmis oldugu durumda RuntimeError firlatir — boylece operator yanlislikla
+# Production'da reddedilen placeholder secret prefix'leri. Settings constructor
+# `app_env in ("production","prod")` durumunda bu prefix'lerden biriyle baslayan
+# bir secret tespit ederse RuntimeError firlatir — boylece operator yanlislikla
 # default secret'larla prod'a deploy edemez.
-_PLACEHOLDER_SECRETS: set[str] = {
-    "change-me-in-production",
-    "change-me-internal-token",
-    "",
-}
+#
+# Pattern-based: `.env.example` icindeki tum placeholder bicimleri kapsanir:
+#   - "change-me-in-production"
+#   - "change-me-internal-token"
+#   - "change-me-strong-password"
+#   - "please-change-me-32-bytes-hex"
+#   - "please-change-me-internal-32-bytes-hex"
+#   - "change-this-secret"
+#   - "your-secret-here"
+# Yeni placeholder pattern eklerken bu listeye prefix ekleyin.
+_PLACEHOLDER_PREFIXES: tuple[str, ...] = (
+    "change-me",
+    "please-change-me",
+    "change-this",
+    "your-secret",
+)
+
+
+def _is_placeholder_secret(value: str) -> bool:
+    """Bos veya bilinen placeholder prefix'lerden biriyle basliyorsa True."""
+    v = (value or "").strip().lower()
+    if not v:
+        return True
+    return v.startswith(_PLACEHOLDER_PREFIXES)
 
 
 class Settings(BaseSettings):
@@ -19,10 +38,18 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
-    # Uzun operatör oturumları (fabrika) için; .env: ACCESS_TOKEN_MINUTES=...
-    # Varsayılan 30 gün = 43200 dk. "Beni hatırla" tıklayan kullanıcı saha
-    # ortamında hafta sonları boyunca tekrar giriş yapmak zorunda kalmasın.
-    access_token_minutes: int = 43_200
+    # Token omru — bir vardiya + ufak pay (8 saat). Sahada operator
+    # vardiyasi sonunda otomatik logout olur; calinan/sizan token
+    # 8 saatten uzun yasamaz. .env ile ACCESS_TOKEN_MINUTES override
+    # edilebilir; ancak 1440'tan (24 saat) yukari cikartmak gunluk
+    # rotasyonu zayiflatir, onerilmez.
+    #
+    # "Beni hatirla" akisi icin ayri remember_me_token_minutes kullanilir
+    # (default 7 gun). Login response'unda remember_me=true ise uzun TTL'li
+    # token verilir. Local-LAN deploy icin kabul edilebilir; multi-replica
+    # veya internet expose'da kisa TTL + refresh-token zorunlu.
+    access_token_minutes: int = 480
+    remember_me_token_minutes: int = 10_080
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/enerjione"
     # SQLAlchemy connection pool ayarlari (600 cihaz / 10K msg/sn olcekleri icin
     # default pool_size=5, max_overflow=10 yetersiz kalir; concurrent telemetry
@@ -134,6 +161,10 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_email: str = "noreply@enerjione.local"
+    # Frontend public URL — davet linklerinin tam URL olarak uretilmesi icin
+    # gereklidir. Bos ise relative path doner; admin linki kendi domain'i
+    # ile birlestirir. Ornek: `https://grid.example.com` veya `http://192.168.1.10`.
+    frontend_base_url: str = ""
     sms_enabled: bool = False
     sms_provider: str = "mock"
     sms_api_url: str = ""
@@ -170,15 +201,16 @@ class Settings(BaseSettings):
         if env not in ("production", "prod"):
             return self
         errors: list[str] = []
-        if self.secret_key.strip() in _PLACEHOLDER_SECRETS:
+        if _is_placeholder_secret(self.secret_key):
             errors.append(
-                "SECRET_KEY .env'de set edilmemis (default placeholder); JWT "
-                "imzalama icin >=32 byte yuksek-entropy bir deger zorunlu."
+                "SECRET_KEY .env'de set edilmemis veya placeholder ('change-me-*', "
+                "'please-change-me-*' vb.); JWT imzalama icin >=32 byte yuksek-entropy "
+                "bir deger zorunlu."
             )
-        if self.internal_service_token.strip() in _PLACEHOLDER_SECRETS:
+        if _is_placeholder_secret(self.internal_service_token):
             errors.append(
-                "INTERNAL_SERVICE_TOKEN .env'de set edilmemis (default "
-                "placeholder); mikroservis-arasi auth icin >=32 byte deger zorunlu."
+                "INTERNAL_SERVICE_TOKEN .env'de set edilmemis veya placeholder; "
+                "mikroservis-arasi auth icin >=32 byte deger zorunlu."
             )
         if self.event_bus_backend.strip().lower() == "inprocess":
             errors.append(

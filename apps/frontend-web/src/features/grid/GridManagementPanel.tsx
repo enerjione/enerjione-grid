@@ -1,4 +1,4 @@
-﻿/** Mühendislik > Hat Yönetimi.
+/** Mühendislik > Hat Yönetimi.
  *
  * Hiyerarsi: Bolge -> Hat -> Direk (sirali) -> Segment (iki direk arasi).
  *

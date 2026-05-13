@@ -418,11 +418,11 @@ export function GridOverviewPage({
                                     <table className="grid-overview-table">
                                       <thead>
                                         <tr>
-                                          <th style={{ width: 40 }}>{t("dashboard.overview.tableStatus")}</th>
-                                          <th>{t("dashboard.overview.tableDevice")}</th>
-                                          <th>{t("dashboard.overview.tableFault")}</th>
-                                          <th style={{ width: 90 }}>{t("dashboard.overview.tableBattery")}</th>
-                                          <th style={{ width: 140 }}>{t("dashboard.overview.tableLastData")}</th>
+                                          <th scope="col" style={{ width: 40 }}>{t("dashboard.overview.tableStatus")}</th>
+                                          <th scope="col">{t("dashboard.overview.tableDevice")}</th>
+                                          <th scope="col">{t("dashboard.overview.tableFault")}</th>
+                                          <th scope="col" style={{ width: 90 }}>{t("dashboard.overview.tableBattery")}</th>
+                                          <th scope="col" style={{ width: 140 }}>{t("dashboard.overview.tableLastData")}</th>
                                         </tr>
                                       </thead>
                                       <tbody>

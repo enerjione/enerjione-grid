@@ -377,7 +377,7 @@ def _notify_backend(payload: dict) -> int | None:
     deduplicate edilir. Donus: backend'in atadigi `alarm_id` (notification-
     worker bunu kullanarak dispatch tetikler) veya None (dedup/error).
     """
-    headers = {"X-Service-Token": INTERNAL_SERVICE_TOKEN}
+    headers = { "X-Service-Token": INTERNAL_SERVICE_TOKEN, "X-Service-Name": "alarm-service" }
     body = {k: v for k, v in payload.items() if k != "rule_id"}
     response = requests.post(BACKEND_INTERNAL_URL, json=body, headers=headers, timeout=8)
     response.raise_for_status()
@@ -408,7 +408,7 @@ def _notify_backend_clear(
     sat01.x_alarm, sat02.x_alarm) ayni baslikta acik alarma sahip oldugunda,
     sadece dogru sinyalin kaydi reset edilir; aksi halde yanlis sinyal
     'normale dondu' olarak isaretlenir."""
-    headers = {"X-Service-Token": INTERNAL_SERVICE_TOKEN}
+    headers = { "X-Service-Token": INTERNAL_SERVICE_TOKEN, "X-Service-Name": "alarm-service" }
     body = {
         "rule_id": rule_id,
         "title": rule_title,
@@ -751,7 +751,35 @@ def _process_rules_for_payload_jetstream(payload: dict) -> None:
     _process_rules_for_payload(_ChannelProxy(), payload)
 
 
+def _validate_required_secrets() -> None:
+    """Worker baslamadan once placeholder/bos secret tespit edip fail-fast yap.
+
+    Operator env unutursa worker default 'change-me-internal-token' ile devam
+    eder, backend 401 doner, worker sonsuz retry → log spam + sessiz bozulma.
+    Bunun yerine clear error mesajla cik ve operator'i uyar.
+    """
+    _PLACEHOLDER_PREFIXES = ("change-me", "please-change-me", "change-this", "your-secret")
+
+    def _is_placeholder(value: str) -> bool:
+        v = (value or "").strip().lower()
+        return (not v) or v.startswith(_PLACEHOLDER_PREFIXES)
+
+    errors: list[str] = []
+    if _is_placeholder(INTERNAL_SERVICE_TOKEN):
+        errors.append(
+            "INTERNAL_SERVICE_TOKEN .env'de set edilmemis veya placeholder "
+            "('change-me-*'); backend 401 doner ve worker calismaz."
+        )
+    if not RABBIT_URL.strip():
+        errors.append("RABBITMQ_URL .env'de set edilmemis; mesaj kuyruguna baglanilamaz.")
+    if errors:
+        msg = "\n  - ".join(errors)
+        print(f"alarm-service ZORUNLU KONFIGURASYON EKSIK:\n  - {msg}", flush=True)
+        raise SystemExit(2)
+
+
 def main() -> None:
+    _validate_required_secrets()
     _start_health_server()
     stop_event = Event()
     refresh_thread = Thread(target=_rules_refresh_loop, args=(stop_event,), daemon=True)

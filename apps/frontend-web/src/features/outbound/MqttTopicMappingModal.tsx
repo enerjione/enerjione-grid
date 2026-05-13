@@ -20,6 +20,7 @@
  */
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 
 import {
   fetchTopicMappings,
@@ -131,7 +132,7 @@ export function MqttTopicMappingModal({ accessToken, target, devices, onClose }:
   };
 
   const handleDelete = async (m: OutboundTopicMapping) => {
-    if (!window.confirm(t("engineering.outbound.mqtt.mapping.confirmDelete", { topic: m.topic }))) {
+    if (!await asyncConfirm(t("engineering.outbound.mqtt.mapping.confirmDelete", { topic: m.topic }))) {
       return;
     }
     try {
@@ -188,13 +189,13 @@ export function MqttTopicMappingModal({ accessToken, target, devices, onClose }:
             <table className="mqtt-mapping-table">
               <thead>
                 <tr>
-                  <th>{t("engineering.outbound.mqtt.mapping.colTopic")}</th>
-                  <th>{t("engineering.outbound.mqtt.mapping.colDevices")}</th>
-                  <th>{t("engineering.outbound.mqtt.mapping.colSignals")}</th>
-                  <th>QoS</th>
-                  <th>Retain</th>
-                  <th>{t("common.active")}</th>
-                  <th>{t("common.actions")}</th>
+                  <th scope="col">{t("engineering.outbound.mqtt.mapping.colTopic")}</th>
+                  <th scope="col">{t("engineering.outbound.mqtt.mapping.colDevices")}</th>
+                  <th scope="col">{t("engineering.outbound.mqtt.mapping.colSignals")}</th>
+                  <th scope="col">QoS</th>
+                  <th scope="col">Retain</th>
+                  <th scope="col">{t("common.active")}</th>
+                  <th scope="col">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>

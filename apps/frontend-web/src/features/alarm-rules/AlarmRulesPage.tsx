@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { asyncConfirm } from "../../components/ConfirmDialog";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -386,7 +387,7 @@ export function AlarmRulesPage({
   const handleDelete = async (ruleId: number) => {
     const rule = rules.find((r) => r.id === ruleId);
     if (!rule) return;
-    if (!window.confirm(`"${rule.name}" alarm kuralı silinsin mi?`)) return;
+    if (!await asyncConfirm(`"${rule.name}" alarm kuralı silinsin mi?`)) return;
     setLocalError("");
     try {
       await onDelete(ruleId);
