@@ -59,7 +59,7 @@ function effectiveCommStatus(
 type DevicePropsTab = "system" | "comms";
 
 type Props = {
-  role: "operator" | "engineer" | "installer";
+  role: "operator" | "engineer" | "installer" | "ops_manager";
   gateways: Gateway[];
   devices: DeviceRow[];
   deviceModels: DeviceModelOption[];

@@ -13,7 +13,7 @@ import type {
 } from "../../shared/types";
 
 type Props = {
-  role: "operator" | "engineer" | "installer";
+  role: "operator" | "engineer" | "installer" | "ops_manager";
   areas: ResponsibilityAreaRow[];
   users: UserRead[];
   devices: DeviceRow[];
