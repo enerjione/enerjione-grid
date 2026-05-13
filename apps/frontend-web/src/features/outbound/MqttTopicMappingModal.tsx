@@ -114,10 +114,12 @@ export function MqttTopicMappingModal({ accessToken, target, devices, onClose }:
         retain: retainVal,
         is_active: formActive,
       };
-      if (editing === "new") {
+      const currentEditing = editing;
+      if (currentEditing === "new") {
         await createTopicMapping(accessToken, target.id, payload);
-      } else if (editing && editing !== "new") {
-        await updateTopicMapping(accessToken, target.id, editing.id, payload);
+      } else if (currentEditing !== null && typeof currentEditing !== "string") {
+        // Type narrowing: currentEditing burada OutboundTopicMapping (id alani var)
+        await updateTopicMapping(accessToken, target.id, currentEditing.id, payload);
       }
       setEditing(null);
       await reload();
