@@ -225,14 +225,26 @@ def run_pg_dump(file_path: Path) -> tuple[bool, str]:
             timeout=900,  # 15 dk
         )
         if completed.returncode != 0:
-            return False, (completed.stderr or "pg_dump non-zero exit")[:1900]
+            # stderr server log'a, kullaniciya kisaltilmis generic mesaj
+            # (DB host/port/path, kullanici adi gibi alanlar sizmasin).
+            import logging as _logging
+
+            _logging.getLogger(__name__).error(
+                "pg_dump_nonzero_exit rc=%s stderr=%s",
+                completed.returncode,
+                (completed.stderr or "")[:4000],
+            )
+            return False, f"pg_dump non-zero exit (rc={completed.returncode})"
         return True, ""
     except FileNotFoundError:
         return False, "pg_dump bulunamadı (PATH'te olmali veya PG_DUMP env ile yol verin)."
     except subprocess.TimeoutExpired:
         return False, "pg_dump zaman aşımı (15 dk)."
-    except Exception as exc:  # noqa: BLE001
-        return False, f"pg_dump hatasi: {exc}"
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+
+        _logging.getLogger(__name__).exception("pg_dump_unexpected_error")
+        return False, "pg_dump hatasi (detay icin server log'una bakin)"
 
 
 _LEGACY_ROLES = ["horstman", "hsl", "horstmann"]
@@ -393,29 +405,52 @@ def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:
     pool'u tamamen dispose edip yeni connection'larin temiz acilmasini
     saglariz; aksi halde sonraki sorgular 'cached plan must not change
     result type' veya benzeri PG hatasi alabilir.
+
+    Progress: restore_status_tracker ile adim adim ilerleme bildirilir.
+    Frontend /admin/backups/restore/status endpoint'ini polling ile takip
+    eder; kullanici hangi asamada oldugunu gorebilir.
     """
+    from app.services import restore_status_tracker as _tracker
+
     if not job.file_path:
+        _tracker.fail("Yedek dosya yolu yok.")
         return False, "Yedek dosya yolu yok."
     p = Path(job.file_path)
     if not p.exists():
-        return False, f"Yedek dosyasi bulunamadi: {p.name}"
-    # Restore oncesi format + icerik dogrulama (RCE / privilege escalation
-    # vektorlerini reddet). Yukleme sirasinda da kontrol ediyoruz; burada
-    # ikinci kez kontrol etmek defansif: DB'de saklanan eski/legacy job
-    # dosyalari da gecsin.
+        msg = f"Yedek dosyasi bulunamadi: {p.name}"
+        _tracker.fail(msg)
+        return False, msg
+
+    # Adim 1: validate
+    _tracker.set_step("validating", f"{p.name} dogrulaniyor...")
     valid, validation_err = validate_dump_file(p)
     if not valid:
         logger.error("backup_restore_validation_failed file=%s reason=%s", p.name, validation_err)
+        _tracker.fail(validation_err)
         return False, validation_err
+
+    # Adim 2: prepare (legacy role ensure run_pg_restore icinde, ama yine de
+    # adim olarak isaretleyelim ki kullanici 'preparing' rozetini gorsun).
+    _tracker.set_step("preparing", "Veritabani hazirlaniyor...")
+
+    # Adim 3: pg_restore (en uzun adim — 30 sn ile 10 dk arasi)
+    _tracker.set_step("restoring", "pg_restore calisiyor (uzun surebilir)...")
     ok, msg = run_pg_restore(p)
-    if ok:
-        try:
-            from app.db.session import engine as _engine
-            _engine.dispose()
-        except Exception:  # noqa: BLE001
-            import logging as _logging
-            _logging.getLogger(__name__).exception("engine_dispose_after_restore_failed")
-    return ok, msg
+    if not ok:
+        _tracker.fail(msg)
+        return False, msg
+
+    # Adim 4: finalizing — connection pool dispose
+    _tracker.set_step("finalizing", "Baglantilar yenileniyor...")
+    try:
+        from app.db.session import engine as _engine
+        _engine.dispose()
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).exception("engine_dispose_after_restore_failed")
+
+    _tracker.finish_ok()
+    return True, ""
 
 
 def apply_retention(db: Session, retention_count: int) -> int:

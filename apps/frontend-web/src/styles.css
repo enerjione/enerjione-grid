@@ -20641,3 +20641,184 @@ main.content.engineering-content:has(.device-management-panel) {
   align-items: center;
   margin-bottom: 4px;
 }
+
+/* =====================================================================
+   Backup restore progress modal
+   ===================================================================== */
+.backups-restore-progress-modal {
+  min-width: 480px;
+  max-width: 560px;
+}
+.backups-restore-progress-modal .backups-confirm-icon {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+.backups-restore-progress-modal .restore-status-done {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+.backups-restore-progress-modal .restore-status-failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+.backups-restore-progress-modal .backups-confirm-icon .material-symbols-outlined {
+  font-size: 32px;
+  font-variation-settings: "FILL" 1;
+}
+/* Spinner-like rotation for in-progress icon */
+.restore-status-queued .material-symbols-outlined,
+.restore-status-validating .material-symbols-outlined,
+.restore-status-preparing .material-symbols-outlined,
+.restore-status-restoring .material-symbols-outlined,
+.restore-status-finalizing .material-symbols-outlined {
+  animation: restore-spin 1.4s linear infinite;
+}
+@keyframes restore-spin {
+  to { transform: rotate(360deg); }
+}
+
+.restore-progress-filename {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #64748b;
+  font-family: ui-monospace, "Courier New", monospace;
+  background: #f8fafc;
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin: 4px 0 14px;
+}
+.restore-progress-filename .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.restore-progress-bar-wrap {
+  margin: 8px 0 16px;
+}
+.restore-progress-bar-track {
+  width: 100%;
+  height: 10px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.restore-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  border-radius: 999px;
+  transition: width 0.4s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+.restore-progress-bar-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0.15) 100%
+  );
+  animation: restore-bar-shimmer 1.4s linear infinite;
+}
+.restore-progress-bar-fill--done {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+.restore-progress-bar-fill--done::after {
+  display: none;
+}
+.restore-progress-bar-fill--failed {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+.restore-progress-bar-fill--failed::after {
+  display: none;
+}
+@keyframes restore-bar-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+.restore-progress-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-top: 6px;
+}
+.restore-progress-elapsed {
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.restore-progress-steps {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px 0;
+}
+.restore-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+.restore-step .material-symbols-outlined {
+  font-size: 18px;
+  font-variation-settings: "FILL" 1;
+}
+.restore-step.step-pending {
+  color: #94a3b8;
+}
+.restore-step.step-pending .material-symbols-outlined {
+  color: #cbd5e1;
+}
+.restore-step.step-active {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.06);
+  font-weight: 600;
+}
+.restore-step.step-active .material-symbols-outlined {
+  color: #2563eb;
+  animation: restore-spin 1.4s linear infinite;
+}
+.restore-step.step-done {
+  color: #059669;
+}
+.restore-step.step-done .material-symbols-outlined {
+  color: #10b981;
+}
+.restore-step.step-failed {
+  color: #dc2626;
+  background: rgba(239, 68, 68, 0.06);
+  font-weight: 600;
+}
+.restore-step.step-failed .material-symbols-outlined {
+  color: #ef4444;
+}
+
+.restore-progress-message {
+  font-size: 13px;
+  color: #475569;
+  margin: 8px 0 4px;
+  text-align: center;
+}
+.restore-progress-error {
+  font-size: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  padding: 8px 10px;
+  border-radius: 4px;
+  margin: 6px 0;
+  font-family: ui-monospace, monospace;
+  word-break: break-word;
+  max-height: 80px;
+  overflow: auto;
+}

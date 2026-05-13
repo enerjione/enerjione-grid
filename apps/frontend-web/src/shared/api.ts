@@ -458,6 +458,33 @@ export async function restoreBackup(token: string, backupId: number): Promise<vo
   if (!response.ok) throw await buildApiError(response, "Yedek geri yüklenemedi.");
 }
 
+/** Restore ilerleme durumu — backend restore_status_tracker.snapshot() */
+export type RestoreStatus = {
+  backup_id: number | null;
+  filename: string | null;
+  status: "idle" | "queued" | "validating" | "preparing" | "restoring" | "finalizing" | "done" | "failed";
+  current_step: string;
+  step_index: number;
+  total_steps: number;
+  progress_percent: number;
+  message: string;
+  error: string | null;
+  started_by: string | null;
+  started_at: number | null;
+  finished_at: number | null;
+  elapsed_sec: number | null;
+  steps: string[];
+  logs: Array<{ ts: string; step: string; level: "info" | "success" | "error"; message: string }>;
+};
+
+export async function getRestoreStatus(token: string): Promise<RestoreStatus> {
+  const response = await fetch(`${API_BASE_URL}/admin/backups/restore/status`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Restore durumu alınamadı.");
+  return (await response.json()) as RestoreStatus;
+}
+
 /** Backend container'ini yeniden baslat. Yanit ~1.5sn sonra container exit
  * eder, Docker `restart: unless-stopped` policy'si ile yeniden baslar.
  * Toplam downtime ~5sn. Native kurulumda exit otomatik kalkis vermez. */

@@ -7,11 +7,13 @@ import {
   downloadBackupFile,
   fetchBackups,
   fetchBackupSchedule,
+  getRestoreStatus,
   restartBackend,
   restoreBackup,
   updateBackupSchedule,
   uploadBackupFile
 } from "../../shared/api";
+import type { RestoreStatus } from "../../shared/api";
 import type { BackupJob, BackupSchedule } from "../../shared/types";
 import { useToast } from "../../components/ToastProvider";
 
@@ -57,6 +59,11 @@ export function BackupsPanel({ accessToken }: Props) {
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  // Restore progress modal — restore'a basildiginda acilir, polling ile
+  // backend'den her 1.5sn'de bir status alir. status 'done'/'failed' olunca
+  // polling durur, "Kapat" butonu aktif olur.
+  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus | null>(null);
+  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const reload = async () => {
@@ -148,22 +155,82 @@ export function BackupsPanel({ accessToken }: Props) {
     const id = confirmRestoreId;
     setConfirmRestoreId(null);
     setRestoringId(id);
+    // Progress modal'i hemen ac — backend POST'un cevabini beklemeden bile
+    // kullaniciya "baslatiyoruz" hissi ver.
+    setRestoreModalOpen(true);
+    setRestoreStatus({
+      backup_id: id,
+      filename: null,
+      status: "queued",
+      current_step: "queued",
+      step_index: 0,
+      total_steps: 5,
+      progress_percent: 0,
+      message: t("backups.restore.progress.starting"),
+      error: null,
+      started_by: null,
+      started_at: null,
+      finished_at: null,
+      elapsed_sec: null,
+      steps: ["queued", "validating", "preparing", "restoring", "finalizing", "done"],
+      logs: [],
+    });
     try {
       await restoreBackup(accessToken, id);
-      toast.success(t("backups.restore.success"));
-      await reload();
-      // pg_restore --clean DB schema'yi DROP + CREATE eder; backend
-      // engine.dispose() yaptiktan sonra cogu durumda calismaya devam eder.
-      // Ancak worker servisleri (tag-engine, alarm-service vs.) ayri
-      // process'lerdir; bazen tam temizlik icin sistem yeniden baslatilmali.
-      // Kullaniciya soralim — auto-restart yerine bilincli onay.
-      setConfirmRestart(true);
+      // POST geri donduyse backend background thread baslatti; polling devreye girer.
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("backups.restore.fail"));
-    } finally {
+      const msg = err instanceof Error ? err.message : t("backups.restore.fail");
+      toast.error(msg);
       setRestoringId(null);
+      setRestoreStatus((prev) =>
+        prev ? { ...prev, status: "failed", error: msg, message: msg } : prev
+      );
     }
   };
+
+  // Restore polling — restoreModalOpen true iken her 1.5sn'de status cek.
+  // status 'done' veya 'failed' olunca polling durur.
+  useEffect(() => {
+    if (!restoreModalOpen) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const status = await getRestoreStatus(accessToken);
+        if (cancelled) return;
+        setRestoreStatus(status);
+        if (status.status === "done") {
+          setRestoringId(null);
+          toast.success(t("backups.restore.success"));
+          await reload();
+        } else if (status.status === "failed") {
+          setRestoringId(null);
+          toast.error(status.error || t("backups.restore.fail"));
+        }
+      } catch (err) {
+        // Backend gecici hata — polling'i durdurmayalim, bir sonraki tick yine deniyor.
+        if (cancelled) return;
+        // Restore sirasinda backend DB pool reset oluyor; gecici hata kabul.
+        // eslint-disable-next-line no-console
+        console.debug("restore_status_poll_error", err);
+      }
+    };
+    // Hemen bir kez cek + interval kur
+    void poll();
+    const interval = window.setInterval(() => {
+      // 'done' veya 'failed' olduktan sonra ekstra polling yapma — interval'i sil
+      const s = restoreStatus?.status;
+      if (s === "done" || s === "failed") {
+        window.clearInterval(interval);
+        return;
+      }
+      void poll();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoreModalOpen, accessToken]);
 
   const handleRestart = async () => {
     setRestarting(true);
@@ -533,6 +600,141 @@ export function BackupsPanel({ accessToken }: Props) {
               >
                 {t("backups.restore.confirm")}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Restore progress modali — restore'a basildiginda acilir, polling
+          ile backend'den adim adim ilerleme bilgisi alir. */}
+      {restoreModalOpen && restoreStatus ? (
+        <div className="backups-confirm-backdrop">
+          <div
+            className="backups-confirm-modal backups-restore-progress-modal"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className={`backups-confirm-icon restore-status-${restoreStatus.status}`}>
+              <span className="material-symbols-outlined">
+                {restoreStatus.status === "done"
+                  ? "check_circle"
+                  : restoreStatus.status === "failed"
+                  ? "error"
+                  : "progress_activity"}
+              </span>
+            </div>
+            <h3>
+              {restoreStatus.status === "done"
+                ? t("backups.restore.progress.titleDone")
+                : restoreStatus.status === "failed"
+                ? t("backups.restore.progress.titleFailed")
+                : t("backups.restore.progress.titleRunning")}
+            </h3>
+            {restoreStatus.filename ? (
+              <p className="restore-progress-filename">
+                <span className="material-symbols-outlined">folder_zip</span>
+                {restoreStatus.filename}
+              </p>
+            ) : null}
+
+            {/* Progress bar */}
+            <div className="restore-progress-bar-wrap">
+              <div className="restore-progress-bar-track">
+                <div
+                  className={`restore-progress-bar-fill restore-progress-bar-fill--${restoreStatus.status}`}
+                  style={{ width: `${restoreStatus.progress_percent}%` }}
+                />
+              </div>
+              <div className="restore-progress-bar-label">
+                %{restoreStatus.progress_percent}
+                {restoreStatus.elapsed_sec != null ? (
+                  <span className="restore-progress-elapsed">
+                    {" "}· {restoreStatus.elapsed_sec.toFixed(1)}s
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Adim listesi — her adim icin tik / spinner / hata */}
+            <ul className="restore-progress-steps">
+              {restoreStatus.steps.filter((s) => s !== "queued").map((stepName, idx) => {
+                const stepIdx = restoreStatus.steps.indexOf(stepName);
+                const isCurrent = restoreStatus.current_step === stepName;
+                const isDone = stepIdx < restoreStatus.step_index || restoreStatus.status === "done";
+                const isFailed = restoreStatus.status === "failed" && isCurrent;
+                let iconName = "radio_button_unchecked";
+                let cls = "step-pending";
+                if (isFailed) {
+                  iconName = "cancel";
+                  cls = "step-failed";
+                } else if (isDone) {
+                  iconName = "check_circle";
+                  cls = "step-done";
+                } else if (isCurrent) {
+                  iconName = "progress_activity";
+                  cls = "step-active";
+                }
+                return (
+                  <li key={stepName} className={`restore-step ${cls}`}>
+                    <span className="material-symbols-outlined">{iconName}</span>
+                    <span>{t(`backups.restore.progress.steps.${stepName}`, stepName)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Mesaj / hata */}
+            <p className="restore-progress-message">{restoreStatus.message}</p>
+            {restoreStatus.error ? (
+              <p className="restore-progress-error">{restoreStatus.error}</p>
+            ) : null}
+
+            {/* Aksiyon butonlari — sadece done/failed iken aktif */}
+            <div className="backups-confirm-actions">
+              {restoreStatus.status === "done" ? (
+                <>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      setRestoreModalOpen(false);
+                      setRestoreStatus(null);
+                    }}
+                  >
+                    {t("backups.restore.progress.close")}
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={() => {
+                      setRestoreModalOpen(false);
+                      setConfirmRestart(true);
+                    }}
+                  >
+                    {t("backups.restart.confirm")}
+                  </button>
+                </>
+              ) : restoreStatus.status === "failed" ? (
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => {
+                    setRestoreModalOpen(false);
+                    setRestoreStatus(null);
+                  }}
+                >
+                  {t("backups.restore.progress.close")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  disabled
+                  title={t("backups.restore.progress.runningDisabled")}
+                >
+                  {t("backups.restore.progress.running")}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -232,6 +232,13 @@ def delete_backup(
     return None
 
 
+# Backup upload icin maksimum dosya boyutu — 2 GiB. Tek bir tenant icin
+# pg_dump custom format 600 cihaz + 30 gun telemetri ~500 MB civari; 2 GiB
+# 4x marj. Bunun ustu: ya kotu niyetli disk doldurma, ya da hatali export.
+# Streaming sirasinda asilirsa write durdurulup partial dosya silinir.
+_BACKUP_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
 @router.post("/upload", response_model=BackupJobRead, status_code=status.HTTP_201_CREATED)
 async def upload_backup(
     file: UploadFile = File(...),
@@ -246,6 +253,8 @@ async def upload_backup(
     butonuyla geri yukleyebilir.
 
     Sadece pg_dump custom format (.dump) kabul edilir; uzanti kontrolu yapilir.
+    Disk dolma DoS'una karsi 2 GiB hard cap; sinir asildiginda partial dosya
+    silinir ve 413 doner.
     """
     name = (file.filename or "uploaded.dump").strip()
     if not name.lower().endswith(".dump"):
@@ -257,17 +266,35 @@ async def upload_backup(
     now = datetime.now(timezone.utc)
     safe = "".join(c for c in name if c.isalnum() or c in "._-")[:120] or "upload.dump"
     target = get_backup_dir() / f"e1-{now.strftime('%Y%m%d-%H%M%S')}-uploaded-{safe}"
+    written = 0
     try:
         with open(target, "wb") as out:
             while True:
                 chunk = await file.read(1024 * 1024)
                 if not chunk:
                     break
+                written += len(chunk)
+                if written > _BACKUP_UPLOAD_MAX_BYTES:
+                    out.close()
+                    try:
+                        target.unlink()
+                    except OSError:
+                        pass
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"Yedek dosyasi cok buyuk (max {_BACKUP_UPLOAD_MAX_BYTES // (1024 * 1024)} MiB).",
+                    )
                 out.write(chunk)
-    except Exception as exc:  # noqa: BLE001
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001
+        try:
+            target.unlink()
+        except OSError:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Dosya kaydedilemedi: {exc}",
+            detail="Dosya kaydedilemedi.",
         )
     # Format + tehlikeli SQL pattern validation — gecmezse dosyayi sil ve 400 don.
     # Saldirgan engineer rolunu ele gecirip RCE icin malicious dump yukleyemesin.
@@ -318,11 +345,32 @@ def restore(
     current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
+    """Restore'u arka plan thread'inde tetikle, anlik 202 don.
+
+    Frontend `GET /admin/backups/restore/status` ile polling yapip kullaniciya
+    progress bar + adim listesi gosterir. restore_status_tracker tek bir
+    aktif restore tutar (paralel restore engellenir).
+    """
+    from app.services import restore_status_tracker as _tracker
+    import threading
+
     job = db.get(BackupJob, backup_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Yedek kaydi bulunamadi.")
     if job.status != "success":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu yedek geri yuklenemez.")
+    if _tracker.is_running():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Su an baska bir restore zaten calisiyor. Tamamlanmasini bekleyin.",
+        )
+
+    fname = Path(job.file_path).name if job.file_path else f"backup-{job.id}"
+    # Tracker'i SENKRON baslat — endpoint donmeden status 'queued' olmali ki
+    # frontend ilk polling'inde 'idle' yerine 'queued' gorsun.
+    _tracker.start(job.id, fname, current_user.username)
+
+    # Audit event (start)
     record_event(
         db,
         category="backup",
@@ -335,23 +383,60 @@ def restore(
         i18n_params={"id": job.id},
     )
     db.commit()
-    ok, err = restore_backup(db, job)
-    record_event(
-        db,
-        category="backup",
-        event_type="backup_restore_finished" if ok else "backup_restore_failed",
-        severity="info" if ok else "warning",
-        actor_username=current_user.username,
-        message=(
-            f"Yedek geri yukleme tamamlandi (id={job.id})"
-            if ok
-            else f"Yedek geri yukleme hatasi: {err[:200]}"
-        ),
-        metadata={"backup_id": job.id, "error": err if not ok else None},
-        i18n_key="backup_restore_finished" if ok else "backup_restore_failed",
-        i18n_params={"id": job.id, "error": (err or "")[:200]},
-    )
-    db.commit()
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=err or "Geri yukleme basarisiz.")
-    return {"status": "restored", "backup_id": job.id}
+
+    # Background thread — restore HTTP request'i bloklamasin
+    def _run_restore_in_thread(job_id: int, username: str) -> None:
+        # Yeni DB session — thread-safe degil paylasilan session.
+        from app.db.session import SessionLocal as _SessionLocal
+        thread_db = _SessionLocal()
+        try:
+            j = thread_db.get(BackupJob, job_id)
+            if j is None:
+                _tracker.fail(f"BackupJob {job_id} bulunamadi")
+                return
+            ok, err = restore_backup(thread_db, j)
+            # Audit event (finish/fail)
+            try:
+                record_event(
+                    thread_db,
+                    category="backup",
+                    event_type="backup_restore_finished" if ok else "backup_restore_failed",
+                    severity="info" if ok else "warning",
+                    actor_username=username,
+                    message=(
+                        f"Yedek geri yukleme tamamlandi (id={j.id})"
+                        if ok
+                        else f"Yedek geri yukleme hatasi: {err[:200]}"
+                    ),
+                    metadata={"backup_id": j.id, "error": err if not ok else None},
+                    i18n_key="backup_restore_finished" if ok else "backup_restore_failed",
+                    i18n_params={"id": j.id, "error": (err or "")[:200]},
+                )
+                thread_db.commit()
+            except Exception:  # noqa: BLE001
+                import logging as _logging
+                _logging.getLogger(__name__).exception("restore_audit_event_failed")
+        finally:
+            thread_db.close()
+
+    threading.Thread(
+        target=_run_restore_in_thread,
+        args=(job.id, current_user.username),
+        name=f"restore-{job.id}",
+        daemon=True,
+    ).start()
+
+    return {"status": "started", "backup_id": job.id}
+
+
+@router.get("/restore/status")
+def get_restore_status(
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+):
+    """Aktif veya son restore'un guncel durumu — frontend polling endpoint'i.
+
+    Frontend her 1-2 saniyede bir bu endpoint'i cagirir; status='done' veya
+    'failed' olunca polling'i durdurur. 'idle' = hic restore baslamadi.
+    """
+    from app.services import restore_status_tracker as _tracker
+    return _tracker.snapshot()

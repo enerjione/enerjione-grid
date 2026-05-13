@@ -1509,7 +1509,23 @@
       "cancel": "Cancel",
       "confirm": "Yes, Restore",
       "success": "Restore completed. System data has been updated.",
-      "fail": "Restore failed."
+      "fail": "Restore failed.",
+      "progress": {
+        "titleRunning": "Restore In Progress",
+        "titleDone": "Restore Completed",
+        "titleFailed": "Restore Failed",
+        "starting": "Starting restore...",
+        "close": "Close",
+        "running": "Running...",
+        "runningDisabled": "Wait until restore completes",
+        "steps": {
+          "validating": "Validating backup file",
+          "preparing": "Preparing database",
+          "restoring": "Restoring data (pg_restore)",
+          "finalizing": "Refreshing connections",
+          "done": "Done"
+        }
+      }
     },
     "restart": {
       "btn": "Restart System",

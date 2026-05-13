@@ -1509,7 +1509,23 @@
       "cancel": "Vazgeç",
       "confirm": "Evet, Geri Yükle",
       "success": "Geri yükleme tamamlandı. Sistem verileri güncellendi.",
-      "fail": "Geri yükleme başarısız."
+      "fail": "Geri yükleme başarısız.",
+      "progress": {
+        "titleRunning": "Geri Yükleme Sürüyor",
+        "titleDone": "Geri Yükleme Tamamlandı",
+        "titleFailed": "Geri Yükleme Başarısız",
+        "starting": "Geri yükleme başlatılıyor...",
+        "close": "Kapat",
+        "running": "Devam ediyor...",
+        "runningDisabled": "Geri yükleme tamamlanana kadar bekleyin",
+        "steps": {
+          "validating": "Yedek dosyası doğrulanıyor",
+          "preparing": "Veritabanı hazırlanıyor",
+          "restoring": "Veriler geri yükleniyor (pg_restore)",
+          "finalizing": "Bağlantılar yenileniyor",
+          "done": "Tamamlandı"
+        }
+      }
     },
     "restart": {
       "btn": "Sistemi Yeniden Başlat",
