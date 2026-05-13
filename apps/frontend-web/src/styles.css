@@ -5476,16 +5476,20 @@ main.content.engineering-content:has(.device-management-panel) {
 /* Olaylar: öncelik ve kategori rozetleri.
    th + td ikisinde de center; pill icerigi auto-width + max-width ile uzun
    etiketleri (orn. "Dis sistemlere aktarim") sigdirir. */
+.events-table th.event-col-priority,
+.events-table td.event-col-priority,
 .event-col-priority,
 th.event-col-priority {
   white-space: nowrap;
   vertical-align: middle;
-  text-align: center;
+  text-align: center !important;
   width: 110px;
   min-width: 110px;
   max-width: 110px;
 }
 
+.events-table th.event-col-category,
+.events-table td.event-col-category,
 .event-col-category,
 th.event-col-category {
   white-space: nowrap;
@@ -5493,7 +5497,7 @@ th.event-col-category {
   width: 180px;
   min-width: 180px;
   max-width: 180px;
-  text-align: center;
+  text-align: center !important;
 }
 
 /* Pill'ler: sabit genislik yerine icerikle birlikte buyur, ortalanir.
@@ -21619,33 +21623,204 @@ th.event-col-category {
   background: #dc2626;
 }
 
-/* Auto-topics modal */
+/* =====================================================================
+   Auto-topics modal — arama + kopyala + scroll'lu card list
+   ===================================================================== */
 .auto-topics-modal {
-  width: min(820px, 96vw);
-  max-height: 80vh;
-  overflow-y: auto;
+  width: min(880px, 96vw);
+  height: 720px;
+  max-height: 92vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 12px;
+  overflow: hidden;
+  padding: 16px;
+}
+.auto-topics-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .auto-topics-modal h3 {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin: 0;
 }
 .auto-topics-modal h3 .material-symbols-outlined {
   color: #ff8c00;
   font-variation-settings: "FILL" 1;
 }
-.auto-topics-list {
-  margin-top: 8px;
-}
-.auto-topics-code {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+.auto-topics-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #ff8c00;
+  color: #fff;
   font-size: 12px;
-  background: #f1f5f9;
-  padding: 2px 6px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* Toolbar: arama + tumunu kopyala */
+.auto-topics-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.auto-topics-search {
+  flex: 1 1 auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.auto-topics-search .material-symbols-outlined {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  font-size: 18px;
+  pointer-events: none;
+}
+.auto-topics-search input {
+  width: 100%;
+  padding: 9px 36px 9px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+}
+.auto-topics-search input:focus {
+  outline: none;
+  border-color: #ff8c00;
+  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.15);
+}
+.auto-topics-search-clear {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 4px;
+}
+.auto-topics-search-clear:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+.auto-topics-search-clear .material-symbols-outlined {
+  position: static;
+  font-size: 16px;
+}
+.auto-topics-copy-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.auto-topics-copy-all .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* Scroll list */
+.auto-topics-scroll {
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+.auto-topics-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.auto-topics-card {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.12s;
+}
+.auto-topics-card:hover {
+  background: #f8fafc;
+}
+.auto-topics-card:last-child {
+  border-bottom: 0;
+}
+.auto-topics-card--custom {
+  background: #fffbeb;
+}
+.auto-topics-card--custom:hover {
+  background: #fef3c7;
+}
+.auto-topics-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.auto-topics-card-device {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.auto-topics-card-device .material-symbols-outlined {
+  font-size: 16px;
+  color: #64748b;
+}
+.auto-topics-card-topic {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  background: #f1f5f9;
+  padding: 5px 10px;
+  border-radius: 6px;
   color: #1e293b;
   word-break: break-all;
+  min-width: 0;
 }
+.auto-topics-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #64748b;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.auto-topics-copy-btn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #e2e8f0;
+}
+.auto-topics-copy-btn.is-copied {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+.auto-topics-copy-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+
 .auto-topics-tag {
   display: inline-block;
   padding: 2px 8px;
@@ -21654,8 +21829,25 @@ th.event-col-category {
   font-weight: 600;
   background: #e0e7ff;
   color: #4338ca;
+  white-space: nowrap;
 }
 .auto-topics-tag--custom {
   background: #fef3c7;
   color: #92400e;
+}
+
+@media (max-width: 720px) {
+  .auto-topics-card {
+    grid-template-columns: 1fr auto;
+  }
+  .auto-topics-card-meta {
+    grid-column: 1 / -1;
+  }
+  .auto-topics-card-topic {
+    grid-column: 1 / 2;
+  }
+  .auto-topics-copy-btn {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+  }
 }

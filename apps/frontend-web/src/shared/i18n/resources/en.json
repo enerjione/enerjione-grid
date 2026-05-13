@@ -1226,6 +1226,11 @@
         "autoTopicsDefault": "Template",
         "autoTopicsCustom": "Custom",
         "autoTopicsEmpty": "No devices found or no active template for this target.",
+        "autoTopicsSearchPlaceholder": "Search by device code or topic…",
+        "autoTopicsCopyAll": "Copy all ({{count}})",
+        "autoTopicsCopyOne": "Copy topic",
+        "autoTopicsCopied": "Copied",
+        "autoTopicsNoMatch": "No matches.",
         "mapping": {
           "title": "Custom Topic Mapping",
           "subtitle": "Per-device/per-signal custom topics for {{name}}",

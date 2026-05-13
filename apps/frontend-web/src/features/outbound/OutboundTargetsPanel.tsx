@@ -95,6 +95,9 @@ export function OutboundTargetsPanel({
   const [autoTopicsTarget, setAutoTopicsTarget] = useState<OutboundTarget | null>(null);
   const [autoTopics, setAutoTopics] = useState<OutboundAutoTopic[] | null>(null);
   const [autoTopicsLoading, setAutoTopicsLoading] = useState(false);
+  const [autoTopicsSearch, setAutoTopicsSearch] = useState("");
+  const [copiedTopic, setCopiedTopic] = useState<string | null>(null);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   // Form state
   const [name, setName] = useState("");
@@ -544,6 +547,9 @@ export function OutboundTargetsPanel({
   useEffect(() => {
     if (!autoTopicsTarget) {
       setAutoTopics(null);
+      setAutoTopicsSearch("");
+      setCopiedTopic(null);
+      setCopiedAll(false);
       return;
     }
     let cancelled = false;
@@ -1481,53 +1487,147 @@ export function OutboundTargetsPanel({
       ) : null}
 
       {/* Otomatik Topic'ler modal — MQTT target icin uretilecek topic'leri gosterir */}
-      {autoTopicsTarget ? (
+      {autoTopicsTarget ? (() => {
+        const allRows = autoTopics ?? [];
+        const q = autoTopicsSearch.trim().toLowerCase();
+        const filtered = q
+          ? allRows.filter(
+              (r) =>
+                r.topic.toLowerCase().includes(q) ||
+                r.device_code.toLowerCase().includes(q)
+            )
+          : allRows;
+        const copyOne = async (topic: string) => {
+          try {
+            await navigator.clipboard.writeText(topic);
+            setCopiedTopic(topic);
+            window.setTimeout(() => setCopiedTopic(null), 1500);
+          } catch {
+            // sessiz — clipboard izni yoksa fallback yok (operator manuel select)
+          }
+        };
+        const copyAll = async () => {
+          try {
+            const text = filtered.map((r) => r.topic).join("\n");
+            await navigator.clipboard.writeText(text);
+            setCopiedAll(true);
+            window.setTimeout(() => setCopiedAll(false), 1500);
+          } catch {
+            // sessiz
+          }
+        };
+        return (
         <div className="settings-modal-backdrop" onClick={() => setAutoTopicsTarget(null)}>
           <div
             className="settings-modal auto-topics-modal"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3>
-              <span className="material-symbols-outlined">topic</span>
-              {t("engineering.outbound.mqtt.autoTopicsTitle", { name: autoTopicsTarget.name })}
-            </h3>
-            <p className="helper-text">
-              {t("engineering.outbound.mqtt.autoTopicsHint")}
-            </p>
+            <div className="auto-topics-head">
+              <h3>
+                <span className="material-symbols-outlined">topic</span>
+                {t("engineering.outbound.mqtt.autoTopicsTitle", { name: autoTopicsTarget.name })}
+                <span className="auto-topics-count-badge">{allRows.length}</span>
+              </h3>
+              <p className="helper-text">
+                {t("engineering.outbound.mqtt.autoTopicsHint")}
+              </p>
+            </div>
+
+            <div className="auto-topics-toolbar">
+              <div className="auto-topics-search">
+                <span className="material-symbols-outlined">search</span>
+                <input
+                  type="text"
+                  placeholder={t("engineering.outbound.mqtt.autoTopicsSearchPlaceholder")}
+                  value={autoTopicsSearch}
+                  onChange={(e) => setAutoTopicsSearch(e.target.value)}
+                  autoFocus
+                />
+                {autoTopicsSearch ? (
+                  <button
+                    type="button"
+                    className="auto-topics-search-clear"
+                    onClick={() => setAutoTopicsSearch("")}
+                    title={t("common.clear")}
+                  >
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="secondary-btn auto-topics-copy-all"
+                onClick={() => void copyAll()}
+                disabled={filtered.length === 0}
+              >
+                <span className="material-symbols-outlined">
+                  {copiedAll ? "check" : "content_copy"}
+                </span>
+                {copiedAll
+                  ? t("engineering.outbound.mqtt.autoTopicsCopied")
+                  : t("engineering.outbound.mqtt.autoTopicsCopyAll", { count: filtered.length })}
+              </button>
+            </div>
+
             {autoTopicsLoading ? (
-              <p className="helper-text">{t("common.loading")}</p>
-            ) : autoTopics && autoTopics.length > 0 ? (
-              <div className="auto-topics-list">
-                <table className="users-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 80 }}>#</th>
-                      <th>{t("engineering.outbound.mqtt.autoTopicsDevice")}</th>
-                      <th>{t("engineering.outbound.mqtt.autoTopicsTopic")}</th>
-                      <th style={{ width: 90 }}>{t("engineering.outbound.mqtt.autoTopicsKind")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {autoTopics.map((row, idx) => (
-                      <tr key={`${row.device_code}-${row.topic}-${idx}`}>
-                        <td>{idx + 1}</td>
-                        <td className="outbound-name-cell">{row.device_code}</td>
-                        <td><code className="auto-topics-code">{row.topic}</code></td>
-                        <td>
-                          <span className={row.is_custom ? "auto-topics-tag auto-topics-tag--custom" : "auto-topics-tag"}>
+              <p className="helper-text" style={{ padding: "32px 0", textAlign: "center" }}>
+                {t("common.loading")}
+              </p>
+            ) : allRows.length === 0 ? (
+              <p className="helper-text" style={{ padding: "32px 0", textAlign: "center" }}>
+                {t("engineering.outbound.mqtt.autoTopicsEmpty")}
+              </p>
+            ) : filtered.length === 0 ? (
+              <p className="helper-text" style={{ padding: "32px 0", textAlign: "center" }}>
+                {t("engineering.outbound.mqtt.autoTopicsNoMatch")}
+              </p>
+            ) : (
+              <div className="auto-topics-scroll">
+                <ul className="auto-topics-cards">
+                  {filtered.map((row, idx) => {
+                    const isCopied = copiedTopic === row.topic;
+                    return (
+                      <li
+                        key={`${row.device_code}-${row.topic}-${idx}`}
+                        className={`auto-topics-card ${row.is_custom ? "auto-topics-card--custom" : ""}`}
+                      >
+                        <div className="auto-topics-card-meta">
+                          <span className="auto-topics-card-device">
+                            <span className="material-symbols-outlined">router</span>
+                            {row.device_code}
+                          </span>
+                          <span
+                            className={
+                              row.is_custom
+                                ? "auto-topics-tag auto-topics-tag--custom"
+                                : "auto-topics-tag"
+                            }
+                          >
                             {row.is_custom
                               ? t("engineering.outbound.mqtt.autoTopicsCustom")
                               : t("engineering.outbound.mqtt.autoTopicsDefault")}
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                        <code className="auto-topics-card-topic" title={row.topic}>
+                          {row.topic}
+                        </code>
+                        <button
+                          type="button"
+                          className={`auto-topics-copy-btn ${isCopied ? "is-copied" : ""}`}
+                          onClick={() => void copyOne(row.topic)}
+                          title={t("engineering.outbound.mqtt.autoTopicsCopyOne")}
+                        >
+                          <span className="material-symbols-outlined">
+                            {isCopied ? "check" : "content_copy"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-            ) : (
-              <p className="helper-text">{t("engineering.outbound.mqtt.autoTopicsEmpty")}</p>
             )}
+
             <div className="settings-actions">
               <button type="button" onClick={() => setAutoTopicsTarget(null)}>
                 {t("common.close")}
@@ -1535,7 +1635,8 @@ export function OutboundTargetsPanel({
             </div>
           </div>
         </div>
-      ) : null}
+        );
+      })() : null}
     </section>
   );
 }

@@ -338,9 +338,15 @@ def recompute_faults(db: Session) -> None:
             )
         handled_lines.add(line.id)
 
-    # Bu turda aktif alarm GORULMEYEN hatlardaki acik fault'lari resolve et
+    # Bu turda aktif alarm GORULMEYEN hatlardaki acik fault'lari resolve et.
+    # ONEMLI: fault zaten "resolved" durumundaysa tekrar yazma + event spam'i
+    # olusmasin. Sadece status != "resolved" ise gercek state transition var.
     for line_id, fault in open_by_line.items():
         if line_id in handled_lines:
+            continue
+        if fault.status == "resolved":
+            # Onceki turlarda zaten cozulmus — yeniden resolved'a cevirme,
+            # event de yazma. (closed yapmak ayri bir is.) Sessizce gec.
             continue
         fault.status = "resolved"
         fault.resolved_at = now

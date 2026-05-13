@@ -1226,6 +1226,11 @@
         "autoTopicsDefault": "Şablon",
         "autoTopicsCustom": "Özel",
         "autoTopicsEmpty": "Cihaz bulunamadı veya hedefte aktif şablon yok.",
+        "autoTopicsSearchPlaceholder": "Cihaz kodu veya topic ara…",
+        "autoTopicsCopyAll": "Tümünü Kopyala ({{count}})",
+        "autoTopicsCopyOne": "Topic'i kopyala",
+        "autoTopicsCopied": "Kopyalandı",
+        "autoTopicsNoMatch": "Arama eşleşmedi.",
         "mapping": {
           "title": "Özel Topic Eşleme",
           "subtitle": "{{name}} hedefi için cihaz/sinyal bazlı özel topic'ler",
