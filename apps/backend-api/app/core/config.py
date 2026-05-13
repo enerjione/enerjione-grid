@@ -38,18 +38,18 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
-    # Token omru — bir vardiya + ufak pay (8 saat). Sahada operator
-    # vardiyasi sonunda otomatik logout olur; calinan/sizan token
-    # 8 saatten uzun yasamaz. .env ile ACCESS_TOKEN_MINUTES override
-    # edilebilir; ancak 1440'tan (24 saat) yukari cikartmak gunluk
-    # rotasyonu zayiflatir, onerilmez.
+    # Token omru — kullanici sahada uzun saatler calistigi icin 24 saat default
+    # (eskiden 8 saat: vardiya bitiminde otomatik logout olusturuyordu, kullanici
+    # tekrar tekrar login olmak zorundaydi). 24 saatten uzun cikartmak gunluk
+    # rotasyonu zayiflatir, dikkatli kullanin. .env'den ACCESS_TOKEN_MINUTES
+    # override edilebilir.
     #
-    # "Beni hatirla" akisi icin ayri remember_me_token_minutes kullanilir
-    # (default 7 gun). Login response'unda remember_me=true ise uzun TTL'li
-    # token verilir. Local-LAN deploy icin kabul edilebilir; multi-replica
-    # veya internet expose'da kisa TTL + refresh-token zorunlu.
-    access_token_minutes: int = 480
-    remember_me_token_minutes: int = 10_080
+    # "Beni hatirla" akisi icin ayri remember_me_token_minutes (default 30 gun).
+    # Login response'unda remember_me=true ise uzun TTL'li token verilir.
+    # Local-LAN deploy icin kabul edilebilir; internet expose'da kisa TTL +
+    # refresh-token zorunlu.
+    access_token_minutes: int = 1440  # 24 saat
+    remember_me_token_minutes: int = 43_200  # 30 gun
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/enerjione"
     # SQLAlchemy connection pool ayarlari (600 cihaz / 10K msg/sn olcekleri icin
     # default pool_size=5, max_overflow=10 yetersiz kalir; concurrent telemetry

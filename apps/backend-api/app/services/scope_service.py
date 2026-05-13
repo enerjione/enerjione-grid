@@ -25,7 +25,7 @@ def get_visible_device_ids(db: Session, user: User) -> set[int] | None:
     - OPERATOR: kendi sorumluluk alanlarindaki cihazlarin id'leri (set).
       Hicbir alana atanmamis operatorler bos set goryp hicbir cihazi gormez.
     """
-    if user.role in (UserRole.INSTALLER, UserRole.ENGINEER):
+    if user.role in (UserRole.INSTALLER, UserRole.ENGINEER, UserRole.OPS_MANAGER):
         return None
 
     # Operator: alan_id -> device_id zinciri uzerinden cihaz id setini cek
@@ -46,7 +46,7 @@ def get_visible_line_ids(db: Session, user: User) -> set[int] | None:
     icin None (kisit yok). Operator icin: ekibinin kapsamadaki bolgelerin
     altindaki tum hatlar + ekibe direkt eklenmis hatlar.
     """
-    if user.role in (UserRole.INSTALLER, UserRole.ENGINEER):
+    if user.role in (UserRole.INSTALLER, UserRole.ENGINEER, UserRole.OPS_MANAGER):
         return None
     line_ids: set[int] = set()
     # 1) Direkt ekibe eklenmis hatlar
@@ -101,7 +101,7 @@ def get_users_in_scope_for_device(db: Session, device_id: int) -> list[User]:
     # veri (alarm icerigi, cihaz adi) email/SMS ile sizmasin.
     for u in db.scalars(
         select(User).where(
-            User.role.in_([UserRole.ENGINEER, UserRole.INSTALLER]),
+            User.role.in_([UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER]),
             User.hashed_password.isnot(None),
         )
     ).all():
