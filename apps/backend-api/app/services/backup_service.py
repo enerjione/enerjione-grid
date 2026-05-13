@@ -167,6 +167,17 @@ def _pg_env() -> dict[str, str]:
     return env
 
 
+def _pg_restore_env() -> dict[str, str]:
+    """pg_restore icin ozel env — `POSTGRES_RESTORE_PASSWORD` set edilmisse
+    `PGPASSWORD` o degerle override edilir. Restore non-superuser user ile
+    kosturulurken farkli parola gerek (CR2: e1_restore rolu)."""
+    env = _pg_env()
+    restore_pwd = os.getenv("POSTGRES_RESTORE_PASSWORD", "").strip()
+    if restore_pwd:
+        env["PGPASSWORD"] = restore_pwd
+    return env
+
+
 # Yedekten haric tutulan tablolar (sadece schema yedeklenir, veri haric).
 # Telemetri/olay/queue/notification gibi operasyonel veriler hizli buyuyup
 # yedek dosyasini gereksizce sisirir. Geri yuklemede bu tablolar bos
@@ -421,6 +432,16 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     _ensure_legacy_roles_exist(db)
 
     pg_restore = os.getenv("PG_RESTORE", "pg_restore")
+    # GUVENLIK: Restore icin ayri non-superuser rol (RCE koruma).
+    # Default db["user"] genelde POSTGRES_USER (superuser). Yedek dosyasinda
+    # `COPY ... FROM PROGRAM 'sh -c ...'` veya `CREATE FUNCTION ... LANGUAGE c`
+    # gibi RCE vektorleri varsa superuser ile koşulduğunda host'ta komut yurur.
+    # `validate_dump_file` text-search yapıyor ama gzip-compressed TOC icindeki
+    # SQL gizlenebilir. Defense-in-depth: env `POSTGRES_RESTORE_USER` (varsa)
+    # ile non-superuser kosturulur. SUPERUSER yetkisi gerektiren komutlar
+    # restore sirasinda fail eder (örnek: legacy role yaratma); zaten
+    # _ensure_legacy_roles_exist bunu su perpetually yapmis durumda.
+    restore_user = (os.getenv("POSTGRES_RESTORE_USER") or "").strip() or db["user"]
     # NOT: --single-transaction KULLANILMIYOR — eski denemede DROP FK CONSTRAINT
     # asamasinda "ON_ERROR_STOP" gibi davranip kucuk uyarilari bile fatal sayip
     # tum restore'u rollback ediyordu. Bunun yerine --jobs=4 (paralel CREATE/COPY)
@@ -432,7 +453,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
         pg_restore,
         "-h", db["host"],
         "-p", db["port"],
-        "-U", db["user"],
+        "-U", restore_user,
         "-d", db["dbname"],
         "--clean",          # mevcut objeleri DROP et
         "--if-exists",      # yoksa hata verme
@@ -444,7 +465,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     ]
     # Lock bekleme suresi — DROP/CREATE icin 60sn. Default sonsuz; sinir
     # koyarak kullanici "30 dk takildi" durumunu yasamaz, fail-fast hata gorur.
-    env = _pg_env()
+    env = _pg_restore_env()
     env["PGOPTIONS"] = "-c statement_timeout=600000 -c lock_timeout=60000"
 
     # pg_restore'u Popen ile baslat; stderr'i satir satir oku, tracker'a
