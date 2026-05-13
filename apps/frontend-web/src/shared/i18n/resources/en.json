@@ -1643,6 +1643,7 @@
     "actions": {
       "download": "Download",
       "restore": "Restore",
+      "restoreEngineerForbidden": "Only the installer can restore backups",
       "delete": "Delete"
     },
     "errorBanner": "Error",

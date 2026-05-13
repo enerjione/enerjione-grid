@@ -1643,6 +1643,7 @@
     "actions": {
       "download": "İndir",
       "restore": "Geri Yükle",
+      "restoreEngineerForbidden": "Sadece kurulumcu geri yükleyebilir",
       "delete": "Sil"
     },
     "errorBanner": "Hata",
