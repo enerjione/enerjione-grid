@@ -68,7 +68,19 @@ if [[ $ASSUME_YES -ne 1 ]]; then
   fi
 fi
 
-e1_set_steps 5
+e1_set_steps 6
+
+# ---- 0/6: systemd unit (varsa) ------------------------------------------
+e1_step "systemd servis kaydi (varsa)..."
+if systemctl list-unit-files 2>/dev/null | grep -q '^enerjione-grid.service'; then
+  systemctl stop enerjione-grid 2>/dev/null || true
+  systemctl disable enerjione-grid 2>/dev/null || true
+  rm -f /etc/systemd/system/enerjione-grid.service
+  systemctl daemon-reload 2>/dev/null || true
+  e1_ok "systemd unit kaldirildi."
+else
+  e1_ok "systemd unit kaydi yok."
+fi
 
 # ---- 1/5: Compose down -v ------------------------------------------------
 e1_step "Compose stack durduruluyor ve volume'lar siliniyor..."

@@ -1,0 +1,32 @@
+[Unit]
+Description=EnerjiOne Grid (Docker Compose stack)
+Documentation=https://github.com/fikretsafak/EnerjiOneGrid
+# Docker daemon hazir olmadan baslamasin
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+# 'oneshot' tipi: ExecStart bir kez calisir, container'lar arka planda
+# 'restart: unless-stopped' policy ile yasamaya devam eder. RemainAfterExit
+# unit'i 'active (exited)' olarak gosterir; systemctl status anlamli kalir.
+Type=oneshot
+RemainAfterExit=yes
+
+WorkingDirectory=/opt/enerjione-grid
+
+# Stack'i ayaga kaldir / durdur / yeniden baslat
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose up -d --remove-orphans --force-recreate
+
+# Boot sirasinda docker daemon'u hazirlanmasi icin 60sn'lik gecikme.
+# Docker hazir degilse retry uniti FAILED yapmaz; service manager bekler.
+TimeoutStartSec=120
+
+# Log: journalctl -u enerjione-grid takip eder
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

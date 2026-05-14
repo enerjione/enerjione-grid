@@ -361,6 +361,18 @@ else
   e1_warn "  cd ${INSTALL_DIR} && docker compose logs backend-api"
 fi
 
+# ---- (Opsiyonel) systemd servis kaydi -----------------------------------
+# install.sh non-interactive (ASSUME_YES=1) modunda systemd entegrasyonu
+# OTOMATIK yapilir. Interaktif modda kullaniciya sorulur. Eger zaten varsa
+# (idempotent) bir sey degismez.
+if [[ ! -f /etc/systemd/system/enerjione-grid.service ]]; then
+  if [[ "${ASSUME_YES:-0}" == "1" ]] || e1_confirm "EnerjiOne Grid'i systemd servisi olarak kaydet? (sudo systemctl ile yonetim)"; then
+    if [[ -f "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" ]]; then
+      bash "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" || true
+    fi
+  fi
+fi
+
 # ---- Final rehber ---------------------------------------------------------
 VPS_IP="$(e1_detect_ip)"
 echo
@@ -377,11 +389,18 @@ echo "  ${E1_BOLD}Ilk giris:${E1_RESET}"
 echo "    Kullanici : ${E1_CYAN}installer${E1_RESET}"
 echo "    Sifre     : ${E1_CYAN}ChangeMe123!${E1_RESET}    ${E1_YELLOW}<<< MUTLAKA DEGISTIR${E1_RESET}"
 echo
-echo "  ${E1_BOLD}Yonetim komutlari:${E1_RESET}"
+echo "  ${E1_BOLD}Yonetim komutlari (Docker Compose):${E1_RESET}"
 echo "    Guncelleme  : cd ${INSTALL_DIR} && sudo bash update.sh"
 echo "    Kaldirma    : cd ${INSTALL_DIR} && sudo bash uninstall.sh"
 echo "    Servis log  : cd ${INSTALL_DIR} && docker compose logs -f"
 echo "    Servis dur. : cd ${INSTALL_DIR} && docker compose ps"
+echo
+echo "  ${E1_BOLD}Yonetim komutlari (systemd, kaydedildi ise):${E1_RESET}"
+echo "    Baslat      : sudo systemctl start enerjione-grid"
+echo "    Durdur      : sudo systemctl stop enerjione-grid"
+echo "    Yenile      : sudo systemctl restart enerjione-grid"
+echo "    Durum       : sudo systemctl status enerjione-grid"
+echo "    Canli log   : sudo journalctl -u enerjione-grid -f"
 echo
 echo "  ${E1_BOLD}Gateway eklemek icin:${E1_RESET}"
 echo "    Web arayuzu > Muhendislik > Gateway Yonetimi > 'Yeni Gateway'"

@@ -1,281 +1,315 @@
-# EnerjiOne Grid Dashboard
+# EnerjiOne Grid
 
-**Version:** 2.24.4
-Industrial monitoring platform for Horstmann Smart Navigator 2.0 fault-passage indicator devices.
-Iki dağıtım modu:
+**Endüstriyel Akıllı Şebeke İzleme Platformu** — Horstmann Smart Navigator 2.0 arıza-geçiş göstergesi cihazları için açık kaynak izleme/yönetim platformu.
 
-- **Production / Linux + Docker** — VDS, sunucu kurulumları (asağıdaki bölüm).
-- **Geliştirici / Windows native** — masaüstünde IDE ile hızlı iterasyon.
+> 🌐 **Web:** `https://enerjione-grid.fikretsafak.com.tr`
+> 📦 **Repo:** [github.com/fikretsafak/EnerjiOneGrid](https://github.com/fikretsafak/EnerjiOneGrid)
+> 📅 **Sürüm:** 2.24.4
 
 ---
 
-## Production: Linux + Docker
+## 🚀 Hızlı Kurulum (Linux VPS)
 
-Tek komutla sıfırdan ayağa kalkar. Ubuntu 22.04 / 24.04 ve Debian 12 üzerinde test edilmiştir.
-
-### Tek-komut kurulum (yeni VPS)
+**Tek komutla sıfırdan ayağa kalkar.** Test edildi: Ubuntu 22.04/24.04, Debian 12.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
 ```
 
-Script tertemiz VPS'i (Ubuntu/Debian) sıfırdan üretim hazır hâle getirir:
-
-1. Pre-req paketler (`git`, `curl`, `openssl`)
-2. Docker Engine + Compose plugin
-3. Repo klonlama: `/opt/enerjione` (override: `INSTALL_DIR`)
-4. `.env` üretimi — tüm secret değerleri rastgele (Postgres / RabbitMQ / NATS x3 / SECRET_KEY / INTERNAL_SERVICE_TOKEN)
-5. NATS auth konfigürasyonu (`nats-server.conf`) — host Python + bcrypt ile render
-6. Imaj build + servisleri ayağa kaldırma
-7. Backend healthy bekleme + `installer` hesabını otomatik seed
-
-Bittikten sonra tarayıcıdan `http://<vps-ip>/` — login `installer` / `ChangeMe123!` (ilk girişte mutlaka değiştir).
-
-Repo'yu manuel klonladıysan aynı script kök dizinde:
+Veya manuel:
 
 ```bash
+sudo git clone --branch docker-linux-deploy \
+  https://github.com/fikretsafak/EnerjiOneGrid.git /opt/enerjione-grid
+cd /opt/enerjione-grid
 sudo bash install.sh
 ```
 
-Override örnekleri:
+Kurulum sonrası:
+- 🌐 Web: `http://<VPS-IP>/`
+- 👤 İlk giriş: `installer` / `ChangeMe123!` _(mutlaka değiştir)_
+
+---
+
+## 🎛️ Yönetim Komutları
+
+### systemd ile (önerilen)
+
+Install script kurulum sonrası "systemd kaydı yapayım mı?" diye sorar. Onaylarsan:
 
 ```bash
-# Farklı hedef dizin + branch
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh \
-  | sudo INSTALL_DIR=/srv/enerjione BRANCH=main bash
-
-# Interaktif olmayan tam otomatik
-sudo ASSUME_YES=1 bash install.sh
+sudo systemctl start enerjione-grid      # başlat
+sudo systemctl stop enerjione-grid       # durdur
+sudo systemctl restart enerjione-grid    # yeniden başlat
+sudo systemctl status enerjione-grid     # durum
+sudo systemctl enable enerjione-grid     # boot'ta otomatik başlat
+sudo journalctl -u enerjione-grid -f     # canlı log
 ```
 
-### Güncelleme
+Sonradan eklemek:
+```bash
+sudo bash /opt/enerjione-grid/infra/systemd/setup-systemd.sh
+```
+
+### Docker Compose ile (alternatif)
 
 ```bash
-cd /opt/enerjione
-sudo bash update.sh                # tum servisler
-sudo bash update.sh frontend       # sadece frontend-web
-sudo bash update.sh backend        # sadece backend-api
-sudo bash update.sh alarm          # alarm-service
-sudo bash update.sh tag            # tag-engine
-sudo bash update.sh notification   # notification-worker
-sudo bash update.sh iec            # iec104-outbound
-```
+cd /opt/enerjione-grid
 
-`update.sh` git pull öncesi otomatik DB yedeği alır (`backups/auto-pre-update-*.sql.gz`), sonra seçilen servisleri build + force-recreate eder.
+# Stack yönetimi
+sudo docker compose up -d              # başlat
+sudo docker compose down               # durdur (container'lar silinir, volume korunur)
+sudo docker compose restart            # yeniden başlat
+sudo docker compose ps                 # container durumu
+sudo docker compose logs -f            # canlı log (tüm servisler)
+sudo docker compose logs -f backend-api  # tek servis
 
-### Kaldırma
+# Servis güncelleme
+sudo bash update.sh                    # tüm servisler
+sudo bash update.sh backend            # sadece backend-api
+sudo bash update.sh frontend           # sadece frontend-web
+sudo bash update.sh alarm              # alarm-service
+# diğerleri: tag / notification / iec
 
-```bash
-cd /opt/enerjione
-sudo bash uninstall.sh                       # interaktif onayli, dizini korur
-sudo bash uninstall.sh --yes                 # tum onaylari atla
-sudo bash uninstall.sh --keep-images         # sadece data sil, image'lari koru
-sudo bash uninstall.sh --yes --purge-dir     # dizini de sil (full nuke)
-```
-
-Geri yüklemek için (sıfırdan yeniden kur):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
-```
-
-### Servisler ve portlar
-
-| Servis | Public port | Açıklama |
-|---|---|---|
-| frontend-web (nginx) | **80** | SPA + `/api/*` reverse proxy |
-| backend-api | — | Sadece compose network'unde |
-| postgres | — | Sadece compose network'unde |
-| rabbitmq AMQP | — | Sadece compose network'unde |
-| rabbitmq Management UI | 127.0.0.1:15672 | SSH tüneliyle erişim |
-| NATS | **4222** | Gateway → telemetri publish |
-| NATS monitoring | 127.0.0.1:8222 | SSH tüneliyle erişim |
-| iec104-outbound | **2404-2406** | Dış SCADA master bağlantısı |
-
-### Yaygın komutlar
-
-```bash
-cd /opt/enerjione
-docker compose ps                              # durum
-docker compose logs -f backend-api             # log akışı
-docker compose restart backend-api             # servis restart
-docker compose down                            # tümünü durdur (volume'ler kalir)
-sudo bash update.sh                            # git pull + build + recreate
-sudo bash uninstall.sh                         # tamamen kaldır
-```
-
-### Saha gateway'i ekleme (DNP3)
-
-Frontend'den **Mühendislik → Gateway Yönetimi → Yeni Gateway**:
-
-1. Kod (örn. `GTW-1`) ve isim ver, "Oluştur".
-2. "Compose dosyasını indir" — `e1-gw-gtw-1.yml` iner. **NATS şifresi
-   ve gateway token otomatik olarak gömülü gelir**, manuel müdahale yok.
-3. Saha bilgisayarına (Windows/Linux, Docker kurulu) dosyayı kopyala.
-4. `docker compose -f e1-gw-gtw-1.yml up -d` ile başlat.
-
-Gateway, backend `.env`'inde tanımlı `NATS_GATEWAY_PASSWORD`'ü kullanır;
-bu parola backend'in `derive_nats_url()` fonksiyonu tarafından compose'a
-gömülür ([`gateway_compose.py`](apps/backend-api/app/services/gateway_compose.py)).
-
-### HTTPS (opsiyonel, domain varsa)
-
-VDS önüne Caddy/Traefik/Cloudflare koyup `:80`'e proxy edin. Caddy örneği:
-
-```caddy
-hsl.example.com {
-    reverse_proxy localhost:80
-}
+# Kaldırma
+sudo bash uninstall.sh                 # interaktif onay
+sudo bash uninstall.sh --yes           # onay atla
+sudo bash uninstall.sh --keep-images   # image'lar korunur
+sudo bash uninstall.sh --purge-dir     # /opt/enerjione-grid'i de sil
 ```
 
 ---
 
-## Geliştirici: Windows native (IDE ile hızlı iterasyon)
+## 🌍 Multi-Domain (Birden Fazla Uygulama)
 
-## Tek Tıkla Başlatma
+Aynı VPS'te EnerjiOne Grid + EnerjiOne Solar gibi birden fazla uygulama yan yana çalıştırılabilir.
 
-Servis Kontrol Paneli artık tamamen GUI odaklı:
-
-```powershell
-py -3.10 "infra/scripts/windows/service_control_panel.py"
+### 1. DNS ayarları
+Her uygulama için subdomain A kaydı:
+```
+enerjione-grid     A  <VPS-IP>
+enerjione-solar    A  <VPS-IP>
 ```
 
-Önerilen ilk çalıştırma sırası (hepsi panelden, CMD kullanmadan):
-
-1. **Kurulum** sekmesi → *Tüm Bağımlılıkları Kur* (pip + npm install)
-2. **Kurulum** sekmesi → *Kurulumcu (Installer) Hesabı Oluştur / Sıfırla*
-3. **Kurulum** sekmesi → *Varsayılan Sinyalleri Seed Et*
-4. **Hızlı Aksiyonlar** → *Akıllı Başlat (sıralı)*
-
-Panel özellikleri: arka plan thread'lerde non-blocking aksiyonlar, child
-process tree'yi `taskkill /T /F` ile düzgün kapatma, servis başına 500 satırlık
-canlı log penceresi ve `CREATE_NO_WINDOW` ile görünmez PowerShell çağrıları.
-Detay için bkz. `infra/scripts/windows/SERVICE_CONTROL_PANEL.md`.
-
-## Roller (RBAC)
-
-| Yetki | operator | engineer | installer |
-|---|:---:|:---:|:---:|
-| Canlı izleme (harita + tablo) | ✓ | ✓ | ✓ |
-| Alarm / event görüntüleme + onay / reset | ✓ | ✓ | ✓ |
-| Cihaz ekle / çıkar / güncelle | — | ✓ | ✓ |
-| Gateway ekle / düzenle / sil | — | — | ✓ |
-| Sinyal kataloğu (DNP3 adresleri, scale, supports_alarm) | — | — | ✓ |
-| Alarm kuralları (eşik / hysteresis / debounce) | — | — | ✓ |
-| Kullanıcı yönetimi (operatör / mühendis) | — | ✓ | ✓ |
-| Kullanıcı yönetimi (kurulumcu atama) | — | — | ✓ |
-| Outbound hedefleri (REST / MQTT) | — | — | ✓ |
-| Bildirim ayarları (SMTP / SMS) | — | — | ✓ |
-
-- **operator**: yalnızca canlı izleme ve alarm ack/reset yapar.
-- **engineer**: sistemi basitçe genişletip daraltır; cihaz ekler/kaldırır. **Operatör ve mühendis** kullanıcılarını yönetebilir; kurulumcu hesaplarını göremez/müdahale edemez ve kimseye kurulumcu rolü atayamaz. Gateway/sinyal kataloğu/alarm kuralları/bildirim ve outbound ayarlarını değiştiremez.
-- **installer** (süper admin): tüm altyapı, şablon ve parametre kurgusunu yönetir. Tüm rollerde (operator / engineer / installer) kullanıcı oluşturup silebilir. Backend güvenlik gereği kullanıcı kendi hesabını silemez.
-
-## Structure
-
-- `apps/frontend-web`: React + TypeScript operator UI (Anasayfa, Alarmlar, Olaylar, **Sistem durumu** özeti, mühendislik)
-- `apps/backend-api`: FastAPI central backend (auth + signal catalog + alarm rules + IEC 104 / outbound)
-- `apps/tag-engine`: Tag processing microservice (raw telemetri → normalize)
-- `apps/alarm-service`: Alarm evaluation microservice (kural bazlı eşik/debounce)
-- `apps/notification-worker`: Notification microservice (SMTP / Telegram / SMS)
-- `packages/shared-contracts`: shared payload contracts
-- `infra/scripts`: Windows/Linux service scripts
-- **DNP3 Gateway** ayrı repodadır: `Horstmann Smart Logger DNP3 Gateway/` — uzak sunucuda (şube/saha)
-  çalıştırılan standalone Python servisi. Backend'den `/gateways/{code}/config` ile cihaz + sinyal
-  listesini çeker, RabbitMQ `telemetry.raw_received` routing key'i ile yayın yapar.
-
-## Veri akışı (özet)
-
-```
-[Uzak] dnp3-gateway  --(telemetry.raw_received)-->  tag-engine  --(telemetry.received)-->  alarm-service
-       |                                                                                         |
-       +--- GET /gateways/{code}/config (signal list + device list) --- backend-api              |
-                                                                            ^                    |
-                                                                            +-- GET /internal/alarm-rules
-                                                                            |
-                                         IEC 104 / MQTT / REST / Modbus / OPC UA  <-- outbound dispatch
+### 2. Grid'i localhost'a bind et
+```bash
+cd /opt/enerjione-grid
+sed -i 's|^FRONTEND_HTTP_PORT=.*|FRONTEND_HTTP_PORT=127.0.0.1:8080|' .env
+sudo systemctl restart enerjione-grid
 ```
 
-- Sinyal kataloğu tüm cihazlar için ortaktır; cihaz eklendiğinde otomatik uygulanır.
-- Alarm kuralları `signal_key` bazlı template'dir; `supports_alarm=True` olan sinyalde değerlendirilir.
-- `device_code_filter` alanı virgülle ayrılmış cihaz kodları ile kuralın kapsamını daraltır (boş = tüm cihazlar).
+### 3. Host nginx kur
+```bash
+sudo bash /opt/enerjione-grid/infra/host-nginx/setup-host-nginx.sh
+```
 
-## Uzak Gateway Yönetimi
+Bu script:
+- Sistem nginx'i kurar
+- `enerjione-grid.fikretsafak.com.tr` → `127.0.0.1:8080` proxy
+- `enerjione-solar.fikretsafak.com.tr` → `127.0.0.1:8081` proxy
+- WebSocket upgrade + uzun timeout'lar yapılandırılır
 
-Gateway'ler farklı sunucularda (şubelerde/sahalarda) çalıştırılmak üzere tasarlandı.
-Kontrol paneli artık lokal `config.json` yerine **backend'deki gateway kayıtlarını**
-kaynak alır:
+### 4. SSL (Let's Encrypt)
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx \
+  -d enerjione-grid.fikretsafak.com.tr \
+  -d enerjione-solar.fikretsafak.com.tr
+```
 
-1. Frontend → *Mühendislik → Gateway Yönetimi* ekranından gateway eklenir. Yeni
-   alanlar: `Kontrol Host` ve `Kontrol Port` (uzak makinanın IP'si ve gateway'in
-   health portu).
-2. Uzak sunucuya **ayrı DNP3 Gateway repo'su** (`Horstmann Smart Logger DNP3 Gateway`)
-   kurulur; `.env`'de `GATEWAY_CODE`, `GATEWAY_TOKEN`, `BACKEND_API_URL`,
-   `WORKER_HEALTH_HOST`, `WORKER_HEALTH_PORT`, `RABBITMQ_URL`, `GATEWAY_MODE=dnp3`
-   ayarlanıp Windows Service veya systemd ile çalıştırılır.
-3. Kontrol Paneli → *Gateway Yönetimi* sekmesi backend'den listeyi çeker ve
-   her gateway için kontrol adresi, TCP sağlık durumu ve son görülme zamanını
-   gösterir. **Başlat / Durdur / Yeniden Başlat** butonları backend'in
-   `is_active` bayrağını değiştirir; uzak gateway bir sonraki konfig
-   refresh'te bu bilgiyi görüp polling'i askıya alır ya da devam ettirir
-   (proses ayakta kalır, komut kaybolmaz).
+Otomatik yenileme cron'ı certbot kendisi kurar (her 12 saatte bir dener).
 
-Panel backend'e **kişisel kullanıcı login'i yapmadan** bağlanır; backend'in
-`INTERNAL_SERVICE_TOKEN` değeri ile eşleşen servis token'ını kullanır. Bu
-token `service_control_panel.config.json` içindeki `backend.service_token`
-alanında tutulur ve backend `.env` dosyasında da aynı değerle tanımlanmalıdır.
+---
 
-> Not: Durmuş bir gateway prosesini **sıfırdan başlatmak** sunucu tarafında
-> kurulu bir supervisor (Windows Service / systemd) ister. Panel bu durumda
-> yalnızca `is_active` flag'ini `true` yapar; supervisor ayağa kalkınca
-> gateway zaten flag'i görüp yayına devam eder.
+## 🏗️ Mimari
 
-## Sinyal Yönetimi ve Canlı Değerler (v2.21.0+)
+```
+┌──────────────────────────────────────────────────────┐
+│  Frontend (Vite + React + TypeScript)                │
+│  nginx:80 → ports/8080                               │
+└──────────────────────────────┬───────────────────────┘
+                               │ /api/v1/...
+┌──────────────────────────────▼───────────────────────┐
+│  Backend API (FastAPI + SQLAlchemy)                  │
+│  uvicorn:8000                                        │
+└──┬──────────┬─────────────┬────────────┬─────────────┘
+   │          │             │            │
+   ▼          ▼             ▼            ▼
+┌─────┐  ┌────────┐    ┌────────┐   ┌──────────┐
+│ PG  │  │RabbitMQ│    │ NATS   │   │ Workers  │
+│ 16  │  │management│  │JetStream│   │ (4 adet) │
+└─────┘  └────────┘    └────────┘   └──────────┘
+                                     ├─ tag-engine
+                                     ├─ alarm-service
+                                     ├─ notification-worker
+                                     └─ iec104-outbound
+```
 
-Mühendislik menüsü, sinyal ve telemetri verilerini net biçimde ayırır:
+### Container namespace
+Tüm container'lar `e1-grid-` prefix ile gelir (örn: `e1-grid-backend-api`).
+Solar yan-yana çalıştırılırsa `e1s-*` namespace kullanır — çakışma yok.
 
-- **Sinyaller** (yalnızca installer): Sinyal kataloğu sadece tanım/parametre
-  yönetimi içindir (etiket, DNP3 adres, scale, alarm desteği vb.). Canlı
-  değerler bu sayfada gösterilmez.
-  - Sayfa üst sekmeler ile veri tipine göre bölünmüştür:
-    `Analog Input`, `Analog Output`, `Binary Input`, `Binary Output`,
-    `Counter`, `String`. Her sekmede **tablo şeklinde liste** (etiket, kaynak,
-    tip, adres, birim, özellik sütunları) ve sağ tarafta **geniş düzenleme
-    paneli** bulunur. DNP3 adres ve ölçeklendirme alanları ayrı fieldset'lerde
-    gruplandı.
-  - Backend her başlangıçta **strict seed** yapar: JSON'da olmayan kayıtlar
-    (eski mock/test sinyalleri) otomatik temizlenir; listedeki tanımlarla
-    DB birebir eşitlenir. Bu nedenle kurulumcu UI'da ayrıca *Sinyal Ekle*
-    düğmesi yer almaz — tüm katalog `horstmann_sn2_signals.json` tarafından
-    yönetilir.
-- **Canlı Değerler** (engineer + installer): Her cihaz için **aktif sinyal
-  kataloğundaki** tüm sinyallere bir satır açılır; telemetri geldikçe değer
-  ve kalite dolar, gelmeden önce `—` gösterilir. Veri tipine göre sekmeler,
-  arama ve araç çubuğundaki "Yenile" vardır. Ana dashboard'un "Tablo" sekmesi
-  aynı sayfayı kullanır.
+| Element | Değer |
+|---|---|
+| Compose project | `enerjione-grid` |
+| Image prefix | `e1-grid/<service>:latest` |
+| Container prefix | `e1-grid-<service>` |
+| Volume prefix | `enerjione-grid_<name>` |
+| Network | `enerjione-grid_e1-net` |
+| DB adı | `enerjione_grid` |
+| Default dizin | `/opt/enerjione-grid` |
 
-## First Run (Development)
+---
 
-Önerilen yol Servis Kontrol Paneli (yukarıda). Yine de manuel çalıştırmak isteyenler için:
+## 💻 Geliştirici Modu (Windows / Mac / Linux native)
 
-### Backend
+Backend ve frontend ayrı olarak local'de çalıştırılır — IDE ile hızlı iterasyon.
 
-1. Install Python 3.10
-2. `cd apps/backend-api`
-3. `pip install -r requirements.txt`
-4. `uvicorn app.main:app --reload --port 8000`
+### Backend (Python 3.11+)
+```bash
+cd apps/backend-api
+python -m venv .venv
+.venv\Scripts\activate         # Windows
+source .venv/bin/activate      # Linux/Mac
 
-### Frontend
+pip install -e .
+cp .env.example .env
+# .env'i düzenle (DATABASE_URL local postgres'e işaret etmeli)
 
-1. Install Node.js LTS
-2. `cd apps/frontend-web`
-3. `npm install`
-4. `npm run dev`
+python -m uvicorn app.main:app --reload --port 8000
+```
 
-### DNP3 Gateway (ayrı repo)
+### Frontend (Node 20+)
+```bash
+cd apps/frontend-web
+npm install
+npm run dev
+# Vite dev server :5173, API'yi http://localhost:8000/api/v1'e proxy eder
+```
 
-1. `cd ../Horstmann\ Smart\ Logger\ DNP3\ Gateway`
-2. `py -3.10 -m venv .venv && .venv\Scripts\activate`
-3. `pip install -r requirements.txt` (+ `pip install nfm-dnp3` için gerçek cihaz modu)
-4. `.env` düzenle (`GATEWAY_CODE`, `GATEWAY_TOKEN`, `BACKEND_API_URL`, `RABBITMQ_URL`)
-5. `run_gateway.cmd` veya `python -m dnp3_gateway`
+### Test
+```bash
+# Backend testleri
+cd apps/backend-api && pytest
+
+# Frontend type check
+cd apps/frontend-web && npx tsc --noEmit
+```
+
+---
+
+## 📋 Özellikler
+
+### Mühendislik Modülleri
+- **Cihaz Yönetimi**: DNP3 protokolü, gateway tabanlı topoloji
+- **Sinyal Yönetimi**: Analog/digital sinyal mapping, ölçeklendirme
+- **Alarm Kuralları**: Eşik, dV/dt, AND/OR bileşik mantık
+- **Hat Yönetimi**: Bölge → Hat → Direk → Cihaz hiyerarşisi, harita üzerinde
+- **Webhook & Outbound**: REST/MQTT/IEC104 dış sistem entegrasyonu
+- **API Erişimi**: PAT (Personal Access Token) yönetimi
+- **Bildirim Ayarları**: SMTP, SMS (Twilio/Netgsm), Telegram
+- **Proje Ayarları**: Logo, dil, batarya eşikleri
+- **Yedekler**: Manuel + zamanlanmış DB yedeği, restore
+
+### İzleme & Operasyon
+- **Anasayfa**: Cihaz haritası + sol listede tüm cihazlar (hat atanmamış olanlar ayrı pill ile)
+- **Alarmlar**: Kategori/seviye filtresi, atama, yorum, sıfırlama
+- **Hat Arızaları**: Son kırmızı → ilk yeşil aralığı haritada vurgulama
+- **Olaylar**: Audit log, kategori/öncelik filtresi
+- **Sistem Durumu**: CPU/RAM/disk/uptime + servis sağlık probe'ları
+- **Toplu Bildirim**: Wizard ile çoklu kullanıcı/ekibe duyuru (web push + email + SMS)
+
+### Roller
+| Rol | Yetkiler |
+|---|---|
+| `installer` | Süper admin — her şey |
+| `engineer` | Mühendis — installer dışı her şey, yedek geri yükleme YOK |
+| `ops_manager` | Operasyon Yöneticisi — kullanıcı (sadece operator) + ekip yönetimi + toplu bildirim |
+| `operator` | Saha personeli — alarm/arıza görüntüleme, yorum/atama kabul |
+
+---
+
+## 🔧 Yapılandırma
+
+### .env
+
+Önemli alanlar (kurulum scripti rastgele üretir):
+
+```bash
+# Auth
+SECRET_KEY=<random>                    # JWT secret
+INTERNAL_SERVICE_TOKEN=<random>        # backend ↔ worker token
+
+# Veritabanı
+POSTGRES_DB=enerjione_grid
+POSTGRES_USER=enerjione_grid
+POSTGRES_PASSWORD=<random>
+
+# Mesaj kuyrukları
+RABBITMQ_PASSWORD=<random>
+NATS_BACKEND_PASSWORD=<random>
+NATS_WORKER_PASSWORD=<random>
+NATS_GATEWAY_PASSWORD=<random>
+
+# Frontend bind
+FRONTEND_HTTP_PORT=80                  # multi-app: 127.0.0.1:8080
+
+# CORS
+CORS_ORIGINS=http://localhost,http://127.0.0.1,https://enerjione-grid.fikretsafak.com.tr
+
+# SMTP (opsiyonel)
+SMTP_ENABLED=false
+SMTP_HOST=
+SMTP_FROM_EMAIL=noreply@enerjione-grid.local
+
+# Backup retention
+BACKUP_RETENTION_COUNT=30
+```
+
+### FCM (Mobil Push)
+Firebase Console > Project Settings > Service Accounts > Generate new private key
+İndirdiğin JSON'u `/opt/enerjione-grid/fcm-service-account.json` olarak kaydet.
+```bash
+sudo bash update.sh backend
+```
+
+---
+
+## 🆘 Sorun Giderme
+
+### Container ayağa kalkmıyor
+```bash
+sudo docker compose logs <service>
+sudo systemctl status enerjione-grid
+sudo journalctl -u enerjione-grid -n 100
+```
+
+### DB bağlantı sorunu
+```bash
+docker exec -it e1-grid-postgres psql -U enerjione_grid -d enerjione_grid -c '\l'
+```
+
+### Disk dolu
+```bash
+docker system df
+docker system prune -af --volumes   # eski/dangling temizliği
+```
+
+### Cihazlar çevrimdışı görünüyor
+1. Gateway'lerin çalıştığını kontrol et (saha cihazları)
+2. Backend log: `sudo docker compose logs -f backend-api`
+3. Alarm/Tag service worker'ları: `sudo docker compose logs -f alarm-service tag-engine`
+
+---
+
+## 📞 İletişim
+
+- **Geliştirici:** Fikret Şafak
+- **Şirket:** [Form Elektrik](https://www.formelektrik.com.tr)
+- **Issue tracker:** [GitHub Issues](https://github.com/fikretsafak/EnerjiOneGrid/issues)
+
+---
+
+## 📜 Lisans
+
+Form Elektrik İnş.Müh.A.Ş. mülkiyeti. Tüm hakları saklıdır.
