@@ -442,7 +442,7 @@ def get_services_status(
             lambda: _check_worker(
                 "Tag Engine",
                 env_prefix="TAG_ENGINE",
-                default_hosts=("tag-engine", "tag_engine", "e1-tag-engine", "127.0.0.1"),
+                default_hosts=("tag-engine", "tag_engine", "e1-grid-tag-engine", "e1-tag-engine", "127.0.0.1"),
                 default_port=8011,
             ),
         ),
@@ -451,7 +451,7 @@ def get_services_status(
             lambda: _check_worker(
                 "Alarm Service",
                 env_prefix="ALARM_SERVICE",
-                default_hosts=("alarm-service", "alarm_service", "e1-alarm-service", "127.0.0.1"),
+                default_hosts=("alarm-service", "alarm_service", "e1-grid-alarm-service", "e1-alarm-service", "127.0.0.1"),
                 default_port=8012,
             ),
         ),
@@ -463,6 +463,7 @@ def get_services_status(
                 default_hosts=(
                     "notification-worker",
                     "notification_worker",
+                    "e1-grid-notification-worker",
                     "e1-notification-worker",
                     "127.0.0.1",
                 ),
@@ -474,7 +475,7 @@ def get_services_status(
             lambda: _check_worker(
                 "IEC104 Outbound",
                 env_prefix="IEC104_OUTBOUND",
-                default_hosts=("iec104-outbound", "iec104_outbound", "e1-iec104-outbound", "127.0.0.1"),
+                default_hosts=("iec104-outbound", "iec104_outbound", "e1-grid-iec104-outbound", "e1-iec104-outbound", "127.0.0.1"),
                 default_port=8014,
             ),
         ),
