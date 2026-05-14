@@ -17,7 +17,7 @@
 # servisleri update eder.
 #
 # Env override'lar (her ikisi de opsiyonel):
-#   INSTALL_DIR  hedef dizin (default: /opt/enerjione)
+#   INSTALL_DIR  hedef dizin (default: /opt/enerjione-grid)
 #   BRANCH       checkout edilecek git branch'i (default: docker-linux-deploy)
 #   REPO_URL     git remote URL (default: github.com/fikretsafak/EnerjiOneGrid.git)
 #   INSTALL_USER kurulum sonrasi dosya sahibi olacak kullanici
@@ -29,7 +29,7 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/fikretsafak/EnerjiOneGrid.git}"
 BRANCH="${BRANCH:-docker-linux-deploy}"
-INSTALL_DIR="${INSTALL_DIR:-/opt/enerjione}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/enerjione-grid}"
 
 # ---- Bootstrap: bu script repo icinden mi yoksa curl | bash mi? ----------
 # Iki senaryo: (a) repo kokunden bash install.sh — `infra/scripts/linux/_lib.sh`

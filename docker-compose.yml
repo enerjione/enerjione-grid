@@ -14,11 +14,13 @@
 #
 # (scripts/create_installer.py mevcutsa; degilse README'de manuel SQL adimi.)
 #
-# `name: enerjione` — Compose proje adi (volume + network prefix'i icin).
+# `name: enerjione-grid` — Compose proje adi (volume + network prefix'i icin).
 # Repo dizin adi ne olursa olsun (EnerjiOneGrid, baska bir clone adi, ...)
-# volume'lar `enerjione_postgres-data`, network `enerjione_e1-net` olarak olusur.
-# Boylece marka tutarliligi disk artefaktlarinda da saglanmis olur.
-name: enerjione
+# volume'lar `enerjione-grid_postgres-data`, network `enerjione-grid_e1-net`
+# olarak olusur. Boylece marka tutarliligi disk artefaktlarinda da saglanmis
+# olur ve ayni VPS'te EnerjiOne Solar (project name: enerjione-solar) ile
+# yan yana durabilirler.
+name: enerjione-grid
 
 # Logging template: tum servisler default Docker json-file driver'i kullanir
 # ama rotate ayari yok → disk dolar. Bu anchor her servise eklendiginde
@@ -74,13 +76,13 @@ services:
     container_name: e1-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-enerjione}
-      POSTGRES_USER: ${POSTGRES_USER:-enerjione}
+      POSTGRES_DB: ${POSTGRES_DB:-enerjione_grid}
+      POSTGRES_USER: ${POSTGRES_USER:-enerjione_grid}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env'de olmali}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-enerjione} -d ${POSTGRES_DB:-enerjione}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-enerjione_grid} -d ${POSTGRES_DB:-enerjione_grid}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -176,7 +178,7 @@ services:
     environment:
       APP_ENV: production
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY .env'de olmali}
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-enerjione}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-enerjione}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-enerjione_grid}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-enerjione_grid}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       # Vhost izolasyonu: kok `/` vhost'a degil dedicated `e1` (veya
       # `${RABBITMQ_VHOST}`) altinda calisilir. Backend startup'ta admin
@@ -207,12 +209,12 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@enerjione.local}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@enerjione-grid.local}
       # DB yedek dosyalari icin sabit dizin. backup-data volume'una baglanir
       # ki container yeniden olusturulsa da yedekler kaybolmaz.
       BACKUP_DIR: /var/lib/e1-backups
       # FCM push bildirim icin Firebase service account JSON yolu.
-      # Host'ta /opt/enerjione/fcm-service-account.json varsa volume mount edilir.
+      # Host'ta /opt/enerjione-grid/fcm-service-account.json varsa volume mount edilir.
       # Dosya yoksa FCM sessizce devre disi kalir (fcm.py lazy load), email/SMS
       # kanallari calismaya devam eder.
       FCM_SERVICE_ACCOUNT_PATH: /app/fcm-service-account.json

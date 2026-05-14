@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     # refresh-token zorunlu.
     access_token_minutes: int = 1440  # 24 saat
     remember_me_token_minutes: int = 43_200  # 30 gun
-    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/enerjione"
+    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/enerjione_grid"
     # SQLAlchemy connection pool ayarlari (600 cihaz / 10K msg/sn olcekleri icin
     # default pool_size=5, max_overflow=10 yetersiz kalir; concurrent telemetry
     # consumer + alarm-service + tag-engine + frontend istekleri = 50-80 paralel
@@ -160,7 +160,7 @@ class Settings(BaseSettings):
     smtp_port: int = 25
     smtp_username: str = ""
     smtp_password: str = ""
-    smtp_from_email: str = "noreply@enerjione.local"
+    smtp_from_email: str = "noreply@enerjione-grid.local"
     # Frontend public URL — davet linklerinin tam URL olarak uretilmesi icin
     # gereklidir. Bos ise relative path doner; admin linki kendi domain'i
     # ile birlestirir. Ornek: `https://grid.example.com` veya `http://192.168.1.10`.

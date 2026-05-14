@@ -4,7 +4,7 @@
 # ===========================================================================
 # Mevcut kurulumu gunceller: git pull + selective rebuild + DB yedek (otomatik).
 #
-# Kullanim (repo kokunde, ornegin /opt/enerjione):
+# Kullanim (repo kokunde, ornegin /opt/enerjione-grid):
 #   sudo bash update.sh                # tum servisleri yeniden derle + up
 #   sudo bash update.sh frontend       # sadece frontend-web
 #   sudo bash update.sh backend        # sadece backend-api
@@ -55,8 +55,8 @@ if docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; 
   mkdir -p backups
   PG_USER="$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2-)"
   PG_DB="$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2-)"
-  PG_USER="${PG_USER:-enerjione}"
-  PG_DB="${PG_DB:-enerjione}"
+  PG_USER="${PG_USER:-enerjione_grid}"
+  PG_DB="${PG_DB:-enerjione_grid}"
   if docker compose exec -T postgres pg_dump -U "${PG_USER}" -d "${PG_DB}" 2>/dev/null | gzip > "${BACKUP_FILE}"; then
     SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
     e1_ok "Yedek: ${BACKUP_FILE} (${SIZE})"

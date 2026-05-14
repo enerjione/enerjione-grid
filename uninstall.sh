@@ -11,7 +11,7 @@
 #   sudo bash uninstall.sh                # interaktif onayli
 #   sudo bash uninstall.sh --yes          # tum onaylari atla
 #   sudo bash uninstall.sh --keep-images  # image'lari koru (sadece data sil)
-#   sudo bash uninstall.sh --purge-dir    # /opt/enerjione dizinini de sil
+#   sudo bash uninstall.sh --purge-dir    # /opt/enerjione-grid dizinini de sil
 #   sudo bash uninstall.sh --yes --purge-dir   # full nuke
 # ===========================================================================
 
@@ -99,12 +99,16 @@ fi
 docker image prune -f >/dev/null 2>&1 || true
 
 # ---- 3/5: Orphan volume'lar ----------------------------------------------
-# Eski compose proje adlariyla (enerjione_*) olusmus volume'lar — compose
-# down -v genelde silmis olur ama eski proje adi degisikligi sonrasi takintilar
-# kalabilir. Yeni proje adi 'enerjione' (docker-compose.yml: `name: enerjione`).
+# Eski compose proje adlariyla (enerjione_*, enerjione-grid_*) olusmus
+# volume'lar — compose down -v genelde silmis olur ama eski proje adi
+# degisikligi sonrasi takintilar kalabilir. Yeni proje adi 'enerjione-grid'
+# (docker-compose.yml: `name: enerjione-grid`).
+# NOT: Solar uygulamasi 'enerjione-solar_*' kullanir; bu pattern dahil
+# edilmedi — Solar uninstall'i ayri bir scriptle yapilir.
 e1_step "Orphan volume'lar taraniyor..."
 ORPHAN_VOLS=$(docker volume ls --format '{{.Name}}' 2>/dev/null \
-  | grep -E '^enerjione_' \
+  | grep -E '^(enerjione_|enerjione-grid_)' \
+  | grep -vE '^enerjione-solar' \
   | grep -E '(postgres-data|rabbitmq-data|nats-data|backup-data)$' || true)
 if [[ -n "$ORPHAN_VOLS" ]]; then
   echo "$ORPHAN_VOLS" | while read -r vol; do
@@ -117,7 +121,9 @@ fi
 
 # ---- 4/5: Network temizligi ----------------------------------------------
 e1_step "Network temizligi..."
-OLD_NETS=$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -E '^enerjione' || true)
+OLD_NETS=$(docker network ls --format '{{.Name}}' 2>/dev/null \
+  | grep -E '^(enerjione_|enerjione-grid_)' \
+  | grep -vE '^enerjione-solar' || true)
 if [[ -n "$OLD_NETS" ]]; then
   echo "$OLD_NETS" | while read -r net; do
     docker network rm "$net" 2>/dev/null || true

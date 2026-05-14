@@ -10,7 +10,7 @@
 #
 # Calistirmadan ONCE:
 #   - DNS A kayitlari hazir (enerjione-grid.* + solar.* her ikisi VPS IP'ye)
-#   - /opt/enerjione frontend'i 127.0.0.1:8080'de bind
+#   - /opt/enerjione-grid frontend'i 127.0.0.1:8080'de bind
 #   - /opt/solar frontend'i 127.0.0.1:8081'de bind
 set -euo pipefail
 

@@ -17,7 +17,7 @@ VPS host:
     └─ server_name solar.*          → 127.0.0.1:8081  (Solar frontend)
 
 Docker stack'leri:
-  /opt/enerjione → container frontend-web :8080 bind localhost
+  /opt/enerjione-grid → container frontend-web :8080 bind localhost
   /opt/solar     → container frontend-web :8081 bind localhost
 ```
 
@@ -37,13 +37,13 @@ sudo apt install -y nginx
 ```
 
 ### 3. Mevcut EnerjiOne'ı localhost'a çevir
-`/opt/enerjione/.env` dosyasına ekle:
+`/opt/enerjione-grid/.env` dosyasına ekle:
 ```
 FRONTEND_HTTP_PORT=127.0.0.1:8080
 ```
 Sonra:
 ```bash
-cd /opt/enerjione && docker compose up -d frontend-web
+cd /opt/enerjione-grid && docker compose up -d frontend-web
 ```
 
 ### 4. Solar'ı kur (eğer henüz değilse)

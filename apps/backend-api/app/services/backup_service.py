@@ -155,7 +155,7 @@ def _parse_db_url(url: str) -> dict:
         "port": str(u.port or 5432),
         "user": unquote(u.username or ""),
         "password": unquote(u.password or ""),
-        "dbname": (u.path or "/").lstrip("/") or "enerjione",
+        "dbname": (u.path or "/").lstrip("/") or "enerjione_grid",
     }
 
 
