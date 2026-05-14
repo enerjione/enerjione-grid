@@ -21996,18 +21996,16 @@ th.event-col-category {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  /* Parent (engineering-content) flex:1 + min-height:0. Bu yuzden buradaki
-     flex: 1 1 0 + min-height: 0 viewport hesabi olmadan tam alani doldurur.
-     Disarida scroll YOK; icerdeki .bulk-notify-form kendi scroll'unu yapar. */
-  flex: 1 1 0;
-  min-height: 0;
+  /* Kart icerigine gore uzasin (max viewport-138px ile sinirli) — boylece
+     bos sayfada alta uzayip cirkin gozukmez, icerik fazla ise icerdeki
+     .bulk-notify-form scroll yapar. */
+  max-height: calc(100vh - 138px);
   overflow: hidden;
 }
-/* Form alani: kalan dikey alani doldur; icerigin uzun olabilecegi durumlarda
-   sadece BU container scroll yapar (textarea genis, sablon listesi cok vs.).
-   Disarida scroll olusmaz. */
+/* Form alani: icerigin uzun olabilecegi durumlarda sadece BU container
+   scroll yapar (textarea genis, sablon listesi cok vs.). Panel doğal
+   yukseklikte (max-height sinirli) — form da dogal yukseklikte. */
 .bulk-notify-form {
-  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -22340,11 +22338,8 @@ th.event-col-category {
 /* Wizard — stepper bar */
 /* Stepper — eski "pill icine 4 adim sigdir" yapisi son adim labelini
    kesiyordu. Yeni: card-stil, her adim arasinda flex-grow line. */
-.bulk-notify-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 140px);
-}
+/* NOT: .bulk-notify-panel ana kurali yukarida (gercek davranis) — bu eski
+   duplicate tanim kaldirildi. */
 .bulk-notify-wizard .bulk-notify-stepper {
   list-style: none;
   margin: 0;
