@@ -1144,6 +1144,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                     ) : null}
                   </>
                 ) : null}
+                <br />
+                <span style={{ opacity: 0.7, fontFamily: "ui-monospace, monospace", fontSize: 11 }}>
+                  {p.latitude.toFixed(6)}, {p.longitude.toFixed(6)}
+                </span>
               </Tooltip>
             </Marker>
           ))}
@@ -1163,9 +1167,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   click: () => onSelectDevice(device.id)
                 }}
               >
-                {/* Hover'da sadece cihaz adi — kullanici sade istedi. */}
+                {/* Hover: cihaz adi + koordinat (operator marker'i tikladigi
+                    konum kayit notuna kullanir). */}
                 <Tooltip direction="top" offset={[0, -10]}>
-                  {device.name}
+                  <strong>{device.name}</strong>
+                  <br />
+                  <span style={{ opacity: 0.7, fontFamily: "ui-monospace, monospace", fontSize: 11 }}>
+                    {position[0].toFixed(6)}, {position[1].toFixed(6)}
+                  </span>
                 </Tooltip>
               </Marker>
             );
