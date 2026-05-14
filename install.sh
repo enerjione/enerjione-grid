@@ -242,6 +242,14 @@ e1_ok ".env hazir (chmod 600, sahip: $(e1_target_user || echo root))."
 # bind mount'u DIZIN olarak yaratir, NATS conf kazasi gibi).
 # Cozum: dosya yoksa "disabled placeholder" yarat — fcm.py JSON parse
 # basarisiz olur, "FCM yuklenirken hata" log atar ama devam eder.
+# GUVENLIK: Eski yarim migration veya elle bind mount kazasi nedeniyle
+# 'fcm-service-account.json' bir DIZIN olarak kalabilir (docker bunu
+# 'dosya yok' tespitinde otomatik olarak dizin yaratir). Eger dizinse
+# sil; dosya degilse placeholder yaz.
+if [[ -d fcm-service-account.json ]]; then
+  e1_warn "fcm-service-account.json bir DIZIN — siliniyor (yanlis bind mount kalintisi)."
+  rm -rf fcm-service-account.json
+fi
 if [[ ! -f fcm-service-account.json ]]; then
   e1_info "fcm-service-account.json yok — placeholder olusturuluyor (FCM devre disi)."
   e1_info "Mobil push icin Firebase Console > Project Settings > Service Accounts >"
