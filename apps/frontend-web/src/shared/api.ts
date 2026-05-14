@@ -208,13 +208,15 @@ export function saveSession(session: AuthSession, remember: boolean = true): voi
   // Önce her iki depolamayı da temizle ki birden fazla kayıt birbirine karışmasın.
   sessionStorage.removeItem(AUTH_STORAGE_KEY);
   localStorage.removeItem(AUTH_STORAGE_KEY);
-  // GUVENLIK: accessToken'i artik sakLAMIYORUZ — backend HttpOnly cookie
-  // (e1_session) ile auth saglar. XSS olursa JS `document.cookie` okuyamaz,
-  // token exfiltrate edilemez. Sadece UI kararlari icin gereken username +
-  // role bilgisi kalir. authHeaders("") zaten Authorization header gondermez,
-  // tarayici cookie'yi otomatik gonderir (`credentials: 'include'`).
+  // GUVENLIK NOTU: Backend HttpOnly cookie (e1_session) ile auth saglar
+  // ama bazı tarayicilar/sub-resource akislarinda (polling setInterval,
+  // dev port farkliligi vb.) cookie gonderilmeyebilir. Bu yuzden
+  // accessToken'i ek olarak storage'da tutuyoruz; api.ts apiFetch
+  // Authorization header'i ekler → cookie olmasa bile auth saglanir.
+  // XSS riski: localStorage JS'ten okunabilir, ama uygulamanin CSP'si
+  // sıkı; pratikte cookie + header katmanli savunma daha guvenilir.
   const safe: AuthSession = {
-    accessToken: "",
+    accessToken: session.accessToken,
     username: session.username,
     role: session.role,
   };

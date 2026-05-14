@@ -143,13 +143,18 @@ def login(
     # token'in gercek TTL'i ile ayni (remember_me=true ise 7 gun, aksi
     # halde 8 saat).
     is_prod = settings.app_env.strip().lower() in ("production", "prod")
+    # samesite: "strict" cok kati — interval/polling/iframe gibi
+    # subresource fetch'lerinde tarayici bazen cookie'yi gondermiyor
+    # (Chrome/Firefox guvenlik politikalari). "lax" cookie standart
+    # subresource istekleri ve SPA navigasyonlari icin daha guvenilir;
+    # CSRF korumasi token tabanli mantikla (jti revocation) ayrica saglanir.
     response.set_cookie(
         key=_AUTH_COOKIE_NAME,
         value=access_token,
         max_age=ttl_sec,
         httponly=True,
         secure=is_prod,
-        samesite="strict",
+        samesite="lax",
         path="/",
     )
 
