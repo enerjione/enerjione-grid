@@ -4,7 +4,7 @@
 # ===========================================================================
 # Sistemi tamamen kaldirir:
 #   - docker compose down -v  (container + volume = TUM VERI silinir)
-#   - e1/* docker image'larini sil (--keep-images ile koru)
+#   - e1-grid/* (+ eski e1/*) docker image'larini sil (--keep-images ile koru)
 #   - opsiyonel: install dizinini de sil (--purge-dir)
 #
 # Kullanim (repo kokunde):
@@ -59,7 +59,7 @@ if [[ $ASSUME_YES -ne 1 ]]; then
   e1_warn "  * Tum e1-* container'lar"
   e1_warn "  * postgres-data, rabbitmq-data, nats-data, backup-data volume'lari"
   e1_warn "  * Tum telemetri, alarm, kullanici, gateway, sinyal verileri"
-  [[ $KEEP_IMAGES -ne 1 ]] && e1_warn "  * Docker image'lari (e1/*)"
+  [[ $KEEP_IMAGES -ne 1 ]] && e1_warn "  * Docker image'lari (e1-grid/* + eski e1/*)"
   [[ $PURGE_DIR -eq 1 ]]   && e1_warn "  * ${SCRIPT_DIR} dizini (.env DAHIL)"
   echo
   if ! e1_confirm "Gercekten devam edilsin mi?"; then
@@ -82,12 +82,16 @@ fi
 # ---- 2/5: Image'lar ------------------------------------------------------
 e1_step "Docker image'lari..."
 if [[ $KEEP_IMAGES -ne 1 ]]; then
-  OLD_IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E '^e1/' || true)
+  # Eski 'e1/*' + yeni 'e1-grid/*' image namespace'lerini kapsa.
+  # Solar 'e1-solar/*' kullanir; bu uninstall scripti onu silmemeli.
+  OLD_IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+    | grep -E '^(e1/|e1-grid/)' \
+    | grep -vE '^e1-solar/' || true)
   if [[ -n "$OLD_IMAGES" ]]; then
     echo "$OLD_IMAGES" | while read -r img; do
       docker rmi -f "$img" 2>/dev/null || true
     done
-    e1_ok "Image'lar silindi (e1/*)."
+    e1_ok "Image'lar silindi (e1-grid/* + eski e1/*)."
   else
     e1_ok "Silinecek image yok."
   fi

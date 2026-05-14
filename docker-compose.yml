@@ -160,7 +160,7 @@ services:
     build:
       context: ./apps/backend-api
       dockerfile: Dockerfile
-    image: e1/backend-api:${E1_VERSION:-latest}
+    image: e1-grid/backend-api:${E1_VERSION:-latest}
     container_name: e1-backend-api
     restart: unless-stopped
     depends_on:
@@ -249,7 +249,7 @@ services:
     build:
       context: ./apps/tag-engine
       dockerfile: Dockerfile
-    image: e1/tag-engine:${E1_VERSION:-latest}
+    image: e1-grid/tag-engine:${E1_VERSION:-latest}
     container_name: e1-tag-engine
     restart: unless-stopped
     depends_on:
@@ -278,7 +278,7 @@ services:
     build:
       context: ./apps/alarm-service
       dockerfile: Dockerfile
-    image: e1/alarm-service:${E1_VERSION:-latest}
+    image: e1-grid/alarm-service:${E1_VERSION:-latest}
     container_name: e1-alarm-service
     restart: unless-stopped
     depends_on:
@@ -315,7 +315,7 @@ services:
     build:
       context: ./apps/notification-worker
       dockerfile: Dockerfile
-    image: e1/notification-worker:${E1_VERSION:-latest}
+    image: e1-grid/notification-worker:${E1_VERSION:-latest}
     container_name: e1-notification-worker
     restart: unless-stopped
     depends_on:
@@ -346,7 +346,7 @@ services:
     build:
       context: ./apps/iec104-outbound
       dockerfile: Dockerfile
-    image: e1/iec104-outbound:${E1_VERSION:-latest}
+    image: e1-grid/iec104-outbound:${E1_VERSION:-latest}
     container_name: e1-iec104-outbound
     restart: unless-stopped
     depends_on:
@@ -380,7 +380,7 @@ services:
     build:
       context: ./apps/frontend-web
       dockerfile: Dockerfile
-    image: e1/frontend-web:${E1_VERSION:-latest}
+    image: e1-grid/frontend-web:${E1_VERSION:-latest}
     container_name: e1-frontend-web
     restart: unless-stopped
     depends_on:
