@@ -8,6 +8,9 @@
 
 ---
 
+> 📘 **Kapsamlı kurulum rehberi:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) —
+> nginx + SSL + multi-app + sorun giderme adım adım anlatıldı.
+
 ## 🚀 Hızlı Kurulum (Linux VPS)
 
 **Tek komutla sıfırdan ayağa kalkar.** Test edildi: Ubuntu 22.04/24.04, Debian 12.
