@@ -715,10 +715,10 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         ) : null}
 
         {/* Nav butonlari sayfa head'inde — her adimda ayni yerde */}
-      </div>
 
       {/* ALT BOLUM: Kaydedilmis Sablonlar — onizleme + yukle butonu.
-          Sadece adim 1'de gozuksun; diger adimlar daha az yer kapla. */}
+          Sadece adim 1'de gozuksun; diger adimlar daha az yer kapla.
+          form scroll container'i icine alindi ki sayfa scroll'u olusmasin. */}
       {step !== 1 ? null : (
       <div className="bulk-notify-templates-section">
         <div className="bulk-notify-card-head">
@@ -790,6 +790,7 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         )}
       </div>
       )}
+      </div>
     </section>
   );
 }

@@ -21988,16 +21988,37 @@ th.event-col-category {
 .bulk-notify-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  /* Sayfa viewport icinde dolsun — sayfa kendi disinda scroll yapmasin.
-     Header (~64px) + tab bar (~44px) + padding (~32px) icin guvenli ust limit. */
-  min-height: calc(100vh - 140px);
+  gap: 10px;
+  padding: 14px 16px;
+  /* Sayfa viewport icinde TAM sigsin — disarida scroll YOK.
+     Header (~64px) + engineering tab bar (~46px) + sayfa padding (~28px).
+     Kalan alan flex: form + sablon listesi paylasiyor (asagida overflow-y: auto). */
+  height: calc(100vh - 138px);
+  overflow: hidden;
 }
-/* Form alani: kalan dikey alani doldur, asagi tasmasin */
+/* Form alani: kalan dikey alani doldur; icerigin uzun olabilecegi durumlarda
+   sadece BU container scroll yapar (textarea genis, sablon listesi cok vs.).
+   Disarida scroll olusmaz. */
 .bulk-notify-form {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Adim 1'de mesaj kartinin textarea'si fazla yer kaplamasin — kompakt */
+.bulk-notify-form .bulk-notify-field textarea {
+  max-height: 200px;
+}
+/* Sablon listesi alt section'i da kalan alani aynı kapta paylasacak;
+   asagi tasmasin diye max-height. */
+.bulk-notify-form .bulk-notify-templates-section {
+  flex-shrink: 0;
+}
+.bulk-notify-form .bulk-notify-templates-section .bulk-notify-templates-grid {
+  max-height: 220px;
+  overflow-y: auto;
 }
 /* Stepper satiri: SOL Geri butonu, ORTA stepper bar (flex-1), SAG Ileri/Gonder.
    Her adimda butonlar ayni yerde — kullanici aramaz. */
