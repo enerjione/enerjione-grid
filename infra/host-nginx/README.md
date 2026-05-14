@@ -9,7 +9,7 @@ reverse proxy konfigürasyonu.
 ```
 DNS:
   enerjione-grid.fikretsafak.com.tr  → VPS IP
-  solar.fikretsafak.com.tr           → VPS IP
+  enerjione-solar.fikretsafak.com.tr           → VPS IP
 
 VPS host:
   nginx (port 80, opsiyonel 443)
@@ -27,7 +27,7 @@ Docker stack'leri:
 DNS panelinde her iki subdomain için A kaydı:
 ```
 enerjione-grid  A  77.83.37.44
-solar           A  77.83.37.44
+enerjione-solar  A  77.83.37.44
 ```
 
 ### 2. Host nginx kur
@@ -72,7 +72,7 @@ sudo systemctl reload nginx
 ### 6. SSL (Let's Encrypt) — opsiyonel ama önerilen
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d enerjione-grid.fikretsafak.com.tr -d solar.fikretsafak.com.tr
+sudo certbot --nginx -d enerjione-grid.fikretsafak.com.tr -d enerjione-solar.fikretsafak.com.tr
 # Otomatik renewal cron: certbot kendi kuruyor
 ```
 
@@ -80,7 +80,7 @@ sudo certbot --nginx -d enerjione-grid.fikretsafak.com.tr -d solar.fikretsafak.c
 
 ```bash
 curl -H "Host: enerjione-grid.fikretsafak.com.tr" http://localhost
-curl -H "Host: solar.fikretsafak.com.tr" http://localhost
+curl -H "Host: enerjione-solar.fikretsafak.com.tr" http://localhost
 ```
 
 İkisi de 200 dönüyorsa nginx config doğru, subdomain routing çalışıyor.
