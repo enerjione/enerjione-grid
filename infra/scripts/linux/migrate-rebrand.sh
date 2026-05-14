@@ -47,19 +47,45 @@ echo "  Yeni : $NEW_DIR"
 echo "  Dump : $DUMP_FILE"
 echo
 
-# 1) DB dump
+# 1) DB dump — eski stack ayakta olmali. Degilse once start ediyoruz.
 echo "[1/7] DB dump aliniyor..."
 cd "$OLD_DIR"
-OLD_PG_USER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2- || echo enerjione)
-OLD_PG_DB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2- || echo enerjione)
+OLD_PG_USER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2-)
+OLD_PG_DB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2-)
 OLD_PG_USER="${OLD_PG_USER:-enerjione}"
 OLD_PG_DB="${OLD_PG_DB:-enerjione}"
 
-if ! docker compose exec -T postgres pg_dump -U "$OLD_PG_USER" -d "$OLD_PG_DB" 2>/dev/null | gzip > "$DUMP_FILE"; then
-  echo "HATA: DB dump alinamadi."
+echo "  .env'den okundu -> user=$OLD_PG_USER db=$OLD_PG_DB"
+
+# Eski stack ayakta degilse postgres'i baslat ki dump alalim
+if ! docker ps --format '{{.Names}}' | grep -q '^e1-postgres$'; then
+  echo "  -> eski postgres container ayakta degil, baslatiyorum..."
+  docker compose up -d postgres
+  # Hazir olana kadar bekle (max 60sn)
+  for i in {1..30}; do
+    if docker exec e1-postgres pg_isready -U "$OLD_PG_USER" -d "$OLD_PG_DB" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+fi
+
+# Dump al — stderr'i de yakala ki hata mesajini gor
+DUMP_ERR=/tmp/migrate-pg_dump-err.log
+if docker exec -i e1-postgres pg_dump -U "$OLD_PG_USER" -d "$OLD_PG_DB" 2>"$DUMP_ERR" | gzip > "$DUMP_FILE"; then
+  if [[ -s "$DUMP_ERR" ]]; then
+    echo "  uyari: pg_dump stderr:"
+    sed 's/^/    /' "$DUMP_ERR"
+  fi
+  echo "  -> $(du -h "$DUMP_FILE" | cut -f1)"
+else
+  echo "HATA: DB dump alinamadi. pg_dump stderr:"
+  cat "$DUMP_ERR" || true
+  echo
+  echo "Manuel test:"
+  echo "  docker exec -it e1-postgres psql -U $OLD_PG_USER -d $OLD_PG_DB -c '\\l'"
   exit 1
 fi
-echo "  -> $(du -h "$DUMP_FILE" | cut -f1)"
 
 # 2) Eski stack'i durdur
 echo "[2/7] Eski compose stack durduruluyor..."
