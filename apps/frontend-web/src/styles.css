@@ -2291,6 +2291,12 @@ main.content.engineering-content:has(.device-management-panel) {
   overflow: hidden;
 }
 
+/* Toplu Bildirim sayfasi: engineering-content ana scroll yapmasin;
+   bulk-notify-panel kendi icinde flex'le yonetir. */
+main.content.engineering-content:has(.bulk-notify-panel) {
+  overflow: hidden;
+}
+
 .engineering-content > .tabs {
   flex-shrink: 0;
 }
@@ -21990,10 +21996,11 @@ th.event-col-category {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  /* Sayfa viewport icinde TAM sigsin — disarida scroll YOK.
-     Header (~64px) + engineering tab bar (~46px) + sayfa padding (~28px).
-     Kalan alan flex: form + sablon listesi paylasiyor (asagida overflow-y: auto). */
-  height: calc(100vh - 138px);
+  /* Parent (engineering-content) flex:1 + min-height:0. Bu yuzden buradaki
+     flex: 1 1 0 + min-height: 0 viewport hesabi olmadan tam alani doldurur.
+     Disarida scroll YOK; icerdeki .bulk-notify-form kendi scroll'unu yapar. */
+  flex: 1 1 0;
+  min-height: 0;
   overflow: hidden;
 }
 /* Form alani: kalan dikey alani doldur; icerigin uzun olabilecegi durumlarda

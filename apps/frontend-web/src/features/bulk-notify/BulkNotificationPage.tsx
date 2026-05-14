@@ -292,11 +292,6 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
             <span className="material-symbols-outlined">campaign</span>
             {t("bulkNotify.title")}
           </h3>
-          <p className="helper-text">
-            {currentRole === "ops_manager"
-              ? t("bulkNotify.subtitleOpsManager")
-              : t("bulkNotify.subtitle")}
-          </p>
         </div>
       </div>
 
