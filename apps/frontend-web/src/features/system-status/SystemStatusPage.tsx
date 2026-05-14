@@ -232,7 +232,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
         }
       } catch (exc) {
         if (!cancelled) {
-          setHostError(exc instanceof Error ? exc.message : t("systemStatus.host.errorMetrics"));
+          const msg = exc instanceof Error ? exc.message : t("systemStatus.host.errorMetrics");
+          // session_polling_401 sentinel'ini kullaniciya gosterme — loading banner kalsin
+          setHostError(msg === "session_polling_401" ? null : msg);
         }
       } finally {
         hostInFlightRef.current = false;
@@ -262,7 +264,8 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
         }
       } catch (exc) {
         if (!cancelled) {
-          setServicesError(exc instanceof Error ? exc.message : t("systemStatus.services.errorFetch"));
+          const msg = exc instanceof Error ? exc.message : t("systemStatus.services.errorFetch");
+          setServicesError(msg === "session_polling_401" ? null : msg);
         }
       } finally {
         servicesInFlightRef.current = false;
@@ -330,17 +333,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
         </button>
       ) : null}
 
-      {/* Canli telemetri WebSocket baglantisi rozeti — header'dan tasindi */}
-      {wsState ? (
-        <section className="sys-ws-status-bar">
-          <div className="sys-ws-status-label">
-            <span className="material-symbols-outlined">sync_alt</span>
-            <strong>{t("systemStatus.liveSocket.title")}</strong>
-            <small>{t("systemStatus.liveSocket.hint")}</small>
-          </div>
-          <WsStatusBadge state={wsState} />
-        </section>
-      ) : null}
+      {/* Canli telemetri WS rozeti kaldirildi (kullanici tercihi —
+          eski sade haline donus). wsState prop'u hala backward-compat
+          icin kalsin, polling akisini etkilemiyor. */}
 
       {/* KPI: 4 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm */}
       <section className="sys-kpis sys-kpis--lg">
