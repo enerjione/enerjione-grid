@@ -107,9 +107,10 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
             liveBatt !== undefined ? liveBatt : (device.batteryPercent ?? null);
           const battPct = typeof battery === "number" ? Math.max(0, Math.min(100, battery)) : null;
           const topo = deviceTopology?.get(device.id);
+          const isUnassigned = !topo;
           const topoLabel = topo
             ? `${topo.regionName ? topo.regionName + " · " : ""}${topo.lineName}`
-            : t("dashboard.sidebar.noLine");
+            : t("dashboard.sidebar.unassigned");
           const alarmState = deviceAlarmState.get(device.id) ?? (device.alarmActive ? "open" : null);
           const hasAlarm = alarmState !== null;
           return (
@@ -117,7 +118,7 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
               key={device.id}
               className={`device-row ${selectedId === device.id ? "selected" : ""} ${
                 isOnline ? "device-row--online" : "device-row--offline"
-              } ${hasAlarm ? "device-row--alarm" : ""}`}
+              } ${hasAlarm ? "device-row--alarm" : ""} ${isUnassigned ? "device-row--unassigned" : ""}`}
               onClick={() => onSelect(device.id)}
             >
               {/* Sağ üst köşede alarm rozeti — onaylanmamışsa kırmızı yanıp söner,
@@ -154,8 +155,13 @@ export function DeviceSidebar({ devices, selectedId, onSelect, alarms, liveValue
 
               {/* Orta satır: bölge/hat + batarya yan yana (çerçevesiz) */}
               <div className="device-row-meta-row device-row-meta-row--bare">
-                <span className="device-row-location" title={topoLabel}>
-                  <span className="material-symbols-outlined">cable</span>
+                <span
+                  className={`device-row-location ${isUnassigned ? "device-row-location--unassigned" : ""}`}
+                  title={topoLabel}
+                >
+                  <span className="material-symbols-outlined">
+                    {isUnassigned ? "link_off" : "cable"}
+                  </span>
                   {topoLabel}
                 </span>
                 <span

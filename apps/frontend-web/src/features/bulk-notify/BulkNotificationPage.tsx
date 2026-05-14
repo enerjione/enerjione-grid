@@ -717,7 +717,9 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         {/* Nav butonlari sayfa head'inde — her adimda ayni yerde */}
       </div>
 
-      {/* ALT BOLUM: Kaydedilmis Sablonlar — onizleme + yukle butonu */}
+      {/* ALT BOLUM: Kaydedilmis Sablonlar — onizleme + yukle butonu.
+          Sadece adim 1'de gozuksun; diger adimlar daha az yer kapla. */}
+      {step !== 1 ? null : (
       <div className="bulk-notify-templates-section">
         <div className="bulk-notify-card-head">
           <span className="material-symbols-outlined">bookmark</span>
@@ -787,6 +789,7 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
           </ul>
         )}
       </div>
+      )}
     </section>
   );
 }

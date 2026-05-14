@@ -224,6 +224,7 @@
       "online": "Çevrimiçi",
       "offline": "Çevrimdışı",
       "noLine": "Hat atanmamış",
+      "unassigned": "Hatta atanmadı",
       "alarmOpen": "Onaylanmamış aktif alarm",
       "alarmAcked": "Aktif alarm onaylandı, sürdürülüyor",
       "battery": "Batarya: %{{value}}",

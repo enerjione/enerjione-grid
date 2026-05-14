@@ -224,6 +224,7 @@
       "online": "Online",
       "offline": "Offline",
       "noLine": "No line assigned",
+      "unassigned": "Unassigned to line",
       "alarmOpen": "Unacknowledged active alarm",
       "alarmAcked": "Active alarm acknowledged, in progress",
       "battery": "Battery: {{value}}%",

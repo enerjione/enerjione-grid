@@ -15528,6 +15528,23 @@ th.event-col-category {
   color: #64748b;
 }
 
+/* Hatta atanmamis cihaz: turuncu pill + 'link_off' ikonu — kullanici hemen
+   gorur ve cihazi atayabilmek icin Hat Yonetimi/Cihaz Yonetimi'ne gider. */
+.device-row--unassigned {
+  border-left: 3px solid #fb923c;
+}
+.device-sidebar-modern .device-row-location--unassigned {
+  background: #fff7ed;
+  color: #c2410c;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #fed7aa;
+}
+.device-sidebar-modern .device-row-location--unassigned .material-symbols-outlined {
+  color: #c2410c;
+}
+
 /* Canli Degerler — filtre dropdown grubu (cihaz / kaynak / kalite) */
 .live-values-toolbar .live-filter-group {
   display: inline-flex;
@@ -21971,8 +21988,16 @@ th.event-col-category {
 .bulk-notify-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   padding: 16px;
+  /* Sayfa viewport icinde dolsun — sayfa kendi disinda scroll yapmasin.
+     Header (~64px) + tab bar (~44px) + padding (~32px) icin guvenli ust limit. */
+  min-height: calc(100vh - 140px);
+}
+/* Form alani: kalan dikey alani doldur, asagi tasmasin */
+.bulk-notify-form {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 /* Stepper satiri: SOL Geri butonu, ORTA stepper bar (flex-1), SAG Ileri/Gonder.
    Her adimda butonlar ayni yerde — kullanici aramaz. */
@@ -21986,15 +22011,20 @@ th.event-col-category {
   margin: 0;
 }
 .bulk-notify-stepper-btn {
+  /* Stepper bar yuksekligi (8+8+24 = ~40px). Butonlar tam ayni yukseklikte
+     olsun — yuksekligi belirli, padding ile vertical center. */
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 9px 16px;
+  height: 42px;
+  padding: 0 16px;
   font-size: 14px;
-  border-radius: 8px;
+  border-radius: 999px;
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
+  border: 1px solid transparent;
+  line-height: 1;
 }
 .bulk-notify-stepper-btn.secondary-btn {
   background: #fff;
@@ -22289,13 +22319,14 @@ th.event-col-category {
 }
 .bulk-notify-wizard .bulk-notify-stepper {
   list-style: none;
-  margin: 0 0 16px 0;
-  padding: 14px 20px;
+  margin: 0;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 999px;
+  height: 42px;
 }
 .bulk-notify-step {
   display: inline-flex;
