@@ -1796,24 +1796,43 @@ export async function fetchSignalLiveValues(token: string): Promise<SignalLiveRo
 
 /** Sistem Durumu sayfasi icin: backend host'unun anlik CPU/RAM/disk/uptime
  *  metriklerini getirir. Sayfa kapali iken cagirilmaz; psutil hesaplamasi
- *  cok hizli oldugu icin polling 5-10 sn'de tekrarlanabilir. */
+ *  cok hizli oldugu icin polling 5-10 sn'de tekrarlanabilir.
+ *
+ *  ONEMLI: Polling icin session-expired event TETIKLENMEZ. Polling 401
+ *  vermesi durumunda kullaniciyi login'e atmak yerine sessizce hata firlat —
+ *  caller bir-iki tur dene, beklemeden gercek user action'larda (login,
+ *  save) session expired akisi normal islesin. */
 export async function fetchHostStatus(token: string): Promise<HostStatus> {
   const response = await apiFetch(`${API_BASE_URL}/system-status/host`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw await buildApiError(response, "Sunucu kaynak metrikleri alınamadı.");
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401
+        ? "session_polling_401"
+        : "Sunucu kaynak metrikleri alınamadı."
+    );
+  }
   return (await response.json()) as HostStatus;
 }
 
 /** Sistem Durumu sayfasi icin: backend'in bagli oldugu servislerin (DB,
  *  RabbitMQ, tag-engine vb.) saglik durumu. Her cagri tum servisleri
  *  paralel kontrol etmez (sirayla, kucuk timeout'la); pratikte 200ms altinda
- *  toplam suren bir cevap doner. */
+ *  toplam suren bir cevap doner.
+ *
+ *  Polling icin session-expired event TETIKLENMEZ (fetchHostStatus ile ayni). */
 export async function fetchServicesStatus(token: string): Promise<ServicesReport> {
   const response = await apiFetch(`${API_BASE_URL}/system-status/services`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw await buildApiError(response, "Servis durumlari alınamadı.");
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401
+        ? "session_polling_401"
+        : "Servis durumlari alınamadı."
+    );
+  }
   return (await response.json()) as ServicesReport;
 }
 
