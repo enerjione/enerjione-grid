@@ -35,20 +35,20 @@ Sıfırdan production VPS kurulumu, host nginx reverse proxy, SSL ve multi-app
 
 ### 1.2 DNS A kayıtları
 
-DNS panelinde her uygulama için A kaydı ekle (sağlayıcı: GoDaddy, Cloudflare, Namecheap...):
+DNS panelinde `enerjione.com` zone'una her uygulama için A kaydı ekle (sağlayıcı: GoDaddy, Cloudflare, Namecheap...):
 
 ```
-enerjione-grid    A    <VPS-IP>      TTL: 300
+grid     A    <VPS-IP>      TTL: 300   → grid.enerjione.com
 ```
 
 İkinci uygulama (Solar) eklenecekse şimdiden hazırla:
 ```
-enerjione-solar   A    <VPS-IP>      TTL: 300
+solar    A    <VPS-IP>      TTL: 300   → solar.enerjione.com
 ```
 
 Propagasyon kontrolü (5-30 dakika beklemen gerekebilir):
 ```bash
-nslookup enerjione-grid.fikretsafak.com.tr
+nslookup grid.enerjione.com
 # Address: <VPS-IP> dönmeli
 ```
 
@@ -201,7 +201,7 @@ Script:
 
 Test:
 ```bash
-curl -I http://enerjione-grid.fikretsafak.com.tr/
+curl -I http://grid.enerjione.com/
 # HTTP/1.1 200 OK dönmeli
 ```
 
@@ -223,14 +223,14 @@ sudo apt install -y certbot python3-certbot-nginx
 
 **Sadece Grid (Solar DNS hazır değilse):**
 ```bash
-sudo certbot --nginx -d enerjione-grid.fikretsafak.com.tr
+sudo certbot --nginx -d grid.enerjione.com
 ```
 
 **Grid + Solar (DNS hazırsa tek komutta):**
 ```bash
 sudo certbot --nginx \
-  -d enerjione-grid.fikretsafak.com.tr \
-  -d enerjione-solar.fikretsafak.com.tr
+  -d grid.enerjione.com \
+  -d solar.enerjione.com
 ```
 
 Certbot sorularına cevap:
@@ -257,16 +257,16 @@ sudo certbot renew --dry-run
 
 ```bash
 # HTTPS çalışıyor mu?
-curl -I https://enerjione-grid.fikretsafak.com.tr/
+curl -I https://grid.enerjione.com/
 # HTTP/2 200 dönmeli
 
 # HTTP → HTTPS redirect?
-curl -I http://enerjione-grid.fikretsafak.com.tr/
+curl -I http://grid.enerjione.com/
 # HTTP/1.1 301 Moved Permanently
-# Location: https://enerjione-grid.fikretsafak.com.tr/
+# Location: https://grid.enerjione.com/
 ```
 
-Tarayıcıda `https://enerjione-grid.fikretsafak.com.tr` → 🟢 yeşil kilit + login ekranı.
+Tarayıcıda `https://grid.enerjione.com` → 🟢 yeşil kilit + login ekranı.
 
 ### 5.5 CORS güncelle
 
@@ -274,7 +274,7 @@ Backend artık HTTPS origin'i tanımalı:
 
 ```bash
 cd /opt/enerjione-grid
-sudo sed -i 's|^CORS_ORIGINS=.*|CORS_ORIGINS=https://enerjione-grid.fikretsafak.com.tr,http://<VPS-IP>|' .env
+sudo sed -i 's|^CORS_ORIGINS=.*|CORS_ORIGINS=https://grid.enerjione.com,http://<VPS-IP>|' .env
 
 # Backend container'ı yenile
 sudo docker compose up -d backend-api
@@ -308,14 +308,14 @@ Solar deploy edildikten sonra otomatik çalışır.
 Eğer SSL'i sadece Grid için aldıysan, Solar deploy sonrası ekle:
 
 ```bash
-sudo certbot --nginx -d enerjione-solar.fikretsafak.com.tr
+sudo certbot --nginx -d solar.enerjione.com
 # Mevcut Grid cert'i etkilenmez
 ```
 
 ### 6.4 Test
 
 ```bash
-curl -I https://enerjione-solar.fikretsafak.com.tr/
+curl -I https://solar.enerjione.com/
 # HTTP/2 200
 ```
 
@@ -489,8 +489,8 @@ Sorun çözülmediyse:
 
 - [ ] `sudo docker compose ps` → tüm container'lar `(healthy)`
 - [ ] `sudo systemctl is-enabled enerjione-grid` → `enabled`
-- [ ] `nslookup enerjione-grid.fikretsafak.com.tr` → VPS IP
-- [ ] `curl -I https://enerjione-grid.fikretsafak.com.tr/` → `HTTP/2 200`
+- [ ] `nslookup grid.enerjione.com` → VPS IP
+- [ ] `curl -I https://grid.enerjione.com/` → `HTTP/2 200`
 - [ ] Tarayıcıda yeşil kilit + login ekranı
 - [ ] `installer` ile giriş yaptım, şifremi değiştirdim
 - [ ] `sudo certbot renew --dry-run` → success

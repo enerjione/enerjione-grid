@@ -8,13 +8,13 @@ reverse proxy konfigürasyonu.
 
 ```
 DNS:
-  enerjione-grid.fikretsafak.com.tr  → VPS IP
-  enerjione-solar.fikretsafak.com.tr           → VPS IP
+  grid.enerjione.com  → VPS IP
+  solar.enerjione.com           → VPS IP
 
 VPS host:
   nginx (port 80, opsiyonel 443)
-    ├─ server_name enerjione-grid.* → 127.0.0.1:8080  (EnerjiOne frontend)
-    └─ server_name solar.*          → 127.0.0.1:8081  (Solar frontend)
+    ├─ server_name grid.enerjione.com  → 127.0.0.1:8080  (EnerjiOne frontend)
+    └─ server_name solar.enerjione.com → 127.0.0.1:8081  (Solar frontend)
 
 Docker stack'leri:
   /opt/enerjione-grid → container frontend-web :8080 bind localhost
@@ -26,8 +26,8 @@ Docker stack'leri:
 ### 1. DNS kayıtları
 DNS panelinde her iki subdomain için A kaydı:
 ```
-enerjione-grid  A  77.83.37.44
-enerjione-solar  A  77.83.37.44
+grid    A  77.83.37.44     → grid.enerjione.com
+solar   A  77.83.37.44     → solar.enerjione.com
 ```
 
 ### 2. Host nginx kur
@@ -72,15 +72,15 @@ sudo systemctl reload nginx
 ### 6. SSL (Let's Encrypt) — opsiyonel ama önerilen
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d enerjione-grid.fikretsafak.com.tr -d enerjione-solar.fikretsafak.com.tr
+sudo certbot --nginx -d grid.enerjione.com -d solar.enerjione.com
 # Otomatik renewal cron: certbot kendi kuruyor
 ```
 
 ## Test
 
 ```bash
-curl -H "Host: enerjione-grid.fikretsafak.com.tr" http://localhost
-curl -H "Host: enerjione-solar.fikretsafak.com.tr" http://localhost
+curl -H "Host: grid.enerjione.com" http://localhost
+curl -H "Host: solar.enerjione.com" http://localhost
 ```
 
 İkisi de 200 dönüyorsa nginx config doğru, subdomain routing çalışıyor.

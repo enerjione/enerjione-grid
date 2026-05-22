@@ -2,7 +2,7 @@
 
 **Endüstriyel Akıllı Şebeke İzleme Platformu** — Horstmann Smart Navigator 2.0 arıza-geçiş göstergesi cihazları için açık kaynak izleme/yönetim platformu.
 
-> 🌐 **Web:** `https://enerjione-grid.fikretsafak.com.tr`
+> 🌐 **Web:** `https://grid.enerjione.com`
 > 📦 **Repo:** [github.com/fikretsafak/EnerjiOneGrid](https://github.com/fikretsafak/EnerjiOneGrid)
 > 📅 **Sürüm:** 2.24.4
 
@@ -88,10 +88,10 @@ sudo bash uninstall.sh --purge-dir     # /opt/enerjione-grid'i de sil
 Aynı VPS'te EnerjiOne Grid + EnerjiOne Solar gibi birden fazla uygulama yan yana çalıştırılabilir.
 
 ### 1. DNS ayarları
-Her uygulama için subdomain A kaydı:
+`enerjione.com` zone'una her uygulama için A kaydı:
 ```
-enerjione-grid     A  <VPS-IP>
-enerjione-solar    A  <VPS-IP>
+grid     A  <VPS-IP>        → grid.enerjione.com
+solar    A  <VPS-IP>        → solar.enerjione.com
 ```
 
 ### 2. Grid'i localhost'a bind et
@@ -108,16 +108,16 @@ sudo bash /opt/enerjione-grid/infra/host-nginx/setup-host-nginx.sh
 
 Bu script:
 - Sistem nginx'i kurar
-- `enerjione-grid.fikretsafak.com.tr` → `127.0.0.1:8080` proxy
-- `enerjione-solar.fikretsafak.com.tr` → `127.0.0.1:8081` proxy
+- `grid.enerjione.com` → `127.0.0.1:8080` proxy
+- `solar.enerjione.com` → `127.0.0.1:8081` proxy
 - WebSocket upgrade + uzun timeout'lar yapılandırılır
 
 ### 4. SSL (Let's Encrypt)
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx \
-  -d enerjione-grid.fikretsafak.com.tr \
-  -d enerjione-solar.fikretsafak.com.tr
+  -d grid.enerjione.com \
+  -d solar.enerjione.com
 ```
 
 Otomatik yenileme cron'ı certbot kendisi kurar (her 12 saatte bir dener).
@@ -258,7 +258,7 @@ NATS_GATEWAY_PASSWORD=<random>
 FRONTEND_HTTP_PORT=80                  # multi-app: 127.0.0.1:8080
 
 # CORS
-CORS_ORIGINS=http://localhost,http://127.0.0.1,https://enerjione-grid.fikretsafak.com.tr
+CORS_ORIGINS=http://localhost,http://127.0.0.1,https://grid.enerjione.com
 
 # SMTP (opsiyonel)
 SMTP_ENABLED=false

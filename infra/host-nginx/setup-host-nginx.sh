@@ -54,12 +54,12 @@ if nginx -t; then
   echo ""
   echo "=== TAMAM ==="
   echo "Test:"
-  echo "  curl -I http://enerjione-grid.fikretsafak.com.tr/"
-  echo "  curl -I http://solar.fikretsafak.com.tr/"
+  echo "  curl -I http://grid.enerjione.com/"
+  echo "  curl -I http://solar.enerjione.com/"
   echo ""
   echo "SSL icin (opsiyonel):"
   echo "  sudo apt install -y certbot python3-certbot-nginx"
-  echo "  sudo certbot --nginx -d enerjione-grid.fikretsafak.com.tr -d solar.fikretsafak.com.tr"
+  echo "  sudo certbot --nginx -d grid.enerjione.com -d solar.enerjione.com"
 else
   echo "HATA: nginx config gecersiz — durum degistirilmedi."
   exit 1
