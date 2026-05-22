@@ -1,4 +1,6 @@
 import logging
+import threading
+from datetime import datetime, timezone
 
 from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -12,6 +14,46 @@ from app.models.enums import UserRole
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
+
+# last_seen_at debounce — her istekte DB UPDATE yapmamak icin in-memory
+# son yazma zamanlarini tut. Aynı jti icin son yazmadan 30sn gecmediyse
+# atla. Container restart sonrasi cache sifirlanir; ilk istek yine bir
+# UPDATE atar — sorun degil.
+_LAST_SEEN_DEBOUNCE_SEC = 30.0
+_last_seen_writes: dict[str, float] = {}
+_last_seen_lock = threading.Lock()
+
+
+def _touch_user_session(db: Session, jti: str) -> None:
+    """jti icin DB user_sessions.last_seen_at = now (debounce 30sn).
+
+    Hata olursa sessizce yutulur (auth akisi devam etmeli).
+    """
+    if not jti:
+        return
+    now_ts = datetime.now(timezone.utc).timestamp()
+    with _last_seen_lock:
+        last = _last_seen_writes.get(jti, 0.0)
+        if now_ts - last < _LAST_SEEN_DEBOUNCE_SEC:
+            return
+        _last_seen_writes[jti] = now_ts
+        # Cache buyumesin: 50000+ giris varsa eski olanlari at
+        if len(_last_seen_writes) > 50000:
+            cutoff = now_ts - 3600
+            for k in [k for k, v in _last_seen_writes.items() if v < cutoff]:
+                _last_seen_writes.pop(k, None)
+    try:
+        from app.models.user_session import UserSession
+        sess = db.get(UserSession, jti)
+        if sess is not None and sess.revoked_at is None:
+            sess.last_seen_at = datetime.now(timezone.utc)
+            db.commit()
+    except Exception:  # noqa: BLE001
+        # Auth akisini bloklamamak icin sessiz fallback
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
 
 # Authorization: Bearer (eski yol) — auto_error=False, cookie fallback'i icin
 # yokken bile dependency hata yerine None doner.
@@ -58,7 +100,10 @@ def get_current_user(
         if username is None:
             logger.warning("auth_401_no_sub source=%s", source)
             raise credentials_exception
-        # Logout sonrasi revoke edilen jti'leri reddet (in-memory blacklist).
+        # Logout sonrasi revoke edilen jti'leri reddet — once in-memory
+        # blacklist'i kontrol et (hizli), sonra DB'deki UserSession.revoked_at'a
+        # bak (container restart sonrasi memory list bos olsa bile installer'in
+        # 'oturum at' aksiyonu kalici olur).
         jti = payload.get("jti")
         if jti:
             from app.services.auth_service import is_jti_revoked
@@ -66,6 +111,18 @@ def get_current_user(
             if is_jti_revoked(jti):
                 logger.warning("auth_401_jti_revoked source=%s jti=%s", source, jti[:8])
                 raise credentials_exception
+            # DB tarafindaki revoke kontrolu
+            try:
+                from app.models.user_session import UserSession
+                sess = db.get(UserSession, str(jti))
+                if sess is not None and sess.revoked_at is not None:
+                    logger.warning("auth_401_session_revoked_db source=%s jti=%s", source, str(jti)[:8])
+                    raise credentials_exception
+            except HTTPException:
+                raise
+            except Exception:  # noqa: BLE001
+                # DB lookup hatasi auth'u bloklamasin
+                pass
     except JWTError as ex:
         logger.warning("auth_401_jwt_decode_failed source=%s error=%s", source, ex)
         raise credentials_exception from ex
@@ -75,6 +132,9 @@ def get_current_user(
     if user is None:
         logger.warning("auth_401_user_not_found source=%s username=%s", source, username)
         raise credentials_exception
+    # Aktif oturum tracking — debounce'lu last_seen_at update.
+    if jti:
+        _touch_user_session(db, str(jti))
     return user
 
 

@@ -107,6 +107,24 @@
     "ops_manager": "Operations Manager",
     "user": "User"
   },
+  "activeSessions": {
+    "title": "Active Sessions",
+    "subtitle": "Users currently signed in — with IP, device and last activity. You can terminate a suspicious session with 'Revoke'.",
+    "empty": "No active sessions.",
+    "revoke": "Revoke",
+    "revoking": "Revoking...",
+    "revokedToast": "{{name}}'s session was terminated.",
+    "confirmRevoke": "Revoke {{name}}'s session? They will be asked to sign in again on next request.",
+    "col": {
+      "user": "User",
+      "role": "Role",
+      "ip": "IP",
+      "device": "Device / Browser",
+      "loginAt": "Login",
+      "lastSeen": "Last Activity",
+      "action": "Action"
+    }
+  },
   "header": {
     "home": "Home",
     "alarms": "Alarms",
@@ -732,7 +750,8 @@
       "projectSettings": "Project Settings",
       "grid": "Line Management",
       "backups": "Backups",
-      "deviceModels": "Device Models"
+      "deviceModels": "Device Models",
+      "activeSessions": "Active Sessions"
     },
     "users": {
       "title": "Users",

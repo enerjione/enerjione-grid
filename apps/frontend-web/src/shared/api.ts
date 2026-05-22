@@ -1415,6 +1415,39 @@ export async function deleteBulkNotifyTemplate(
   if (!response.ok) throw await buildApiError(response, "Şablon silinemedi.");
 }
 
+// ============================================================
+// ACTIVE SESSIONS — installer-only oturum yonetimi
+// ============================================================
+
+export type ActiveSession = {
+  jti: string;
+  user_id: number;
+  username: string;
+  full_name: string;
+  role: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  login_at: string;
+  last_seen_at: string;
+  is_self: boolean;
+};
+
+export async function fetchActiveSessions(token: string): Promise<ActiveSession[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/sessions`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) throw await buildApiError(response, "Aktif oturumlar alınamadı.");
+  return (await response.json()) as ActiveSession[];
+}
+
+export async function revokeSession(token: string, jti: string): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/admin/sessions/${encodeURIComponent(jti)}`,
+    { method: "DELETE", headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Oturum atılamadı.");
+}
+
 export async function fetchIec104Runtime(token: string, targetId: number) {
   const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/iec104-runtime`, {
     headers: authHeaders(token)

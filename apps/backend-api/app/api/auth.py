@@ -137,7 +137,31 @@ def login(
         user.failed_login_count = 0
         user.locked_until = None
 
-    access_token, ttl_sec = create_access_token(user.username, remember_me=payload.remember_me)
+    access_token, ttl_sec, jti = create_access_token(user.username, remember_me=payload.remember_me)
+
+    # Aktif oturum kaydi — installer 'Aktif Oturumlar' sayfasinda gorur
+    # ve istedigini revoke edebilir.
+    try:
+        from app.models.user_session import UserSession
+        # Client IP: reverse proxy arkasinda X-Forwarded-For ilk degeri,
+        # yoksa request.client.host. uvicorn --forwarded-allow-ips=* bunu
+        # request.client.host'a otomatik koyar.
+        client_ip = request.client.host if request.client else None
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            client_ip = xff.split(",")[0].strip()
+        ua = (request.headers.get("user-agent") or "")[:255] or None
+        db.add(UserSession(
+            jti=jti,
+            user_id=user.id,
+            ip_address=client_ip,
+            user_agent=ua,
+        ))
+    except Exception:  # noqa: BLE001
+        # Session insert fail olsa bile login basarili kabul edilir;
+        # session tracking advisory bir feature, kritik degil.
+        import logging
+        logging.getLogger(__name__).exception("user_session_insert_failed username=%s", user.username)
 
     # HttpOnly cookie — XSS sonrasi token exfiltrate olmaz. Cookie max_age
     # token'in gercek TTL'i ile ayni (remember_me=true ise 7 gun, aksi
@@ -391,6 +415,9 @@ def logout(
         if cookie_token:
             tokens_to_revoke.append(cookie_token.strip())
 
+        from app.models.user_session import UserSession as _UserSession
+        from datetime import datetime as _datetime, timezone as _timezone
+
         for token in tokens_to_revoke:
             if not token:
                 continue
@@ -402,6 +429,11 @@ def logout(
                 exp = payload.get("exp")
                 if jti and exp:
                     revoke_jti(str(jti), float(exp))
+                    # DB'de session.revoked_at isaretle
+                    sess = db.get(_UserSession, str(jti))
+                    if sess is not None and sess.revoked_at is None:
+                        sess.revoked_at = _datetime.now(_timezone.utc)
+                        db.commit()
             except Exception:  # noqa: BLE001
                 # Tek bir token decode hatasi diger token'lari engellemesin
                 pass

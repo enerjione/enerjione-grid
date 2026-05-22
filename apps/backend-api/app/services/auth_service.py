@@ -88,12 +88,12 @@ def is_jti_revoked(jti: str | None) -> bool:
         return True
 
 
-def create_access_token(subject: str, remember_me: bool = False) -> tuple[str, int]:
+def create_access_token(subject: str, remember_me: bool = False) -> tuple[str, int, str]:
     """JWT olusturur. `jti` (UUID) revocation icin sart; `exp` JWT spec'i.
 
     `remember_me=True` ise `remember_me_token_minutes` (default 7 gun)
     TTL kullanilir; aksi takdirde `access_token_minutes` (default 8 saat).
-    Donus: (token, ttl_seconds).
+    Donus: (token, ttl_seconds, jti).
     """
     minutes = (
         settings.remember_me_token_minutes if remember_me else settings.access_token_minutes
@@ -102,7 +102,7 @@ def create_access_token(subject: str, remember_me: bool = False) -> tuple[str, i
     jti = uuid4().hex
     payload = {"sub": subject, "exp": expire, "jti": jti}
     token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-    return token, minutes * 60
+    return token, minutes * 60, jti
 
 
 # ---- WebSocket ticket store (URL'de JWT yerine kisa-omurlu ticket) ---------

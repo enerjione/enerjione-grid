@@ -16,10 +16,12 @@ from app.models.system_event import SystemEvent
 from app.models.telemetry import Telemetry
 from app.models.user import User
 from app.models.user_fcm_token import UserFcmToken
+from app.models.user_session import UserSession
 
 __all__ = [
     "User",
     "UserFcmToken",
+    "UserSession",
     "Device",
     "Gateway",
     "GatewayIngestBatch",

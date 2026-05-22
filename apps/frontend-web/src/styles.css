@@ -22721,3 +22721,125 @@ th.event-col-category {
     grid-row: 2 / 3;
   }
 }
+
+/* =====================================================================
+   Aktif Oturumlar sayfasi (installer-only)
+   ===================================================================== */
+.active-sessions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.active-sessions-panel .panel-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.active-sessions-panel .panel-head h3 .material-symbols-outlined {
+  color: #ff8c00;
+  font-variation-settings: "FILL" 1;
+}
+.active-sessions-panel .panel-head .helper-text {
+  margin-top: 4px;
+}
+.active-sessions-panel .secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+}
+.active-sessions-panel .secondary-btn:hover {
+  background: #f8fafc;
+}
+.active-sessions-panel .secondary-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+.active-sessions-table-wrap {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  overflow-x: auto;
+}
+.active-sessions-user {
+  display: flex;
+  flex-direction: column;
+}
+.active-sessions-user strong {
+  font-size: 13px;
+  color: #1e293b;
+}
+.active-sessions-user small {
+  font-size: 11.5px;
+  color: #64748b;
+}
+.active-sessions-ip {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #1e293b;
+}
+.active-sessions-role {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #e0e7ff;
+  color: #4338ca;
+}
+.active-sessions-role.role-installer {
+  background: #fef3c7;
+  color: #92400e;
+}
+.active-sessions-role.role-engineer {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.active-sessions-role.role-ops_manager {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.active-sessions-role.role-operator {
+  background: #dcfce7;
+  color: #15803d;
+}
+.active-sessions-lastseen {
+  font-weight: 600;
+  color: #16a34a;
+}
+.active-sessions-panel .actions-cell .danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #dc2626;
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.active-sessions-panel .actions-cell .danger-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.active-sessions-panel .actions-cell .danger-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.active-sessions-panel .actions-cell .material-symbols-outlined {
+  font-size: 14px;
+}

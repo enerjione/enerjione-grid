@@ -107,6 +107,24 @@
     "ops_manager": "Operasyon Yöneticisi",
     "user": "Kullanıcı"
   },
+  "activeSessions": {
+    "title": "Aktif Oturumlar",
+    "subtitle": "Sisteme şu anda giriş yapmış kullanıcılar — IP, cihaz ve son aktivite bilgisiyle. Şüpheli bir oturumu 'At' ile sonlandırabilirsin.",
+    "empty": "Şu anda aktif oturum yok.",
+    "revoke": "At",
+    "revoking": "Atılıyor...",
+    "revokedToast": "{{name}} oturumu kapatıldı.",
+    "confirmRevoke": "{{name}} kullanıcısının oturumunu atmak istiyor musun? Bir sonraki istekte tekrar giriş yapması istenecek.",
+    "col": {
+      "user": "Kullanıcı",
+      "role": "Rol",
+      "ip": "IP",
+      "device": "Cihaz / Tarayıcı",
+      "loginAt": "Giriş",
+      "lastSeen": "Son Aktivite",
+      "action": "İşlem"
+    }
+  },
   "header": {
     "home": "Anasayfa",
     "alarms": "Alarmlar",
@@ -732,7 +750,8 @@
       "projectSettings": "Proje Ayarları",
       "grid": "Hat Yönetimi",
       "backups": "Yedekler",
-      "deviceModels": "Cihaz Modelleri"
+      "deviceModels": "Cihaz Modelleri",
+      "activeSessions": "Aktif Oturumlar"
     },
     "users": {
       "title": "Kullanıcılar",

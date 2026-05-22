@@ -13,6 +13,7 @@ import { ResponsibilityAreasPage } from "../features/responsibility-areas/Respon
 import { EventsPage } from "../features/events/EventsPage";
 import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
 import { BulkNotificationPage } from "../features/bulk-notify/BulkNotificationPage";
+import { ActiveSessionsPage } from "../features/sessions/ActiveSessionsPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
 import { ApiAccessPanel } from "../features/api-access/ApiAccessPanel";
@@ -172,7 +173,8 @@ type EngineeringPage =
   | "notifications"
   | "project-settings"
   | "grid"
-  | "backups";
+  | "backups"
+  | "active-sessions";
 
 const ROUTE_STORAGE_KEY = "hsl.route.v1";
 const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering"];
@@ -189,7 +191,8 @@ const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
   "notifications",
   "project-settings",
   "grid",
-  "backups"
+  "backups",
+  "active-sessions"
 ];
 type PersistedRoute = {
   pageMode: PageMode;
@@ -1986,6 +1989,16 @@ export function App() {
                   {t("engineering.nav.backups")}
                 </button>
               ) : null}
+              {/* Aktif Oturumlar: sadece installer (sistem genelinde kim girmis,
+                  hangi IP'den, gerekirse oturumu at). */}
+              {session.role === "installer" ? (
+                <button
+                  className={engineeringPage === "active-sessions" ? "active" : ""}
+                  onClick={() => setEngineeringPage("active-sessions")}
+                >
+                  {t("engineering.nav.activeSessions")}
+                </button>
+              ) : null}
             </div>
 
             {engineeringPage === "devices" &&
@@ -2152,6 +2165,9 @@ export function App() {
             {engineeringPage === "backups" &&
             (session.role === "engineer" || session.role === "installer") ? (
               <BackupsPanel accessToken={session.accessToken} currentRole={session.role} />
+            ) : null}
+            {engineeringPage === "active-sessions" && session.role === "installer" ? (
+              <ActiveSessionsPage accessToken={session.accessToken} />
             ) : null}
           </main>
         ) : pageMode !== "home" ? (
