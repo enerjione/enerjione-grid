@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.enums import UserRole
-from app.models.grid_topology import Line, Pole
+from app.models.grid_topology import Line, LineSegment, Pole
 from app.models.responsibility_area import (
     responsibility_area_devices,
     responsibility_area_lines,
@@ -21,24 +21,52 @@ from app.models.user import User
 def get_visible_device_ids(db: Session, user: User) -> set[int] | None:
     """Kullanicinin gorebilecegi cihaz id setini doner.
 
-    - INSTALLER ve ENGINEER: None doner -> kisit yok, tum cihazlar.
-    - OPERATOR: kendi sorumluluk alanlarindaki cihazlarin id'leri (set).
-      Hicbir alana atanmamis operatorler bos set goryp hicbir cihazi gormez.
+    - INSTALLER / ENGINEER / OPS_MANAGER: None doner -> kisit yok, tum cihazlar.
+    - OPERATOR: ekibine atanan cihazlarin id'leri (set). Atama UC yoldan gelir
+      ve hepsi birlestirilir:
+        1) Cihaz ekibe DOGRUDAN atanmis (responsibility_area_devices).
+        2) Cihaz, ekibe atanmis bir HAT'in segmentinde (hat -> segment -> cihaz).
+        3) Cihaz, ekibe atanmis bir BOLGE'nin hatlarinin segmentinde
+           (bolge -> hatlar -> segment -> cihaz).
+      Operator cogunlukla cihazlari tek tek degil hat/bolge atayarak yonetir;
+      bu yuzden hat/bolge zinciri de gorunurluge dahil edilir. Bildirim kapsami
+      (get_users_in_scope_for_device) zaten ayni UC yolu kullanir; gorunurluk
+      onunla simetrik tutulur.
+
+      Hicbir alana atanmamis operator bos set gorur, hicbir cihazi gormez.
     """
     if user.role in (UserRole.INSTALLER, UserRole.ENGINEER, UserRole.OPS_MANAGER):
         return None
 
-    # Operator: alan_id -> device_id zinciri uzerinden cihaz id setini cek
-    stmt = (
+    device_ids: set[int] = set()
+
+    # 1) Dogrudan ekibe atanan cihazlar.
+    for row in db.execute(
         select(responsibility_area_devices.c.device_id)
         .join(
             responsibility_area_users,
             responsibility_area_devices.c.area_id == responsibility_area_users.c.area_id,
         )
         .where(responsibility_area_users.c.user_id == user.id)
-    )
-    rows = db.execute(stmt).all()
-    return {row[0] for row in rows}
+    ).all():
+        if row[0] is not None:
+            device_ids.add(int(row[0]))
+
+    # 2+3) Ekibin gorebildigi hatlardaki (hat + bolge zinciri) segmentlere bagli
+    # cihazlar. get_visible_line_ids hat ve bolgeden gelen tum hatlari toplar;
+    # buradan segment.device_id ile cihazlara inilir.
+    line_ids = get_visible_line_ids(db, user)
+    if line_ids:  # bos set ise sorgu atmaya gerek yok
+        for row in db.execute(
+            select(LineSegment.device_id).where(
+                LineSegment.line_id.in_(line_ids),
+                LineSegment.device_id.isnot(None),
+            )
+        ).all():
+            if row[0] is not None:
+                device_ids.add(int(row[0]))
+
+    return device_ids
 
 
 def get_visible_line_ids(db: Session, user: User) -> set[int] | None:

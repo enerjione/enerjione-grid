@@ -1407,7 +1407,8 @@
         "protocol": "Protokol",
         "endpoint": "Adres",
         "status": "Durum",
-        "actions": "İşlem"
+        "actions": "İşlem",
+        "iec104AddrHint": "SCADA master bu adrese bağlanır. 0.0.0.0 sunucudaki tüm ağ arayüzlerini dinler; bağlantı için bu sunucunun erişilebilir IP/alan adını kullanın."
       },
       "downloadXlsx": "Sinyal Listesi (Excel)",
       "downloadXlsxTitle": "SCADA için Excel sinyal listesi indir",

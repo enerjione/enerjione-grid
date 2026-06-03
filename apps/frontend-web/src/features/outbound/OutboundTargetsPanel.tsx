@@ -11,6 +11,10 @@ import { MqttCertUploader } from "./MqttCertUploader";
 
 type Protocol = "rest" | "mqtt" | "iec104";
 
+// IEC104 listen_host'u bu degerlerden biriyse "tum arayuzler" anlamina gelir;
+// SCADA buraya dogrudan baglanamaz, tarayicinin host'unu gostermek gerekir.
+const WILDCARD_HOSTS = new Set(["0.0.0.0", "::", "*", ""]);
+
 type CreatePayload = {
   name: string;
   protocol: Protocol;
@@ -1351,9 +1355,19 @@ export function OutboundTargetsPanel({
           <tbody>
             {targets.map((item) => {
               const isIec = item.protocol === "iec104";
+              // listen_host wildcard ise (0.0.0.0 / :: / bos) SCADA buraya
+              // dogrudan baglanamaz; tarayicinin eristigi host'u goster (ayni
+              // sunucu). Operator spesifik bir IP girdiyse onu aynen birak.
+              const rawHost = (item.listen_host ?? "0.0.0.0").trim();
+              const isWildcardHost = WILDCARD_HOSTS.has(rawHost);
+              const connectHost =
+                isWildcardHost && typeof window !== "undefined"
+                  ? window.location.hostname
+                  : rawHost || "0.0.0.0";
               const endpointDisplay = isIec
-                ? `${item.listen_host ?? "0.0.0.0"}:${item.listen_port ?? 2404}`
+                ? `${connectHost}:${item.listen_port ?? 2404}`
                 : item.endpoint;
+              const showAddrHint = isIec && isWildcardHost;
               const badge = isIec ? runtimeBadges[item.id] : undefined;
               return (
                 <tr key={item.id} className={item.is_active ? "" : "outbound-row--inactive"}>
@@ -1371,7 +1385,18 @@ export function OutboundTargetsPanel({
                       {item.protocol.toUpperCase()}
                     </span>
                   </td>
-                  <td className="outbound-endpoint-cell">{endpointDisplay}</td>
+                  <td className="outbound-endpoint-cell">
+                    <code>{endpointDisplay}</code>
+                    {showAddrHint ? (
+                      <span
+                        className="outbound-addr-hint"
+                        title={t("engineering.outbound.table.iec104AddrHint")}
+                        aria-label={t("engineering.outbound.table.iec104AddrHint")}
+                      >
+                        {" "}ⓘ
+                      </span>
+                    ) : null}
+                  </td>
                   <td>
                     {isIec && badge ? (
                       <button
