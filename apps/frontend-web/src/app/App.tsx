@@ -280,7 +280,13 @@ export function App() {
   const [dashboardSearch, setDashboardSearch] = useState("");
   const [dashboardStatusFilter, setDashboardStatusFilter] = useState<StatusFilter>("all");
   const [dashboardAreaId, setDashboardAreaId] = useState<number | "all">("all");
-  const [dashboardAreaDeviceIds, setDashboardAreaDeviceIds] = useState<Set<number> | null>(null);
+  // Secili ekibin ham kapsam bilgisi: dogrudan atanan cihazlar + atanan
+  // bolge/hat id'leri. Cihaz gorunurlugu sadece dogrudan cihazlarla degil,
+  // ekibe atanan bolge/hatlarin uzerindeki cihazlarla da genisler (backend
+  // get_visible_device_ids ile simetrik). null = ekip secili degil ("Tumu").
+  const [dashboardAreaScope, setDashboardAreaScope] = useState<
+    { deviceIds: number[]; regionIds: number[]; lineIds: number[] } | null
+  >(null);
   const [dashboardAreaLoading, setDashboardAreaLoading] = useState(false);
   const [dashboardLocationFilter, setDashboardLocationFilter] = useState<string>("all");
   // "unassigned" = topolojiye dahil olmayan cihazlar (hat/bolge atanmamis).
@@ -303,7 +309,7 @@ export function App() {
   // Sorumluluk alani secimi degistiginde o alanin cihaz id setini cek.
   useEffect(() => {
     if (dashboardAreaId === "all" || !session) {
-      setDashboardAreaDeviceIds(null);
+      setDashboardAreaScope(null);
       return;
     }
     let cancelled = false;
@@ -311,11 +317,17 @@ export function App() {
     void fetchResponsibilityAreaDetail(session.accessToken, dashboardAreaId)
       .then((detail) => {
         if (cancelled) return;
-        setDashboardAreaDeviceIds(new Set(detail.devices.map((d) => d.id)));
+        // Dogrudan cihazlar + atanan bolge/hat id'leri. Bolge/hat -> cihaz
+        // donusumu deviceTopologyInfo ile asagidaki useMemo'da yapilir.
+        setDashboardAreaScope({
+          deviceIds: detail.devices.map((d) => d.id),
+          regionIds: (detail.regions ?? []).map((r) => r.id),
+          lineIds: (detail.lines ?? []).map((l) => l.id),
+        });
       })
       .catch(() => {
         if (cancelled) return;
-        setDashboardAreaDeviceIds(new Set());
+        setDashboardAreaScope({ deviceIds: [], regionIds: [], lineIds: [] });
       })
       .finally(() => {
         if (cancelled) return;
@@ -1693,6 +1705,25 @@ export function App() {
     }
     return map;
   }, [gridSnapshot]);
+
+  // Secili ekibin gorunur cihaz id seti. Backend get_visible_device_ids ile
+  // ayni mantik: dogrudan atanan cihazlar + ekibe atanan bolge/hatlarin
+  // uzerindeki (deviceTopologyInfo'dan tureyen) cihazlar. null = ekip secili
+  // degil ("Tumu"); bu durumda area filtresi uygulanmaz.
+  const dashboardAreaDeviceIds = useMemo<Set<number> | null>(() => {
+    if (!dashboardAreaScope) return null;
+    const ids = new Set<number>(dashboardAreaScope.deviceIds);
+    if (dashboardAreaScope.regionIds.length || dashboardAreaScope.lineIds.length) {
+      const regionSet = new Set(dashboardAreaScope.regionIds);
+      const lineSet = new Set(dashboardAreaScope.lineIds);
+      for (const [deviceId, info] of deviceTopologyInfo.entries()) {
+        if (regionSet.has(info.regionId) || lineSet.has(info.lineId)) {
+          ids.add(deviceId);
+        }
+      }
+    }
+    return ids;
+  }, [dashboardAreaScope, deviceTopologyInfo]);
 
   // Dashboard ortak filtrelerine göre süzülmüş cihaz listesi.
   // Harita marker'ları, sol sidebar listesi ve LiveValuesPage tablo satırları
