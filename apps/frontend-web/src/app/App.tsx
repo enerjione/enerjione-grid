@@ -473,6 +473,12 @@ export function App() {
       setPageMode("home");
       setEngineeringPage("devices");
     }
+    // Sistem Durumu yalnizca installer'a aciktir. Operator/engineer/ops_manager
+    // localStorage'a kaydedilmis ya da URL'den gelen "system-status" route'una
+    // dusmusse anasayfaya geri al (header'da sekme zaten gizli).
+    if (session.role !== "installer" && pageMode === "system-status") {
+      setPageMode("home");
+    }
     // ops_manager: yalnizca users + responsibility-areas + bulk-notify
     // tabi'larina erisebilir
     if (

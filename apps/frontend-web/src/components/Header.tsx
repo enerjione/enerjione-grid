@@ -110,12 +110,17 @@ export function Header({
           <button className={activePage === "events" ? "active" : ""} onClick={() => onChangePage("events")}>
             {t("header.events")}
           </button>
-          <button
-            className={activePage === "system-status" ? "active" : ""}
-            onClick={() => onChangePage("system-status")}
-          >
-            {t("header.systemStatus")}
-          </button>
+          {/* Sistem Durumu yalnizca installer rolune gosterilir; operator ve
+              diger roller bu sekmeyi gormez (App.tsx route guard'i URL/storage
+              uzerinden dogrudan erisimi de engeller). */}
+          {role === "installer" ? (
+            <button
+              className={activePage === "system-status" ? "active" : ""}
+              onClick={() => onChangePage("system-status")}
+            >
+              {t("header.systemStatus")}
+            </button>
+          ) : null}
           {/* Toplu Bildirim ana menuden kaldirildi — Muhendislik > Toplu Bildirim
               tab'ina tasindi (ops_manager / installer / engineer icin). */}
         </nav>
