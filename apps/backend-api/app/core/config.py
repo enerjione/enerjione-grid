@@ -174,6 +174,14 @@ class Settings(BaseSettings):
     worker_health_host: str = "127.0.0.1"
     worker_health_port: int = 0
 
+    # Hat Arizalari sayfasi gosterim gecikmesi (saniye). Bir ariza acildiktan
+    # sonra bu sure gecene kadar listede GORUNMEZ; harita aninda gosterir.
+    # Amac: haberlesme gecikmesiyle gec gelen alarmlar bu pencere icinde
+    # birikip arizanin dogru cihaz araligiyla TEK SEFERDE acilmasini saglamak
+    # (yanlis konumda gecici ariza gostermemek). 0 = gecikme yok.
+    # Env: FAULT_DISPLAY_DELAY_SEC
+    fault_display_delay_sec: int = 30
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @property

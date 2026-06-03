@@ -112,6 +112,10 @@ class AlarmRuleBase(BaseModel):
     notify_email: bool = False
     notify_sms: bool = False
     notify_telegram: bool = False
+    # "Bu alarm gercek hat arizasi uretir mi?" True (default): harita kirmizi +
+    # Hat Arizasi acilir. False: yalniz Alarmlar ekraninda gorunur, haritada
+    # ariza gostermez. Default True -> geriye donuk uyum.
+    produces_fault: bool = True
 
     @model_validator(mode="after")
     def _validate_kind_consistency(self):
@@ -144,6 +148,7 @@ class AlarmRuleUpdate(BaseModel):
     notify_email: bool | None = None
     notify_sms: bool | None = None
     notify_telegram: bool | None = None
+    produces_fault: bool | None = None
 
 
 class AlarmRuleRead(AlarmRuleBase):

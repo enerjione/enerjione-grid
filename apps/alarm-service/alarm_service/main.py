@@ -321,6 +321,7 @@ def _build_alarm_from_rule(
     *,
     threshold: float | None = None,
     operator: str | None = None,
+    produces_fault: bool = True,
 ) -> dict:
     # Title kuralın adını yansıtır; kaynak (master/sat01/sat02) bilgisi
     # frontend'de signal_key prefix'inden turetilir, boylece backend dedup
@@ -343,6 +344,9 @@ def _build_alarm_from_rule(
         "value_string": payload.get("value_string"),
         "threshold": threshold,
         "operator": operator,
+        # Kuraldan "dondurulan" produces_fault — backend bu alani AlarmEvent'e
+        # yazar; haritada kirmizi gosterim + Hat Arizasi yalniz True ise olusur.
+        "produces_fault": produces_fault,
     }
 
 
@@ -497,6 +501,7 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 value=value,
                 threshold=rule.threshold,
                 operator=rule.comparator,
+                produces_fault=rule.produces_fault,
             )
             # NOT: `channel` artik gercek RabbitMQ kanali degil (JetStream'den
             # consume ediyoruz). Alarm yayini icin thread-safe singleton

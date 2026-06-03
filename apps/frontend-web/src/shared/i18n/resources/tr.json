@@ -547,7 +547,7 @@
       "open": "Açık",
       "assigned": "Atandı",
       "inProgress": "Devam Ediyor",
-      "resolved": "Sahada Çözüldü",
+      "resolved": "Normale Döndü",
       "closed": "Kapatıldı",
       "avgResolution": "Ort. Çözüm Süresi"
     },
@@ -555,7 +555,7 @@
       "open": "Açık",
       "assigned": "Atandı",
       "in_progress": "Devam Ediyor",
-      "resolved": "Sahada Çözüldü",
+      "resolved": "Normale Döndü",
       "closed": "Kapatıldı"
     },
     "filter": {
@@ -1213,6 +1213,9 @@
       "channelSmsHint": "Telefon numarası kayıtlı kullanıcılara kısa mesaj.",
       "channelTelegram": "Telegram",
       "channelTelegramHint": "Bildirim Ayarları'nda tanımlı tüm chat'lere gönderilir.",
+      "fieldsetFault": "Arıza Davranışı",
+      "producesFault": "Hat arızası üret",
+      "producesFaultHint": "Açıkken bu alarm geldiğinde cihaz haritada kırmızı (arızalı) gösterilir ve Hat Arızaları'nda bir kayıt açılır. Kapalıyken alarm yalnızca Alarmlar ekranında görünür; haritada arıza üretmez (geçici/gürültülü sinyaller için).",
       "cancel": "İptal",
       "save": "Kaydet",
       "saving": "Kaydediliyor...",

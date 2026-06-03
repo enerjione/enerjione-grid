@@ -16,6 +16,9 @@ class AlarmEventRead(BaseModel):
     reset: bool = False
     acknowledged_at: datetime | None = None
     reset_at: datetime | None = None
+    # Bu alarm gercek hat arizasi uretir mi? Frontend haritada cihazi yalniz
+    # produces_fault=True ise kirmizi gosterir. Default True -> geriye uyum.
+    produces_fault: bool = True
     created_at: datetime
 
     class Config:

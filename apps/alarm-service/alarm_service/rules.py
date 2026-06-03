@@ -67,6 +67,10 @@ class AlarmRule:
     debounce_sec: int
     device_code_filter: str | None
     is_active: bool
+    # "Bu alarm gercek hat arizasi uretir mi?" Backend'e gonderilen payload'a
+    # konur; backend produces_fault=False alarmlari haritada/fault'ta dikkate
+    # almaz. Default True -> eski backend yaniti bu alani vermezse de guvenli.
+    produces_fault: bool = True
     # Faz 1: composite kural destegi (geriye uyumlu, default simple).
     rule_kind: str = "simple"
     expression: CompositeExpression | None = None
@@ -175,6 +179,7 @@ class AlarmRuleCache:
                 debounce_sec=int(item.get("debounce_sec") or 0),
                 device_code_filter=item.get("device_code_filter"),
                 is_active=True,
+                produces_fault=bool(item.get("produces_fault", True)),
                 rule_kind=rule_kind,
                 expression=expression,
                 composite_signal_keys=composite_keys,

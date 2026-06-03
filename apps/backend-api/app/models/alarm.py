@@ -23,6 +23,11 @@ class AlarmEvent(Base):
     reset: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    # Bu alarmi ureten kuralin produces_fault degeri alarm satirina "dondurulur".
+    # Hat arizasi hesabi (fault_recompute) ve harita kirmizi gosterimi yalniz
+    # produces_fault=True alarmlari dikkate alir. Kural sonradan degisse de bu
+    # alarmin davranisi sabit kalir. Default True -> eski kayitlar ariza uretir.
+    produces_fault: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 

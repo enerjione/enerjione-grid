@@ -77,7 +77,9 @@ const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   is_active: true,
   notify_email: false,
   notify_sms: false,
-  notify_telegram: false
+  notify_telegram: false,
+  // Varsayilan TRUE: yeni kural ariza uretir (harita kirmizi + Hat Arizasi).
+  produces_fault: true
 };
 
 function makeEmptyTerm(signalKey = ""): AlarmCompositeTerm {
@@ -215,7 +217,9 @@ export function AlarmRulesPage({
         is_active: selectedRule.is_active,
         notify_email: selectedRule.notify_email === true,
         notify_sms: selectedRule.notify_sms === true,
-        notify_telegram: selectedRule.notify_telegram === true
+        notify_telegram: selectedRule.notify_telegram === true,
+        // undefined (eski kural) => true (geriye uyum).
+        produces_fault: selectedRule.produces_fault !== false
       });
       setLocalError("");
     }
@@ -771,6 +775,26 @@ export function AlarmRulesPage({
                           <span className="rule-channel-label">
                             <strong>{t("engineering.alarmRules.channelTelegram")}</strong>
                             <small>{t("engineering.alarmRules.channelTelegramHint")}</small>
+                          </span>
+                        </label>
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="rule-fieldset" disabled={!canEdit}>
+                      <legend>{t("engineering.alarmRules.fieldsetFault")}</legend>
+                      <div className="rule-channel-grid">
+                        <label className="rule-channel-option">
+                          <input
+                            type="checkbox"
+                            checked={form.produces_fault !== false}
+                            onChange={(e) =>
+                              setForm({ ...form, produces_fault: e.target.checked })
+                            }
+                          />
+                          <span className="rule-channel-icon material-symbols-outlined">e911_emergency</span>
+                          <span className="rule-channel-label">
+                            <strong>{t("engineering.alarmRules.producesFault")}</strong>
+                            <small>{t("engineering.alarmRules.producesFaultHint")}</small>
                           </span>
                         </label>
                       </div>

@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.enums import UserRole
@@ -102,6 +103,24 @@ def list_faults(
     elif status_filter == "closed":
         stmt = stmt.where(FaultEvent.status == "closed")
     # "all" -> filtre yok
+
+    # GOSTERIM GECIKMESI: yeni acilan (henuz "olgunlasmamis") arizalari
+    # opened_at + fault_display_delay_sec gecene kadar GIZLE. Boylece
+    # haberlesme gecikmesiyle gec gelen alarmlar bu pencere icinde birikip
+    # ariza dogru cihaz araligiyla tek seferde gorunur — yanlis konumda
+    # gecici ariza gosterilmez. Harita bu filtreden ETKILENMEZ (harita
+    # alarmlar uzerinden calisir, faults endpoint'ini kullanmaz).
+    #
+    # ISTISNA: resolved/closed arizalar gecikme dolmasa bile GORUNUR. Cunku
+    # kisa omurlu (test) arizalar 30sn dolmadan normale donebilir; kullanici
+    # bunlarin "resetlendi/normale dondu" olarak listede gorunmesini istiyor.
+    delay = settings.fault_display_delay_sec
+    if delay > 0 and status_filter in ("active", "open"):
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=delay)
+        stmt = stmt.where(
+            (FaultEvent.opened_at <= cutoff)
+            | (FaultEvent.status.in_(["resolved", "closed"]))
+        )
 
     line_scope = get_visible_line_ids(db, current_user)
     if line_scope is not None:

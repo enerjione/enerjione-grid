@@ -331,11 +331,15 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
   }, [selectedDevice, liveValues, voltageToPercent]);
 
   // ===== Sebeke topolojisi: hatlar + direkler + cihaz segmentleri =====
-  // Cihazda aktif (reset edilmemis) alarm var mi? Polyline rengi icin.
+  // Cihazda aktif (reset edilmemis) VE hat arizasi ureten alarm var mi?
+  // Marker + polyline kirmizi rengi icin. produces_fault === false olan
+  // alarmlar (gecici/gurultulu) haritada ARIZA GOSTERMEZ; yalniz Alarmlar
+  // ekraninda durur. `!== false`: eski/undefined alarmlar true kabul edilir
+  // (geriye uyum — backend produces_fault default'u da True).
   const alarmActiveDeviceIds = useMemo<Set<number>>(() => {
     const s = new Set<number>();
     for (const a of alarms ?? []) {
-      if (!a.reset) s.add(a.device_id);
+      if (!a.reset && a.produces_fault !== false) s.add(a.device_id);
     }
     return s;
   }, [alarms]);

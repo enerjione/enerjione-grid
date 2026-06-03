@@ -149,6 +149,18 @@ def create_tables():
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS reset_at TIMESTAMPTZ"))
         connection.execute(text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS signal_key VARCHAR(120)"))
+        # produces_fault — "bu alarm gercek hat arizasi uretir mi?" bayragi.
+        # FREEZE politikasina ragmen burada tutuluyor cunku mevcut sahalar
+        # alembic_version'i zaten head'e stamp'lemis durumda; yeni alembic
+        # revision (0003) bu deploylarda OTOMATIK kosmaz. Idempotent ALTER her
+        # boot'ta no-op olarak calisip yeni kolonun varligini garanti eder.
+        # Esdeger alembic revision 0003'te de tanimli (yeni kurulumlar icin).
+        connection.execute(
+            text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS produces_fault BOOLEAN NOT NULL DEFAULT TRUE")
+        )
+        connection.execute(
+            text("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS produces_fault BOOLEAN NOT NULL DEFAULT TRUE")
+        )
         # Alarm kurali bileşik (AND/OR) destegi — Faz 1.
         connection.execute(
             text("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS rule_kind VARCHAR(20) NOT NULL DEFAULT 'simple'")

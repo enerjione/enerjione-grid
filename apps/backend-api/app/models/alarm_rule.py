@@ -78,3 +78,13 @@ class AlarmRule(Base):
     notify_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notify_sms: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notify_telegram: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # "Bu alarm gercek bir hat arizasi uretir mi?"
+    # True (varsayilan): alarm geldiginde cihaz haritada kirmizi (arizali)
+    #   gosterilir ve Hat Arizalari'nda FaultEvent acilir (mevcut davranis).
+    # False: alarm yine olusur ve Alarmlar ekraninda gorunur (gecici/gurultulu
+    #   ariza kaydi tutulabilir) AMA haritada ariza gostermez ve hat arizasi
+    #   acmaz. Boylece gecici arizalar haritada gereksiz kirmizi uretmez.
+    # Default True -> geriye donuk uyum: tum mevcut kurallar ariza uretmeye
+    # devam eder.
+    produces_fault: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

@@ -28,6 +28,11 @@ class InternalAlarmIngest(BaseModel):
     # Esige gore karsilastirma operatoru ("gt", "lt", "eq", "ne"). Frontend
     # ">", "<", "=", "!=" sembollerine cevirir.
     operator: str | None = None
+    # Bu alarmi ureten kuralin produces_fault degeri. True (default): cihaz
+    # haritada arizali gosterilir + Hat Arizasi acilir. False: yalniz Alarmlar
+    # ekraninda gorunur. Eski alarm-service surumu bu alani gondermezse default
+    # True devreye girer (geriye donuk uyum).
+    produces_fault: bool = True
 
 
 class InternalAlarmClear(BaseModel):

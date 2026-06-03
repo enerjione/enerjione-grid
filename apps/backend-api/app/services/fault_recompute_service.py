@@ -128,11 +128,16 @@ def recompute_faults_debounced(db: Session) -> bool:
 
 def recompute_faults(db: Session) -> None:
     """Tum aktif alarmlardan yola cikarak fault_events tablosunu senkronla."""
-    # Aktif (reset=False) alarmli cihaz id'leri
+    # Aktif (reset=False) VE hat arizasi ureten (produces_fault=True) alarmli
+    # cihaz id'leri. produces_fault=False alarmlar (gecici/gurultulu) burada
+    # dikkate ALINMAZ: fault araligi hesabina girmez, FaultEvent acmaz/genisletmez.
+    # Boylece bu cihazlar "yesil" gibi davranir; alarm yine Alarmlar ekraninda durur.
     active_alarm_device_ids = {
         row[0]
         for row in db.execute(
-            select(AlarmEvent.device_id).where(AlarmEvent.reset.is_(False))
+            select(AlarmEvent.device_id)
+            .where(AlarmEvent.reset.is_(False))
+            .where(AlarmEvent.produces_fault.is_(True))
         ).all()
     }
 
@@ -242,19 +247,11 @@ def recompute_faults(db: Session) -> None:
 
         existing = open_by_line.get(line.id)
         if existing is None:
-            # Yeni fault olustur — bolgenin/hattin sorumluluk alanindan
-            # otomatik bir kullanici atayalim (operator tercihli; yoksa
-            # ekipte kayitli bir kisi). Birden fazla aday varsa
-            # deterministik secim icin alfabetik en kucuk username.
-            from app.services.scope_service import get_users_in_scope_for_device
-            from app.models.enums import UserRole as _UR
-            assignees = get_users_in_scope_for_device(db, last_red_seg.device_id)
-            # Operator'leri once tercih et (saha personeli); yoksa ilk
-            # uygun engineer/installer.
-            ops = [u for u in assignees if u.role == _UR.OPERATOR]
-            picked = (sorted(ops, key=lambda u: u.username)[0]
-                      if ops else (sorted(assignees, key=lambda u: u.username)[0]
-                                   if assignees else None))
+            # Yeni fault olustur — OTOMATIK ATAMA YAPILMAZ. Ariza her zaman
+            # "open" olarak acilir; atama, Hat Arizalari sayfasindan manuel
+            # yapilir (faults.py assign endpoint). Onceden otomatik operator
+            # atanip "assigned" geliyordu; kullanici arizanin once "acik"
+            # gorunup sonra elle atanmasini istedi.
             fault = FaultEvent(
                 line_id=line.id,
                 region_id=line.region_id,
@@ -264,18 +261,17 @@ def recompute_faults(db: Session) -> None:
                 to_pole_id=to_pole.id if to_pole else last_red_to_pole.id,
                 from_pole_seq=from_pole.sequence_no,
                 to_pole_seq=(to_pole.sequence_no if to_pole else last_red_to_pole.sequence_no),
-                status="assigned" if picked else "open",
+                status="open",
                 opened_at=now,
-                assigned_to_username=picked.username if picked else None,
-                assigned_at=now if picked else None,
+                assigned_to_username=None,
+                assigned_at=None,
             )
             db.add(fault)
             logger.info(
-                "fault_opened line_id=%d from_pole_seq=%s to_pole_seq=%s last_red_dev=%s first_green_dev=%s assigned=%s",
+                "fault_opened line_id=%d from_pole_seq=%s to_pole_seq=%s last_red_dev=%s first_green_dev=%s assigned=None",
                 line.id, fault.from_pole_seq, fault.to_pole_seq,
                 last_red_dev.code if last_red_dev else None,
                 first_green_dev.code if first_green_dev else None,
-                picked.username if picked else None,
             )
             # Olay kaydi: yeni fault aciliyor — Olaylar sayfasinda gozuksun.
             # Mesaj kullanici dostu Turkce; metadata'da line/region/device
@@ -309,7 +305,7 @@ def recompute_faults(db: Session) -> None:
                         "to_pole_seq": fault.to_pole_seq,
                         "last_red_device_id": fault.last_red_device_id,
                         "first_green_device_id": fault.first_green_device_id,
-                        "assigned_to": picked.username if picked else None,
+                        "assigned_to": None,
                     },
                     i18n_key="fault_opened",
                     i18n_params={

@@ -181,6 +181,10 @@ def ingest_alarm(
         # Eski kayit signal_key olmadan acilmissa, yeni payload'tan tamamla.
         if payload.signal_key and not existing.signal_key:
             existing.signal_key = payload.signal_key
+        # Kural produces_fault'u sonradan degismis olabilir; mevcut acik alarmi
+        # da senkronla. Boylece kural "ariza uretmez"e cevrilince acik alarm da
+        # haritadan/fault'tan duser (recompute sonraki tetikte yansitir).
+        existing.produces_fault = payload.produces_fault
         if payload.message_id:
             from app.services.idempotency_service import mark_processed
 
@@ -245,6 +249,7 @@ def ingest_alarm(
         title=payload.title,
         description=payload.description,
         signal_key=payload.signal_key,
+        produces_fault=payload.produces_fault,
         created_at=datetime.now(timezone.utc),
     )
     db.add(alarm)

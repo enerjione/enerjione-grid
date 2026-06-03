@@ -136,6 +136,10 @@ export type AlarmEvent = {
   reset?: boolean;
   acknowledged_at?: string | null;
   reset_at?: string | null;
+  /** Bu alarm gercek hat arizasi uretir mi? Harita cihazi yalniz
+   *  produces_fault !== false ise kirmizi gosterir. Eski/undefined kayitlar
+   *  true kabul edilir (geriye uyum). */
+  produces_fault?: boolean;
   created_at: string;
 };
 
@@ -656,6 +660,9 @@ export type AlarmRuleRow = {
   notify_email?: boolean;
   notify_sms?: boolean;
   notify_telegram?: boolean;
+  /** "Bu alarm gercek hat arizasi uretir mi?" True (default): harita kirmizi +
+   *  Hat Arizasi acilir. False: yalniz Alarmlar ekraninda gorunur. */
+  produces_fault?: boolean;
 };
 
 /** Backend host'unun anlik kaynak metrikleri (`/system-status/host`).

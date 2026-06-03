@@ -35,11 +35,15 @@ export function GridOverviewPage({
 }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
-  // Arızalı cihazların aktif alarm bilgisi (en güncel onaylanmamış)
+  // Arızalı cihazların aktif alarm bilgisi (en güncel onaylanmamış).
+  // produces_fault === false alarmlar (geçici/gürültülü) burada "arıza" olarak
+  // GÖSTERİLMEZ — haritayla tutarlı; bu alarmlar yalnız Alarmlar ekranında durur.
+  // `!== false`: eski/undefined kayıtlar true sayılır (geriye uyum).
   const deviceFaults = useMemo<Map<number, DeviceFault[]>>(() => {
     const m = new Map<number, DeviceFault[]>();
     for (const a of alarms ?? []) {
       if (a.reset) continue;
+      if (a.produces_fault === false) continue;
       const arr = m.get(a.device_id) ?? [];
       arr.push({ level: a.level, title: a.title, signalKey: a.signal_key });
       m.set(a.device_id, arr);
