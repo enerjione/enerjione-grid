@@ -15,6 +15,10 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Claude Code — ekip ayarlari (.claude/settings.json, commands/, CLAUDE.md) commit edilir.
+# Kisiye ozel local override ve gecici dosyalar commit edilmez.
+.claude/settings.local.json
+
 # Firebase Admin SDK service account dosyalari — ASLA commit edilmemeli
 # (private key icerir). Backend runtime'da yerel dosyadan veya env ile okur.
 fcm-service-account.json

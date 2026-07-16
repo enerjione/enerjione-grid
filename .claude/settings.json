@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pytest:*)",
+      "Bash(alembic:*)",
+      "Bash(pip-compile:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Read(//**)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose down:*)",
+      "Bash(bash update.sh:*)",
+      "Bash(bash uninstall.sh:*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(apps/backend-api/.env)",
+      "Read(apps/backend-api/fcm-service-account.json)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)"
+    ]
+  }
+}
