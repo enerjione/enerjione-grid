@@ -29,7 +29,9 @@ from sqlalchemy.orm import Session
 from app.models.device import Device
 from app.models.grid_topology import Line, LineSegment, Pole, Region
 
-# Sablon kolonlari (sira onemli — parse bunlara gore index'ler).
+# Sablon kolonlari (sira onemli). Cihaz_Sira YOK — cihaz sirasi ara-satir
+# sirasindan otomatik turer. Kolon harfleri COLUMNS index'inden hesaplanir
+# (asagida _col), elle harf gomulmez.
 COLUMNS = [
     "Bolge_Kodu",
     "Bolge_Adi",
@@ -41,11 +43,19 @@ COLUMNS = [
     "Boylam",
     "Direk_Tipi",
     "Cihaz",
-    "Cihaz_Sira",   # iki direk arasi coklu cihazda sira (1,2,3...)
     "Yon",          # FCI yon oryantasyonu: yesil | kirmizi
     "Bransman_Hat_Kodu",
     "Bransman_Direk_Sira",
 ]
+
+
+def _col(name: str) -> str:
+    """COLUMNS'taki kolon adinin Excel harfini dondur (A, B, ...). Kolon sirasi
+    degisirse tum adresler otomatik guncellenir — elle harf gomme."""
+    from openpyxl.utils import get_column_letter
+
+    return get_column_letter(COLUMNS.index(name) + 1)
+
 
 POLE_TYPES = ["pole", "transformer", "breaker"]
 
@@ -63,6 +73,26 @@ ORIENTATION_TO_YON = {
     "red_forward": "kirmizi",
 }
 YON_CHOICES = ["yesil", "kirmizi"]
+
+
+def _sanitize_range_token(code: str) -> str:
+    """Hat kodunu Excel named-range parcasina cevir: harf/rakam/altcizgi, harfle
+    baslar. 'F-1' -> 'F_1'. Excel INDIRECT tarafi ile BIREBIR ayni donusum
+    (SUBSTITUTE zinciri: bosluk ve tire -> altcizgi). Diger ozel karakterler de
+    altcizgi olur ama Excel formulu yalniz bosluk+tire cevirir; bu yuzden hat
+    kodlarinda yalniz harf/rakam/bosluk/tire varsayilir (UI zaten kisitli)."""
+    out = []
+    for ch in code:
+        out.append(ch if (ch.isalnum() or ch == "_") else "_")
+    token = "".join(out)
+    if not token or not token[0].isalpha():
+        token = "L_" + token
+    return token[:200]
+
+
+def _range_name(code: str) -> str:
+    """Hat koduna karsilik gelen named-range adi (HAT_<token>)."""
+    return "HAT_" + _sanitize_range_token(code)
 
 
 # --------------------------------------------------------------------------- #
@@ -101,9 +131,13 @@ def _hex(color: str | None, fallback: str) -> str:
 
 
 def _load_topology_rows(db: Session) -> list[dict]:
-    """Sistemdeki tum Region->Line->Pole->Segment(cihaz) hiyerarsisini duz
-    satirlara ac. Her satir bir DIREK; o direkten baslayan segmentteki cihaz(lar)
-    ayri satirlarda tekrar eder (Cihaz_Sira ile). Bolge/Hat sirali."""
+    """Sistemdeki tum Region->Line->Pole->Segment(cihaz) hiyerarsisini satirlara
+    ac. Iki satir tipi ('kind'):
+      - 'pole'   : bir DIREK (koordinat/tip burada, Cihaz bos).
+      - 'device' : bir CIHAZ ara-satiri, ait oldugu direkten HEMEN SONRA gelir.
+                   Cihaz o direkten baslayan segmente baglanir (from=direk,
+                   to=sonraki direk). Coklu cihaz = ardisik birden fazla 'device'.
+    Bolge/Hat sirali. Cihaz sirasi ara-satir sirasiyla verilir (device_position_t)."""
     regions = {r.id: r for r in db.scalars(select(Region).order_by(Region.name)).all()}
     lines = list(db.scalars(select(Line).order_by(Line.region_id, Line.code)).all())
     poles = list(db.scalars(select(Pole).order_by(Pole.line_id, Pole.sequence_no)).all())
@@ -114,7 +148,7 @@ def _load_topology_rows(db: Session) -> list[dict]:
     for p in poles:
         poles_by_line.setdefault(p.line_id, []).append(p)
 
-    # (line_id, from_seq) -> [ (order, device_code, orientation) ]
+    # (line_id, from_seq) -> [ (t, device_code, orientation) ]
     seg_by_slot: dict[tuple[int, int], list[tuple[float, str, str | None]]] = {}
     seq_by_pole = {p.id: p.sequence_no for p in poles}
     for s in segments:
@@ -130,7 +164,7 @@ def _load_topology_rows(db: Session) -> list[dict]:
         seg_by_slot.setdefault((s.line_id, from_seq), []).append(
             (t, dev.code, s.device_orientation)
         )
-    # Her slottaki cihazlari t'ye gore sirala (Cihaz_Sira 1..N).
+    # Her slottaki cihazlari t'ye gore sirala (ara-satir sirasi).
     for key in seg_by_slot:
         seg_by_slot[key].sort(key=lambda x: x[0])
 
@@ -147,36 +181,36 @@ def _load_topology_rows(db: Session) -> list[dict]:
             branch_pole_seq = ""
             if ln.branched_from_pole_id is not None:
                 bp_seq = seq_by_pole.get(ln.branched_from_pole_id)
-                # bagli oldugu hattin kodunu bul
                 for other in lines:
                     if any(p.id == ln.branched_from_pole_id for p in poles_by_line.get(other.id, [])):
                         branch_line_code = other.code
                         break
                 branch_pole_seq = bp_seq if bp_seq is not None else ""
             for p in line_poles:
+                # Direk satiri (cihazsiz).
+                rows.append({
+                    "kind": "pole",
+                    "region": region, "line": ln, "pole": p,
+                    "branch_line_code": branch_line_code,
+                    "branch_pole_seq": branch_pole_seq,
+                })
+                # O direkten baslayan slottaki cihazlar -> ayri ara-satirlar.
                 slot = seg_by_slot.get((ln.id, p.sequence_no), [])
-                if slot:
-                    for order, (_, dev_code, orient) in enumerate(slot, start=1):
-                        rows.append({
-                            "region": region, "line": ln, "pole": p,
-                            "device_code": dev_code, "cihaz_sira": order,
-                            "yon": ORIENTATION_TO_YON.get(orient or "", ""),
-                            "branch_line_code": branch_line_code,
-                            "branch_pole_seq": branch_pole_seq,
-                        })
-                else:
+                for _, dev_code, orient in slot:
                     rows.append({
+                        "kind": "device",
                         "region": region, "line": ln, "pole": p,
-                        "device_code": "", "cihaz_sira": "", "yon": "",
-                        "branch_line_code": branch_line_code,
-                        "branch_pole_seq": branch_pole_seq,
+                        "device_code": dev_code,
+                        "yon": ORIENTATION_TO_YON.get(orient or "", ""),
                     })
     return rows
 
 
 def build_template_workbook(db: Session) -> io.BytesIO:
     """Import sablonu (.xlsx). MEVCUT topolojiyi DOLU getirir + agac gorunum
-    (Bolge/Hat gruplu, katlanabilir outline). Cihaz/Direk_Tipi/Yon dropdown'lu.
+    (Bolge>Hat>Direk katlanabilir outline). Cihazlar direkler arasinda AYRI
+    ara-satirda. Cihaz/Direk_Tipi/Yon dropdown; bransman bagimli dropdown;
+    tekrar eden cihaz kirmizi (kosullu bicim).
 
     Bos satirlar altta yeni ekleme icin. Doner: BytesIO."""
     from openpyxl import Workbook
@@ -184,12 +218,20 @@ def build_template_workbook(db: Session) -> io.BytesIO:
 
     devices = list(db.scalars(select(Device).order_by(Device.code)).all())
     all_device_codes = [d.code for d in devices]
+    all_line_codes = list(db.scalars(select(Line.code).order_by(Line.code)).all())
+    # Hat kodu -> o hattin direk sira listesi (bransman bagimli dropdown icin).
+    line_pole_seqs: dict[str, list[int]] = {}
+    for ln in db.scalars(select(Line)).all():
+        seqs = sorted(
+            p.sequence_no
+            for p in db.scalars(select(Pole).where(Pole.line_id == ln.id)).all()
+        )
+        line_pole_seqs[ln.code] = seqs
 
     wb = Workbook()
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
     center = Alignment(horizontal="center", vertical="center")
-    left = Alignment(horizontal="left", vertical="center")
 
     ws = wb.active
     ws.title = "Topoloji"
@@ -200,18 +242,29 @@ def build_template_workbook(db: Session) -> io.BytesIO:
         cell.fill = header_fill
         cell.alignment = center
 
-    # Agac gorunum: her Bolge bir grup (outline level 1), her Hat alt grup
-    # (level 2). Bolge/Hat basligi ilk satirinda dolu; ayni gruptaki alt
-    # satirlarda Bolge/Hat kolonlari BOS (girinti hissi) — parse forward-fill
-    # yapar. Renkli dolgu ile gruplar ayrilir.
+    # Agac gorunum: Bolge (level 0 baslik) > Hat (level 1 baslik) >
+    # Direk + Cihaz ara-satirlari (level 2). Bolge/Hat kolonlari yalniz grup
+    # basinda dolu (parse forward-fill yapar). Cihaz ara-satirinda Direk_Sira
+    # ve koordinat/tip BOS, Cihaz+Yon dolu, Direk_Adi = "-> N-M arasi" etiketi.
     topo_rows = _load_topology_rows(db)
     excel_row = 2
     last_region_code = None
     last_line_key = None
     region_fill_cache: dict[str, PatternFill] = {}
     line_fill = PatternFill(start_color="EEF2FF", end_color="EEF2FF", fill_type="solid")
+    device_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
 
-    for r in topo_rows:
+    # Sonraki direk sirasini bulmak icin: ayni hattaki bir sonraki 'pole' satiri.
+    def _next_pole_seq(idx: int, line_id: int) -> int | None:
+        for j in range(idx + 1, len(topo_rows)):
+            nr = topo_rows[j]
+            if nr["line"].id != line_id:
+                return None
+            if nr["kind"] == "pole":
+                return nr["pole"].sequence_no
+        return None
+
+    for i, r in enumerate(topo_rows):
         region = r["region"]
         line = r["line"]
         pole = r["pole"]
@@ -220,29 +273,42 @@ def build_template_workbook(db: Session) -> io.BytesIO:
         is_new_region = region_code != last_region_code
         is_new_line = line_key != last_line_key
 
-        # Bolge/Hat kolonlari yalniz grup basinda dolu.
-        vals = [
-            region_code if is_new_region else "",
-            region.name if is_new_region else "",
-            line.code if is_new_line else "",
-            line.name if is_new_line else "",
-            pole.sequence_no,
-            pole.name or "",
-            pole.latitude,
-            pole.longitude,
-            pole.pole_type or "pole",
-            r["device_code"],
-            r["cihaz_sira"],
-            r["yon"],
-            r["branch_line_code"] if is_new_line else "",
-            r["branch_pole_seq"] if is_new_line else "",
-        ]
+        if r["kind"] == "pole":
+            vals = [
+                region_code if is_new_region else "",
+                region.name if is_new_region else "",
+                line.code if is_new_line else "",
+                line.name if is_new_line else "",
+                pole.sequence_no,
+                pole.name or "",
+                pole.latitude,
+                pole.longitude,
+                pole.pole_type or "pole",
+                "", "",  # Cihaz, Yon bos
+                r["branch_line_code"] if is_new_line else "",
+                r["branch_pole_seq"] if is_new_line else "",
+            ]
+        else:  # device ara-satiri
+            nxt = _next_pole_seq(i, line.id)
+            label = f"-> {pole.sequence_no}-{nxt} arasi" if nxt else f"-> {pole.sequence_no} sonrasi"
+            vals = [
+                "", "", "", "",   # bolge/hat bos (ust satirdan gelir)
+                "",               # Direk_Sira BOS -> cihaz satiri isareti
+                label,            # Direk_Adi = bilgilendirici etiket
+                "", "", "",       # Enlem/Boylam/Direk_Tipi bos
+                r["device_code"],
+                r["yon"],
+                "", "",           # bransman bos
+            ]
         ws.append(vals)
 
-        # Outline: direk satirlari level 1 (Bolge/Hat basligi altinda katlanir).
-        ws.row_dimensions[excel_row].outline_level = 1
+        # Outline seviyeleri.
+        if is_new_line:
+            ws.row_dimensions[excel_row].outline_level = 1  # hat basligi
+        else:
+            ws.row_dimensions[excel_row].outline_level = 2  # direk/cihaz
 
-        # Renklendirme: yeni hat satirinin Bolge/Hat hucrelerine hafif dolgu.
+        # Renklendirme.
         if is_new_region:
             rc = _hex(region.color, "DBEAFE")
             if rc not in region_fill_cache:
@@ -255,23 +321,30 @@ def build_template_workbook(db: Session) -> io.BytesIO:
             for col in (3, 4):
                 ws.cell(row=excel_row, column=col).fill = line_fill
                 ws.cell(row=excel_row, column=col).font = Font(bold=True)
+        if r["kind"] == "device":
+            # Cihaz ara-satirini hafifce boya (gorsel ayrim).
+            for col in range(1, len(COLUMNS) + 1):
+                ws.cell(row=excel_row, column=col).fill = device_fill
 
         last_region_code = region_code
         last_line_key = line_key
         excel_row += 1
 
-    # Grup gorunumu: ozet ustte, +/- solda.
     ws.sheet_properties.outlinePr.summaryBelow = False
 
-    # Bos ekleme satirlari (yeni hat/direk icin) — dropdown'lar buralara da uygulanir.
+    # Bos ekleme satirlari (yeni hat/direk/cihaz icin).
     blank_end = excel_row + 200
 
-    widths = [12, 20, 10, 18, 10, 16, 12, 12, 13, 18, 10, 10, 18, 18]
+    widths = [12, 20, 10, 18, 10, 18, 12, 12, 13, 18, 10, 18, 18]
     for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[chr(64 + i)].width = w
+        ws.column_dimensions[_col(COLUMNS[i - 1])].width = w
     ws.freeze_panes = "A2"
 
-    _add_dropdowns(wb, ws, all_device_codes, last_data_row=blank_end)
+    _add_dropdowns(
+        wb, ws, all_device_codes, all_line_codes, line_pole_seqs,
+        last_data_row=blank_end,
+    )
+    _add_conditional_formats(ws, last_data_row=blank_end)
 
     # --- Yardim sheet ---
     _add_help_sheet(wb, header_font, header_fill)
@@ -282,31 +355,55 @@ def build_template_workbook(db: Session) -> io.BytesIO:
     return buf
 
 
-def _add_dropdowns(wb, ws, all_device_codes, last_data_row: int) -> None:
-    """Direk_Tipi (I), Cihaz (J), Yon (L) kolonlarina acilir liste ekle."""
+def _add_conditional_formats(ws, last_data_row: int) -> None:
+    """Tekrar eden Cihaz kodunu KIRMIZI boya (kosullu bicim). Ayni cihaz iki
+    satirda secilirse kullanici aninda gorur; import de hata verir."""
+    from openpyxl.formatting.rule import Rule
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.styles.differential import DifferentialStyle
+
+    cihaz = _col("Cihaz")
+    end = max(last_data_row, 2)
+    rng = f"{cihaz}2:{cihaz}{end}"
+    red = DifferentialStyle(
+        fill=PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+        font=Font(color="B91C1C", bold=True),
+    )
+    # Bos degilse VE ayni deger 1'den fazla ise -> kirmizi.
+    formula = f'AND({cihaz}2<>"",COUNTIF(${cihaz}$2:${cihaz}${end},{cihaz}2)>1)'
+    rule = Rule(type="expression", formula=[formula], dxf=red, stopIfTrue=False)
+    ws.conditional_formatting.add(rng, rule)
+
+
+def _add_dropdowns(
+    wb, ws, all_device_codes, all_line_codes, line_pole_seqs, last_data_row: int
+) -> None:
+    """Acilir listeler: Direk_Tipi, Cihaz, Yon (duz) + Bransman_Hat_Kodu (duz,
+    tum hatlar) + Bransman_Direk_Sira (BAGIMLI — secili hattin direk siralari,
+    INDIRECT ile). Kolon harfleri COLUMNS index'inden turer (elle harf yok)."""
     from openpyxl.worksheet.datavalidation import DataValidation
     from openpyxl.styles import Font, PatternFill
+    from openpyxl.workbook.defined_name import DefinedName
+    from openpyxl.utils import quote_sheetname
 
     end = max(last_data_row, 2)
+    c_tip = _col("Direk_Tipi")
+    c_cihaz = _col("Cihaz")
+    c_yon = _col("Yon")
+    c_br_hat = _col("Bransman_Hat_Kodu")
+    c_br_dir = _col("Bransman_Direk_Sira")
 
-    # Direk_Tipi = I
-    type_dv = DataValidation(
-        type="list", formula1='"' + ",".join(POLE_TYPES) + '"',
-        allow_blank=True, showDropDown=False,
-    )
-    ws.add_data_validation(type_dv)
-    type_dv.add(f"I2:I{end}")
+    def _add_list_dv(col: str, formula1: str) -> None:
+        dv = DataValidation(type="list", formula1=formula1, allow_blank=True, showDropDown=False)
+        ws.add_data_validation(dv)
+        dv.add(f"{col}2:{col}{end}")
 
-    # Yon = L
-    yon_dv = DataValidation(
-        type="list", formula1='"' + ",".join(YON_CHOICES) + '"',
-        allow_blank=True, showDropDown=False,
-    )
-    ws.add_data_validation(yon_dv)
-    yon_dv.add(f"L2:L{end}")
+    # Direk_Tipi + Yon: inline liste.
+    _add_list_dv(c_tip, '"' + ",".join(POLE_TYPES) + '"')
+    _add_list_dv(c_yon, '"' + ",".join(YON_CHOICES) + '"')
 
-    # Cihaz = J — gizli "Cihazlar" sheet'inden. Tum cihazlar listelenir
-    # (dolu satirlar kendi cihazini gostersin diye); atanmislar da dahil.
+    # Cihaz: gizli "Cihazlar" sheet'inden (atanmislar dahil — dolu satirlar
+    # kendi cihazini gostersin).
     ws_dev = wb.create_sheet("Cihazlar")
     ws_dev.append(["Cihaz_Kodu"])
     ws_dev.cell(row=1, column=1).font = Font(bold=True, color="FFFFFF")
@@ -319,28 +416,76 @@ def _add_dropdowns(wb, ws, all_device_codes, last_data_row: int) -> None:
     ws_dev.sheet_state = "hidden"
     if all_device_codes:
         last = len(all_device_codes) + 1
-        dev_dv = DataValidation(
-            type="list", formula1=f"Cihazlar!$A$2:$A${last}",
-            allow_blank=True, showDropDown=False,
+        _add_list_dv(c_cihaz, f"Cihazlar!$A$2:$A${last}")
+
+    # Bransman_Hat_Kodu: gizli "Hatlar" sheet A kolonundan (tum hat kodlari).
+    # Her hat icin B..N kolonlarina direk siralari yazilir + named range HAT_<token>.
+    ws_ln = wb.create_sheet("Hatlar")
+    ws_ln.append(["Hat_Kodu", "Direk_Siralari"])
+    ws_ln.cell(row=1, column=1).font = Font(bold=True, color="FFFFFF")
+    ws_ln.cell(row=1, column=2).font = Font(bold=True, color="FFFFFF")
+    for c in (1, 2):
+        ws_ln.cell(row=1, column=c).fill = PatternFill(
+            start_color="1F2937", end_color="1F2937", fill_type="solid"
         )
-        ws.add_data_validation(dev_dv)
-        dev_dv.add(f"J2:J{end}")
+    ws_ln.column_dimensions["A"].width = 18
+    ws_ln.sheet_state = "hidden"
+
+    quoted = quote_sheetname("Hatlar")
+    used_tokens: set[str] = set()
+    row = 2
+    for code in all_line_codes:
+        seqs = line_pole_seqs.get(code, [])
+        ws_ln.cell(row=row, column=1, value=code)
+        # Direk siralarini C..N sutunlarina yatay yaz (named range yatay aralik).
+        for j, seq in enumerate(seqs):
+            ws_ln.cell(row=row, column=3 + j, value=seq)
+        # Named range: HAT_<token>. Cakisma olursa suffix.
+        base = _range_name(code)
+        token = base
+        n = 2
+        while token in used_tokens:
+            token = f"{base}_{n}"
+            n += 1
+        used_tokens.add(token)
+        if seqs:
+            from openpyxl.utils import get_column_letter as _gcl
+            first = _gcl(3)
+            lastc = _gcl(3 + len(seqs) - 1)
+            ref = f"{quoted}!${first}${row}:${lastc}${row}"
+            wb.defined_names.add(DefinedName(token, attr_text=ref))
+        row += 1
+
+    if all_line_codes:
+        last_ln = len(all_line_codes) + 1
+        _add_list_dv(c_br_hat, f"Hatlar!$A$2:$A${last_ln}")
+
+        # Bagimli dropdown: secili hat koduna gore direk siralari. INDIRECT +
+        # SUBSTITUTE zinciri _sanitize_range_token ile BIREBIR ayni (bosluk+tire
+        # -> altcizgi). Kod cakismasinda suffix'li named range INDIRECT'te
+        # bulunmaz (nadir; o durumda dropdown bos gelir ama import yine dogrular).
+        indirect = (
+            f'INDIRECT("HAT_"&SUBSTITUTE(SUBSTITUTE({c_br_hat}2," ","_"),"-","_"))'
+        )
+        _add_list_dv(c_br_dir, indirect)
 
 
 def _add_help_sheet(wb, header_font, header_fill) -> None:
     ws_help = wb.create_sheet("Yardim")
     help_rows = [
-        ["Kolon", "Açıklama"],
-        ["Bolge_Kodu / Bolge_Adi", "Bölge kodu ve adı. Grup başında bir kez yazılır; alt direk satırlarında boş bırakılabilir (üstteki geçerli sayılır)."],
+        ["Kolon / Konu", "Açıklama"],
+        ["YAPISI", "İki satır tipi vardır: DİREK satırı (Direk_Sira dolu) ve CİHAZ ara-satırı (Direk_Sira BOŞ, Cihaz dolu). Cihaz ara-satırı, hemen ÜSTÜNDEKİ direkten sonraki segmente bağlanır."],
+        ["Bolge_Kodu / Bolge_Adi", "Bölge kodu ve adı. Grup başında bir kez yazılır; alt satırlarda boş bırakılabilir (üstteki geçerli sayılır)."],
         ["Hat_Kodu / Hat_Adi", "Hat kodu ve adı. Aynı bölge içinde kod benzersiz. Grup başında bir kez yazılır."],
-        ["Direk_Sira", "Hat üzerinde 1'den başlayan sıra. Boşluksuz artmalı."],
-        ["Direk_Adi", "Opsiyonel direk adı."],
-        ["Enlem / Boylam", "Ondalık derece. Enlem -90..90, Boylam -180..180."],
+        ["Direk_Sira", "DİREK satırında 1'den başlayan sıra. Boşluksuz artmalı. Cihaz ara-satırında BOŞ bırakılır."],
+        ["Direk_Adi", "Direk satırında opsiyonel ad. Cihaz ara-satırında '-> N-M arası' bilgi etiketi (elle doldurmaya gerek yok)."],
+        ["Enlem / Boylam", "Direk satırında ondalık derece. Enlem -90..90, Boylam -180..180."],
         ["Direk_Tipi", "pole / transformer / breaker. Boş = pole."],
-        ["Cihaz", "Bu direğin başlattığı segmente bağlanacak cihaz (açılır liste). Boş bırakılabilir."],
-        ["Cihaz_Sira", "İki direk arasında birden fazla cihaz varsa sıra (1, 2, 3...). Tek cihazda boş/1."],
+        ["Cihaz", "Bir CİHAZ ara-satırına yazılır: üstteki direkten sonraki segmente bağlanacak cihaz (açılır liste). Aynı iki direk arasında birden fazla cihaz için üst üste birden çok cihaz ara-satırı ekleyin; sıra satır sırasıdır (otomatik)."],
         ["Yon", "Cihazın FCI yön oryantasyonu: yesil (A ucu ileri) / kirmizi (B ucu ileri). Opsiyonel."],
-        ["Bransman_Hat_Kodu / _Direk_Sira", "Bu hat başka hattın direğinden dallanıyorsa o hattın kodu + direk sırası (opsiyonel)."],
+        ["Bransman_Hat_Kodu", "Bu hat başka hattın direğinden dallanıyorsa o hattın kodu (açılır liste). Hat başı satırına yazılır."],
+        ["Bransman_Direk_Sira", "Bağlanılacak direk sırası. Bransman_Hat_Kodu seçilince açılır liste O HATTIN direk sıralarını gösterir (bağımlı liste)."],
+        ["Tekrar eden cihaz", "Aynı cihaz iki kez seçilirse hücre KIRMIZI boyanır ve içe aktarımda hata verir; bir cihaz yalnız bir segmente bağlanır."],
     ]
     for r in help_rows:
         ws_help.append(r)
@@ -476,6 +621,8 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
     ff_hat_name = ""
     ff_branch_line = ""
     ff_branch_seq: int | None = None
+    # Cihaz ara-satiri en son goruilen DIREGE baglanir.
+    last_pole_key: tuple[str, str, int] | None = None
 
     rows_iter = ws.iter_rows(min_row=2, values_only=True)
     for idx, raw in enumerate(rows_iter, start=2):
@@ -497,10 +644,27 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
             # Bransman bilgisi hat basinda tasinir.
             ff_branch_line = _clean(rec["Bransman_Hat_Kodu"])
             ff_branch_seq = _to_int(rec["Bransman_Direk_Sira"])
+            last_pole_key = None  # yeni hat -> cihaz baglama sifirla
 
         region_code = ff_region_code
         hat_code = ff_hat_code
         seq = _to_int(rec["Direk_Sira"])
+        device_code_raw = _clean(rec["Cihaz"])
+
+        # ---- CIHAZ ARA-SATIRI: Direk_Sira bos + Cihaz dolu ----
+        if seq is None and device_code_raw:
+            _parse_device_row(
+                idx, rec, device_code_raw, last_pole_key, plan,
+                device_by_code, assigned_slots, used_device_codes,
+                pole_by_key, slot_orders,
+            )
+            continue
+
+        # ---- DIREK SATIRI: Direk_Sira dolu ----
+        if seq is None:
+            # Ne direk ne cihaz — atla (bos/etiket satiri).
+            continue
+
         lat = _to_float(rec["Enlem"])
         lon = _to_float(rec["Boylam"])
 
@@ -510,7 +674,7 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
         if not hat_code:
             plan.errors.append(RowError(idx, "Hat_Kodu boş (üstte de yok)."))
             continue
-        if seq is None or seq < 1:
+        if seq < 1:
             plan.errors.append(RowError(idx, "Direk_Sira geçersiz (1'den başlamalı)."))
             continue
 
@@ -547,50 +711,65 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
             plan.poles.append(existing_pole)
             slot_orders[pole_key] = set()
 
-        # Cihaz (opsiyonel) — slota ekle.
-        device_code_raw = _clean(rec["Cihaz"])
-        if not device_code_raw:
-            continue
-        dev = device_by_code.get(device_code_raw)
-        if dev is None:
-            plan.errors.append(RowError(idx, f"Cihaz bulunamadı: {device_code_raw!r}."))
-            continue
-        if device_code_raw in used_device_codes:
-            plan.errors.append(RowError(idx, f"Cihaz {device_code_raw!r} birden fazla kez seçilmiş."))
-            continue
-        assigned_slot = assigned_slots.get(dev.id)
-        if assigned_slot is not None and assigned_slot != (region_code, hat_code, seq):
-            plan.errors.append(RowError(idx, f"Cihaz {device_code_raw!r} zaten başka segmente bağlı."))
-            continue
+        last_pole_key = pole_key
 
-        # Cihaz_Sira: verilmezse mevcut slot doluluguna gore otomatik.
-        cihaz_sira = _to_int(rec["Cihaz_Sira"])
-        if cihaz_sira is None or cihaz_sira < 1:
-            cihaz_sira = len(slot_orders[pole_key]) + 1
-        if cihaz_sira in slot_orders[pole_key]:
-            plan.errors.append(
-                RowError(idx, f"{seq}. direk slotunda Cihaz_Sira {cihaz_sira} tekrar ediyor.")
+        # Geriye donuk uyum: cihaz AYNI direk satirinda da yazilmis olabilir
+        # (eski sablon veya kullanici elle). Varsa yine bagla.
+        if device_code_raw:
+            _parse_device_row(
+                idx, rec, device_code_raw, pole_key, plan,
+                device_by_code, assigned_slots, used_device_codes,
+                pole_by_key, slot_orders,
             )
-            continue
-        slot_orders[pole_key].add(cihaz_sira)
-
-        # Yon.
-        yon_raw = _clean(rec["Yon"]).lower()
-        orientation = YON_TO_ORIENTATION.get(yon_raw) if yon_raw else None
-        if yon_raw and orientation is None:
-            plan.errors.append(RowError(idx, f"Yon geçersiz: {yon_raw!r} (yesil/kirmizi)."))
-            continue
-
-        used_device_codes.add(device_code_raw)
-        existing_pole.devices.append(
-            ParsedDevice(
-                device_code=device_code_raw, cihaz_sira=cihaz_sira,
-                orientation=orientation, excel_row=idx,
-            )
-        )
 
     wb.close()
     return plan
+
+
+def _parse_device_row(
+    idx, rec, device_code_raw, pole_key, plan,
+    device_by_code, assigned_slots, used_device_codes,
+    pole_by_key, slot_orders,
+) -> None:
+    """Bir cihazi (ara-satir veya direk satirindaki Cihaz hucresi) ait oldugu
+    direk slotuna ekle. Cihaz_Sira YOK — sira ara-satir sirasidir (append)."""
+    if pole_key is None:
+        plan.errors.append(RowError(idx, f"Cihaz {device_code_raw!r} bir direğe bağlı değil (üstte direk yok)."))
+        return
+    existing_pole = pole_by_key.get(pole_key)
+    if existing_pole is None:
+        plan.errors.append(RowError(idx, f"Cihaz {device_code_raw!r} için geçerli direk yok."))
+        return
+    dev = device_by_code.get(device_code_raw)
+    if dev is None:
+        plan.errors.append(RowError(idx, f"Cihaz bulunamadı: {device_code_raw!r}."))
+        return
+    if device_code_raw in used_device_codes:
+        plan.errors.append(RowError(idx, f"Cihaz {device_code_raw!r} birden fazla kez seçilmiş."))
+        return
+    region_code, hat_code, seq = pole_key
+    assigned_slot = assigned_slots.get(dev.id)
+    if assigned_slot is not None and assigned_slot != (region_code, hat_code, seq):
+        plan.errors.append(RowError(idx, f"Cihaz {device_code_raw!r} zaten başka segmente bağlı."))
+        return
+
+    # Yon (opsiyonel).
+    yon_raw = _clean(rec["Yon"]).lower()
+    orientation = YON_TO_ORIENTATION.get(yon_raw) if yon_raw else None
+    if yon_raw and orientation is None:
+        plan.errors.append(RowError(idx, f"Yon geçersiz: {yon_raw!r} (yesil/kirmizi)."))
+        return
+
+    # Sira = slottaki append sirasi (otomatik).
+    cihaz_sira = len(slot_orders.setdefault(pole_key, set())) + 1
+    slot_orders[pole_key].add(cihaz_sira)
+    used_device_codes.add(device_code_raw)
+    existing_pole.devices.append(
+        ParsedDevice(
+            device_code=device_code_raw, cihaz_sira=cihaz_sira,
+            orientation=orientation, excel_row=idx,
+        )
+    )
 
 
 # --------------------------------------------------------------------------- #

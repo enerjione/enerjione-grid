@@ -1,9 +1,11 @@
 """grid_import_service — sablon uret + parse + apply (in-memory SQLite).
 
-Kolon sirasi (COLUMNS):
+Kolon sirasi (COLUMNS) — Cihaz_Sira YOK:
   Bolge_Kodu, Bolge_Adi, Hat_Kodu, Hat_Adi, Direk_Sira, Direk_Adi,
-  Enlem, Boylam, Direk_Tipi, Cihaz, Cihaz_Sira, Yon,
-  Bransman_Hat_Kodu, Bransman_Direk_Sira
+  Enlem, Boylam, Direk_Tipi, Cihaz, Yon, Bransman_Hat_Kodu, Bransman_Direk_Sira
+
+Yeni yapi: cihazlar direk satirlarinda DEGIL, ayri CIHAZ ara-satirlarinda
+(Direk_Sira bos, Cihaz dolu). Ara-satir bir onceki direge baglanir.
 """
 
 from __future__ import annotations
@@ -32,10 +34,15 @@ def db():
 
 
 def _row(bolge_k="", bolge_a="", hat_k="", hat_a="", sira=None, direk_a="",
-         lat=None, lon=None, tip="", cihaz="", cihaz_sira="", yon="",
-         br_hat="", br_sira=""):
+         lat=None, lon=None, tip="", br_hat="", br_sira=""):
+    """DIREK satiri (13 kolon). Cihaz/Yon bos."""
     return [bolge_k, bolge_a, hat_k, hat_a, sira, direk_a, lat, lon, tip,
-            cihaz, cihaz_sira, yon, br_hat, br_sira]
+            "", "", br_hat, br_sira]
+
+
+def _dev_row(cihaz, yon=""):
+    """CIHAZ ara-satiri: Direk_Sira bos, Cihaz dolu. Ustteki direge baglanir."""
+    return ["", "", "", "", None, "", None, None, "", cihaz, yon, "", ""]
 
 
 def _sheet(rows: list[list]) -> bytes:
@@ -55,10 +62,13 @@ def test_build_template_has_sheets_and_headers(db):
     wb = load_workbook(buf)
     assert "Topoloji" in wb.sheetnames
     assert "Cihazlar" in wb.sheetnames
+    assert "Hatlar" in wb.sheetnames   # bransman bagimli dropdown kaynagi
     assert "Yardim" in wb.sheetnames
     header = [c.value for c in wb["Topoloji"][1]]
     assert header == g.COLUMNS
-    assert "Cihaz_Sira" in header and "Yon" in header
+    assert "Cihaz_Sira" not in header   # kaldirildi
+    assert "Yon" in header and "Cihaz" in header
+    assert len(header) == 13
 
 
 def test_build_template_fills_existing_data_as_tree(db):
@@ -78,38 +88,86 @@ def test_build_template_fills_existing_data_as_tree(db):
     assert ws.cell(row=3, column=1).value in (None, "")   # forward-fill: bos
 
 
-def test_parse_valid_and_invalid_rows(db):
+def test_build_template_has_conditional_formatting(db):
+    """Tekrar eden cihaz icin kosullu bicim kurali Cihaz kolonuna eklenmis."""
+    db.add(Device(code="D1", name="c1", ip_address="1.1.1.1", latitude=0, longitude=0))
+    db.commit()
+    wb = load_workbook(g.build_template_workbook(db))
+    ws = wb["Topoloji"]
+    # En az bir CF kurali olmali (Cihaz kolonu COUNTIF>1).
+    ranges = list(ws.conditional_formatting)
+    assert len(ranges) >= 1
+
+
+def test_build_template_defines_line_named_ranges(db):
+    """Her hat icin HAT_<token> named range tanimli (bagimli dropdown kaynagi)."""
+    reg = Region(code="R1", name="B1"); db.add(reg); db.flush()
+    ln = Line(region_id=reg.id, code="F-1", name="Fider 1"); db.add(ln); db.flush()
+    db.add_all([
+        Pole(line_id=ln.id, sequence_no=1, latitude=40.0, longitude=29.0, pole_type="pole"),
+        Pole(line_id=ln.id, sequence_no=2, latitude=40.1, longitude=29.1, pole_type="pole"),
+    ]); db.commit()
+    wb = load_workbook(g.build_template_workbook(db))
+    # 'F-1' -> HAT_F_1 (tire altcizgiye)
+    assert "HAT_F_1" in wb.defined_names
+
+
+def test_sanitize_range_token():
+    assert g._range_name("F-1") == "HAT_F_1"
+    assert g._range_name("E1") == "HAT_E1"
+    assert g._range_name("HAT 2") == "HAT_HAT_2"
+    # rakamla baslarsa L_ prefix
+    assert g._range_name("1A").startswith("HAT_L_")
+
+
+def test_parse_device_in_between_row(db):
+    """Cihaz ara-satiri: ustteki direge baglanir, koordinat direk satirindan."""
     db.add(Device(code="DEV-1", name="Cihaz 1", ip_address="10.0.0.1", latitude=0, longitude=0))
     db.commit()
     rows = [
         _row("R1", "Bolge 1", "L1", "Hat 1", 1, "Bas", 40.0, 29.0, "transformer"),
-        _row(sira=2, lat=40.1, lon=29.1, tip="pole", cihaz="DEV-1"),          # forward-fill bolge/hat
-        _row(sira=3, lat=999.0, lon=29.2, tip="pole"),                        # gecersiz enlem
-        _row(sira=4, lat=40.3, lon=29.3, tip="pole", cihaz="YOK"),            # bilinmeyen cihaz
+        _dev_row("DEV-1"),                          # 1. direk sonrasi cihaz
+        _row(sira=2, lat=40.1, lon=29.1, tip="pole"),
     ]
     plan = g.parse_and_plan(_sheet(rows), db)
     c = plan.counts()
     assert c["regions"] == 1
     assert c["lines"] == 1
-    assert c["poles"] == 3           # direk 1,2,4 gecerli (3 enlem hatali)
-    assert c["devices"] == 1         # DEV-1
-    assert c["errors"] == 2          # gecersiz enlem + bilinmeyen cihaz
+    assert c["poles"] == 2
+    assert c["devices"] == 1
+    assert c["errors"] == 0
 
 
-def test_parse_multi_device_slot_with_order_and_direction(db):
-    """Iki direk arasinda 2 cihaz + sira + yon."""
+def test_parse_invalid_and_unknown(db):
+    db.add(Device(code="DEV-1", name="Cihaz 1", ip_address="10.0.0.1", latitude=0, longitude=0))
+    db.commit()
+    rows = [
+        _row("R1", "Bolge 1", "L1", "Hat 1", 1, "Bas", 40.0, 29.0, "pole"),
+        _dev_row("DEV-1"),
+        _row(sira=2, lat=999.0, lon=29.2, tip="pole"),   # gecersiz enlem
+        _dev_row("YOK"),                                 # bilinmeyen cihaz (2. direge)
+    ]
+    plan = g.parse_and_plan(_sheet(rows), db)
+    c = plan.counts()
+    assert c["poles"] == 1            # sadece direk 1 (direk 2 enlem hatali)
+    assert c["devices"] == 1          # DEV-1
+    assert c["errors"] == 2           # gecersiz enlem + bilinmeyen cihaz
+
+
+def test_parse_multi_device_slot_auto_order(db):
+    """Iki direk arasi 2 cihaz ara-satiri -> sira otomatik (satir sirasi)."""
     db.add(Device(code="D1", name="c1", ip_address="1.1.1.1", latitude=0, longitude=0))
     db.add(Device(code="D2", name="c2", ip_address="1.1.1.2", latitude=0, longitude=0))
     db.commit()
     rows = [
-        _row("R1", "Bolge 1", "L1", "Hat 1", 1, "P1", 40.0, 29.0, "pole", "D1", 1, "yesil"),
-        _row(sira=1, cihaz="D2", cihaz_sira=2, yon="kirmizi"),  # ayni direk-1 slotu, 2. cihaz
+        _row("R1", "Bolge 1", "L1", "Hat 1", 1, "P1", 40.0, 29.0, "pole"),
+        _dev_row("D1", "yesil"),   # slot 1->2, sira 1
+        _dev_row("D2", "kirmizi"), # slot 1->2, sira 2 (otomatik)
         _row(sira=2, lat=40.1, lon=29.1, tip="pole"),
     ]
     plan = g.parse_and_plan(_sheet(rows), db)
     assert plan.counts()["devices"] == 2
     assert plan.counts()["errors"] == 0
-    # apply -> 2 segment, orientation + position_t
     result = g.apply_plan(plan, db); db.commit()
     assert result.segments_created == 2
     segs = db.query(LineSegment).order_by(LineSegment.device_position_t).all()
@@ -120,17 +178,48 @@ def test_parse_multi_device_slot_with_order_and_direction(db):
 def test_parse_invalid_direction(db):
     db.add(Device(code="D1", name="c1", ip_address="1.1.1.1", latitude=0, longitude=0)); db.commit()
     rows = [
-        _row("R1", "B", "L1", "H", 1, "", 40.0, 29.0, "pole", "D1", 1, "mavi"),  # gecersiz yon
+        _row("R1", "B", "L1", "H", 1, "", 40.0, 29.0, "pole"),
+        _dev_row("D1", "mavi"),   # gecersiz yon
         _row(sira=2, lat=40.1, lon=29.1, tip="pole"),
     ]
     plan = g.parse_and_plan(_sheet(rows), db)
     assert any("Yon" in e.message for e in plan.errors)
 
 
+def test_duplicate_device_error(db):
+    db.add(Device(code="D1", name="c1", ip_address="1.1.1.1", latitude=0, longitude=0)); db.commit()
+    rows = [
+        _row("R1", "B", "L1", "H", 1, "", 40.0, 29.0, "pole"),
+        _dev_row("D1"),
+        _row(sira=2, lat=40.1, lon=29.1, tip="pole"),
+        _dev_row("D1"),   # ayni cihaz ikinci kez
+    ]
+    plan = g.parse_and_plan(_sheet(rows), db)
+    assert any("birden fazla" in e.message for e in plan.errors)
+
+
+def test_device_without_pole_errors(db):
+    """Ustunde direk olmayan cihaz ara-satiri -> hata."""
+    db.add(Device(code="D1", name="c1", ip_address="1.1.1.1", latitude=0, longitude=0)); db.commit()
+    rows = [
+        _row("R1", "B", "L1", "H", 1, "", 40.0, 29.0, "pole"),
+        _dev_row("D1"),
+    ]
+    # Hat basi sonrasi ilk satir direk, cihaz ona baglanir -> hata YOK burada.
+    # Ama hat basinda direkten ONCE cihaz gelirse hata olmali:
+    rows2 = [
+        ["R1", "B", "L1", "H", None, "", None, None, "", "D1", "", "", ""],  # direk yok, cihaz var
+        _row(sira=1, lat=40.0, lon=29.0, tip="pole"),
+    ]
+    plan = g.parse_and_plan(_sheet(rows2), db)
+    assert any("bağlı değil" in e.message or "direk" in e.message.lower() for e in plan.errors)
+
+
 def test_apply_creates_topology(db):
     db.add(Device(code="DEV-1", name="Cihaz 1", ip_address="10.0.0.1", latitude=0, longitude=0)); db.commit()
     rows = [
-        _row("R1", "Bolge 1", "L1", "Hat 1", 1, "P1", 40.0, 29.0, "pole", "DEV-1"),
+        _row("R1", "Bolge 1", "L1", "Hat 1", 1, "P1", 40.0, 29.0, "pole"),
+        _dev_row("DEV-1"),
         _row(sira=2, lat=40.1, lon=29.1, tip="pole"),
     ]
     result = g.apply_plan(g.parse_and_plan(_sheet(rows), db), db); db.commit()
@@ -156,6 +245,7 @@ def test_apply_is_idempotent_upsert(db):
 
 
 def test_import_template_round_trip_keeps_existing_device(db):
+    """Sablonu uret -> geri yukle: mevcut cihaz ara-satirda gelir, tekrar baglanmaz."""
     dev = Device(code="D1", name="c1", ip_address="1.1.1.1", latitude=0, longitude=0)
     db.add(dev); db.flush()
     reg = Region(code="R1", name="Bolge 1"); db.add(reg); db.flush()
@@ -171,9 +261,39 @@ def test_import_template_round_trip_keeps_existing_device(db):
     result = g.apply_plan(plan, db); db.commit()
 
     assert plan.counts()["errors"] == 0
+    assert plan.counts()["devices"] == 1   # cihaz ara-satirda geldi
     assert result.errors == []
-    assert result.segments_created == 0
+    assert result.segments_created == 0    # zaten bagli, tekrar yaratmaz
     assert db.query(LineSegment).count() == 1
+
+
+def test_branch_round_trip(db):
+    """Bransmanli hat: sablon round-trip hatasiz, branched_from korunur."""
+    reg = Region(code="R1", name="B1"); db.add(reg); db.flush()
+    main = Line(region_id=reg.id, code="E1", name="Ana"); db.add(main); db.flush()
+    mp1 = Pole(line_id=main.id, sequence_no=1, latitude=40.0, longitude=29.0, pole_type="pole")
+    mp2 = Pole(line_id=main.id, sequence_no=2, latitude=40.1, longitude=29.1, pole_type="pole")
+    db.add_all([mp1, mp2]); db.flush()
+    branch = Line(region_id=reg.id, code="E2", name="Dal", branched_from_pole_id=mp2.id)
+    db.add(branch); db.flush()
+    db.add_all([
+        Pole(line_id=branch.id, sequence_no=1, latitude=41.0, longitude=30.0, pole_type="pole"),
+        Pole(line_id=branch.id, sequence_no=2, latitude=41.1, longitude=30.1, pole_type="pole"),
+    ]); db.commit()
+
+    data = g.build_template_workbook(db).getvalue()
+    plan = g.parse_and_plan(data, db)
+    assert plan.counts()["errors"] == 0
+    # Bransman bilgisi plana tasindi
+    branch_line = plan.lines.get("R1|E2")
+    assert branch_line is not None
+    assert branch_line.branch_line_code == "E1"
+    assert branch_line.branch_pole_seq == 2
+
+    result = g.apply_plan(plan, db); db.commit()
+    assert result.errors == []
+    refreshed = db.query(Line).filter(Line.code == "E2").one()
+    assert refreshed.branched_from_pole_id == mp2.id
 
 
 def test_same_line_code_in_different_regions_does_not_merge_poles(db):
