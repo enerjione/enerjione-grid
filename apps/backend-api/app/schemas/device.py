@@ -84,9 +84,31 @@ class DeviceCommandRequest(BaseModel):
     off_time_ms: int = Field(default=100, ge=0, le=60000)
 
 
-class DeviceCommandResult(BaseModel):
-    ok: bool
-    status: str
+class DeviceCommandQueued(BaseModel):
+    """Komut kuyruga alindi yaniti (anlik sonuc DEGIL).
+
+    Gateway NAT arkasinda; komut config-poll ile ~config_refresh_sec icinde
+    iletilir. Gercek sonuc (ok/failed) sonra `GET /devices/{code}/commands`
+    ile takip edilir.
+    """
+
+    id: int
+    status: str  # pending
     command: str
-    index: int
-    detail: str | None = None
+    dnp3_index: int
+
+
+class DeviceCommandRow(BaseModel):
+    """Komut kaydi + durum (UI takip listesi icin)."""
+
+    id: int
+    device_code: str
+    command: str
+    dnp3_index: int
+    status: str  # pending | sent | ok | failed | expired
+    result_status: str | None = None
+    result_error: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)

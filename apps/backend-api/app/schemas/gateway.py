@@ -102,6 +102,38 @@ class GatewayConfigSignal(BaseModel):
     supports_alarm: bool
 
 
+class GatewayConfigCommand(BaseModel):
+    """Cihaza gonderilecek bekleyen DNP3 CROB komutu.
+
+    Gateway NAT arkasinda; komut config-poll ile iletilir. Gateway bu listedeki
+    her komut icin `reader.operate_device(device, index, ...)` cagirir ve sonucu
+    `POST /gateways/{code}/command-results` ile geri bildirir. `id` ile idempotent
+    (ayni id tekrar gelirse gateway tekrar calistirmaz).
+    """
+
+    id: int
+    device_code: str
+    command: str
+    dnp3_index: int
+    op_type: str = "pulse_on"
+    count: int = 1
+    on_time_ms: int = 100
+    off_time_ms: int = 100
+
+
+class CommandResultItem(BaseModel):
+    """Gateway'in bir komut icin bildirdigi sonuc.
+
+    Gateway config'ten cektigi her pending komutu calistirdiktan sonra bunu
+    `POST /gateways/{code}/command-results` batch'inde geri gonderir.
+    """
+
+    id: int
+    ok: bool
+    status: str = "unknown"
+    error: str | None = None
+
+
 class GatewayConfigResponse(BaseModel):
     gateway_code: str
     gateway_name: str
@@ -116,3 +148,7 @@ class GatewayConfigResponse(BaseModel):
     # buyukse reader.refresh_all_devices() cagirir (Class 0+1+2+3 integrity
     # poll). Default 0 (hic tetiklenmedi).
     refresh_nonce: int = 0
+    # Bekleyen cihaz komutlari (status='pending'). Gateway ceker, CROB gonderir,
+    # sonucu command-results endpoint'ine bildirir. config_version SEED'ine
+    # KATILMAZ (yoksa her komutta ETag churn olur). Bkz get_gateway_config 304.
+    pending_commands: list[GatewayConfigCommand] = []

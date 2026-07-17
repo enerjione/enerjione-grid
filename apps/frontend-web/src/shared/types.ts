@@ -483,13 +483,30 @@ export type SignalDataType =
   | "binary_output"
   | "analog_output";
 
-/** POST /devices/{code}/command yaniti. ok=false -> cihaz komutu reddetti. */
-export type DeviceCommandResult = {
-  ok: boolean;
-  status: string;
+/** Komut durumu. pending=kuyrukta, sent=gateway'e iletildi (config-poll),
+ *  ok/failed=gateway sonuc bildirdi, expired=sonuc gelmedi. */
+export type DeviceCommandStatus = "pending" | "sent" | "ok" | "failed" | "expired";
+
+/** POST /devices/{code}/command yaniti — komut KUYRUGA alindi (anlik sonuc degil).
+ *  Gateway NAT arkasinda; komut ~config_refresh_sec icinde iletilir. */
+export type DeviceCommandQueued = {
+  id: number;
+  status: DeviceCommandStatus;
   command: string;
-  index: number;
-  detail?: string | null;
+  dnp3_index: number;
+};
+
+/** GET /devices/{code}/commands satiri — komut kaydi + durum takibi. */
+export type DeviceCommandRow = {
+  id: number;
+  device_code: string;
+  command: string;
+  dnp3_index: number;
+  status: DeviceCommandStatus;
+  result_status?: string | null;
+  result_error?: string | null;
+  created_at: string;
+  completed_at?: string | null;
 };
 
 export type SignalSource = "master" | "sat01" | "sat02";

@@ -10,11 +10,13 @@
  * Grafikler/telemetri gecmisi AYRI IS (historian).
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { fetchDeviceCommands } from "../../shared/api";
 import { locateDevice } from "../../shared/geoLookup";
 import type {
+  DeviceCommandRow,
   DeviceRow,
   Gateway,
   SignalCatalogRow,
@@ -34,8 +36,11 @@ type Props = {
   topologyInfo?: TopologyInfo;
   /** ENGINEER/INSTALLER ise komut butonlari gorunur. */
   canCommand?: boolean;
-  /** Komut gonderme handler'i (confirm + toast App.tsx'te merkezi). */
+  /** Komut gonderme handler'i (confirm + toast App.tsx'te merkezi).
+   *  Resolve olunca komut kuyruga alinmistir; liste yenilenir. */
   onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
+  /** Komut gecmisi/durum takibi icin session token'i (canCommand ile birlikte). */
+  token?: string;
 };
 
 // Cihaz detay komut butonlari: SignalCatalog binary_output slug -> UI meta.
@@ -150,14 +155,42 @@ export function DeviceDetailPage({
   topologyInfo,
   canCommand = false,
   onDeviceCommand,
+  token,
 }: Props) {
   const { t } = useTranslation();
   const [activeSource, setActiveSource] = useState<SignalSource>("master");
   const [showOther, setShowOther] = useState(false);
   const [showMoreCmds, setShowMoreCmds] = useState(false);
   const [busyCmd, setBusyCmd] = useState<string | null>(null);
+  const [cmdHistory, setCmdHistory] = useState<DeviceCommandRow[]>([]);
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
+
+  // Komut gecmisi/durum: canCommand+token varsa cek. pending/sent komut varken
+  // 10sn'de bir yenile (config-poll ~30sn sonra sonuc gelir); terminal olunca dur.
+  const deviceCode = device?.code;
+  const reloadCommands = useCallback(async () => {
+    if (!token || !canCommand || !deviceCode) return;
+    try {
+      setCmdHistory(await fetchDeviceCommands(token, deviceCode, 10));
+    } catch {
+      // sessiz — komut gecmisi ikincil bilgi, sayfayi bozmasin
+    }
+  }, [token, canCommand, deviceCode]);
+
+  useEffect(() => {
+    void reloadCommands();
+  }, [reloadCommands]);
+
+  const hasOpenCmd = useMemo(
+    () => cmdHistory.some((c) => c.status === "pending" || c.status === "sent"),
+    [cmdHistory]
+  );
+  useEffect(() => {
+    if (!hasOpenCmd) return;
+    const id = window.setInterval(() => void reloadCommands(), 10000);
+    return () => window.clearInterval(id);
+  }, [hasOpenCmd, reloadCommands]);
 
   // Komut listesi: master kaynak binary_output sinyalleri (SignalCatalog'dan).
   // slug = key'in "master." sonrasi. Ana komutlar PRIMARY_COMMANDS sirasinda,
@@ -188,6 +221,7 @@ export function DeviceDetailPage({
     setBusyCmd(slug);
     try {
       await onDeviceCommand(device.code, slug, label);
+      await reloadCommands();  // yeni pending komutu listede goster
     } finally {
       setBusyCmd(null);
     }
@@ -352,6 +386,25 @@ export function DeviceDetailPage({
                 </button>
               ))}
             </div>
+          ) : null}
+          {cmdHistory.length > 0 ? (
+            <ul className="device-detail-cmd-history">
+              {cmdHistory.map((c) => (
+                <li key={c.id} className={`cmd-hist cmd-hist-${c.status}`}>
+                  <span className="cmd-hist-label">
+                    {commandSignals.find((s) => s.slug === c.command)?.label ?? c.command}
+                  </span>
+                  <span className={`cmd-hist-status status-${c.status}`}>
+                    {t(`deviceDetail.commands.status.${c.status}`)}
+                  </span>
+                  {c.status === "failed" && c.result_error ? (
+                    <span className="cmd-hist-err" title={c.result_error}>
+                      {c.result_error}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           ) : null}
         </section>
       ) : null}

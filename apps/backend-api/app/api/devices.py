@@ -4,19 +4,20 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.models.device_command import DeviceCommand
 from app.models.enums import UserRole
 from app.models.gateway import Gateway
 from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.device import (
+    DeviceCommandQueued,
     DeviceCommandRequest,
-    DeviceCommandResult,
+    DeviceCommandRow,
     DeviceCreate,
     DeviceRead,
     DeviceUpdate,
 )
-from app.services import gateway_command_service
 from app.services.event_service import record_event
 from app.services.scope_service import get_visible_device_ids
 
@@ -160,25 +161,27 @@ def delete_device(
     return None
 
 
-@router.post("/{device_code}/command", response_model=DeviceCommandResult)
-def send_device_command(
+@router.post("/{device_code}/command", response_model=DeviceCommandQueued)
+def queue_device_command(
     device_code: str,
     payload: DeviceCommandRequest,
     current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
     db: Session = Depends(get_db),
 ):
-    """Cihaza DNP3 binary output (CROB) komutu gonderir.
+    """Cihaza DNP3 binary output (CROB) komutu KUYRUGA ALIR.
 
-    Yetki: ENGINEER, INSTALLER (refresh-all ile ayni). Engineer scope disi
-    cihaza komut gonderemez (`_ensure_device_visible`).
+    Yetki: ENGINEER, INSTALLER. Engineer scope disi cihaza komut gonderemez.
 
-    Akis: cihazi bul -> gateway'ini bul -> `command` slug'ini SignalCatalog'daki
-    binary_output sinyalinden `dnp3_index`'e cevir (allowlist; ham index yok) ->
-    gateway `POST /operate`'e Bearer command_token ile proxy et -> audit.
+    Gateway NAT arkasinda oldugundan backend gateway'e ulasamaz. Komut config-poll
+    ile iletilir: burada `device_commands` tablosuna status='pending' satir yazilir,
+    gateway her config poll'de (~config_refresh_sec, default 30sn) pending komutlari
+    ceker, CROB gonderir ve sonucu `POST /gateways/{code}/command-results` ile bildirir.
 
-    Iletim anliktir (gateway HTTP). Gateway cihaza CROB gonderir; cihaz komutu
-    reddederse HTTP 200 + `ok=False` doner (hata degil, operator'a bildirilir).
-    Gateway'e ulasilamaz/token yok ise 502/503.
+    Yanit ANLIK DEGIL: {id, status:'pending'} doner. Gercek sonuc
+    `GET /devices/{code}/commands` ile takip edilir.
+
+    Akis: cihaz bul -> gateway bul -> slug'i SignalCatalog binary_output'tan
+    dnp3_index'e cevir (allowlist; ham index yok) -> pending satir + audit.
     """
     device = DeviceRepository(db).get_by_code(device_code)
     if device is None:
@@ -214,60 +217,53 @@ def send_device_command(
         )
     index = int(signal.dnp3_index)
 
-    try:
-        result = gateway_command_service.send_operate(
-            gateway,
-            device_code=device.code,
-            index=index,
-            count=payload.count,
-            on_time_ms=payload.on_time_ms,
-            off_time_ms=payload.off_time_ms,
-        )
-    except gateway_command_service.GatewayCommandError as exc:
-        # Gateway'e ulasilamadi / token yok / HTTP hatasi. Audit'e basarisiz kaydet.
-        record_event(
-            db,
-            category="device",
-            event_type="device_command_failed",
-            severity="warning",
-            actor_username=current_user.username,
-            device_code=device.code,
-            message=f"Komut gonderilemedi: {signal.label} ({device.code}) — {exc}",
-            metadata={"command": slug, "index": index, "error": str(exc)[:300]},
-            i18n_key="device_command_failed",
-            i18n_params={"command": signal.label, "code": device.code},
-        )
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        ) from exc
-
-    ok = bool(result.get("ok"))
+    cmd = DeviceCommand(
+        gateway_code=gateway.code,
+        device_code=device.code,
+        command=slug,
+        dnp3_index=index,
+        count=payload.count,
+        on_time_ms=payload.on_time_ms,
+        off_time_ms=payload.off_time_ms,
+        status="pending",
+        actor_username=current_user.username,
+    )
+    db.add(cmd)
+    db.flush()  # id icin
     record_event(
         db,
         category="device",
-        event_type="device_command_sent",
-        severity="info" if ok else "warning",
+        event_type="device_command_queued",
+        severity="info",
         actor_username=current_user.username,
         device_code=device.code,
-        message=(
-            f"Komut gonderildi: {signal.label} ({device.code}) — "
-            f"{'OK' if ok else result.get('status', 'reddedildi')}"
-        ),
-        metadata={
-            "command": slug,
-            "index": index,
-            "result_ok": ok,
-            "result_status": result.get("status"),
-        },
-        i18n_key="device_command_sent",
+        message=f"Komut kuyruga alindi: {signal.label} ({device.code}) #{cmd.id}",
+        metadata={"command": slug, "index": index, "command_id": cmd.id},
+        i18n_key="device_command_queued",
         i18n_params={"command": signal.label, "code": device.code},
     )
     db.commit()
-    return DeviceCommandResult(
-        ok=ok,
-        status=str(result.get("status", "unknown")),
-        command=slug,
-        index=index,
-        detail=result.get("error"),
+    return DeviceCommandQueued(
+        id=cmd.id, status=cmd.status, command=slug, dnp3_index=index
     )
+
+
+@router.get("/{device_code}/commands", response_model=list[DeviceCommandRow])
+def list_device_commands(
+    device_code: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    """Cihazin son komutlari + durumlari (UI takip listesi). En yeni once."""
+    device = DeviceRepository(db).get_by_code(device_code)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    _ensure_device_visible(db, current_user, device)
+    rows = db.scalars(
+        select(DeviceCommand)
+        .where(DeviceCommand.device_code == device.code)
+        .order_by(DeviceCommand.id.desc())
+        .limit(limit)
+    ).all()
+    return list(rows)

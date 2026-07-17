@@ -515,7 +515,9 @@
       "area_line_added": "'{{line}}' hattı '{{area}}' sorumluluk alanına eklendi",
       "area_line_removed": "'{{line}}' hattı '{{area}}' sorumluluk alanından çıkarıldı",
       "device_command_sent": "Komut gönderildi: {{command}} ({{code}})",
-      "device_command_failed": "Komut gönderilemedi: {{command}} ({{code}})"
+      "device_command_failed": "Komut gönderilemedi: {{command}} ({{code}})",
+      "device_command_queued": "Komut kuyruğa alındı: {{command}} ({{code}})",
+      "device_command_result": "Komut sonucu: {{command}} ({{code}})"
     },
     "category": {
       "auth": "Giriş ve oturum",
@@ -2135,7 +2137,15 @@
       "confirm": "{{command}} komutu {{code}} cihazına gönderilsin mi?",
       "sent": "Komut gönderildi: {{command}}",
       "rejected": "Cihaz komutu reddetti: {{command}} ({{status}})",
-      "fail": "Komut gönderilemedi: {{msg}}"
+      "fail": "Komut gönderilemedi: {{msg}}",
+      "queued": "Komut kuyruğa alındı: {{command}} (gateway ~30sn içinde uygular)",
+      "status": {
+        "pending": "Kuyrukta",
+        "sent": "Gönderildi",
+        "ok": "Başarılı",
+        "failed": "Hata",
+        "expired": "Zaman aşımı"
+      }
     }
   }
 }

@@ -3,6 +3,7 @@ from app.models.alarm_rule import AlarmRule
 from app.models.bulk_notification_job import BulkNotificationJob
 from app.models.bulk_notification_template import BulkNotificationTemplate
 from app.models.device import Device
+from app.models.device_command import DeviceCommand
 from app.models.gateway import Gateway
 from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.notification_settings import NotificationSettings
@@ -23,6 +24,7 @@ __all__ = [
     "UserFcmToken",
     "UserSession",
     "Device",
+    "DeviceCommand",
     "Gateway",
     "GatewayIngestBatch",
     "NotificationSettings",

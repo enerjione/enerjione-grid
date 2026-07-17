@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.api.deps import require_role, require_roles
 from app.core.config import Settings, settings
 from app.db.session import get_db
 from app.models.device import Device
+from app.models.device_command import DeviceCommand
 from app.models.enums import UserRole
 from app.models.gateway import Gateway
 from app.models.gateway_ingest_batch import GatewayIngestBatch
@@ -19,6 +20,8 @@ from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.gateway import (
+    CommandResultItem,
+    GatewayConfigCommand,
     GatewayConfigDevice,
     GatewayConfigResponse,
     GatewayConfigSignal,
@@ -517,12 +520,26 @@ def get_gateway_config(
     # `last_seen_at` ETag eslese bile her istekte guncellenmeli — konfigiyuon
     # degismemis bile olsa gateway canlilik sinyali veriyor.
     gateway.last_seen_at = datetime.now(timezone.utc)
+
+    # Bekleyen komutlar: config_version SEED'ine katilmaz (ETag churn olmasin),
+    # bu yuzden pending komut varken 304 DONULMEZ — aksi halde komut gateway'e
+    # hic ulasmaz. Komut yoksa 304 fast-path normal calisir.
+    pending_cmds = list(
+        db.scalars(
+            select(DeviceCommand)
+            .where(
+                DeviceCommand.gateway_code == gateway.code,
+                DeviceCommand.status == "pending",
+            )
+            .order_by(DeviceCommand.id.asc())
+        ).all()
+    )
     db.commit()
 
-    # ETag match -> 304 Not Modified. Signal/device Pydantic serialize yok,
-    # response body de yok. Body disindaki headerlari gateway yine kullanir.
+    # ETag match VE bekleyen komut yok -> 304 Not Modified. Signal/device
+    # Pydantic serialize yok, response body de yok.
     normalized_inm = (if_none_match or "").strip()
-    if normalized_inm in (etag, config_version):
+    if not pending_cmds and normalized_inm in (etag, config_version):
         response.status_code = status.HTTP_304_NOT_MODIFIED
         response.headers["ETag"] = etag
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
@@ -605,6 +622,20 @@ def get_gateway_config(
         for signal in signals_rows
     ]
 
+    config_commands = [
+        GatewayConfigCommand(
+            id=cmd.id,
+            device_code=cmd.device_code,
+            command=cmd.command,
+            dnp3_index=cmd.dnp3_index,
+            op_type=cmd.op_type,
+            count=cmd.count,
+            on_time_ms=cmd.on_time_ms,
+            off_time_ms=cmd.off_time_ms,
+        )
+        for cmd in pending_cmds
+    ]
+
     config_resp = GatewayConfigResponse(
         gateway_code=gateway.code,
         gateway_name=gateway.name,
@@ -615,7 +646,20 @@ def get_gateway_config(
         signals=config_signals,
         config_version=config_version,
         refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
+        pending_commands=config_commands,
     )
+
+    # Komutlar config'e konuldu -> status='sent' + sent_at. Gateway sonucu
+    # command-results ile bildirene kadar bu satirlar 'sent' kalir. At-least-once:
+    # gateway ayni config'i tekrar cekerse (ETag miss) sent komut TEKRAR gitmez
+    # (artik pending degil); gateway restart'ta komut kaybi olabilir ama komut
+    # zaten idempotent id ile korunur ve operator tekrar tetikleyebilir.
+    if pending_cmds:
+        now = datetime.now(timezone.utc)
+        for cmd in pending_cmds:
+            cmd.status = "sent"
+            cmd.sent_at = now
+        db.commit()
 
     # HMAC signature — payload integrity koruma (MITM / backend kompromize).
     # KRITIK: HMAC byte'larin DETERMINISTIK olmasi sart, yoksa gateway her
@@ -655,3 +699,74 @@ def get_gateway_config(
         media_type="application/json",
         headers=headers,
     )
+
+
+@router.post("/{gateway_code}/command-results")
+def report_command_results(
+    gateway_code: str,
+    results: list[CommandResultItem] = Body(...),
+    db: Session = Depends(get_db),
+    x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+):
+    """Gateway calistirdigi cihaz komutlarinin sonuclarini bildirir (batch).
+
+    Auth: `X-Gateway-Token` (config poll ile ayni). Gateway config'ten cektigi
+    pending komutlari CROB ile calistirir, her birinin sonucunu buraya POST eder.
+
+    Her sonuc: {id, ok, status, error?}. Ilgili device_commands satiri (ayni
+    gateway_code — IDOR koruma) status='ok'|'failed' yapilir. Bilinmeyen/baska
+    gateway'e ait id sessizce atlanir (idempotent; tekrar bildirim zararsiz).
+    """
+    from app.services.ingest_service import validate_gateway_token
+
+    validate_gateway_token(db, gateway_code, x_gateway_token)
+
+    if not results:
+        return {"updated": 0}
+
+    ids = [r.id for r in results]
+    rows = {
+        row.id: row
+        for row in db.scalars(
+            select(DeviceCommand).where(
+                DeviceCommand.id.in_(ids),
+                DeviceCommand.gateway_code == gateway_code,
+            )
+        ).all()
+    }
+    now = datetime.now(timezone.utc)
+    updated = 0
+    for res in results:
+        cmd = rows.get(res.id)
+        if cmd is None:
+            continue  # baska gateway'e ait veya silinmis; atla
+        # Terminal durumdaki komutu tekrar guncelleme (idempotent)
+        if cmd.status in ("ok", "failed"):
+            continue
+        cmd.status = "ok" if res.ok else "failed"
+        cmd.result_status = res.status[:40] if res.status else None
+        cmd.result_error = res.error[:500] if res.error else None
+        cmd.completed_at = now
+        record_event(
+            db,
+            category="device",
+            event_type="device_command_result",
+            severity="info" if res.ok else "warning",
+            actor_username=cmd.actor_username,
+            device_code=cmd.device_code,
+            message=(
+                f"Komut sonucu: {cmd.command} ({cmd.device_code}) #{cmd.id} — "
+                f"{'OK' if res.ok else 'HATA: ' + (res.error or res.status)}"
+            ),
+            metadata={
+                "command": cmd.command,
+                "command_id": cmd.id,
+                "ok": res.ok,
+                "result_status": res.status,
+            },
+            i18n_key="device_command_result",
+            i18n_params={"command": cmd.command, "code": cmd.device_code},
+        )
+        updated += 1
+    db.commit()
+    return {"updated": updated}

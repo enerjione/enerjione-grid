@@ -515,7 +515,9 @@
       "area_line_added": "Line '{{line}}' added to responsibility area '{{area}}'",
       "area_line_removed": "Line '{{line}}' removed from responsibility area '{{area}}'",
       "device_command_sent": "Command sent: {{command}} ({{code}})",
-      "device_command_failed": "Command failed: {{command}} ({{code}})"
+      "device_command_failed": "Command failed: {{command}} ({{code}})",
+      "device_command_queued": "Command queued: {{command}} ({{code}})",
+      "device_command_result": "Command result: {{command}} ({{code}})"
     },
     "category": {
       "auth": "Login & session",
@@ -2135,7 +2137,15 @@
       "confirm": "Send command {{command}} to device {{code}}?",
       "sent": "Command sent: {{command}}",
       "rejected": "Device rejected command: {{command}} ({{status}})",
-      "fail": "Command failed: {{msg}}"
+      "fail": "Command failed: {{msg}}",
+      "queued": "Command queued: {{command}} (gateway applies within ~30s)",
+      "status": {
+        "pending": "Queued",
+        "sent": "Sent",
+        "ok": "Success",
+        "failed": "Failed",
+        "expired": "Timed out"
+      }
     }
   }
 }

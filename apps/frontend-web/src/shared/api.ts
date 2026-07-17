@@ -7,7 +7,8 @@ import type {
   DeviceModelOption,
   DeviceRow,
   Dnp3ExtendedSettings,
-  DeviceCommandResult,
+  DeviceCommandQueued,
+  DeviceCommandRow,
   Gateway,
   HostStatus,
   NotificationItem,
@@ -1028,19 +1029,20 @@ export async function refreshGatewayAllDevices(
 }
 
 /**
- * Cihaza DNP3 binary output (CROB) komutu gonderir.
+ * Cihaza DNP3 binary output (CROB) komutu KUYRUGA ALIR.
  *
  * `command` = SignalCatalog'daki binary_output sinyalinin slug'i (orn.
- * "trigger_config_download"). Backend bunu dnp3_index'e cevirip gateway'e
- * anlik HTTP proxy eder. Yanit gateway'in dondugu sonuc — ok=false ise cihaz
- * komutu reddetti (hata degil, kullaniciya bildirilir).
+ * "trigger_config_download"). Gateway NAT arkasinda oldugundan komut anlik
+ * gonderilemez: backend pending kaydi yazar, gateway config-poll'de (~30sn)
+ * ceker ve CROB gonderir. Yanit {id, status:'pending'}; gercek sonuc
+ * `fetchDeviceCommands` ile takip edilir.
  */
 export async function sendDeviceCommand(
   token: string,
   deviceCode: string,
   command: string,
   opts?: { count?: number; onTimeMs?: number; offTimeMs?: number }
-): Promise<DeviceCommandResult> {
+): Promise<DeviceCommandQueued> {
   const body: Record<string, unknown> = { command };
   if (opts?.count != null) body.count = opts.count;
   if (opts?.onTimeMs != null) body.on_time_ms = opts.onTimeMs;
@@ -1054,8 +1056,23 @@ export async function sendDeviceCommand(
     }
   );
   if (!response.ok)
-    throw await buildApiError(response, "Cihaz komutu gönderilemedi.");
-  return (await response.json()) as DeviceCommandResult;
+    throw await buildApiError(response, "Cihaz komutu kuyruğa alınamadı.");
+  return (await response.json()) as DeviceCommandQueued;
+}
+
+/** Cihazin son komutlari + durumlari (UI takip listesi). En yeni once. */
+export async function fetchDeviceCommands(
+  token: string,
+  deviceCode: string,
+  limit = 20
+): Promise<DeviceCommandRow[]> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/devices/${deviceCode}/commands?limit=${limit}`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok)
+    throw await buildApiError(response, "Komut geçmişi alınamadı.");
+  return (await response.json()) as DeviceCommandRow[];
 }
 
 export type GatewayComposeDownloadOptions = {
