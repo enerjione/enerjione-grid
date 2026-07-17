@@ -8,6 +8,10 @@ SignalDataType = Literal[
     "binary",
     "counter",
     "string",
+    # binary_output (G10) = DNP3 CROB komut kanali; yayinlanmaz, cihaz komutu
+    # (Trigger Download, Reset...) icin dnp3_index adresi tutar.
+    "binary_output",
+    "analog_output",
 ]
 
 SignalSource = Literal["master", "sat01", "sat02"]

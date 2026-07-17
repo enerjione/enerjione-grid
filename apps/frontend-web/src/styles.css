@@ -23224,6 +23224,39 @@ th.event-col-category {
 .device-detail-chip.is-battery { background: #ecfdf5; color: #047857; }
 .device-detail-chip.is-alarm { background: #fef2f2; color: #b91c1c; }
 
+/* Cihaz komut butonlari (DNP3 CROB) — ENGINEER/INSTALLER */
+.device-detail-commands {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+.device-detail-commands-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.device-detail-commands-title .material-symbols-outlined { font-size: 16px; }
+.device-detail-commands-row,
+.device-detail-commands-more {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.device-detail-commands .action-btn.danger {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.device-detail-commands .action-btn.danger:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
 /* Kaynak sekmeleri (Master / Sat01 / Sat02) — renkli badge */
 .device-detail-sources {
   display: flex;

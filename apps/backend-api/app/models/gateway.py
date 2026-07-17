@@ -33,6 +33,12 @@ class Gateway(Base):
     control_host: Mapped[str] = mapped_column(String(255), default="127.0.0.1", nullable=False)
     control_port: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Cihaz komutu (DNP3 CROB) proxy'si icin gateway'e ozel Bearer token.
+    # Backend `POST control_host:control_port/operate` cagirirken bu token'i
+    # Authorization: Bearer olarak yollar; gateway kendi .env
+    # GATEWAY_COMMAND_TOKEN ile eslestirir. Bos ise komut endpoint'i devre disi.
+    command_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # RabbitMQ icin gateway'e ozel olarak provisionlanmis kullanici/parola.
     # Backend gateway create akisinda RabbitMQ Management API uzerinden
     # otomatik yaratir; compose YAML'i indirilirken bu degerlerden AMQP URL

@@ -1,12 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.enums import UserRole
+from app.models.gateway import Gateway
+from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
-from app.schemas.device import DeviceCreate, DeviceRead, DeviceUpdate
+from app.schemas.device import (
+    DeviceCommandRequest,
+    DeviceCommandResult,
+    DeviceCreate,
+    DeviceRead,
+    DeviceUpdate,
+)
+from app.services import gateway_command_service
 from app.services.event_service import record_event
 from app.services.scope_service import get_visible_device_ids
 
@@ -148,3 +158,116 @@ def delete_device(
     )
     db.commit()
     return None
+
+
+@router.post("/{device_code}/command", response_model=DeviceCommandResult)
+def send_device_command(
+    device_code: str,
+    payload: DeviceCommandRequest,
+    current_user: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    """Cihaza DNP3 binary output (CROB) komutu gonderir.
+
+    Yetki: ENGINEER, INSTALLER (refresh-all ile ayni). Engineer scope disi
+    cihaza komut gonderemez (`_ensure_device_visible`).
+
+    Akis: cihazi bul -> gateway'ini bul -> `command` slug'ini SignalCatalog'daki
+    binary_output sinyalinden `dnp3_index`'e cevir (allowlist; ham index yok) ->
+    gateway `POST /operate`'e Bearer command_token ile proxy et -> audit.
+
+    Iletim anliktir (gateway HTTP). Gateway cihaza CROB gonderir; cihaz komutu
+    reddederse HTTP 200 + `ok=False` doner (hata degil, operator'a bildirilir).
+    Gateway'e ulasilamaz/token yok ise 502/503.
+    """
+    device = DeviceRepository(db).get_by_code(device_code)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    _ensure_device_visible(db, current_user, device)
+
+    if not device.gateway_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cihaz bir gateway'e bagli degil; komut gonderilemez.",
+        )
+    gateway = db.scalar(select(Gateway).where(Gateway.code == device.gateway_code))
+    if gateway is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Gateway bulunamadi: {device.gateway_code}",
+        )
+
+    # Allowlist: komut slug'i SignalCatalog'da aktif bir binary_output olmali.
+    # Ham index kabul edilmez; adres DB'den (dnp3_index) yonetilir.
+    slug = payload.command.strip()
+    signal = db.scalar(
+        select(SignalCatalog).where(
+            SignalCatalog.key == f"master.{slug}",
+            SignalCatalog.data_type == "binary_output",
+            SignalCatalog.is_active.is_(True),
+        )
+    )
+    if signal is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Gecersiz veya pasif komut: {slug}",
+        )
+    index = int(signal.dnp3_index)
+
+    try:
+        result = gateway_command_service.send_operate(
+            gateway,
+            device_code=device.code,
+            index=index,
+            count=payload.count,
+            on_time_ms=payload.on_time_ms,
+            off_time_ms=payload.off_time_ms,
+        )
+    except gateway_command_service.GatewayCommandError as exc:
+        # Gateway'e ulasilamadi / token yok / HTTP hatasi. Audit'e basarisiz kaydet.
+        record_event(
+            db,
+            category="device",
+            event_type="device_command_failed",
+            severity="warning",
+            actor_username=current_user.username,
+            device_code=device.code,
+            message=f"Komut gonderilemedi: {signal.label} ({device.code}) — {exc}",
+            metadata={"command": slug, "index": index, "error": str(exc)[:300]},
+            i18n_key="device_command_failed",
+            i18n_params={"command": signal.label, "code": device.code},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+
+    ok = bool(result.get("ok"))
+    record_event(
+        db,
+        category="device",
+        event_type="device_command_sent",
+        severity="info" if ok else "warning",
+        actor_username=current_user.username,
+        device_code=device.code,
+        message=(
+            f"Komut gonderildi: {signal.label} ({device.code}) — "
+            f"{'OK' if ok else result.get('status', 'reddedildi')}"
+        ),
+        metadata={
+            "command": slug,
+            "index": index,
+            "result_ok": ok,
+            "result_status": result.get("status"),
+        },
+        i18n_key="device_command_sent",
+        i18n_params={"command": signal.label, "code": device.code},
+    )
+    db.commit()
+    return DeviceCommandResult(
+        ok=ok,
+        status=str(result.get("status", "unknown")),
+        command=slug,
+        index=index,
+        detail=result.get("error"),
+    )

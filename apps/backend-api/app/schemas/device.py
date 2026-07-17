@@ -68,3 +68,25 @@ class DeviceRead(DeviceScalarBase):
         return merge_dnp3_extended(None)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeviceCommandRequest(BaseModel):
+    """Cihaza DNP3 CROB komutu gonderme istegi.
+
+    `command` = SignalCatalog'daki binary_output sinyalinin slug'i (key'in
+    `master.` sonrasi). Backend bunu katalogdan `dnp3_index`'e cevirir; ham
+    index kabul edilmez (allowlist). Pulse parametreleri opsiyonel.
+    """
+
+    command: str = Field(min_length=1, max_length=80)
+    count: int = Field(default=1, ge=1, le=10)
+    on_time_ms: int = Field(default=100, ge=0, le=60000)
+    off_time_ms: int = Field(default=100, ge=0, le=60000)
+
+
+class DeviceCommandResult(BaseModel):
+    ok: bool
+    status: str
+    command: str
+    index: int
+    detail: str | None = None

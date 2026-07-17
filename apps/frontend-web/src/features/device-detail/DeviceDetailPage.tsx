@@ -32,7 +32,21 @@ type Props = {
   signals: SignalCatalogRow[];
   gateways: Gateway[];
   topologyInfo?: TopologyInfo;
+  /** ENGINEER/INSTALLER ise komut butonlari gorunur. */
+  canCommand?: boolean;
+  /** Komut gonderme handler'i (confirm + toast App.tsx'te merkezi). */
+  onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
 };
+
+// Cihaz detay komut butonlari: SignalCatalog binary_output slug -> UI meta.
+// Index backend'de SignalCatalog'dan cozulur; burada sadece ikon/vurgu.
+// 4 ana komut buton olarak; kalan binary_output sinyalleri "Diger" menusunde.
+const PRIMARY_COMMANDS: { slug: string; icon: string; danger?: boolean }[] = [
+  { slug: "trigger_config_download", icon: "download" },
+  { slug: "config_update", icon: "settings" },
+  { slug: "clear_counters", icon: "delete_sweep" },
+  { slug: "software_reset", icon: "restart_alt", danger: true },
+];
 
 // ---- Kaynak (source) meta ---------------------------------------------------
 const SOURCES: { key: SignalSource; label: string; tone: "master" | "green" | "amber" }[] = [
@@ -134,12 +148,50 @@ export function DeviceDetailPage({
   signals,
   gateways,
   topologyInfo,
+  canCommand = false,
+  onDeviceCommand,
 }: Props) {
   const { t } = useTranslation();
   const [activeSource, setActiveSource] = useState<SignalSource>("master");
   const [showOther, setShowOther] = useState(false);
+  const [showMoreCmds, setShowMoreCmds] = useState(false);
+  const [busyCmd, setBusyCmd] = useState<string | null>(null);
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
+
+  // Komut listesi: master kaynak binary_output sinyalleri (SignalCatalog'dan).
+  // slug = key'in "master." sonrasi. Ana komutlar PRIMARY_COMMANDS sirasinda,
+  // kalani "Diger" menusunde (display_order'a gore).
+  const commandSignals = useMemo(() => {
+    return signals
+      .filter((s) => s.data_type === "binary_output" && s.source === "master" && s.is_active)
+      .map((s) => ({ slug: s.key.replace(/^master\./, ""), label: s.label, order: s.display_order }))
+      .sort((a, b) => a.order - b.order);
+  }, [signals]);
+
+  const primaryCmds = useMemo(
+    () =>
+      PRIMARY_COMMANDS.map((p) => {
+        const sig = commandSignals.find((c) => c.slug === p.slug);
+        return sig ? { ...p, label: sig.label } : null;
+      }).filter((x): x is { slug: string; icon: string; danger?: boolean; label: string } => x != null),
+    [commandSignals]
+  );
+  const primarySlugs = useMemo(() => new Set(primaryCmds.map((c) => c.slug)), [primaryCmds]);
+  const moreCmds = useMemo(
+    () => commandSignals.filter((c) => !primarySlugs.has(c.slug)),
+    [commandSignals, primarySlugs]
+  );
+
+  const runCommand = async (slug: string, label: string) => {
+    if (!onDeviceCommand || !device) return;
+    setBusyCmd(slug);
+    try {
+      await onDeviceCommand(device.code, slug, label);
+    } finally {
+      setBusyCmd(null);
+    }
+  };
 
   const dataTypeByKey = useMemo(() => {
     const m = new Map<string, SignalDataType>();
@@ -242,6 +294,67 @@ export function DeviceDetailPage({
           ) : null}
         </div>
       </header>
+
+      {/* ---- Komutlar (ENGINEER/INSTALLER) ---- */}
+      {canCommand && onDeviceCommand && primaryCmds.length > 0 ? (
+        <section className="device-detail-commands">
+          <span className="device-detail-commands-title">
+            <span className="material-symbols-outlined">terminal</span>
+            {t("deviceDetail.commands.title")}
+          </span>
+          <div className="device-detail-commands-row">
+            {primaryCmds.map((c) => (
+              <button
+                key={c.slug}
+                type="button"
+                className={`secondary-btn action-btn${c.danger ? " danger" : ""}`}
+                disabled={busyCmd != null}
+                aria-busy={busyCmd === c.slug}
+                onClick={() => void runCommand(c.slug, c.label)}
+                title={c.label}
+              >
+                {busyCmd === c.slug ? (
+                  <span className="btn-spinner" aria-hidden="true" />
+                ) : (
+                  <span className="material-symbols-outlined">{c.icon}</span>
+                )}
+                {c.label}
+              </button>
+            ))}
+            {moreCmds.length > 0 ? (
+              <button
+                type="button"
+                className="secondary-btn action-btn"
+                disabled={busyCmd != null}
+                onClick={() => setShowMoreCmds((v) => !v)}
+                title={t("deviceDetail.commands.more")}
+              >
+                <span className="material-symbols-outlined">more_horiz</span>
+                {t("deviceDetail.commands.more")}
+              </button>
+            ) : null}
+          </div>
+          {showMoreCmds && moreCmds.length > 0 ? (
+            <div className="device-detail-commands-more">
+              {moreCmds.map((c) => (
+                <button
+                  key={c.slug}
+                  type="button"
+                  className="secondary-btn action-btn"
+                  disabled={busyCmd != null}
+                  aria-busy={busyCmd === c.slug}
+                  onClick={() => void runCommand(c.slug, c.label)}
+                >
+                  {busyCmd === c.slug ? (
+                    <span className="btn-spinner" aria-hidden="true" />
+                  ) : null}
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* ---- Kaynak sekmeleri ---- */}
       <div className="device-detail-sources">

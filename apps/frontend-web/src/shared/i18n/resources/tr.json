@@ -513,7 +513,9 @@
       "area_region_added": "'{{region}}' bölgesi '{{area}}' sorumluluk alanına eklendi",
       "area_region_removed": "'{{region}}' bölgesi '{{area}}' sorumluluk alanından çıkarıldı",
       "area_line_added": "'{{line}}' hattı '{{area}}' sorumluluk alanına eklendi",
-      "area_line_removed": "'{{line}}' hattı '{{area}}' sorumluluk alanından çıkarıldı"
+      "area_line_removed": "'{{line}}' hattı '{{area}}' sorumluluk alanından çıkarıldı",
+      "device_command_sent": "Komut gönderildi: {{command}} ({{code}})",
+      "device_command_failed": "Komut gönderilemedi: {{command}} ({{code}})"
     },
     "category": {
       "auth": "Giriş ve oturum",
@@ -2126,6 +2128,14 @@
     "noSignals": "{{source}} için sinyal verisi yok.",
     "permanentFaults": "KALICI",
     "momentaryFaults": "GEÇİCİ",
-    "otherSignals": "Diğer sinyaller ({{count}})"
+    "otherSignals": "Diğer sinyaller ({{count}})",
+    "commands": {
+      "title": "Komutlar",
+      "more": "Diğer komutlar",
+      "confirm": "{{command}} komutu {{code}} cihazına gönderilsin mi?",
+      "sent": "Komut gönderildi: {{command}}",
+      "rejected": "Cihaz komutu reddetti: {{command}} ({{status}})",
+      "fail": "Komut gönderilemedi: {{msg}}"
+    }
   }
 }

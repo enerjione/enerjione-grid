@@ -477,7 +477,20 @@ export type SignalDataType =
   | "analog"
   | "binary"
   | "counter"
-  | "string";
+  | "string"
+  // binary_output (G10) = DNP3 CROB komut kanali; yayinlanmaz, cihaz komutu
+  // (Trigger Download, Reset...) icin dnp3_index adresini tutar.
+  | "binary_output"
+  | "analog_output";
+
+/** POST /devices/{code}/command yaniti. ok=false -> cihaz komutu reddetti. */
+export type DeviceCommandResult = {
+  ok: boolean;
+  status: string;
+  command: string;
+  index: number;
+  detail?: string | null;
+};
 
 export type SignalSource = "master" | "sat01" | "sat02";
 

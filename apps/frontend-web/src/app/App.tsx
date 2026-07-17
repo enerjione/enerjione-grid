@@ -55,6 +55,7 @@ import {
   deleteDevice,
   deleteGateway,
   refreshGatewayAllDevices,
+  sendDeviceCommand,
   downloadGatewayCompose,
   deleteSignal,
   deleteUser,
@@ -1144,6 +1145,25 @@ export function App() {
     }
   };
 
+  // Cihaz DNP3 komutu (CROB) — confirm + gateway'e anlik proxy + toast.
+  const handleDeviceCommand = async (deviceCode: string, command: string, label: string) => {
+    if (!session) return;
+    if (!(await asyncConfirm(t("deviceDetail.commands.confirm", { command: label, code: deviceCode }))))
+      return;
+    try {
+      const res = await sendDeviceCommand(session.accessToken, deviceCode, command);
+      if (res.ok) {
+        toast.success(t("deviceDetail.commands.sent", { command: label }));
+      } else {
+        // Gateway ulasti ama cihaz komutu reddetti (timeout/unsupported/inactive).
+        toast.error(t("deviceDetail.commands.rejected", { command: label, status: res.status }));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t("toasts.requestSendFail");
+      toast.error(t("deviceDetail.commands.fail", { msg }));
+    }
+  };
+
   const handleUpdateGateway = async (
     gatewayCode: string,
     payload: { name?: string; host?: string; listen_port?: number; token?: string }
@@ -1852,6 +1872,8 @@ export function App() {
               signals={signalCatalog}
               gateways={gateways}
               topologyInfo={deviceTopologyInfo.get(activeDeviceDetailId)}
+              canCommand={session.role === "engineer" || session.role === "installer"}
+              onDeviceCommand={handleDeviceCommand}
             />
           </main>
         ) : pageMode === "engineering" ? (

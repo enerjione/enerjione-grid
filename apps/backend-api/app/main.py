@@ -184,6 +184,10 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS control_port INTEGER NOT NULL DEFAULT 0")
         )
+        # Cihaz komut (DNP3 CROB) proxy'si icin gateway'e ozel Bearer token.
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS command_token VARCHAR(255)")
+        )
         # Per-gateway RabbitMQ cred (otomatik provisionlanir; manual rabbitmqctl gerek yok)
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS rabbitmq_username VARCHAR(120)")

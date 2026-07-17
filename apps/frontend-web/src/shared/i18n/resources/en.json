@@ -513,7 +513,9 @@
       "area_region_added": "Region '{{region}}' added to responsibility area '{{area}}'",
       "area_region_removed": "Region '{{region}}' removed from responsibility area '{{area}}'",
       "area_line_added": "Line '{{line}}' added to responsibility area '{{area}}'",
-      "area_line_removed": "Line '{{line}}' removed from responsibility area '{{area}}'"
+      "area_line_removed": "Line '{{line}}' removed from responsibility area '{{area}}'",
+      "device_command_sent": "Command sent: {{command}} ({{code}})",
+      "device_command_failed": "Command failed: {{command}} ({{code}})"
     },
     "category": {
       "auth": "Login & session",
@@ -2126,6 +2128,14 @@
     "noSignals": "No signal data for {{source}}.",
     "permanentFaults": "PERMANENT",
     "momentaryFaults": "MOMENTARY",
-    "otherSignals": "Other signals ({{count}})"
+    "otherSignals": "Other signals ({{count}})",
+    "commands": {
+      "title": "Commands",
+      "more": "More commands",
+      "confirm": "Send command {{command}} to device {{code}}?",
+      "sent": "Command sent: {{command}}",
+      "rejected": "Device rejected command: {{command}} ({{status}})",
+      "fail": "Command failed: {{msg}}"
+    }
   }
 }
