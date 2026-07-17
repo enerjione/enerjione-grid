@@ -134,6 +134,14 @@ class LineSegment(Base):
     # ayarlandiginda kullanici suruklemeyle bu degeri belirler ve auto-dagilim
     # bu cihaz icin override edilir.
     device_position_t: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Cihazin FCI yon oryantasyonu (kurulum verisi). Cihaz A ucu (yesil) /
+    # B ucu (kirmizi) besleme yonune (sequence_no artan) gore nasil bakiyor.
+    #   "green_forward" = yesil (A) uc besleme yonune bakar
+    #   "red_forward"   = kirmizi (B) uc besleme yonune bakar
+    #   None            = tanimsiz
+    # NOT: Simdilik yalnizca gorsel/kurulum bilgisi. Fault yonu algoritmasi
+    # ileride buna baglanabilir (su an fault RED/GREEN = alarm durumu).
+    device_orientation: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )

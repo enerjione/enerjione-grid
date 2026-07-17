@@ -1668,6 +1668,81 @@ export async function deleteSegment(token: string, id: number): Promise<void> {
   if (!r.ok) throw await buildApiError(r, "Segment silinemedi.");
 }
 
+// ----- Hat topolojisi Excel import (sablon + onizleme + commit) -----
+
+export type GridImportRowError = { row: number; message: string };
+export type GridImportPreview = {
+  regions: number;
+  lines: number;
+  poles: number;
+  devices: number;
+  errors: GridImportRowError[];
+};
+export type GridImportResult = {
+  regions_created: number;
+  regions_updated: number;
+  lines_created: number;
+  lines_updated: number;
+  poles_created: number;
+  poles_updated: number;
+  segments_created: number;
+  skipped: number;
+  errors: GridImportRowError[];
+};
+
+/** Bos hat topoloji import sablonunu (.xlsx) tarayicida indir. */
+export async function downloadGridImportTemplate(token: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/grid/import-template.xlsx`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablon indirilemedi.");
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = match ? match[1] : "hat-topoloji-sablon.xlsx";
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a); // Chromium proxy arkasinda click yutulmasin
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Import onizleme (dry-run): dosyayi yolla, DB'ye yazmadan ozet + hatalar al. */
+export async function previewGridImport(
+  token: string,
+  file: File
+): Promise<GridImportPreview> {
+  const form = new FormData();
+  form.append("file", file);
+  // KRITIK: Content-Type SET ETME — tarayici multipart boundary'yi kendi koyar.
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const response = await apiFetch(`${API_BASE_URL}/grid/import/preview`, {
+    method: "POST", headers, body: form
+  });
+  if (!response.ok) throw await buildApiError(response, "Önizleme başarısız.");
+  return (await response.json()) as GridImportPreview;
+}
+
+/** Import'i uygula (commit). Onizleme ile ayni dosya. */
+export async function commitGridImport(
+  token: string,
+  file: File
+): Promise<GridImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const response = await apiFetch(`${API_BASE_URL}/grid/import/commit`, {
+    method: "POST", headers, body: form
+  });
+  if (!response.ok) throw await buildApiError(response, "İçe aktarma başarısız.");
+  return (await response.json()) as GridImportResult;
+}
+
 // ----- Project Settings -----
 // GET auth-siz kullanilabilsin; bazi yerlerde token vermeden de cagiriyoruz
 // (login ekrani, header initial fetch). Backend GET /project-settings public.

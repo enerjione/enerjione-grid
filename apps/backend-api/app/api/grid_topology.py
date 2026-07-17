@@ -10,7 +10,9 @@ Yetki:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,6 +25,9 @@ from app.models.grid_topology import Line, LineSegment, Pole, Region
 from app.models.user import User
 from app.schemas.grid_topology import (
     GridSnapshot,
+    ImportCommitResponse,
+    ImportPreviewResponse,
+    ImportRowError,
     LineCreate,
     LineDetail,
     LineRead,
@@ -38,6 +43,7 @@ from app.schemas.grid_topology import (
     RegionRead,
     RegionUpdate,
 )
+from app.services import grid_import_service
 from app.services.event_service import record_event
 
 router = APIRouter(prefix="/grid", tags=["grid-topology"])
@@ -99,6 +105,7 @@ def grid_snapshot(
             from_pole_id=s.from_pole_id, to_pole_id=s.to_pole_id,
             device_id=s.device_id,
             device_position_t=s.device_position_t,
+            device_orientation=s.device_orientation,
             created_at=s.created_at,
             from_pole_seq=pole_seq_map.get(s.from_pole_id),
             to_pole_seq=pole_seq_map.get(s.to_pole_id),
@@ -269,7 +276,10 @@ def get_line_detail(
         seg_reads.append(LineSegmentRead(
             id=s.id, line_id=s.line_id,
             from_pole_id=s.from_pole_id, to_pole_id=s.to_pole_id,
-            device_id=s.device_id, created_at=s.created_at,
+            device_id=s.device_id,
+            device_position_t=s.device_position_t,
+            device_orientation=s.device_orientation,
+            created_at=s.created_at,
             from_pole_seq=pole_seq.get(s.from_pole_id),
             to_pole_seq=pole_seq.get(s.to_pole_id),
             device_code=dev.code if dev else None,
@@ -638,6 +648,7 @@ def list_segments(
             from_pole_id=s.from_pole_id, to_pole_id=s.to_pole_id,
             device_id=s.device_id,
             device_position_t=s.device_position_t,
+            device_orientation=s.device_orientation,
             created_at=s.created_at,
             from_pole_seq=pole_seq.get(s.from_pole_id),
             to_pole_seq=pole_seq.get(s.to_pole_id),
@@ -907,9 +918,124 @@ def _segment_to_read(db: Session, row: LineSegment) -> LineSegmentRead:
         from_pole_id=row.from_pole_id, to_pole_id=row.to_pole_id,
         device_id=row.device_id,
         device_position_t=row.device_position_t,
+        device_orientation=row.device_orientation,
         created_at=row.created_at,
         from_pole_seq=from_pole.sequence_no if from_pole else None,
         to_pole_seq=to_pole.sequence_no if to_pole else None,
         device_code=device.code if device else None,
         device_name=device.name if device else None,
+    )
+
+
+# ===================== Excel Import (sablon + onizleme + commit) =============
+
+_IMPORT_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+async def _read_xlsx_upload(file: UploadFile) -> bytes:
+    """Yuklenen .xlsx dosyasini oku + dogrula (uzanti + boyut). mqtt-cert
+    upload pattern'i: kucuk dosya, tumu bellege."""
+    name = (file.filename or "").lower()
+    if not name.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Yalnız .xlsx dosyası yükleyin.",
+        )
+    content = await file.read()
+    if len(content) > _IMPORT_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Dosya çok büyük (en fazla 2 MB).",
+        )
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dosya boş.",
+        )
+    return content
+
+
+@router.get("/import-template.xlsx")
+def download_import_template(
+    _: User = Depends(require_roles(_EDIT_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Bos hat topolojisi import sablonu (.xlsx). Cihaz + Direk_Tipi kolonlari
+    acilir liste (dropdown). Atanmis cihazlar dropdown'da yer almaz."""
+    buf = grid_import_service.build_template_workbook(db)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    filename = f"hat-topoloji-sablon-{ts}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+@router.post("/import/preview", response_model=ImportPreviewResponse)
+async def import_preview(
+    file: UploadFile = File(...),
+    _: User = Depends(require_roles(_EDIT_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Onizleme (dry-run): dosyayi parse et, DB'ye YAZMADAN ozet + hatalar."""
+    content = await _read_xlsx_upload(file)
+    plan = grid_import_service.parse_and_plan(content, db)
+    counts = plan.counts()
+    return ImportPreviewResponse(
+        regions=counts["regions"],
+        lines=counts["lines"],
+        poles=counts["poles"],
+        devices=counts["devices"],
+        errors=[ImportRowError(row=e.row, message=e.message) for e in plan.errors],
+    )
+
+
+@router.post("/import/commit", response_model=ImportCommitResponse)
+async def import_commit(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_roles(_EDIT_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Import'i uygula (tek transaction). Onizleme ile ayni dosya tekrar parse
+    edilir + apply_plan. Ekle/birlestir: kod varsa guncelle, yoksa yarat."""
+    content = await _read_xlsx_upload(file)
+    plan = grid_import_service.parse_and_plan(content, db)
+    result = grid_import_service.apply_plan(plan, db)
+    record_event(
+        db, category="grid", event_type="topology_imported", severity="info",
+        actor_username=current_user.username,
+        message=(
+            f"Topoloji içe aktarıldı: {result.regions_created} bölge, "
+            f"{result.lines_created} hat, {result.poles_created} direk, "
+            f"{result.segments_created} cihaz atandı."
+        ),
+        metadata={
+            "regions_created": result.regions_created,
+            "lines_created": result.lines_created,
+            "poles_created": result.poles_created,
+            "segments_created": result.segments_created,
+            "errors": len(result.errors),
+        },
+        i18n_key="topology_imported",
+        i18n_params={
+            "regions": result.regions_created,
+            "lines": result.lines_created,
+            "poles": result.poles_created,
+        },
+    )
+    db.commit()
+    return ImportCommitResponse(
+        regions_created=result.regions_created,
+        regions_updated=result.regions_updated,
+        lines_created=result.lines_created,
+        lines_updated=result.lines_updated,
+        poles_created=result.poles_created,
+        poles_updated=result.poles_updated,
+        segments_created=result.segments_created,
+        skipped=result.skipped,
+        errors=[ImportRowError(row=e.row, message=e.message) for e in result.errors],
     )

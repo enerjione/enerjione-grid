@@ -44,6 +44,7 @@ import {
 import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region } from "../../shared/types";
 import type { GridSnapshot } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
+import { LineWizardModal } from "./LineWizardModal";
 
 type Props = {
   accessToken: string;
@@ -181,6 +182,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
   // Modaller
   const [regionModalOpen, setRegionModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [editingRegion, setEditingRegion] = useState<Region | null>(null);
   const [lineModalOpen, setLineModalOpen] = useState(false);
   const [editingLine, setEditingLine] = useState<Line | null>(null);
@@ -421,7 +423,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       });
     }
     return slots;
-  }, [detail, livePoles]);
+  }, [detail, livePoles, draftDevicePositions]);
 
   // Cihazlarin hangileri TUM SISTEMDE zaten bir segmente bagli.
   // DB seviyesinde LineSegment.device_id UNIQUE — bir cihaz sadece bir
@@ -574,9 +576,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     try {
       // Önce kaynaktan kaldır
       await updateSegment(accessToken, fromSegment.id, { device_id: null });
-      // Sonra hedefe yaz (yeni segment ya da mevcut)
-      if (targetSlot.segment) {
-        await updateSegment(accessToken, targetSlot.segment.id, { device_id: fromSegment.device_id });
+      // Sonra hedefe yaz: hedef slotta cihazsiz segment varsa onu kullan,
+      // yoksa coklu cihaz icin yeni segment yarat.
+      const emptyTargetSeg = targetSlot.segments.find((s) => !s.device_id) ?? null;
+      if (emptyTargetSeg) {
+        await updateSegment(accessToken, emptyTargetSeg.id, { device_id: fromSegment.device_id });
       } else {
         await createSegment(accessToken, {
           line_id: selectedLine.id,
@@ -676,15 +680,25 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         <div className="grid-mgmt-col grid-mgmt-col-regions">
           <div className="grid-mgmt-col-head">
             <h4>{t("engineering.grid.regions")}</h4>
-            <button
-              className="add-user-btn"
-              onClick={() => {
-                setEditingRegion(null);
-                setRegionModalOpen(true);
-              }}
-            >
-              {t("engineering.grid.addRegionShort")}
-            </button>
+            <div className="grid-mgmt-col-head-actions">
+              <button
+                className="grid-import-trigger"
+                title={t("engineering.grid.wizard.title")}
+                onClick={() => setImportModalOpen(true)}
+              >
+                <span className="material-symbols-outlined">auto_awesome</span>
+                <span className="grid-import-trigger-label">{t("engineering.grid.wizard.shortBtn")}</span>
+              </button>
+              <button
+                className="add-user-btn"
+                onClick={() => {
+                  setEditingRegion(null);
+                  setRegionModalOpen(true);
+                }}
+              >
+                {t("engineering.grid.addRegionShort")}
+              </button>
+            </div>
           </div>
           <div className="grid-mgmt-list">
             {regions.length === 0 ? (
@@ -805,20 +819,20 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       className={`grid-mgmt-tool-btn ${addPoleMode ? "is-active" : ""}`}
                       onClick={() => setAddPoleMode(!addPoleMode)}
                       disabled={busy}
-                      title={addPoleMode ? "Click on the map to add a pole" : "Add pole mode"}
+                      title={t("engineering.grid.addPoleModeTooltip")}
                     >
                       <span className="material-symbols-outlined">add_location_alt</span>
-                      Add Pole
+                      {t("engineering.grid.addPole")}
                     </button>
 
                     <button
                       className="grid-mgmt-tool-btn"
                       disabled={sortedPoles.length < 2 || busy}
                       onClick={() => void handleReverseOrder()}
-                      title="Reverse pole order"
+                      title={t("engineering.grid.reverseOrderTooltip")}
                     >
                       <span className="material-symbols-outlined">swap_horiz</span>
-                      Reverse
+                      {t("engineering.grid.reverseShort")}
                     </button>
 
                     <span className="grid-mgmt-toolbar-sep" />
@@ -827,19 +841,19 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       className="grid-mgmt-tool-btn is-undo"
                       onClick={() => void handleUndoDraft()}
                       disabled={!hasUnsavedDraft || busy}
-                      title="Discard all draft changes"
+                      title={t("engineering.grid.undoDraftTooltip")}
                     >
                       <span className="material-symbols-outlined">undo</span>
-                      Undo
+                      {t("engineering.grid.undoDraft")}
                     </button>
                     <button
                       className="grid-mgmt-tool-btn is-save"
                       onClick={() => void handleSaveDraft()}
                       disabled={!hasUnsavedDraft || busy}
-                      title="Save draft changes"
+                      title={t("engineering.grid.saveDraftTooltip")}
                     >
                       <span className="material-symbols-outlined">save</span>
-                      Save
+                      {t("engineering.grid.saveDraft")}
                       {hasUnsavedDraft ? (
                         <span className="grid-mgmt-draft-badge">
                           {draftPoleAdds.length + draftPoleEdits.size + draftPoleDeletes.size + draftDevicePositions.size}
@@ -1235,10 +1249,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   >
                     <div className="map-ctx-menu-head">
                       {mapContextMenu.type === "pole"
-                        ? `Pole #${mapContextMenu.poleSeq}`
+                        ? t("engineering.grid.poleHeader", { seq: mapContextMenu.poleSeq })
                         : mapContextMenu.type === "line"
-                          ? "On line"
-                          : "Map location"}
+                          ? t("engineering.grid.onLine")
+                          : t("engineering.grid.mapLocation")}
                       <button
                         type="button"
                         className="map-ctx-menu-close"
@@ -1258,7 +1272,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">add_location</span>
-                          Add pole at end
+                          {t("engineering.grid.addPoleAtEnd")}
                         </button>
                       </>
                     ) : null}
@@ -1274,7 +1288,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">edit</span>
-                          Edit pole
+                          {t("engineering.grid.editPole")}
                         </button>
                         <button
                           type="button"
@@ -1288,7 +1302,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">arrow_upward</span>
-                          Insert pole before this one
+                          {t("engineering.grid.insertPoleBefore")}
                         </button>
                         <button
                           type="button"
@@ -1301,7 +1315,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">arrow_downward</span>
-                          Insert pole after this one
+                          {t("engineering.grid.insertPoleAfter")}
                         </button>
                         <button
                           type="button"
@@ -1313,7 +1327,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           }}
                         >
                           <span className="material-symbols-outlined">delete</span>
-                          Delete pole
+                          {t("engineering.grid.deletePole")}
                         </button>
                       </>
                     ) : null}
@@ -1352,7 +1366,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   // Material icon — pin/lightning emoji yerine. SVG-tabanli,
                   // tarayicilar arasi tutarli, renklendirme CSS'ten gelir.
                   const iconName =
-                    p.pole_type === "transformer" ? "bolt" : "location_on";
+                    p.pole_type === "transformer"
+                      ? "bolt"
+                      : p.pole_type === "breaker"
+                        ? "electrical_services"
+                        : "location_on";
                   const isDeviceDropTarget =
                     draggedDeviceSegId !== null &&
                     nextSlot &&
@@ -1372,7 +1390,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           <span className="material-symbols-outlined">drag_indicator</span>
                         </span>
                         <span className={`grid-mgmt-pole-card-icon ${
-                          p.pole_type === "transformer" ? "is-transformer" : ""
+                          p.pole_type === "transformer"
+                            ? "is-transformer"
+                            : p.pole_type === "breaker"
+                              ? "is-breaker"
+                              : ""
                         }`}>
                           <span className="material-symbols-outlined">{iconName}</span>
                         </span>
@@ -1387,7 +1409,9 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             {isStart ? <span className="grid-mgmt-pole-card-tag is-start">BAŞ</span> : null}
                             {isEnd ? <span className="grid-mgmt-pole-card-tag is-end">SON</span> : null}
                             {p.pole_type === "transformer" ? (
-                              <span className="grid-mgmt-pole-card-tag is-type">Trafo</span>
+                              <span className="grid-mgmt-pole-card-tag is-type">{t("engineering.grid.typeTransformer")}</span>
+                            ) : p.pole_type === "breaker" ? (
+                              <span className="grid-mgmt-pole-card-tag is-type">{t("engineering.grid.typeBreaker")}</span>
                             ) : null}
                           </div>
                           <div className="grid-mgmt-pole-card-meta">
@@ -1488,6 +1512,17 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       {error ? <p className="error-text">{error}</p> : null}
 
       {/* Modallar */}
+      {importModalOpen ? (
+        <LineWizardModal
+          accessToken={accessToken}
+          onClose={() => setImportModalOpen(false)}
+          onImported={async () => {
+            await reloadRegions();
+            if (selectedRegionId !== null) await reloadLines(selectedRegionId);
+            if (selectedLineId !== null) await reloadDetail(selectedLineId);
+          }}
+        />
+      ) : null}
       {regionModalOpen ? (
         <RegionModal initial={editingRegion} busy={busy}
           onClose={() => setRegionModalOpen(false)}
@@ -2350,9 +2385,10 @@ function PoleEditModal({
   };
   const { t } = useTranslation();
   // Material icon adlari (SVG-tabanli, emoji yerine).
-  const typeOptions: { value: string; labelKey: string; icon: string }[] = [
+  const typeOptions: { value: NonNullable<Pole["pole_type"]>; labelKey: string; icon: string }[] = [
     { value: "pole", labelKey: "engineering.grid.typePole", icon: "location_on" },
-    { value: "transformer", labelKey: "engineering.grid.typeTransformer", icon: "bolt" }
+    { value: "transformer", labelKey: "engineering.grid.typeTransformer", icon: "bolt" },
+    { value: "breaker", labelKey: "engineering.grid.typeBreaker", icon: "electrical_services" }
   ];
   return (
     <div className="settings-modal-backdrop">

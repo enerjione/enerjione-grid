@@ -7044,10 +7044,12 @@ th.event-col-category {
   overflow: hidden;
 }
 
+/* Sutun basligi: baslik USTTE, butonlar ALTTA. */
 .grid-mgmt-col-head {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   padding-bottom: 10px;
   border-bottom: 1px solid #e2e8f0;
   margin-bottom: 10px;
@@ -7057,6 +7059,33 @@ th.event-col-category {
   margin: 0;
   font-size: 14px;
   color: #0f172a;
+  text-align: center;
+}
+
+/* Actions yan yana (wizard + bolge butonlari). Wizard butonu uzun metinli
+   (nowrap), kalan genisligi alir; "+ Bolge" icerige gore sabit genislik.
+   Boylece dar sutunda wizard metni kirpilmaz. */
+.grid-mgmt-col-head-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.grid-mgmt-col-head-actions > .grid-import-trigger {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.grid-mgmt-col-head-actions > .add-user-btn {
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+/* Hatlar sutununda actions sarmalayici yok, tek "+ Hat" butonu dogrudan
+   col-head altinda; onu da tam genislik yap. */
+.grid-mgmt-col-head > .add-user-btn {
+  width: 100%;
 }
 
 .grid-mgmt-list {
@@ -9325,7 +9354,28 @@ th.event-col-category {
   border-radius: 12px;
   padding: 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Ince modern scrollbar — .notif-list ile ayni dil (Firefox) */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+/* Chrome/Edge/Safari */
+.dashboard-body .sidebar.device-sidebar-modern::-webkit-scrollbar {
+  width: 8px;
+}
+.dashboard-body .sidebar.device-sidebar-modern::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dashboard-body .sidebar.device-sidebar-modern::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.dashboard-body .sidebar.device-sidebar-modern::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
+  background-clip: padding-box;
 }
 
 .dashboard-body .sidebar.device-sidebar-modern .device-row {
@@ -22842,4 +22892,726 @@ th.event-col-category {
 }
 .active-sessions-panel .actions-cell .material-symbols-outlined {
   font-size: 14px;
+}
+
+/* ============================================================
+   Chrome tarzi sekme (tab) seridi — header ile icerik arasi
+   ============================================================ */
+.tab-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 6px 10px 0;
+  background: #e2e8f0;
+  border-bottom: 1px solid #cbd5e1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-height: 40px;
+  /* Ince modern scrollbar (kod tabaninin scrollbar dili) */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+  z-index: 1000;
+}
+.tab-bar::-webkit-scrollbar {
+  height: 6px;
+}
+.tab-bar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tab-bar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 3px;
+}
+
+.tab-bar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  max-width: 220px;
+  min-width: 96px;
+  height: 34px;
+  padding: 0 10px 0 12px;
+  background: #cbd5e1;
+  color: #475569;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 9px 9px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tab-bar-item:hover {
+  background: #dbe2ea;
+  color: #334155;
+}
+/* Aktif sekme icerikle ayni duzlemde — beyaz, alt kenar birlesir (Chrome). */
+.tab-bar-item.active {
+  background: #fff;
+  color: #0f172a;
+  font-weight: 600;
+  box-shadow: 0 -1px 3px rgba(15, 23, 42, 0.06);
+  position: relative;
+}
+.tab-bar-item.active::after {
+  /* Sekme ile icerik arasindaki 1px cizgiyi ort — kesintisiz gecis hissi */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: #fff;
+}
+.tab-bar-item:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.tab-bar-item-icon {
+  font-size: 17px;
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+.tab-bar-item.active .tab-bar-item-icon {
+  opacity: 1;
+  color: #2563eb;
+}
+.tab-bar-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-bar-item-close,
+.tab-bar-item-pin {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+.tab-bar-item-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.6;
+}
+.tab-bar-item-close .material-symbols-outlined {
+  font-size: 15px;
+}
+.tab-bar-item-close:hover {
+  background: rgba(15, 23, 42, 0.12);
+  opacity: 1;
+}
+.tab-bar-item-pin {
+  font-size: 13px;
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Surukle-birak durumlari */
+.tab-bar-item.dragging {
+  opacity: 0.45;
+}
+.tab-bar-item.drag-over {
+  /* Birakilacak yeri sol kenardaki mavi cizgi ile goster */
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+/* Sekme sag-tik baglam menusu */
+.tab-ctx-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 200px;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tab-ctx-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+}
+.tab-ctx-menu button .material-symbols-outlined {
+  font-size: 18px;
+  color: #64748b;
+}
+.tab-ctx-menu button:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+.tab-ctx-menu button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Cihaz detay sayfasi (placeholder) ---- */
+.device-detail {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.device-detail-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #64748b;
+}
+.device-detail-empty .material-symbols-outlined {
+  font-size: 48px;
+  color: #cbd5e1;
+}
+.device-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.device-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.device-detail-title h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #0f172a;
+}
+.device-detail-code {
+  font-size: 13px;
+  color: #64748b;
+}
+.device-detail-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.device-detail-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+.device-detail-dot.offline {
+  background: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.2);
+}
+.device-detail-alarm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 600;
+}
+.device-detail-alarm .material-symbols-outlined {
+  font-size: 18px;
+}
+.device-detail-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.device-detail-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.device-detail-card > .material-symbols-outlined {
+  font-size: 26px;
+  color: #2563eb;
+}
+.device-detail-card-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.device-detail-card strong {
+  font-size: 16px;
+  color: #0f172a;
+}
+.device-detail-charts-placeholder {
+  flex: 1;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+  text-align: center;
+  padding: 32px;
+}
+.device-detail-charts-placeholder .material-symbols-outlined {
+  font-size: 52px;
+  color: #cbd5e1;
+}
+.device-detail-charts-placeholder h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #475569;
+}
+
+/* ============================================================
+   Hat Yönetimi — Excel Import modalı + "İçe Aktar" butonu
+   ============================================================ */
+
+/* Panel başlığındaki "İçe Aktar" — nötr outline (yanındaki turuncu "+Bölge"
+   ana aksiyonla yarışmasın). */
+.grid-import-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 6px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.grid-import-trigger:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.grid-import-trigger:active {
+  transform: scale(0.97);
+}
+/* Uzun etiket dar sutunda ellipsis ile kirpilir; buton tasmaz, ikon hep gorunur.
+   Tam ad title tooltip'te. */
+.grid-import-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.grid-import-trigger .material-symbols-outlined {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+/* ---- Modal buton hiyerarşisi ---- */
+/* soft: yardımcı aksiyon (şablon indir) — mavi outline */
+.grid-import-btn-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.grid-import-btn-soft:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+.grid-import-btn-soft:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.grid-import-btn-soft .material-symbols-outlined {
+  font-size: 19px;
+}
+
+/* filepick: dosya seç — kesikli çerçeve, dosya seçilince yeşile döner */
+.grid-import-filepick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 10px 14px;
+  border: 1.5px dashed #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+.grid-import-filepick:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.grid-import-filepick.has-file {
+  border-style: solid;
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+.grid-import-filepick:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.grid-import-filepick .material-symbols-outlined {
+  font-size: 19px;
+  flex: 0 0 auto;
+}
+
+/* Modal alt aksiyon barı: iptal (nötr) + İçe Aktar (turuncu primary) */
+.grid-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+.grid-import-btn-cancel {
+  padding: 9px 18px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.grid-import-btn-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+.grid-import-btn-cancel:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.grid-import-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 20px;
+  border: 1px solid #cc7000;
+  background: linear-gradient(135deg, #e67c00 0%, #cc7000 100%);
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(230, 124, 0, 0.24);
+  transition: filter 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
+}
+.grid-import-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+.grid-import-btn-primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.grid-import-btn-primary:disabled {
+  background: #e2e8f0;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  box-shadow: none;
+  cursor: default;
+}
+.grid-import-btn-primary .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.grid-import-modal {
+  max-width: 620px;
+  width: 92vw;
+}
+.grid-import-step {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.grid-import-step-num {
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.grid-import-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.grid-import-step-body strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+.grid-import-step-body button {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.grid-import-step-body button .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.grid-import-preview {
+  padding: 12px 0;
+}
+.grid-import-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.grid-import-summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.grid-import-summary-card strong {
+  font-size: 22px;
+  color: #2563eb;
+}
+.grid-import-summary-card span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 600;
+}
+.grid-import-ok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #15803d;
+  font-weight: 600;
+  font-size: 13px;
+}
+.grid-import-ok .material-symbols-outlined {
+  font-size: 20px;
+}
+.grid-import-errors {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.grid-import-errors > strong {
+  display: block;
+  color: #b91c1c;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.grid-import-errors ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.grid-import-errors li {
+  font-size: 12px;
+  color: #7f1d1d;
+  line-height: 1.4;
+}
+.grid-import-error-row {
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+/* ============================================================
+   Hat Sihirbazı (LineWizardModal) — adım-0 yol secimi + head
+   ============================================================ */
+.grid-wizard-modal {
+  max-width: 640px;
+  width: 92vw;
+}
+
+.grid-wizard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.grid-wizard-head h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a;
+}
+.grid-wizard-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.grid-wizard-back:hover {
+  background: #eff6ff;
+}
+.grid-wizard-back .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.grid-wizard-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+}
+.grid-wizard-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (max-width: 560px) {
+  .grid-wizard-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Her yol bir buyuk tiklanabilir kart — ikon / baslik / aciklama DIKEY. */
+.grid-wizard-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  padding: 18px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.grid-wizard-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+}
+.grid-wizard-card:active {
+  transform: translateY(1px);
+}
+.grid-wizard-card strong {
+  font-size: 15px;
+  color: #0f172a;
+}
+.grid-wizard-card-icon {
+  font-size: 30px;
+  color: #2563eb;
+}
+.grid-wizard-card-desc {
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+/* "Yakında" yolu — soluk + rozet, ama yine tiklanip placeholder gosterir. */
+.grid-wizard-card--soon {
+  background: #f8fafc;
+  cursor: pointer;
+}
+.grid-wizard-card--soon .grid-wizard-card-icon,
+.grid-wizard-card--soon strong {
+  color: #94a3b8;
+}
+.grid-wizard-card--soon:hover {
+  border-color: #cbd5e1;
+  box-shadow: none;
+}
+.grid-wizard-soon-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.grid-wizard-qa-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: #64748b;
+}
+.grid-wizard-qa-placeholder .material-symbols-outlined {
+  font-size: 40px;
+  color: #cbd5e1;
+}
+.grid-wizard-qa-placeholder h4 {
+  margin: 0;
+  font-size: 15px;
+  color: #334155;
 }

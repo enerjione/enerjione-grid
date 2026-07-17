@@ -112,6 +112,8 @@ class LineSegmentBase(BaseModel):
     device_id: int | None = None
     # Cihazin slot icindeki fiziksel konumu (0..1). NULL = otomatik dagilim.
     device_position_t: float | None = None
+    # FCI yon oryantasyonu: "green_forward" | "red_forward" | None.
+    device_orientation: str | None = None
 
 
 class LineSegmentCreate(LineSegmentBase):
@@ -123,6 +125,7 @@ class LineSegmentUpdate(BaseModel):
     to_pole_id: int | None = None
     device_id: int | None = None
     device_position_t: float | None = None
+    device_orientation: str | None = None
 
 
 class LineSegmentRead(LineSegmentBase):
@@ -172,3 +175,33 @@ class PoleReorderRequest(BaseModel):
     geçici negatif değerlere taşıyıp sonra hedef değerlere yazar."""
     line_id: int
     items: list[PoleReorderItem]
+
+
+# ----- Excel Import (sablon + onizleme + commit) -----
+
+class ImportRowError(BaseModel):
+    """Import sirasinda bir Excel satirindaki hata (satir no + mesaj)."""
+    row: int
+    message: str
+
+
+class ImportPreviewResponse(BaseModel):
+    """Onizleme (dry-run): DB'ye yazmadan neyin olusacaginin ozeti + hatalar."""
+    regions: int
+    lines: int
+    poles: int
+    devices: int
+    errors: list[ImportRowError]
+
+
+class ImportCommitResponse(BaseModel):
+    """Commit sonucu: gercekten yaratilan/guncellenen sayilar + kalan hatalar."""
+    regions_created: int
+    regions_updated: int
+    lines_created: int
+    lines_updated: int
+    poles_created: int
+    poles_updated: int
+    segments_created: int
+    skipped: int
+    errors: list[ImportRowError]

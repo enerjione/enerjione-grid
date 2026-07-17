@@ -388,7 +388,7 @@ export type Line = {
   segment_count?: number;
 };
 
-export type PoleType = "pole" | "transformer";
+export type PoleType = "pole" | "transformer" | "breaker";
 
 export type Pole = {
   id: number;
@@ -409,6 +409,8 @@ export type LineSegment = {
   device_id?: number | null;
   /** Cihazin slot icindeki fiziksel konumu (0..1). NULL = otomatik dagilim. */
   device_position_t?: number | null;
+  /** FCI yon oryantasyonu: "green_forward" | "red_forward" | null. */
+  device_orientation?: string | null;
   created_at: string;
   /** UI render kolaylığı için backend expand ediyor */
   from_pole_seq?: number | null;

@@ -600,6 +600,11 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE line_segments ADD COLUMN IF NOT EXISTS device_position_t DOUBLE PRECISION")
         )
+        # Cihaz FCI yon oryantasyonu (green_forward / red_forward / NULL).
+        # Kurulum verisi; fault yonu algoritmasi ileride buna baglanabilir.
+        connection.execute(
+            text("ALTER TABLE line_segments ADD COLUMN IF NOT EXISTS device_orientation VARCHAR(20)")
+        )
         # Bransman: hattin baska bir hattin diregine bagli oldugunu isaretler.
         # NULL = bagimsiz hat (default). Set edilirse hattin baslangic noktasi
         # bu pole'dan kabul edilir; ariza algoritmasi ana hat -> dal akisini
