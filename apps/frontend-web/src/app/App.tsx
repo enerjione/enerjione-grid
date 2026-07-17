@@ -25,6 +25,10 @@ import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
 import { GridOverviewPage } from "../features/dashboard/GridOverviewPage";
+import { TabBar } from "../features/tabs/TabBar";
+import { useTabs } from "../features/tabs/useTabs";
+import { routeToPageState, type PageMode, type EngineeringPage } from "../features/tabs/tabModel";
+import { DeviceDetailPage } from "../features/device-detail/DeviceDetailPage";
 import { GlobalLoading } from "../components/GlobalLoading";
 import { useProjectSettings } from "../components/ProjectSettingsProvider";
 import {
@@ -159,76 +163,8 @@ import type {
 } from "../shared/types";
 
 type TabId = "map" | "values";
-type PageMode = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
-type EngineeringPage =
-  | "devices"
-  | "signals"
-  | "live-values"
-  | "alarm-rules"
-  | "users"
-  | "responsibility-areas"
-  | "bulk-notify"
-  | "outbound"
-  | "api-access"
-  | "notifications"
-  | "project-settings"
-  | "grid"
-  | "backups"
-  | "active-sessions";
-
-const ROUTE_STORAGE_KEY = "hsl.route.v1";
-const VALID_PAGE_MODES: PageMode[] = ["home", "alarms", "faults", "events", "system-status", "engineering"];
-const VALID_ENGINEERING_PAGES: EngineeringPage[] = [
-  "devices",
-  "signals",
-  "live-values",
-  "alarm-rules",
-  "users",
-  "responsibility-areas",
-  "bulk-notify",
-  "outbound",
-  "api-access",
-  "notifications",
-  "project-settings",
-  "grid",
-  "backups",
-  "active-sessions"
-];
-type PersistedRoute = {
-  pageMode: PageMode;
-  engineeringPage: EngineeringPage;
-};
-
-// Ana sayfa sekmesi (Harita / Tablo) kasten persist edilmez — kullanıcı her
-// oturumda haritayla başlasın; tabloya geçtikten sonra yenilemede yine harita
-// gelir. Sayfa modu (Anasayfa/Alarmlar/Olaylar/Mühendislik) ve engineering alt
-// sayfası persist olur — kullanıcı çalıştığı sayfada kalır.
-function loadPersistedRoute(): PersistedRoute {
-  const fallback: PersistedRoute = { pageMode: "home", engineeringPage: "devices" };
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(ROUTE_STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<PersistedRoute>;
-    return {
-      pageMode: VALID_PAGE_MODES.includes(parsed.pageMode as PageMode) ? (parsed.pageMode as PageMode) : fallback.pageMode,
-      engineeringPage: VALID_ENGINEERING_PAGES.includes(parsed.engineeringPage as EngineeringPage)
-        ? (parsed.engineeringPage as EngineeringPage)
-        : fallback.engineeringPage
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-function savePersistedRoute(route: PersistedRoute): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(ROUTE_STORAGE_KEY, JSON.stringify(route));
-  } catch {
-    // sessizce yutuyoruz - localStorage devre dışı / quota dolmuş olabilir
-  }
-}
+// PageMode / EngineeringPage tipleri tabModel'den geliyor (tek kaynak). Sekme
+// sistemi bunlari uretir; App aktif sekmeden turetir.
 
 export function App() {
   const projectSettings = useProjectSettings();
@@ -264,17 +200,24 @@ export function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<number>(0);
   const toast = useToast();
   const { t } = useTranslation();
-  const persistedRouteRef = useRef<PersistedRoute>(loadPersistedRoute());
   // Harita ana sayfada her oturumda varsayılan olsun — persist edilmez.
   const [activeTab, setActiveTab] = useState<TabId>("map");
-  const [engineeringPage, setEngineeringPage] = useState<EngineeringPage>(
-    () => persistedRouteRef.current.engineeringPage
-  );
-  const [pageMode, setPageMode] = useState<PageMode>(() => persistedRouteRef.current.pageMode);
 
-  useEffect(() => {
-    savePersistedRoute({ pageMode, engineeringPage });
-  }, [pageMode, engineeringPage]);
+  // Chrome tarzi sekme sistemi. Acik sekmeler + aktif sekme burada; pageMode/
+  // engineeringPage aktif sekmeden TURETILIR (asagida). Session yokken login
+  // ekrani render edilir ama hook kurali geregi kosulsuz cagrilir — rol yoksa
+  // "operator" guvenli default.
+  const tabsApi = useTabs(session?.role ?? "operator");
+  const { pageMode: derivedPageMode, engineeringPage: derivedEngineeringPage } =
+    routeToPageState(tabsApi.activeRoute);
+  // App'in geri kalani bu iki turetilmis degeri kullanir (render zinciri aynen
+  // korunur). device-detail durumunda pageMode "device-detail" olur.
+  const pageMode = derivedPageMode;
+  const engineeringPage: EngineeringPage = derivedEngineeringPage;
+  const activeDeviceDetailId =
+    tabsApi.activeRoute.kind === "device-detail"
+      ? tabsApi.activeRoute.deviceId
+      : null;
 
   // Ana sayfa (dashboard) ortak filtre state'i — Harita ve Tablo aynı filtreyi paylaşır.
   const [dashboardSearch, setDashboardSearch] = useState("");
@@ -463,34 +406,9 @@ export function App() {
     void load();
   }, [session]);
 
-  useEffect(() => {
-    if (!session) return;
-    const canAccessEngineering =
-      session.role === "engineer" ||
-      session.role === "installer" ||
-      session.role === "ops_manager";
-    if (!canAccessEngineering && pageMode === "engineering") {
-      setPageMode("home");
-      setEngineeringPage("devices");
-    }
-    // Sistem Durumu yalnizca installer'a aciktir. Operator/engineer/ops_manager
-    // localStorage'a kaydedilmis ya da URL'den gelen "system-status" route'una
-    // dusmusse anasayfaya geri al (header'da sekme zaten gizli).
-    if (session.role !== "installer" && pageMode === "system-status") {
-      setPageMode("home");
-    }
-    // ops_manager: yalnizca users + responsibility-areas + bulk-notify
-    // tabi'larina erisebilir
-    if (
-      session.role === "ops_manager" &&
-      pageMode === "engineering" &&
-      engineeringPage !== "users" &&
-      engineeringPage !== "responsibility-areas" &&
-      engineeringPage !== "bulk-notify"
-    ) {
-      setEngineeringPage("users");
-    }
-  }, [session, pageMode, engineeringPage]);
+  // Rol bazli sekme gorunurlugu artik useTabs icinde (visibleTabs / canAccessRoute
+  // -> tabModel.ts) merkezi olarak yonetiliyor: rol degisince izinsiz sekmeler
+  // elenir ve aktif sekme home'a duser. Eski manuel guard effect'i kaldirildi.
 
   const handleLogin = async (username: string, password: string, remember: boolean) => {
     setLoadingLogin(true);
@@ -498,8 +416,7 @@ export function App() {
       const nextSession = await login(username, password);
       saveSession(nextSession, remember);
       setSession(nextSession);
-      setPageMode("home");
-      setEngineeringPage("devices");
+      tabsApi.openTab({ kind: "page", page: "home" });
     } catch (error) {
       // Backend tipik olarak 401 'Invalid username or password' donderir; bunu
       // dile uygun toast'a cevir. Network/server hatasi farkli ele alinir.
@@ -549,9 +466,38 @@ export function App() {
     setSignalLiveValues([]);
     setSignalLiveError("");
     setAlarmRules([]);
-    setEngineeringPage("devices");
-    setPageMode("home");
-  }, [session]);
+    tabsApi.openTab({ kind: "page", page: "home" });
+  }, [session, tabsApi]);
+
+  // ===== Sekme navigasyon yardimcilari =====
+  // Header ust menusu: "engineering" gelirse son acik engineering sekmesine
+  // don, yoksa devices ile ac. Diger page'ler dogrudan page sekmesi acar.
+  const openTab = tabsApi.openTab;
+  const handleChangePage = useCallback(
+    (page: PageMode) => {
+      if (page === "engineering") {
+        const existingEng = tabsApi.tabs.find((tab) => tab.route.kind === "engineering");
+        if (existingEng) {
+          tabsApi.activateTab(existingEng.key);
+        } else {
+          openTab({ kind: "engineering", page: "devices" });
+        }
+        return;
+      }
+      openTab({ kind: "page", page });
+    },
+    [openTab, tabsApi]
+  );
+  // Engineering alt sayfasi ac (sekme).
+  const openEng = useCallback(
+    (page: EngineeringPage) => openTab({ kind: "engineering", page }),
+    [openTab]
+  );
+  // Cihaz detay sekmesi ac (harita popup / sidebar "tum detaylar").
+  const openDeviceDetail = useCallback(
+    (deviceId: number) => openTab({ kind: "device-detail", deviceId }),
+    [openTab]
+  );
 
   // Token suresi dolup 401 dondugunde otomatik login ekranina dus.
   // api.ts buildApiError 401 yakaladiginda "hsl:session-expired" event'ini yayar;
@@ -1876,15 +1822,39 @@ export function App() {
         role={session.role}
         accessToken={session.accessToken}
         wsState={liveSocket.connectionState}
-        activePage={pageMode}
-        onChangePage={setPageMode}
+        activePage={pageMode === "device-detail" ? "home" : pageMode}
+        onChangePage={handleChangePage}
         isEngineeringView={pageMode === "engineering"}
-        onToggleEngineering={() => setPageMode("engineering")}
+        onToggleEngineering={() => handleChangePage("engineering")}
         onSettings={handleOpenSettings}
         onLogout={handleLogout}
       />
+      <TabBar
+        tabs={tabsApi.tabs}
+        activeKey={tabsApi.activeKey}
+        onActivate={tabsApi.activateTab}
+        onClose={tabsApi.closeTab}
+        onCloseOthers={tabsApi.closeOthers}
+        onCloseToRight={tabsApi.closeToRight}
+        onReorder={tabsApi.reorderTabs}
+        deviceLookup={(id) => {
+          const d = devices.find((dev) => dev.id === id);
+          return d ? { code: d.code, name: d.name } : undefined;
+        }}
+      />
       <div className="body">
-        {pageMode === "engineering" ? (
+        {pageMode === "device-detail" && activeDeviceDetailId !== null ? (
+          <main className="content">
+            <DeviceDetailPage
+              deviceId={activeDeviceDetailId}
+              devices={devices}
+              values={signalLiveValues}
+              signals={signalCatalog}
+              gateways={gateways}
+              topologyInfo={deviceTopologyInfo.get(activeDeviceDetailId)}
+            />
+          </main>
+        ) : pageMode === "engineering" ? (
           <main className="content engineering-content">
             <div className="tabs">
               {/* ===== GRUP 1: TOPOLOJI & KURULUM =====
@@ -1892,7 +1862,7 @@ export function App() {
               {session.role !== "ops_manager" ? (
                 <button
                   className={engineeringPage === "devices" ? "active" : ""}
-                  onClick={() => setEngineeringPage("devices")}
+                  onClick={() => openEng("devices")}
                 >
                   {t("engineering.nav.devices")}
                 </button>
@@ -1901,7 +1871,7 @@ export function App() {
                 <button
                   className={engineeringPage === "signals" ? "active" : ""}
                   onClick={() => {
-                    setEngineeringPage("signals");
+                    openEng("signals");
                     void reloadSignals();
                   }}
                 >
@@ -1911,7 +1881,7 @@ export function App() {
               {session.role === "installer" || session.role === "engineer" ? (
                 <button
                   className={engineeringPage === "grid" ? "active" : ""}
-                  onClick={() => setEngineeringPage("grid")}
+                  onClick={() => openEng("grid")}
                 >
                   {t("engineering.nav.grid")}
                 </button>
@@ -1921,7 +1891,7 @@ export function App() {
               {session.role === "engineer" || session.role === "installer" ? (
                 <button
                   className={engineeringPage === "live-values" ? "active" : ""}
-                  onClick={() => setEngineeringPage("live-values")}
+                  onClick={() => openEng("live-values")}
                 >
                   {t("engineering.nav.liveValues")}
                 </button>
@@ -1930,7 +1900,7 @@ export function App() {
                 <button
                   className={engineeringPage === "alarm-rules" ? "active" : ""}
                   onClick={() => {
-                    setEngineeringPage("alarm-rules");
+                    openEng("alarm-rules");
                     void reloadAlarmRules();
                     void reloadSignals();
                   }}
@@ -1944,7 +1914,7 @@ export function App() {
                 <button
                   className={engineeringPage === "users" ? "active" : ""}
                   onClick={() => {
-                    setEngineeringPage("users");
+                    openEng("users");
                     void reloadUsers();
                   }}
                 >
@@ -1955,7 +1925,7 @@ export function App() {
                 <button
                   className={engineeringPage === "responsibility-areas" ? "active" : ""}
                   onClick={() => {
-                    setEngineeringPage("responsibility-areas");
+                    openEng("responsibility-areas");
                     void reloadResponsibilityAreas();
                   }}
                 >
@@ -1965,7 +1935,7 @@ export function App() {
               {session.role === "engineer" || session.role === "installer" || session.role === "ops_manager" ? (
                 <button
                   className={engineeringPage === "bulk-notify" ? "active" : ""}
-                  onClick={() => setEngineeringPage("bulk-notify")}
+                  onClick={() => openEng("bulk-notify")}
                 >
                   {t("engineering.nav.bulkNotify")}
                 </button>
@@ -1977,7 +1947,7 @@ export function App() {
               {session.role === "installer" || session.role === "engineer" ? (
                 <button
                   className={engineeringPage === "outbound" ? "active" : ""}
-                  onClick={() => setEngineeringPage("outbound")}
+                  onClick={() => openEng("outbound")}
                 >
                   {t("engineering.nav.outboundTargets")}
                 </button>
@@ -1986,7 +1956,7 @@ export function App() {
                 <button
                   className={engineeringPage === "api-access" ? "active" : ""}
                   onClick={() => {
-                    setEngineeringPage("api-access");
+                    openEng("api-access");
                     void reloadApiKeys();
                   }}
                 >
@@ -2000,7 +1970,7 @@ export function App() {
                   <button
                     className={engineeringPage === "notifications" ? "active" : ""}
                     onClick={() => {
-                      setEngineeringPage("notifications");
+                      openEng("notifications");
                       void reloadNotificationSettings();
                     }}
                   >
@@ -2010,7 +1980,7 @@ export function App() {
                   {/* ===== GRUP 5: PROJE & SISTEM YONETIMI ===== */}
                   <button
                     className={engineeringPage === "project-settings" ? "active" : ""}
-                    onClick={() => setEngineeringPage("project-settings")}
+                    onClick={() => openEng("project-settings")}
                   >
                     {t("engineering.nav.projectSettings")}
                   </button>
@@ -2021,7 +1991,7 @@ export function App() {
               {session.role === "installer" || session.role === "engineer" ? (
                 <button
                   className={engineeringPage === "backups" ? "active" : ""}
-                  onClick={() => setEngineeringPage("backups")}
+                  onClick={() => openEng("backups")}
                 >
                   {t("engineering.nav.backups")}
                 </button>
@@ -2031,7 +2001,7 @@ export function App() {
               {session.role === "installer" ? (
                 <button
                   className={engineeringPage === "active-sessions" ? "active" : ""}
-                  onClick={() => setEngineeringPage("active-sessions")}
+                  onClick={() => openEng("active-sessions")}
                 >
                   {t("engineering.nav.activeSessions")}
                 </button>
@@ -2308,6 +2278,7 @@ export function App() {
                     liveValues={signalLiveValues}
                     gridSnapshot={gridSnapshot}
                     alarms={alarms}
+                    onOpenDetail={openDeviceDetail}
                   />
                 ) : null}
                 {activeTab === "values" ? (

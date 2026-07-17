@@ -19,6 +19,9 @@ type Props = {
   gridSnapshot?: GridSnapshot | null;
   /** Aktif alarmlar — segment cihazının alarm durumunu hesaplamak için. */
   alarms?: AlarmEvent[];
+  /** Verilirse "Tüm detayları göster" popup içi modal yerine cihaz detay
+   *  SEKMESI acar (Chrome tarzi sekme sistemi). Verilmezse eski modal davranisi. */
+  onOpenDetail?: (deviceId: number) => void;
 };
 
 const DEFAULT_LINE_COLOR = "#2563eb";
@@ -53,7 +56,11 @@ const polePin = (
   const cached = _polePinCache.get(key);
   if (cached) return cached;
   const typeCls =
-    poleType === "transformer" ? "is-transformer" : "";
+    poleType === "transformer"
+      ? "is-transformer"
+      : poleType === "breaker"
+        ? "is-breaker"
+        : "";
   const cls = [
     isStart ? "is-start" : isEnd ? "is-end" : "",
     typeCls,
@@ -67,18 +74,21 @@ const polePin = (
   // Trafo: ic ice cift halka — fiziksel sembol cagrisimi.
   // Numara halka altinda kucuk badge olarak gosterilir.
   const isTrafo = poleType === "transformer";
+  const isBreaker = poleType === "breaker";
   const inner = isTrafo
     ? `<span class="grid-trafo-rings" aria-label="Trafo">
          <span class="grid-trafo-ring grid-trafo-ring--outer"></span>
          <span class="grid-trafo-ring grid-trafo-ring--inner"></span>
        </span>
        <span class="grid-pole-seq">${label}</span>`
-    : `<span>${label}</span>`;
+    : isBreaker
+      ? `<span class="grid-pole-symbol" aria-label="Kesici">▣</span><span class="grid-pole-seq">${label}</span>`
+      : `<span>${label}</span>`;
   // Bransman noktasi ise pin'in ust kosesine kucuk Y-catalli rozet.
   const branchBadge = (isBranchPoint || isBranchEntry)
     ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
     : "";
-  const size: [number, number] = isTrafo ? [40, 40] : [20, 20];
+  const size: [number, number] = isTrafo || isBreaker ? [40, 40] : [20, 20];
   const icon = L.divIcon({
     className: "grid-pole-leaflet-wrap",
     html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}</div>`,
@@ -253,7 +263,7 @@ type LineInfoCard = {
   isFault: boolean;
 };
 
-export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms }: Props) {
+export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms, onOpenDetail }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -1393,7 +1403,13 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             <button
               type="button"
               className="device-popup-detail-btn"
-              onClick={() => setDetailModalOpen(true)}
+              onClick={() => {
+                if (onOpenDetail && selectedDevice) {
+                  onOpenDetail(selectedDevice.id);
+                } else {
+                  setDetailModalOpen(true);
+                }
+              }}
             >
               <span className="material-symbols-outlined">read_more</span>
               {t("dashboard.popup.showAllDetails")}

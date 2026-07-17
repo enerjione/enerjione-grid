@@ -1514,7 +1514,7 @@
         "shortBtn": "Import",
         "title": "Import Topology from Excel",
         "step1Title": "1. Download the blank template",
-        "step1Hint": "Download the Excel; fill in coordinates, pick Device and Pole Type from the dropdowns.",
+        "step1Hint": "Download the Excel; fill in the poles, then add devices to the in-between rows between poles via the dropdown. Branch and device order are automatic.",
         "downloadTemplate": "Download Blank Excel Template",
         "downloading": "Downloading…",
         "downloadFail": "Could not download template.",
@@ -2122,6 +2122,10 @@
     "lastData": "Last Data",
     "alarmActive": "Alarm active",
     "chartsComingSoon": "Charts coming soon",
-    "chartsHint": "Charts of telemetry data collected for this device will appear here."
+    "chartsHint": "Charts of telemetry data collected for this device will appear here.",
+    "noSignals": "No signal data for {{source}}.",
+    "permanentFaults": "PERMANENT",
+    "momentaryFaults": "MOMENTARY",
+    "otherSignals": "Other signals ({{count}})"
   }
 }

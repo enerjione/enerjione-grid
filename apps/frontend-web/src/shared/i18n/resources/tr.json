@@ -1514,7 +1514,7 @@
         "shortBtn": "İçe Aktar",
         "title": "Excel ile Topoloji İçe Aktar",
         "step1Title": "1. Boş şablonu indir",
-        "step1Hint": "Excel'i indir; koordinatları doldur, Cihaz ve Direk Tipi hücrelerinde açılır listeden seç.",
+        "step1Hint": "Excel'i indir; direkleri doldur, cihazları direkler arasındaki ara-satırlara açılır listeden ekle. Branşman ve cihaz sırası otomatik.",
         "downloadTemplate": "Boş Excel Şablonu İndir",
         "downloading": "İndiriliyor…",
         "downloadFail": "Şablon indirilemedi.",
@@ -2122,6 +2122,10 @@
     "lastData": "Son Veri",
     "alarmActive": "Alarm aktif",
     "chartsComingSoon": "Grafikler yakında",
-    "chartsHint": "Bu cihaz için toplanan telemetri verilerinin grafikleri burada gösterilecek."
+    "chartsHint": "Bu cihaz için toplanan telemetri verilerinin grafikleri burada gösterilecek.",
+    "noSignals": "{{source}} için sinyal verisi yok.",
+    "permanentFaults": "KALICI",
+    "momentaryFaults": "GEÇİCİ",
+    "otherSignals": "Diğer sinyaller ({{count}})"
   }
 }

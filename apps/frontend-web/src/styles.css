@@ -23195,6 +23195,204 @@ th.event-col-category {
 }
 
 /* ============================================================
+   Cihaz Detay Sayfasi — kaynak sekmeli + kategori gruplu paneller
+   ============================================================ */
+/* Header chip'leri (bolge / hat / pil / konum / alarm) */
+.device-detail-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.device-detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device-detail-chip .material-symbols-outlined { font-size: 15px; }
+.device-detail-chip.is-line { background: #eef2ff; color: #4338ca; }
+.device-detail-chip.is-battery { background: #ecfdf5; color: #047857; }
+.device-detail-chip.is-alarm { background: #fef2f2; color: #b91c1c; }
+
+/* Kaynak sekmeleri (Master / Sat01 / Sat02) — renkli badge */
+.device-detail-sources {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.device-detail-source-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.device-detail-source-tab:disabled { opacity: 0.45; cursor: default; }
+.device-detail-source-tab .device-detail-source-badge {
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.device-detail-source-tab.tone-master .device-detail-source-badge { background: #e67c00; }
+.device-detail-source-tab.tone-green .device-detail-source-badge { background: #16a34a; }
+.device-detail-source-tab.tone-amber .device-detail-source-badge { background: #f59e0b; }
+.device-detail-source-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.device-detail-source-tab.active {
+  border-color: #94a3b8;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+  background: #f8fafc;
+}
+.device-detail-source-tab.active.tone-master { border-color: #e67c00; }
+.device-detail-source-tab.active.tone-green { border-color: #16a34a; }
+.device-detail-source-tab.active.tone-amber { border-color: #f59e0b; }
+
+/* Govde: aktif kaynagin ust cizgisi rengi */
+.device-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-top: 4px solid #e67c00;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.device-detail-body.tone-green { border-top-color: #16a34a; }
+.device-detail-body.tone-amber { border-top-color: #f59e0b; }
+
+/* Sayac kutulari (KALICI / GECICI) */
+.device-detail-counters {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.device-detail-counter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+.device-detail-counter .material-symbols-outlined { font-size: 28px; }
+.device-detail-counter.tone-red .material-symbols-outlined { color: #dc2626; }
+.device-detail-counter.tone-amber .material-symbols-outlined { color: #d97706; }
+.device-detail-counter-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  font-weight: 700;
+}
+.device-detail-counter strong { font-size: 22px; color: #0f172a; }
+
+/* Kategori basligi */
+.device-detail-cat { display: flex; flex-direction: column; gap: 8px; }
+.device-detail-cat-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #475569;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.device-detail-cat-title .material-symbols-outlined { font-size: 18px; color: #94a3b8; }
+.device-detail-cat-title.as-toggle {
+  background: none;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+/* Olcum / ariza olcumu grid (deger + birim) */
+.device-detail-measures {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+}
+.device-detail-measures.is-other { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.device-detail-measure {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f8fafc;
+}
+.device-detail-measure-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.device-detail-measure-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+
+/* Durum / yon bit'leri (aktif renkli) */
+.device-detail-bits {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 16px;
+}
+.device-detail-bit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.device-detail-bit-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  flex: 0 0 auto;
+}
+.device-detail-bit-label { font-size: 13px; color: #64748b; }
+.device-detail-bit.is-on .device-detail-bit-dot { background: #64748b; }
+.device-detail-bit.is-on .device-detail-bit-label { color: #0f172a; font-weight: 600; }
+/* Yon: A yesil, B kirmizi (aktifken) */
+.device-detail-bit.is-on.dir-a .device-detail-bit-dot { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,0.18); }
+.device-detail-bit.is-on.dir-b .device-detail-bit-dot { background: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,38,0.18); }
+/* Durum aktif = kirmizi vurgusu (ariza aktif) */
+.device-detail-bits:not(.is-direction) .device-detail-bit.is-on .device-detail-bit-dot {
+  background: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+@media (max-width: 720px) {
+  .device-detail-counters,
+  .device-detail-measures,
+  .device-detail-bits { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
    Hat Yönetimi — Excel Import modalı + "İçe Aktar" butonu
    ============================================================ */
 
