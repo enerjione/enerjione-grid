@@ -10742,6 +10742,15 @@ th.event-col-category {
   background: #e9d5ff;
   color: #6b21a8;
 }
+/* Binary Output = DNP3 CROB komut kanali (yayinlanmaz, cihaza komut). */
+.badge.badge-binary_output {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.badge.badge-analog_output {
+  background: #cffafe;
+  color: #0e7490;
+}
 .badge.badge-source {
   margin-left: 4px;
   letter-spacing: 0.02em;
@@ -10929,6 +10938,8 @@ th.event-col-category {
 .signals-type-tab.stt-binary.active { border-color: #fcd34d; }
 .signals-type-tab.stt-counter.active { border-color: #6ee7b7; }
 .signals-type-tab.stt-string.active { border-color: #d8b4fe; }
+.signals-type-tab.stt-binary_output.active { border-color: #fca5a5; }
+.signals-type-tab.stt-analog_output.active { border-color: #67e8f9; }
 
 .signals-header-row {
   display: flex;

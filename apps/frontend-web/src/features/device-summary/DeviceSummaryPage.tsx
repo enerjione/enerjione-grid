@@ -32,7 +32,9 @@ const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
   analog: "Analog",
   binary: "Binary",
   counter: "Counter",
-  string: "String"
+  string: "String",
+  binary_output: "Komut",
+  analog_output: "AO"
 };
 
 const SOURCE_LABEL: Record<string, string> = {

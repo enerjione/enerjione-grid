@@ -72,7 +72,10 @@ function parseIntOrNullModule(v: string): number | null {
 const DATA_TYPES: SignalDataType[] = [
   "analog",
   "binary",
-  "counter"
+  "counter",
+  // Binary Output = DNP3 CROB komut kanali (Trigger Download, Reset...).
+  // Adres (dnp3_index) buradan duzenlenir; cihaz surumu farkliysa degistir.
+  "binary_output"
 ];
 
 const SOURCES: SignalSource[] = ["master", "sat01", "sat02"];
@@ -87,14 +90,18 @@ const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
   analog: "Analog Input",
   binary: "Binary Input",
   counter: "Counter",
-  string: "String"
+  string: "String",
+  binary_output: "Binary Output (Komut)",
+  analog_output: "Analog Output"
 };
 
 const DATA_TYPE_SHORT: Record<SignalDataType, string> = {
   analog: "Analog",
   binary: "Binary",
   counter: "Counter",
-  string: "String"
+  string: "String",
+  binary_output: "Komut",
+  analog_output: "AO"
 };
 
 // DNP3 standart nesne grubu - veri tipine göre 1-1 eşlesir.
@@ -103,7 +110,9 @@ const DNP3_GROUP_BY_TYPE: Record<SignalDataType, number> = {
   analog: 30,
   binary: 1,
   counter: 20,
-  string: 110
+  string: 110,
+  binary_output: 10,
+  analog_output: 40
 };
 
 export function SignalsPage({
