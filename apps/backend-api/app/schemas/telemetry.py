@@ -42,3 +42,24 @@ class TelemetryRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TelemetryHistoryPoint(BaseModel):
+    """Historian ham okuma noktasi (bucket=raw)."""
+
+    signal_key: str
+    value: float | None = None
+    value_string: str | None = None
+    quality: str
+    source_timestamp: datetime
+
+
+class TelemetryAggregatePoint(BaseModel):
+    """Continuous aggregate ozet noktasi (bucket=1m|1h)."""
+
+    signal_key: str
+    bucket: datetime
+    avg_value: float | None = None
+    min_value: float | None = None
+    max_value: float | None = None
+    sample_count: int
