@@ -23292,9 +23292,30 @@ th.event-col-category {
 }
 .cmd-hist-status.status-pending,
 .cmd-hist-status.status-sent { background: #fef9c3; color: #854d0e; }
-.cmd-hist-status.status-ok { background: #dcfce7; color: #166534; }
+/* ok = "Cihaza iletildi" (DNP3 SUCCESS) — islem tamamlandi DEGIL. Yesil yerine
+   mavi: komut ulasti, sonuc cihaza bagli. */
+.cmd-hist-status.status-ok { background: #dbeafe; color: #1d4ed8; }
 .cmd-hist-status.status-failed { background: #fee2e2; color: #b91c1c; }
 .cmd-hist-status.status-expired { background: #f1f5f9; color: #64748b; }
+.device-cmd-async-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #475569;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+}
+.device-cmd-async-note .material-symbols-outlined {
+  font-size: 16px;
+  color: #0ea5e9;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
 .cmd-hist-err {
   color: #b91c1c;
   overflow: hidden;

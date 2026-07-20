@@ -195,6 +195,10 @@ export function DeviceCommandsPanel({
             <span className="material-symbols-outlined">history</span>
             {t("deviceDetail.commands.historyTitle")}
           </h4>
+          <p className="device-cmd-async-note">
+            <span className="material-symbols-outlined">info</span>
+            {t("deviceDetail.commands.asyncNote")}
+          </p>
           <ul className="device-detail-cmd-history">
             {cmdHistory.map((c) => (
               <li key={c.id} className={`cmd-hist cmd-hist-${c.status}`}>

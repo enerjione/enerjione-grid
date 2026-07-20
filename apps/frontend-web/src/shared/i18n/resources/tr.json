@@ -2143,7 +2143,7 @@
       "status": {
         "pending": "Kuyrukta",
         "sent": "Gönderildi",
-        "ok": "Başarılı",
+        "ok": "Cihaza iletildi",
         "failed": "Hata",
         "expired": "Zaman aşımı"
       },
@@ -2154,7 +2154,8 @@
         "danger": "Tehlikeli İşlemler"
       },
       "noPermission": "Bu cihaza komut gönderme yetkiniz yok.",
-      "historyTitle": "Komut Geçmişi"
+      "historyTitle": "Komut Geçmişi",
+      "asyncNote": "Not: Yapılandırma, yükleme ve firmware komutları cihazda arka planda işlenir; \"Cihaza iletildi\" komutun ulaştığını gösterir, işlemin bitişi cihaza bağlıdır ve zaman alabilir."
     },
     "tabs": {
       "measures": "Ölçümler",

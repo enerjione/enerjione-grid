@@ -2143,7 +2143,7 @@
       "status": {
         "pending": "Queued",
         "sent": "Sent",
-        "ok": "Success",
+        "ok": "Delivered",
         "failed": "Failed",
         "expired": "Timed out"
       },
@@ -2154,7 +2154,8 @@
         "danger": "Dangerous Operations"
       },
       "noPermission": "You do not have permission to send commands to this device.",
-      "historyTitle": "Command History"
+      "historyTitle": "Command History",
+      "asyncNote": "Note: Configuration, upload and firmware commands run in the background on the device; \"Delivered\" means the command reached the device — completion depends on the device and may take time."
     },
     "tabs": {
       "measures": "Measurements",
