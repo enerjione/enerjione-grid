@@ -73,6 +73,9 @@ const DATA_TYPES: SignalDataType[] = [
   "analog",
   "binary",
   "counter",
+  // String (G110 Octet String): SIM CCID, IMEI, IPv4, GPS, seri no, FW version...
+  "string",
+  "analog_output",
   // Binary Output = DNP3 CROB komut kanali (Trigger Download, Reset...).
   // Adres (dnp3_index) buradan duzenlenir; cihaz surumu farkliysa degistir.
   "binary_output"
@@ -145,7 +148,7 @@ export function SignalsPage({
   }, [deviceModels, modelFilter]);
 
   const signalsForModel = useMemo(
-    () => signals.filter((s) => s.model === modelFilter && s.data_type !== "string"),
+    () => signals.filter((s) => s.model === modelFilter),
     [signals, modelFilter]
   );
 

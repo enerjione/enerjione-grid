@@ -1565,7 +1565,8 @@
         "analog": "Analog Input",
         "binary": "Binary Input",
         "counter": "Counter",
-        "string": "String"
+        "string": "String",
+        "analog_output": "Analog Output"
       },
       "filter": {
         "device": "Filter by device",

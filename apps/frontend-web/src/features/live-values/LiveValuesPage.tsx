@@ -31,10 +31,14 @@ function isGatewayOnline(gw: Gateway | undefined): boolean {
 
 type TabKey = "all" | SignalDataType;
 
+// Yayinlanan (okunabilir) sinyal tipleri — sekme olarak gosterilir.
+// binary_output (G10) haric: o DNP3 komut kanali, canli deger yayinlamaz.
 const DATA_TYPES: SignalDataType[] = [
   "analog",
   "binary",
-  "counter"
+  "counter",
+  "string",
+  "analog_output"
 ];
 
 const SOURCE_LABEL: Record<string, string> = {
