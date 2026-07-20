@@ -223,6 +223,72 @@ PY
   fi
   docker compose exec -T backend-api alembic upgrade head
   e1_ok "DB migration tamam."
+
+  # Historian (TimescaleDB) idempotent ensure. Migration 0007 extension'i
+  # `CREATE EXTENSION` ile kurar AMA shared_preload_libraries ayarlanmamis
+  # eski volume'de bu adim basarisiz olabilir (extension kurulamaz -> hypertable
+  # /aggregate atlanir, migration yine 0007'ye ilerler). Compose'a
+  # shared_preload_libraries=timescaledb eklendikten + postgres recreate
+  # edildikten sonra burada eksik parcalari (extension/hypertable/policy/
+  # aggregate) IF NOT EXISTS ile tamamlariz. Tumu idempotent; her update'te
+  # guvenle tekrar calisir.
+  e1_step "Historian (TimescaleDB hypertable) dogrulaniyor..."
+  if docker compose exec -T backend-api python - <<'PY'
+import sys
+from sqlalchemy import create_engine, text
+from app.core.config import settings
+
+engine = create_engine(settings.database_url, pool_pre_ping=True, isolation_level="AUTOCOMMIT")
+stmts = [
+    "CREATE EXTENSION IF NOT EXISTS timescaledb",
+    "SELECT create_hypertable('telemetry_history','source_timestamp',"
+    " chunk_time_interval => INTERVAL '1 day', migrate_data => TRUE, if_not_exists => TRUE)",
+    "SELECT add_retention_policy('telemetry_history', INTERVAL '90 days', if_not_exists => TRUE)",
+    "ALTER TABLE telemetry_history SET ("
+    " timescaledb.compress,"
+    " timescaledb.compress_segmentby = 'device_id, signal_key',"
+    " timescaledb.compress_orderby = 'source_timestamp DESC')",
+    "SELECT add_compression_policy('telemetry_history', INTERVAL '7 days', if_not_exists => TRUE)",
+    "CREATE MATERIALIZED VIEW IF NOT EXISTS telemetry_history_1m"
+    " WITH (timescaledb.continuous) AS"
+    " SELECT device_id, signal_key,"
+    "        time_bucket(INTERVAL '1 minute', source_timestamp) AS bucket,"
+    "        avg(value) AS avg_value, min(value) AS min_value,"
+    "        max(value) AS max_value, count(*) AS sample_count"
+    " FROM telemetry_history GROUP BY device_id, signal_key, bucket"
+    " WITH NO DATA",
+    "SELECT add_continuous_aggregate_policy('telemetry_history_1m',"
+    " start_offset => INTERVAL '3 hours', end_offset => INTERVAL '1 minute',"
+    " schedule_interval => INTERVAL '1 minute', if_not_exists => TRUE)",
+    "CREATE MATERIALIZED VIEW IF NOT EXISTS telemetry_history_1h"
+    " WITH (timescaledb.continuous) AS"
+    " SELECT device_id, signal_key,"
+    "        time_bucket(INTERVAL '1 hour', source_timestamp) AS bucket,"
+    "        avg(value) AS avg_value, min(value) AS min_value,"
+    "        max(value) AS max_value, count(*) AS sample_count"
+    " FROM telemetry_history GROUP BY device_id, signal_key, bucket"
+    " WITH NO DATA",
+    "SELECT add_continuous_aggregate_policy('telemetry_history_1h',"
+    " start_offset => INTERVAL '3 days', end_offset => INTERVAL '1 hour',"
+    " schedule_interval => INTERVAL '1 hour', if_not_exists => TRUE)",
+]
+with engine.connect() as conn:
+    for s in stmts:
+        try:
+            conn.execute(text(s))
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARN atlandi: {exc}", file=sys.stderr)
+    hyper = conn.scalar(text(
+        "SELECT count(*) FROM timescaledb_information.hypertables"
+        " WHERE hypertable_name='telemetry_history'"
+    ))
+print("HYPERTABLE_OK" if hyper else "HYPERTABLE_MISSING")
+PY
+  then
+    e1_ok "Historian hazir (hypertable + aggregate + retention)."
+  else
+    e1_warn "Historian ensure calisti ama dogrulama beklenenden farkli — loglari kontrol edin."
+  fi
 fi
 
 echo
