@@ -15,6 +15,7 @@ from app.models.project_settings import ProjectSettings
 from app.models.signal_catalog import SignalCatalog
 from app.models.system_event import SystemEvent
 from app.models.telemetry import Telemetry
+from app.models.telemetry_history import TelemetryHistory
 from app.models.user import User
 from app.models.user_fcm_token import UserFcmToken
 from app.models.user_session import UserSession
@@ -40,6 +41,7 @@ __all__ = [
     "SignalCatalog",
     "AlarmRule",
     "Telemetry",
+    "TelemetryHistory",
     "AlarmEvent",
     "AlarmComment",
     "SystemEvent",

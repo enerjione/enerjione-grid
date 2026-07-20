@@ -122,6 +122,29 @@ def _persist_message(payload: dict[str, Any]) -> None:
             )
 
         db.add(telemetry)
+        # Historian: okunan degeri uzun-sureli arsive de yaz (TimescaleDB
+        # hypertable, bkz. telemetry_history modeli + migration 0007). Ayni
+        # commit'te; ON CONFLICT DO NOTHING ile composite PK (device_id,
+        # signal_key, source_timestamp) cakismasi ana telemetry INSERT'ini
+        # rollback ETMEZ — historian ikincil, canli akisi bozmamali.
+        from sqlalchemy.dialects.postgresql import insert as _pg_insert
+
+        from app.models.telemetry_history import TelemetryHistory
+
+        db.execute(
+            _pg_insert(TelemetryHistory)
+            .values(
+                device_id=telemetry.device_id,
+                signal_key=telemetry.signal_key,
+                value=telemetry.value,
+                value_string=telemetry.value_string,
+                quality=telemetry.quality,
+                source_timestamp=telemetry.source_timestamp,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["device_id", "signal_key", "source_timestamp"]
+            )
+        )
         db.add(
             ProcessedMessage(
                 consumer_name=CONSUMER_NAME,
