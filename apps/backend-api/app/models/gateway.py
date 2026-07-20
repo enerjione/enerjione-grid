@@ -62,3 +62,8 @@ class Gateway(Base):
     # Counter -> tetik kaybolmaz (gateway o sirada offline olsa bile sonraki
     # config refresh'te yakalar).
     refresh_nonce: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Config degisikligi sayaci. Cihaz/gateway config'i her degistiginde
+    # (create/update/enable/disable) +1 artar. Gateway hafif komut-poll'de
+    # (1sn) bu degeri gorur; en son gordugunden buyukse config'i HEMEN ceker
+    # (5dk poll'u beklemez). Counter -> gateway offline olsa bile tetik kaybolmaz.
+    config_nonce: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

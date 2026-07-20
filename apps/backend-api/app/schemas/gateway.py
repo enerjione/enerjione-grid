@@ -148,7 +148,29 @@ class GatewayConfigResponse(BaseModel):
     # buyukse reader.refresh_all_devices() cagirir (Class 0+1+2+3 integrity
     # poll). Default 0 (hic tetiklenmedi).
     refresh_nonce: int = 0
-    # Bekleyen cihaz komutlari (status='pending'). Gateway ceker, CROB gonderir,
-    # sonucu command-results endpoint'ine bildirir. config_version SEED'ine
-    # KATILMAZ (yoksa her komutta ETag churn olur). Bkz get_gateway_config 304.
+    # Config degisikligi sayaci — gateway hafif komut-poll'de bunu okuyup
+    # config'i erken ceker. Geriye uyum: eski gateway bu alani yok sayar.
+    config_nonce: int = 0
+    # DEPRECATED: komut artik AYRI /pending endpoint'inden gelir (config'ten
+    # ayrildi). Geriye uyum icin alan duruyor ama HER ZAMAN BOS doner; eski
+    # gateway'ler komutu buradan cekemez, yeni komut-poll kanalini kullanmali.
     pending_commands: list[GatewayConfigCommand] = []
+
+
+class GatewayPendingResponse(BaseModel):
+    """Hafif komut-poll yaniti — GET /gateways/{code}/pending.
+
+    Config'in agir parcalarini (device/signal listesi) TASIMAZ; sadece bekleyen
+    komutlar + iki nonce. Gateway bunu 1sn'de bir ceker (komut anlik gelsin) ve
+    config_nonce/refresh_nonce degistiyse ilgili tetigi calistirir.
+    """
+
+    gateway_code: str
+    is_active: bool
+    # Bekleyen cihaz komutlari (status='pending'). Gateway CROB gonderir, sonucu
+    # command-results ile bildirir. id ile idempotent (command_ledger).
+    commands: list[GatewayConfigCommand] = []
+    # Config degisti mi (gateway artmissa config'i hemen ceker).
+    config_nonce: int = 0
+    # "Tum cihazlara integrity poll at" tetigi (mevcut refresh-all mekanizmasi).
+    refresh_nonce: int = 0

@@ -26,6 +26,7 @@ from app.schemas.gateway import (
     GatewayConfigResponse,
     GatewayConfigSignal,
     GatewayCreate,
+    GatewayPendingResponse,
     GatewayRead,
     GatewayUpdate,
 )
@@ -59,6 +60,33 @@ def _rmq_admin() -> RabbitMqAdminClient:
     )
 
 router = APIRouter(prefix="/gateways", tags=["gateways"])
+
+
+def _signed_json_response(gateway, model, extra_headers: dict[str, str] | None = None):
+    """Pydantic model'i DETERMINISTIK byte'larla serialize edip HMAC imzali
+    Response doner. Hem config hem pending endpoint kullanir.
+
+    KRITIK: HMAC byte'lari deterministik olmali — gateway ayni byte'lardan imzayi
+    dogrular. FastAPI default JSON renderer'i pydantic'in `model_dump_json()`
+    ciktisindan farkli byte uretir (separators/ensure_ascii). Bu yuzden manuel
+    olarak model_dump_json byte'larini yazip imzayi ondan hesapliyoruz.
+    MITM/backend-kompromize koruma: gateway imzasiz/yanlis imzali komutu reddeder.
+    """
+    import hashlib as _hashlib
+    import hmac as _hmac
+
+    from fastapi.responses import Response as _Response
+
+    body_bytes = model.model_dump_json().encode("utf-8")
+    headers: dict[str, str] = dict(extra_headers or {})
+    try:
+        sig = _hmac.new(
+            gateway.token.encode("utf-8"), body_bytes, _hashlib.sha256
+        ).hexdigest()
+        headers["X-Config-Signature"] = sig
+    except Exception:  # noqa: BLE001
+        logger.exception("gateway_body_signature_failed gateway=%s", gateway.code)
+    return _Response(content=body_bytes, media_type="application/json", headers=headers)
 
 
 @router.get("", response_model=list[GatewayRead])
@@ -168,6 +196,8 @@ def update_gateway(
     changes = payload.model_dump(exclude_none=True)
     for key, value in changes.items():
         setattr(row, key, value)
+    # Config degisti -> nonce++ (gateway 1sn komut-poll'de gorup hemen ceker).
+    row.config_nonce = int(getattr(row, "config_nonce", 0) or 0) + 1
     record_event(
         db,
         category="gateway",
@@ -241,6 +271,7 @@ def enable_gateway(
     was_active = row.is_active
     row.is_active = True
     if not was_active:
+        row.config_nonce = int(getattr(row, "config_nonce", 0) or 0) + 1
         record_event(
             db,
             category="gateway",
@@ -271,6 +302,7 @@ def disable_gateway(
     was_active = row.is_active
     row.is_active = False
     if was_active:
+        row.config_nonce = int(getattr(row, "config_nonce", 0) or 0) + 1
         record_event(
             db,
             category="gateway",
@@ -520,26 +552,13 @@ def get_gateway_config(
     # `last_seen_at` ETag eslese bile her istekte guncellenmeli — konfigiyuon
     # degismemis bile olsa gateway canlilik sinyali veriyor.
     gateway.last_seen_at = datetime.now(timezone.utc)
-
-    # Bekleyen komutlar: config_version SEED'ine katilmaz (ETag churn olmasin),
-    # bu yuzden pending komut varken 304 DONULMEZ — aksi halde komut gateway'e
-    # hic ulasmaz. Komut yoksa 304 fast-path normal calisir.
-    pending_cmds = list(
-        db.scalars(
-            select(DeviceCommand)
-            .where(
-                DeviceCommand.gateway_code == gateway.code,
-                DeviceCommand.status == "pending",
-            )
-            .order_by(DeviceCommand.id.asc())
-        ).all()
-    )
     db.commit()
 
-    # ETag match VE bekleyen komut yok -> 304 Not Modified. Signal/device
-    # Pydantic serialize yok, response body de yok.
+    # Komutlar artik AYRI /pending endpoint'inden gelir (config'ten ayrildi).
+    # Config saf ETag/304: config degismemisse fast-path 304 doner (5dk poll'de
+    # cogunlukla). Komut varligi config'i etkilemez.
     normalized_inm = (if_none_match or "").strip()
-    if not pending_cmds and normalized_inm in (etag, config_version):
+    if normalized_inm in (etag, config_version):
         response.status_code = status.HTTP_304_NOT_MODIFIED
         response.headers["ETag"] = etag
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
@@ -622,7 +641,61 @@ def get_gateway_config(
         for signal in signals_rows
     ]
 
-    config_commands = [
+    config_resp = GatewayConfigResponse(
+        gateway_code=gateway.code,
+        gateway_name=gateway.name,
+        batch_interval_sec=gateway.batch_interval_sec,
+        max_devices=gateway.max_devices,
+        is_active=gateway.is_active,
+        devices=config_devices,
+        signals=config_signals,
+        config_version=config_version,
+        refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
+        config_nonce=int(getattr(gateway, "config_nonce", 0) or 0),
+        # Komut artik AYRI /pending endpoint'inde; config bos doner (geriye uyum).
+        pending_commands=[],
+    )
+
+    # Deterministik + HMAC imzali response (ETag gibi mevcut header'lari yansit).
+    return _signed_json_response(
+        gateway, config_resp, extra_headers=dict(response.headers)
+    )
+
+
+@router.get("/{gateway_code}/pending")
+def get_gateway_pending(
+    gateway_code: str,
+    db: Session = Depends(get_db),
+    x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+):
+    """Hafif komut-poll — gateway 1sn'de bir ceker (komut anlik gelsin).
+
+    Config'in AGIR parcalarini (device/signal listesi) TASIMAZ; sadece bekleyen
+    komutlar + config_nonce + refresh_nonce. Komut config-poll'den AYRILDI: config
+    5dk'da bir cekilir, komut burada 1sn'de.
+
+    Auth: `X-Gateway-Token`. HMAC imza (X-Config-Signature) — MITM/komut enjekte
+    koruma; gateway imzayi dogrular.
+
+    `pending -> sent` gecisi BURADA yapilir (config endpoint'te DEGIL). Gateway
+    komutu cektikten sonra command_ledger ile idempotent calistirir; ayni komut
+    tekrar cekilse bile (sent kalirken) gateway CROB'u tekrar atmaz (ledger).
+    """
+    from app.services.ingest_service import validate_gateway_token
+
+    gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
+
+    pending_cmds = list(
+        db.scalars(
+            select(DeviceCommand)
+            .where(
+                DeviceCommand.gateway_code == gateway.code,
+                DeviceCommand.status == "pending",
+            )
+            .order_by(DeviceCommand.id.asc())
+        ).all()
+    )
+    commands = [
         GatewayConfigCommand(
             id=cmd.id,
             device_code=cmd.device_code,
@@ -635,70 +708,25 @@ def get_gateway_config(
         )
         for cmd in pending_cmds
     ]
-
-    config_resp = GatewayConfigResponse(
-        gateway_code=gateway.code,
-        gateway_name=gateway.name,
-        batch_interval_sec=gateway.batch_interval_sec,
-        max_devices=gateway.max_devices,
-        is_active=gateway.is_active,
-        devices=config_devices,
-        signals=config_signals,
-        config_version=config_version,
-        refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
-        pending_commands=config_commands,
-    )
-
-    # Komutlar config'e konuldu -> status='sent' + sent_at. Gateway sonucu
-    # command-results ile bildirene kadar bu satirlar 'sent' kalir. At-least-once:
-    # gateway ayni config'i tekrar cekerse (ETag miss) sent komut TEKRAR gitmez
-    # (artik pending degil); gateway restart'ta komut kaybi olabilir ama komut
-    # zaten idempotent id ile korunur ve operator tekrar tetikleyebilir.
+    # pending -> sent (komut gateway'e teslim edildi). Gateway command_ledger ile
+    # idempotent; sent komut tekrar cekilmez (artik pending degil). Sonucu
+    # command-results ile bildirir -> ok/failed.
     if pending_cmds:
         now = datetime.now(timezone.utc)
         for cmd in pending_cmds:
             cmd.status = "sent"
             cmd.sent_at = now
-        db.commit()
 
-    # HMAC signature — payload integrity koruma (MITM / backend kompromize).
-    # KRITIK: HMAC byte'larin DETERMINISTIK olmasi sart, yoksa gateway her
-    # request'te imzayi reject eder. Sorun: FastAPI default JSON renderer'i
-    # pydantic'in `model_dump_json()` ciktisindan FARKLI byte uretir
-    # (jsonable_encoder + json.dumps separators=(",",": ") + ensure_ascii=True
-    # iken pydantic separators=(",",":") + ensure_ascii=False kullanir).
-    # Bu nedenle manuel olarak ayni byte'lari Response icine yazip imzayi
-    # o byte'lardan hesapliyoruz. Boylece gateway 1:1 dogrulayabilir.
-    body_bytes = config_resp.model_dump_json().encode("utf-8")
-    headers: dict[str, str] = {
-        # Mevcut response.headers icindeki ETag/Cache-Control gibi header'lari
-        # da yansit (eger varsa).
-    }
-    for k, v in response.headers.items():
-        headers[k] = v
-    try:
-        import hashlib as _hashlib
-        import hmac as _hmac
-
-        sig = _hmac.new(
-            gateway.token.encode("utf-8"),
-            body_bytes,
-            _hashlib.sha256,
-        ).hexdigest()
-        headers["X-Config-Signature"] = sig
-    except Exception:  # noqa: BLE001
-        import logging as _logging
-        _logging.getLogger(__name__).exception(
-            "config_signature_failed gateway=%s", gateway.code
-        )
-
-    from fastapi.responses import Response as _Response
-
-    return _Response(
-        content=body_bytes,
-        media_type="application/json",
-        headers=headers,
+    gateway.last_seen_at = datetime.now(timezone.utc)
+    resp = GatewayPendingResponse(
+        gateway_code=gateway.code,
+        is_active=gateway.is_active,
+        commands=commands,
+        config_nonce=int(getattr(gateway, "config_nonce", 0) or 0),
+        refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
     )
+    db.commit()
+    return _signed_json_response(gateway, resp)
 
 
 @router.post("/{gateway_code}/command-results")

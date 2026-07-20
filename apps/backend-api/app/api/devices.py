@@ -98,8 +98,22 @@ def create_device(
         i18n_key="device_created",
         i18n_params={"name": device.name, "code": device.code},
     )
+    _bump_gateway_config_nonce(db, device.gateway_code)
     db.commit()
     return device
+
+
+def _bump_gateway_config_nonce(db: Session, gateway_code: str | None) -> None:
+    """Cihaz config'i degisti -> ait oldugu gateway'in config_nonce'unu +1 artir.
+
+    Gateway hafif komut-poll'de (1sn) bu artisi gorup config'i HEMEN ceker (5dk
+    poll'u beklemez). commit CALLER'a birakilir (mevcut transaction'a katilir).
+    """
+    if not gateway_code:
+        return
+    gw = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gw is not None:
+        gw.config_nonce = int(getattr(gw, "config_nonce", 0) or 0) + 1
 
 
 def _ensure_device_visible(db: Session, current_user: User, device) -> None:
@@ -149,6 +163,7 @@ def update_device(
         i18n_key="device_updated",
         i18n_params={"name": updated.name, "code": updated.code},
     )
+    _bump_gateway_config_nonce(db, updated.gateway_code)
     db.commit()
     return updated
 
@@ -167,7 +182,9 @@ def delete_device(
     name = device.name
     code = device.code
     device_id = device.id
+    device_gateway = device.gateway_code
     repository.delete(device)
+    _bump_gateway_config_nonce(db, device_gateway)
     record_event(
         db,
         category="device",
