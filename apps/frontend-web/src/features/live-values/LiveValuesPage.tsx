@@ -228,9 +228,6 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     const q = search.trim().toLowerCase();
     return values.filter((row) => {
       const sig = signalByKey.get(row.signal_key);
-      // String tipli sinyaller hic gosterilmiyor — cihaz tarafinda 'Not Class 0'
-      // ile isaretli oldugu icin okunamiyor.
-      if (sig?.data_type === "string") return false;
       if (activeTab !== "all") {
         if (!sig || sig.data_type !== activeTab) return false;
       }
