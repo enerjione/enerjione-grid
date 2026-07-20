@@ -2191,7 +2191,38 @@
         "user": "User",
         "pass": "Password",
         "dir": "Directory"
+      },
+      "readonly": "read-only",
+      "readonlyHint": "These settings are edited on the Device Management page. Shown here for diagnostics.",
+      "field": {
+        "ip": "IP Address",
+        "port": "Outstation Port",
+        "dnp3Address": "DNP3 Address",
+        "endpointType": "Endpoint Type",
+        "masterAddress": "Master Address",
+        "gateway": "Gateway"
       }
+    },
+    "kpi": {
+      "current": "Current",
+      "voltage": "Voltage",
+      "temperature": "Temperature"
+    },
+    "meta": {
+      "region": "Region",
+      "line": "Line",
+      "battery": "Battery",
+      "operator": "Operator",
+      "location": "Location"
+    },
+    "quick": {
+      "reset": "Alarm Reset",
+      "resetHint": "Reset all FCIs — clear fault/alarm indicators"
+    },
+    "direction": {
+      "toA": "Direction A (green)",
+      "toB": "Direction B (red)",
+      "none": "No direction"
     }
   }
 }

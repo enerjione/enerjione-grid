@@ -24102,3 +24102,268 @@ th.event-col-category {
   gap: 10px;
   opacity: 0.65;
 }
+
+/* ===== Cihaz detay: header hizli aksiyon + durum pill ===== */
+.device-detail-head { align-items: flex-start; }
+.device-detail-title { flex-wrap: wrap; }
+.device-detail-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+.device-detail-status-pill .material-symbols-outlined { font-size: 15px; }
+.device-detail-status-pill.is-online { background: #dcfce7; color: #15803d; }
+.device-detail-status-pill.is-offline { background: #f1f5f9; color: #64748b; }
+.device-detail-status-pill.is-alarm { background: #fee2e2; color: #b91c1c; }
+.device-detail-quick { display: inline-flex; gap: 8px; }
+.action-btn.is-reset {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #c2410c;
+  font-weight: 700;
+}
+.action-btn.is-reset:hover:not(:disabled) { background: #ffedd5; }
+
+/* ===== Ust ozet bandi ===== */
+.device-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+.device-summary-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.device-kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.device-kpi::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+.device-kpi-icon {
+  font-size: 26px;
+  width: 42px; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  flex: 0 0 auto;
+}
+.device-kpi-body { display: flex; flex-direction: column; min-width: 0; }
+.device-kpi-value {
+  font-size: 19px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.device-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.device-kpi.tone-amber::before { background: #f59e0b; }
+.device-kpi.tone-amber .device-kpi-icon { background: #fef3c7; color: #b45309; }
+.device-kpi.tone-blue::before { background: #3b82f6; }
+.device-kpi.tone-blue .device-kpi-icon { background: #dbeafe; color: #1d4ed8; }
+.device-kpi.tone-rose::before { background: #f43f5e; }
+.device-kpi.tone-rose .device-kpi-icon { background: #ffe4e6; color: #be123c; }
+.device-kpi.tone-red::before { background: #ef4444; }
+.device-kpi.tone-red .device-kpi-icon { background: #fee2e2; color: #b91c1c; }
+.device-kpi.tone-orange::before { background: #f97316; }
+.device-kpi.tone-orange .device-kpi-icon { background: #ffedd5; color: #c2410c; }
+
+/* Meta seridi */
+.device-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding-top: 4px;
+  border-top: 1px dashed #e2e8f0;
+}
+.device-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #334155;
+  min-width: 0;
+}
+.device-meta-item .material-symbols-outlined { font-size: 16px; color: #94a3b8; }
+.device-meta-label { color: #94a3b8; font-weight: 600; }
+.device-meta-value {
+  font-weight: 700;
+  color: #0f172a;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Seri no kartlari */
+.device-summary-serials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.device-serial-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  border-left-width: 3px;
+}
+.device-serial-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+.device-serial-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.device-serial-value .material-symbols-outlined { font-size: 15px; color: #94a3b8; }
+.device-serial-card.tone-master { border-left-color: #f59e0b; }
+.device-serial-card.tone-green { border-left-color: #22c55e; }
+.device-serial-card.tone-amber { border-left-color: #f59e0b; }
+
+/* ===== Ariza yonu akis diyagrami ===== */
+.device-dir-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.device-dir-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 120px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+.device-dir-label { font-size: 13px; font-weight: 600; color: #334155; }
+.device-dir-flow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.device-dir-node {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 14px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 2px solid #e2e8f0;
+  flex: 0 0 auto;
+  transition: all 0.2s;
+}
+.device-dir-node.node-a.active {
+  background: #dcfce7; color: #15803d; border-color: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+.device-dir-node.node-b.active {
+  background: #fee2e2; color: #b91c1c; border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
+}
+.device-dir-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 60px;
+}
+.device-dir-line {
+  flex: 1;
+  height: 2px;
+  background: #e2e8f0;
+  border-radius: 2px;
+}
+.device-dir-arrow {
+  font-size: 18px;
+  color: #cbd5e1;
+  transition: color 0.2s;
+}
+.device-dir-row.is-a .arrow-a { color: #22c55e; }
+.device-dir-row.is-a .device-dir-line { background: linear-gradient(90deg, #22c55e, #e2e8f0); }
+.device-dir-row.is-b .arrow-b { color: #ef4444; }
+.device-dir-row.is-b .device-dir-line { background: linear-gradient(90deg, #e2e8f0, #ef4444); }
+.device-dir-state {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  color: #94a3b8;
+}
+.device-dir-row.is-a .device-dir-state { color: #15803d; }
+.device-dir-row.is-b .device-dir-state { color: #b91c1c; }
+
+/* ===== Ayarlar salt-okuma ===== */
+.device-config-section.is-readonly { background: #fff; }
+.device-config-badge.is-muted { color: #64748b; background: #f1f5f9; }
+.device-cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.device-cfg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+.device-cfg-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.device-cfg-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@media (max-width: 640px) {
+  .device-dir-row { grid-template-columns: 1fr; gap: 8px; }
+  .device-dir-state { text-align: left; }
+}

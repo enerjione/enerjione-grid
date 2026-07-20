@@ -2191,7 +2191,38 @@
         "user": "Kullanıcı",
         "pass": "Parola",
         "dir": "Dizin"
+      },
+      "readonly": "salt-okuma",
+      "readonlyHint": "Bu ayarlar Cihaz Yönetimi sayfasından düzenlenir. Burada teşhis için gösterilir.",
+      "field": {
+        "ip": "IP Adresi",
+        "port": "Outstation Port",
+        "dnp3Address": "DNP3 Adresi",
+        "endpointType": "Endpoint Tipi",
+        "masterAddress": "Master Adresi",
+        "gateway": "Gateway"
       }
+    },
+    "kpi": {
+      "current": "Akım",
+      "voltage": "Gerilim",
+      "temperature": "Sıcaklık"
+    },
+    "meta": {
+      "region": "Bölge",
+      "line": "Hat",
+      "battery": "Pil",
+      "operator": "Operatör",
+      "location": "Konum"
+    },
+    "quick": {
+      "reset": "Alarm Reset",
+      "resetHint": "Reset all FCIs — arıza/alarm göstergelerini sıfırla"
+    },
+    "direction": {
+      "toA": "A yönü (yeşil)",
+      "toB": "B yönü (kırmızı)",
+      "none": "Yön yok"
     }
   }
 }

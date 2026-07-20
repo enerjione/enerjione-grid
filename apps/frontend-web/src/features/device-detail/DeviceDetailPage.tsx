@@ -156,6 +156,7 @@ export function DeviceDetailPage({
   const [activeTab, setActiveTab] = useState<TabKey>("measures");
   const [activeSource, setActiveSource] = useState<SignalSource>("master");
   const [showOther, setShowOther] = useState(false);
+  const [busyQuick, setBusyQuick] = useState<string | null>(null);
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
 
@@ -187,6 +188,29 @@ export function DeviceDetailPage({
     for (const r of rows) m.set(suffixOf(r.signal_key), r);
     return m;
   }, [rows]);
+
+  // Ust ozet icin: cihazin TUM kaynaklardaki (master+sat) sinyalleri, key ile.
+  // activeSource'tan bagimsiz — header/ozet bandi master string'leri + satellite
+  // seri no'lari gostermeli.
+  const valueByKey = useMemo(() => {
+    const m = new Map<string, SignalLiveRow>();
+    if (!device) return m;
+    for (const r of values) {
+      if (r.device_id === device.id) m.set(r.signal_key, r);
+    }
+    return m;
+  }, [values, device]);
+
+  // Bir string sinyalin metnini getir (bos/yok ise undefined).
+  const strVal = (key: string): string | undefined => {
+    const v = valueByKey.get(key)?.value_string?.trim();
+    return v && v.length > 0 ? v : undefined;
+  };
+  // Bir numeric sinyalin degerini getir.
+  const numVal = (key: string): number | undefined => {
+    const v = valueByKey.get(key)?.value;
+    return v == null ? undefined : v;
+  };
 
   // Kategori -> gorsel row'lar (curated). Diger = curated'de olmayan + string haric.
   const grouped = useMemo(() => {
@@ -220,9 +244,38 @@ export function DeviceDetailPage({
   const momCnt = rowBySuffix.get(CNT_MOMENTARY);
   const activeMeta = SOURCES.find((s) => s.key === activeSource)!;
 
+  // Hizli komut (header): reset_all_fcis. Backend allowlist'te ise calisir.
+  const runQuick = async (slug: string) => {
+    if (!onDeviceCommand) return;
+    const label = signals.find((s) => s.key === `master.${slug}`)?.label ?? slug;
+    setBusyQuick(slug);
+    try {
+      await onDeviceCommand(device.code, slug, label);
+    } finally {
+      setBusyQuick(null);
+    }
+  };
+  const hasResetCmd = signals.some(
+    (s) => s.key === "master.reset_all_fcis" && s.data_type === "binary_output" && s.is_active
+  );
+
+  // Ust ozet verileri (tum kaynaklardan).
+  const serialMaster = strVal("master.info_serial_number");
+  const serialSat01 = strVal("sat01.info_serial_number");
+  const serialSat02 = strVal("sat02.info_serial_number");
+  const ipv4 = strVal("master.info_ipv4_address");
+  const gps = strVal("master.info_gps_latitude_longitude") ?? strVal("master.info_gps_string");
+  const netOp = strVal("master.info_network_operator");
+  const rssi = numVal("master.modem_rssi");
+  const curNow = numVal("master.actual_current");
+  const voltNow = numVal("master.actual_voltage");
+  const tempNow = numVal("master.device_temperature") ?? numVal("master.conductor_temperature");
+  const permCount = permCnt?.value ?? numVal("master.permanent_fault_counter");
+  const momCount = momCnt?.value ?? numVal("master.momentary_fault_counter");
+
   return (
     <div className="device-detail">
-      {/* ---- Header ---- */}
+      {/* ---- Header + hizli aksiyonlar ---- */}
       <header className="device-detail-head">
         <div className="device-detail-title">
           <span className={`device-detail-dot ${online ? "online" : "offline"}`} aria-hidden="true" />
@@ -230,36 +283,108 @@ export function DeviceDetailPage({
             <h2>{device.code}</h2>
             <span className="device-detail-code">{device.name}</span>
           </div>
-        </div>
-        <div className="device-detail-chips">
-          {topologyInfo?.regionName ? (
-            <span className="device-detail-chip">
-              <span className="material-symbols-outlined">map</span>
-              {topologyInfo.regionName}
+          <span className={`device-detail-status-pill ${online ? "is-online" : "is-offline"}`}>
+            <span className="material-symbols-outlined">
+              {online ? "wifi" : "wifi_off"}
             </span>
-          ) : null}
-          {topologyInfo?.lineName ? (
-            <span className="device-detail-chip is-line">
-              <span className="material-symbols-outlined">timeline</span>
-              {topologyInfo.lineName}
-            </span>
-          ) : null}
-          <span className="device-detail-chip is-battery">
-            <span className="material-symbols-outlined">battery_full</span>
-            %{Math.round(device.batteryPercent)}
-          </span>
-          <span className="device-detail-chip" title={locationLabel}>
-            <span className="material-symbols-outlined">location_on</span>
-            {locationLabel}
+            {online ? t("deviceDetail.online") : t("deviceDetail.offline")}
           </span>
           {device.alarmActive ? (
-            <span className="device-detail-chip is-alarm">
+            <span className="device-detail-status-pill is-alarm">
               <span className="material-symbols-outlined">warning</span>
               {t("deviceDetail.alarmActive")}
             </span>
           ) : null}
         </div>
+        {canCommand && onDeviceCommand ? (
+          <div className="device-detail-quick">
+            {hasResetCmd ? (
+              <button
+                type="button"
+                className="secondary-btn action-btn is-reset"
+                disabled={busyQuick != null}
+                aria-busy={busyQuick === "reset_all_fcis"}
+                onClick={() => void runQuick("reset_all_fcis")}
+                title={t("deviceDetail.quick.resetHint")}
+              >
+                {busyQuick === "reset_all_fcis" ? (
+                  <span className="btn-spinner" aria-hidden="true" />
+                ) : (
+                  <span className="material-symbols-outlined">restart_alt</span>
+                )}
+                {t("deviceDetail.quick.reset")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
+
+      {/* ---- Ust ozet bandi ---- */}
+      <section className="device-summary">
+        {/* Kilit olcum KPI'lari */}
+        <div className="device-summary-kpis">
+          <SummaryKpi
+            icon="bolt"
+            tone="amber"
+            label={t("deviceDetail.kpi.current")}
+            value={fmt(curNow ?? null, "analog", "mA")}
+          />
+          <SummaryKpi
+            icon="electric_bolt"
+            tone="blue"
+            label={t("deviceDetail.kpi.voltage")}
+            value={fmt(voltNow ?? null, "analog", "V")}
+          />
+          <SummaryKpi
+            icon="device_thermostat"
+            tone="rose"
+            label={t("deviceDetail.kpi.temperature")}
+            value={fmt(tempNow ?? null, "analog", "°C")}
+          />
+          <SummaryKpi
+            icon="report"
+            tone="red"
+            label={t("deviceDetail.permanentFaults")}
+            value={fmt(permCount ?? null, "counter")}
+          />
+          <SummaryKpi
+            icon="flash_on"
+            tone="orange"
+            label={t("deviceDetail.momentaryFaults")}
+            value={fmt(momCount ?? null, "counter")}
+          />
+        </div>
+
+        {/* Meta seridi: topoloji + haberlesme + kimlik */}
+        <div className="device-summary-meta">
+          {topologyInfo?.regionName ? (
+            <MetaItem icon="map" label={t("deviceDetail.meta.region")} value={topologyInfo.regionName} />
+          ) : null}
+          {topologyInfo?.lineName ? (
+            <MetaItem icon="timeline" label={t("deviceDetail.meta.line")} value={topologyInfo.lineName} />
+          ) : null}
+          <MetaItem
+            icon="battery_full"
+            label={t("deviceDetail.meta.battery")}
+            value={`%${Math.round(device.batteryPercent)}`}
+          />
+          {rssi != null ? (
+            <MetaItem icon="cell_tower" label="RSSI" value={`${Math.round(rssi)} dBm`} />
+          ) : null}
+          {netOp ? <MetaItem icon="signal_cellular_alt" label={t("deviceDetail.meta.operator")} value={netOp} /> : null}
+          {ipv4 ? <MetaItem icon="lan" label="IP" value={ipv4} /> : null}
+          {gps ? <MetaItem icon="location_on" label="GPS" value={gps} /> : (
+            <MetaItem icon="location_off" label={t("deviceDetail.meta.location")} value={locationLabel} />
+          )}
+        </div>
+
+        {/* Kimlik: Master + Satellite seri no'lari */}
+        <div className="device-summary-serials">
+          <SerialCard tone="master" label="Master" serial={serialMaster ?? device.code} />
+          {serialSat01 ? <SerialCard tone="green" label="Satellite 01" serial={serialSat01} /> : null}
+          {serialSat02 ? <SerialCard tone="amber" label="Satellite 02" serial={serialSat02} /> : null}
+        </div>
+      </section>
 
       {/* ---- Ana sekme cubugu ---- */}
       <nav className="device-detail-tabs" role="tablist">
@@ -323,7 +448,7 @@ export function DeviceDetailPage({
 
       {/* ---- Config sekmesi ---- */}
       {activeTab === "config" && canConfig && token ? (
-        <DeviceConfigPanel device={device} token={token} />
+        <DeviceConfigPanel device={device} />
       ) : null}
 
       {/* ---- Grafikler sekmesi ---- */}
@@ -402,26 +527,22 @@ export function DeviceDetailPage({
           {CAT_ORDER.map((cat) => {
             const items = grouped.g[cat];
             const meta = CAT_META[cat];
-            const binary = cat === "status" || cat === "direction";
             return (
               <section key={cat} className="device-detail-cat">
                 <h4 className="device-detail-cat-title">
                   <span className="material-symbols-outlined">{meta.icon}</span>
                   {meta.title}
                 </h4>
-                {binary ? (
-                  <div className={`device-detail-bits ${cat === "direction" ? "is-direction" : ""}`}>
+                {cat === "direction" ? (
+                  <DirectionDiagram rowBySuffix={rowBySuffix} t={t} />
+                ) : cat === "status" ? (
+                  <div className="device-detail-bits">
                     {items.map(({ def, row }) => {
                       const on = row?.value === 1;
-                      const dir = def.suffix.includes("green_a")
-                        ? "a"
-                        : def.suffix.includes("red_b")
-                          ? "b"
-                          : "";
                       return (
                         <div
                           key={def.suffix}
-                          className={`device-detail-bit ${on ? "is-on" : ""} ${dir ? `dir-${dir}` : ""}`}
+                          className={`device-detail-bit ${on ? "is-on" : ""}`}
                           title={row ? fmt(row.value, "binary") : "—"}
                         >
                           <span className="device-detail-bit-dot" />
@@ -498,6 +619,123 @@ function CounterBox({
         <span className="device-detail-counter-label">{label}</span>
         <strong>{value}</strong>
       </div>
+    </div>
+  );
+}
+
+// Ust ozet: kilit olcum / sayac KPI karti.
+function SummaryKpi({
+  icon,
+  tone,
+  label,
+  value,
+}: {
+  icon: string;
+  tone: "amber" | "blue" | "rose" | "red" | "orange";
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className={`device-kpi tone-${tone}`}>
+      <span className="device-kpi-icon material-symbols-outlined">{icon}</span>
+      <div className="device-kpi-body">
+        <span className="device-kpi-value">{value}</span>
+        <span className="device-kpi-label">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+// Ust ozet: meta bilgi ogesi (ikon + etiket + deger).
+function MetaItem({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <span className="device-meta-item" title={`${label}: ${value}`}>
+      <span className="material-symbols-outlined">{icon}</span>
+      <span className="device-meta-label">{label}</span>
+      <span className="device-meta-value">{value}</span>
+    </span>
+  );
+}
+
+// Ust ozet: Master/Satellite seri no karti.
+function SerialCard({
+  tone,
+  label,
+  serial,
+}: {
+  tone: "master" | "green" | "amber";
+  label: string;
+  serial: string;
+}) {
+  return (
+    <div className={`device-serial-card tone-${tone}`}>
+      <span className="device-serial-badge">{label}</span>
+      <span className="device-serial-value" title={serial}>
+        <span className="material-symbols-outlined">tag</span>
+        {serial}
+      </span>
+    </div>
+  );
+}
+
+// Ariza yonu: her cift (A=yesil, B=kirmizi) icin gorsel akis diyagrami.
+// Aktif yon renkli ok ile vurgulanir; ikisi de pasifse notr.
+const DIRECTION_ROWS: { key: string; label: string; aSuffix: string; bSuffix: string }[] = [
+  {
+    key: "load_flow",
+    label: "Yük Akışı",
+    aSuffix: "load_flow_direction_green_a",
+    bSuffix: "load_flow_direction_red_b",
+  },
+  {
+    key: "overcurrent",
+    label: "Aşırı Akım Arıza Yönü",
+    aSuffix: "overcurrent_fault_direction_green_a",
+    bSuffix: "overcurrent_fault_direction_red_b",
+  },
+  {
+    key: "delta",
+    label: "ΔI/Δt Arıza Yönü",
+    aSuffix: "delta_i_delta_t_fault_direction_green_a",
+    bSuffix: "delta_i_delta_t_fault_direction_red_b",
+  },
+];
+
+function DirectionDiagram({
+  rowBySuffix,
+  t,
+}: {
+  rowBySuffix: Map<string, Row>;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className="device-dir-grid">
+      {DIRECTION_ROWS.map((d) => {
+        const aOn = rowBySuffix.get(d.aSuffix)?.value === 1;
+        const bOn = rowBySuffix.get(d.bSuffix)?.value === 1;
+        const state = aOn ? "a" : bOn ? "b" : "none";
+        return (
+          <div key={d.key} className={`device-dir-row is-${state}`}>
+            <span className="device-dir-label">{d.label}</span>
+            <div className="device-dir-flow">
+              <span className={`device-dir-node node-a${aOn ? " active" : ""}`}>A</span>
+              <span className="device-dir-track" aria-hidden="true">
+                <span className="device-dir-arrow arrow-a material-symbols-outlined">arrow_back</span>
+                <span className="device-dir-line" />
+                <span className="device-dir-arrow arrow-b material-symbols-outlined">arrow_forward</span>
+              </span>
+              <span className={`device-dir-node node-b${bOn ? " active" : ""}`}>B</span>
+            </div>
+            <span className="device-dir-state">
+              {state === "a"
+                ? t("deviceDetail.direction.toA")
+                : state === "b"
+                  ? t("deviceDetail.direction.toB")
+                  : t("deviceDetail.direction.none")}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
