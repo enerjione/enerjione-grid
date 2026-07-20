@@ -2145,6 +2145,51 @@
         "ok": "Başarılı",
         "failed": "Hata",
         "expired": "Zaman aşımı"
+      },
+      "group": {
+        "general": "Genel Komutlar",
+        "alarm_reset": "Alarm / Arıza Reset",
+        "config": "Yapılandırma",
+        "danger": "Tehlikeli İşlemler"
+      },
+      "noPermission": "Bu cihaza komut gönderme yetkiniz yok.",
+      "historyTitle": "Komut Geçmişi"
+    },
+    "tabs": {
+      "measures": "Ölçümler",
+      "charts": "Grafikler",
+      "commands": "Komutlar",
+      "config": "Ayarlar"
+    },
+    "charts": {
+      "signal": "Sinyal",
+      "value": "Değer",
+      "avg": "Ortalama",
+      "min": "Min",
+      "max": "Max",
+      "loading": "Yükleniyor…",
+      "empty": "Bu aralıkta veri yok",
+      "noNumeric": "Bu kaynakta grafiklenebilir sayısal sinyal yok.",
+      "range": {
+        "1h": "1 saat",
+        "6h": "6 saat",
+        "24h": "24 saat",
+        "7d": "7 gün"
+      }
+    },
+    "config": {
+      "dnp3Title": "DNP3 Ayarları",
+      "save": "Kaydet",
+      "saved": "Ayarlar kaydedildi.",
+      "ftpTitle": "FTP Config Yönetimi",
+      "soon": "yakında",
+      "ftpHint": "Cihaz FTP config formatı çözüldüğünde bu alandan uzaktan config çekip güncelleyebileceksiniz.",
+      "ftp": {
+        "server": "Sunucu",
+        "port": "Port",
+        "user": "Kullanıcı",
+        "pass": "Parola",
+        "dir": "Dizin"
       }
     }
   }

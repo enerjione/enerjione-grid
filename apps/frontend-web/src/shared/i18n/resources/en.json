@@ -2145,6 +2145,51 @@
         "ok": "Success",
         "failed": "Failed",
         "expired": "Timed out"
+      },
+      "group": {
+        "general": "General Commands",
+        "alarm_reset": "Alarm / Fault Reset",
+        "config": "Configuration",
+        "danger": "Dangerous Operations"
+      },
+      "noPermission": "You do not have permission to send commands to this device.",
+      "historyTitle": "Command History"
+    },
+    "tabs": {
+      "measures": "Measurements",
+      "charts": "Charts",
+      "commands": "Commands",
+      "config": "Config"
+    },
+    "charts": {
+      "signal": "Signal",
+      "value": "Value",
+      "avg": "Average",
+      "min": "Min",
+      "max": "Max",
+      "loading": "Loading…",
+      "empty": "No data in this range",
+      "noNumeric": "No chartable numeric signal for this source.",
+      "range": {
+        "1h": "1 hour",
+        "6h": "6 hours",
+        "24h": "24 hours",
+        "7d": "7 days"
+      }
+    },
+    "config": {
+      "dnp3Title": "DNP3 Settings",
+      "save": "Save",
+      "saved": "Settings saved.",
+      "ftpTitle": "FTP Config Management",
+      "soon": "soon",
+      "ftpHint": "Once the device FTP config format is decoded, you will be able to pull and update config remotely here.",
+      "ftp": {
+        "server": "Server",
+        "port": "Port",
+        "user": "User",
+        "pass": "Password",
+        "dir": "Directory"
       }
     }
   }

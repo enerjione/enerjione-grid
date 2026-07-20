@@ -803,3 +803,25 @@ export type NotificationItem = {
   read_at?: string | null;
   created_at: string;
 };
+
+// ---- Historian (telemetry_history) ----------------------------------------
+export type HistoryBucket = "raw" | "1m" | "1h";
+
+/** bucket=raw: ham historian okuma noktasi. */
+export type TelemetryHistoryPoint = {
+  signal_key: string;
+  value: number | null;
+  value_string: string | null;
+  quality: string;
+  source_timestamp: string;
+};
+
+/** bucket=1m|1h: continuous aggregate ozet noktasi. */
+export type TelemetryAggregatePoint = {
+  signal_key: string;
+  bucket: string;
+  avg_value: number | null;
+  min_value: number | null;
+  max_value: number | null;
+  sample_count: number;
+};

@@ -1870,6 +1870,7 @@ export function App() {
               gateways={gateways}
               topologyInfo={deviceTopologyInfo.get(activeDeviceDetailId)}
               canCommand={session.role === "engineer" || session.role === "installer"}
+              canConfig={session.role === "installer"}
               onDeviceCommand={handleDeviceCommand}
               token={session.accessToken}
             />

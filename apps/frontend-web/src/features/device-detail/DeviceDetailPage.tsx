@@ -10,13 +10,11 @@
  * Grafikler/telemetri gecmisi AYRI IS (historian).
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { fetchDeviceCommands } from "../../shared/api";
 import { locateDevice } from "../../shared/geoLookup";
 import type {
-  DeviceCommandRow,
   DeviceRow,
   Gateway,
   SignalCatalogRow,
@@ -24,8 +22,13 @@ import type {
   SignalLiveRow,
   SignalSource,
 } from "../../shared/types";
+import { DeviceCommandsPanel } from "./DeviceCommandsPanel";
+import { DeviceChartsPanel } from "./DeviceChartsPanel";
+import { DeviceConfigPanel } from "./DeviceConfigPanel";
 
 type TopologyInfo = { regionName: string; lineName: string } | undefined;
+
+type TabKey = "measures" | "charts" | "commands" | "config";
 
 type Props = {
   deviceId: number;
@@ -34,24 +37,15 @@ type Props = {
   signals: SignalCatalogRow[];
   gateways: Gateway[];
   topologyInfo?: TopologyInfo;
-  /** ENGINEER/INSTALLER ise komut butonlari gorunur. */
+  /** ENGINEER/INSTALLER ise komut sekmesi + genel/alarm reset komutlari acilir. */
   canCommand?: boolean;
-  /** Komut gonderme handler'i (confirm + toast App.tsx'te merkezi).
-   *  Resolve olunca komut kuyruga alinmistir; liste yenilenir. */
+  /** INSTALLER ise config sekmesi + config komutlari acilir. */
+  canConfig?: boolean;
+  /** Komut gonderme handler'i (confirm + toast App.tsx'te merkezi). */
   onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
-  /** Komut gecmisi/durum takibi icin session token'i (canCommand ile birlikte). */
+  /** Historian/komut/config API cagrilari icin session token'i. */
   token?: string;
 };
-
-// Cihaz detay komut butonlari: SignalCatalog binary_output slug -> UI meta.
-// Index backend'de SignalCatalog'dan cozulur; burada sadece ikon/vurgu.
-// 4 ana komut buton olarak; kalan binary_output sinyalleri "Diger" menusunde.
-const PRIMARY_COMMANDS: { slug: string; icon: string; danger?: boolean }[] = [
-  { slug: "trigger_config_download", icon: "download" },
-  { slug: "config_update", icon: "settings" },
-  { slug: "clear_counters", icon: "delete_sweep" },
-  { slug: "software_reset", icon: "restart_alt", danger: true },
-];
 
 // ---- Kaynak (source) meta ---------------------------------------------------
 const SOURCES: { key: SignalSource; label: string; tone: "master" | "green" | "amber" }[] = [
@@ -154,78 +148,16 @@ export function DeviceDetailPage({
   gateways,
   topologyInfo,
   canCommand = false,
+  canConfig = false,
   onDeviceCommand,
   token,
 }: Props) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<TabKey>("measures");
   const [activeSource, setActiveSource] = useState<SignalSource>("master");
   const [showOther, setShowOther] = useState(false);
-  const [showMoreCmds, setShowMoreCmds] = useState(false);
-  const [busyCmd, setBusyCmd] = useState<string | null>(null);
-  const [cmdHistory, setCmdHistory] = useState<DeviceCommandRow[]>([]);
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
-
-  // Komut gecmisi/durum: canCommand+token varsa cek. pending/sent komut varken
-  // 10sn'de bir yenile (config-poll ~30sn sonra sonuc gelir); terminal olunca dur.
-  const deviceCode = device?.code;
-  const reloadCommands = useCallback(async () => {
-    if (!token || !canCommand || !deviceCode) return;
-    try {
-      setCmdHistory(await fetchDeviceCommands(token, deviceCode, 10));
-    } catch {
-      // sessiz — komut gecmisi ikincil bilgi, sayfayi bozmasin
-    }
-  }, [token, canCommand, deviceCode]);
-
-  useEffect(() => {
-    void reloadCommands();
-  }, [reloadCommands]);
-
-  const hasOpenCmd = useMemo(
-    () => cmdHistory.some((c) => c.status === "pending" || c.status === "sent"),
-    [cmdHistory]
-  );
-  useEffect(() => {
-    if (!hasOpenCmd) return;
-    const id = window.setInterval(() => void reloadCommands(), 10000);
-    return () => window.clearInterval(id);
-  }, [hasOpenCmd, reloadCommands]);
-
-  // Komut listesi: master kaynak binary_output sinyalleri (SignalCatalog'dan).
-  // slug = key'in "master." sonrasi. Ana komutlar PRIMARY_COMMANDS sirasinda,
-  // kalani "Diger" menusunde (display_order'a gore).
-  const commandSignals = useMemo(() => {
-    return signals
-      .filter((s) => s.data_type === "binary_output" && s.source === "master" && s.is_active)
-      .map((s) => ({ slug: s.key.replace(/^master\./, ""), label: s.label, order: s.display_order }))
-      .sort((a, b) => a.order - b.order);
-  }, [signals]);
-
-  const primaryCmds = useMemo(
-    () =>
-      PRIMARY_COMMANDS.map((p) => {
-        const sig = commandSignals.find((c) => c.slug === p.slug);
-        return sig ? { ...p, label: sig.label } : null;
-      }).filter((x): x is { slug: string; icon: string; danger?: boolean; label: string } => x != null),
-    [commandSignals]
-  );
-  const primarySlugs = useMemo(() => new Set(primaryCmds.map((c) => c.slug)), [primaryCmds]);
-  const moreCmds = useMemo(
-    () => commandSignals.filter((c) => !primarySlugs.has(c.slug)),
-    [commandSignals, primarySlugs]
-  );
-
-  const runCommand = async (slug: string, label: string) => {
-    if (!onDeviceCommand || !device) return;
-    setBusyCmd(slug);
-    try {
-      await onDeviceCommand(device.code, slug, label);
-      await reloadCommands();  // yeni pending komutu listede goster
-    } finally {
-      setBusyCmd(null);
-    }
-  };
 
   const dataTypeByKey = useMemo(() => {
     const m = new Map<string, SignalDataType>();
@@ -329,87 +261,103 @@ export function DeviceDetailPage({
         </div>
       </header>
 
-      {/* ---- Komutlar (ENGINEER/INSTALLER) ---- */}
-      {canCommand && onDeviceCommand && primaryCmds.length > 0 ? (
-        <section className="device-detail-commands">
-          <span className="device-detail-commands-title">
+      {/* ---- Ana sekme cubugu ---- */}
+      <nav className="device-detail-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "measures"}
+          className={`device-detail-tab${activeTab === "measures" ? " active" : ""}`}
+          onClick={() => setActiveTab("measures")}
+        >
+          <span className="material-symbols-outlined">monitoring</span>
+          {t("deviceDetail.tabs.measures")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "charts"}
+          className={`device-detail-tab${activeTab === "charts" ? " active" : ""}`}
+          onClick={() => setActiveTab("charts")}
+        >
+          <span className="material-symbols-outlined">show_chart</span>
+          {t("deviceDetail.tabs.charts")}
+        </button>
+        {canCommand ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "commands"}
+            className={`device-detail-tab${activeTab === "commands" ? " active" : ""}`}
+            onClick={() => setActiveTab("commands")}
+          >
             <span className="material-symbols-outlined">terminal</span>
-            {t("deviceDetail.commands.title")}
-          </span>
-          <div className="device-detail-commands-row">
-            {primaryCmds.map((c) => (
-              <button
-                key={c.slug}
-                type="button"
-                className={`secondary-btn action-btn${c.danger ? " danger" : ""}`}
-                disabled={busyCmd != null}
-                aria-busy={busyCmd === c.slug}
-                onClick={() => void runCommand(c.slug, c.label)}
-                title={c.label}
-              >
-                {busyCmd === c.slug ? (
-                  <span className="btn-spinner" aria-hidden="true" />
-                ) : (
-                  <span className="material-symbols-outlined">{c.icon}</span>
-                )}
-                {c.label}
-              </button>
-            ))}
-            {moreCmds.length > 0 ? (
-              <button
-                type="button"
-                className="secondary-btn action-btn"
-                disabled={busyCmd != null}
-                onClick={() => setShowMoreCmds((v) => !v)}
-                title={t("deviceDetail.commands.more")}
-              >
-                <span className="material-symbols-outlined">more_horiz</span>
-                {t("deviceDetail.commands.more")}
-              </button>
-            ) : null}
-          </div>
-          {showMoreCmds && moreCmds.length > 0 ? (
-            <div className="device-detail-commands-more">
-              {moreCmds.map((c) => (
-                <button
-                  key={c.slug}
-                  type="button"
-                  className="secondary-btn action-btn"
-                  disabled={busyCmd != null}
-                  aria-busy={busyCmd === c.slug}
-                  onClick={() => void runCommand(c.slug, c.label)}
-                >
-                  {busyCmd === c.slug ? (
-                    <span className="btn-spinner" aria-hidden="true" />
-                  ) : null}
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {cmdHistory.length > 0 ? (
-            <ul className="device-detail-cmd-history">
-              {cmdHistory.map((c) => (
-                <li key={c.id} className={`cmd-hist cmd-hist-${c.status}`}>
-                  <span className="cmd-hist-label">
-                    {commandSignals.find((s) => s.slug === c.command)?.label ?? c.command}
-                  </span>
-                  <span className={`cmd-hist-status status-${c.status}`}>
-                    {t(`deviceDetail.commands.status.${c.status}`)}
-                  </span>
-                  {c.status === "failed" && c.result_error ? (
-                    <span className="cmd-hist-err" title={c.result_error}>
-                      {c.result_error}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
+            {t("deviceDetail.tabs.commands")}
+          </button>
+        ) : null}
+        {canConfig ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "config"}
+            className={`device-detail-tab${activeTab === "config" ? " active" : ""}`}
+            onClick={() => setActiveTab("config")}
+          >
+            <span className="material-symbols-outlined">tune</span>
+            {t("deviceDetail.tabs.config")}
+          </button>
+        ) : null}
+      </nav>
+
+      {/* ---- Komutlar sekmesi ---- */}
+      {activeTab === "commands" && canCommand && onDeviceCommand && token ? (
+        <DeviceCommandsPanel
+          deviceCode={device.code}
+          signals={signals}
+          canCommand={canCommand}
+          canConfig={canConfig}
+          onDeviceCommand={onDeviceCommand}
+          token={token}
+        />
       ) : null}
 
-      {/* ---- Kaynak sekmeleri ---- */}
+      {/* ---- Config sekmesi ---- */}
+      {activeTab === "config" && canConfig && token ? (
+        <DeviceConfigPanel device={device} token={token} />
+      ) : null}
+
+      {/* ---- Grafikler sekmesi ---- */}
+      {activeTab === "charts" && token ? (
+        <>
+          <div className="device-detail-sources">
+            {SOURCES.map((s) => {
+              const n = values.filter((r) => r.device_id === device.id && r.source === s.key).length;
+              return (
+                <button
+                  key={s.key}
+                  className={`device-detail-source-tab tone-${s.tone} ${activeSource === s.key ? "active" : ""}`}
+                  onClick={() => setActiveSource(s.key)}
+                  disabled={n === 0}
+                >
+                  <span className="device-detail-source-badge">{s.label}</span>
+                  <span className="device-detail-source-count">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+          <DeviceChartsPanel
+            deviceCode={device.code}
+            activeSource={activeSource}
+            signals={signals}
+            token={token}
+          />
+        </>
+      ) : null}
+
+      {/* ---- Olcumler sekmesi ---- */}
+      {activeTab !== "measures" ? null : (
+      <>
+      {/* Kaynak sekmeleri */}
       <div className="device-detail-sources">
         {SOURCES.map((s) => {
           const n = values.filter((r) => r.device_id === device.id && r.source === s.key).length;
@@ -525,6 +473,8 @@ export function DeviceDetailPage({
             </section>
           ) : null}
         </div>
+      )}
+      </>
       )}
     </div>
   );

@@ -10,7 +10,10 @@ import type {
   DeviceCommandQueued,
   DeviceCommandRow,
   Gateway,
+  HistoryBucket,
   HostStatus,
+  TelemetryHistoryPoint,
+  TelemetryAggregatePoint,
   NotificationItem,
   ServicesReport,
   NotificationSettings,
@@ -1073,6 +1076,30 @@ export async function fetchDeviceCommands(
   if (!response.ok)
     throw await buildApiError(response, "Komut geçmişi alınamadı.");
   return (await response.json()) as DeviceCommandRow[];
+}
+
+/** Historian zaman serisi — cihaz detay grafikleri.
+ *  bucket=raw -> ham nokta[]; 1m/1h -> aggregate nokta[]. */
+export async function fetchDeviceHistory(
+  token: string,
+  deviceCode: string,
+  signalKey: string,
+  opts?: { bucket?: HistoryBucket; since?: string; until?: string; limit?: number }
+): Promise<TelemetryHistoryPoint[] | TelemetryAggregatePoint[]> {
+  const params = new URLSearchParams({ signal_key: signalKey });
+  if (opts?.bucket) params.set("bucket", opts.bucket);
+  if (opts?.since) params.set("since", opts.since);
+  if (opts?.until) params.set("until", opts.until);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  const response = await apiFetch(
+    `${API_BASE_URL}/devices/${deviceCode}/history?${params.toString()}`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok)
+    throw await buildApiError(response, "Geçmiş veri alınamadı.");
+  return (await response.json()) as
+    | TelemetryHistoryPoint[]
+    | TelemetryAggregatePoint[];
 }
 
 export type GatewayComposeDownloadOptions = {
