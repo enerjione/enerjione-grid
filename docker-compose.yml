@@ -72,7 +72,9 @@ x-hardened-worker: &hardened-worker
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # TimescaleDB (pg16 tabanli) — historian hypertable icin. Vanilla
+    # postgres:16 volume'u ile uyumlu; extension migration 0007'de kurulur.
+    image: timescale/timescaledb:2.17.2-pg16
     container_name: e1-grid-postgres
     restart: unless-stopped
     environment:

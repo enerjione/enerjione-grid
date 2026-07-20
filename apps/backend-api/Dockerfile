@@ -51,6 +51,8 @@ RUN if grep -qE '^[^#]*--hash=' requirements.txt; then \
 
 COPY app ./app
 COPY scripts ./scripts
+COPY alembic.ini ./alembic.ini
+COPY alembic_migrations ./alembic_migrations
 
 # Non-root user — container escape exploit'lerinde host root'a yakin
 # olmamak icin. UID 10001 reserved-range; backup-data volume host'unda

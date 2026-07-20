@@ -38,16 +38,16 @@ echo "  ${E1_DIM}Branch      :${E1_RESET} $(git rev-parse --abbrev-ref HEAD 2>/d
 echo "  ${E1_DIM}Onceki HEAD :${E1_RESET} $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 echo
 
-e1_set_steps 4
+e1_set_steps 5
 
-# ---- 1/4: Lokal degisiklik kontrolu --------------------------------------
+# ---- 1/5: Lokal degisiklik kontrolu --------------------------------------
 e1_step "Lokal degisiklik kontrolu..."
 if ! git diff --quiet || ! git diff --cached --quiet; then
   e1_die "Repo'da commit edilmemis lokal degisiklik var. 'git status' ile inceleyin, stash veya commit edin."
 fi
 e1_ok "Calisma agaci temiz."
 
-# ---- 2/4: DB yedek (otomatik, postgres ayaktaysa) ------------------------
+# ---- 2/5: DB yedek (otomatik, postgres ayaktaysa) ------------------------
 e1_step "Update oncesi DB yedek aliniyor..."
 if docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; then
   TS=$(date +%Y%m%d-%H%M%S)
@@ -69,7 +69,7 @@ else
   e1_info "Postgres ayakta degil — yedek atlandi (ilk kurulum sonrasi?)."
 fi
 
-# ---- 3/4: Git pull --------------------------------------------------------
+# ---- 3/5: Git pull --------------------------------------------------------
 e1_step "Git pull..."
 git pull --ff-only
 NEW_HEAD="$(git rev-parse --short HEAD)"
@@ -162,7 +162,7 @@ if [[ $NEED_NATS_RENDER -eq 1 ]]; then
   fi
 fi
 
-# ---- 4/4: Build + up ------------------------------------------------------
+# ---- 4/5: Build + up ------------------------------------------------------
 case "$TARGET" in
   frontend|frontend-web|web)        SVC="frontend-web" ;;
   backend|api|backend-api)          SVC="backend-api" ;;
@@ -176,6 +176,22 @@ case "$TARGET" in
     ;;
 esac
 
+NEEDS_BACKEND=0
+if [[ -z "$SVC" || "$SVC" == "backend-api" ]]; then
+  NEEDS_BACKEND=1
+fi
+
+if [[ "$NEEDS_BACKEND" -eq 1 ]]; then
+  # Historian (TimescaleDB) gibi DB image degisiklikleri backend migration'dan
+  # once uygulanmali. postgres named volume korunur; sadece image/compose farki
+  # varsa container recreate edilir. `pull` local/offline kurulumda hata verirse
+  # update'i bozmasin; compose eldeki image ile devam eder.
+  e1_step "Postgres image/compose senkronize ediliyor (TimescaleDB hazirligi)..."
+  docker compose pull postgres 2>/dev/null || true
+  docker compose up -d postgres
+  e1_ok "Postgres hazir."
+fi
+
 if [[ -z "$SVC" ]]; then
   e1_step "Tum servisler yeniden derleniyor + ayaga kalkiyor..."
   docker compose build
@@ -184,6 +200,29 @@ else
   e1_step "Servis '$SVC' yeniden derleniyor + force-recreate..."
   docker compose build "$SVC"
   docker compose up -d --force-recreate "$SVC"
+fi
+
+# ---- 5/5: Alembic migration (backend/all) ---------------------------------
+if [[ "$NEEDS_BACKEND" -eq 1 ]]; then
+  e1_step "DB migration uygulanıyor (alembic upgrade head)..."
+  # Eski kurulumlar (create_all + legacy bootstrap) Alembic'e stamp'lenmemis
+  # olabilir. alembic_version yoksa mevcut schema'yi 0006 kabul edip sadece yeni
+  # migration'lari (0007+) uygula. Aksi halde 0001..0006 tekrar calisip mevcut
+  # tablo/kolonlarda patlar. Yeni/temiz DB'de backend startup create_all zaten
+  # mevcut metadata'yi kurar; 0006 stamp + 0007 upgrade yine dogru sonucu verir.
+  if ! docker compose exec -T backend-api python - <<'PY' | grep -q '^YES$'; then
+from sqlalchemy import create_engine, text
+from app.core.config import settings
+engine = create_engine(settings.database_url, pool_pre_ping=True)
+with engine.connect() as conn:
+    exists = conn.scalar(text("SELECT to_regclass('public.alembic_version') IS NOT NULL"))
+print('YES' if exists else 'NO')
+PY
+    e1_info "alembic_version yok — mevcut schema 0006 olarak stamp'leniyor..."
+    docker compose exec -T backend-api alembic stamp 0006
+  fi
+  docker compose exec -T backend-api alembic upgrade head
+  e1_ok "DB migration tamam."
 fi
 
 echo

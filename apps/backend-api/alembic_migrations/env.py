@@ -47,6 +47,7 @@ import app.models.responsibility_area  # noqa: F401,E402
 import app.models.signal_catalog  # noqa: F401,E402
 import app.models.system_event  # noqa: F401,E402
 import app.models.telemetry  # noqa: F401,E402
+import app.models.telemetry_history  # noqa: F401,E402
 import app.models.user  # noqa: F401,E402
 import app.models.user_fcm_token  # noqa: F401,E402
 import app.models.user_notification_preference  # noqa: F401,E402
