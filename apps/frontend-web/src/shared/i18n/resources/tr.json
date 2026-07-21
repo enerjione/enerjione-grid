@@ -2211,7 +2211,10 @@
       "smooth": "Yumuşak çizgi",
       "showPoints": "Noktaları göster",
       "lineWidth": "Çizgi kalınlığı",
-      "barStack": "Üst üste yığ"
+      "barStack": "Üst üste yığ",
+      "barWidth": "Bar genişliği",
+      "barRadius": "Köşe yuvarlaklık",
+      "auto": "Otomatik"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",

@@ -41,8 +41,10 @@ type ChartSettings = {
   showSymbol: boolean;   // cizgi/alan: nokta goster
   lineWidth: number;     // cizgi/alan kalinlik
   barStack: boolean;     // bar: ust uste (stack)
+  barWidth: number;      // bar: genislik (px, 0=otomatik)
+  barRadius: number;     // bar: ust kose yuvarlaklik (px)
 };
-const DEFAULT_SETTINGS: ChartSettings = { smooth: true, showSymbol: false, lineWidth: 2, barStack: false };
+const DEFAULT_SETTINGS: ChartSettings = { smooth: true, showSymbol: false, lineWidth: 2, barStack: false, barWidth: 0, barRadius: 3 };
 
 // Zaman araliklari (kisa araliklar dahil) — bucket araliga gore otomatik.
 const RANGES: { key: string; minutes: number; bucket: HistoryBucket }[] = [
@@ -297,11 +299,15 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
         symbolSize: 5,
         smooth: chartType !== "bar" && settings.smooth ? 0.3 : false,
         yAxisIndex: units[1] != null && (s.unit ?? "") === units[1] ? 1 : 0,
-        // bar: gruplu ya da stack
+        // bar: gruplu ya da stack + genislik/yuvarlaklik
         stack: chartType === "bar" && settings.barStack ? "total" : undefined,
-        barMaxWidth: chartType === "bar" ? 24 : undefined,
+        barWidth: chartType === "bar" && settings.barWidth > 0 ? settings.barWidth : undefined,
+        barMaxWidth: chartType === "bar" && settings.barWidth === 0 ? 40 : undefined,
         lineStyle: chartType !== "bar" ? { color: s.color, width: settings.lineWidth } : undefined,
-        itemStyle: { color: s.color, borderRadius: chartType === "bar" ? [3, 3, 0, 0] : 0 },
+        itemStyle: {
+          color: s.color,
+          borderRadius: chartType === "bar" ? [settings.barRadius, settings.barRadius, 0, 0] : 0,
+        },
         // alan dolgusu: sadece "area" tipinde
         areaStyle:
           chartType === "area"
@@ -415,10 +421,20 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
                       </label>
                     </>
                   ) : (
-                    <label className="device-trend-gear-row">
-                      <input type="checkbox" checked={settings.barStack} onChange={(e) => setSettings((s) => ({ ...s, barStack: e.target.checked }))} />
-                      {t("deviceDetail.charts.barStack")}
-                    </label>
+                    <>
+                      <label className="device-trend-gear-row">
+                        <input type="checkbox" checked={settings.barStack} onChange={(e) => setSettings((s) => ({ ...s, barStack: e.target.checked }))} />
+                        {t("deviceDetail.charts.barStack")}
+                      </label>
+                      <label className="device-trend-gear-row device-trend-gear-slider">
+                        <span>{t("deviceDetail.charts.barWidth")}: {settings.barWidth === 0 ? t("deviceDetail.charts.auto") : `${settings.barWidth}px`}</span>
+                        <input type="range" min={0} max={60} step={2} value={settings.barWidth} onChange={(e) => setSettings((s) => ({ ...s, barWidth: Number(e.target.value) }))} />
+                      </label>
+                      <label className="device-trend-gear-row device-trend-gear-slider">
+                        <span>{t("deviceDetail.charts.barRadius")}: {settings.barRadius}px</span>
+                        <input type="range" min={0} max={12} value={settings.barRadius} onChange={(e) => setSettings((s) => ({ ...s, barRadius: Number(e.target.value) }))} />
+                      </label>
+                    </>
                   )}
                 </div>
               </>

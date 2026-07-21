@@ -2211,7 +2211,10 @@
       "smooth": "Smooth line",
       "showPoints": "Show points",
       "lineWidth": "Line width",
-      "barStack": "Stack bars"
+      "barStack": "Stack bars",
+      "barWidth": "Bar width",
+      "barRadius": "Corner radius",
+      "auto": "Auto"
     },
     "config": {
       "dnp3Title": "DNP3 Settings",
