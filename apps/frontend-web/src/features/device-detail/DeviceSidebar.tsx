@@ -40,6 +40,8 @@ type Props = {
   hasAlarm?: boolean;
   /** Kanal seri no'lari (master/sat01/sat02 serial_number). */
   channelSerials?: Partial<Record<SignalSource, string>>;
+  /** Kanal pil yuzdeleri (0..100) — her cihazin ayri pil seviyesi. */
+  channelBattery?: Partial<Record<SignalSource, number>>;
   activeSource: SignalSource;
   onSourceChange: (s: SignalSource) => void;
   /** Her kaynaktaki sinyal sayisi (0 ise kanal disabled). */
@@ -83,6 +85,7 @@ export function DeviceSidebar({
   firmware,
   hasAlarm = false,
   channelSerials,
+  channelBattery,
   activeSource,
   onSourceChange,
   sourceCounts,
@@ -198,6 +201,7 @@ export function DeviceSidebar({
             const n = sourceCounts[ch.key] ?? 0;
             const active = activeSource === ch.key;
             const sn = channelSerials?.[ch.key];
+            const batt = channelBattery?.[ch.key];
             return (
               <li key={ch.key}>
                 <button
@@ -206,6 +210,17 @@ export function DeviceSidebar({
                   onClick={() => onSourceChange(ch.key)}
                   disabled={n === 0}
                 >
+                  {batt != null ? (
+                    <span className={`device-channel-batt ${batteryClass(batt)}`} title={`%${Math.round(batt)}`}>
+                      <span className="device-battery-icon" aria-hidden="true">
+                        <span
+                          className="device-battery-fill"
+                          style={{ width: `${Math.max(0, Math.min(100, batt))}%` }}
+                        />
+                      </span>
+                      <span className="device-channel-batt-text">%{Math.round(batt)}</span>
+                    </span>
+                  ) : null}
                   <span className="device-channel-label">{ch.label}</span>
                   <span className="device-channel-serial">{sn ?? (n === 0 ? "—" : "")}</span>
                 </button>

@@ -295,16 +295,16 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
               ) : null}
               <td className="device-events-time">
                 <span className={`device-events-dot tone-${r.tone}`} aria-hidden="true" />
-                {!isFull && r.isAlarm ? (
-                  <span className="device-events-alarm-tag">
-                    <span className="material-symbols-outlined">notification_important</span>
-                    {t("deviceDetail.events.alarm")}
-                  </span>
-                ) : null}
                 {isFull ? (
                   <span title={formatRelative(r.ts)}>{formatDateTime(r.ts)}</span>
                 ) : (
                   <span className="device-events-time-compact" title={formatRelative(r.ts)}>
+                    {r.isAlarm ? (
+                      <span className="device-events-alarm-tag">
+                        <span className="material-symbols-outlined">notification_important</span>
+                        {t("deviceDetail.events.alarm")}
+                      </span>
+                    ) : null}
                     <span className="device-events-time-date">{formatDate(r.ts)}</span>
                     <span className="device-events-time-hm">
                       {formatDateTime(r.ts, { hour: "2-digit", minute: "2-digit" })}

@@ -24507,6 +24507,45 @@ th.event-col-category {
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
 }
+/* Kanal butonu pil gostergesi (her cihazin ayri pil seviyesi) */
+.device-channel-batt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+.device-channel-batt .device-battery-icon {
+  position: relative;
+  width: 24px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  padding: 1px;
+  display: inline-block;
+}
+.device-channel-batt .device-battery-icon::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: 3px;
+  width: 2px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 0 1px 1px 0;
+}
+.device-channel-batt .device-battery-fill { display: block; height: 100%; border-radius: 1px; background: currentColor; }
+.device-channel-batt.device-battery--ok { color: #16a34a; }
+.device-channel-batt.device-battery--low { color: #d97706; }
+.device-channel-batt.device-battery--critical { color: #dc2626; }
+.device-channel-batt-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+}
+.device-channel { gap: 8px; }
+.device-channel-label { flex: 1; text-align: left; }
 .device-channel.active .device-channel-serial { color: inherit; }
 .device-channel:hover:not(:disabled) { background: #f8fafc; }
 .device-channel:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -25210,8 +25249,24 @@ th.event-col-category {
 }
 .device-map-label.leaflet-tooltip-top::before { border-top-color: #0f172a; }
 
-/* Compact olay tarih: 2 satir (tarih ustte, saat altta) */
-.device-events-time-compact { display: inline-flex; flex-direction: column; line-height: 1.25; }
+/* Compact olay zamani: dot solda dikey ortali + sabit genislikli blok.
+   Alarm rozeti ustte (kaymaz), tarih + saat altta hizali. */
+.device-events-table:not(.is-full) .device-events-time {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 130px;
+  white-space: nowrap;
+}
+.device-events-table:not(.is-full) .device-events-time .device-events-dot { margin-top: 5px; }
+.device-events-time-compact {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  line-height: 1.25;
+}
+.device-events-time-compact .device-events-alarm-tag { margin-bottom: 2px; }
 .device-events-time-date { font-size: 11px; color: #94a3b8; font-weight: 600; }
 .device-events-time-hm { font-size: 13px; color: #334155; font-weight: 700; }
 

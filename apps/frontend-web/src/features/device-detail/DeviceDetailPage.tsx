@@ -99,8 +99,9 @@ const GROUP_ORDER: { key: GroupKey; icon: string }[] = [
 ];
 
 // Bilgi/altyapi sinyalleri Mevcut Durum'da GOSTERILMEZ (sidebar/Tumu'de).
+// "info_" ile baslayan tum sinyaller bilgi kabul edilir (NWS/RF/modem vb dahil).
 const INFO_SUFFIX_RE =
-  /(serial_number|ipv4_address|ip_address|firmware|fw_version|modem|imei|sim_serial|gps|latitude|longitude|hardware_revision|part_no|rtu_status|network_operator|network_registration|network_type|operation_mode|device_position|test_point_level)/;
+  /^info_|(serial_number|ipv4_address|ip_address|firmware|fw_version|modem|imei|sim_serial|gps|latitude|longitude|hardware_revision|part_no|rtu_status|network|operation_mode|device_position|test_point_level|comm_library|dial_in)/;
 
 function groupOfSuffix(suffix: string, dataType: string | undefined): GroupKey {
   const s = suffix.toLowerCase();
@@ -257,10 +258,17 @@ export function DeviceDetailPage({
   //   value_string DEGIL value; string variant (info_serial_number) fallback.
   const sidebarIp = strVal("master.info_ipv4_address") ?? strVal("master.info_modem_ip_address");
   const sidebarPartNo = strVal("master.info_part_no");
-  // Firmware: analog (2.338) once, string variant fallback.
+  // Firmware: cihaz ham deger olarak 2338 gonderir, gercek surum "2.338".
+  // Ham deger >= 1000 ise X.YYY formatina cevir (2338 -> 2.338); string
+  // variant (info_fw_version) varsa onu tercih et.
+  const fwStr = strVal("master.info_fw_version");
   const fwNum = numVal("master.firmware_version");
+  const fmtFirmware = (n: number): string => {
+    if (n >= 1000) return (n / 1000).toFixed(3); // 2338 -> "2.338"
+    return String(n);
+  };
   const sidebarFirmware =
-    fwNum != null && Number.isFinite(fwNum) ? String(fwNum) : strVal("master.info_fw_version");
+    fwStr ?? (fwNum != null && Number.isFinite(fwNum) ? fmtFirmware(fwNum) : undefined);
   const serialOf = (src: SignalSource): string | undefined => {
     const n = numVal(`${src}.serial_number`);
     if (n != null && Number.isFinite(n) && n > 0) return String(Math.round(n));
@@ -277,6 +285,25 @@ export function DeviceDetailPage({
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueByKey]);
+
+  // Kanal pil yuzdeleri. Master: device.batteryPercent (hesaplanmis). Satellite:
+  // battery_voltage_satellite voltajindan basit Li-ion oran (3.2V=%0, 4.2V=%100).
+  // ponytail: sabit Li-ion araligi; cihaz bazli esik gerekirse settings'e bagla.
+  const voltToPct = (v: number | undefined): number | undefined => {
+    if (v == null || !Number.isFinite(v)) return undefined;
+    const pct = ((v - 3.2) / (4.2 - 3.2)) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  };
+  const channelBattery = useMemo<Partial<Record<SignalSource, number>>>(() => {
+    const out: Partial<Record<SignalSource, number>> = {};
+    if (device && Number.isFinite(device.batteryPercent)) out.master = device.batteryPercent;
+    const s1 = voltToPct(numVal("sat01.battery_voltage_satellite"));
+    const s2 = voltToPct(numVal("sat02.battery_voltage_satellite"));
+    if (s1 != null) out.sat01 = s1;
+    if (s2 != null) out.sat02 = s2;
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueByKey, device]);
 
   const sourceCounts = useMemo<Record<SignalSource, number>>(() => {
     const c: Record<SignalSource, number> = { master: 0, sat01: 0, sat02: 0 };
@@ -341,6 +368,7 @@ export function DeviceDetailPage({
         firmware={sidebarFirmware}
         hasAlarm={hasActiveAlarm}
         channelSerials={channelSerials}
+        channelBattery={channelBattery}
         activeSource={activeSource}
         onSourceChange={setActiveSource}
         sourceCounts={sourceCounts}
