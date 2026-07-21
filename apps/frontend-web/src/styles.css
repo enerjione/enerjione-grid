@@ -24689,6 +24689,11 @@ th.event-col-category {
 .device-detail-main:has(> .device-overview),
 .device-detail-main:has(> .device-events-fullpanel),
 .device-detail-main:has(> .device-trend-panel) { overflow: hidden; }
+/* Tumu: set kartlari kalan yuksekligi doldurur (dibe kadar, esit yukseklik) */
+.device-detail-main:has(> .device-set) { overflow: hidden; }
+.device-set { flex: 1; min-height: 0; }
+.device-set .device-set-card { height: 100%; }
+.device-set .device-set-measures { align-content: start; }
 /* Trendler paneli kalan yuksekligi doldurur (grafik en asagiya kadar) */
 .device-trend-panel {
   flex: 1;
@@ -25135,23 +25140,30 @@ th.event-col-category {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  border: 1px solid #e8edf3;
+  border-radius: 18px;
   background: #fff;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.2s, transform 0.2s;
 }
-/* Ust renkli aksan seridi (tona gore) */
+.device-set-card:hover { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.09); transform: translateY(-2px); }
+/* Ust renkli aksan seridi (tona gore) — daha belirgin */
 .device-set-card::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 4px;
+  height: 5px;
 }
-.device-set-card.tone-master::before { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
-.device-set-card.tone-green::before { background: linear-gradient(90deg, #4ade80, #22c55e); }
-.device-set-card.tone-amber::before { background: linear-gradient(90deg, #fb923c, #f59e0b); }
+.device-set-card.tone-master::before { background: linear-gradient(90deg, #fcd34d, #f59e0b, #ea580c); }
+.device-set-card.tone-green::before { background: linear-gradient(90deg, #6ee7b7, #22c55e, #16a34a); }
+.device-set-card.tone-amber::before { background: linear-gradient(90deg, #fdba74, #f97316, #ea580c); }
+/* Baslik bolgesi hafif renk tonu (kaynaga gore) */
+.device-set-card.tone-master .device-set-head { background: linear-gradient(180deg, #fffbeb 0%, #fff 100%); }
+.device-set-card.tone-green .device-set-head { background: linear-gradient(180deg, #f0fdf4 0%, #fff 100%); }
+.device-set-card.tone-amber .device-set-head { background: linear-gradient(180deg, #fff7ed 0%, #fff 100%); }
 .device-set-card.is-offline { opacity: 0.6; background: #f8fafc; }
+.device-set-card.is-offline:hover { transform: none; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
 
 .device-set-head {
   display: flex;
@@ -25217,20 +25229,19 @@ th.event-col-category {
   background: #fff;
 }
 .device-set-kpi-icon {
-  font-size: 18px;
-  width: 32px; height: 32px;
+  font-size: 19px;
+  width: 36px; height: 36px;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 9px;
+  border-radius: 11px;
   flex: 0 0 auto;
+  box-shadow: 0 2px 6px rgba(15,23,42,0.08);
 }
-.device-set-kpi.tone-amber .device-set-kpi-icon { background: #fef3c7; color: #d97706; }
-.device-set-kpi.tone-blue .device-set-kpi-icon { background: #dbeafe; color: #2563eb; }
-.device-set-kpi.tone-rose .device-set-kpi-icon { background: #ffe4e6; color: #e11d48; }
-.device-set-kpi.tone-green .device-set-kpi-icon { background: #dcfce7; color: #16a34a; }
-.device-set-kpi.tone-amber .device-set-kpi-icon,
-.device-set-kpi.tone-red .device-set-kpi-icon { }
-.device-set-kpi.tone-red .device-set-kpi-icon { background: #fee2e2; color: #dc2626; }
-.device-set-kpi.tone-slate .device-set-kpi-icon { background: #f1f5f9; color: #94a3b8; }
+.device-set-kpi.tone-amber .device-set-kpi-icon { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+.device-set-kpi.tone-blue .device-set-kpi-icon { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
+.device-set-kpi.tone-rose .device-set-kpi-icon { background: linear-gradient(135deg, #ffe4e6, #fecdd3); color: #e11d48; }
+.device-set-kpi.tone-green .device-set-kpi-icon { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #16a34a; }
+.device-set-kpi.tone-red .device-set-kpi-icon { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+.device-set-kpi.tone-slate .device-set-kpi-icon { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); color: #94a3b8; }
 .device-set-kpi-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .device-set-kpi-value { font-size: 17px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .device-set-kpi-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
