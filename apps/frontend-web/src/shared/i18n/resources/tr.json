@@ -2319,6 +2319,19 @@
       "measure": "Ölçümler",
       "status": "Durum",
       "counter": "Sayaçlar"
+    },
+    "set": {
+      "noData": "Bağlı değil",
+      "noDataLong": "Bu cihaz için veri gelmiyor",
+      "faultStatus": "ARIZA DURUMU",
+      "signal": {
+        "overcurrent": "Aşırı akım",
+        "voltageLoss": "Gerilim kaybı",
+        "currentLoss": "Akım kaybı",
+        "delta": "ΔI/Δt",
+        "permanent": "Kalıcı arıza",
+        "momentary": "Geçici arıza"
+      }
     }
   }
 }

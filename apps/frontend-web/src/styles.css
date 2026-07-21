@@ -25029,6 +25029,181 @@ th.event-col-category {
 .device-events-actor.is-system { color: #94a3b8; }
 
 /* ---- Tumu sekmesi ---- */
+/* ===================== TUMU: SET OZETI (3 cihaz yan yana) ===================== */
+.device-set {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.device-set-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+/* Ust renkli aksan seridi (tona gore) */
+.device-set-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+}
+.device-set-card.tone-master::before { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+.device-set-card.tone-green::before { background: linear-gradient(90deg, #4ade80, #22c55e); }
+.device-set-card.tone-amber::before { background: linear-gradient(90deg, #fb923c, #f59e0b); }
+.device-set-card.is-offline { opacity: 0.6; background: #f8fafc; }
+
+.device-set-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.device-set-icon {
+  font-size: 20px;
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  flex: 0 0 auto;
+}
+.device-set-card.tone-master .device-set-icon { background: #fef3c7; color: #d97706; }
+.device-set-card.tone-green .device-set-icon { background: #dcfce7; color: #16a34a; }
+.device-set-card.tone-amber .device-set-icon { background: #ffedd5; color: #ea580c; }
+.device-set-title { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.device-set-name { font-size: 15px; font-weight: 800; color: #0f172a; }
+.device-set-serial { font-size: 12px; color: #94a3b8; font-weight: 600; font-variant-numeric: tabular-nums; }
+.device-set-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.device-set-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.device-set-status.is-online { color: #15803d; }
+.device-set-status.is-online .device-set-status-dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.18); }
+.device-set-status.is-off { color: #94a3b8; }
+.device-set-status.is-off .device-set-status-dot { background: #cbd5e1; }
+
+/* Bagli degil */
+.device-set-nodata {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 20px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.device-set-nodata .material-symbols-outlined { font-size: 36px; color: #cbd5e1; }
+.device-set-nodata p { margin: 0; }
+
+/* KPI mini grid (2x2) */
+.device-set-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+}
+.device-set-kpi {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 14px;
+  background: #fff;
+}
+.device-set-kpi-icon {
+  font-size: 18px;
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  flex: 0 0 auto;
+}
+.device-set-kpi.tone-amber .device-set-kpi-icon { background: #fef3c7; color: #d97706; }
+.device-set-kpi.tone-blue .device-set-kpi-icon { background: #dbeafe; color: #2563eb; }
+.device-set-kpi.tone-rose .device-set-kpi-icon { background: #ffe4e6; color: #e11d48; }
+.device-set-kpi.tone-green .device-set-kpi-icon { background: #dcfce7; color: #16a34a; }
+.device-set-kpi.tone-amber .device-set-kpi-icon,
+.device-set-kpi.tone-red .device-set-kpi-icon { }
+.device-set-kpi.tone-red .device-set-kpi-icon { background: #fee2e2; color: #dc2626; }
+.device-set-kpi.tone-slate .device-set-kpi-icon { background: #f1f5f9; color: #94a3b8; }
+.device-set-kpi-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.device-set-kpi-value { font-size: 17px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device-set-kpi-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
+
+/* Ariza durumu blogu */
+.device-set-block { padding: 14px 16px; }
+.device-set-block-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+.device-set-status-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.device-set-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.device-set-status-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #334155;
+}
+.device-set-status-name .material-symbols-outlined { font-size: 16px; color: #94a3b8; }
+.device-set-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.device-set-badge .material-symbols-outlined { font-size: 14px; }
+.device-set-badge.is-normal { color: #16a34a; }
+.device-set-badge.is-active { color: #d97706; }
+
+/* Sayaclar */
+.device-set-counters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 16px 16px;
+  margin-top: auto;
+}
+.device-set-counter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+  border-radius: 11px;
+}
+.device-set-counter.tone-red { background: #fef2f2; }
+.device-set-counter.tone-orange { background: #fff7ed; }
+.device-set-counter .material-symbols-outlined { font-size: 20px; }
+.device-set-counter.tone-red .material-symbols-outlined { color: #dc2626; }
+.device-set-counter.tone-orange .material-symbols-outlined { color: #ea580c; }
+.device-set-counter-label { display: block; font-size: 10px; color: #94a3b8; font-weight: 600; }
+.device-set-counter strong { font-size: 20px; font-weight: 800; color: #0f172a; }
+
+@media (max-width: 1100px) {
+  .device-set { grid-template-columns: 1fr; }
+}
+
 .device-all { display: flex; flex-direction: column; gap: 18px; }
 .device-all-source { display: flex; flex-direction: column; gap: 10px; }
 .device-all-source-title {

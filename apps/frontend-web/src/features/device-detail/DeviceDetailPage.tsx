@@ -440,7 +440,7 @@ export function DeviceDetailPage({
         ) : null}
 
         {activeTab === "all" ? (
-          <DeviceAllSignalsTab device={device} values={values} signals={signals} gwOnline={gwOnline} />
+          <DeviceAllSignalsTab device={device} values={values} gwOnline={gwOnline} sourceCounts={sourceCounts} />
         ) : null}
 
         {activeTab === "trends" && token ? (

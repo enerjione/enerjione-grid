@@ -2319,6 +2319,19 @@
       "measure": "Measurements",
       "status": "Status",
       "counter": "Counters"
+    },
+    "set": {
+      "noData": "Offline",
+      "noDataLong": "No data for this device",
+      "faultStatus": "FAULT STATUS",
+      "signal": {
+        "overcurrent": "Overcurrent",
+        "voltageLoss": "Voltage loss",
+        "currentLoss": "Current loss",
+        "delta": "ΔI/Δt",
+        "permanent": "Permanent fault",
+        "momentary": "Momentary fault"
+      }
     }
   }
 }
