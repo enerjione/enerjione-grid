@@ -24559,9 +24559,13 @@ th.event-col-category {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   padding: 0 24px 24px;
   overflow-y: auto;
 }
+/* Genel Bakis aktifken main scroll KAPALI — overview kendi kartlarinda scroll
+   yonetir (Mevcut Durum/Alarmlar/Olaylar ic scroll, dis bosluk yok). */
+.device-detail-main:has(> .device-overview) { overflow: hidden; }
 .device-detail-main .device-detail-tabs {
   position: sticky;
   top: 0;
@@ -24580,13 +24584,21 @@ th.event-col-category {
   color: #64748b;
 }
 
-/* ---- Genel Bakis ---- */
-.device-overview { display: flex; flex-direction: column; gap: 16px; }
+/* ---- Genel Bakis (kalan yuksekligi doldurur, alt bosluk yok) ---- */
+.device-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
 .device-overview-kpis {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 14px;
+  flex: 0 0 auto;
 }
+.device-overview-srchint { flex: 0 0 auto; }
 .device-overview-kpis .device-kpi {
   position: relative;
   border: 1px solid #e8edf3;
@@ -24893,22 +24905,41 @@ th.event-col-category {
 }
 .device-overview-srchint .material-symbols-outlined { font-size: 15px; }
 
-/* ---- Sag kolon: Alarmlar + Son Olaylar ESIT yukseklik, her biri ic scroll ---- */
-.device-overview-grid { align-items: stretch; }
-.device-overview-col { height: 100%; min-height: 0; }
-/* Sag kolon iki karti esit bolussun */
-.device-overview-col:last-child {
+/* ---- Kalan yuksekligi doldur: grid flex:1, kartlar ic scroll ---- */
+.device-overview-grid {
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+.device-overview-col { min-height: 0; display: flex; flex-direction: column; }
+
+/* SOL kolon (Mevcut Durum) — sabit yukseklik (sekme degisse degismez) + ic scroll */
+.device-overview-col:first-child .device-card {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
+.device-overview-col:first-child .device-status {
+  flex: 1;
+  min-height: 0;
+}
+/* Alt-sekme cubugu sabit, sinyal grid'i tasinca ic scroll */
+.device-overview-col:first-child .device-status-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+}
+
+/* SAG kolon: Alarmlar + Son Olaylar ESIT yukseklik (soldan bagimsiz), ic scroll */
+.device-overview-col:last-child { gap: 16px; }
 .device-overview-col:last-child .device-card {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-/* Kart govdesi (baslik disi) tasinca ic scroll */
 .device-overview-col:last-child .device-card .device-alarms-list,
 .device-overview-col:last-child .device-card .device-events,
 .device-overview-col:last-child .device-card .device-alarms-empty {
@@ -24916,7 +24947,6 @@ th.event-col-category {
   min-height: 0;
   overflow-y: auto;
 }
-/* Alarmlar listesi zaten scroll'lu — max-height'i kaldir (flex belirlesin) */
 .device-overview-col:last-child .device-alarms-list { max-height: none; }
 
 /* ---- Son Olaylar: kim (actor) ---- */
