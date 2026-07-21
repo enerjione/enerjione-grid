@@ -24621,21 +24621,25 @@ th.event-col-category {
   display: flex;
   flex-direction: column;
 }
-/* Filtre/toolbar/pager sabit; sadece tablo scroll */
+/* Filtre sabit; tablo scroll; PAGER en altta SABIT (scroll'da kaybolmaz) */
+.device-card.is-events-full { overflow: hidden; }
 .device-card.is-events-full .device-events {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 .device-card.is-events-full .device-events-table { flex: 0 0 auto; }
-.device-card.is-events-full .device-events > .device-events-table {
-  display: table;
-}
-/* Tablo govdesini kaydirmak icin sarmalayici — tablo uzun olursa scroll */
-.device-card.is-events-full { overflow: hidden; }
-.device-card.is-events-full .device-events {
-  overflow-y: auto;
+/* Pager: sticky alt — tablo kaysa da kartin dibinde kalir */
+.device-card.is-events-full .device-events-pager {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  padding: 12px 0 4px;
 }
 /* Bos durum (filtre sonucu bos) — kart ortasinda */
 .device-events-empty.is-filtered {
@@ -25792,12 +25796,14 @@ th.event-col-category {
 }
 .device-events-table.is-full tbody tr:hover td { background: #f8fafc; }
 .device-events-table.is-full tbody tr.is-alarm-row:hover td { background: #fee2e2; }
-.device-events-th-alarm, .device-events-td-alarm { width: 100px; text-align: center; }
+/* Full kolon sirasi: Durum | Kaynak | Zaman | Olay | Kim */
+.device-events-table.is-full .device-events-th-status,
+.device-events-table.is-full .device-events-td-status { width: 120px; text-align: left; }
 .device-events-th-time { width: 155px; white-space: nowrap; }
 .device-events-table.is-full .device-events-msg { white-space: normal; }
-/* Kaynak sutunu (Olay ile Kim arasi) — ortali */
 .device-events-th-channel { width: 100px; text-align: center; }
 .device-events-table.is-full .device-events-channel { width: 100px; text-align: center; }
+.device-events-who-empty { color: #cbd5e1; }
 .device-events-chan {
   display: inline-block;
   font-size: 11px;
@@ -25809,12 +25815,8 @@ th.event-col-category {
 .device-events-chan.tone-green { background: #dcfce7; color: #15803d; }
 .device-events-chan.tone-amber { background: #fef3c7; color: #b45309; }
 .device-events-chan-none { color: #cbd5e1; }
-/* Kim + Durum kolonlari sabit + basik-icerik ORTALI */
-.device-events-table.is-full td.device-events-who { width: 140px; text-align: center; }
-.device-events-table.is-full th:nth-child(5) { text-align: center; }
-.device-events-table.is-full .device-events-who .device-events-actor { justify-content: center; }
-.device-events-table.is-full .device-events-th-status,
-.device-events-table.is-full .device-events-td-status { width: 120px; text-align: center; }
+/* Kim kolonu sola hizali (Durum artik en basta, ortalanmaz) */
+.device-events-table.is-full td.device-events-who { width: 150px; text-align: left; }
 .device-events-alarm-none { color: #cbd5e1; }
 .device-events-table.is-full .device-events-time {
   white-space: nowrap;

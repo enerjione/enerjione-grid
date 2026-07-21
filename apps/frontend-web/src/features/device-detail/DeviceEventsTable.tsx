@@ -182,16 +182,15 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
   // gizlemesin — kullanici filtreyi temizleyebilsin). Bos durum tablo yerine.
 
   const exportCsv = () => {
-    const head = ["Zaman", "Alarm", "Olay", "Kaynak", "Kim", "Durum"];
+    const head = ["Durum", "Kaynak", "Zaman", "Olay", "Kim"];
     const esc = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
     const lines = allRows.map((r) =>
       [
-        formatDateTime(r.ts),
-        r.isAlarm ? "ALARM" : "",
-        r.message,
+        r.isAlarm ? "ALARM" : r.statusLabel,
         r.channel ? CHANNEL_META[r.channel].label : "",
-        r.actor ?? "Sistem",
-        r.statusLabel,
+        formatDateTime(r.ts),
+        r.message,
+        r.actor ?? "",
       ]
         .map(esc)
         .join(",")
@@ -279,17 +278,12 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
       <table className={`device-events-table${isFull ? " is-full" : " is-compact"}`}>
         <thead>
           <tr>
-            {/* Compact: Durum EN BASTA. Full: Alarm sutunu basta. */}
-            {isFull ? (
-              <th className="device-events-th-alarm">{t("deviceDetail.events.alarmCol")}</th>
-            ) : (
-              <th className="device-events-th-status">{t("deviceDetail.events.status")}</th>
-            )}
+            {/* Durum EN BASTA (hem full hem compact), yaninda Kaynak. */}
+            <th className="device-events-th-status">{t("deviceDetail.events.status")}</th>
+            {isFull ? <th className="device-events-th-channel">{t("deviceDetail.events.channel")}</th> : null}
             <th className="device-events-th-time">{t("deviceDetail.events.time")}</th>
             <th>{t("deviceDetail.events.event")}</th>
-            {isFull ? <th className="device-events-th-channel">{t("deviceDetail.events.channel")}</th> : null}
             <th>{t("deviceDetail.events.who")}</th>
-            {isFull ? <th className="device-events-th-status">{t("deviceDetail.events.status")}</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -305,20 +299,21 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
             );
             return (
             <tr key={r.id} className={r.isAlarm ? "is-alarm-row" : undefined}>
+              {/* 1. Durum (en basta) */}
+              <td className="device-events-td-status is-first">{statusCell}</td>
+              {/* 2. Kaynak (full) */}
               {isFull ? (
-                <td className="device-events-td-alarm">
-                  {r.isAlarm ? (
-                    <span className="device-events-alarm-tag">
-                      <span className="material-symbols-outlined">notification_important</span>
-                      {t("deviceDetail.events.alarm")}
+                <td className="device-events-channel">
+                  {r.channel ? (
+                    <span className={`device-events-chan tone-${CHANNEL_META[r.channel].tone}`}>
+                      {CHANNEL_META[r.channel].label}
                     </span>
                   ) : (
-                    <span className="device-events-alarm-none" aria-hidden="true">—</span>
+                    <span className="device-events-chan-none">—</span>
                   )}
                 </td>
-              ) : (
-                <td className="device-events-td-status is-first">{statusCell}</td>
-              )}
+              ) : null}
+              {/* 3. Zaman */}
               <td className="device-events-time">
                 {isFull ? (
                   <>
@@ -334,18 +329,9 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
                   </span>
                 )}
               </td>
+              {/* 4. Olay */}
               <td className="device-events-msg">{r.message}</td>
-              {isFull ? (
-                <td className="device-events-channel">
-                  {r.channel ? (
-                    <span className={`device-events-chan tone-${CHANNEL_META[r.channel].tone}`}>
-                      {CHANNEL_META[r.channel].label}
-                    </span>
-                  ) : (
-                    <span className="device-events-chan-none">—</span>
-                  )}
-                </td>
-              ) : null}
+              {/* 5. Kim — sadece gercek kullanici; sistem/otomatik ise BOS */}
               <td className="device-events-who">
                 {r.actor ? (
                   <span className="device-events-actor">
@@ -353,15 +339,9 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
                     {r.actor}
                   </span>
                 ) : (
-                  <span className="device-events-actor is-system">
-                    <span className="material-symbols-outlined">smart_toy</span>
-                    {t("deviceDetail.events.system")}
-                  </span>
+                  <span className="device-events-who-empty" aria-hidden="true">—</span>
                 )}
               </td>
-              {isFull ? (
-                <td className="device-events-td-status">{statusCell}</td>
-              ) : null}
             </tr>
             );
           })}
