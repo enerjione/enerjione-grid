@@ -2279,7 +2279,11 @@
       "system": "Sistem",
       "alarm": "ALARM",
       "export": "CSV indir",
-      "total": "{{count}} olay"
+      "total": "{{count}} olay",
+      "alarmCol": "Alarm",
+      "prev": "Önceki",
+      "next": "Sonraki",
+      "pageOf": "Sayfa {{page}} / {{total}}"
     }
   }
 }

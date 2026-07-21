@@ -57,12 +57,15 @@ function commandTone(status: string): Row["tone"] {
   return "info";
 }
 
+const PAGE_SIZE = 15;
+
 export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant }: Props) {
   const { t } = useTranslation();
   const isFull = variant === "full";
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [commands, setCommands] = useState<DeviceCommandRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
 
   const reload = useCallback(async () => {
     if (!token || !deviceCode) return;
@@ -70,20 +73,21 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
     try {
       const [ev, cmd] = await Promise.all([
         fetchSystemEvents(token).catch(() => [] as SystemEvent[]),
-        fetchDeviceCommands(token, deviceCode, 25).catch(() => [] as DeviceCommandRow[]),
+        fetchDeviceCommands(token, deviceCode, isFull ? 100 : 25).catch(() => [] as DeviceCommandRow[]),
       ]);
       setEvents(ev.filter((e) => e.device_code === deviceCode));
       setCommands(cmd);
     } finally {
       setLoading(false);
     }
-  }, [token, deviceCode]);
+  }, [token, deviceCode, isFull]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  const rows = useMemo<Row[]>(() => {
+  // Tum satirlar (sirali). Pagination full modda uygulanir.
+  const allRows = useMemo<Row[]>(() => {
     const evRows: Row[] = events.map((e) => ({
       id: `ev-${e.id}`,
       ts: e.created_at,
@@ -106,11 +110,16 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
       tone: commandTone(c.status),
       statusLabel: t(`deviceDetail.commands.status.${c.status}`, { defaultValue: c.status }),
     }));
-    const all = [...evRows, ...cmdRows].sort(
-      (a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()
-    );
-    return limit ? all.slice(0, limit) : all;
-  }, [events, commands, limit, t]);
+    return [...evRows, ...cmdRows].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  }, [events, commands, t]);
+
+  const pageCount = Math.max(1, Math.ceil(allRows.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const rows = useMemo<Row[]>(() => {
+    if (limit) return allRows.slice(0, limit); // compact (Genel Bakis)
+    if (!isFull) return allRows;
+    return allRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  }, [allRows, limit, isFull, safePage]);
 
   if (loading && rows.length === 0) {
     return (
@@ -129,10 +138,12 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
   }
 
   const exportCsv = () => {
-    const head = ["Zaman", "Olay", "Kim", "Durum"];
+    const head = ["Zaman", "Alarm", "Olay", "Kim", "Durum"];
     const esc = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
-    const lines = rows.map((r) =>
-      [formatDateTime(r.ts), r.message, r.actor ?? "Sistem", r.statusLabel].map(esc).join(",")
+    const lines = allRows.map((r) =>
+      [formatDateTime(r.ts), r.isAlarm ? "ALARM" : "", r.message, r.actor ?? "Sistem", r.statusLabel]
+        .map(esc)
+        .join(",")
     );
     const blob = new Blob(["﻿" + [head.map(esc).join(","), ...lines].join("\r\n")], {
       type: "text/csv;charset=utf-8;",
@@ -149,17 +160,18 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
     <div className={`device-events${isFull ? " is-full" : ""}`}>
       {isFull ? (
         <div className="device-events-toolbar">
-          <span className="device-events-count">{t("deviceDetail.events.total", { count: rows.length })}</span>
+          <span className="device-events-count">{t("deviceDetail.events.total", { count: allRows.length })}</span>
           <button type="button" className="device-events-export" onClick={exportCsv}>
             <span className="material-symbols-outlined">download</span>
             {t("deviceDetail.events.export")}
           </button>
         </div>
       ) : null}
-      <table className="device-events-table">
+      <table className={`device-events-table${isFull ? " is-full" : ""}`}>
         <thead>
           <tr>
-            <th>{t("deviceDetail.events.time")}</th>
+            {isFull ? <th className="device-events-th-alarm">{t("deviceDetail.events.alarmCol")}</th> : null}
+            <th className="device-events-th-time">{t("deviceDetail.events.time")}</th>
             <th>{t("deviceDetail.events.event")}</th>
             <th>{t("deviceDetail.events.who")}</th>
             <th className="device-events-th-status">{t("deviceDetail.events.status")}</th>
@@ -168,9 +180,21 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className={r.isAlarm ? "is-alarm-row" : undefined}>
+              {isFull ? (
+                <td className="device-events-td-alarm">
+                  {r.isAlarm ? (
+                    <span className="device-events-alarm-tag">
+                      <span className="material-symbols-outlined">notification_important</span>
+                      {t("deviceDetail.events.alarm")}
+                    </span>
+                  ) : (
+                    <span className="device-events-alarm-none" aria-hidden="true">—</span>
+                  )}
+                </td>
+              ) : null}
               <td className="device-events-time">
                 <span className={`device-events-dot tone-${r.tone}`} aria-hidden="true" />
-                {r.isAlarm ? (
+                {!isFull && r.isAlarm ? (
                   <span className="device-events-alarm-tag">
                     <span className="material-symbols-outlined">notification_important</span>
                     {t("deviceDetail.events.alarm")}
@@ -199,6 +223,33 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
           ))}
         </tbody>
       </table>
+
+      {isFull && pageCount > 1 ? (
+        <div className="device-events-pager">
+          <button
+            type="button"
+            className="device-events-pagebtn"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={safePage === 0}
+          >
+            <span className="material-symbols-outlined">chevron_left</span>
+            {t("deviceDetail.events.prev")}
+          </button>
+          <span className="device-events-pageinfo">
+            {t("deviceDetail.events.pageOf", { page: safePage + 1, total: pageCount })}
+          </span>
+          <button
+            type="button"
+            className="device-events-pagebtn"
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            disabled={safePage >= pageCount - 1}
+          >
+            {t("deviceDetail.events.next")}
+            <span className="material-symbols-outlined">chevron_right</span>
+          </button>
+        </div>
+      ) : null}
+
       {limit && onViewAll ? (
         <button type="button" className="device-events-viewall" onClick={onViewAll}>
           {t("deviceDetail.overview.viewAllEvents")}

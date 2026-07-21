@@ -181,12 +181,19 @@ export function DeviceDetailPage({
   };
 
   // Sidebar: master IP + kanal (master/sat01/sat02) seri no'lari.
-  const sidebarIp = strVal("master.ipv4_address");
+  // IP: G110 string (info_ipv4_address). Serial: analog (group 30) -> sayi,
+  //   value_string DEGIL value; string variant (info_serial_number) fallback.
+  const sidebarIp = strVal("master.info_ipv4_address") ?? strVal("master.info_modem_ip_address");
+  const serialOf = (src: SignalSource): string | undefined => {
+    const n = numVal(`${src}.serial_number`);
+    if (n != null && Number.isFinite(n) && n > 0) return String(Math.round(n));
+    return strVal(`${src}.info_serial_number`);
+  };
   const channelSerials = useMemo<Partial<Record<SignalSource, string>>>(() => {
     const out: Partial<Record<SignalSource, string>> = {};
-    const m = strVal("master.serial_number");
-    const s1 = strVal("sat01.serial_number");
-    const s2 = strVal("sat02.serial_number");
+    const m = serialOf("master");
+    const s1 = serialOf("sat01");
+    const s2 = serialOf("sat02");
     if (m) out.master = m;
     if (s1) out.sat01 = s1;
     if (s2) out.sat02 = s2;

@@ -2279,7 +2279,11 @@
       "system": "System",
       "alarm": "ALARM",
       "export": "Export CSV",
-      "total": "{{count}} events"
+      "total": "{{count}} events",
+      "alarmCol": "Alarm",
+      "prev": "Prev",
+      "next": "Next",
+      "pageOf": "Page {{page}} / {{total}}"
     }
   }
 }

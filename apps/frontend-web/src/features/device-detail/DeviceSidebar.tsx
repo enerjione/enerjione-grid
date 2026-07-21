@@ -142,30 +142,6 @@ export function DeviceSidebar({
             )}
           </ul>
         ) : null}
-
-        {/* Mini harita (topoloji/cihaz konumu) */}
-        {hasGeo ? (
-          <div className="device-sidebar-map">
-            <MapContainer
-              center={[lat as number, lon as number]}
-              zoom={14}
-              zoomControl={false}
-              dragging={false}
-              scrollWheelZoom={false}
-              doubleClickZoom={false}
-              attributionControl={false}
-              style={{ height: "150px", width: "100%" }}
-            >
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN} />
-            </MapContainer>
-          </div>
-        ) : (
-          <div className="device-sidebar-nomap">
-            <span className="material-symbols-outlined">location_off</span>
-            {t("deviceDetail.sidebar.noLocation")}
-          </div>
-        )}
       </section>
 
       {/* ---- Kanal secimi (seri no'lu) ---- */}
@@ -191,6 +167,39 @@ export function DeviceSidebar({
             );
           })}
         </ul>
+      </section>
+
+      {/* ---- Konum + mini harita (en altta) ---- */}
+      <section className="device-sidebar-section">
+        <span className="device-sidebar-kicker">{t("deviceDetail.meta.location")}</span>
+        {hasGeo ? (
+          <>
+            <div className="device-sidebar-map">
+              <MapContainer
+                center={[lat as number, lon as number]}
+                zoom={14}
+                zoomControl={false}
+                dragging={false}
+                scrollWheelZoom={false}
+                doubleClickZoom={false}
+                attributionControl={false}
+                style={{ height: "150px", width: "100%" }}
+              >
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN} />
+              </MapContainer>
+            </div>
+            <div className="device-sidebar-coords">
+              <span className="material-symbols-outlined">my_location</span>
+              {(lat as number).toFixed(5)}, {(lon as number).toFixed(5)}
+            </div>
+          </>
+        ) : (
+          <div className="device-sidebar-nomap">
+            <span className="material-symbols-outlined">location_off</span>
+            {t("deviceDetail.sidebar.noLocation")}
+          </div>
+        )}
       </section>
     </aside>
   );

@@ -25136,6 +25136,54 @@ th.event-col-category {
 .device-events-table tr.is-alarm-row { background: #fef2f2; }
 .device-events-table tr.is-alarm-row:hover { background: #fee2e2; }
 
+/* Full: ayri Alarm sutunu + zaman sutunu sabit genislik */
+.device-events-th-alarm, .device-events-td-alarm { width: 90px; }
+.device-events-th-time { width: 160px; white-space: nowrap; }
+.device-events-alarm-none { color: #cbd5e1; }
+.device-events-table.is-full .device-events-time {
+  display: table-cell;
+  white-space: nowrap;
+}
+.device-events-table.is-full .device-events-time > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pagination */
+.device-events-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #f1f5f9;
+}
+.device-events-pagebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.device-events-pagebtn:hover:not(:disabled) { background: #f8fafc; border-color: #94a3b8; }
+.device-events-pagebtn:disabled { opacity: 0.4; cursor: default; }
+.device-events-pagebtn .material-symbols-outlined { font-size: 18px; }
+.device-events-pageinfo {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- Komutlar: accordion ---- */
 .device-cmd-accordion {
   border: 1px solid #e2e8f0;
@@ -25287,6 +25335,18 @@ th.event-col-category {
   color: #334155;
   font-variant-numeric: tabular-nums;
 }
+
+/* Koordinat metni (harita alti) */
+.device-sidebar-coords {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+.device-sidebar-coords .material-symbols-outlined { font-size: 15px; color: #94a3b8; }
 
 /* Konum yok durumu */
 .device-sidebar-nomap {
