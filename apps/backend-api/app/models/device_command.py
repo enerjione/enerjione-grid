@@ -32,10 +32,12 @@ class DeviceCommand(Base):
     # SignalCatalog degisse bile gonderilen komut sabit kalsin.
     command: Mapped[str] = mapped_column(String(80))
     dnp3_index: Mapped[int] = mapped_column(Integer)
-    op_type: Mapped[str] = mapped_column(String(20), default="pulse_on")
+    # Horstmann SN2 Device Profile PULSE desteklemez; yalnizca LATCH_ON/LATCH_OFF.
+    # Default latch_on (pulse_on cihazda NOT_SUPPORTED / SELECT_FAIL doner).
+    op_type: Mapped[str] = mapped_column(String(20), default="latch_on")
     count: Mapped[int] = mapped_column(Integer, default=1)
-    on_time_ms: Mapped[int] = mapped_column(Integer, default=100)
-    off_time_ms: Mapped[int] = mapped_column(Integer, default=100)
+    on_time_ms: Mapped[int] = mapped_column(Integer, default=0)
+    off_time_ms: Mapped[int] = mapped_column(Integer, default=0)
 
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     result_status: Mapped[str | None] = mapped_column(String(40), nullable=True)

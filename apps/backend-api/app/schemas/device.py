@@ -75,13 +75,16 @@ class DeviceCommandRequest(BaseModel):
 
     `command` = SignalCatalog'daki binary_output sinyalinin slug'i (key'in
     `master.` sonrasi). Backend bunu katalogdan `dnp3_index`'e cevirir; ham
-    index kabul edilmez (allowlist). Pulse parametreleri opsiyonel.
+    index kabul edilmez (allowlist).
+
+    LATCH_ON kullanilir (SN2 PULSE desteklemez); LATCH'te on/off time anlamsiz,
+    default 0. count=1 standart CROB.
     """
 
     command: str = Field(min_length=1, max_length=80)
     count: int = Field(default=1, ge=1, le=10)
-    on_time_ms: int = Field(default=100, ge=0, le=60000)
-    off_time_ms: int = Field(default=100, ge=0, le=60000)
+    on_time_ms: int = Field(default=0, ge=0, le=60000)
+    off_time_ms: int = Field(default=0, ge=0, le=60000)
 
 
 class DeviceCommandQueued(BaseModel):

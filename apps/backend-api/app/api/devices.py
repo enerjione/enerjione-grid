@@ -271,6 +271,10 @@ def queue_device_command(
         device_code=device.code,
         command=slug,
         dnp3_index=index,
+        # Horstmann SN2 Device Profile PULSE DESTEKLEMEZ (yalniz LATCH_ON/OFF).
+        # op_type ACIKCA latch_on — model default'una guvenme (eski satirlar/
+        # deploy gecikmesi pulse_on birakabilir; cihaz NOT_SUPPORTED doner).
+        op_type="latch_on",
         count=payload.count,
         on_time_ms=payload.on_time_ms,
         off_time_ms=payload.off_time_ms,
