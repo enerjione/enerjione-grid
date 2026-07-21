@@ -229,11 +229,17 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
 
   // ---- ECharts option (koyu tema) ----
   const chartOption = useMemo(() => {
-    const yAxes = [
-      { type: "value" as const, name: units[0] ?? "", position: "left" as const, splitLine: { lineStyle: { color: "rgba(148,163,184,0.12)" } }, axisLabel: { color: "#94a3b8" }, nameTextStyle: { color: "#94a3b8" } },
-    ];
+    const mkAxis = (name: string, position: "left" | "right", showSplit: boolean) => ({
+      type: "value" as const,
+      name,
+      position,
+      splitLine: { lineStyle: { color: showSplit ? "rgba(148,163,184,0.12)" : "rgba(148,163,184,0)" } },
+      axisLabel: { color: "#94a3b8" },
+      nameTextStyle: { color: "#94a3b8" },
+    });
+    const yAxes = [mkAxis(units[0] ?? "", "left", true)];
     if (units[1] != null) {
-      yAxes.push({ type: "value", name: units[1], position: "right", splitLine: { lineStyle: { color: "rgba(148,163,184,0)" } }, axisLabel: { color: "#94a3b8" }, nameTextStyle: { color: "#94a3b8" } });
+      yAxes.push(mkAxis(units[1], "right", false));
     }
     return {
       backgroundColor: "transparent",
