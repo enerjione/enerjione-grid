@@ -2158,7 +2158,7 @@
       },
       "noPermission": "Bu cihaza komut gönderme yetkiniz yok.",
       "historyTitle": "Komut Geçmişi",
-      "asyncNote": "Not: Yapılandırma, yükleme ve firmware komutları cihazda arka planda işlenir; \"Cihaza iletildi\" komutun ulaştığını gösterir, işlemin bitişi cihaza bağlıdır ve zaman alabilir."
+      "asyncNote": "Not: Yapılandırma, yükleme ve firmware komutları cihazda arka planda işlenir. \"Cihaza iletildi\" komutun ulaştığını gösterir; işlemin bitişi cihaza bağlıdır ve zaman alabilir. Bazı komutlarda cihaz işlem için modemi/bağlantıyı kısa süre kapatabilir (FTP indirme/yükleme); bu sırada geçici \"çevrimdışı\" görünmesi normaldir, cihaz işlem bitince yeniden bağlanır."
     },
     "tabs": {
       "measures": "Ölçümler",
