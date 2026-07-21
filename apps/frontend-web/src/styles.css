@@ -23982,6 +23982,169 @@ th.event-col-category {
 }
 
 /* ---- Grafik paneli ---- */
+/* ===================== TRENDLER — coklu sinyal + kaynak ===================== */
+.device-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+.device-trend-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.device-trend-ctrl-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-right: 8px;
+}
+/* Sinyal cip'leri */
+.device-trend-signals { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.device-trend-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+.device-trend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.device-trend-chip:hover { background: #f8fafc; }
+.device-trend-chip.active { background: #fff; font-weight: 700; }
+.device-trend-chip-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.device-trend-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
+}
+/* Kaynak checkbox */
+.device-trend-sources { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.device-trend-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+}
+.device-trend-src.active { color: #0f172a; }
+.device-trend-src input { accent-color: #0ea5e9; cursor: pointer; }
+.device-trend-src-dash {
+  width: 20px;
+  height: 0;
+  border-top: 2px solid #94a3b8;
+}
+.device-trend-src-dash[data-src="sat01"] { border-top-style: dashed; }
+.device-trend-src-dash[data-src="sat02"] { border-top-style: dotted; }
+
+/* Zaman araligi */
+.device-trend-ranges { display: inline-flex; gap: 4px; }
+.device-trend-range {
+  padding: 7px 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.device-trend-range:hover { background: #f8fafc; }
+.device-trend-range.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+
+/* Ozel tarih */
+.device-trend-custom {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
+}
+.device-trend-custom label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.device-trend-custom input {
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+/* Grafik alani */
+.device-trend-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 340px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+}
+.device-trend-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 300px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.device-trend-empty .material-symbols-outlined { font-size: 40px; color: #cbd5e1; }
+.device-trend-empty.is-error { color: #b91c1c; }
+.device-trend-empty.is-error .material-symbols-outlined { color: #ef4444; }
+.device-trend-empty p { margin: 0; }
+
+/* Legend (seri chip'leri) */
+.device-trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 4px 2px;
+}
+.device-trend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.device-trend-legend-line { width: 20px; height: 3px; border-radius: 2px; }
+
+@media (max-width: 1024px) {
+  .device-trend-controls-row { flex-direction: column; align-items: stretch; gap: 12px; }
+}
+
 .device-chart-panel {
   display: flex;
   flex-direction: column;

@@ -1,10 +1,13 @@
 /**
- * DeviceChartsPanel — historian (telemetry_history) zaman serisi grafikleri.
+ * DeviceChartsPanel — historian (telemetry_history) COKLU sinyal trend analizi.
  *
- * Secili kaynak (master/sat01/sat02) icin numeric sinyalleri listeler; kullanici
- * bir sinyal + zaman araligi secer, GET /devices/{code}/history'den seri cekilir.
- * Aralik/bucket otomatik: kisa aralik ham (raw), gunluk 1dk, haftalik 1saat
- * aggregate — ham veri patlamasini onler. String sinyaller (value NULL) haric.
+ * Kullanici birden fazla sinyal (suffix bazli) + kaynak (master/sat01/sat02)
+ * secer; her (sinyal x kaynak) kombinasyonu ayri seri olarak TEK grafikte
+ * cizilir. Renk = sinyal, cizgi stili (duz/kesikli/noktali) = kaynak.
+ *
+ * Backend history TEK sinyal doner; coklu icin her seri AYRI fetch (Promise.all,
+ * cancellation flag). Aralik/bucket otomatik (raw/1m/1h). Ozel tarih araligi da
+ * secilebilir. Secim localStorage'a kaydedilir (cihaza donunce ayni gorunum).
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -32,18 +35,8 @@ import type {
   TelemetryHistoryPoint,
 } from "../../shared/types";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  TimeScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, TimeScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
-// Zaman araliklari — bucket otomatik secilir (ham veri patlamasini onlemek icin).
 const RANGES: { key: string; hours: number; bucket: "raw" | "1m" | "1h" }[] = [
   { key: "1h", hours: 1, bucket: "raw" },
   { key: "6h", hours: 6, bucket: "raw" },
@@ -51,10 +44,18 @@ const RANGES: { key: string; hours: number; bucket: "raw" | "1m" | "1h" }[] = [
   { key: "7d", hours: 168, bucket: "1h" },
 ];
 
-// Grafik cizgi rengi — tema-notr, erisilebilir (emerald, proje aksani).
-const LINE = "#0ea5e9";
-const LINE_FILL = "rgba(14, 165, 233, 0.12)";
-const BAND = "rgba(14, 165, 233, 0.10)"; // min-max band (aggregate)
+// Sinyal renk paleti (indekse gore deterministik, ayirt edilebilir).
+const PALETTE = [
+  "#0ea5e9", "#f59e0b", "#22c55e", "#ef4444", "#8b5cf6",
+  "#ec4899", "#14b8a6", "#f97316", "#3b82f6", "#84cc16",
+];
+// Kaynak -> cizgi stili (borderDash) + isim.
+const SOURCE_META: Record<SignalSource, { label: string; dash: number[] }> = {
+  master: { label: "Master", dash: [] },
+  sat01: { label: "Sat 01", dash: [6, 3] },
+  sat02: { label: "Sat 02", dash: [2, 3] },
+};
+const ALL_SOURCES: SignalSource[] = ["master", "sat01", "sat02"];
 
 type Props = {
   deviceCode: string;
@@ -64,6 +65,15 @@ type Props = {
 };
 
 type Point = { x: number; y: number | null };
+type Bucket = "raw" | "1m" | "1h";
+
+type SavedView = {
+  suffixes: string[];
+  sources: SignalSource[];
+  rangeKey: string;
+  customFrom?: string;
+  customTo?: string;
+};
 
 function isAggregate(
   rows: TelemetryHistoryPoint[] | TelemetryAggregatePoint[]
@@ -71,128 +81,196 @@ function isAggregate(
   return rows.length > 0 && "avg_value" in rows[0];
 }
 
+function suffixOf(key: string): string {
+  const i = key.indexOf(".");
+  return i >= 0 ? key.slice(i + 1) : key;
+}
+
+// localStorage yukle/kaydet (quota/devre-disi sessiz yut).
+function loadView(deviceCode: string): SavedView | null {
+  try {
+    const raw = window.localStorage.getItem(`hsl.device-trends.${deviceCode}`);
+    return raw ? (JSON.parse(raw) as SavedView) : null;
+  } catch {
+    return null;
+  }
+}
+function saveView(deviceCode: string, v: SavedView): void {
+  try {
+    window.localStorage.setItem(`hsl.device-trends.${deviceCode}`, JSON.stringify(v));
+  } catch {
+    /* sessiz */
+  }
+}
+
 export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: Props) {
   const { t } = useTranslation();
-  const [rangeKey, setRangeKey] = useState<string>("6h");
-  const [signalKey, setSignalKey] = useState<string>("");
+
+  // Trend'e uygun sinyaller (analog/counter), suffix bazinda (kaynak-bagimsiz).
+  // Ayni suffix birden cok kaynakta olabilir; label/unit ilk gorulenden.
+  const suffixCatalog = useMemo(() => {
+    const m = new Map<string, { label: string; unit: string | null; sources: Set<SignalSource> }>();
+    for (const s of signals) {
+      if (s.data_type !== "analog" && s.data_type !== "counter" && s.data_type !== "analog_output") continue;
+      if (!s.is_active) continue;
+      const suf = suffixOf(s.key);
+      const entry = m.get(suf) ?? { label: s.label, unit: s.unit ?? null, sources: new Set<SignalSource>() };
+      entry.sources.add(s.source);
+      m.set(suf, entry);
+    }
+    return m;
+  }, [signals]);
+
+  const suffixList = useMemo(
+    () => [...suffixCatalog.entries()].map(([suffix, v]) => ({ suffix, ...v })).sort((a, b) => a.label.localeCompare(b.label)),
+    [suffixCatalog]
+  );
+
+  // ---- State (localStorage'dan lazy init) ----
+  const saved = useMemo(() => loadView(deviceCode), [deviceCode]);
+  const [suffixes, setSuffixes] = useState<string[]>(() => {
+    if (saved?.suffixes?.length) return saved.suffixes;
+    // Varsayilan: akim (yoksa ilk sinyal).
+    const def = suffixCatalog.has("actual_current") ? "actual_current" : suffixList[0]?.suffix;
+    return def ? [def] : [];
+  });
+  const [sources, setSources] = useState<SignalSource[]>(() => saved?.sources?.length ? saved.sources : [activeSource]);
+  const [rangeKey, setRangeKey] = useState<string>(() => saved?.rangeKey ?? "6h");
+  const [customOn, setCustomOn] = useState<boolean>(() => rangeKey === "custom");
+  const [customFrom, setCustomFrom] = useState<string>(() => saved?.customFrom ?? "");
+  const [customTo, setCustomTo] = useState<string>(() => saved?.customTo ?? "");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [series, setSeries] = useState<{ avg: Point[]; min: Point[]; max: Point[] }>({
-    avg: [], min: [], max: [],
-  });
+  // seriKey -> {label, points, color, dash, unit}
+  const [series, setSeries] = useState<
+    { key: string; label: string; points: Point[]; color: string; dash: number[]; unit: string | null }[]
+  >([]);
 
-  // Bu kaynagin grafiklenebilir (numeric) sinyalleri: analog/counter/analog_output.
-  const numericSignals = useMemo(
-    () =>
-      signals
-        .filter(
-          (s) =>
-            s.source === activeSource &&
-            (s.data_type === "analog" ||
-              s.data_type === "counter" ||
-              s.data_type === "analog_output")
-        )
-        .sort((a, b) => a.display_order - b.display_order),
-    [signals, activeSource]
-  );
-
-  // Kaynak degisince gecerli sinyal secimi kaynakta yoksa ilkine dus.
+  // Secimi localStorage'a kaydet.
   useEffect(() => {
-    if (numericSignals.length === 0) {
-      setSignalKey("");
+    saveView(deviceCode, { suffixes, sources, rangeKey, customFrom, customTo });
+  }, [deviceCode, suffixes, sources, rangeKey, customFrom, customTo]);
+
+  // Aktif seri anahtarlari: secili suffix x secili kaynak (katalogda varsa).
+  const seriesKeys = useMemo(() => {
+    const out: { seriesKey: string; suffix: string; source: SignalSource; label: string; unit: string | null; color: string; dash: number[] }[] = [];
+    suffixes.forEach((suf, si) => {
+      const cat = suffixCatalog.get(suf);
+      if (!cat) return;
+      for (const src of sources) {
+        if (!cat.sources.has(src)) continue; // o kaynakta bu sinyal yok
+        out.push({
+          seriesKey: `${src}.${suf}`,
+          suffix: suf,
+          source: src,
+          label: cat.label,
+          unit: cat.unit,
+          color: PALETTE[si % PALETTE.length],
+          dash: SOURCE_META[src].dash,
+        });
+      }
+    });
+    return out;
+  }, [suffixes, sources, suffixCatalog]);
+
+  // ---- Veri cek (her seri ayri fetch, Promise.all) ----
+  useEffect(() => {
+    if (!token || seriesKeys.length === 0) {
+      setSeries([]);
       return;
     }
-    if (!numericSignals.some((s) => s.key === signalKey)) {
-      setSignalKey(numericSignals[0].key);
-    }
-  }, [numericSignals, signalKey]);
-
-  const range = RANGES.find((r) => r.key === rangeKey) ?? RANGES[1];
-  const unit = useMemo(
-    () => signals.find((s) => s.key === signalKey)?.unit ?? "",
-    [signals, signalKey]
-  );
-
-  useEffect(() => {
-    if (!signalKey || !token) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const since = new Date(Date.now() - range.hours * 3600_000).toISOString();
-    fetchDeviceHistory(token, deviceCode, signalKey, {
-      bucket: range.bucket,
-      since,
-      limit: 10000,
-    })
-      .then((rows) => {
+
+    // Zaman penceresi: ozel varsa custom, yoksa hazir aralik.
+    let sinceISO: string;
+    let untilISO: string | undefined;
+    let bucket: Bucket;
+    if (customOn && customFrom && customTo) {
+      sinceISO = new Date(customFrom).toISOString();
+      untilISO = new Date(customTo).toISOString();
+      const spanH = (new Date(customTo).getTime() - new Date(customFrom).getTime()) / 3600_000;
+      bucket = spanH <= 6 ? "raw" : spanH <= 48 ? "1m" : "1h";
+    } else {
+      const range = RANGES.find((r) => r.key === rangeKey) ?? RANGES[1];
+      sinceISO = new Date(Date.now() - range.hours * 3600_000).toISOString();
+      bucket = range.bucket;
+    }
+
+    Promise.all(
+      seriesKeys.map((sk) =>
+        fetchDeviceHistory(token, deviceCode, sk.seriesKey, {
+          bucket,
+          since: sinceISO,
+          until: untilISO,
+          limit: 10000,
+        })
+          .then((rows) => {
+            const points: Point[] = isAggregate(rows)
+              ? rows.map((r) => ({ x: new Date(r.bucket).getTime(), y: r.avg_value }))
+              : (rows as TelemetryHistoryPoint[]).map((r) => ({ x: new Date(r.source_timestamp).getTime(), y: r.value }));
+            return { ...sk, points };
+          })
+          .catch(() => ({ ...sk, points: [] as Point[] }))
+      )
+    )
+      .then((results) => {
         if (cancelled) return;
-        if (isAggregate(rows)) {
-          setSeries({
-            avg: rows.map((r) => ({ x: new Date(r.bucket).getTime(), y: r.avg_value })),
-            min: rows.map((r) => ({ x: new Date(r.bucket).getTime(), y: r.min_value })),
-            max: rows.map((r) => ({ x: new Date(r.bucket).getTime(), y: r.max_value })),
-          });
-        } else {
-          setSeries({
-            avg: rows.map((r) => ({ x: new Date(r.source_timestamp).getTime(), y: r.value })),
-            min: [],
-            max: [],
-          });
-        }
+        setSeries(
+          results.map((r) => ({
+            key: r.seriesKey,
+            label: `${r.label} · ${SOURCE_META[r.source].label}`,
+            points: r.points,
+            color: r.color,
+            dash: r.dash,
+            unit: r.unit,
+          }))
+        );
       })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      .catch(() => {
+        if (!cancelled) setError(t("deviceDetail.charts.loadError"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
-  }, [signalKey, token, deviceCode, range.hours, range.bucket]);
+  }, [token, deviceCode, seriesKeys, rangeKey, customOn, customFrom, customTo, t]);
 
-  const hasAgg = series.min.length > 0;
-  const data = useMemo(
+  // ---- Cift Y-ekseni: ilk 2 farkli birim ----
+  const unitAxes = useMemo(() => {
+    const units: string[] = [];
+    for (const s of series) {
+      const u = s.unit ?? "";
+      if (!units.includes(u)) units.push(u);
+    }
+    return { left: units[0] ?? "", right: units[1] }; // right undefined ise tek eksen
+  }, [series]);
+
+  const chartData = useMemo(
     () => ({
-      datasets: [
-        ...(hasAgg
-          ? [
-              {
-                label: t("deviceDetail.charts.max"),
-                data: series.max,
-                borderColor: "transparent",
-                backgroundColor: BAND,
-                pointRadius: 0,
-                fill: "+1" as const, // min'e kadar doldur (min-max band)
-                tension: 0.25,
-              },
-              {
-                label: t("deviceDetail.charts.min"),
-                data: series.min,
-                borderColor: "transparent",
-                pointRadius: 0,
-                fill: false as const,
-                tension: 0.25,
-              },
-            ]
-          : []),
-        {
-          label: hasAgg ? t("deviceDetail.charts.avg") : t("deviceDetail.charts.value"),
-          data: series.avg,
-          borderColor: LINE,
-          backgroundColor: LINE_FILL,
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 4,
-          fill: !hasAgg,
-          tension: 0.25,
-        },
-      ],
+      datasets: series.map((s) => ({
+        label: s.label,
+        data: s.points,
+        borderColor: s.color,
+        backgroundColor: s.color,
+        borderWidth: 2,
+        borderDash: s.dash,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.25,
+        yAxisID: unitAxes.right != null && (s.unit ?? "") === unitAxes.right ? "yR" : "yL",
+        spanGaps: true,
+      })),
     }),
-    [series, hasAgg, t]
+    [series, unitAxes]
   );
 
-  const options = useMemo<ChartOptions<"line">>(
+  const chartOptions = useMemo<ChartOptions<"line">>(
     () => ({
       responsive: true,
       maintainAspectRatio: false,
@@ -200,93 +278,175 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       scales: {
         x: {
           type: "time",
-          time: { tooltipFormat: "dd.MM HH:mm", displayFormats: { hour: "HH:mm", day: "dd.MM" } },
-          grid: { color: "rgba(148, 163, 184, 0.12)" },
-          ticks: { color: "#64748b", maxRotation: 0, autoSkipPadding: 24 },
+          time: { tooltipFormat: "dd.MM HH:mm", displayFormats: { hour: "HH:mm", day: "dd.MM", minute: "HH:mm" } },
+          grid: { color: "rgba(148,163,184,0.12)" },
+          ticks: { color: "#94a3b8", maxRotation: 0, autoSkipPadding: 20 },
         },
-        y: {
-          grid: { color: "rgba(148, 163, 184, 0.12)" },
-          ticks: {
-            color: "#64748b",
-            callback: (v) => (unit ? `${v} ${unit}` : `${v}`),
-          },
+        yL: {
+          position: "left",
+          title: { display: !!unitAxes.left, text: unitAxes.left, color: "#94a3b8" },
+          grid: { color: "rgba(148,163,184,0.12)" },
+          ticks: { color: "#94a3b8" },
+        },
+        yR: {
+          position: "right",
+          display: unitAxes.right != null,
+          title: { display: !!unitAxes.right, text: unitAxes.right ?? "", color: "#94a3b8" },
+          grid: { drawOnChartArea: false },
+          ticks: { color: "#94a3b8" },
         },
       },
       plugins: {
-        legend: {
-          display: hasAgg,
-          labels: { color: "#475569", filter: (l) => l.text !== t("deviceDetail.charts.min") },
-        },
+        legend: { display: false }, // kendi legend chip'lerimiz
         tooltip: {
           callbacks: {
-            label: (ctx) =>
-              `${ctx.dataset.label}: ${ctx.parsed.y ?? "—"}${unit ? ` ${unit}` : ""}`,
+            label: (ctx) => {
+              const s = series[ctx.datasetIndex];
+              const y = ctx.parsed.y;
+              const u = s?.unit ? ` ${s.unit}` : "";
+              return `${ctx.dataset.label}: ${y == null ? "—" : y}${u}`;
+            },
           },
         },
       },
     }),
-    [unit, hasAgg, t]
+    [series, unitAxes]
   );
 
-  if (numericSignals.length === 0) {
-    return (
-      <div className="device-detail-empty">
-        <span className="material-symbols-outlined">show_chart</span>
-        <p className="helper-text">{t("deviceDetail.charts.noNumeric")}</p>
-      </div>
-    );
-  }
+  const toggleSuffix = (suf: string) =>
+    setSuffixes((prev) => (prev.includes(suf) ? prev.filter((s) => s !== suf) : [...prev, suf]));
+  const toggleSource = (src: SignalSource) =>
+    setSources((prev) => (prev.includes(src) ? prev.filter((s) => s !== src) : [...prev, src]));
 
-  const empty = !loading && series.avg.length === 0;
+  const hasData = series.some((s) => s.points.length > 0);
 
   return (
-    <div className="device-chart-panel">
-      <div className="device-chart-controls">
-        <label className="device-chart-select">
-          <span>{t("deviceDetail.charts.signal")}</span>
-          <select value={signalKey} onChange={(e) => setSignalKey(e.target.value)}>
-            {numericSignals.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-                {s.unit ? ` (${s.unit})` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="device-chart-ranges">
-          {RANGES.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              className={`device-chart-range${rangeKey === r.key ? " active" : ""}`}
-              onClick={() => setRangeKey(r.key)}
-            >
-              {t(`deviceDetail.charts.range.${r.key}`)}
-            </button>
-          ))}
+    <div className="device-trend">
+      {/* ---- Kontrol paneli ---- */}
+      <div className="device-trend-controls">
+        {/* Sinyal coklu-sec */}
+        <div className="device-trend-signals">
+          <span className="device-trend-ctrl-label">{t("deviceDetail.charts.signals")}</span>
+          <div className="device-trend-chips">
+            {suffixList.map((s, i) => {
+              const active = suffixes.includes(s.suffix);
+              const color = PALETTE[suffixes.indexOf(s.suffix) % PALETTE.length];
+              return (
+                <button
+                  key={s.suffix}
+                  type="button"
+                  className={`device-trend-chip${active ? " active" : ""}`}
+                  style={active ? { borderColor: color, color } : undefined}
+                  onClick={() => toggleSuffix(s.suffix)}
+                  title={s.unit ? `${s.label} (${s.unit})` : s.label}
+                >
+                  {active ? <span className="device-trend-chip-dot" style={{ background: color }} /> : null}
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
+
+        <div className="device-trend-controls-row">
+          {/* Kaynak sec */}
+          <div className="device-trend-sources">
+            <span className="device-trend-ctrl-label">{t("deviceDetail.charts.sources")}</span>
+            {ALL_SOURCES.map((src) => (
+              <label key={src} className={`device-trend-src${sources.includes(src) ? " active" : ""}`}>
+                <input type="checkbox" checked={sources.includes(src)} onChange={() => toggleSource(src)} />
+                <span className="device-trend-src-dash" data-src={src} aria-hidden="true" />
+                {SOURCE_META[src].label}
+              </label>
+            ))}
+          </div>
+
+          {/* Zaman araligi */}
+          <div className="device-trend-ranges">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                className={`device-trend-range${!customOn && rangeKey === r.key ? " active" : ""}`}
+                onClick={() => {
+                  setCustomOn(false);
+                  setRangeKey(r.key);
+                }}
+              >
+                {t(`deviceDetail.charts.range.${r.key}`)}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`device-trend-range${customOn ? " active" : ""}`}
+              onClick={() => {
+                setCustomOn(true);
+                setRangeKey("custom");
+              }}
+            >
+              {t("deviceDetail.charts.custom")}
+            </button>
+          </div>
+        </div>
+
+        {/* Ozel tarih araligi */}
+        {customOn ? (
+          <div className="device-trend-custom">
+            <label>
+              {t("deviceDetail.charts.from")}
+              <input type="datetime-local" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            </label>
+            <label>
+              {t("deviceDetail.charts.to")}
+              <input type="datetime-local" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            </label>
+          </div>
+        ) : null}
       </div>
 
-      <div className="device-chart-canvas">
-        {loading ? (
-          <div className="device-chart-status">
+      {/* ---- Grafik ---- */}
+      <div className="device-trend-canvas">
+        {seriesKeys.length === 0 ? (
+          <div className="device-trend-empty">
+            <span className="material-symbols-outlined">show_chart</span>
+            <p>{t("deviceDetail.charts.selectSignal")}</p>
+          </div>
+        ) : loading && !hasData ? (
+          <div className="device-trend-empty">
             <span className="btn-spinner" aria-hidden="true" />
-            {t("deviceDetail.charts.loading")}
           </div>
         ) : error ? (
-          <div className="device-chart-status is-error">
+          <div className="device-trend-empty is-error">
             <span className="material-symbols-outlined">error</span>
-            {error}
+            <p>{error}</p>
           </div>
-        ) : empty ? (
-          <div className="device-chart-status">
-            <span className="material-symbols-outlined">data_usage</span>
-            {t("deviceDetail.charts.empty")}
+        ) : !hasData ? (
+          <div className="device-trend-empty">
+            <span className="material-symbols-outlined">timeline</span>
+            <p>{t("deviceDetail.charts.noData")}</p>
           </div>
         ) : (
-          <Line data={data} options={options} />
+          <Line data={chartData} options={chartOptions} />
         )}
       </div>
+
+      {/* ---- Legend (seri chip'leri) ---- */}
+      {series.length > 0 ? (
+        <div className="device-trend-legend">
+          {series.map((s) => (
+            <span key={s.key} className="device-trend-legend-item">
+              <span
+                className="device-trend-legend-line"
+                style={{
+                  background: s.color,
+                  ...(s.dash.length ? { backgroundImage: `repeating-linear-gradient(90deg, ${s.color} 0 6px, transparent 6px 10px)`, background: "transparent" } : {}),
+                }}
+              />
+              {s.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

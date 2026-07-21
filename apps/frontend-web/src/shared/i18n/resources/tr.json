@@ -2180,11 +2180,19 @@
       "empty": "Bu aralıkta veri yok",
       "noNumeric": "Bu kaynakta grafiklenebilir sayısal sinyal yok.",
       "range": {
-        "1h": "1 saat",
-        "6h": "6 saat",
-        "24h": "24 saat",
-        "7d": "7 gün"
-      }
+        "1h": "1 Saat",
+        "6h": "6 Saat",
+        "24h": "24 Saat",
+        "7d": "7 Gün"
+      },
+      "signals": "Sinyaller",
+      "sources": "Kaynaklar",
+      "custom": "Özel",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "selectSignal": "Grafik için sinyal seçin",
+      "noData": "Bu aralıkta veri yok",
+      "loadError": "Veri yüklenemedi"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",

@@ -2180,11 +2180,19 @@
       "empty": "No data in this range",
       "noNumeric": "No chartable numeric signal for this source.",
       "range": {
-        "1h": "1 hour",
-        "6h": "6 hours",
-        "24h": "24 hours",
-        "7d": "7 days"
-      }
+        "1h": "1 Hour",
+        "6h": "6 Hours",
+        "24h": "24 Hours",
+        "7d": "7 Days"
+      },
+      "signals": "Signals",
+      "sources": "Sources",
+      "custom": "Custom",
+      "from": "From",
+      "to": "To",
+      "selectSignal": "Select a signal to chart",
+      "noData": "No data in this range",
+      "loadError": "Failed to load data"
     },
     "config": {
       "dnp3Title": "DNP3 Settings",

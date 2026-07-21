@@ -444,7 +444,7 @@ export function DeviceDetailPage({
         ) : null}
 
         {activeTab === "trends" && token ? (
-          <div className="device-detail-panel">
+          <div className="device-trend-panel">
             <DeviceChartsPanel
               deviceCode={device.code}
               activeSource={activeSource}
