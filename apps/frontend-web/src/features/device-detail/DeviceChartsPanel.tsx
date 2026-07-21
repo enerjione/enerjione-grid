@@ -139,8 +139,12 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       e.sources.add(s.source);
       m.set(suf, e);
     }
+    // Sanal sinyal: alarm_rate (backend alarm_reconciliation worker'i
+    // master.alarm_rate historian'a yazar; katalogda YOK ama historian sorgusu
+    // katalogsuz calisir). Trendler'de/heatmap'te secilebilsin diye elle ekle.
+    m.set("alarm_rate", { label: t("deviceDetail.charts.alarmRate"), unit: t("deviceDetail.charts.perMin"), sources: new Set<SignalSource>(["master"]) });
     return m;
-  }, [signals]);
+  }, [signals, t]);
   const suffixList = useMemo(
     () => [...suffixCatalog.entries()].map(([suffix, v]) => ({ suffix, ...v })).sort((a, b) => a.label.localeCompare(b.label)),
     [suffixCatalog]

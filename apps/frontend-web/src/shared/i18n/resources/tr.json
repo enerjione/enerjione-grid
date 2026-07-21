@@ -2214,7 +2214,9 @@
       "barStack": "Üst üste yığ",
       "barWidth": "Bar genişliği",
       "barRadius": "Köşe yuvarlaklık",
-      "auto": "Otomatik"
+      "auto": "Otomatik",
+      "alarmRate": "Alarm Sıklığı",
+      "perMin": "adet/dk"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",

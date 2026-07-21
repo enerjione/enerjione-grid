@@ -2214,7 +2214,9 @@
       "barStack": "Stack bars",
       "barWidth": "Bar width",
       "barRadius": "Corner radius",
-      "auto": "Auto"
+      "auto": "Auto",
+      "alarmRate": "Alarm Rate",
+      "perMin": "/min"
     },
     "config": {
       "dnp3Title": "DNP3 Settings",
