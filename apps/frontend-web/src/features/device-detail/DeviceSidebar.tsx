@@ -29,6 +29,10 @@ type Props = {
   topologyInfo?: TopologyInfo;
   /** RSSI (master.modem_rssi) — string sinyal degeri getirici. */
   rssi?: number;
+  /** Seri no (master.serial_number) — cihaz kimligi altinda. */
+  serial?: string;
+  /** Ek teknik bilgiler (IP/IMEI/firmware/modem) — string sinyallerden. */
+  extraInfo?: { icon: string; label: string; value: string }[];
   activeSource: SignalSource;
   onSourceChange: (s: SignalSource) => void;
   /** Her kaynaktaki sinyal sayisi (0 ise kanal disabled). */
@@ -55,6 +59,8 @@ export function DeviceSidebar({
   device,
   topologyInfo,
   rssi,
+  serial,
+  extraInfo,
   activeSource,
   onSourceChange,
   sourceCounts,
@@ -76,6 +82,12 @@ export function DeviceSidebar({
         <span className="device-sidebar-kicker">{t("deviceDetail.sidebar.device")}</span>
         <h2 className="device-sidebar-code">{device.code}</h2>
         <div className="device-sidebar-name">{device.name}</div>
+        {serial ? (
+          <div className="device-sidebar-serial">
+            <span className="material-symbols-outlined">tag</span>
+            {t("deviceDetail.sidebar.serial")}: <strong>{serial}</strong>
+          </div>
+        ) : null}
         <div className={`device-sidebar-status ${online ? "is-online" : "is-offline"}`}>
           <span className="device-sidebar-dot" aria-hidden="true" />
           {online ? t("deviceDetail.online") : t("deviceDetail.offline")}
@@ -103,6 +115,9 @@ export function DeviceSidebar({
           />
           <InfoRow icon="cell_tower" label="RSSI" value={quality.dbm} />
           <InfoRow icon="location_on" label={t("deviceDetail.meta.location")} value={loc.label} />
+          {extraInfo?.map((it) => (
+            <InfoRow key={it.label} icon={it.icon} label={it.label} value={it.value} />
+          ))}
         </ul>
         {hasGeo ? (
           <div className="device-sidebar-map">
@@ -131,11 +146,6 @@ export function DeviceSidebar({
             dot={online ? "green" : "slate"}
             label={t("deviceDetail.sidebar.deviceStatus")}
             value={online ? t("deviceDetail.online") : t("deviceDetail.offline")}
-          />
-          <SummaryRow
-            dot="sky"
-            label={t("deviceDetail.sidebar.lastCommShort")}
-            value={device.lastUpdateAt ? formatRelative(device.lastUpdateAt) : "—"}
           />
           <SummaryRow
             dot={device.batteryPercent < 20 ? "amber" : "green"}

@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchDeviceCommands } from "../../shared/api";
-import { formatRelative } from "../../shared/format";
+import { formatDateTime, formatRelative } from "../../shared/format";
 import type { DeviceCommandRow, SignalCatalogRow } from "../../shared/types";
 
 type CmdGroup = "general" | "alarm_reset" | "config" | "danger";
@@ -84,6 +84,9 @@ export function DeviceCommandsPanel({
   const { t } = useTranslation();
   const [busyCmd, setBusyCmd] = useState<string | null>(null);
   const [cmdHistory, setCmdHistory] = useState<DeviceCommandRow[]>([]);
+  // Accordion: varsayilan alarm_reset acik (en cok kullanilan), digerleri kapali.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ alarm_reset: true });
+  const toggleGroup = (k: string) => setOpenGroups((s) => ({ ...s, [k]: !s[k] }));
 
   // Komut listesi: master binary_output sinyalleri -> grup meta ile zenginlestir.
   const commands = useMemo<CommandItem[]>(() => {
@@ -108,7 +111,7 @@ export function DeviceCommandsPanel({
   const reloadCommands = useCallback(async () => {
     if (!token || !deviceCode) return;
     try {
-      setCmdHistory(await fetchDeviceCommands(token, deviceCode, 10));
+      setCmdHistory(await fetchDeviceCommands(token, deviceCode, 30));
     } catch {
       // sessiz — komut gecmisi ikincil
     }
@@ -160,47 +163,60 @@ export function DeviceCommandsPanel({
         if (items.length === 0) return null;
         // config grubu installer-only: yetkisizse gizle.
         if (key === "config" && !canConfig) return null;
+        const open = !!openGroups[key];
         return (
-          <section key={key} className={`device-cmd-group is-${key}`}>
-            <h4 className="device-cmd-group-title">
-              <span className="material-symbols-outlined">{icon}</span>
-              {t(`deviceDetail.commands.group.${key}`)}
-            </h4>
-            <div className="device-cmd-group-row">
-              {items.map((c) => (
-                <button
-                  key={c.slug}
-                  type="button"
-                  className={`secondary-btn action-btn${key === "danger" ? " danger" : ""}`}
-                  disabled={busyCmd != null}
-                  aria-busy={busyCmd === c.slug}
-                  onClick={() => void runCommand(c.slug, c.label)}
-                  title={c.label}
-                >
-                  {busyCmd === c.slug ? (
-                    <span className="btn-spinner" aria-hidden="true" />
-                  ) : (
-                    <span className="material-symbols-outlined">{c.icon}</span>
-                  )}
-                  {c.label}
-                </button>
-              ))}
-            </div>
+          <section key={key} className={`device-cmd-accordion is-${key}${open ? " is-open" : ""}`}>
+            <button
+              type="button"
+              className="device-cmd-accordion-head"
+              onClick={() => toggleGroup(key)}
+              aria-expanded={open}
+            >
+              <span className="material-symbols-outlined device-cmd-accordion-icon">{icon}</span>
+              <span className="device-cmd-accordion-title">{t(`deviceDetail.commands.group.${key}`)}</span>
+              <span className="device-cmd-accordion-count">{items.length}</span>
+              <span className="material-symbols-outlined device-cmd-accordion-chevron">
+                {open ? "expand_less" : "expand_more"}
+              </span>
+            </button>
+            {open ? (
+              <div className="device-cmd-accordion-body">
+                {items.map((c) => (
+                  <button
+                    key={c.slug}
+                    type="button"
+                    className={`device-cmd-btn${key === "danger" ? " is-danger" : ""}`}
+                    disabled={busyCmd != null}
+                    aria-busy={busyCmd === c.slug}
+                    onClick={() => void runCommand(c.slug, c.label)}
+                    title={c.label}
+                  >
+                    {busyCmd === c.slug ? (
+                      <span className="btn-spinner" aria-hidden="true" />
+                    ) : (
+                      <span className="material-symbols-outlined">{c.icon}</span>
+                    )}
+                    <span className="device-cmd-btn-label">{c.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </section>
         );
       })}
 
       {cmdHistory.length > 0 ? (
-        <section className="device-cmd-group">
+        <section className="device-cmd-history-section">
           <h4 className="device-cmd-group-title">
             <span className="material-symbols-outlined">history</span>
             {t("deviceDetail.commands.historyTitle")}
+            <span className="device-cmd-history-count">{cmdHistory.length}</span>
           </h4>
           <p className="device-cmd-async-note">
             <span className="material-symbols-outlined">info</span>
             {t("deviceDetail.commands.asyncNote")}
           </p>
-          <div className="device-cmd-history">
+          <div className="device-cmd-history-box">
             {cmdHistory.map((c) => (
               <div key={c.id} className={`device-cmd-row is-${c.status}`}>
                 <span className={`device-cmd-row-dot tone-${c.status}`} aria-hidden="true" />
@@ -211,7 +227,9 @@ export function DeviceCommandsPanel({
                       <span className="material-symbols-outlined">person</span>
                       {c.actor_username ?? t("deviceDetail.events.system")}
                     </span>
-                    <span className="device-cmd-row-time">{formatRelative(c.created_at)}</span>
+                    <span className="device-cmd-row-time" title={formatRelative(c.created_at)}>
+                      {formatDateTime(c.created_at)}
+                    </span>
                   </span>
                   {c.status === "failed" && c.result_error ? (
                     <span className="device-cmd-row-err" title={c.result_error}>

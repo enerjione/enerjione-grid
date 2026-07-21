@@ -2245,7 +2245,8 @@
       "deviceStatus": "Cihaz Durumu",
       "batteryStatus": "Pil Durumu",
       "signalQuality": "Sinyal Kalitesi",
-      "low": "Düşük"
+      "low": "Düşük",
+      "serial": "Seri No"
     },
     "overview": {
       "currentStatus": "MEVCUT DURUM",
@@ -2274,7 +2275,10 @@
         "critical": "Kritik"
       },
       "who": "Kim",
-      "system": "Sistem"
+      "system": "Sistem",
+      "alarm": "ALARM",
+      "export": "CSV indir",
+      "total": "{{count}} olay"
     }
   }
 }

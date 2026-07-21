@@ -173,6 +173,26 @@ export function DeviceDetailPage({
     const v = valueByKey.get(key)?.value;
     return v == null ? undefined : v;
   };
+  const strVal = (key: string): string | undefined => {
+    const s = (valueByKey.get(key)?.value_string ?? "").trim();
+    return s.length > 0 ? s : undefined;
+  };
+
+  // Sidebar teknik bilgi satirlari (string sinyallerden — IP/IMEI/firmware/modem).
+  const sidebarSerial = strVal("master.serial_number");
+  const sidebarExtra = useMemo(() => {
+    const rows: { icon: string; label: string; value: string }[] = [];
+    const push = (icon: string, label: string, key: string) => {
+      const v = strVal(key);
+      if (v) rows.push({ icon, label, value: v });
+    };
+    push("router", "IP", "master.ipv4_address");
+    push("memory", "Firmware", "master.firmware_version");
+    push("smartphone", "Modem", "master.modem_model_name");
+    push("sim_card", "IMEI", "master.modem_imei");
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueByKey]);
 
   const sourceCounts = useMemo<Record<SignalSource, number>>(() => {
     const c: Record<SignalSource, number> = { master: 0, sat01: 0, sat02: 0 };
@@ -232,6 +252,8 @@ export function DeviceDetailPage({
         device={device}
         topologyInfo={topologyInfo}
         rssi={numVal("master.modem_rssi")}
+        serial={sidebarSerial}
+        extraInfo={sidebarExtra}
         activeSource={activeSource}
         onSourceChange={setActiveSource}
         sourceCounts={sourceCounts}
@@ -315,7 +337,7 @@ export function DeviceDetailPage({
         {activeTab === "events" && token ? (
           <div className="device-detail-panel">
             <h3 className="device-panel-title">{t("deviceDetail.overview.recentEvents")}</h3>
-            <DeviceEventsTable token={token} deviceCode={device.code} />
+            <DeviceEventsTable token={token} deviceCode={device.code} variant="full" />
           </div>
         ) : null}
 
@@ -402,16 +424,12 @@ function OverviewTab({
         <KpiCard icon="flash_on" tone="orange" label={t("deviceDetail.momentaryFaults")} value={fmt(momCount ?? null, "counter")} />
       </div>
 
-      {/* 2 kolon */}
+      {/* 2 kolon: sol Mevcut Durum (2 kolonlu), sag Son Olaylar */}
       <div className="device-overview-grid">
         <div className="device-overview-col">
           <section className="device-card">
             <h3 className="device-card-title">{t("deviceDetail.overview.currentStatus")}</h3>
             <StatusTable rowBySuffix={rowBySuffix} t={t} />
-          </section>
-          <section className="device-card">
-            <h3 className="device-card-title">{t("deviceDetail.direction.title")}</h3>
-            <DirectionDiagram rowBySuffix={rowBySuffix} deviceCode={device.code} t={t} />
           </section>
         </div>
 
@@ -419,7 +437,7 @@ function OverviewTab({
           <section className="device-card is-events">
             <h3 className="device-card-title">{t("deviceDetail.overview.recentEvents")}</h3>
             {token ? (
-              <DeviceEventsTable token={token} deviceCode={device.code} limit={5} onViewAll={onViewAllEvents} />
+              <DeviceEventsTable token={token} deviceCode={device.code} limit={6} onViewAll={onViewAllEvents} />
             ) : null}
           </section>
         </div>
@@ -457,7 +475,43 @@ function KpiCard({
   );
 }
 
-// Mevcut Durum tablosu — status kategorisindeki binary sinyaller -> sinyal|durum.
+// Mevcut Durum — 2 kolonlu durum sinyalleri (aktif/normal) + kritik olcum
+// bloklari (ariza akimi/suresi/son iyi akim, akim/gerilim son).
+const STATUS_MEASURES: { suffix: string; label: string; unit: string; type: string }[] = [
+  { suffix: "fault_current", label: "Arıza Akımı", unit: "mA", type: "analog" },
+  { suffix: "fault_duration", label: "Arıza Süresi", unit: "ms", type: "analog" },
+  { suffix: "last_good_known_current", label: "Son İyi Akım", unit: "mA", type: "analog" },
+  { suffix: "average_current", label: "Ort. Akım", unit: "mA", type: "analog" },
+  { suffix: "maximum_current", label: "Max. Akım", unit: "mA", type: "analog" },
+  { suffix: "conductor_temperature", label: "İletken Sıc.", unit: "°C", type: "analog" },
+];
+
+function StatusRow({
+  def,
+  rowBySuffix,
+  t,
+}: {
+  def: SigDef;
+  rowBySuffix: Map<string, Row>;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const row = rowBySuffix.get(def.suffix);
+  const active = row?.value === 1;
+  const icon = STATUS_ICONS[def.suffix] ?? "circle";
+  return (
+    <div className="device-status-item">
+      <span className="device-status-name">
+        <span className="material-symbols-outlined">{icon}</span>
+        {def.label}
+      </span>
+      <span className={`device-status-badge ${active ? "is-active" : "is-normal"}`}>
+        <span className="material-symbols-outlined">{active ? "warning" : "check_circle"}</span>
+        {active ? t("deviceDetail.status.active") : t("deviceDetail.status.normal")}
+      </span>
+    </div>
+  );
+}
+
 function StatusTable({
   rowBySuffix,
   t,
@@ -467,89 +521,26 @@ function StatusTable({
 }) {
   const statusDefs = SIGNALS.filter((s) => s.cat === "status");
   return (
-    <table className="device-status-table">
-      <thead>
-        <tr>
-          <th>{t("deviceDetail.overview.signal")}</th>
-          <th>{t("deviceDetail.overview.state")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {statusDefs.map((def) => {
-          const row = rowBySuffix.get(def.suffix);
-          const active = row?.value === 1;
-          const icon = STATUS_ICONS[def.suffix] ?? "circle";
+    <div className="device-status">
+      {/* 2 kolonlu durum sinyalleri */}
+      <div className="device-status-grid">
+        {statusDefs.map((def) => (
+          <StatusRow key={def.suffix} def={def} rowBySuffix={rowBySuffix} t={t} />
+        ))}
+      </div>
+      {/* Kritik olcum degerleri */}
+      <div className="device-status-measures">
+        {STATUS_MEASURES.map((m) => {
+          const v = rowBySuffix.get(m.suffix)?.value ?? null;
           return (
-            <tr key={def.suffix}>
-              <td className="device-status-name">
-                <span className="material-symbols-outlined">{icon}</span>
-                {def.label}
-              </td>
-              <td>
-                <span className={`device-status-badge ${active ? "is-active" : "is-normal"}`}>
-                  <span className="material-symbols-outlined">
-                    {active ? "warning" : "check_circle"}
-                  </span>
-                  {active ? t("deviceDetail.status.active") : t("deviceDetail.status.normal")}
-                </span>
-              </td>
-            </tr>
+            <div key={m.suffix} className="device-status-measure">
+              <span className="device-status-measure-label">{m.label}</span>
+              <span className="device-status-measure-value">{fmt(v, m.type, m.unit)}</span>
+            </div>
           );
         })}
-      </tbody>
-    </table>
-  );
-}
-
-// Ariza yonu: tek gorsel akis diyagrami (A—cihaz—B). Aktif yon renkli.
-const DIRECTION_ROWS: { key: string; label: string; aSuffix: string; bSuffix: string }[] = [
-  { key: "load_flow", label: "Yük Akışı", aSuffix: "load_flow_direction_green_a", bSuffix: "load_flow_direction_red_b" },
-  { key: "overcurrent", label: "Aşırı Akım", aSuffix: "overcurrent_fault_direction_green_a", bSuffix: "overcurrent_fault_direction_red_b" },
-  { key: "delta", label: "ΔI/Δt", aSuffix: "delta_i_delta_t_fault_direction_green_a", bSuffix: "delta_i_delta_t_fault_direction_red_b" },
-];
-
-function DirectionDiagram({
-  rowBySuffix,
-  deviceCode,
-  t,
-}: {
-  rowBySuffix: Map<string, Row>;
-  deviceCode: string;
-  t: (key: string, opts?: Record<string, unknown>) => string;
-}) {
-  // Herhangi bir yon aktif mi (genel arıza yönü)?
-  const anyActive = DIRECTION_ROWS.some(
-    (d) => rowBySuffix.get(d.aSuffix)?.value === 1 || rowBySuffix.get(d.bSuffix)?.value === 1
-  );
-  // Ilk aktif yonu bul (gorsel A/B vurgusu icin).
-  const firstActive = DIRECTION_ROWS.find(
-    (d) => rowBySuffix.get(d.aSuffix)?.value === 1 || rowBySuffix.get(d.bSuffix)?.value === 1
-  );
-  const state = firstActive
-    ? rowBySuffix.get(firstActive.aSuffix)?.value === 1
-      ? "a"
-      : "b"
-    : "none";
-
-  return (
-    <div className="device-flow">
-      <div className={`device-flow-diagram is-${state}`}>
-        <span className={`device-flow-node node-a${state === "a" ? " active" : ""}`}>A</span>
-        <span className="device-flow-track" aria-hidden="true">
-          <span className="device-flow-line" />
-          <span className="device-flow-chip">{deviceCode}</span>
-          <span className="device-flow-line" />
-        </span>
-        <span className={`device-flow-node node-b${state === "b" ? " active" : ""}`}>B</span>
       </div>
-      <p className="device-flow-caption">
-        {anyActive
-          ? state === "a"
-            ? t("deviceDetail.direction.toA")
-            : t("deviceDetail.direction.toB")
-          : t("deviceDetail.direction.none")}
-      </p>
-      <p className="device-flow-note">{t("deviceDetail.direction.note")}</p>
     </div>
   );
 }
+

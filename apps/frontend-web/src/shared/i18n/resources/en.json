@@ -2245,7 +2245,8 @@
       "deviceStatus": "Device Status",
       "batteryStatus": "Battery Status",
       "signalQuality": "Signal Quality",
-      "low": "Low"
+      "low": "Low",
+      "serial": "Serial"
     },
     "overview": {
       "currentStatus": "CURRENT STATUS",
@@ -2274,7 +2275,10 @@
         "critical": "Critical"
       },
       "who": "By",
-      "system": "System"
+      "system": "System",
+      "alarm": "ALARM",
+      "export": "Export CSV",
+      "total": "{{count}} events"
     }
   }
 }

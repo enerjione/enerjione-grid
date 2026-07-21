@@ -30,6 +30,24 @@ const NUMBER_FORMATTER = new Intl.NumberFormat("tr-TR", {
   useGrouping: false,
 });
 
+// Bilgi/altyapi string sinyalleri — bunlar sol sidebar'da gosteriliyor,
+// Tumu'de tekrar etmesin (suffix bazli, kaynak fark etmez).
+const INFO_SUFFIXES = new Set([
+  "serial_number",
+  "ipv4_address",
+  "firmware_version",
+  "modem_model_name",
+  "modem_imei",
+  "modem_fw_version",
+  "sim_serial",
+  "gps_string",
+]);
+
+function suffixOf(key: string): string {
+  const i = key.indexOf(".");
+  return i >= 0 ? key.slice(i + 1) : key;
+}
+
 function fmtVal(row: SignalLiveRow, dataType: string | undefined): string {
   if (dataType === "string") {
     const t = (row.value_string ?? "").trim();
@@ -51,12 +69,16 @@ export function DeviceAllSignalsTab({ device, values, signals, gwOnline }: Props
     return m;
   }, [signals]);
 
-  // kaynak -> satirlar (label'a gore sirali)
+  // kaynak -> satirlar (label'a gore sirali). Komut (binary_output) ve bilgi
+  // string'leri (IP/firmware/serial — sidebar'da) HARIC.
   const bySource = useMemo(() => {
     const m = new Map<SignalSource, SignalLiveRow[]>();
     for (const src of SOURCES) m.set(src.key, []);
     for (const r of values) {
       if (r.device_id !== device.id) continue;
+      const dt = (r.data_type as string | undefined) ?? typeByKey.get(r.signal_key);
+      if (dt === "binary_output") continue; // komut sinyali — Komutlar sekmesinde
+      if (INFO_SUFFIXES.has(suffixOf(r.signal_key))) continue; // bilgi — sidebar'da
       const arr = m.get(r.source as SignalSource);
       if (arr) arr.push(r);
     }
@@ -64,7 +86,7 @@ export function DeviceAllSignalsTab({ device, values, signals, gwOnline }: Props
       arr.sort((a, b) => (a.signal_label || a.signal_key).localeCompare(b.signal_label || b.signal_key));
     }
     return m;
-  }, [values, device.id]);
+  }, [values, device.id, typeByKey]);
 
   return (
     <div className="device-all">
