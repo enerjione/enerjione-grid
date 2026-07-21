@@ -33,15 +33,84 @@ import threading
 import time as _time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as _pg_insert
 
 from app.db.session import SessionLocal
 from app.models.alarm import AlarmEvent
 from app.models.alarm_rule import AlarmRule
+from app.models.device import Device
 from app.models.telemetry import Telemetry
+from app.models.telemetry_history import TelemetryHistory
 from app.services.event_service import record_event
 
 logger = logging.getLogger(__name__)
+
+# Alarm sikligi (rate) icin historian sinyal key'i. Cihaz bazli — her tick
+# "son ALARM_RATE_WINDOW_MIN dakikada olusan alarm sayisi" TelemetryHistory'ye
+# yazilir. Katalog/aggregate otomatik kapsar (device_id+signal_key sorgusu).
+# Ileride hat analizi: LineSegment.device_id uzerinden hat toplami cekilir.
+ALARM_RATE_SIGNAL_KEY = "master.alarm_rate"
+
+
+def _alarm_rate_window_min() -> int:
+    raw = os.getenv("ALARM_RATE_WINDOW_MIN", "1")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 1
+
+
+def _record_alarm_rate(db) -> None:
+    """Her tick: cihaz bazli son-pencere alarm sayisini historian'a yaz.
+
+    Alarm gelmeyen cihaza da 0 yazilir (surekli zaman serisi -> heatmap/trend
+    icin bosluksuz). Bucket zamani tick anina hizalanir (pencere sonu).
+    """
+    now = datetime.now(timezone.utc)
+    window = timedelta(minutes=_alarm_rate_window_min())
+    since = now - window
+
+    # Son penceredeki alarm sayisi (created_at) cihaz bazli — tum yeni alarmlar.
+    counts = dict(
+        db.execute(
+            select(AlarmEvent.device_id, func.count(AlarmEvent.id))
+            .where(AlarmEvent.created_at >= since)
+            .group_by(AlarmEvent.device_id)
+        ).all()
+    )
+    # Tum cihazlar (alarm gelmese de 0 yaz — surekli seri).
+    device_ids = [row[0] for row in db.execute(select(Device.id)).all()]
+    if not device_ids:
+        return
+
+    # Bucket zamanini pencereye hizala (dakikanin basi) — idempotent, ayni
+    # dakikada ikinci tick ustune yazmaz (on_conflict_do_nothing PK).
+    bucket_ts = now.replace(second=0, microsecond=0)
+    rows = [
+        {
+            "device_id": did,
+            "signal_key": ALARM_RATE_SIGNAL_KEY,
+            "value": float(counts.get(did, 0)),
+            "value_string": None,
+            "quality": "good",
+            "source_timestamp": bucket_ts,
+        }
+        for did in device_ids
+    ]
+    try:
+        db.execute(
+            _pg_insert(TelemetryHistory)
+            .values(rows)
+            .on_conflict_do_update(
+                index_elements=["device_id", "signal_key", "source_timestamp"],
+                set_={"value": _pg_insert(TelemetryHistory).excluded.value},
+            )
+        )
+        db.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("alarm_rate_historian_write_failed")
+        db.rollback()
 
 
 def _interval_sec() -> int:
@@ -176,6 +245,14 @@ class AlarmReconciliationWorker:
     def _reconcile_once(self) -> None:
         db = SessionLocal()
         try:
+            # Alarm sikligi (rate) historian yazimi — reconcile'dan bagimsiz,
+            # her tick (0 alarm da yazilir, surekli seri). Kendi commit'i var.
+            try:
+                _record_alarm_rate(db)
+            except Exception:  # noqa: BLE001
+                logger.exception("alarm_rate_record_failed")
+                db.rollback()
+
             open_alarms = list(
                 db.scalars(
                     select(AlarmEvent).where(AlarmEvent.reset.is_(False))
