@@ -105,9 +105,10 @@ const INFO_SUFFIX_RE =
 
 function groupOfSuffix(suffix: string, dataType: string | undefined): GroupKey {
   const s = suffix.toLowerCase();
-  // Koruma / ariza yonu / trip + ariza olcum degerleri (tek grupta).
+  // Koruma / ariza yonu / trip / alarm esikleri + ariza olcum degerleri.
+  // "_alarm" iceren tum sinyaller (conductor_temperature_alarm vb) koruma.
   if (
-    /(overcurrent|delta_i_delta_t|fault_direction|load_flow|_tripped|voltage_loss|current_loss|tamper|pick_up|permanent_fault$|momentary_fault$|fault_current|fault_duration|last_good|minimum_current|minimum_voltage|maximum_current|maximum_voltage|trip_level)/.test(
+    /(overcurrent|delta_i_delta_t|fault_direction|load_flow|_tripped|voltage_loss|current_loss|tamper|pick_up|_alarm|permanent_fault$|momentary_fault$|fault_current|fault_duration|last_good|minimum_current|minimum_voltage|maximum_current|maximum_voltage|trip_level)/.test(
       s
     )
   ) {
@@ -576,9 +577,15 @@ function OverviewTab({
           </section>
           {/* Son Olaylar */}
           <section className="device-card is-events">
-            <h3 className="device-card-title">{t("deviceDetail.overview.recentEvents")}</h3>
+            <div className="device-card-titlerow">
+              <h3 className="device-card-title">{t("deviceDetail.overview.recentEvents")}</h3>
+              <button type="button" className="device-card-viewall" onClick={onViewAllEvents}>
+                {t("deviceDetail.overview.viewAllEvents")}
+                <span className="material-symbols-outlined">chevron_right</span>
+              </button>
+            </div>
             {token ? (
-              <DeviceEventsTable token={token} deviceCode={device.code} limit={5} onViewAll={onViewAllEvents} />
+              <DeviceEventsTable token={token} deviceCode={device.code} limit={6} />
             ) : null}
           </section>
         </div>
@@ -743,16 +750,17 @@ function StatusTable({
           </button>
         ))}
       </div>
-      {binItems.length > 0 ? (
-        <div className="device-status-grid">
-          {binItems.map((r) => (
+      {/* Analoglar (deger) USTTE, binary (durum) ALTTA */}
+      {valItems.length > 0 ? (
+        <div className="device-status-grid is-values">
+          {valItems.map((r) => (
             <StatusItem key={r.signal_key} row={r} t={t} />
           ))}
         </div>
       ) : null}
-      {valItems.length > 0 ? (
-        <div className={`device-status-grid is-values${binItems.length > 0 ? " has-sep" : ""}`}>
-          {valItems.map((r) => (
+      {binItems.length > 0 ? (
+        <div className={`device-status-grid${valItems.length > 0 ? " has-sep" : ""}`}>
+          {binItems.map((r) => (
             <StatusItem key={r.signal_key} row={r} t={t} />
           ))}
         </div>

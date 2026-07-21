@@ -24989,24 +24989,14 @@ th.event-col-category {
 }
 .device-overview-col { min-height: 0; display: flex; flex-direction: column; }
 
-/* SOL kolon (Mevcut Durum) — sabit yukseklik (sekme degisse degismez) + ic scroll */
+/* SOL kolon (Mevcut Durum) — SCROLL YOK, icerige gore dogal yukseklik.
+   Kart en az kolon kadar uzar ama tasarsa buyur (scroll degil). */
 .device-overview-col:first-child .device-card {
-  flex: 1;
-  min-height: 0;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
 }
-.device-overview-col:first-child .device-status {
-  flex: 1;
-  min-height: 0;
-}
-/* Alt-sekme cubugu sabit, sinyal grid'i tasinca ic scroll */
-.device-overview-col:first-child .device-status-grid {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  align-content: start;
-}
+.device-overview-col:first-child .device-status-grid { align-content: start; }
 
 /* SAG kolon: Alarmlar + Son Olaylar ESIT yukseklik (soldan bagimsiz), ic scroll */
 .device-overview-col:last-child { gap: 16px; }
@@ -25286,16 +25276,64 @@ th.event-col-category {
 }
 .device-map-label.leaflet-tooltip-top::before { border-top-color: #0f172a; }
 
-/* Compact olay zamani: dot solda dikey ortali + sabit genislikli blok.
-   Alarm rozeti ustte (kaymaz), tarih + saat altta hizali. */
+/* Compact olay tablosu: Durum EN BASTA + sticky baslik + sabit kolonlar */
+.device-events-table.is-compact {
+  table-layout: fixed;
+  width: 100%;
+}
+.device-events-table.is-compact thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+}
+.device-events-table.is-compact .device-events-th-status,
+.device-events-table.is-compact .device-events-td-status.is-first { width: 110px; text-align: left; }
+.device-events-table.is-compact .device-events-th-time { width: 90px; }
+.device-events-table.is-compact th:nth-child(4) { width: 110px; }
+.device-events-table.is-compact .device-events-msg { white-space: normal; overflow: hidden; text-overflow: ellipsis; }
 .device-events-table:not(.is-full) .device-events-time {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  width: 130px;
   white-space: nowrap;
 }
-.device-events-table:not(.is-full) .device-events-time .device-events-dot { margin-top: 5px; }
+/* Kart baslik satiri: baslik solda, "Tumu" butonu sagda */
+.device-card-titlerow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.device-card-titlerow .device-card-title { margin: 0; }
+.device-card-viewall {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: none;
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.device-card-viewall:hover { color: #075985; }
+.device-card-viewall .material-symbols-outlined { font-size: 16px; }
+/* Durum rozeti — alarm (compact + full) */
+.device-events-badge.is-alarm {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.device-events-badge.is-alarm .material-symbols-outlined { font-size: 13px; }
 .device-events-time-compact {
   display: inline-flex;
   flex-direction: column;
@@ -25564,12 +25602,21 @@ th.event-col-category {
 .device-events-table.is-full {
   table-layout: fixed;
   width: 100%;
+  border-collapse: collapse;
 }
 .device-events-table.is-full th,
 .device-events-table.is-full td {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Satir cizgileri tam genislik + tutarli (kayma hissi giderilir) */
+.device-events-table.is-full td {
+  height: 52px;
+  border-bottom: 1px solid #eef2f6;
+  vertical-align: middle;
+}
+.device-events-table.is-full tbody tr:hover td { background: #f8fafc; }
+.device-events-table.is-full tbody tr.is-alarm-row:hover td { background: #fee2e2; }
 .device-events-th-alarm, .device-events-td-alarm { width: 100px; text-align: center; }
 .device-events-th-time { width: 155px; white-space: nowrap; }
 .device-events-table.is-full .device-events-msg { white-space: normal; }

@@ -276,19 +276,34 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
           <p>{loading ? t("deviceDetail.events.loading") : t("deviceDetail.events.noMatch")}</p>
         </div>
       ) : (
-      <table className={`device-events-table${isFull ? " is-full" : ""}`}>
+      <table className={`device-events-table${isFull ? " is-full" : " is-compact"}`}>
         <thead>
           <tr>
-            {isFull ? <th className="device-events-th-alarm">{t("deviceDetail.events.alarmCol")}</th> : null}
+            {/* Compact: Durum EN BASTA. Full: Alarm sutunu basta. */}
+            {isFull ? (
+              <th className="device-events-th-alarm">{t("deviceDetail.events.alarmCol")}</th>
+            ) : (
+              <th className="device-events-th-status">{t("deviceDetail.events.status")}</th>
+            )}
             <th className="device-events-th-time">{t("deviceDetail.events.time")}</th>
             <th>{t("deviceDetail.events.event")}</th>
             {isFull ? <th className="device-events-th-channel">{t("deviceDetail.events.channel")}</th> : null}
             <th>{t("deviceDetail.events.who")}</th>
-            <th className="device-events-th-status">{t("deviceDetail.events.status")}</th>
+            {isFull ? <th className="device-events-th-status">{t("deviceDetail.events.status")}</th> : null}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {rows.map((r) => {
+            // Durum rozeti: alarm satirinda "ALARM" (statusLabel yerine).
+            const statusCell = r.isAlarm ? (
+              <span className="device-events-badge is-alarm">
+                <span className="material-symbols-outlined">notification_important</span>
+                {t("deviceDetail.events.alarm")}
+              </span>
+            ) : (
+              <span className={`device-events-badge tone-${r.tone}`}>{r.statusLabel}</span>
+            );
+            return (
             <tr key={r.id} className={r.isAlarm ? "is-alarm-row" : undefined}>
               {isFull ? (
                 <td className="device-events-td-alarm">
@@ -301,19 +316,17 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
                     <span className="device-events-alarm-none" aria-hidden="true">—</span>
                   )}
                 </td>
-              ) : null}
+              ) : (
+                <td className="device-events-td-status is-first">{statusCell}</td>
+              )}
               <td className="device-events-time">
-                <span className={`device-events-dot tone-${r.tone}`} aria-hidden="true" />
                 {isFull ? (
-                  <span title={formatRelative(r.ts)}>{formatDateTime(r.ts)}</span>
+                  <>
+                    <span className={`device-events-dot tone-${r.tone}`} aria-hidden="true" />
+                    <span title={formatRelative(r.ts)}>{formatDateTime(r.ts)}</span>
+                  </>
                 ) : (
                   <span className="device-events-time-compact" title={formatRelative(r.ts)}>
-                    {r.isAlarm ? (
-                      <span className="device-events-alarm-tag">
-                        <span className="material-symbols-outlined">notification_important</span>
-                        {t("deviceDetail.events.alarm")}
-                      </span>
-                    ) : null}
                     <span className="device-events-time-date">{formatDate(r.ts)}</span>
                     <span className="device-events-time-hm">
                       {formatDateTime(r.ts, { hour: "2-digit", minute: "2-digit" })}
@@ -346,11 +359,12 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
                   </span>
                 )}
               </td>
-              <td className="device-events-td-status">
-                <span className={`device-events-badge tone-${r.tone}`}>{r.statusLabel}</span>
-              </td>
+              {isFull ? (
+                <td className="device-events-td-status">{statusCell}</td>
+              ) : null}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       )}
