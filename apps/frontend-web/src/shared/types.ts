@@ -505,6 +505,7 @@ export type DeviceCommandRow = {
   status: DeviceCommandStatus;
   result_status?: string | null;
   result_error?: string | null;
+  actor_username?: string | null;
   created_at: string;
   completed_at?: string | null;
 };

@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchDeviceCommands } from "../../shared/api";
+import { formatRelative } from "../../shared/format";
 import type { DeviceCommandRow, SignalCatalogRow } from "../../shared/types";
 
 type CmdGroup = "general" | "alarm_reset" | "config" | "danger";
@@ -199,21 +200,31 @@ export function DeviceCommandsPanel({
             <span className="material-symbols-outlined">info</span>
             {t("deviceDetail.commands.asyncNote")}
           </p>
-          <ul className="device-detail-cmd-history">
+          <div className="device-cmd-history">
             {cmdHistory.map((c) => (
-              <li key={c.id} className={`cmd-hist cmd-hist-${c.status}`}>
-                <span className="cmd-hist-label">{labelForSlug(c.command)}</span>
-                <span className={`cmd-hist-status status-${c.status}`}>
+              <div key={c.id} className={`device-cmd-row is-${c.status}`}>
+                <span className={`device-cmd-row-dot tone-${c.status}`} aria-hidden="true" />
+                <div className="device-cmd-row-main">
+                  <span className="device-cmd-row-label">{labelForSlug(c.command)}</span>
+                  <span className="device-cmd-row-meta">
+                    <span className="device-cmd-row-actor">
+                      <span className="material-symbols-outlined">person</span>
+                      {c.actor_username ?? t("deviceDetail.events.system")}
+                    </span>
+                    <span className="device-cmd-row-time">{formatRelative(c.created_at)}</span>
+                  </span>
+                  {c.status === "failed" && c.result_error ? (
+                    <span className="device-cmd-row-err" title={c.result_error}>
+                      {c.result_error}
+                    </span>
+                  ) : null}
+                </div>
+                <span className={`device-cmd-row-status status-${c.status}`}>
                   {t(`deviceDetail.commands.status.${c.status}`)}
                 </span>
-                {c.status === "failed" && c.result_error ? (
-                  <span className="cmd-hist-err" title={c.result_error}>
-                    {c.result_error}
-                  </span>
-                ) : null}
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </section>
       ) : null}
     </div>

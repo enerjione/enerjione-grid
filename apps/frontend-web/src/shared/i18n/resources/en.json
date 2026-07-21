@@ -2167,7 +2167,8 @@
       "config": "Config",
       "overview": "Overview",
       "trends": "Trends",
-      "events": "Events"
+      "events": "Events",
+      "all": "All"
     },
     "charts": {
       "signal": "Signal",
@@ -2251,7 +2252,8 @@
       "recentEvents": "RECENT EVENTS",
       "viewAllEvents": "View all events",
       "signal": "SIGNAL",
-      "state": "STATE"
+      "state": "STATE",
+      "sourceHint": "Showing {{source}} — switch channel from the left"
     },
     "signalQuality": {
       "good": "Good",
@@ -2270,7 +2272,9 @@
         "warning": "Warning",
         "error": "Error",
         "critical": "Critical"
-      }
+      },
+      "who": "By",
+      "system": "System"
     }
   }
 }

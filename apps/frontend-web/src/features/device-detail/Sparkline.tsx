@@ -28,6 +28,8 @@ type Props = {
   signalKey: string;
   hours?: number;
   color?: string;
+  /** Son (en yeni) degeri parent'a bildirir — KPI "son bilinen deger" icin. */
+  onLastValue?: (v: number | null) => void;
 };
 
 const SPARK_OPTIONS: ChartOptions<"line"> = {
@@ -45,6 +47,7 @@ export function Sparkline({
   signalKey,
   hours = 6,
   color = "#0ea5e9",
+  onLastValue,
 }: Props) {
   const [points, setPoints] = useState<number[]>([]);
 
@@ -60,13 +63,19 @@ export function Sparkline({
           .map((r) => r.value)
           .filter((v): v is number => v != null);
         setPoints(vals);
+        onLastValue?.(vals.length ? vals[vals.length - 1] : null);
       })
       .catch(() => {
-        if (!cancelled) setPoints([]);
+        if (!cancelled) {
+          setPoints([]);
+          onLastValue?.(null);
+        }
       });
     return () => {
       cancelled = true;
     };
+    // onLastValue intentionally excluded — parent stable degil, sonsuz dongu onle
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, deviceCode, signalKey, hours]);
 
   const data = useMemo(

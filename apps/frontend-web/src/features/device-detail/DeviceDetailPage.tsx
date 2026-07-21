@@ -20,6 +20,7 @@ import type {
   SignalLiveRow,
   SignalSource,
 } from "../../shared/types";
+import { DeviceAllSignalsTab } from "./DeviceAllSignalsTab";
 import { DeviceCommandsPanel } from "./DeviceCommandsPanel";
 import { DeviceChartsPanel } from "./DeviceChartsPanel";
 import { DeviceConfigPanel } from "./DeviceConfigPanel";
@@ -29,7 +30,7 @@ import { Sparkline } from "./Sparkline";
 
 type TopologyInfo = { regionName: string; lineName: string } | undefined;
 
-type TabKey = "overview" | "trends" | "events" | "commands" | "config";
+type TabKey = "overview" | "all" | "trends" | "events" | "commands" | "config";
 
 type Props = {
   deviceId: number;
@@ -216,11 +217,14 @@ export function DeviceDetailPage({
 
   const tabs: { key: TabKey; icon: string; show: boolean }[] = [
     { key: "overview", icon: "dashboard", show: true },
+    { key: "all", icon: "table_rows", show: true },
     { key: "trends", icon: "show_chart", show: true },
     { key: "events", icon: "history", show: true },
     { key: "commands", icon: "terminal", show: canCommand },
     { key: "config", icon: "tune", show: canConfig },
   ];
+
+  const showReset = canCommand && hasResetCmd && onDeviceCommand;
 
   return (
     <div className="device-detail-shell">
@@ -231,28 +235,51 @@ export function DeviceDetailPage({
         activeSource={activeSource}
         onSourceChange={setActiveSource}
         sourceCounts={sourceCounts}
-        canCommand={canCommand && hasResetCmd}
-        onResetAlarm={onDeviceCommand ? runResetAlarm : undefined}
-        resetBusy={busyReset}
         onOtherActions={canCommand ? () => setActiveTab("commands") : undefined}
       />
 
       <div className="device-detail-main">
-        <nav className="device-detail-tabs" role="tablist">
-          {tabs.filter((tb) => tb.show).map((tb) => (
-            <button
-              key={tb.key}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tb.key}
-              className={`device-detail-tab${activeTab === tb.key ? " active" : ""}`}
-              onClick={() => setActiveTab(tb.key)}
-            >
-              <span className="material-symbols-outlined">{tb.icon}</span>
-              {t(`deviceDetail.tabs.${tb.key}`)}
-            </button>
-          ))}
-        </nav>
+        <div className="device-detail-topbar">
+          <nav className="device-detail-tabs" role="tablist">
+            {tabs.filter((tb) => tb.show).map((tb) => (
+              <button
+                key={tb.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tb.key}
+                className={`device-detail-tab${activeTab === tb.key ? " active" : ""}`}
+                onClick={() => setActiveTab(tb.key)}
+              >
+                <span className="material-symbols-outlined">{tb.icon}</span>
+                {t(`deviceDetail.tabs.${tb.key}`)}
+              </button>
+            ))}
+          </nav>
+          <div className="device-detail-topbar-actions">
+            {device.alarmActive ? (
+              <span className="device-alarm-badge">
+                <span className="device-alarm-pulse" aria-hidden="true" />
+                {t("deviceDetail.alarmActive")}
+              </span>
+            ) : null}
+            {showReset ? (
+              <button
+                type="button"
+                className="device-reset-btn"
+                onClick={() => void runResetAlarm()}
+                disabled={busyReset}
+                aria-busy={busyReset}
+              >
+                {busyReset ? (
+                  <span className="btn-spinner" aria-hidden="true" />
+                ) : (
+                  <span className="material-symbols-outlined">restart_alt</span>
+                )}
+                {t("deviceDetail.quick.reset")}
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         {activeTab === "overview" ? (
           <OverviewTab
@@ -268,6 +295,10 @@ export function DeviceDetailPage({
             onViewAllEvents={() => setActiveTab("events")}
             t={t}
           />
+        ) : null}
+
+        {activeTab === "all" ? (
+          <DeviceAllSignalsTab device={device} values={values} signals={signals} gwOnline={gwOnline} />
         ) : null}
 
         {activeTab === "trends" && token ? (
@@ -334,17 +365,39 @@ function OverviewTab({
   onViewAllEvents: () => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
+  // Canli deger yoksa (cihaz offline) historian son degeri (sparkline'dan) fallback.
+  const [lastCur, setLastCur] = useState<number | null>(null);
+  const [lastVolt, setLastVolt] = useState<number | null>(null);
+  const [lastTemp, setLastTemp] = useState<number | null>(null);
+  const curVal = curNow ?? lastCur ?? null;
+  const voltVal = voltNow ?? lastVolt ?? null;
+  const tempVal = tempNow ?? lastTemp ?? null;
+  const stale = (live: number | undefined, fb: number | null) => live == null && fb != null;
+  const srcLabel = activeSource === "master" ? "Master" : activeSource === "sat01" ? "Satellite 01" : "Satellite 02";
+
   return (
     <div className="device-overview">
+      <div className="device-overview-srchint">
+        <span className="material-symbols-outlined">tune</span>
+        {t("deviceDetail.overview.sourceHint", { source: srcLabel })}
+      </div>
       {/* KPI serit */}
       <div className="device-overview-kpis">
-        <KpiCard icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curNow ?? null, "analog", "mA")}>
+        <KpiCard icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", "mA")} stale={stale(curNow, lastCur)}>
           {token ? (
-            <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_current`} />
+            <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_current`} color="#f59e0b" onLastValue={setLastCur} />
           ) : null}
         </KpiCard>
-        <KpiCard icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltNow ?? null, "analog", "V")} />
-        <KpiCard icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempNow ?? null, "analog", "°C")} />
+        <KpiCard icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltVal, "analog", "V")} stale={stale(voltNow, lastVolt)}>
+          {token ? (
+            <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_voltage`} color="#3b82f6" onLastValue={setLastVolt} />
+          ) : null}
+        </KpiCard>
+        <KpiCard icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempVal, "analog", "°C")} stale={stale(tempNow, lastTemp)}>
+          {token ? (
+            <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.device_temperature`} color="#f43f5e" onLastValue={setLastTemp} />
+          ) : null}
+        </KpiCard>
         <KpiCard icon="report" tone="red" label={t("deviceDetail.permanentFaults")} value={fmt(permCount ?? null, "counter")} />
         <KpiCard icon="flash_on" tone="orange" label={t("deviceDetail.momentaryFaults")} value={fmt(momCount ?? null, "counter")} />
       </div>
@@ -380,12 +433,14 @@ function KpiCard({
   tone,
   label,
   value,
+  stale,
   children,
 }: {
   icon: string;
   tone: string;
   label: string;
   value: string;
+  stale?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -394,7 +449,9 @@ function KpiCard({
         <span className="device-kpi-label">{label}</span>
         <span className="device-kpi-icon material-symbols-outlined">{icon}</span>
       </div>
-      <div className="device-kpi-value">{value}</div>
+      <div className={`device-kpi-value${stale ? " is-stale" : ""}`} title={stale ? "son bilinen deger" : undefined}>
+        {value}
+      </div>
       {children ? <div className="device-kpi-spark">{children}</div> : null}
     </div>
   );

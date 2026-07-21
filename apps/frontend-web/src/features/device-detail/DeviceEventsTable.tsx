@@ -21,6 +21,7 @@ type Row = {
   ts: string;
   message: string;
   source: string;
+  actor: string | null;
   tone: "ok" | "warn" | "err" | "info" | "pending";
   statusLabel: string;
 };
@@ -79,6 +80,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll }: Props
       ts: e.created_at,
       message: e.message,
       source: e.category || "system",
+      actor: e.actor_username ?? null,
       tone: severityTone(e.severity),
       statusLabel: t(`deviceDetail.events.severity.${e.severity.toLowerCase()}`, {
         defaultValue: e.severity,
@@ -89,6 +91,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll }: Props
       ts: c.created_at,
       message: t("deviceDetail.events.commandMsg", { command: c.command }),
       source: "master",
+      actor: c.actor_username ?? null,
       tone: commandTone(c.status),
       statusLabel: t(`deviceDetail.commands.status.${c.status}`, { defaultValue: c.status }),
     }));
@@ -121,7 +124,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll }: Props
           <tr>
             <th>{t("deviceDetail.events.time")}</th>
             <th>{t("deviceDetail.events.event")}</th>
-            <th>{t("deviceDetail.events.source")}</th>
+            <th>{t("deviceDetail.events.who")}</th>
             <th>{t("deviceDetail.events.status")}</th>
           </tr>
         </thead>
@@ -133,7 +136,19 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll }: Props
                 <span title={formatRelative(r.ts)}>{formatTime(r.ts)}</span>
               </td>
               <td className="device-events-msg">{r.message}</td>
-              <td className="device-events-source">{r.source}</td>
+              <td className="device-events-who">
+                {r.actor ? (
+                  <span className="device-events-actor">
+                    <span className="material-symbols-outlined">person</span>
+                    {r.actor}
+                  </span>
+                ) : (
+                  <span className="device-events-actor is-system">
+                    <span className="material-symbols-outlined">smart_toy</span>
+                    {t("deviceDetail.events.system")}
+                  </span>
+                )}
+              </td>
               <td>
                 <span className={`device-events-badge tone-${r.tone}`}>{r.statusLabel}</span>
               </td>

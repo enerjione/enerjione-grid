@@ -24788,10 +24788,209 @@ th.event-col-category {
 }
 .device-events-empty .material-symbols-outlined { font-size: 32px; color: #cbd5e1; }
 
+/* ---- Ust bar: sekmeler + Alarm Reset + aktif alarm rozeti ---- */
+.device-detail-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #f8fafc;
+  padding-top: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.device-detail-topbar .device-detail-tabs { border-bottom: none; margin-bottom: 0; padding-top: 0; }
+.device-detail-topbar-actions { display: inline-flex; align-items: center; gap: 10px; padding-bottom: 8px; }
+.device-alarm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
+}
+.device-alarm-pulse {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239,68,68,0.6);
+  animation: device-alarm-pulse 1.6s infinite;
+}
+@keyframes device-alarm-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(239,68,68,0); }
+  100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
+.device-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px solid #fdba74;
+  border-radius: 9px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.device-reset-btn:hover:not(:disabled) { background: #ffedd5; }
+.device-reset-btn:disabled { opacity: 0.6; cursor: default; }
+.device-reset-btn .material-symbols-outlined { font-size: 18px; }
+
+/* ---- KPI: stale (son bilinen) + kaynak ipucu ---- */
+.device-kpi-value.is-stale { color: #94a3b8 !important; }
+.device-overview-srchint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.device-overview-srchint .material-symbols-outlined { font-size: 15px; }
+
+/* ---- Kart yukseklik esitle (sag bosluk kaldir) ---- */
+.device-overview-grid { align-items: stretch; }
+.device-overview-col { height: 100%; }
+.device-overview-col:last-child .device-card.is-events {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.device-card.is-events .device-events { flex: 1; }
+
+/* ---- Son Olaylar: kim (actor) ---- */
+.device-events-who { white-space: nowrap; }
+.device-events-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.device-events-actor .material-symbols-outlined { font-size: 15px; color: #94a3b8; }
+.device-events-actor.is-system { color: #94a3b8; }
+
+/* ---- Tumu sekmesi ---- */
+.device-all { display: flex; flex-direction: column; gap: 18px; }
+.device-all-source { display: flex; flex-direction: column; gap: 10px; }
+.device-all-source-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e2e8f0;
+}
+.device-all-source-badge {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.device-all-source-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 1px 9px;
+  border-radius: 999px;
+}
+.device-all-source-title.tone-master { border-bottom-color: #fcd34d; }
+.device-all-source-title.tone-green { border-bottom-color: #86efac; }
+.device-all-source-title.tone-amber { border-bottom-color: #fcd34d; }
+.device-all-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.device-all-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.device-all-item.is-stale { opacity: 0.55; }
+.device-all-item-label {
+  font-size: 12px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device-all-item-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+/* ---- Komut gecmisi (zengin, actor) ---- */
+.device-cmd-history { display: flex; flex-direction: column; gap: 8px; }
+.device-cmd-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.device-cmd-row-dot { width: 9px; height: 9px; border-radius: 50%; }
+.device-cmd-row-dot.tone-ok { background: #0ea5e9; }
+.device-cmd-row-dot.tone-failed { background: #ef4444; }
+.device-cmd-row-dot.tone-pending, .device-cmd-row-dot.tone-sent { background: #eab308; }
+.device-cmd-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.device-cmd-row-label { font-size: 13px; font-weight: 700; color: #0f172a; }
+.device-cmd-row-meta { display: inline-flex; align-items: center; gap: 12px; font-size: 12px; color: #94a3b8; }
+.device-cmd-row-actor { display: inline-flex; align-items: center; gap: 4px; }
+.device-cmd-row-actor .material-symbols-outlined { font-size: 14px; }
+.device-cmd-row-err { font-size: 11px; color: #b91c1c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-cmd-row-status {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.device-cmd-row-status.status-ok { background: #dbeafe; color: #1d4ed8; }
+.device-cmd-row-status.status-failed { background: #fee2e2; color: #b91c1c; }
+.device-cmd-row-status.status-pending, .device-cmd-row-status.status-sent { background: #fef9c3; color: #854d0e; }
+.device-cmd-row-status.status-expired { background: #f1f5f9; color: #64748b; }
+
+/* ---- Sidebar mini harita ---- */
+.device-sidebar-map {
+  margin-top: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+.device-sidebar-map .leaflet-container { border-radius: 10px; }
+.device-map-pin-dot {
+  display: block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #0ea5e9;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px rgba(14,165,233,0.35);
+}
+
 @media (max-width: 1024px) {
   .device-detail-shell { grid-template-columns: 1fr; }
   .device-sidebar { border-right: none; border-bottom: 1px solid #e2e8f0; }
   .device-overview-kpis { grid-template-columns: repeat(2, 1fr); }
   .device-overview-kpis .device-kpi:nth-child(2n) { border-right: none; }
   .device-overview-grid { grid-template-columns: 1fr; }
+  .device-detail-topbar { flex-direction: column; align-items: stretch; gap: 8px; }
 }

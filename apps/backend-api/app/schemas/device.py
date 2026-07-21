@@ -108,6 +108,7 @@ class DeviceCommandRow(BaseModel):
     status: str  # pending | sent | ok | failed | expired
     result_status: str | None = None
     result_error: str | None = None
+    actor_username: str | None = None  # komutu gonderen kullanici (UI "kim")
     created_at: datetime
     completed_at: datetime | None = None
 

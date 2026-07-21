@@ -2167,7 +2167,8 @@
       "config": "Yapılandırma",
       "overview": "Genel Bakış",
       "trends": "Trendler",
-      "events": "Olaylar"
+      "events": "Olaylar",
+      "all": "Tümü"
     },
     "charts": {
       "signal": "Sinyal",
@@ -2251,7 +2252,8 @@
       "recentEvents": "SON OLAYLAR",
       "viewAllEvents": "Tüm olayları görüntüle",
       "signal": "SİNYAL",
-      "state": "DURUM"
+      "state": "DURUM",
+      "sourceHint": "{{source}} kaynağı gösteriliyor — kanalı soldan değiştirin"
     },
     "signalQuality": {
       "good": "İyi",
@@ -2270,7 +2272,9 @@
         "warning": "Uyarı",
         "error": "Hata",
         "critical": "Kritik"
-      }
+      },
+      "who": "Kim",
+      "system": "Sistem"
     }
   }
 }

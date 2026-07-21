@@ -7,10 +7,20 @@
  */
 
 import { useTranslation } from "react-i18next";
+import { MapContainer, Marker, TileLayer } from "react-leaflet";
+import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
 import { locateDevice } from "../../shared/geoLookup";
 import type { DeviceRow, SignalSource } from "../../shared/types";
+
+// Cihaz pin ikonu (Leaflet divIcon — material-symbols yerine basit daire).
+const DEVICE_PIN = L.divIcon({
+  className: "device-map-pin",
+  html: '<span class="device-map-pin-dot"></span>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
 
 type TopologyInfo = { regionName: string; lineName: string } | undefined;
 
@@ -23,9 +33,6 @@ type Props = {
   onSourceChange: (s: SignalSource) => void;
   /** Her kaynaktaki sinyal sayisi (0 ise kanal disabled). */
   sourceCounts: Record<SignalSource, number>;
-  canCommand: boolean;
-  onResetAlarm?: () => void;
-  resetBusy?: boolean;
   onOtherActions?: () => void;
 };
 
@@ -51,22 +58,19 @@ export function DeviceSidebar({
   activeSource,
   onSourceChange,
   sourceCounts,
-  canCommand,
-  onResetAlarm,
-  resetBusy,
   onOtherActions,
 }: Props) {
   const { t } = useTranslation();
   const online = device.communicationStatus === "online";
   const loc = locateDevice(device.latitude, device.longitude);
   const quality = rssiQuality(rssi);
+  const hasGeo =
+    Number.isFinite(device.latitude) &&
+    Number.isFinite(device.longitude) &&
+    !(device.latitude === 0 && device.longitude === 0);
 
   return (
     <aside className="device-sidebar">
-      <div className="device-sidebar-brand">
-        <img src="/logo.png" alt="EnerjiOne" className="device-sidebar-logo" />
-      </div>
-
       {/* ---- Cihaz kimlik ---- */}
       <section className="device-sidebar-section">
         <span className="device-sidebar-kicker">{t("deviceDetail.sidebar.device")}</span>
@@ -100,6 +104,23 @@ export function DeviceSidebar({
           <InfoRow icon="cell_tower" label="RSSI" value={quality.dbm} />
           <InfoRow icon="location_on" label={t("deviceDetail.meta.location")} value={loc.label} />
         </ul>
+        {hasGeo ? (
+          <div className="device-sidebar-map">
+            <MapContainer
+              center={[device.latitude, device.longitude]}
+              zoom={13}
+              zoomControl={false}
+              dragging={false}
+              scrollWheelZoom={false}
+              doubleClickZoom={false}
+              attributionControl={false}
+              style={{ height: "140px", width: "100%" }}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <Marker position={[device.latitude, device.longitude]} icon={DEVICE_PIN} />
+            </MapContainer>
+          </div>
+        ) : null}
       </section>
 
       {/* ---- Durum ozeti ---- */}
@@ -157,23 +178,7 @@ export function DeviceSidebar({
         </ul>
       </section>
 
-      {/* ---- Alarm Reset + Diger ---- */}
-      {canCommand && onResetAlarm ? (
-        <button
-          type="button"
-          className="device-sidebar-reset"
-          onClick={onResetAlarm}
-          disabled={resetBusy}
-          aria-busy={resetBusy}
-        >
-          {resetBusy ? (
-            <span className="btn-spinner" aria-hidden="true" />
-          ) : (
-            <span className="material-symbols-outlined">restart_alt</span>
-          )}
-          {t("deviceDetail.quick.reset")}
-        </button>
-      ) : null}
+      {/* ---- Diger Islemler (Alarm Reset ust sekme cubugunda) ---- */}
       {onOtherActions ? (
         <button type="button" className="device-sidebar-more" onClick={onOtherActions}>
           <span className="material-symbols-outlined">more_horiz</span>
