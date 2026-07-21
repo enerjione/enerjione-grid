@@ -24893,15 +24893,31 @@ th.event-col-category {
 }
 .device-overview-srchint .material-symbols-outlined { font-size: 15px; }
 
-/* ---- Kart yukseklik esitle (sag bosluk kaldir) ---- */
+/* ---- Sag kolon: Alarmlar + Son Olaylar ESIT yukseklik, her biri ic scroll ---- */
 .device-overview-grid { align-items: stretch; }
-.device-overview-col { height: 100%; }
-.device-overview-col:last-child .device-card.is-events {
-  height: 100%;
+.device-overview-col { height: 100%; min-height: 0; }
+/* Sag kolon iki karti esit bolussun */
+.device-overview-col:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.device-overview-col:last-child .device-card {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.device-card.is-events .device-events { flex: 1; }
+/* Kart govdesi (baslik disi) tasinca ic scroll */
+.device-overview-col:last-child .device-card .device-alarms-list,
+.device-overview-col:last-child .device-card .device-events,
+.device-overview-col:last-child .device-card .device-alarms-empty {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Alarmlar listesi zaten scroll'lu — max-height'i kaldir (flex belirlesin) */
+.device-overview-col:last-child .device-alarms-list { max-height: none; }
 
 /* ---- Son Olaylar: kim (actor) ---- */
 .device-events-who { white-space: nowrap; }
@@ -25211,32 +25227,46 @@ th.event-col-category {
 }
 
 /* ---- Mevcut Durum: 2 kolonlu grid + olcum blogu ---- */
-/* Mevcut Durum — kategori gruplu, her grup 2 kolonlu grid */
-.device-status { display: flex; flex-direction: column; gap: 18px; }
-.device-status-group { display: flex; flex-direction: column; gap: 6px; }
-.device-status-group-title {
+/* Mevcut Durum — kategori ALT-SEKMELERI (scroll yerine tab) + 2 kolonlu grid */
+.device-status { display: flex; flex-direction: column; gap: 14px; }
+.device-status-tabs {
   display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.device-status-tab {
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin: 0;
-  padding-bottom: 6px;
-  border-bottom: 2px solid #e2e8f0;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
   color: #475569;
-}
-.device-status-group-title .material-symbols-outlined { font-size: 17px; color: #64748b; }
-.device-status-group-count {
-  margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 1px 8px;
-  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
+.device-status-tab .material-symbols-outlined { font-size: 16px; color: #94a3b8; }
+.device-status-tab:hover { background: #f8fafc; }
+.device-status-tab.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+}
+.device-status-tab.active .material-symbols-outlined { color: #fff; }
+.device-status-tab-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.device-status-tab.active .device-status-tab-count { background: rgba(255,255,255,0.2); color: #fff; }
 .device-status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

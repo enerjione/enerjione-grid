@@ -36,6 +36,8 @@ type Props = {
   partNo?: string;
   /** Firmware surumu (master.firmware_version / info_fw_version). */
   firmware?: string;
+  /** Gercek alarm listesinden: aktif (giderilmemis) alarm var mi. */
+  hasAlarm?: boolean;
   /** Kanal seri no'lari (master/sat01/sat02 serial_number). */
   channelSerials?: Partial<Record<SignalSource, string>>;
   activeSource: SignalSource;
@@ -79,6 +81,7 @@ export function DeviceSidebar({
   ip,
   partNo,
   firmware,
+  hasAlarm = false,
   channelSerials,
   activeSource,
   onSourceChange,
@@ -113,21 +116,21 @@ export function DeviceSidebar({
         <div className="device-sidebar-name">{device.name}</div>
 
         {/* Genel alarm durum karti — alarm varsa yanip sonen, yoksa yesil */}
-        <div className={`device-sidebar-alarmcard ${device.alarmActive ? "is-alarm" : "is-ok"}`}>
+        <div className={`device-sidebar-alarmcard ${hasAlarm ? "is-alarm" : "is-ok"}`}>
           <span className="device-sidebar-alarmcard-icon">
             <span className="material-symbols-outlined">
-              {device.alarmActive ? "notification_important" : "check_circle"}
+              {hasAlarm ? "notification_important" : "check_circle"}
             </span>
           </span>
           <div className="device-sidebar-alarmcard-body">
             <span className="device-sidebar-alarmcard-title">
-              {device.alarmActive ? t("deviceDetail.sidebar.alarmActive") : t("deviceDetail.sidebar.alarmClear")}
+              {hasAlarm ? t("deviceDetail.sidebar.alarmActive") : t("deviceDetail.sidebar.alarmClear")}
             </span>
             <span className="device-sidebar-alarmcard-sub">
-              {device.alarmActive ? t("deviceDetail.sidebar.alarmActiveSub") : t("deviceDetail.sidebar.alarmClearSub")}
+              {hasAlarm ? t("deviceDetail.sidebar.alarmActiveSub") : t("deviceDetail.sidebar.alarmClearSub")}
             </span>
           </div>
-          {device.alarmActive ? <span className="device-sidebar-alarmcard-pulse" aria-hidden="true" /> : null}
+          {hasAlarm ? <span className="device-sidebar-alarmcard-pulse" aria-hidden="true" /> : null}
         </div>
       </section>
 

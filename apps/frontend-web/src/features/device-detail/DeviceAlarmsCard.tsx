@@ -6,16 +6,15 @@
  * kanalin alarmlari). Her satirda kaynak rozeti + baslik + zaman + seviye.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
-import { fetchAlarmEvents } from "../../shared/api";
 import { formatDateTime, formatRelative } from "../../shared/format";
 import type { AlarmEvent, SignalSource } from "../../shared/types";
 
 type Props = {
-  token: string;
-  deviceId: number;
+  /** Cihazin alarmlari (DeviceDetailPage tek fetch eder). */
+  alarms: AlarmEvent[];
   /** Aktif kaynak — sadece bu kanalin alarmlari gosterilir. */
   activeSource: SignalSource;
   limit?: number;
@@ -41,41 +40,16 @@ function levelTone(level: string): "err" | "warn" | "info" {
   return "info";
 }
 
-export function DeviceAlarmsCard({ token, deviceId, activeSource, limit = 6 }: Props) {
+export function DeviceAlarmsCard({ alarms, activeSource, limit = 50 }: Props) {
   const { t } = useTranslation();
-  const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const reload = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const all = await fetchAlarmEvents(token).catch(() => [] as AlarmEvent[]);
-      setAlarms(all.filter((a) => a.device_id === deviceId));
-    } finally {
-      setLoading(false);
-    }
-  }, [token, deviceId]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  // Aktif kaynagin alarmlari (zamana gore, en yeni ustte).
+  // Aktif kaynagin AKTIF alarmlari (giderilen/reset olan GOSTERILMEZ).
   const rows = useMemo(() => {
     return alarms
-      .filter((a) => sourceOf(a.signal_key) === activeSource)
+      .filter((a) => sourceOf(a.signal_key) === activeSource && !a.reset)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, limit);
   }, [alarms, activeSource, limit]);
-
-  if (loading && rows.length === 0) {
-    return (
-      <div className="device-alarms-empty">
-        <span className="btn-spinner" aria-hidden="true" />
-      </div>
-    );
-  }
 
   if (rows.length === 0) {
     return (

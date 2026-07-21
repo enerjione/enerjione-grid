@@ -9,8 +9,11 @@
  * sistem olaylari/komut gecmisi (Son Olaylar). activeSource sidebar'dan kontrol.
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+
+import { fetchAlarmEvents } from "../../shared/api";
+import type { AlarmEvent } from "../../shared/types";
 
 import type {
   DeviceRow,
@@ -174,8 +177,30 @@ export function DeviceDetailPage({
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [activeSource, setActiveSource] = useState<SignalSource>("master");
   const [busyReset, setBusyReset] = useState(false);
+  const [deviceAlarms, setDeviceAlarms] = useState<AlarmEvent[]>([]);
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
+
+  // Bu cihazin alarmlari — hem sidebar durum karti hem Alarmlar karti kullanir
+  // (tek fetch). Aktif alarm = reset EDILMEMIS (giderilmemis) alarm.
+  const loadAlarms = useCallback(async () => {
+    if (!token || !device) return;
+    try {
+      const all = await fetchAlarmEvents(token).catch(() => [] as AlarmEvent[]);
+      setDeviceAlarms(all.filter((a) => a.device_id === device.id));
+    } catch {
+      // sessiz
+    }
+  }, [token, device]);
+
+  useEffect(() => {
+    void loadAlarms();
+  }, [loadAlarms]);
+
+  const hasActiveAlarm = useMemo(
+    () => deviceAlarms.some((a) => !a.reset),
+    [deviceAlarms]
+  );
 
   const dataTypeByKey = useMemo(() => {
     const m = new Map<string, SignalDataType>();
@@ -319,6 +344,7 @@ export function DeviceDetailPage({
         ip={sidebarIp}
         partNo={sidebarPartNo}
         firmware={sidebarFirmware}
+        hasAlarm={hasActiveAlarm}
         channelSerials={channelSerials}
         activeSource={activeSource}
         onSourceChange={setActiveSource}
@@ -375,6 +401,7 @@ export function DeviceDetailPage({
             activeSource={activeSource}
             rowBySuffix={rowBySuffix}
             allRows={rows}
+            deviceAlarms={deviceAlarms}
             curNow={curNow}
             voltNow={voltNow}
             tempNow={tempNow}
@@ -437,6 +464,7 @@ function OverviewTab({
   activeSource,
   rowBySuffix,
   allRows,
+  deviceAlarms,
   curNow,
   voltNow,
   tempNow,
@@ -453,6 +481,7 @@ function OverviewTab({
   activeSource: SignalSource;
   rowBySuffix: Map<string, Row>;
   allRows: Row[];
+  deviceAlarms: AlarmEvent[];
   curNow?: number;
   voltNow?: number;
   tempNow?: number;
@@ -517,9 +546,8 @@ function OverviewTab({
               <span className="material-symbols-outlined device-card-title-icon">notifications_active</span>
               {t("deviceDetail.alarms.title", { source: srcLabel })}
             </h3>
-            {token ? (
-              <DeviceAlarmsCard token={token} deviceId={device.id} activeSource={activeSource} limit={50} />
-            ) : null}
+            <DeviceAlarmsCard alarms={deviceAlarms} activeSource={activeSource} />
+
           </section>
           {/* Son Olaylar */}
           <section className="device-card is-events">
@@ -635,8 +663,13 @@ function StatusTable({
     return m;
   }, [rows]);
 
-  const hasAny = GROUP_ORDER.some((g) => (byGroup.get(g.key)?.length ?? 0) > 0);
-  if (!hasAny) {
+  // Dolu gruplar (bos olanlar tab'da gorunmez).
+  const activeGroups = GROUP_ORDER.filter((g) => (byGroup.get(g.key)?.length ?? 0) > 0);
+  const [tab, setTab] = useState<GroupKey>(activeGroups[0]?.key ?? "protection");
+  // Aktif tab bos kaldiysa (kaynak degisti) ilk dolu gruba dus.
+  const curTab = activeGroups.some((g) => g.key === tab) ? tab : activeGroups[0]?.key;
+
+  if (activeGroups.length === 0) {
     return (
       <div className="device-events-empty">
         <span className="material-symbols-outlined">sensors_off</span>
@@ -645,26 +678,32 @@ function StatusTable({
     );
   }
 
+  const items = curTab ? byGroup.get(curTab) ?? [] : [];
+
   return (
     <div className="device-status">
-      {GROUP_ORDER.map((g) => {
-        const items = byGroup.get(g.key) ?? [];
-        if (items.length === 0) return null;
-        return (
-          <section key={g.key} className="device-status-group">
-            <h4 className="device-status-group-title">
-              <span className="material-symbols-outlined">{g.icon}</span>
-              {t(`deviceDetail.groups.${g.key}`)}
-              <span className="device-status-group-count">{items.length}</span>
-            </h4>
-            <div className="device-status-grid">
-              {items.map((r) => (
-                <StatusItem key={r.signal_key} row={r} t={t} />
-              ))}
-            </div>
-          </section>
-        );
-      })}
+      {/* Alt-sekmeler (kategori) — scroll yerine tab */}
+      <div className="device-status-tabs" role="tablist">
+        {activeGroups.map((g) => (
+          <button
+            key={g.key}
+            type="button"
+            role="tab"
+            aria-selected={curTab === g.key}
+            className={`device-status-tab${curTab === g.key ? " active" : ""}`}
+            onClick={() => setTab(g.key)}
+          >
+            <span className="material-symbols-outlined">{g.icon}</span>
+            {t(`deviceDetail.groups.${g.key}`)}
+            <span className="device-status-tab-count">{byGroup.get(g.key)?.length ?? 0}</span>
+          </button>
+        ))}
+      </div>
+      <div className="device-status-grid">
+        {items.map((r) => (
+          <StatusItem key={r.signal_key} row={r} t={t} />
+        ))}
+      </div>
     </div>
   );
 }
