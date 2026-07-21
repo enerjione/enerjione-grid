@@ -2246,7 +2246,8 @@
       "batteryStatus": "Pil Durumu",
       "signalQuality": "Sinyal Kalitesi",
       "low": "Düşük",
-      "serial": "Seri No"
+      "serial": "Seri No",
+      "noLocation": "Konum belirtilmemiş"
     },
     "overview": {
       "currentStatus": "MEVCUT DURUM",

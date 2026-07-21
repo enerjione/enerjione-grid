@@ -28,7 +28,9 @@ import { DeviceEventsTable } from "./DeviceEventsTable";
 import { DeviceSidebar } from "./DeviceSidebar";
 import { Sparkline } from "./Sparkline";
 
-type TopologyInfo = { regionName: string; lineName: string } | undefined;
+type TopologyInfo =
+  | { regionName: string; lineName: string; latitude?: number; longitude?: number }
+  | undefined;
 
 type TabKey = "overview" | "all" | "trends" | "events" | "commands" | "config";
 
@@ -178,19 +180,17 @@ export function DeviceDetailPage({
     return s.length > 0 ? s : undefined;
   };
 
-  // Sidebar teknik bilgi satirlari (string sinyallerden — IP/IMEI/firmware/modem).
-  const sidebarSerial = strVal("master.serial_number");
-  const sidebarExtra = useMemo(() => {
-    const rows: { icon: string; label: string; value: string }[] = [];
-    const push = (icon: string, label: string, key: string) => {
-      const v = strVal(key);
-      if (v) rows.push({ icon, label, value: v });
-    };
-    push("router", "IP", "master.ipv4_address");
-    push("memory", "Firmware", "master.firmware_version");
-    push("smartphone", "Modem", "master.modem_model_name");
-    push("sim_card", "IMEI", "master.modem_imei");
-    return rows;
+  // Sidebar: master IP + kanal (master/sat01/sat02) seri no'lari.
+  const sidebarIp = strVal("master.ipv4_address");
+  const channelSerials = useMemo<Partial<Record<SignalSource, string>>>(() => {
+    const out: Partial<Record<SignalSource, string>> = {};
+    const m = strVal("master.serial_number");
+    const s1 = strVal("sat01.serial_number");
+    const s2 = strVal("sat02.serial_number");
+    if (m) out.master = m;
+    if (s1) out.sat01 = s1;
+    if (s2) out.sat02 = s2;
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueByKey]);
 
@@ -252,12 +252,11 @@ export function DeviceDetailPage({
         device={device}
         topologyInfo={topologyInfo}
         rssi={numVal("master.modem_rssi")}
-        serial={sidebarSerial}
-        extraInfo={sidebarExtra}
+        ip={sidebarIp}
+        channelSerials={channelSerials}
         activeSource={activeSource}
         onSourceChange={setActiveSource}
         sourceCounts={sourceCounts}
-        onOtherActions={canCommand ? () => setActiveTab("commands") : undefined}
       />
 
       <div className="device-detail-main">

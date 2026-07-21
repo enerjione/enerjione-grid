@@ -2246,7 +2246,8 @@
       "batteryStatus": "Battery Status",
       "signalQuality": "Signal Quality",
       "low": "Low",
-      "serial": "Serial"
+      "serial": "Serial",
+      "noLocation": "No location set"
     },
     "overview": {
       "currentStatus": "CURRENT STATUS",

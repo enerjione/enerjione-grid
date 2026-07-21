@@ -24501,6 +24501,13 @@ th.event-col-category {
   transition: background 0.15s, border-color 0.15s;
 }
 .device-channel .material-symbols-outlined { font-size: 18px; color: #94a3b8; }
+.device-channel-serial {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+.device-channel.active .device-channel-serial { color: inherit; }
 .device-channel:hover:not(:disabled) { background: #f8fafc; }
 .device-channel:disabled { opacity: 0.45; cursor: not-allowed; }
 .device-channel.active { background: #f8fafc; }
@@ -25218,6 +25225,83 @@ th.event-col-category {
   background: #fafbfc;
 }
 .device-cmd-row-time { font-variant-numeric: tabular-nums; }
+
+/* ===== Sidebar v4: kod solunda durum + birlesik bilgiler + kanal seri no ===== */
+.device-sidebar-idrow { display: flex; align-items: center; gap: 10px; }
+.device-sidebar-statusdot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.device-sidebar-statusdot.is-online {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34,197,94,0.18);
+}
+.device-sidebar-statusdot.is-offline {
+  background: #94a3b8;
+  box-shadow: 0 0 0 4px rgba(148,163,184,0.15);
+}
+
+/* Birlesik bilgiler: tone'lu deger (durum noktali) */
+.device-sidebar-info-value.tone-green,
+.device-sidebar-info-value.tone-amber,
+.device-sidebar-info-value.tone-slate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.device-sidebar-info-dot { width: 7px; height: 7px; border-radius: 50%; }
+.device-sidebar-info-dot.dot-green { background: #22c55e; }
+.device-sidebar-info-dot.dot-amber { background: #f59e0b; }
+.device-sidebar-info-dot.dot-slate { background: #94a3b8; }
+
+/* Seri no listesi (master + satellite) */
+.device-sidebar-serials {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.device-sidebar-serial-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.device-sidebar-serial-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.device-sidebar-serial-tag.tone-master { background: #fef3c7; color: #b45309; }
+.device-sidebar-serial-tag.tone-green { background: #dcfce7; color: #15803d; }
+.device-sidebar-serial-tag.tone-amber { background: #fef3c7; color: #b45309; }
+.device-sidebar-serial-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Konum yok durumu */
+.device-sidebar-nomap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 18px;
+  border: 1px dashed #e2e8f0;
+  border-radius: 10px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+.device-sidebar-nomap .material-symbols-outlined { font-size: 18px; color: #cbd5e1; }
 
 @media (max-width: 1024px) {
   .device-detail-shell { grid-template-columns: 1fr; }

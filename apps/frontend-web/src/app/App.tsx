@@ -1655,21 +1655,46 @@ export function App() {
   const deviceTopologyInfo = useMemo(() => {
     const map = new Map<
       number,
-      { regionId: number; regionName: string; lineId: number; lineName: string }
+      {
+        regionId: number;
+        regionName: string;
+        lineId: number;
+        lineName: string;
+        latitude?: number;
+        longitude?: number;
+      }
     >();
     if (!gridSnapshot) return map;
     const lineById = new Map(gridSnapshot.lines.map((l) => [l.id, l]));
     const regionById = new Map(gridSnapshot.regions.map((r) => [r.id, r]));
+    const poleById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
     for (const seg of gridSnapshot.segments) {
       if (!seg.device_id) continue;
       const line = lineById.get(seg.line_id);
       if (!line) continue;
       const region = regionById.get(line.region_id);
+      // Cihaz konumu: bagli oldugu segmentin iki diregi arasi (position_t ile
+      // interpolasyon; yoksa orta nokta). Cihazin kendi lat/lon'u yoksa harita
+      // bunu kullanir.
+      const fromP = poleById.get(seg.from_pole_id);
+      const toP = poleById.get(seg.to_pole_id);
+      let lat: number | undefined;
+      let lon: number | undefined;
+      if (fromP && toP) {
+        const t = seg.device_position_t ?? 0.5;
+        lat = fromP.latitude + (toP.latitude - fromP.latitude) * t;
+        lon = fromP.longitude + (toP.longitude - fromP.longitude) * t;
+      } else if (fromP) {
+        lat = fromP.latitude;
+        lon = fromP.longitude;
+      }
       map.set(seg.device_id, {
         regionId: line.region_id,
         regionName: region?.name ?? "",
         lineId: line.id,
-        lineName: line.name
+        lineName: line.name,
+        latitude: lat,
+        longitude: lon,
       });
     }
     return map;
