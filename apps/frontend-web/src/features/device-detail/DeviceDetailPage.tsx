@@ -89,11 +89,10 @@ const STATUS_ICONS: Record<string, string> = {
 // ---- Mevcut Durum: sinyalleri kategori gruplarina ayir (suffix pattern) ----
 // Kategori sirasi = gorunum sirasi. Her sinyal bir gruba duser; bilgi/komut
 // sinyalleri (IP/serial/firmware, binary_output) HARIC (baska sekmelerde).
-type GroupKey = "protection" | "faultValues" | "measure" | "status" | "counter";
+type GroupKey = "protection" | "measure" | "status" | "counter";
 
 const GROUP_ORDER: { key: GroupKey; icon: string }[] = [
   { key: "protection", icon: "shield" },
-  { key: "faultValues", icon: "warning" },
   { key: "measure", icon: "monitoring" },
   { key: "status", icon: "toggle_on" },
   { key: "counter", icon: "pin" },
@@ -105,17 +104,13 @@ const INFO_SUFFIX_RE =
 
 function groupOfSuffix(suffix: string, dataType: string | undefined): GroupKey {
   const s = suffix.toLowerCase();
-  // Koruma / ariza yonu / trip
+  // Koruma / ariza yonu / trip + ariza olcum degerleri (tek grupta).
   if (
-    /(overcurrent|delta_i_delta_t|fault_direction|load_flow|_tripped|voltage_loss|current_loss|tamper|pick_up|permanent_fault$|momentary_fault$)/.test(
+    /(overcurrent|delta_i_delta_t|fault_direction|load_flow|_tripped|voltage_loss|current_loss|tamper|pick_up|permanent_fault$|momentary_fault$|fault_current|fault_duration|last_good|minimum_current|minimum_voltage|maximum_current|maximum_voltage|trip_level)/.test(
       s
     )
   ) {
     return "protection";
-  }
-  // Ariza olcum degerleri
-  if (/(fault_current|fault_duration|last_good|minimum_current|minimum_voltage|maximum_current|maximum_voltage|trip_level)/.test(s)) {
-    return "faultValues";
   }
   // Sayaclar
   if (dataType === "counter" || /_counter$/.test(s)) return "counter";
