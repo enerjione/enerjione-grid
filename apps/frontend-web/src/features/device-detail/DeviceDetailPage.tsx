@@ -20,6 +20,7 @@ import type {
   SignalLiveRow,
   SignalSource,
 } from "../../shared/types";
+import { DeviceAlarmsCard } from "./DeviceAlarmsCard";
 import { DeviceAllSignalsTab } from "./DeviceAllSignalsTab";
 import { DeviceCommandsPanel } from "./DeviceCommandsPanel";
 import { DeviceChartsPanel } from "./DeviceChartsPanel";
@@ -171,6 +172,13 @@ export function DeviceDetailPage({
     return m;
   }, [values, device]);
 
+  // Katalog birimleri (kullanici Sinyaller sayfasindan degistirebilir).
+  const unitByKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of signals) if (s.unit) m.set(s.key, s.unit);
+    return m;
+  }, [signals]);
+
   const numVal = (key: string): number | undefined => {
     const v = valueByKey.get(key)?.value;
     return v == null ? undefined : v;
@@ -179,6 +187,9 @@ export function DeviceDetailPage({
     const s = (valueByKey.get(key)?.value_string ?? "").trim();
     return s.length > 0 ? s : undefined;
   };
+  // Birim: canli deger unit'i, yoksa katalog unit'i (sabit "mA" DEGIL).
+  const unitOf = (key: string): string | undefined =>
+    valueByKey.get(key)?.unit || unitByKey.get(key) || undefined;
 
   // Sidebar: master IP + kanal (master/sat01/sat02) seri no'lari.
   // IP: G110 string (info_ipv4_address). Serial: analog (group 30) -> sayi,
@@ -318,6 +329,9 @@ export function DeviceDetailPage({
             curNow={curNow}
             voltNow={voltNow}
             tempNow={tempNow}
+            curUnit={unitOf(`${activeSource}.actual_current`)}
+            voltUnit={unitOf(`${activeSource}.actual_voltage`)}
+            tempUnit={unitOf(`${activeSource}.device_temperature`) ?? unitOf(`${activeSource}.conductor_temperature`)}
             permCount={permCount}
             momCount={momCount}
             onViewAllEvents={() => setActiveTab("events")}
@@ -376,6 +390,9 @@ function OverviewTab({
   curNow,
   voltNow,
   tempNow,
+  curUnit,
+  voltUnit,
+  tempUnit,
   permCount,
   momCount,
   onViewAllEvents,
@@ -388,6 +405,9 @@ function OverviewTab({
   curNow?: number;
   voltNow?: number;
   tempNow?: number;
+  curUnit?: string;
+  voltUnit?: string;
+  tempUnit?: string;
   permCount?: number;
   momCount?: number;
   onViewAllEvents: () => void;
@@ -411,17 +431,17 @@ function OverviewTab({
       </div>
       {/* KPI serit */}
       <div className="device-overview-kpis">
-        <KpiCard icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", "mA")} stale={stale(curNow, lastCur)}>
+        <KpiCard icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", curUnit)} stale={stale(curNow, lastCur)}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_current`} color="#f59e0b" onLastValue={setLastCur} />
           ) : null}
         </KpiCard>
-        <KpiCard icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltVal, "analog", "V")} stale={stale(voltNow, lastVolt)}>
+        <KpiCard icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltVal, "analog", voltUnit)} stale={stale(voltNow, lastVolt)}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_voltage`} color="#3b82f6" onLastValue={setLastVolt} />
           ) : null}
         </KpiCard>
-        <KpiCard icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempVal, "analog", "°C")} stale={stale(tempNow, lastTemp)}>
+        <KpiCard icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempVal, "analog", tempUnit)} stale={stale(tempNow, lastTemp)}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.device_temperature`} color="#f43f5e" onLastValue={setLastTemp} />
           ) : null}
@@ -440,10 +460,21 @@ function OverviewTab({
         </div>
 
         <div className="device-overview-col">
+          {/* Alarmlar — sadece bu cihaz + aktif kaynak */}
+          <section className="device-card">
+            <h3 className="device-card-title">
+              <span className="material-symbols-outlined device-card-title-icon">notifications_active</span>
+              {t("deviceDetail.alarms.title", { source: srcLabel })}
+            </h3>
+            {token ? (
+              <DeviceAlarmsCard token={token} deviceId={device.id} activeSource={activeSource} limit={5} />
+            ) : null}
+          </section>
+          {/* Son Olaylar */}
           <section className="device-card is-events">
             <h3 className="device-card-title">{t("deviceDetail.overview.recentEvents")}</h3>
             {token ? (
-              <DeviceEventsTable token={token} deviceCode={device.code} limit={6} onViewAll={onViewAllEvents} />
+              <DeviceEventsTable token={token} deviceCode={device.code} limit={5} onViewAll={onViewAllEvents} />
             ) : null}
           </section>
         </div>
@@ -537,11 +568,14 @@ function StatusTable({
       {/* Kritik olcum degerleri */}
       <div className="device-status-measures">
         {STATUS_MEASURES.map((m) => {
-          const v = rowBySuffix.get(m.suffix)?.value ?? null;
+          const row = rowBySuffix.get(m.suffix);
+          const v = row?.value ?? null;
+          // Birim: sinyalin canli unit'i (kullanici degistirebilir), yoksa varsayilan.
+          const unit = row?.unit || m.unit;
           return (
             <div key={m.suffix} className="device-status-measure">
               <span className="device-status-measure-label">{m.label}</span>
-              <span className="device-status-measure-value">{fmt(v, m.type, m.unit)}</span>
+              <span className="device-status-measure-value">{fmt(v, m.type, unit)}</span>
             </div>
           );
         })}

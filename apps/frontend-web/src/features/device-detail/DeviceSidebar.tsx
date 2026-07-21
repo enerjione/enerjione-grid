@@ -46,13 +46,26 @@ const CHANNELS: { key: SignalSource; label: string; tone: string }[] = [
   { key: "sat02", label: "Satellite 02", tone: "amber" },
 ];
 
-// RSSI -> sinyal kalitesi (dBm). -70 ust iyi, -85 ust orta, alti zayif.
-function rssiQuality(rssi: number | undefined): { key: "good" | "fair" | "poor" | "none"; dbm: string } {
-  if (rssi == null) return { key: "none", dbm: "—" };
+// RSSI -> sebeke sinyali (dBm). -70 ust iyi, -85 ust orta, alti zayif.
+// bars: 4 kademeli sinyal cubugu (0..4).
+function rssiQuality(rssi: number | undefined): {
+  key: "good" | "fair" | "poor" | "none";
+  dbm: string;
+  bars: number;
+} {
+  if (rssi == null) return { key: "none", dbm: "—", bars: 0 };
   const dbm = `${Math.round(rssi)} dBm`;
-  if (rssi >= -70) return { key: "good", dbm };
-  if (rssi >= -85) return { key: "fair", dbm };
-  return { key: "poor", dbm };
+  if (rssi >= -70) return { key: "good", dbm, bars: 4 };
+  if (rssi >= -85) return { key: "fair", dbm, bars: 3 };
+  if (rssi >= -100) return { key: "poor", dbm, bars: 2 };
+  return { key: "poor", dbm, bars: 1 };
+}
+
+// Pil % -> renk sinifi (ana sayfa ile ayni esikler).
+function batteryClass(pct: number): string {
+  if (pct <= 20) return "device-battery--critical";
+  if (pct <= 50) return "device-battery--low";
+  return "device-battery--ok";
 }
 
 export function DeviceSidebar({
@@ -115,33 +128,36 @@ export function DeviceSidebar({
             <InfoRow icon="timeline" label={t("deviceDetail.meta.line")} value={topologyInfo.lineName} />
           ) : null}
           {ip ? <InfoRow icon="router" label="IP" value={ip} /> : null}
-          <InfoRow
-            icon="battery_full"
-            label={t("deviceDetail.meta.battery")}
-            value={`%${Math.round(device.batteryPercent)}`}
-            tone={device.batteryPercent < 20 ? "amber" : "green"}
-          />
-          <InfoRow
-            icon="cell_tower"
-            label={t("deviceDetail.sidebar.signalQuality")}
-            value={quality.key === "none" ? "—" : `${t(`deviceDetail.signalQuality.${quality.key}`)} · ${quality.dbm}`}
-            tone={quality.key === "good" ? "green" : quality.key === "fair" ? "amber" : "slate"}
-          />
-        </ul>
 
-        {/* Seri no'lar (master + satellite) */}
-        {channelSerials && (channelSerials.master || channelSerials.sat01 || channelSerials.sat02) ? (
-          <ul className="device-sidebar-serials">
-            {CHANNELS.map((ch) =>
-              channelSerials[ch.key] ? (
-                <li key={ch.key} className="device-sidebar-serial-row">
-                  <span className={`device-sidebar-serial-tag tone-${ch.tone}`}>{ch.label}</span>
-                  <span className="device-sidebar-serial-val">{channelSerials[ch.key]}</span>
-                </li>
-              ) : null
-            )}
-          </ul>
-        ) : null}
+          {/* Pil — ana sayfa batarya sembolu (% ye gore renkli) */}
+          <li className="device-sidebar-info-row">
+            <span className="material-symbols-outlined">battery_full</span>
+            <span className="device-sidebar-info-label">{t("deviceDetail.meta.battery")}</span>
+            <span className={`device-sidebar-battery ${batteryClass(device.batteryPercent)}`}>
+              <span className="device-battery-icon" aria-hidden="true">
+                <span
+                  className="device-battery-fill"
+                  style={{ width: `${Math.max(0, Math.min(100, device.batteryPercent))}%` }}
+                />
+              </span>
+              <span className="device-sidebar-battery-text">%{Math.round(device.batteryPercent)}</span>
+            </span>
+          </li>
+
+          {/* Sebeke sinyali — renkli sinyal cubugu */}
+          <li className="device-sidebar-info-row">
+            <span className="material-symbols-outlined">signal_cellular_alt</span>
+            <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.networkSignal")}</span>
+            <span className={`device-sidebar-signal sig-${quality.key}`}>
+              <span className="device-sidebar-signal-bars" aria-hidden="true">
+                {[1, 2, 3, 4].map((b) => (
+                  <span key={b} className={`bar${b <= quality.bars ? " on" : ""}`} />
+                ))}
+              </span>
+              <span className="device-sidebar-signal-text">{quality.dbm}</span>
+            </span>
+          </li>
+        </ul>
       </section>
 
       {/* ---- Kanal secimi (seri no'lu) ---- */}
@@ -169,31 +185,33 @@ export function DeviceSidebar({
         </ul>
       </section>
 
-      {/* ---- Konum + mini harita (en altta) ---- */}
-      <section className="device-sidebar-section">
-        <span className="device-sidebar-kicker">{t("deviceDetail.meta.location")}</span>
-        {hasGeo ? (
-          <>
-            <div className="device-sidebar-map">
-              <MapContainer
-                center={[lat as number, lon as number]}
-                zoom={14}
-                zoomControl={false}
-                dragging={false}
-                scrollWheelZoom={false}
-                doubleClickZoom={false}
-                attributionControl={false}
-                style={{ height: "150px", width: "100%" }}
-              >
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN} />
-              </MapContainer>
-            </div>
-            <div className="device-sidebar-coords">
+      {/* ---- Konum + mini harita (en alta yapisik) ---- */}
+      <section className="device-sidebar-mapsection">
+        <div className="device-sidebar-maphead">
+          <span className="device-sidebar-kicker">{t("deviceDetail.meta.location")}</span>
+          {hasGeo ? (
+            <span className="device-sidebar-coords">
               <span className="material-symbols-outlined">my_location</span>
               {(lat as number).toFixed(5)}, {(lon as number).toFixed(5)}
-            </div>
-          </>
+            </span>
+          ) : null}
+        </div>
+        {hasGeo ? (
+          <div className="device-sidebar-map">
+            <MapContainer
+              center={[lat as number, lon as number]}
+              zoom={14}
+              zoomControl={false}
+              dragging={false}
+              scrollWheelZoom={false}
+              doubleClickZoom={false}
+              attributionControl={false}
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN} />
+            </MapContainer>
+          </div>
         ) : (
           <div className="device-sidebar-nomap">
             <span className="material-symbols-outlined">location_off</span>

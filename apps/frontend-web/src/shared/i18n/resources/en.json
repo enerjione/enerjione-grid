@@ -2238,7 +2238,7 @@
       "device": "DEVICE",
       "info": "INFO",
       "statusSummary": "STATUS SUMMARY",
-      "channel": "CHANNEL (ACTIVE)",
+      "channel": "DEVICES",
       "lastComm": "Last comm",
       "lastCommShort": "Last Comm",
       "otherActions": "Other Actions",
@@ -2247,7 +2247,8 @@
       "signalQuality": "Signal Quality",
       "low": "Low",
       "serial": "Serial",
-      "noLocation": "No location set"
+      "noLocation": "No location set",
+      "networkSignal": "Network Signal"
     },
     "overview": {
       "currentStatus": "CURRENT STATUS",
@@ -2283,7 +2284,18 @@
       "alarmCol": "Alarm",
       "prev": "Prev",
       "next": "Next",
-      "pageOf": "Page {{page}} / {{total}}"
+      "pageOf": "Page {{page}} / {{total}}",
+      "channel": "Source"
+    },
+    "alarms": {
+      "title": "ALARMS · {{source}}",
+      "none": "No active alarms for {{source}}",
+      "cleared": "Cleared",
+      "level": {
+        "err": "Critical",
+        "warn": "Warning",
+        "info": "Info"
+      }
     }
   }
 }

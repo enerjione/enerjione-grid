@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchDeviceCommands, fetchSystemEvents } from "../../shared/api";
-import { formatDateTime, formatRelative, formatTime } from "../../shared/format";
+import { formatDateTime, formatRelative } from "../../shared/format";
 import type { DeviceCommandRow, SystemEvent } from "../../shared/types";
 
 type Row = {
@@ -21,11 +21,28 @@ type Row = {
   ts: string;
   message: string;
   source: string;
+  /** Kaynak kanal: master | sat01 | sat02 | null (bilinmiyor). */
+  channel: "master" | "sat01" | "sat02" | null;
   actor: string | null;
   isAlarm: boolean;
   tone: "ok" | "warn" | "err" | "info" | "pending";
   statusLabel: string;
 };
+
+const CHANNEL_META: Record<"master" | "sat01" | "sat02", { label: string; tone: string }> = {
+  master: { label: "Master", tone: "master" },
+  sat01: { label: "Sat 01", tone: "green" },
+  sat02: { label: "Sat 02", tone: "amber" },
+};
+
+// SystemEvent metadata_json / message'dan kaynak kanal turet.
+function channelOfEvent(e: SystemEvent): "master" | "sat01" | "sat02" | null {
+  const raw = `${e.metadata_json ?? ""} ${e.message ?? ""}`.toLowerCase();
+  if (raw.includes("sat01") || raw.includes("satellite 01") || raw.includes("satellite 1")) return "sat01";
+  if (raw.includes("sat02") || raw.includes("satellite 02") || raw.includes("satellite 2")) return "sat02";
+  if (raw.includes("master")) return "master";
+  return null;
+}
 
 type Props = {
   token: string;
@@ -57,7 +74,7 @@ function commandTone(status: string): Row["tone"] {
   return "info";
 }
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 12;
 
 export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant }: Props) {
   const { t } = useTranslation();
@@ -93,6 +110,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
       ts: e.created_at,
       message: e.message,
       source: e.category || "system",
+      channel: channelOfEvent(e),
       actor: e.actor_username ?? null,
       isAlarm: isAlarmEvent(e),
       tone: severityTone(e.severity),
@@ -105,6 +123,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
       ts: c.created_at,
       message: t("deviceDetail.events.commandMsg", { command: c.command }),
       source: "master",
+      channel: "master", // komutlar her zaman master'a gonderilir
       actor: c.actor_username ?? null,
       isAlarm: false,
       tone: commandTone(c.status),
@@ -138,10 +157,17 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
   }
 
   const exportCsv = () => {
-    const head = ["Zaman", "Alarm", "Olay", "Kim", "Durum"];
+    const head = ["Zaman", "Alarm", "Olay", "Kaynak", "Kim", "Durum"];
     const esc = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
     const lines = allRows.map((r) =>
-      [formatDateTime(r.ts), r.isAlarm ? "ALARM" : "", r.message, r.actor ?? "Sistem", r.statusLabel]
+      [
+        formatDateTime(r.ts),
+        r.isAlarm ? "ALARM" : "",
+        r.message,
+        r.channel ? CHANNEL_META[r.channel].label : "",
+        r.actor ?? "Sistem",
+        r.statusLabel,
+      ]
         .map(esc)
         .join(",")
     );
@@ -173,6 +199,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
             {isFull ? <th className="device-events-th-alarm">{t("deviceDetail.events.alarmCol")}</th> : null}
             <th className="device-events-th-time">{t("deviceDetail.events.time")}</th>
             <th>{t("deviceDetail.events.event")}</th>
+            {isFull ? <th className="device-events-th-channel">{t("deviceDetail.events.channel")}</th> : null}
             <th>{t("deviceDetail.events.who")}</th>
             <th className="device-events-th-status">{t("deviceDetail.events.status")}</th>
           </tr>
@@ -200,9 +227,29 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
                     {t("deviceDetail.events.alarm")}
                   </span>
                 ) : null}
-                <span title={formatRelative(r.ts)}>{isFull ? formatDateTime(r.ts) : formatTime(r.ts)}</span>
+                <span title={formatRelative(r.ts)}>
+                  {isFull
+                    ? formatDateTime(r.ts)
+                    : formatDateTime(r.ts, {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                </span>
               </td>
               <td className="device-events-msg">{r.message}</td>
+              {isFull ? (
+                <td className="device-events-channel">
+                  {r.channel ? (
+                    <span className={`device-events-chan tone-${CHANNEL_META[r.channel].tone}`}>
+                      {CHANNEL_META[r.channel].label}
+                    </span>
+                  ) : (
+                    <span className="device-events-chan-none">—</span>
+                  )}
+                </td>
+              ) : null}
               <td className="device-events-who">
                 {r.actor ? (
                   <span className="device-events-actor">

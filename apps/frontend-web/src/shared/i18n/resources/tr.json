@@ -2238,7 +2238,7 @@
       "device": "CİHAZ",
       "info": "BİLGİLER",
       "statusSummary": "DURUM ÖZETİ",
-      "channel": "KANAL (AKTİF)",
+      "channel": "CİHAZLAR",
       "lastComm": "Son iletişim",
       "lastCommShort": "Son İletişim",
       "otherActions": "Diğer İşlemler",
@@ -2247,7 +2247,8 @@
       "signalQuality": "Sinyal Kalitesi",
       "low": "Düşük",
       "serial": "Seri No",
-      "noLocation": "Konum belirtilmemiş"
+      "noLocation": "Konum belirtilmemiş",
+      "networkSignal": "Şebeke Sinyali"
     },
     "overview": {
       "currentStatus": "MEVCUT DURUM",
@@ -2283,7 +2284,18 @@
       "alarmCol": "Alarm",
       "prev": "Önceki",
       "next": "Sonraki",
-      "pageOf": "Sayfa {{page}} / {{total}}"
+      "pageOf": "Sayfa {{page}} / {{total}}",
+      "channel": "Kaynak"
+    },
+    "alarms": {
+      "title": "ALARMLAR · {{source}}",
+      "none": "{{source}} için aktif alarm yok",
+      "cleared": "Giderildi",
+      "level": {
+        "err": "Kritik",
+        "warn": "Uyarı",
+        "info": "Bilgi"
+      }
     }
   }
 }
