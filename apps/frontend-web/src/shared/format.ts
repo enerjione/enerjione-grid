@@ -102,3 +102,23 @@ export function formatDuration(seconds: number): string {
   }
   return isTr ? `${sec}s` : `${sec}s`;
 }
+
+/** Gecmis bir zamana gore goreli ifade → "az once", "12 dk once", "2 saat once",
+ *  "3 gun once". Cihaz detay "Son iletisim" + olay zaman sutunu icin. */
+export function formatRelative(
+  value: string | number | Date | null | undefined,
+): string {
+  const d = toDate(value);
+  if (d == null) return "—";
+  const isTr = (i18n?.language || "").toString().toLowerCase().startsWith("tr");
+  const diffSec = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (diffSec < 45) return isTr ? "az önce" : "just now";
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return isTr ? `${min} dk önce` : `${min} min ago`;
+  const hr = Math.floor(diffSec / 3600);
+  if (hr < 24) return isTr ? `${hr} saat önce` : `${hr} h ago`;
+  const day = Math.floor(diffSec / 86400);
+  if (day < 30) return isTr ? `${day} gün önce` : `${day} d ago`;
+  // 30 gunden eski: tam tarih daha anlamli
+  return formatDate(d);
+}

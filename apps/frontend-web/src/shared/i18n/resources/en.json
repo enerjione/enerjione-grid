@@ -2119,7 +2119,10 @@
   "deviceDetail": {
     "title": "Device Detail",
     "notFound": "Device not found.",
-    "status": "Status",
+    "status": {
+      "normal": "Normal",
+      "active": "Active"
+    },
     "online": "Online",
     "offline": "Offline",
     "battery": "Battery",
@@ -2139,7 +2142,7 @@
       "sent": "Command sent: {{command}}",
       "rejected": "Device rejected command: {{command}} ({{status}})",
       "fail": "Command failed: {{msg}}",
-      "queued": "Command queued: {{command}} (gateway applies within ~30s)",
+      "queued": "Command queued: {{command}} (gateway will apply it shortly)",
       "status": {
         "pending": "Queued",
         "sent": "Sent",
@@ -2161,7 +2164,10 @@
       "measures": "Measurements",
       "charts": "Charts",
       "commands": "Commands",
-      "config": "Config"
+      "config": "Config",
+      "overview": "Overview",
+      "trends": "Trends",
+      "events": "Events"
     },
     "charts": {
       "signal": "Signal",
@@ -2223,7 +2229,48 @@
     "direction": {
       "toA": "Direction A (green)",
       "toB": "Direction B (red)",
-      "none": "No direction"
+      "none": "No direction",
+      "title": "FAULT DIRECTION",
+      "note": "Note: Fault direction is shown when a fault is detected."
+    },
+    "sidebar": {
+      "device": "DEVICE",
+      "info": "INFO",
+      "statusSummary": "STATUS SUMMARY",
+      "channel": "CHANNEL (ACTIVE)",
+      "lastComm": "Last comm",
+      "lastCommShort": "Last Comm",
+      "otherActions": "Other Actions",
+      "deviceStatus": "Device Status",
+      "batteryStatus": "Battery Status",
+      "signalQuality": "Signal Quality",
+      "low": "Low"
+    },
+    "overview": {
+      "currentStatus": "CURRENT STATUS",
+      "recentEvents": "RECENT EVENTS",
+      "viewAllEvents": "View all events",
+      "signal": "SIGNAL",
+      "state": "STATE"
+    },
+    "signalQuality": {
+      "good": "Good",
+      "fair": "Fair",
+      "poor": "Poor"
+    },
+    "events": {
+      "time": "Time",
+      "event": "Event",
+      "source": "Source",
+      "status": "Status",
+      "empty": "No events for this device.",
+      "commandMsg": "Command: {{command}}",
+      "severity": {
+        "info": "Info",
+        "warning": "Warning",
+        "error": "Error",
+        "critical": "Critical"
+      }
     }
   }
 }

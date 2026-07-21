@@ -24388,3 +24388,410 @@ th.event-col-category {
   .device-dir-row { grid-template-columns: 1fr; gap: 8px; }
   .device-dir-state { text-align: left; }
 }
+
+/* ===================== CIHAZ DETAY — DASHBOARD DUZENI ===================== */
+.device-detail-shell {
+  display: grid;
+  grid-template-columns: 270px 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  background: #f8fafc;
+}
+
+/* ---- Sol sidebar ---- */
+.device-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 18px;
+  background: #fff;
+  border-right: 1px solid #e2e8f0;
+  overflow-y: auto;
+}
+.device-sidebar-brand { padding-bottom: 4px; }
+.device-sidebar-logo { height: 30px; width: auto; object-fit: contain; }
+.device-sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+.device-sidebar-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+.device-sidebar-code {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+.device-sidebar-name { font-size: 13px; color: #64748b; font-weight: 600; }
+.device-sidebar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.device-sidebar-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.device-sidebar-status.is-online { color: #15803d; }
+.device-sidebar-status.is-online .device-sidebar-dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.18); }
+.device-sidebar-status.is-offline { color: #64748b; }
+.device-sidebar-status.is-offline .device-sidebar-dot { background: #94a3b8; }
+.device-sidebar-lastcomm { font-size: 12px; color: #94a3b8; }
+.device-sidebar-lastcomm strong { color: #475569; font-weight: 700; }
+.device-sidebar-section + .device-sidebar-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 16px;
+}
+
+.device-sidebar-info,
+.device-sidebar-summary,
+.device-sidebar-channels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.device-sidebar-info-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.device-sidebar-info-row .material-symbols-outlined { font-size: 17px; color: #94a3b8; }
+.device-sidebar-info-label { color: #64748b; }
+.device-sidebar-info-value {
+  font-weight: 700;
+  color: #0f172a;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.device-sidebar-summary-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.device-summary-dot { width: 9px; height: 9px; border-radius: 50%; }
+.device-summary-dot.dot-green { background: #22c55e; }
+.device-summary-dot.dot-sky { background: #0ea5e9; }
+.device-summary-dot.dot-amber { background: #f59e0b; }
+.device-summary-dot.dot-slate { background: #94a3b8; }
+.device-sidebar-summary-label { color: #64748b; }
+.device-sidebar-summary-value { font-weight: 700; color: #0f172a; text-align: right; }
+
+/* Kanal secimi */
+.device-channel {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.device-channel .material-symbols-outlined { font-size: 18px; color: #94a3b8; }
+.device-channel:hover:not(:disabled) { background: #f8fafc; }
+.device-channel:disabled { opacity: 0.45; cursor: not-allowed; }
+.device-channel.active { background: #f8fafc; }
+.device-channel.tone-master.active { border-left-color: #f59e0b; color: #b45309; }
+.device-channel.tone-master.active .material-symbols-outlined { color: #f59e0b; }
+.device-channel.tone-green.active { border-left-color: #22c55e; color: #15803d; }
+.device-channel.tone-green.active .material-symbols-outlined { color: #22c55e; }
+.device-channel.tone-amber.active { border-left-color: #f59e0b; color: #b45309; }
+.device-channel.tone-amber.active .material-symbols-outlined { color: #f59e0b; }
+
+.device-sidebar-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.device-sidebar-reset:hover:not(:disabled) { background: #ffedd5; }
+.device-sidebar-reset:disabled { opacity: 0.6; cursor: default; }
+.device-sidebar-reset .material-symbols-outlined { font-size: 19px; }
+.device-sidebar-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 2px;
+  border: none;
+  background: none;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.device-sidebar-more:hover { color: #0f172a; }
+.device-sidebar-more .material-symbols-outlined { font-size: 18px; }
+.device-sidebar-more-chevron { margin-left: auto; }
+
+/* ---- Ana icerik ---- */
+.device-detail-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 24px 24px;
+  overflow-y: auto;
+}
+.device-detail-main .device-detail-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  padding-top: 16px;
+  margin-bottom: 16px;
+}
+.device-detail-panel { display: flex; flex-direction: column; gap: 14px; }
+.device-panel-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+/* ---- Genel Bakis ---- */
+.device-overview { display: flex; flex-direction: column; gap: 16px; }
+.device-overview-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.device-overview-kpis .device-kpi {
+  border: none;
+  border-right: 1px solid #f1f5f9;
+  border-radius: 0;
+  padding: 16px 18px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.device-overview-kpis .device-kpi:last-child { border-right: none; }
+.device-overview-kpis .device-kpi::before { display: none; }
+.device-kpi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.device-kpi-head .device-kpi-label {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.device-kpi-head .device-kpi-icon {
+  font-size: 18px;
+  width: auto; height: auto;
+  background: none;
+  border-radius: 0;
+}
+.device-overview-kpis .device-kpi-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.device-overview-kpis .device-kpi.tone-amber .device-kpi-icon { color: #f59e0b; }
+.device-overview-kpis .device-kpi.tone-blue .device-kpi-icon { color: #3b82f6; }
+.device-overview-kpis .device-kpi.tone-blue .device-kpi-value { color: #1d4ed8; }
+.device-overview-kpis .device-kpi.tone-rose .device-kpi-icon { color: #f43f5e; }
+.device-overview-kpis .device-kpi.tone-red .device-kpi-icon { color: #ef4444; }
+.device-overview-kpis .device-kpi.tone-red .device-kpi-value { color: #b91c1c; }
+.device-overview-kpis .device-kpi.tone-orange .device-kpi-icon { color: #f97316; }
+.device-overview-kpis .device-kpi.tone-orange .device-kpi-value { color: #c2410c; }
+.device-kpi-value { color: #0369a1; }
+.device-kpi-spark { height: 34px; margin-top: 2px; }
+.device-spark { height: 34px; }
+.device-spark.is-empty { height: 34px; }
+
+.device-overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.device-overview-col { display: flex; flex-direction: column; gap: 16px; }
+.device-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px;
+}
+.device-card.is-events { min-height: 100%; }
+.device-card-title {
+  margin: 0 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+/* Mevcut Durum tablosu */
+.device-status-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.device-status-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.device-status-table td { padding: 9px 0; border-bottom: 1px solid #f1f5f9; }
+.device-status-table tr:last-child td { border-bottom: none; }
+.device-status-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #334155;
+  font-weight: 500;
+}
+.device-status-name .material-symbols-outlined { font-size: 18px; color: #94a3b8; }
+.device-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.device-status-badge .material-symbols-outlined { font-size: 16px; }
+.device-status-badge.is-normal { color: #16a34a; }
+.device-status-badge.is-active { color: #d97706; }
+
+/* Ariza yonu — tek akis diyagrami */
+.device-flow { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 12px 0; }
+.device-flow-diagram { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 380px; }
+.device-flow-node {
+  width: 46px; height: 46px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-weight: 800; font-size: 16px;
+  background: #f1f5f9; color: #94a3b8;
+  border: 2px solid #e2e8f0;
+  flex: 0 0 auto;
+}
+.device-flow-node.node-a.active { background: #dcfce7; color: #15803d; border-color: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.15); }
+.device-flow-node.node-b.active { background: #fee2e2; color: #b91c1c; border-color: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.15); }
+.device-flow-track { flex: 1; display: flex; align-items: center; gap: 6px; }
+.device-flow-line { flex: 1; border-top: 2px dashed #cbd5e1; }
+.device-flow-chip {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.device-flow-caption { margin: 0; font-size: 13px; font-weight: 700; color: #64748b; }
+.device-flow-diagram.is-a ~ .device-flow-caption { color: #15803d; }
+.device-flow-diagram.is-b ~ .device-flow-caption { color: #b91c1c; }
+.device-flow-note { margin: 0; font-size: 11px; color: #94a3b8; text-align: center; }
+
+/* Son Olaylar tablosu */
+.device-events-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.device-events-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  padding: 6px 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.device-events-table td { padding: 11px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.device-events-table tr:last-child td { border-bottom: none; }
+.device-events-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.device-events-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.device-events-dot.tone-ok { background: #22c55e; }
+.device-events-dot.tone-info { background: #0ea5e9; }
+.device-events-dot.tone-warn { background: #f59e0b; }
+.device-events-dot.tone-err { background: #ef4444; }
+.device-events-dot.tone-pending { background: #eab308; }
+.device-events-msg { color: #0f172a; }
+.device-events-source { color: #64748b; text-transform: capitalize; }
+.device-events-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.device-events-badge.tone-ok { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+.device-events-badge.tone-info { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.device-events-badge.tone-warn { background: #fef3c7; color: #b45309; border-color: #fde68a; }
+.device-events-badge.tone-err { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+.device-events-badge.tone-pending { background: #fef9c3; color: #854d0e; border-color: #fef08a; }
+.device-events-viewall {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border: none;
+  border-top: 1px solid #f1f5f9;
+  background: none;
+  color: #0369a1;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.device-events-viewall:hover { color: #075985; }
+.device-events-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.device-events-empty .material-symbols-outlined { font-size: 32px; color: #cbd5e1; }
+
+@media (max-width: 1024px) {
+  .device-detail-shell { grid-template-columns: 1fr; }
+  .device-sidebar { border-right: none; border-bottom: 1px solid #e2e8f0; }
+  .device-overview-kpis { grid-template-columns: repeat(2, 1fr); }
+  .device-overview-kpis .device-kpi:nth-child(2n) { border-right: none; }
+  .device-overview-grid { grid-template-columns: 1fr; }
+}

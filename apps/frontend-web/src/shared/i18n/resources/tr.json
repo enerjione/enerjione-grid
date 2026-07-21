@@ -2119,7 +2119,10 @@
   "deviceDetail": {
     "title": "Cihaz Detayı",
     "notFound": "Cihaz bulunamadı.",
-    "status": "Durum",
+    "status": {
+      "normal": "Normal",
+      "active": "Aktif"
+    },
     "online": "Çevrimiçi",
     "offline": "Çevrimdışı",
     "battery": "Batarya",
@@ -2139,7 +2142,7 @@
       "sent": "Komut gönderildi: {{command}}",
       "rejected": "Cihaz komutu reddetti: {{command}} ({{status}})",
       "fail": "Komut gönderilemedi: {{msg}}",
-      "queued": "Komut kuyruğa alındı: {{command}} (gateway ~30sn içinde uygular)",
+      "queued": "Komut kuyruğa alındı: {{command}} (gateway kısa süre içinde uygular)",
       "status": {
         "pending": "Kuyrukta",
         "sent": "Gönderildi",
@@ -2161,7 +2164,10 @@
       "measures": "Ölçümler",
       "charts": "Grafikler",
       "commands": "Komutlar",
-      "config": "Ayarlar"
+      "config": "Yapılandırma",
+      "overview": "Genel Bakış",
+      "trends": "Trendler",
+      "events": "Olaylar"
     },
     "charts": {
       "signal": "Sinyal",
@@ -2223,7 +2229,48 @@
     "direction": {
       "toA": "A yönü (yeşil)",
       "toB": "B yönü (kırmızı)",
-      "none": "Yön yok"
+      "none": "Yön yok",
+      "title": "ARIZA YÖNÜ",
+      "note": "Not: Arıza yönü bilgisi, arıza tespit edildiğinde görüntülenir."
+    },
+    "sidebar": {
+      "device": "CİHAZ",
+      "info": "BİLGİLER",
+      "statusSummary": "DURUM ÖZETİ",
+      "channel": "KANAL (AKTİF)",
+      "lastComm": "Son iletişim",
+      "lastCommShort": "Son İletişim",
+      "otherActions": "Diğer İşlemler",
+      "deviceStatus": "Cihaz Durumu",
+      "batteryStatus": "Pil Durumu",
+      "signalQuality": "Sinyal Kalitesi",
+      "low": "Düşük"
+    },
+    "overview": {
+      "currentStatus": "MEVCUT DURUM",
+      "recentEvents": "SON OLAYLAR",
+      "viewAllEvents": "Tüm olayları görüntüle",
+      "signal": "SİNYAL",
+      "state": "DURUM"
+    },
+    "signalQuality": {
+      "good": "İyi",
+      "fair": "Orta",
+      "poor": "Zayıf"
+    },
+    "events": {
+      "time": "Zaman",
+      "event": "Olay",
+      "source": "Kaynak",
+      "status": "Durum",
+      "empty": "Bu cihaz için olay kaydı yok.",
+      "commandMsg": "Komut: {{command}}",
+      "severity": {
+        "info": "Bilgi",
+        "warning": "Uyarı",
+        "error": "Hata",
+        "critical": "Kritik"
+      }
     }
   }
 }
