@@ -126,12 +126,22 @@ class CommandResultItem(BaseModel):
 
     Gateway config'ten cektigi her pending komutu calistirdiktan sonra bunu
     `POST /gateways/{code}/command-results` batch'inde geri gonderir.
+
+    DNP3 alanlari (SELECT-before-OPERATE + LATCH_ON): dnp3_status gercek
+    per-point CommandStatus (SUCCESS/NO_SELECT/NOT_SUPPORTED/...), dnp3_state
+    SBO fazi (SELECT_SUCCESS/SELECT_FAIL/OPERATE_FAIL/...), dnp3_task transport
+    (TaskCompletion). Backend bunlari result_status'a birlestirip UI'da gosterir.
     """
 
     id: int
     ok: bool
     status: str = "unknown"
     error: str | None = None
+    dnp3_status: str | None = None
+    dnp3_state: str | None = None
+    dnp3_task: str | None = None
+    control: str | None = None
+    duration_ms: int | None = None
 
 
 class GatewayConfigResponse(BaseModel):

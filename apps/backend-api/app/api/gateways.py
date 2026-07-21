@@ -772,8 +772,17 @@ def report_command_results(
         if cmd.status in ("ok", "failed"):
             continue
         cmd.status = "ok" if res.ok else "failed"
-        cmd.result_status = res.status[:40] if res.status else None
-        cmd.result_error = res.error[:500] if res.error else None
+        # result_status: gercek DNP3 CommandStatus varsa onu goster (NO_SELECT,
+        # NOT_SUPPORTED gibi — cihaz neden reddetti belli olsun), yoksa genel status.
+        dnp3_detail = res.dnp3_status or res.status
+        cmd.result_status = (dnp3_detail[:40] if dnp3_detail else None)
+        # result_error: hata + SBO fazi (SELECT_FAIL/OPERATE_FAIL) birlestir.
+        err_parts = []
+        if res.error:
+            err_parts.append(res.error)
+        if res.dnp3_state and "SUCCESS" not in (res.dnp3_state or ""):
+            err_parts.append(f"faz={res.dnp3_state}")
+        cmd.result_error = ("; ".join(err_parts)[:500] if err_parts else None)
         cmd.completed_at = now
         record_event(
             db,
@@ -784,13 +793,18 @@ def report_command_results(
             device_code=cmd.device_code,
             message=(
                 f"Komut sonucu: {cmd.command} ({cmd.device_code}) #{cmd.id} — "
-                f"{'OK' if res.ok else 'HATA: ' + (res.error or res.status)}"
+                f"{'OK' if res.ok else 'HATA: ' + (res.dnp3_status or res.error or res.status)}"
             ),
             metadata={
                 "command": cmd.command,
                 "command_id": cmd.id,
                 "ok": res.ok,
                 "result_status": res.status,
+                "dnp3_status": res.dnp3_status,
+                "dnp3_state": res.dnp3_state,
+                "dnp3_task": res.dnp3_task,
+                "control": res.control,
+                "duration_ms": res.duration_ms,
             },
             i18n_key="device_command_result",
             i18n_params={"command": cmd.command, "code": cmd.device_code},
