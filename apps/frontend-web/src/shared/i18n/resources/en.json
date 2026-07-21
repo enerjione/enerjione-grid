@@ -2183,7 +2183,9 @@
         "1h": "1 Hour",
         "6h": "6 Hours",
         "24h": "24 Hours",
-        "7d": "7 Days"
+        "7d": "7 Days",
+        "5m": "5 min",
+        "15m": "15 min"
       },
       "signals": "Signals",
       "sources": "Sources",
@@ -2192,7 +2194,11 @@
       "to": "To",
       "selectSignal": "Select a signal to chart",
       "noData": "No data in this range",
-      "loadError": "Failed to load data"
+      "loadError": "Failed to load data",
+      "addSignal": "Add Signal",
+      "add": "Add",
+      "color": "Color",
+      "noSignalsYet": "No signals added yet"
     },
     "config": {
       "dnp3Title": "DNP3 Settings",

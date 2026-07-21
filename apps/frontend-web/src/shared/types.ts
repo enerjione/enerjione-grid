@@ -806,7 +806,7 @@ export type NotificationItem = {
 };
 
 // ---- Historian (telemetry_history) ----------------------------------------
-export type HistoryBucket = "raw" | "1m" | "1h";
+export type HistoryBucket = "raw" | "10s" | "1m" | "5m" | "1h";
 
 /** bucket=raw: ham historian okuma noktasi. */
 export type TelemetryHistoryPoint = {

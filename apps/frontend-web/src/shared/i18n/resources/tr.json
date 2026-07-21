@@ -2183,7 +2183,9 @@
         "1h": "1 Saat",
         "6h": "6 Saat",
         "24h": "24 Saat",
-        "7d": "7 Gün"
+        "7d": "7 Gün",
+        "5m": "5 dk",
+        "15m": "15 dk"
       },
       "signals": "Sinyaller",
       "sources": "Kaynaklar",
@@ -2192,7 +2194,11 @@
       "to": "Bitiş",
       "selectSignal": "Grafik için sinyal seçin",
       "noData": "Bu aralıkta veri yok",
-      "loadError": "Veri yüklenemedi"
+      "loadError": "Veri yüklenemedi",
+      "addSignal": "Sinyal Ekle",
+      "add": "Ekle",
+      "color": "Renk",
+      "noSignalsYet": "Henüz sinyal eklenmedi"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",

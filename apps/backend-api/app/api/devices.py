@@ -329,8 +329,12 @@ def list_device_commands(
 def device_signal_history(
     device_code: str,
     signal_key: str = Query(..., description="Sinyal key'i (orn. master.actual_current)"),
-    bucket: Literal["raw", "1m", "1h"] = Query(
-        "raw", description="raw=ham historian; 1m/1h=continuous aggregate ozet"
+    bucket: Literal["raw", "10s", "1m", "5m", "1h"] = Query(
+        "raw",
+        description=(
+            "raw=ham historian; 1m/1h=continuous aggregate (materialized);"
+            " 10s/5m=raw'dan on-the-fly time_bucket (kisa aralik icin)"
+        ),
     ),
     since: datetime | None = Query(None, description="Bu zamandan sonra (UTC)"),
     until: datetime | None = Query(None, description="Bu zamana kadar (UTC)"),
@@ -378,17 +382,36 @@ def device_signal_history(
             for r in rows
         ]
 
-    # Aggregate: continuous aggregate view'indan oku. View adi bucket'a gore.
-    view = "telemetry_history_1m" if bucket == "1m" else "telemetry_history_1h"
-    sql = text(
-        f"SELECT signal_key, bucket, avg_value, min_value, max_value, sample_count"
-        f" FROM {view}"
-        " WHERE device_id = :device_id AND signal_key = :signal_key"
-        "   AND (:since IS NULL OR bucket >= :since)"
-        "   AND (:until IS NULL OR bucket <= :until)"
-        " ORDER BY bucket ASC"
-        " LIMIT :limit"
-    )
+    # 1m/1h: materialized continuous aggregate view. 10s/5m: raw hypertable'dan
+    # on-the-fly time_bucket (materialized view yok, raw 90 gun + index yeterli;
+    # kisa aralik grafikleri icin). Ikisi de ayni cikti semasini doner.
+    if bucket in ("1m", "1h"):
+        view = "telemetry_history_1m" if bucket == "1m" else "telemetry_history_1h"
+        sql = text(
+            f"SELECT signal_key, bucket, avg_value, min_value, max_value, sample_count"
+            f" FROM {view}"
+            " WHERE device_id = :device_id AND signal_key = :signal_key"
+            "   AND (:since IS NULL OR bucket >= :since)"
+            "   AND (:until IS NULL OR bucket <= :until)"
+            " ORDER BY bucket ASC"
+            " LIMIT :limit"
+        )
+    else:
+        # 10s / 5m -> raw'dan time_bucket. TimescaleDB time_bucket(interval, ts).
+        interval = "10 seconds" if bucket == "10s" else "5 minutes"
+        sql = text(
+            "SELECT signal_key,"
+            f" time_bucket(INTERVAL '{interval}', source_timestamp) AS bucket,"
+            " avg(value) AS avg_value, min(value) AS min_value,"
+            " max(value) AS max_value, count(value) AS sample_count"
+            " FROM telemetry_history"
+            " WHERE device_id = :device_id AND signal_key = :signal_key"
+            "   AND (:since IS NULL OR source_timestamp >= :since)"
+            "   AND (:until IS NULL OR source_timestamp <= :until)"
+            " GROUP BY signal_key, bucket"
+            " ORDER BY bucket ASC"
+            " LIMIT :limit"
+        )
     try:
         result = db.execute(
             sql,
@@ -402,7 +425,7 @@ def device_signal_history(
         )
         agg_rows = result.mappings().all()
     except ProgrammingError:
-        # View yok (vanilla postgres / migration uygulanmadi) -> ham veriye dus.
+        # View/time_bucket yok (vanilla postgres / migration uygulanmadi) -> ham veriye dus.
         db.rollback()
         return device_signal_history(
             device_code=device_code,
