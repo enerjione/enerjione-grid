@@ -2339,6 +2339,19 @@
         "delta": "ΔI/Δt",
         "permanent": "Kalıcı arıza",
         "momentary": "Geçici arıza"
+      },
+      "measures": "ÖLÇÜMLER",
+      "measure": {
+        "avgCurrent": "Ort. Akım",
+        "maxCurrent": "Max Akım",
+        "minCurrent": "Min Akım",
+        "maxVoltage": "Max Gerilim",
+        "minVoltage": "Min Gerilim",
+        "conductorTemp": "İletken Sıc.",
+        "faultCurrent": "Arıza Akımı",
+        "faultDuration": "Arıza Süresi",
+        "lastGood": "Son İyi Akım",
+        "tripLevel": "Trip Seviyesi"
       }
     }
   }

@@ -42,6 +42,20 @@ const STATUS_DEFS: { suffix: string; labelKey: string; icon: string }[] = [
   { suffix: "momentary_fault", labelKey: "momentary", icon: "error_outline" },
 ];
 
+// Analog olcum degerleri — bos alani doldur, daha fazla bilgi (2 kolon liste).
+const MEASURE_DEFS: { suffix: string; labelKey: string }[] = [
+  { suffix: "average_current", labelKey: "avgCurrent" },
+  { suffix: "maximum_current", labelKey: "maxCurrent" },
+  { suffix: "minimum_current", labelKey: "minCurrent" },
+  { suffix: "maximum_voltage", labelKey: "maxVoltage" },
+  { suffix: "minimum_voltage", labelKey: "minVoltage" },
+  { suffix: "conductor_temperature", labelKey: "conductorTemp" },
+  { suffix: "fault_current", labelKey: "faultCurrent" },
+  { suffix: "fault_duration", labelKey: "faultDuration" },
+  { suffix: "last_good_known_current", labelKey: "lastGood" },
+  { suffix: "trip_level", labelKey: "tripLevel" },
+];
+
 function fmtNum(v: number | undefined, unit: string | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
   const txt = NUMBER_FORMATTER.format(v);
@@ -167,6 +181,23 @@ export function DeviceAllSignalsTab({ device, values, gwOnline, sourceCounts }: 
                       );
                     })}
                   </ul>
+                </div>
+
+                {/* Analog olcumler (2 kolon) — bos alani doldurur */}
+                <div className="device-set-block">
+                  <span className="device-set-block-title">{t("deviceDetail.set.measures")}</span>
+                  <div className="device-set-measures">
+                    {MEASURE_DEFS.map((m) => {
+                      const row = get(m.suffix);
+                      if (!row) return null; // o kaynakta yoksa gosterme
+                      return (
+                        <div key={m.suffix} className="device-set-measure">
+                          <span className="device-set-measure-label">{t(`deviceDetail.set.measure.${m.labelKey}`)}</span>
+                          <span className="device-set-measure-value">{fmtNum(row.value ?? undefined, row.unit)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Sayaclar */}

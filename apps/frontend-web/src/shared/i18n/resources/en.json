@@ -2339,6 +2339,19 @@
         "delta": "ΔI/Δt",
         "permanent": "Permanent fault",
         "momentary": "Momentary fault"
+      },
+      "measures": "MEASUREMENTS",
+      "measure": {
+        "avgCurrent": "Avg Current",
+        "maxCurrent": "Max Current",
+        "minCurrent": "Min Current",
+        "maxVoltage": "Max Voltage",
+        "minVoltage": "Min Voltage",
+        "conductorTemp": "Conductor Temp",
+        "faultCurrent": "Fault Current",
+        "faultDuration": "Fault Duration",
+        "lastGood": "Last Good Current",
+        "tripLevel": "Trip Level"
       }
     }
   }
