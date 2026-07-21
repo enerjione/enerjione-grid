@@ -2299,7 +2299,9 @@
         "alarm": "Alarms",
         "command": "Commands",
         "system": "System"
-      }
+      },
+      "noMatch": "No events match the filter",
+      "loading": "Loading..."
     },
     "alarms": {
       "title": "ALARMS · {{source}}",

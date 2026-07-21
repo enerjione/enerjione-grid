@@ -114,9 +114,9 @@ export function DeviceSidebar({
             title={online ? t("deviceDetail.online") : t("deviceDetail.offline")}
             aria-label={online ? t("deviceDetail.online") : t("deviceDetail.offline")}
           />
-          <h2 className="device-sidebar-code">{device.code}</h2>
+          <h2 className="device-sidebar-code">{device.name}</h2>
         </div>
-        <div className="device-sidebar-name">{device.name}</div>
+        <div className="device-sidebar-name">{device.code}</div>
 
         {/* Genel alarm durum karti — alarm varsa yanip sonen, yoksa yesil */}
         <div className={`device-sidebar-alarmcard ${hasAlarm ? "is-alarm" : "is-ok"}`}>

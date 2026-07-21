@@ -162,14 +162,15 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
     return filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
   }, [allRows, filtered, limit, isFull, safePage]);
 
-  if (loading && rows.length === 0) {
+  // Compact modda (Genel Bakis) hic olay yoksa erken bos durum.
+  if (!isFull && loading && rows.length === 0) {
     return (
       <div className="device-events-empty">
         <span className="btn-spinner" aria-hidden="true" />
       </div>
     );
   }
-  if (rows.length === 0) {
+  if (!isFull && rows.length === 0) {
     return (
       <div className="device-events-empty">
         <span className="material-symbols-outlined">history_toggle_off</span>
@@ -177,6 +178,8 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
       </div>
     );
   }
+  // Full modda: filtre/toolbar HER ZAMAN gorunur (bos sonuc filtre UI'sini
+  // gizlemesin — kullanici filtreyi temizleyebilsin). Bos durum tablo yerine.
 
   const exportCsv = () => {
     const head = ["Zaman", "Alarm", "Olay", "Kaynak", "Kim", "Durum"];
@@ -267,6 +270,15 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
           </div>
         </>
       ) : null}
+
+      {isFull && rows.length === 0 ? (
+        <div className="device-events-empty is-filtered">
+          <span className="material-symbols-outlined">
+            {loading ? "hourglass_empty" : "filter_alt_off"}
+          </span>
+          <p>{loading ? t("deviceDetail.events.loading") : t("deviceDetail.events.noMatch")}</p>
+        </div>
+      ) : (
       <table className={`device-events-table${isFull ? " is-full" : ""}`}>
         <thead>
           <tr>
@@ -344,6 +356,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
           ))}
         </tbody>
       </table>
+      )}
 
       {isFull && pageCount > 1 ? (
         <div className="device-events-pager">

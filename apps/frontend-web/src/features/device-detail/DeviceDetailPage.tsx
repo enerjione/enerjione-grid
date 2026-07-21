@@ -454,9 +454,11 @@ export function DeviceDetailPage({
         ) : null}
 
         {activeTab === "events" && token ? (
-          <div className="device-detail-panel">
-            <h3 className="device-panel-title">{t("deviceDetail.overview.recentEvents")}</h3>
-            <DeviceEventsTable token={token} deviceCode={device.code} variant="full" />
+          <div className="device-events-fullpanel">
+            <section className="device-card is-events-full">
+              <h3 className="device-card-title">{t("deviceDetail.overview.recentEvents")}</h3>
+              <DeviceEventsTable token={token} deviceCode={device.code} variant="full" />
+            </section>
           </div>
         ) : null}
 

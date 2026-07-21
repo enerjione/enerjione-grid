@@ -24602,9 +24602,46 @@ th.event-col-category {
   padding: 0 24px 24px;
   overflow-y: auto;
 }
-/* Genel Bakis aktifken main scroll KAPALI — overview kendi kartlarinda scroll
-   yonetir (Mevcut Durum/Alarmlar/Olaylar ic scroll, dis bosluk yok). */
-.device-detail-main:has(> .device-overview) { overflow: hidden; }
+/* Genel Bakis / Olaylar aktifken main scroll KAPALI — kartlar kendi ic
+   scroll'unu yonetir (dis bosluk yok, kart en asagiya kadar). */
+.device-detail-main:has(> .device-overview),
+.device-detail-main:has(> .device-events-fullpanel) { overflow: hidden; }
+
+/* Olaylar sekmesi: tek buyuk kart, kalan yuksekligi doldurur, tablo ic scroll */
+.device-events-fullpanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 4px;
+}
+.device-card.is-events-full {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Filtre/toolbar/pager sabit; sadece tablo scroll */
+.device-card.is-events-full .device-events {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.device-card.is-events-full .device-events-table { flex: 0 0 auto; }
+.device-card.is-events-full .device-events > .device-events-table {
+  display: table;
+}
+/* Tablo govdesini kaydirmak icin sarmalayici — tablo uzun olursa scroll */
+.device-card.is-events-full { overflow: hidden; }
+.device-card.is-events-full .device-events {
+  overflow-y: auto;
+}
+/* Bos durum (filtre sonucu bos) — kart ortasinda */
+.device-events-empty.is-filtered {
+  flex: 1;
+  min-height: 200px;
+}
 .device-detail-main .device-detail-tabs {
   position: sticky;
   top: 0;
