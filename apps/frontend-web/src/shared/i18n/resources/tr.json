@@ -2248,7 +2248,13 @@
       "low": "Düşük",
       "serial": "Seri No",
       "noLocation": "Konum belirtilmemiş",
-      "networkSignal": "Şebeke Sinyali"
+      "networkSignal": "Şebeke Sinyali",
+      "partNo": "Part No",
+      "firmware": "Firmware",
+      "alarmActive": "AKTİF ALARM",
+      "alarmActiveSub": "Cihazda aktif alarm var",
+      "alarmClear": "Normal",
+      "alarmClearSub": "Aktif alarm yok"
     },
     "overview": {
       "currentStatus": "MEVCUT DURUM",
@@ -2285,7 +2291,15 @@
       "prev": "Önceki",
       "next": "Sonraki",
       "pageOf": "Sayfa {{page}} / {{total}}",
-      "channel": "Kaynak"
+      "channel": "Kaynak",
+      "searchPlaceholder": "Olay ara...",
+      "channelAll": "Tüm kaynaklar",
+      "kind": {
+        "all": "Tümü",
+        "alarm": "Alarmlar",
+        "command": "Komutlar",
+        "system": "Sistem"
+      }
     },
     "alarms": {
       "title": "ALARMLAR · {{source}}",
@@ -2296,6 +2310,13 @@
         "warn": "Uyarı",
         "info": "Bilgi"
       }
+    },
+    "groups": {
+      "protection": "Koruma / Arıza Yönü",
+      "faultValues": "Arıza Değerleri",
+      "measure": "Ölçümler",
+      "status": "Durum",
+      "counter": "Sayaçlar"
     }
   }
 }

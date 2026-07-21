@@ -2248,7 +2248,13 @@
       "low": "Low",
       "serial": "Serial",
       "noLocation": "No location set",
-      "networkSignal": "Network Signal"
+      "networkSignal": "Network Signal",
+      "partNo": "Part No",
+      "firmware": "Firmware",
+      "alarmActive": "ACTIVE ALARM",
+      "alarmActiveSub": "Device has an active alarm",
+      "alarmClear": "Normal",
+      "alarmClearSub": "No active alarms"
     },
     "overview": {
       "currentStatus": "CURRENT STATUS",
@@ -2285,7 +2291,15 @@
       "prev": "Prev",
       "next": "Next",
       "pageOf": "Page {{page}} / {{total}}",
-      "channel": "Source"
+      "channel": "Source",
+      "searchPlaceholder": "Search events...",
+      "channelAll": "All sources",
+      "kind": {
+        "all": "All",
+        "alarm": "Alarms",
+        "command": "Commands",
+        "system": "System"
+      }
     },
     "alarms": {
       "title": "ALARMS · {{source}}",
@@ -2296,6 +2310,13 @@
         "warn": "Warning",
         "info": "Info"
       }
+    },
+    "groups": {
+      "protection": "Protection / Fault Direction",
+      "faultValues": "Fault Values",
+      "measure": "Measurements",
+      "status": "Status",
+      "counter": "Counters"
     }
   }
 }

@@ -83,6 +83,47 @@ const STATUS_ICONS: Record<string, string> = {
   momentary_fault: "error_outline",
 };
 
+// ---- Mevcut Durum: sinyalleri kategori gruplarina ayir (suffix pattern) ----
+// Kategori sirasi = gorunum sirasi. Her sinyal bir gruba duser; bilgi/komut
+// sinyalleri (IP/serial/firmware, binary_output) HARIC (baska sekmelerde).
+type GroupKey = "protection" | "faultValues" | "measure" | "status" | "counter";
+
+const GROUP_ORDER: { key: GroupKey; icon: string }[] = [
+  { key: "protection", icon: "shield" },
+  { key: "faultValues", icon: "warning" },
+  { key: "measure", icon: "monitoring" },
+  { key: "status", icon: "toggle_on" },
+  { key: "counter", icon: "pin" },
+];
+
+// Bilgi/altyapi sinyalleri Mevcut Durum'da GOSTERILMEZ (sidebar/Tumu'de).
+const INFO_SUFFIX_RE =
+  /(serial_number|ipv4_address|ip_address|firmware|fw_version|modem|imei|sim_serial|gps|latitude|longitude|hardware_revision|part_no|rtu_status|network_operator|network_registration|network_type|operation_mode|device_position|test_point_level)/;
+
+function groupOfSuffix(suffix: string, dataType: string | undefined): GroupKey {
+  const s = suffix.toLowerCase();
+  // Koruma / ariza yonu / trip
+  if (
+    /(overcurrent|delta_i_delta_t|fault_direction|load_flow|_tripped|voltage_loss|current_loss|tamper|pick_up|permanent_fault$|momentary_fault$)/.test(
+      s
+    )
+  ) {
+    return "protection";
+  }
+  // Ariza olcum degerleri
+  if (/(fault_current|fault_duration|last_good|minimum_current|minimum_voltage|maximum_current|maximum_voltage|trip_level)/.test(s)) {
+    return "faultValues";
+  }
+  // Sayaclar
+  if (dataType === "counter" || /_counter$/.test(s)) return "counter";
+  // Olcumler (analog)
+  if (dataType === "analog" || /(current|voltage|temperature|phase_angle|pitch_angle|nominal)/.test(s)) {
+    return "measure";
+  }
+  // Kalan binary/durum
+  return "status";
+}
+
 const CNT_PERMANENT = "permanent_fault_counter";
 const CNT_MOMENTARY = "momentary_fault_counter";
 
@@ -195,6 +236,11 @@ export function DeviceDetailPage({
   // IP: G110 string (info_ipv4_address). Serial: analog (group 30) -> sayi,
   //   value_string DEGIL value; string variant (info_serial_number) fallback.
   const sidebarIp = strVal("master.info_ipv4_address") ?? strVal("master.info_modem_ip_address");
+  const sidebarPartNo = strVal("master.info_part_no");
+  // Firmware: analog (2.338) once, string variant fallback.
+  const fwNum = numVal("master.firmware_version");
+  const sidebarFirmware =
+    fwNum != null && Number.isFinite(fwNum) ? String(fwNum) : strVal("master.info_fw_version");
   const serialOf = (src: SignalSource): string | undefined => {
     const n = numVal(`${src}.serial_number`);
     if (n != null && Number.isFinite(n) && n > 0) return String(Math.round(n));
@@ -271,6 +317,8 @@ export function DeviceDetailPage({
         topologyInfo={topologyInfo}
         rssi={numVal("master.modem_rssi")}
         ip={sidebarIp}
+        partNo={sidebarPartNo}
+        firmware={sidebarFirmware}
         channelSerials={channelSerials}
         activeSource={activeSource}
         onSourceChange={setActiveSource}
@@ -326,6 +374,7 @@ export function DeviceDetailPage({
             device={device}
             activeSource={activeSource}
             rowBySuffix={rowBySuffix}
+            allRows={rows}
             curNow={curNow}
             voltNow={voltNow}
             tempNow={tempNow}
@@ -387,6 +436,7 @@ function OverviewTab({
   device,
   activeSource,
   rowBySuffix,
+  allRows,
   curNow,
   voltNow,
   tempNow,
@@ -402,6 +452,7 @@ function OverviewTab({
   device: DeviceRow;
   activeSource: SignalSource;
   rowBySuffix: Map<string, Row>;
+  allRows: Row[];
   curNow?: number;
   voltNow?: number;
   tempNow?: number;
@@ -455,7 +506,7 @@ function OverviewTab({
         <div className="device-overview-col">
           <section className="device-card">
             <h3 className="device-card-title">{t("deviceDetail.overview.currentStatus")}</h3>
-            <StatusTable rowBySuffix={rowBySuffix} t={t} />
+            <StatusTable rows={allRows} rowBySuffix={rowBySuffix} t={t} />
           </section>
         </div>
 
@@ -467,7 +518,7 @@ function OverviewTab({
               {t("deviceDetail.alarms.title", { source: srcLabel })}
             </h3>
             {token ? (
-              <DeviceAlarmsCard token={token} deviceId={device.id} activeSource={activeSource} limit={5} />
+              <DeviceAlarmsCard token={token} deviceId={device.id} activeSource={activeSource} limit={50} />
             ) : null}
           </section>
           {/* Son Olaylar */}
@@ -512,74 +563,108 @@ function KpiCard({
   );
 }
 
-// Mevcut Durum — 2 kolonlu durum sinyalleri (aktif/normal) + kritik olcum
-// bloklari (ariza akimi/suresi/son iyi akim, akim/gerilim son).
-const STATUS_MEASURES: { suffix: string; label: string; unit: string; type: string }[] = [
-  { suffix: "fault_current", label: "Arıza Akımı", unit: "mA", type: "analog" },
-  { suffix: "fault_duration", label: "Arıza Süresi", unit: "ms", type: "analog" },
-  { suffix: "last_good_known_current", label: "Son İyi Akım", unit: "mA", type: "analog" },
-  { suffix: "average_current", label: "Ort. Akım", unit: "mA", type: "analog" },
-  { suffix: "maximum_current", label: "Max. Akım", unit: "mA", type: "analog" },
-  { suffix: "conductor_temperature", label: "İletken Sıc.", unit: "°C", type: "analog" },
-];
-
-function StatusRow({
-  def,
-  rowBySuffix,
+// Mevcut Durum — aktif kaynagin TUM sinyalleri, kategori gruplu.
+// binary/binary_output -> durum rozeti (Aktif/Normal); analog/counter -> deger.
+function StatusItem({
+  row,
   t,
 }: {
-  def: SigDef;
-  rowBySuffix: Map<string, Row>;
+  row: Row;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
-  const row = rowBySuffix.get(def.suffix);
-  const active = row?.value === 1;
-  const icon = STATUS_ICONS[def.suffix] ?? "circle";
+  const suffix = suffixOf(row.signal_key);
+  const label = row.signal_label || suffix;
+  const dt = (row.effType as string | undefined) ?? (row.data_type as string | undefined);
+  const isBinary = dt === "binary" || dt === "binary_output";
+
+  if (isBinary) {
+    const active = row.value === 1;
+    const icon = STATUS_ICONS[suffix] ?? "toggle_on";
+    return (
+      <div className="device-status-item">
+        <span className="device-status-name" title={row.signal_key}>
+          <span className="material-symbols-outlined">{icon}</span>
+          {label}
+        </span>
+        <span className={`device-status-badge ${active ? "is-active" : "is-normal"}`}>
+          <span className="material-symbols-outlined">{active ? "warning" : "check_circle"}</span>
+          {active ? t("deviceDetail.status.active") : t("deviceDetail.status.normal")}
+        </span>
+      </div>
+    );
+  }
+  // analog / counter -> deger
+  const val =
+    dt === "string"
+      ? (row.value_string ?? "").trim() || "—"
+      : fmt(row.value ?? null, dt, row.unit);
   return (
-    <div className="device-status-item">
-      <span className="device-status-name">
-        <span className="material-symbols-outlined">{icon}</span>
-        {def.label}
+    <div className="device-status-item is-value">
+      <span className="device-status-name" title={row.signal_key}>
+        {label}
       </span>
-      <span className={`device-status-badge ${active ? "is-active" : "is-normal"}`}>
-        <span className="material-symbols-outlined">{active ? "warning" : "check_circle"}</span>
-        {active ? t("deviceDetail.status.active") : t("deviceDetail.status.normal")}
-      </span>
+      <span className="device-status-itemval">{val}</span>
     </div>
   );
 }
 
 function StatusTable({
-  rowBySuffix,
+  rows,
   t,
 }: {
+  rows: Row[];
   rowBySuffix: Map<string, Row>;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
-  const statusDefs = SIGNALS.filter((s) => s.cat === "status");
+  // Sinyalleri gruplara ayir (bilgi/altyapi HARIC). Grup ici: binary'ler once,
+  // sonra label'a gore.
+  const byGroup = useMemo(() => {
+    const m = new Map<GroupKey, Row[]>();
+    for (const g of GROUP_ORDER) m.set(g.key, []);
+    for (const r of rows) {
+      const suffix = suffixOf(r.signal_key);
+      if (INFO_SUFFIX_RE.test(suffix)) continue; // IP/serial/firmware -> sidebar/Tumu
+      const dt = (r.effType as string | undefined) ?? (r.data_type as string | undefined);
+      if (dt === "binary_output") continue; // komut -> Komutlar sekmesi
+      const g = groupOfSuffix(suffix, dt);
+      m.get(g)?.push(r);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => (a.signal_label || a.signal_key).localeCompare(b.signal_label || b.signal_key));
+    }
+    return m;
+  }, [rows]);
+
+  const hasAny = GROUP_ORDER.some((g) => (byGroup.get(g.key)?.length ?? 0) > 0);
+  if (!hasAny) {
+    return (
+      <div className="device-events-empty">
+        <span className="material-symbols-outlined">sensors_off</span>
+        <p>{t("deviceDetail.noSignals", { source: "" })}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="device-status">
-      {/* 2 kolonlu durum sinyalleri */}
-      <div className="device-status-grid">
-        {statusDefs.map((def) => (
-          <StatusRow key={def.suffix} def={def} rowBySuffix={rowBySuffix} t={t} />
-        ))}
-      </div>
-      {/* Kritik olcum degerleri */}
-      <div className="device-status-measures">
-        {STATUS_MEASURES.map((m) => {
-          const row = rowBySuffix.get(m.suffix);
-          const v = row?.value ?? null;
-          // Birim: sinyalin canli unit'i (kullanici degistirebilir), yoksa varsayilan.
-          const unit = row?.unit || m.unit;
-          return (
-            <div key={m.suffix} className="device-status-measure">
-              <span className="device-status-measure-label">{m.label}</span>
-              <span className="device-status-measure-value">{fmt(v, m.type, unit)}</span>
+      {GROUP_ORDER.map((g) => {
+        const items = byGroup.get(g.key) ?? [];
+        if (items.length === 0) return null;
+        return (
+          <section key={g.key} className="device-status-group">
+            <h4 className="device-status-group-title">
+              <span className="material-symbols-outlined">{g.icon}</span>
+              {t(`deviceDetail.groups.${g.key}`)}
+              <span className="device-status-group-count">{items.length}</span>
+            </h4>
+            <div className="device-status-grid">
+              {items.map((r) => (
+                <StatusItem key={r.signal_key} row={r} t={t} />
+              ))}
             </div>
-          );
-        })}
-      </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

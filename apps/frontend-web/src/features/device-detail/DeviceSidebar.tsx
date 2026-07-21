@@ -7,7 +7,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { MapContainer, Marker, TileLayer } from "react-leaflet";
+import { MapContainer, Marker, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
@@ -32,6 +32,10 @@ type Props = {
   rssi?: number;
   /** Master IP (master.ipv4_address). */
   ip?: string;
+  /** Part No (master.info_part_no). */
+  partNo?: string;
+  /** Firmware surumu (master.firmware_version / info_fw_version). */
+  firmware?: string;
   /** Kanal seri no'lari (master/sat01/sat02 serial_number). */
   channelSerials?: Partial<Record<SignalSource, string>>;
   activeSource: SignalSource;
@@ -73,6 +77,8 @@ export function DeviceSidebar({
   topologyInfo,
   rssi,
   ip,
+  partNo,
+  firmware,
   channelSerials,
   activeSource,
   onSourceChange,
@@ -105,9 +111,23 @@ export function DeviceSidebar({
           <h2 className="device-sidebar-code">{device.code}</h2>
         </div>
         <div className="device-sidebar-name">{device.name}</div>
-        <div className="device-sidebar-lastcomm">
-          {t("deviceDetail.sidebar.lastComm")}{" "}
-          <strong>{device.lastUpdateAt ? formatRelative(device.lastUpdateAt) : "—"}</strong>
+
+        {/* Genel alarm durum karti — alarm varsa yanip sonen, yoksa yesil */}
+        <div className={`device-sidebar-alarmcard ${device.alarmActive ? "is-alarm" : "is-ok"}`}>
+          <span className="device-sidebar-alarmcard-icon">
+            <span className="material-symbols-outlined">
+              {device.alarmActive ? "notification_important" : "check_circle"}
+            </span>
+          </span>
+          <div className="device-sidebar-alarmcard-body">
+            <span className="device-sidebar-alarmcard-title">
+              {device.alarmActive ? t("deviceDetail.sidebar.alarmActive") : t("deviceDetail.sidebar.alarmClear")}
+            </span>
+            <span className="device-sidebar-alarmcard-sub">
+              {device.alarmActive ? t("deviceDetail.sidebar.alarmActiveSub") : t("deviceDetail.sidebar.alarmClearSub")}
+            </span>
+          </div>
+          {device.alarmActive ? <span className="device-sidebar-alarmcard-pulse" aria-hidden="true" /> : null}
         </div>
       </section>
 
@@ -121,6 +141,11 @@ export function DeviceSidebar({
             value={online ? t("deviceDetail.online") : t("deviceDetail.offline")}
             tone={online ? "green" : "slate"}
           />
+          <InfoRow
+            icon="schedule"
+            label={t("deviceDetail.sidebar.lastCommShort")}
+            value={device.lastUpdateAt ? formatRelative(device.lastUpdateAt) : "—"}
+          />
           {topologyInfo?.regionName ? (
             <InfoRow icon="map" label={t("deviceDetail.meta.region")} value={topologyInfo.regionName} />
           ) : null}
@@ -128,6 +153,8 @@ export function DeviceSidebar({
             <InfoRow icon="timeline" label={t("deviceDetail.meta.line")} value={topologyInfo.lineName} />
           ) : null}
           {ip ? <InfoRow icon="router" label="IP" value={ip} /> : null}
+          {partNo ? <InfoRow icon="qr_code_2" label={t("deviceDetail.sidebar.partNo")} value={partNo} /> : null}
+          {firmware ? <InfoRow icon="memory" label={t("deviceDetail.sidebar.firmware")} value={firmware} /> : null}
 
           {/* Pil — ana sayfa batarya sembolu (% ye gore renkli) */}
           <li className="device-sidebar-info-row">
@@ -201,15 +228,19 @@ export function DeviceSidebar({
             <MapContainer
               center={[lat as number, lon as number]}
               zoom={14}
-              zoomControl={false}
-              dragging={false}
-              scrollWheelZoom={false}
-              doubleClickZoom={false}
+              zoomControl={true}
+              dragging={true}
+              scrollWheelZoom={true}
+              doubleClickZoom={true}
               attributionControl={false}
               style={{ height: "100%", width: "100%" }}
             >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN} />
+              <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN}>
+                <Tooltip permanent direction="top" offset={[0, -10]} className="device-map-label">
+                  {device.code}
+                </Tooltip>
+              </Marker>
             </MapContainer>
           </div>
         ) : (

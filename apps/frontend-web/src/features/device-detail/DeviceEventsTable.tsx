@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchDeviceCommands, fetchSystemEvents } from "../../shared/api";
-import { formatDateTime, formatRelative } from "../../shared/format";
+import { formatDate, formatDateTime, formatRelative } from "../../shared/format";
 import type { DeviceCommandRow, SystemEvent } from "../../shared/types";
 
 type Row = {
@@ -25,9 +25,14 @@ type Row = {
   channel: "master" | "sat01" | "sat02" | null;
   actor: string | null;
   isAlarm: boolean;
+  /** Olay turu: alarm | command | system (filtre icin). */
+  kind: "alarm" | "command" | "system";
   tone: "ok" | "warn" | "err" | "info" | "pending";
   statusLabel: string;
 };
+
+type KindFilter = "all" | "alarm" | "command" | "system";
+type ChannelFilter = "all" | "master" | "sat01" | "sat02";
 
 const CHANNEL_META: Record<"master" | "sat01" | "sat02", { label: string; tone: string }> = {
   master: { label: "Master", tone: "master" },
@@ -83,6 +88,9 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
   const [commands, setCommands] = useState<DeviceCommandRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
+  const [fKind, setFKind] = useState<KindFilter>("all");
+  const [fChannel, setFChannel] = useState<ChannelFilter>("all");
+  const [search, setSearch] = useState("");
 
   const reload = useCallback(async () => {
     if (!token || !deviceCode) return;
@@ -113,6 +121,7 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
       channel: channelOfEvent(e),
       actor: e.actor_username ?? null,
       isAlarm: isAlarmEvent(e),
+      kind: isAlarmEvent(e) ? "alarm" : "system",
       tone: severityTone(e.severity),
       statusLabel: t(`deviceDetail.events.severity.${e.severity.toLowerCase()}`, {
         defaultValue: e.severity,
@@ -126,19 +135,32 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
       channel: "master", // komutlar her zaman master'a gonderilir
       actor: c.actor_username ?? null,
       isAlarm: false,
+      kind: "command",
       tone: commandTone(c.status),
       statusLabel: t(`deviceDetail.commands.status.${c.status}`, { defaultValue: c.status }),
     }));
     return [...evRows, ...cmdRows].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
   }, [events, commands, t]);
 
-  const pageCount = Math.max(1, Math.ceil(allRows.length / PAGE_SIZE));
+  // Filtre uygula (full mod). kind + kaynak + metin arama.
+  const filtered = useMemo<Row[]>(() => {
+    if (!isFull) return allRows;
+    const q = search.trim().toLowerCase();
+    return allRows.filter((r) => {
+      if (fKind !== "all" && r.kind !== fKind) return false;
+      if (fChannel !== "all" && r.channel !== fChannel) return false;
+      if (q && !r.message.toLowerCase().includes(q) && !(r.actor ?? "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allRows, isFull, fKind, fChannel, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const rows = useMemo<Row[]>(() => {
     if (limit) return allRows.slice(0, limit); // compact (Genel Bakis)
     if (!isFull) return allRows;
-    return allRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
-  }, [allRows, limit, isFull, safePage]);
+    return filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  }, [allRows, filtered, limit, isFull, safePage]);
 
   if (loading && rows.length === 0) {
     return (
@@ -185,13 +207,65 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
   return (
     <div className={`device-events${isFull ? " is-full" : ""}`}>
       {isFull ? (
-        <div className="device-events-toolbar">
-          <span className="device-events-count">{t("deviceDetail.events.total", { count: allRows.length })}</span>
-          <button type="button" className="device-events-export" onClick={exportCsv}>
-            <span className="material-symbols-outlined">download</span>
-            {t("deviceDetail.events.export")}
-          </button>
-        </div>
+        <>
+          <div className="device-events-toolbar">
+            <span className="device-events-count">
+              {t("deviceDetail.events.total", { count: filtered.length })}
+              {filtered.length !== allRows.length ? ` / ${allRows.length}` : ""}
+            </span>
+            <button type="button" className="device-events-export" onClick={exportCsv}>
+              <span className="material-symbols-outlined">download</span>
+              {t("deviceDetail.events.export")}
+            </button>
+          </div>
+          <div className="device-events-filters">
+            <div className="device-events-search">
+              <span className="material-symbols-outlined">search</span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
+                placeholder={t("deviceDetail.events.searchPlaceholder")}
+              />
+              {search ? (
+                <button type="button" className="device-events-search-clear" onClick={() => setSearch("")}>
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              ) : null}
+            </div>
+            <div className="device-events-chips">
+              {(["all", "alarm", "command", "system"] as KindFilter[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`device-events-chip${fKind === k ? " active" : ""}`}
+                  onClick={() => {
+                    setFKind(k);
+                    setPage(0);
+                  }}
+                >
+                  {t(`deviceDetail.events.kind.${k}`)}
+                </button>
+              ))}
+            </div>
+            <select
+              className="device-events-select"
+              value={fChannel}
+              onChange={(e) => {
+                setFChannel(e.target.value as ChannelFilter);
+                setPage(0);
+              }}
+            >
+              <option value="all">{t("deviceDetail.events.channelAll")}</option>
+              <option value="master">Master</option>
+              <option value="sat01">Satellite 01</option>
+              <option value="sat02">Satellite 02</option>
+            </select>
+          </div>
+        </>
       ) : null}
       <table className={`device-events-table${isFull ? " is-full" : ""}`}>
         <thead>
@@ -227,16 +301,16 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
                     {t("deviceDetail.events.alarm")}
                   </span>
                 ) : null}
-                <span title={formatRelative(r.ts)}>
-                  {isFull
-                    ? formatDateTime(r.ts)
-                    : formatDateTime(r.ts, {
-                        day: "2-digit",
-                        month: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                </span>
+                {isFull ? (
+                  <span title={formatRelative(r.ts)}>{formatDateTime(r.ts)}</span>
+                ) : (
+                  <span className="device-events-time-compact" title={formatRelative(r.ts)}>
+                    <span className="device-events-time-date">{formatDate(r.ts)}</span>
+                    <span className="device-events-time-hm">
+                      {formatDateTime(r.ts, { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </span>
+                )}
               </td>
               <td className="device-events-msg">{r.message}</td>
               {isFull ? (

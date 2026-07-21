@@ -24764,7 +24764,7 @@ th.event-col-category {
   padding: 6px 8px 10px;
   border-bottom: 1px solid #e2e8f0;
 }
-.device-events-table td { padding: 11px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.device-events-table td { padding: 11px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
 .device-events-table tr:last-child td { border-bottom: none; }
 .device-events-time {
   display: flex;
@@ -25008,7 +25008,17 @@ th.event-col-category {
 
 /* ---- Genel Bakis: Alarmlar karti (bu cihaz + aktif kaynak) ---- */
 .device-card-title-icon { font-size: 16px; vertical-align: -3px; margin-right: 5px; color: #f43f5e; }
-.device-alarms-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Alarm karti Son Olaylar ile ayni boyut: sabit yukseklik + ic scroll (tablo gibi) */
+.device-alarms-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
 .device-alarm-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -25093,6 +25103,72 @@ th.event-col-category {
 
 /* ===== v3 iyilestirmeler: KPI zengin, durum 2 kolon, olay/komut tasarim ===== */
 
+/* ---- Sidebar: genel alarm durum karti (yanip sonen / yesil) ---- */
+.device-sidebar-alarmcard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 11px 13px;
+  border-radius: 11px;
+  border: 1px solid;
+  overflow: hidden;
+}
+.device-sidebar-alarmcard.is-ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.device-sidebar-alarmcard.is-alarm {
+  background: #fef2f2;
+  border-color: #fecaca;
+  animation: sidebar-alarm-blink 1.4s ease-in-out infinite;
+}
+@keyframes sidebar-alarm-blink {
+  0%, 100% { background: #fef2f2; border-color: #fecaca; }
+  50% { background: #fee2e2; border-color: #f87171; }
+}
+.device-sidebar-alarmcard-icon { display: inline-flex; flex: 0 0 auto; }
+.device-sidebar-alarmcard-icon .material-symbols-outlined { font-size: 24px; }
+.device-sidebar-alarmcard.is-ok .device-sidebar-alarmcard-icon { color: #16a34a; }
+.device-sidebar-alarmcard.is-alarm .device-sidebar-alarmcard-icon { color: #dc2626; }
+.device-sidebar-alarmcard-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.device-sidebar-alarmcard-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.device-sidebar-alarmcard.is-ok .device-sidebar-alarmcard-title { color: #15803d; }
+.device-sidebar-alarmcard.is-alarm .device-sidebar-alarmcard-title { color: #b91c1c; }
+.device-sidebar-alarmcard-sub { font-size: 11px; color: #64748b; }
+.device-sidebar-alarmcard-pulse {
+  position: absolute;
+  right: 12px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239,68,68,0.6);
+  animation: device-alarm-pulse 1.4s infinite;
+}
+
+/* ---- Harita etiketi (cihaz adi, Leaflet tooltip) ---- */
+.device-map-label.leaflet-tooltip {
+  background: #0f172a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.device-map-label.leaflet-tooltip-top::before { border-top-color: #0f172a; }
+
+/* Compact olay tarih: 2 satir (tarih ustte, saat altta) */
+.device-events-time-compact { display: inline-flex; flex-direction: column; line-height: 1.25; }
+.device-events-time-date { font-size: 11px; color: #94a3b8; font-weight: 600; }
+.device-events-time-hm { font-size: 13px; color: #334155; font-weight: 700; }
+
 /* ---- Sidebar seri no ---- */
 .device-sidebar-serial {
   display: inline-flex;
@@ -25135,19 +25211,45 @@ th.event-col-category {
 }
 
 /* ---- Mevcut Durum: 2 kolonlu grid + olcum blogu ---- */
-.device-status { display: flex; flex-direction: column; gap: 16px; }
+/* Mevcut Durum — kategori gruplu, her grup 2 kolonlu grid */
+.device-status { display: flex; flex-direction: column; gap: 18px; }
+.device-status-group { display: flex; flex-direction: column; gap: 6px; }
+.device-status-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #475569;
+}
+.device-status-group-title .material-symbols-outlined { font-size: 17px; color: #64748b; }
+.device-status-group-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
 .device-status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 24px;
+  gap: 2px 24px;
 }
 .device-status-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 0;
+  padding: 7px 0;
   border-bottom: 1px solid #f1f5f9;
+  min-width: 0;
 }
 .device-status-name {
   display: inline-flex;
@@ -25155,8 +25257,11 @@ th.event-col-category {
   gap: 8px;
   font-size: 13px;
   color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.device-status-name .material-symbols-outlined { font-size: 17px; color: #94a3b8; }
+.device-status-name .material-symbols-outlined { font-size: 17px; color: #94a3b8; flex: 0 0 auto; }
 .device-status-badge {
   display: inline-flex;
   align-items: center;
@@ -25168,23 +25273,13 @@ th.event-col-category {
 .device-status-badge .material-symbols-outlined { font-size: 15px; }
 .device-status-badge.is-normal { color: #16a34a; }
 .device-status-badge.is-active { color: #d97706; }
-.device-status-measures {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding-top: 14px;
-  border-top: 1px solid #e2e8f0;
+.device-status-itemval {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.device-status-measure {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-.device-status-measure-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
-.device-status-measure-value { font-size: 15px; font-weight: 800; color: #0f172a; }
 
 /* ---- Olaylar sekmesi (full): toolbar + export + alarm tag + durum ortali ---- */
 .device-events-toolbar {
@@ -25210,6 +25305,77 @@ th.event-col-category {
 }
 .device-events-export:hover { background: #f8fafc; border-color: #94a3b8; }
 .device-events-export .material-symbols-outlined { font-size: 17px; }
+
+/* Olaylar filtreleri (full): arama + tip cipleri + kaynak select */
+.device-events-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.device-events-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  min-width: 220px;
+  flex: 1 1 220px;
+  max-width: 340px;
+}
+.device-events-search .material-symbols-outlined { font-size: 18px; color: #94a3b8; }
+.device-events-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 9px 0;
+  font-size: 13px;
+  color: #0f172a;
+  background: transparent;
+}
+.device-events-search-clear {
+  display: inline-flex;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 2px;
+}
+.device-events-search-clear:hover { color: #475569; }
+.device-events-search-clear .material-symbols-outlined { font-size: 16px; }
+.device-events-chips { display: inline-flex; gap: 4px; }
+.device-events-chip {
+  padding: 7px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.device-events-chip:hover { background: #f8fafc; }
+.device-events-chip.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+}
+.device-events-select {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
 .device-events-th-status, .device-events-td-status { text-align: center; }
 .device-events-td-status .device-events-badge { min-width: 88px; justify-content: center; }
 .device-events-alarm-tag {
