@@ -1,0 +1,3 @@
+# EnerjiOne FTP sunucusu — gomulu cihaz config/firmware transfer sunucusu.
+# pyftpdlib: saf-python FTP server (C bagimliligi yok, manylinux sorunu olmaz).
+pyftpdlib>=1.5,<2.0

@@ -12,6 +12,7 @@
 #   sudo bash update.sh tag            # tag-engine
 #   sudo bash update.sh notification   # notification-worker
 #   sudo bash update.sh iec            # iec104-outbound
+#   sudo bash update.sh ftp            # ftp-server (cihaz config transfer)
 #
 # Idempotent. Compose Docker build cache'i kullanir; degismemis layer'lar
 # yeniden indirilmez.
@@ -170,9 +171,10 @@ case "$TARGET" in
   tag|tag-engine)                   SVC="tag-engine" ;;
   notification|notification-worker) SVC="notification-worker" ;;
   iec|iec104|iec104-outbound)       SVC="iec104-outbound" ;;
+  ftp|ftp-server)                   SVC="ftp-server" ;;
   all|"")                           SVC="" ;;
   *)
-    e1_die "Bilinmeyen servis: $TARGET. Gecerli: frontend, backend, alarm, tag, notification, iec, all"
+    e1_die "Bilinmeyen servis: $TARGET. Gecerli: frontend, backend, alarm, tag, notification, iec, ftp, all"
     ;;
 esac
 

@@ -384,6 +384,41 @@ services:
     logging: *default-logging
     <<: [*worker-resources, *hardened-worker]
 
+  # Gomulu FTP sunucusu — Horstmann SN2 cihazlari config/firmware dosyalarini
+  # buraya yazar/okur (cihaz FTP ekrani: Server/Port 21/User/Pass/Dir).
+  # NOT: `*hardened-worker` KULLANILMAZ — FTP writable volume'a yazar (read_only
+  # olamaz) ve port 21 + pasif veri portlarini bind eder (cap_drop:ALL, port 21
+  # <1024 root bind engellenir). Bu yuzden inline, sadelestirilmis guvenlik.
+  ftp-server:
+    build:
+      context: ./apps/ftp-server
+      dockerfile: Dockerfile
+    image: e1-grid/ftp-server:${E1_VERSION:-latest}
+    container_name: e1-grid-ftp-server
+    restart: unless-stopped
+    environment:
+      FTP_USER: ${FTP_USER:-device}
+      FTP_PASSWORD: ${FTP_PASSWORD}
+      FTP_ROOT: /data/ftp
+      FTP_LISTEN_PORT: 21
+      FTP_PASV_MIN_PORT: ${FTP_PASV_MIN_PORT:-30000}
+      FTP_PASV_MAX_PORT: ${FTP_PASV_MAX_PORT:-30009}
+      # NAT arkasindaki cihazlar pasif modda dis IP gormeli. Bos ise otomatik.
+      FTP_MASQUERADE_ADDRESS: ${FTP_MASQUERADE_ADDRESS:-}
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: 8015
+    ports:
+      # Kontrol portu + pasif veri portu araligi (cihazlar bu araliga baglanir).
+      - "${FTP_HOST_PORT:-21}:21"
+      - "${FTP_PASV_MIN_PORT:-30000}-${FTP_PASV_MAX_PORT:-30009}:${FTP_PASV_MIN_PORT:-30000}-${FTP_PASV_MAX_PORT:-30009}"
+    volumes:
+      # Cihazlarin yazdigi config/firmware — backend/UI bu volume'u okur.
+      - ftp-data:/data/ftp
+    networks:
+      - e1-net
+    logging: *default-logging
+    <<: *worker-resources
+
   frontend-web:
     build:
       context: ./apps/frontend-web
@@ -417,3 +452,5 @@ volumes:
   rabbitmq-data:
   nats-data:
   backup-data:
+  # Cihazlarin FTP ile yazdigi config/firmware dosyalari (ftp-server + backend okur).
+  ftp-data:
