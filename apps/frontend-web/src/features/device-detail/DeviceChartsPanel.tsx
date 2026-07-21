@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
-import { LineChart } from "echarts/charts";
+import { LineChart, BarChart } from "echarts/charts";
 import {
   GridComponent,
   TooltipComponent,
@@ -33,7 +33,16 @@ import type {
   TelemetryHistoryPoint,
 } from "../../shared/types";
 
-echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, CanvasRenderer]);
+echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, CanvasRenderer]);
+
+type ChartType = "line" | "area" | "bar";
+type ChartSettings = {
+  smooth: boolean;       // cizgi/alan: yumusak
+  showSymbol: boolean;   // cizgi/alan: nokta goster
+  lineWidth: number;     // cizgi/alan kalinlik
+  barStack: boolean;     // bar: ust uste (stack)
+};
+const DEFAULT_SETTINGS: ChartSettings = { smooth: true, showSymbol: false, lineWidth: 2, barStack: false };
 
 // Zaman araliklari (kisa araliklar dahil) — bucket araliga gore otomatik.
 const RANGES: { key: string; minutes: number; bucket: HistoryBucket }[] = [
@@ -72,7 +81,14 @@ type Point = [number, number | null]; // [timestamp, value]
 
 // Eklenmis bir seri = tek sinyal + tek cihaz + renk (id ile benzersiz).
 type SeriesDef = { id: string; suffix: string; source: SignalSource; color: string };
-type SavedView = { defs: SeriesDef[]; rangeKey: string; customFrom?: string; customTo?: string };
+type SavedView = {
+  defs: SeriesDef[];
+  rangeKey: string;
+  customFrom?: string;
+  customTo?: string;
+  chartType?: ChartType;
+  settings?: ChartSettings;
+};
 
 let _idCounter = 0;
 function newId(): string {
@@ -141,6 +157,9 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
   const [customTo, setCustomTo] = useState<string>(() => saved?.customTo ?? "");
   const [popupOpen, setPopupOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null); // duzenlenen seri (null=yeni)
+  const [chartType, setChartType] = useState<ChartType>(() => saved?.chartType ?? "area");
+  const [settings, setSettings] = useState<ChartSettings>(() => ({ ...DEFAULT_SETTINGS, ...(saved?.settings ?? {}) }));
+  const [gearOpen, setGearOpen] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,8 +168,8 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
   >([]);
 
   useEffect(() => {
-    saveView(deviceCode, { defs, rangeKey: customOn ? "custom" : rangeKey, customFrom, customTo });
-  }, [deviceCode, defs, rangeKey, customOn, customFrom, customTo]);
+    saveView(deviceCode, { defs, rangeKey: customOn ? "custom" : rangeKey, customFrom, customTo, chartType, settings });
+  }, [deviceCode, defs, rangeKey, customOn, customFrom, customTo, chartType, settings]);
 
   // Aktif seri anahtarlari: her def = tek sinyal + tek cihaz (katalogda varsa).
   const seriesKeys = useMemo(() => {
@@ -272,18 +291,26 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       yAxis: yAxes,
       series: series.map((s) => ({
         name: s.label,
-        type: "line" as const,
+        type: chartType === "bar" ? ("bar" as const) : ("line" as const),
         data: s.points,
-        showSymbol: false,
-        smooth: 0.25,
+        showSymbol: chartType !== "bar" && settings.showSymbol,
+        symbolSize: 5,
+        smooth: chartType !== "bar" && settings.smooth ? 0.3 : false,
         yAxisIndex: units[1] != null && (s.unit ?? "") === units[1] ? 1 : 0,
-        lineStyle: { color: s.color, width: 2 },
-        itemStyle: { color: s.color },
-        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: s.color + "33" }, { offset: 1, color: s.color + "05" }]) },
+        // bar: gruplu ya da stack
+        stack: chartType === "bar" && settings.barStack ? "total" : undefined,
+        barMaxWidth: chartType === "bar" ? 24 : undefined,
+        lineStyle: chartType !== "bar" ? { color: s.color, width: settings.lineWidth } : undefined,
+        itemStyle: { color: s.color, borderRadius: chartType === "bar" ? [3, 3, 0, 0] : 0 },
+        // alan dolgusu: sadece "area" tipinde
+        areaStyle:
+          chartType === "area"
+            ? { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: s.color + "33" }, { offset: 1, color: s.color + "05" }]) }
+            : undefined,
         connectNulls: true,
       })),
     };
-  }, [series, units]);
+  }, [series, units, chartType, settings]);
 
   // Popup: sinyal ekle / duzenle (tek sinyal + tek cihaz).
   const [pSuffix, setPSuffix] = useState<string>("");
@@ -339,6 +366,66 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
             {t("deviceDetail.charts.custom")}
           </button>
         </div>
+        {/* Grafik tipi + ayarlar */}
+        <div className="device-trend-typebar">
+          <div className="device-trend-types">
+            {([
+              { key: "line", icon: "show_chart" },
+              { key: "area", icon: "area_chart" },
+              { key: "bar", icon: "bar_chart" },
+            ] as { key: ChartType; icon: string }[]).map((ct) => (
+              <button
+                key={ct.key}
+                type="button"
+                className={`device-trend-type${chartType === ct.key ? " active" : ""}`}
+                onClick={() => setChartType(ct.key)}
+                title={t(`deviceDetail.charts.type.${ct.key}`)}
+              >
+                <span className="material-symbols-outlined">{ct.icon}</span>
+              </button>
+            ))}
+          </div>
+          <div className="device-trend-gear-wrap">
+            <button
+              type="button"
+              className={`device-trend-gear${gearOpen ? " active" : ""}`}
+              onClick={() => setGearOpen((o) => !o)}
+              title={t("deviceDetail.charts.settings")}
+            >
+              <span className="material-symbols-outlined">tune</span>
+            </button>
+            {gearOpen ? (
+              <>
+                <div className="device-trend-gear-backdrop" onClick={() => setGearOpen(false)} />
+                <div className="device-trend-gear-panel">
+                  <span className="device-trend-gear-title">{t("deviceDetail.charts.settings")}</span>
+                  {chartType !== "bar" ? (
+                    <>
+                      <label className="device-trend-gear-row">
+                        <input type="checkbox" checked={settings.smooth} onChange={(e) => setSettings((s) => ({ ...s, smooth: e.target.checked }))} />
+                        {t("deviceDetail.charts.smooth")}
+                      </label>
+                      <label className="device-trend-gear-row">
+                        <input type="checkbox" checked={settings.showSymbol} onChange={(e) => setSettings((s) => ({ ...s, showSymbol: e.target.checked }))} />
+                        {t("deviceDetail.charts.showPoints")}
+                      </label>
+                      <label className="device-trend-gear-row device-trend-gear-slider">
+                        <span>{t("deviceDetail.charts.lineWidth")}: {settings.lineWidth}px</span>
+                        <input type="range" min={1} max={5} value={settings.lineWidth} onChange={(e) => setSettings((s) => ({ ...s, lineWidth: Number(e.target.value) }))} />
+                      </label>
+                    </>
+                  ) : (
+                    <label className="device-trend-gear-row">
+                      <input type="checkbox" checked={settings.barStack} onChange={(e) => setSettings((s) => ({ ...s, barStack: e.target.checked }))} />
+                      {t("deviceDetail.charts.barStack")}
+                    </label>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+
         {customOn ? (
           <div className="device-trend-custom">
             <input type="datetime-local" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} aria-label={t("deviceDetail.charts.from")} />

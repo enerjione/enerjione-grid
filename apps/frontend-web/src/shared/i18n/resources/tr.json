@@ -2201,7 +2201,17 @@
       "noSignalsYet": "Henüz sinyal eklenmedi",
       "editSignal": "Sinyal Düzenle",
       "device": "Cihaz",
-      "editHint": "Düzenlemek için tıkla"
+      "editHint": "Düzenlemek için tıkla",
+      "type": {
+        "line": "Çizgi",
+        "area": "Alan",
+        "bar": "Bar"
+      },
+      "settings": "Grafik Ayarları",
+      "smooth": "Yumuşak çizgi",
+      "showPoints": "Noktaları göster",
+      "lineWidth": "Çizgi kalınlığı",
+      "barStack": "Üst üste yığ"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",

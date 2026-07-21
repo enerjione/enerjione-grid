@@ -79,7 +79,7 @@ function commandTone(status: string): Row["tone"] {
   return "info";
 }
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 25;
 
 export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant }: Props) {
   const { t } = useTranslation();

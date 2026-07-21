@@ -23995,6 +23995,51 @@ th.event-col-category {
 .device-trend-custom input { padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #0f172a; }
 .device-trend-custom-sep { color: #94a3b8; font-weight: 700; }
 
+/* Grafik tipi + ayar (gear) */
+.device-trend-typebar { display: inline-flex; align-items: center; gap: 8px; }
+.device-trend-types { display: inline-flex; gap: 2px; padding: 3px; background: #f1f5f9; border-radius: 9px; }
+.device-trend-type {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 30px;
+  border: none; border-radius: 7px; background: transparent; color: #64748b; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.device-trend-type:hover { color: #0f172a; }
+.device-trend-type.active { background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(15,23,42,0.1); }
+.device-trend-type .material-symbols-outlined { font-size: 18px; }
+.device-trend-gear-wrap { position: relative; }
+.device-trend-gear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; color: #64748b; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.device-trend-gear:hover { background: #f8fafc; color: #0f172a; }
+.device-trend-gear.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+.device-trend-gear .material-symbols-outlined { font-size: 18px; }
+.device-trend-gear-backdrop { position: fixed; inset: 0; z-index: 40; }
+.device-trend-gear-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.15);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.device-trend-gear-title { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #94a3b8; }
+.device-trend-gear-row { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; }
+.device-trend-gear-row input[type="checkbox"] { accent-color: #0ea5e9; cursor: pointer; }
+.device-trend-gear-slider { flex-direction: column; align-items: stretch; gap: 5px; cursor: default; }
+.device-trend-gear-slider span { font-size: 12px; color: #64748b; font-weight: 600; }
+.device-trend-gear-slider input[type="range"] { accent-color: #0ea5e9; width: 100%; }
+
 /* Ana govde: sol panel | grafik */
 .device-trend-body { display: grid; grid-template-columns: 240px 1fr; gap: 12px; flex: 1; min-height: 0; }
 
@@ -25916,6 +25961,14 @@ th.event-col-category {
 }
 .device-events-table.is-full tbody tr:hover td { background: #f8fafc; }
 .device-events-table.is-full tbody tr.is-alarm-row:hover td { background: #fee2e2; }
+/* Baslik SABIT — tablo scroll'da kaybolmaz */
+.device-events-table.is-full thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #fff;
+  box-shadow: inset 0 -1px 0 #e2e8f0;
+}
 /* Full kolon sirasi: Durum | Kaynak | Zaman | Olay | Kim */
 .device-events-table.is-full .device-events-th-status,
 .device-events-table.is-full .device-events-td-status { width: 120px; text-align: left; }
