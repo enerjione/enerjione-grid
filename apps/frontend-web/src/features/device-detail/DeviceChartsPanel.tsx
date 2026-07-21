@@ -229,12 +229,13 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
 
   // ---- ECharts option (koyu tema) ----
   const chartOption = useMemo(() => {
+    // Acik tema — okunur gri eksen + hafif grid.
     const mkAxis = (name: string, position: "left" | "right", showSplit: boolean) => ({
       type: "value" as const,
       name,
       position,
-      splitLine: { lineStyle: { color: showSplit ? "rgba(148,163,184,0.12)" : "rgba(148,163,184,0)" } },
-      axisLabel: { color: "#94a3b8" },
+      splitLine: { lineStyle: { color: showSplit ? "rgba(148,163,184,0.22)" : "rgba(148,163,184,0)" } },
+      axisLabel: { color: "#64748b" },
       nameTextStyle: { color: "#94a3b8" },
     });
     const yAxes = [mkAxis(units[0] ?? "", "left", true)];
@@ -247,15 +248,17 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       grid: { left: 8, right: units[1] != null ? 8 : 16, top: 16, bottom: 8, containLabel: true },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "rgba(15,23,42,0.95)",
-        borderColor: "rgba(148,163,184,0.2)",
-        textStyle: { color: "#e2e8f0", fontSize: 12 },
-        axisPointer: { type: "cross", lineStyle: { color: "rgba(148,163,184,0.4)" } },
+        backgroundColor: "rgba(255,255,255,0.98)",
+        borderColor: "#e2e8f0",
+        borderWidth: 1,
+        textStyle: { color: "#0f172a", fontSize: 12 },
+        extraCssText: "box-shadow: 0 6px 20px rgba(15,23,42,0.12); border-radius: 10px;",
+        axisPointer: { type: "cross", lineStyle: { color: "rgba(148,163,184,0.5)" } },
       },
       xAxis: {
         type: "time",
-        axisLine: { lineStyle: { color: "rgba(148,163,184,0.25)" } },
-        axisLabel: { color: "#94a3b8", hideOverlap: true },
+        axisLine: { lineStyle: { color: "rgba(148,163,184,0.35)" } },
+        axisLabel: { color: "#64748b", hideOverlap: true },
         splitLine: { show: false },
       },
       yAxis: yAxes,

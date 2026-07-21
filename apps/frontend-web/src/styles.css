@@ -24015,10 +24015,10 @@ th.event-col-category {
 .device-trend-listdel:hover { color: #ef4444; }
 .device-trend-listdel .material-symbols-outlined { font-size: 16px; }
 
-/* Grafik (koyu tema konteyner) */
-.device-trend-chart { position: relative; border-radius: 14px; background: #0f172a; border: 1px solid #1e293b; padding: 12px; min-height: 0; overflow: hidden; }
-.device-trend-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 100%; min-height: 300px; color: #64748b; font-size: 13px; }
-.device-trend-empty .material-symbols-outlined { font-size: 40px; color: #334155; }
+/* Grafik (acik tema konteyner) */
+.device-trend-chart { position: relative; border-radius: 14px; background: #fff; border: 1px solid #e2e8f0; padding: 12px; min-height: 0; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.04); }
+.device-trend-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 100%; min-height: 300px; color: #94a3b8; font-size: 13px; }
+.device-trend-empty .material-symbols-outlined { font-size: 40px; color: #cbd5e1; }
 .device-trend-empty.is-error { color: #f87171; }
 .device-trend-empty.is-error .material-symbols-outlined { color: #ef4444; }
 .device-trend-empty p { margin: 0; }
@@ -24681,7 +24681,16 @@ th.event-col-category {
 /* Genel Bakis / Olaylar aktifken main scroll KAPALI — kartlar kendi ic
    scroll'unu yonetir (dis bosluk yok, kart en asagiya kadar). */
 .device-detail-main:has(> .device-overview),
-.device-detail-main:has(> .device-events-fullpanel) { overflow: hidden; }
+.device-detail-main:has(> .device-events-fullpanel),
+.device-detail-main:has(> .device-trend-panel) { overflow: hidden; }
+/* Trendler paneli kalan yuksekligi doldurur (grafik en asagiya kadar) */
+.device-trend-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 4px;
+}
 
 /* Olaylar sekmesi: tek buyuk kart, kalan yuksekligi doldurur, tablo ic scroll */
 .device-events-fullpanel {
