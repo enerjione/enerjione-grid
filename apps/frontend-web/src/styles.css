@@ -24006,7 +24006,13 @@ th.event-col-category {
 .device-trend-add .material-symbols-outlined { font-size: 18px; }
 .device-trend-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; }
 .device-trend-list-empty { padding: 20px 12px; text-align: center; font-size: 12px; color: #94a3b8; }
-.device-trend-listitem { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid #f1f5f9; border-radius: 9px; background: #fafbfc; }
+.device-trend-listitem { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid #f1f5f9; border-radius: 9px; background: #fafbfc; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.device-trend-listitem:hover { border-color: #cbd5e1; background: #fff; }
+/* Cihaz radio (popup) */
+.device-trend-radio { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; }
+.device-trend-radio.active { color: #0f172a; }
+.device-trend-radio.is-disabled { opacity: 0.4; cursor: not-allowed; }
+.device-trend-radio input { accent-color: #0ea5e9; cursor: pointer; }
 .device-trend-listcolor { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
 .device-trend-listbody { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .device-trend-listlabel { font-size: 13px; font-weight: 700; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

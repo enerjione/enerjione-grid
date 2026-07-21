@@ -50,12 +50,16 @@ const PALETTE = [
   "#38bdf8", "#f59e0b", "#34d399", "#f87171", "#a78bfa",
   "#f472b6", "#2dd4bf", "#fb923c", "#60a5fa", "#a3e635",
 ];
-const SOURCE_META: Record<SignalSource, { label: string; type: "solid" | "dashed" | "dotted" }> = {
-  master: { label: "Master", type: "solid" },
-  sat01: { label: "Sat 01", type: "dashed" },
-  sat02: { label: "Sat 02", type: "dotted" },
+const SOURCE_META: Record<SignalSource, { label: string }> = {
+  master: { label: "Master" },
+  sat01: { label: "Satellite 01" },
+  sat02: { label: "Satellite 02" },
 };
 const ALL_SOURCES: SignalSource[] = ["master", "sat01", "sat02"];
+
+// Grafige uygun OLMAYAN sinyaller (sabit/konum/kimlik) — listede gizli.
+const NON_TREND_RE =
+  /(firmware|fw_version|hardware_revision|serial|part_no|latitude|longitude|gps|test_point|modem_model|imei|sim_serial|ipv4|ip_address|dial_in|comm_library|network_operator|network_type|network_registration|rtu_status|device_position|last_configuration|nominal_voltage|pitch_angle)/;
 
 type Props = {
   deviceCode: string;
@@ -66,9 +70,15 @@ type Props = {
 
 type Point = [number, number | null]; // [timestamp, value]
 
-// Eklenmis bir seri tanimi (kullanici sec + renk). Kaynak ayrimi cizgi stili.
-type SeriesDef = { suffix: string; sources: SignalSource[]; color: string };
+// Eklenmis bir seri = tek sinyal + tek cihaz + renk (id ile benzersiz).
+type SeriesDef = { id: string; suffix: string; source: SignalSource; color: string };
 type SavedView = { defs: SeriesDef[]; rangeKey: string; customFrom?: string; customTo?: string };
+
+let _idCounter = 0;
+function newId(): string {
+  _idCounter += 1;
+  return `s${_idCounter}_${Math.floor(performance.now())}`;
+}
 
 function isAggregate(
   rows: TelemetryHistoryPoint[] | TelemetryAggregatePoint[]
@@ -98,13 +108,15 @@ function saveView(code: string, v: SavedView): void {
 export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: Props) {
   const { t } = useTranslation();
 
-  // Trend'e uygun sinyaller (analog/counter), suffix bazinda (kaynak-bagimsiz).
+  // Trend'e uygun sinyaller (analog/counter), suffix bazinda. Sabit/konum/kimlik
+  // sinyalleri (firmware/hardware/latitude vb) HARIC — grafigi anlamsiz doldurur.
   const suffixCatalog = useMemo(() => {
     const m = new Map<string, { label: string; unit: string | null; sources: Set<SignalSource> }>();
     for (const s of signals) {
       if (s.data_type !== "analog" && s.data_type !== "counter" && s.data_type !== "analog_output") continue;
       if (!s.is_active) continue;
       const suf = suffixOf(s.key);
+      if (NON_TREND_RE.test(suf)) continue; // grafige uygun degil
       const e = m.get(suf) ?? { label: s.label, unit: s.unit ?? null, sources: new Set<SignalSource>() };
       e.sources.add(s.source);
       m.set(suf, e);
@@ -119,37 +131,34 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
   // ---- State (localStorage lazy init) ----
   const saved = useMemo(() => loadView(deviceCode), [deviceCode]);
   const [defs, setDefs] = useState<SeriesDef[]>(() => {
-    if (saved?.defs?.length) return saved.defs;
+    if (saved?.defs?.length) return saved.defs.filter((d) => d.source); // eski cok-kaynak kayitlari ele
     const def = suffixCatalog.has("actual_current") ? "actual_current" : suffixList[0]?.suffix;
-    return def ? [{ suffix: def, sources: [activeSource], color: PALETTE[0] }] : [];
+    return def ? [{ id: newId(), suffix: def, source: activeSource, color: PALETTE[0] }] : [];
   });
   const [rangeKey, setRangeKey] = useState<string>(() => saved?.rangeKey ?? "1h");
   const [customOn, setCustomOn] = useState<boolean>(() => (saved?.rangeKey ?? "1h") === "custom");
   const [customFrom, setCustomFrom] = useState<string>(() => saved?.customFrom ?? "");
   const [customTo, setCustomTo] = useState<string>(() => saved?.customTo ?? "");
   const [popupOpen, setPopupOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null); // duzenlenen seri (null=yeni)
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // seriKey -> {label, points, color, lineType, unit}
   const [series, setSeries] = useState<
-    { key: string; label: string; points: Point[]; color: string; lineType: "solid" | "dashed" | "dotted"; unit: string | null }[]
+    { id: string; label: string; points: Point[]; color: string; unit: string | null }[]
   >([]);
 
   useEffect(() => {
     saveView(deviceCode, { defs, rangeKey: customOn ? "custom" : rangeKey, customFrom, customTo });
   }, [deviceCode, defs, rangeKey, customOn, customFrom, customTo]);
 
-  // Aktif seri anahtarlari: her def x kaynak (katalogda varsa).
+  // Aktif seri anahtarlari: her def = tek sinyal + tek cihaz (katalogda varsa).
   const seriesKeys = useMemo(() => {
-    const out: { seriesKey: string; suffix: string; source: SignalSource; label: string; unit: string | null; color: string }[] = [];
+    const out: { id: string; seriesKey: string; source: SignalSource; label: string; unit: string | null; color: string }[] = [];
     for (const d of defs) {
       const cat = suffixCatalog.get(d.suffix);
-      if (!cat) continue;
-      for (const src of d.sources) {
-        if (!cat.sources.has(src)) continue;
-        out.push({ seriesKey: `${src}.${d.suffix}`, suffix: d.suffix, source: src, label: cat.label, unit: cat.unit, color: d.color });
-      }
+      if (!cat || !cat.sources.has(d.source)) continue;
+      out.push({ id: d.id, seriesKey: `${d.source}.${d.suffix}`, source: d.source, label: cat.label, unit: cat.unit, color: d.color });
     }
     return out;
   }, [defs, suffixCatalog]);
@@ -194,11 +203,10 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
         if (cancelled) return;
         setSeries(
           results.map((r) => ({
-            key: r.seriesKey,
+            id: r.id,
             label: `${r.label} · ${SOURCE_META[r.source].label}`,
             points: r.points,
             color: r.color,
-            lineType: SOURCE_META[r.source].type,
             unit: r.unit,
           }))
         );
@@ -269,40 +277,44 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
         showSymbol: false,
         smooth: 0.25,
         yAxisIndex: units[1] != null && (s.unit ?? "") === units[1] ? 1 : 0,
-        lineStyle: { color: s.color, width: 2, type: s.lineType },
+        lineStyle: { color: s.color, width: 2 },
         itemStyle: { color: s.color },
-        areaStyle:
-          s.lineType === "solid"
-            ? { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: s.color + "40" }, { offset: 1, color: s.color + "05" }]) }
-            : undefined,
+        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: s.color + "33" }, { offset: 1, color: s.color + "05" }]) },
         connectNulls: true,
       })),
     };
   }, [series, units]);
 
-  // Popup: sinyal ekle.
+  // Popup: sinyal ekle / duzenle (tek sinyal + tek cihaz).
   const [pSuffix, setPSuffix] = useState<string>("");
-  const [pSources, setPSources] = useState<SignalSource[]>(["master"]);
+  const [pSource, setPSource] = useState<SignalSource>("master");
   const [pColor, setPColor] = useState<string>(PALETTE[0]);
-  const openPopup = () => {
-    const firstFree = suffixList.find((s) => !defs.some((d) => d.suffix === s.suffix));
-    setPSuffix(firstFree?.suffix ?? suffixList[0]?.suffix ?? "");
-    setPSources([activeSource]);
+  const openAdd = () => {
+    setEditId(null);
+    setPSuffix(suffixList[0]?.suffix ?? "");
+    setPSource(activeSource);
     setPColor(PALETTE[defs.length % PALETTE.length]);
     setPopupOpen(true);
   };
-  const addSeries = () => {
-    if (!pSuffix || pSources.length === 0) return;
+  const openEdit = (d: SeriesDef) => {
+    setEditId(d.id);
+    setPSuffix(d.suffix);
+    setPSource(d.source);
+    setPColor(d.color);
+    setPopupOpen(true);
+  };
+  const submitSeries = () => {
+    if (!pSuffix) return;
+    // Secili sinyal secili kaynakta yoksa (o cihazda yok) ilk mevcut kaynaga dus.
+    const cat = suffixCatalog.get(pSuffix);
+    const src = cat?.sources.has(pSource) ? pSource : (cat ? [...cat.sources][0] : pSource);
     setDefs((prev) => {
-      const existing = prev.find((d) => d.suffix === pSuffix);
-      if (existing) {
-        return prev.map((d) => (d.suffix === pSuffix ? { ...d, sources: pSources, color: pColor } : d));
-      }
-      return [...prev, { suffix: pSuffix, sources: pSources, color: pColor }];
+      if (editId) return prev.map((d) => (d.id === editId ? { ...d, suffix: pSuffix, source: src, color: pColor } : d));
+      return [...prev, { id: newId(), suffix: pSuffix, source: src, color: pColor }];
     });
     setPopupOpen(false);
   };
-  const removeSeries = (suffix: string) => setDefs((prev) => prev.filter((d) => d.suffix !== suffix));
+  const removeSeries = (id: string) => setDefs((prev) => prev.filter((d) => d.id !== id));
 
   return (
     <div className="device-trend">
@@ -342,7 +354,7 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
         <aside className="device-trend-side">
           <div className="device-trend-side-head">
             <span>{t("deviceDetail.charts.signals")}</span>
-            <button type="button" className="device-trend-add" onClick={openPopup}>
+            <button type="button" className="device-trend-add" onClick={openAdd}>
               <span className="material-symbols-outlined">add</span>
             </button>
           </div>
@@ -353,16 +365,21 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
               defs.map((d) => {
                 const cat = suffixCatalog.get(d.suffix);
                 return (
-                  <li key={d.suffix} className="device-trend-listitem">
+                  <li key={d.id} className="device-trend-listitem" onClick={() => openEdit(d)} title={t("deviceDetail.charts.editHint")}>
                     <span className="device-trend-listcolor" style={{ background: d.color }} />
                     <div className="device-trend-listbody">
                       <span className="device-trend-listlabel">{cat?.label ?? d.suffix}</span>
                       <span className="device-trend-listsrc">
-                        {d.sources.map((s) => SOURCE_META[s].label).join(", ")}
+                        {SOURCE_META[d.source].label}
                         {cat?.unit ? ` · ${cat.unit}` : ""}
                       </span>
                     </div>
-                    <button type="button" className="device-trend-listdel" onClick={() => removeSeries(d.suffix)} aria-label="Sil">
+                    <button
+                      type="button"
+                      className="device-trend-listdel"
+                      onClick={(e) => { e.stopPropagation(); removeSeries(d.id); }}
+                      aria-label="Sil"
+                    >
                       <span className="material-symbols-outlined">close</span>
                     </button>
                   </li>
@@ -396,7 +413,7 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
         <div className="device-trend-modal-overlay" onClick={() => setPopupOpen(false)}>
           <div className="device-trend-modal" onClick={(e) => e.stopPropagation()}>
             <div className="device-trend-modal-head">
-              <h4>{t("deviceDetail.charts.addSignal")}</h4>
+              <h4>{editId ? t("deviceDetail.charts.editSignal") : t("deviceDetail.charts.addSignal")}</h4>
               <button type="button" onClick={() => setPopupOpen(false)}><span className="material-symbols-outlined">close</span></button>
             </div>
             <div className="device-trend-modal-body">
@@ -409,19 +426,19 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
                 </select>
               </label>
               <div className="device-trend-field">
-                <span>{t("deviceDetail.charts.sources")}</span>
+                <span>{t("deviceDetail.charts.device")}</span>
                 <div className="device-trend-modal-sources">
                   {ALL_SOURCES.map((src) => {
                     const avail = suffixCatalog.get(pSuffix)?.sources.has(src) ?? false;
                     return (
-                      <label key={src} className={`device-trend-src${pSources.includes(src) ? " active" : ""}${avail ? "" : " is-disabled"}`}>
+                      <label key={src} className={`device-trend-radio${pSource === src ? " active" : ""}${avail ? "" : " is-disabled"}`}>
                         <input
-                          type="checkbox"
-                          checked={pSources.includes(src)}
+                          type="radio"
+                          name="trend-device"
+                          checked={pSource === src}
                           disabled={!avail}
-                          onChange={() => setPSources((prev) => (prev.includes(src) ? prev.filter((s) => s !== src) : [...prev, src]))}
+                          onChange={() => setPSource(src)}
                         />
-                        <span className="device-trend-src-dash" data-src={src} aria-hidden="true" />
                         {SOURCE_META[src].label}
                       </label>
                     );
@@ -446,8 +463,8 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
             </div>
             <div className="device-trend-modal-foot">
               <button type="button" className="device-trend-btn-secondary" onClick={() => setPopupOpen(false)}>{t("common.cancel")}</button>
-              <button type="button" className="device-trend-btn-primary" onClick={addSeries} disabled={!pSuffix || pSources.length === 0}>
-                {t("deviceDetail.charts.add")}
+              <button type="button" className="device-trend-btn-primary" onClick={submitSeries} disabled={!pSuffix}>
+                {editId ? t("common.save") : t("deviceDetail.charts.add")}
               </button>
             </div>
           </div>

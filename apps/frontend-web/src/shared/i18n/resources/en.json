@@ -2198,7 +2198,10 @@
       "addSignal": "Add Signal",
       "add": "Add",
       "color": "Color",
-      "noSignalsYet": "No signals added yet"
+      "noSignalsYet": "No signals added yet",
+      "editSignal": "Edit Signal",
+      "device": "Device",
+      "editHint": "Click to edit"
     },
     "config": {
       "dnp3Title": "DNP3 Settings",

@@ -2198,7 +2198,10 @@
       "addSignal": "Sinyal Ekle",
       "add": "Ekle",
       "color": "Renk",
-      "noSignalsYet": "Henüz sinyal eklenmedi"
+      "noSignalsYet": "Henüz sinyal eklenmedi",
+      "editSignal": "Sinyal Düzenle",
+      "device": "Cihaz",
+      "editHint": "Düzenlemek için tıkla"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",
