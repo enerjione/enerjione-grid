@@ -115,7 +115,7 @@ class GatewayConfigCommand(BaseModel):
     device_code: str
     command: str
     dnp3_index: int
-    op_type: str = "pulse_on"
+    op_type: str = "latch_on"  # Horstmann SN2 PULSE desteklemez (latch zorunlu)
     count: int = 1
     on_time_ms: int = 100
     off_time_ms: int = 100

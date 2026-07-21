@@ -3,7 +3,7 @@
     {
       "name": "PostgreSQL",
       "type": "windows_service",
-      "windows_service_name": "postgresql-x64-16",
+      "windows_service_name": "postgresql-x64-18",
       "health_host": "127.0.0.1",
       "health_port": 5432
     },
