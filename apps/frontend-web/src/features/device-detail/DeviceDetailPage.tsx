@@ -682,8 +682,19 @@ function StatusTable({
       const g = groupOfSuffix(suffix, dt);
       m.get(g)?.push(r);
     }
+    // Grup ici siralama: once binary (durum rozetli), sonra analog/counter
+    // (deger). Her tip kendi icinde label'a gore — analoglar EN ALTTA toplansin.
+    const isBinaryRow = (r: Row): boolean => {
+      const dt = (r.effType as string | undefined) ?? (r.data_type as string | undefined);
+      return dt === "binary" || dt === "binary_output";
+    };
     for (const arr of m.values()) {
-      arr.sort((a, b) => (a.signal_label || a.signal_key).localeCompare(b.signal_label || b.signal_key));
+      arr.sort((a, b) => {
+        const ba = isBinaryRow(a) ? 0 : 1;
+        const bb = isBinaryRow(b) ? 0 : 1;
+        if (ba !== bb) return ba - bb; // binary once, analog sonra
+        return (a.signal_label || a.signal_key).localeCompare(b.signal_label || b.signal_key);
+      });
     }
     return m;
   }, [rows]);
@@ -704,6 +715,14 @@ function StatusTable({
   }
 
   const items = curTab ? byGroup.get(curTab) ?? [] : [];
+  // Binary (durum rozetli) ve analog (deger) ayri bloklar — analoglar EN ALTTA
+  // toplu (grid akisinda araya karismasin).
+  const isBin = (r: Row): boolean => {
+    const dt = (r.effType as string | undefined) ?? (r.data_type as string | undefined);
+    return dt === "binary" || dt === "binary_output";
+  };
+  const binItems = items.filter(isBin);
+  const valItems = items.filter((r) => !isBin(r));
 
   return (
     <div className="device-status">
@@ -724,11 +743,20 @@ function StatusTable({
           </button>
         ))}
       </div>
-      <div className="device-status-grid">
-        {items.map((r) => (
-          <StatusItem key={r.signal_key} row={r} t={t} />
-        ))}
-      </div>
+      {binItems.length > 0 ? (
+        <div className="device-status-grid">
+          {binItems.map((r) => (
+            <StatusItem key={r.signal_key} row={r} t={t} />
+          ))}
+        </div>
+      ) : null}
+      {valItems.length > 0 ? (
+        <div className={`device-status-grid is-values${binItems.length > 0 ? " has-sep" : ""}`}>
+          {valItems.map((r) => (
+            <StatusItem key={r.signal_key} row={r} t={t} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

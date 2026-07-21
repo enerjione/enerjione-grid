@@ -25393,6 +25393,13 @@ th.event-col-category {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px 24px;
+  align-content: start;
+}
+/* Analog (deger) blogu binary'lerin ALTINDA — ayirici cizgi + bosluk */
+.device-status-grid.is-values.has-sep {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
 }
 .device-status-item {
   display: flex;
@@ -25458,15 +25465,23 @@ th.event-col-category {
 .device-events-export:hover { background: #f8fafc; border-color: #94a3b8; }
 .device-events-export .material-symbols-outlined { font-size: 17px; }
 
-/* Olaylar filtreleri (full): arama + tip cipleri + kaynak select */
+/* Olaylar filtreleri (full): TEK SATIR — arama + cipler + kaynak solda,
+   sayi + export en saga. */
 .device-events-filters {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 14px;
   padding-bottom: 14px;
   border-bottom: 1px solid #e2e8f0;
+}
+.device-events-filters .device-events-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .device-events-search {
   display: inline-flex;
@@ -25476,9 +25491,8 @@ th.event-col-category {
   border: 1px solid #cbd5e1;
   border-radius: 9px;
   background: #fff;
-  min-width: 220px;
-  flex: 1 1 220px;
-  max-width: 340px;
+  min-width: 180px;
+  flex: 0 1 240px;
 }
 .device-events-search .material-symbols-outlined { font-size: 18px; color: #94a3b8; }
 .device-events-search input {

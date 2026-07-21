@@ -107,7 +107,6 @@ export function DeviceSidebar({
     <aside className="device-sidebar">
       {/* ---- Cihaz kimlik (kod solunda durum noktasi) ---- */}
       <section className="device-sidebar-section">
-        <span className="device-sidebar-kicker">{t("deviceDetail.sidebar.device")}</span>
         <div className="device-sidebar-idrow">
           <span
             className={`device-sidebar-statusdot ${online ? "is-online" : "is-offline"}`}

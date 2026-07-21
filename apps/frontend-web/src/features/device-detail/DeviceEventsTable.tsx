@@ -210,65 +210,62 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
   return (
     <div className={`device-events${isFull ? " is-full" : ""}`}>
       {isFull ? (
-        <>
-          <div className="device-events-toolbar">
-            <span className="device-events-count">
-              {t("deviceDetail.events.total", { count: filtered.length })}
-              {filtered.length !== allRows.length ? ` / ${allRows.length}` : ""}
-            </span>
-            <button type="button" className="device-events-export" onClick={exportCsv}>
-              <span className="material-symbols-outlined">download</span>
-              {t("deviceDetail.events.export")}
-            </button>
-          </div>
-          <div className="device-events-filters">
-            <div className="device-events-search">
-              <span className="material-symbols-outlined">search</span>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(0);
-                }}
-                placeholder={t("deviceDetail.events.searchPlaceholder")}
-              />
-              {search ? (
-                <button type="button" className="device-events-search-clear" onClick={() => setSearch("")}>
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              ) : null}
-            </div>
-            <div className="device-events-chips">
-              {(["all", "alarm", "command", "system"] as KindFilter[]).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  className={`device-events-chip${fKind === k ? " active" : ""}`}
-                  onClick={() => {
-                    setFKind(k);
-                    setPage(0);
-                  }}
-                >
-                  {t(`deviceDetail.events.kind.${k}`)}
-                </button>
-              ))}
-            </div>
-            <select
-              className="device-events-select"
-              value={fChannel}
+        <div className="device-events-filters">
+          <div className="device-events-search">
+            <span className="material-symbols-outlined">search</span>
+            <input
+              type="text"
+              value={search}
               onChange={(e) => {
-                setFChannel(e.target.value as ChannelFilter);
+                setSearch(e.target.value);
                 setPage(0);
               }}
-            >
-              <option value="all">{t("deviceDetail.events.channelAll")}</option>
-              <option value="master">Master</option>
-              <option value="sat01">Satellite 01</option>
-              <option value="sat02">Satellite 02</option>
-            </select>
+              placeholder={t("deviceDetail.events.searchPlaceholder")}
+            />
+            {search ? (
+              <button type="button" className="device-events-search-clear" onClick={() => setSearch("")}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            ) : null}
           </div>
-        </>
+          <div className="device-events-chips">
+            {(["all", "alarm", "command", "system"] as KindFilter[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={`device-events-chip${fKind === k ? " active" : ""}`}
+                onClick={() => {
+                  setFKind(k);
+                  setPage(0);
+                }}
+              >
+                {t(`deviceDetail.events.kind.${k}`)}
+              </button>
+            ))}
+          </div>
+          <select
+            className="device-events-select"
+            value={fChannel}
+            onChange={(e) => {
+              setFChannel(e.target.value as ChannelFilter);
+              setPage(0);
+            }}
+          >
+            <option value="all">{t("deviceDetail.events.channelAll")}</option>
+            <option value="master">Master</option>
+            <option value="sat01">Satellite 01</option>
+            <option value="sat02">Satellite 02</option>
+          </select>
+          {/* Sayi + export en saga */}
+          <span className="device-events-count">
+            {t("deviceDetail.events.total", { count: filtered.length })}
+            {filtered.length !== allRows.length ? ` / ${allRows.length}` : ""}
+          </span>
+          <button type="button" className="device-events-export" onClick={exportCsv}>
+            <span className="material-symbols-outlined">download</span>
+            {t("deviceDetail.events.export")}
+          </button>
+        </div>
       ) : null}
 
       {isFull && rows.length === 0 ? (
