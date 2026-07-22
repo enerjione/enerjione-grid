@@ -15161,21 +15161,39 @@ th.event-col-category {
   transition: background 0.12s;
 }
 
-/* Seviyeye göre sol kenar şeridi (sadece ilk hücrede 3px dikey çizgi) */
-.alarm-row td:first-child {
-  position: relative;
-  border-left: 3px solid transparent;
+/* Sol renkli nokta hucresi — seviyeye gore timeline gostergesi */
+.alarm-th-dot { width: 28px; padding: 0 !important; }
+.alarm-cell-dot {
+  width: 28px; padding: 0 !important; text-align: center; position: relative;
 }
-
-.alarm-row-level-critical td:first-child {
-  border-left-color: #ef4444;
+.alarm-row-dot {
+  display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+  background: #fff; border: 2px solid #cbd5e1; vertical-align: middle;
 }
-.alarm-row-level-warning td:first-child {
-  border-left-color: #f59e0b;
+.level-dot-critical { border-color: #ef4444; background: #ef4444; }
+.level-dot-error { border-color: #ef4444; background: #ef4444; }
+.level-dot-warning { border-color: #f59e0b; background: #f59e0b; }
+.level-dot-info { border-color: #f97316; background: #fff; }
+/* Noktalar arasi dikey baglanti cizgisi (timeline hissi) */
+.alarm-cell-dot::before {
+  content: ""; position: absolute; left: 50%; top: 50%; bottom: -1px;
+  width: 2px; transform: translateX(-50%); background: #e2e8f0; z-index: 0;
 }
-.alarm-row-level-info td:first-child {
-  border-left-color: #ff8c00;
+.alarm-cell-dot::after {
+  content: ""; position: absolute; left: 50%; top: -1px; height: 50%;
+  width: 2px; transform: translateX(-50%); background: #e2e8f0; z-index: 0;
 }
+.alarm-row:first-child .alarm-cell-dot::after,
+.alarm-row:last-child .alarm-cell-dot::before { display: none; }
+.alarm-row-dot { position: relative; z-index: 1; }
+/* Sure hucresi */
+.alarm-cell-duration { color: #64748b; font-size: 13px; font-weight: 600; white-space: nowrap; }
+/* Incele butonu */
+.alarm-row-inspect {
+  border: none; background: transparent; color: #ea580c; font-size: 13px;
+  font-weight: 700; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+}
+.alarm-row-inspect:hover { background: #fff7ed; }
 
 /* ----- Hücre içerikleri ----- */
 .alarm-cell-date {

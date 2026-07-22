@@ -307,7 +307,9 @@ export function AlarmsPage({
             <span className={`alarm-state ${state.klass}`}>{state.label}</span>
           </div>
           <h3 className="alarm-detail-alarmtitle">{a.title}</h3>
-          {a.description ? <p className="alarm-detail-desc">{a.description}</p> : null}
+          {a.description && a.description.trim() !== a.title.trim() ? (
+            <p className="alarm-detail-desc">{a.description}</p>
+          ) : null}
           <div className="alarm-detail-sub">
             {deviceInfo ? (
               <>
@@ -569,6 +571,7 @@ export function AlarmsPage({
             <table className="values-table alarms-page-table">
               <thead>
                 <tr>
+                  <th scope="col" className="alarm-th-dot" aria-label="" />
                   <th scope="col">{t("alarms.table.date")}</th>
                   <th scope="col">{t("alarms.table.level")}</th>
                   <th scope="col">{t("alarms.table.device")}</th>
@@ -576,6 +579,8 @@ export function AlarmsPage({
                   <th scope="col">{t("alarms.table.alarm")}</th>
                   <th scope="col">{t("alarms.table.status")}</th>
                   <th scope="col">{t("alarms.table.assignee")}</th>
+                  <th scope="col">{t("alarms.table.duration")}</th>
+                  <th scope="col" className="alarm-actions-th">{t("alarms.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -584,12 +589,17 @@ export function AlarmsPage({
                   const selectedClass = selectedAlarmId === alarm.id ? "alarm-row-active" : "";
                   const created = new Date(alarm.created_at);
                   const state = alarmState(alarm);
+                  const rowDuration = formatDuration(Date.now() - created.getTime());
                   return (
                     <tr
                       key={alarm.id}
                       className={`alarm-row ${levelClass} ${selectedClass}`.trim()}
                       onClick={() => setSelectedAlarmId(alarm.id)}
                     >
+                      {/* Sol renkli nokta (seviyeye gore timeline gostergesi) */}
+                      <td className="alarm-cell-dot">
+                        <span className={`alarm-row-dot level-dot-${alarm.level.toLowerCase()}`} />
+                      </td>
                       <td className="alarm-cell-date">
                         <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
                         <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
@@ -606,12 +616,22 @@ export function AlarmsPage({
                         <span className={`alarm-state ${state.klass}`}>{state.label}</span>
                       </td>
                       <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
+                      <td className="alarm-cell-duration">{rowDuration}</td>
+                      <td className="actions-cell alarm-actions-cell">
+                        <button
+                          type="button"
+                          className="alarm-row-inspect"
+                          onClick={(e) => { e.stopPropagation(); setSelectedAlarmId(alarm.id); }}
+                        >
+                          {t("alarms.actions.inspect")}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
                 {activeAlarms.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={7} className="alarms-empty-cell">{t("alarms.noActive")}</td>
+                    <td colSpan={10} className="alarms-empty-cell">{t("alarms.noActive")}</td>
                   </tr>
                 ) : null}
               </tbody>

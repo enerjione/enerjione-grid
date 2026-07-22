@@ -373,10 +373,12 @@
       "alarm": "Alarm",
       "status": "Status",
       "assignee": "Assignee",
+      "duration": "Duration",
       "actions": "Action"
     },
     "actions": {
       "acknowledge": "Acknowledge",
+      "inspect": "Inspect",
       "ackAndRemove": "Acknowledge and remove from list",
       "assign": "Assign",
       "comment": "Comment",
