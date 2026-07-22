@@ -2286,6 +2286,7 @@ export function App() {
                 onAcknowledge={handleAcknowledgeAlarm}
                 onAcknowledgeAll={handleAcknowledgeAllAlarms}
                 onOpenDevice={openDeviceDetail}
+                events={events}
               />
             ) : null}
             {pageMode === "faults" ? (

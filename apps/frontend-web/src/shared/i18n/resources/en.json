@@ -369,12 +369,36 @@
       "date": "Date",
       "level": "Level",
       "device": "Device",
+      "deviceSource": "Device / Source",
       "source": "Source",
       "alarm": "Alarm",
       "status": "Status",
       "assignee": "Assignee",
       "duration": "Duration",
       "actions": "Action"
+    },
+    "tabs": {
+      "active": "Active Alarms",
+      "resolved": "Returned to Normal",
+      "history": "History"
+    },
+    "history": {
+      "colEvent": "Status",
+      "colDetail": "Event",
+      "colWho": "Who",
+      "empty": "No alarm history records."
+    },
+    "eventType": {
+      "alarm_triggered": "Alarm raised",
+      "alarm_created": "Alarm raised",
+      "alarm_acknowledged": "Acknowledged",
+      "alarm_acknowledge_all": "Bulk ack",
+      "alarm_reset": "Returned to normal",
+      "alarm_auto_cleared": "Auto cleared",
+      "alarm_reset_all": "Bulk reset",
+      "alarm_deleted": "Deleted",
+      "alarm_assigned": "Assigned",
+      "alarm_comment_added": "Comment added"
     },
     "actions": {
       "acknowledge": "Acknowledge",

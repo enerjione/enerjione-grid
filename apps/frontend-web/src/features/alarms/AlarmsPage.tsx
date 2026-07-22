@@ -4,7 +4,7 @@ import { Check, ExternalLink, X } from "lucide-react";
 
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { TablePagination } from "../../components/TablePagination";
-import type { AlarmComment, AlarmEvent, DeviceRow, Region, UserRead } from "../../shared/types";
+import type { AlarmComment, AlarmEvent, DeviceRow, Region, SystemEvent, UserRead } from "../../shared/types";
 
 // Cihaz id -> topoloji (bolge/hat) — App.tsx deviceTopologyInfo map'i.
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
@@ -22,10 +22,12 @@ type Props = {
   onAcknowledge: (alarmId: number) => Promise<void>;
   onAcknowledgeAll: () => Promise<void>;
   onOpenDevice: (deviceId: number) => void;
+  events: SystemEvent[];
 };
 
 type TimeFilter = "all" | "1h" | "24h" | "7d";
 type StatusFilter = "all" | "open" | "ack" | "pendingAck";
+type AlarmTab = "active" | "resolved" | "history";
 
 export function AlarmsPage({
   alarms,
@@ -39,10 +41,12 @@ export function AlarmsPage({
   onAddComment,
   onAcknowledge,
   onAcknowledgeAll,
-  onOpenDevice
+  onOpenDevice,
+  events
 }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
+  const [activeTab, setActiveTab] = useState<AlarmTab>("active");
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState<"all" | "critical" | "warning" | "info">("all");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned" | "unassigned">("all");
@@ -71,13 +75,14 @@ export function AlarmsPage({
     return map;
   }, [devices]);
 
-  const renderDeviceCell = (deviceId: number) => {
+  /** Referans gorsel: seri no (kod) ustte, kaynak (Master/Sat) altta. */
+  const renderDeviceSourceCell = (deviceId: number, signalKey: string | null | undefined) => {
     const info = deviceLabelById.get(deviceId);
-    if (!info) return <span className="alarm-device-fallback">#{deviceId}</span>;
+    const src = sourceOf(signalKey);
     return (
-      <div className="alarm-device-cell">
-        <span className="alarm-device-name">{info.name}</span>
-        <span className="alarm-device-code">{info.code}</span>
+      <div className="alarm-devsource-cell">
+        <span className="alarm-devsource-code">{info ? info.code : `#${deviceId}`}</span>
+        <span className="alarm-devsource-src">{src ? src.label : "—"}</span>
       </div>
     );
   };
@@ -101,11 +106,6 @@ export function AlarmsPage({
       sat02: { label: "Sat 02", klass: "sat02" }
     };
     return map[prefix] ?? null;
-  };
-  const renderSourceCell = (signalKey: string | null | undefined) => {
-    const entry = sourceOf(signalKey);
-    if (!entry) return <span className="alarm-cell-empty">—</span>;
-    return <span className={`badge badge-source badge-source-${entry.klass}`}>{entry.label}</span>;
   };
 
   /** Alarm durumu (SCADA): acik / onaylandi / normale-dondu-onay-bekliyor. */
@@ -157,29 +157,48 @@ export function AlarmsPage({
     return levelOk && assignmentOk && timeOk && regionOk && deviceOk && statusOk && searchOk;
   };
 
-  // Tek liste (SCADA): backend onayli+reset olani zaten siler. Listede kalanlar =
-  // acik alarmlar VEYA normale donmus ama henuz onaylanmamis (gorulmemis) olanlar.
+  // Aktif alarmlar: acik VEYA onaylanmis-ama-hala-aktif (reset degil).
   const activeAlarms = useMemo(
-    () => alarms.filter(filterPredicate),
+    () => alarms.filter((a) => !a.reset && filterPredicate(a)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [alarms, search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, deviceLabelById]
   );
 
+  // Normale donenler: reset olmus ama henuz onaylanmamis (gorulmemis).
+  const resolvedAlarms = useMemo(
+    () => alarms.filter((a) => a.reset && !a.acknowledged && filterPredicate(a)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [alarms, search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, deviceLabelById]
+  );
+
+  // Gecmis: event log'dan alarm kategorili olaylar (olustu/onaylandi/normale dondu).
+  const historyEvents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return events
+      .filter((e) => e.category === "alarm")
+      .filter((e) => (q ? `${e.message} ${e.device_code ?? ""} ${e.actor_username ?? ""}`.toLowerCase().includes(q) : true))
+      .slice(0, 300);
+  }, [events, search]);
+
+  // Aktif sekmenin listesi (aktif/normale) — sayfalama icin.
+  const tabAlarms = activeTab === "resolved" ? resolvedAlarms : activeAlarms;
+
   useEffect(() => {
     setPage(1);
-  }, [search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, pageSize]);
+  }, [search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, pageSize, activeTab]);
 
-  const pagedActiveAlarms = useMemo(() => {
+  const pagedTabAlarms = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return activeAlarms.slice(start, start + pageSize);
-  }, [activeAlarms, page, pageSize]);
+    return tabAlarms.slice(start, start + pageSize);
+  }, [tabAlarms, page, pageSize]);
 
-  // Secili yoksa ilk alarmi otomatik sec.
+  // Secili yoksa (aktif/normale sekmesinde) ilk alarmi otomatik sec.
   useEffect(() => {
+    if (activeTab === "history") return;
     if (selectedAlarmId !== null) return;
-    if (activeAlarms.length === 0) return;
-    setSelectedAlarmId(activeAlarms[0].id);
-  }, [activeAlarms, selectedAlarmId]);
+    if (tabAlarms.length === 0) return;
+    setSelectedAlarmId(tabAlarms[0].id);
+  }, [tabAlarms, selectedAlarmId, activeTab]);
 
   // Secili alarmin yorumlarini yukle.
   useEffect(() => {
@@ -556,90 +575,155 @@ export function AlarmsPage({
           </div>
         </div>
 
-        {/* Tek liste: Aktif Alarmlar */}
-        <div className="alarms-section alarms-section-active">
-          <div className="alarms-section-header">
-            <div className="alarms-section-title">
-              <span className="alarms-section-icon alarms-section-icon-active">
-                <span className="material-symbols-outlined">notifications_active</span>
-              </span>
-              <h3>{t("alarms.active")}</h3>
-              <span className="alarms-section-count alarms-section-count-active">{activeAlarms.length}</span>
-            </div>
+        {/* Sekme cubugu: Aktif / Normale Donenler / Gecmis */}
+        <div className="alarms-section">
+          <div className="alarms-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              className={`alarms-tab${activeTab === "active" ? " active" : ""}`}
+              onClick={() => setActiveTab("active")}
+            >
+              {t("alarms.tabs.active")}
+              <span className="alarms-tab-count">{activeAlarms.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`alarms-tab${activeTab === "resolved" ? " active" : ""}`}
+              onClick={() => setActiveTab("resolved")}
+            >
+              {t("alarms.tabs.resolved")}
+              <span className="alarms-tab-count">{resolvedAlarms.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`alarms-tab${activeTab === "history" ? " active" : ""}`}
+              onClick={() => setActiveTab("history")}
+            >
+              {t("alarms.tabs.history")}
+            </button>
           </div>
-          <div className="alarms-table-wrap alarms-page-table-wrap">
-            <table className="values-table alarms-page-table">
-              <thead>
-                <tr>
-                  <th scope="col" className="alarm-th-dot" aria-label="" />
-                  <th scope="col">{t("alarms.table.date")}</th>
-                  <th scope="col">{t("alarms.table.level")}</th>
-                  <th scope="col">{t("alarms.table.device")}</th>
-                  <th scope="col">{t("alarms.table.source")}</th>
-                  <th scope="col">{t("alarms.table.alarm")}</th>
-                  <th scope="col">{t("alarms.table.status")}</th>
-                  <th scope="col">{t("alarms.table.assignee")}</th>
-                  <th scope="col">{t("alarms.table.duration")}</th>
-                  <th scope="col" className="alarm-actions-th">{t("alarms.table.actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedActiveAlarms.map((alarm) => {
-                  const levelClass = `alarm-row-level-${alarm.level.toLowerCase()}`;
-                  const selectedClass = selectedAlarmId === alarm.id ? "alarm-row-active" : "";
-                  const created = new Date(alarm.created_at);
-                  const state = alarmState(alarm);
-                  const rowDuration = formatDuration(Date.now() - created.getTime());
-                  return (
-                    <tr
-                      key={alarm.id}
-                      className={`alarm-row ${levelClass} ${selectedClass}`.trim()}
-                      onClick={() => setSelectedAlarmId(alarm.id)}
-                    >
-                      {/* Sol renkli nokta (seviyeye gore timeline gostergesi) */}
-                      <td className="alarm-cell-dot">
-                        <span className={`alarm-row-dot level-dot-${alarm.level.toLowerCase()}`} />
-                      </td>
-                      <td className="alarm-cell-date">
-                        <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
-                        <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
-                      </td>
-                      <td className="alarm-cell-level">
-                        <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{levelLabelTr(alarm.level)}</span>
-                      </td>
-                      <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
-                      <td className="alarm-cell-source">{renderSourceCell(alarm.signal_key)}</td>
-                      <td className="alarm-cell-title">
-                        <div className="alarm-title-text" title={alarm.description || alarm.title}>{alarm.title}</div>
-                      </td>
-                      <td className="alarm-cell-state">
-                        <span className={`alarm-state ${state.klass}`}>{state.label}</span>
-                      </td>
-                      <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
-                      <td className="alarm-cell-duration">{rowDuration}</td>
-                      <td className="actions-cell alarm-actions-cell">
-                        <button
-                          type="button"
-                          className="alarm-row-inspect"
-                          onClick={(e) => { e.stopPropagation(); setSelectedAlarmId(alarm.id); }}
-                        >
-                          {t("alarms.actions.inspect")}
-                        </button>
+
+          {activeTab === "history" ? (
+            /* ---- Gecmis: event log ---- */
+            <div className="alarms-table-wrap alarms-page-table-wrap">
+              <table className="values-table alarms-page-table">
+                <thead>
+                  <tr>
+                    <th scope="col">{t("alarms.table.date")}</th>
+                    <th scope="col">{t("alarms.history.colEvent")}</th>
+                    <th scope="col">{t("alarms.table.device")}</th>
+                    <th scope="col">{t("alarms.history.colDetail")}</th>
+                    <th scope="col">{t("alarms.history.colWho")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyEvents.map((ev) => {
+                    const created = new Date(ev.created_at);
+                    return (
+                      <tr key={ev.id} className="alarm-row alarm-history-row">
+                        <td className="alarm-cell-date">
+                          <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
+                          <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
+                        </td>
+                        <td className="alarm-cell-event">
+                          <span className={`alarm-event-badge ev-${ev.event_type}`}>
+                            {t(`alarms.eventType.${ev.event_type}`, ev.event_type)}
+                          </span>
+                        </td>
+                        <td className="alarm-cell-device">
+                          {ev.device_code ? <span className="alarm-device-code">{ev.device_code}</span> : <span className="alarm-cell-empty">—</span>}
+                        </td>
+                        <td className="alarm-cell-title">
+                          <div className="alarm-title-text" title={ev.message}>{ev.message}</div>
+                        </td>
+                        <td className="alarm-cell-assignee">{ev.actor_username ?? <span className="alarm-cell-empty">—</span>}</td>
+                      </tr>
+                    );
+                  })}
+                  {historyEvents.length === 0 ? (
+                    <tr><td colSpan={5} className="alarms-empty-cell">{t("alarms.history.empty")}</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* ---- Aktif / Normale Donenler ---- */
+            <div className="alarms-table-wrap alarms-page-table-wrap">
+              <table className="values-table alarms-page-table">
+                <thead>
+                  <tr>
+                    <th scope="col" className="alarm-th-dot" aria-label="" />
+                    <th scope="col">{t("alarms.table.date")}</th>
+                    <th scope="col">{t("alarms.table.level")}</th>
+                    <th scope="col">{t("alarms.table.deviceSource")}</th>
+                    <th scope="col">{t("alarms.table.alarm")}</th>
+                    <th scope="col">{t("alarms.table.status")}</th>
+                    <th scope="col">{t("alarms.table.assignee")}</th>
+                    <th scope="col">{t("alarms.table.duration")}</th>
+                    <th scope="col" className="alarm-actions-th">{t("alarms.table.actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedTabAlarms.map((alarm) => {
+                    const levelClass = `alarm-row-level-${alarm.level.toLowerCase()}`;
+                    const selectedClass = selectedAlarmId === alarm.id ? "alarm-row-active" : "";
+                    const created = new Date(alarm.created_at);
+                    const state = alarmState(alarm);
+                    const rowDuration = formatDuration(Date.now() - created.getTime());
+                    return (
+                      <tr
+                        key={alarm.id}
+                        className={`alarm-row ${levelClass} ${selectedClass}`.trim()}
+                        onClick={() => setSelectedAlarmId(alarm.id)}
+                      >
+                        <td className="alarm-cell-dot">
+                          <span className={`alarm-row-dot level-dot-${alarm.level.toLowerCase()}`} />
+                        </td>
+                        <td className="alarm-cell-date">
+                          <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
+                          <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
+                        </td>
+                        <td className="alarm-cell-level">
+                          <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{levelLabelTr(alarm.level)}</span>
+                        </td>
+                        <td className="alarm-cell-devsource">{renderDeviceSourceCell(alarm.device_id, alarm.signal_key)}</td>
+                        <td className="alarm-cell-title">
+                          <div className="alarm-title-text" title={alarm.description || alarm.title}>{alarm.title}</div>
+                        </td>
+                        <td className="alarm-cell-state">
+                          <span className={`alarm-state ${state.klass}`}>{state.label}</span>
+                        </td>
+                        <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
+                        <td className="alarm-cell-duration">{rowDuration}</td>
+                        <td className="actions-cell alarm-actions-cell">
+                          <button
+                            type="button"
+                            className="alarm-row-inspect"
+                            onClick={(e) => { e.stopPropagation(); setSelectedAlarmId(alarm.id); }}
+                          >
+                            {t("alarms.actions.inspect")}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {tabAlarms.length === 0 && !loading ? (
+                    <tr>
+                      <td colSpan={9} className="alarms-empty-cell">
+                        {activeTab === "resolved" ? t("alarms.noPending") : t("alarms.noActive")}
                       </td>
                     </tr>
-                  );
-                })}
-                {activeAlarms.length === 0 && !loading ? (
-                  <tr>
-                    <td colSpan={10} className="alarms-empty-cell">{t("alarms.noActive")}</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-          {activeAlarms.length > pageSize ? (
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {activeTab !== "history" && tabAlarms.length > pageSize ? (
             <TablePagination
-              totalItems={activeAlarms.length}
+              totalItems={tabAlarms.length}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}

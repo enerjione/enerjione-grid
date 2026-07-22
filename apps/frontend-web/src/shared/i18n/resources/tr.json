@@ -369,12 +369,36 @@
       "date": "Tarih",
       "level": "Seviye",
       "device": "Cihaz",
+      "deviceSource": "Cihaz / Kaynak",
       "source": "Kaynak",
       "alarm": "Alarm",
       "status": "Durum",
       "assignee": "Atanan",
       "duration": "Süre",
       "actions": "İşlem"
+    },
+    "tabs": {
+      "active": "Aktif Alarmlar",
+      "resolved": "Normale Dönenler",
+      "history": "Geçmiş"
+    },
+    "history": {
+      "colEvent": "Durum",
+      "colDetail": "Olay",
+      "colWho": "Kim",
+      "empty": "Alarm geçmişi kaydı yok."
+    },
+    "eventType": {
+      "alarm_triggered": "Alarm oluştu",
+      "alarm_created": "Alarm oluştu",
+      "alarm_acknowledged": "Onaylandı",
+      "alarm_acknowledge_all": "Toplu onay",
+      "alarm_reset": "Normale döndü",
+      "alarm_auto_cleared": "Otomatik temizlendi",
+      "alarm_reset_all": "Toplu reset",
+      "alarm_deleted": "Silindi",
+      "alarm_assigned": "Atandı",
+      "alarm_comment_added": "Yorum eklendi"
     },
     "actions": {
       "acknowledge": "Onayla",

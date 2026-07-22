@@ -15186,6 +15186,40 @@ th.event-col-category {
 .alarm-row:first-child .alarm-cell-dot::after,
 .alarm-row:last-child .alarm-cell-dot::before { display: none; }
 .alarm-row-dot { position: relative; z-index: 1; }
+/* Sekme cubugu (Aktif / Normale Donenler / Gecmis) — alt turuncu cizgi */
+.alarms-tabs {
+  display: flex; align-items: center; gap: 4px;
+  border-bottom: 1px solid #e2e8f0; padding: 0 6px; margin-bottom: 2px;
+}
+.alarms-tab {
+  position: relative; display: inline-flex; align-items: center; gap: 8px;
+  padding: 13px 14px; border: none; background: transparent; cursor: pointer;
+  font-size: 14px; font-weight: 700; color: #64748b;
+}
+.alarms-tab:hover { color: #334155; }
+.alarms-tab.active { color: #0f172a; }
+.alarms-tab.active::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px;
+  height: 2.5px; border-radius: 2px; background: #f97316;
+}
+.alarms-tab-count {
+  font-size: 11px; font-weight: 800; color: #64748b; background: #f1f5f9;
+  border-radius: 999px; padding: 1px 8px; min-width: 20px; text-align: center;
+}
+.alarms-tab.active .alarms-tab-count { background: #ffedd5; color: #c2410c; }
+/* Cihaz / Kaynak hucresi: kod ustte, kaynak altta (referans) */
+.alarm-devsource-cell { display: flex; flex-direction: column; gap: 1px; }
+.alarm-devsource-code { font-size: 13px; font-weight: 700; color: #0f172a; }
+.alarm-devsource-src { font-size: 11px; color: #94a3b8; }
+/* Gecmis: olay tipi rozeti */
+.alarm-history-row { cursor: default; }
+.alarm-event-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; background: #f1f5f9; color: #475569;
+}
+.alarm-event-badge.ev-alarm_triggered, .alarm-event-badge.ev-alarm_created { background: #fee2e2; color: #b91c1c; }
+.alarm-event-badge.ev-alarm_acknowledged, .alarm-event-badge.ev-alarm_acknowledge_all { background: #dbeafe; color: #1d4ed8; }
+.alarm-event-badge.ev-alarm_reset, .alarm-event-badge.ev-alarm_auto_cleared, .alarm-event-badge.ev-alarm_reset_all { background: #dcfce7; color: #15803d; }
 /* Sure hucresi */
 .alarm-cell-duration { color: #64748b; font-size: 13px; font-weight: 600; white-space: nowrap; }
 /* Incele butonu */
