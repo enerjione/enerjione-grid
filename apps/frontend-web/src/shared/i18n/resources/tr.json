@@ -370,6 +370,8 @@
       "level": "Seviye",
       "device": "Cihaz",
       "deviceSource": "Cihaz / Kaynak",
+      "region": "Bölge",
+      "line": "Hat",
       "source": "Kaynak",
       "alarm": "Alarm",
       "status": "Durum",

@@ -6131,11 +6131,13 @@ th.event-col-category {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 5px 11px;
+  font-size: 12px;
   font-weight: 700;
 }
+.alarm-state svg { flex: 0 0 auto; }
 
 .state-open {
   background: #fee2e2;
@@ -15067,7 +15069,9 @@ th.event-col-category {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
+.alarms-section .alarms-page-table { width: 100%; table-layout: auto; }
 
 .alarms-section-header {
   padding: 14px 18px 10px;
@@ -15173,12 +15177,12 @@ th.event-col-category {
 
 /* ----- Alarm satırları: seviye + duruma göre renklendirme ----- */
 .alarms-section .alarms-page-table {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .alarms-section .alarms-page-table thead th {
-  padding: 9px 14px;
-  font-size: 11px;
+  padding: 12px 16px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -15207,8 +15211,8 @@ th.event-col-category {
 
 .alarm-row td {
   transition: background 0.12s;
-  padding-top: 14px;
-  padding-bottom: 14px;
+  padding-top: 17px;
+  padding-bottom: 17px;
   vertical-align: middle;
 }
 /* Seviyeye gore cok hafif satir tonu (referans gorsel: her satir soft renkli) */
@@ -15264,18 +15268,39 @@ th.event-col-category {
   border-radius: 999px; padding: 1px 8px; min-width: 20px; text-align: center;
 }
 .alarms-tab.active .alarms-tab-count { background: #ffedd5; color: #c2410c; }
-/* Cihaz hucresi: ad·kod ustte, kaynak·bolge·hat altta (bulunabilirlik) */
-.alarm-devsource-cell { display: flex; flex-direction: column; gap: 2px; }
-.alarm-devsource-name { font-size: 13px; font-weight: 700; color: #0f172a; }
-.alarm-devsource-code { font-weight: 600; color: #64748b; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
-.alarm-devsource-src { font-size: 11px; color: #94a3b8; }
-/* Satir hizli islemleri (Onayla + Incele) */
+/* Tarih hucresi: tarih + saat TEK SATIR yan yana */
+.alarm-cell-datetime { white-space: nowrap; font-size: 13.5px; font-weight: 600; color: #334155; font-variant-numeric: tabular-nums; }
+/* Bolge / Hat hucreleri */
+.alarm-cell-region, .alarm-cell-line { font-size: 13.5px; color: #475569; white-space: nowrap; }
+
+/* ---- Profesyonel sabit-genislik tablo: sutunlar tasmaz, hizali ---- */
+.alarms-page-table { table-layout: fixed; }
+.alarm-col-level    { width: 92px; }
+.alarm-col-date     { width: 168px; }
+.alarm-col-device   { width: 120px; }
+.alarm-col-source   { width: 96px; }
+.alarm-col-line     { width: 90px; }
+.alarm-col-region   { width: 110px; }
+.alarm-col-alarm    { width: auto; }   /* esner, kalan alani doldurur */
+.alarm-col-status   { width: 150px; }
+.alarm-col-assignee { width: 120px; }
+.alarm-col-duration { width: 110px; }
+/* Sutun hizalari: seviye/cihaz/kaynak/hat/durum ortali; digerleri sola */
+.alarm-cell-level, .alarm-cell-device, .alarm-cell-source,
+.alarm-cell-line, .alarm-cell-state,
+.alarm-col-level, .alarm-col-device, .alarm-col-source,
+.alarm-col-line, .alarm-col-status { text-align: center; }
+.alarm-cell-device .alarm-device-cell { align-items: center; }
+.alarm-cell-state { display: table-cell; }
+.alarm-cell-state .alarm-state { display: inline-flex; }
+.alarm-cell-title .alarm-title-text { overflow: hidden; text-overflow: ellipsis; }
+/* Islem hucresi butonlari — hucre icinde sagda, tasmasin */
 .alarm-row-actions { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .alarm-row-ack {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 6px 12px; border: none; border-radius: 8px;
   background: #f97316; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer;
-  transition: filter 0.12s;
+  transition: filter 0.12s; flex: 0 0 auto;
 }
 .alarm-row-ack:hover { filter: brightness(1.05); }
 /* Gecmis: olay tipi rozeti */
@@ -15288,7 +15313,7 @@ th.event-col-category {
 .alarm-event-badge.ev-alarm_acknowledged, .alarm-event-badge.ev-alarm_acknowledge_all { background: #dbeafe; color: #1d4ed8; }
 .alarm-event-badge.ev-alarm_reset, .alarm-event-badge.ev-alarm_auto_cleared, .alarm-event-badge.ev-alarm_reset_all { background: #dcfce7; color: #15803d; }
 /* Sure hucresi */
-.alarm-cell-duration { color: #64748b; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.alarm-cell-duration { color: #475569; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
 /* Incele butonu */
 .alarm-row-inspect {
   border: none; background: transparent; color: #ea580c; font-size: 13px;
@@ -15397,25 +15422,24 @@ th.event-col-category {
 }
 
 .alarm-device-name {
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 700;
+  font-size: 14px;
   color: #0f172a;
 }
 
 .alarm-device-code {
-  font-size: 11px;
+  font-size: 12px;
   color: #64748b;
   font-family: ui-monospace, SFMono-Regular, monospace;
 }
 
 .alarm-device-fallback {
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 12px;
+  font-size: 13px;
   color: #94a3b8;
 }
 
 .alarm-cell-state {
-  width: 1%;
   white-space: nowrap;
   min-width: 110px;
 }
@@ -15505,13 +15529,15 @@ th.event-col-category {
 /* İşlem butonları biraz daha kompakt */
 .alarm-actions-th {
   text-align: right;
-  width: 1%;
   white-space: nowrap;
+  width: 180px;
+  padding-right: 20px;
 }
 
 .alarm-actions-cell {
   text-align: right;
   white-space: nowrap;
+  width: 180px;
 }
 
 .alarm-actions-cell .icon-btn {
@@ -15525,14 +15551,15 @@ th.event-col-category {
   font-size: 16px;
 }
 
-/* Durum etiketi (açık / onaylandı) küçültüp soft tonla */
+/* Durum etiketi (acik / onaylandi) — ikon + soft ton */
 .alarms-section .alarm-state {
   display: inline-flex;
   align-items: center;
-  padding: 3px 9px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
 }
 .alarms-section .alarm-state.state-open {
   background: #fef3c7;

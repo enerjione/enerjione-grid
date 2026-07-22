@@ -370,6 +370,8 @@
       "level": "Level",
       "device": "Device",
       "deviceSource": "Device / Source",
+      "region": "Region",
+      "line": "Line",
       "source": "Source",
       "alarm": "Alarm",
       "status": "Status",

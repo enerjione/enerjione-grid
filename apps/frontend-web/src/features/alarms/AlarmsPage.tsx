@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ExternalLink, SlidersHorizontal, X } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, CircleDot, ExternalLink, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
 
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { TablePagination } from "../../components/TablePagination";
@@ -82,28 +82,23 @@ export function AlarmsPage({
     return map;
   }, [devices]);
 
-  /** Cihaz hucresi: ad + kod ustte, kaynak · bolge · hat altta (bulunabilirlik). */
-  const renderDeviceSourceCell = (deviceId: number, signalKey: string | null | undefined) => {
+  /** Cihaz hucresi: ad ustte, kod altta (ortali). */
+  const renderDeviceCell = (deviceId: number) => {
     const info = deviceLabelById.get(deviceId);
-    const src = sourceOf(signalKey);
-    const topo = deviceTopology.get(deviceId);
-    // Alt satir: kaynak · bolge · hat (dolu olanlar birlestirilir).
-    const metaParts = [
-      src?.label,
-      topo?.regionName || null,
-      topo?.lineName || null,
-    ].filter(Boolean);
+    if (!info) return <span className="alarm-device-fallback">#{deviceId}</span>;
     return (
-      <div className="alarm-devsource-cell">
-        <span className="alarm-devsource-name">
-          {info ? info.name : `#${deviceId}`}
-          {info ? <span className="alarm-devsource-code"> · {info.code}</span> : null}
-        </span>
-        <span className="alarm-devsource-src">
-          {metaParts.length > 0 ? metaParts.join(" · ") : "—"}
-        </span>
+      <div className="alarm-device-cell">
+        <span className="alarm-device-name">{info.name}</span>
+        <span className="alarm-device-code">{info.code}</span>
       </div>
     );
+  };
+
+  /** Kaynak hucresi: Master/Sat renkli rozeti. */
+  const renderSourceCell = (signalKey: string | null | undefined) => {
+    const entry = sourceOf(signalKey);
+    if (!entry) return <span className="alarm-cell-empty">—</span>;
+    return <span className={`badge badge-source badge-source-${entry.klass}`}>{entry.label}</span>;
   };
 
   /** Seviye kodundan i18n etiketi. Bilinmeyen seviye icin ham deger doner. */
@@ -128,10 +123,10 @@ export function AlarmsPage({
   };
 
   /** Alarm durumu (SCADA): acik / onaylandi / normale-dondu-onay-bekliyor. */
-  const alarmState = (a: AlarmEvent): { label: string; klass: string } => {
-    if (a.reset && !a.acknowledged) return { label: t("alarms.state.pendingAck"), klass: "state-pending" };
-    if (a.acknowledged) return { label: t("alarms.stateAck"), klass: "state-ack" };
-    return { label: t("alarms.stateOpen"), klass: "state-open" };
+  const alarmState = (a: AlarmEvent): { label: string; klass: string; Icon: LucideIcon } => {
+    if (a.reset && !a.acknowledged) return { label: t("alarms.state.pendingAck"), klass: "state-pending", Icon: CircleDot };
+    if (a.acknowledged) return { label: t("alarms.stateAck"), klass: "state-ack", Icon: CircleCheck };
+    return { label: t("alarms.stateOpen"), klass: "state-open", Icon: CircleAlert };
   };
 
   /** Sure formatla (ms -> "12 dk" / "1 sa 3 dk"). */
@@ -780,13 +775,16 @@ export function AlarmsPage({
               <table className="values-table alarms-page-table">
                 <thead>
                   <tr>
-                    <th scope="col">{t("alarms.table.date")}</th>
-                    <th scope="col">{t("alarms.table.level")}</th>
-                    <th scope="col">{t("alarms.table.deviceSource")}</th>
-                    <th scope="col">{t("alarms.table.alarm")}</th>
-                    <th scope="col">{t("alarms.table.status")}</th>
-                    <th scope="col">{t("alarms.table.assignee")}</th>
-                    <th scope="col">{t("alarms.table.duration")}</th>
+                    <th scope="col" className="alarm-col-level">{t("alarms.table.level")}</th>
+                    <th scope="col" className="alarm-col-date">{t("alarms.table.date")}</th>
+                    <th scope="col" className="alarm-col-device">{t("alarms.table.device")}</th>
+                    <th scope="col" className="alarm-col-source">{t("alarms.table.source")}</th>
+                    <th scope="col" className="alarm-col-line">{t("alarms.table.line")}</th>
+                    <th scope="col" className="alarm-col-region">{t("alarms.table.region")}</th>
+                    <th scope="col" className="alarm-col-alarm">{t("alarms.table.alarm")}</th>
+                    <th scope="col" className="alarm-col-status">{t("alarms.table.status")}</th>
+                    <th scope="col" className="alarm-col-assignee">{t("alarms.table.assignee")}</th>
+                    <th scope="col" className="alarm-col-duration">{t("alarms.table.duration")}</th>
                     <th scope="col" className="alarm-actions-th">{t("alarms.table.actions")}</th>
                   </tr>
                 </thead>
@@ -797,25 +795,31 @@ export function AlarmsPage({
                     const created = new Date(alarm.created_at);
                     const state = alarmState(alarm);
                     const rowDuration = formatDuration(Date.now() - created.getTime());
+                    const topo = deviceTopology.get(alarm.device_id);
                     return (
                       <tr
                         key={alarm.id}
                         className={`alarm-row ${levelClass} ${selectedClass}`.trim()}
                         onClick={() => setSelectedAlarmId(alarm.id)}
                       >
-                        <td className="alarm-cell-date">
-                          <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
-                          <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
-                        </td>
                         <td className="alarm-cell-level">
                           <span className={`alarm-pill level-${alarm.level.toLowerCase()}`}>{levelLabelTr(alarm.level)}</span>
                         </td>
-                        <td className="alarm-cell-devsource">{renderDeviceSourceCell(alarm.device_id, alarm.signal_key)}</td>
+                        <td className="alarm-cell-datetime">
+                          {created.toLocaleDateString(localeTag)} {created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </td>
+                        <td className="alarm-cell-device">{renderDeviceCell(alarm.device_id)}</td>
+                        <td className="alarm-cell-source">{renderSourceCell(alarm.signal_key)}</td>
+                        <td className="alarm-cell-line">{topo?.lineName || <span className="alarm-cell-empty">—</span>}</td>
+                        <td className="alarm-cell-region">{topo?.regionName || <span className="alarm-cell-empty">—</span>}</td>
                         <td className="alarm-cell-title">
                           <div className="alarm-title-text" title={alarm.description || alarm.title}>{alarm.title}</div>
                         </td>
                         <td className="alarm-cell-state">
-                          <span className={`alarm-state ${state.klass}`}>{state.label}</span>
+                          <span className={`alarm-state ${state.klass}`}>
+                            <state.Icon size={13} />
+                            {state.label}
+                          </span>
                         </td>
                         <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
                         <td className="alarm-cell-duration">{rowDuration}</td>
@@ -847,7 +851,7 @@ export function AlarmsPage({
                   })}
                   {tabAlarms.length === 0 && !loading ? (
                     <tr>
-                      <td colSpan={8} className="alarms-empty-cell">
+                      <td colSpan={11} className="alarms-empty-cell">
                         {activeTab === "resolved" ? t("alarms.noPending") : t("alarms.noActive")}
                       </td>
                     </tr>
