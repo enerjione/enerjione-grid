@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, CircleAlert, CircleCheck, CircleDot, ExternalLink, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
+import {
+  Calendar, Check, CircleAlert, CircleCheck, CircleDot, Clock, ExternalLink,
+  GitBranch, MapPin, SlidersHorizontal, Timer, User, X, type LucideIcon
+} from "lucide-react";
 
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { TablePagination } from "../../components/TablePagination";
@@ -357,6 +360,34 @@ export function AlarmsPage({
     const duration = formatDuration(endMs - created.getTime());
     const fmtTime = (iso: string) =>
       new Date(iso).toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" });
+    const fmtDate = (iso: string) =>
+      new Date(iso).toLocaleDateString(localeTag, { day: "2-digit", month: "2-digit", year: "numeric" });
+
+    // ---- Tekrar sikl igi: son 30 gunde bu cihaz+baslik alarmi gun gun kac kez (heatmap) ----
+    // Kaynak: event log (alarm_triggered/created) + mevcut aktif alarm listesi.
+    const repeatDays = 30;
+    const dayMs = 86_400_000;
+    const todayStart = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+    const startMs = todayStart - (repeatDays - 1) * dayMs;
+    const counts = new Array(repeatDays).fill(0);
+    const bump = (ts: number) => {
+      if (ts < startMs) return;
+      const idx = Math.floor((ts - startMs) / dayMs);
+      if (idx >= 0 && idx < repeatDays) counts[idx] += 1;
+    };
+    // Event log: bu cihaza ait alarm-olustu olaylari.
+    for (const ev of events) {
+      if (ev.category !== "alarm") continue;
+      if (ev.event_type !== "alarm_triggered" && ev.event_type !== "alarm_created") continue;
+      if (deviceInfo && ev.device_code && ev.device_code !== deviceInfo.code) continue;
+      bump(new Date(ev.created_at).getTime());
+    }
+    // Ayni cihaz+baslik aktif alarmlari (event log eksikse tamamla).
+    for (const al of alarms) {
+      if (al.device_id === a.device_id && al.title === a.title) bump(new Date(al.created_at).getTime());
+    }
+    const totalRepeat = counts.reduce((s, n) => s + n, 0);
+    const maxCount = Math.max(1, ...counts);
 
     return (
       <div className="alarm-detail">
@@ -373,10 +404,14 @@ export function AlarmsPage({
           </button>
         </header>
 
-        <div className="alarm-detail-heading">
+        {/* Seviye seridi + baslik */}
+        <div className={`alarm-detail-heading level-band-${a.level.toLowerCase()}`}>
           <div className="alarm-detail-pills">
             <span className={`alarm-pill level-${a.level.toLowerCase()}`}>{levelLabelTr(a.level)}</span>
-            <span className={`alarm-state ${state.klass}`}>{state.label}</span>
+            <span className={`alarm-state ${state.klass}`}>
+              <state.Icon size={13} />
+              {state.label}
+            </span>
           </div>
           <h3 className="alarm-detail-alarmtitle">{a.title}</h3>
           {a.description && a.description.trim() !== a.title.trim() ? (
@@ -420,27 +455,53 @@ export function AlarmsPage({
         <div className="alarm-detail-scroll">
         {panelTab === "detail" ? (
         <>
-        {/* Bilgi grid: Tarih / Baslangic / Sure / Atanan */}
+        {/* Bilgi kartlari: ikonlu 2x2 (Tarih / Baslangic / Sure / Atanan) */}
         <div className="alarm-detail-metrics">
           <div className="alarm-detail-metric">
-            <span className="alarm-detail-metric-label">{t("alarms.detail.fieldDate")}</span>
-            <span className="alarm-detail-metric-value">{created.toLocaleDateString(localeTag)}</span>
+            <span className="alarm-detail-metric-icon"><Calendar size={15} /></span>
+            <div className="alarm-detail-metric-body">
+              <span className="alarm-detail-metric-label">{t("alarms.detail.fieldDate")}</span>
+              <span className="alarm-detail-metric-value">{created.toLocaleDateString(localeTag)}</span>
+            </div>
           </div>
           <div className="alarm-detail-metric">
-            <span className="alarm-detail-metric-label">{t("alarms.detail.fieldStart")}</span>
-            <span className="alarm-detail-metric-value">{fmtTime(a.created_at)}</span>
+            <span className="alarm-detail-metric-icon"><Clock size={15} /></span>
+            <div className="alarm-detail-metric-body">
+              <span className="alarm-detail-metric-label">{t("alarms.detail.fieldStart")}</span>
+              <span className="alarm-detail-metric-value">{fmtTime(a.created_at)}</span>
+            </div>
           </div>
           <div className="alarm-detail-metric">
-            <span className="alarm-detail-metric-label">{t("alarms.detail.duration")}</span>
-            <span className="alarm-detail-metric-value">{duration}</span>
+            <span className="alarm-detail-metric-icon"><Timer size={15} /></span>
+            <div className="alarm-detail-metric-body">
+              <span className="alarm-detail-metric-label">{t("alarms.detail.duration")}</span>
+              <span className="alarm-detail-metric-value">{duration}</span>
+            </div>
           </div>
           <div className="alarm-detail-metric">
-            <span className="alarm-detail-metric-label">{t("alarms.detail.assignee")}</span>
-            <span className="alarm-detail-metric-value">
-              {a.assigned_to ?? t("alarms.detail.assignNone")}
-            </span>
+            <span className="alarm-detail-metric-icon"><User size={15} /></span>
+            <div className="alarm-detail-metric-body">
+              <span className="alarm-detail-metric-label">{t("alarms.detail.assignee")}</span>
+              <span className="alarm-detail-metric-value">{a.assigned_to ?? t("alarms.detail.assignNone")}</span>
+            </div>
           </div>
         </div>
+
+        {/* Konum: bolge · hat (varsa) */}
+        {(() => {
+          const topo = deviceTopology.get(a.device_id);
+          if (!topo?.regionName && !topo?.lineName) return null;
+          return (
+            <div className="alarm-detail-location">
+              {topo.regionName ? (
+                <span className="alarm-detail-loc-item"><MapPin size={14} />{topo.regionName}</span>
+              ) : null}
+              {topo.lineName ? (
+                <span className="alarm-detail-loc-item"><GitBranch size={14} />{topo.lineName}</span>
+              ) : null}
+            </div>
+          );
+        })()}
 
         {/* Sorumluya ata */}
         <label className="alarm-detail-assign">
@@ -480,6 +541,36 @@ export function AlarmsPage({
           </button>
         </div>
 
+        {/* Tekrar sikligi heatmap (son 30 gun, GitHub katki grafigi tarzi) */}
+        <div className="alarm-detail-repeat">
+          <div className="alarm-detail-repeat-head">
+            <span className="alarm-detail-section-title">{t("alarms.detail.repeatTitle")}</span>
+            <span className="alarm-detail-repeat-total">{t("alarms.detail.repeatCount", { count: totalRepeat })}</span>
+          </div>
+          <div className="alarm-heatmap" title={t("alarms.detail.repeatHint", { days: repeatDays })}>
+            {counts.map((c, i) => {
+              const dayTs = startMs + i * dayMs;
+              const lvl = c === 0 ? 0 : c >= maxCount ? 4 : Math.ceil((c / maxCount) * 3);
+              return (
+                <span
+                  key={i}
+                  className={`alarm-heatmap-cell hm-${lvl}`}
+                  title={`${new Date(dayTs).toLocaleDateString(localeTag)} — ${c}`}
+                />
+              );
+            })}
+          </div>
+          <div className="alarm-heatmap-legend">
+            <span>{t("alarms.detail.repeatLess")}</span>
+            <span className="alarm-heatmap-cell hm-0" />
+            <span className="alarm-heatmap-cell hm-1" />
+            <span className="alarm-heatmap-cell hm-2" />
+            <span className="alarm-heatmap-cell hm-3" />
+            <span className="alarm-heatmap-cell hm-4" />
+            <span>{t("alarms.detail.repeatMore")}</span>
+          </div>
+        </div>
+
         {/* Durum gecmisi (timeline) */}
         <div className="alarm-detail-timeline">
           <span className="alarm-detail-section-title">{t("alarms.detail.history")}</span>
@@ -487,7 +578,7 @@ export function AlarmsPage({
             <li className="alarm-timeline-item is-created">
               <span className="alarm-timeline-dot" />
               <div className="alarm-timeline-body">
-                <span className="alarm-timeline-time">{fmtTime(a.created_at)}</span>
+                <span className="alarm-timeline-time">{fmtDate(a.created_at)} · {fmtTime(a.created_at)}</span>
                 <span className="alarm-timeline-label">{t("alarms.detail.historyCreated")}</span>
               </div>
             </li>
@@ -495,7 +586,7 @@ export function AlarmsPage({
               <li className="alarm-timeline-item is-ack">
                 <span className="alarm-timeline-dot" />
                 <div className="alarm-timeline-body">
-                  <span className="alarm-timeline-time">{fmtTime(a.acknowledged_at)}</span>
+                  <span className="alarm-timeline-time">{fmtDate(a.acknowledged_at)} · {fmtTime(a.acknowledged_at)}</span>
                   <span className="alarm-timeline-label">{t("alarms.detail.historyAck")}</span>
                 </div>
               </li>
@@ -504,7 +595,7 @@ export function AlarmsPage({
               <li className="alarm-timeline-item is-reset">
                 <span className="alarm-timeline-dot" />
                 <div className="alarm-timeline-body">
-                  <span className="alarm-timeline-time">{fmtTime(a.reset_at)}</span>
+                  <span className="alarm-timeline-time">{fmtDate(a.reset_at)} · {fmtTime(a.reset_at)}</span>
                   <span className="alarm-timeline-label">{t("alarms.detail.historyReset")}</span>
                 </div>
               </li>
