@@ -15273,18 +15273,20 @@ th.event-col-category {
 /* Bolge / Hat hucreleri */
 .alarm-cell-region, .alarm-cell-line { font-size: 13.5px; color: #475569; white-space: nowrap; }
 
-/* ---- Profesyonel sabit-genislik tablo: sutunlar tasmaz, hizali ---- */
-.alarms-page-table { table-layout: fixed; }
-.alarm-col-level    { width: 92px; }
-.alarm-col-date     { width: 168px; }
-.alarm-col-device   { width: 120px; }
-.alarm-col-source   { width: 96px; }
-.alarm-col-line     { width: 90px; }
-.alarm-col-region   { width: 110px; }
-.alarm-col-alarm    { width: auto; }   /* esner, kalan alani doldurur */
-.alarm-col-status   { width: 150px; }
-.alarm-col-assignee { width: 120px; }
-.alarm-col-duration { width: 110px; }
+/* ---- Profesyonel sabit-genislik tablo: sutunlar tasmaz, hizali ----
+   table-layout: auto -> icerige gore, ama Alarm sutunu esner. Toplam sabit
+   genislik ekrani asmasin diye kolonlar dar tutuldu; Islem sutunu sabit. */
+.alarms-page-table { table-layout: auto; }
+.alarm-col-level    { width: 84px; }
+.alarm-col-date     { width: 150px; white-space: nowrap; }
+.alarm-col-device   { width: 100px; }
+.alarm-col-source   { width: 86px; }
+.alarm-col-line     { width: 78px; }
+.alarm-col-region   { width: 96px; }
+.alarm-col-alarm    { width: auto; min-width: 140px; }   /* esner */
+.alarm-col-status   { width: 132px; }
+.alarm-col-assignee { width: 104px; }
+.alarm-col-duration { width: 100px; }
 /* Sutun hizalari: seviye/cihaz/kaynak/hat/durum ortali; digerleri sola */
 .alarm-cell-level, .alarm-cell-device, .alarm-cell-source,
 .alarm-cell-line, .alarm-cell-state,
@@ -15526,18 +15528,20 @@ th.event-col-category {
   color: #334155;
 }
 
-/* İşlem butonları biraz daha kompakt */
+/* İşlem sutunu: butonlar hucre icinde, tasmasin */
 .alarm-actions-th {
   text-align: right;
   white-space: nowrap;
-  width: 180px;
-  padding-right: 20px;
+  width: 200px;
+  padding-right: 16px;
 }
 
 .alarm-actions-cell {
   text-align: right;
   white-space: nowrap;
-  width: 180px;
+  width: 200px;
+  padding-right: 16px;
+  overflow: hidden;
 }
 
 .alarm-actions-cell .icon-btn {
