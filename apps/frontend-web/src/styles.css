@@ -3166,6 +3166,74 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   gap: 10px;
 }
 
+/* Split varyant: sol tablo alanı | sağ sabit detay paneli (görsel tasarım). */
+.alarms-layout-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 12px;
+  align-items: start;
+}
+.alarms-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+/* Sağ panel yapışkan: sayfa kayarken görünür kalır. */
+.alarms-side-panel {
+  position: sticky;
+  top: 12px;
+  align-self: start;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  padding: 16px;
+}
+.alarm-detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 260px;
+  text-align: center;
+  color: #94a3b8;
+}
+.alarm-detail-empty .material-symbols-outlined { font-size: 40px; opacity: 0.5; }
+.alarm-detail-empty h3 { margin: 0; font-size: 15px; color: #64748b; }
+/* Panel aksiyon butonlari (onayla / cihaz detayi / reset / sil) */
+.alarm-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+.alarm-detail-action,
+.alarm-detail-action-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+}
+.alarm-detail-action .material-symbols-outlined,
+.alarm-detail-action-primary .material-symbols-outlined { font-size: 18px; }
+.alarm-detail-action-danger { color: #dc2626; border-color: #fecaca; }
+.alarm-detail-action-danger:hover { background: #fef2f2; }
+/* Filtre satırı kalabalıklaşınca alta sar */
+.alarms-page-toolbar .alarms-filter-row { flex-wrap: wrap; }
+.alarms-page-toolbar .alarms-filter-row select { min-width: 120px; }
+
+/* Dar ekran: panel alta iner, tek kolon */
+@media (max-width: 1100px) {
+  .alarms-layout-split { grid-template-columns: 1fr; }
+  .alarms-side-panel { position: static; max-height: none; }
+  .alarm-detail-2col .alarm-detail-grid { grid-template-columns: 1fr; }
+}
+
 .alarms-list-card,
 .alarms-detail-card {
   background: #fff;

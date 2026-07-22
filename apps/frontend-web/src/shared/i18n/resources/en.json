@@ -371,11 +371,26 @@
       "acknowledge": "Acknowledge",
       "ackAndRemove": "Acknowledge and remove from list",
       "assign": "Assign",
-      "comment": "Comment"
+      "comment": "Comment",
+      "reset": "Mark as resolved",
+      "delete": "Delete"
+    },
+    "filter": {
+      "timeAll": "All time",
+      "time1h": "Last 1 hour",
+      "time24h": "Last 24 hours",
+      "time7d": "Last 7 days",
+      "regionAll": "All regions",
+      "deviceAll": "All devices",
+      "statusAll": "All statuses",
+      "statusOpen": "Open",
+      "statusAck": "Acknowledged",
+      "statusReset": "Resolved"
     },
     "detail": {
       "title": "Alarm Details",
       "selectHint": "Select an alarm from the list to view details.",
+      "openDevice": "Go to device detail",
       "sectionDetails": "Details",
       "sectionComments": "Comments",
       "fieldDevice": "Device",
@@ -2008,6 +2023,8 @@
   "toasts": {
     "sessionExpiredTitle": "Session ended",
     "sessionExpiredBody": "Your session has expired, please sign in again.",
+    "newAlarmsTitle": "New alarms",
+    "newAlarmsBody": "{{count}} new alarms occurred.",
     "loginFailedTitle": "Sign-in failed",
     "loginInvalidCredentials": "Username or password is incorrect.",
     "loginNetworkFail": "Cannot reach the server. Check your connection and try again.",

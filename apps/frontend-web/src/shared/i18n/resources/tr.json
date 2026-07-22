@@ -371,11 +371,26 @@
       "acknowledge": "Onayla",
       "ackAndRemove": "Onayla ve listeden çıkar",
       "assign": "Atama",
-      "comment": "Yorum"
+      "comment": "Yorum",
+      "reset": "Normale döndür",
+      "delete": "Sil"
+    },
+    "filter": {
+      "timeAll": "Tüm zamanlar",
+      "time1h": "Son 1 saat",
+      "time24h": "Son 24 saat",
+      "time7d": "Son 7 gün",
+      "regionAll": "Tüm bölgeler",
+      "deviceAll": "Tüm cihazlar",
+      "statusAll": "Tüm durumlar",
+      "statusOpen": "Açık",
+      "statusAck": "Onaylı",
+      "statusReset": "Normale döndü"
     },
     "detail": {
       "title": "Alarm Detayı",
       "selectHint": "Detay için soldan bir alarm seçin.",
+      "openDevice": "Cihaz detayına git",
       "sectionDetails": "Detaylar",
       "sectionComments": "Yorumlar",
       "fieldDevice": "Cihaz",
@@ -2008,6 +2023,8 @@
   "toasts": {
     "sessionExpiredTitle": "Oturum sona erdi",
     "sessionExpiredBody": "Oturum süresi doldu, lütfen tekrar giriş yapın.",
+    "newAlarmsTitle": "Yeni alarmlar",
+    "newAlarmsBody": "{{count}} yeni alarm oluştu.",
     "loginFailedTitle": "Giriş başarısız",
     "loginInvalidCredentials": "Kullanıcı adı veya şifre hatalı.",
     "loginNetworkFail": "Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.",

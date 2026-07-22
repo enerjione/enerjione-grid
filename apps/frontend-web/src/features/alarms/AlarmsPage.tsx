@@ -3,12 +3,17 @@ import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import { TablePagination } from "../../components/TablePagination";
-import type { AlarmComment, AlarmEvent, DeviceRow, UserRead } from "../../shared/types";
+import type { AlarmComment, AlarmEvent, DeviceRow, Region, UserRead } from "../../shared/types";
+
+// Cihaz id -> topoloji (bolge/hat) — App.tsx deviceTopologyInfo map'i.
+type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
 
 type Props = {
   alarms: AlarmEvent[];
   users: UserRead[];
   devices: DeviceRow[];
+  regions: Region[];
+  deviceTopology: DeviceTopology;
   loading?: boolean;
   onAssign: (alarmId: number, assignedTo: string | null) => Promise<void>;
   onLoadComments: (alarmId: number) => Promise<AlarmComment[]>;
@@ -18,14 +23,18 @@ type Props = {
   onDelete: (alarmId: number) => Promise<void>;
   onAcknowledgeAll: () => Promise<void>;
   onResetAll: () => Promise<void>;
+  onOpenDevice: (deviceId: number) => void;
 };
 
-type DetailFocus = "assign" | "comments" | null;
+type TimeFilter = "all" | "1h" | "24h" | "7d";
+type StatusFilter = "all" | "open" | "ack" | "reset";
 
 export function AlarmsPage({
   alarms,
   users,
   devices,
+  regions,
+  deviceTopology,
   loading,
   onAssign,
   onLoadComments,
@@ -34,16 +43,19 @@ export function AlarmsPage({
   onReset,
   onDelete,
   onAcknowledgeAll,
-  onResetAll
+  onResetAll,
+  onOpenDevice
 }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState<"all" | "critical" | "warning" | "info">("all");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned" | "unassigned">("all");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
+  const [regionFilter, setRegionFilter] = useState<number | "all">("all");
+  const [deviceFilter, setDeviceFilter] = useState<number | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedAlarmId, setSelectedAlarmId] = useState<number | null>(null);
-  const [isDetailModalOpen, setDetailModalOpen] = useState(false);
-  const [detailFocus, setDetailFocus] = useState<DetailFocus>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentsByAlarm, setCommentsByAlarm] = useState<Record<number, AlarmComment[]>>({});
   const [saving, setSaving] = useState(false);
@@ -108,7 +120,7 @@ export function AlarmsPage({
     );
   };
 
-  // Genel filtre (arama / seviye / atama). Onaylanmis+resetli alarmlar ekrandan gizli.
+  // Genel filtre (arama / seviye / atama / zaman / bolge / cihaz / durum).
   const filterPredicate = (alarm: AlarmEvent): boolean => {
     const level = alarm.level.toLowerCase();
     const levelOk = levelFilter === "all" ? true : level === levelFilter;
@@ -118,17 +130,36 @@ export function AlarmsPage({
         : assignmentFilter === "assigned"
           ? Boolean(alarm.assigned_to)
           : !alarm.assigned_to;
+    // Zaman araligi: created_at simdiden ne kadar geride.
+    let timeOk = true;
+    if (timeFilter !== "all") {
+      const spanMs = timeFilter === "1h" ? 3600_000 : timeFilter === "24h" ? 86_400_000 : 604_800_000;
+      timeOk = Date.now() - new Date(alarm.created_at).getTime() <= spanMs;
+    }
+    // Bolge: cihaz topolojisinden.
+    const regionOk =
+      regionFilter === "all" ? true : deviceTopology.get(alarm.device_id)?.regionId === regionFilter;
+    const deviceOk = deviceFilter === "all" ? true : alarm.device_id === deviceFilter;
+    // Durum: acknowledged/reset bool'larindan.
+    const statusOk =
+      statusFilter === "all"
+        ? true
+        : statusFilter === "reset"
+          ? Boolean(alarm.reset)
+          : statusFilter === "ack"
+            ? Boolean(alarm.acknowledged) && !alarm.reset
+            : !alarm.acknowledged && !alarm.reset; // "open"
     const dev = deviceLabelById.get(alarm.device_id);
     const text = `${alarm.title} ${alarm.description} ${alarm.device_id} ${dev?.name ?? ""} ${dev?.code ?? ""}`.toLowerCase();
     const searchOk = search.trim() ? text.includes(search.trim().toLowerCase()) : true;
-    return levelOk && assignmentOk && searchOk;
+    return levelOk && assignmentOk && timeOk && regionOk && deviceOk && statusOk && searchOk;
   };
 
   // Aktif alarmlar: henuz normale donmemis (reset = false). Onaylanmis veya degil farketmez.
   const activeAlarms = useMemo(
     () => alarms.filter((alarm) => !alarm.reset && filterPredicate(alarm)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [alarms, search, levelFilter, assignmentFilter, deviceLabelById]
+    [alarms, search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, deviceLabelById]
   );
 
   // Aktif alarmda olan (device_id + signal_key/title) kombinasyonlarinin set'i.
@@ -159,7 +190,7 @@ export function AlarmsPage({
         return true;
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [alarms, search, levelFilter, assignmentFilter, deviceLabelById, activeKeySet]
+    [alarms, search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, deviceLabelById, activeKeySet]
   );
 
   // Birlesik liste — secili alarm dogrulamasi icin
@@ -170,7 +201,7 @@ export function AlarmsPage({
 
   useEffect(() => {
     setPage(1);
-  }, [search, levelFilter, assignmentFilter, pageSize]);
+  }, [search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, pageSize]);
 
   const pagedActiveAlarms = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -268,7 +299,6 @@ export function AlarmsPage({
       await onDelete(alarmId);
       if (selectedAlarmId === alarmId) {
         setSelectedAlarmId(null);
-        setDetailModalOpen(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("alarms.errors.deleteFailed"));
@@ -277,10 +307,9 @@ export function AlarmsPage({
     }
   };
 
-  const openDetail = (alarmId: number, focus: DetailFocus) => {
+  // Satir/ikon tiklamasi -> sabit sag panelde o alarmi sec (modal yok).
+  const openDetail = (alarmId: number) => {
     setSelectedAlarmId(alarmId);
-    setDetailFocus(focus);
-    setDetailModalOpen(true);
   };
 
   const handleAcknowledgeAll = async () => {
@@ -325,10 +354,11 @@ export function AlarmsPage({
     }
   };
 
-  const renderAlarmDetail = (mode: "panel" | "modal") => {
+  const renderAlarmDetail = () => {
     if (!selectedAlarm) {
       return (
-        <div className={mode === "modal" ? "alarm-detail-modal-body" : undefined}>
+        <div className="alarm-detail-empty">
+          <span className="material-symbols-outlined">notifications_off</span>
           <h3>{t("alarms.detail.title")}</h3>
           <p className="helper-text">{t("alarms.detail.selectHint")}</p>
           {error ? <p className="error-text">{error}</p> : null}
@@ -345,7 +375,7 @@ export function AlarmsPage({
         : t("alarms.stateOpen");
     const stateClass = selectedAlarm.reset ? "state-reset" : selectedAlarm.acknowledged ? "state-ack" : "state-open";
     return (
-      <div className={mode === "modal" ? "alarm-detail-modal-body alarm-detail-2col" : "alarm-detail-2col"}>
+      <div className="alarm-detail-2col">
         <header className="alarm-detail-header">
           <div className="alarm-detail-titlebar">
             <span className={`alarm-pill level-${selectedAlarm.level.toLowerCase()}`}>{levelLabelTr(selectedAlarm.level)}</span>
@@ -432,6 +462,50 @@ export function AlarmsPage({
                 </select>
               </label>
             </div>
+
+            {/* Aksiyonlar: onayla / normale don / cihaz detayina git / sil */}
+            <div className="alarm-detail-actions">
+              {!selectedAlarm.acknowledged ? (
+                <button
+                  type="button"
+                  className="primary-btn alarm-detail-action-primary"
+                  disabled={saving}
+                  onClick={() => void handleAcknowledge(selectedAlarm.id)}
+                >
+                  <span className="material-symbols-outlined">check_circle</span>
+                  {t("alarms.actions.acknowledge")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="secondary-btn alarm-detail-action"
+                onClick={() => onOpenDevice(selectedAlarm.device_id)}
+              >
+                <span className="material-symbols-outlined">open_in_new</span>
+                {t("alarms.detail.openDevice")}
+              </button>
+              {!selectedAlarm.reset ? (
+                <button
+                  type="button"
+                  className="secondary-btn alarm-detail-action"
+                  disabled={saving}
+                  onClick={() => void handleReset(selectedAlarm.id)}
+                >
+                  <span className="material-symbols-outlined">history_toggle_off</span>
+                  {t("alarms.actions.reset")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary-btn alarm-detail-action alarm-detail-action-danger"
+                  disabled={saving}
+                  onClick={() => void handleDelete(selectedAlarm.id)}
+                >
+                  <span className="material-symbols-outlined">delete</span>
+                  {t("alarms.actions.delete")}
+                </button>
+              )}
+            </div>
           </section>
 
           {/* SAĞ: Yorumlar */}
@@ -471,15 +545,6 @@ export function AlarmsPage({
                 {t("alarms.detail.commentHint")}
               </small>
               <div className="alarm-detail-comment-actions">
-                {mode === "modal" ? (
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={() => setDetailModalOpen(false)}
-                  >
-                    {t("common.close")}
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   className="primary-btn"
@@ -499,7 +564,8 @@ export function AlarmsPage({
   };
 
   return (
-    <section className="alarms-layout alarms-layout-flat">
+    <section className="alarms-layout alarms-layout-split">
+      <div className="alarms-main">
         <div className="alarms-toolbar alarms-page-toolbar">
           <input
             className="device-search-input"
@@ -508,11 +574,41 @@ export function AlarmsPage({
             onChange={(event) => setSearch(event.target.value)}
           />
           <div className="alarms-filter-row">
+            <select value={timeFilter} onChange={(event) => setTimeFilter(event.target.value as TimeFilter)}>
+              <option value="all">{t("alarms.filter.timeAll")}</option>
+              <option value="1h">{t("alarms.filter.time1h")}</option>
+              <option value="24h">{t("alarms.filter.time24h")}</option>
+              <option value="7d">{t("alarms.filter.time7d")}</option>
+            </select>
+            <select
+              value={regionFilter === "all" ? "all" : String(regionFilter)}
+              onChange={(event) => setRegionFilter(event.target.value === "all" ? "all" : Number(event.target.value))}
+            >
+              <option value="all">{t("alarms.filter.regionAll")}</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+            <select
+              value={deviceFilter === "all" ? "all" : String(deviceFilter)}
+              onChange={(event) => setDeviceFilter(event.target.value === "all" ? "all" : Number(event.target.value))}
+            >
+              <option value="all">{t("alarms.filter.deviceAll")}</option>
+              {devices.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
             <select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value as typeof levelFilter)}>
               <option value="all">{t("alarms.filterAllLevels")}</option>
               <option value="critical">{t("alarms.level.critical")}</option>
               <option value="warning">{t("alarms.level.warning")}</option>
               <option value="info">{t("alarms.level.info")}</option>
+            </select>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+              <option value="all">{t("alarms.filter.statusAll")}</option>
+              <option value="open">{t("alarms.filter.statusOpen")}</option>
+              <option value="ack">{t("alarms.filter.statusAck")}</option>
+              <option value="reset">{t("alarms.filter.statusReset")}</option>
             </select>
             <select
               value={assignmentFilter}
@@ -569,7 +665,6 @@ export function AlarmsPage({
                     key={alarm.id}
                     className={`alarm-row ${levelClass} ${stateClass} ${selectedClass}`.trim()}
                     onClick={() => setSelectedAlarmId(alarm.id)}
-                    onDoubleClick={() => openDetail(alarm.id, "comments")}
                   >
                     <td className="alarm-cell-date">
                       <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
@@ -613,7 +708,7 @@ export function AlarmsPage({
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
-                          openDetail(alarm.id, "assign");
+                          openDetail(alarm.id);
                         }}
                       >
                         <span className="material-symbols-outlined">person_add</span>
@@ -626,7 +721,7 @@ export function AlarmsPage({
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
-                          openDetail(alarm.id, "comments");
+                          openDetail(alarm.id);
                         }}
                       >
                         <span className="material-symbols-outlined">chat</span>
@@ -689,7 +784,6 @@ export function AlarmsPage({
                     key={alarm.id}
                     className={`alarm-row alarm-row-resolved ${selectedAlarmId === alarm.id ? "alarm-row-active" : ""}`}
                     onClick={() => setSelectedAlarmId(alarm.id)}
-                    onDoubleClick={() => openDetail(alarm.id, "comments")}
                   >
                     <td className="alarm-cell-date">
                       <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
@@ -728,7 +822,7 @@ export function AlarmsPage({
                         disabled={saving}
                         onClick={(event) => {
                           event.stopPropagation();
-                          openDetail(alarm.id, "comments");
+                          openDetail(alarm.id);
                         }}
                       >
                         <span className="material-symbols-outlined">chat</span>
@@ -753,12 +847,12 @@ export function AlarmsPage({
             </p>
           ) : null}
         </div>
+      </div>
 
-      {isDetailModalOpen ? (
-        <div className="settings-modal-backdrop">
-          <div className="settings-modal alarm-detail-modal">{renderAlarmDetail("modal")}</div>
-        </div>
-      ) : null}
+      {/* SAĞ: Sabit alarm detay paneli */}
+      <aside className="alarms-side-panel">
+        {renderAlarmDetail()}
+      </aside>
     </section>
   );
 }

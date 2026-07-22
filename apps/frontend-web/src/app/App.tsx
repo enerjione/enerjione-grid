@@ -173,6 +173,8 @@ export function App() {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [users, setUsers] = useState<UserRead[]>([]);
   const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
+  // Toast icin gorulmus (aktif) alarm ID seti. null = ilk yukleme yapilmadi.
+  const seenAlarmIdsRef = useRef<Set<number> | null>(null);
   const [faults, setFaults] = useState<FaultEvent[]>([]);
   const [faultStats, setFaultStats] = useState<FaultStats | null>(null);
   const [events, setEvents] = useState<SystemEvent[]>([]);
@@ -456,6 +458,7 @@ export function App() {
     setDevices([]);
     setUsers([]);
     setAlarms([]);
+    seenAlarmIdsRef.current = null; // yeni oturumda alarm toast durumu sifir
     setFaults([]);
     setEvents([]);
     setGateways([]);
@@ -516,13 +519,43 @@ export function App() {
   }, [session, handleLogout, toast]);
 
   // Alarm listesini arka planda her 5 sn yenile — alarm-service yeni alarm
-  // urettiginde kullanici sayfayi yenilemeden anlik gorebilsin.
+  // urettiginde kullanici sayfayi yenilemeden anlik gorebilsin. Yeni (onceden
+  // gorulmemis, aktif) alarm gelince toast bildirimi at.
   useEffect(() => {
     if (!session) return;
+    const notifyNew = (rows: AlarmEvent[]) => {
+      const active = rows.filter((a) => !a.reset);
+      // Ilk yukleme: mevcut alarmlar icin toast ATMA, sadece set'i doldur.
+      if (seenAlarmIdsRef.current === null) {
+        seenAlarmIdsRef.current = new Set(active.map((a) => a.id));
+        return;
+      }
+      const seen = seenAlarmIdsRef.current;
+      const fresh = active.filter((a) => !seen.has(a.id));
+      for (const a of active) seen.add(a.id);
+      if (fresh.length === 0) return;
+      const deviceName = (id: number) => devices.find((d) => d.id === id)?.name ?? `#${id}`;
+      if (fresh.length === 1) {
+        const a = fresh[0];
+        const lvl = a.level.toLowerCase();
+        const opts = { title: `${a.title} · ${deviceName(a.device_id)}` };
+        if (lvl === "critical" || lvl === "error") toast.error(a.description || a.title, opts);
+        else if (lvl === "warning") toast.warning(a.description || a.title, opts);
+        else toast.info(a.description || a.title, opts);
+      } else {
+        // Coklu: tek ozet toast (en yuksek seviyeye gore renk).
+        const hasCritical = fresh.some((a) => ["critical", "error"].includes(a.level.toLowerCase()));
+        const body = t("toasts.newAlarmsBody", { count: fresh.length });
+        const opts = { title: t("toasts.newAlarmsTitle") };
+        if (hasCritical) toast.error(body, opts);
+        else toast.warning(body, opts);
+      }
+    };
     const tick = async () => {
       try {
         const rows = await fetchAlarmEvents(session.accessToken);
         setAlarms(rows);
+        notifyNew(rows);
       } catch {
         // sessizce yutuyoruz — gecici ag hatalari polling'i durdurmamali
       }
@@ -531,7 +564,8 @@ export function App() {
       void tick();
     }, 5000);
     return () => window.clearInterval(id);
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, devices, toast, t]);
 
   // Hat Arizalari (faults) canli refresh: 5 sn'de bir. Backend'in
   // fault_recompute_service'i alarm degistikce DB'yi senkronlar; biz de
@@ -2230,6 +2264,8 @@ export function App() {
                 alarms={alarms}
                 users={users}
                 devices={devices}
+                regions={gridSnapshot?.regions ?? []}
+                deviceTopology={deviceTopologyInfo}
                 loading={alarmsLoading}
                 onAssign={handleAssignAlarm}
                 onLoadComments={handleLoadAlarmComments}
@@ -2239,6 +2275,7 @@ export function App() {
                 onDelete={handleDeleteAlarm}
                 onAcknowledgeAll={handleAcknowledgeAllAlarms}
                 onResetAll={handleResetAllAlarms}
+                onOpenDevice={openDeviceDetail}
               />
             ) : null}
             {pageMode === "faults" ? (
