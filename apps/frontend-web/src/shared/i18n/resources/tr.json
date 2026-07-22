@@ -2205,7 +2205,8 @@
       "type": {
         "line": "Çizgi",
         "area": "Alan",
-        "bar": "Bar"
+        "bar": "Bar",
+        "heatmap": "Isı haritası"
       },
       "settings": "Grafik Ayarları",
       "smooth": "Yumuşak çizgi",
@@ -2216,7 +2217,11 @@
       "barRadius": "Köşe yuvarlaklık",
       "auto": "Otomatik",
       "alarmRate": "Alarm Sıklığı",
-      "perMin": "adet/dk"
+      "perMin": "adet/dk",
+      "alarmDensity": "Alarm yoğunluğu",
+      "valueDensity": "Değer yoğunluğu",
+      "alarmCount": "alarm",
+      "heatmapNote": "3 kaynak (Master/Sat01/Sat02) satır olarak gösterilir; aralık otomatik saat/gün çözünürlüğe bölünür."
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",

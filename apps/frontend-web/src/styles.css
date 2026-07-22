@@ -24039,6 +24039,12 @@ th.event-col-category {
 .device-trend-gear-slider { flex-direction: column; align-items: stretch; gap: 5px; cursor: default; }
 .device-trend-gear-slider span { font-size: 12px; color: #64748b; font-weight: 600; }
 .device-trend-gear-slider input[type="range"] { accent-color: #0ea5e9; width: 100%; }
+.device-trend-gear-slider select { padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 7px; font-size: 13px; color: #334155; background: #fff; }
+/* Heatmap mod secici (Alarm / Deger yogunlugu) */
+.device-trend-heat-modes { display: flex; gap: 4px; background: #f1f5f9; padding: 3px; border-radius: 9px; }
+.device-trend-heat-mode { flex: 1; padding: 6px 8px; border: none; background: transparent; border-radius: 7px; font-size: 12px; font-weight: 700; color: #64748b; cursor: pointer; }
+.device-trend-heat-mode.active { background: #fff; color: #0ea5e9; box-shadow: 0 1px 3px rgba(15,23,42,0.1); }
+.device-trend-gear-note { font-size: 11px; line-height: 1.4; color: #94a3b8; }
 
 /* Ana govde: sol panel | grafik */
 .device-trend-body { display: grid; grid-template-columns: 240px 1fr; gap: 12px; flex: 1; min-height: 0; }

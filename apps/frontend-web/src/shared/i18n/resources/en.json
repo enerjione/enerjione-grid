@@ -2205,7 +2205,8 @@
       "type": {
         "line": "Line",
         "area": "Area",
-        "bar": "Bar"
+        "bar": "Bar",
+        "heatmap": "Heatmap"
       },
       "settings": "Chart Settings",
       "smooth": "Smooth line",
@@ -2216,7 +2217,11 @@
       "barRadius": "Corner radius",
       "auto": "Auto",
       "alarmRate": "Alarm Rate",
-      "perMin": "/min"
+      "perMin": "/min",
+      "alarmDensity": "Alarm density",
+      "valueDensity": "Value density",
+      "alarmCount": "alarms",
+      "heatmapNote": "3 sources (Master/Sat01/Sat02) shown as rows; range auto-split into hourly/daily resolution."
     },
     "config": {
       "dnp3Title": "DNP3 Settings",

@@ -14,13 +14,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
-import { LineChart, BarChart } from "echarts/charts";
+import { LineChart, BarChart, HeatmapChart } from "echarts/charts";
 import {
   GridComponent,
   TooltipComponent,
   LegendComponent,
   DataZoomComponent,
   MarkLineComponent,
+  VisualMapComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 
@@ -33,9 +34,10 @@ import type {
   TelemetryHistoryPoint,
 } from "../../shared/types";
 
-echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, CanvasRenderer]);
+echarts.use([LineChart, BarChart, HeatmapChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, VisualMapComponent, CanvasRenderer]);
 
-type ChartType = "line" | "area" | "bar";
+type ChartType = "line" | "area" | "bar" | "heatmap";
+type HeatmapMode = "alarm" | "value"; // alarm yogunlugu / secili sinyal degeri
 type ChartSettings = {
   smooth: boolean;       // cizgi/alan: yumusak
   showSymbol: boolean;   // cizgi/alan: nokta goster
@@ -90,6 +92,7 @@ type SavedView = {
   customTo?: string;
   chartType?: ChartType;
   settings?: ChartSettings;
+  heatmapMode?: HeatmapMode;
 };
 
 let _idCounter = 0;
@@ -166,6 +169,13 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
   const [chartType, setChartType] = useState<ChartType>(() => saved?.chartType ?? "area");
   const [settings, setSettings] = useState<ChartSettings>(() => ({ ...DEFAULT_SETTINGS, ...(saved?.settings ?? {}) }));
   const [gearOpen, setGearOpen] = useState(false);
+  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>(() => saved?.heatmapMode ?? "alarm");
+  // heatmap deger modu icin secili sinyal (ilk def'in suffix'i varsayilan).
+  const [heatmapSignal, setHeatmapSignal] = useState<string>("");
+  // heatmap: {sources x zaman-kova -> deger} + zaman etiketleri.
+  const [heatData, setHeatData] = useState<{ cols: string[]; cells: [number, number, number | null][]; max: number }>(
+    { cols: [], cells: [], max: 0 }
+  );
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,8 +184,8 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
   >([]);
 
   useEffect(() => {
-    saveView(deviceCode, { defs, rangeKey: customOn ? "custom" : rangeKey, customFrom, customTo, chartType, settings });
-  }, [deviceCode, defs, rangeKey, customOn, customFrom, customTo, chartType, settings]);
+    saveView(deviceCode, { defs, rangeKey: customOn ? "custom" : rangeKey, customFrom, customTo, chartType, settings, heatmapMode });
+  }, [deviceCode, defs, rangeKey, customOn, customFrom, customTo, chartType, settings, heatmapMode]);
 
   // Aktif seri anahtarlari: her def = tek sinyal + tek cihaz (katalogda varsa).
   const seriesKeys = useMemo(() => {
@@ -248,6 +258,110 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
     };
   }, [token, deviceCode, seriesKeys, rangeKey, customOn, customFrom, customTo, t]);
 
+  // ---- Heatmap veri (3 kaynak x zaman kova) ----
+  useEffect(() => {
+    if (chartType !== "heatmap" || !token) {
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    // Zaman penceresi + kova cozunurlugu (kisa aralik -> saat, uzun -> gun).
+    let sinceMs: number;
+    let untilMs: number;
+    if (customOn && customFrom && customTo) {
+      sinceMs = new Date(customFrom).getTime();
+      untilMs = new Date(customTo).getTime();
+    } else {
+      const range = RANGES.find((r) => r.key === rangeKey) ?? RANGES[2];
+      untilMs = Date.now();
+      sinceMs = untilMs - range.minutes * 60_000;
+    }
+    const spanH = (untilMs - sinceMs) / 3600_000;
+    // <= 48 saat -> saatlik kova; aksi -> gunluk.
+    const byHour = spanH <= 48;
+    const bucketMs = byHour ? 3600_000 : 86_400_000;
+    // Historian bucket: alarm/deger icin uygun cozunurluk.
+    const histBucket: HistoryBucket = byHour ? "5m" : "1h";
+
+    // Kova sinirlarini olustur (kova basi timestamp -> kolon index).
+    const colStarts: number[] = [];
+    const first = Math.floor(sinceMs / bucketMs) * bucketMs;
+    for (let ts = first; ts <= untilMs; ts += bucketMs) colStarts.push(ts);
+    const colFmt = (ts: number): string => {
+      const d = new Date(ts);
+      return byHour
+        ? `${String(d.getHours()).padStart(2, "0")}:00`
+        : `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+    };
+    const cols = colStarts.map(colFmt);
+    const colIndex = (ts: number): number => {
+      const i = Math.floor((ts - first) / bucketMs);
+      return i >= 0 && i < colStarts.length ? i : -1;
+    };
+
+    // Deger modu icin sinyal (secili yoksa ilk def / actual_current).
+    const valSuffix = heatmapSignal || defs[0]?.suffix || "actual_current";
+    const sinceISO = new Date(sinceMs).toISOString();
+    const untilISO = new Date(untilMs).toISOString();
+
+    // Her kaynak icin fetch. Alarm: {src}.alarm_rate topla; Deger: {src}.{suffix} avg.
+    const sigKey = (src: SignalSource) =>
+      heatmapMode === "alarm" ? `${src}.alarm_rate` : `${src}.${valSuffix}`;
+
+    Promise.all(
+      ALL_SOURCES.map((src) =>
+        fetchDeviceHistory(token, deviceCode, sigKey(src), { bucket: histBucket, since: sinceISO, until: untilISO, limit: 10000 })
+          .then((rows) => {
+            // Kova bazinda topla: alarm=sum, deger=avg (ortalama).
+            const sums = new Array(colStarts.length).fill(0);
+            const counts = new Array(colStarts.length).fill(0);
+            const norm: { ts: number; v: number | null }[] = isAggregate(rows)
+              ? rows.map((r) => ({ ts: new Date(r.bucket).getTime(), v: heatmapMode === "value" ? r.avg_value : r.avg_value }))
+              : (rows as TelemetryHistoryPoint[]).map((r) => ({ ts: new Date(r.source_timestamp).getTime(), v: r.value }));
+            for (const p of norm) {
+              if (p.v == null) continue;
+              const ci = colIndex(p.ts);
+              if (ci < 0) continue;
+              sums[ci] += p.v;
+              counts[ci] += 1;
+            }
+            return { src, sums, counts };
+          })
+          .catch(() => ({ src, sums: new Array(colStarts.length).fill(0), counts: new Array(colStarts.length).fill(0) }))
+      )
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const cells: [number, number, number | null][] = [];
+        let max = 0;
+        results.forEach((res, rowIdx) => {
+          for (let ci = 0; ci < colStarts.length; ci++) {
+            let val: number | null;
+            if (heatmapMode === "alarm") {
+              val = res.sums[ci]; // toplam alarm sayisi
+            } else {
+              val = res.counts[ci] > 0 ? res.sums[ci] / res.counts[ci] : null; // ortalama
+            }
+            if (val != null && val > max) max = val;
+            cells.push([ci, rowIdx, val]);
+          }
+        });
+        setHeatData({ cols, cells, max: max || 1 });
+      })
+      .catch(() => {
+        if (!cancelled) setError(t("deviceDetail.charts.loadError"));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chartType, heatmapMode, heatmapSignal, defs, token, deviceCode, rangeKey, customOn, customFrom, customTo, t]);
+
   // Cift Y-ekseni: ilk 2 farkli birim.
   const units = useMemo(() => {
     const u: string[] = [];
@@ -262,6 +376,72 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
 
   // ---- ECharts option (koyu tema) ----
   const chartOption = useMemo(() => {
+    // ---- HEATMAP: 3 kaynak (satir) x zaman kova (sutun) ----
+    if (chartType === "heatmap") {
+      const rowLabels = ALL_SOURCES.map((s) => SOURCE_META[s].label);
+      const isAlarm = heatmapMode === "alarm";
+      return {
+        backgroundColor: "transparent",
+        animationDuration: 300,
+        tooltip: {
+          position: "top",
+          backgroundColor: "rgba(255,255,255,0.98)",
+          borderColor: "#e2e8f0",
+          borderWidth: 1,
+          textStyle: { color: "#0f172a", fontSize: 12 },
+          extraCssText: "box-shadow: 0 6px 20px rgba(15,23,42,0.12); border-radius: 10px;",
+          formatter: (p: { data: [number, number, number | null]; marker: string }) => {
+            const [ci, ri, v] = p.data;
+            const label = rowLabels[ri];
+            const time = heatData.cols[ci] ?? "";
+            const val = v == null ? "—" : isAlarm ? Math.round(v) : v.toFixed(1);
+            const suffix = isAlarm ? t("deviceDetail.charts.alarmCount") : "";
+            return `${label} · ${time}<br/>${p.marker}<b>${val}</b> ${suffix}`;
+          },
+        },
+        grid: { left: 8, right: 8, top: 12, bottom: 60, containLabel: true },
+        xAxis: {
+          type: "category",
+          data: heatData.cols,
+          splitArea: { show: true },
+          axisLabel: { color: "#64748b", hideOverlap: true },
+          axisLine: { lineStyle: { color: "rgba(148,163,184,0.35)" } },
+        },
+        yAxis: {
+          type: "category",
+          data: rowLabels,
+          splitArea: { show: true },
+          axisLabel: { color: "#64748b" },
+          axisLine: { lineStyle: { color: "rgba(148,163,184,0.35)" } },
+        },
+        visualMap: {
+          min: 0,
+          max: heatData.max,
+          calculable: true,
+          orient: "horizontal",
+          left: "center",
+          bottom: 8,
+          textStyle: { color: "#64748b" },
+          // alarm: sicak renkler (az->cok), deger: mavi->kirmizi
+          inRange: {
+            color: isAlarm
+              ? ["#f1f5f9", "#fde68a", "#fb923c", "#ef4444", "#b91c1c"]
+              : ["#dbeafe", "#93c5fd", "#facc15", "#fb923c", "#ef4444"],
+          },
+        },
+        series: [
+          {
+            type: "heatmap" as const,
+            data: heatData.cells,
+            label: { show: false },
+            itemStyle: { borderColor: "#fff", borderWidth: 1, borderRadius: 2 },
+            emphasis: { itemStyle: { shadowBlur: 6, shadowColor: "rgba(0,0,0,0.2)" } },
+          },
+        ],
+      };
+    }
+
+    // ---- LINE/AREA/BAR ----
     // Acik tema — okunur gri eksen + hafif grid.
     const mkAxis = (name: string, position: "left" | "right", showSplit: boolean) => ({
       type: "value" as const,
@@ -320,7 +500,7 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
         connectNulls: true,
       })),
     };
-  }, [series, units, chartType, settings]);
+  }, [series, units, chartType, settings, heatmapMode, heatData, t]);
 
   // Popup: sinyal ekle / duzenle (tek sinyal + tek cihaz).
   const [pSuffix, setPSuffix] = useState<string>("");
@@ -383,6 +563,7 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
               { key: "line", icon: "show_chart" },
               { key: "area", icon: "area_chart" },
               { key: "bar", icon: "bar_chart" },
+              { key: "heatmap", icon: "grid_on" },
             ] as { key: ChartType; icon: string }[]).map((ct) => (
               <button
                 key={ct.key}
@@ -409,7 +590,44 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
                 <div className="device-trend-gear-backdrop" onClick={() => setGearOpen(false)} />
                 <div className="device-trend-gear-panel">
                   <span className="device-trend-gear-title">{t("deviceDetail.charts.settings")}</span>
-                  {chartType !== "bar" ? (
+                  {chartType === "heatmap" ? (
+                    <>
+                      <div className="device-trend-heat-modes">
+                        <button
+                          type="button"
+                          className={`device-trend-heat-mode${heatmapMode === "alarm" ? " active" : ""}`}
+                          onClick={() => setHeatmapMode("alarm")}
+                        >
+                          {t("deviceDetail.charts.alarmDensity")}
+                        </button>
+                        <button
+                          type="button"
+                          className={`device-trend-heat-mode${heatmapMode === "value" ? " active" : ""}`}
+                          onClick={() => setHeatmapMode("value")}
+                        >
+                          {t("deviceDetail.charts.valueDensity")}
+                        </button>
+                      </div>
+                      {heatmapMode === "value" ? (
+                        <label className="device-trend-gear-row device-trend-gear-slider">
+                          <span>{t("deviceDetail.charts.signal")}</span>
+                          <select
+                            value={heatmapSignal || defs[0]?.suffix || ""}
+                            onChange={(e) => setHeatmapSignal(e.target.value)}
+                          >
+                            {suffixList
+                              .filter((s) => s.suffix !== "alarm_rate")
+                              .map((s) => (
+                                <option key={s.suffix} value={s.suffix}>
+                                  {s.label}{s.unit ? ` (${s.unit})` : ""}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <span className="device-trend-gear-note">{t("deviceDetail.charts.heatmapNote")}</span>
+                    </>
+                  ) : chartType !== "bar" ? (
                     <>
                       <label className="device-trend-gear-row">
                         <input type="checkbox" checked={settings.smooth} onChange={(e) => setSettings((s) => ({ ...s, smooth: e.target.checked }))} />
@@ -457,7 +675,8 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
 
       {/* ---- Ana govde: sol panel | grafik ---- */}
       <div className="device-trend-body">
-        {/* Sol sinyal paneli */}
+        {/* Sol sinyal paneli — heatmap 3 sabit kaynak gosterir, panel anlamsiz */}
+        {chartType !== "heatmap" ? (
         <aside className="device-trend-side">
           <div className="device-trend-side-head">
             <span>{t("deviceDetail.charts.signals")}</span>
@@ -495,10 +714,22 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
             )}
           </ul>
         </aside>
+        ) : null}
 
         {/* Grafik */}
         <div className="device-trend-chart">
-          {seriesKeys.length === 0 ? (
+          {chartType === "heatmap" ? (
+            // Heatmap: sinyal secimi gerekmez (3 sabit kaynak). heatData.cells kontrolu.
+            loading && heatData.cells.length === 0 ? (
+              <div className="device-trend-empty"><span className="btn-spinner" aria-hidden="true" /></div>
+            ) : error ? (
+              <div className="device-trend-empty is-error"><span className="material-symbols-outlined">error</span><p>{error}</p></div>
+            ) : heatData.cells.length === 0 ? (
+              <div className="device-trend-empty"><span className="material-symbols-outlined">grid_on</span><p>{t("deviceDetail.charts.noData")}</p></div>
+            ) : (
+              <ReactECharts echarts={echarts} option={chartOption} style={{ height: "100%", width: "100%" }} notMerge lazyUpdate />
+            )
+          ) : seriesKeys.length === 0 ? (
             <div className="device-trend-empty">
               <span className="material-symbols-outlined">show_chart</span>
               <p>{t("deviceDetail.charts.selectSignal")}</p>
