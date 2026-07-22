@@ -120,7 +120,7 @@ export function Header({
             </>
           );
         })()}
-        <nav className="header-nav header-nav--framed">
+        <nav className="header-nav">
           {NAV_ITEMS.map(({ page, key, Icon }) => {
             // Sistem Durumu yalnizca installer rolune gosterilir (route guard
             // App.tsx'te de var — URL/storage uzerinden dogrudan erisim engelli).
@@ -139,18 +139,16 @@ export function Header({
         </nav>
       </div>
 
-      {/* Orta: global cihaz + bolge aramasi */}
-      <HeaderSearch
-        devices={devices}
-        regions={regions}
-        deviceTopology={deviceTopology}
-        onOpenDevice={onOpenDevice}
-        onSelectRegion={onSelectRegion}
-      />
-
       <div className="header-right">
-        {/* Muhendislik/ayarlar: tum yetkili rollerde artik sadece cark ikonu
-            (yer kazanir, operator'da hic gozukmez -> arama saga yaslanir). */}
+        {/* Global cihaz + bolge aramasi — sag tarafta, cark'in solunda */}
+        <HeaderSearch
+          devices={devices}
+          regions={regions}
+          deviceTopology={deviceTopology}
+          onOpenDevice={onOpenDevice}
+          onSelectRegion={onSelectRegion}
+        />
+        {/* Muhendislik/ayarlar: tum yetkili rollerde artik sadece cark ikonu. */}
         {role === "engineer" || role === "installer" || role === "ops_manager" ? (
           <button
             className={`engineering-btn engineering-btn--icon-only ${isEngineeringView ? "active" : ""}`}
