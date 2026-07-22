@@ -398,6 +398,7 @@
     "detail": {
       "title": "Alarm Details",
       "selectHint": "Select an alarm from the list to view details.",
+      "tabDetail": "Detail",
       "openDevice": "Go to device detail",
       "sectionDetails": "Details",
       "sectionComments": "Comments",

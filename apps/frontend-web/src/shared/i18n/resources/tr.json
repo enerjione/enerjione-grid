@@ -398,6 +398,7 @@
     "detail": {
       "title": "Alarm Detayı",
       "selectHint": "Detay için soldan bir alarm seçin.",
+      "tabDetail": "Detay",
       "openDevice": "Cihaz detayına git",
       "sectionDetails": "Detaylar",
       "sectionComments": "Yorumlar",

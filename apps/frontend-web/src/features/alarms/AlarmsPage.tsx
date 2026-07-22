@@ -51,6 +51,7 @@ export function AlarmsPage({
   const [deviceFilter, setDeviceFilter] = useState<number | "all">("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedAlarmId, setSelectedAlarmId] = useState<number | null>(null);
+  const [panelTab, setPanelTab] = useState<"detail" | "comments">("detail");
   const [commentDraft, setCommentDraft] = useState("");
   const [commentsByAlarm, setCommentsByAlarm] = useState<Record<number, AlarmComment[]>>({});
   const [saving, setSaving] = useState(false);
@@ -295,6 +296,7 @@ export function AlarmsPage({
 
     return (
       <div className="alarm-detail">
+        {/* Sabit ust: baslik + kapat */}
         <header className="alarm-detail-top">
           <span className="alarm-detail-eyebrow">{t("alarms.detail.title")}</span>
           <button
@@ -319,6 +321,31 @@ export function AlarmsPage({
           </div>
         </div>
 
+        {/* Sekme cubugu: Detay | Yorumlar */}
+        <div className="alarm-detail-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            className={`alarm-detail-tab${panelTab === "detail" ? " active" : ""}`}
+            onClick={() => setPanelTab("detail")}
+          >
+            {t("alarms.detail.tabDetail")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`alarm-detail-tab${panelTab === "comments" ? " active" : ""}`}
+            onClick={() => setPanelTab("comments")}
+          >
+            {t("alarms.detail.sectionComments")}
+            <span className="alarm-detail-tab-count">{comments.length}</span>
+          </button>
+        </div>
+
+        {/* Kaydirilabilir govde — aktif sekmeye gore */}
+        <div className="alarm-detail-scroll">
+        {panelTab === "detail" ? (
+        <>
         {/* Bilgi grid: Baslangic / Sure / Atanan */}
         <div className="alarm-detail-metrics">
           <div className="alarm-detail-metric">
@@ -422,13 +449,10 @@ export function AlarmsPage({
             ) : null}
           </ul>
         </div>
-
-        {/* Yorumlar */}
+        </>
+        ) : (
+        /* ---- Yorumlar sekmesi ---- */
         <div className="alarm-detail-comments">
-          <div className="alarm-detail-comments-head">
-            <span className="alarm-detail-section-title">{t("alarms.detail.sectionComments")}</span>
-            <span className="alarm-detail-comments-count">{comments.length}</span>
-          </div>
           <div className="alarm-detail-comments-list">
             {comments.map((c) => (
               <div key={c.id} className="alarm-comment-card">
@@ -462,6 +486,8 @@ export function AlarmsPage({
               {saving ? t("alarms.detail.savingComment") : t("alarms.detail.saveComment")}
             </button>
           </div>
+        </div>
+        )}
         </div>
 
         {error ? <p className="error-text">{error}</p> : null}

@@ -3320,31 +3320,50 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   gap: 10px;
 }
 
-/* Split varyant: sol tablo alanı | sağ sabit detay paneli (görsel tasarım). */
+/* Split varyant: sol tablo alanı | sağ sabit detay paneli (görsel tasarım).
+   Sol alan viewport'u doldurur; tablo dikeyde tum bos alani kaplar. */
 .alarms-layout-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 400px;
   gap: 12px;
   align-items: start;
+  height: calc(100vh - 78px);
 }
 .alarms-main {
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
-/* Sağ panel yapışkan: sayfa kayarken görünür kalır. */
+/* Aktif alarm bolumu dikeyde esner; tablo kaydirilabilir govde. */
+.alarms-layout-split .alarms-section-active {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.alarms-layout-split .alarms-section-active .alarms-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Sağ panel yapışkan: sayfa kayarken görünür kalır. Panelin KENDİSİ scroll
+   olmaz; sabit üst (başlık+sekme) + iç kaydırılabilir gövde (.alarm-detail-scroll). */
 .alarms-side-panel {
   position: sticky;
   top: 12px;
   align-self: start;
-  max-height: calc(100vh - 90px);
-  overflow-y: auto;
+  height: calc(100vh - 90px);
+  overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   padding: 16px;
+  display: flex;
+  flex-direction: column;
 }
 .alarm-detail-empty {
   display: flex;
@@ -3359,11 +3378,36 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .alarm-detail-empty .material-symbols-outlined { font-size: 40px; opacity: 0.5; }
 .alarm-detail-empty h3 { margin: 0; font-size: 15px; color: #64748b; }
 /* ---- Alarm detay paneli (SCADA tarzi, referans gorsel) ---- */
-.alarm-detail { display: flex; flex-direction: column; gap: 16px; }
+/* Panel kolon: ust (baslik+heading+sekme) sabit, govde ic scroll. */
+.alarm-detail { display: flex; flex-direction: column; gap: 16px; height: 100%; min-height: 0; }
 .alarm-detail-top {
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;
+  flex: 0 0 auto;
 }
+/* Sekme cubugu */
+.alarm-detail-tabs {
+  display: flex; gap: 4px; background: #f1f5f9; padding: 3px; border-radius: 10px;
+  flex: 0 0 auto;
+}
+.alarm-detail-tab {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 10px; border: none; background: transparent; border-radius: 8px;
+  font-size: 13px; font-weight: 700; color: #64748b; cursor: pointer;
+}
+.alarm-detail-tab.active { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(15,23,42,0.1); }
+.alarm-detail-tab-count {
+  font-size: 11px; font-weight: 800; color: #64748b; background: #e2e8f0;
+  border-radius: 999px; padding: 0 7px; min-width: 18px; text-align: center;
+}
+.alarm-detail-tab.active .alarm-detail-tab-count { background: #f1f5f9; }
+/* Ic kaydirilabilir govde — panelin tek scroll alani */
+.alarm-detail-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 16px;
+  margin: 0 -4px; padding: 2px 4px;
+}
+.alarm-detail-heading { flex: 0 0 auto; }
 .alarm-detail-eyebrow { font-size: 13px; font-weight: 700; color: #475569; }
 .alarm-detail-close {
   display: inline-flex; align-items: center; justify-content: center;
@@ -3433,14 +3477,9 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .alarm-timeline-body { display: flex; flex-direction: column; gap: 1px; }
 .alarm-timeline-time { font-size: 12px; font-weight: 700; color: #0f172a; }
 .alarm-timeline-label { font-size: 13px; color: #64748b; }
-/* Yorumlar */
-.alarm-detail-comments { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px; }
-.alarm-detail-comments-head { display: flex; align-items: center; gap: 8px; }
-.alarm-detail-comments-count {
-  font-size: 11px; font-weight: 800; color: #64748b; background: #f1f5f9;
-  border-radius: 999px; padding: 1px 8px;
-}
-.alarm-detail-comments-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+/* Yorumlar sekmesi */
+.alarm-detail-comments { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.alarm-detail-comments-list { display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .alarm-detail-comments-empty { font-size: 12px; color: #94a3b8; text-align: center; padding: 10px; }
 .alarm-detail-comment-form { display: flex; flex-direction: column; gap: 8px; }
 .alarm-detail-comment-form textarea {
