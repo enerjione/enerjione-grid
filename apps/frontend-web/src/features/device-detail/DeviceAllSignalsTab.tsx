@@ -23,7 +23,7 @@ type Props = {
 const SOURCES: { key: SignalSource; label: string; tone: string; icon: string }[] = [
   { key: "master", label: "Master", tone: "master", icon: "dns" },
   { key: "sat01", label: "Satellite 01", tone: "green", icon: "settings_input_antenna" },
-  { key: "sat02", label: "Satellite 02", tone: "amber", icon: "settings_input_antenna" },
+  { key: "sat02", label: "Satellite 02", tone: "blue", icon: "settings_input_antenna" },
 ];
 
 const NUMBER_FORMATTER = new Intl.NumberFormat("tr-TR", {
@@ -95,7 +95,6 @@ export function DeviceAllSignalsTab({ device, values, gwOnline, sourceCounts }: 
     <div className="device-set">
       {SOURCES.map((src) => {
         const rows = bySource.get(src.key) ?? new Map();
-        const online = (sourceCounts[src.key] ?? 0) > 0 && gwOnline;
         const get = (suffix: string): SignalLiveRow | undefined => rows.get(suffix);
         const numOf = (suffix: string): number | undefined => {
           const v = get(suffix)?.value;
@@ -135,10 +134,6 @@ export function DeviceAllSignalsTab({ device, values, gwOnline, sourceCounts }: 
                   </span>
                 ) : null}
               </div>
-              <span className={`device-set-status ${online ? "is-online" : "is-off"}`}>
-                <span className="device-set-status-dot" aria-hidden="true" />
-                {online ? t("deviceDetail.online") : noData ? t("deviceDetail.set.noData") : t("deviceDetail.offline")}
-              </span>
             </header>
 
             {noData ? (

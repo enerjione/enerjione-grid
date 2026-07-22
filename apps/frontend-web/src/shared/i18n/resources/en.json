@@ -2221,7 +2221,9 @@
       "alarmDensity": "Alarm density",
       "valueDensity": "Value density",
       "alarmCount": "alarms",
-      "heatmapNote": "3 sources (Master/Sat01/Sat02) shown as rows; range auto-split into hourly/daily resolution."
+      "heatmapNote": "3 sources (Master/Sat01/Sat02) shown as rows; range auto-split into hourly/daily resolution.",
+      "live": "Live",
+      "liveHint": "Live mode: new data is appended to the chart in real time"
     },
     "config": {
       "dnp3Title": "DNP3 Settings",

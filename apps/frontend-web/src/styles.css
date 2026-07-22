@@ -23998,6 +23998,17 @@ th.event-col-category {
 /* Grafik tipi + ayar (gear) */
 .device-trend-typebar { display: inline-flex; align-items: center; gap: 8px; }
 .device-trend-types { display: inline-flex; gap: 2px; padding: 3px; background: #f1f5f9; border-radius: 9px; }
+/* Canli mod toggle */
+.device-trend-live { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; font-size: 12px; font-weight: 700; color: #64748b; cursor: pointer; transition: all 0.15s; }
+.device-trend-live:hover { border-color: #cbd5e1; }
+.device-trend-live.active { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+.device-trend-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; flex: 0 0 auto; }
+.device-trend-live-dot.is-on { background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,0.5); animation: trend-live-pulse 1.6s infinite; }
+@keyframes trend-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+  100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
 .device-trend-type {
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 30px;
@@ -24048,6 +24059,8 @@ th.event-col-category {
 
 /* Ana govde: sol panel | grafik */
 .device-trend-body { display: grid; grid-template-columns: 240px 1fr; gap: 12px; flex: 1; min-height: 0; }
+/* Heatmap: sol panel yok -> grafik tam genislik */
+.device-trend-body.is-heatmap { grid-template-columns: 1fr; }
 
 /* Sol sinyal paneli */
 .device-trend-side { display: flex; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; overflow: hidden; }
@@ -25209,10 +25222,12 @@ th.event-col-category {
 .device-set-card.tone-master::before { background: linear-gradient(90deg, #fcd34d, #f59e0b, #ea580c); }
 .device-set-card.tone-green::before { background: linear-gradient(90deg, #6ee7b7, #22c55e, #16a34a); }
 .device-set-card.tone-amber::before { background: linear-gradient(90deg, #fdba74, #f97316, #ea580c); }
+.device-set-card.tone-blue::before { background: linear-gradient(90deg, #7dd3fc, #38bdf8, #0284c7); }
 /* Baslik bolgesi hafif renk tonu (kaynaga gore) */
 .device-set-card.tone-master .device-set-head { background: linear-gradient(180deg, #fffbeb 0%, #fff 100%); }
 .device-set-card.tone-green .device-set-head { background: linear-gradient(180deg, #f0fdf4 0%, #fff 100%); }
 .device-set-card.tone-amber .device-set-head { background: linear-gradient(180deg, #fff7ed 0%, #fff 100%); }
+.device-set-card.tone-blue .device-set-head { background: linear-gradient(180deg, #f0f9ff 0%, #fff 100%); }
 .device-set-card.is-offline { opacity: 0.6; background: #f8fafc; }
 .device-set-card.is-offline:hover { transform: none; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
 
@@ -25233,6 +25248,7 @@ th.event-col-category {
 .device-set-card.tone-master .device-set-icon { background: #fef3c7; color: #d97706; }
 .device-set-card.tone-green .device-set-icon { background: #dcfce7; color: #16a34a; }
 .device-set-card.tone-amber .device-set-icon { background: #ffedd5; color: #ea580c; }
+.device-set-card.tone-blue .device-set-icon { background: #e0f2fe; color: #0284c7; }
 .device-set-title { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .device-set-name { font-size: 15px; font-weight: 800; color: #0f172a; }
 .device-set-serial { font-size: 12px; color: #94a3b8; font-weight: 600; font-variant-numeric: tabular-nums; }

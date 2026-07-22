@@ -25,7 +25,8 @@ import {
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 
-import { fetchDeviceHistory } from "../../shared/api";
+import { fetchDeviceHistory, API_BASE_URL } from "../../shared/api";
+import { useLiveValuesSocket } from "../../shared/useLiveValuesSocket";
 import type {
   HistoryBucket,
   SignalCatalogRow,
@@ -177,6 +178,8 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
     { cols: [], cells: [], max: 0 }
   );
 
+  const [live, setLive] = useState(false); // canli mod: WS ile anlik append
+  const [liveTick, setLiveTick] = useState(0); // heatmap canli: periyodik refetch tetigi
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [series, setSeries] = useState<
@@ -360,7 +363,43 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
     return () => {
       cancelled = true;
     };
-  }, [chartType, heatmapMode, heatmapSignal, defs, token, deviceCode, rangeKey, customOn, customFrom, customTo, t]);
+  }, [chartType, heatmapMode, heatmapSignal, defs, token, deviceCode, rangeKey, customOn, customFrom, customTo, t, liveTick]);
+
+  // ---- Canli mod: WS (line/area/bar append) + heatmap periyodik refetch ----
+  const liveDevices = useMemo(() => new Set([deviceCode]), [deviceCode]);
+  const { connectionState, registerHandler } = useLiveValuesSocket({
+    token,
+    apiBaseUrl: API_BASE_URL,
+    deviceCodes: liveDevices,
+    enabled: live && chartType !== "heatmap",
+  });
+
+  // WS mesaji -> ilgili seriye nokta ekle (kayan pencere degil; sadece append).
+  // seriesKeys[].seriesKey ("master.actual_current") <-> msg.signal_key eslesir.
+  useEffect(() => {
+    if (!live || chartType === "heatmap") return;
+    registerHandler((msg) => {
+      if (msg.device_code !== deviceCode || msg.value == null) return;
+      const ts = msg.source_timestamp ? new Date(msg.source_timestamp).getTime() : Date.now();
+      setSeries((prev) =>
+        prev.map((s) => {
+          const sk = seriesKeys.find((k) => k.id === s.id);
+          if (!sk || sk.seriesKey !== msg.signal_key) return s;
+          // Ayni timestamp tekrari gelirse ekleme (dedup son nokta).
+          const last = s.points[s.points.length - 1];
+          if (last && last[0] === ts) return s;
+          return { ...s, points: [...s.points, [ts, msg.value ?? null] as Point] };
+        })
+      );
+    });
+  }, [live, chartType, deviceCode, seriesKeys, registerHandler]);
+
+  // Heatmap canli: WS append anlamsiz (kova-bazli) -> 30sn'de bir refetch.
+  useEffect(() => {
+    if (!live || chartType !== "heatmap") return;
+    const id = window.setInterval(() => setLiveTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, [live, chartType]);
 
   // Cift Y-ekseni: ilk 2 farkli birim.
   const units = useMemo(() => {
@@ -380,9 +419,22 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
     if (chartType === "heatmap") {
       const rowLabels = ALL_SOURCES.map((s) => SOURCE_META[s].label);
       const isAlarm = heatmapMode === "alarm";
+      // Baslik: hangi deger gosteriliyor. Alarm -> "Alarm yogunlugu";
+      // Deger -> secili sinyalin etiketi (+ birim).
+      const valSuffix = heatmapSignal || defs[0]?.suffix || "actual_current";
+      const valCat = suffixCatalog.get(valSuffix);
+      const heatTitle = isAlarm
+        ? t("deviceDetail.charts.alarmDensity")
+        : `${valCat?.label ?? valSuffix}${valCat?.unit ? ` (${valCat.unit})` : ""}`;
       return {
         backgroundColor: "transparent",
         animationDuration: 300,
+        title: {
+          text: heatTitle,
+          left: "center",
+          top: 6,
+          textStyle: { color: "#0f172a", fontSize: 14, fontWeight: 700 },
+        },
         tooltip: {
           position: "top",
           backgroundColor: "rgba(255,255,255,0.98)",
@@ -394,12 +446,20 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
             const [ci, ri, v] = p.data;
             const label = rowLabels[ri];
             const time = heatData.cols[ci] ?? "";
-            const val = v == null ? "—" : isAlarm ? Math.round(v) : v.toFixed(1);
-            const suffix = isAlarm ? t("deviceDetail.charts.alarmCount") : "";
-            return `${label} · ${time}<br/>${p.marker}<b>${val}</b> ${suffix}`;
+            const val = v == null ? "—" : isAlarm ? String(Math.round(v)) : v.toFixed(1);
+            // Birim: alarm -> "alarm", deger -> secili sinyalin birimi.
+            const unit = isAlarm ? t("deviceDetail.charts.alarmCount") : (valCat?.unit ?? "");
+            return (
+              `<div style="min-width:120px">` +
+              `<div style="font-size:11px;color:#94a3b8;margin-bottom:4px">${label} · ${time}</div>` +
+              `<div style="display:flex;align-items:baseline;gap:5px">${p.marker}` +
+              `<span style="font-size:17px;font-weight:800;color:#0f172a">${val}</span>` +
+              (unit ? `<span style="font-size:12px;color:#64748b">${unit}</span>` : "") +
+              `</div></div>`
+            );
           },
         },
-        grid: { left: 8, right: 8, top: 12, bottom: 60, containLabel: true },
+        grid: { left: 8, right: 8, top: 42, bottom: 60, containLabel: true },
         xAxis: {
           type: "category",
           data: heatData.cols,
@@ -458,15 +518,53 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
     return {
       backgroundColor: "transparent",
       animationDuration: 300,
-      grid: { left: 8, right: units[1] != null ? 8 : 16, top: 16, bottom: 8, containLabel: true },
+      grid: { left: 8, right: units[1] != null ? 8 : 16, top: 16, bottom: 44, containLabel: true },
+      // Alt slider: zaman penceresini kaydir/yakinlastir (line/area/bar).
+      dataZoom: [
+        { type: "inside", filterMode: "none" as const },
+        {
+          type: "slider" as const,
+          height: 22,
+          bottom: 6,
+          filterMode: "none" as const,
+          borderColor: "rgba(148,163,184,0.35)",
+          fillerColor: "rgba(14,165,233,0.12)",
+          handleStyle: { color: "#0ea5e9" },
+          moveHandleStyle: { color: "#0ea5e9" },
+          textStyle: { color: "#64748b", fontSize: 10 },
+          dataBackground: { lineStyle: { color: "#cbd5e1" }, areaStyle: { color: "rgba(148,163,184,0.15)" } },
+        },
+      ],
       tooltip: {
         trigger: "axis",
         backgroundColor: "rgba(255,255,255,0.98)",
         borderColor: "#e2e8f0",
         borderWidth: 1,
         textStyle: { color: "#0f172a", fontSize: 12 },
-        extraCssText: "box-shadow: 0 6px 20px rgba(15,23,42,0.12); border-radius: 10px;",
+        extraCssText: "box-shadow: 0 6px 20px rgba(15,23,42,0.12); border-radius: 10px; padding: 8px 10px;",
         axisPointer: { type: "cross", lineStyle: { color: "rgba(148,163,184,0.5)" } },
+        // Her seri satiri: renk noktasi + etiket + deger + birim. Birim
+        // seri sirasindan (series[].unit) alinir; ECharts param.seriesIndex.
+        formatter: (params: { axisValueLabel?: string; axisValue?: number; seriesIndex: number; value: [number, number | null]; marker: string; seriesName: string }[]) => {
+          if (!params.length) return "";
+          const ts = params[0].axisValue;
+          const head = ts != null
+            ? new Date(ts).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+            : (params[0].axisValueLabel ?? "");
+          const rows = params.map((pt) => {
+            const v = Array.isArray(pt.value) ? pt.value[1] : null;
+            const unit = series[pt.seriesIndex]?.unit ?? "";
+            const valStr = v == null ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+            return (
+              `<div style="display:flex;align-items:center;gap:6px;margin-top:3px">${pt.marker}` +
+              `<span style="flex:1;color:#475569">${pt.seriesName}</span>` +
+              `<span style="font-weight:800;color:#0f172a">${valStr}</span>` +
+              (unit ? `<span style="color:#94a3b8;font-size:11px">${unit}</span>` : "") +
+              `</div>`
+            );
+          }).join("");
+          return `<div style="font-size:11px;color:#94a3b8;margin-bottom:2px">${head}</div>${rows}`;
+        },
       },
       xAxis: {
         type: "time",
@@ -558,6 +656,16 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
         </div>
         {/* Grafik tipi + ayarlar */}
         <div className="device-trend-typebar">
+          {/* Canli mod toggle — WS ile anlik guncelleme */}
+          <button
+            type="button"
+            className={`device-trend-live${live ? " active" : ""}`}
+            onClick={() => setLive((v) => !v)}
+            title={t("deviceDetail.charts.liveHint")}
+          >
+            <span className={`device-trend-live-dot${live && connectionState === "open" ? " is-on" : ""}`} aria-hidden="true" />
+            {t("deviceDetail.charts.live")}
+          </button>
           <div className="device-trend-types">
             {([
               { key: "line", icon: "show_chart" },
@@ -674,7 +782,7 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       </div>
 
       {/* ---- Ana govde: sol panel | grafik ---- */}
-      <div className="device-trend-body">
+      <div className={`device-trend-body${chartType === "heatmap" ? " is-heatmap" : ""}`}>
         {/* Sol sinyal paneli — heatmap 3 sabit kaynak gosterir, panel anlamsiz */}
         {chartType !== "heatmap" ? (
         <aside className="device-trend-side">

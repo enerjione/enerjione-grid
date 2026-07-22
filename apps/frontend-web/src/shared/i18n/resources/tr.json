@@ -2221,7 +2221,9 @@
       "alarmDensity": "Alarm yoğunluğu",
       "valueDensity": "Değer yoğunluğu",
       "alarmCount": "alarm",
-      "heatmapNote": "3 kaynak (Master/Sat01/Sat02) satır olarak gösterilir; aralık otomatik saat/gün çözünürlüğe bölünür."
+      "heatmapNote": "3 kaynak (Master/Sat01/Sat02) satır olarak gösterilir; aralık otomatik saat/gün çözünürlüğe bölünür.",
+      "live": "Canlı",
+      "liveHint": "Canlı mod: yeni veriler anlık olarak grafiğe eklenir"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",
