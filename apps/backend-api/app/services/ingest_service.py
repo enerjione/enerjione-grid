@@ -12,7 +12,7 @@ from app.models.gateway import Gateway
 from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.telemetry import Telemetry
 from app.schemas.telemetry import GatewayTelemetryBatch, TelemetryIn
-from app.services.outbox_service import enqueue_outbox_event, flush_outbox
+from app.services.outbox_service import enqueue_outbox_event
 from app.services.event_service import record_event
 
 
@@ -146,5 +146,10 @@ def _persist_readings(db: Session, readings: list[TelemetryIn]) -> int:
             dedup_key=message_id,
         )
         accepted += 1
-    flush_outbox(db, limit=max(accepted, 20))
+    # NOT: flush artik request yolunda DEGIL. Ingest sadece DB'ye yazar/commit
+    # eder; RabbitMQ yayinini arka plan outbox flush worker'i yapar (bkz.
+    # main.py _run_outbox_flush_worker). Boylece 200 cihaz yukunde ingest
+    # response'u senkron broker publish'i beklemez -> gateway "Read timed out"
+    # gitti. At-least-once korunur: satir DB'de published=False durur.
+    return accepted
     return accepted

@@ -17,7 +17,7 @@ from app.models import alarm, alarm_rule, api_key as api_key_model, backup as ba
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
-from app.services import alarm_reconciliation, backup_scheduler, telemetry_consumer, telemetry_retention
+from app.services import alarm_reconciliation, backup_scheduler, outbox_flush_worker, telemetry_consumer, telemetry_retention
 
 app = FastAPI(
     title=settings.app_name,
@@ -901,6 +901,19 @@ def start_telemetry_consumer():
 @app.on_event("shutdown")
 def stop_telemetry_consumer():
     telemetry_consumer.stop()
+
+
+@app.on_event("startup")
+def start_outbox_flush_worker():
+    """Outbox flush worker — telemetri yayinini ingest request yolundan ayirir.
+    Ingest sadece DB'ye yazar; bu worker arka planda RabbitMQ'ya yayinlar.
+    200 cihaz yukunde gateway 'Read timed out' onlenir."""
+    outbox_flush_worker.start()
+
+
+@app.on_event("shutdown")
+def stop_outbox_flush_worker():
+    outbox_flush_worker.stop()
 
 
 @app.on_event("startup")
