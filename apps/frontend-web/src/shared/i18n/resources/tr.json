@@ -463,6 +463,8 @@
       "history": "Durum geçmişi",
       "historyCreated": "Alarm oluştu",
       "historyAck": "Onaylandı",
+      "historyAssigned": "Atama yapıldı",
+      "historyComment": "Yorum eklendi",
       "historyReset": "Normale döndü",
       "historyPending": "Bekliyor · Operatör onayı",
       "assignTo": "Sorumluya Ata",

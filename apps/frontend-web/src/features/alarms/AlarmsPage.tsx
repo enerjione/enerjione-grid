@@ -389,6 +389,36 @@ export function AlarmsPage({
     const totalRepeat = counts.reduce((s, n) => s + n, 0);
     const maxCount = Math.max(1, ...counts);
 
+    // ---- Durum gecmisi: event log'dan bu alarma ait olaylar (yorum + atama dahil) ----
+    // metadata_json icindeki alarm_id === a.id eslesmesi. Alarm olusma (created_at)
+    // her zaman ilk, digerleri kronolojik.
+    type TlItem = { ts: number; label: string; kind: string };
+    const tlItems: TlItem[] = [
+      { ts: created.getTime(), label: t("alarms.detail.historyCreated"), kind: "created" },
+    ];
+    for (const ev of events) {
+      if (ev.category !== "alarm") continue;
+      let evAlarmId: number | null = null;
+      if (ev.metadata_json) {
+        try { evAlarmId = (JSON.parse(ev.metadata_json) as { alarm_id?: number }).alarm_id ?? null; } catch { /* yut */ }
+      }
+      if (evAlarmId !== a.id) continue;
+      const ts = new Date(ev.created_at).getTime();
+      const who = ev.actor_username ? ` · ${ev.actor_username}` : "";
+      if (ev.event_type === "alarm_acknowledged") tlItems.push({ ts, label: t("alarms.detail.historyAck") + who, kind: "ack" });
+      else if (ev.event_type === "alarm_assigned") tlItems.push({ ts, label: t("alarms.detail.historyAssigned") + who, kind: "assign" });
+      else if (ev.event_type === "alarm_comment_added") tlItems.push({ ts, label: t("alarms.detail.historyComment") + who, kind: "comment" });
+      else if (ev.event_type === "alarm_reset" || ev.event_type === "alarm_auto_cleared") tlItems.push({ ts, label: t("alarms.detail.historyReset") + who, kind: "reset" });
+    }
+    // Event log eksikse alarmin kendi damgalarindan tamamla (dedup).
+    if (a.acknowledged && a.acknowledged_at && !tlItems.some((x) => x.kind === "ack")) {
+      tlItems.push({ ts: new Date(a.acknowledged_at).getTime(), label: t("alarms.detail.historyAck"), kind: "ack" });
+    }
+    if (a.reset && a.reset_at && !tlItems.some((x) => x.kind === "reset")) {
+      tlItems.push({ ts: new Date(a.reset_at).getTime(), label: t("alarms.detail.historyReset"), kind: "reset" });
+    }
+    tlItems.sort((x, y) => x.ts - y.ts);
+
     return (
       <div className="alarm-detail">
         {/* Sabit ust: baslik + kapat */}
@@ -575,31 +605,15 @@ export function AlarmsPage({
         <div className="alarm-detail-timeline">
           <span className="alarm-detail-section-title">{t("alarms.detail.history")}</span>
           <ul className="alarm-timeline">
-            <li className="alarm-timeline-item is-created">
-              <span className="alarm-timeline-dot" />
-              <div className="alarm-timeline-body">
-                <span className="alarm-timeline-time">{fmtDate(a.created_at)} · {fmtTime(a.created_at)}</span>
-                <span className="alarm-timeline-label">{t("alarms.detail.historyCreated")}</span>
-              </div>
-            </li>
-            {a.acknowledged && a.acknowledged_at ? (
-              <li className="alarm-timeline-item is-ack">
+            {tlItems.map((item, i) => (
+              <li key={i} className={`alarm-timeline-item is-${item.kind}`}>
                 <span className="alarm-timeline-dot" />
                 <div className="alarm-timeline-body">
-                  <span className="alarm-timeline-time">{fmtDate(a.acknowledged_at)} · {fmtTime(a.acknowledged_at)}</span>
-                  <span className="alarm-timeline-label">{t("alarms.detail.historyAck")}</span>
+                  <span className="alarm-timeline-time">{fmtDate(new Date(item.ts).toISOString())} · {fmtTime(new Date(item.ts).toISOString())}</span>
+                  <span className="alarm-timeline-label">{item.label}</span>
                 </div>
               </li>
-            ) : null}
-            {a.reset && a.reset_at ? (
-              <li className="alarm-timeline-item is-reset">
-                <span className="alarm-timeline-dot" />
-                <div className="alarm-timeline-body">
-                  <span className="alarm-timeline-time">{fmtDate(a.reset_at)} · {fmtTime(a.reset_at)}</span>
-                  <span className="alarm-timeline-label">{t("alarms.detail.historyReset")}</span>
-                </div>
-              </li>
-            ) : null}
+            ))}
             {!a.acknowledged ? (
               <li className="alarm-timeline-item is-pending">
                 <span className="alarm-timeline-dot" />

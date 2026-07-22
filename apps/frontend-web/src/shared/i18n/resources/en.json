@@ -463,6 +463,8 @@
       "history": "Status history",
       "historyCreated": "Alarm raised",
       "historyAck": "Acknowledged",
+      "historyAssigned": "Assigned",
+      "historyComment": "Comment added",
       "historyReset": "Returned to normal",
       "historyPending": "Pending · Operator acknowledgement",
       "assignTo": "Assign to",

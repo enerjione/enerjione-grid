@@ -3408,9 +3408,9 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .alarm-detail-tab.active .alarm-detail-tab-count { background: #f1f5f9; }
 /* Ic kaydirilabilir govde — panelin tek scroll alani */
 .alarm-detail-scroll {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
   display: flex; flex-direction: column; gap: 16px;
-  margin: 0 -4px; padding: 2px 4px;
+  padding: 2px 0;
 }
 .alarm-detail-heading { flex: 0 0 auto; }
 .alarm-detail-eyebrow { font-size: 13px; font-weight: 700; color: #475569; }
@@ -3440,6 +3440,9 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .alarm-detail-sub-name { color: #0f172a; font-weight: 700; }
 .alarm-detail-sub-code { color: #64748b; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .alarm-detail-sub-source { color: #94a3b8; }
+/* Panel govdesinin ust bloklari sabit (timeline haric) — scroll sadece timeline'da */
+.alarm-detail-metrics, .alarm-detail-location, .alarm-detail-assign,
+.alarm-detail-cta, .alarm-detail-repeat { flex: 0 0 auto; }
 /* Ikonlu bilgi kartlari: 2x2 grid */
 .alarm-detail-metrics {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
@@ -3514,12 +3517,17 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 }
 .alarm-heatmap-legend .alarm-heatmap-cell { width: 11px; height: 11px; aspect-ratio: auto; }
 
-.alarm-detail-timeline { display: flex; flex-direction: column; gap: 12px; }
+/* Durum gecmisi: panel govdesinde ESNER ve KENDI icinde kayar (tek scroll) */
+.alarm-detail-timeline { display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 120px; }
 .alarm-detail-section-title {
   font-size: 11px; font-weight: 800; color: #64748b;
   text-transform: uppercase; letter-spacing: 0.05em;
+  flex: 0 0 auto;
 }
-.alarm-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.alarm-timeline {
+  list-style: none; margin: 0; padding: 2px 4px 2px 2px; display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+}
 .alarm-timeline-item { display: flex; gap: 13px; padding-bottom: 18px; position: relative; }
 .alarm-timeline-item:last-child { padding-bottom: 0; }
 /* Dikey birlestirme cizgisi */
@@ -3534,6 +3542,8 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 }
 .alarm-timeline-item.is-created .alarm-timeline-dot { border-color: #ef4444; background: #fee2e2; }
 .alarm-timeline-item.is-ack .alarm-timeline-dot { border-color: #3b82f6; background: #3b82f6; }
+.alarm-timeline-item.is-assign .alarm-timeline-dot { border-color: #8b5cf6; background: #8b5cf6; }
+.alarm-timeline-item.is-comment .alarm-timeline-dot { border-color: #64748b; background: #cbd5e1; }
 .alarm-timeline-item.is-reset .alarm-timeline-dot { border-color: #22c55e; background: #22c55e; }
 .alarm-timeline-item.is-pending .alarm-timeline-dot { border-style: dashed; }
 .alarm-timeline-body { display: flex; flex-direction: column; gap: 2px; }
