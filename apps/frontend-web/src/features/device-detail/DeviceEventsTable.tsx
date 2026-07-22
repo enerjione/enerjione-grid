@@ -37,7 +37,7 @@ type ChannelFilter = "all" | "master" | "sat01" | "sat02";
 const CHANNEL_META: Record<"master" | "sat01" | "sat02", { label: string; tone: string }> = {
   master: { label: "Master", tone: "master" },
   sat01: { label: "Sat 01", tone: "green" },
-  sat02: { label: "Sat 02", tone: "amber" },
+  sat02: { label: "Sat 02", tone: "blue" },
 };
 
 // SystemEvent metadata_json / message'dan kaynak kanal turet.

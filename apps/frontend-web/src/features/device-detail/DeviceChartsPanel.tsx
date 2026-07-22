@@ -282,21 +282,32 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       sinceMs = untilMs - range.minutes * 60_000;
     }
     const spanH = (untilMs - sinceMs) / 3600_000;
-    // <= 48 saat -> saatlik kova; aksi -> gunluk.
-    const byHour = spanH <= 48;
-    const bucketMs = byHour ? 3600_000 : 86_400_000;
-    // Historian bucket: alarm/deger icin uygun cozunurluk.
-    const histBucket: HistoryBucket = byHour ? "5m" : "1h";
+    // Kova cozunurlugunu aralik genisligine gore kademelendir (hedef ~10-40 kolon).
+    // Cok kisa aralikta (5-15dk) saatlik kova tek sutuna dusuyor -> dakika kovasi.
+    //   <=30dk -> 1dk | <=3s -> 5dk | <=48s -> saat | ustu -> gun
+    type Grain = "min" | "min5" | "hour" | "day";
+    const grain: Grain =
+      spanH <= 0.5 ? "min" : spanH <= 3 ? "min5" : spanH <= 48 ? "hour" : "day";
+    const bucketMs =
+      grain === "min" ? 60_000 : grain === "min5" ? 300_000 : grain === "hour" ? 3600_000 : 86_400_000;
+    // Historian bucket: kova cozunurlugune uygun (kovadan ince olmali).
+    const histBucket: HistoryBucket =
+      grain === "min" ? "10s" : grain === "min5" ? "1m" : grain === "hour" ? "5m" : "1h";
 
     // Kova sinirlarini olustur (kova basi timestamp -> kolon index).
+    // Guvenlik: cok sayida kova (uzun custom + dakika) okunmaz + agir olur;
+    // 400 kolonda kes (pratikte grain zaten kademeli, bu son emniyet).
+    const MAX_COLS = 400;
     const colStarts: number[] = [];
     const first = Math.floor(sinceMs / bucketMs) * bucketMs;
-    for (let ts = first; ts <= untilMs; ts += bucketMs) colStarts.push(ts);
+    for (let ts = first; ts <= untilMs && colStarts.length < MAX_COLS; ts += bucketMs) colStarts.push(ts);
     const colFmt = (ts: number): string => {
       const d = new Date(ts);
-      return byHour
-        ? `${String(d.getHours()).padStart(2, "0")}:00`
-        : `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      if (grain === "min" || grain === "min5") return `${hh}:${mm}`;
+      if (grain === "hour") return `${hh}:00`;
+      return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
     };
     const cols = colStarts.map(colFmt);
     const colIndex = (ts: number): number => {

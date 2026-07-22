@@ -23,7 +23,7 @@ type Props = {
 const SRC_META: Record<SignalSource, { label: string; tone: string }> = {
   master: { label: "Master", tone: "master" },
   sat01: { label: "Satellite 01", tone: "green" },
-  sat02: { label: "Satellite 02", tone: "amber" },
+  sat02: { label: "Satellite 02", tone: "blue" },
 };
 
 function sourceOf(signalKey: string | null | undefined): SignalSource {

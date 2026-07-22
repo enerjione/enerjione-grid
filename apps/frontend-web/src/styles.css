@@ -24702,6 +24702,8 @@ th.event-col-category {
 .device-channel.tone-green.active .material-symbols-outlined { color: #22c55e; }
 .device-channel.tone-amber.active { border-left-color: #f59e0b; color: #b45309; }
 .device-channel.tone-amber.active .material-symbols-outlined { color: #f59e0b; }
+.device-channel.tone-blue.active { border-left-color: #0ea5e9; color: #0369a1; }
+.device-channel.tone-blue.active .material-symbols-outlined { color: #0ea5e9; }
 
 .device-sidebar-reset {
   display: inline-flex;
@@ -25537,6 +25539,7 @@ th.event-col-category {
 .device-alarm-src.tone-master { background: #fef3c7; color: #b45309; }
 .device-alarm-src.tone-green { background: #dcfce7; color: #15803d; }
 .device-alarm-src.tone-amber { background: #fef3c7; color: #b45309; }
+.device-alarm-src.tone-blue { background: #e0f2fe; color: #0369a1; }
 .device-alarm-time { font-size: 12px; color: #94a3b8; font-variant-numeric: tabular-nums; }
 .device-alarm-badge {
   padding: 3px 10px;
@@ -26009,6 +26012,7 @@ th.event-col-category {
 .device-events-chan.tone-master { background: #fef3c7; color: #b45309; }
 .device-events-chan.tone-green { background: #dcfce7; color: #15803d; }
 .device-events-chan.tone-amber { background: #fef3c7; color: #b45309; }
+.device-events-chan.tone-blue { background: #e0f2fe; color: #0369a1; }
 .device-events-chan-none { color: #cbd5e1; }
 /* Kim kolonu sola hizali (Durum artik en basta, ortalanmaz) */
 .device-events-table.is-full td.device-events-who { width: 150px; text-align: left; }

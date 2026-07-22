@@ -51,7 +51,7 @@ type Props = {
 const CHANNELS: { key: SignalSource; label: string; tone: string }[] = [
   { key: "master", label: "Master", tone: "master" },
   { key: "sat01", label: "Satellite 01", tone: "green" },
-  { key: "sat02", label: "Satellite 02", tone: "amber" },
+  { key: "sat02", label: "Satellite 02", tone: "blue" },
 ];
 
 // RSSI -> sebeke sinyali (dBm). -70 ust iyi, -85 ust orta, alti zayif.
