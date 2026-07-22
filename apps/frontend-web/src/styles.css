@@ -3341,13 +3341,16 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   height: 100%;
 }
 /* Aktif alarm bolumu dikeyde esner; tablo kaydirilabilir govde. */
-.alarms-layout-split .alarms-section-active {
+/* Sekmeli tek section: dikeyde tum bos alani doldurur; tablo govdesi kendi
+   icinde kayar (sayfa scroll'u olmaz). */
+.alarms-layout-split .alarms-section {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  margin-top: 0;
 }
-.alarms-layout-split .alarms-section-active .alarms-table-wrap {
+.alarms-layout-split .alarms-section .alarms-table-wrap {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -3492,9 +3495,54 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   font-size: 13px; resize: vertical; font-family: inherit;
 }
 
-/* Filtre satiri kalabaliklasinca alta sar */
-.alarms-page-toolbar .alarms-filter-row { flex-wrap: wrap; }
-.alarms-page-toolbar .alarms-filter-row select { min-width: 120px; }
+/* Filtre satiri */
+.alarms-page-toolbar .alarms-filter-row { flex-wrap: nowrap; gap: 8px; }
+/* Filtrele butonu (acilir panel tetikleyici) */
+.alarms-filter-wrap { position: relative; }
+.alarms-filter-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 14px; border: 1px solid #e2e8f0; border-radius: 10px;
+  background: #fff; color: #334155; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.alarms-filter-btn:hover { border-color: #cbd5e1; }
+.alarms-filter-btn.has-active { border-color: #fdba74; color: #c2410c; }
+.alarms-filter-btn.open { border-color: #f97316; }
+.alarms-filter-badge {
+  font-size: 11px; font-weight: 800; color: #fff; background: #f97316;
+  border-radius: 999px; padding: 0 7px; min-width: 18px; text-align: center;
+}
+/* Acilir filtre paneli */
+.alarms-filter-panel {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+  width: 320px; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.18); padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.alarms-filter-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 800; color: #0f172a;
+}
+.alarms-filter-clear {
+  border: none; background: transparent; color: #ea580c; font-size: 12px;
+  font-weight: 700; cursor: pointer; padding: 2px 4px; border-radius: 6px;
+}
+.alarms-filter-clear:hover { background: #fff7ed; }
+.alarms-filter-field { display: flex; flex-direction: column; gap: 5px; }
+.alarms-filter-field > label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; }
+.alarms-filter-field select,
+.alarms-filter-field input[type="datetime-local"] {
+  padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 9px;
+  font-size: 13px; color: #334155; background: #fff; width: 100%;
+}
+.alarms-filter-daterow { display: flex; align-items: center; gap: 6px; }
+.alarms-filter-daterow input { flex: 1; min-width: 0; }
+.alarms-filter-daterow span { color: #94a3b8; flex: 0 0 auto; }
+.alarms-filter-quick { display: flex; gap: 5px; flex-wrap: wrap; }
+.alarms-filter-quick-btn {
+  padding: 4px 9px; border: 1px solid #e2e8f0; border-radius: 7px;
+  background: #fff; font-size: 11px; font-weight: 700; color: #64748b; cursor: pointer;
+}
+.alarms-filter-quick-btn.active { border-color: #f97316; background: #fff7ed; color: #c2410c; }
 
 /* Dar ekran: panel alta iner, tek kolon */
 @media (max-width: 1100px) {
@@ -15159,7 +15207,15 @@ th.event-col-category {
 
 .alarm-row td {
   transition: background 0.12s;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
+/* Seviyeye gore cok hafif satir tonu (referans gorsel: her satir soft renkli) */
+.alarm-row-level-critical td, .alarm-row-level-error td { background: rgba(239, 68, 68, 0.035); }
+.alarm-row-level-warning td { background: rgba(245, 158, 11, 0.035); }
+.alarm-row-level-info td { background: rgba(249, 115, 22, 0.03); }
+.alarm-row:hover td { background: rgba(148, 163, 184, 0.1); }
+.alarm-row.alarm-row-active td { background: rgba(59, 130, 246, 0.08) !important; }
 
 /* Sol renkli nokta hucresi — seviyeye gore timeline gostergesi */
 .alarm-th-dot { width: 28px; padding: 0 !important; }

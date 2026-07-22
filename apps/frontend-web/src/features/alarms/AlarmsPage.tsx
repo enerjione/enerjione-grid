@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ExternalLink, X } from "lucide-react";
+import { Check, ExternalLink, SlidersHorizontal, X } from "lucide-react";
 
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { TablePagination } from "../../components/TablePagination";
-import type { AlarmComment, AlarmEvent, DeviceRow, Region, SystemEvent, UserRead } from "../../shared/types";
+import type { AlarmComment, AlarmEvent, DeviceRow, Line, Region, SystemEvent, UserRead } from "../../shared/types";
 
 // Cihaz id -> topoloji (bolge/hat) — App.tsx deviceTopologyInfo map'i.
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
@@ -14,6 +14,7 @@ type Props = {
   users: UserRead[];
   devices: DeviceRow[];
   regions: Region[];
+  lines: Line[];
   deviceTopology: DeviceTopology;
   loading?: boolean;
   onAssign: (alarmId: number, assignedTo: string | null) => Promise<void>;
@@ -34,6 +35,7 @@ export function AlarmsPage({
   users,
   devices,
   regions,
+  lines,
   deviceTopology,
   loading,
   onAssign,
@@ -51,9 +53,14 @@ export function AlarmsPage({
   const [levelFilter, setLevelFilter] = useState<"all" | "critical" | "warning" | "info">("all");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned" | "unassigned">("all");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
+  const [dateFrom, setDateFrom] = useState<string>(""); // datetime-local
+  const [dateTo, setDateTo] = useState<string>("");
   const [regionFilter, setRegionFilter] = useState<number | "all">("all");
+  const [lineFilter, setLineFilter] = useState<number | "all">("all");
   const [deviceFilter, setDeviceFilter] = useState<number | "all">("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterWrapRef = useRef<HTMLDivElement | null>(null);
   const [selectedAlarmId, setSelectedAlarmId] = useState<number | null>(null);
   const [panelTab, setPanelTab] = useState<"detail" | "comments">("detail");
   const [commentDraft, setCommentDraft] = useState("");
@@ -134,13 +141,18 @@ export function AlarmsPage({
         : assignmentFilter === "assigned"
           ? Boolean(alarm.assigned_to)
           : !alarm.assigned_to;
+    const createdMs = new Date(alarm.created_at).getTime();
+    // Zaman: hizli on-ayar (1h/24h/7d) VE/VEYA ozel tarih araligi (from/to).
     let timeOk = true;
     if (timeFilter !== "all") {
       const spanMs = timeFilter === "1h" ? 3600_000 : timeFilter === "24h" ? 86_400_000 : 604_800_000;
-      timeOk = Date.now() - new Date(alarm.created_at).getTime() <= spanMs;
+      timeOk = Date.now() - createdMs <= spanMs;
     }
-    const regionOk =
-      regionFilter === "all" ? true : deviceTopology.get(alarm.device_id)?.regionId === regionFilter;
+    if (timeOk && dateFrom) timeOk = createdMs >= new Date(dateFrom).getTime();
+    if (timeOk && dateTo) timeOk = createdMs <= new Date(dateTo).getTime();
+    const topo = deviceTopology.get(alarm.device_id);
+    const regionOk = regionFilter === "all" ? true : topo?.regionId === regionFilter;
+    const lineOk = lineFilter === "all" ? true : topo?.lineId === lineFilter;
     const deviceOk = deviceFilter === "all" ? true : alarm.device_id === deviceFilter;
     // Durum: acik / onayli / normale-dondu-onay-bekliyor.
     const statusOk =
@@ -154,21 +166,45 @@ export function AlarmsPage({
     const dev = deviceLabelById.get(alarm.device_id);
     const text = `${alarm.title} ${alarm.description} ${alarm.device_id} ${dev?.name ?? ""} ${dev?.code ?? ""}`.toLowerCase();
     const searchOk = search.trim() ? text.includes(search.trim().toLowerCase()) : true;
-    return levelOk && assignmentOk && timeOk && regionOk && deviceOk && statusOk && searchOk;
+    return levelOk && assignmentOk && timeOk && regionOk && lineOk && deviceOk && statusOk && searchOk;
+  };
+
+  // Aktif (varsayilandan farkli) filtre sayisi — Filtrele butonu rozeti.
+  const activeFilterCount =
+    (timeFilter !== "all" ? 1 : 0) +
+    (dateFrom ? 1 : 0) +
+    (dateTo ? 1 : 0) +
+    (regionFilter !== "all" ? 1 : 0) +
+    (lineFilter !== "all" ? 1 : 0) +
+    (deviceFilter !== "all" ? 1 : 0) +
+    (levelFilter !== "all" ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0) +
+    (assignmentFilter !== "all" ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setTimeFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setRegionFilter("all");
+    setLineFilter("all");
+    setDeviceFilter("all");
+    setLevelFilter("all");
+    setStatusFilter("all");
+    setAssignmentFilter("all");
   };
 
   // Aktif alarmlar: acik VEYA onaylanmis-ama-hala-aktif (reset degil).
   const activeAlarms = useMemo(
     () => alarms.filter((a) => !a.reset && filterPredicate(a)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [alarms, search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, deviceLabelById]
+    [alarms, search, levelFilter, assignmentFilter, timeFilter, dateFrom, dateTo, regionFilter, lineFilter, deviceFilter, statusFilter, deviceLabelById]
   );
 
   // Normale donenler: reset olmus ama henuz onaylanmamis (gorulmemis).
   const resolvedAlarms = useMemo(
     () => alarms.filter((a) => a.reset && !a.acknowledged && filterPredicate(a)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [alarms, search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, deviceLabelById]
+    [alarms, search, levelFilter, assignmentFilter, timeFilter, dateFrom, dateTo, regionFilter, lineFilter, deviceFilter, statusFilter, deviceLabelById]
   );
 
   // Gecmis: event log'dan alarm kategorili olaylar (olustu/onaylandi/normale dondu).
@@ -185,7 +221,7 @@ export function AlarmsPage({
 
   useEffect(() => {
     setPage(1);
-  }, [search, levelFilter, assignmentFilter, timeFilter, regionFilter, deviceFilter, statusFilter, pageSize, activeTab]);
+  }, [search, levelFilter, assignmentFilter, timeFilter, dateFrom, dateTo, regionFilter, lineFilter, deviceFilter, statusFilter, pageSize, activeTab]);
 
   const pagedTabAlarms = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -199,6 +235,16 @@ export function AlarmsPage({
     if (tabAlarms.length === 0) return;
     setSelectedAlarmId(tabAlarms[0].id);
   }, [tabAlarms, selectedAlarmId, activeTab]);
+
+  // Filtre popover: dis tik ile kapat.
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!filterWrapRef.current?.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [filterOpen]);
 
   // Secili alarmin yorumlarini yukle.
   useEffect(() => {
@@ -523,46 +569,113 @@ export function AlarmsPage({
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="alarms-filter-row">
-            <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}>
-              <option value="all">{t("alarms.filter.timeAll")}</option>
-              <option value="1h">{t("alarms.filter.time1h")}</option>
-              <option value="24h">{t("alarms.filter.time24h")}</option>
-              <option value="7d">{t("alarms.filter.time7d")}</option>
-            </select>
-            <select
-              value={regionFilter === "all" ? "all" : String(regionFilter)}
-              onChange={(e) => setRegionFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
-            >
-              <option value="all">{t("alarms.filter.regionAll")}</option>
-              {regions.map((r) => (<option key={r.id} value={r.id}>{r.name}</option>))}
-            </select>
-            <select
-              value={deviceFilter === "all" ? "all" : String(deviceFilter)}
-              onChange={(e) => setDeviceFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
-            >
-              <option value="all">{t("alarms.filter.deviceAll")}</option>
-              {devices.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-            </select>
-            <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value as typeof levelFilter)}>
-              <option value="all">{t("alarms.filterAllLevels")}</option>
-              <option value="critical">{t("alarms.level.critical")}</option>
-              <option value="warning">{t("alarms.level.warning")}</option>
-              <option value="info">{t("alarms.level.info")}</option>
-            </select>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
-              <option value="all">{t("alarms.filter.statusAll")}</option>
-              <option value="open">{t("alarms.filter.statusOpen")}</option>
-              <option value="ack">{t("alarms.filter.statusAck")}</option>
-              <option value="pendingAck">{t("alarms.state.pendingAck")}</option>
-            </select>
-            <select
-              value={assignmentFilter}
-              onChange={(e) => setAssignmentFilter(e.target.value as typeof assignmentFilter)}
-            >
-              <option value="all">{t("alarms.filterAllAssignments")}</option>
-              <option value="assigned">{t("alarms.assigned")}</option>
-              <option value="unassigned">{t("alarms.unassigned")}</option>
-            </select>
+            {/* Filtrele: acilir panel (tarih araligi + bolge + hat + cihaz + seviye + durum + atama) */}
+            <div className="alarms-filter-wrap" ref={filterWrapRef}>
+              <button
+                type="button"
+                className={`alarms-filter-btn${activeFilterCount > 0 ? " has-active" : ""}${filterOpen ? " open" : ""}`}
+                onClick={() => setFilterOpen((o) => !o)}
+              >
+                <SlidersHorizontal size={16} />
+                {t("alarms.filterBtn")}
+                {activeFilterCount > 0 ? <span className="alarms-filter-badge">{activeFilterCount}</span> : null}
+              </button>
+              {filterOpen ? (
+                <div className="alarms-filter-panel">
+                  <div className="alarms-filter-panel-head">
+                    <span>{t("alarms.filterBtn")}</span>
+                    {activeFilterCount > 0 ? (
+                      <button type="button" className="alarms-filter-clear" onClick={clearAllFilters}>
+                        {t("alarms.filterClear")}
+                      </button>
+                    ) : null}
+                  </div>
+                  {/* Tarih araligi */}
+                  <div className="alarms-filter-field">
+                    <label>{t("alarms.filter.dateRange")}</label>
+                    <div className="alarms-filter-daterow">
+                      <input type="datetime-local" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label={t("alarms.filter.dateFrom")} />
+                      <span>→</span>
+                      <input type="datetime-local" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label={t("alarms.filter.dateTo")} />
+                    </div>
+                    <div className="alarms-filter-quick">
+                      {(["all", "1h", "24h", "7d"] as TimeFilter[]).map((tf) => (
+                        <button
+                          key={tf}
+                          type="button"
+                          className={`alarms-filter-quick-btn${timeFilter === tf ? " active" : ""}`}
+                          onClick={() => { setTimeFilter(tf); setDateFrom(""); setDateTo(""); }}
+                        >
+                          {t(`alarms.filter.time${tf === "all" ? "All" : tf === "1h" ? "1h" : tf === "24h" ? "24h" : "7d"}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Bolge */}
+                  <div className="alarms-filter-field">
+                    <label>{t("alarms.filter.region")}</label>
+                    <select
+                      value={regionFilter === "all" ? "all" : String(regionFilter)}
+                      onChange={(e) => { setRegionFilter(e.target.value === "all" ? "all" : Number(e.target.value)); setLineFilter("all"); }}
+                    >
+                      <option value="all">{t("alarms.filter.regionAll")}</option>
+                      {regions.map((r) => (<option key={r.id} value={r.id}>{r.name}</option>))}
+                    </select>
+                  </div>
+                  {/* Hat (secili bolgeye gore filtreli) */}
+                  <div className="alarms-filter-field">
+                    <label>{t("alarms.filter.line")}</label>
+                    <select
+                      value={lineFilter === "all" ? "all" : String(lineFilter)}
+                      onChange={(e) => setLineFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+                    >
+                      <option value="all">{t("alarms.filter.lineAll")}</option>
+                      {lines
+                        .filter((l) => regionFilter === "all" || l.region_id === regionFilter)
+                        .map((l) => (<option key={l.id} value={l.id}>{l.name}</option>))}
+                    </select>
+                  </div>
+                  {/* Cihaz */}
+                  <div className="alarms-filter-field">
+                    <label>{t("alarms.filter.device")}</label>
+                    <select
+                      value={deviceFilter === "all" ? "all" : String(deviceFilter)}
+                      onChange={(e) => setDeviceFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+                    >
+                      <option value="all">{t("alarms.filter.deviceAll")}</option>
+                      {devices.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                    </select>
+                  </div>
+                  {/* Seviye + Durum + Atama */}
+                  <div className="alarms-filter-field">
+                    <label>{t("alarms.table.level")}</label>
+                    <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value as typeof levelFilter)}>
+                      <option value="all">{t("alarms.filterAllLevels")}</option>
+                      <option value="critical">{t("alarms.level.critical")}</option>
+                      <option value="warning">{t("alarms.level.warning")}</option>
+                      <option value="info">{t("alarms.level.info")}</option>
+                    </select>
+                  </div>
+                  <div className="alarms-filter-field">
+                    <label>{t("alarms.table.status")}</label>
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
+                      <option value="all">{t("alarms.filter.statusAll")}</option>
+                      <option value="open">{t("alarms.filter.statusOpen")}</option>
+                      <option value="ack">{t("alarms.filter.statusAck")}</option>
+                      <option value="pendingAck">{t("alarms.state.pendingAck")}</option>
+                    </select>
+                  </div>
+                  <div className="alarms-filter-field">
+                    <label>{t("alarms.table.assignee")}</label>
+                    <select value={assignmentFilter} onChange={(e) => setAssignmentFilter(e.target.value as typeof assignmentFilter)}>
+                      <option value="all">{t("alarms.filterAllAssignments")}</option>
+                      <option value="assigned">{t("alarms.assigned")}</option>
+                      <option value="unassigned">{t("alarms.unassigned")}</option>
+                    </select>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               className="secondary-btn action-btn"

@@ -2278,6 +2278,7 @@ export function App() {
                 users={users}
                 devices={devices}
                 regions={gridSnapshot?.regions ?? []}
+                lines={gridSnapshot?.lines ?? []}
                 deviceTopology={deviceTopologyInfo}
                 loading={alarmsLoading}
                 onAssign={handleAssignAlarm}
