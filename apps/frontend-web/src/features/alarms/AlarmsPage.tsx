@@ -82,14 +82,26 @@ export function AlarmsPage({
     return map;
   }, [devices]);
 
-  /** Referans gorsel: seri no (kod) ustte, kaynak (Master/Sat) altta. */
+  /** Cihaz hucresi: ad + kod ustte, kaynak · bolge · hat altta (bulunabilirlik). */
   const renderDeviceSourceCell = (deviceId: number, signalKey: string | null | undefined) => {
     const info = deviceLabelById.get(deviceId);
     const src = sourceOf(signalKey);
+    const topo = deviceTopology.get(deviceId);
+    // Alt satir: kaynak · bolge · hat (dolu olanlar birlestirilir).
+    const metaParts = [
+      src?.label,
+      topo?.regionName || null,
+      topo?.lineName || null,
+    ].filter(Boolean);
     return (
       <div className="alarm-devsource-cell">
-        <span className="alarm-devsource-code">{info ? info.code : `#${deviceId}`}</span>
-        <span className="alarm-devsource-src">{src ? src.label : "—"}</span>
+        <span className="alarm-devsource-name">
+          {info ? info.name : `#${deviceId}`}
+          {info ? <span className="alarm-devsource-code"> · {info.code}</span> : null}
+        </span>
+        <span className="alarm-devsource-src">
+          {metaParts.length > 0 ? metaParts.join(" · ") : "—"}
+        </span>
       </div>
     );
   };
@@ -768,7 +780,6 @@ export function AlarmsPage({
               <table className="values-table alarms-page-table">
                 <thead>
                   <tr>
-                    <th scope="col" className="alarm-th-dot" aria-label="" />
                     <th scope="col">{t("alarms.table.date")}</th>
                     <th scope="col">{t("alarms.table.level")}</th>
                     <th scope="col">{t("alarms.table.deviceSource")}</th>
@@ -792,9 +803,6 @@ export function AlarmsPage({
                         className={`alarm-row ${levelClass} ${selectedClass}`.trim()}
                         onClick={() => setSelectedAlarmId(alarm.id)}
                       >
-                        <td className="alarm-cell-dot">
-                          <span className={`alarm-row-dot level-dot-${alarm.level.toLowerCase()}`} />
-                        </td>
                         <td className="alarm-cell-date">
                           <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
                           <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
@@ -812,20 +820,34 @@ export function AlarmsPage({
                         <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
                         <td className="alarm-cell-duration">{rowDuration}</td>
                         <td className="actions-cell alarm-actions-cell">
-                          <button
-                            type="button"
-                            className="alarm-row-inspect"
-                            onClick={(e) => { e.stopPropagation(); setSelectedAlarmId(alarm.id); }}
-                          >
-                            {t("alarms.actions.inspect")}
-                          </button>
+                          <div className="alarm-row-actions">
+                            {/* Hizli islem: onaysizsa Onayla; her zaman Incele (panel acar) */}
+                            {!alarm.acknowledged ? (
+                              <button
+                                type="button"
+                                className="alarm-row-ack"
+                                onClick={(e) => { e.stopPropagation(); setSelectedAlarmId(alarm.id); void handleAcknowledge(alarm.id); }}
+                                title={t("alarms.actions.acknowledge")}
+                              >
+                                <Check size={15} />
+                                {t("alarms.actions.acknowledge")}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="alarm-row-inspect"
+                              onClick={(e) => { e.stopPropagation(); setSelectedAlarmId(alarm.id); }}
+                            >
+                              {t("alarms.actions.inspect")}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
                   })}
                   {tabAlarms.length === 0 && !loading ? (
                     <tr>
-                      <td colSpan={9} className="alarms-empty-cell">
+                      <td colSpan={8} className="alarms-empty-cell">
                         {activeTab === "resolved" ? t("alarms.noPending") : t("alarms.noActive")}
                       </td>
                     </tr>
