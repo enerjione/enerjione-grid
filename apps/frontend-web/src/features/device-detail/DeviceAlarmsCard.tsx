@@ -66,12 +66,14 @@ export function DeviceAlarmsCard({ alarms, activeSource, limit = 50 }: Props) {
         const src = sourceOf(a.signal_key);
         const tone = levelTone(a.level);
         const meta = SRC_META[src];
-        const done = a.reset || a.acknowledged;
+        // SCADA durum: onaylanmis ama hala aktif (reset olmadi) -> "Onaylandi",
+        // aksi -> acik alarm (seviyeye gore). Reset olanlar zaten listede yok.
+        const acked = a.acknowledged;
         return (
-          <li key={a.id} className={`device-alarm-row tone-${tone}${done ? " is-done" : ""}`}>
-            <span className={`device-alarm-icon tone-${tone}`}>
+          <li key={a.id} className={`device-alarm-row tone-${tone}${acked ? " is-acked" : ""}`}>
+            <span className={`device-alarm-icon tone-${tone}${acked ? " is-acked" : ""}`}>
               <span className="material-symbols-outlined">
-                {done ? "check_circle" : tone === "err" ? "error" : "warning"}
+                {acked ? "task_alt" : tone === "err" ? "error" : "warning"}
               </span>
             </span>
             <div className="device-alarm-body">
@@ -86,10 +88,15 @@ export function DeviceAlarmsCard({ alarms, activeSource, limit = 50 }: Props) {
                     minute: "2-digit",
                   })}
                 </span>
+                {acked && a.acknowledged_at ? (
+                  <span className="device-alarm-acked-at">
+                    · {t("deviceDetail.alarms.ackedAt")} {formatDateTime(a.acknowledged_at, { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                ) : null}
               </span>
             </div>
-            {done ? (
-              <span className="device-alarm-badge is-done">{t("deviceDetail.alarms.cleared")}</span>
+            {acked ? (
+              <span className="device-alarm-badge is-acked">{t("deviceDetail.alarms.acknowledged")}</span>
             ) : (
               <span className={`device-alarm-badge tone-${tone}`}>
                 {t(`deviceDetail.alarms.level.${tone}`)}

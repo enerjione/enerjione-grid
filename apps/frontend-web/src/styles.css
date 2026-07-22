@@ -25873,6 +25873,11 @@ th.event-col-category {
 .device-alarm-row.tone-warn { border-left-color: #f59e0b; background: #fffbeb; }
 .device-alarm-row.tone-info { border-left-color: #3b82f6; }
 .device-alarm-row.is-done { background: #fff; border-left-color: #cbd5e1; opacity: 0.75; }
+/* Onaylandi ama hala aktif (reset degil): soluk degil, mavi vurgu */
+.device-alarm-row.is-acked { border-left-color: #3b82f6; }
+.device-alarm-icon.is-acked { color: #2563eb !important; }
+.device-alarm-acked-at { font-size: 11px; color: #2563eb; font-weight: 600; }
+.device-alarm-badge.is-acked { background: #dbeafe; color: #1d4ed8; }
 .device-alarm-icon { display: inline-flex; }
 .device-alarm-icon .material-symbols-outlined { font-size: 20px; }
 .device-alarm-icon.tone-err { color: #dc2626; }

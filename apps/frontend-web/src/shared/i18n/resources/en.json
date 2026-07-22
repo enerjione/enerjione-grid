@@ -2392,6 +2392,8 @@
       "title": "ALARMS · {{source}}",
       "none": "No active alarms for {{source}}",
       "cleared": "Cleared",
+      "acknowledged": "Acknowledged",
+      "ackedAt": "ack",
       "level": {
         "err": "Critical",
         "warn": "Warning",

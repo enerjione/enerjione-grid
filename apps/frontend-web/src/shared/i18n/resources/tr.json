@@ -2392,6 +2392,8 @@
       "title": "ALARMLAR · {{source}}",
       "none": "{{source}} için aktif alarm yok",
       "cleared": "Giderildi",
+      "acknowledged": "Onaylandı",
+      "ackedAt": "onay",
       "level": {
         "err": "Kritik",
         "warn": "Uyarı",
