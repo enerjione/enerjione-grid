@@ -3611,7 +3611,6 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   background: #fff;
 }
 
-.alarm-actions-th,
 .alarm-actions-cell {
   text-align: right;
   white-space: nowrap;
@@ -15523,10 +15522,9 @@ th.event-col-category {
 
 /* İşlem sutunu: butonlar hucre icinde, tasmasin */
 .alarm-actions-th {
-  text-align: right;
+  text-align: center !important;
   white-space: nowrap;
   width: 200px;
-  padding-right: 16px;
 }
 
 .alarm-actions-cell {
