@@ -122,29 +122,6 @@ def _persist_message(payload: dict[str, Any]) -> None:
             )
 
         db.add(telemetry)
-        # Historian: okunan degeri uzun-sureli arsive de yaz (TimescaleDB
-        # hypertable, bkz. telemetry_history modeli + migration 0007). Ayni
-        # commit'te; ON CONFLICT DO NOTHING ile composite PK (device_id,
-        # signal_key, source_timestamp) cakismasi ana telemetry INSERT'ini
-        # rollback ETMEZ — historian ikincil, canli akisi bozmamali.
-        from sqlalchemy.dialects.postgresql import insert as _pg_insert
-
-        from app.models.telemetry_history import TelemetryHistory
-
-        db.execute(
-            _pg_insert(TelemetryHistory)
-            .values(
-                device_id=telemetry.device_id,
-                signal_key=telemetry.signal_key,
-                value=telemetry.value,
-                value_string=telemetry.value_string,
-                quality=telemetry.quality,
-                source_timestamp=telemetry.source_timestamp,
-            )
-            .on_conflict_do_nothing(
-                index_elements=["device_id", "signal_key", "source_timestamp"]
-            )
-        )
         db.add(
             ProcessedMessage(
                 consumer_name=CONSUMER_NAME,
@@ -152,6 +129,10 @@ def _persist_message(payload: dict[str, Any]) -> None:
                 processed_at=datetime.now(timezone.utc),
             )
         )
+        # Historian INSERT'i BURADA YAPILMAZ — canli Telemetry commit'ini
+        # (ve dolayisiyla WS broadcast'ini) TimescaleDB hypertable yazimi
+        # bloke etmesin diye ayri commit'e (write_historian) tasindi.
+        # Bu commit sadece canli veri (Telemetry + device status) — hizli.
         try:
             db.commit()
         except IntegrityError:
@@ -204,6 +185,50 @@ def _persist_message(payload: dict[str, Any]) -> None:
         db.close()
 
 
+def _write_historian(payload: dict[str, Any]) -> None:
+    """Historian (TimescaleDB hypertable) yazimi — canli akistan AYRI commit.
+
+    _persist_message + WS broadcast tamamlandiktan SONRA cagirilir. Boylece
+    yavas hypertable INSERT'i canli Telemetry commit'ini ve WS'i geciktirmez.
+    ON CONFLICT DO NOTHING ile idempotent (redeliver/paralel guvenli). Hata
+    yutulur — historian ikincil, canli akisi bozmamali.
+    """
+    try:
+        reading = TelemetryIn(**payload)
+    except ValidationError:
+        return  # gecersiz payload zaten _persist_message'te loglandi
+    db = SessionLocal()
+    try:
+        device = db.scalar(select(Device).where(Device.code == reading.device_code))
+        if device is None:
+            return
+        from sqlalchemy.dialects.postgresql import insert as _pg_insert
+
+        from app.services.tag_engine_service import normalize_quality
+        from app.models.telemetry_history import TelemetryHistory
+
+        db.execute(
+            _pg_insert(TelemetryHistory)
+            .values(
+                device_id=device.id,
+                signal_key=reading.signal_key,
+                value=reading.value,
+                value_string=reading.value_string,
+                quality=normalize_quality(reading.quality),
+                source_timestamp=reading.source_timestamp,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["device_id", "signal_key", "source_timestamp"]
+            )
+        )
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        logger.debug("historian_write_failed", exc_info=True)
+    finally:
+        db.close()
+
+
 def _consume_loop() -> None:
     """JetStream'den `hsl.telemetry.raw.>` subject'ini dinler.
 
@@ -237,16 +262,18 @@ def _consume_loop() -> None:
                 async def _handle(msg) -> None:  # noqa: ANN001
                     try:
                         payload = json.loads(msg.data.decode("utf-8"))
-                        # SIRA ONEMLI: persist ONCE, sonra WS broadcast.
-                        # Eski sira (WS once) DB hatasi durumunda nak() ->
-                        # JetStream redeliver -> WS ayni degeri ikinci kez
-                        # yayinlar (duplicate frontend goruntusu). Persist
-                        # succeed olmadan WS yapilmaz; idempotent davranis.
+                        # SIRA: (1) canli persist (Telemetry+device, hizli commit)
+                        # -> (2) WS broadcast (anlik) -> (3) historian (ayri, yavas
+                        # commit). Boylece frontend en dusuk gecikmeyle veriyi alir;
+                        # TimescaleDB hypertable yazimi WS'i BEKLETMEZ.
+                        # WS yine persist SONRASI — DB-fail'de duplicate riski yok.
                         _persist_message(payload)
                         try:
                             ws_broadcaster.broadcast(payload)
                         except Exception:  # noqa: BLE001 — WS hatasi consume akisini bozmasin
                             logger.debug("ws_broadcast_failed", exc_info=True)
+                        # Historian: WS'ten SONRA, ayri commit — canli akisi bloke etmez.
+                        _write_historian(payload)
                         await msg.ack()
                     except Exception as exc:  # noqa: BLE001
                         # Mesajin kacinci delivery oldugunu kontrol et — son

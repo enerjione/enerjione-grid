@@ -20,7 +20,7 @@ class Device(Base):
     dnp3_outstation_port: Mapped[int] = mapped_column(Integer, default=20001)
     dnp3_address: Mapped[int] = mapped_column(Integer, default=1)
     dnp3_extended: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    poll_interval_sec: Mapped[int] = mapped_column(Integer, default=5)
+    poll_interval_sec: Mapped[int] = mapped_column(Integer, default=2)
     timeout_ms: Mapped[int] = mapped_column(Integer, default=3000)
     retry_count: Mapped[int] = mapped_column(Integer, default=2)
     signal_profile: Mapped[str] = mapped_column(String(80), default="horstmann_sn2_fixed")

@@ -15,7 +15,7 @@ class DeviceScalarBase(BaseModel):
     ip_address: str
     dnp3_outstation_port: int = Field(default=20001, ge=1, le=65535)
     dnp3_address: int = 1
-    poll_interval_sec: int = 5
+    poll_interval_sec: int = 2
     timeout_ms: int = 3000
     retry_count: int = 2
     signal_profile: str = "horstmann_sn2_fixed"
