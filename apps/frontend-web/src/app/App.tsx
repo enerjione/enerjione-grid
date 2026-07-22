@@ -24,7 +24,6 @@ import { DeviceSidebar } from "../features/devices/DeviceSidebar";
 import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
-import { GridOverviewPage } from "../features/dashboard/GridOverviewPage";
 import { TabBar } from "../features/tabs/TabBar";
 import { useTabs } from "../features/tabs/useTabs";
 import { routeToPageState, type PageMode, type EngineeringPage } from "../features/tabs/tabModel";
@@ -163,7 +162,6 @@ import type {
   UserRole
 } from "../shared/types";
 
-type TabId = "map" | "values";
 // PageMode / EngineeringPage tipleri tabModel'den geliyor (tek kaynak). Sekme
 // sistemi bunlari uretir; App aktif sekmeden turetir.
 
@@ -203,8 +201,6 @@ export function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<number>(0);
   const toast = useToast();
   const { t } = useTranslation();
-  // Harita ana sayfada her oturumda varsayılan olsun — persist edilmez.
-  const [activeTab, setActiveTab] = useState<TabId>("map");
 
   // Chrome tarzi sekme sistemi. Acik sekmeler + aktif sekme burada; pageMode/
   // engineeringPage aktif sekmeden TURETILIR (asagida). Session yokken login
@@ -753,7 +749,6 @@ export function App() {
     // WS bagli degilken (WS unsupported / nginx config eksik): polling 5sn
     // (degerler "yeterince" canli gozuksun).
     if (pageMode !== "home") return;
-    if (activeTab !== "values" && activeTab !== "map") return;
     void handleRefreshSignalLive();
     const wsConnected = liveSocket.connectionState === "open";
     const intervalMs = wsConnected ? 30000 : 5000;
@@ -761,7 +756,7 @@ export function App() {
       void handleRefreshSignalLive();
     }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [session, pageMode, activeTab, handleRefreshSignalLive, liveSocket.connectionState]);
+  }, [session, pageMode, handleRefreshSignalLive, liveSocket.connectionState]);
 
   const reloadAlarmRules = async () => {
     if (!session) return;
@@ -2343,8 +2338,6 @@ export function App() {
               areaLoading={dashboardAreaLoading}
               sidebarCollapsed={sidebarCollapsed}
               onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
-              activeTab={activeTab}
-              onActiveTabChange={setActiveTab}
             />
             <div className={`dashboard-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
               {!sidebarCollapsed ? (
@@ -2364,27 +2357,16 @@ export function App() {
                   }
                 />
               ) : null}
-              <main className={`content dashboard-content ${activeTab === "map" ? "map-active" : ""}`}>
-                {activeTab === "map" ? (
-                  <DeviceMapTab
-                    devices={filteredDashboardDevices}
-                    selectedDevice={selectedDevice}
-                    onSelectDevice={setSelectedDeviceId}
-                    liveValues={signalLiveValues}
-                    gridSnapshot={gridSnapshot}
-                    alarms={alarms}
-                    onOpenDetail={openDeviceDetail}
-                  />
-                ) : null}
-                {activeTab === "values" ? (
-                  <GridOverviewPage
-                    devices={filteredDashboardDevices}
-                    alarms={alarms}
-                    gridSnapshot={gridSnapshot}
-                    onSelectDevice={setSelectedDeviceId}
-                    selectedDeviceId={selectedDeviceId}
-                  />
-                ) : null}
+              <main className="content dashboard-content map-active">
+                <DeviceMapTab
+                  devices={filteredDashboardDevices}
+                  selectedDevice={selectedDevice}
+                  onSelectDevice={setSelectedDeviceId}
+                  liveValues={signalLiveValues}
+                  gridSnapshot={gridSnapshot}
+                  alarms={alarms}
+                  onOpenDetail={openDeviceDetail}
+                />
               </main>
             </div>
           </div>

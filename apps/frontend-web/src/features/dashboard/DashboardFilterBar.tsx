@@ -31,8 +31,6 @@ type Props = {
   areaLoading?: boolean;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
-  activeTab: "map" | "values";
-  onActiveTabChange: (value: "map" | "values") => void;
 };
 
 export function DashboardFilterBar({
@@ -53,9 +51,7 @@ export function DashboardFilterBar({
   visibleCount,
   areaLoading,
   sidebarCollapsed,
-  onToggleSidebar,
-  activeTab,
-  onActiveTabChange
+  onToggleSidebar
 }: Props) {
   const { t } = useTranslation();
   const showActiveFilter =
@@ -221,22 +217,6 @@ export function DashboardFilterBar({
         </button>
       ) : null}
 
-      <div className="dashboard-filter-tabs">
-        <button
-          type="button"
-          className={`dashboard-filter-tab ${activeTab === "map" ? "active" : ""}`}
-          onClick={() => onActiveTabChange("map")}
-        >
-          {t("dashboard.filter.tabMap")}
-        </button>
-        <button
-          type="button"
-          className={`dashboard-filter-tab ${activeTab === "values" ? "active" : ""}`}
-          onClick={() => onActiveTabChange("values")}
-        >
-          {t("dashboard.filter.tabTable")}
-        </button>
-      </div>
     </div>
   );
 }
