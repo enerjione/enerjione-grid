@@ -8,9 +8,9 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Router, MapPin } from "lucide-react";
+import { Search, Router, MapPin, GitBranch } from "lucide-react";
 
-import type { DeviceRow, Region } from "../shared/types";
+import type { CommunicationStatus, DeviceRow, Line, Region } from "../shared/types";
 
 // Cihaz id -> topoloji (bolge adi etiketi icin). App.tsx deviceTopologyInfo.
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
@@ -18,20 +18,23 @@ type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId
 type Props = {
   devices: DeviceRow[];
   regions: Region[];
+  lines: Line[];
   deviceTopology: DeviceTopology;
   onOpenDevice: (deviceId: number) => void;
   onSelectRegion: (regionId: number) => void;
+  onSelectLine: (lineId: number) => void;
 };
 
 const MAX_PER_GROUP = 6;
 
 // Duz "sonuc" listesi — klavye gezinmesi tek index uzerinden yurusun diye
-// cihaz + bolge tek diziye serilir (grup basliklari render'da eklenir).
+// cihaz + hat + bolge tek diziye serilir (grup basliklari render'da eklenir).
 type Result =
-  | { kind: "device"; id: number; name: string; code: string; region: string }
+  | { kind: "device"; id: number; name: string; code: string; region: string; comm: CommunicationStatus; alarm: boolean }
+  | { kind: "line"; id: number; name: string; code: string }
   | { kind: "region"; id: number; name: string };
 
-export function HeaderSearch({ devices, regions, deviceTopology, onOpenDevice, onSelectRegion }: Props) {
+export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDevice, onSelectRegion, onSelectLine }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -61,9 +64,9 @@ export function HeaderSearch({ devices, regions, deviceTopology, onOpenDevice, o
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const { deviceResults, regionResults, flat } = useMemo(() => {
+  const { deviceResults, lineResults, regionResults, flat } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return { deviceResults: [] as Result[], regionResults: [] as Result[], flat: [] as Result[] };
+    if (!q) return { deviceResults: [] as Result[], lineResults: [] as Result[], regionResults: [] as Result[], flat: [] as Result[] };
     const dev: Result[] = devices
       .filter((d) => d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q))
       .slice(0, MAX_PER_GROUP)
@@ -73,13 +76,19 @@ export function HeaderSearch({ devices, regions, deviceTopology, onOpenDevice, o
         name: d.name,
         code: d.code,
         region: deviceTopology.get(d.id)?.regionName ?? "",
+        comm: d.communicationStatus,
+        alarm: d.alarmActive,
       }));
+    const ln: Result[] = lines
+      .filter((l) => l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q))
+      .slice(0, MAX_PER_GROUP)
+      .map((l) => ({ kind: "line", id: l.id, name: l.name, code: l.code }));
     const reg: Result[] = regions
       .filter((r) => r.name.toLowerCase().includes(q))
       .slice(0, MAX_PER_GROUP)
       .map((r) => ({ kind: "region", id: r.id, name: r.name }));
-    return { deviceResults: dev, regionResults: reg, flat: [...dev, ...reg] };
-  }, [query, devices, regions, deviceTopology]);
+    return { deviceResults: dev, lineResults: ln, regionResults: reg, flat: [...dev, ...ln, ...reg] };
+  }, [query, devices, lines, regions, deviceTopology]);
 
   // Sorgu degisince ilk sonuca sar + aktif index sifirla.
   useEffect(() => {
@@ -89,6 +98,7 @@ export function HeaderSearch({ devices, regions, deviceTopology, onOpenDevice, o
 
   const choose = (r: Result) => {
     if (r.kind === "device") onOpenDevice(r.id);
+    else if (r.kind === "line") onSelectLine(r.id);
     else onSelectRegion(r.id);
     setQuery("");
     setOpen(false);
@@ -121,17 +131,30 @@ export function HeaderSearch({ devices, regions, deviceTopology, onOpenDevice, o
       <button
         key={`${r.kind}-${r.id}`}
         type="button"
-        className={`header-search-item${active ? " active" : ""}`}
+        className={`header-search-item${active ? " active" : ""}${r.kind === "device" && r.alarm ? " has-alarm" : ""}`}
         onMouseEnter={() => setActiveIndex(flatIdx)}
         onClick={() => choose(r)}
       >
-        {r.kind === "device" ? <Router size={16} /> : <MapPin size={16} />}
+        {r.kind === "device" ? (
+          // Sol: haberlesme durumu noktasi (online/offline/unknown) + alarm rengi
+          <span
+            className={`header-search-status status-${r.comm}${r.alarm ? " has-alarm" : ""}`}
+            title={r.alarm ? t("header.searchAlarmTag") : t(`common.${r.comm}`)}
+          />
+        ) : r.kind === "line" ? (
+          <GitBranch size={16} />
+        ) : (
+          <MapPin size={16} />
+        )}
+        {r.kind === "device" ? <Router size={16} className="header-search-kind-icon" /> : null}
         <span className="header-search-item-main">{r.name}</span>
         {r.kind === "device" ? (
           <span className="header-search-item-meta">
             {r.code}
             {r.region ? ` · ${r.region}` : ""}
           </span>
+        ) : r.kind === "line" ? (
+          <span className="header-search-item-meta">{r.code} · {t("header.searchLineTag")}</span>
         ) : (
           <span className="header-search-item-meta">{t("header.searchRegionTag")}</span>
         )}
@@ -167,10 +190,16 @@ export function HeaderSearch({ devices, regions, deviceTopology, onOpenDevice, o
                   {deviceResults.map((r, i) => renderRow(r, i))}
                 </div>
               ) : null}
+              {lineResults.length > 0 ? (
+                <div className="header-search-group">
+                  <div className="header-search-group-title">{t("header.searchLines")}</div>
+                  {lineResults.map((r, i) => renderRow(r, deviceResults.length + i))}
+                </div>
+              ) : null}
               {regionResults.length > 0 ? (
                 <div className="header-search-group">
                   <div className="header-search-group-title">{t("header.searchRegions")}</div>
-                  {regionResults.map((r, i) => renderRow(r, deviceResults.length + i))}
+                  {regionResults.map((r, i) => renderRow(r, deviceResults.length + lineResults.length + i))}
                 </div>
               ) : null}
             </>

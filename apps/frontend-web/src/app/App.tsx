@@ -1906,10 +1906,15 @@ export function App() {
         onLogout={handleLogout}
         devices={devices}
         regions={gridSnapshot?.regions ?? []}
+        lines={gridSnapshot?.lines ?? []}
         deviceTopology={deviceTopologyInfo}
         onOpenDevice={openDeviceDetail}
         onSelectRegion={(regionId) => {
           setDashboardRegionId(regionId);
+          handleChangePage("home");
+        }}
+        onSelectLine={(lineId) => {
+          setDashboardLineId(lineId);
           handleChangePage("home");
         }}
       />

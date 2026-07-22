@@ -5,7 +5,7 @@ import { Home, Bell, TriangleAlert, FileText, HeartPulse, Settings, type LucideI
 import { NotificationBell } from "./NotificationBell";
 import { HeaderSearch } from "./HeaderSearch";
 import { useProjectSettings } from "./ProjectSettingsProvider";
-import type { DeviceRow, Region, UserRole } from "../shared/types";
+import type { DeviceRow, Line, Region, UserRole } from "../shared/types";
 import type { WsConnectionState } from "../shared/useLiveValuesSocket";
 
 type NavPage = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
@@ -24,12 +24,14 @@ type Props = {
   onToggleEngineering?: () => void;
   activePage: NavPage;
   onChangePage: (page: NavPage) => void;
-  // Global arama (cihaz + bolge).
+  // Global arama (cihaz + hat + bolge).
   devices: DeviceRow[];
   regions: Region[];
+  lines: Line[];
   deviceTopology: DeviceTopology;
   onOpenDevice: (deviceId: number) => void;
   onSelectRegion: (regionId: number) => void;
+  onSelectLine: (lineId: number) => void;
 };
 
 // Nav sekmeleri: sayfa + i18n anahtar + lucide ikon.
@@ -53,9 +55,11 @@ export function Header({
   onChangePage,
   devices,
   regions,
+  lines,
   deviceTopology,
   onOpenDevice,
-  onSelectRegion
+  onSelectRegion,
+  onSelectLine
 }: Props) {
   const { settings } = useProjectSettings();
   const { t } = useTranslation();
@@ -144,9 +148,11 @@ export function Header({
         <HeaderSearch
           devices={devices}
           regions={regions}
+          lines={lines}
           deviceTopology={deviceTopology}
           onOpenDevice={onOpenDevice}
           onSelectRegion={onSelectRegion}
+          onSelectLine={onSelectLine}
         />
         {/* Muhendislik/ayarlar: tum yetkili rollerde artik sadece cark ikonu. */}
         {role === "engineer" || role === "installer" || role === "ops_manager" ? (

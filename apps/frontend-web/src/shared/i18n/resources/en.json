@@ -140,8 +140,11 @@
     "customerLogoAlt": "Customer Logo",
     "searchPlaceholder": "Search device, line, region...",
     "searchDevices": "Devices",
+    "searchLines": "Lines",
     "searchRegions": "Regions",
     "searchRegionTag": "Region",
+    "searchLineTag": "Line",
+    "searchAlarmTag": "Active alarm",
     "searchEmpty": "No results found"
   },
   "bulkNotify": {

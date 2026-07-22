@@ -140,8 +140,11 @@
     "customerLogoAlt": "Müşteri Logosu",
     "searchPlaceholder": "Cihaz, hat, bölge ara...",
     "searchDevices": "Cihazlar",
+    "searchLines": "Hatlar",
     "searchRegions": "Bölgeler",
     "searchRegionTag": "Bölge",
+    "searchLineTag": "Hat",
+    "searchAlarmTag": "Aktif alarm",
     "searchEmpty": "Sonuç bulunamadı"
   },
   "bulkNotify": {
