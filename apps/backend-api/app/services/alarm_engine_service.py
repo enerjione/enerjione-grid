@@ -217,8 +217,9 @@ def acknowledge_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmE
     alarm = db.get(AlarmEvent, alarm_id)
     if alarm is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm not found")
+    now = datetime.now(timezone.utc)
     alarm.acknowledged = True
-    alarm.acknowledged_at = datetime.now(timezone.utc)
+    alarm.acknowledged_at = now
     record_event(
         db,
         category="alarm",
@@ -228,9 +229,50 @@ def acknowledge_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmE
         message=f"Alarm \"{alarm.title}\" acknowledged",
         metadata={"alarm_id": alarm.id},
     )
+    # SCADA modeli: cihaz zaten normale donmusse (reset) ve simdi onaylandiysa
+    # alarm yasam dongusu tamamlanmistir -> kaydi sil (aktif alarm listesinde
+    # asili kalmasin). Gecmis event log'da durur (Olaylar sayfasi).
+    if alarm.reset:
+        return _finalize_acknowledged_reset(db, alarm, actor_username)
     db.commit()
     db.refresh(alarm)
     return alarm
+
+
+def _finalize_acknowledged_reset(db: Session, alarm: AlarmEvent, actor_username: str) -> AlarmEvent:
+    """Onaylanmis + reset olmus alarmi sil, response icin detached kopya don."""
+    # Response icin snapshot (silindikten sonra ORM nesnesi kullanilamaz).
+    snapshot = AlarmEvent(
+        id=alarm.id,
+        device_id=alarm.device_id,
+        level=alarm.level,
+        title=alarm.title,
+        description=alarm.description,
+        signal_key=alarm.signal_key,
+        assigned_to=alarm.assigned_to,
+        acknowledged=True,
+        reset=True,
+        acknowledged_at=alarm.acknowledged_at,
+        reset_at=alarm.reset_at,
+        produces_fault=alarm.produces_fault,
+        created_at=alarm.created_at,
+    )
+    title = alarm.title
+    alarm_id = alarm.id
+    db.query(AlarmComment).filter(AlarmComment.alarm_event_id == alarm_id).delete(synchronize_session=False)
+    db.delete(alarm)
+    record_event(
+        db,
+        category="alarm",
+        event_type="alarm_auto_cleared",
+        severity="info",
+        actor_username=actor_username,
+        message=f"Alarm \"{title}\" onaylandi ve normale donmustu -> temizlendi",
+        metadata={"alarm_id": alarm_id, "title": title},
+    )
+    db.commit()
+    # snapshot session'a hic eklenmedi -> zaten detached, dogrudan don.
+    return snapshot
 
 
 def reset_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmEvent:
@@ -256,9 +298,16 @@ def reset_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmEvent:
 def acknowledge_all_alarms(db: Session, actor_username: str) -> list[AlarmEvent]:
     alarms = list_alarm_events(db)
     now = datetime.now(timezone.utc)
+    remaining: list[AlarmEvent] = []
     for alarm in alarms:
         alarm.acknowledged = True
         alarm.acknowledged_at = now
+        # Zaten normale donmus olanlari onaylayinca sil (SCADA: dongu tamam).
+        if alarm.reset:
+            db.query(AlarmComment).filter(AlarmComment.alarm_event_id == alarm.id).delete(synchronize_session=False)
+            db.delete(alarm)
+        else:
+            remaining.append(alarm)
     record_event(
         db,
         category="alarm",
@@ -269,7 +318,7 @@ def acknowledge_all_alarms(db: Session, actor_username: str) -> list[AlarmEvent]
         metadata={"count": len(alarms)},
     )
     db.commit()
-    return alarms
+    return remaining
 
 
 def reset_all_alarms(db: Session, actor_username: str) -> list[AlarmEvent]:

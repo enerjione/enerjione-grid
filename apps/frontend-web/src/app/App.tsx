@@ -2279,10 +2279,7 @@ export function App() {
                 onLoadComments={handleLoadAlarmComments}
                 onAddComment={handleAddAlarmComment}
                 onAcknowledge={handleAcknowledgeAlarm}
-                onReset={handleResetAlarm}
-                onDelete={handleDeleteAlarm}
                 onAcknowledgeAll={handleAcknowledgeAllAlarms}
-                onResetAll={handleResetAllAlarms}
                 onOpenDevice={openDeviceDetail}
               />
             ) : null}
