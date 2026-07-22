@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Home, Bell, TriangleAlert, FileText, HeartPulse, Settings, type LucideIcon } from "lucide-react";
 
 import { NotificationBell } from "./NotificationBell";
+import { HeaderSearch } from "./HeaderSearch";
 import { useProjectSettings } from "./ProjectSettingsProvider";
-import { WsStatusBadge } from "./WsStatusBadge";
-import type { UserRole } from "../shared/types";
+import type { DeviceRow, Region, UserRole } from "../shared/types";
 import type { WsConnectionState } from "../shared/useLiveValuesSocket";
+
+type NavPage = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
+type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
 
 type Props = {
   fullName?: string;
@@ -18,21 +22,40 @@ type Props = {
   onSettings?: () => void;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
-  activePage: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
-  onChangePage: (page: "home" | "alarms" | "faults" | "events" | "system-status" | "engineering") => void;
+  activePage: NavPage;
+  onChangePage: (page: NavPage) => void;
+  // Global arama (cihaz + bolge).
+  devices: DeviceRow[];
+  regions: Region[];
+  deviceTopology: DeviceTopology;
+  onOpenDevice: (deviceId: number) => void;
+  onSelectRegion: (regionId: number) => void;
 };
+
+// Nav sekmeleri: sayfa + i18n anahtar + lucide ikon.
+const NAV_ITEMS: { page: Exclude<NavPage, "engineering">; key: string; Icon: LucideIcon }[] = [
+  { page: "home", key: "header.home", Icon: Home },
+  { page: "alarms", key: "header.alarms", Icon: Bell },
+  { page: "faults", key: "header.faults", Icon: TriangleAlert },
+  { page: "events", key: "header.events", Icon: FileText },
+  { page: "system-status", key: "header.systemStatus", Icon: HeartPulse },
+];
 
 export function Header({
   fullName,
   role,
   accessToken,
-  wsState,
   onLogout,
   onSettings,
   isEngineeringView,
   onToggleEngineering,
   activePage,
-  onChangePage
+  onChangePage,
+  devices,
+  regions,
+  deviceTopology,
+  onOpenDevice,
+  onSelectRegion
 }: Props) {
   const { settings } = useProjectSettings();
   const { t } = useTranslation();
@@ -98,54 +121,44 @@ export function Header({
           );
         })()}
         <nav className="header-nav header-nav--framed">
-          <button className={activePage === "home" ? "active" : ""} onClick={() => onChangePage("home")}>
-            {t("header.home")}
-          </button>
-          <button className={activePage === "alarms" ? "active" : ""} onClick={() => onChangePage("alarms")}>
-            {t("header.alarms")}
-          </button>
-          <button className={activePage === "faults" ? "active" : ""} onClick={() => onChangePage("faults")}>
-            {t("header.faults")}
-          </button>
-          <button className={activePage === "events" ? "active" : ""} onClick={() => onChangePage("events")}>
-            {t("header.events")}
-          </button>
-          {/* Sistem Durumu yalnizca installer rolune gosterilir; operator ve
-              diger roller bu sekmeyi gormez (App.tsx route guard'i URL/storage
-              uzerinden dogrudan erisimi de engeller). */}
-          {role === "installer" ? (
-            <button
-              className={activePage === "system-status" ? "active" : ""}
-              onClick={() => onChangePage("system-status")}
-            >
-              {t("header.systemStatus")}
-            </button>
-          ) : null}
-          {/* Toplu Bildirim ana menuden kaldirildi — Muhendislik > Toplu Bildirim
-              tab'ina tasindi (ops_manager / installer / engineer icin). */}
+          {NAV_ITEMS.map(({ page, key, Icon }) => {
+            // Sistem Durumu yalnizca installer rolune gosterilir (route guard
+            // App.tsx'te de var — URL/storage uzerinden dogrudan erisim engelli).
+            if (page === "system-status" && role !== "installer") return null;
+            return (
+              <button
+                key={page}
+                className={`header-nav-btn${activePage === page ? " active" : ""}`}
+                onClick={() => onChangePage(page)}
+              >
+                <Icon size={17} strokeWidth={2} />
+                <span>{t(key)}</span>
+              </button>
+            );
+          })}
         </nav>
       </div>
 
+      {/* Orta: global cihaz + bolge aramasi */}
+      <HeaderSearch
+        devices={devices}
+        regions={regions}
+        deviceTopology={deviceTopology}
+        onOpenDevice={onOpenDevice}
+        onSelectRegion={onSelectRegion}
+      />
+
       <div className="header-right">
-        {/* WsStatusBadge buradan kaldirildi — Sistem Durumu sayfasinda
-            gosteriliyor; header'da yer karistirmasin diye. */}
-        {role === "engineer" || role === "installer" ? (
-          <button
-            className={`engineering-btn ${isEngineeringView ? "active" : ""}`}
-            onClick={() => onToggleEngineering?.()}
-          >
-            {t("header.engineering")}
-          </button>
-        ) : role === "ops_manager" ? (
-          /* Operasyon Yoneticisi icin 'Muhendislik' yazisi yerine settings
-             cark ikonu — ayarlar oldugu belli. Tooltip ile aciklama. */
+        {/* Muhendislik/ayarlar: tum yetkili rollerde artik sadece cark ikonu
+            (yer kazanir, operator'da hic gozukmez -> arama saga yaslanir). */}
+        {role === "engineer" || role === "installer" || role === "ops_manager" ? (
           <button
             className={`engineering-btn engineering-btn--icon-only ${isEngineeringView ? "active" : ""}`}
             onClick={() => onToggleEngineering?.()}
-            title={t("header.opsSettings")}
-            aria-label={t("header.opsSettings")}
+            title={t("header.engineering")}
+            aria-label={t("header.engineering")}
           >
-            <span className="material-symbols-outlined">settings</span>
+            <Settings size={20} strokeWidth={2} />
           </button>
         ) : null}
 

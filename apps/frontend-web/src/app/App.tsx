@@ -1904,6 +1904,14 @@ export function App() {
         onToggleEngineering={() => handleChangePage("engineering")}
         onSettings={handleOpenSettings}
         onLogout={handleLogout}
+        devices={devices}
+        regions={gridSnapshot?.regions ?? []}
+        deviceTopology={deviceTopologyInfo}
+        onOpenDevice={openDeviceDetail}
+        onSelectRegion={(regionId) => {
+          setDashboardRegionId(regionId);
+          handleChangePage("home");
+        }}
       />
       <TabBar
         tabs={tabsApi.tabs}

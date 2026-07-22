@@ -137,7 +137,12 @@
     "settings": "Settings",
     "logout": "Log Out",
     "user": "User",
-    "customerLogoAlt": "Customer Logo"
+    "customerLogoAlt": "Customer Logo",
+    "searchPlaceholder": "Search device, line, region...",
+    "searchDevices": "Devices",
+    "searchRegions": "Regions",
+    "searchRegionTag": "Region",
+    "searchEmpty": "No results found"
   },
   "bulkNotify": {
     "title": "Bulk Notification",

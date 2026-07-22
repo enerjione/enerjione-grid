@@ -137,7 +137,12 @@
     "settings": "Ayarlar",
     "logout": "Çıkış Yap",
     "user": "Kullanıcı",
-    "customerLogoAlt": "Müşteri Logosu"
+    "customerLogoAlt": "Müşteri Logosu",
+    "searchPlaceholder": "Cihaz, hat, bölge ara...",
+    "searchDevices": "Cihazlar",
+    "searchRegions": "Bölgeler",
+    "searchRegionTag": "Bölge",
+    "searchEmpty": "Sonuç bulunamadı"
   },
   "bulkNotify": {
     "title": "Toplu Bildirim",
