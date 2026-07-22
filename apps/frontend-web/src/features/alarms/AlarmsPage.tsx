@@ -263,14 +263,6 @@ export function AlarmsPage({
     }
   };
 
-  // Seviyeye gore onerilen sonraki adim metni.
-  const suggestedStep = (level: string): string => {
-    const k = level.toLowerCase();
-    if (k === "critical" || k === "error") return t("alarms.detail.suggestedStepCritical");
-    if (k === "warning") return t("alarms.detail.suggestedStepWarning");
-    return t("alarms.detail.suggestedStepInfo");
-  };
-
   const renderAlarmDetail = () => {
     if (!selectedAlarm) {
       return (
@@ -315,8 +307,16 @@ export function AlarmsPage({
             <span className={`alarm-state ${state.klass}`}>{state.label}</span>
           </div>
           <h3 className="alarm-detail-alarmtitle">{a.title}</h3>
+          {a.description ? <p className="alarm-detail-desc">{a.description}</p> : null}
           <div className="alarm-detail-sub">
-            {deviceInfo ? deviceInfo.code : `#${a.device_id}`}
+            {deviceInfo ? (
+              <>
+                <span className="alarm-detail-sub-name">{deviceInfo.name}</span>
+                <span className="alarm-detail-sub-code"> · {deviceInfo.code}</span>
+              </>
+            ) : (
+              <span className="alarm-detail-sub-code">#{a.device_id}</span>
+            )}
             {source ? <span className="alarm-detail-sub-source"> · {source.label}</span> : null}
           </div>
         </div>
@@ -346,8 +346,12 @@ export function AlarmsPage({
         <div className="alarm-detail-scroll">
         {panelTab === "detail" ? (
         <>
-        {/* Bilgi grid: Baslangic / Sure / Atanan */}
+        {/* Bilgi grid: Tarih / Baslangic / Sure / Atanan */}
         <div className="alarm-detail-metrics">
+          <div className="alarm-detail-metric">
+            <span className="alarm-detail-metric-label">{t("alarms.detail.fieldDate")}</span>
+            <span className="alarm-detail-metric-value">{created.toLocaleDateString(localeTag)}</span>
+          </div>
           <div className="alarm-detail-metric">
             <span className="alarm-detail-metric-label">{t("alarms.detail.fieldStart")}</span>
             <span className="alarm-detail-metric-value">{fmtTime(a.created_at)}</span>
@@ -363,14 +367,6 @@ export function AlarmsPage({
             </span>
           </div>
         </div>
-
-        {/* Onerilen sonraki adim */}
-        {!a.acknowledged ? (
-          <div className="alarm-detail-suggest">
-            <span className="alarm-detail-suggest-title">{t("alarms.detail.suggestedStepTitle")}</span>
-            <p>{suggestedStep(a.level)}</p>
-          </div>
-        ) : null}
 
         {/* Sorumluya ata */}
         <label className="alarm-detail-assign">
@@ -580,7 +576,6 @@ export function AlarmsPage({
                   <th scope="col">{t("alarms.table.alarm")}</th>
                   <th scope="col">{t("alarms.table.status")}</th>
                   <th scope="col">{t("alarms.table.assignee")}</th>
-                  <th scope="col" className="alarm-actions-th">{t("alarms.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -611,24 +606,12 @@ export function AlarmsPage({
                         <span className={`alarm-state ${state.klass}`}>{state.label}</span>
                       </td>
                       <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
-                      <td className="actions-cell alarm-actions-cell">
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-ack"
-                          title={t("alarms.actions.acknowledge")}
-                          aria-label={t("alarms.actions.acknowledge")}
-                          disabled={saving || Boolean(alarm.acknowledged)}
-                          onClick={(e) => { e.stopPropagation(); void handleAcknowledge(alarm.id); }}
-                        >
-                          <span className="material-symbols-outlined">check</span>
-                        </button>
-                      </td>
                     </tr>
                   );
                 })}
                 {activeAlarms.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={8} className="alarms-empty-cell">{t("alarms.noActive")}</td>
+                    <td colSpan={7} className="alarms-empty-cell">{t("alarms.noActive")}</td>
                   </tr>
                 ) : null}
               </tbody>

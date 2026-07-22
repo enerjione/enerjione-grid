@@ -406,6 +406,7 @@
       "fieldLevel": "Level",
       "fieldStatus": "Status",
       "fieldOpened": "Opened",
+      "fieldDate": "Date",
       "fieldStart": "Started",
       "fieldReset": "Returned to normal",
       "fieldAck": "Acknowledged",

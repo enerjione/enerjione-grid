@@ -3327,7 +3327,10 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   grid-template-columns: minmax(0, 1fr) 400px;
   gap: 12px;
   align-items: start;
-  height: calc(100vh - 78px);
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 .alarms-main {
   display: flex;
@@ -3352,10 +3355,9 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 /* Sağ panel yapışkan: sayfa kayarken görünür kalır. Panelin KENDİSİ scroll
    olmaz; sabit üst (başlık+sekme) + iç kaydırılabilir gövde (.alarm-detail-scroll). */
 .alarms-side-panel {
-  position: sticky;
-  top: 12px;
-  align-self: start;
-  height: calc(100vh - 90px);
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -3419,11 +3421,14 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .alarm-detail-heading { display: flex; flex-direction: column; gap: 8px; }
 .alarm-detail-pills { display: flex; align-items: center; gap: 8px; }
 .alarm-detail-alarmtitle { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.25; }
+.alarm-detail-desc { margin: 0; font-size: 13px; color: #64748b; line-height: 1.4; }
 .alarm-detail-sub { font-size: 13px; color: #64748b; font-weight: 600; }
+.alarm-detail-sub-name { color: #0f172a; font-weight: 700; }
+.alarm-detail-sub-code { color: #64748b; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .alarm-detail-sub-source { color: #94a3b8; }
-/* Metrik grid: Baslangic / Sure / Atanan */
+/* Metrik grid: Tarih / Baslangic / Sure / Atanan (2x2) */
 .alarm-detail-metrics {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 10px;
   padding: 14px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9;
 }
 .alarm-detail-metric { display: flex; flex-direction: column; gap: 3px; min-width: 0; }

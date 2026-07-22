@@ -406,6 +406,7 @@
       "fieldLevel": "Seviye",
       "fieldStatus": "Durum",
       "fieldOpened": "Oluşma",
+      "fieldDate": "Tarih",
       "fieldStart": "Başlangıç",
       "fieldReset": "Normale Dönüş",
       "fieldAck": "Onay",
