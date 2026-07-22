@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     # tasinir. 10 makul: gecici DB hatasi/lock contention 10 retry'da gecer;
     # poison payload (parse error vb.) hep nack'leyecektir, 10. nack'te DLQ.
     nats_worker_max_deliver: int = 10
+    # Pull consumer fetch batch boyutu. Backend kendi hizinda batch ceker
+    # (push degil) -> NATS slow-consumer disconnect'i onlenir. 200 cihaz x
+    # sinyal degisimi yukunde 256 makul: her fetch'te toplu isle+ack, NATS'a
+    # geri basinc olmaz. Cok buyuk -> ack_wait icinde islenemez riski.
+    nats_pull_batch_size: int = 256
     # Connect timeout — kisa tutulur; backend startup'i NATS yokken bloklanmasin.
     # NATS gelene kadar consumer hatasi atar ama backend ayagi kalir; NATS gelince
     # consumer kendi reconnect dongusunde devam eder.

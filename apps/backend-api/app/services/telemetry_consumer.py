@@ -329,48 +329,57 @@ def _consume_loop() -> None:
                             except Exception:  # noqa: BLE001
                                 logger.debug("js_nak_failed", exc_info=True)
 
-                # Durable push consumer — subject pattern'i dinliyoruz.
-                # Backend startup'ta jetstream_bus.start_bus_if_enabled() stream'leri
-                # ensure ediyor olmali; consumer subscribe ederken stream var olmali.
+                # Durable PULL consumer — subject pattern'i biz fetch ile cekeriz.
                 #
-                # Consumer parametreleri (nats-py default'lari uretim icin yetersiz):
-                #   * max_ack_pending=10000: 600 cihaz x 10 msg/s = ~6000 inflight;
-                #     default 1000 yetersiz, ack'lemeyi yetistiremeyince broker
-                #     subscriber'i suspend eder.
-                #   * max_deliver=10: poison message sonsuza dek redeliver edilmez;
-                #     10 deneme sonrasi NACK -> DLQ benzeri davranis (max_deliver
-                #     asimi mesaji discard eder; production'da DLQ stream'i ileride
-                #     eklenebilir).
-                #   * deliver_policy=NEW: durable consumer ilk olusurken sadece
-                #     yeni mesajlardan baslar. Aksi halde 7 gunluk history'yi
-                #     baslangicta replay eder ve persister gec kalir.
-                #   * ack_wait=60s: persist + WS broadcast tipik <100ms; 60sn cap
-                #     network gecikmesi icin defansif.
+                # NEDEN pull (push degil): push consumer'da NATS mesajlari sunucu
+                # hizinda client socket'ine iter; backend her mesajda senkron DB
+                # yazimi yaptigi icin socket write buffer'i dolar ve NATS
+                # "Slow Consumer Detected" ile BAGLANTIYI DUSURUR. 200 cihaz
+                # yukunde bu dongu cihaz durumunu (communication_status) kesik
+                # kesik gunceller -> yeni cihazlar UNKNOWN kalir. Pull'da backend
+                # kendi hizinda fetch(batch) yapar; slow-consumer imkansiz.
+                #
+                # Consumer parametreleri:
+                #   * deliver_policy=NEW: durable ilk olusurken 7 gunluk history'yi
+                #     replay etmez, yeni mesajdan baslar.
+                #   * ack_wait=60s: persist + WS tipik <100ms; 60sn defansif cap.
+                #   * max_ack_pending=10000: 600 cihaz x 10 msg/s ~6000 inflight.
+                #   * max_deliver: poison message sonsuz redeliver edilmez -> DLQ.
                 from nats.js.api import ConsumerConfig, DeliverPolicy
                 consumer_cfg = ConsumerConfig(
                     durable_name=settings.nats_consumer_telemetry_persist,
                     deliver_policy=DeliverPolicy.NEW,
                     ack_wait=60,
                     max_ack_pending=10000,
-                    max_deliver=10,
+                    max_deliver=settings.nats_worker_max_deliver,
                 )
-                sub = await js.subscribe(
+                psub = await js.pull_subscribe(
                     subject=settings.nats_subject_telemetry_raw,
                     durable=settings.nats_consumer_telemetry_persist,
-                    cb=_handle,
-                    manual_ack=True,
                     config=consumer_cfg,
                 )
                 logger.info(
-                    "telemetry_consumer_running subject=%s durable=%s url=%s",
+                    "telemetry_consumer_running mode=pull subject=%s durable=%s url=%s",
                     settings.nats_subject_telemetry_raw,
                     settings.nats_consumer_telemetry_persist,
                     settings.nats_url,
                 )
                 backoff = 2  # connect basarili — backoff sifirla
+                # Fetch dongusu: backend kendi hizinda batch ceker, her mesaji
+                # _handle ile isler+ack'ler. fetch timeout'unda mesaj yoksa
+                # TimeoutError normal -> devam. Boylece NATS'a asla geri basinc
+                # (slow consumer) olmaz.
                 while not _stop_event.is_set():
-                    await asyncio.sleep(1)
-                await sub.unsubscribe()
+                    try:
+                        msgs = await psub.fetch(
+                            batch=settings.nats_pull_batch_size, timeout=5
+                        )
+                    except asyncio.TimeoutError:
+                        continue  # bu pencerede yeni mesaj yok — normal
+                    for msg in msgs:
+                        if _stop_event.is_set():
+                            break
+                        await _handle(msg)
             except Exception as exc:  # noqa: BLE001
                 if _stop_event.is_set():
                     break
