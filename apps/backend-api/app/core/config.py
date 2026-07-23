@@ -127,16 +127,24 @@ class Settings(BaseSettings):
     # poison payload (parse error vb.) hep nack'leyecektir, 10. nack'te DLQ.
     nats_worker_max_deliver: int = 10
     # Pull consumer fetch batch boyutu. Backend kendi hizinda batch ceker
-    # (push degil) -> NATS slow-consumer disconnect'i onlenir. 200 cihaz x
-    # sinyal degisimi yukunde 256 makul: her fetch'te toplu isle+ack, NATS'a
-    # geri basinc olmaz. Cok buyuk -> ack_wait icinde islenemez riski.
-    nats_pull_batch_size: int = 256
+    # (push degil) -> NATS slow-consumer disconnect'i onlenir. Batch-commit
+    # ile 500 mesaj TEK transaction'da yazilir -> DB round-trip ~batch kadar
+    # azalir, throughput gelis hizini gecer, backlog erir. Cok buyuk ->
+    # ack_wait (60s) icinde tek commit'te islenemez riski.
+    nats_pull_batch_size: int = 500
+    # Pull consumer max_ack_pending — fetch inflight tavani. batch_size'in
+    # kati olmali (2x guvenli marj). Backlog'u TEK BASINA cozmez; asil cozum
+    # batch-commit throughput'u.
+    nats_pull_max_ack_pending: int = 10000
     # Connect timeout — kisa tutulur; backend startup'i NATS yokken bloklanmasin.
     # NATS gelene kadar consumer hatasi atar ama backend ayagi kalir; NATS gelince
     # consumer kendi reconnect dongusunde devam eder.
     nats_connect_timeout_sec: int = 5
-    # Durable consumer adi (backend-api telemetry persister icin).
-    nats_consumer_telemetry_persist: str = "backend-api-telemetry-persist"
+    # Durable consumer adi (backend-api telemetry persister icin). v2: eski
+    # push consumer 1.4M smoke-test backlog + 10K ack_pending ile kilitliydi.
+    # Yeni isim DeliverPolicy.NEW ile guncele baslar; stream verisi silinmez.
+    # Batch-commit throughput sayesinde v2 tekrar geride kalmaz.
+    nats_consumer_telemetry_persist: str = "backend-api-telemetry-persist-v2"
     # Gateway compose dosyasi indirilirken gateway user/password URL'e gomuluyor.
     # `infra/nats/nats-server.conf`'taki `gateway` user'inin cleartext sifresi.
     # bootstrap.sh urettiginde .env'e yazar; backend bu degeri okuyup compose

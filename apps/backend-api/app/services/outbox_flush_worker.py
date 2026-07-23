@@ -15,8 +15,11 @@ Backlog varsa (bir turda limit kadar satir yayinlandiysa) hemen devam eder;
 bosaltinca kisa uyur. Tek worker => tek RabbitMQ publisher => lock cekismesi yok.
 
 Konfigurasyon (env):
-  OUTBOX_FLUSH_INTERVAL_SEC   default 0.3  (bos iken bekleme)
-  OUTBOX_FLUSH_BATCH          default 200  (bir turda yayin siniri)
+  OUTBOX_FLUSH_INTERVAL_SEC          default 0.3   (bos iken bekleme)
+  OUTBOX_FLUSH_BATCH                 default 200   (bir turda yayin siniri)
+  OUTBOX_PUBLISHED_RETENTION_HOURS   default 24    (published=True saklama)
+  OUTBOX_PURGE_INTERVAL_SEC          default 10    (cleanup periyodu)
+  OUTBOX_PURGE_BATCH                 default 10000 (tek cleanup delete siniri)
 """
 
 from __future__ import annotations
@@ -24,9 +27,11 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
+from datetime import datetime, timedelta, timezone
 
 from app.db.session import SessionLocal
-from app.services.outbox_service import flush_outbox
+from app.services.outbox_service import flush_outbox, purge_published_outbox
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +48,27 @@ def _batch() -> int:
         return max(1, int(os.getenv("OUTBOX_FLUSH_BATCH", "200")))
     except ValueError:
         return 200
+
+
+def _retention_hours() -> int:
+    try:
+        return max(1, int(os.getenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "24")))
+    except ValueError:
+        return 24
+
+
+def _purge_interval_sec() -> float:
+    try:
+        return max(1.0, float(os.getenv("OUTBOX_PURGE_INTERVAL_SEC", "10")))
+    except ValueError:
+        return 10.0
+
+
+def _purge_batch() -> int:
+    try:
+        return max(100, int(os.getenv("OUTBOX_PURGE_BATCH", "10000")))
+    except ValueError:
+        return 10_000
 
 
 class OutboxFlushWorker:
@@ -72,6 +98,7 @@ class OutboxFlushWorker:
     def _run(self) -> None:
         batch = _batch()
         consecutive_errors = 0
+        last_purge = 0.0
         while not self._stop.is_set():
             try:
                 db = SessionLocal()
@@ -80,8 +107,30 @@ class OutboxFlushWorker:
                 finally:
                     db.close()
                 consecutive_errors = 0
-                # Bir turda limit kadar yayinlandiysa backlog var — beklemeden
-                # devam et. Az yayin/bos ise kisa uyu (broker'i bombardiman etme).
+
+                # published=True outbox satirlari sinirsiz buyumesin: 24 saatten
+                # eskiyi 10K batch sil. Sahada 1.7M published row UNIQUE/index
+                # sorgularini yavaslatiyordu. published=False ASLA silinmez.
+                # Backlog surekli dolu olsa bile interval geldiginde purge calisir;
+                # aksi halde `continue` retention'i sonsuza dek acliktan birakir.
+                now_mono = time.monotonic()
+                if now_mono - last_purge >= _purge_interval_sec():
+                    purge_db = SessionLocal()
+                    try:
+                        removed = purge_published_outbox(
+                            purge_db,
+                            before=datetime.now(timezone.utc) - timedelta(
+                                hours=_retention_hours()
+                            ),
+                            limit=_purge_batch(),
+                        )
+                    finally:
+                        purge_db.close()
+                    last_purge = now_mono
+                    if removed:
+                        logger.info("outbox_published_purged count=%d", removed)
+                # Flush batch tamamen doluysa publish backlog var; retention
+                # kontrolu yapildi, simdi uyumadan sonraki publish batch'e gec.
                 if published >= batch:
                     continue
             except Exception:  # noqa: BLE001

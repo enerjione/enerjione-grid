@@ -141,34 +141,20 @@ class RabbitMqEventBus:
     ) -> None:
         """Telemetry akisi icin NATS JetStream. Yuksek throughput, replay'li.
 
-        JetStream bus yoksa/baglanti yoksa ERROR loglar ama exception YAYMAZ
-        (event_bus.publish_event'i cagiranlar — orn. outbox_service — bunu
-        yutsun istemiyoruz ama bozulmasin da). Bu noktada outbox akisi
-        (outbox_events tablosu) zaten DB-side at-least-once veriyor — outbox
-        publisher tekrar deneyecek.
+        Hata MUTLAKA caller'a yayilir. `flush_outbox` ancak publish basariliysa
+        row'u published=True yapar; exception olursa transaction rollback olur,
+        published=False kalir ve worker tekrar dener. Onceki kod hatayi yutup
+        satiri basarili isaretliyordu -> NATS kesintisinde sessiz telemetri
+        kaybi + donmus device.last_update_at.
         """
-        try:
-            from app.services.jetstream_bus import get_bus
+        from app.services.jetstream_bus import get_bus
 
-            bus = get_bus()
-            if bus is None:
-                logger = __import__("logging").getLogger(__name__)
-                logger.error(
-                    "jetstream_bus_unavailable topic=%s message_id=%s — "
-                    "telemetri JetStream'e gonderilemedi. Outbox tekrar deneyecek.",
-                    topic,
-                    message_id,
-                )
-                return
-            bus.publish_event(topic, payload, message_id=message_id)
-        except Exception as exc:  # noqa: BLE001
-            logger = __import__("logging").getLogger(__name__)
-            logger.warning(
-                "jetstream_publish_failed topic=%s message_id=%s error=%s",
-                topic,
-                message_id,
-                exc,
+        bus = get_bus()
+        if bus is None:
+            raise RuntimeError(
+                f"jetstream bus unavailable topic={topic} message_id={message_id}"
             )
+        bus.publish_event(topic, payload, message_id=message_id)
 
     def consume_event(self, topic: str, handler: EventHandler, *, config: ConsumerConfig | None = None) -> None:
         handlers = self._subscribers.setdefault(topic, [])

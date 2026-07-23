@@ -51,16 +51,27 @@ except ImportError:  # pragma: no cover
     mqtt_publish = None
 
 
-def dispatch_event(db: Session, *, event_kind: str, payload: dict) -> None:
+def dispatch_event(
+    db: Session,
+    *,
+    event_kind: str,
+    payload: dict,
+    targets: list[OutboundTarget] | None = None,
+) -> None:
     """Outbound dispatcher entry point.
 
     NOT: telemetry event'leri icin REST/MQTT hedefleri ATLANIR —
     `outbound_telemetry_batcher` ayni readings'i 5sn pencerede dedup edip
     batch POST yolluyor (kullanici tercihi). Burada sadece IEC104 anlik
     gunceller. Alarm event'leri tum protocol'lerde anlik gonderilir.
+
+    `targets` batch consumer optimizasyonu: 500 payload icin ayni aktif hedef
+    sorgusunu 500 kez yapmak yerine caller bir kez ceker. Diger caller'lar
+    None birakir; mevcut davranis degismez.
     """
-    stmt = select(OutboundTarget).where(OutboundTarget.is_active.is_(True))
-    targets = list(db.scalars(stmt).all())
+    if targets is None:
+        stmt = select(OutboundTarget).where(OutboundTarget.is_active.is_(True))
+        targets = list(db.scalars(stmt).all())
     for target in targets:
         if target.event_filter not in {"all", event_kind}:
             continue

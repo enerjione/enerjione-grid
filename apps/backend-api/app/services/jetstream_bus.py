@@ -326,13 +326,14 @@ class JetStreamBus:
         *,
         message_id: str = "",
     ) -> None:
-        """Best-effort publish — hata RabbitMQ akisini etkilemez.
+        """JetStream'e publish et; basarisizlikta exception yay.
 
-        Bu fonksiyon RabbitMqEventBus.publish_event ile ayni imzaya sahiptir.
-        Hata olursa exception YAYILMAZ; sadece counter artar ve warning loglanir.
+        Telemetri artik JetStream'e TEK yoldan gider. Best-effort/no-op veri
+        kaybettirir: outbox caller'i basari sanip row'u published=True yapar.
+        Exception sayesinde row published=False kalir ve worker retry eder.
         """
         if not self._ready.is_set() or self._loop is None or self._js is None:
-            return  # bus baslamadiysa sessiz no-op (dual-publish ilk acilirken normal)
+            raise RuntimeError("jetstream bus not ready")
 
         gateway_code = str(payload.get("source_gateway") or "unknown")
         subject = topic_to_subject(topic, gateway_code=gateway_code)
@@ -354,12 +355,13 @@ class JetStreamBus:
             if self._publish_failures in (1, 10, 100, 1000) or self._publish_failures % 10000 == 0:
                 logger.warning(
                     "jetstream_publish_failed subject=%s msg_id=%s error=%s "
-                    "consecutive=%s (RabbitMQ akisi devam ediyor)",
+                    "consecutive=%s (outbox retry edecek)",
                     subject,
                     msg_id,
                     exc,
                     self._publish_failures,
                 )
+            raise
 
     @property
     def is_ready(self) -> bool:
