@@ -25,6 +25,7 @@ from app.schemas.device import (
     DeviceUpdate,
 )
 from app.schemas.telemetry import TelemetryAggregatePoint, TelemetryHistoryPoint
+from app.services import license_service
 from app.services.event_service import record_event
 from app.services.scope_service import get_visible_device_ids
 
@@ -85,7 +86,16 @@ def create_device(
     existing = repository.get_by_code(payload.code)
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Device code already exists")
-    device = repository.create(payload)
+    try:
+        _require_gateway(db, payload.gateway_code)
+        license_service.lock_and_assert_device_capacity(db)
+        device = repository.create(payload)
+    except license_service.LicenseCapacityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
     record_event(
         db,
         category="device",
@@ -101,6 +111,16 @@ def create_device(
     _bump_gateway_config_nonce(db, device.gateway_code)
     db.commit()
     return device
+
+
+def _require_gateway(db: Session, gateway_code: str | None) -> None:
+    if not gateway_code:
+        return
+    if db.scalar(select(Gateway.id).where(Gateway.code == gateway_code)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Gateway bulunamadi: {gateway_code}",
+        )
 
 
 def _bump_gateway_config_nonce(db: Session, gateway_code: str | None) -> None:
@@ -149,7 +169,10 @@ def update_device(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
     _ensure_device_visible(db, current_user, device)
     # Hangi alanlar degisti — operator/muhendis paneli icin event'e koy.
-    changes = payload.model_dump(exclude_none=True)
+    changes = payload.model_dump(exclude_unset=True)
+    old_gateway_code = device.gateway_code
+    if "gateway_code" in changes:
+        _require_gateway(db, payload.gateway_code)
     updated = repository.update(device, payload)
     record_event(
         db,
@@ -163,7 +186,11 @@ def update_device(
         i18n_key="device_updated",
         i18n_params={"name": updated.name, "code": updated.code},
     )
-    _bump_gateway_config_nonce(db, updated.gateway_code)
+    if updated.gateway_code == old_gateway_code:
+        _bump_gateway_config_nonce(db, updated.gateway_code)
+    else:
+        _bump_gateway_config_nonce(db, old_gateway_code)
+        _bump_gateway_config_nonce(db, updated.gateway_code)
     db.commit()
     return updated
 
@@ -183,7 +210,7 @@ def delete_device(
     code = device.code
     device_id = device.id
     device_gateway = device.gateway_code
-    repository.delete(device)
+    deleted_counts = repository.delete(device)
     _bump_gateway_config_nonce(db, device_gateway)
     record_event(
         db,
@@ -193,7 +220,11 @@ def delete_device(
         actor_username=current_user.username,
         device_code=code,
         message=f"Cihaz silindi: {name} ({code})",
-        metadata={"device_id": device_id},
+        metadata={
+            "device_id": device_id,
+            "gateway_code": device_gateway,
+            "cleanup": deleted_counts,
+        },
         i18n_key="device_deleted",
         i18n_params={"name": name, "code": code},
     )

@@ -108,7 +108,7 @@ class DeviceCommandRow(BaseModel):
     device_code: str
     command: str
     dnp3_index: int
-    status: str  # pending | sent | ok | failed | expired
+    status: str  # pending | sent | ok | failed | expired | cancelled
     result_status: str | None = None
     result_error: str | None = None
     actor_username: str | None = None  # komutu gonderen kullanici (UI "kim")

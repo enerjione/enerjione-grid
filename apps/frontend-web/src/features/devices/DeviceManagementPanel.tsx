@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 import i18n from "../../shared/i18n";
-import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway } from "../../shared/types";
+import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway, LicenseStatus } from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
 
@@ -62,7 +62,10 @@ type Props = {
   role: "operator" | "engineer" | "installer" | "ops_manager";
   gateways: Gateway[];
   devices: DeviceRow[];
+  unassignedCount: number;
   deviceModels: DeviceModelOption[];
+  inventoryError: string;
+  licenseStatus: LicenseStatus | null;
   onSelectGateway: (gatewayCode: string) => Promise<void>;
   onCreateGateway: (payload: {
     code: string;
@@ -133,7 +136,10 @@ export function DeviceManagementPanel({
   role,
   gateways,
   devices,
+  unassignedCount,
   deviceModels,
+  inventoryError,
+  licenseStatus,
   onSelectGateway,
   onCreateGateway,
   onUpdateGateway,
@@ -303,13 +309,18 @@ export function DeviceManagementPanel({
       return;
     }
     const exists = gateways.some((item) => item.code === selectedGatewayCode);
-    if (!selectedGatewayCode || !exists) {
+    if (selectedGatewayCode && !exists) {
       setSelectedDeviceCode("");
       const nextGatewayCode = gateways[0].code;
       setSelectedGatewayCode(nextGatewayCode);
       void onSelectGateway(nextGatewayCode);
     }
-  }, [gateways, selectedGatewayCode, onSelectGateway]);
+    if (!selectedGatewayCode && unassignedCount === 0) {
+      const nextGatewayCode = gateways[0].code;
+      setSelectedGatewayCode(nextGatewayCode);
+      void onSelectGateway(nextGatewayCode);
+    }
+  }, [gateways, selectedGatewayCode, onSelectGateway, unassignedCount]);
 
   const applySelectedDeviceToForm = (device: DeviceRow) => {
     setName(device.name);
@@ -537,6 +548,28 @@ export function DeviceManagementPanel({
             </div>
           ) : null}
           <div className="device-group-list">
+            {unassignedCount > 0 ? (
+              <div
+                className={`device-group-item gateway-item ${selectedGatewayCode === "" ? "active" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="device-group-main gateway-select-main"
+                  onClick={() => void handleGatewaySelect("")}
+                >
+                  <div className="gateway-title-row">
+                    <div className="gateway-name-with-status">
+                      <span className="gateway-status never" aria-hidden="true">
+                        <span className="gateway-status-dot" />
+                      </span>
+                      <strong className="gateway-name-only">
+                        {t("engineering.devicesPanel.unassigned", { count: unassignedCount })}
+                      </strong>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            ) : null}
             {gateways.map((gateway) => {
               const gLive = getGatewayLiveness(gateway);
               const isDeletingThis = deletingGatewayCode === gateway.code;
@@ -652,10 +685,32 @@ export function DeviceManagementPanel({
         <div className="device-management-middle">
           <h4>{t("engineering.devicesPanel.title")}</h4>
           <div className="section-actions">
-            <button className="add-user-btn full-width-btn" onClick={() => setShowCreateModal(true)} disabled={!selectedGatewayCode}>
+            <button
+              className="add-user-btn full-width-btn"
+              onClick={() => setShowCreateModal(true)}
+              disabled={!selectedGatewayCode || !licenseStatus?.can_add_device}
+              title={
+                licenseStatus?.can_add_device
+                  ? undefined
+                  : t("engineering.devicesPanel.licenseBlocked")
+              }
+            >
               {t("engineering.devicesPanel.addDevice")}
             </button>
           </div>
+          {!licenseStatus?.can_add_device ? (
+            <div className="device-license-warning" role="alert">
+              <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+              <span>
+                {licenseStatus?.is_valid && licenseStatus.device_limit > 0
+                  ? t("engineering.devicesPanel.licenseLimitWarning", {
+                      used: licenseStatus.device_count,
+                      limit: licenseStatus.device_limit
+                    })
+                  : t("engineering.devicesPanel.licenseUnavailableWarning")}
+              </span>
+            </div>
+          ) : null}
           <div className="device-group-list">
             {devices.map((device) => {
               const effStatus = effectiveCommStatus(device, gateways);
@@ -895,6 +950,7 @@ export function DeviceManagementPanel({
         </div>
       </div>
 
+      {inventoryError ? <p className="error-text">{inventoryError}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
 
       {showGatewayCreateModal ? (

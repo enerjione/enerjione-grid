@@ -48,6 +48,12 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 e1_ok "Calisma agaci temiz."
 
+# Lisans host machine-id'ye bagli. USB/disk/RAM/MAC degisimi etkisizdir;
+# machine-id yoksa backend fail-closed cihaz eklemeyi kapatir.
+if [[ ! -s /etc/machine-id ]]; then
+  e1_die "/etc/machine-id yok veya bos; lisans makine bagi dogrulanamaz."
+fi
+
 # ---- 2/5: DB yedek (otomatik, postgres ayaktaysa) ------------------------
 e1_step "Update oncesi DB yedek aliniyor..."
 if docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; then
@@ -207,23 +213,18 @@ fi
 # ---- 5/5: Alembic migration (backend/all) ---------------------------------
 if [[ "$NEEDS_BACKEND" -eq 1 ]]; then
   e1_step "DB migration uygulanıyor (alembic upgrade head)..."
-  # Eski kurulumlar (create_all + legacy bootstrap) Alembic'e stamp'lenmemis
-  # olabilir. alembic_version yoksa mevcut schema'yi 0006 kabul edip sadece yeni
-  # migration'lari (0007+) uygula. Aksi halde 0001..0006 tekrar calisip mevcut
-  # tablo/kolonlarda patlar. Yeni/temiz DB'de backend startup create_all zaten
-  # mevcut metadata'yi kurar; 0006 stamp + 0007 upgrade yine dogru sonucu verir.
-  if ! docker compose exec -T backend-api python - <<'PY' | grep -q '^YES$'; then
-from sqlalchemy import create_engine, text
-from app.core.config import settings
-engine = create_engine(settings.database_url, pool_pre_ping=True)
-with engine.connect() as conn:
-    exists = conn.scalar(text("SELECT to_regclass('public.alembic_version') IS NOT NULL"))
-print('YES' if exists else 'NO')
-PY
-    e1_info "alembic_version yok — mevcut schema 0006 olarak stamp'leniyor..."
-    docker compose exec -T backend-api alembic stamp 0006
-  fi
-  docker compose exec -T backend-api alembic upgrade head
+  # Container entrypoint migration runner'i uvicorn'dan once calistirir.
+  # Ayni runner'i eszamanli baslatma; backend healthy olunca migration bitmistir.
+  backend_ready=0
+  for i in $(seq 1 60); do
+    if docker compose exec -T backend-api curl -fsS http://localhost:8000/api/v1/health >/dev/null 2>&1; then
+      backend_ready=1
+      break
+    fi
+    sleep 2
+  done
+  [[ "$backend_ready" -eq 1 ]] || e1_die "Backend migration/startup 2 dakikada tamamlanmadi. Log: docker compose logs backend-api"
+  docker compose exec -T backend-api alembic current
   e1_ok "DB migration tamam."
 
   # Historian (TimescaleDB) idempotent ensure. Migration 0007 extension'i

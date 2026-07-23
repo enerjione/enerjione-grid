@@ -12,6 +12,7 @@ import type {
   Gateway,
   HistoryBucket,
   HostStatus,
+  LicenseStatus,
   TelemetryHistoryPoint,
   TelemetryAggregatePoint,
   NotificationItem,
@@ -1817,6 +1818,49 @@ export async function commitGridImport(
   });
   if (!response.ok) throw await buildApiError(response, "İçe aktarma başarısız.");
   return (await response.json()) as GridImportResult;
+}
+
+// ----- Offline cihaz lisansi -----
+
+export async function fetchLicenseStatus(token: string): Promise<LicenseStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/license/status`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Lisans durumu alınamadı.");
+  return (await response.json()) as LicenseStatus;
+}
+
+export async function downloadLicenseRequest(token: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/license/request`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Lisans istek dosyası indirilemedi.");
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = match ? match[1] : "enerjione-license-request.licreq";
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function importLicense(token: string, file: File): Promise<LicenseStatus> {
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await apiFetch(`${API_BASE_URL}/license/import`, {
+    method: "POST",
+    headers,
+    body: form
+  });
+  if (!response.ok) throw await buildApiError(response, "Lisans içe aktarılamadı.");
+  return (await response.json()) as LicenseStatus;
 }
 
 // ----- Project Settings -----

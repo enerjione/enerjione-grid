@@ -15,6 +15,7 @@ import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
 import { BulkNotificationPage } from "../features/bulk-notify/BulkNotificationPage";
 import { ActiveSessionsPage } from "../features/sessions/ActiveSessionsPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
+import { LicenseManagementPanel } from "../features/license/LicenseManagementPanel";
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
 import { ApiAccessPanel } from "../features/api-access/ApiAccessPanel";
 import { NotificationSettingsPanel } from "../features/settings/NotificationSettingsPanel";
@@ -81,6 +82,7 @@ import {
   fetchDeviceModels,
   fetchDevices,
   fetchGateways,
+  fetchLicenseStatus,
   fetchResponsibilityAreaDetail,
   fetchResponsibilityAreas,
   removeDeviceFromArea,
@@ -152,6 +154,7 @@ import type {
   FaultStats,
   UserNotificationPreferences,
   Gateway,
+  LicenseStatus,
   NotificationSettings,
   OutboundTarget,
   ResponsibilityAreaRow,
@@ -177,7 +180,7 @@ export function App() {
   const [faultStats, setFaultStats] = useState<FaultStats | null>(null);
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [gateways, setGateways] = useState<Gateway[]>([]);
-  const [devicesByGateway, setDevicesByGateway] = useState<DeviceRow[]>([]);
+  const [deviceInventoryError, setDeviceInventoryError] = useState("");
   /** Cihazlar sekmesinde listelenen gateway (kapsam); yenileme ve yoklama bunu kullanır */
   const [devicePanelGatewayCode, setDevicePanelGatewayCode] = useState<string>("");
   const [outboundTargets, setOutboundTargets] = useState<OutboundTarget[]>([]);
@@ -187,6 +190,8 @@ export function App() {
   const [gridSnapshot, setGridSnapshot] = useState<GridSnapshot | null>(null);
   const [alarmsLoading, setAlarmsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
+  const [licenseLoading, setLicenseLoading] = useState(false);
 
   // i18n: kullanici tercihi degistiginde (login sonrasi me yuklenince veya
   // ayarlardan dil secildiginde) react-i18next'i ona gore senkronize et.
@@ -331,28 +336,48 @@ export function App() {
         setCurrentUser(me);
         setSettingsFullName(me.full_name);
         setSettingsEmail(me.email);
-        const loadedDevices = await fetchDevices(session.accessToken);
-        setDevices(loadedDevices);
+        try {
+          const [loadedDevices, gatewayRows] = await Promise.all([
+            fetchDevices(session.accessToken),
+            fetchGateways(session.accessToken)
+          ]);
+          setDevices(loadedDevices);
+          setGateways(gatewayRows);
+          setDeviceInventoryError("");
+          setDevicePanelGatewayCode((current) =>
+            current && gatewayRows.some((gateway) => gateway.code === current)
+              ? current
+              : (gatewayRows[0]?.code ?? "")
+          );
+        } catch (error) {
+          setDeviceInventoryError(
+            error instanceof Error ? error.message : t("common.errorOccurred")
+          );
+        }
         setAlarmsLoading(true);
-        const alarmRows = await fetchAlarmEvents(session.accessToken);
-        setAlarms(alarmRows);
-        const eventRows = await fetchSystemEvents(session.accessToken);
-        setEvents(eventRows);
-        const gatewayRows = await fetchGateways(session.accessToken);
-        setGateways(gatewayRows);
-        if (gatewayRows.length > 0) {
-          const g0 = gatewayRows[0].code;
-          setDevicePanelGatewayCode(g0);
-          setDevicesByGateway(loadedDevices.filter((d) => d.gatewayCode === g0));
-        } else {
-          setDevicePanelGatewayCode("");
-          setDevicesByGateway(loadedDevices);
+        try {
+          setAlarms(await fetchAlarmEvents(session.accessToken));
+        } catch {
+          setAlarms([]);
+        }
+        try {
+          setEvents(await fetchSystemEvents(session.accessToken));
+        } catch {
+          setEvents([]);
         }
         if (session.role === "engineer" || session.role === "installer") {
           const allUsers = await fetchUsers(session.accessToken);
           setUsers(allUsers);
+          // Lisans servisi gecici olarak erisilemezse session'i gecersiz sayma.
+          // Status null kalir ve cihaz ekleme fail-closed disabled olur.
+          try {
+            setLicenseStatus(await fetchLicenseStatus(session.accessToken));
+          } catch {
+            setLicenseStatus(null);
+          }
         } else {
           setUsers([]);
+          setLicenseStatus(null);
         }
         if (session.role === "installer") {
           const outboundRows = await fetchOutboundTargets(session.accessToken);
@@ -451,6 +476,7 @@ export function App() {
     clearSession();
     setSession(null);
     setCurrentUser(null);
+    setLicenseStatus(null);
     setDevices([]);
     setUsers([]);
     setAlarms([]);
@@ -458,7 +484,7 @@ export function App() {
     setFaults([]);
     setEvents([]);
     setGateways([]);
-    setDevicesByGateway([]);
+    setDeviceInventoryError("");
     setDevicePanelGatewayCode("");
     setOutboundTargets([]);
     setNotificationSettings(null);
@@ -1118,6 +1144,17 @@ export function App() {
     toast.success(t("toasts.gatewayDownloaded", { filename }));
   };
 
+  const panelDevices = useMemo(
+    () =>
+      devicePanelGatewayCode
+        ? devices.filter((device) => device.gatewayCode === devicePanelGatewayCode)
+        : devices.filter(
+            (device) =>
+              !device.gatewayCode || !gateways.some((gateway) => gateway.code === device.gatewayCode)
+          ),
+    [devicePanelGatewayCode, devices, gateways]
+  );
+
   const handleDeleteGateway = async (gatewayCode: string) => {
     if (!session) return;
     const gateway = gateways.find((item) => item.code === gatewayCode);
@@ -1137,22 +1174,14 @@ export function App() {
     if (!await asyncConfirm(message)) return;
     try {
       await deleteGateway(session.accessToken, gatewayCode);
-      // Gateway listesi ve "tum cihazlar" listesi birbirinden bagimsiz —
-      // ardisik degil paralel cek.
       const [nextGateways, all] = await Promise.all([
-        reloadGateways(),
+        fetchGateways(session.accessToken),
         fetchDevices(session.accessToken)
       ]);
+      setGateways(nextGateways);
       setDevices(all);
-      if (nextGateways && nextGateways.length > 0) {
-        const firstCode = nextGateways[0].code;
-        setDevicePanelGatewayCode(firstCode);
-        const scoped = await fetchDevices(session.accessToken, firstCode);
-        setDevicesByGateway(scoped);
-      } else {
-        setDevicePanelGatewayCode("");
-        setDevicesByGateway([]);
-      }
+      setDeviceInventoryError("");
+      setDevicePanelGatewayCode(nextGateways[0]?.code ?? "");
       toast.success(t("toasts.gatewayDeleted", { name: displayName }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Gateway silinemedi.";
@@ -1200,15 +1229,9 @@ export function App() {
     toast.success(t("toasts.gatewayUpdated"));
   };
 
-  const handleSelectGatewayForDevices = useCallback(
-    async (gatewayCode: string) => {
-      if (!session) return;
-      setDevicePanelGatewayCode(gatewayCode);
-      const scopedDevices = await fetchDevices(session.accessToken, gatewayCode);
-      setDevicesByGateway(scopedDevices);
-    },
-    [session]
-  );
+  const handleSelectGatewayForDevices = useCallback(async (gatewayCode: string) => {
+    setDevicePanelGatewayCode(gatewayCode);
+  }, []);
 
   const refreshDevicePanelData = useCallback(async () => {
     if (!session) return;
@@ -1220,31 +1243,19 @@ export function App() {
       ]);
       setGateways(gw);
       setDevices(allDev);
-      if (devicePanelGatewayCode) {
-        const still = gw.some((g) => g.code === devicePanelGatewayCode);
-        const code = still ? devicePanelGatewayCode : (gw[0]?.code ?? "");
-        if (code) {
-          if (!still) {
-            setDevicePanelGatewayCode(code);
-          }
-          setDevicesByGateway(allDev.filter((d) => d.gatewayCode === code));
-        } else {
-          setDevicePanelGatewayCode("");
-          setDevicesByGateway(allDev);
-        }
-      } else {
-        if (gw.length > 0) {
-          const c = gw[0].code;
-          setDevicePanelGatewayCode(c);
-          setDevicesByGateway(allDev.filter((d) => d.gatewayCode === c));
-        } else {
-          setDevicesByGateway(allDev);
-        }
-      }
-    } catch {
-      // API hatasi ust katmanda
+      setDeviceInventoryError("");
+      setDevicePanelGatewayCode((current) =>
+        current && gw.some((gateway) => gateway.code === current)
+          ? current
+          : (gw[0]?.code ?? "")
+      );
+    } catch (error) {
+      // Son basarili envanteri koru; API hatasini bos liste gibi gosterme.
+      setDeviceInventoryError(
+        error instanceof Error ? error.message : t("common.errorOccurred")
+      );
     }
-  }, [session, devicePanelGatewayCode]);
+  }, [session, t]);
 
   useEffect(() => {
     if (!session) return;
@@ -1258,6 +1269,20 @@ export function App() {
     }, 12000);
     return () => window.clearInterval(id);
   }, [pageMode, engineeringPage, session, refreshDevicePanelData]);
+
+  const reloadLicenseStatus = useCallback(async () => {
+    if (!session || (session.role !== "engineer" && session.role !== "installer")) return;
+    setLicenseLoading(true);
+    try {
+      setLicenseStatus(await fetchLicenseStatus(session.accessToken));
+    } catch {
+      // Fail-closed: status bilinmiyorsa cihaz ekleme disabled kalir; cihaz
+      // ekleme/silme akisini lisans status yenileme hatasiyla basarisiz gosterme.
+      setLicenseStatus(null);
+    } finally {
+      setLicenseLoading(false);
+    }
+  }, [session]);
 
   const handleCreateDevice = async (payload: {
     code: string;
@@ -1283,10 +1308,6 @@ export function App() {
     setDevices(all);
     if (payload.gateway_code) {
       setDevicePanelGatewayCode(payload.gateway_code);
-      const scoped = await fetchDevices(session.accessToken, payload.gateway_code);
-      setDevicesByGateway(scoped);
-    } else {
-      setDevicesByGateway(all);
     }
     try {
       const signalsRows = await fetchSignals(session.accessToken);
@@ -1294,7 +1315,7 @@ export function App() {
     } catch {
       // sinyal listesi tazelense iyi, canlı matrisin etiketleriyle uyum kalsin
     }
-    await handleRefreshSignalLive();
+    await Promise.all([handleRefreshSignalLive(), reloadLicenseStatus()]);
     toast.success(t("toasts.deviceAdded", { name: payload.name }));
   };
 
@@ -1322,10 +1343,7 @@ export function App() {
     const all = await fetchDevices(session.accessToken);
     setDevices(all);
     if (payload.gateway_code) {
-      const scoped = await fetchDevices(session.accessToken, payload.gateway_code);
-      setDevicesByGateway(scoped);
-    } else {
-      setDevicesByGateway(all);
+      setDevicePanelGatewayCode(payload.gateway_code);
     }
     toast.success(t("toasts.deviceUpdated"));
   };
@@ -1335,8 +1353,7 @@ export function App() {
     await deleteDevice(session.accessToken, deviceCode);
     const all = await fetchDevices(session.accessToken);
     setDevices(all);
-    setDevicesByGateway((prev) => prev.filter((item) => item.code !== deviceCode));
-    await handleRefreshSignalLive();
+    await Promise.all([handleRefreshSignalLive(), reloadLicenseStatus()]);
     toast.success(t("toasts.deviceDeleted"));
   };
 
@@ -1842,27 +1859,12 @@ export function App() {
       setDevices(dev);
       setGateways(gw);
       setAlarms(al);
-      if (devicePanelGatewayCode) {
-        const still = gw.some((g) => g.code === devicePanelGatewayCode);
-        const code = still ? devicePanelGatewayCode : (gw[0]?.code ?? "");
-        if (code) {
-          if (!still) {
-            setDevicePanelGatewayCode(code);
-          }
-          setDevicesByGateway(dev.filter((d) => d.gatewayCode === code));
-        } else {
-          setDevicePanelGatewayCode("");
-          setDevicesByGateway(dev);
-        }
-      } else {
-        if (gw.length > 0) {
-          const c = gw[0].code;
-          setDevicePanelGatewayCode(c);
-          setDevicesByGateway(dev.filter((d) => d.gatewayCode === c));
-        } else {
-          setDevicesByGateway(dev);
-        }
-      }
+      setDeviceInventoryError("");
+      setDevicePanelGatewayCode((current) =>
+        current && gw.some((gateway) => gateway.code === current)
+          ? current
+          : (gw[0]?.code ?? "")
+      );
     } catch {
       // Oturum hatasi ust seviyede yakala
     } finally {
@@ -1897,6 +1899,7 @@ export function App() {
         onChangePage={handleChangePage}
         isEngineeringView={pageMode === "engineering"}
         onToggleEngineering={() => handleChangePage("engineering")}
+        onOpenSystemStatus={() => openEng("system-status")}
         onSettings={handleOpenSettings}
         onLogout={handleLogout}
         devices={devices}
@@ -2074,6 +2077,17 @@ export function App() {
                   </button>
                 </>
               ) : null}
+              {session.role === "installer" || session.role === "engineer" ? (
+                <button
+                  className={engineeringPage === "license" ? "active" : ""}
+                  onClick={() => {
+                    openEng("license");
+                    void reloadLicenseStatus();
+                  }}
+                >
+                  {t("engineering.nav.license")}
+                </button>
+              ) : null}
               {/* Yedekler: installer + engineer (engineer sadece alma; restore butonu
                   BackupsPanel'de role'e gore disabled). */}
               {session.role === "installer" || session.role === "engineer" ? (
@@ -2084,15 +2098,23 @@ export function App() {
                   {t("engineering.nav.backups")}
                 </button>
               ) : null}
-              {/* Aktif Oturumlar: sadece installer (sistem genelinde kim girmis,
-                  hangi IP'den, gerekirse oturumu at). */}
               {session.role === "installer" ? (
-                <button
-                  className={engineeringPage === "active-sessions" ? "active" : ""}
-                  onClick={() => openEng("active-sessions")}
-                >
-                  {t("engineering.nav.activeSessions")}
-                </button>
+                <>
+                  <button
+                    className={engineeringPage === "system-status" ? "active" : ""}
+                    onClick={() => openEng("system-status")}
+                  >
+                    {t("header.systemStatus")}
+                  </button>
+                  {/* Aktif Oturumlar: sadece installer (sistem genelinde kim girmis,
+                      hangi IP'den, gerekirse oturumu at). */}
+                  <button
+                    className={engineeringPage === "active-sessions" ? "active" : ""}
+                    onClick={() => openEng("active-sessions")}
+                  >
+                    {t("engineering.nav.activeSessions")}
+                  </button>
+                </>
               ) : null}
             </div>
 
@@ -2101,8 +2123,15 @@ export function App() {
               <DeviceManagementPanel
                 role={session.role}
                 gateways={gateways}
-                devices={devicesByGateway}
+                devices={panelDevices}
+                unassignedCount={devices.filter(
+                  (device) =>
+                    !device.gatewayCode ||
+                    !gateways.some((gateway) => gateway.code === device.gatewayCode)
+                ).length}
                 deviceModels={deviceModels}
+                inventoryError={deviceInventoryError}
+                licenseStatus={licenseStatus}
                 onSelectGateway={handleSelectGatewayForDevices}
                 onCreateGateway={handleCreateGateway}
                 onUpdateGateway={handleUpdateGateway}
@@ -2257,9 +2286,29 @@ export function App() {
             (session.role === "engineer" || session.role === "installer") ? (
               <GridManagementPanel accessToken={session.accessToken} devices={devices} gridSnapshot={gridSnapshot} />
             ) : null}
+            {engineeringPage === "license" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <LicenseManagementPanel
+                accessToken={session.accessToken}
+                status={licenseStatus}
+                loading={licenseLoading}
+                onStatusChange={setLicenseStatus}
+                onRefresh={reloadLicenseStatus}
+              />
+            ) : null}
             {engineeringPage === "backups" &&
             (session.role === "engineer" || session.role === "installer") ? (
               <BackupsPanel accessToken={session.accessToken} currentRole={session.role} />
+            ) : null}
+            {engineeringPage === "system-status" && session.role === "installer" ? (
+              <SystemStatusPage
+                devices={devices}
+                gateways={gateways}
+                alarms={alarms}
+                loading={loadingData}
+                onRefresh={handleRefreshSystemStatus}
+                wsState={liveSocket.connectionState}
+              />
             ) : null}
             {engineeringPage === "active-sessions" && session.role === "installer" ? (
               <ActiveSessionsPage accessToken={session.accessToken} />
@@ -2305,16 +2354,6 @@ export function App() {
             ) : null}
             {pageMode === "events" ? (
               <EventsPage events={events} loading={loadingData} devices={devices} />
-            ) : null}
-            {pageMode === "system-status" ? (
-              <SystemStatusPage
-                devices={devices}
-                gateways={gateways}
-                alarms={alarms}
-                loading={loadingData}
-                onRefresh={handleRefreshSystemStatus}
-                wsState={liveSocket.connectionState}
-              />
             ) : null}
           </main>
         ) : (

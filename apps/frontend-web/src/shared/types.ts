@@ -76,6 +76,25 @@ export type DeviceRow = {
 
 export type UserRole = "operator" | "engineer" | "installer" | "ops_manager";
 
+export type LicenseStatus = {
+  state: "valid" | "unlicensed" | "invalid" | "machine_mismatch" | "machine_unavailable";
+  reason_code: string;
+  is_valid: boolean;
+  can_add_device: boolean;
+  quota_state: "available" | "full" | "over_limit" | "unavailable";
+  installation_id: string;
+  machine_fingerprint?: string | null;
+  license_id?: string | null;
+  customer_code?: string | null;
+  customer_name?: string | null;
+  project_name?: string | null;
+  note?: string | null;
+  device_limit: number;
+  device_count: number;
+  remaining: number;
+  issued_at?: string | null;
+};
+
 export type AuthSession = {
   accessToken: string;
   username: string;

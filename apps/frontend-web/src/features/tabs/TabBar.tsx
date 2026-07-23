@@ -6,7 +6,7 @@
  * - Klavye: ok tuslari ile gez, Enter/Space ile aktive, Delete ile kapat.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -45,7 +45,42 @@ export function TabBar({
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+
+  const updateScrollState = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    updateScrollState();
+    const observer = new ResizeObserver(updateScrollState);
+    observer.observe(el);
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("scroll", updateScrollState);
+    };
+  }, [tabs, updateScrollState]);
+
+  useEffect(() => {
+    const active = listRef.current?.querySelector<HTMLElement>(
+      `[data-tab-key="${cssEscape(activeKey)}"]`
+    );
+    active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [activeKey]);
+
+  const scrollTabs = (direction: -1 | 1) => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * Math.max(240, el.clientWidth * 0.65), behavior: "smooth" });
+  };
 
   // Sag-tik menusunu disari tiklama / Esc / scroll ile kapat.
   useEffect(() => {
@@ -85,8 +120,18 @@ export function TabBar({
   };
 
   return (
-    <div className="tab-bar" role="tablist" ref={listRef}>
-      {tabs.map((tab) => {
+    <div className="tab-bar-shell">
+      <button
+        type="button"
+        className="tab-bar-scroll tab-bar-scroll--left"
+        aria-label={t("common.previous")}
+        disabled={!canScrollLeft}
+        onClick={() => scrollTabs(-1)}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+      </button>
+      <div className="tab-bar" role="tablist" ref={listRef}>
+        {tabs.map((tab) => {
         const active = tab.key === activeKey;
         const closable = isClosable(tab.route);
         const isDragOver = dragOverKey === tab.key && dragKey !== tab.key;
@@ -177,7 +222,17 @@ export function TabBar({
             )}
           </div>
         );
-      })}
+        })}
+      </div>
+      <button
+        type="button"
+        className="tab-bar-scroll tab-bar-scroll--right"
+        aria-label={t("common.next")}
+        disabled={!canScrollRight}
+        onClick={() => scrollTabs(1)}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+      </button>
       {ctxMenu ? (
         <TabContextMenu
           menu={ctxMenu}

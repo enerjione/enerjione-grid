@@ -237,7 +237,7 @@ def delete_gateway(
     name = row.name
     code = row.code
     repository = DeviceRepository(db)
-    deleted_devices = repository.delete_all_for_gateway(gateway_code)
+    deleted_device_codes, cleanup_counts = repository.delete_all_for_gateway(gateway_code)
     db.execute(delete(GatewayIngestBatch).where(GatewayIngestBatch.gateway_code == gateway_code))
     db.delete(row)
     record_event(
@@ -246,10 +246,14 @@ def delete_gateway(
         event_type="gateway_deleted",
         severity="warning",
         actor_username=current_user.username,
-        message=f"Gateway deleted: {name} ({code}); {deleted_devices} attached devices also removed",
-        metadata={"gateway_code": code, "deleted_devices": deleted_devices},
+        message=f"Gateway deleted: {name} ({code}); {len(deleted_device_codes)} attached devices also removed",
+        metadata={
+            "gateway_code": code,
+            "deleted_devices": deleted_device_codes,
+            "cleanup": cleanup_counts,
+        },
         i18n_key="gateway_deleted",
-        i18n_params={"name": name, "code": code, "count": deleted_devices},
+        i18n_params={"name": name, "code": code, "count": len(deleted_device_codes)},
     )
     db.commit()
     # Best-effort RabbitMQ user temizligi response sonrasina ertelenir.

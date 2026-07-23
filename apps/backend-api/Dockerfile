@@ -60,8 +60,8 @@ COPY alembic_migrations ./alembic_migrations
 # `chown` ile /app + /var/lib/e1-backups'i kendisine atar.
 RUN groupadd -r e1 --gid=10001 \
  && useradd -r -g e1 --uid=10001 --home-dir=/app --shell=/sbin/nologin e1 \
- && mkdir -p /var/lib/e1-backups \
- && chown -R e1:e1 /app /var/lib/e1-backups
+ && mkdir -p /var/lib/e1-backups /var/lib/e1-license \
+ && chown -R e1:e1 /app /var/lib/e1-backups /var/lib/e1-license
 USER e1
 
 EXPOSE 8000
@@ -74,4 +74,4 @@ EXPOSE 8000
 # tanimaz; "*" kabul edilir cunku 8000 portu compose internal network'unde
 # (host'a expose edilmemis), saldirgan zaten direkt erisemez. Production'da
 # sadece nginx container'i 8000'e ulasabilir.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+CMD ["sh", "-c", "python -m scripts.migrate_db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"]

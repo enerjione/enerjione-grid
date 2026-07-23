@@ -40,3 +40,7 @@ infra/nats/nats-server.conf
 
 # DB yedek dosyalari — update.sh tarafindan repo root'a yazilir; commit edilmemeli.
 backups/
+
+# Runtime lisans verisi (installation-id, license.lic) — makineye baglidir,
+# native backend calisinca LICENSE_DIR altinda olusur. Commit edilmez.
+apps/backend-api/license-data/

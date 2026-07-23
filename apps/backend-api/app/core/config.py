@@ -187,6 +187,13 @@ class Settings(BaseSettings):
     worker_health_host: str = "127.0.0.1"
     worker_health_port: int = 0
 
+    # Cihaz bazli offline lisans. Docker'da kalici volume; Windows native'de
+    # PROGRAMDATA altinda tutulur. Makine kimligi USB/disk/MAC'ten degil,
+    # sabit OS kimliginden gelir; donanim eklemek lisansi bozmaz.
+    license_dir: str = "./license-data"
+    host_machine_id_path: str = "/run/host-machine-id"
+    license_upload_max_bytes: int = 50 * 1024
+
     # Hat Arizalari sayfasi gosterim gecikmesi (saniye). Bir ariza acildiktan
     # sonra bu sure gecene kadar listede GORUNMEZ; harita aninda gosterir.
     # Amac: haberlesme gecikmesiyle gec gelen alarmlar bu pencere icinde

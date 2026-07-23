@@ -18,7 +18,6 @@ export type PageMode =
   | "alarms"
   | "faults"
   | "events"
-  | "system-status"
   | "engineering";
 
 export type EngineeringPage =
@@ -35,6 +34,8 @@ export type EngineeringPage =
   | "project-settings"
   | "grid"
   | "backups"
+  | "license"
+  | "system-status"
   | "active-sessions";
 
 export type TabRoute =
@@ -88,7 +89,6 @@ export function tabLabel(
         alarms: "header.alarms",
         faults: "header.faults",
         events: "header.events",
-        "system-status": "header.systemStatus",
       };
       return t(map[route.page]);
     }
@@ -107,6 +107,8 @@ export function tabLabel(
         "project-settings": "engineering.nav.projectSettings",
         grid: "engineering.nav.grid",
         backups: "engineering.nav.backups",
+        license: "engineering.nav.license",
+        "system-status": "header.systemStatus",
         "active-sessions": "engineering.nav.activeSessions",
       };
       return t(map[route.page]);
@@ -127,12 +129,11 @@ export function tabIcon(route: TabRoute): string {
         alarms: "notifications_active",
         faults: "electric_bolt",
         events: "history",
-        "system-status": "monitor_heart",
       };
       return map[route.page];
     }
     case "engineering":
-      return "engineering";
+      return route.page === "system-status" ? "monitor_heart" : "engineering";
     case "device-detail":
       return "developer_board";
   }
@@ -175,13 +176,13 @@ const ENGINEER_ENG: EngineeringPage[] = [
   "outbound",
   "api-access",
   "backups",
+  "license",
 ];
 // installer: tum engineering sayfalari.
 
 export function canAccessRoute(route: TabRoute, role: UserRole): boolean {
   switch (route.kind) {
     case "page":
-      if (route.page === "system-status") return role === "installer";
       return true; // home/alarms/faults/events herkes
     case "engineering": {
       const canEngineering =
@@ -267,9 +268,7 @@ export function loadTabs(): { tabs: Tab[]; activeKey: string } {
 function isValidRoute(route: TabRoute): boolean {
   if (!route || typeof route !== "object") return false;
   if (route.kind === "page") {
-    return ["home", "alarms", "faults", "events", "system-status"].includes(
-      route.page
-    );
+    return ["home", "alarms", "faults", "events"].includes(route.page);
   }
   if (route.kind === "engineering") {
     return typeof route.page === "string";

@@ -117,6 +117,13 @@ else
 fi
 e1_ok "Repo hazir: $(git rev-parse --short HEAD) (${BRANCH})"
 
+# Lisans makine bagi host'un sabit OS kimligine dayanir. USB, disk, RAM, MAC
+# veya container ID kullanilmaz; bunlar degisince lisans patlamamali.
+if [[ ! -s /etc/machine-id ]]; then
+  e1_die "/etc/machine-id yok veya bos. Lisans makine kimligi guvenli uretilmeden kurulum devam edemez."
+fi
+e1_ok "Sabit host machine-id hazir (USB/disk/ag degisikliklerinden etkilenmez)."
+
 # Dizin sahipligini cagiran kullaniciya devret (sudo ile root:root oldu).
 if [[ -n "$(e1_target_user)" ]]; then
   e1_info "Dizin sahipligi '$(e1_target_user)' kullanicisina devrediliyor..."

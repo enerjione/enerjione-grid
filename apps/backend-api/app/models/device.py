@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Float, Integer, JSON, String
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -15,7 +15,11 @@ class Device(Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     model: Mapped[str] = mapped_column(String(80), default="horstmann_sn_2_0", index=True)
-    gateway_code: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    gateway_code: Mapped[str | None] = mapped_column(
+        ForeignKey("gateways.code", ondelete="RESTRICT", onupdate="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     ip_address: Mapped[str] = mapped_column(String(120))
     dnp3_outstation_port: Mapped[int] = mapped_column(Integer, default=20001)
     dnp3_address: Mapped[int] = mapped_column(Integer, default=1)

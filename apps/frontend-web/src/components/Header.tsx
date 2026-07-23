@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Home, Bell, TriangleAlert, FileText, HeartPulse, Settings, type LucideIcon } from "lucide-react";
+import { Home, Bell, TriangleAlert, FileText, Settings, type LucideIcon } from "lucide-react";
 
 import { NotificationBell } from "./NotificationBell";
 import { HeaderSearch } from "./HeaderSearch";
@@ -8,7 +8,7 @@ import { useProjectSettings } from "./ProjectSettingsProvider";
 import type { DeviceRow, Line, Region, UserRole } from "../shared/types";
 import type { WsConnectionState } from "../shared/useLiveValuesSocket";
 
-type NavPage = "home" | "alarms" | "faults" | "events" | "system-status" | "engineering";
+type NavPage = "home" | "alarms" | "faults" | "events" | "engineering";
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
 
 type Props = {
@@ -22,6 +22,7 @@ type Props = {
   onSettings?: () => void;
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
+  onOpenSystemStatus?: () => void;
   activePage: NavPage;
   onChangePage: (page: NavPage) => void;
   // Global arama (cihaz + hat + bolge).
@@ -40,7 +41,6 @@ const NAV_ITEMS: { page: Exclude<NavPage, "engineering">; key: string; Icon: Luc
   { page: "alarms", key: "header.alarms", Icon: Bell },
   { page: "faults", key: "header.faults", Icon: TriangleAlert },
   { page: "events", key: "header.events", Icon: FileText },
-  { page: "system-status", key: "header.systemStatus", Icon: HeartPulse },
 ];
 
 export function Header({
@@ -51,6 +51,7 @@ export function Header({
   onSettings,
   isEngineeringView,
   onToggleEngineering,
+  onOpenSystemStatus,
   activePage,
   onChangePage,
   devices,
@@ -125,21 +126,16 @@ export function Header({
           );
         })()}
         <nav className="header-nav">
-          {NAV_ITEMS.map(({ page, key, Icon }) => {
-            // Sistem Durumu yalnizca installer rolune gosterilir (route guard
-            // App.tsx'te de var — URL/storage uzerinden dogrudan erisim engelli).
-            if (page === "system-status" && role !== "installer") return null;
-            return (
-              <button
-                key={page}
-                className={`header-nav-btn${activePage === page ? " active" : ""}`}
-                onClick={() => onChangePage(page)}
-              >
-                <Icon size={17} strokeWidth={2} />
-                <span>{t(key)}</span>
-              </button>
-            );
-          })}
+          {NAV_ITEMS.map(({ page, key, Icon }) => (
+            <button
+              key={page}
+              className={`header-nav-btn${activePage === page ? " active" : ""}`}
+              onClick={() => onChangePage(page)}
+            >
+              <Icon size={17} strokeWidth={2} />
+              <span>{t(key)}</span>
+            </button>
+          ))}
         </nav>
       </div>
 
@@ -175,7 +171,7 @@ export function Header({
                 if (link.startsWith("/alarms")) onChangePage("alarms");
                 else if (link.startsWith("/faults")) onChangePage("faults");
                 else if (link.startsWith("/events")) onChangePage("events");
-                else if (link.startsWith("/system-status")) onChangePage("system-status");
+                else if (link.startsWith("/system-status")) onOpenSystemStatus?.();
               }}
             />
           ) : null}

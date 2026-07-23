@@ -9,7 +9,7 @@ from sqlalchemy import select as _select, text
 
 from app.core.rate_limit import limiter
 
-from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -76,6 +76,7 @@ app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
 app.include_router(device_models.router, prefix=settings.api_prefix)
+app.include_router(licensing.router, prefix=settings.api_prefix)
 app.include_router(responsibility_areas.router, prefix=settings.api_prefix)
 app.include_router(gateways.router, prefix=settings.api_prefix)
 app.include_router(telemetry.router, prefix=settings.api_prefix)
@@ -213,6 +214,12 @@ def create_tables():
         # tetikler.
         connection.execute(
             text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS refresh_nonce INTEGER NOT NULL DEFAULT 0")
+        )
+        # Acil sema repair: eski startup `stamp head` nedeniyle 0008 gercekte
+        # calismadan isaretlenmis olabilir. Gateway ORM her SELECT'te bu kolonu
+        # bekledigi icin eksikligi `/gateways` endpoint'ini 500'e dusurur.
+        connection.execute(
+            text("ALTER TABLE gateways ADD COLUMN IF NOT EXISTS config_nonce INTEGER NOT NULL DEFAULT 0")
         )
         # Gateway token hash kolonu — yeni gateway create'lerinde SHA-256 hash
         # token'la birlikte yazilir. validate_gateway_token() once hash'a bakar,
@@ -736,41 +743,6 @@ def create_tables():
     finally:
         db.close()
 
-    # Alembic baseline stamp — `alembic_version` tablosu yoksa olustur ve
-    # head revision'a stamp et. Boylece sonraki `alembic upgrade head`
-    # mevcut deploy'larda da idempotent calisir; create_all + ALTER zinciri
-    # yerine Alembic versiyonlama zinciri geri donulemez sekilde devrede.
-    try:
-        with engine.connect() as connection:
-            has_alembic_version = connection.execute(
-                text(
-                    "SELECT to_regclass('public.alembic_version') IS NOT NULL"
-                )
-            ).scalar()
-            if not has_alembic_version:
-                import logging
-                from alembic import command as _alembic_cmd
-                from alembic.config import Config as _AlembicConfig
-                from pathlib import Path as _Path
-
-                _alembic_ini = _Path(__file__).resolve().parents[1] / "alembic.ini"
-                if _alembic_ini.exists():
-                    cfg = _AlembicConfig(str(_alembic_ini))
-                    # DB URL'i Settings'ten zaten env.py uzerinden okuyor.
-                    _alembic_cmd.stamp(cfg, "head")
-                    logging.getLogger(__name__).info(
-                        "alembic_baseline_stamped revision=head (existing schema marked)"
-                    )
-                else:
-                    logging.getLogger(__name__).warning(
-                        "alembic_ini_not_found path=%s — baseline atlandi", _alembic_ini
-                    )
-    except Exception:  # noqa: BLE001
-        # Alembic optional baseline stamp'i boot'u durdurmamali (eski deploy
-        # kosullarinda alembic paketi yoksa veya alembic.ini bulunamazsa).
-        import logging
-
-        logging.getLogger(__name__).exception("alembic_baseline_stamp_failed")
 
 
 @app.on_event("startup")

@@ -226,6 +226,10 @@ services:
       # Dosya yoksa FCM sessizce devre disi kalir (fcm.py lazy load), email/SMS
       # kanallari calismaya devam eder.
       FCM_SERVICE_ACCOUNT_PATH: /app/fcm-service-account.json
+      # Offline cihaz lisansi: dosya kalici volume'da; makine bagi host'un sabit
+      # OS machine-id'sinden gelir. USB/disk/MAC/container ID kullanilmaz.
+      LICENSE_DIR: /var/lib/e1-license
+      HOST_MACHINE_ID_PATH: /run/host-machine-id
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -243,6 +247,10 @@ services:
     # uzerinden ulasabilir; veya `docker compose exec backend-api curl ...`.
     volumes:
       - backup-data:/var/lib/e1-backups
+      - license-data:/var/lib/e1-license
+      # Host OS kimligi sabit; USB/disk/RAM/ag karti degisimi bunu etkilemez.
+      # Container recreate sonrasi lisans ayni makinede gecerli kalir.
+      - /etc/machine-id:/run/host-machine-id:ro
       # FCM service account — host'ta dosya yoksa Docker DIZIN olarak yaratir
       # (bind mount kazasi). Bunu onlemek icin :ro flag + dosya zorunluluk.
       # Dosya yoksa kullanici install/update sirasinda uyarilir; FCM o zaman
@@ -452,5 +460,7 @@ volumes:
   rabbitmq-data:
   nats-data:
   backup-data:
+  # Imzali lisans + kurulum kimligi. DB backup'ina dahil degil; makineye bagli.
+  license-data:
   # Cihazlarin FTP ile yazdigi config/firmware dosyalari (ftp-server + backend okur).
   ftp-data:
