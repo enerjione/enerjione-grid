@@ -2,8 +2,17 @@ FROM node:20-slim
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --omit=dev
+# libsignal-node (Baileys bagimliligi) lockfile'da git+ssh:// uzerinden
+# cozuluyor; slim image'de git yok ve SSH key'i yok. git kur + git+ssh'i
+# https'e yonlendir (public repo, anonim https erisimi yeterli).
+RUN apt-get update -qq \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && git config --global url."https://github.com/".insteadOf "git@github.com:" \
+ && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 COPY src ./src
 
