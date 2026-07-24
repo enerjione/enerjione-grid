@@ -128,7 +128,6 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
     <section className="tab-panel signals-panel signals-panel-modern">
       <div className="signals-header-row">
         <label className="signals-model-label">
-          Cihaz Modeli
           <select
             className="signals-model-select"
             value={modelFilter}

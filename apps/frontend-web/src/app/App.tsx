@@ -133,6 +133,10 @@ import {
   testNotificationSmtp,
   testNotificationTelegram,
   discoverTelegramChats,
+  fetchWhatsappWebStatus,
+  fetchWhatsappWebQr,
+  testWhatsappWeb,
+  logoutWhatsappWeb,
   updateNotificationSettings as updateNotificationSettingsApi,
   updateUser,
   updateMyProfile,
@@ -1289,6 +1293,7 @@ export function App() {
     name: string;
     description?: string | null;
     model: string;
+    installation_date?: string | null;
     gateway_code?: string | null;
     ip_address: string;
     dnp3_outstation_port: number;
@@ -1325,6 +1330,7 @@ export function App() {
       name?: string;
       description?: string | null;
       model?: string;
+      installation_date?: string | null;
       gateway_code?: string | null;
       ip_address?: string;
       dnp3_outstation_port?: number;
@@ -1595,6 +1601,34 @@ export function App() {
       throw new Error("Oturum bulunamadı.");
     }
     return discoverTelegramChats(session.accessToken, payload);
+  };
+
+  const handleFetchWhatsappWebStatus = async () => {
+    if (!session) {
+      throw new Error("Oturum bulunamadı.");
+    }
+    return fetchWhatsappWebStatus(session.accessToken);
+  };
+
+  const handleFetchWhatsappWebQr = async () => {
+    if (!session) {
+      throw new Error("Oturum bulunamadı.");
+    }
+    return fetchWhatsappWebQr(session.accessToken);
+  };
+
+  const handleTestWhatsappWeb = async (payload: { recipient_phone: string; message?: string }) => {
+    if (!session) {
+      throw new Error("Oturum bulunamadı.");
+    }
+    return testWhatsappWeb(session.accessToken, payload);
+  };
+
+  const handleLogoutWhatsappWeb = async () => {
+    if (!session) {
+      throw new Error("Oturum bulunamadı.");
+    }
+    return logoutWhatsappWeb(session.accessToken);
   };
 
   const handleOpenSettings = () => {
@@ -2241,6 +2275,7 @@ export function App() {
                 targets={outboundTargets}
                 devices={devices}
                 accessToken={session.accessToken}
+                allowedProtocols={["mqtt", "iec104"]}
                 onCreate={handleCreateOutboundTarget}
                 onUpdate={handleUpdateOutboundTarget}
                 onDelete={handleDeleteOutboundTarget}
@@ -2272,11 +2307,21 @@ export function App() {
                 loading={notificationSettingsLoading}
                 saving={notificationSettingsSaving}
                 error={notificationSettingsError}
+                outboundTargets={outboundTargets}
+                devices={devices}
+                accessToken={session.accessToken}
+                onCreateWebhook={handleCreateOutboundTarget}
+                onUpdateWebhook={handleUpdateOutboundTarget}
+                onDeleteWebhook={handleDeleteOutboundTarget}
                 onSave={handleSaveNotificationSettings}
                 onTestSmtp={handleTestNotificationSmtp}
                 onTestSms={handleTestNotificationSms}
                 onTestTelegram={handleTestNotificationTelegram}
                 onDiscoverTelegramChats={handleDiscoverTelegramChats}
+                onFetchWhatsappWebStatus={handleFetchWhatsappWebStatus}
+                onFetchWhatsappWebQr={handleFetchWhatsappWebQr}
+                onTestWhatsappWeb={handleTestWhatsappWeb}
+                onLogoutWhatsappWeb={handleLogoutWhatsappWeb}
               />
             ) : null}
             {engineeringPage === "project-settings" && session.role === "installer" ? (

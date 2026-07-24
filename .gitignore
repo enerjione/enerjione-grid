@@ -44,3 +44,8 @@ backups/
 # Runtime lisans verisi (installation-id, license.lic) — makineye baglidir,
 # native backend calisinca LICENSE_DIR altinda olusur. Commit edilmez.
 apps/backend-api/license-data/
+
+# WhatsApp Web (Baileys) session/credential dosyalari — telefon eslesme
+# bilgisi icerir, makineye/session'a ozeldir. Docker'da named volume ile
+# kalici; native/yerel testte burada olusur, commit edilmez.
+apps/whatsapp-web-gateway/session-data/

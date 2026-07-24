@@ -10,12 +10,13 @@ import { MqttTopicMappingModal } from "./MqttTopicMappingModal";
 import { MqttCertUploader } from "./MqttCertUploader";
 
 type Protocol = "rest" | "mqtt" | "iec104";
+const DEFAULT_PROTOCOLS: Protocol[] = ["rest", "mqtt", "iec104"];
 
 // IEC104 listen_host'u bu degerlerden biriyse "tum arayuzler" anlamina gelir;
 // SCADA buraya dogrudan baglanamaz, tarayicinin host'unu gostermek gerekir.
 const WILDCARD_HOSTS = new Set(["0.0.0.0", "::", "*", ""]);
 
-type CreatePayload = {
+export type OutboundTargetCreatePayload = {
   name: string;
   protocol: Protocol;
   endpoint: string;
@@ -32,7 +33,7 @@ type CreatePayload = {
   iec104_allowed_peers?: string | null;
 } & MqttPayloadFields;
 
-type UpdatePayload = {
+export type OutboundTargetUpdatePayload = {
   endpoint?: string;
   topic?: string | null;
   event_filter?: "all" | "telemetry" | "alarm";
@@ -51,8 +52,11 @@ type Props = {
   targets: OutboundTarget[];
   devices?: DeviceRow[];
   accessToken: string;
-  onCreate: (payload: CreatePayload) => Promise<OutboundTarget | undefined>;
-  onUpdate: (targetId: number, payload: UpdatePayload) => Promise<void>;
+  allowedProtocols?: Protocol[];
+  titleKey?: string;
+  newTargetKey?: string;
+  onCreate: (payload: OutboundTargetCreatePayload) => Promise<OutboundTarget | undefined>;
+  onUpdate: (targetId: number, payload: OutboundTargetUpdatePayload) => Promise<void>;
   onDelete: (targetId: number) => Promise<void>;
   onDownloadIec104Points?: (targetId: number, suggestedName: string) => Promise<void>;
   onDownloadIec104Xlsx?: (targetId: number, suggestedName: string) => Promise<void>;
@@ -65,6 +69,9 @@ export function OutboundTargetsPanel({
   targets,
   devices,
   accessToken,
+  allowedProtocols,
+  titleKey = "engineering.outbound.title",
+  newTargetKey = "engineering.outbound.newTarget",
   onCreate,
   onUpdate,
   onDelete,
@@ -75,6 +82,16 @@ export function OutboundTargetsPanel({
   onFetchIec104Runtime
 }: Props) {
   const { t } = useTranslation();
+  const protocolKey = (allowedProtocols ?? DEFAULT_PROTOCOLS).join("|");
+  const protocols = useMemo(
+    () => (allowedProtocols ?? DEFAULT_PROTOCOLS).filter((protocol) => DEFAULT_PROTOCOLS.includes(protocol)),
+    [allowedProtocols, protocolKey]
+  );
+  const firstProtocol = protocols[0] ?? "rest";
+  const visibleTargets = useMemo(
+    () => targets.filter((target) => protocols.includes(target.protocol as Protocol)),
+    [targets, protocols]
+  );
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<OutboundTarget | null>(null);
   const [error, setError] = useState("");
@@ -151,7 +168,7 @@ export function OutboundTargetsPanel({
 
   const resetForm = () => {
     setName("");
-    setProtocol("rest");
+    setProtocol(firstProtocol);
     setEndpoint("");
     setTopic("");
     setEventFilter("all");
@@ -523,7 +540,7 @@ export function OutboundTargetsPanel({
   // Liste rozetleri 10 sn'de bir
   useEffect(() => {
     if (!onFetchIec104Runtime) return;
-    const iec104Ids = targets.filter((t) => t.protocol === "iec104").map((t) => t.id);
+    const iec104Ids = visibleTargets.filter((t) => t.protocol === "iec104").map((t) => t.id);
     if (iec104Ids.length === 0) {
       setRuntimeBadges({});
       return;
@@ -549,11 +566,11 @@ export function OutboundTargetsPanel({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [targets, onFetchIec104Runtime]);
+  }, [visibleTargets, onFetchIec104Runtime]);
 
   // REST/MQTT runtime status — 'Durum' sutunu icin 5sn poll
   useEffect(() => {
-    const restMqttIds = targets.filter((t) => t.protocol !== "iec104").map((t) => t.id);
+    const restMqttIds = visibleTargets.filter((t) => t.protocol !== "iec104").map((t) => t.id);
     if (restMqttIds.length === 0) {
       setOutboundRuntime({});
       return;
@@ -573,7 +590,7 @@ export function OutboundTargetsPanel({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [targets, accessToken]);
+  }, [visibleTargets, accessToken]);
 
   // Otomatik Topic'ler popup acildiginda backend'den cek
   useEffect(() => {
@@ -604,9 +621,9 @@ export function OutboundTargetsPanel({
   return (
     <section className="tab-panel">
       <div className="panel-head">
-        <h3>{t("engineering.outbound.title")}</h3>
+        <h3>{t(titleKey)}</h3>
         <button className="add-user-btn" onClick={() => setCreateOpen(true)}>
-          + {t("engineering.outbound.newTarget")}
+          + {t(newTargetKey)}
         </button>
       </div>
       {/* Modal labels */}
@@ -640,9 +657,15 @@ export function OutboundTargetsPanel({
                       value={protocol}
                       onChange={(event) => setProtocol(event.target.value as Protocol)}
                     >
-                      <option value="rest">{t("engineering.outbound.proto.rest")}</option>
-                      <option value="mqtt">{t("engineering.outbound.proto.mqtt")}</option>
-                      <option value="iec104">{t("engineering.outbound.proto.iec104")}</option>
+                      {protocols.includes("rest") ? (
+                        <option value="rest">{t("engineering.outbound.proto.rest")}</option>
+                      ) : null}
+                      {protocols.includes("mqtt") ? (
+                        <option value="mqtt">{t("engineering.outbound.proto.mqtt")}</option>
+                      ) : null}
+                      {protocols.includes("iec104") ? (
+                        <option value="iec104">{t("engineering.outbound.proto.iec104")}</option>
+                      ) : null}
                     </select>
                   </label>
                 </>
@@ -1353,7 +1376,7 @@ export function OutboundTargetsPanel({
             </tr>
           </thead>
           <tbody>
-            {targets.map((item) => {
+            {visibleTargets.map((item) => {
               const isIec = item.protocol === "iec104";
               // listen_host wildcard ise (0.0.0.0 / :: / bos) SCADA buraya
               // dogrudan baglanamaz; tarayicinin eristigi host'u goster (ayni
@@ -1540,7 +1563,7 @@ export function OutboundTargetsPanel({
                 </tr>
               );
             })}
-            {targets.length === 0 ? (
+            {visibleTargets.length === 0 ? (
               <tr>
                 <td colSpan={6} className="helper-text" style={{ padding: 24, textAlign: "center" }}>
                   {t("engineering.outbound.emptyHint")}

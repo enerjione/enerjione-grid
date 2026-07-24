@@ -286,15 +286,6 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
 
   return (
     <section className="tab-panel bulk-notify-panel bulk-notify-wizard">
-      <div className="panel-head bulk-notify-page-head">
-        <div>
-          <h3>
-            <span className="material-symbols-outlined">campaign</span>
-            {t("bulkNotify.title")}
-          </h3>
-        </div>
-      </div>
-
       {/* Stepper + nav butonlari: Geri stepper'in SOL ucu, Ileri/Gonder SAG ucu.
           Her adimda ayni yerde — kullanici aramasin. */}
       <div className="bulk-notify-stepper-row">

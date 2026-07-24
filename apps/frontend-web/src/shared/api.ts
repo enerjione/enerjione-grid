@@ -354,6 +354,7 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     name: item.name,
     description: item.description ?? undefined,
     model: item.model ?? "horstmann_sn_2_0",
+    installationDate: item.installation_date ?? undefined,
     gatewayCode: item.gateway_code ?? undefined,
     ipAddress: item.ip_address,
     dnp3OutstationPort: item.dnp3_outstation_port ?? 20001,
@@ -388,6 +389,7 @@ export async function createDevice(
     name: string;
     description?: string | null;
     model: string;
+    installation_date?: string | null;
     gateway_code?: string | null;
     ip_address: string;
     dnp3_outstation_port: number;
@@ -417,6 +419,7 @@ export async function updateDevice(
     name?: string;
     description?: string | null;
     model?: string;
+    installation_date?: string | null;
     gateway_code?: string | null;
     ip_address?: string;
     dnp3_outstation_port?: number;
@@ -1942,6 +1945,46 @@ export async function testNotificationTelegram(
     body: JSON.stringify(payload)
   });
   if (!response.ok) throw await buildApiError(response, "Telegram test gönderimi başarısız.");
+  return (await response.json()) as { ok: boolean; detail: string };
+}
+
+export async function fetchWhatsappWebStatus(
+  token: string
+): Promise<{ status: string; phone_number: string | null }> {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/whatsapp-web/status`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "WhatsApp Web durumu alınamadı.");
+  return (await response.json()) as { status: string; phone_number: string | null };
+}
+
+export async function fetchWhatsappWebQr(token: string): Promise<{ qr: string | null }> {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/whatsapp-web/qr`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "WhatsApp Web QR kodu alınamadı.");
+  return (await response.json()) as { qr: string | null };
+}
+
+export async function testWhatsappWeb(
+  token: string,
+  payload: { recipient_phone: string; message?: string }
+): Promise<{ ok: boolean; detail: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/whatsapp-web/test`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "WhatsApp test gönderimi başarısız.");
+  return (await response.json()) as { ok: boolean; detail: string };
+}
+
+export async function logoutWhatsappWeb(token: string): Promise<{ ok: boolean; detail: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/whatsapp-web/logout`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "WhatsApp bağlantısı kesilemedi.");
   return (await response.json()) as { ok: boolean; detail: string };
 }
 

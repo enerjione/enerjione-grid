@@ -132,9 +132,6 @@ export function ProjectSettingsPanel({ onSave }: Props) {
       <div className="panel-head project-settings-head">
         <div className="project-settings-head-text">
           <h3>{t("engineering.nav.projectSettings")}</h3>
-          <p className="helper-text">
-            {t("engineering.projectSettings.subtitle")}
-          </p>
         </div>
         {/* Save butonu sag-ust koseye tasindi — uzun sayfanin altina scroll
             etmeden kaydetmek icin. error/success durumu altta gosterilir. */}
@@ -177,16 +174,12 @@ export function ProjectSettingsPanel({ onSave }: Props) {
               placeholder={t("engineering.projectSettings.siteTitlePlaceholder")}
               maxLength={200}
             />
-            <small className="helper-text">
-              {t("engineering.projectSettings.siteTitleHint")}
-            </small>
           </label>
         </div>
 
         <div className="project-settings-logo-grid">
           <LogoBox
             title={t("engineering.projectSettings.loginLogoTitle")}
-            description={t("engineering.projectSettings.loginLogoDesc")}
             value={customerLogo}
             onPick={(file) => void handlePickLogo(file, setCustomerLogo)}
             onClear={() => setCustomerLogo(null)}
@@ -197,7 +190,6 @@ export function ProjectSettingsPanel({ onSave }: Props) {
           />
           <LogoBox
             title={t("engineering.projectSettings.headerLogoTitle")}
-            description={t("engineering.projectSettings.headerLogoDesc")}
             value={customerLogoLight}
             onPick={(file) => void handlePickLogo(file, setCustomerLogoLight)}
             onClear={() => setCustomerLogoLight(null)}
@@ -208,7 +200,6 @@ export function ProjectSettingsPanel({ onSave }: Props) {
           />
           <LogoBox
             title={t("engineering.projectSettings.faviconTitle")}
-            description={t("engineering.projectSettings.faviconDesc")}
             value={favicon}
             onPick={(file) => void handlePickLogo(file, setFavicon, MAX_FILE_SIZE)}
             onClear={() => setFavicon(null)}
@@ -220,7 +211,6 @@ export function ProjectSettingsPanel({ onSave }: Props) {
           />
           <LogoBox
             title={t("engineering.projectSettings.loginImageTitle")}
-            description={t("engineering.projectSettings.loginImageDesc")}
             value={loginImage}
             onPick={(file) => void handlePickLogo(file, setLoginImage, MAX_LOGIN_IMAGE_SIZE)}
             onClear={() => setLoginImage(null)}
@@ -236,12 +226,7 @@ export function ProjectSettingsPanel({ onSave }: Props) {
             <span className="project-settings-battery-icon material-symbols-outlined" aria-hidden="true">
               battery_charging_full
             </span>
-            <div>
-              <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
-              <p className="helper-text">
-                {t("engineering.projectSettings.batteryHint")}
-              </p>
-            </div>
+            <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
           </div>
           <div className="project-settings-battery-grid">
             <label className="project-settings-battery-field">
@@ -290,7 +275,6 @@ export function ProjectSettingsPanel({ onSave }: Props) {
 
 type LogoBoxProps = {
   title: string;
-  description: string;
   value: string | null;
   onPick: (file: File | undefined) => void;
   onClear: () => void;
@@ -303,7 +287,6 @@ type LogoBoxProps = {
 
 function LogoBox({
   title,
-  description,
   value,
   onPick,
   onClear,
@@ -323,7 +306,6 @@ function LogoBox({
           </button>
         ) : null}
       </div>
-      <p className="helper-text">{description}</p>
       <div className={previewClass}>
         {value ? (
           <img src={value} alt={title} />

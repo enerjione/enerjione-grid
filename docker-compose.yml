@@ -218,6 +218,9 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@enerjione-grid.local}
+      # WhatsApp Web sidecar (Baileys, QR ile giris) — ayni Docker network
+      # icinde servis adiyla erisilir, INTERNAL_SERVICE_TOKEN ile auth.
+      WHATSAPP_WEB_GATEWAY_URL: http://whatsapp-web-gateway:8016
       # DB yedek dosyalari icin sabit dizin. backup-data volume'una baglanir
       # ki container yeniden olusturulsa da yedekler kaybolmaz.
       BACKUP_DIR: /var/lib/e1-backups
@@ -427,6 +430,32 @@ services:
     logging: *default-logging
     <<: *worker-resources
 
+  # WhatsApp Web self-hosted gateway (Baileys) — telefonla QR kod okutup
+  # baglanan WhatsApp gonderim kanali. NOT: `*hardened-worker` KULLANILMAZ —
+  # oturum dosyalari writable volume'a yazilir (read_only olamaz). Host'a
+  # hicbir port expose edilmez, sadece backend internal network'ten erisir.
+  whatsapp-web-gateway:
+    build:
+      context: ./apps/whatsapp-web-gateway
+      dockerfile: Dockerfile
+    image: e1-grid/whatsapp-web-gateway:${E1_VERSION:-latest}
+    container_name: e1-grid-whatsapp-web-gateway
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      WHATSAPP_SESSION_DIR: /data/session
+      WORKER_HEALTH_PORT: 8016
+    volumes:
+      - whatsapp-session-data:/data/session
+    networks:
+      - e1-net
+    logging: *default-logging
+    <<: *worker-resources
+
   frontend-web:
     build:
       context: ./apps/frontend-web
@@ -464,3 +493,6 @@ volumes:
   license-data:
   # Cihazlarin FTP ile yazdigi config/firmware dosyalari (ftp-server + backend okur).
   ftp-data:
+  # WhatsApp Web oturum dosyalari (Baileys useMultiFileAuthState). DB backup'ina
+  # dahil degil; kaybolursa sadece yeniden QR okutmak gerekir.
+  whatsapp-session-data:

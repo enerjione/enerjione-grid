@@ -275,35 +275,18 @@ def _send_sms_via_twilio(
     recipient_phone: str,
     message: str,
 ) -> None:
-    """Twilio Programmable Messaging REST API uzerinden tek mesaj gonderir.
+    """Twilio Programmable Messaging REST API uzerinden duz SMS gonderir.
 
-    Iki mod destekli — settings_row.sms_twilio_use_whatsapp:
-      - False (SMS): Body parametresi ile duz SMS. To/From dogrudan E.164.
-      - True (WhatsApp): 'whatsapp:' prefixi otomatik eklenir. Eger
-        sms_twilio_content_sid dolu ise template mesaj atilir
-        (ContentSid + bos ContentVariables); aksi halde Body ile sade
-        WhatsApp mesaji (24h pencereyi gerektirir).
-
-    Curl esdegerleri:
-      SMS:
+    Curl esdegeri:
         curl 'https://api.twilio.com/2010-04-01/Accounts/<SID>/Messages.json' -X POST \\
           --data-urlencode 'To=<E.164>' \\
           --data-urlencode 'From=<E.164>' \\
           --data-urlencode 'Body=test' \\
           -u <SID>:<AuthToken>
-      WhatsApp (template):
-        curl 'https://api.twilio.com/2010-04-01/Accounts/<SID>/Messages.json' -X POST \\
-          --data-urlencode 'To=whatsapp:<E.164>' \\
-          --data-urlencode 'From=whatsapp:<E.164>' \\
-          --data-urlencode 'ContentSid=HX...' \\
-          --data-urlencode 'ContentVariables={}' \\
-          -u <SID>:<AuthToken>
 
-    sms_account_sid          = Account SID (AC...)
-    sms_api_key              = Auth Token
-    sms_from_number          = Sender (E.164, prefix otomatik eklenir)
-    sms_twilio_use_whatsapp  = SMS yerine WhatsApp gonder
-    sms_twilio_content_sid   = (opsiyonel) onaylanmis template ID (HX...)
+    sms_account_sid = Account SID (AC...)
+    sms_api_key     = Auth Token
+    sms_from_number = Sender (E.164)
     """
     # Twilio account_sid + auth_token (sms_api_key) DB'de Fernet sifreli.
     from app.services.notification_settings_service import decrypt_notification_credentials
@@ -312,9 +295,6 @@ def _send_sms_via_twilio(
     account_sid = (_creds.sms_account_sid or "").strip()
     auth_token = (_creds.sms_api_key or "").strip()
     from_number = (settings_row.sms_from_number or "").strip()
-    use_wa = bool(getattr(settings_row, "sms_twilio_use_whatsapp", False))
-    content_sid = (getattr(settings_row, "sms_twilio_content_sid", "") or "").strip()
-    content_vars_raw = (getattr(settings_row, "sms_twilio_content_vars", "") or "").strip()
 
     if not account_sid:
         raise ValueError("Twilio Account SID boş.")
@@ -325,40 +305,11 @@ def _send_sms_via_twilio(
     if not recipient_phone:
         raise ValueError("Alıcı numarası boş.")
 
-    # 'whatsapp:' prefixi: kullanici hem ham E.164 hem 'whatsapp:+...' yazmis
-    # olabilir. WhatsApp modunda eksikse ekle, varsa olduğu gibi kullan.
-    def _wa(num: str) -> str:
-        s = num.strip()
-        if not use_wa:
-            return s
-        return s if s.lower().startswith("whatsapp:") else f"whatsapp:{s}"
-
     fields: dict[str, str] = {
-        "To": _wa(recipient_phone),
-        "From": _wa(from_number),
+        "To": recipient_phone.strip(),
+        "From": from_number,
+        "Body": message or "",
     }
-    if use_wa and content_sid:
-        # Template (Business-initiated) mesaj: ContentSid + ContentVariables.
-        # Kullanici JSON yazmissa olduğu gibi geçir; bos veya bozuksa {}
-        # gonder (degisken icermeyen template'ler icin yeterli).
-        fields["ContentSid"] = content_sid
-        cv: str = "{}"
-        if content_vars_raw:
-            try:
-                # Geçerli JSON oldugunu dogrula — gecersiz JSON Twilio
-                # tarafindan reddedilir; biz dogrulayip bos olana dusurelim.
-                parsed = json.loads(content_vars_raw)
-                if isinstance(parsed, dict):
-                    cv = json.dumps(parsed, ensure_ascii=False)
-            except (ValueError, json.JSONDecodeError):
-                # Bozuk JSON — kullaniciya net hata mesaji ver.
-                raise ValueError(
-                    "Twilio Content Variables alanı geçerli JSON değil. "
-                    "Örnek: {\"1\": \"değer\", \"2\": \"değer2\"}"
-                )
-        fields["ContentVariables"] = cv
-    else:
-        fields["Body"] = message or ""
 
     url = f"https://api.twilio.com/2010-04-01/Accounts/{urllib.parse.quote(account_sid, safe='')}/Messages.json"
     body = urllib.parse.urlencode(fields).encode("utf-8")
@@ -379,25 +330,15 @@ def _send_sms_via_twilio(
                 raise RuntimeError(f"Twilio HTTP {resp.status}")
     except urllib.error.HTTPError as exc:
         # Twilio hata gövdesinde JSON {code, message, more_info} doner —
-        # kullaniciya anlamli hata mesaji yansit. WhatsApp'a ozel bilinen
-        # hata kodlari icin ek aciklama ekle.
+        # kullaniciya anlamli hata mesaji yansit.
         try:
             err_body = exc.read().decode("utf-8", errors="replace")
             err_json = json.loads(err_body)
             msg = err_json.get("message") or err_body
             code = err_json.get("code")
             extra = ""
-            if code == 63016:
-                # 24-saat conversation window disinda free-form Body.
-                extra = (
-                    " — WhatsApp 24 saatlik konuşma penceresi dışında "
-                    "Body gönderilemez; onaylanmış bir Content Template "
-                    "(HX...) kullanın."
-                )
-            elif code == 63018:
+            if code == 63018:
                 extra = " — Twilio hız limiti aşıldı (kısa süre sonra tekrar deneyin)."
-            elif code == 63007:
-                extra = " — From numarası WhatsApp için kayıtlı/onaylanmış değil."
             raise RuntimeError(f"Twilio API hatası ({code}): {msg}{extra}") from exc
         except (ValueError, json.JSONDecodeError):
             raise RuntimeError(f"Twilio HTTP {exc.code}") from exc

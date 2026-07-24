@@ -15,7 +15,11 @@ from app.schemas.notification import (
     TelegramDiscoverChatsRequest,
     TelegramDiscoverChatsResult,
     TelegramDiscoveredChat,
+    WhatsappWebQr,
+    WhatsappWebStatus,
+    WhatsappWebTestRequest,
 )
+from app.services import whatsapp_web_client_service
 from app.services.event_service import record_event
 from app.services.notification_settings_service import get_or_create_notification_settings
 from app.services.notification_test_service import (
@@ -84,12 +88,10 @@ def update_notification_settings(
     settings_row.sms_api_key = encrypt_secret(payload.sms_api_key)
     settings_row.sms_account_sid = encrypt_secret(payload.sms_account_sid)
     settings_row.sms_from_number = payload.sms_from_number
-    settings_row.sms_twilio_use_whatsapp = payload.sms_twilio_use_whatsapp
-    settings_row.sms_twilio_content_sid = payload.sms_twilio_content_sid
-    settings_row.sms_twilio_content_vars = payload.sms_twilio_content_vars
     settings_row.telegram_enabled = payload.telegram_enabled
     settings_row.telegram_bot_token = encrypt_secret(payload.telegram_bot_token)
     settings_row.telegram_chat_ids = payload.telegram_chat_ids
+    settings_row.whatsapp_web_enabled = payload.whatsapp_web_enabled
     record_event(
         db,
         category="settings",
@@ -286,3 +288,71 @@ def discover_chats(
         detail=f"{len(chats)} chat bulundu.",
         chats=[TelegramDiscoveredChat(**c) for c in chats],
     )
+
+
+@router.get("/whatsapp-web/status", response_model=WhatsappWebStatus)
+def get_whatsapp_web_status(_: User = Depends(require_role(UserRole.INSTALLER))):
+    return WhatsappWebStatus(**whatsapp_web_client_service.fetch_status())
+
+
+@router.get("/whatsapp-web/qr", response_model=WhatsappWebQr)
+def get_whatsapp_web_qr(_: User = Depends(require_role(UserRole.INSTALLER))):
+    return WhatsappWebQr(**whatsapp_web_client_service.fetch_qr())
+
+
+@router.post("/whatsapp-web/test", response_model=NotificationTestResult)
+def test_whatsapp_web(
+    payload: WhatsappWebTestRequest,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    message = payload.message or "Bu mesaj Horstman Smart Logger WhatsApp test gönderimidir."
+    try:
+        whatsapp_web_client_service.send_test_message(payload.recipient_phone, message)
+        record_event(
+            db,
+            category="settings",
+            event_type="notification_whatsapp_web_test_ok",
+            severity="info",
+            actor_username=current_user.username,
+            message=f"WhatsApp Web test succeeded: {payload.recipient_phone}",
+            i18n_key="notification_whatsapp_web_test_ok",
+            i18n_params={"recipient": payload.recipient_phone},
+        )
+        db.commit()
+        return NotificationTestResult(ok=True, detail="WhatsApp test mesajı gönderildi.")
+    except Exception as ex:
+        record_event(
+            db,
+            category="settings",
+            event_type="notification_whatsapp_web_test_failed",
+            severity="error",
+            actor_username=current_user.username,
+            message=f"WhatsApp Web test failed: {ex}",
+            i18n_key="notification_whatsapp_web_test_failed",
+            i18n_params={"error": str(ex)},
+        )
+        db.commit()
+        return NotificationTestResult(ok=False, detail=f"WhatsApp test başarısız: {ex}")
+
+
+@router.post("/whatsapp-web/logout", response_model=NotificationTestResult)
+def logout_whatsapp_web(
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    try:
+        whatsapp_web_client_service.logout()
+        record_event(
+            db,
+            category="settings",
+            event_type="notification_whatsapp_web_logout",
+            severity="info",
+            actor_username=current_user.username,
+            message="WhatsApp Web oturumu kapatıldı",
+            i18n_key="notification_whatsapp_web_logout",
+        )
+        db.commit()
+        return NotificationTestResult(ok=True, detail="WhatsApp bağlantısı kesildi.")
+    except Exception as ex:
+        return NotificationTestResult(ok=False, detail=f"Bağlantı kesme başarısız: {ex}")

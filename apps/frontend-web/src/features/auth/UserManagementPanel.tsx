@@ -106,6 +106,7 @@ export function UserManagementPanel({
   const [smsNotify, setSmsNotify] = useState(false);
   const [telegramNotify, setTelegramNotify] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [search, setSearch] = useState("");
   // Tablodaki rozet ikonlari icin tum kullanicilarin son bilinen tercihleri.
   // Liste yuklenince paralel olarak doldurulur; toggle degisince guncellenir.
   const [notificationPrefs, setNotificationPrefs] = useState<Record<number, NotificationPrefs>>({});
@@ -265,6 +266,15 @@ export function UserManagementPanel({
     setSubmitError("");
   };
 
+  const filteredUsers = users.filter((user) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [user.full_name, user.username, user.email, user.phone_number ?? "", getRoleLabel(user.role)]
+      .join(" ")
+      .toLowerCase()
+      .includes(q);
+  });
+
   const handleResetPasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!passwordResetUser) return;
@@ -288,41 +298,24 @@ export function UserManagementPanel({
   };
 
   return (
-    <section className="tab-panel">
-      <div className="panel-head">
-        <div>
-          <h3>{t("engineering.users.title")}</h3>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {onInvite ? (
-            <button
-              className="add-user-btn"
-              onClick={() => {
-                setInviteError("");
-                setInviteResult(null);
-                setInviteUsername("");
-                setInviteEmail("");
-                setInviteFullName("");
-                setInvitePhone("");
-                setInviteRole("operator");
-                setInviteSendEmail(true);
-                setInviteModalOpen(true);
-              }}
-              title={t("engineering.users.inviteHint", { defaultValue: "Sifre belirlemeden kullaniciya davet linki gonder" })}
-            >
-              {t("engineering.users.invite", { defaultValue: "Davet Et" })}
-            </button>
-          ) : null}
-          <button
-            className="add-user-btn"
-            onClick={() => {
-              setSubmitError("");
-              setCreateModalOpen(true);
-            }}
-          >
-            {t("engineering.users.newUser")}
-          </button>
-        </div>
+    <section className="tab-panel users-management-panel">
+      <div className="users-toolbar">
+        <input
+          type="search"
+          className="users-search-input"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={t("engineering.users.searchPlaceholder", { defaultValue: "Kullanıcı ara..." })}
+        />
+        <button
+          className="add-user-btn"
+          onClick={() => {
+            setSubmitError("");
+            setCreateModalOpen(true);
+          }}
+        >
+          {t("engineering.users.newUser")}
+        </button>
       </div>
 
       {/* Davet modali */}
@@ -659,7 +652,8 @@ export function UserManagementPanel({
         </div>
       ) : null}
 
-      <table className="values-table user-table">
+      <div className="users-table-wrap">
+        <table className="values-table user-table">
         <thead>
           <tr>
             <th scope="col">{t("engineering.users.table.fullName")}</th>
@@ -675,7 +669,7 @@ export function UserManagementPanel({
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => {
+          {filteredUsers.map((user) => {
             const prefs =
               notificationPrefs[user.id] ?? { web: true, email: true, sms: false, telegram: false };
             const cell = (on: boolean, channel: "web" | "email" | "sms" | "telegram") => (
@@ -730,8 +724,16 @@ export function UserManagementPanel({
             </tr>
             );
           })}
+          {filteredUsers.length === 0 ? (
+            <tr>
+              <td colSpan={10} className="helper-text users-empty-cell">
+                {t("engineering.users.noSearchResults", { defaultValue: "Aramaya uygun kullanıcı yok." })}
+              </td>
+            </tr>
+          ) : null}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

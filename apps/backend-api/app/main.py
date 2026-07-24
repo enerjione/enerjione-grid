@@ -334,16 +334,6 @@ def create_tables():
         connection.execute(
             text("ALTER TABLE user_notification_preferences ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE")
         )
-        # Twilio WhatsApp modu — opsiyonel ContentSid (template mesaj).
-        connection.execute(
-            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_twilio_use_whatsapp BOOLEAN NOT NULL DEFAULT FALSE")
-        )
-        connection.execute(
-            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_twilio_content_sid VARCHAR(64) NOT NULL DEFAULT ''")
-        )
-        connection.execute(
-            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sms_twilio_content_vars VARCHAR(2000) NOT NULL DEFAULT ''")
-        )
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS outbound_targets ("

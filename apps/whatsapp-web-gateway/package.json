@@ -1,0 +1,15 @@
+{
+  "name": "whatsapp-web-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WhatsApp Web (QR ile giris) self-hosted gateway - Baileys.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "qrcode": "^1.5.4"
+  }
+}

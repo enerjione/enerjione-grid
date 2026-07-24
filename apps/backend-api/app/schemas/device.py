@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -11,6 +11,7 @@ class DeviceScalarBase(BaseModel):
     name: str
     description: str | None = None
     model: str = "horstmann_sn_2_0"
+    installation_date: date | None = None
     gateway_code: str | None = None
     ip_address: str
     dnp3_outstation_port: int = Field(default=20001, ge=1, le=65535)
@@ -35,6 +36,7 @@ class DeviceUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     model: str | None = None
+    installation_date: date | None = None
     gateway_code: str | None = None
     ip_address: str | None = None
     dnp3_outstation_port: int | None = Field(default=None, ge=1, le=65535)

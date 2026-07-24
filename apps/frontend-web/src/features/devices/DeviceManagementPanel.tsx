@@ -43,6 +43,15 @@ function deviceCommDotClass(status: DeviceRow["communicationStatus"]): "online" 
   return status === "online" ? "online" : "offline";
 }
 
+const DEVICE_MODEL_IMAGES: Record<string, string> = {
+  horstmann_sn_2_0: "/sn20.png"
+};
+const INITIATING_PORT_BASE_DEFAULT = 20100;
+
+function deviceImageSrc(modelCode: string): string {
+  return DEVICE_MODEL_IMAGES[modelCode] ?? "/sn20.png";
+}
+
 /** Gateway down ise altindaki cihazlar da offline gozukmeli — collector ayakta
  * degilken cihaz sinyali fiziksel olarak gelse bile platform tarafinda yoktur. */
 function effectiveCommStatus(
@@ -98,6 +107,7 @@ type Props = {
     name: string;
     description?: string | null;
     model: string;
+    installation_date?: string | null;
     gateway_code?: string | null;
     ip_address: string;
     dnp3_outstation_port: number;
@@ -116,6 +126,7 @@ type Props = {
       name?: string;
       description?: string | null;
       model?: string;
+      installation_date?: string | null;
       gateway_code?: string | null;
       ip_address?: string;
       dnp3_outstation_port?: number;
@@ -228,6 +239,7 @@ export function DeviceManagementPanel({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("horstmann_sn_2_0");
+  const [installationDate, setInstallationDate] = useState("");
   const [ipAddress, setIpAddress] = useState("");
   const [dnp3OutstationPort, setDnp3OutstationPort] = useState("20001");
   const [dnp3Address, setDnp3Address] = useState("1");
@@ -247,8 +259,8 @@ export function DeviceManagementPanel({
 
   const [createCode, setCreateCode] = useState("");
   const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
   const [createModel, setCreateModel] = useState("horstmann_sn_2_0");
+  const [createInstallationDate, setCreateInstallationDate] = useState("");
   const [createIpAddress, setCreateIpAddress] = useState("");
   const [createDnp3OutstationPort, setCreateDnp3OutstationPort] = useState("20001");
   const [createDnp3Address, setCreateDnp3Address] = useState("1");
@@ -286,6 +298,28 @@ export function DeviceManagementPanel({
     }
     return null;
   }, [devices, selectedDeviceCode]);
+
+  const selectedDeviceGateway = useMemo(
+    () => gateways.find((g) => g.code === (selectedDevice?.gatewayCode ?? selectedGatewayCode)) ?? selectedGateway,
+    [gateways, selectedDevice, selectedGateway, selectedGatewayCode]
+  );
+
+  const nextInitiatingMasterPort = useMemo(() => {
+    const base = selectedGateway?.initiating_port_base ?? INITIATING_PORT_BASE_DEFAULT;
+    const count = devices.filter((d) => d.dnp3Extended?.ip_endpoint_type === "initiating").length;
+    return base + count;
+  }, [devices, selectedGateway]);
+
+  const selectedInitiatingMasterPort = useMemo(() => {
+    if (!selectedDevice) return nextInitiatingMasterPort;
+    if (dnp3Ext.master_ip_port) return dnp3Ext.master_ip_port;
+    const base = selectedDeviceGateway?.initiating_port_base ?? INITIATING_PORT_BASE_DEFAULT;
+    const initiatingDevices = devices
+      .filter((d) => d.gatewayCode === selectedDevice.gatewayCode && d.dnp3Extended?.ip_endpoint_type === "initiating")
+      .sort((a, b) => a.id - b.id);
+    const idx = Math.max(0, initiatingDevices.findIndex((d) => d.code === selectedDevice.code));
+    return base + idx;
+  }, [devices, dnp3Ext.master_ip_port, nextInitiatingMasterPort, selectedDevice, selectedDeviceGateway]);
 
   useEffect(() => {
     if (!selectedDeviceCode) {
@@ -326,6 +360,7 @@ export function DeviceManagementPanel({
     setName(device.name);
     setDescription(device.description ?? "");
     setModel(device.model ?? "horstmann_sn_2_0");
+    setInstallationDate(device.installationDate ?? "");
     setIpAddress(device.ipAddress ?? "");
     setDnp3OutstationPort(String(device.dnp3OutstationPort ?? 20001));
     setDnp3Address(String(device.dnp3Address ?? 1));
@@ -371,11 +406,22 @@ export function DeviceManagementPanel({
         name,
         description: description.trim() || null,
         model,
+        installation_date: installationDate || null,
         gateway_code: targetGateway,
         ip_address: ipAddress,
         dnp3_outstation_port: Number(dnp3OutstationPort),
         dnp3_address: Number(dnp3Address),
-        dnp3_extended: { ...dnp3Ext, ip_endpoint_type: "listening" },
+        dnp3_extended: {
+          ...dnp3Ext,
+          master_ip_address:
+            dnp3Ext.ip_endpoint_type === "initiating"
+              ? selectedDeviceGateway?.control_host || "127.0.0.1"
+              : dnp3Ext.master_ip_address,
+          master_ip_port:
+            dnp3Ext.ip_endpoint_type === "initiating"
+              ? selectedInitiatingMasterPort
+              : dnp3Ext.master_ip_port
+        },
         poll_interval_sec: Number(pollIntervalSec),
         timeout_ms: Number(timeoutMs),
         retry_count: Number(retryCount),
@@ -410,19 +456,24 @@ export function DeviceManagementPanel({
     event.preventDefault();
     setError("");
     try {
+      const endpointType = createDnp3Ext.ip_endpoint_type;
       await onCreate({
         code: createCode,
         name: createName,
-        description: createDescription.trim() || null,
         model: createModel,
+        installation_date: createInstallationDate || null,
         gateway_code: selectedGatewayCode || null,
         // Cihazin DNP3 outstation IP adresi. Gateway listening modunda buraya
         // bagdir. Bos olursa form 'required' kuralina takilir; bu nedenle
         // explicit default vermeye gerek yok.
-        ip_address: createIpAddress.trim(),
-        dnp3_outstation_port: Number(createDnp3OutstationPort),
-        dnp3_address: Number(createDnp3Address),
-        dnp3_extended: { ...createDnp3Ext, ip_endpoint_type: "listening" },
+        ip_address: endpointType === "initiating" ? "0.0.0.0" : createIpAddress.trim(),
+        dnp3_outstation_port: endpointType === "initiating" ? nextInitiatingMasterPort : Number(createDnp3OutstationPort),
+        dnp3_address: endpointType === "initiating" ? createDnp3Ext.master_address : Number(createDnp3Address),
+        dnp3_extended: {
+          ...createDnp3Ext,
+          master_ip_address: selectedGateway?.control_host || "127.0.0.1",
+          master_ip_port: nextInitiatingMasterPort
+        },
         poll_interval_sec: Number(createPollIntervalSec),
         timeout_ms: Number(createTimeoutMs),
         retry_count: Number(createRetryCount),
@@ -433,8 +484,8 @@ export function DeviceManagementPanel({
       setShowCreateModal(false);
       setCreateCode("");
       setCreateName("");
-      setCreateDescription("");
       setCreateModel("horstmann_sn_2_0");
+      setCreateInstallationDate("");
       setCreateIpAddress("");
       setCreateDnp3OutstationPort("20001");
       setCreateDnp3Address("1");
@@ -536,17 +587,20 @@ export function DeviceManagementPanel({
     <section className="tab-panel device-management-panel">
       <div className="device-management-layout">
         <div className="device-management-left">
-          <h4>{t("engineering.gateways.title")}</h4>
-          {canManageGateways ? (
-            <div className="section-actions">
+          <div className="device-panel-heading">
+            <h4>{t("engineering.gateways.title")}</h4>
+            {canManageGateways ? (
               <button
-                className="secondary-btn action-btn full-width-btn"
+                type="button"
+                className="device-add-plus-btn"
                 onClick={() => setShowGatewayCreateModal(true)}
+                title={t("engineering.gateways.addGateway")}
+                aria-label={t("engineering.gateways.addGateway")}
               >
-                {t("engineering.gateways.addGateway")}
+                +
               </button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
           <div className="device-group-list">
             {unassignedCount > 0 ? (
               <div
@@ -683,19 +737,21 @@ export function DeviceManagementPanel({
         </div>
 
         <div className="device-management-middle">
-          <h4>{t("engineering.devicesPanel.title")}</h4>
-          <div className="section-actions">
+          <div className="device-panel-heading">
+            <h4>{t("engineering.devicesPanel.title")}</h4>
             <button
-              className="add-user-btn full-width-btn"
+              type="button"
+              className="device-add-plus-btn device-add-plus-btn--primary"
               onClick={() => setShowCreateModal(true)}
               disabled={!selectedGatewayCode || !licenseStatus?.can_add_device}
               title={
                 licenseStatus?.can_add_device
-                  ? undefined
+                  ? t("engineering.devicesPanel.addDevice")
                   : t("engineering.devicesPanel.licenseBlocked")
               }
+              aria-label={t("engineering.devicesPanel.addDevice")}
             >
-              {t("engineering.devicesPanel.addDevice")}
+              +
             </button>
           </div>
           {!licenseStatus?.can_add_device ? (
@@ -746,7 +802,13 @@ export function DeviceManagementPanel({
         <div className="device-management-right">
           <h4>{t("engineering.devicesPanel.properties")}</h4>
           {!selectedDevice ? (
-            <p className="helper-text">{t("engineering.devicesPanel.selectHint")}</p>
+            <div className="device-empty-state">
+              <div className="device-empty-copy">
+                <span className="material-symbols-outlined" aria-hidden="true">touch_app</span>
+                <h5>{t("engineering.devicesPanel.selectHintTitle")}</h5>
+                <p>{t("engineering.devicesPanel.selectHint")}</p>
+              </div>
+            </div>
           ) : (
             <div className="device-detail-form device-detail-form--tabbed">
               <div className="device-detail-form-fixed-header">
@@ -781,49 +843,51 @@ export function DeviceManagementPanel({
                   id="device-panel-system"
                   aria-labelledby="device-tab-system"
                 >
-                  <div className="device-detail-form-grid">
-                    <label>
-                      {t("engineering.devicesPanel.form.code")}
-                      <input value={selectedDevice.code} disabled readOnly />
-                    </label>
-                    <label>
-                      {t("engineering.devicesPanel.form.nameShort")}
-                      <input value={name} onChange={(event) => setName(event.target.value)} />
-                    </label>
-                    <label>
-                      {t("engineering.devicesPanel.form.gateway")}
-                      <select
-                        value={deviceGatewayCode}
-                        onChange={(event) => setDeviceGatewayCode(event.target.value)}
-                      >
-                        {gateways.length === 0 ? (
-                          <option value="">{t("engineering.devicesPanel.form.noGateway")}</option>
-                        ) : (
-                          gateways.map((gw) => (
-                            <option key={gw.code} value={gw.code}>
-                              {gw.name} ({gw.code})
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </label>
-                    <label>
-                      {t("engineering.devicesPanel.form.model")}
-                      <select value={model} onChange={(event) => setModel(event.target.value)}>
-                        {deviceModels.length === 0 ? (
-                          <option value={model}>{model}</option>
-                        ) : (
-                          deviceModels.map((opt) => (
-                            <option key={opt.code} value={opt.code}>
-                              {opt.label}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </label>
-                    <label>
+                  <div className="device-system-layout">
+                    <div className="device-system-top-row">
+                      <div className="device-info-card">
+                        <label>
+                          {t("engineering.devicesPanel.form.serialNo")}
+                          <input value={selectedDevice.code} disabled readOnly />
+                        </label>
+                        <label>
+                          {t("engineering.devicesPanel.form.name")}
+                          <input value={name} onChange={(event) => setName(event.target.value)} />
+                        </label>
+                        <label>
+                          {t("engineering.devicesPanel.form.deviceType")}
+                          <select value={model} onChange={(event) => setModel(event.target.value)}>
+                            {deviceModels.length === 0 ? (
+                              <option value={model}>{model}</option>
+                            ) : (
+                              deviceModels.map((opt) => (
+                                <option key={opt.code} value={opt.code}>
+                                  {opt.label}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </label>
+                        <label>
+                          {t("engineering.devicesPanel.form.installationDate")}
+                          <input
+                            type="date"
+                            value={installationDate}
+                            onChange={(event) => setInstallationDate(event.target.value)}
+                          />
+                        </label>
+                      </div>
+                      <div className="device-visual-card">
+                        <img src={deviceImageSrc(model)} alt={t("engineering.devicesPanel.deviceImageAlt")} />
+                      </div>
+                    </div>
+                    <label className="device-description-field">
                       {t("engineering.devicesPanel.form.description")}
-                      <input value={description} onChange={(event) => setDescription(event.target.value)} />
+                      <textarea
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        rows={6}
+                      />
                     </label>
                   </div>
                 </div>
@@ -835,37 +899,73 @@ export function DeviceManagementPanel({
                   aria-labelledby="device-tab-comms"
                 >
                   <div className="device-props-comms-scroll">
-                    <div className="device-detail-form-grid">
-                      <label>
-                        {t("engineering.devicesPanel.form.ipShort")}
-                        <input
-                          value={ipAddress}
-                          onChange={(event) => setIpAddress(event.target.value)}
-                          required
-                        />
-                      </label>
+                    <div className="device-comms-connection-grid">
                       {canSeeDnp3 ? (
+                        <label>
+                          {t("engineering.dnp3.endpointType")}
+                          <select
+                            value={dnp3Ext.ip_endpoint_type}
+                            onChange={(event) => setDnp3Ext((prev) => ({
+                              ...prev,
+                              ip_endpoint_type: event.target.value as "listening" | "initiating"
+                            }))}
+                          >
+                            <option value="listening">{t("engineering.dnp3.modeListening")}</option>
+                            <option value="initiating">{t("engineering.dnp3.modeInitiating")}</option>
+                          </select>
+                        </label>
+                      ) : null}
+                      {dnp3Ext.ip_endpoint_type === "initiating" ? (
                         <>
                           <label>
-                            {t("engineering.devicesPanel.form.port")}
-                            <input
-                              type="number"
-                              min={1}
-                              max={65535}
-                              value={dnp3OutstationPort}
-                              onChange={(event) => setDnp3OutstationPort(event.target.value)}
-                            />
+                            {t("engineering.dnp3.masterIp")}
+                            <input value={selectedDeviceGateway?.control_host || "127.0.0.1"} disabled readOnly />
                           </label>
                           <label>
-                            {t("engineering.devicesPanel.form.dnp3Address")}
-                            <input
-                              type="number"
-                              value={dnp3Address}
-                              onChange={(event) => setDnp3Address(event.target.value)}
-                            />
+                            {t("engineering.dnp3.masterPort")}
+                            <input value={selectedInitiatingMasterPort} disabled readOnly />
+                          </label>
+                          <label>
+                            {t("engineering.dnp3.masterAddr")}
+                            <input value={dnp3Ext.master_address} disabled readOnly />
                           </label>
                         </>
-                      ) : null}
+                      ) : (
+                        <>
+                          <label>
+                            {t("engineering.devicesPanel.form.ipShort")}
+                            <input
+                              value={ipAddress}
+                              onChange={(event) => setIpAddress(event.target.value)}
+                              required
+                            />
+                          </label>
+                          {canSeeDnp3 ? (
+                            <>
+                              <label>
+                                {t("engineering.devicesPanel.form.port")}
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={65535}
+                                  value={dnp3OutstationPort}
+                                  onChange={(event) => setDnp3OutstationPort(event.target.value)}
+                                />
+                              </label>
+                              <label>
+                                {t("engineering.devicesPanel.form.dnp3Address")}
+                                <input
+                                  type="number"
+                                  value={dnp3Address}
+                                  onChange={(event) => setDnp3Address(event.target.value)}
+                                />
+                              </label>
+                            </>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                    <div className="device-detail-form-grid device-detail-form-grid--runtime">
                       <label>
                         {t("engineering.devicesPanel.form.pollInterval")}
                         <input
@@ -901,6 +1001,7 @@ export function DeviceManagementPanel({
                       <Dnp3SettingsForm
                         value={dnp3Ext}
                         onChange={(patch) => setDnp3Ext((prev) => ({ ...prev, ...patch }))}
+                        hideConnectionFields
                         usedMasterPorts={devices
                           .filter(
                             (x) =>
@@ -1106,110 +1207,118 @@ export function DeviceManagementPanel({
 
       {showCreateModal ? (
         <div className="settings-modal-backdrop">
-          <form className="settings-modal device-create-modal" onSubmit={handleCreateDevice}>
+          <form className="settings-modal device-create-modal device-create-modal--visual" onSubmit={handleCreateDevice}>
             <h3>{t("engineering.devicesPanel.newDeviceModal")}</h3>
-            <label>
-              {t("engineering.devicesPanel.form.code")}
-              <input value={createCode} onChange={(event) => setCreateCode(event.target.value)} required />
-            </label>
-            <label>
-              {t("engineering.devicesPanel.form.name")}
-              <input value={createName} onChange={(event) => setCreateName(event.target.value)} required />
-            </label>
-            <label>
-              {t("engineering.devicesPanel.form.model")}
-              <select value={createModel} onChange={(event) => setCreateModel(event.target.value)} required>
-                {deviceModels.length === 0 ? (
-                  <option value={createModel}>{createModel}</option>
-                ) : (
-                  deviceModels.map((opt) => (
-                    <option key={opt.code} value={opt.code}>
-                      {opt.label}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            <label>
-              {t("engineering.devicesPanel.form.description")}
-              <input value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} />
-            </label>
-            <label>
-              {t("engineering.devicesPanel.form.ipAddress")}
-              <input
-                value={createIpAddress}
-                onChange={(event) => setCreateIpAddress(event.target.value)}
-                placeholder="192.168.1.50"
-                required
-              />
-            </label>
-            {canSeeDnp3 ? (
-              <>
+            <div className="device-create-system-layout">
+              <div className="device-system-top-row">
+                <div className="device-info-card">
+                  <label>
+                    {t("engineering.devicesPanel.form.serialNo")}
+                    <input value={createCode} onChange={(event) => setCreateCode(event.target.value)} required />
+                  </label>
+                  <label>
+                    {t("engineering.devicesPanel.form.name")}
+                    <input value={createName} onChange={(event) => setCreateName(event.target.value)} required />
+                  </label>
+                  <label>
+                    {t("engineering.devicesPanel.form.deviceType")}
+                    <select value={createModel} onChange={(event) => setCreateModel(event.target.value)} required>
+                      {deviceModels.length === 0 ? (
+                        <option value={createModel}>{createModel}</option>
+                      ) : (
+                        deviceModels.map((opt) => (
+                          <option key={opt.code} value={opt.code}>
+                            {opt.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                  <label>
+                    {t("engineering.devicesPanel.form.installationDate")}
+                    <input
+                      type="date"
+                      value={createInstallationDate}
+                      onChange={(event) => setCreateInstallationDate(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="device-visual-card">
+                  <img src={deviceImageSrc(createModel)} alt={t("engineering.devicesPanel.deviceImageAlt")} />
+                </div>
+              </div>
+            </div>
+            <div className="device-create-comms-grid">
+              {canSeeDnp3 ? (
                 <label>
-                  {t("engineering.devicesPanel.form.port")}
-                  <input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={createDnp3OutstationPort}
-                    onChange={(event) => setCreateDnp3OutstationPort(event.target.value)}
-                    required
-                  />
+                  {t("engineering.dnp3.endpointType")}
+                  <select
+                    value={createDnp3Ext.ip_endpoint_type}
+                    onChange={(event) => setCreateDnp3Ext((prev) => ({
+                      ...prev,
+                      ip_endpoint_type: event.target.value as "listening" | "initiating"
+                    }))}
+                  >
+                    <option value="listening">{t("engineering.dnp3.modeListening")}</option>
+                    <option value="initiating">{t("engineering.dnp3.modeInitiating")}</option>
+                  </select>
                 </label>
-                <label>
-                  {t("engineering.devicesPanel.form.dnp3Address")}
-                  <input
-                    type="number"
-                    min={1}
-                    value={createDnp3Address}
-                    onChange={(event) => setCreateDnp3Address(event.target.value)}
-                    required
-                  />
-                </label>
-                <Dnp3SettingsForm
-                  value={createDnp3Ext}
-                  onChange={(patch) => setCreateDnp3Ext((prev) => ({ ...prev, ...patch }))}
-                  usedMasterPorts={devices
-                    .filter((x) => x.dnp3Extended?.ip_endpoint_type === "initiating")
-                    .map((x) => Number(x.dnp3Extended?.master_ip_port) || 0)
-                    .filter((p) => p > 0)}
-                />
-              </>
-            ) : null}
-            <label>
-              {t("engineering.devicesPanel.form.pollInterval")}
-              <input
-                type="number"
-                min={1}
-                max={3600}
-                value={createPollIntervalSec}
-                onChange={(event) => setCreatePollIntervalSec(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              {t("engineering.devicesPanel.form.timeout")}
-              <input
-                type="number"
-                min={100}
-                max={60000}
-                value={createTimeoutMs}
-                onChange={(event) => setCreateTimeoutMs(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              {t("engineering.devicesPanel.form.retry")}
-              <input
-                type="number"
-                min={0}
-                max={10}
-                value={createRetryCount}
-                onChange={(event) => setCreateRetryCount(event.target.value)}
-                required
-              />
-            </label>
-            <p className="helper-text">{t("engineering.devicesPanel.form.locationHint")}</p>
+              ) : null}
+              {createDnp3Ext.ip_endpoint_type === "initiating" ? (
+                <>
+                  <label>
+                    {t("engineering.dnp3.masterIp")}
+                    <input value={selectedGateway?.control_host || "127.0.0.1"} disabled readOnly />
+                  </label>
+                  <label>
+                    {t("engineering.dnp3.masterPort")}
+                    <input value={nextInitiatingMasterPort} disabled readOnly />
+                  </label>
+                  <label>
+                    {t("engineering.dnp3.masterAddr")}
+                    <input value={createDnp3Ext.master_address} disabled readOnly />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label>
+                    {t("engineering.devicesPanel.form.ipAddress")}
+                    <input
+                      value={createIpAddress}
+                      onChange={(event) => setCreateIpAddress(event.target.value)}
+                      placeholder="192.168.1.50"
+                      required
+                    />
+                  </label>
+                  {canSeeDnp3 ? (
+                    <>
+                      <label>
+                        {t("engineering.devicesPanel.form.port")}
+                        <input
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={createDnp3OutstationPort}
+                          onChange={(event) => setCreateDnp3OutstationPort(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {t("engineering.devicesPanel.form.dnp3Address")}
+                        <input
+                          type="number"
+                          min={1}
+                          value={createDnp3Address}
+                          onChange={(event) => setCreateDnp3Address(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                </>
+              )}
+            </div>
+            <p className="helper-text">{t("engineering.devicesPanel.form.createMinimalHint")}</p>
             <div className="modal-actions">
               <button type="button" className="secondary-btn" onClick={() => setShowCreateModal(false)}>
                 {t("engineering.devicesPanel.form.cancel")}

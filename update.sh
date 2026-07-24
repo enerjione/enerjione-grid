@@ -13,6 +13,7 @@
 #   sudo bash update.sh notification   # notification-worker
 #   sudo bash update.sh iec            # iec104-outbound
 #   sudo bash update.sh ftp            # ftp-server (cihaz config transfer)
+#   sudo bash update.sh whatsapp       # whatsapp-web-gateway (Baileys sidecar)
 #
 # Idempotent. Compose Docker build cache'i kullanir; degismemis layer'lar
 # yeniden indirilmez.
@@ -178,9 +179,10 @@ case "$TARGET" in
   notification|notification-worker) SVC="notification-worker" ;;
   iec|iec104|iec104-outbound)       SVC="iec104-outbound" ;;
   ftp|ftp-server)                   SVC="ftp-server" ;;
+  whatsapp|whatsapp-web-gateway)    SVC="whatsapp-web-gateway" ;;
   all|"")                           SVC="" ;;
   *)
-    e1_die "Bilinmeyen servis: $TARGET. Gecerli: frontend, backend, alarm, tag, notification, iec, ftp, all"
+    e1_die "Bilinmeyen servis: $TARGET. Gecerli: frontend, backend, alarm, tag, notification, iec, ftp, whatsapp, all"
     ;;
 esac
 

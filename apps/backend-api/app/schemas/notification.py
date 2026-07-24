@@ -15,12 +15,10 @@ class NotificationSettingsRead(BaseModel):
     # Twilio'ya ozel (diger sagayicilarda bos kalir).
     sms_account_sid: str = ""
     sms_from_number: str = ""
-    sms_twilio_use_whatsapp: bool = False
-    sms_twilio_content_sid: str = ""
-    sms_twilio_content_vars: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""
+    whatsapp_web_enabled: bool = False
 
     class Config:
         from_attributes = True
@@ -39,12 +37,10 @@ class NotificationSettingsUpdate(BaseModel):
     sms_api_key: str
     sms_account_sid: str = ""
     sms_from_number: str = ""
-    sms_twilio_use_whatsapp: bool = False
-    sms_twilio_content_sid: str = ""
-    sms_twilio_content_vars: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""
+    whatsapp_web_enabled: bool = False
 
 
 class NotificationSmtpTestRequest(BaseModel):
@@ -85,3 +81,17 @@ class TelegramDiscoverChatsResult(BaseModel):
 class NotificationTestResult(BaseModel):
     ok: bool
     detail: str
+
+
+class WhatsappWebStatus(BaseModel):
+    status: str  # "disconnected" | "qr_pending" | "connected"
+    phone_number: str | None = None
+
+
+class WhatsappWebQr(BaseModel):
+    qr: str | None = None  # base64 PNG data URL
+
+
+class WhatsappWebTestRequest(BaseModel):
+    recipient_phone: str
+    message: str | None = None

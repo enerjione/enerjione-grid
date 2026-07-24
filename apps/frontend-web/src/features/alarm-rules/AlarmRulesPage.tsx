@@ -113,6 +113,15 @@ const SOURCE_SHORT: Record<string, string> = {
 };
 
 type Mode = "list" | "edit-existing" | "create";
+type RuleWizardStep = "signal" | "definition" | "condition" | "behavior" | "summary";
+
+const WIZARD_STEPS: Array<{ key: RuleWizardStep; title: string; subtitle: string }> = [
+  { key: "signal", title: "Sinyal", subtitle: "Alarm kaynağı" },
+  { key: "definition", title: "Tanım", subtitle: "Ad ve seviye" },
+  { key: "condition", title: "Koşul", subtitle: "Tetikleme" },
+  { key: "behavior", title: "Davranış", subtitle: "Aksiyonlar" },
+  { key: "summary", title: "Özet", subtitle: "Kontrol" }
+];
 
 export function AlarmRulesPage({
   role,
@@ -147,6 +156,7 @@ export function AlarmRulesPage({
   const [mode, setMode] = useState<Mode>("list");
   const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
   const [form, setForm] = useState<Omit<AlarmRuleRow, "id">>({ ...EMPTY_FORM });
+  const [wizardStep, setWizardStep] = useState<RuleWizardStep>("signal");
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState("");
 
@@ -155,7 +165,7 @@ export function AlarmRulesPage({
   const [ruleLevelFilter, setRuleLevelFilter] = useState<"all" | AlarmLevel>("all");
 
   // Yeni kural sinyal seçici filtreleri
-  const [pickerSource, setPickerSource] = useState<"all" | "master" | "sat01" | "sat02">("all");
+  const [pickerSource, setPickerSource] = useState<"master" | "sat01" | "sat02">("master");
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerSelectedKey, setPickerSelectedKey] = useState<string>("");
 
@@ -178,7 +188,7 @@ export function AlarmRulesPage({
   const filteredSignalsForPicker = useMemo(() => {
     const q = pickerSearch.trim().toLowerCase();
     return signals.filter((sig) => {
-      if (pickerSource !== "all" && sig.source !== pickerSource) return false;
+      if (sig.source !== pickerSource) return false;
       if (!q) return true;
       return (
         sig.label.toLowerCase().includes(q) ||
@@ -246,8 +256,9 @@ export function AlarmRulesPage({
     setMode("create");
     setSelectedRuleId(null);
     setPickerSelectedKey("");
-    setPickerSource("all");
+    setPickerSource("master");
     setPickerSearch("");
+    setWizardStep("signal");
     setForm({ ...EMPTY_FORM });
     setLocalError("");
   };
@@ -255,6 +266,7 @@ export function AlarmRulesPage({
   const startEdit = (ruleId: number) => {
     setMode("edit-existing");
     setSelectedRuleId(ruleId);
+    setWizardStep("definition");
     setLocalError("");
   };
 
@@ -262,8 +274,59 @@ export function AlarmRulesPage({
     setMode("list");
     setSelectedRuleId(null);
     setPickerSelectedKey("");
+    setWizardStep("signal");
     setForm({ ...EMPTY_FORM });
     setLocalError("");
+  };
+
+  const isStepDone = (step: RuleWizardStep): boolean => {
+    if (step === "signal") return mode === "edit-existing" || Boolean(form.signal_key);
+    if (step === "definition") return (mode === "edit-existing" || Boolean(form.signal_key)) && form.name.trim().length > 0;
+    if (step === "condition") return isStepDone("definition") && (!isRangeComparator(form.comparator) || form.threshold_high !== null);
+    if (step === "behavior") return isStepDone("condition");
+    return isStepDone("behavior");
+  };
+
+  const visibleWizardSteps = mode === "edit-existing" ? WIZARD_STEPS.filter((step) => step.key !== "signal") : WIZARD_STEPS;
+  const wizardIndex = visibleWizardSteps.findIndex((step) => step.key === wizardStep);
+  const isFirstWizardStep = wizardIndex <= 0;
+  const isSummaryStep = wizardStep === "summary";
+
+  const canOpenWizardStep = (step: RuleWizardStep): boolean => {
+    const idx = visibleWizardSteps.findIndex((item) => item.key === step);
+    if (idx === -1) return false;
+    if (idx <= wizardIndex) return true;
+    return visibleWizardSteps.slice(0, idx).every((item) => isStepDone(item.key));
+  };
+
+  const goToWizardStep = (step: RuleWizardStep) => {
+    if (!canOpenWizardStep(step)) return;
+    setWizardStep(step);
+    setLocalError("");
+  };
+
+  const goNextWizardStep = () => {
+    if (!isStepDone("signal")) {
+      setLocalError("Bir sinyal seçin.");
+      return;
+    }
+    if (wizardStep !== "signal" && !isStepDone("definition")) {
+      setLocalError("Kural adı girin.");
+      return;
+    }
+    const next = visibleWizardSteps[wizardIndex + 1];
+    if (next) {
+      setWizardStep(next.key);
+      setLocalError("");
+    }
+  };
+
+  const goPrevWizardStep = () => {
+    const prev = visibleWizardSteps[wizardIndex - 1];
+    if (prev) {
+      setWizardStep(prev.key);
+      setLocalError("");
+    }
   };
 
   const buildPayload = (): Omit<AlarmRuleRow, "id"> => {
@@ -323,6 +386,10 @@ export function AlarmRulesPage({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit) return;
+    if (!isSummaryStep) {
+      goNextWizardStep();
+      return;
+    }
     if (!form.signal_key) {
       setLocalError(t("engineering.alarmRules.errors.pickSignal"));
       return;
@@ -413,7 +480,35 @@ export function AlarmRulesPage({
     }
   };
 
+  const duplicateRule = (rule: AlarmRuleRow) => {
+    const { id: _ignored, ...copy } = rule;
+    setForm({
+      ...EMPTY_FORM,
+      ...copy,
+      name: `${rule.name} kopyası`,
+      expression: rule.expression ?? null
+    });
+    setPickerSelectedKey(rule.signal_key);
+    setSelectedRuleId(null);
+    setMode("create");
+    setWizardStep("definition");
+    setLocalError("");
+  };
+
   const formSignalUnit = formSignal?.unit ?? "";
+  const formConditionText = isBooleanComparator(form.comparator)
+    ? form.comparator === "boolean_true"
+      ? "= TRUE"
+      : "= FALSE"
+    : isRangeComparator(form.comparator)
+      ? `${COMPARATOR_SYMBOL[form.comparator]} ${form.threshold} … ${form.threshold_high ?? "?"}`
+      : `${COMPARATOR_SYMBOL[form.comparator]} ${form.threshold}${formSignalUnit ? ` ${formSignalUnit}` : ""}`;
+  const formScopeText = form.device_code_filter?.trim() ? form.device_code_filter : "Tüm cihazlar";
+  const formNotifyText = [
+    form.notify_sms ? "SMS" : null,
+    form.notify_email ? "E-Posta" : null,
+    form.notify_telegram ? "Telegram" : null
+  ].filter(Boolean).join(", ") || "—";
   const isFormMode = mode === "create" || mode === "edit-existing";
 
   // ========== RENDER: form modu ==========
@@ -438,7 +533,30 @@ export function AlarmRulesPage({
           </header>
 
           <form className="rules-v3-form" onSubmit={handleSubmit}>
-            <div className="rules-v3-form-grid">
+            <div className="rules-v3-wizard-steps" role="tablist" aria-label="Alarm kuralı adımları">
+              {visibleWizardSteps.map((step, idx) => {
+                const isActive = wizardStep === step.key;
+                const isDone = isStepDone(step.key) && !isActive;
+                const isLocked = !canOpenWizardStep(step.key);
+                return (
+                  <button
+                    key={step.key}
+                    type="button"
+                    className={`rules-v3-wizard-step ${isActive ? "rules-v3-wizard-step--active" : ""} ${isDone ? "rules-v3-wizard-step--done" : ""}`}
+                    onClick={() => goToWizardStep(step.key)}
+                    disabled={isLocked}
+                    aria-current={isActive ? "step" : undefined}
+                  >
+                    <span className="rules-v3-wizard-step-index">{isDone ? "✓" : idx + 1}</span>
+                    <span className="rules-v3-wizard-step-text">
+                      <strong>{step.title}</strong>
+                      <small>{step.subtitle}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="rules-v3-form-grid rules-v3-form-grid--wizard">
               {/* SOL: Sinyal seçici (yalnızca create modunda aktif) */}
               <aside className="rules-v3-picker">
                 <h4 className="rules-v3-section-title">
@@ -447,16 +565,16 @@ export function AlarmRulesPage({
                 {mode === "create" ? (
                   <>
                     <div className="rules-v2-signals-tabs">
-                      {(["all", "master", "sat01", "sat02"] as const).map((src) => (
+                      {(["master", "sat01", "sat02"] as const).map((src) => (
                         <button
                           key={src}
                           type="button"
                           className={`signal-picker-tab ${pickerSource === src ? "active" : ""}`}
                           onClick={() => setPickerSource(src)}
                         >
-                          <span>{src === "all" ? t("engineering.alarmRules.all") : SOURCE_SHORT[src]}</span>
+                          <span>{SOURCE_SHORT[src]}</span>
                           <span className="signal-picker-tab-count">
-                            {src === "all" ? signals.length : sourceCounts[src] ?? 0}
+                            {sourceCounts[src] ?? 0}
                           </span>
                         </button>
                       ))}
@@ -528,7 +646,9 @@ export function AlarmRulesPage({
                   </div>
                 ) : (
                   <div className="rules-v3-properties-body">
-                    <fieldset className="rule-fieldset" disabled={!canEdit}>
+                    {wizardStep === "definition" ? (
+                      <>
+                        <fieldset className="rule-fieldset" disabled={!canEdit}>
                       <legend>{t("engineering.alarmRules.fieldsetDef")}</legend>
                       <label className="rule-field">
                         <span>{t("engineering.alarmRules.ruleName")}</span>
@@ -568,8 +688,12 @@ export function AlarmRulesPage({
                       </div>
                     </fieldset>
 
-                    <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>{t("engineering.alarmRules.fieldsetCondition")}</legend>
+                      </>
+                    ) : null}
+
+                    {wizardStep === "condition" ? (
+                      <fieldset className="rule-fieldset" disabled={!canEdit}>
+                        <legend>{t("engineering.alarmRules.fieldsetCondition")}</legend>
                       {/* Mod toggle: Basit (tek sinyal) | Gelişmiş (AND/OR
                           birden fazla terim). Composite mod ana sinyal
                           tetikleyicisi degismez; ek terimler expression
@@ -677,10 +801,13 @@ export function AlarmRulesPage({
                           t={t}
                         />
                       )}
-                    </fieldset>
+                      </fieldset>
+                    ) : null}
 
-                    <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>{t("engineering.alarmRules.fieldsetBehavior")}</legend>
+                    {wizardStep === "behavior" ? (
+                      <>
+                        <fieldset className="rule-fieldset" disabled={!canEdit}>
+                          <legend>{t("engineering.alarmRules.fieldsetBehavior")}</legend>
                       <div className="rule-grid-2">
                         {!isBooleanComparator(form.comparator) ? (
                           <label className="rule-field">
@@ -780,25 +907,70 @@ export function AlarmRulesPage({
                       </div>
                     </fieldset>
 
-                    <fieldset className="rule-fieldset" disabled={!canEdit}>
-                      <legend>{t("engineering.alarmRules.fieldsetFault")}</legend>
-                      <div className="rule-channel-grid">
-                        <label className="rule-channel-option">
-                          <input
-                            type="checkbox"
-                            checked={form.produces_fault !== false}
-                            onChange={(e) =>
-                              setForm({ ...form, produces_fault: e.target.checked })
-                            }
-                          />
-                          <span className="rule-channel-icon material-symbols-outlined">e911_emergency</span>
-                          <span className="rule-channel-label">
-                            <strong>{t("engineering.alarmRules.producesFault")}</strong>
-                            <small>{t("engineering.alarmRules.producesFaultHint")}</small>
-                          </span>
-                        </label>
+                        <fieldset className="rule-fieldset" disabled={!canEdit}>
+                          <legend>{t("engineering.alarmRules.fieldsetFault")}</legend>
+                          <div className="rule-channel-grid">
+                            <label className="rule-channel-option">
+                              <input
+                                type="checkbox"
+                                checked={form.produces_fault !== false}
+                                onChange={(e) =>
+                                  setForm({ ...form, produces_fault: e.target.checked })
+                                }
+                              />
+                              <span className="rule-channel-icon material-symbols-outlined">e911_emergency</span>
+                              <span className="rule-channel-label">
+                                <strong>{t("engineering.alarmRules.producesFault")}</strong>
+                                <small>{t("engineering.alarmRules.producesFaultHint")}</small>
+                              </span>
+                            </label>
+                          </div>
+                        </fieldset>
+                      </>
+                    ) : null}
+
+                    {wizardStep === "summary" ? (
+                      <div className="rules-v3-summary-grid">
+                        <section className="rules-v3-summary-card rules-v3-summary-card--hero">
+                          <span className={`rule-level-badge level-${form.level}`}>{LEVEL_LABEL[form.level]}</span>
+                          <h4>{form.name || "Adsız alarm kuralı"}</h4>
+                          <p>{form.description || "Açıklama yok"}</p>
+                        </section>
+                        <section className="rules-v3-summary-card">
+                          <h4>Sinyal</h4>
+                          {formSignal ? (
+                            <div className="rules-v3-summary-signal">
+                              <span className={`badge badge-source badge-source-${formSignal.source}`}>
+                                {SOURCE_SHORT[formSignal.source] ?? formSignal.source}
+                              </span>
+                              <span className={`badge badge-${formSignal.data_type}`}>{formSignal.data_type}</span>
+                              <strong>{formSignal.label}</strong>
+                              <code>{formSignal.key}</code>
+                            </div>
+                          ) : (
+                            <span className="rules-v3-muted">Sinyal seçilmedi</span>
+                          )}
+                        </section>
+                        <section className="rules-v3-summary-card">
+                          <h4>Koşul</h4>
+                          <div className="rules-v3-condition-preview">
+                            <strong>{formSignal?.label ?? form.signal_key}</strong>
+                            <code className="rules-v3-row-condition">{formConditionText}</code>
+                          </div>
+                        </section>
+                        <section className="rules-v3-summary-card">
+                          <h4>Ayarlar</h4>
+                          <dl className="rules-v3-summary-list">
+                            <div><dt>Durum</dt><dd>{form.is_active ? "Aktif" : "Pasif"}</dd></div>
+                            <div><dt>Kapsam</dt><dd>{formScopeText}</dd></div>
+                            <div><dt>Debounce</dt><dd>{form.debounce_sec} sn</dd></div>
+                            <div><dt>Histerezis</dt><dd>{isBooleanComparator(form.comparator) ? "—" : form.hysteresis}</dd></div>
+                            <div><dt>Bildirim</dt><dd>{formNotifyText}</dd></div>
+                            <div><dt>Hat Arızası</dt><dd>{form.produces_fault !== false ? "✓" : "—"}</dd></div>
+                          </dl>
+                        </section>
                       </div>
-                    </fieldset>
+                    ) : null}
 
                     {(localError || error) ? (
                       <p className="error-text rule-form-error">{localError || error}</p>
@@ -808,19 +980,32 @@ export function AlarmRulesPage({
               </div>
             </div>
 
-            <footer className="rules-v3-form-footer">
+            <footer className="rules-v3-form-footer rules-v3-wizard-footer">
               <button type="button" className="secondary-btn" onClick={cancel} disabled={saving}>
                 {t("engineering.alarmRules.cancel")}
               </button>
-              {canEdit ? (
-                <button
-                  type="submit"
-                  className="primary-btn"
-                  disabled={saving || (mode === "create" && !pickerSelectedKey)}
-                >
-                  {saving ? t("engineering.alarmRules.saving") : mode === "create" ? t("engineering.alarmRules.create") : t("engineering.alarmRules.update")}
-                </button>
-              ) : null}
+              <div className="rules-v3-form-footer-main">
+                {!isFirstWizardStep ? (
+                  <button type="button" className="secondary-btn" onClick={goPrevWizardStep} disabled={saving}>
+                    Önceki
+                  </button>
+                ) : null}
+                {canEdit ? (
+                  <button
+                    type="submit"
+                    className="primary-btn"
+                    disabled={saving || (mode === "create" && !pickerSelectedKey)}
+                  >
+                    {saving
+                      ? t("engineering.alarmRules.saving")
+                      : isSummaryStep
+                        ? mode === "create"
+                          ? "Kuralı Oluştur"
+                          : "Değişiklikleri Kaydet"
+                        : "Sonraki"}
+                  </button>
+                ) : null}
+              </div>
             </footer>
           </form>
         </div>
@@ -857,7 +1042,7 @@ export function AlarmRulesPage({
         </span>
         {canEdit ? (
           <button type="button" className="primary-btn rules-new-btn" onClick={startCreate}>
-            + {t("engineering.alarmRules.newRule")}
+            {t("engineering.alarmRules.newRule")}
           </button>
         ) : null}
       </div>
@@ -884,109 +1069,157 @@ export function AlarmRulesPage({
             </p>
           </div>
         ) : (
-          <ul className="rules-v3-list">
-            {filteredRules.map((rule) => {
-              const sig = signalByKey.get(rule.signal_key);
-              const isComposite = (rule.rule_kind ?? "simple") === "composite";
-              const conditionText = isComposite && rule.expression
-                ? rule.expression.terms
-                    .map((tm) => {
-                      const tmSig = signalByKey.get(tm.signal_key);
-                      const baseLbl = tmSig?.label ?? tm.signal_key;
-                      // agg ise "avg(signal, 60sn)" formatinda goster
-                      const lbl =
-                        tm.kind === "formula"
-                          ? `ƒ(${tm.formula_expr ?? ""})`
-                          : tm.kind === "agg" && tm.agg_fn
-                            ? `${tm.agg_fn}(${baseLbl}, ${tm.agg_window_sec ?? 60}s)`
-                            : baseLbl;
-                      if (isBooleanComparator(tm.comparator)) {
-                        return `${lbl} ${tm.comparator === "boolean_true" ? "= TRUE" : "= FALSE"}`;
-                      }
-                      if (isRangeComparator(tm.comparator)) {
-                        return `${lbl} ${COMPARATOR_SYMBOL[tm.comparator]} ${tm.threshold}…${tm.threshold_high ?? "?"}`;
-                      }
-                      return `${lbl} ${COMPARATOR_SYMBOL[tm.comparator]} ${tm.threshold}`;
-                    })
-                    .join(rule.expression.logic === "AND" ? "  ∧  " : "  ∨  ")
-                : isBooleanComparator(rule.comparator)
-                  ? rule.comparator === "boolean_true"
-                    ? "= TRUE"
-                    : "= FALSE"
-                  : isRangeComparator(rule.comparator)
-                    ? `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold} … ${rule.threshold_high ?? "?"}`
-                    : `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold}${sig?.unit ? ` ${sig.unit}` : ""}`;
-              return (
-                <li
-                  key={rule.id}
-                  className={`rules-v3-row ${rule.is_active ? "" : "rules-v3-row-inactive"}`}
-                >
-                  <div className="rules-v3-row-main">
-                    <div className="rules-v3-row-headline">
+          <table className="rules-v3-table">
+            <thead>
+              <tr>
+                <th>Durum</th>
+                <th>Seviye</th>
+                <th>Cihaz</th>
+                <th>Kural Adı</th>
+                <th>Koşul</th>
+                <th>Hat Arızası</th>
+                <th>Bildirim</th>
+                {canEdit ? <th>İşlemler</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRules.map((rule) => {
+                const sig = signalByKey.get(rule.signal_key);
+                const isComposite = (rule.rule_kind ?? "simple") === "composite";
+                const conditionText = isComposite && rule.expression
+                  ? rule.expression.terms
+                      .map((tm) => {
+                        const tmSig = signalByKey.get(tm.signal_key);
+                        const baseLbl = tmSig?.label ?? tm.signal_key;
+                        const lbl =
+                          tm.kind === "formula"
+                            ? `ƒ(${tm.formula_expr ?? ""})`
+                            : tm.kind === "agg" && tm.agg_fn
+                              ? `${tm.agg_fn}(${baseLbl}, ${tm.agg_window_sec ?? 60}s)`
+                              : baseLbl;
+                        if (isBooleanComparator(tm.comparator)) {
+                          return `${lbl} ${tm.comparator === "boolean_true" ? "= TRUE" : "= FALSE"}`;
+                        }
+                        if (isRangeComparator(tm.comparator)) {
+                          return `${lbl} ${COMPARATOR_SYMBOL[tm.comparator]} ${tm.threshold}…${tm.threshold_high ?? "?"}`;
+                        }
+                        return `${lbl} ${COMPARATOR_SYMBOL[tm.comparator]} ${tm.threshold}`;
+                      })
+                      .join(rule.expression.logic === "AND" ? "  ∧  " : "  ∨  ")
+                  : isBooleanComparator(rule.comparator)
+                    ? rule.comparator === "boolean_true"
+                      ? "= TRUE"
+                      : "= FALSE"
+                    : isRangeComparator(rule.comparator)
+                      ? `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold} … ${rule.threshold_high ?? "?"}`
+                      : `${COMPARATOR_SYMBOL[rule.comparator]} ${rule.threshold}${sig?.unit ? ` ${sig.unit}` : ""}`;
+                return (
+                  <tr key={rule.id} className={rule.is_active ? "" : "rules-v3-row-inactive"}>
+                    <td className="rules-v3-status-cell">
+                      <div className="rules-v3-status-wrap">
+                        {canEdit ? (
+                          <ActiveSwitch
+                            checked={rule.is_active}
+                            onChange={() => void handleToggleActive(rule)}
+                          />
+                        ) : (
+                          <span className={`rules-v3-check ${rule.is_active ? "on" : "off"}`}>
+                            {rule.is_active ? "✓" : "—"}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
                       <span className={`rule-level-badge level-${rule.level}`}>
                         {LEVEL_LABEL[rule.level]}
                       </span>
-                      <strong>{rule.name}</strong>
-                      {isComposite ? (
-                        <span
-                          className="rules-v3-row-kind"
-                          title={t("engineering.alarmRules.compositeBadgeHint", {
-                            logic: rule.expression?.logic ?? "AND"
-                          })}
-                        >
-                          <span className="material-symbols-outlined">account_tree</span>
-                          {rule.expression?.logic ?? "AND"}
-                        </span>
-                      ) : null}
-                      {!rule.is_active ? (
-                        <span className="rules-v3-row-flag">{t("common.inactive")}</span>
-                      ) : null}
-                    </div>
-                    <div className="rules-v3-row-meta">
+                    </td>
+                    <td>
                       {sig ? (
-                        <span className="rules-v3-row-signal">
-                          <span className={`badge badge-source badge-source-${sig.source}`}>
-                            {SOURCE_SHORT[sig.source] ?? sig.source}
-                          </span>
-                          {sig.label}
+                        <span className={`badge badge-source badge-source-${sig.source}`}>
+                          {SOURCE_SHORT[sig.source] ?? sig.source}
                         </span>
                       ) : (
-                        <span className="rules-v3-row-signal">{rule.signal_key}</span>
+                        <span className="rules-v3-muted">—</span>
                       )}
-                      <code className="rules-v3-row-condition">{conditionText}</code>
                       {rule.device_code_filter ? (
                         <span className="rules-v3-row-scope" title="Cihaz filtresi">
-                          🔧 {rule.device_code_filter}
+                          {rule.device_code_filter}
                         </span>
                       ) : null}
-                    </div>
-                  </div>
-                  {canEdit ? (
-                    <div className="rules-v3-row-actions">
-                      <ActiveSwitch
-                        checked={rule.is_active}
-                        onChange={() => void handleToggleActive(rule)}
-                      />
-                      <button
-                        type="button"
-                        className="secondary-btn"
-                        onClick={() => startEdit(rule.id)}
-                      >
-                        {t("common.edit")}
-                      </button>
-                      <button
-                        type="button"
-                        className="danger-btn"
-                        onClick={() => void handleDelete(rule.id)}
-                      >
-                        {t("common.delete")}
-                      </button>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                    </td>
+                    <td>
+                      <div className="rules-v3-name-cell">
+                        <strong>{rule.name}</strong>
+                        {rule.description ? <small>{rule.description}</small> : null}
+                        <span className="rules-v3-id-pill">ID: {rule.id}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="rules-v3-condition-cell">
+                        <strong>{sig?.label ?? rule.signal_key}</strong>
+                        <code className="rules-v3-row-condition">{conditionText}</code>
+                        {isComposite ? (
+                          <span
+                            className="rules-v3-row-kind"
+                            title={t("engineering.alarmRules.compositeBadgeHint", {
+                              logic: rule.expression?.logic ?? "AND"
+                            })}
+                          >
+                            <span className="material-symbols-outlined">account_tree</span>
+                            {rule.expression?.logic ?? "AND"}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`rules-v3-check ${rule.produces_fault !== false ? "on" : "off"}`}>
+                        {rule.produces_fault !== false ? "✓" : "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="rules-v3-notify-cell">
+                        {rule.notify_sms ? <span className="rules-v3-notify-pill">SMS</span> : null}
+                        {rule.notify_email ? <span className="rules-v3-notify-pill">E-Posta</span> : null}
+                        {rule.notify_telegram ? <span className="rules-v3-notify-pill">Telegram</span> : null}
+                        {!rule.notify_sms && !rule.notify_email && !rule.notify_telegram ? <span className="rules-v3-muted">—</span> : null}
+                      </div>
+                    </td>
+                    {canEdit ? (
+                      <td>
+                        <div className="rules-v3-table-actions">
+                          <button
+                            type="button"
+                            className="rules-v3-icon-btn"
+                            onClick={() => startEdit(rule.id)}
+                            title={t("common.edit")}
+                          >
+                            <span className="material-symbols-outlined">edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="rules-v3-icon-btn"
+                            onClick={() => duplicateRule(rule)}
+                            title="Kopyala"
+                          >
+                            <span className="material-symbols-outlined">content_copy</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="rules-v3-icon-btn rules-v3-delete-btn"
+                            onClick={() => void handleDelete(rule.id)}
+                            title={t("common.delete")}
+                          >
+                            <span className="material-symbols-outlined">delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 

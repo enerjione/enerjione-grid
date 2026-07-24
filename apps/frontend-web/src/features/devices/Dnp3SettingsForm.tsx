@@ -9,6 +9,7 @@ type Props = {
   /** Diger cihazlarda kullanilan master_ip_port'lar — initiating modunda
    *  otomatik atama bunlari hariç tutar. */
   usedMasterPorts?: number[];
+  hideConnectionFields?: boolean;
 };
 
 const INITIATING_PORT_RANGE_START = 20100;
@@ -53,7 +54,7 @@ function BoolSelect({
   );
 }
 
-export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Props) {
+export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideConnectionFields = false }: Props) {
   const { t } = useTranslation();
   const v = value;
   const set = onChange;
@@ -85,54 +86,58 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [] }: Prop
     <div className="dnp3-settings-form">
       <h5 className="dnp3-settings-title">{t("engineering.dnp3.title")}</h5>
       <div className="dnp3-settings-grid">
-        <label className="dnp3-field">
-          <span className="dnp3-label">
-            {t("engineering.dnp3.endpointType")} <Req />
-          </span>
-          <select
-            value={v.ip_endpoint_type}
-            onChange={(e) => set({ ip_endpoint_type: e.target.value as "listening" | "initiating" })}
-          >
-            <option value="listening">{t("engineering.dnp3.modeListening")}</option>
-            <option value="initiating">{t("engineering.dnp3.modeInitiating")}</option>
-          </select>
-        </label>
-        <label className="dnp3-field">
-          <span className="dnp3-label">
-            {t("engineering.dnp3.masterIp")} <Req />
-          </span>
-          <input
-            value={v.master_ip_address}
-            onChange={(e) => set({ master_ip_address: e.target.value })}
-            placeholder={isInitiating ? t("engineering.dnp3.masterIpInitPlaceholder") : t("engineering.dnp3.masterIpPlaceholder")}
-          />
-        </label>
-        <label className="dnp3-field">
-          <span className="dnp3-label">
-            {t("engineering.dnp3.masterPort")} {isInitiating ? null : <Req />}
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={65535}
-            value={v.master_ip_port}
-            onChange={(e) => set({ master_ip_port: Number(e.target.value) || 1 })}
-            disabled={isInitiating}
-            title={isInitiating ? t("engineering.dnp3.masterPortInitTooltip") : undefined}
-          />
-        </label>
-        <label className="dnp3-field">
-          <span className="dnp3-label">
-            {t("engineering.dnp3.masterAddr")} <Req />
-          </span>
-          <input
-            type="number"
-            min={0}
-            max={65535}
-            value={v.master_address}
-            onChange={(e) => set({ master_address: Number(e.target.value) || 0 })}
-          />
-        </label>
+        {!hideConnectionFields ? (
+          <>
+            <label className="dnp3-field">
+              <span className="dnp3-label">
+                {t("engineering.dnp3.endpointType")} <Req />
+              </span>
+              <select
+                value={v.ip_endpoint_type}
+                onChange={(e) => set({ ip_endpoint_type: e.target.value as "listening" | "initiating" })}
+              >
+                <option value="listening">{t("engineering.dnp3.modeListening")}</option>
+                <option value="initiating">{t("engineering.dnp3.modeInitiating")}</option>
+              </select>
+            </label>
+            <label className="dnp3-field">
+              <span className="dnp3-label">
+                {t("engineering.dnp3.masterIp")} <Req />
+              </span>
+              <input
+                value={v.master_ip_address}
+                onChange={(e) => set({ master_ip_address: e.target.value })}
+                placeholder={isInitiating ? t("engineering.dnp3.masterIpInitPlaceholder") : t("engineering.dnp3.masterIpPlaceholder")}
+              />
+            </label>
+            <label className="dnp3-field">
+              <span className="dnp3-label">
+                {t("engineering.dnp3.masterPort")} {isInitiating ? null : <Req />}
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={v.master_ip_port}
+                onChange={(e) => set({ master_ip_port: Number(e.target.value) || 1 })}
+                disabled={isInitiating}
+                title={isInitiating ? t("engineering.dnp3.masterPortInitTooltip") : undefined}
+              />
+            </label>
+            <label className="dnp3-field">
+              <span className="dnp3-label">
+                {t("engineering.dnp3.masterAddr")} <Req />
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={65535}
+                value={v.master_address}
+                onChange={(e) => set({ master_address: Number(e.target.value) || 0 })}
+              />
+            </label>
+          </>
+        ) : null}
         <BoolSelect
           id="dnp3-unsol"
           label={t("engineering.dnp3.unsolicited")}

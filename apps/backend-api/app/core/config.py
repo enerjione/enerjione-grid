@@ -182,6 +182,9 @@ class Settings(BaseSettings):
     sms_provider: str = "mock"
     sms_api_url: str = ""
     sms_api_key: str = ""
+    # WhatsApp Web sidecar (Baileys, QR ile giris) — internal_service_token
+    # ile ayni auth. Docker network icinde servis adiyla erisilir.
+    whatsapp_web_gateway_url: str = "http://whatsapp-web-gateway:8016"
     service_role: str = "api"
     service_name: str = "backend-api"
     worker_health_host: str = "127.0.0.1"

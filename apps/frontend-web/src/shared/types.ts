@@ -38,7 +38,7 @@ export function mergeDnp3Extended(
 ): Dnp3ExtendedSettings {
   const rest = raw ? { ...raw } : {};
   delete (rest as Record<string, unknown>).tls_dnp3;
-  return { ...DEFAULT_DNP3_EXTENDED, ...rest, ip_endpoint_type: "listening" };
+  return { ...DEFAULT_DNP3_EXTENDED, ...rest };
 }
 
 export type DeviceModelOption = {
@@ -54,6 +54,7 @@ export type DeviceRow = {
   name: string;
   description?: string;
   model: string;
+  installationDate?: string;
   gatewayCode?: string;
   ipAddress?: string;
   dnp3OutstationPort?: number;
@@ -111,6 +112,7 @@ export type ApiDevice = {
   name: string;
   description?: string | null;
   model?: string | null;
+  installation_date?: string | null;
   gateway_code?: string | null;
   ip_address: string;
   dnp3_outstation_port?: number;
@@ -476,15 +478,9 @@ export type NotificationSettings = {
   /** Twilio'ya ozel — Account SID (AC...) ve gonderen numara (E.164). */
   sms_account_sid?: string;
   sms_from_number?: string;
-  /** Twilio WhatsApp modu: True ise 'whatsapp:' prefixi otomatik eklenir.
-   *  sms_twilio_content_sid doluysa ContentSid + ContentVariables ile
-   *  template mesaj atilir (business-initiated 24h penceresi).
-   *  Bu alanlar sadece Twilio sagayicisinda anlamli. */
-  sms_twilio_use_whatsapp?: boolean;
-  sms_twilio_content_sid?: string;
-  /** Content Template degiskenleri — JSON string. Ornek: '{"1":"deger"}'.
-   *  Bos string varsayilan {} olarak gonderilir. */
-  sms_twilio_content_vars?: string;
+  /** WhatsApp Web (Baileys self-hosted sidecar, QR ile giris) aktif mi.
+   *  Baglanti durumu/QR DB'de saklanmaz, her zaman sidecar'dan canli cekilir. */
+  whatsapp_web_enabled?: boolean;
   /** Telegram Bot ile bildirim gondermek icin. */
   telegram_enabled?: boolean;
   telegram_bot_token?: string;
