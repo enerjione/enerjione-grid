@@ -221,7 +221,8 @@
     "submitting": "Signing in...",
     "invalidCredentials": "Invalid username or password",
     "visualAlt": "Login screen image",
-    "customerLogoAlt": "Customer Logo"
+    "customerLogoAlt": "Customer Logo",
+    "footerProductName": "EnerjiOne"
   },
   "dashboard": {
     "filter": {
@@ -1123,11 +1124,17 @@
       "allSources": "All Sources",
       "readOnlyHint": "Edit: installer only",
       "selectHint": "Signal properties",
+      "editProperties": "Edit Properties",
       "noSignals": "No signals defined yet.",
       "noResults": "No signals match the filter.",
       "iec104OnTitle": "IEC 104 published",
       "iec104OffTitle": "IEC 104 unpublished",
       "inactive": "inactive",
+      "export": {
+        "button": "Export",
+        "iec104": "IEC104 signal list (CSV)",
+        "modbus": "Modbus TCP signal list (CSV)"
+      },
       "tabGeneral": "General",
       "tabIec104": "IEC 104",
       "selectListHint": "Select a signal from the list; properties are edited here.",

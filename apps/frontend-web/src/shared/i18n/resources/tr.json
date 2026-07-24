@@ -221,7 +221,8 @@
     "submitting": "Giriş yapılıyor...",
     "invalidCredentials": "Kullanıcı adı veya şifre hatalı",
     "visualAlt": "Giriş ekranı görseli",
-    "customerLogoAlt": "Müşteri Logo"
+    "customerLogoAlt": "Müşteri Logo",
+    "footerProductName": "EnerjiOne"
   },
   "dashboard": {
     "filter": {
@@ -1123,11 +1124,17 @@
       "allSources": "Tüm Kaynaklar",
       "readOnlyHint": "Düzenleme: kurulumcu",
       "selectHint": "Sinyal özellikleri",
+      "editProperties": "Özellikleri Düzenle",
       "noSignals": "Henüz sinyal tanımlı değil.",
       "noResults": "Filtreye uygun sinyal bulunamadı.",
       "iec104OnTitle": "IEC 104 yayında",
       "iec104OffTitle": "IEC 104 yayından kaldırıldı",
       "inactive": "pasif",
+      "export": {
+        "button": "Dışa Aktar",
+        "iec104": "IEC104 sinyal listesi (CSV)",
+        "modbus": "Modbus TCP sinyal listesi (CSV)"
+      },
       "tabGeneral": "Genel",
       "tabIec104": "IEC 104",
       "selectListHint": "Listeden bir sinyal seçin; özellikler burada düzenlenir.",

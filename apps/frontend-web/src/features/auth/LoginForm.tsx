@@ -61,13 +61,10 @@ export function LoginForm({ onSubmit, loading }: Props) {
         </label>
       </div>
 
-      {/* Background split visuals */}
-      <div className="login-bg-left" />
-      <div className="login-bg-right" />
-      <div className="login-bg-divider" />
+      <img className="login-visual-bg" src="/login-visual.png" alt={t("login.visualAlt")} />
+      <div className="login-visual-overlay" />
 
       <div className="login-layout">
-        {/* Sağ Taraf: Giriş Formu */}
         <main className="login-form-container">
           <div className="login-glass-card">
             {(() => {
@@ -164,9 +161,6 @@ export function LoginForm({ onSubmit, loading }: Props) {
                   </span>
                   <span>{t("login.remember")}</span>
                 </label>
-                <button type="button" className="login-forgot-btn">
-                  Şifremi Unuttum?
-                </button>
               </div>
 
               <button type="submit" className="login-submit-btn" disabled={loading}>
@@ -179,31 +173,11 @@ export function LoginForm({ onSubmit, loading }: Props) {
                 )}
               </button>
             </form>
-
-            <div className="login-footer">
-              <div className="login-footer-brand">
-                <img src="/logo.png" alt="EnerjiOne" className="login-footer-logo" />
-                <div className="login-footer-text">
-                  <strong>EnerjiOne</strong>
-                  <span>Enerjinizin Dijital Gücü</span>
-                </div>
-              </div>
-              <div className="login-security-badge">
-                <div className="login-security-icon">
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                    <path d="m9 12 2 2 4-4" />
-                  </svg>
-                </div>
-                <div className="login-security-text">
-                  <strong>Güvenli Bağlantı</strong>
-                  <span>256-bit SSL şifreleme</span>
-                </div>
-              </div>
-            </div>
           </div>
         </main>
       </div>
+
+      <img src="/logo.png" alt={t("login.footerProductName")} className="login-footer-logo" />
     </div>
   );
 }
