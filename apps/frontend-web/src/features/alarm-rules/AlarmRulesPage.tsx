@@ -78,6 +78,7 @@ const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   notify_email: false,
   notify_sms: false,
   notify_telegram: false,
+  notify_whatsapp_web: false,
   // Varsayilan TRUE: yeni kural ariza uretir (harita kirmizi + Hat Arizasi).
   produces_fault: true
 };
@@ -228,6 +229,7 @@ export function AlarmRulesPage({
         notify_email: selectedRule.notify_email === true,
         notify_sms: selectedRule.notify_sms === true,
         notify_telegram: selectedRule.notify_telegram === true,
+        notify_whatsapp_web: selectedRule.notify_whatsapp_web === true,
         // undefined (eski kural) => true (geriye uyum).
         produces_fault: selectedRule.produces_fault !== false
       });
@@ -507,7 +509,8 @@ export function AlarmRulesPage({
   const formNotifyText = [
     form.notify_sms ? "SMS" : null,
     form.notify_email ? "E-Posta" : null,
-    form.notify_telegram ? "Telegram" : null
+    form.notify_telegram ? "Telegram" : null,
+    form.notify_whatsapp_web ? "WhatsApp" : null
   ].filter(Boolean).join(", ") || "—";
   const isFormMode = mode === "create" || mode === "edit-existing";
 
@@ -904,6 +907,20 @@ export function AlarmRulesPage({
                             <small>{t("engineering.alarmRules.channelTelegramHint")}</small>
                           </span>
                         </label>
+                        <label className="rule-channel-option">
+                          <input
+                            type="checkbox"
+                            checked={form.notify_whatsapp_web === true}
+                            onChange={(e) =>
+                              setForm({ ...form, notify_whatsapp_web: e.target.checked })
+                            }
+                          />
+                          <span className="rule-channel-icon material-symbols-outlined">forum</span>
+                          <span className="rule-channel-label">
+                            <strong>{t("engineering.alarmRules.channelWhatsapp")}</strong>
+                            <small>{t("engineering.alarmRules.channelWhatsappHint")}</small>
+                          </span>
+                        </label>
                       </div>
                     </fieldset>
 
@@ -1182,7 +1199,8 @@ export function AlarmRulesPage({
                         {rule.notify_sms ? <span className="rules-v3-notify-pill">SMS</span> : null}
                         {rule.notify_email ? <span className="rules-v3-notify-pill">E-Posta</span> : null}
                         {rule.notify_telegram ? <span className="rules-v3-notify-pill">Telegram</span> : null}
-                        {!rule.notify_sms && !rule.notify_email && !rule.notify_telegram ? <span className="rules-v3-muted">—</span> : null}
+                        {rule.notify_whatsapp_web ? <span className="rules-v3-notify-pill">WhatsApp</span> : null}
+                        {!rule.notify_sms && !rule.notify_email && !rule.notify_telegram && !rule.notify_whatsapp_web ? <span className="rules-v3-muted">—</span> : null}
                       </div>
                     </td>
                     {canEdit ? (

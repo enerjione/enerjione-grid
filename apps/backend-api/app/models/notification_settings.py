@@ -37,3 +37,7 @@ class NotificationSettings(Base):
     # DB'de SAKLANMAZ; her zaman sidecar'dan canli cekilir. Alarm dispatch'te
     # henuz KULLANILMIYOR (ileride notification_dispatch_service.py'ye eklenecek).
     whatsapp_web_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Alarm broadcast icin grup/kisi JID listesi (Telegram chat_ids deseni,
+    # virgulle ayrilmis). Kisi JID: <digits>@s.whatsapp.net, grup JID:
+    # <id>@g.us. Sidecar'a oldugu gibi iletilir (toJid() JID'i tanir).
+    whatsapp_web_group_jids: Mapped[str] = mapped_column(String(2000), default="")

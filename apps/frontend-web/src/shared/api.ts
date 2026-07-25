@@ -1398,7 +1398,7 @@ export async function deleteMqttCert(
 // BULK NOTIFICATIONS (toplu bildirim — ops_manager / installer / engineer)
 // ============================================================
 
-export type BulkNotifyChannel = "web" | "email" | "sms";
+export type BulkNotifyChannel = "web" | "email" | "sms" | "whatsapp";
 
 export type BulkNotifyRequest = {
   subject: string;
@@ -1416,6 +1416,8 @@ export type BulkNotifyResult = {
   email_failed: number;
   sms_sent: number;
   sms_failed: number;
+  whatsapp_sent: number;
+  whatsapp_failed: number;
   skipped_no_email: number;
   skipped_no_phone: number;
   errors: string[];

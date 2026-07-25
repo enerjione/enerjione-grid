@@ -201,14 +201,15 @@
     "channel": {
       "web": "Web",
       "email": "Email",
-      "sms": "SMS"
+      "sms": "SMS",
+      "whatsapp": "WhatsApp"
     },
     "send": "Send",
     "sending": "Sending…",
     "completeForm": "Provide subject, message, channel, and target.",
     "resultTitle": "Sent to {{count}} recipients",
-    "resultDetail": "Web: {{web}} · Email: {{email}} · SMS: {{sms}}",
-    "resultFail": "Failed → email: {{emailFail}}, SMS: {{smsFail}}"
+    "resultDetail": "Web: {{web}} · Email: {{email}} · SMS: {{sms}} · WhatsApp: {{whatsapp}}",
+    "resultFail": "Failed → email: {{emailFail}}, SMS: {{smsFail}}, WhatsApp: {{whatsappFail}}"
   },
   "login": {
     "title": "Sign In",
@@ -1321,6 +1322,8 @@
       "channelSmsHint": "Short message to users with phone numbers.",
       "channelTelegram": "Telegram",
       "channelTelegramHint": "Sent to all chat IDs configured under Notification Settings.",
+      "channelWhatsapp": "WhatsApp",
+      "channelWhatsappHint": "Sent to the responsible user and to groups configured under Notification Settings.",
       "fieldsetFault": "Fault Behavior",
       "producesFault": "Generate line fault",
       "producesFaultHint": "When on, this alarm turns the device red (faulted) on the map and opens a Line Fault record. When off, the alarm only appears on the Alarms screen and does not produce a map fault (for transient/noisy signals).",
@@ -2094,6 +2097,9 @@
         "whatsappDisconnected": "Waiting for connection — loading QR code...",
         "whatsappLogoutBtn": "Disconnect",
         "whatsappLoggingOut": "Disconnecting...",
+        "whatsappGroupJidsTitle": "Group/Contact JID List",
+        "whatsappGroupJidsLabel": "JID List",
+        "whatsappGroupJidsHint": "Comma-separated. Contact JID: 905xxxxxxxxx@s.whatsapp.net, group JID: xxxxxxxxxx-xxxxxxx@g.us. Broadcast to this list on alarm trigger.",
         "telegramBotToken": "Bot Token",
         "telegramBotTokenHint": "Get the token from @BotFather. Leaving empty disables Telegram notifications.",
         "telegramChatIds": "Chat ID List",

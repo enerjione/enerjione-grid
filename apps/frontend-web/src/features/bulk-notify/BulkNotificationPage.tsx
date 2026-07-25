@@ -33,7 +33,7 @@ type Props = {
   currentRole: UserRole;
 };
 
-const ALL_CHANNELS: BulkNotifyChannel[] = ["web", "email", "sms"];
+const ALL_CHANNELS: BulkNotifyChannel[] = ["web", "email", "sms", "whatsapp"];
 
 type WizardStep = 1 | 2 | 3 | 4;
 
@@ -261,13 +261,15 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
         web: res.web_sent,
         email: res.email_sent,
         sms: res.sms_sent,
+        whatsapp: res.whatsapp_sent,
       });
       toast.success(`${okMsg} — ${detail}`);
-      if (res.email_failed || res.sms_failed) {
+      if (res.email_failed || res.sms_failed || res.whatsapp_failed) {
         toast.error(
           t("bulkNotify.resultFail", {
             emailFail: res.email_failed,
             smsFail: res.sms_failed,
+            whatsappFail: res.whatsapp_failed,
           })
         );
       }
@@ -487,7 +489,13 @@ export function BulkNotificationPage({ accessToken, currentRole }: Props) {
                     onChange={() => toggleChannel(ch)}
                   />
                   <span className="material-symbols-outlined">
-                    {ch === "web" ? "notifications" : ch === "email" ? "mail" : "sms"}
+                    {ch === "web"
+                      ? "notifications"
+                      : ch === "email"
+                      ? "mail"
+                      : ch === "whatsapp"
+                      ? "forum"
+                      : "sms"}
                   </span>
                   <span className="bulk-notify-channel-label">
                     {t(`bulkNotify.channel.${ch}`)}

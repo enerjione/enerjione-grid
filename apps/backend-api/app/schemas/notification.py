@@ -19,6 +19,7 @@ class NotificationSettingsRead(BaseModel):
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""
     whatsapp_web_enabled: bool = False
+    whatsapp_web_group_jids: str = ""
 
     class Config:
         from_attributes = True
@@ -41,6 +42,7 @@ class NotificationSettingsUpdate(BaseModel):
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""
     whatsapp_web_enabled: bool = False
+    whatsapp_web_group_jids: str = ""
 
 
 class NotificationSmtpTestRequest(BaseModel):

@@ -92,6 +92,7 @@ def update_notification_settings(
     settings_row.telegram_bot_token = encrypt_secret(payload.telegram_bot_token)
     settings_row.telegram_chat_ids = payload.telegram_chat_ids
     settings_row.whatsapp_web_enabled = payload.whatsapp_web_enabled
+    settings_row.whatsapp_web_group_jids = payload.whatsapp_web_group_jids
     record_event(
         db,
         category="settings",

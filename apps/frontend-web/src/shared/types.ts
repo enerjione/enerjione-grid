@@ -481,6 +481,9 @@ export type NotificationSettings = {
   /** WhatsApp Web (Baileys self-hosted sidecar, QR ile giris) aktif mi.
    *  Baglanti durumu/QR DB'de saklanmaz, her zaman sidecar'dan canli cekilir. */
   whatsapp_web_enabled?: boolean;
+  /** Virgulle ayrili kisi/grup JID listesi (Telegram chat_ids deseni).
+   *  Kisi JID: <digits>@s.whatsapp.net, grup JID: <id>@g.us. */
+  whatsapp_web_group_jids?: string;
   /** Telegram Bot ile bildirim gondermek icin. */
   telegram_enabled?: boolean;
   telegram_bot_token?: string;
@@ -708,6 +711,7 @@ export type AlarmRuleRow = {
   notify_email?: boolean;
   notify_sms?: boolean;
   notify_telegram?: boolean;
+  notify_whatsapp_web?: boolean;
   /** "Bu alarm gercek hat arizasi uretir mi?" True (default): harita kirmizi +
    *  Hat Arizasi acilir. False: yalniz Alarmlar ekraninda gorunur. */
   produces_fault?: boolean;

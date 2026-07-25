@@ -201,14 +201,15 @@
     "channel": {
       "web": "Web Bildirim",
       "email": "E-posta",
-      "sms": "SMS"
+      "sms": "SMS",
+      "whatsapp": "WhatsApp"
     },
     "send": "Gönder",
     "sending": "Gönderiliyor…",
     "completeForm": "Başlık, mesaj, kanal ve hedef seç.",
     "resultTitle": "{{count}} kişiye gönderildi",
-    "resultDetail": "Web: {{web}} · E-posta: {{email}} · SMS: {{sms}}",
-    "resultFail": "Başarısız → e-posta: {{emailFail}}, SMS: {{smsFail}}"
+    "resultDetail": "Web: {{web}} · E-posta: {{email}} · SMS: {{sms}} · WhatsApp: {{whatsapp}}",
+    "resultFail": "Başarısız → e-posta: {{emailFail}}, SMS: {{smsFail}}, WhatsApp: {{whatsappFail}}"
   },
   "login": {
     "title": "Giriş Yap",
@@ -1321,6 +1322,8 @@
       "channelSmsHint": "Telefon numarası kayıtlı kullanıcılara kısa mesaj.",
       "channelTelegram": "Telegram",
       "channelTelegramHint": "Bildirim Ayarları'nda tanımlı tüm chat'lere gönderilir.",
+      "channelWhatsapp": "WhatsApp",
+      "channelWhatsappHint": "Sorumlu kullanıcıya ve Bildirim Ayarları'nda tanımlı gruplara gönderilir.",
       "fieldsetFault": "Arıza Davranışı",
       "producesFault": "Hat arızası üret",
       "producesFaultHint": "Açıkken bu alarm geldiğinde cihaz haritada kırmızı (arızalı) gösterilir ve Hat Arızaları'nda bir kayıt açılır. Kapalıyken alarm yalnızca Alarmlar ekranında görünür; haritada arıza üretmez (geçici/gürültülü sinyaller için).",
@@ -2094,6 +2097,9 @@
         "whatsappDisconnected": "Bağlantı bekleniyor — QR kod yükleniyor...",
         "whatsappLogoutBtn": "Bağlantıyı Kes",
         "whatsappLoggingOut": "Kesiliyor...",
+        "whatsappGroupJidsTitle": "Grup/Kişi JID Listesi",
+        "whatsappGroupJidsLabel": "JID Listesi",
+        "whatsappGroupJidsHint": "Virgülle ayırın. Kişi JID: 905xxxxxxxxx@s.whatsapp.net, grup JID: xxxxxxxxxx-xxxxxxx@g.us. Alarm tetiklendiğinde bu listeye broadcast yapılır.",
         "telegramBotToken": "Bot Token",
         "telegramBotTokenHint": "Token @BotFather'dan alınır. Boş bırakılırsa Telegram bildirimi devre dışıdır.",
         "telegramChatIds": "Chat ID Listesi",

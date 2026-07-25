@@ -21,7 +21,12 @@ const state = {
 };
 
 function toJid(rawPhone) {
-  const digits = String(rawPhone || "").replace(/[^0-9]/g, "");
+  const value = String(rawPhone || "").trim();
+  if (!value) throw new Error("Gecersiz telefon numarasi.");
+  // Zaten tam JID (kisi veya grup) ise dokunma — grup JID'lerinde tire ve
+  // harf gecebilir (orn "123456-789@g.us"), digit-strip bunu bozar.
+  if (value.endsWith("@g.us") || value.endsWith("@s.whatsapp.net")) return value;
+  const digits = value.replace(/[^0-9]/g, "");
   if (!digits) throw new Error("Gecersiz telefon numarasi.");
   return `${digits}@s.whatsapp.net`;
 }

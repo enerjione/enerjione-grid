@@ -28,6 +28,7 @@ class UserNotificationPreference(Base):
     email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sms_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     telegram_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    whatsapp_web_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Min seviye (info, warning, critical) — bu seviyeden DUSUK olanlar
     # bildirim olarak gonderilmez. Default "info" = hepsi.

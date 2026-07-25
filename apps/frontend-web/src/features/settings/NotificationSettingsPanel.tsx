@@ -53,6 +53,7 @@ const EMPTY_SETTINGS: NotificationSettings = {
   sms_account_sid: "",
   sms_from_number: "",
   whatsapp_web_enabled: false,
+  whatsapp_web_group_jids: "",
   telegram_enabled: false,
   telegram_bot_token: "",
   telegram_chat_ids: ""
@@ -120,7 +121,8 @@ export function NotificationSettingsPanel({
         ...initialSettings,
         telegram_enabled: initialSettings.telegram_enabled ?? false,
         telegram_bot_token: initialSettings.telegram_bot_token ?? "",
-        telegram_chat_ids: initialSettings.telegram_chat_ids ?? ""
+        telegram_chat_ids: initialSettings.telegram_chat_ids ?? "",
+        whatsapp_web_group_jids: initialSettings.whatsapp_web_group_jids ?? ""
       });
     }
   }, [initialSettings]);
@@ -591,6 +593,31 @@ export function NotificationSettingsPanel({
                 <p>{t("notifications.settings.fields.whatsappDisconnected")}</p>
               </div>
             )}
+          </div>
+        </div>
+        <div className="notification-detail-section">
+          <div className="notification-content-card">
+            <div className="notification-content-head">
+              <span className="material-symbols-outlined">forum</span>
+              <div>
+                <h4>{t("notifications.settings.fields.whatsappGroupJidsTitle")}</h4>
+                <p>{t("notifications.settings.fields.whatsappGroupJidsHint")}</p>
+              </div>
+            </div>
+            <div className="notif-field-grid notification-detail-grid">
+              <label className="notif-field notif-field--full">
+                <span>{t("notifications.settings.fields.whatsappGroupJidsLabel")}</span>
+                <textarea
+                  value={form.whatsapp_web_group_jids ?? ""}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, whatsapp_web_group_jids: event.target.value }))
+                  }
+                  placeholder="905xxxxxxxxx@s.whatsapp.net, 12036xxxxxx-xxxxxxx@g.us"
+                  rows={3}
+                />
+                <small className="helper-text">{t("notifications.settings.fields.whatsappGroupJidsHint")}</small>
+              </label>
+            </div>
           </div>
         </div>
         <div className="notification-card-test notification-detail-test">

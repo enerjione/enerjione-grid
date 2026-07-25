@@ -53,6 +53,7 @@ def _row_to_read(row: AlarmRule) -> AlarmRuleRead:
             "notify_email": row.notify_email,
             "notify_sms": row.notify_sms,
             "notify_telegram": row.notify_telegram,
+            "notify_whatsapp_web": row.notify_whatsapp_web,
             "produces_fault": row.produces_fault,
         }
     )

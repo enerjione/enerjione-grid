@@ -29,6 +29,7 @@ from app.models.enums import UserRole
 from app.models.notification_settings import NotificationSettings
 from app.models.responsibility_area import responsibility_area_users
 from app.models.user import User
+from app.services import whatsapp_web_client_service
 from app.services.notification_service import create_notification
 from app.services.notification_test_service import (
     send_smtp_test,
@@ -47,6 +48,8 @@ class BulkNotifyResult:
     email_failed: int = 0
     sms_sent: int = 0
     sms_failed: int = 0
+    whatsapp_sent: int = 0
+    whatsapp_failed: int = 0
     skipped_no_email: int = 0
     skipped_no_phone: int = 0
     errors: list[str] = field(default_factory=list)
@@ -142,7 +145,7 @@ def send_bulk_notification(
 
     # SMTP/SMS ayarlari (gerekirse)
     settings: NotificationSettings | None = None
-    if "email" in channels_set or "sms" in channels_set:
+    if "email" in channels_set or "sms" in channels_set or "whatsapp" in channels_set:
         settings = db.scalar(select(NotificationSettings))
 
     subject = subject.strip() or "Bildirim"
@@ -215,5 +218,25 @@ def send_bulk_notification(
                     )
                     result.sms_failed += 1
                     result.errors.append(f"sms:{user.username}:{exc}")
+
+        # WhatsApp
+        if "whatsapp" in channels_set:
+            if settings is None or not settings.whatsapp_web_enabled:
+                result.errors.append("whatsapp_channel_disabled")
+            elif not user.phone_number:
+                result.skipped_no_phone += 1
+            else:
+                try:
+                    whatsapp_web_client_service.send_test_message(
+                        user.phone_number, f"{subject}: {body}"[:1000],
+                    )
+                    result.whatsapp_sent += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "bulk_notify_whatsapp_failed user=%s error=%s",
+                        user.username, exc,
+                    )
+                    result.whatsapp_failed += 1
+                    result.errors.append(f"whatsapp:{user.username}:{exc}")
 
     return result

@@ -41,6 +41,8 @@ class BulkNotifyResultRead(BaseModel):
     email_failed: int
     sms_sent: int
     sms_failed: int
+    whatsapp_sent: int
+    whatsapp_failed: int
     skipped_no_email: int
     skipped_no_phone: int
     errors: list[str]
@@ -57,7 +59,7 @@ def send_bulk(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="En az bir hedef sec: user_ids, team_ids veya send_to_all=True",
         )
-    valid_channels = {"web", "email", "sms"}
+    valid_channels = {"web", "email", "sms", "whatsapp"}
     bad = [c for c in payload.channels if c not in valid_channels]
     if bad:
         raise HTTPException(
@@ -114,6 +116,8 @@ def send_bulk(
         email_failed=result.email_failed,
         sms_sent=result.sms_sent,
         sms_failed=result.sms_failed,
+        whatsapp_sent=result.whatsapp_sent,
+        whatsapp_failed=result.whatsapp_failed,
         skipped_no_email=result.skipped_no_email,
         skipped_no_phone=result.skipped_no_phone,
         errors=result.errors,
@@ -195,7 +199,7 @@ def create_template(
     db: Session = Depends(get_db),
 ):
     # Channels validasyonu
-    valid = {"web", "email", "sms"}
+    valid = {"web", "email", "sms", "whatsapp"}
     bad = [c for c in payload.channels if c not in valid]
     if bad:
         raise HTTPException(
@@ -346,7 +350,7 @@ def create_scheduled(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="En az bir hedef sec: user_ids, team_ids veya send_to_all=True",
         )
-    valid_channels = {"web", "email", "sms"}
+    valid_channels = {"web", "email", "sms", "whatsapp"}
     bad = [c for c in payload.channels if c not in valid_channels]
     if bad:
         raise HTTPException(

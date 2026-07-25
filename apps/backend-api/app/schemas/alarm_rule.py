@@ -112,6 +112,7 @@ class AlarmRuleBase(BaseModel):
     notify_email: bool = False
     notify_sms: bool = False
     notify_telegram: bool = False
+    notify_whatsapp_web: bool = False
     # "Bu alarm gercek hat arizasi uretir mi?" True (default): harita kirmizi +
     # Hat Arizasi acilir. False: yalniz Alarmlar ekraninda gorunur, haritada
     # ariza gostermez. Default True -> geriye donuk uyum.
@@ -148,6 +149,7 @@ class AlarmRuleUpdate(BaseModel):
     notify_email: bool | None = None
     notify_sms: bool | None = None
     notify_telegram: bool | None = None
+    notify_whatsapp_web: bool | None = None
     produces_fault: bool | None = None
 
 

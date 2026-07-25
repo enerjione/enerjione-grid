@@ -41,6 +41,7 @@ from app.services.notification_test_service import (
     send_sms_test,
     send_telegram_test,
 )
+from app.services import whatsapp_web_client_service
 from app.services.scope_service import get_users_in_scope_for_device
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ def _get_pref(db: Session, user_id: int) -> UserNotificationPreference:
             web_enabled=True,
             email_enabled=True,
             sms_enabled=False,
+            whatsapp_web_enabled=False,
             min_level_rank=0,
         )
     return pref
@@ -310,6 +312,48 @@ def _send_telegram_broadcast(
             )
 
 
+def _send_whatsapp_for_user(
+    settings: NotificationSettings | None, user: User, alarm: AlarmEvent
+) -> None:
+    if settings is None or not settings.whatsapp_web_enabled:
+        return
+    if not user.phone_number:
+        return
+    msg = f"Alarm: {alarm.title} - {alarm.description}"[:1000]
+    try:
+        whatsapp_web_client_service.send_test_message(user.phone_number, msg)
+        logger.info("alarm_whatsapp_sent user=%s alarm_id=%d", user.username, alarm.id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "alarm_whatsapp_failed user=%s alarm_id=%d error=%s",
+            user.username, alarm.id, exc,
+        )
+
+
+def _send_whatsapp_group_broadcast(
+    settings: NotificationSettings | None, alarm: AlarmEvent
+) -> None:
+    """WhatsApp grup/kisi JID listesine global broadcast (Telegram deseni)."""
+    if settings is None or not settings.whatsapp_web_enabled:
+        return
+    jids_raw = getattr(settings, "whatsapp_web_group_jids", "") or ""
+    jids = [j.strip() for j in jids_raw.split(",") if j.strip()]
+    if not jids:
+        return
+    title = alarm.title or "Alarm"
+    level = (alarm.level or "warning").upper()
+    text = f"Alarm: {title}\nSeviye: {level}\n{alarm.description or ''}"
+    for jid in jids:
+        try:
+            whatsapp_web_client_service.send_test_message(jid, text)
+            logger.info("alarm_whatsapp_group_sent jid=%s alarm_id=%d", jid, alarm.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "alarm_whatsapp_group_failed jid=%s alarm_id=%d error=%s",
+                jid, alarm.id, exc,
+            )
+
+
 def _create_personal_web_notification(
     db: Session, user: User, alarm: AlarmEvent
 ) -> None:
@@ -458,8 +502,10 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     rule_email = bool(rule and rule.notify_email)
     rule_sms = bool(rule and rule.notify_sms)
     rule_telegram = bool(rule and rule.notify_telegram)
+    rule_whatsapp = bool(rule and rule.notify_whatsapp_web)
     alarm_rank = _level_rank(alarm.level)
     any_telegram_optin = False
+    any_whatsapp_optin = False
     for user in recipients:
         pref = _get_pref(db, user.id)
         # Min seviye filtresi
@@ -473,15 +519,24 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
         # SMS: kuralda notify_sms AND kullanici tercihi acik
         if rule_sms and pref.sms_enabled:
             _send_sms_for_user(settings, user, alarm)
+        # WhatsApp kisisel: kuralda notify_whatsapp_web AND kullanici tercihi acik
+        if rule_whatsapp and getattr(pref, "whatsapp_web_enabled", False):
+            _send_whatsapp_for_user(settings, user, alarm)
         # Telegram: kullanici tercihi opt-in oldu mu?
         if getattr(pref, "telegram_enabled", False):
             any_telegram_optin = True
+        if getattr(pref, "whatsapp_web_enabled", False):
+            any_whatsapp_optin = True
     # Telegram: kural izin verdi + en az 1 kullanici opt-in oldu ise
     # global broadcast. Bot tek bir kanaldan yayin yapar (ayar listesi
     # icinde tanimli chat_ids), bu yuzden kisi-bazli filtre yapamayiz
     # ama opt-in olan yoksa gondermeyiz.
     if rule_telegram and any_telegram_optin:
         _send_telegram_broadcast(settings, alarm)
+    # WhatsApp grup: ayni mantik — kural izin verdi + en az 1 kullanici
+    # opt-in oldu ise grup/kisi JID listesine broadcast.
+    if rule_whatsapp and any_whatsapp_optin:
+        _send_whatsapp_group_broadcast(settings, alarm)
 
 
 def _unused_for_imports(_d: Device, _i: Iterable):  # pragma: no cover
