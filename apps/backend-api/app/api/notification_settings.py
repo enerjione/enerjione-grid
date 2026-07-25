@@ -306,7 +306,7 @@ def test_whatsapp_web(
     current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    message = payload.message or "Bu mesaj Horstman Smart Logger WhatsApp test gönderimidir."
+    message = payload.message or "Bu mesaj EnerjiOne Grid WhatsApp test gönderimidir."
     try:
         whatsapp_web_client_service.send_test_message(payload.recipient_phone, message)
         record_event(

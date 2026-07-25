@@ -27,6 +27,18 @@ function toJid(rawPhone) {
 }
 
 async function connect() {
+  // Onceki socket hala aciksa event listener'lari birakma — gec gelen bir
+  // event (eski sock'tan) yeni sock'un state'ini ezebilir (stale closure).
+  if (state.sock) {
+    state.sock.ev.removeAllListeners();
+    try {
+      state.sock.end(undefined);
+    } catch (err) {
+      // Zaten kopuk olabilir, yok say.
+    }
+    state.sock = null;
+  }
+
   fs.mkdirSync(SESSION_DIR, { recursive: true });
   const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
   const { version } = await fetchLatestBaileysVersion();
@@ -42,6 +54,8 @@ async function connect() {
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", async (update) => {
+    if (state.sock !== sock) return; // eski socket'in gecikmis event'i
+
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
