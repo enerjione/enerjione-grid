@@ -78,11 +78,21 @@ async function connect() {
       const statusCode = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output
         ? lastDisconnect.error.output.statusCode
         : null;
-      const loggedOut = statusCode === DisconnectReason.loggedOut;
+      // restartRequired (515) ilk QR taramasindan hemen sonra normal —
+      // Baileys ayni session ile tek seferlik yeniden baglanma ister.
+      // Bunun disindaki her kapanma (badSession, loggedOut, connectionLost,
+      // WA'nin cihazi reddetmesi vb.) bozuk/geçersiz session anlamina gelir;
+      // session silinmezse ayni credentials ile sonsuz retry doner ve QR
+      // hicbir zaman uretilmez. Bu yuzden restartRequired disinda session'i
+      // sifirlayip taze QR akisina donuyoruz.
+      const restartOnly = statusCode === DisconnectReason.restartRequired;
       state.status = "disconnected";
       state.qrDataUrl = null;
       state.phoneNumber = null;
-      if (!loggedOut) {
+      if (restartOnly) {
+        connect().catch((err) => console.error("[whatsapp-web-gateway] reconnect basarisiz:", err));
+      } else {
+        fs.rmSync(SESSION_DIR, { recursive: true, force: true });
         connect().catch((err) => console.error("[whatsapp-web-gateway] reconnect basarisiz:", err));
       }
     }
