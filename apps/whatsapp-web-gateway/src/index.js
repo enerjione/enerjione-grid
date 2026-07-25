@@ -59,6 +59,10 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, baileys.getQr());
       return;
     }
+    if (req.method === "GET" && req.url === "/groups") {
+      sendJson(res, 200, { groups: await baileys.listGroups() });
+      return;
+    }
     if (req.method === "POST" && req.url === "/send") {
       const body = await readBody(req);
       await baileys.sendMessage(body.to, body.message);

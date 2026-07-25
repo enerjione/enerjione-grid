@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { DeviceRow, NotificationSettings, OutboundTarget } from "../../shared/types";
+import type { DeviceRow, NotificationSettings, OutboundTarget, WhatsappWebGroup } from "../../shared/types";
 import {
   OutboundTargetsPanel,
   type OutboundTargetCreatePayload,
@@ -35,6 +35,7 @@ type Props = {
   /** WhatsApp Web (Baileys sidecar) baglanti durumunu getirir — polling icin. */
   onFetchWhatsappWebStatus?: () => Promise<{ status: string; phone_number: string | null }>;
   onFetchWhatsappWebQr?: () => Promise<{ qr: string | null }>;
+  onFetchWhatsappWebGroups?: () => Promise<{ groups: WhatsappWebGroup[] }>;
   onTestWhatsappWeb?: (payload: { recipient_phone: string; message?: string }) => Promise<{ ok: boolean; detail: string }>;
   onLogoutWhatsappWeb?: () => Promise<{ ok: boolean; detail: string }>;
 };
@@ -54,6 +55,7 @@ const EMPTY_SETTINGS: NotificationSettings = {
   sms_from_number: "",
   whatsapp_web_enabled: false,
   whatsapp_web_group_jids: "",
+  whatsapp_web_group_mode: false,
   telegram_enabled: false,
   telegram_bot_token: "",
   telegram_chat_ids: ""
@@ -88,6 +90,7 @@ export function NotificationSettingsPanel({
   onDiscoverTelegramChats,
   onFetchWhatsappWebStatus,
   onFetchWhatsappWebQr,
+  onFetchWhatsappWebGroups,
   onTestWhatsappWeb,
   onLogoutWhatsappWeb
 }: Props) {
@@ -112,6 +115,8 @@ export function NotificationSettingsPanel({
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState<{ status: string; phone_number: string | null } | null>(null);
   const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
+  const [whatsappGroups, setWhatsappGroups] = useState<WhatsappWebGroup[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
   const [loggingOutWhatsapp, setLoggingOutWhatsapp] = useState(false);
 
   useEffect(() => {
@@ -122,7 +127,8 @@ export function NotificationSettingsPanel({
         telegram_enabled: initialSettings.telegram_enabled ?? false,
         telegram_bot_token: initialSettings.telegram_bot_token ?? "",
         telegram_chat_ids: initialSettings.telegram_chat_ids ?? "",
-        whatsapp_web_group_jids: initialSettings.whatsapp_web_group_jids ?? ""
+        whatsapp_web_group_jids: initialSettings.whatsapp_web_group_jids ?? "",
+        whatsapp_web_group_mode: initialSettings.whatsapp_web_group_mode ?? false
       });
     }
   }, [initialSettings]);
@@ -152,6 +158,24 @@ export function NotificationSettingsPanel({
       clearInterval(interval);
     };
   }, [activeChannel, onFetchWhatsappWebStatus, onFetchWhatsappWebQr]);
+
+  const refreshWhatsappGroups = useCallback(async () => {
+    if (!onFetchWhatsappWebGroups) return;
+    setLoadingGroups(true);
+    try {
+      const result = await onFetchWhatsappWebGroups();
+      setWhatsappGroups(result.groups);
+    } catch {
+      setWhatsappGroups([]);
+    } finally {
+      setLoadingGroups(false);
+    }
+  }, [onFetchWhatsappWebGroups]);
+
+  useEffect(() => {
+    if (activeChannel !== "whatsapp" || whatsappStatus?.status !== "connected") return;
+    void refreshWhatsappGroups();
+  }, [activeChannel, whatsappStatus?.status, refreshWhatsappGroups]);
 
   const channels = useMemo<ChannelDef[]>(
     () => [
@@ -358,6 +382,18 @@ export function NotificationSettingsPanel({
     if (existing.has(chatId)) return;
     existing.add(chatId);
     setForm((prev) => ({ ...prev, telegram_chat_ids: Array.from(existing).join(", ") }));
+  };
+
+  const whatsappJidList = (form.whatsapp_web_group_jids ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const toggleGroupSelection = (jid: string) => {
+    const next = whatsappJidList.includes(jid)
+      ? whatsappJidList.filter((item) => item !== jid)
+      : [...whatsappJidList, jid];
+    setForm((prev) => ({ ...prev, whatsapp_web_group_jids: next.join(", ") }));
   };
 
   const renderTestResult = (channel: TestChannel) =>
@@ -600,24 +636,90 @@ export function NotificationSettingsPanel({
             <div className="notification-content-head">
               <span className="material-symbols-outlined">forum</span>
               <div>
-                <h4>{t("notifications.settings.fields.whatsappGroupJidsTitle")}</h4>
-                <p>{t("notifications.settings.fields.whatsappGroupJidsHint")}</p>
+                <h4>{t("notifications.settings.fields.whatsappGroupModeLabel")}</h4>
+                <p>
+                  {form.whatsapp_web_group_mode
+                    ? t("notifications.settings.fields.whatsappGroupModeHint")
+                    : t("notifications.settings.fields.whatsappPersonalModeHint")}
+                </p>
               </div>
-            </div>
-            <div className="notif-field-grid notification-detail-grid">
-              <label className="notif-field notif-field--full">
-                <span>{t("notifications.settings.fields.whatsappGroupJidsLabel")}</span>
-                <textarea
-                  value={form.whatsapp_web_group_jids ?? ""}
+              <label
+                className="notif-toggle"
+                style={{ marginLeft: "auto" }}
+                title={t("notifications.settings.fields.whatsappGroupModeLabel")}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.whatsapp_web_group_mode}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, whatsapp_web_group_jids: event.target.value }))
+                    setForm((prev) => ({ ...prev, whatsapp_web_group_mode: event.target.checked }))
                   }
-                  placeholder="905xxxxxxxxx@s.whatsapp.net, 12036xxxxxx-xxxxxxx@g.us"
-                  rows={3}
                 />
-                <small className="helper-text">{t("notifications.settings.fields.whatsappGroupJidsHint")}</small>
+                <span className="notif-toggle-slider" />
               </label>
             </div>
+
+            {form.whatsapp_web_group_mode && status === "connected" ? (
+              <div className="telegram-discover-card">
+                <div className="telegram-discover-head">
+                  <span className="material-symbols-outlined">groups</span>
+                  <div className="telegram-discover-head-text">
+                    <strong>{t("notifications.settings.fields.whatsappGroupListTitle")}</strong>
+                    <small>
+                      {t("notifications.settings.fields.whatsappGroupSelectedCount", {
+                        count: whatsappJidList.length
+                      })}
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-btn telegram-discover-btn"
+                    onClick={() => void refreshWhatsappGroups()}
+                    disabled={loadingGroups}
+                  >
+                    <span className="material-symbols-outlined">
+                      {loadingGroups ? "hourglass_top" : "refresh"}
+                    </span>
+                    {t("notifications.settings.fields.whatsappGroupListRefresh")}
+                  </button>
+                </div>
+                {whatsappGroups.length === 0 ? (
+                  <div className="telegram-discover-empty">
+                    <span className="material-symbols-outlined">info</span>
+                    {t("notifications.settings.fields.whatsappGroupListEmpty")}
+                  </div>
+                ) : (
+                  <ul className="telegram-discover-list">
+                    {whatsappGroups.map((group) => {
+                      const isSelected = whatsappJidList.includes(group.jid);
+                      return (
+                        <li key={group.jid} className="telegram-discover-item">
+                          <span className="telegram-discover-type" title="group">
+                            👥
+                          </span>
+                          <div className="telegram-discover-info">
+                            <strong>{group.name}</strong>
+                            <code>{group.participants} üye</code>
+                          </div>
+                          <button
+                            type="button"
+                            className={`telegram-discover-add ${isSelected ? "is-added" : ""}`}
+                            onClick={() => toggleGroupSelection(group.jid)}
+                          >
+                            <span className="material-symbols-outlined">
+                              {isSelected ? "check" : "add"}
+                            </span>
+                            {isSelected
+                              ? t("notifications.settings.fields.telegramDiscoverAdded")
+                              : t("notifications.settings.fields.telegramDiscoverAdd")}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="notification-card-test notification-detail-test">

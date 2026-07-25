@@ -15,6 +15,7 @@ from app.schemas.notification import (
     TelegramDiscoverChatsRequest,
     TelegramDiscoverChatsResult,
     TelegramDiscoveredChat,
+    WhatsappWebGroupsResult,
     WhatsappWebQr,
     WhatsappWebStatus,
     WhatsappWebTestRequest,
@@ -93,6 +94,7 @@ def update_notification_settings(
     settings_row.telegram_chat_ids = payload.telegram_chat_ids
     settings_row.whatsapp_web_enabled = payload.whatsapp_web_enabled
     settings_row.whatsapp_web_group_jids = payload.whatsapp_web_group_jids
+    settings_row.whatsapp_web_group_mode = payload.whatsapp_web_group_mode
     record_event(
         db,
         category="settings",
@@ -299,6 +301,11 @@ def get_whatsapp_web_status(_: User = Depends(require_role(UserRole.INSTALLER)))
 @router.get("/whatsapp-web/qr", response_model=WhatsappWebQr)
 def get_whatsapp_web_qr(_: User = Depends(require_role(UserRole.INSTALLER))):
     return WhatsappWebQr(**whatsapp_web_client_service.fetch_qr())
+
+
+@router.get("/whatsapp-web/groups", response_model=WhatsappWebGroupsResult)
+def get_whatsapp_web_groups(_: User = Depends(require_role(UserRole.INSTALLER))):
+    return WhatsappWebGroupsResult(**whatsapp_web_client_service.fetch_groups())
 
 
 @router.post("/whatsapp-web/test", response_model=NotificationTestResult)

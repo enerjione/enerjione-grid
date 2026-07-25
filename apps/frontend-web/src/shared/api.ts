@@ -25,7 +25,8 @@ import type {
   SignalLiveRow,
   SystemEvent,
   UserRead,
-  UserRole
+  UserRole,
+  WhatsappWebGroup
 } from "./types";
 import { mergeDnp3Extended } from "./types";
 
@@ -1966,6 +1967,14 @@ export async function fetchWhatsappWebQr(token: string): Promise<{ qr: string | 
   });
   if (!response.ok) throw await buildApiError(response, "WhatsApp Web QR kodu alınamadı.");
   return (await response.json()) as { qr: string | null };
+}
+
+export async function fetchWhatsappWebGroups(token: string): Promise<{ groups: WhatsappWebGroup[] }> {
+  const response = await apiFetch(`${API_BASE_URL}/notification-settings/whatsapp-web/groups`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "WhatsApp grup listesi alınamadı.");
+  return (await response.json()) as { groups: WhatsappWebGroup[] };
 }
 
 export async function testWhatsappWeb(

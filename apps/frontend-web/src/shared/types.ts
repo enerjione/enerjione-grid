@@ -481,14 +481,22 @@ export type NotificationSettings = {
   /** WhatsApp Web (Baileys self-hosted sidecar, QR ile giris) aktif mi.
    *  Baglanti durumu/QR DB'de saklanmaz, her zaman sidecar'dan canli cekilir. */
   whatsapp_web_enabled?: boolean;
-  /** Virgulle ayrili kisi/grup JID listesi (Telegram chat_ids deseni).
-   *  Kisi JID: <digits>@s.whatsapp.net, grup JID: <id>@g.us. */
+  /** Secili grup JID listesi (virgulle ayrili), sidecar'in /groups
+   *  endpoint'inden kesfedilip UI'da secilir. Grup JID: <id>@g.us. */
   whatsapp_web_group_jids?: string;
+  /** Acik: sadece secili gruplara git. Kapali: kullanicinin phone_number'ina git. */
+  whatsapp_web_group_mode?: boolean;
   /** Telegram Bot ile bildirim gondermek icin. */
   telegram_enabled?: boolean;
   telegram_bot_token?: string;
   /** Virgulle ayrili chat ID listesi (kanal/grup). */
   telegram_chat_ids?: string;
+};
+
+export type WhatsappWebGroup = {
+  jid: string;
+  name: string;
+  participants: number;
 };
 
 export type SignalDataType =

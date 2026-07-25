@@ -40,6 +40,13 @@ def fetch_qr() -> dict:
         return {"qr": None}
 
 
+def fetch_groups() -> dict:
+    try:
+        return _request("GET", "/groups", timeout=15)
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return {"groups": []}
+
+
 def send_test_message(recipient_phone: str, message: str) -> None:
     if not recipient_phone:
         raise ValueError("Alıcı numarası boş.")

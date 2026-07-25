@@ -20,6 +20,7 @@ class NotificationSettingsRead(BaseModel):
     telegram_chat_ids: str = ""
     whatsapp_web_enabled: bool = False
     whatsapp_web_group_jids: str = ""
+    whatsapp_web_group_mode: bool = False
 
     class Config:
         from_attributes = True
@@ -43,6 +44,7 @@ class NotificationSettingsUpdate(BaseModel):
     telegram_chat_ids: str = ""
     whatsapp_web_enabled: bool = False
     whatsapp_web_group_jids: str = ""
+    whatsapp_web_group_mode: bool = False
 
 
 class NotificationSmtpTestRequest(BaseModel):
@@ -97,3 +99,13 @@ class WhatsappWebQr(BaseModel):
 class WhatsappWebTestRequest(BaseModel):
     recipient_phone: str
     message: str | None = None
+
+
+class WhatsappWebGroup(BaseModel):
+    jid: str
+    name: str
+    participants: int = 0
+
+
+class WhatsappWebGroupsResult(BaseModel):
+    groups: list[WhatsappWebGroup] = []

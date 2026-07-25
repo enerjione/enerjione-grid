@@ -120,4 +120,14 @@ function getQr() {
   return { qr: state.qrDataUrl };
 }
 
-module.exports = { connect, sendMessage, logout, getStatus, getQr };
+async function listGroups() {
+  if (state.status !== "connected" || !state.sock) return [];
+  const groups = await state.sock.groupFetchAllParticipating();
+  return Object.values(groups).map((g) => ({
+    jid: g.id,
+    name: g.subject || g.id,
+    participants: Array.isArray(g.participants) ? g.participants.length : 0,
+  }));
+}
+
+module.exports = { connect, sendMessage, logout, getStatus, getQr, listGroups };

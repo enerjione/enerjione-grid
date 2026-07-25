@@ -34,10 +34,13 @@ class NotificationSettings(Base):
     telegram_chat_ids: Mapped[str] = mapped_column(String(2000), default="")
     # WhatsApp Web (Baileys self-hosted sidecar) — kullanicinin bu kanali
     # yapilandirip aktif ettigini isaretler. Baglanti durumu ve QR kodu
-    # DB'de SAKLANMAZ; her zaman sidecar'dan canli cekilir. Alarm dispatch'te
-    # henuz KULLANILMIYOR (ileride notification_dispatch_service.py'ye eklenecek).
+    # DB'de SAKLANMAZ; her zaman sidecar'dan canli cekilir.
     whatsapp_web_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Alarm broadcast icin grup/kisi JID listesi (Telegram chat_ids deseni,
-    # virgulle ayrilmis). Kisi JID: <digits>@s.whatsapp.net, grup JID:
-    # <id>@g.us. Sidecar'a oldugu gibi iletilir (toJid() JID'i tanir).
+    # Alarm broadcast icin secilen grup JID listesi (sidecar'in /groups
+    # endpoint'inden kesfedilir, kullanici UI'da secer — elle JID girisi yok).
+    # Virgulle ayrilmis, grup JID formati: <id>@g.us.
     whatsapp_web_group_jids: Mapped[str] = mapped_column(String(2000), default="")
+    # Kapali: alarm/test mesajlari kullanicinin User.phone_number'ina gider
+    # (kisisel mod). Acik: sadece whatsapp_web_group_jids'teki gruplara
+    # broadcast yapilir — ikisi ayni anda calismaz.
+    whatsapp_web_group_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

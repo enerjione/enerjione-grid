@@ -135,6 +135,7 @@ import {
   discoverTelegramChats,
   fetchWhatsappWebStatus,
   fetchWhatsappWebQr,
+  fetchWhatsappWebGroups,
   testWhatsappWeb,
   logoutWhatsappWeb,
   updateNotificationSettings as updateNotificationSettingsApi,
@@ -1617,6 +1618,13 @@ export function App() {
     return fetchWhatsappWebQr(session.accessToken);
   };
 
+  const handleFetchWhatsappWebGroups = async () => {
+    if (!session) {
+      throw new Error("Oturum bulunamadı.");
+    }
+    return fetchWhatsappWebGroups(session.accessToken);
+  };
+
   const handleTestWhatsappWeb = async (payload: { recipient_phone: string; message?: string }) => {
     if (!session) {
       throw new Error("Oturum bulunamadı.");
@@ -2320,6 +2328,7 @@ export function App() {
                 onDiscoverTelegramChats={handleDiscoverTelegramChats}
                 onFetchWhatsappWebStatus={handleFetchWhatsappWebStatus}
                 onFetchWhatsappWebQr={handleFetchWhatsappWebQr}
+                onFetchWhatsappWebGroups={handleFetchWhatsappWebGroups}
                 onTestWhatsappWeb={handleTestWhatsappWeb}
                 onLogoutWhatsappWeb={handleLogoutWhatsappWeb}
               />

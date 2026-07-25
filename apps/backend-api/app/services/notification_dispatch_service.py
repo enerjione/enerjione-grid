@@ -520,7 +520,12 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
         if rule_sms and pref.sms_enabled:
             _send_sms_for_user(settings, user, alarm)
         # WhatsApp kisisel: kuralda notify_whatsapp_web AND kullanici tercihi acik
-        if rule_whatsapp and getattr(pref, "whatsapp_web_enabled", False):
+        # AND grup modu kapali (grup modunda kisisel mesaj gitmez, tek mod).
+        if (
+            rule_whatsapp
+            and getattr(pref, "whatsapp_web_enabled", False)
+            and not (settings and settings.whatsapp_web_group_mode)
+        ):
             _send_whatsapp_for_user(settings, user, alarm)
         # Telegram: kullanici tercihi opt-in oldu mu?
         if getattr(pref, "telegram_enabled", False):
@@ -533,9 +538,10 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     # ama opt-in olan yoksa gondermeyiz.
     if rule_telegram and any_telegram_optin:
         _send_telegram_broadcast(settings, alarm)
-    # WhatsApp grup: ayni mantik — kural izin verdi + en az 1 kullanici
-    # opt-in oldu ise grup/kisi JID listesine broadcast.
-    if rule_whatsapp and any_whatsapp_optin:
+    # WhatsApp grup: kural izin verdi + grup modu acik + en az 1 kullanici
+    # opt-in oldu ise secili grup JID listesine broadcast. Kisisel mod ile
+    # grup modu ayni anda calismaz.
+    if rule_whatsapp and settings and settings.whatsapp_web_group_mode and any_whatsapp_optin:
         _send_whatsapp_group_broadcast(settings, alarm)
 
 
