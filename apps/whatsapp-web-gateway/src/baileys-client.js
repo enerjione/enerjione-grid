@@ -20,6 +20,27 @@ const state = {
   phoneNumber: null,
 };
 
+function clearSession() {
+  // Dizinin kendisini degil, icindeki dosyalari siliyoruz — VDS'te session
+  // dizininin ust sahipligi container user'indan farkli olabiliyor, bu da
+  // rmdir'i EACCES ile patlatip Node process'ini crash ediyordu. Dosya
+  // silme (unlink) genelde calisir cunku dizin container user'a yazilabilir,
+  // sadece dizinin kendisi baska sahipte kalmis olabilir.
+  let entries = [];
+  try {
+    entries = fs.readdirSync(SESSION_DIR);
+  } catch (err) {
+    return;
+  }
+  for (const entry of entries) {
+    try {
+      fs.rmSync(path.join(SESSION_DIR, entry), { recursive: true, force: true });
+    } catch (err) {
+      console.error("[whatsapp-web-gateway] session dosyasi silinemedi:", entry, err.message);
+    }
+  }
+}
+
 function toJid(rawPhone) {
   const value = String(rawPhone || "").trim();
   if (!value) throw new Error("Gecersiz telefon numarasi.");
@@ -92,7 +113,7 @@ async function connect() {
       if (restartOnly) {
         connect().catch((err) => console.error("[whatsapp-web-gateway] reconnect basarisiz:", err));
       } else {
-        fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+        clearSession();
         connect().catch((err) => console.error("[whatsapp-web-gateway] reconnect basarisiz:", err));
       }
     }
@@ -115,7 +136,7 @@ async function logout() {
       // Zaten kopuk olabilir — session'i yine de temizle.
     }
   }
-  fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+  clearSession();
   state.status = "disconnected";
   state.qrDataUrl = null;
   state.phoneNumber = null;
