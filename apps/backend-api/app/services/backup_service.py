@@ -10,9 +10,14 @@ DB baglanti bilgilerini settings.database_url'den parse eder. URL formati:
 
 Env override:
   BACKUP_DIR  — yedek dosyalari icin dizin (default: ./backups)
-  PG_DUMP     — pg_dump binary path (default: pg_dump, PATH'te aranir)
-  PG_RESTORE  — pg_restore binary path (default: pg_restore)
+  PG_DUMP     — pg_dump binary path
+  PG_RESTORE  — pg_restore binary path
   PSQL        — psql binary (geri yuklerken DROP DATABASE icin gerekli olabilir)
+
+Client binary'leri env ile verilmezse `resolve_pg_binary` once PATH'e, sonra
+standart PostgreSQL kurulum dizinlerine bakar (Windows'ta
+`C:\\Program Files\\PostgreSQL\\<surum>\\bin`, Linux'ta `/usr/lib/postgresql/...`
+vb.) — Windows installer PATH'e eklemedigi icin gerekli.
 """
 
 from __future__ import annotations
@@ -167,6 +172,96 @@ def _pg_env() -> dict[str, str]:
     return env
 
 
+# ---------------------------------------------------------------------------
+# PostgreSQL client binary cozumleme
+# ---------------------------------------------------------------------------
+# Docker imajinda postgresql-client kurulu ve PATH'te; ama Windows/native
+# kurulumda PostgreSQL kendi dizinine kuruluyor ve installer PATH'e
+# eklemiyor -> `pg_restore bulunamadi` hatasi. Asagidaki resolver PATH'e ek
+# olarak standart kurulum dizinlerini de tarar, en yuksek surumu secer.
+# Env override (PG_DUMP / PG_RESTORE / PSQL) her zaman oncelikli.
+
+# Kurulum dizini glob'lari — {name} binary adi ile doldurulur.
+_PG_BIN_GLOBS: tuple[str, ...] = (
+    # Windows — resmi EDB installer
+    r"C:\Program Files\PostgreSQL\*\bin\{name}.exe",
+    r"C:\Program Files (x86)\PostgreSQL\*\bin\{name}.exe",
+    # Debian/Ubuntu
+    "/usr/lib/postgresql/*/bin/{name}",
+    # RHEL/Rocky (PGDG)
+    "/usr/pgsql-*/bin/{name}",
+    # kaynaktan derleme
+    "/usr/local/pgsql/bin/{name}",
+    # macOS — Homebrew / EDB installer
+    "/opt/homebrew/opt/postgresql@*/bin/{name}",
+    "/usr/local/opt/postgresql@*/bin/{name}",
+    "/Library/PostgreSQL/*/bin/{name}",
+)
+
+# name -> cozulmus yol. Surec basina bir kez taranir.
+_pg_bin_cache: dict[str, str] = {}
+
+
+def _version_sort_key(path: str) -> list[int]:
+    """Yoldaki sayilari surum anahtarina cevir — `.../PostgreSQL/18/bin` >
+    `.../PostgreSQL/9/bin` dogru siralanir (lexicografik siralama yanlis)."""
+    import re
+
+    return [int(n) for n in re.findall(r"\d+", path)] or [0]
+
+
+def resolve_pg_binary(name: str) -> str:
+    """`pg_dump` / `pg_restore` / `psql` icin calistirilabilir yol dondur.
+
+    Sira:
+      1. Env override (PG_DUMP / PG_RESTORE / PSQL) — verilmisse aynen kullan.
+      2. PATH (shutil.which).
+      3. Standart kurulum dizinleri (`_PG_BIN_GLOBS`), en yuksek surum kazanir.
+
+    Hicbiri bulunamazsa `name` aynen doner; cagiran taraf FileNotFoundError
+    yakalayip kullaniciya anlasilir mesaj verir.
+    """
+    import glob as _glob
+    import shutil
+
+    override = (os.getenv(name.upper()) or "").strip()
+    if override:
+        return override
+
+    cached = _pg_bin_cache.get(name)
+    if cached:
+        return cached
+
+    found = shutil.which(name)
+    if not found:
+        candidates: list[str] = []
+        for pattern in _PG_BIN_GLOBS:
+            candidates.extend(_glob.glob(pattern.format(name=name)))
+        candidates = [c for c in candidates if os.access(c, os.X_OK)]
+        if candidates:
+            candidates.sort(key=_version_sort_key, reverse=True)
+            found = candidates[0]
+            logger.info("pg_binary_resolved_outside_path name=%s path=%s", name, found)
+
+    if not found:
+        # Cache'lemiyoruz — kullanici PostgreSQL client'i kurup backend'i
+        # restart etmeden tekrar denerse yeni tarama yapilsin.
+        return name
+
+    _pg_bin_cache[name] = found
+    return found
+
+
+def _pg_binary_missing_msg(name: str) -> str:
+    """Binary bulunamadiginda kullaniciya gosterilecek yol gosterici mesaj."""
+    return (
+        f"{name} bulunamadi. PostgreSQL client araclari kurulu olmali; "
+        f"kurulu ise ya bin dizinini PATH'e ekleyin ya da {name.upper()} "
+        f"ortam degiskeni ile tam yolu verin "
+        f"(ornek: {name.upper()}=\"C:\\Program Files\\PostgreSQL\\18\\bin\\{name}.exe\")."
+    )
+
+
 def _pg_restore_env() -> dict[str, str]:
     """pg_restore icin ozel env — `POSTGRES_RESTORE_PASSWORD` set edilmisse
     `PGPASSWORD` o degerle override edilir. Restore non-superuser user ile
@@ -216,7 +311,7 @@ def run_pg_dump(file_path: Path) -> tuple[bool, str]:
     yeniden olusturulur, sistem normal calismasina devam eder.
     """
     db = _parse_db_url(settings.database_url)
-    pg_dump = os.getenv("PG_DUMP", "pg_dump")
+    pg_dump = resolve_pg_binary("pg_dump")
     cmd = [
         pg_dump,
         "-h", db["host"],
@@ -251,7 +346,7 @@ def run_pg_dump(file_path: Path) -> tuple[bool, str]:
             return False, f"pg_dump non-zero exit (rc={completed.returncode})"
         return True, ""
     except FileNotFoundError:
-        return False, "pg_dump bulunamadı (PATH'te olmali veya PG_DUMP env ile yol verin)."
+        return False, _pg_binary_missing_msg("pg_dump")
     except subprocess.TimeoutExpired:
         return False, "pg_dump zaman aşımı (15 dk)."
     except Exception:  # noqa: BLE001
@@ -276,7 +371,7 @@ def _ensure_legacy_roles_exist(db_conn_info: dict) -> None:
     DB'sinden aldigi .dump dosyasini yeni `enerjione` DB'sine restore
     edebiliyor olmali (sahadaki tarihi yedekler kaybolmasin).
     """
-    psql = os.getenv("PSQL", "psql")
+    psql = resolve_pg_binary("psql")
     for role in _LEGACY_ROLES:
         # PostgreSQL'de "CREATE ROLE IF NOT EXISTS" yok; bunun yerine
         # DO bloku ile pg_roles'a bakip yoksa yaratiyoruz.
@@ -310,7 +405,7 @@ def _ensure_legacy_roles_exist(db_conn_info: dict) -> None:
 def _run_psql_on_postgres_db(db_conn_info: dict, sql: str, *, timeout: int = 15) -> tuple[bool, str]:
     """`postgres` sistem DB'sine baglanip SQL calistir. Hedef DB'mizi
     rahatsiz etmeden ALTER DATABASE / pg_terminate_backend yapmak icin."""
-    psql = os.getenv("PSQL", "psql")
+    psql = resolve_pg_binary("psql")
     try:
         completed = subprocess.run(
             [
@@ -431,7 +526,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     # 3. Legacy role'leri ensure
     _ensure_legacy_roles_exist(db)
 
-    pg_restore = os.getenv("PG_RESTORE", "pg_restore")
+    pg_restore = resolve_pg_binary("pg_restore")
     # GUVENLIK: Restore icin ayri non-superuser rol (RCE koruma).
     # Default db["user"] genelde POSTGRES_USER (superuser). Yedek dosyasinda
     # `COPY ... FROM PROGRAM 'sh -c ...'` veya `CREATE FUNCTION ... LANGUAGE c`
@@ -483,7 +578,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
             bufsize=1,
         )
     except FileNotFoundError:
-        return False, "pg_restore bulunamadı (PATH'te olmali veya PG_RESTORE env ile yol verin)."
+        return False, _pg_binary_missing_msg("pg_restore")
     except Exception as exc:  # noqa: BLE001
         return False, f"pg_restore baslatilamadi: {exc}"
 

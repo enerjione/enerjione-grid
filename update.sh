@@ -40,7 +40,12 @@ echo "  ${E1_DIM}Branch      :${E1_RESET} $(git rev-parse --abbrev-ref HEAD 2>/d
 echo "  ${E1_DIM}Onceki HEAD :${E1_RESET} $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 echo
 
-e1_set_steps 5
+# Backend'i kapsayan hedeflerde ek adimlar var (postgres sync, db-preflight,
+# alembic, historian ensure); digerlerinde sadece ilk 4 adim kosar.
+case "$TARGET" in
+  all|""|backend|api|backend-api) e1_set_steps 8 ;;
+  *)                              e1_set_steps 4 ;;
+esac
 
 # ---- 1/5: Lokal degisiklik kontrolu --------------------------------------
 e1_step "Lokal degisiklik kontrolu..."
@@ -200,6 +205,15 @@ if [[ "$NEEDS_BACKEND" -eq 1 ]]; then
   docker compose pull postgres 2>/dev/null || true
   docker compose up -d postgres
   e1_ok "Postgres hazir."
+
+  # POSTGRES_DB/POSTGRES_USER (ve RABBITMQ_USER) yalnizca BOS volume'da initdb
+  # sirasinda islenir. Rebrand'de .env degisip volume ayni kaldiysa backend
+  # 'role does not exist' ile baglanamaz ve asagidaki healthcheck dongusu
+  # sebebi gostermeden 2 dakika sonra die eder. Preflight bunu once tespit
+  # edip rename ile hizalar; uyumluysa hicbir sey yapmaz (idempotent).
+  e1_step ".env <-> Postgres kimlik uyumu dogrulaniyor..."
+  bash infra/scripts/linux/db-preflight.sh \
+    || e1_die "DB on-kontrolu basarisiz. Detay yukarida; duzeltmeden update devam edemez."
 fi
 
 if [[ -z "$SVC" ]]; then

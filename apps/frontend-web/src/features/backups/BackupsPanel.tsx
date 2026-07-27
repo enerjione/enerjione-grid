@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
@@ -42,11 +42,36 @@ function fmtDate(iso: string | null | undefined, localeTag: string): string {
   return new Date(iso).toLocaleString(localeTag);
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  running: "#3b82f6",
-  success: "#10b981",
-  failed: "#ef4444"
+/** "2 saat once" tarzi goreceli sure — Intl ile, ekstra ceviri anahtari yok. */
+function fmtRelative(iso: string | null | undefined, localeTag: string): string {
+  if (!iso) return "—";
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  const rtf = new Intl.RelativeTimeFormat(localeTag, { numeric: "auto" });
+  if (Math.abs(diffMin) < 60) return rtf.format(-diffMin, "minute");
+  const diffHour = Math.round(diffMin / 60);
+  if (Math.abs(diffHour) < 24) return rtf.format(-diffHour, "hour");
+  return rtf.format(-Math.round(diffHour / 24), "day");
+}
+
+/** Yedek tipine gore satir ikonu. */
+const TYPE_ICON: Record<string, string> = {
+  manual: "person",
+  scheduled: "schedule",
+  uploaded: "upload_file"
 };
+
+/** Panel ust bandinin sagligi — ikon + renk buna gore secilir. */
+type BackupHealth = "ok" | "stale" | "fail" | "empty";
+
+const HEALTH_ICON: Record<BackupHealth, string> = {
+  ok: "verified_user",
+  stale: "gpp_maybe",
+  fail: "gpp_bad",
+  empty: "cloud_off"
+};
+
+/** Otomatik program kapaliysa bu suredan eski yedek "eski" sayilir. */
+const STALE_FALLBACK_HOURS = 24 * 7;
 
 export function BackupsPanel({ accessToken, currentRole }: Props) {
   const canRestore = currentRole !== "engineer";
@@ -281,6 +306,46 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
     return { total, success, failed, totalSize };
   }, [backups]);
 
+  // Backend siralamasina guvenmeyelim — en yeni ustte olsun.
+  const sortedBackups = useMemo(
+    () =>
+      [...backups].sort((a, b) =>
+        (b.created_at ?? "").localeCompare(a.created_at ?? "")
+      ),
+    [backups]
+  );
+
+  /** Ust bant: en son BASARILI yedek tazelik olcusu, en yeni kayit ise
+   *  "son deneme patladi mi?" sinyali. */
+  const { health, lastSuccess } = useMemo(() => {
+    const newest = sortedBackups[0] ?? null;
+    const ok = sortedBackups.find((b) => b.status === "success") ?? null;
+    let h: BackupHealth;
+    if (!newest) {
+      h = "empty";
+    } else if (newest.status === "failed" || !ok) {
+      h = "fail";
+    } else {
+      const staleAfter =
+        schedule?.enabled && schedule.interval_hours > 0
+          ? schedule.interval_hours * 2
+          : STALE_FALLBACK_HOURS;
+      const ageHours = (Date.now() - new Date(ok.created_at).getTime()) / 3600000;
+      h = ageHours > staleAfter ? "stale" : "ok";
+    }
+    return { health: h, lastSuccess: ok };
+  }, [sortedBackups, schedule]);
+
+  const statTiles = useMemo(
+    () => [
+      { key: "total", icon: "inventory_2", tone: "", value: String(stats.total) },
+      { key: "success", icon: "task_alt", tone: "is-ok", value: String(stats.success) },
+      { key: "failed", icon: "error", tone: "is-fail", value: String(stats.failed) },
+      { key: "totalSize", icon: "database", tone: "is-size", value: fmtBytes(stats.totalSize) }
+    ],
+    [stats]
+  );
+
   const confirmJob = useMemo(
     () => backups.find((b) => b.id === confirmRestoreId) ?? null,
     [confirmRestoreId, backups]
@@ -288,79 +353,136 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
 
   return (
     <section className="tab-panel backups-panel">
-      {/* TOP BAR — stats + actions tek satirda */}
-      <div className="backups-topbar">
-        <div className="backups-stats">
-          <div className="backups-stat-chip">
-            <span className="backups-stat-num">{stats.total}</span>
-            <span className="backups-stat-label">{t("backups.stats.total")}</span>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".dump"
+        style={{ display: "none" }}
+        onChange={(e) => void handleFileChosen(e)}
+      />
+
+      {/* HERO — panelin konusu: yedekleme sagligi + son yedek kunyesi.
+          Saga dogru periyodik program durumu ve ana aksiyonlar. */}
+      <div className={`backups-hero is-${health}`}>
+        <div className="backups-hero-main">
+          <div className="backups-hero-badge">
+            <span className="material-symbols-outlined">{HEALTH_ICON[health]}</span>
           </div>
-          <div className="backups-stat-chip is-ok">
-            <span className="backups-stat-num">{stats.success}</span>
-            <span className="backups-stat-label">{t("backups.stats.success")}</span>
-          </div>
-          <div className="backups-stat-chip is-fail">
-            <span className="backups-stat-num">{stats.failed}</span>
-            <span className="backups-stat-label">{t("backups.stats.failed")}</span>
-          </div>
-          <div className="backups-stat-chip is-size">
-            <span className="backups-stat-num">{fmtBytes(stats.totalSize)}</span>
-            <span className="backups-stat-label">{t("backups.stats.totalSize")}</span>
+          <div className="backups-hero-text">
+            <h3>{t(`backups.hero.title.${health}`)}</h3>
+            {lastSuccess ? (
+              <div className="backups-hero-meta">
+                <span>
+                  <span className="material-symbols-outlined">event</span>
+                  {fmtDate(lastSuccess.created_at, localeTag)}
+                </span>
+                <span>
+                  <span className="material-symbols-outlined">history</span>
+                  {fmtRelative(lastSuccess.created_at, localeTag)}
+                </span>
+                <span>
+                  <span className="material-symbols-outlined">database</span>
+                  {fmtBytes(lastSuccess.size_bytes)}
+                </span>
+                {lastSuccess.created_by_username ? (
+                  <span>
+                    <span className="material-symbols-outlined">person</span>
+                    {lastSuccess.created_by_username}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <p className="backups-hero-sub">{t("backups.hero.noneYet")}</p>
+            )}
           </div>
         </div>
-        <div className="backups-topbar-actions">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".dump"
-            style={{ display: "none" }}
-            onChange={(e) => void handleFileChosen(e)}
-          />
+
+        <div className="backups-hero-side">
           <button
             type="button"
-            className="secondary-btn backups-action-btn backups-restart-btn"
-            onClick={() => setConfirmRestart(true)}
-            title={t("backups.restart.title")}
-            disabled={restarting}
-          >
-            <span className="material-symbols-outlined">power_settings_new</span>
-            {t("backups.restart.btn")}
-          </button>
-          <button
-            type="button"
-            className="secondary-btn backups-action-btn"
+            className={`backups-schedule-chip ${schedule?.enabled ? "is-on" : "is-off"}`}
             onClick={() => setScheduleModalOpen(true)}
             title={t("backups.schedule.title")}
           >
-            <span className="material-symbols-outlined">schedule</span>
-            {t("backups.schedule.openBtn")}
+            <span className="material-symbols-outlined">
+              {schedule?.enabled ? "autorenew" : "timer_off"}
+            </span>
+            <span className="backups-schedule-chip-text">
+              <strong>
+                {schedule?.enabled
+                  ? t("backups.hero.autoOn", { hours: schedule.interval_hours })
+                  : t("backups.hero.autoOff")}
+              </strong>
+              <small>
+                {schedule?.enabled
+                  ? t("backups.hero.retention", { count: schedule.retention_count })
+                  : t("backups.hero.autoOffHint")}
+              </small>
+            </span>
+            <span className="material-symbols-outlined backups-schedule-chip-arrow">
+              chevron_right
+            </span>
           </button>
-          <button
-            type="button"
-            className="secondary-btn backups-action-btn backups-upload-btn"
-            onClick={handleUploadClick}
-            disabled={uploading}
-            title={t("backups.uploadHint")}
-          >
-            <span className="material-symbols-outlined">upload_file</span>
-            {uploading ? t("backups.uploading") : t("backups.uploadBackup")}
-          </button>
-          <button
-            type="button"
-            className="primary-btn backups-action-btn backups-create-btn"
-            onClick={() => void handleCreate()}
-            disabled={creating}
-          >
-            <span className="material-symbols-outlined">backup</span>
-            {creating ? t("backups.creatingBackup") : t("backups.manualBackup")}
-          </button>
+
+          <div className="backups-hero-actions">
+            <button
+              type="button"
+              className="secondary-btn backups-action-btn backups-restart-btn"
+              onClick={() => setConfirmRestart(true)}
+              title={t("backups.restart.title")}
+              disabled={restarting}
+            >
+              <span className="material-symbols-outlined">power_settings_new</span>
+              {t("backups.restart.btn")}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn backups-action-btn backups-upload-btn"
+              onClick={handleUploadClick}
+              disabled={uploading}
+              title={t("backups.uploadHint")}
+            >
+              <span className="material-symbols-outlined">upload_file</span>
+              {uploading ? t("backups.uploading") : t("backups.uploadBackup")}
+            </button>
+            <button
+              type="button"
+              className="primary-btn backups-action-btn backups-create-btn"
+              onClick={() => void handleCreate()}
+              disabled={creating}
+            >
+              <span className="material-symbols-outlined">
+                {creating ? "progress_activity" : "backup"}
+              </span>
+              {creating ? t("backups.creatingBackup") : t("backups.manualBackup")}
+            </button>
+          </div>
         </div>
+      </div>
+
+      {/* Sayac kartlari — ikon rozeti + deger. */}
+      <div className="backups-stats">
+        {statTiles.map((tile) => (
+          <div key={tile.key} className={`backups-stat-chip ${tile.tone}`}>
+            <span className="backups-stat-icon">
+              <span className="material-symbols-outlined">{tile.icon}</span>
+            </span>
+            <span className="backups-stat-body">
+              <span className="backups-stat-num">{tile.value}</span>
+              <span className="backups-stat-label">{t(`backups.stats.${tile.key}`)}</span>
+            </span>
+          </div>
+        ))}
       </div>
 
       {/* Liste */}
       <div className="backups-list">
         <div className="backups-list-head">
-          <h4>{t("backups.history")}</h4>
+          <h4>
+            <span className="material-symbols-outlined">history</span>
+            {t("backups.history")}
+            <span className="backups-list-count">{backups.length}</span>
+          </h4>
           <button
             type="button"
             className={`backups-refresh-btn ${loading ? "is-spinning" : ""}`}
@@ -376,7 +498,11 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
         {loading && backups.length === 0 ? (
           <div className="backups-empty">{t("common.loading")}</div>
         ) : backups.length === 0 ? (
-          <div className="backups-empty">{t("backups.empty")}</div>
+          <div className="backups-empty">
+            <span className="material-symbols-outlined backups-empty-icon">cloud_off</span>
+            <h3>{t("backups.hero.title.empty")}</h3>
+            <p>{t("backups.empty")}</p>
+          </div>
         ) : (
           <div className="backups-list-table-wrap">
           <table className="backups-table">
@@ -392,32 +518,61 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
               </tr>
             </thead>
             <tbody>
-              {backups.map((b) => {
-                const sc = STATUS_COLOR[b.status] ?? "#64748b";
+              {sortedBackups.map((b) => {
+                const showError = b.status === "failed" && !!b.error_message;
                 return (
-                  <tr key={b.id}>
-                    <td>{fmtDate(b.created_at, localeTag)}</td>
+                  <Fragment key={b.id}>
+                  <tr className={`backups-row is-${b.status}`}>
+                    <td>
+                      <div className="backups-date-cell">
+                        <strong>{fmtDate(b.created_at, localeTag)}</strong>
+                        <small>{fmtRelative(b.created_at, localeTag)}</small>
+                      </div>
+                    </td>
                     <td>
                       <span
                         className={`backups-type-pill is-${b.job_type}`}
                         title={b.job_type}
                       >
+                        <span className="material-symbols-outlined">
+                          {TYPE_ICON[b.job_type] ?? "backup"}
+                        </span>
                         {t(`backups.type.${b.job_type}`, { defaultValue: b.job_type })}
                       </span>
                     </td>
                     <td>
                       <span
-                        className="backups-status-pill"
-                        style={{ background: `${sc}22`, color: sc }}
+                        className={`backups-status-pill is-${b.status}`}
                         title={b.error_message ?? undefined}
                       >
+                        <span className="backups-status-dot" />
                         {t(`backups.status.${b.status}`, { defaultValue: b.status })}
                       </span>
                     </td>
-                    <td className="backups-cell-mono">{fmtBytes(b.size_bytes)}</td>
-                    <td>{b.created_by_username ?? "—"}</td>
-                    <td className="backups-cell-mono backups-cell-filename">
-                      {b.filename ?? "—"}
+                    <td>
+                      <span className="backups-size-badge">{fmtBytes(b.size_bytes)}</span>
+                    </td>
+                    <td>
+                      {b.created_by_username ? (
+                        <span className="backups-user-cell">
+                          <span className="backups-user-avatar">
+                            {b.created_by_username.charAt(0).toUpperCase()}
+                          </span>
+                          {b.created_by_username}
+                        </span>
+                      ) : (
+                        <span className="backups-muted">—</span>
+                      )}
+                    </td>
+                    <td className="backups-cell-filename" title={b.filename ?? undefined}>
+                      {b.filename ? (
+                        <span className="backups-file-cell">
+                          <span className="material-symbols-outlined">folder_zip</span>
+                          <code>{b.filename}</code>
+                        </span>
+                      ) : (
+                        <span className="backups-muted">—</span>
+                      )}
                     </td>
                     <td>
                       <div className="backups-actions">
@@ -454,18 +609,29 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
                           className="icon-btn icon-btn-danger"
                           title={t("backups.actions.delete")}
                           aria-label={t("backups.actions.delete")}
-                          onClick={() => {
-                            if (b.status === "failed" && b.error_message) {
-                              toast.error(b.error_message);
-                            }
-                            void handleDelete(b.id);
-                          }}
+                          onClick={() => void handleDelete(b.id)}
                         >
                           <span className="material-symbols-outlined">delete</span>
                         </button>
                       </div>
                     </td>
                   </tr>
+                  {/* Basarisiz yedegin hata detayi — tooltip'te saklamak yerine
+                      satirin altinda acikca gosteriliyor. */}
+                  {showError ? (
+                    <tr className="backups-error-row">
+                      <td colSpan={7}>
+                        <div className="backups-error-banner">
+                          <span className="material-symbols-outlined">error</span>
+                          <div>
+                            <strong>{t("backups.errorBanner")}</strong>
+                            <code>{b.error_message}</code>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                  </Fragment>
                 );
               })}
             </tbody>

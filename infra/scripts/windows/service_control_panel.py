@@ -616,7 +616,7 @@ class ServiceControlPanel:
                     )
                 )
             elif cmd0 == "py":
-                py_cmd = svc.command[:2] if len(svc.command) >= 2 and svc.command[1] == "-3.10" else ["py"]
+                py_cmd = svc.command[:2] if len(svc.command) >= 2 and svc.command[1] == "-3.11" else ["py"]
                 tasks.append(
                     SetupTask(
                         name=f"{svc.name} → pip install",
@@ -631,8 +631,8 @@ class ServiceControlPanel:
             None,
         )
         if backend and backend.working_dir:
-            py_cmd = ["py", "-3.10"]
-            if backend.command and len(backend.command) >= 2 and backend.command[1] == "-3.10":
+            py_cmd = ["py", "-3.11"]
+            if backend.command and len(backend.command) >= 2 and backend.command[1] == "-3.11":
                 py_cmd = backend.command[:2]
             tasks.append(
                 SetupTask(

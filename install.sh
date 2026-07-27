@@ -200,6 +200,15 @@ _ensure_env_var "NATS_BACKEND_PASSWORD" "$NB"
 _ensure_env_var "NATS_WORKER_PASSWORD" "$NW"
 _ensure_env_var "NATS_GATEWAY_PASSWORD" "$NG"
 
+# Postgres kimligi TEK kanonik isimdir: enerjione_grid. Eski kurulumlarda
+# .env'de 'enerjione' / 'hsl' / 'horstman' kalmis olabilir; burada kesin
+# olarak hizaliyoruz. Volume zaten eski isimle init edilmisse asagidaki
+# db-preflight adimi ALTER ROLE/DATABASE RENAME ile onu da tasir.
+# Ilk kurulumda volume bos oldugu icin postgres imaji DB'yi bu isimle
+# kendisi olusturur (docker-compose.yml POSTGRES_DB).
+_set_env_var "POSTGRES_DB" "enerjione_grid"
+_set_env_var "POSTGRES_USER" "enerjione_grid"
+
 # APP_ENV — install.sh production deploy yapiyor, default production.
 # CORS_ORIGINS '*' bu env'de backend tarafindan reddedilir (config.py guard).
 # VPS IP'sini otomatik tespit edip whitelist'e koyariz; kullanici sonradan
@@ -322,6 +331,17 @@ fi
 e1_step "Servisler build ediliyor ve ayaga kaldiriliyor..."
 e1_info "docker compose build --pull (yaklasik 3-8 dakika)..."
 docker compose build --pull
+
+# Postgres'i once tek basina kaldirip kimlik on-kontrolunu yap. Ilk kurulumda
+# volume bos -> imaj enerjione_grid rol+DB'sini kendisi olusturur, preflight
+# sadece dogrular. Mevcut kuruluma tekrar install.sh calistirilirsa volume
+# eski isimle init edilmis olabilir; preflight rename ile hizalar. Bu adim
+# olmadan backend 'role does not exist' ile ayaga kalkmaz.
+e1_info "Postgres baslatiliyor + kimlik on-kontrolu..."
+docker compose up -d postgres
+bash infra/scripts/linux/db-preflight.sh \
+  || e1_die "Postgres kimlik on-kontrolu basarisiz. Detay yukarida."
+
 e1_info "docker compose up -d..."
 docker compose up -d
 e1_ok "Stack ayakta."

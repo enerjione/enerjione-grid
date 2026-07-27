@@ -38,8 +38,25 @@ if (-not (Test-Path $backupDir)) {
 $ts = (Get-Date).ToString("yyyyMMdd-HHmmss")
 $backupFile = Join-Path $backupDir "auto-pre-update-$ts.dump"
 
+# Rol/DB adi .env'den okunur; kanonik varsayilan 'enerjione_grid'. Eskiden
+# burada 'enerjione' hard-code'luydu ve rebrand sonrasi pg_dump patliyordu.
+function Get-EnvValue($key, $default) {
+    $envPath = Join-Path $InstallDir ".env"
+    if (Test-Path $envPath) {
+        $line = Select-String -Path $envPath -Pattern "^$key=" -ErrorAction SilentlyContinue |
+                Select-Object -Last 1
+        if ($line) {
+            $val = $line.Line.Substring($line.Line.IndexOf('=') + 1).Trim()
+            if ($val) { return $val }
+        }
+    }
+    return $default
+}
+$pgUser = Get-EnvValue "POSTGRES_USER" "enerjione_grid"
+$pgDb   = Get-EnvValue "POSTGRES_DB"   "enerjione_grid"
+
 try {
-    & docker compose exec -T postgres pg_dump -U enerjione -d enerjione -F c -f /tmp/pre-update.dump
+    & docker compose exec -T postgres pg_dump -U $pgUser -d $pgDb -F c -f /tmp/pre-update.dump
     if ($LASTEXITCODE -ne 0) { throw "pg_dump basarisiz" }
     & docker compose cp postgres:/tmp/pre-update.dump $backupFile
     & docker compose exec -T postgres rm /tmp/pre-update.dump

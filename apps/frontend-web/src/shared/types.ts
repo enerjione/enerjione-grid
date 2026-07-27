@@ -787,7 +787,7 @@ export type HostStatus = {
 };
 
 /** Sistem servisleri saglik raporu (`/system-status/services`). */
-export type ServiceRole = "db" | "broker" | "worker" | "gateway" | "self";
+export type ServiceRole = "db" | "broker" | "worker" | "gateway" | "ftp" | "web" | "self";
 
 export type ServiceStatus = {
   name: string;

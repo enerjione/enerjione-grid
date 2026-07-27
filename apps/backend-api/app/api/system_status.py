@@ -209,7 +209,7 @@ def get_host_status(
 
 class ServiceStatus(BaseModel):
     name: str
-    role: str = Field(..., description="db | broker | worker | gateway | self")
+    role: str = Field(..., description="db | broker | worker | gateway | ftp | web | self")
     healthy: bool
     latency_ms: float | None = None
     detail: str | None = Field(default=None, description="Hata veya bilgi mesaji")
@@ -328,8 +328,13 @@ def _check_worker(
     env_prefix: str,
     default_hosts: tuple[str, ...],
     default_port: int,
+    role: str = "worker",
 ) -> ServiceStatus:
     """Bir worker servisinin /health portuna TCP probe.
+
+    `role` alani UI'da servisleri gruplayabilmek icin serbest birakildi:
+    worker (tag-engine, alarm-service, ...), ftp (ftp-server), gateway
+    (whatsapp-web-gateway), web (frontend nginx).
 
     Host secimi (oncelik sirasi):
       1. Env override: `<ENV_PREFIX>_HEALTH_HOST` (orn. `TAG_ENGINE_HEALTH_HOST`)
@@ -367,7 +372,7 @@ def _check_worker(
     if not tried:
         return ServiceStatus(
             name=name,
-            role="worker",
+            role=role,
             healthy=False,
             latency_ms=0.0,
             endpoint=f":{port}",
@@ -388,7 +393,7 @@ def _check_worker(
             if ok:
                 return ServiceStatus(
                     name=name,
-                    role="worker",
+                    role=role,
                     healthy=True,
                     latency_ms=ms,
                     endpoint=f"{host}:{port}",
@@ -402,12 +407,22 @@ def _check_worker(
         detail = f"{detail} | Denenen: {', '.join(tried)}"
     return ServiceStatus(
         name=name,
-        role="worker",
+        role=role,
         healthy=False,
         latency_ms=last_ms,
         endpoint=f"{chosen_host}:{port}",
         detail=detail,
     )
+
+
+def _skipped_service_keys() -> set[str]:
+    """`SYSTEM_STATUS_SKIP_SERVICES` env'inde listelenen probe anahtarlari.
+
+    Virgulle ayrilir; tire/alt-tire ve buyuk/kucuk harf farki onemsenmez
+    (`frontend-web` == `frontend_web`).
+    """
+    raw = os.environ.get("SYSTEM_STATUS_SKIP_SERVICES", "")
+    return {part.strip().lower().replace("-", "_") for part in raw.split(",") if part.strip()}
 
 
 @router.get("/services", response_model=ServicesReport)
@@ -417,9 +432,17 @@ def get_services_status(
     """Backend'in bagli oldugu servislerin (DB, broker, worker'lar) saglik durumu.
 
     Hizli probe'lar (timeout 1.5s) ile her cagriya tum servisler kontrol edilir.
-    Worker servisleri (tag-engine, alarm-service, notification-worker, iec104-outbound)
-    ayri proseslerdir; her birinin kendi /health portu vardir.
+    Worker servisleri (tag-engine, alarm-service, notification-worker,
+    iec104-outbound, ftp-server, whatsapp-web-gateway) ayri proseslerdir; her
+    birinin kendi /health portu vardir. Frontend nginx icin de 8080 probe edilir.
+
+    Kurulumda bulunmayan servisler `SYSTEM_STATUS_SKIP_SERVICES` ile listeden
+    tamamen cikarilabilir (orn. native dev'de nginx yerine vite kullanilirken:
+    `SYSTEM_STATUS_SKIP_SERVICES=frontend_web,ftp_server`). Aksi halde bu
+    servisler surekli "kirmizi" gorunur ve gercek arizayi golgeler.
     """
+    skip = _skipped_service_keys()
+
     # Backend (kendisi) - bu cagri zaten basariliysa backend ayakta.
     self_status = ServiceStatus(
         name="Backend API",
@@ -479,10 +502,51 @@ def get_services_status(
                 default_port=8014,
             ),
         ),
+        # ---- Sonradan eklenen servisler (compose'ta var, raporda yoktu) ----
+        (
+            "ftp_server",
+            lambda: _check_worker(
+                "FTP Sunucusu",
+                env_prefix="FTP_SERVER",
+                default_hosts=("ftp-server", "ftp_server", "e1-grid-ftp-server", "e1-ftp-server", "127.0.0.1"),
+                default_port=8015,
+                role="ftp",
+            ),
+        ),
+        (
+            "whatsapp_web_gateway",
+            lambda: _check_worker(
+                "WhatsApp Web Gateway",
+                env_prefix="WHATSAPP_WEB_GATEWAY",
+                default_hosts=(
+                    "whatsapp-web-gateway",
+                    "whatsapp_web_gateway",
+                    "e1-grid-whatsapp-web-gateway",
+                    "e1-whatsapp-web-gateway",
+                    "127.0.0.1",
+                ),
+                default_port=8016,
+                role="gateway",
+            ),
+        ),
+        (
+            "frontend_web",
+            lambda: _check_worker(
+                "Frontend (nginx)",
+                env_prefix="FRONTEND_WEB",
+                # Container icinde nginx-unprivileged 8080'de dinler; host'a 80
+                # ile map edilir. Compose network'unde servis adi kullanilir.
+                default_hosts=("frontend-web", "e1-grid-frontend-web", "e1-frontend-web", "127.0.0.1"),
+                default_port=8080,
+                role="web",
+            ),
+        ),
     ]
 
+    probe_jobs = [(key, fn) for key, fn in probe_jobs if key not in skip]
+
     results: dict[str, ServiceStatus] = {}
-    with ThreadPoolExecutor(max_workers=len(probe_jobs)) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, len(probe_jobs))) as ex:
         future_map = {ex.submit(fn): key for key, fn in probe_jobs}
         for fut in as_completed(future_map):
             key = future_map[fut]
@@ -498,15 +562,20 @@ def get_services_status(
                     detail=str(exc),
                 )
 
-    services: list[ServiceStatus] = [
-        self_status,
-        results["database"],
-        results["rabbitmq"],
-        results["nats"],
-        results["tag_engine"],
-        results["alarm_service"],
-        results["notification_worker"],
-        results["iec104_outbound"],
-    ]
+    # UI'da gosterim sirasi: cekirdek altyapi -> isleyiciler -> entegrasyonlar.
+    display_order = (
+        "database",
+        "rabbitmq",
+        "nats",
+        "frontend_web",
+        "tag_engine",
+        "alarm_service",
+        "notification_worker",
+        "iec104_outbound",
+        "ftp_server",
+        "whatsapp_web_gateway",
+    )
+    services: list[ServiceStatus] = [self_status]
+    services.extend(results[key] for key in display_order if key in results)
 
     return ServicesReport(services=services, sampled_at=time.time())

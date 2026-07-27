@@ -1,8 +1,48 @@
+﻿/**
+ * Sistem Durumu — host kaynaklari + servis sagligi dashboard'u.
+ *
+ * Ikonografi NOTU: bu sayfa material-symbols DEGIL `lucide-react` kullanir
+ * (ayni set Header/HeaderSearch'te de kullaniliyor). Lucide stroke-tabanli
+ * oldugu icin metrik kartlarindaki donut/sparkline cizgileriyle ayni gorsel
+ * dile sahip; material-symbols'un dolgun ikonlari bu sayfada agir duruyordu.
+ * Yeni ikon eklerken lucide'dan named import edin, `material-symbols`
+ * class'ini bu dosyada KULLANMAYIN.
+ */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  Activity,
+  ArrowDown,
+  ArrowLeftRight,
+  ArrowUp,
+  BellRing,
+  Code,
+  Cpu,
+  Database,
+  Gauge,
+  Globe,
+  HardDrive,
+  Cog,
+  FolderTree,
+  Info,
+  LayoutGrid,
+  MemoryStick,
+  Monitor,
+  Network,
+  Package,
+  Plug,
+  RefreshCw,
+  Router,
+  Server,
+  Timer,
+  TrendingUp,
+  Wifi,
+  WifiOff,
+  Zap,
+  type LucideIcon
+} from "lucide-react";
 
 import { fetchHostStatus, fetchServicesStatus, loadSession } from "../../shared/api";
-import { WsStatusBadge } from "../../components/WsStatusBadge";
 import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
 import type {
   AlarmEvent,
@@ -30,6 +70,8 @@ const HOST_HISTORY_LEN = 24;
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
 
+type Tone = "ok" | "warn" | "bad";
+
 function formatBytes(value: number | null | undefined, fractionDigits = 1): string {
   if (value == null || !Number.isFinite(value) || value <= 0) return "—";
   let n = value;
@@ -39,6 +81,19 @@ function formatBytes(value: number | null | undefined, fractionDigits = 1): stri
     i += 1;
   }
   return `${n.toFixed(fractionDigits)} ${BYTE_UNITS[i]}`;
+}
+
+/** Anlik ag hizi: iki olcum arasindaki byte farkindan turetilir. */
+function formatRate(bytesPerSec: number | null): string {
+  if (bytesPerSec == null || !Number.isFinite(bytesPerSec) || bytesPerSec < 0) return "—";
+  if (bytesPerSec < 1) return "0 B/s";
+  let n = bytesPerSec;
+  let i = 0;
+  while (n >= 1024 && i < BYTE_UNITS.length - 1) {
+    n /= 1024;
+    i += 1;
+  }
+  return `${n.toFixed(n >= 100 ? 0 : 1)} ${BYTE_UNITS[i]}/s`;
 }
 
 function formatDuration(
@@ -58,11 +113,23 @@ function formatDuration(
   return parts.join(" ");
 }
 
-function percentTone(percent: number): "ok" | "warn" | "bad" {
+function percentTone(percent: number): Tone {
   if (percent >= 90) return "bad";
   if (percent >= 75) return "warn";
   return "ok";
 }
+
+const TONE_STROKE: Record<Tone, string> = {
+  ok: "#10b981",
+  warn: "#f59e0b",
+  bad: "#dc2626"
+};
+
+const TONE_FILL: Record<Tone, string> = {
+  ok: "rgba(16, 185, 129, 0.15)",
+  warn: "rgba(245, 158, 11, 0.15)",
+  bad: "rgba(220, 38, 38, 0.15)"
+};
 
 /** SVG donut: 0-100 yuzdeyi animasyonlu cizer. */
 function Donut({
@@ -74,13 +141,12 @@ function Donut({
   percent: number;
   size?: number;
   thickness?: number;
-  tone: "ok" | "warn" | "bad";
+  tone: Tone;
 }) {
   const safe = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
   const r = (size - thickness) / 2;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - safe / 100);
-  const strokeColor = tone === "bad" ? "#dc2626" : tone === "warn" ? "#f59e0b" : "#10b981";
   const trackColor = "rgba(148, 163, 184, 0.18)";
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="donut">
@@ -89,7 +155,7 @@ function Donut({
         cx={size / 2}
         cy={size / 2}
         r={r}
-        stroke={strokeColor}
+        stroke={TONE_STROKE[tone]}
         strokeWidth={thickness}
         fill="none"
         strokeLinecap="round"
@@ -111,7 +177,7 @@ function Sparkline({
   values: number[];
   width?: number;
   height?: number;
-  tone: "ok" | "warn" | "bad";
+  tone: Tone;
 }) {
   if (values.length < 2) {
     return <div className="sparkline sparkline--empty" style={{ width, height }} />;
@@ -128,20 +194,13 @@ function Sparkline({
     .split(" ")
     .map((p) => p)
     .join(" L")} L${width},${height} Z`;
-  const strokeColor = tone === "bad" ? "#dc2626" : tone === "warn" ? "#f59e0b" : "#10b981";
-  const fillColor =
-    tone === "bad"
-      ? "rgba(220, 38, 38, 0.15)"
-      : tone === "warn"
-      ? "rgba(245, 158, 11, 0.15)"
-      : "rgba(16, 185, 129, 0.15)";
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="sparkline">
-      <path d={areaPath} fill={fillColor} />
+      <path d={areaPath} fill={TONE_FILL[tone]} />
       <polyline
         points={points}
         fill="none"
-        stroke={strokeColor}
+        stroke={TONE_STROKE[tone]}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -150,47 +209,51 @@ function Sparkline({
   );
 }
 
-function gatewayLastSeenTone(gw: Gateway): "ok" | "warn" | "bad" | "muted" {
-  if (!gw.is_active) return "muted";
-  if (!gw.last_seen_at) return "warn";
-  const sec = (Date.now() - new Date(gw.last_seen_at).getTime()) / 1000;
-  if (sec < 60) return "ok";
-  if (sec < 600) return "warn";
-  return "bad";
-}
-
-function serviceRoleIcon(role: ServiceStatus["role"]): string {
+function serviceRoleIcon(role: ServiceStatus["role"]): LucideIcon {
   switch (role) {
     case "db":
-      return "database";
+      return Database;
     case "broker":
-      return "lan";
+      return Network;
     case "worker":
-      return "memory";
+      return Cog;
     case "gateway":
-      return "hub";
+      return Router;
+    case "ftp":
+      return FolderTree;
+    case "web":
+      return Globe;
     case "self":
-      return "api";
+      return Plug;
     default:
-      return "settings";
+      return Server;
   }
 }
 
-export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh, wsState }: Props) {
+/** Servis listesi rol'e gore gruplanir: cekirdek altyapi / isleyiciler / entegrasyon. */
+const SERVICE_GROUPS: { key: "core" | "workers" | "integrations"; roles: ServiceStatus["role"][] }[] = [
+  { key: "core", roles: ["self", "db", "broker", "web"] },
+  { key: "workers", roles: ["worker"] },
+  { key: "integrations", roles: ["gateway", "ftp"] }
+];
+
+export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const isTr = i18n.language?.startsWith("tr");
   const durationUnits = isTr
     ? { d: "g", h: "sa", m: "dk" }
     : { d: "d", h: "h", m: "m" };
-  const gatewayStatusLabel = (tone: "ok" | "warn" | "bad" | "muted"): string => {
-    if (tone === "ok") return t("systemStatus.gateways.stateOnline");
-    if (tone === "warn") return t("systemStatus.gateways.stateLagging");
-    if (tone === "bad") return t("systemStatus.gateways.stateOffline");
-    return t("systemStatus.gateways.stateInactive");
-  };
   const serviceRoleLabel = (role: ServiceStatus["role"]): string => {
-    if (role === "db" || role === "broker" || role === "worker" || role === "gateway" || role === "self") {
+    if (
+      role === "db" ||
+      role === "broker" ||
+      role === "worker" ||
+      role === "gateway" ||
+      role === "ftp" ||
+      role === "web" ||
+      role === "self"
+    ) {
       return t(`systemStatus.services.role.${role}`);
     }
     return role;
@@ -207,6 +270,12 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
 
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [memHistory, setMemHistory] = useState<number[]>([]);
+
+  // Anlik ag hizi (B/s) — iki ardisik olcumun byte farkindan hesaplanir.
+  // Kumulatif sayaclar (boot'tan beri toplam) tek basina bir sey soylemez;
+  // operatorun gormek istedigi "su an ne kadar trafik akiyor".
+  const [netRate, setNetRate] = useState<{ up: number; down: number } | null>(null);
+  const prevNetRef = useRef<{ sent: number; recv: number; at: number } | null>(null);
 
   // Host metrikleri polling
   useEffect(() => {
@@ -229,6 +298,19 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             const next = [...prev, status.memory.percent];
             return next.length > HOST_HISTORY_LEN ? next.slice(-HOST_HISTORY_LEN) : next;
           });
+          const prev = prevNetRef.current;
+          const dt = prev ? status.sampled_at - prev.at : 0;
+          if (prev && dt > 0.5) {
+            setNetRate({
+              up: Math.max(0, (status.network.bytes_sent - prev.sent) / dt),
+              down: Math.max(0, (status.network.bytes_recv - prev.recv) / dt)
+            });
+          }
+          prevNetRef.current = {
+            sent: status.network.bytes_sent,
+            recv: status.network.bytes_recv,
+            at: status.sampled_at
+          };
         }
       } catch (exc) {
         if (!cancelled) {
@@ -301,10 +383,24 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
   }, [gateways]);
 
   const serviceCounts = useMemo(() => {
-    if (!services) return { total: 0, healthy: 0, unhealthy: 0 };
+    if (!services) return { total: 0, healthy: 0, unhealthy: 0, avgLatency: null as number | null };
     const total = services.services.length;
     const healthy = services.services.filter((s) => s.healthy).length;
-    return { total, healthy, unhealthy: total - healthy };
+    const latencies = services.services
+      .filter((s) => s.healthy && s.latency_ms != null && s.latency_ms > 0)
+      .map((s) => s.latency_ms as number);
+    const avgLatency =
+      latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : null;
+    return { total, healthy, unhealthy: total - healthy, avgLatency };
+  }, [services]);
+
+  // Servisleri rol gruplarina dagit — bos gruplar render edilmez.
+  const serviceGroups = useMemo(() => {
+    const list = services?.services ?? [];
+    return SERVICE_GROUPS.map((group) => ({
+      key: group.key,
+      items: list.filter((svc) => group.roles.includes(svc.role))
+    })).filter((group) => group.items.length > 0);
   }, [services]);
 
   const showSpinner = Boolean(loading);
@@ -312,36 +408,61 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
   const cpuTone = host ? percentTone(host.cpu.percent) : "ok";
   const memTone = host ? percentTone(host.memory.percent) : "ok";
   const diskTone = host ? percentTone(host.disk.percent) : "ok";
+  const swapPercent = host?.memory.swap_percent ?? null;
+  const hasSwap = Boolean(host && (host.memory.swap_total_bytes ?? 0) > 0 && swapPercent != null);
+  const swapTone: Tone = swapPercent != null ? percentTone(swapPercent) : "ok";
+  const perCpu = host?.cpu.per_cpu_percent ?? [];
 
   return (
     <section className="system-status-shell">
-      {/* Sag ust kose floating Yenile butonu (sticky; scroll'da hep erisilebilir) */}
-      {onRefresh ? (
-        <button
-          type="button"
-          className="sys-fab"
-          disabled={showSpinner}
-          onClick={() => void onRefresh()}
-          title={host ? `${host.info.hostname} · ${t("systemStatus.host.infoUptime")} ${formatDuration(host.info.uptime_seconds, durationUnits)}` : t("common.refresh")}
-        >
-          <span
-            className={`material-symbols-outlined ${showSpinner ? "sys-fab-spin" : ""}`}
+      {/* Ust serit — Yenile artik KPI'larin uzerine binen floating buton degil,
+          basligin yanindaki normal bir toolbar ogesi. Yaninda canli ornekleme
+          saati ve host adi var; boylece butonun neyi yeniledigi belli. */}
+      <header className="sys-page-head">
+        <div className="sys-page-head-text">
+          <h2>{t("systemStatus.title")}</h2>
+          {host ? (
+            <div className="sys-page-head-meta">
+              <span>
+                <Server size={14} strokeWidth={2} />
+                {host.info.hostname}
+              </span>
+              <span>
+                <Timer size={14} strokeWidth={2} />
+                {formatDuration(host.info.uptime_seconds, durationUnits)}
+              </span>
+              <span
+                className="sys-page-head-live"
+                title={t("systemStatus.host.liveHint")}
+              >
+                <span className="sys-live-dot" />
+                {new Date(host.sampled_at * 1000).toLocaleTimeString(localeTag)}
+              </span>
+            </div>
+          ) : null}
+        </div>
+        {onRefresh ? (
+          <button
+            type="button"
+            className="sys-refresh-btn"
+            disabled={showSpinner}
+            onClick={() => void onRefresh()}
           >
-            refresh
-          </span>
-          <span>{showSpinner ? t("common.refreshing") : t("common.refresh")}</span>
-        </button>
-      ) : null}
+            <RefreshCw
+              size={16}
+              strokeWidth={2.2}
+              className={showSpinner ? "sys-spin" : undefined}
+            />
+            {showSpinner ? t("common.refreshing") : t("common.refresh")}
+          </button>
+        ) : null}
+      </header>
 
-      {/* Canli telemetri WS rozeti kaldirildi (kullanici tercihi —
-          eski sade haline donus). wsState prop'u hala backward-compat
-          icin kalsin, polling akisini etkilemiyor. */}
-
-      {/* KPI: 4 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm */}
+      {/* KPI: 6 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm / Gateway / Servis */}
       <section className="sys-kpis sys-kpis--lg">
         <article className="sys-kpi sys-kpi--total">
           <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">router</span>
+            <Router size={20} strokeWidth={2} />
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">{t("systemStatus.kpi.totalDevices")}</span>
@@ -352,7 +473,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
 
         <article className="sys-kpi sys-kpi--ok">
           <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">wifi</span>
+            <Wifi size={20} strokeWidth={2} />
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">{t("systemStatus.kpi.online")}</span>
@@ -363,7 +484,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
 
         <article className="sys-kpi sys-kpi--bad">
           <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">wifi_off</span>
+            <WifiOff size={20} strokeWidth={2} />
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">{t("systemStatus.kpi.offline")}</span>
@@ -374,7 +495,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
 
         <article className="sys-kpi sys-kpi--alarm">
           <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">notifications_active</span>
+            <BellRing size={20} strokeWidth={2} />
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">{t("systemStatus.kpi.activeAlarm")}</span>
@@ -385,7 +506,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
 
         <article className="sys-kpi sys-kpi--gw">
           <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">hub</span>
+            <Network size={20} strokeWidth={2} />
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">{t("systemStatus.kpi.gateway")}</span>
@@ -402,7 +523,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           }`}
         >
           <div className="sys-kpi-icon">
-            <span className="material-symbols-outlined">monitor_heart</span>
+            <Activity size={20} strokeWidth={2} />
           </div>
           <div className="sys-kpi-body">
             <span className="sys-kpi-label">{t("systemStatus.kpi.services")}</span>
@@ -418,26 +539,28 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
         </article>
       </section>
 
-      {/* 3 dikey kart yan yana: Sunucu Kaynaklari · Servisler · Gateway'ler */}
-      <div className="sys-tri-grid">
+      {/* 2 kolon: Sunucu Kaynaklari · Servisler (Gateway karti kaldirildi) */}
+      <div className="sys-duo-grid">
         {/* ------ KART 1: SUNUCU KAYNAKLARI ------ */}
         <section className="sys-card">
           <header className="sys-card-head">
             <div className="sys-card-title-wrap">
-              <span className="material-symbols-outlined sys-card-icon sys-card-icon--cpu">
-                memory
+              <span className="sys-card-icon sys-card-icon--cpu">
+                <Cpu size={17} strokeWidth={2.1} />
               </span>
               <h2 className="sys-card-title">{t("systemStatus.host.title")}</h2>
             </div>
-            {host ? (
-              <span className={`sys-pill sys-pill--${cpuTone}`}>
-                {cpuTone === "bad"
-                  ? t("systemStatus.host.stateBusy")
-                  : cpuTone === "warn"
-                  ? t("systemStatus.host.stateHigh")
-                  : t("systemStatus.host.stateOk")}
-              </span>
-            ) : null}
+            <div className="sys-head-meta">
+              {host ? (
+                <span className={`sys-pill sys-pill--${cpuTone}`}>
+                  {cpuTone === "bad"
+                    ? t("systemStatus.host.stateBusy")
+                    : cpuTone === "warn"
+                    ? t("systemStatus.host.stateHigh")
+                    : t("systemStatus.host.stateOk")}
+                </span>
+              ) : null}
+            </div>
           </header>
 
           {hostError && !host ? <p className="sys-error-banner">{hostError}</p> : null}
@@ -471,6 +594,9 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                   <span className="sys-mini-donut-detail">
                     {formatBytes(host.memory.used_bytes)} / {formatBytes(host.memory.total_bytes)}
                   </span>
+                  <span className="sys-mini-donut-free">
+                    {t("systemStatus.host.freeLabel", { value: formatBytes(host.memory.available_bytes) })}
+                  </span>
                 </div>
 
                 <div className={`sys-mini-donut sys-mini-donut--${diskTone}`}>
@@ -484,24 +610,88 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                   <span className="sys-mini-donut-detail">
                     {formatBytes(host.disk.used_bytes)} / {formatBytes(host.disk.total_bytes)}
                   </span>
+                  <span className="sys-mini-donut-free">
+                    {t("systemStatus.host.freeLabel", { value: formatBytes(host.disk.free_bytes) })}
+                  </span>
                 </div>
               </div>
 
-              {/* CPU sparkline trendi */}
-              <div className={`sys-trend sys-trend--${cpuTone}`}>
-                <div className="sys-trend-head">
-                  <span className="material-symbols-outlined">trending_up</span>
-                  <span className="sys-trend-label">{t("systemStatus.host.trendCpu")}</span>
-                  <strong className="sys-trend-current">{host.cpu.percent.toFixed(0)}%</strong>
+              {/* CPU + RAM sparkline trendleri yan yana */}
+              <div className="sys-trend-duo">
+                <div className={`sys-trend sys-trend--${cpuTone}`}>
+                  <div className="sys-trend-head">
+                    <TrendingUp size={15} strokeWidth={2.1} />
+                    <span className="sys-trend-label">{t("systemStatus.host.trendCpu")}</span>
+                    <strong className="sys-trend-current">{host.cpu.percent.toFixed(0)}%</strong>
+                  </div>
+                  <Sparkline values={cpuHistory} tone={cpuTone} width={280} height={42} />
                 </div>
-                <Sparkline values={cpuHistory} tone={cpuTone} width={280} height={42} />
+                <div className={`sys-trend sys-trend--${memTone}`}>
+                  <div className="sys-trend-head">
+                    <MemoryStick size={15} strokeWidth={2.1} />
+                    <span className="sys-trend-label">{t("systemStatus.host.trendRam")}</span>
+                    <strong className="sys-trend-current">{host.memory.percent.toFixed(0)}%</strong>
+                  </div>
+                  <Sparkline values={memHistory} tone={memTone} width={280} height={42} />
+                </div>
               </div>
+
+              {/* Cekirdek basina CPU kullanimi — tek bir cekirdegin dolmasi
+                  ortalamada gorunmez, burada aninda fark edilir. */}
+              {perCpu.length > 1 ? (
+                <div className="sys-cores">
+                  <div className="sys-metric-group-title">
+                    <LayoutGrid size={14} strokeWidth={2.1} />
+                    {t("systemStatus.host.cores", { value: perCpu.length })}
+                  </div>
+                  <div className="sys-core-bars">
+                    {perCpu.map((value, index) => {
+                      const tone = percentTone(value);
+                      return (
+                        <div
+                          key={index}
+                          className={`sys-core-bar sys-core-bar--${tone}`}
+                          title={`#${index + 1} · ${value.toFixed(0)}%`}
+                        >
+                          <div className="sys-core-bar-track">
+                            <div
+                              className="sys-core-bar-fill"
+                              style={{ height: `${Math.max(2, Math.min(100, value))}%` }}
+                            />
+                          </div>
+                          <span className="sys-core-bar-label">{index + 1}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Takas alani — RAM tukendiginde buradan anlasilir (Linux/Windows). */}
+              {hasSwap ? (
+                <div className={`sys-meter sys-meter--${swapTone}`}>
+                  <div className="sys-meter-head">
+                    <ArrowLeftRight size={15} strokeWidth={2.1} />
+                    <span className="sys-meter-label">{t("systemStatus.host.swap")}</span>
+                    <strong className="sys-meter-value">{(swapPercent ?? 0).toFixed(0)}%</strong>
+                  </div>
+                  <div className="sys-meter-track">
+                    <div
+                      className={`sys-meter-fill sys-meter-fill--${swapTone}`}
+                      style={{ width: `${Math.max(0, Math.min(100, swapPercent ?? 0))}%` }}
+                    />
+                  </div>
+                  <span className="sys-meter-sub">
+                    {formatBytes(host.memory.swap_used_bytes)} / {formatBytes(host.memory.swap_total_bytes)}
+                  </span>
+                </div>
+              ) : null}
 
               {/* Yuk ortalamasi (sadece Linux'ta var) — tek bagimsiz rozet */}
               {host.cpu.load_avg_1m != null ? (
                 <div className="sys-loadavg">
                   <div className="sys-loadavg-icon">
-                    <span className="material-symbols-outlined">speed</span>
+                    <Gauge size={18} strokeWidth={2.1} />
                   </div>
                   <div className="sys-loadavg-body">
                     <span className="sys-loadavg-title">{t("systemStatus.host.loadAvg")}</span>
@@ -523,91 +713,32 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
                 </div>
               ) : null}
 
-              {/* Ag trafigi ozel gorsel — yatay akis */}
+              {/* Ag trafigi — onde anlik hiz, arkada kumulatif toplam */}
               <div className="sys-net-panel">
                 <div className="sys-metric-group-title">
-                  <span className="material-symbols-outlined">lan</span>
+                  <Network size={14} strokeWidth={2.1} />
                   {t("systemStatus.host.network")}
                 </div>
                 <div className="sys-net-flow">
                   <div className="sys-net-side sys-net-side--up">
                     <div className="sys-net-arrow">
-                      <span className="material-symbols-outlined">arrow_upward</span>
+                      <ArrowUp size={17} strokeWidth={2.4} />
                     </div>
                     <div className="sys-net-info">
-                      <strong>{formatBytes(host.network.bytes_sent)}</strong>
+                      <strong>{formatRate(netRate?.up ?? null)}</strong>
+                      <span>{t("systemStatus.host.netTotalUp", { value: formatBytes(host.network.bytes_sent) })}</span>
                       <span>{t("systemStatus.host.netUp", { value: host.network.packets_sent.toLocaleString(localeTag) })}</span>
                     </div>
                   </div>
                   <div className="sys-net-divider" />
                   <div className="sys-net-side sys-net-side--down">
                     <div className="sys-net-arrow">
-                      <span className="material-symbols-outlined">arrow_downward</span>
+                      <ArrowDown size={17} strokeWidth={2.4} />
                     </div>
                     <div className="sys-net-info">
-                      <strong>{formatBytes(host.network.bytes_recv)}</strong>
+                      <strong>{formatRate(netRate?.down ?? null)}</strong>
+                      <span>{t("systemStatus.host.netTotalDown", { value: formatBytes(host.network.bytes_recv) })}</span>
                       <span>{t("systemStatus.host.netDown", { value: host.network.packets_recv.toLocaleString(localeTag) })}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sistem bilgileri grubu */}
-              <div className="sys-info-group">
-                <div className="sys-metric-group-title">
-                  <span className="material-symbols-outlined">badge</span>
-                  {t("systemStatus.host.systemInfo")}
-                </div>
-                <div className="sys-info-tiles">
-                  <div className="sys-info-tile">
-                    <span className="sys-info-tile-icon">
-                      <span className="material-symbols-outlined">dns</span>
-                    </span>
-                    <div>
-                      <span className="sys-info-tile-label">{t("systemStatus.host.infoHost")}</span>
-                      <strong className="sys-info-tile-val sys-info-tile-val--mono">
-                        {host.info.hostname}
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="sys-info-tile">
-                    <span className="sys-info-tile-icon">
-                      <span className="material-symbols-outlined">monitor</span>
-                    </span>
-                    <div>
-                      <span className="sys-info-tile-label">{t("systemStatus.host.infoOS")}</span>
-                      <strong className="sys-info-tile-val">
-                        {host.info.os_name} {host.info.os_release}
-                      </strong>
-                      <span className="sys-info-tile-sub">{host.info.machine}</span>
-                    </div>
-                  </div>
-                  <div className="sys-info-tile">
-                    <span className="sys-info-tile-icon">
-                      <span className="material-symbols-outlined">timer</span>
-                    </span>
-                    <div>
-                      <span className="sys-info-tile-label">{t("systemStatus.host.infoUptime")}</span>
-                      <strong className="sys-info-tile-val">
-                        {formatDuration(host.info.uptime_seconds, durationUnits)}
-                      </strong>
-                      <span className="sys-info-tile-sub">
-                        {new Date(host.info.boot_time * 1000).toLocaleString(localeTag)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="sys-info-tile">
-                    <span className="sys-info-tile-icon">
-                      <span className="material-symbols-outlined">deployed_code</span>
-                    </span>
-                    <div>
-                      <span className="sys-info-tile-label">{t("systemStatus.host.infoBackend")}</span>
-                      <strong className="sys-info-tile-val">
-                        PID {host.info.process_pid}
-                      </strong>
-                      <span className="sys-info-tile-sub">
-                        {t("systemStatus.host.backendActive", { duration: formatDuration(host.info.process_uptime_seconds, durationUnits) })}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -620,18 +751,26 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
         <section className="sys-card">
           <header className="sys-card-head">
             <div className="sys-card-title-wrap">
-              <span className="material-symbols-outlined sys-card-icon sys-card-icon--svc">
-                monitor_heart
+              <span className="sys-card-icon sys-card-icon--svc">
+                <Activity size={17} strokeWidth={2.1} />
               </span>
               <h2 className="sys-card-title">{t("systemStatus.services.title")}</h2>
             </div>
-            <span
-              className={`sys-pill ${
-                serviceCounts.unhealthy === 0 ? "sys-pill--ok" : "sys-pill--bad"
-              }`}
-            >
-              {serviceCounts.healthy}/{serviceCounts.total}
-            </span>
+            <div className="sys-head-meta">
+              {serviceCounts.avgLatency != null ? (
+                <span className="sys-latency-chip" title={t("systemStatus.services.avgLatencyHint")}>
+                  <Zap size={13} strokeWidth={2.2} />
+                  {t("systemStatus.services.avgLatency", { value: serviceCounts.avgLatency.toFixed(0) })}
+                </span>
+              ) : null}
+              <span
+                className={`sys-pill ${
+                  serviceCounts.unhealthy === 0 ? "sys-pill--ok" : "sys-pill--bad"
+                }`}
+              >
+                {serviceCounts.healthy}/{serviceCounts.total}
+              </span>
+            </div>
           </header>
 
           {servicesError && !services ? (
@@ -642,111 +781,174 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           ) : null}
 
           {services ? (
-            <ul className="sys-card-list">
-              {services.services.map((svc) => (
-                <li
-                  key={`${svc.role}-${svc.name}`}
-                  className={`sys-list-item ${
-                    svc.healthy ? "sys-list-item--ok" : "sys-list-item--bad"
-                  }`}
-                >
-                  <div
-                    className={`sys-list-leading ${
-                      svc.healthy ? "sys-list-leading--ok" : "sys-list-leading--bad"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined">
-                      {serviceRoleIcon(svc.role)}
-                    </span>
-                  </div>
-                  <div className="sys-list-body">
-                    <div className="sys-list-head">
-                      <strong>{svc.name}</strong>
-                      <span className="sys-list-role">{serviceRoleLabel(svc.role)}</span>
-                    </div>
-                    <div className="sys-list-meta">
-                      {svc.endpoint ? (
-                        <code className="inline-code">{svc.endpoint}</code>
-                      ) : null}
-                      {svc.healthy && svc.latency_ms != null ? (
-                        <span className="helper-text">{svc.latency_ms.toFixed(0)} ms</span>
-                      ) : null}
-                      {!svc.healthy && svc.detail ? (
-                        <span className="sys-list-error" title={svc.detail}>
-                          {svc.detail}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                  <span
-                    className={`sys-list-status ${
-                      svc.healthy ? "sys-list-status--ok" : "sys-list-status--bad"
-                    }`}
-                  >
-                    <span className="sys-list-status-dot" />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
-
-        {/* ------ KART 3: GATEWAY DURUMLARI ------ */}
-        <section className="sys-card">
-          <header className="sys-card-head">
-            <div className="sys-card-title-wrap">
-              <span className="material-symbols-outlined sys-card-icon sys-card-icon--gw">
-                hub
-              </span>
-              <h2 className="sys-card-title">{t("systemStatus.gateways.title")}</h2>
-            </div>
-            <span className="sys-pill sys-pill--muted">{gateways.length}</span>
-          </header>
-          {gateways.length === 0 && !showSpinner ? (
-            <p className="sys-empty">{t("systemStatus.gateways.empty")}</p>
-          ) : (
-            <ul className="sys-card-list">
-              {gateways.map((g) => {
-                const tone = gatewayLastSeenTone(g);
-                const ok = tone === "ok";
+            <div className="sys-svc-groups">
+              {serviceGroups.map((group) => {
+                const groupBad = group.items.filter((s) => !s.healthy).length;
                 return (
-                  <li
-                    key={g.id}
-                    className={`sys-list-item sys-list-item--${tone}`}
-                  >
-                    <div className={`sys-list-leading sys-list-leading--${tone}`}>
-                      <span className="material-symbols-outlined">router</span>
+                  <div key={group.key} className="sys-svc-group">
+                    <div className="sys-svc-group-head">
+                      <span className="sys-svc-group-title">
+                        {t(`systemStatus.services.group.${group.key}`)}
+                      </span>
+                      <span
+                        className={`sys-svc-group-count ${
+                          groupBad > 0 ? "sys-svc-group-count--bad" : ""
+                        }`}
+                      >
+                        {group.items.length - groupBad}/{group.items.length}
+                      </span>
                     </div>
-                    <div className="sys-list-body">
-                      <div className="sys-list-head">
-                        <strong>{g.name}</strong>
-                        <code className="inline-code">{g.code}</code>
-                      </div>
-                      <div className="sys-list-meta">
-                        <span className={`sys-gw-status sys-gw-status--${tone}`}>
-                          {gatewayStatusLabel(tone)}
-                        </span>
-                        <span className="helper-text">
-                          {g.last_seen_at
-                            ? new Date(g.last_seen_at).toLocaleString(localeTag)
-                            : t("systemStatus.gateways.neverSeen")}
-                        </span>
-                      </div>
-                    </div>
-                    <span
-                      className={`sys-list-status ${
-                        ok ? "sys-list-status--ok" : "sys-list-status--bad"
-                      }`}
-                    >
-                      <span className="sys-list-status-dot" />
-                    </span>
-                  </li>
+                    <ul className="sys-card-list">
+                      {group.items.map((svc) => {
+                        const RoleIcon = serviceRoleIcon(svc.role);
+                        return (
+                        <li
+                          key={`${svc.role}-${svc.name}`}
+                          className={`sys-list-item ${
+                            svc.healthy ? "sys-list-item--ok" : "sys-list-item--bad"
+                          }`}
+                        >
+                          <div
+                            className={`sys-list-leading ${
+                              svc.healthy ? "sys-list-leading--ok" : "sys-list-leading--bad"
+                            }`}
+                          >
+                            <RoleIcon size={17} strokeWidth={2} />
+                          </div>
+                          <div className="sys-list-body">
+                            <div className="sys-list-head">
+                              <strong>{svc.name}</strong>
+                              <span className="sys-list-role">{serviceRoleLabel(svc.role)}</span>
+                            </div>
+                            <div className="sys-list-meta">
+                              {svc.endpoint ? (
+                                <code className="inline-code">{svc.endpoint}</code>
+                              ) : null}
+                              {svc.healthy && svc.latency_ms != null ? (
+                                <span className="sys-list-latency">{svc.latency_ms.toFixed(0)} ms</span>
+                              ) : null}
+                              {!svc.healthy && svc.detail ? (
+                                <span className="sys-list-error" title={svc.detail}>
+                                  {svc.detail}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <span
+                            className={`sys-list-status ${
+                              svc.healthy ? "sys-list-status--ok" : "sys-list-status--bad"
+                            }`}
+                            title={
+                              svc.healthy
+                                ? t("systemStatus.services.stateUp")
+                                : t("systemStatus.services.stateDown")
+                            }
+                          >
+                            <span className="sys-list-status-dot" />
+                          </span>
+                        </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 );
               })}
-            </ul>
-          )}
+            </div>
+          ) : null}
         </section>
       </div>
+
+      {/* ------ ALT SERIT: SISTEM BILGISI (tam genislik) ------ */}
+      {host ? (
+        <section className="sys-card sys-card--strip">
+          <header className="sys-card-head">
+            <div className="sys-card-title-wrap">
+              <span className="sys-card-icon sys-card-icon--info">
+                <Info size={17} strokeWidth={2.1} />
+              </span>
+              <h2 className="sys-card-title">{t("systemStatus.host.systemInfo")}</h2>
+            </div>
+          </header>
+          <div className="sys-info-tiles">
+            <div className="sys-info-tile">
+              <span className="sys-info-tile-icon">
+                <Server size={17} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="sys-info-tile-label">{t("systemStatus.host.infoHost")}</span>
+                <strong className="sys-info-tile-val sys-info-tile-val--mono">
+                  {host.info.hostname}
+                </strong>
+              </div>
+            </div>
+            <div className="sys-info-tile">
+              <span className="sys-info-tile-icon">
+                <Monitor size={17} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="sys-info-tile-label">{t("systemStatus.host.infoOS")}</span>
+                <strong className="sys-info-tile-val">
+                  {host.info.os_name} {host.info.os_release}
+                </strong>
+                <span className="sys-info-tile-sub">{host.info.machine}</span>
+              </div>
+            </div>
+            <div className="sys-info-tile">
+              <span className="sys-info-tile-icon">
+                <Timer size={17} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="sys-info-tile-label">{t("systemStatus.host.infoUptime")}</span>
+                <strong className="sys-info-tile-val">
+                  {formatDuration(host.info.uptime_seconds, durationUnits)}
+                </strong>
+                <span className="sys-info-tile-sub">
+                  {new Date(host.info.boot_time * 1000).toLocaleString(localeTag)}
+                </span>
+              </div>
+            </div>
+            <div className="sys-info-tile">
+              <span className="sys-info-tile-icon">
+                <Package size={17} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="sys-info-tile-label">{t("systemStatus.host.infoBackend")}</span>
+                <strong className="sys-info-tile-val">
+                  PID {host.info.process_pid}
+                </strong>
+                <span className="sys-info-tile-sub">
+                  {t("systemStatus.host.backendActive", { duration: formatDuration(host.info.process_uptime_seconds, durationUnits) })}
+                </span>
+              </div>
+            </div>
+            <div className="sys-info-tile">
+              <span className="sys-info-tile-icon">
+                <Code size={17} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="sys-info-tile-label">{t("systemStatus.host.infoPython")}</span>
+                <strong className="sys-info-tile-val sys-info-tile-val--mono">
+                  {host.info.python_version}
+                </strong>
+              </div>
+            </div>
+            <div className="sys-info-tile">
+              <span className="sys-info-tile-icon">
+                <HardDrive size={17} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="sys-info-tile-label">{t("systemStatus.host.infoDiskPath")}</span>
+                <strong className="sys-info-tile-val sys-info-tile-val--mono">
+                  {host.disk.path}
+                </strong>
+                <span className="sys-info-tile-sub">
+                  {t("systemStatus.host.freeLabel", { value: formatBytes(host.disk.free_bytes) })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }
