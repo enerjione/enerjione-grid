@@ -732,6 +732,12 @@ export function DeviceManagementPanel({
               </div>
             );
             })}
+            {gateways.length === 0 ? (
+              <div className="empty-state empty-state--compact">
+                <span className="material-symbols-outlined">lan</span>
+                <p>{t("engineering.devicesPanel.noGateways")}</p>
+              </div>
+            ) : null}
           </div>
 
         </div>
@@ -795,7 +801,12 @@ export function DeviceManagementPanel({
               </button>
               );
             })}
-            {devices.length === 0 ? <p className="helper-text">{t("engineering.devicesPanel.noDevicesUnderGateway")}</p> : null}
+            {devices.length === 0 ? (
+              <div className="empty-state empty-state--compact">
+                <span className="material-symbols-outlined">developer_board</span>
+                <p>{t("engineering.devicesPanel.noDevicesUnderGateway")}</p>
+              </div>
+            ) : null}
           </div>
         </div>
 

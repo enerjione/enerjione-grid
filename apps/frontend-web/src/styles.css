@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   font-family: Arial, sans-serif;
   color: #111827;
   background-color: #f3f4f6;
@@ -1743,22 +1743,12 @@ body {
   overflow: hidden;
 }
 
+/* Toolbar gorseli alarm kurallari sayfasiyla ORTAK — bkz. `.rules-v3-toolbar`
+   ve `.rules-search` seçici gruplari (dosyanin ilerisinde). Burada sadece
+   kullanicilar panelinin kendine ozgu yerlesim duzeltmeleri var. */
 .users-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
   flex-shrink: 0;
   margin-bottom: 10px;
-}
-
-.users-search-input {
-  width: min(420px, 100%);
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  padding: 9px 12px;
-  font-size: 13px;
-  background: #fff;
 }
 
 .users-table-wrap {
@@ -2609,14 +2599,8 @@ body {
 }
 
 .device-empty-copy .material-symbols-outlined {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #fff7ed;
-  color: #e67c00;
-  font-size: 22px;
+  font-size: 48px;
+  color: #cbd5e1;
 }
 
 .device-empty-copy h5 {
@@ -3141,52 +3125,178 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   overflow: hidden;
 }
 
-.engineering-content > .tabs {
+.engineering-content > .tabs,
+.engineering-content > .eng-nav {
   flex-shrink: 0;
   width: calc(100% + 24px);
   margin: -12px -12px 0;
 }
 
-.engineering-content .tabs {
+/* NOT: eski `.engineering-content .tabs` duz sekme cubugu kaldirildi;
+   yerini asagidaki gruplu `.eng-nav` menusu aldi. */
+
+/* =====================================================================
+   Muhendislik ust menusu — 5 gruplu acilir menu (EngineeringNav.tsx)
+   ===================================================================== */
+.eng-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
   width: 100%;
-  max-width: none;
-  margin-bottom: 0;
-  padding: 0;
-  gap: 0;
-  overflow-x: auto;
-  flex-wrap: nowrap;
-  border: 0;
-  border-bottom: 1px solid #dbe2ea;
-  border-radius: 0;
   background: #fff;
-  box-shadow: none;
-  scrollbar-width: thin;
+  border-bottom: 1px solid #dbe2ea;
 }
 
-.engineering-content .tabs button {
-  flex: 1 0 auto;
+.eng-nav-group {
+  position: relative;
+}
+
+.eng-nav-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 48px;
-  padding: 0 16px;
+  padding: 0 18px;
   border: 0;
   border-bottom: 2px solid transparent;
-  border-radius: 0;
   background: transparent;
   color: #334155;
   font-weight: 600;
+  font-size: 13.5px;
   white-space: nowrap;
-  box-shadow: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.engineering-content .tabs button:hover {
+.eng-nav-trigger svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.eng-nav-trigger:hover {
   background: #fff7ed;
   color: #c45f00;
 }
 
-.engineering-content .tabs button.active {
-  background: transparent;
+.eng-nav-trigger:hover svg,
+.eng-nav-trigger.active svg {
+  opacity: 1;
+}
+
+.eng-nav-trigger.active {
   color: #e67c00;
-  border-color: #e67c00;
-  box-shadow: none;
+  border-bottom-color: #e67c00;
+}
+
+.eng-nav-trigger[aria-expanded="true"] .eng-nav-chevron {
+  transform: rotate(180deg);
+}
+
+.eng-nav-trigger:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(230, 124, 0, 0.35);
+}
+
+.eng-nav-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 290px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  animation: eng-nav-in 0.13s ease-out;
+}
+
+@keyframes eng-nav-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.eng-nav-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: #0f172a;
+  transition: background-color 0.12s ease;
+}
+
+.eng-nav-item:hover {
+  background: #f1f5f9;
+}
+
+.eng-nav-item.active {
+  background: #fff7ed;
+}
+
+.eng-nav-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.eng-nav-item.active .eng-nav-item-icon {
+  background: #ffedd5;
+  color: #c45f00;
+}
+
+.eng-nav-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.eng-nav-item-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.eng-nav-item.active .eng-nav-item-text strong {
+  color: #c45f00;
+}
+
+.eng-nav-item-text small {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #64748b;
+  white-space: normal;
+}
+
+/* Dar ekranda menu ekrandan tasmasin: son gruplar saga hizalanir. */
+@media (max-width: 900px) {
+  .eng-nav {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .eng-nav-trigger {
+    padding: 0 12px;
+  }
 }
 
 .tabs {
@@ -3578,8 +3688,78 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   background: #fff;
 }
 .whatsapp-qr-waiting .material-symbols-outlined {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #eef2f6;
   font-size: 28px;
-  color: #9ca3af;
+  color: #94a3b8;
+}
+
+/* WhatsApp: QR solda, grup gonderim sagda (yan yana) */
+.whatsapp-web-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.whatsapp-web-side,
+.whatsapp-web-main {
+  min-width: 0;
+}
+.whatsapp-web-side .whatsapp-qr-panel {
+  height: 100%;
+  min-height: 240px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.whatsapp-web-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.whatsapp-group-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.whatsapp-group-head > .material-symbols-outlined {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 19px;
+  flex-shrink: 0;
+}
+.whatsapp-group-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #0f172a;
+}
+.whatsapp-group-head p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.whatsapp-group-hint {
+  margin: 0;
+}
+@media (max-width: 820px) {
+  .whatsapp-web-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Telegram chat otomatik kesfi kart */
@@ -4064,68 +4244,40 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
-.notification-channel-card:hover,
+.notification-channel-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
 .notification-channel-card.is-selected {
-  border-color: #a78bfa;
-  background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%);
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.1);
+  border-color: #4f46e5;
+  background: #f8fafc;
+  box-shadow: inset 3px 0 0 #4f46e5;
 }
 
 .notification-channel-card.is-passive {
   color: #64748b;
 }
 
+/* Kanal ikonlari tek renk (notr slate); secili olan accent. Kanal bazli
+   renkli gradyanlar kaldirildi — sade tek renkli gorunum. */
 .notification-channel-icon {
   width: 42px;
   height: 42px;
-  border-radius: 14px;
+  border-radius: 12px;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.92) 0 18%, transparent 19%),
-    linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
-  color: #4f46e5;
+  background: #f1f5f9;
+  color: #475569;
   font-size: 22px !important;
   line-height: 1 !important;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.08), 0 6px 14px rgba(79, 70, 229, 0.12);
-}
-
-.notification-channel-card:nth-child(2) .notification-channel-icon {
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.92) 0 18%, transparent 19%),
-    linear-gradient(135deg, #dbeafe 0%, #e0f2fe 100%);
-  color: #2563eb;
-}
-
-.notification-channel-card:nth-child(3) .notification-channel-icon {
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.92) 0 18%, transparent 19%),
-    linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
-  color: #0284c7;
-}
-
-.notification-channel-card:nth-child(4) .notification-channel-icon {
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.92) 0 18%, transparent 19%),
-    linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-  color: #16a34a;
-}
-
-.notification-channel-card:nth-child(5) .notification-channel-icon {
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.92) 0 18%, transparent 19%),
-    linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
-  color: #ea580c;
 }
 
 .notification-channel-card.is-selected .notification-channel-icon {
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.34) 0 18%, transparent 19%),
-    linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  background: #4f46e5;
   color: #ffffff;
-  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.28);
 }
 
 .notification-channel-text {
@@ -4185,7 +4337,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 }
 
 .notification-detail-card.is-active .notification-detail-head {
-  background: linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%);
+  background: #f8fafc;
 }
 
 .notification-detail-card.is-active .notification-card-icon {
@@ -4200,6 +4352,14 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   padding: 14px 16px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
+}
+
+/* Kart basligindaki aksiyon butonu (Webhook > "+ Yeni Webhook") saga yaslanir;
+   normalde burada acma/kapama toggle'i duruyor. */
+.notification-head-action {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .notification-detail-section {
@@ -4255,6 +4415,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 }
 
 .notification-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   max-width: none;
 }
 
@@ -4322,6 +4483,205 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   border: 0;
   border-radius: 0;
   padding: 12px 14px;
+}
+
+/* Webhook (rest-only) kart listesi — genel outbound tablosu yerine sade kartlar */
+.webhook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.webhook-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.webhook-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+.webhook-card--inactive {
+  opacity: 0.62;
+}
+.webhook-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: #f1f5f9;
+  color: #475569;
+}
+.webhook-card-icon .material-symbols-outlined {
+  font-size: 20px;
+}
+.webhook-card-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.webhook-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.webhook-card-name strong {
+  font-size: 14px;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.webhook-card-url {
+  font-size: 12px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+  border-radius: 6px;
+  padding: 2px 8px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.webhook-card-runtime {
+  flex-shrink: 0;
+}
+.webhook-card-idle {
+  color: #94a3b8;
+  font-size: 12px;
+}
+.webhook-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.webhook-empty {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  padding: 48px 24px;
+  text-align: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+.webhook-empty > .material-symbols-outlined {
+  font-size: 52px;
+  color: #cbd5e1;
+}
+.webhook-empty h4 {
+  margin: 0;
+  color: #0f172a;
+}
+.webhook-empty p {
+  margin: 0;
+  max-width: 380px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.webhook-empty .primary-btn {
+  margin-top: 4px;
+}
+.webhook-test-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.webhook-test-result .material-symbols-outlined {
+  font-size: 15px;
+}
+.webhook-test-result.is-ok {
+  color: #059669;
+}
+.webhook-test-result.is-fail {
+  color: #dc2626;
+}
+
+/* n8n yardim karti — webhook create/edit formunda endpoint + auth altinda */
+.webhook-n8n-help {
+  margin-top: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.webhook-n8n-help-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.webhook-n8n-help-head > .material-symbols-outlined {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.webhook-n8n-help-head strong {
+  display: block;
+  font-size: 13px;
+  color: #0f172a;
+}
+.webhook-n8n-help-head small {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.webhook-payload-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.webhook-payload-sample-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+.webhook-payload-sample pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (max-width: 640px) {
+  .webhook-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .webhook-card-runtime,
+  .webhook-card-actions {
+    grid-column: 2 / -1;
+  }
 }
 
 .notification-inline-state {
@@ -4876,90 +5236,146 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-  /* Sayfa kullanilabilir tum yuksekligi alir: parent .content (flex:1) shell'i
-     uzatir; min-height: 0 ile flex:1 cocuklarin shrink olmasina izin ver. */
+  /* Kullanilabilir alani alir AMA icerik sigmazsa kirpmaz: kendi icinde
+     dikey scroll eder. Onceki surumde kartlara `height: 100%` verilip
+     shell sabit yuksekligi zorluyordu; SWAP olcumu ve ag paneli kart
+     disina tasip kirpiliyordu (kullanici raporu). Artik kartlar dogal
+     yuksekliklerini alir, tasan kisim scroll ile gorulur. */
   flex: 1 1 auto;
   min-height: 0;
-  padding: 8px 4px 32px;
+  overflow-y: auto;
+  padding: 8px 4px 28px;
 }
 
 /* ============================================================
  * Yeni 3-kolon dashboard (Sunucu / Servisler / Gateway)
  * ============================================================ */
 
-/* Sayfa shell'i relative - FAB position absolute icin. */
 .system-status-shell {
   position: relative;
 }
 
-/* ----- Floating Yenile butonu (sayfanin sag ust kosesinde) ----- */
-.sys-fab {
-  position: absolute;
-  top: 12px;
-  right: 8px;
-  z-index: 5;
+/* ----- Ust serit: sayfa basligi + host kunyesi + Yenile -----
+   Onceki surumde Yenile `position: absolute` bir FAB'di ve KPI seridinin
+   uzerine biniyordu; KPI grid'ine de `padding-right: 130px` hack'i
+   gerekiyordu (son kart daraliyor, sagda bosluk kaliyordu). Artik normal
+   akista bir toolbar satiri. */
+.sys-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0 4px;
+}
+
+.sys-page-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sys-page-head-text h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: #0f172a;
+}
+
+.sys-page-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.sys-page-head-meta > span {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.sys-page-head-meta svg {
+  color: #94a3b8;
+}
+
+.sys-page-head-live {
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857 !important;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
   padding: 9px 16px;
-  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
-  color: #fff;
-  border: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
+  color: #334155;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(67, 56, 202, 0.32);
-  transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
-.sys-fab:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(67, 56, 202, 0.45);
+.sys-refresh-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
 }
 
-.sys-fab:disabled {
-  opacity: 0.7;
+.sys-refresh-btn:disabled {
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
-.sys-fab .material-symbols-outlined {
-  font-size: 18px;
+.sys-refresh-btn svg {
+  color: #6366f1;
 }
 
-.sys-fab-spin {
-  animation: sys-fab-spin 1s linear infinite;
+.sys-spin {
+  animation: sys-spin-rotate 1s linear infinite;
 }
 
-@keyframes sys-fab-spin {
+@keyframes sys-spin-rotate {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
-/* ----- 3-kolon ana grid (tum kartlar ayni yukseklikte ve sayfa sonuna kadar) ----- */
-.sys-tri-grid {
+/* ----- 2-kolon ana grid: Sunucu kaynaklari | Servisler -----
+   Gateway karti kaldirildi; kalan iki kart genisleyerek daha okunakli
+   grafik/liste alani kazandi. Sol kolon gorsel agirlikli oldugu icin
+   biraz daha genis. */
+.sys-duo-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1.15fr 1fr;
   gap: 16px;
+  /* stretch: iki kart en uzun icerige gore ayni yukseklikte olur (ragged
+     alt kenar olmaz). Kartlardaki `height: 100%` KALDIRILDI — grid satiri
+     artik icerige gore buyuyor; onceki surumde satir shell'in sabit
+     yuksekligine sikistiriliyor, SWAP/ag paneli ve son servis satiri kart
+     disina tasip kirpiliyordu. */
   align-items: stretch;
-  /* Sayfa shell'i flex column oldugundan, grid'e flex:1 verince hero/KPI'dan
-     sonra kalan tum dikey alani alir. min-height:0 cocuklarin overflow icin
-     gerekli; min-height: 380 ise cok az icerikte cok yamuk gozukmesin diye
-     korumalı zemin. */
-  flex: 1 1 auto;
-  min-height: 380px;
+  flex: 0 0 auto;
 }
 
-@media (max-width: 1280px) {
-  .sys-tri-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 800px) {
-  .sys-tri-grid {
+@media (max-width: 1100px) {
+  .sys-duo-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -4975,8 +5391,8 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   flex-direction: column;
   gap: 14px;
   transition: box-shadow 0.2s;
-  /* Grid stretch ile butun kartlar ayni yukseklige sahip olur. */
-  height: 100%;
+  /* Dogal yukseklik — sabit yukseklik dayatmiyoruz, aksi halde uzun
+     icerik (SWAP + ag paneli / uzun servis listesi) kart disina tasiyor. */
   min-height: 0;
 }
 
@@ -5001,7 +5417,13 @@ main.content.engineering-content:has(.bulk-notify-panel) {
    ve flex-grow yok; sys-card flex:column ile baslayan list, kalan alanda
    bos kalir ama bu temiz gorunur (sayfa zaten esit yuksekligi grid stretch
    ile garanti ediyor). */
-.sys-card > .sys-card-list {
+.sys-card > .sys-card-list,
+.sys-card > .sys-svc-groups {
+  flex: 0 0 auto;
+}
+
+/* Tam genislik alt serit (sistem bilgisi) — dogal yukseklik. */
+.sys-card--strip {
   flex: 0 0 auto;
 }
 
@@ -5030,20 +5452,65 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   min-width: 0;
 }
 
+/* Kart basligi ikon kutusu — icinde lucide SVG var (eski surumde glyph
+   span'i kendisiydi, o yuzden font-size ile boyutlaniyordu). */
 .sys-card-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  display: flex;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px !important;
   flex-shrink: 0;
 }
 
 .sys-card-icon--cpu { background: #fef3c7; color: #b45309; }
 .sys-card-icon--svc { background: #d1fae5; color: #047857; }
 .sys-card-icon--gw { background: #e0f2fe; color: #0369a1; }
+.sys-card-icon--info { background: #e0e7ff; color: #4338ca; }
+
+/* Kart basliginin sag tarafi: canli saat / gecikme rozeti + durum pill'i. */
+.sys-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* "Canli" rozeti — son olcum saati + nabiz atan nokta. Veri bayat mi taze mi
+   sorusunu tek bakista cevaplar. */
+.sys-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55);
+  animation: sys-live-pulse 2s ease-out infinite;
+}
+
+@keyframes sys-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Servis kartinda ortalama probe gecikmesi. */
+.sys-latency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-latency-chip svg {
+  font-size: 14px;
+}
 
 .sys-card-title {
   margin: 0;
@@ -5134,6 +5601,149 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .sys-mini-donut--warn .sys-mini-donut-detail { color: #b45309; }
 .sys-mini-donut--bad .sys-mini-donut-detail { color: #b91c1c; }
 
+/* Kalan bos alan — doluluk yuzdesinden daha operasyonel bir bilgi. */
+.sys-mini-donut-free {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* ----- CPU + RAM trend grafikleri yan yana ----- */
+.sys-trend-duo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 620px) {
+  .sys-trend-duo {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ----- Cekirdek basina CPU kullanimi (dikey mini barlar) ----- */
+.sys-cores {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.sys-core-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sys-core-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.sys-core-bar-track {
+  position: relative;
+  width: 14px;
+  height: 44px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sys-core-bar-fill {
+  width: 100%;
+  border-radius: 4px;
+  transition: height 500ms ease, background 300ms ease;
+  background: linear-gradient(180deg, #34d399, #10b981);
+}
+
+.sys-core-bar--warn .sys-core-bar-fill { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
+.sys-core-bar--bad .sys-core-bar-fill { background: linear-gradient(180deg, #f87171, #dc2626); }
+
+.sys-core-bar-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- Genel amacli yatay olcek (swap vb.) ----- */
+.sys-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.sys-meter--warn { border-color: #fde68a; background: #fffbeb; }
+.sys-meter--bad { border-color: #fecaca; background: #fef2f2; }
+
+.sys-meter-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sys-meter-head svg {
+  font-size: 18px;
+  color: #6d28d9;
+}
+
+.sys-meter-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  flex: 1 1 auto;
+}
+
+.sys-meter-value {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-meter--warn .sys-meter-value { color: #b45309; }
+.sys-meter--bad .sys-meter-value { color: #b91c1c; }
+
+.sys-meter-track {
+  height: 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.sys-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 500ms ease;
+}
+
+.sys-meter-fill--ok { background: linear-gradient(90deg, #a78bfa, #7c3aed); }
+.sys-meter-fill--warn { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+.sys-meter-fill--bad { background: linear-gradient(90deg, #f87171, #dc2626); }
+
+.sys-meter-sub {
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* ----- Yuk ortalamasi rozeti (Linux only) ----- */
 .sys-loadavg {
   display: flex;
@@ -5157,7 +5767,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   flex-shrink: 0;
 }
 
-.sys-loadavg-icon .material-symbols-outlined {
+.sys-loadavg-icon svg {
   font-size: 20px;
 }
 
@@ -5226,14 +5836,14 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   gap: 8px;
 }
 
-.sys-trend-head .material-symbols-outlined {
+.sys-trend-head svg {
   font-size: 18px;
   color: #6366f1;
 }
 
-.sys-trend--ok .sys-trend-head .material-symbols-outlined { color: #10b981; }
-.sys-trend--warn .sys-trend-head .material-symbols-outlined { color: #f59e0b; }
-.sys-trend--bad .sys-trend-head .material-symbols-outlined { color: #dc2626; }
+.sys-trend--ok .sys-trend-head svg { color: #10b981; }
+.sys-trend--warn .sys-trend-head svg { color: #f59e0b; }
+.sys-trend--bad .sys-trend-head svg { color: #dc2626; }
 
 .sys-trend-label {
   flex: 1;
@@ -5281,7 +5891,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   padding: 0 2px;
 }
 
-.sys-metric-group-title .material-symbols-outlined {
+.sys-metric-group-title svg {
   font-size: 16px;
   color: #6366f1;
 }
@@ -5417,7 +6027,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   flex-shrink: 0;
 }
 
-.sys-net-arrow .material-symbols-outlined {
+.sys-net-arrow svg {
   font-size: 18px;
 }
 
@@ -5454,10 +6064,74 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   margin: 0 4px;
 }
 
-/* ----- Sistem bilgisi tile'lari (Host/OS/Uptime/Backend) ----- */
+/* ----- Servis gruplari (cekirdek / isleyici / entegrasyon) ----- */
+.sys-svc-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sys-svc-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sys-svc-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sys-svc-group-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+/* Baslik ile sayac arasini dolduran ince ayrac cizgi. */
+.sys-svc-group-head::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, #e2e8f0, transparent);
+}
+
+.sys-svc-group-count {
+  order: 3;
+  font-size: 11px;
+  font-weight: 700;
+  color: #047857;
+  background: #d1fae5;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-svc-group-count--bad {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+/* Servis satirinda probe gecikmesi rozeti. */
+.sys-list-latency {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4338ca;
+  background: #eef2ff;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- Sistem bilgisi tile'lari (Host/OS/Uptime/Backend/Python/Disk) -----
+   Tam genislik alt seritte otomatik sarilir; dar ekranda tek kolona duser. */
 .sys-info-tiles {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
 }
 
@@ -5488,7 +6162,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   flex-shrink: 0;
 }
 
-.sys-info-tile-icon .material-symbols-outlined {
+.sys-info-tile-icon svg {
   font-size: 17px;
 }
 
@@ -5628,7 +6302,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .sys-list-leading--bad { background: #fee2e2; color: #b91c1c; }
 .sys-list-leading--muted { background: #f1f5f9; color: #475569; }
 
-.sys-list-leading .material-symbols-outlined {
+.sys-list-leading svg {
   font-size: 18px;
 }
 
@@ -5938,27 +6612,13 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 }
 
 /* ----- KPI GRID ----- */
+/* Yenile butonu artik ust seride tasindi — KPI seridi tam genislige yayilir
+   (eski `padding-right: 130px` hack'i kaldirildi). */
 .sys-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 14px;
-  /* Ust kose FAB butonu icin sag tarafta alan birak. Kpis flex-flow auto-fit
-     oldugu icin son kartin yana kayma riski yok, ust ust gelmez. */
-  padding-right: 130px;
-}
-
-@media (max-width: 720px) {
-  .sys-kpis {
-    padding-right: 0;
-  }
-  .sys-fab {
-    /* Kucuk ekranda FAB'i normal akisa al, sayfanin ustune koy. */
-    position: relative;
-    align-self: flex-end;
-    top: 0;
-    right: 0;
-    margin-bottom: -8px;
-  }
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  flex: 0 0 auto;
 }
 
 .sys-kpi {
@@ -5999,10 +6659,11 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .sys-kpi--gw::before { background: linear-gradient(180deg, #38bdf8, #0284c7); }
 
 .sys-kpi-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
   background: #f1f5f9;
+  color: #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6017,8 +6678,8 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .sys-kpi--gw .sys-kpi-icon { background: #e0f2fe; color: #0369a1; }
 .sys-kpi--total .sys-kpi-icon { background: #e0e7ff; color: #4338ca; }
 
-.sys-kpi-icon .material-symbols-outlined {
-  font-size: 24px;
+.sys-kpi-value {
+  font-variant-numeric: tabular-nums;
 }
 
 .sys-kpi-body {
@@ -6037,7 +6698,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 }
 
 .sys-kpi-value {
-  font-size: 1.85rem;
+  font-size: 1.6rem;
   font-weight: 800;
   color: #0f172a;
   line-height: 1.05;
@@ -6765,19 +7426,9 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   flex-shrink: 0;
 }
 
-.sys-gw-status {
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.sys-gw-status--ok { background: #d1fae5; color: #047857; }
-.sys-gw-status--warn { background: #fef3c7; color: #b45309; }
-.sys-gw-status--bad { background: #fee2e2; color: #b91c1c; }
-.sys-gw-status--muted { background: #f1f5f9; color: #475569; }
+/* NOT: .sys-gw-status* kurallari, Sistem Durumu sayfasindan "Gateway
+   durumlari" karti kaldirildigi icin silindi. Gateway ozeti KPI seridinde
+   (.sys-kpi--gw) durmaya devam ediyor. */
 
 /* ----- Eski siniflari korumak (geriye uyumluluk) ----- */
 .system-status-page {
@@ -8050,6 +8701,64 @@ th.event-col-category {
   overflow: hidden;
 }
 
+/* Engineering Outbound sayfasi — kart tum yuksekligi doldurur, tablo iceride
+   kayar (device-management-panel ile ayni desen; sayfalar arasi tutarli). */
+.engineering-content .tab-panel.outbound-panel {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.outbound-panel .panel-head {
+  flex-shrink: 0;
+}
+.outbound-panel .error-text {
+  flex-shrink: 0;
+}
+.outbound-panel .outbound-modern-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+/* Kaydirirken baslik sabit kalir */
+.outbound-panel .outbound-modern-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.outbound-empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.outbound-empty > .material-symbols-outlined {
+  font-size: 52px;
+  color: #cbd5e1;
+}
+.outbound-empty h4 {
+  margin: 0;
+  color: #0f172a;
+}
+.outbound-empty p {
+  margin: 0;
+  max-width: 380px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.outbound-empty .primary-btn {
+  margin-top: 4px;
+}
+
 .outbound-modern-table {
   width: 100%;
   border-collapse: separate;
@@ -8575,8 +9284,9 @@ th.event-col-category {
 /* Sutun basligi: baslik USTTE, butonlar ALTTA. */
 .grid-mgmt-col-head {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding-bottom: 10px;
   border-bottom: 1px solid #e2e8f0;
@@ -8587,7 +9297,21 @@ th.event-col-category {
   margin: 0;
   font-size: 14px;
   color: #0f172a;
-  text-align: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cihazlar/Gateway'lerdeki gibi kompakt "+" ikon butonlari (device-add-plus-btn). */
+.grid-mgmt-head-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.grid-mgmt-head-btns .device-add-plus-btn .material-symbols-outlined {
+  font-size: 18px;
 }
 
 /* Actions yan yana (wizard + bolge butonlari). Wizard butonu uzun metinli
@@ -8614,6 +9338,17 @@ th.event-col-category {
    col-head altinda; onu da tam genislik yap. */
 .grid-mgmt-col-head > .add-user-btn {
   width: 100%;
+}
+
+/* Dar grid sutunlarinda add-user-btn'un agir turuncu golgesi (0 8px 18px)
+   butonun altina/ayraca tasiyor, "turuncu halo" gibi kotu duruyordu. Burada
+   hafif golge kullan — buton temiz otursun. */
+.grid-mgmt-col-head .add-user-btn,
+.grid-mgmt-col-head-actions .add-user-btn {
+  box-shadow: 0 1px 2px rgba(230, 124, 0, 0.2);
+}
+.grid-mgmt-col-head .add-user-btn:active {
+  box-shadow: 0 1px 2px rgba(230, 124, 0, 0.24);
 }
 
 .grid-mgmt-list {
@@ -10348,46 +11083,44 @@ th.event-col-category {
   width: 100%;
 }
 
-/* Sayfa basligi + Save butonu yan yana, basligi sola, Save sag-uste it. */
-.project-settings-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-.project-settings-head-text {
-  flex: 1;
-  min-width: 0;
-}
-.project-settings-head-text h3 {
-  margin: 0 0 4px;
-}
-.project-settings-head-text .helper-text {
-  margin: 0;
-}
-.project-settings-save-top {
-  white-space: nowrap;
-  flex-shrink: 0;
-  align-self: flex-start;
-  /* Mobilde h3 ile yan yana sigmiyorsa altina dussun */
-}
-@media (max-width: 640px) {
-  .project-settings-head {
-    flex-direction: column;
-  }
-  .project-settings-save-top {
-    align-self: flex-end;
-  }
-}
-
-.project-settings-grid {
-  display: grid;
-  grid-template-rows: auto minmax(260px, 1fr) auto;
+/* Icerik kendi icinde kayar; Kaydet butonu asagidaki sabit aksiyon
+   cubugunda kalir. Sayfa basligi kaldirildi (sekme cubugu zaten soyluyor). */
+.project-settings-body {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.project-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-shrink: 0;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.project-settings-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  padding: 10px 20px;
+  font-weight: 700;
+}
+
+.project-settings-save .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Satirlar icerige gore yuksellik alir — eskiden orta satir `1fr` idi ve
+   logo onizleme kutulari bos ekranin tamamina yayilarak devlesiyordu. */
+.project-settings-grid {
+  display: grid;
+  grid-template-rows: auto auto auto;
   gap: 16px;
-  margin-top: 8px;
 }
 
 /* Metin alanlari satiri: Proje Adi / Musteri Adi / Sekme Basligi 3 esit
@@ -10441,10 +11174,12 @@ th.event-col-category {
 /* Boxlar yan yana iken preview yuksekligi tutarli olsun.
    Login image biraz daha buyuk preview ister; ama yine de box'lar
    ayni hizada bitsin diye preview area flex 1 ile yayilir. */
+/* Sabit yukseklik: dort onizleme kutusu esit ve makul boyda kalir. Eskiden
+   `flex: 1 1 auto` ile kalan dikey alanin tamamini yutuyorlardi. */
 .project-settings-logo-box .project-settings-logo-preview {
-  flex: 1 1 auto;
-  height: auto;
-  min-height: 180px;
+  flex: 0 0 auto;
+  height: 200px;
+  min-height: 0;
 }
 
 .project-settings-logo-head {
@@ -11608,21 +12343,37 @@ th.event-col-category {
 
 .values-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .values-table th,
 .values-table td {
-  border-bottom: 1px solid #e5e7eb;
-  border-right: 1px solid #e5e7eb;
-  padding: 8px;
+  border-bottom: 1px solid #f1f5f9;
+  padding: 10px 14px;
   text-align: left;
   font-size: 13px;
+  vertical-align: middle;
 }
 
 .values-table th:last-child,
 .values-table td:last-child {
   border-right: none;
+}
+
+/* Ortak modern liste tablosu gorunumu (Outbound referans) — sayfalar arasi
+   ayni tarz: acik gri uppercase baslik, cizgisiz satirlar, hover vurgusu. */
+.values-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #e2e8f0;
+}
+.values-table tbody tr:hover {
+  background: #f8fafc;
 }
 
 .user-table th {
@@ -12691,23 +13442,36 @@ th.event-col-category {
   color: #ffffff;
 }
 
-.signals-header-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
 .signals-type-tabs--inline {
   margin: 0;
   flex: 1;
   min-width: 0;
 }
 
+/* Veri tipi filtresi 2. satirda (model + kaynak ile birlikte). */
+.signals-type-tabs--row {
+  margin: 0;
+  border-radius: 10px;
+}
+
+/* 2. satir: cihaz turu (model) + kaynak + veri tipi filtreleri yan yana. */
+.signals-filters-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+  flex-shrink: 0;
+}
+
 .signals-export-wrap {
   position: relative;
   flex-shrink: 0;
+}
+
+/* Tek satirlik sinyaller cubugunda export en saga yaslanir. */
+.signals-toolbar--merged .signals-export-wrap {
+  margin-left: auto;
 }
 
 .signals-export-btn.secondary-btn {
@@ -12814,21 +13578,12 @@ th.event-col-category {
   color: #94a3b8;
 }
 
-.signals-search {
+/* .signals-search gorseli ortak `.rules-search` grubundan gelir. Sinyaller
+   sayfasinda arama tek satirlik cubugun SOLUNDA durur ve kisadir; kalan
+   yeri model/kaynak/tip filtreleri alsin diye buyumez. */
+.signals-toolbar--merged .signals-search {
   flex: 1;
-  min-width: 260px;
-  padding: 10px 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: #ffffff;
-  font-size: 13px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.signals-search:focus {
-  outline: none;
-  border-color: #ff8c00;
-  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.18);
+  min-width: 220px;
 }
 
 .signals-source-chips {
@@ -12879,13 +13634,8 @@ th.event-col-category {
 .chip.chip-source-sat01.chip-active { background: #16a34a; border-color: #16a34a; }
 .chip.chip-source-sat02.chip-active { background: #ea580c; border-color: #ea580c; }
 
+/* Gorsel ortak `.rules-count-pill` grubundan gelir. */
 .signals-count-pill {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -12945,12 +13695,12 @@ th.event-col-category {
 .signals-list-table thead th {
   position: sticky;
   top: 0;
-  background: #f1f5f9;
-  color: #334155;
+  background: #f8fafc;
+  color: #475569;
   text-align: left;
   font-weight: 700;
   font-size: 11px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 10px 12px;
   border-bottom: 1px solid #e2e8f0;
@@ -13406,7 +14156,7 @@ th.event-col-category {
 .live-values-page .values-table th {
   position: sticky;
   top: 0;
-  background: #f1f5f9;
+  background: #f8fafc;
   z-index: 1;
 }
 
@@ -13545,73 +14295,35 @@ th.event-col-category {
   font-size: 10px;
 }
 
-.live-values-toolbar {
-  min-height: 48px;
-  padding: 8px 12px;
-  gap: 8px;
-  align-items: center;
-  border-radius: 12px;
-  background:
-    linear-gradient(90deg, rgba(230, 124, 0, 0.07), transparent 26%),
-    #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-
-.live-values-toolbar .signals-search {
-  min-width: 300px;
-  height: 32px;
-  padding: 6px 12px;
-  border-radius: 9px;
-  background: #fbfdff;
-}
-
-.live-values-toolbar .live-filter-group {
-  gap: 6px;
-}
-
-.live-values-toolbar .live-filter-select,
-.live-values-toolbar .searchable-select-trigger,
-.live-values-toolbar .auto-refresh-select {
-  height: 32px;
-  padding-top: 5px;
-  padding-bottom: 5px;
-  border-radius: 9px;
-  background-color: #fbfdff;
-  font-size: 12px;
-}
-
+/* Canli Degerler toolbar'i alarm kurallari toolbar'i ile AYNI gorseldir —
+   kart, arama, select'ler ve sayac rozeti yukaridaki ortak seçici
+   gruplarindan gelir. Burada sadece bu sayfaya ozgu hizalama kaldi. */
+/* Cihaz secici (SearchableSelect) gorsel olarak komsu native select'lerle
+   AYNI kutu olmali — kullanici sayfalar arasi gecerken hicbir fark
+   gormemeli. Bu yuzden trigger'i ortak select gorseline esitliyoruz;
+   kendi min/max genisligi ve chevron farki kaldirildi. */
 .live-values-toolbar .searchable-select-trigger {
-  padding-left: 10px;
-  padding-right: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+  background: #fff;
+  color: #334155;
 }
 
-.live-values-toolbar .signals-count-pill {
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px;
-  background: #eef2f7;
-  border: 1px solid #e2e8f0;
-  font-size: 11px;
+/* Dis sarmalayici sadece konumlandirma icin — cerceve/padding/arka plan
+   yalniz IC trigger'da olsun (aksi halde cift cerceve olusuyordu). */
+.live-values-toolbar .searchable-select.live-filter-select--searchable {
+  min-width: 140px;
+  max-width: 220px;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .live-values-toolbar .auto-refresh-control {
-  gap: 6px;
-  font-size: 12px;
-}
-
-.live-values-toolbar .live-values-refresh {
-  height: 32px;
-  min-width: 112px;
-  padding: 0 14px;
-  border-radius: 9px;
-  font-size: 12px;
-}
-
-.live-values-toolbar .live-filter-clear {
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 9px;
+  gap: 8px;
+  font-size: 13px;
 }
 
 .values-table .cell-center {
@@ -13786,6 +14498,52 @@ th.event-col-category {
   margin: 4px 0;
 }
 
+/* ===== Ortak bos-durum uyarisi (reusable) — ikon cip + baslik + aciklama.
+   Ekran bos oldugunda tutarli, gorsel bir uyari icin her sayfada kullanilabilir. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 40px 24px;
+  color: #64748b;
+}
+/* Alarm kurallari sayfasindaki referans stil: buyuk, acik gri sembol (chip yok). */
+.empty-state > .material-symbols-outlined {
+  font-size: 52px;
+  color: #cbd5e1;
+  margin-bottom: 2px;
+}
+.empty-state h3,
+.empty-state h4,
+.empty-state strong {
+  margin: 0;
+  color: #334155;
+  font-size: 16px;
+  font-weight: 700;
+}
+.empty-state p {
+  margin: 0;
+  max-width: 340px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+.empty-state--compact {
+  padding: 24px 12px;
+  gap: 6px;
+}
+.empty-state--compact > .material-symbols-outlined {
+  font-size: 40px;
+}
+.empty-state--compact h3,
+.empty-state--compact h4,
+.empty-state--compact strong {
+  font-size: 14px;
+}
+
 /* --- Sag detay paneli --- */
 .responsibility-detail {
   background: #fff;
@@ -13814,9 +14572,9 @@ th.event-col-category {
 }
 
 .responsibility-empty-icon {
-  font-size: 48px;
-  margin-bottom: 8px;
-  filter: grayscale(0.2);
+  font-size: 52px;
+  color: #cbd5e1;
+  margin-bottom: 4px;
 }
 
 .responsibility-empty-detail .helper-text {
@@ -14557,7 +15315,16 @@ th.event-col-category {
   flex-shrink: 0;
 }
 
-.rules-search {
+/* NOT: asagidaki bloklar (search / filter-group / count-pill) alarm
+   kurallari, kullanicilar, canli degerler, sinyaller ve outbound
+   sayfalari tarafindan PAYLASILIR. Tek yerden degistirince hepsi ayni
+   gorunur — kopyalamayin, yeni sayfayi seçici listesine ekleyin. */
+.rules-search,
+.users-search-input,
+.signals-search,
+.outbound-search-input,
+.api-keys-search-input,
+.sessions-search-input {
   flex: 1;
   min-width: 220px;
   padding: 9px 14px;
@@ -14568,19 +15335,37 @@ th.event-col-category {
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
-.rules-search:focus {
+.rules-search:focus,
+.users-search-input:focus,
+.signals-search:focus,
+.outbound-search-input:focus,
+.api-keys-search-input:focus,
+.sessions-search-input:focus {
   outline: none;
   border-color: #6366f1;
   background: #fff;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
-.rules-filter-group {
+.rules-filter-group,
+.users-filter-group,
+.live-filter-group,
+.outbound-filter-group,
+.api-keys-filter-group,
+.sessions-filter-group {
   display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.rules-filter-group select {
+.rules-filter-group select,
+.users-filter-group select,
+.outbound-filter-group select,
+.api-keys-filter-group select,
+.sessions-filter-group select,
+.live-values-toolbar .live-filter-select,
+.live-values-toolbar .auto-refresh-select {
   padding: 8px 12px;
   border: 1px solid #e2e8f0;
   border-radius: 9px;
@@ -14590,13 +15375,24 @@ th.event-col-category {
   cursor: pointer;
 }
 
-.rules-filter-group select:focus {
+.rules-filter-group select:focus,
+.users-filter-group select:focus,
+.outbound-filter-group select:focus,
+.api-keys-filter-group select:focus,
+.sessions-filter-group select:focus,
+.live-values-toolbar .live-filter-select:focus,
+.live-values-toolbar .auto-refresh-select:focus {
   outline: none;
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
-.rules-count-pill {
+.rules-count-pill,
+.users-count-pill,
+.signals-count-pill,
+.outbound-count-pill,
+.api-keys-count-pill,
+.sessions-count-pill {
   display: inline-flex;
   align-items: center;
   padding: 5px 12px;
@@ -14608,10 +15404,26 @@ th.event-col-category {
   border: 1px solid #e0e7ff;
 }
 
-.rules-new-btn {
+.rules-new-btn,
+.users-new-btn,
+.outbound-new-btn,
+.api-keys-new-btn {
   margin-left: auto;
   font-weight: 600;
   padding: 9px 18px;
+}
+
+/* Outbound cubugu — panel basligi solda kalir, gerisi diger sayfalarla ayni. */
+.outbound-toolbar {
+  margin-bottom: 12px;
+}
+
+.outbound-toolbar-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
 }
 
 .rules-readonly-hint {
@@ -15739,8 +16551,16 @@ th.event-col-category {
   min-height: 0;
 }
 
-/* List mode — toolbar */
-.rules-v3-toolbar {
+/* List mode — toolbar. Kullanicilar, canli degerler ve sinyaller sayfalari
+   da ayni gorseli kullanir; bu blok tek kaynak. Yeni bir sayfa eklerken
+   kopyalamayin, seçici listesine ekleyin. */
+.rules-v3-toolbar,
+.users-toolbar,
+.live-values-toolbar,
+.signals-toolbar--merged,
+.outbound-toolbar,
+.api-keys-toolbar,
+.sessions-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -15763,14 +16583,20 @@ th.event-col-category {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.rules-v3-table {
+/* Tablo gorseli API Erisimi sayfasiyla ORTAK — yeni sayfa eklerken
+   kopyalamayin, seçici listesine ekleyin. */
+.rules-v3-table,
+.api-keys-table,
+.sessions-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   min-width: 980px;
 }
 
-.rules-v3-table th {
+.rules-v3-table th,
+.api-keys-table th,
+.sessions-table th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -15786,7 +16612,9 @@ th.event-col-category {
   white-space: nowrap;
 }
 
-.rules-v3-table td {
+.rules-v3-table td,
+.api-keys-table td,
+.sessions-table td {
   padding: 13px 16px;
   border-bottom: 1px solid #eef2f7;
   color: #0f172a;
@@ -15794,11 +16622,15 @@ th.event-col-category {
   vertical-align: middle;
 }
 
-.rules-v3-table tbody tr:hover {
+.rules-v3-table tbody tr:hover,
+.api-keys-table tbody tr:hover,
+.sessions-table tbody tr:hover {
   background: #f8fafc;
 }
 
-.rules-v3-table tbody tr:last-child td {
+.rules-v3-table tbody tr:last-child td,
+.api-keys-table tbody tr:last-child td,
+.sessions-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
@@ -16057,7 +16889,9 @@ th.event-col-category {
   margin-left: 0;
 }
 
-.rules-v3-empty {
+/* Bos-liste gorseli API Erisimi sayfasiyla ORTAK. */
+.rules-v3-empty,
+.api-keys-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -16067,15 +16901,26 @@ th.event-col-category {
   gap: 8px;
 }
 
-.rules-v3-empty-icon {
+.rules-v3-empty-icon,
+.api-keys-empty-icon {
   font-size: 56px !important;
   color: #cbd5e1;
 }
 
-.rules-v3-empty h3 {
+.rules-v3-empty h3,
+.api-keys-empty h3 {
   margin: 0;
   font-size: 18px;
   color: #334155;
+}
+
+.rules-v3-empty p,
+.api-keys-empty p {
+  margin: 2px 0 0;
+  max-width: 340px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #94a3b8;
 }
 
 /* Form mode — tam panel düzeni */
@@ -16929,78 +17774,134 @@ th.event-col-category {
    ========================================================== */
 .toast-container {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: 28px;
+  right: 28px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   z-index: 10000;
   pointer-events: none;
-  max-width: calc(100vw - 48px);
+  max-width: calc(100vw - 40px);
 }
 
 .toast {
+  position: relative;
   pointer-events: auto;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  min-width: 280px;
-  max-width: 420px;
-  padding: 12px 14px;
+  gap: 14px;
+  min-width: 380px;
+  max-width: 480px;
+  padding: 16px 18px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-left: 4px solid #94a3b8;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.06);
-  font-size: 13px;
+  border-left: 6px solid #94a3b8;
+  border-radius: 14px;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22), 0 3px 10px rgba(15, 23, 42, 0.08);
   color: #0f172a;
-  animation: toast-slide-in 0.22s ease-out;
+  overflow: hidden;
+  animation: toast-slide-in 0.26s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes toast-slide-in {
   from {
-    transform: translateY(8px);
+    transform: translateY(14px) scale(0.97);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
 
-.toast-icon {
-  font-size: 22px;
+@media (max-width: 520px) {
+  .toast {
+    min-width: 0;
+    width: calc(100vw - 40px);
+  }
+}
+
+/* Ikon, renkli daire rozetin icinde — kucuk gri ikondan cok daha gorunur. */
+.toast-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  margin-top: 1px;
+}
+
+.toast-icon {
+  font-size: 24px;
 }
 
 .toast-body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
+  padding-top: 2px;
 }
 
 .toast-title {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: #0f172a;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .toast-message {
-  font-size: 13px;
+  font-size: 13.5px;
   color: #334155;
-  line-height: 1.4;
+  line-height: 1.45;
   word-break: break-word;
+}
+
+/* Tiklanabilir toast'un CTA satiri ("Alarmlara git →"). */
+.toast-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4338ca;
+}
+
+.toast-action .material-symbols-outlined {
+  font-size: 16px;
+  transition: transform 0.18s ease;
+}
+
+.toast--actionable {
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.2s ease;
+}
+
+.toast--actionable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.26), 0 4px 12px rgba(15, 23, 42, 0.1);
+}
+
+.toast--actionable:hover .toast-action .material-symbols-outlined {
+  transform: translateX(3px);
+}
+
+.toast--actionable:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 
 .toast-close {
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 2px;
-  border-radius: 6px;
+  padding: 3px;
+  border-radius: 8px;
   color: #94a3b8;
   display: inline-flex;
   align-items: center;
@@ -17015,35 +17916,99 @@ th.event-col-category {
 }
 
 .toast-close .material-symbols-outlined {
-  font-size: 18px;
+  font-size: 20px;
+}
+
+/* Kalan sure cubugu — alt kenarda soldan saga tukenir. */
+.toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  transform-origin: left center;
+  background: #94a3b8;
+  opacity: 0.55;
+  animation-name: toast-progress-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes toast-progress-drain {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
 }
 
 .toast-success {
   border-left-color: #10b981;
 }
-.toast-success .toast-icon {
-  color: #10b981;
+.toast-success .toast-icon-wrap {
+  background: #d1fae5;
+  color: #047857;
+}
+.toast-success .toast-progress {
+  background: #10b981;
 }
 
 .toast-error {
   border-left-color: #ef4444;
 }
-.toast-error .toast-icon {
-  color: #ef4444;
+.toast-error .toast-icon-wrap {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.toast-error .toast-title {
+  color: #b91c1c;
+}
+.toast-error .toast-progress {
+  background: #ef4444;
 }
 
 .toast-info {
   border-left-color: #ff8c00;
 }
-.toast-info .toast-icon {
-  color: #ff8c00;
+.toast-info .toast-icon-wrap {
+  background: #ffedd5;
+  color: #c2410c;
+}
+.toast-info .toast-progress {
+  background: #ff8c00;
 }
 
 .toast-warning {
   border-left-color: #f59e0b;
 }
-.toast-warning .toast-icon {
-  color: #f59e0b;
+.toast-warning .toast-icon-wrap {
+  background: #fef3c7;
+  color: #b45309;
+}
+.toast-warning .toast-title {
+  color: #b45309;
+}
+.toast-warning .toast-progress {
+  background: #f59e0b;
+}
+
+/* Alarm toast'i (aksiyonlu + kritik) ekstra dikkat cekmeli: acilirken bir kez
+   nabiz atar. Hareketi azaltilmis tercihte devre disi. */
+.toast-error.toast--actionable {
+  animation: toast-slide-in 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    toast-attention 1.1s ease-out 0.26s 2;
+}
+
+@keyframes toast-attention {
+  0%, 100% { box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22), 0 0 0 0 rgba(239, 68, 68, 0.45); }
+  50% { box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22), 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast-error.toast--actionable {
+    animation: none;
+  }
+  .toast-progress {
+    animation: none;
+  }
 }
 
 /* ==========================================================
@@ -18151,30 +19116,11 @@ th.event-col-category {
 }
 
 /* Canli Degerler — filtre dropdown grubu (cihaz / kaynak / kalite) */
-.live-values-toolbar .live-filter-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
+/* Gorsel ortak bloklardan gelir; burada sadece genislik sinirlari var. */
 .live-values-toolbar .live-filter-select {
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13px;
-  background: #fff;
-  color: #334155;
-  cursor: pointer;
   min-width: 140px;
   max-width: 220px;
   transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.live-values-toolbar .live-filter-select:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .live-values-toolbar .live-filter-select:hover {
@@ -18306,10 +19252,6 @@ th.event-col-category {
 }
 
 /* LiveValues toolbar uyumlu boyut. */
-.live-values-toolbar .live-filter-select--searchable {
-  min-width: 200px;
-  max-width: 260px;
-}
 
 /* Login formu — "Beni hatırla" checkbox.
  * .login-card label varsayılanı `display: grid` (etiket üstte, input altta);
@@ -22149,13 +23091,197 @@ th.event-col-category {
 .backups-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   padding: 14px 16px !important;
   /* Sayfa yuksekligini doldur — list bolumu kalan alana yayilir, table icinde
      scrollu kendi tasir. Diger muhendislik sekmeleri ile ayni davranis. */
   min-height: 0;
   flex: 1;
   overflow: hidden !important;
+  /* Hafif gri kanvas — beyaz kartlar (hero / sayaclar / gecmis) uzerinde
+     ayirt edilebilsin. Duz beyaz uzerine beyaz kart "kenarsiz" duruyordu. */
+  background: #f6f8fb !important;
+}
+
+/* ===== HERO — yedekleme sagligi bandi ===== */
+.backups-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  /* Sol kenarda saglik rengi seridi — durum bir bakista okunur. */
+  border-left: 5px solid #94a3b8;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Saglik durumuna gore serit + arka plan tonu. */
+.backups-hero.is-ok {
+  border-left-color: #10b981;
+  background: linear-gradient(100deg, #ecfdf5 0%, #fff 42%);
+}
+.backups-hero.is-stale {
+  border-left-color: #f59e0b;
+  background: linear-gradient(100deg, #fffbeb 0%, #fff 42%);
+}
+.backups-hero.is-fail {
+  border-left-color: #ef4444;
+  background: linear-gradient(100deg, #fef2f2 0%, #fff 42%);
+}
+.backups-hero.is-empty {
+  border-left-color: #94a3b8;
+  background: linear-gradient(100deg, #f8fafc 0%, #fff 42%);
+}
+
+.backups-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 260px;
+  flex: 1 1 380px;
+}
+
+.backups-hero-badge {
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15px;
+  color: #fff;
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.3);
+}
+.backups-hero.is-ok .backups-hero-badge {
+  background: linear-gradient(135deg, #34d399, #059669);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+.backups-hero.is-stale .backups-hero-badge {
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.3);
+}
+.backups-hero.is-fail .backups-hero-badge {
+  background: linear-gradient(135deg, #f87171, #dc2626);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+.backups-hero-badge .material-symbols-outlined {
+  font-size: 30px;
+  font-variation-settings: "FILL" 1;
+}
+
+.backups-hero-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.backups-hero-text h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+.backups-hero-sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: #64748b;
+  max-width: 46ch;
+  line-height: 1.45;
+}
+
+/* Son yedek kunyesi — tarih · yas · boyut · kullanici */
+.backups-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #475569;
+}
+.backups-hero-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.backups-hero-meta .material-symbols-outlined {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+/* Periyodik program durumu — hem gosterge hem modal'i acan buton.
+   Aksiyon butonlariyla AYNI SATIRDA durdugu icin tek satir metin + buton
+   yuksekligi/radius'u ile hizali; ayrinti tooltip'te. */
+.backups-schedule-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 9px 8px 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.backups-schedule-chip:hover {
+  border-color: #c7d2fe;
+  background: #f8fafc;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.14);
+}
+.backups-schedule-chip > .material-symbols-outlined:first-child {
+  font-size: 18px;
+  color: #94a3b8;
+}
+.backups-schedule-chip.is-on > .material-symbols-outlined:first-child {
+  color: #059669;
+  animation: backups-spin 4s linear infinite;
+}
+.backups-schedule-chip-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+.backups-schedule-chip.is-off .backups-schedule-chip-text {
+  color: #64748b;
+}
+.backups-schedule-chip-arrow {
+  font-size: 17px !important;
+  color: #cbd5e1;
+}
+
+.backups-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* .secondary-btn'in global `margin-right: 8px`i bu satirda gap ile toplanip
+   8/16/16px duzensiz araliga yol aciyordu — esit 8px icin sifirla. */
+.backups-hero-actions > .secondary-btn {
+  margin-right: 0;
+}
+
+/* Durum chip'i ile aksiyonlar arasi ince ayrac. */
+.backups-hero-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 22px;
+  margin: 0 2px;
+  background: #e2e8f0;
+  flex-shrink: 0;
 }
 .backups-head {
   display: flex;
@@ -22180,6 +23306,10 @@ th.event-col-category {
 .backups-create-btn .material-symbols-outlined {
   font-size: 18px;
 }
+/* Yedek aliniyorken buton disabled olur — progress_activity ikonu donsun. */
+.backups-create-btn:disabled .material-symbols-outlined {
+  animation: backups-spin 900ms linear infinite;
+}
 .backups-head--actions-only {
   justify-content: flex-end;
 }
@@ -22195,26 +23325,6 @@ th.event-col-category {
   font-size: 18px;
 }
 
-/* Yeni layout: stats + actions tek satirda. Stats sola yayilir; actions sagda
-   sabit kalir. Dar ekranda flex-wrap ile alt alta gecer. */
-.backups-topbar {
-  display: flex;
-  align-items: stretch;
-  gap: 16px;
-  flex-wrap: wrap;
-  justify-content: space-between;
-}
-.backups-topbar .backups-stats {
-  flex: 1 1 460px;
-  min-width: 0;
-}
-.backups-topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
 .backups-action-btn {
   display: inline-flex;
   align-items: center;
@@ -22304,38 +23414,83 @@ th.event-col-category {
   color: #d97706;
 }
 
+/* ===== Sayac kartlari — ikon rozeti + deger ===== */
 .backups-stats {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
+
+@media (max-width: 820px) {
+  .backups-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .backups-stat-chip {
-  flex: 1 1 150px;
-  background: #ffffff;
-  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
   padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.backups-stat-chip:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
+}
+
+/* Ikon rozeti — varsayilan slate, tona gore renklenir. */
+.backups-stat-icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.backups-stat-icon .material-symbols-outlined {
+  font-size: 21px;
+}
+.backups-stat-chip.is-ok .backups-stat-icon {
+  background: #dcfce7;
+  color: #059669;
+}
+.backups-stat-chip.is-fail .backups-stat-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.backups-stat-chip.is-size .backups-stat-icon {
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+
+.backups-stat-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
-  border-left: 4px solid #475569;
+  gap: 3px;
+  min-width: 0;
 }
-.backups-stat-chip.is-ok      { border-left-color: #10b981; }
-.backups-stat-chip.is-fail    { border-left-color: #ef4444; }
-.backups-stat-chip.is-size    { border-left-color: #6366f1; }
 .backups-stat-num {
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .backups-stat-label {
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #64748b;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .backups-schedule-card {
@@ -22412,8 +23567,9 @@ th.event-col-category {
 
 .backups-list {
   background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   overflow: hidden;
   /* Kalan dikey alani doldur — head/stats/schedule yukarida, biz asagiya
      yayiliriz. Ic tablo kendi scroll'unu tasir. */
@@ -22430,18 +23586,27 @@ th.event-col-category {
 .backups-error-row td {
   background: #fef2f2;
   padding: 0 !important;
+  box-shadow: inset 3px 0 0 #ef4444;
 }
 .backups-error-banner {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 9px 14px;
   color: #991b1b;
   font-size: 12px;
 }
 .backups-error-banner .material-symbols-outlined {
+  flex-shrink: 0;
   font-size: 18px;
   margin-top: 1px;
+  color: #ef4444;
+}
+.backups-error-banner strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .backups-error-banner code {
   display: block;
@@ -22455,71 +23620,254 @@ th.event-col-category {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 11px 14px;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+  border-bottom: 1px solid #e2e8f0;
 }
 .backups-list-head h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   font-size: 14px;
+  font-weight: 700;
   color: #0f172a;
 }
+.backups-list-head h4 .material-symbols-outlined {
+  font-size: 19px;
+  color: #94a3b8;
+}
+.backups-list-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Bos durum — ikon + baslik + aciklama (duz tek satir yazi yerine). */
 .backups-empty {
-  padding: 30px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 54px 32px;
   text-align: center;
   color: #94a3b8;
   font-size: 13px;
 }
+.backups-empty-icon {
+  font-size: 54px !important;
+  color: #cbd5e1;
+}
+.backups-empty h3 {
+  margin: 0;
+  font-size: 17px;
+  color: #334155;
+}
+.backups-empty p {
+  margin: 0;
+  max-width: 44ch;
+  line-height: 1.5;
+}
+
 .backups-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
+  min-width: 900px;
 }
 .backups-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: #f8fafc;
   text-align: left;
-  padding: 8px 12px;
-  font-size: 11px;
+  padding: 10px 14px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #64748b;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  color: #475569;
+  font-weight: 700;
+  white-space: nowrap;
+  border-bottom: 1px solid #e2e8f0;
 }
 .backups-table tbody td {
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  padding: 10px 14px;
+  border-bottom: 1px solid #eef2f7;
   vertical-align: middle;
 }
+.backups-row:hover td {
+  background: #f8fafc;
+}
+/* Basarisiz satir — solda kirmizi serit, hata banner'i hemen altinda. */
+.backups-row.is-failed td:first-child {
+  box-shadow: inset 3px 0 0 #ef4444;
+}
+.backups-row.is-running td:first-child {
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
+
+.backups-date-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+.backups-date-cell strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.backups-date-cell small {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.backups-muted {
+  color: #cbd5e1;
+}
+
 .backups-cell-mono {
   font-family: monospace;
   font-size: 12px;
   color: #475569;
 }
 .backups-cell-filename {
-  max-width: 280px;
+  max-width: 300px;
+}
+.backups-file-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.backups-file-cell .material-symbols-outlined {
+  flex-shrink: 0;
+  font-size: 17px;
+  color: #94a3b8;
+}
+.backups-file-cell code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: #475569;
 }
+
+.backups-size-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.backups-user-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: #334155;
+  white-space: nowrap;
+}
+.backups-user-avatar {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a5b4fc, #6366f1);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .backups-type-pill {
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   background: #eef2ff;
+  border: 1px solid #e0e7ff;
   color: #4338ca;
+  white-space: nowrap;
+}
+.backups-type-pill .material-symbols-outlined {
+  font-size: 14px;
 }
 .backups-type-pill.is-scheduled {
   background: #f0fdf4;
+  border-color: #d1fae5;
   color: #047857;
 }
+.backups-type-pill.is-uploaded {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
 .backups-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
 }
+.backups-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.backups-status-pill.is-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+.backups-status-pill.is-failed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.backups-status-pill.is-running {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.backups-status-pill.is-running .backups-status-dot {
+  animation: backups-pulse 1.2s ease-in-out infinite;
+}
+@keyframes backups-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+
 .backups-actions {
   display: inline-flex;
   gap: 4px;
@@ -22743,22 +24091,135 @@ th.event-col-category {
   border: none;
 }
 
-/* ===== API Access Panel — Personal Access Token (PAT) yonetimi ===== */
-.api-access-panel .api-keys-table-wrap {
-  margin-top: 16px;
-  background: white;
-  border-radius: 10px;
+/* ===== API Access Panel — Personal Access Token (PAT) yonetimi =====
+   Yerlesim Alarm Yonetimi (`.alarm-rules-v3`) ile ayni: ustte toolbar,
+   altta tablo karti panelin dibine kadar uzar. */
+.engineering-content .tab-panel.api-access-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
 }
+
+.api-keys-toolbar,
+.api-access-panel > .helper-text,
+.api-access-panel > .error-text {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+/* NOT: .api-keys-hint (panel tanitim kutusu) kaldirildi — token listesi
+   dogrudan arac cubugunun altindan basliyor. */
+
+.api-access-panel .api-keys-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.api-keys-row-inactive {
+  opacity: 0.65;
+}
+
+.api-keys-table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.api-keys-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.api-keys-icon-btn:hover {
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.api-keys-icon-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.api-keys-icon-btn--danger {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #e11d48;
+}
+
+.api-keys-icon-btn--danger:hover {
+  background: #ffe4e6;
+  border-color: #fda4af;
+}
+
 .api-key-prefix {
   background: #f3f4f6;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
 }
+.api-key-name-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 200px;
+}
 .api-key-name-cell strong {
   display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.api-key-id-pill {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.api-key-ip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+}
+.api-key-ip-pill .material-symbols-outlined {
+  font-size: 13px;
+}
+.api-key-scopes-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 240px;
+}
+.api-key-date-cell {
+  white-space: nowrap;
+  color: #475569 !important;
+  font-size: 12.5px !important;
 }
 .scope-chip {
   display: inline-block;
@@ -22767,9 +24228,9 @@ th.event-col-category {
   border: 1px solid #bfdbfe;
   border-radius: 4px;
   padding: 2px 6px;
-  margin: 2px 3px 2px 0;
   font-size: 11px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: nowrap;
 }
 .api-key-status {
   display: inline-flex;
@@ -23920,6 +25381,111 @@ th.event-col-category {
   max-height: 92vh;
   overflow-y: auto;
 }
+/* ===== MQTT wizard (adim adim yapilandirma) ===== */
+.mqtt-wizard {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mqtt-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.mqtt-steps li {
+  min-width: 0;
+}
+.mqtt-step {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.mqtt-step:hover {
+  border-color: #cbd5e1;
+}
+.mqtt-step.is-active {
+  border-color: #e67c00;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.mqtt-step.is-done {
+  color: #334155;
+}
+.mqtt-step-num {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+.mqtt-step-num .material-symbols-outlined {
+  font-size: 15px;
+}
+.mqtt-step.is-active .mqtt-step-num {
+  background: #e67c00;
+  color: #fff;
+}
+.mqtt-step.is-done .mqtt-step-num {
+  background: #dcfce7;
+  color: #16a34a;
+}
+.mqtt-step-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mqtt-wizard-body {
+  min-height: 250px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f9fafb;
+  padding: 16px;
+}
+.mqtt-wizard-step-tls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mqtt-wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mqtt-wizard-nav .secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mqtt-topic-card--full {
+  width: 100%;
+  margin: 0;
+}
+@media (max-width: 680px) {
+  .mqtt-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .mqtt-form-v2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -23987,6 +25553,110 @@ th.event-col-category {
 .mqtt-tls-toggle {
   margin-bottom: 10px;
   font-size: 13px;
+}
+
+/* ===================================================================== */
+/* Outbound MQTT / IEC104 modal estetik cilasi — marka turuncusu korunur */
+/* ===================================================================== */
+
+/* Modal kabuk + baslik ayraci */
+.settings-modal.mqtt-edit-modal,
+.settings-modal.iec104-edit-modal {
+  padding: 20px 22px;
+  border-color: #e2e8f0;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+.mqtt-edit-modal > h3,
+.iec104-edit-modal > h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+/* Bolum basliklari — ikon artik yumusak turuncu cip icinde */
+.mqtt-edit-modal .mqtt-panel-heading {
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+}
+.mqtt-edit-modal .mqtt-panel-heading .material-symbols-outlined {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #ea580c;
+  font-size: 16px;
+  font-variation-settings: "FILL" 1;
+}
+
+/* Panel + input tutarli koseler, focus halkasi (marka turuncusu) */
+.mqtt-edit-modal .mqtt-form-v2-panel {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.mqtt-panel-grid > label > input,
+.mqtt-panel-grid > label > select {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.settings-modal input:focus,
+.settings-modal textarea:focus,
+.mqtt-panel-grid > label > input:focus,
+.mqtt-panel-grid > label > select:focus,
+.iec104-edit-col input:focus {
+  outline: none;
+  border-color: #e67c00;
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.15);
+}
+
+/* IEC104 — her iki kolon da kart (server + whitelist simetrik) */
+.iec104-edit-col {
+  background: #f9fafb;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+}
+.iec104-edit-col-title {
+  padding-bottom: 8px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.iec104-edit-col input {
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Aksiyon bari — ayrac + iptal notr, kaydet vurgulu */
+.mqtt-edit-modal .settings-actions,
+.iec104-edit-modal .settings-actions {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f6;
+}
+.mqtt-edit-modal .settings-actions button,
+.iec104-edit-modal .settings-actions button {
+  padding: 9px 18px;
+  font-weight: 600;
+}
+.mqtt-edit-modal .settings-actions button:not([type="submit"]),
+.iec104-edit-modal .settings-actions button:not([type="submit"]) {
+  background: #fff;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+.mqtt-edit-modal .settings-actions button:not([type="submit"]):hover,
+.iec104-edit-modal .settings-actions button:not([type="submit"]):hover {
+  background: #f8fafc;
+  filter: none;
 }
 
 .mqtt-cert-upload-grid {
@@ -25395,71 +27065,259 @@ th.event-col-category {
 /* =====================================================================
    Aktif Oturumlar sayfasi (installer-only)
    ===================================================================== */
-.active-sessions-panel {
+/* Yerlesim Alarm Yonetimi / API Erisimi ile ayni: toolbar ustte sabit,
+   tablo karti panelin dibine kadar uzar. */
+.engineering-content .tab-panel.active-sessions-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 14px 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
-.active-sessions-panel .panel-head h3 {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+
+.sessions-toolbar {
+  flex-shrink: 0;
+}
+
+.active-sessions-panel > .error-text {
+  flex-shrink: 0;
   margin: 0;
 }
-.active-sessions-panel .panel-head h3 .material-symbols-outlined {
-  color: #ff8c00;
-  font-variation-settings: "FILL" 1;
-}
-.active-sessions-panel .panel-head .helper-text {
-  margin-top: 4px;
-}
-.active-sessions-panel .secondary-btn {
+
+/* Yenile butonu — toolbar'in sagina yapisir, yuklenirken ikon doner. */
+.sessions-refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-left: auto;
   padding: 8px 14px;
   background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
   color: #475569;
   cursor: pointer;
   font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
-.active-sessions-panel .secondary-btn:hover {
+.sessions-refresh-btn:hover:not(:disabled) {
   background: #f8fafc;
+  border-color: #cbd5e1;
 }
-.active-sessions-panel .secondary-btn .material-symbols-outlined {
-  font-size: 16px;
+.sessions-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
-.active-sessions-table-wrap {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px;
-  overflow-x: auto;
+.sessions-refresh-btn .material-symbols-outlined {
+  font-size: 17px;
 }
-.active-sessions-user {
+.sessions-refresh-btn.is-spinning .material-symbols-outlined {
+  animation: backups-spin 900ms linear infinite;
+}
+
+/* ===== Tablo hucreleri ===== */
+.sessions-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 210px;
+}
+/* Avatar — cevrimici oturumda yesil halka + nokta. */
+.sessions-avatar {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #cbd5e1, #94a3b8);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sessions-avatar.is-online {
+  background: linear-gradient(135deg, #6ee7b7, #059669);
+}
+.sessions-avatar.is-online::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid #fff;
+}
+.sessions-user-text {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
-.active-sessions-user strong {
+.sessions-user-text strong {
   font-size: 13px;
-  color: #1e293b;
+  font-weight: 700;
+  color: #0f172a;
 }
-.active-sessions-user small {
+.sessions-user-text small {
   font-size: 11.5px;
   color: #64748b;
 }
-.active-sessions-ip {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 12.5px;
-  background: #f1f5f9;
-  padding: 2px 8px;
-  border-radius: 4px;
-  color: #1e293b;
+/* Ayni kullanicinin birden fazla oturumu varsa uyarici rozet. */
+.sessions-multi-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
 }
-.active-sessions-role {
+.sessions-multi-pill .material-symbols-outlined {
+  font-size: 13px;
+}
+
+.sessions-ip {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.sessions-device-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sessions-device-cell > .material-symbols-outlined {
+  font-size: 19px;
+  color: #94a3b8;
+}
+.sessions-device-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.sessions-device-text strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+.sessions-device-text small {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.sessions-time-cell {
+  white-space: nowrap;
+  color: #475569 !important;
+  font-size: 12.5px !important;
+}
+
+/* Son aktivite — cevrimici ise yesil nokta yanip soner. */
+.sessions-lastseen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #64748b;
+}
+.sessions-lastseen-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  flex-shrink: 0;
+}
+.sessions-lastseen.is-online {
+  color: #15803d;
+}
+.sessions-lastseen.is-online .sessions-lastseen-dot {
+  background: #22c55e;
+  animation: backups-pulse 1.6s ease-in-out infinite;
+}
+
+.sessions-revoke-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  color: #e11d48;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.sessions-revoke-btn:hover:not(:disabled) {
+  background: #ffe4e6;
+  border-color: #fda4af;
+}
+.sessions-revoke-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sessions-revoke-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* Bos / yukleniyor durumu */
+.sessions-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 56px 32px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.sessions-empty h3 {
+  margin: 0;
+  font-size: 17px;
+  color: #334155;
+}
+.sessions-empty p {
+  margin: 0;
+  max-width: 42ch;
+  line-height: 1.5;
+}
+.sessions-empty-icon {
+  font-size: 52px !important;
+  color: #cbd5e1;
+}
+.sessions-empty-icon:not(:only-child) {
+  margin-bottom: 2px;
+}
+
+.active-sessions-table-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.sessions-role-pill {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 6px;
@@ -25470,48 +27328,21 @@ th.event-col-category {
   background: #e0e7ff;
   color: #4338ca;
 }
-.active-sessions-role.role-installer {
+.sessions-role-pill.role-installer {
   background: #fef3c7;
   color: #92400e;
 }
-.active-sessions-role.role-engineer {
+.sessions-role-pill.role-engineer {
   background: #dbeafe;
   color: #1e40af;
 }
-.active-sessions-role.role-ops_manager {
+.sessions-role-pill.role-ops_manager {
   background: #ede9fe;
   color: #6d28d9;
 }
-.active-sessions-role.role-operator {
+.sessions-role-pill.role-operator {
   background: #dcfce7;
   color: #15803d;
-}
-.active-sessions-lastseen {
-  font-weight: 600;
-  color: #16a34a;
-}
-.active-sessions-panel .actions-cell .danger-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  background: #dc2626;
-  color: #fff;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.active-sessions-panel .actions-cell .danger-btn:hover:not(:disabled) {
-  background: #b91c1c;
-}
-.active-sessions-panel .actions-cell .danger-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.active-sessions-panel .actions-cell .material-symbols-outlined {
-  font-size: 14px;
 }
 
 /* ============================================================
@@ -25559,7 +27390,7 @@ th.event-col-category {
 }
 .tab-bar-scroll:hover:not(:disabled) { color: #0f172a; background-color: #cbd5e1; }
 .tab-bar-scroll:disabled { opacity: 0.25; cursor: default; }
-.tab-bar-scroll .material-symbols-outlined { font-size: 22px; }
+.tab-bar-scroll svg { flex: 0 0 auto; }
 .tab-bar-scroll:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
 
 .tab-bar-item {
@@ -25610,8 +27441,8 @@ th.event-col-category {
   outline-offset: -2px;
 }
 
+/* Artik lucide <svg> (eskiden material-symbols font ikonuydu). */
 .tab-bar-item-icon {
-  font-size: 17px;
   flex: 0 0 auto;
   opacity: 0.85;
 }

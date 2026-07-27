@@ -398,8 +398,11 @@ export function ResponsibilityAreasPage({
             ))}
             {areas.length === 0 && !loading ? (
               <li className="responsibility-empty-list">
-                <p>Henüz ekip yok.</p>
-                {canEdit ? <p className="helper-text">Sağdaki "+ Yeni" ile bir alan oluşturun.</p> : null}
+                <div className="empty-state empty-state--compact">
+                  <span className="material-symbols-outlined">groups</span>
+                  <p><strong>Henüz ekip yok.</strong></p>
+                  {canEdit ? <p className="helper-text">Sağdaki "+ Yeni" ile bir alan oluşturun.</p> : null}
+                </div>
               </li>
             ) : null}
           </ul>

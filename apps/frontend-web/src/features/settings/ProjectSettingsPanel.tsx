@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
+import { useToast } from "../../components/ToastProvider";
 import type { ProjectSettings } from "../../shared/types";
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB (logo, favicon)
@@ -31,6 +32,9 @@ function readFileAsDataUrl(file: File): Promise<string> {
 export function ProjectSettingsPanel({ onSave }: Props) {
   const { t } = useTranslation();
   const { settings, refresh } = useProjectSettings();
+  // Hata/basari mesajlari sayfanin altinda satir olarak degil toast ile
+  // gosterilir — uzun formda alta scroll etmeden geri bildirim alinir.
+  const toast = useToast();
 
   const [projectName, setProjectName] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -42,8 +46,6 @@ export function ProjectSettingsPanel({ onSave }: Props) {
   const [favicon, setFavicon] = useState<string | null>(null);
   const [loginImage, setLoginImage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     setProjectName(settings.project_name ?? "");
@@ -70,39 +72,35 @@ export function ProjectSettingsPanel({ onSave }: Props) {
     setter: (val: string | null) => void,
     maxSize = MAX_FILE_SIZE
   ) => {
-    setError("");
-    setSuccess("");
     if (!file) return;
     if (file.size > maxSize) {
-      setError(`Dosya çok büyük (max ${Math.round(maxSize / 1024)} KB).`);
+      toast.error(t("engineering.projectSettings.fileTooLarge", { kb: Math.round(maxSize / 1024) }));
       return;
     }
     try {
       const url = await readFileAsDataUrl(file);
       setter(url);
     } catch {
-      setError("Dosya okunamadı.");
+      toast.error(t("engineering.projectSettings.fileReadFailed"));
     }
   };
 
   const handleSave = async () => {
     setSaving(true);
-    setError("");
-    setSuccess("");
     const lowNum = batteryLow.trim() === "" ? null : Number(batteryLow);
     const fullNum = batteryFull.trim() === "" ? null : Number(batteryFull);
     if (lowNum !== null && (!Number.isFinite(lowNum) || lowNum < 0 || lowNum > 10)) {
-      setError("Düşük voltaj geçersiz (0-10 V).");
+      toast.error(t("engineering.projectSettings.batteryLowInvalid"));
       setSaving(false);
       return;
     }
     if (fullNum !== null && (!Number.isFinite(fullNum) || fullNum < 0 || fullNum > 10)) {
-      setError("Tam voltaj geçersiz (0-10 V).");
+      toast.error(t("engineering.projectSettings.batteryFullInvalid"));
       setSaving(false);
       return;
     }
     if (lowNum !== null && fullNum !== null && fullNum <= lowNum) {
-      setError("Tam voltaj, düşük voltajdan büyük olmalı.");
+      toast.error(t("engineering.projectSettings.batteryOrderInvalid"));
       setSaving(false);
       return;
     }
@@ -119,9 +117,11 @@ export function ProjectSettingsPanel({ onSave }: Props) {
         login_image: loginImage
       });
       await refresh();
-      setSuccess("Proje ayarları kaydedildi.");
+      toast.success(t("engineering.projectSettings.saveSuccess"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Proje ayarları kaydedilemedi.");
+      toast.error(
+        err instanceof Error ? err.message : t("engineering.projectSettings.saveFailed")
+      );
     } finally {
       setSaving(false);
     }
@@ -129,23 +129,12 @@ export function ProjectSettingsPanel({ onSave }: Props) {
 
   return (
     <section className="tab-panel project-settings-panel project-settings-panel--wide">
-      <div className="panel-head project-settings-head">
-        <div className="project-settings-head-text">
-          <h3>{t("engineering.nav.projectSettings")}</h3>
-        </div>
-        {/* Save butonu sag-ust koseye tasindi — uzun sayfanin altina scroll
-            etmeden kaydetmek icin. error/success durumu altta gosterilir. */}
-        <button
-          type="button"
-          className="primary-btn project-settings-save-top"
-          disabled={saving}
-          onClick={() => void handleSave()}
-        >
-          {saving ? t("engineering.projectSettings.saving") : t("engineering.projectSettings.save")}
-        </button>
-      </div>
-
-      <div className="project-settings-grid">
+      {/* Sayfa basligi kaldirildi — sekme cubugu zaten "Proje Ayarlari"
+          diyor. Icerik kendi icinde kayar, Kaydet butonu altta sabit bir
+          aksiyon cubugunda durur; boylece uzun formun neresinde olursaniz
+          olun buton gorunur kalir. */}
+      <div className="project-settings-body">
+        <div className="project-settings-grid">
         <div className="project-settings-field">
           <label>
             {t("engineering.projectSettings.projectName")}
@@ -264,11 +253,21 @@ export function ProjectSettingsPanel({ onSave }: Props) {
               </div>
             </label>
           </div>
+          </div>
         </div>
       </div>
 
-      {error ? <p className="error-text">{error}</p> : null}
-      {success ? <p className="success-text">{success}</p> : null}
+      <div className="project-settings-actions">
+        <button
+          type="button"
+          className="primary-btn project-settings-save"
+          disabled={saving}
+          onClick={() => void handleSave()}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">save</span>
+          {saving ? t("engineering.projectSettings.saving") : t("engineering.projectSettings.save")}
+        </button>
+      </div>
     </section>
   );
 }

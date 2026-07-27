@@ -126,7 +126,55 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
 
   return (
     <section className="tab-panel signals-panel signals-panel-modern">
-      <div className="signals-header-row">
+      {/* Tek satirlik filtre cubugu: solda arama, saginda model/kaynak/tip
+          filtreleri ve export. Eskiden iki ayri satirdi (header-row +
+          toolbar) ve gereksiz dikey yer kapliyordu. */}
+      <div className="signals-toolbar signals-toolbar--merged">
+        <input
+          className="signals-search"
+          type="search"
+          placeholder={t("engineering.signals.search")}
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+        />
+        <span className="signals-count-pill">
+          {visibleCount} / {totalCount}
+        </span>
+        {!canEdit ? (
+          <span className="helper-text signals-toolbar-readonly">{t("engineering.signals.readOnlyHint")}</span>
+        ) : null}
+        <div
+          className="signals-export-wrap"
+          onBlur={(event) => {
+            const nextFocus = event.relatedTarget;
+            if (!(nextFocus instanceof Node) || !event.currentTarget.contains(nextFocus)) {
+              setExportMenuOpen(false);
+            }
+          }}
+        >
+          <button
+            type="button"
+            className="secondary-btn signals-export-btn"
+            onClick={() => setExportMenuOpen((v) => !v)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">download</span>
+            {t("engineering.signals.export.button")}
+          </button>
+          {exportMenuOpen ? (
+            <div className="signals-export-menu">
+              <button type="button" onClick={exportIec104}>
+                {t("engineering.signals.export.iec104")}
+              </button>
+              <button type="button" onClick={exportModbus}>
+                {t("engineering.signals.export.modbus")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* 2. satir: cihaz turu (model) + kaynak + veri tipi filtreleri birlikte. */}
+      <div className="signals-filters-row">
         <label className="signals-model-label">
           <select
             className="signals-model-select"
@@ -166,7 +214,7 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
             </button>
           ))}
         </div>
-        <div className="signals-type-tabs signals-type-tabs--inline">
+        <div className="signals-type-tabs signals-type-tabs--row">
           <button
             className={`signals-type-tab ${activeTab === "all" ? "active" : ""}`}
             onClick={() => setActiveTab("all")}
@@ -185,50 +233,6 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
             </button>
           ))}
         </div>
-        <div
-          className="signals-export-wrap"
-          onBlur={(event) => {
-            const nextFocus = event.relatedTarget;
-            if (!(nextFocus instanceof Node) || !event.currentTarget.contains(nextFocus)) {
-              setExportMenuOpen(false);
-            }
-          }}
-        >
-          <button
-            type="button"
-            className="secondary-btn signals-export-btn"
-            onClick={() => setExportMenuOpen((v) => !v)}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">download</span>
-            {t("engineering.signals.export.button")}
-          </button>
-          {exportMenuOpen ? (
-            <div className="signals-export-menu">
-              <button type="button" onClick={exportIec104}>
-                {t("engineering.signals.export.iec104")}
-              </button>
-              <button type="button" onClick={exportModbus}>
-                {t("engineering.signals.export.modbus")}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="signals-toolbar">
-        <input
-          className="signals-search"
-          type="search"
-          placeholder={t("engineering.signals.search")}
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-        />
-        <span className="signals-count-pill">
-          {visibleCount} / {totalCount}
-        </span>
-        {!canEdit ? (
-          <span className="helper-text signals-toolbar-readonly">{t("engineering.signals.readOnlyHint")}</span>
-        ) : null}
       </div>
 
       <div className="signals-main-layout">

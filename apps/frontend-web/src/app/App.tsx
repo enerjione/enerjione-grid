@@ -26,6 +26,7 @@ import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
 import { TabBar } from "../features/tabs/TabBar";
+import { EngineeringNav } from "../features/tabs/EngineeringNav";
 import { useTabs } from "../features/tabs/useTabs";
 import { routeToPageState, type PageMode, type EngineeringPage } from "../features/tabs/tabModel";
 import { DeviceDetailPage } from "../features/device-detail/DeviceDetailPage";
@@ -562,10 +563,16 @@ export function App() {
       for (const a of active) seen.add(a.id);
       if (fresh.length === 0) return;
       const deviceName = (id: number) => devices.find((d) => d.id === id)?.name ?? `#${id}`;
+      // Alarm toast'i tiklanabilir: dogrudan Alarmlar sekmesini acar. Operator
+      // bildirimi gorup ne yapacagini aramak zorunda kalmasin.
+      const alarmAction = {
+        onAction: () => openTab({ kind: "page", page: "alarms" }),
+        actionLabel: t("toasts.goToAlarms")
+      };
       if (fresh.length === 1) {
         const a = fresh[0];
         const lvl = a.level.toLowerCase();
-        const opts = { title: `${a.title} · ${deviceName(a.device_id)}` };
+        const opts = { title: `${a.title} · ${deviceName(a.device_id)}`, ...alarmAction };
         if (lvl === "critical" || lvl === "error") toast.error(a.description || a.title, opts);
         else if (lvl === "warning") toast.warning(a.description || a.title, opts);
         else toast.info(a.description || a.title, opts);
@@ -573,7 +580,7 @@ export function App() {
         // Coklu: tek ozet toast (en yuksek seviyeye gore renk).
         const hasCritical = fresh.some((a) => ["critical", "error"].includes(a.level.toLowerCase()));
         const body = t("toasts.newAlarmsBody", { count: fresh.length });
-        const opts = { title: t("toasts.newAlarmsTitle") };
+        const opts = { title: t("toasts.newAlarmsTitle"), ...alarmAction };
         if (hasCritical) toast.error(body, opts);
         else toast.warning(body, opts);
       }
@@ -592,7 +599,7 @@ export function App() {
     }, 5000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, devices, toast, t]);
+  }, [session, devices, toast, t, openTab]);
 
   // Hat Arizalari (faults) canli refresh: 5 sn'de bir. Backend'in
   // fault_recompute_service'i alarm degistikce DB'yi senkronlar; biz de
@@ -1556,6 +1563,39 @@ export function App() {
     }
   };
 
+  // Muhendislik menusunden sayfa secimi. Sekmeyi acar ve o sayfaya ozel
+  // veri yenilemelerini tetikler — eski duz sekme butonlarindaki onClick
+  // govdeleriyle birebir ayni davranis.
+  const handleEngNavSelect = (page: EngineeringPage) => {
+    openEng(page);
+    switch (page) {
+      case "signals":
+        void reloadSignals();
+        break;
+      case "alarm-rules":
+        void reloadAlarmRules();
+        void reloadSignals();
+        break;
+      case "users":
+        void reloadUsers();
+        break;
+      case "responsibility-areas":
+        void reloadResponsibilityAreas();
+        break;
+      case "api-access":
+        void reloadApiKeys();
+        break;
+      case "notifications":
+        void reloadNotificationSettings();
+        break;
+      case "license":
+        void reloadLicenseStatus();
+        break;
+      default:
+        break;
+    }
+  };
+
   const handleSaveNotificationSettings = async (payload: NotificationSettings) => {
     if (!session) return;
     setNotificationSettingsSaving(true);
@@ -1989,176 +2029,11 @@ export function App() {
           </main>
         ) : pageMode === "engineering" ? (
           <main className="content engineering-content">
-            <div className="tabs">
-              {/* ===== GRUP 1: TOPOLOJI & KURULUM =====
-                  Saha kurulumu sirasi: once cihazlar -> sinyal katalogu -> hat topolojisi */}
-              {session.role !== "ops_manager" ? (
-                <button
-                  className={engineeringPage === "devices" ? "active" : ""}
-                  onClick={() => openEng("devices")}
-                >
-                  {t("engineering.nav.devices")}
-                </button>
-              ) : null}
-              {session.role === "installer" ? (
-                <button
-                  className={engineeringPage === "signals" ? "active" : ""}
-                  onClick={() => {
-                    openEng("signals");
-                    void reloadSignals();
-                  }}
-                >
-                  {t("engineering.nav.signals")}
-                </button>
-              ) : null}
-              {session.role === "installer" || session.role === "engineer" ? (
-                <button
-                  className={engineeringPage === "grid" ? "active" : ""}
-                  onClick={() => openEng("grid")}
-                >
-                  {t("engineering.nav.grid")}
-                </button>
-              ) : null}
-
-              {/* ===== GRUP 2: IZLEME & ALARMLAR ===== */}
-              {session.role === "engineer" || session.role === "installer" ? (
-                <button
-                  className={engineeringPage === "live-values" ? "active" : ""}
-                  onClick={() => openEng("live-values")}
-                >
-                  {t("engineering.nav.liveValues")}
-                </button>
-              ) : null}
-              {session.role === "installer" ? (
-                <button
-                  className={engineeringPage === "alarm-rules" ? "active" : ""}
-                  onClick={() => {
-                    openEng("alarm-rules");
-                    void reloadAlarmRules();
-                    void reloadSignals();
-                  }}
-                >
-                  {t("engineering.nav.alarmRules")}
-                </button>
-              ) : null}
-
-              {/* ===== GRUP 3: ERISIM & EKIP YONETIMI ===== */}
-              {session.role === "engineer" || session.role === "installer" || session.role === "ops_manager" ? (
-                <button
-                  className={engineeringPage === "users" ? "active" : ""}
-                  onClick={() => {
-                    openEng("users");
-                    void reloadUsers();
-                  }}
-                >
-                  {t("engineering.nav.users")}
-                </button>
-              ) : null}
-              {session.role === "engineer" || session.role === "installer" || session.role === "ops_manager" ? (
-                <button
-                  className={engineeringPage === "responsibility-areas" ? "active" : ""}
-                  onClick={() => {
-                    openEng("responsibility-areas");
-                    void reloadResponsibilityAreas();
-                  }}
-                >
-                  {t("engineering.nav.responsibilityAreas")}
-                </button>
-              ) : null}
-              {session.role === "engineer" || session.role === "installer" || session.role === "ops_manager" ? (
-                <button
-                  className={engineeringPage === "bulk-notify" ? "active" : ""}
-                  onClick={() => openEng("bulk-notify")}
-                >
-                  {t("engineering.nav.bulkNotify")}
-                </button>
-              ) : null}
-
-              {/* ===== GRUP 4: ENTEGRASYONLAR & BILDIRIM ===== */}
-              {/* Outbound + API erisimi: engineer + installer. Cihaz CRUD ve
-                  yayin ozellikleri muhendisin yetkisi dahilinde. */}
-              {session.role === "installer" || session.role === "engineer" ? (
-                <button
-                  className={engineeringPage === "outbound" ? "active" : ""}
-                  onClick={() => openEng("outbound")}
-                >
-                  {t("engineering.nav.outboundTargets")}
-                </button>
-              ) : null}
-              {session.role === "installer" || session.role === "engineer" ? (
-                <button
-                  className={engineeringPage === "api-access" ? "active" : ""}
-                  onClick={() => {
-                    openEng("api-access");
-                    void reloadApiKeys();
-                  }}
-                >
-                  {t("engineering.nav.apiAccess")}
-                </button>
-              ) : null}
-              {session.role === "installer" ? (
-                <>
-                  {/* Bildirim Ayarlari: sistem geneli SMTP/SMS/Telegram konfigi —
-                      sadece installer yapabilir. */}
-                  <button
-                    className={engineeringPage === "notifications" ? "active" : ""}
-                    onClick={() => {
-                      openEng("notifications");
-                      void reloadNotificationSettings();
-                    }}
-                  >
-                    {t("engineering.nav.notificationSettings")}
-                  </button>
-
-                  {/* ===== GRUP 5: PROJE & SISTEM YONETIMI ===== */}
-                  <button
-                    className={engineeringPage === "project-settings" ? "active" : ""}
-                    onClick={() => openEng("project-settings")}
-                  >
-                    {t("engineering.nav.projectSettings")}
-                  </button>
-                </>
-              ) : null}
-              {session.role === "installer" || session.role === "engineer" ? (
-                <button
-                  className={engineeringPage === "license" ? "active" : ""}
-                  onClick={() => {
-                    openEng("license");
-                    void reloadLicenseStatus();
-                  }}
-                >
-                  {t("engineering.nav.license")}
-                </button>
-              ) : null}
-              {/* Yedekler: installer + engineer (engineer sadece alma; restore butonu
-                  BackupsPanel'de role'e gore disabled). */}
-              {session.role === "installer" || session.role === "engineer" ? (
-                <button
-                  className={engineeringPage === "backups" ? "active" : ""}
-                  onClick={() => openEng("backups")}
-                >
-                  {t("engineering.nav.backups")}
-                </button>
-              ) : null}
-              {session.role === "installer" ? (
-                <>
-                  <button
-                    className={engineeringPage === "system-status" ? "active" : ""}
-                    onClick={() => openEng("system-status")}
-                  >
-                    {t("header.systemStatus")}
-                  </button>
-                  {/* Aktif Oturumlar: sadece installer (sistem genelinde kim girmis,
-                      hangi IP'den, gerekirse oturumu at). */}
-                  <button
-                    className={engineeringPage === "active-sessions" ? "active" : ""}
-                    onClick={() => openEng("active-sessions")}
-                  >
-                    {t("engineering.nav.activeSessions")}
-                  </button>
-                </>
-              ) : null}
-            </div>
+            <EngineeringNav
+              role={session.role}
+              activePage={engineeringPage}
+              onSelect={handleEngNavSelect}
+            />
 
             {engineeringPage === "devices" &&
             (session.role === "engineer" || session.role === "installer") ? (

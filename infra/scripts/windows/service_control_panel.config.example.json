@@ -15,12 +15,19 @@
       "health_port": 5672
     },
     {
+      "name": "NATS JetStream",
+      "type": "windows_service",
+      "windows_service_name": "nats",
+      "health_host": "127.0.0.1",
+      "health_port": 4222
+    },
+    {
       "name": "Backend API",
       "type": "process",
       "working_dir": "apps/backend-api",
       "command": [
         "py",
-        "-3.10",
+        "-3.11",
         "-m",
         "uvicorn",
         "app.main:app",
@@ -31,7 +38,8 @@
       ],
       "env": {
         "SERVICE_NAME": "backend-api",
-        "INTERNAL_SERVICE_TOKEN": "change-me-internal-token"
+        "INTERNAL_SERVICE_TOKEN": "change-me-internal-token",
+        "WHATSAPP_WEB_GATEWAY_URL": "http://127.0.0.1:8016"
       },
       "health_host": "127.0.0.1",
       "health_port": 8000
@@ -42,13 +50,14 @@
       "working_dir": "apps/tag-engine",
       "command": [
         "py",
-        "-3.10",
+        "-3.11",
         "-m",
         "tag_engine.main"
       ],
       "env": {
-        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672/",
-        "RABBITMQ_EXCHANGE": "hsl.events",
+        "NATS_URL": "nats://localhost:4222",
+        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672/e1",
+        "RABBITMQ_EXCHANGE": "e1.events",
         "WORKER_HEALTH_PORT": "8011"
       },
       "health_host": "127.0.0.1",
@@ -60,13 +69,14 @@
       "working_dir": "apps/alarm-service",
       "command": [
         "py",
-        "-3.10",
+        "-3.11",
         "-m",
         "alarm_service.main"
       ],
       "env": {
-        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672/",
-        "RABBITMQ_EXCHANGE": "hsl.events",
+        "NATS_URL": "nats://localhost:4222",
+        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672/e1",
+        "RABBITMQ_EXCHANGE": "e1.events",
         "BACKEND_API_BASE": "http://127.0.0.1:8000/api/v1",
         "BACKEND_INTERNAL_ALARM_URL": "http://127.0.0.1:8000/api/v1/internal/alarms",
         "INTERNAL_SERVICE_TOKEN": "change-me-internal-token",
@@ -82,17 +92,56 @@
       "working_dir": "apps/notification-worker",
       "command": [
         "py",
-        "-3.10",
+        "-3.11",
         "-m",
         "notification_service.main"
       ],
       "env": {
-        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672/",
-        "RABBITMQ_EXCHANGE": "hsl.events",
+        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672/e1",
+        "RABBITMQ_EXCHANGE": "e1.events",
+        "BACKEND_API_BASE": "http://127.0.0.1:8000/api/v1",
+        "INTERNAL_SERVICE_TOKEN": "change-me-internal-token",
         "WORKER_HEALTH_PORT": "8013"
       },
       "health_host": "127.0.0.1",
       "health_port": 8013
+    },
+    {
+      "name": "IEC104 Outbound",
+      "type": "process",
+      "working_dir": "apps/iec104-outbound",
+      "command": [
+        "py",
+        "-3.11",
+        "-m",
+        "iec104_outbound"
+      ],
+      "env": {
+        "NATS_URL": "nats://localhost:4222",
+        "NATS_SUBJECT_TELEMETRY_NORMALIZED": "e1.telemetry.normalized.>",
+        "BACKEND_API_BASE": "http://127.0.0.1:8000/api/v1",
+        "INTERNAL_SERVICE_TOKEN": "change-me-internal-token",
+        "WORKER_HEALTH_HOST": "127.0.0.1",
+        "WORKER_HEALTH_PORT": "8014"
+      },
+      "health_host": "127.0.0.1",
+      "health_port": 8014
+    },
+    {
+      "name": "WhatsApp Web Gateway",
+      "type": "process",
+      "working_dir": "apps/whatsapp-web-gateway",
+      "command": [
+        "npm",
+        "start"
+      ],
+      "env": {
+        "WORKER_HEALTH_PORT": "8016",
+        "SERVICE_TOKEN": "change-me-internal-token",
+        "WHATSAPP_SESSION_DIR": "C:/ProgramData/EnerjiOneGrid/whatsapp-session"
+      },
+      "health_host": "127.0.0.1",
+      "health_port": 8016
     },
     {
       "name": "Frontend Web",

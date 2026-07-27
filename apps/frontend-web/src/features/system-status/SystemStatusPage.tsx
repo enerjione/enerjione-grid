@@ -459,7 +459,7 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
       </header>
 
       {/* KPI: 6 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm / Gateway / Servis */}
-      <section className="sys-kpis sys-kpis--lg">
+      <section className="sys-kpis">
         <article className="sys-kpi sys-kpi--total">
           <div className="sys-kpi-icon">
             <Router size={20} strokeWidth={2} />

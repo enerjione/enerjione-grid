@@ -680,29 +680,36 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         <div className="grid-mgmt-col grid-mgmt-col-regions">
           <div className="grid-mgmt-col-head">
             <h4>{t("engineering.grid.regions")}</h4>
-            <div className="grid-mgmt-col-head-actions">
+            <div className="grid-mgmt-head-btns">
               <button
-                className="grid-import-trigger"
+                type="button"
+                className="device-add-plus-btn"
                 title={t("engineering.grid.wizard.title")}
+                aria-label={t("engineering.grid.wizard.title")}
                 onClick={() => setImportModalOpen(true)}
               >
                 <span className="material-symbols-outlined">auto_awesome</span>
-                <span className="grid-import-trigger-label">{t("engineering.grid.wizard.shortBtn")}</span>
               </button>
               <button
-                className="add-user-btn"
+                type="button"
+                className="device-add-plus-btn device-add-plus-btn--primary"
+                title={t("engineering.grid.addRegionShort")}
+                aria-label={t("engineering.grid.addRegionShort")}
                 onClick={() => {
                   setEditingRegion(null);
                   setRegionModalOpen(true);
                 }}
               >
-                {t("engineering.grid.addRegionShort")}
+                +
               </button>
             </div>
           </div>
           <div className="grid-mgmt-list">
             {regions.length === 0 ? (
-              <p className="helper-text">{t("engineering.grid.noRegions")}</p>
+              <div className="empty-state empty-state--compact">
+                <span className="material-symbols-outlined">map</span>
+                <p>{t("engineering.grid.noRegions")}</p>
+              </div>
             ) : null}
             {regions.map((r) => (
               <div
@@ -729,14 +736,28 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         <div className="grid-mgmt-col grid-mgmt-col-lines">
           <div className="grid-mgmt-col-head">
             <h4>{t("engineering.grid.lines")}{selectedRegion ? ` · ${selectedRegion.name}` : ""}</h4>
-            <button className="add-user-btn" disabled={!selectedRegion}
-              onClick={() => { setEditingLine(null); setLineModalOpen(true); }}>{t("engineering.grid.addLineShort")}</button>
+            <button
+              type="button"
+              className="device-add-plus-btn device-add-plus-btn--primary"
+              disabled={!selectedRegion}
+              title={t("engineering.grid.addLineShort")}
+              aria-label={t("engineering.grid.addLineShort")}
+              onClick={() => { setEditingLine(null); setLineModalOpen(true); }}
+            >
+              +
+            </button>
           </div>
           <div className="grid-mgmt-list">
             {!selectedRegion ? (
-              <p className="helper-text">{t("engineering.grid.noLinesPickRegion")}</p>
+              <div className="empty-state empty-state--compact">
+                <span className="material-symbols-outlined">west</span>
+                <p>{t("engineering.grid.noLinesPickRegion")}</p>
+              </div>
             ) : lines.length === 0 ? (
-              <p className="helper-text">{t("engineering.grid.noLinesInRegion")}</p>
+              <div className="empty-state empty-state--compact">
+                <span className="material-symbols-outlined">polyline</span>
+                <p>{t("engineering.grid.noLinesInRegion")}</p>
+              </div>
             ) : null}
             {lines.map((l) => (
               <div key={l.id}
@@ -778,7 +799,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
           </div>
 
           {!selectedLine ? (
-            <p className="helper-text">{t("engineering.grid.pickLineHint")}</p>
+            <div className="empty-state">
+              <span className="material-symbols-outlined">route</span>
+              <p>{t("engineering.grid.pickLineHint")}</p>
+            </div>
           ) : detailTab === "map" ? (
             <>
               <div className={`grid-mgmt-map-toolbar ${editMode ? "is-edit-mode" : ""}`}>

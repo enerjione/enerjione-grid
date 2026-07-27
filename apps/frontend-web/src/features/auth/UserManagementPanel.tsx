@@ -107,6 +107,9 @@ export function UserManagementPanel({
   const [telegramNotify, setTelegramNotify] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [search, setSearch] = useState("");
+  // Alarm kurallari sayfasindaki seviye filtresinin kullanicilar sayfasindaki
+  // karsiligi — ayni toolbar duzeni icin rol bazli filtre.
+  const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   // Tablodaki rozet ikonlari icin tum kullanicilarin son bilinen tercihleri.
   // Liste yuklenince paralel olarak doldurulur; toggle degisince guncellenir.
   const [notificationPrefs, setNotificationPrefs] = useState<Record<number, NotificationPrefs>>({});
@@ -266,7 +269,16 @@ export function UserManagementPanel({
     setSubmitError("");
   };
 
+  // Rol filtresi secenekleri — panelin yetki moduna gore daralir; boylece
+  // ops_manager'a hicbir zaman erisemeyecegi rol gosterilmez.
+  const roleFilterOptions: UserRole[] = restrictToOperator
+    ? ["operator"]
+    : allowInstallerRole
+      ? ["operator", "engineer", "ops_manager", "installer"]
+      : ["operator", "engineer", "ops_manager"];
+
   const filteredUsers = users.filter((user) => {
+    if (roleFilter !== "all" && user.role !== roleFilter) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
     return [user.full_name, user.username, user.email, user.phone_number ?? "", getRoleLabel(user.role)]
@@ -305,10 +317,26 @@ export function UserManagementPanel({
           className="users-search-input"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder={t("engineering.users.searchPlaceholder", { defaultValue: "Kullanıcı ara..." })}
+          placeholder={t("engineering.users.searchPlaceholder")}
         />
+        <div className="users-filter-group">
+          <select
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value as typeof roleFilter)}
+          >
+            <option value="all">{t("engineering.users.filterAllRoles")}</option>
+            {roleFilterOptions.map((r) => (
+              <option key={r} value={r}>
+                {getRoleLabel(r)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <span className="users-count-pill">
+          {filteredUsers.length} / {users.length}
+        </span>
         <button
-          className="add-user-btn"
+          className="add-user-btn users-new-btn"
           onClick={() => {
             setSubmitError("");
             setCreateModalOpen(true);

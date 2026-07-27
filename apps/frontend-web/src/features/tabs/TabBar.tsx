@@ -9,10 +9,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { routeIcon } from "./tabIcons";
 import {
   HOME_KEY,
   isClosable,
-  tabIcon,
   tabLabel,
   type Tab,
 } from "./tabModel";
@@ -47,11 +49,16 @@ export function TabBar({
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  // Seride tasma var mi? Oklar SADECE tasma varken render edilir; serit
+  // sigdigi surece hic gozukmez (eskiden hep duruyor, sadece disabled
+  // oluyorlardi).
+  const [isOverflowing, setIsOverflowing] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const updateScrollState = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
+    setIsOverflowing(el.scrollWidth > el.clientWidth + 1);
     setCanScrollLeft(el.scrollLeft > 1);
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
   }, []);
@@ -121,20 +128,24 @@ export function TabBar({
 
   return (
     <div className="tab-bar-shell">
-      <button
-        type="button"
-        className="tab-bar-scroll tab-bar-scroll--left"
-        aria-label={t("common.previous")}
-        disabled={!canScrollLeft}
-        onClick={() => scrollTabs(-1)}
-      >
-        <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
-      </button>
+      {isOverflowing ? (
+        <button
+          type="button"
+          className="tab-bar-scroll tab-bar-scroll--left"
+          aria-label={t("common.previous")}
+          disabled={!canScrollLeft}
+          onClick={() => scrollTabs(-1)}
+        >
+          <ChevronLeft size={18} strokeWidth={2.2} aria-hidden="true" />
+        </button>
+      ) : null}
       <div className="tab-bar" role="tablist" ref={listRef}>
         {tabs.map((tab) => {
         const active = tab.key === activeKey;
         const closable = isClosable(tab.route);
         const isDragOver = dragOverKey === tab.key && dragKey !== tab.key;
+        // Sayfaya ozel ikon — ust menudeki acilir liste ile ayni harita.
+        const TabIcon = routeIcon(tab.route);
         return (
           <div
             key={tab.key}
@@ -188,9 +199,7 @@ export function TabBar({
               setDragOverKey(null);
             }}
           >
-            <span className="material-symbols-outlined tab-bar-item-icon" aria-hidden="true">
-              {tabIcon(tab.route)}
-            </span>
+            <TabIcon className="tab-bar-item-icon" size={15} strokeWidth={2} aria-hidden="true" />
             <span className="tab-bar-item-label">
               {tabLabel(tab.route, t, deviceLookup)}
             </span>
@@ -224,15 +233,17 @@ export function TabBar({
         );
         })}
       </div>
-      <button
-        type="button"
-        className="tab-bar-scroll tab-bar-scroll--right"
-        aria-label={t("common.next")}
-        disabled={!canScrollRight}
-        onClick={() => scrollTabs(1)}
-      >
-        <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
-      </button>
+      {isOverflowing ? (
+        <button
+          type="button"
+          className="tab-bar-scroll tab-bar-scroll--right"
+          aria-label={t("common.next")}
+          disabled={!canScrollRight}
+          onClick={() => scrollTabs(1)}
+        >
+          <ChevronRight size={18} strokeWidth={2.2} aria-hidden="true" />
+        </button>
+      ) : null}
       {ctxMenu ? (
         <TabContextMenu
           menu={ctxMenu}

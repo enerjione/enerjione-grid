@@ -121,23 +121,9 @@ export function tabLabel(
 }
 
 /** material-symbols ikon adi. */
-export function tabIcon(route: TabRoute): string {
-  switch (route.kind) {
-    case "page": {
-      const map: Record<Exclude<PageMode, "engineering">, string> = {
-        home: "home",
-        alarms: "notifications_active",
-        faults: "electric_bolt",
-        events: "history",
-      };
-      return map[route.page];
-    }
-    case "engineering":
-      return route.page === "system-status" ? "monitor_heart" : "engineering";
-    case "device-detail":
-      return "developer_board";
-  }
-}
+// NOT: Sekme ikonlari `tabIcons.ts`'e tasindi (lucide bileseni dondurur, bu
+// dosya bilerek React'siz kaliyor). Eski `tabIcon()` tum muhendislik
+// sayfalari icin ayni "engineering" sembolunu donduruyordu.
 
 // ---- pageMode/engineeringPage turetme -------------------------------------
 /** Aktif route -> App.tsx'in bekledigi {pageMode, engineeringPage} state'i.

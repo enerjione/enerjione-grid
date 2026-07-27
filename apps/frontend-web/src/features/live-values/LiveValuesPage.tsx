@@ -60,10 +60,10 @@ const AUTO_REFRESH_OPTIONS: RefreshOpt[] = [
 ];
 
 const AUTO_REFRESH_STORAGE_KEY = "hsl.live-values.auto-refresh-sec";
-// Default 10sn -> 2sn: kullanici cihaz degerini neredeyse anlik gorur.
-// Backend her live-values cagrisinda 600 cihaz × 175 sinyal SELECT yapar;
-// composite index (idx_telemetry_device_signal_ts) ile <50ms tamamlanir.
-const AUTO_REFRESH_DEFAULT_SEC = 2;
+// Default: KAPALI (manuel). Kullanici "Yenile" ile ceker; istemedikce otomatik
+// yenileme backend'i bosuna yormaz (her cagride 600 cihaz × N sinyal SELECT).
+// Isteyen asagidaki secimden 1/2/5... sn otomatik yenilemeyi acabilir.
+const AUTO_REFRESH_DEFAULT_SEC = 0;
 
 function readStoredAutoRefresh(): number {
   if (typeof window === "undefined") return AUTO_REFRESH_DEFAULT_SEC;
@@ -285,26 +285,8 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
 
   return (
     <section className="tab-panel live-values-page">
-      <div className="signals-type-tabs">
-        <button
-          className={`signals-type-tab ${activeTab === "all" ? "active" : ""}`}
-          onClick={() => setActiveTab("all")}
-        >
-          <span className="stt-label">{t("engineering.liveValues.all")}</span>
-          <span className="stt-count">{totalCount}</span>
-        </button>
-        {DATA_TYPES.map((type) => (
-          <button
-            key={type}
-            className={`signals-type-tab stt-${type} ${activeTab === type ? "active" : ""}`}
-            onClick={() => setActiveTab(type)}
-          >
-            <span className="stt-label">{dataTypeLabel(type)}</span>
-            <span className="stt-count">{countsByType.get(type) ?? 0}</span>
-          </button>
-        ))}
-      </div>
-
+      {/* Duzen: once arama/filtre cubugu, ALTINDA veri tipi filtresi.
+          Alarm kurallari ve sinyaller sayfalariyla ayni sira. */}
       <div className="signals-toolbar live-values-toolbar">
         <input
           className="signals-search"
@@ -392,6 +374,26 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
         </button>
       </div>
 
+      <div className="signals-type-tabs">
+        <button
+          className={`signals-type-tab ${activeTab === "all" ? "active" : ""}`}
+          onClick={() => setActiveTab("all")}
+        >
+          <span className="stt-label">{t("engineering.liveValues.all")}</span>
+          <span className="stt-count">{totalCount}</span>
+        </button>
+        {DATA_TYPES.map((type) => (
+          <button
+            key={type}
+            className={`signals-type-tab stt-${type} ${activeTab === type ? "active" : ""}`}
+            onClick={() => setActiveTab(type)}
+          >
+            <span className="stt-label">{dataTypeLabel(type)}</span>
+            <span className="stt-count">{countsByType.get(type) ?? 0}</span>
+          </button>
+        ))}
+      </div>
+
       {error ? <p className="error-text">{error}</p> : null}
 
       <div className="live-values-table-wrap">
@@ -469,8 +471,11 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             })}
             {filtered.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} className="helper-text" style={{ textAlign: "center" }}>
-                  {totalCount === 0 ? t("engineering.liveValues.noRowsInitial") : t("engineering.liveValues.noRows")}
+                <td colSpan={7}>
+                  <div className="empty-state">
+                    <span className="material-symbols-outlined">monitoring</span>
+                    <p>{totalCount === 0 ? t("engineering.liveValues.noRowsInitial") : t("engineering.liveValues.noRows")}</p>
+                  </div>
                 </td>
               </tr>
             ) : null}

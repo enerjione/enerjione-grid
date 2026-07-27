@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useToast } from "../../components/ToastProvider";
 import type { DeviceRow, NotificationSettings, OutboundTarget, WhatsappWebGroup } from "../../shared/types";
 import {
   OutboundTargetsPanel,
@@ -48,7 +49,7 @@ const EMPTY_SETTINGS: NotificationSettings = {
   smtp_password: "",
   smtp_from_email: "",
   sms_enabled: false,
-  sms_provider: "mock",
+  sms_provider: "netgsm",
   sms_api_url: "",
   sms_api_key: "",
   sms_account_sid: "",
@@ -95,9 +96,15 @@ export function NotificationSettingsPanel({
   onLogoutWhatsappWeb
 }: Props) {
   const { t } = useTranslation();
+  const toast = useToast();
+  // Webhook bolumunun "yeni hedef" butonu kart basliginda duruyor; modali
+  // acan fonksiyon OutboundTargetsPanel'den buraya kaydediliyor.
+  const webhookCreateRef = useRef<(() => void) | null>(null);
+  const registerWebhookCreate = useCallback((openCreate: () => void) => {
+    webhookCreateRef.current = openCreate;
+  }, []);
   const [form, setForm] = useState<NotificationSettings>(EMPTY_SETTINGS);
   const [activeChannel, setActiveChannel] = useState<ChannelKey>("smtp");
-  const [submitError, setSubmitError] = useState("");
   const [smtpTestEmail, setSmtpTestEmail] = useState("");
   const [smsTestPhone, setSmsTestPhone] = useState("");
   const [whatsappTestPhone, setWhatsappTestPhone] = useState("");
@@ -134,7 +141,12 @@ export function NotificationSettingsPanel({
   }, [initialSettings]);
 
   useEffect(() => {
-    if (activeChannel !== "whatsapp" || !onFetchWhatsappWebStatus) return;
+    // WhatsApp kanali KAPALIYSA polling/QR uretme — sistemi bosuna yorma.
+    // Yalniz kanal aktifken (whatsapp_web_enabled) status/QR dongusu calisir.
+    if (activeChannel !== "whatsapp" || !form.whatsapp_web_enabled || !onFetchWhatsappWebStatus) {
+      setWhatsappQr(null);
+      return;
+    }
     let cancelled = false;
     const poll = async () => {
       try {
@@ -157,7 +169,7 @@ export function NotificationSettingsPanel({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeChannel, onFetchWhatsappWebStatus, onFetchWhatsappWebQr]);
+  }, [activeChannel, form.whatsapp_web_enabled, onFetchWhatsappWebStatus, onFetchWhatsappWebQr]);
 
   const refreshWhatsappGroups = useCallback(async () => {
     if (!onFetchWhatsappWebGroups) return;
@@ -227,12 +239,20 @@ export function NotificationSettingsPanel({
 
   const activeDef = channels.find((channel) => channel.key === activeChannel) ?? channels[0];
 
+  // Ust katmandan gelen yukleme/kaydetme hatasi da toast'a yonlendirilir;
+  // eskiden sayfanin en altinda satir olarak ciktigi icin `error` ve
+  // `submitError` ayni mesaji iki kez gosterebiliyordu.
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error, toast]);
+
+  // Kaydetme/dogrulama hatalari sayfanin altinda satir olarak degil toast ile
+  // gosterilir — kullanici uzun formun sonunda hatayi kacirmasin.
   const handleSave = async () => {
-    setSubmitError("");
     try {
       await onSave(form);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Bildirim ayarları kaydedilemedi.");
+      toast.error(err instanceof Error ? err.message : t("notifications.settings.saveFailed"));
     }
   };
 
@@ -242,7 +262,6 @@ export function NotificationSettingsPanel({
       setTestResult({ channel: "smtp", ok: false, detail: "Test için alıcı e-posta giriniz." });
       return;
     }
-    setSubmitError("");
     setTestResult(null);
     setTestingSmtp(true);
     try {
@@ -264,7 +283,6 @@ export function NotificationSettingsPanel({
       setTestResult({ channel: "sms", ok: false, detail: "Test için telefon numarası giriniz." });
       return;
     }
-    setSubmitError("");
     setTestResult(null);
     setTestingSms(true);
     try {
@@ -287,7 +305,6 @@ export function NotificationSettingsPanel({
       setTestResult({ channel: "whatsapp", ok: false, detail: "Test için telefon numarası giriniz." });
       return;
     }
-    setSubmitError("");
     setTestResult(null);
     setTestingWhatsapp(true);
     try {
@@ -329,7 +346,6 @@ export function NotificationSettingsPanel({
       setTestResult({ channel: "telegram", ok: false, detail: "Test için chat ID giriniz." });
       return;
     }
-    setSubmitError("");
     setTestResult(null);
     setTestingTelegram(true);
     try {
@@ -409,16 +425,8 @@ export function NotificationSettingsPanel({
   const renderSmtpPanel = () => (
     <>
       <div className="notification-detail-section">
-        <div className="notification-content-card">
-          <div className="notification-content-head">
-            <span className="material-symbols-outlined">dns</span>
-            <div>
-              <h4>{t("notifications.settings.smtp.title")}</h4>
-              <p>{t("notifications.settings.content.smtpDesc")}</p>
-            </div>
-          </div>
-          <div className="notif-field-grid notification-detail-grid">
-          <label className="notif-field">
+        <div className="notif-field-grid notification-detail-grid">
+          <label className="notif-field notif-field--full">
             <span>{t("notifications.settings.fields.smtpHost")}</span>
             <input
               value={form.smtp_host}
@@ -426,7 +434,7 @@ export function NotificationSettingsPanel({
               placeholder={t("notifications.settings.fields.smtpHostPlaceholder")}
             />
           </label>
-          <label className="notif-field notif-field--narrow">
+          <label className="notif-field">
             <span>{t("notifications.settings.fields.smtpPort")}</span>
             <input
               type="number"
@@ -438,7 +446,7 @@ export function NotificationSettingsPanel({
               }
             />
           </label>
-          <label className="notif-field notif-field--full">
+          <label className="notif-field">
             <span>{t("notifications.settings.fields.smtpUser")}</span>
             <input
               value={form.smtp_username}
@@ -447,7 +455,7 @@ export function NotificationSettingsPanel({
               placeholder={t("notifications.settings.fields.smtpUserPlaceholder")}
             />
           </label>
-          <label className="notif-field notif-field--full">
+          <label className="notif-field">
             <span>{t("notifications.settings.fields.smtpPassword")}</span>
             <input
               type="password"
@@ -457,7 +465,7 @@ export function NotificationSettingsPanel({
               placeholder="••••••••"
             />
           </label>
-          <label className="notif-field notif-field--full">
+          <label className="notif-field">
             <span>{t("notifications.settings.fields.smtpFrom")}</span>
             <input
               type="email"
@@ -466,7 +474,6 @@ export function NotificationSettingsPanel({
               placeholder={t("notifications.settings.fields.smtpFromPlaceholder")}
             />
           </label>
-          </div>
         </div>
       </div>
       <div className="notification-card-test notification-detail-test">
@@ -493,25 +500,15 @@ export function NotificationSettingsPanel({
   const renderSmsPanel = () => (
     <>
       <div className="notification-detail-section">
-        <div className="notification-content-card">
-          <div className="notification-content-head">
-            <span className="material-symbols-outlined">sms</span>
-            <div>
-              <h4>{t("notifications.settings.sms.title")}</h4>
-              <p>{t("notifications.settings.content.smsDesc")}</p>
-            </div>
-          </div>
-          <div className="notif-field-grid notification-detail-grid">
+        <div className="notif-field-grid notification-detail-grid">
           <label className="notif-field notif-field--full">
             <span>{t("notifications.settings.fields.smsProvider")}</span>
             <select
-              value={(form.sms_provider || "mock").toLowerCase()}
+              value={["twilio", "netgsm"].includes((form.sms_provider || "").toLowerCase()) ? (form.sms_provider || "").toLowerCase() : "netgsm"}
               onChange={(event) => setForm((prev) => ({ ...prev, sms_provider: event.target.value }))}
             >
-              <option value="mock">{t("notifications.settings.fields.smsProviderMock")}</option>
-              <option value="twilio">{t("notifications.settings.fields.smsProviderTwilio")}</option>
               <option value="netgsm">{t("notifications.settings.fields.smsProviderNetgsm")}</option>
-              <option value="generic">{t("notifications.settings.fields.smsProviderGeneric")}</option>
+              <option value="twilio">{t("notifications.settings.fields.smsProviderTwilio")}</option>
             </select>
           </label>
           {(form.sms_provider || "").toLowerCase() === "twilio" ? (
@@ -545,7 +542,7 @@ export function NotificationSettingsPanel({
               </label>
               <p className="helper-text notif-field--full">{t("notifications.settings.fields.twilioHint")}</p>
             </>
-          ) : (form.sms_provider || "").toLowerCase() !== "mock" ? (
+          ) : (
             <>
               <label className="notif-field notif-field--full">
                 <span>{t("notifications.settings.fields.smsApiUrl")}</span>
@@ -565,12 +562,7 @@ export function NotificationSettingsPanel({
                 />
               </label>
             </>
-          ) : (
-            <p className="helper-text notif-field--full">
-              {t("notifications.settings.fields.smsProviderMockHint")}
-            </p>
           )}
-          </div>
         </div>
       </div>
       <div className="notification-card-test notification-detail-test">
@@ -599,127 +591,138 @@ export function NotificationSettingsPanel({
       <>
         <div className="notification-detail-section">
           <p className="helper-text whatsapp-panel-desc">{t("notifications.settings.content.whatsappDesc")}</p>
-          <div className="whatsapp-qr-panel">
-            {status === "connected" ? (
-              <div className="whatsapp-qr-connected">
-                <span className="material-symbols-outlined">check_circle</span>
-                <div>
-                  <strong>{t("notifications.settings.fields.whatsappConnected")}</strong>
-                  <small>{whatsappStatus?.phone_number ?? ""}</small>
-                </div>
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => void handleWhatsappLogout()}
-                  disabled={loggingOutWhatsapp || !onLogoutWhatsappWeb}
-                >
-                  {loggingOutWhatsapp
-                    ? t("notifications.settings.fields.whatsappLoggingOut")
-                    : t("notifications.settings.fields.whatsappLogoutBtn")}
-                </button>
-              </div>
-            ) : status === "qr_pending" && whatsappQr ? (
-              <div className="whatsapp-qr-pending">
-                <p>{t("notifications.settings.fields.whatsappQrHint")}</p>
-                <img src={whatsappQr} alt={t("notifications.settings.fields.whatsappQrTitle")} />
-              </div>
-            ) : (
-              <div className="whatsapp-qr-waiting">
-                <span className="material-symbols-outlined">hourglass_top</span>
-                <p>{t("notifications.settings.fields.whatsappDisconnected")}</p>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="notification-detail-section">
-          <div className="notification-content-card">
-            <div className="notification-content-head">
-              <span className="material-symbols-outlined">forum</span>
-              <div>
-                <h4>{t("notifications.settings.fields.whatsappGroupModeLabel")}</h4>
-                <p>
-                  {form.whatsapp_web_group_mode
-                    ? t("notifications.settings.fields.whatsappGroupModeHint")
-                    : t("notifications.settings.fields.whatsappPersonalModeHint")}
-                </p>
-              </div>
-              <label
-                className="notif-toggle"
-                style={{ marginLeft: "auto" }}
-                title={t("notifications.settings.fields.whatsappGroupModeLabel")}
-              >
-                <input
-                  type="checkbox"
-                  checked={form.whatsapp_web_group_mode}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, whatsapp_web_group_mode: event.target.checked }))
-                  }
-                />
-                <span className="notif-toggle-slider" />
-              </label>
-            </div>
-
-            {form.whatsapp_web_group_mode && status === "connected" ? (
-              <div className="telegram-discover-card">
-                <div className="telegram-discover-head">
-                  <span className="material-symbols-outlined">groups</span>
-                  <div className="telegram-discover-head-text">
-                    <strong>{t("notifications.settings.fields.whatsappGroupListTitle")}</strong>
-                    <small>
-                      {t("notifications.settings.fields.whatsappGroupSelectedCount", {
-                        count: whatsappJidList.length
-                      })}
-                    </small>
+          <div className="whatsapp-web-layout">
+            <div className="whatsapp-web-side">
+              <div className="whatsapp-qr-panel">
+                {!form.whatsapp_web_enabled ? (
+                  <div className="whatsapp-qr-waiting whatsapp-qr-off">
+                    <span className="material-symbols-outlined">power_settings_new</span>
+                    <p>{t("notifications.settings.fields.whatsappOffHint")}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="primary-btn telegram-discover-btn"
-                    onClick={() => void refreshWhatsappGroups()}
-                    disabled={loadingGroups}
-                  >
-                    <span className="material-symbols-outlined">
-                      {loadingGroups ? "hourglass_top" : "refresh"}
-                    </span>
-                    {t("notifications.settings.fields.whatsappGroupListRefresh")}
-                  </button>
-                </div>
-                {whatsappGroups.length === 0 ? (
-                  <div className="telegram-discover-empty">
-                    <span className="material-symbols-outlined">info</span>
-                    {t("notifications.settings.fields.whatsappGroupListEmpty")}
+                ) : status === "connected" ? (
+                  <div className="whatsapp-qr-connected">
+                    <span className="material-symbols-outlined">check_circle</span>
+                    <div>
+                      <strong>{t("notifications.settings.fields.whatsappConnected")}</strong>
+                      <small>{whatsappStatus?.phone_number ?? ""}</small>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => void handleWhatsappLogout()}
+                      disabled={loggingOutWhatsapp || !onLogoutWhatsappWeb}
+                    >
+                      {loggingOutWhatsapp
+                        ? t("notifications.settings.fields.whatsappLoggingOut")
+                        : t("notifications.settings.fields.whatsappLogoutBtn")}
+                    </button>
+                  </div>
+                ) : status === "qr_pending" && whatsappQr ? (
+                  <div className="whatsapp-qr-pending">
+                    <p>{t("notifications.settings.fields.whatsappQrHint")}</p>
+                    <img src={whatsappQr} alt={t("notifications.settings.fields.whatsappQrTitle")} />
                   </div>
                 ) : (
-                  <ul className="telegram-discover-list">
-                    {whatsappGroups.map((group) => {
-                      const isSelected = whatsappJidList.includes(group.jid);
-                      return (
-                        <li key={group.jid} className="telegram-discover-item">
-                          <span className="telegram-discover-type" title="group">
-                            👥
-                          </span>
-                          <div className="telegram-discover-info">
-                            <strong>{group.name}</strong>
-                            <code>{group.participants} üye</code>
-                          </div>
-                          <button
-                            type="button"
-                            className={`telegram-discover-add ${isSelected ? "is-added" : ""}`}
-                            onClick={() => toggleGroupSelection(group.jid)}
-                          >
-                            <span className="material-symbols-outlined">
-                              {isSelected ? "check" : "add"}
-                            </span>
-                            {isSelected
-                              ? t("notifications.settings.fields.telegramDiscoverAdded")
-                              : t("notifications.settings.fields.telegramDiscoverAdd")}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <div className="whatsapp-qr-waiting">
+                    <span className="material-symbols-outlined">hourglass_top</span>
+                    <p>{t("notifications.settings.fields.whatsappDisconnected")}</p>
+                  </div>
                 )}
               </div>
-            ) : null}
+            </div>
+            <div className="whatsapp-web-main">
+              <div className="whatsapp-group-head">
+                <span className="material-symbols-outlined">forum</span>
+                <div>
+                  <h4>{t("notifications.settings.fields.whatsappGroupModeLabel")}</h4>
+                </div>
+                <label
+                  className="notif-toggle"
+                  style={{ marginLeft: "auto" }}
+                  title={t("notifications.settings.fields.whatsappGroupModeLabel")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.whatsapp_web_group_mode}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, whatsapp_web_group_mode: event.target.checked }))
+                    }
+                  />
+                  <span className="notif-toggle-slider" />
+                </label>
+              </div>
+
+              {form.whatsapp_web_group_mode && status === "connected" ? (
+                <div className="telegram-discover-card">
+                  <div className="telegram-discover-head">
+                    <span className="material-symbols-outlined">groups</span>
+                    <div className="telegram-discover-head-text">
+                      <strong>{t("notifications.settings.fields.whatsappGroupListTitle")}</strong>
+                      <small>
+                        {t("notifications.settings.fields.whatsappGroupSelectedCount", {
+                          count: whatsappJidList.length
+                        })}
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      className="primary-btn telegram-discover-btn"
+                      onClick={() => void refreshWhatsappGroups()}
+                      disabled={loadingGroups}
+                    >
+                      <span className="material-symbols-outlined">
+                        {loadingGroups ? "hourglass_top" : "refresh"}
+                      </span>
+                      {t("notifications.settings.fields.whatsappGroupListRefresh")}
+                    </button>
+                  </div>
+                  {whatsappGroups.length === 0 ? (
+                    <div className="telegram-discover-empty">
+                      <span className="material-symbols-outlined">info</span>
+                      {t("notifications.settings.fields.whatsappGroupListEmpty")}
+                    </div>
+                  ) : (
+                    <ul className="telegram-discover-list">
+                      {whatsappGroups.map((group) => {
+                        const isSelected = whatsappJidList.includes(group.jid);
+                        return (
+                          <li key={group.jid} className="telegram-discover-item">
+                            <span className="telegram-discover-type" title="group">
+                              👥
+                            </span>
+                            <div className="telegram-discover-info">
+                              <strong>{group.name}</strong>
+                              <code>{group.participants} üye</code>
+                            </div>
+                            <button
+                              type="button"
+                              className={`telegram-discover-add ${isSelected ? "is-added" : ""}`}
+                              onClick={() => toggleGroupSelection(group.jid)}
+                            >
+                              <span className="material-symbols-outlined">
+                                {isSelected ? "check" : "add"}
+                              </span>
+                              {isSelected
+                                ? t("notifications.settings.fields.telegramDiscoverAdded")
+                                : t("notifications.settings.fields.telegramDiscoverAdd")}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <div className="telegram-discover-empty whatsapp-group-hint">
+                  <span className="material-symbols-outlined">
+                    {form.whatsapp_web_group_mode ? "link_off" : "person"}
+                  </span>
+                  {form.whatsapp_web_group_mode
+                    ? t("notifications.settings.fields.whatsappGroupConnectFirst")
+                    : t("notifications.settings.fields.whatsappPersonalModeBody")}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className="notification-card-test notification-detail-test">
@@ -751,15 +754,7 @@ export function NotificationSettingsPanel({
   const renderTelegramPanel = () => (
     <>
       <div className="notification-detail-section">
-        <div className="notification-content-card">
-          <div className="notification-content-head">
-            <span className="material-symbols-outlined">send</span>
-            <div>
-              <h4>{t("notifications.settings.telegram.title")}</h4>
-              <p>{t("notifications.settings.content.telegramDesc")}</p>
-            </div>
-          </div>
-          <div className="notif-field-grid notification-detail-grid">
+        <div className="notif-field-grid notification-detail-grid">
           <label className="notif-field notif-field--full">
             <span>{t("notifications.settings.fields.telegramBotToken")}</span>
             <input
@@ -863,7 +858,6 @@ export function NotificationSettingsPanel({
             </div>
           ) : null}
         </div>
-        </div>
       </div>
       <div className="notification-card-test notification-detail-test">
         <div className="notif-test-title">
@@ -908,6 +902,8 @@ export function NotificationSettingsPanel({
           allowedProtocols={["rest"]}
           titleKey="notifications.settings.webhook.title"
           newTargetKey="notifications.settings.webhook.newTarget"
+          hideToolbar
+          onCreateHandlerReady={registerWebhookCreate}
           onCreate={onCreateWebhook}
           onUpdate={onUpdateWebhook}
           onDelete={onDeleteWebhook}
@@ -979,7 +975,17 @@ export function NotificationSettingsPanel({
                   <h4>{activeDef.label}</h4>
                   <small>{activeDef.subtitle}</small>
                 </div>
-                {!activeDef.passive && activeDef.key !== "webhook" ? (
+                {activeDef.key === "webhook" ? (
+                  /* Webhook bolumunde acma/kapama yerine ekleme butonu var —
+                     ayri bir cubuk satiri acmaya gerek kalmiyor. */
+                  <button
+                    type="button"
+                    className="add-user-btn notification-head-action"
+                    onClick={() => webhookCreateRef.current?.()}
+                  >
+                    + {t("notifications.settings.webhook.newTarget")}
+                  </button>
+                ) : !activeDef.passive ? (
                   <label className="notif-toggle" title={t("notifications.settings.channelActive")}>
                     <input
                       type="checkbox"
@@ -996,8 +1002,6 @@ export function NotificationSettingsPanel({
         </div>
 
         {loading ? <p className="helper-text notification-inline-state">{t("notifications.settings.loading")}</p> : null}
-        {error ? <p className="error-text notification-inline-state">{error}</p> : null}
-        {submitError ? <p className="error-text notification-inline-state">{submitError}</p> : null}
         <div className="notification-bottom-actions">
           <button type="button" className="primary-btn notification-save-top" disabled={saving} onClick={() => void handleSave()}>
             <span className="material-symbols-outlined">save</span>

@@ -30,6 +30,19 @@ const ALL_SCOPES: ScopeDef[] = [
 
 const DEFAULT_SELECTED_SCOPES: string[] = ["devices:read", "telemetry:read", "alarms:read"];
 
+/** Token'in tek kelimelik durumu — hem satir badge'i hem filtre bunu kullanir.
+ *  Sira onemli: revoke > expired > disabled > active. */
+type KeyStatus = "active" | "disabled" | "expired" | "revoked";
+
+function keyStatusOf(k: ApiKey): KeyStatus {
+  if (k.revoked_at) return "revoked";
+  if (k.expires_at && new Date(k.expires_at).getTime() <= Date.now()) return "expired";
+  if (!k.is_active) return "disabled";
+  return "active";
+}
+
+const STATUS_FILTERS: KeyStatus[] = ["active", "disabled", "expired", "revoked"];
+
 type Props = {
   apiBaseUrl: string;
   keys: ApiKey[];
@@ -74,10 +87,30 @@ export function ApiAccessPanel({
   // Bir token id icin "curl ornekleri ac" toggle.
   const [exampleTokenId, setExampleTokenId] = useState<number | null>(null);
 
+  // Liste filtreleri — gorsel olarak Alarm Yonetimi toolbar'i ile ortak.
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | KeyStatus>("all");
+  const [scopeFilter, setScopeFilter] = useState<string>("all");
+
   const sortedKeys = useMemo(
     () => [...keys].sort((a, b) => b.created_at.localeCompare(a.created_at)),
     [keys]
   );
+
+  const filteredKeys = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return sortedKeys.filter((k) => {
+      if (statusFilter !== "all" && keyStatusOf(k) !== statusFilter) return false;
+      if (scopeFilter !== "all" && !k.scopes.includes(scopeFilter)) return false;
+      if (!q) return true;
+      return (
+        k.name.toLowerCase().includes(q) ||
+        k.token_prefix.toLowerCase().includes(q) ||
+        k.scopes.some((s) => s.toLowerCase().includes(q)) ||
+        (k.allowed_ips ?? []).some((ip) => ip.toLowerCase().includes(q))
+      );
+    });
+  }, [sortedKeys, search, statusFilter, scopeFilter]);
 
   const toggleScope = (scope: string) => {
     setSelectedScopes((prev) =>
@@ -170,137 +203,168 @@ export function ApiAccessPanel({
 
   return (
     <section className="tab-panel api-access-panel">
-      <div className="panel-head">
-        <div>
-          <h3>{t("apiAccess.title")}</h3>
-          <p className="helper-text" style={{ marginTop: 4 }}>
-            {t("apiAccess.intro")}
-          </p>
+      {/* Toolbar — gorsel olarak Alarm Yonetimi sayfasi ile ortak (bkz.
+          styles.css `.rules-v3-toolbar` seçici grubu). */}
+      <div className="api-keys-toolbar">
+        <input
+          type="search"
+          className="api-keys-search-input"
+          placeholder={t("apiAccess.searchPlaceholder")}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="api-keys-filter-group">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          >
+            <option value="all">{t("apiAccess.filterAllStatuses")}</option>
+            {STATUS_FILTERS.map((s) => (
+              <option key={s} value={s}>
+                {t(`apiAccess.status.${s}`)}
+              </option>
+            ))}
+          </select>
+          <select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value)}>
+            <option value="all">{t("apiAccess.filterAllScopes")}</option>
+            {ALL_SCOPES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.id}
+              </option>
+            ))}
+          </select>
         </div>
-        <button className="add-user-btn" onClick={() => setCreateOpen(true)}>
+        <span className="api-keys-count-pill">
+          {filteredKeys.length} / {keys.length}
+        </span>
+        <button
+          type="button"
+          className="primary-btn api-keys-new-btn"
+          onClick={() => setCreateOpen(true)}
+        >
           + {t("apiAccess.newToken")}
         </button>
       </div>
 
+      {loading ? <p className="helper-text">{t("common.loading")}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
 
       {/* ===== Token listesi ===== */}
       <div className="api-keys-table-wrap">
-        <table className="values-table">
-          <thead>
-            <tr>
-              <th scope="col">{t("apiAccess.cols.name")}</th>
-              <th scope="col">{t("apiAccess.cols.tokenPrefix")}</th>
-              <th scope="col">{t("apiAccess.cols.scopes")}</th>
-              <th scope="col">{t("apiAccess.cols.created")}</th>
-              <th scope="col">{t("apiAccess.cols.expires")}</th>
-              <th scope="col">{t("apiAccess.cols.lastUsed")}</th>
-              <th scope="col">{t("apiAccess.cols.status")}</th>
-              <th scope="col" className="actions-header">{t("apiAccess.cols.actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedKeys.length === 0 && !loading ? (
+        {filteredKeys.length === 0 ? (
+          <div className="api-keys-empty">
+            <span className="material-symbols-outlined api-keys-empty-icon">key_off</span>
+            <h3>{t("apiAccess.emptyHeading")}</h3>
+            <p className="helper-text">
+              {keys.length === 0 ? t("apiAccess.empty") : t("apiAccess.emptyNoMatch")}
+            </p>
+          </div>
+        ) : (
+          <table className="api-keys-table">
+            <thead>
               <tr>
-                <td colSpan={8} className="helper-text" style={{ padding: 24, textAlign: "center" }}>
-                  {t("apiAccess.empty")}
-                </td>
+                <th scope="col">{t("apiAccess.cols.name")}</th>
+                <th scope="col">{t("apiAccess.cols.tokenPrefix")}</th>
+                <th scope="col">{t("apiAccess.cols.scopes")}</th>
+                <th scope="col">{t("apiAccess.cols.created")}</th>
+                <th scope="col">{t("apiAccess.cols.expires")}</th>
+                <th scope="col">{t("apiAccess.cols.lastUsed")}</th>
+                <th scope="col">{t("apiAccess.cols.status")}</th>
+                <th scope="col">{t("apiAccess.cols.actions")}</th>
               </tr>
-            ) : null}
-            {sortedKeys.map((k) => {
-              const isRevoked = k.revoked_at != null;
-              const isExpired =
-                k.expires_at != null && new Date(k.expires_at).getTime() <= Date.now();
-              const usable = !isRevoked && !isExpired && k.is_active;
-              const statusLabel = isRevoked
-                ? t("apiAccess.status.revoked")
-                : isExpired
-                ? t("apiAccess.status.expired")
-                : !k.is_active
-                ? t("apiAccess.status.disabled")
-                : t("apiAccess.status.active");
-              const statusClass = isRevoked
-                ? "api-key-status--revoked"
-                : isExpired
-                ? "api-key-status--expired"
-                : !k.is_active
-                ? "api-key-status--disabled"
-                : "api-key-status--active";
-              return (
-                <>
-                  <tr key={k.id} className={!usable ? "outbound-row--inactive" : ""}>
-                    <td className="api-key-name-cell">
-                      <strong>{k.name}</strong>
-                      {k.allowed_ips && k.allowed_ips.length > 0 ? (
-                        <div className="helper-text" style={{ fontSize: 12 }}>
-                          🔒 {k.allowed_ips.join(", ")}
-                        </div>
-                      ) : null}
+            </thead>
+            <tbody>
+              {filteredKeys.map((k) => {
+                const status = keyStatusOf(k);
+                const isRevoked = status === "revoked";
+                return (
+                  <tr key={k.id} className={status !== "active" ? "api-keys-row-inactive" : ""}>
+                    <td>
+                      <div className="api-key-name-cell">
+                        <strong>{k.name}</strong>
+                        {k.allowed_ips && k.allowed_ips.length > 0 ? (
+                          <span className="api-key-ip-pill" title={t("apiAccess.fields.allowedIps")}>
+                            <span className="material-symbols-outlined">lock</span>
+                            {k.allowed_ips.join(", ")}
+                          </span>
+                        ) : null}
+                        <span className="api-key-id-pill">ID: {k.id}</span>
+                      </div>
                     </td>
                     <td>
                       <code className="api-key-prefix">{k.token_prefix}</code>
                     </td>
                     <td>
-                      {k.scopes.map((s) => (
-                        <span key={s} className="scope-chip">
-                          {s}
-                        </span>
-                      ))}
+                      <div className="api-key-scopes-cell">
+                        {k.scopes.map((s) => (
+                          <span key={s} className="scope-chip">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
                     </td>
-                    <td>{dateOrDash(k.created_at)}</td>
-                    <td>{dateOrDash(k.expires_at)}</td>
-                    <td>{dateOrDash(k.last_used_at)}</td>
+                    <td className="api-key-date-cell">{dateOrDash(k.created_at)}</td>
+                    <td className="api-key-date-cell">{dateOrDash(k.expires_at)}</td>
+                    <td className="api-key-date-cell">{dateOrDash(k.last_used_at)}</td>
                     <td>
-                      <span className={`api-key-status ${statusClass}`}>
+                      <span className={`api-key-status api-key-status--${status}`}>
                         <span className="status-dot" />
-                        {statusLabel}
+                        {t(`apiAccess.status.${status}`)}
                       </span>
                     </td>
-                    <td className="actions-cell">
-                      <button
-                        type="button"
-                        className="secondary-btn action-btn"
-                        onClick={() => setExampleTokenId(k.id)}
-                      >
-                        {t("apiAccess.showExamples")}
-                      </button>
-                      {!isRevoked ? (
+                    <td>
+                      <div className="api-keys-table-actions">
                         <button
                           type="button"
-                          className="edit-btn action-btn"
-                          onClick={() => void handleToggleActive(k)}
+                          className="api-keys-icon-btn"
+                          onClick={() => setExampleTokenId(k.id)}
+                          title={t("apiAccess.showExamples")}
+                          aria-label={t("apiAccess.showExamples")}
                         >
-                          {k.is_active
-                            ? t("apiAccess.disable")
-                            : t("apiAccess.enable")}
+                          <span className="material-symbols-outlined">terminal</span>
                         </button>
-                      ) : null}
-                      {!isRevoked ? (
-                        <button
-                          type="button"
-                          className="danger-btn action-btn"
-                          onClick={() => void handleRevoke(k)}
-                        >
-                          {t("apiAccess.revoke")}
-                        </button>
-                      ) : onPurge ? (
-                        <button
-                          type="button"
-                          className="danger-btn action-btn"
-                          onClick={() => void handlePurge(k)}
-                          title={t("apiAccess.purgeTitle")}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: "-3px", marginRight: 4 }}>delete</span>
-                          {t("apiAccess.purge")}
-                        </button>
-                      ) : null}
+                        {!isRevoked ? (
+                          <button
+                            type="button"
+                            className="api-keys-icon-btn"
+                            onClick={() => void handleToggleActive(k)}
+                            title={k.is_active ? t("apiAccess.disable") : t("apiAccess.enable")}
+                            aria-label={k.is_active ? t("apiAccess.disable") : t("apiAccess.enable")}
+                          >
+                            <span className="material-symbols-outlined">
+                              {k.is_active ? "toggle_on" : "toggle_off"}
+                            </span>
+                          </button>
+                        ) : null}
+                        {!isRevoked ? (
+                          <button
+                            type="button"
+                            className="api-keys-icon-btn api-keys-icon-btn--danger"
+                            onClick={() => void handleRevoke(k)}
+                            title={t("apiAccess.revoke")}
+                            aria-label={t("apiAccess.revoke")}
+                          >
+                            <span className="material-symbols-outlined">block</span>
+                          </button>
+                        ) : onPurge ? (
+                          <button
+                            type="button"
+                            className="api-keys-icon-btn api-keys-icon-btn--danger"
+                            onClick={() => void handlePurge(k)}
+                            title={t("apiAccess.purgeTitle")}
+                            aria-label={t("apiAccess.purge")}
+                          >
+                            <span className="material-symbols-outlined">delete</span>
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
-                </>
-              );
-            })}
-          </tbody>
-        </table>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* ===== Yeni token modal'i ===== */}
