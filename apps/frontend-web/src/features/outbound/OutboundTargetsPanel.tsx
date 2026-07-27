@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
+import { useToast } from "../../components/ToastProvider";
 import type { DeviceRow, Iec104RuntimeStatus, OutboundTarget } from "../../shared/types";
 import type { MqttPayloadFields, OutboundRuntimeStatus, OutboundAutoTopic } from "../../shared/api";
-import { fetchOutboundRuntimeStatus, fetchOutboundAutoTopics, uploadMqttCert } from "../../shared/api";
+import { fetchOutboundRuntimeStatus, fetchOutboundAutoTopics, uploadMqttCert, testOutboundTarget } from "../../shared/api";
 import { MqttTopicMappingModal } from "./MqttTopicMappingModal";
 import { MqttCertUploader } from "./MqttCertUploader";
 
@@ -15,6 +16,21 @@ const DEFAULT_PROTOCOLS: Protocol[] = ["rest", "mqtt", "iec104"];
 // IEC104 listen_host'u bu degerlerden biriyse "tum arayuzler" anlamina gelir;
 // SCADA buraya dogrudan baglanamaz, tarayicinin host'unu gostermek gerekir.
 const WILDCARD_HOSTS = new Set(["0.0.0.0", "::", "*", ""]);
+
+// n8n / webhook formunda gosterilen ornek payload — backend'in test endpoint'i
+// ve gercek alarm event'i ile ayni sekildir; operator n8n akisini buna gore kurar.
+const WEBHOOK_SAMPLE_JSON = `{
+  "message_id": "3f0c…",
+  "event_kind": "alarm",
+  "device_code": "DEV-001",
+  "device_name": "Ornek Fider",
+  "signal_key": "sat01.current_phase_a",
+  "value": 245.7,
+  "quality": "good",
+  "severity": "critical",
+  "message": "Faz A akimi esik ustunde",
+  "timestamp": "2026-07-27T09:30:00+00:00"
+}`;
 
 export type OutboundTargetCreatePayload = {
   name: string;
@@ -55,6 +71,12 @@ type Props = {
   allowedProtocols?: Protocol[];
   titleKey?: string;
   newTargetKey?: string;
+  /** true ise panel kendi filtre/ekleme cubugunu cizmez — buton ust
+   *  bilesenin basliginda durur (Bildirim Ayarlari > Webhook). */
+  hideToolbar?: boolean;
+  /** Cubuk gizliyken ust bilesen "yeni hedef" akisini baslatabilsin diye
+   *  `openCreate` fonksiyonunu disari verir. */
+  onCreateHandlerReady?: (openCreate: () => void) => void;
   onCreate: (payload: OutboundTargetCreatePayload) => Promise<OutboundTarget | undefined>;
   onUpdate: (targetId: number, payload: OutboundTargetUpdatePayload) => Promise<void>;
   onDelete: (targetId: number) => Promise<void>;
@@ -72,6 +94,8 @@ export function OutboundTargetsPanel({
   allowedProtocols,
   titleKey = "engineering.outbound.title",
   newTargetKey = "engineering.outbound.newTarget",
+  hideToolbar = false,
+  onCreateHandlerReady,
   onCreate,
   onUpdate,
   onDelete,
@@ -92,9 +116,37 @@ export function OutboundTargetsPanel({
     () => targets.filter((target) => protocols.includes(target.protocol as Protocol)),
     [targets, protocols]
   );
+  // Sadece REST izinliyse (Bildirim Ayarlari > Webhook) genel outbound tablosu
+  // yerine sade kart listesi gosterilir — SCADA/protokol sutunlari webhook'ta
+  // anlamsiz, tablo cok bos gorunuyordu.
+  const isWebhookMode = protocols.length === 1 && protocols[0] === "rest";
+  // Diger sayfalardaki (alarm kurallari / kullanicilar / canli degerler)
+  // filtre cubugunun outbound karsiligi: arama + protokol filtresi.
+  // NOT: runtime polling'i `visibleTargets` uzerinden yapilir — filtre
+  // sadece GORUNUMU daraltir, arka plandaki durum sorgusunu degil.
+  const [search, setSearch] = useState("");
+  const [protocolFilter, setProtocolFilter] = useState<"all" | Protocol>("all");
+  const filteredTargets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return visibleTargets.filter((target) => {
+      if (protocolFilter !== "all" && target.protocol !== protocolFilter) return false;
+      if (!q) return true;
+      return [target.name, target.protocol, target.endpoint ?? "", target.topic ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [visibleTargets, search, protocolFilter]);
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<OutboundTarget | null>(null);
   const [error, setError] = useState("");
+  // Hata mesaji panelin altinda satir olarak degil toast ile gosterilir.
+  // Tek yerden yakalamak icin state korunuyor; `setError(...)` cagiran tum
+  // akislar otomatik olarak toast uretir.
+  const toast = useToast();
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error, toast]);
 
   // Cihaz ASDU adresleri popup
   const [asduModalTarget, setAsduModalTarget] = useState<OutboundTarget | null>(null);
@@ -163,8 +215,32 @@ export function OutboundTargetsPanel({
   const [mqttCustomerId, setMqttCustomerId] = useState("");
   const [showMqttAdvanced, setShowMqttAdvanced] = useState(false);
 
+  // MQTT formu adim adim (wizard): 0 Baglanti, 1 Guvenlik(TLS), 2 Yayin, 3 Topic.
+  const [mqttStep, setMqttStep] = useState(0);
+
   // Custom Topic Mapping modal — hangi target icin acik
   const [mappingModalTarget, setMappingModalTarget] = useState<OutboundTarget | null>(null);
+
+  // Webhook (n8n) test gonderimi — hangi target test ediliyor + sonuclar
+  const [webhookTestingId, setWebhookTestingId] = useState<number | null>(null);
+  const [webhookTestResults, setWebhookTestResults] = useState<
+    Record<number, { ok: boolean; detail: string }>
+  >({});
+
+  const runWebhookTest = async (item: OutboundTarget) => {
+    setWebhookTestingId(item.id);
+    try {
+      const res = await testOutboundTarget(accessToken, item.id);
+      setWebhookTestResults((prev) => ({ ...prev, [item.id]: res }));
+    } catch (err) {
+      setWebhookTestResults((prev) => ({
+        ...prev,
+        [item.id]: { ok: false, detail: err instanceof Error ? err.message : t("common.errorOccurred") }
+      }));
+    } finally {
+      setWebhookTestingId(null);
+    }
+  };
 
   const resetForm = () => {
     setName("");
@@ -203,6 +279,27 @@ export function OutboundTargetsPanel({
     setPendingCertCert(null);
     setPendingCertKey(null);
   };
+
+  // Yeni hedef ekleme: her acilista formu sifirla — boylece protokol izinli
+  // ilk protokole (or. muhendislik'te MQTT) doner; aksi halde initial "rest"
+  // state kaliyor ve MQTT/IEC104 sayfasinda yanlislikla webhook formu aciliyordu.
+  const openCreate = () => {
+    resetForm();
+    setEditing(null);
+    setError("");
+    setMqttStep(0);
+    setCreateOpen(true);
+  };
+
+  // Cubuk gizliyken ekleme butonu ust bilesenin basliginda durur; modali
+  // acabilmesi icin openCreate'i disari veriyoruz. Ref uzerinden gecirmek
+  // sart: openCreate her render'da yeniden olusuyor, dogrudan verirsek ust
+  // bilesen bayat bir closure tutar ve resetForm eski state ile calisir.
+  const openCreateRef = useRef(openCreate);
+  openCreateRef.current = openCreate;
+  useEffect(() => {
+    onCreateHandlerReady?.(() => openCreateRef.current());
+  }, [onCreateHandlerReady]);
 
   /** MQTT alanlarini payload'a ekle. createPayload'a ve updatePayload'a
    *  ortak helper. forceInclude=true ise protocol state'ini kontrol etmez
@@ -338,6 +435,7 @@ export function OutboundTargetsPanel({
     setMqttTopicPrefix(target.mqtt_topic_prefix ?? "e1");
     setMqttCustomerId(target.mqtt_customer_id ?? "");
     setShowMqttAdvanced(false);
+    setMqttStep(0);
   };
 
   const handleEdit = async (event: FormEvent<HTMLFormElement>) => {
@@ -619,16 +717,47 @@ export function OutboundTargetsPanel({
   }, [autoTopicsTarget, accessToken]);
 
   return (
-    <section className="tab-panel">
-      <div className="panel-head">
-        <h3>{t(titleKey)}</h3>
-        <button className="add-user-btn" onClick={() => setCreateOpen(true)}>
-          + {t(newTargetKey)}
-        </button>
-      </div>
+    <section className="tab-panel outbound-panel">
+      {/* Filtre cubugu — gorsel olarak alarm kurallari sayfasiyla ayni
+          (bkz. styles.css ortak `.rules-v3-toolbar` seçici grubu). */}
+      {/* Webhook modunda (Bildirim Ayarlari > Webhook) liste kisa ve bolumun
+          kendi basligi zaten var — arama/filtre/sayac gosterilmez, sadece
+          sag ustte ekleme butonu kalir. Genel outbound sayfasinda tam
+          filtre cubugu calisir. */}
+      {!hideToolbar ? (
+        <div className="outbound-toolbar">
+          <input
+            type="search"
+            className="outbound-search-input"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t("engineering.outbound.searchPlaceholder")}
+          />
+          {protocols.length > 1 ? (
+            <div className="outbound-filter-group">
+              <select
+                value={protocolFilter}
+                onChange={(event) => setProtocolFilter(event.target.value as typeof protocolFilter)}
+              >
+                <option value="all">{t("engineering.outbound.filterAllProtocols")}</option>
+                {protocols.map((p) => (
+                  <option key={p} value={p}>
+                    {p.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <span className="outbound-count-pill">
+            {filteredTargets.length} / {visibleTargets.length}
+          </span>
+          <button className="add-user-btn outbound-new-btn" onClick={openCreate}>
+            + {t(newTargetKey)}
+          </button>
+        </div>
+      ) : null}
       {/* Modal labels */}
       {/* (i18n çevirileri aşağıdaki modal blok ile birlikte) */}
-      {error ? <p className="error-text">{error}</p> : null}
 
       {(isCreateOpen || editing) && (
         <div className="settings-modal-backdrop">
@@ -655,7 +784,10 @@ export function OutboundTargetsPanel({
                     {t("engineering.outbound.form.protocol")}
                     <select
                       value={protocol}
-                      onChange={(event) => setProtocol(event.target.value as Protocol)}
+                      onChange={(event) => {
+                        setProtocol(event.target.value as Protocol);
+                        setMqttStep(0);
+                      }}
                     >
                       {protocols.includes("rest") ? (
                         <option value="rest">{t("engineering.outbound.proto.rest")}</option>
@@ -791,6 +923,8 @@ export function OutboundTargetsPanel({
                     placeholder={
                       isMqttForm
                         ? "mqtt-broker.example.com"
+                        : isWebhookMode
+                        ? "https://n8n.ornek.com/webhook/xxxxxxxx"
                         : "https://musteri.example.com/webhook"
                     }
                   />
@@ -832,6 +966,23 @@ export function OutboundTargetsPanel({
                         onChange={(event) => setAuthToken(event.target.value)}
                       />
                     </label>
+                    {isWebhookMode ? (
+                      <div className="webhook-n8n-help">
+                        <div className="webhook-n8n-help-head">
+                          <span className="material-symbols-outlined">bolt</span>
+                          <div>
+                            <strong>{t("notifications.settings.webhook.n8nTitle")}</strong>
+                            <small>{t("notifications.settings.webhook.n8nHint")}</small>
+                          </div>
+                        </div>
+                        <div className="webhook-payload-sample">
+                          <span className="webhook-payload-sample-label">
+                            {t("notifications.settings.webhook.payloadTitle")}
+                          </span>
+                          <pre>{WEBHOOK_SAMPLE_JSON}</pre>
+                        </div>
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
 
@@ -840,312 +991,343 @@ export function OutboundTargetsPanel({
                     SOL: Baglanti + TLS + Sertifika (TLS aktifken kompakt cert area)
                     SAG: Yayin Ayarlari + Topic Sablonu (tek panel ust uste) */}
                 {isMqttForm ? (
-                  <div className="mqtt-form-v2 mqtt-form-v3">
-                    {/* SOL PANEL: Baglanti + TLS + Sertifika */}
-                    <div className="mqtt-form-v2-panel">
-                      <div className="mqtt-panel-heading">
-                        <span className="material-symbols-outlined">link</span>
-                        {t("engineering.outbound.mqtt.section.connection")}
-                      </div>
-                      <div className="mqtt-panel-grid">
-                        <label>
-                          {t("engineering.outbound.mqtt.port")}
-                          <input
-                            type="number"
-                            min={1}
-                            max={65535}
-                            placeholder={mqttTlsEnabled ? "8883" : "1883"}
-                            value={mqttPort}
-                            onChange={(event) => setMqttPort(event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          {t("engineering.outbound.mqtt.clientId")}
-                          <input
-                            value={mqttClientId}
-                            onChange={(event) => setMqttClientId(event.target.value)}
-                            placeholder={t("engineering.outbound.mqtt.clientIdPlaceholder")}
-                          />
-                        </label>
-                        <label>
-                          {t("engineering.outbound.mqtt.username")}
-                          <input
-                            value={mqttUsername}
-                            onChange={(event) => setMqttUsername(event.target.value)}
-                            autoComplete="off"
-                          />
-                        </label>
-                        <label>
-                          {t("engineering.outbound.mqtt.password")}
-                          <input
-                            type="password"
-                            value={mqttPassword}
-                            onChange={(event) => setMqttPassword(event.target.value)}
-                            autoComplete="new-password"
-                          />
-                        </label>
-                      </div>
+                  <div className="mqtt-wizard">
+                    <ol className="mqtt-steps">
+                      {[
+                        t("engineering.outbound.mqtt.section.connection"),
+                        t("engineering.outbound.mqtt.section.tls"),
+                        t("engineering.outbound.mqtt.section.publish"),
+                        t("engineering.outbound.mqtt.topicCard.title")
+                      ].map((label, i) => (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            className={`mqtt-step ${mqttStep === i ? "is-active" : ""} ${mqttStep > i ? "is-done" : ""}`}
+                            onClick={() => setMqttStep(i)}
+                          >
+                            <span className="mqtt-step-num">
+                              {mqttStep > i ? (
+                                <span className="material-symbols-outlined">check</span>
+                              ) : (
+                                i + 1
+                              )}
+                            </span>
+                            <span className="mqtt-step-label">{label}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
 
-                      {/* TLS + Sertifika — SOL PANEL'IN ALT KISMI */}
-                      <div className="mqtt-panel-heading mqtt-panel-heading--with-margin">
-                        <span className="material-symbols-outlined">lock</span>
-                        {t("engineering.outbound.mqtt.section.tls")}
-                      </div>
-                      <label className="notify-option mqtt-tls-toggle">
-                        <input
-                          type="checkbox"
-                          checked={mqttTlsEnabled}
-                          onChange={(event) => setMqttTlsEnabled(event.target.checked)}
-                        />
-                        {t("engineering.outbound.mqtt.tlsEnabled")}
-                      </label>
-                      {mqttTlsEnabled ? (
-                        <>
-                          <label className="notify-option">
+                    <div className="mqtt-wizard-body">
+                      {mqttStep === 0 ? (
+                        <div className="mqtt-panel-grid">
+                          <label>
+                            {t("engineering.outbound.mqtt.port")}
+                            <input
+                              type="number"
+                              min={1}
+                              max={65535}
+                              placeholder={mqttTlsEnabled ? "8883" : "1883"}
+                              value={mqttPort}
+                              onChange={(event) => setMqttPort(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            {t("engineering.outbound.mqtt.clientId")}
+                            <input
+                              value={mqttClientId}
+                              onChange={(event) => setMqttClientId(event.target.value)}
+                              placeholder={t("engineering.outbound.mqtt.clientIdPlaceholder")}
+                            />
+                          </label>
+                          <label>
+                            {t("engineering.outbound.mqtt.username")}
+                            <input
+                              value={mqttUsername}
+                              onChange={(event) => setMqttUsername(event.target.value)}
+                              autoComplete="off"
+                            />
+                          </label>
+                          <label>
+                            {t("engineering.outbound.mqtt.password")}
+                            <input
+                              type="password"
+                              value={mqttPassword}
+                              onChange={(event) => setMqttPassword(event.target.value)}
+                              autoComplete="new-password"
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+
+                      {mqttStep === 1 ? (
+                        <div className="mqtt-wizard-step-tls">
+                          <label className="notify-option mqtt-tls-toggle">
                             <input
                               type="checkbox"
-                              checked={mqttTlsInsecure}
-                              onChange={(event) => setMqttTlsInsecure(event.target.checked)}
+                              checked={mqttTlsEnabled}
+                              onChange={(event) => setMqttTlsEnabled(event.target.checked)}
                             />
-                            {t("engineering.outbound.mqtt.tlsInsecure")}
+                            {t("engineering.outbound.mqtt.tlsEnabled")}
                           </label>
-                          {editing ? (
-                            <div className="mqtt-cert-upload-grid mqtt-cert-upload-grid--compact">
-                              <MqttCertUploader
-                                accessToken={accessToken}
-                                targetId={editing.id}
-                                kind="ca"
-                                currentPath={mqttTlsCaPath}
-                                label={t("engineering.outbound.mqtt.tlsCaPath")}
-                                onUploaded={(path) => setMqttTlsCaPath(path)}
-                                onDeleted={() => setMqttTlsCaPath("")}
+                          {mqttTlsEnabled ? (
+                            <>
+                              <label className="notify-option">
+                                <input
+                                  type="checkbox"
+                                  checked={mqttTlsInsecure}
+                                  onChange={(event) => setMqttTlsInsecure(event.target.checked)}
+                                />
+                                {t("engineering.outbound.mqtt.tlsInsecure")}
+                              </label>
+                              {editing ? (
+                                <div className="mqtt-cert-upload-grid mqtt-cert-upload-grid--compact">
+                                  <MqttCertUploader
+                                    accessToken={accessToken}
+                                    targetId={editing.id}
+                                    kind="ca"
+                                    currentPath={mqttTlsCaPath}
+                                    label={t("engineering.outbound.mqtt.tlsCaPath")}
+                                    onUploaded={(path) => setMqttTlsCaPath(path)}
+                                    onDeleted={() => setMqttTlsCaPath("")}
+                                  />
+                                  <MqttCertUploader
+                                    accessToken={accessToken}
+                                    targetId={editing.id}
+                                    kind="cert"
+                                    currentPath={mqttTlsCertPath}
+                                    label={t("engineering.outbound.mqtt.tlsCertPath")}
+                                    onUploaded={(path) => setMqttTlsCertPath(path)}
+                                    onDeleted={() => setMqttTlsCertPath("")}
+                                  />
+                                  <MqttCertUploader
+                                    accessToken={accessToken}
+                                    targetId={editing.id}
+                                    kind="key"
+                                    currentPath={mqttTlsKeyPath}
+                                    label={t("engineering.outbound.mqtt.tlsKeyPath")}
+                                    onUploaded={(path) => setMqttTlsKeyPath(path)}
+                                    onDeleted={() => setMqttTlsKeyPath("")}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="mqtt-cert-pending-grid">
+                                  <PendingCertInput
+                                    label={t("engineering.outbound.mqtt.tlsCaPath")}
+                                    file={pendingCertCa}
+                                    onChange={setPendingCertCa}
+                                    t={t}
+                                  />
+                                  <PendingCertInput
+                                    label={t("engineering.outbound.mqtt.tlsCertPath")}
+                                    file={pendingCertCert}
+                                    onChange={setPendingCertCert}
+                                    t={t}
+                                  />
+                                  <PendingCertInput
+                                    label={t("engineering.outbound.mqtt.tlsKeyPath")}
+                                    file={pendingCertKey}
+                                    onChange={setPendingCertKey}
+                                    t={t}
+                                  />
+                                  <small className="mqtt-cert-pending-hint">
+                                    {t("engineering.outbound.mqtt.certUploadOnSave")}
+                                  </small>
+                                </div>
+                              )}
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {mqttStep === 2 ? (
+                        <>
+                          <div className="mqtt-panel-grid">
+                            <label>
+                              {t("engineering.outbound.mqtt.publishIntervalSec")}
+                              <input
+                                type="number"
+                                min={0}
+                                max={3600}
+                                value={mqttPublishInterval}
+                                onChange={(event) => setMqttPublishInterval(event.target.value)}
                               />
-                              <MqttCertUploader
-                                accessToken={accessToken}
-                                targetId={editing.id}
-                                kind="cert"
-                                currentPath={mqttTlsCertPath}
-                                label={t("engineering.outbound.mqtt.tlsCertPath")}
-                                onUploaded={(path) => setMqttTlsCertPath(path)}
-                                onDeleted={() => setMqttTlsCertPath("")}
+                            </label>
+                            <label>
+                              {t("engineering.outbound.form.qos")}
+                              <input
+                                type="number"
+                                min={0}
+                                max={2}
+                                value={qos}
+                                onChange={(event) => setQos(Number(event.target.value) || 0)}
                               />
-                              <MqttCertUploader
-                                accessToken={accessToken}
-                                targetId={editing.id}
-                                kind="key"
-                                currentPath={mqttTlsKeyPath}
-                                label={t("engineering.outbound.mqtt.tlsKeyPath")}
-                                onUploaded={(path) => setMqttTlsKeyPath(path)}
-                                onDeleted={() => setMqttTlsKeyPath("")}
+                            </label>
+                            <label>
+                              {t("engineering.outbound.form.eventFilter")}
+                              <select
+                                value={eventFilter}
+                                onChange={(event) =>
+                                  setEventFilter(event.target.value as "all" | "telemetry" | "alarm")
+                                }
+                              >
+                                <option value="all">{t("engineering.outbound.form.filterAll")}</option>
+                                <option value="telemetry">{t("engineering.outbound.form.filterTelemetry")}</option>
+                                <option value="alarm">{t("engineering.outbound.form.filterAlarm")}</option>
+                              </select>
+                            </label>
+                            <label className="notify-option">
+                              <input
+                                type="checkbox"
+                                checked={retain}
+                                onChange={(event) => setRetain(event.target.checked)}
                               />
+                              {t("engineering.outbound.form.retain")}
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            className="link-btn mqtt-advanced-toggle"
+                            onClick={() => setShowMqttAdvanced((v) => !v)}
+                          >
+                            <span className="material-symbols-outlined">
+                              {showMqttAdvanced ? "expand_less" : "expand_more"}
+                            </span>
+                            {showMqttAdvanced
+                              ? t("engineering.outbound.mqtt.hideAdvanced")
+                              : t("engineering.outbound.mqtt.showAdvanced")}
+                          </button>
+                          {showMqttAdvanced ? (
+                            <div className="mqtt-panel-grid mqtt-advanced-grid">
+                              <label>
+                                {t("engineering.outbound.mqtt.keepaliveSec")}
+                                <input
+                                  type="number"
+                                  min={5}
+                                  max={3600}
+                                  value={mqttKeepalive}
+                                  onChange={(event) => setMqttKeepalive(event.target.value)}
+                                />
+                              </label>
+                              <label>
+                                {t("engineering.outbound.mqtt.connectTimeoutSec")}
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={120}
+                                  value={mqttConnectTimeout}
+                                  onChange={(event) => setMqttConnectTimeout(event.target.value)}
+                                />
+                              </label>
                             </div>
-                          ) : (
-                            <div className="mqtt-cert-pending-grid">
-                              <PendingCertInput
-                                label={t("engineering.outbound.mqtt.tlsCaPath")}
-                                file={pendingCertCa}
-                                onChange={setPendingCertCa}
-                                t={t}
-                              />
-                              <PendingCertInput
-                                label={t("engineering.outbound.mqtt.tlsCertPath")}
-                                file={pendingCertCert}
-                                onChange={setPendingCertCert}
-                                t={t}
-                              />
-                              <PendingCertInput
-                                label={t("engineering.outbound.mqtt.tlsKeyPath")}
-                                file={pendingCertKey}
-                                onChange={setPendingCertKey}
-                                t={t}
-                              />
-                              <small className="mqtt-cert-pending-hint">
-                                {t("engineering.outbound.mqtt.certUploadOnSave")}
-                              </small>
-                            </div>
-                          )}
+                          ) : null}
                         </>
+                      ) : null}
+
+                      {mqttStep === 3 ? (
+                        <div className="mqtt-topic-card mqtt-topic-card--full">
+                          <div className="mqtt-topic-card-head">
+                            <div>
+                              <div className="mqtt-topic-card-title">
+                                <span className="material-symbols-outlined">topic</span>
+                                {t("engineering.outbound.mqtt.topicCard.title")}
+                              </div>
+                              <small>{t("engineering.outbound.mqtt.topicCard.hint")}</small>
+                            </div>
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={() => setTopicTemplateEditing((v) => !v)}
+                            >
+                              <span className="material-symbols-outlined">
+                                {topicTemplateEditing ? "check" : "edit"}
+                              </span>
+                              {topicTemplateEditing ? t("common.done") : t("common.edit")}
+                            </button>
+                          </div>
+
+                          <div className="mqtt-topic-card-body">
+                            <div className="mqtt-topic-meta-grid">
+                              <label>
+                                {t("engineering.outbound.mqtt.topicPrefix")}
+                                <input
+                                  value={mqttTopicPrefix}
+                                  onChange={(event) => setMqttTopicPrefix(event.target.value)}
+                                  placeholder="e1"
+                                />
+                              </label>
+                              <label>
+                                {t("engineering.outbound.mqtt.customerId")}
+                                <input
+                                  value={mqttCustomerId}
+                                  onChange={(event) => setMqttCustomerId(event.target.value)}
+                                  placeholder="default"
+                                />
+                              </label>
+                            </div>
+
+                            {topicTemplateEditing ? (
+                              <>
+                                <label className="mqtt-topic-template-edit">
+                                  {t("engineering.outbound.mqtt.topicTemplate")}
+                                  <input
+                                    value={mqttTopicTemplate}
+                                    onChange={(event) => setMqttTopicTemplate(event.target.value)}
+                                    placeholder={DEFAULT_MQTT_TEMPLATE}
+                                  />
+                                </label>
+                                <div className="mqtt-topic-vars">
+                                  {["{prefix}", "{customer}", "{device}", "{source}", "{datatype}"].map(
+                                    (v) => (
+                                      <button
+                                        type="button"
+                                        key={v}
+                                        className="mqtt-topic-var-chip"
+                                        onClick={() => {
+                                          const base = (mqttTopicTemplate || "").trim();
+                                          setMqttTopicTemplate(base ? `${base}/${v}` : v);
+                                        }}
+                                      >
+                                        {v}
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="mqtt-topic-template-display">
+                                <code>{effectiveTemplate}</code>
+                              </div>
+                            )}
+
+                            <div className="mqtt-topic-preview">
+                              <small>{t("engineering.outbound.mqtt.topicCard.previewLabel")}:</small>
+                              <code>{topicPreview}</code>
+                            </div>
+                          </div>
+                        </div>
                       ) : null}
                     </div>
 
-                    {/* SAG PANEL: Yayin Ayarlari + Topic Sablonu */}
-                    <div className="mqtt-form-v2-panel">
-                      <div className="mqtt-panel-heading">
-                        <span className="material-symbols-outlined">send</span>
-                        {t("engineering.outbound.mqtt.section.publish")}
-                      </div>
-                      <div className="mqtt-panel-grid">
-                        <label>
-                          {t("engineering.outbound.mqtt.publishIntervalSec")}
-                          <input
-                            type="number"
-                            min={0}
-                            max={3600}
-                            value={mqttPublishInterval}
-                            onChange={(event) => setMqttPublishInterval(event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          {t("engineering.outbound.form.qos")}
-                          <input
-                            type="number"
-                            min={0}
-                            max={2}
-                            value={qos}
-                            onChange={(event) => setQos(Number(event.target.value) || 0)}
-                          />
-                        </label>
-                        <label>
-                          {t("engineering.outbound.form.eventFilter")}
-                          <select
-                            value={eventFilter}
-                            onChange={(event) =>
-                              setEventFilter(event.target.value as "all" | "telemetry" | "alarm")
-                            }
-                          >
-                            <option value="all">{t("engineering.outbound.form.filterAll")}</option>
-                            <option value="telemetry">{t("engineering.outbound.form.filterTelemetry")}</option>
-                            <option value="alarm">{t("engineering.outbound.form.filterAlarm")}</option>
-                          </select>
-                        </label>
-                        <label className="notify-option">
-                          <input
-                            type="checkbox"
-                            checked={retain}
-                            onChange={(event) => setRetain(event.target.checked)}
-                          />
-                          {t("engineering.outbound.form.retain")}
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* TOPIC TEMPLATE CARD (sag panelin altinda, sadece sag sutunda) */}
-                    <div className="mqtt-topic-card mqtt-topic-card--right-col">
-                      <div className="mqtt-topic-card-head">
-                        <div>
-                          <div className="mqtt-topic-card-title">
-                            <span className="material-symbols-outlined">topic</span>
-                            {t("engineering.outbound.mqtt.topicCard.title")}
-                          </div>
-                          <small>{t("engineering.outbound.mqtt.topicCard.hint")}</small>
-                        </div>
+                    <div className="mqtt-wizard-nav">
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        disabled={mqttStep === 0}
+                        onClick={() => setMqttStep((s) => Math.max(0, s - 1))}
+                      >
+                        {t("engineering.outbound.mqtt.stepPrev")}
+                      </button>
+                      {mqttStep < 3 ? (
                         <button
                           type="button"
-                          className="link-btn"
-                          onClick={() => setTopicTemplateEditing((v) => !v)}
+                          className="primary-btn"
+                          onClick={() => setMqttStep((s) => Math.min(3, s + 1))}
                         >
-                          <span className="material-symbols-outlined">
-                            {topicTemplateEditing ? "check" : "edit"}
-                          </span>
-                          {topicTemplateEditing
-                            ? t("common.done")
-                            : t("common.edit")}
+                          {t("engineering.outbound.mqtt.stepNext")}
                         </button>
-                      </div>
-
-                      <div className="mqtt-topic-card-body">
-                        {/* Prefix + Customer (small inputs) */}
-                        <div className="mqtt-topic-meta-grid">
-                          <label>
-                            {t("engineering.outbound.mqtt.topicPrefix")}
-                            <input
-                              value={mqttTopicPrefix}
-                              onChange={(event) => setMqttTopicPrefix(event.target.value)}
-                              placeholder="e1"
-                            />
-                          </label>
-                          <label>
-                            {t("engineering.outbound.mqtt.customerId")}
-                            <input
-                              value={mqttCustomerId}
-                              onChange={(event) => setMqttCustomerId(event.target.value)}
-                              placeholder="default"
-                            />
-                          </label>
-                        </div>
-
-                        {topicTemplateEditing ? (
-                          <>
-                            <label className="mqtt-topic-template-edit">
-                              {t("engineering.outbound.mqtt.topicTemplate")}
-                              <input
-                                value={mqttTopicTemplate}
-                                onChange={(event) => setMqttTopicTemplate(event.target.value)}
-                                placeholder={DEFAULT_MQTT_TEMPLATE}
-                              />
-                            </label>
-                            <div className="mqtt-topic-vars">
-                              {["{prefix}", "{customer}", "{device}", "{source}", "{datatype}"].map(
-                                (v) => (
-                                  <button
-                                    type="button"
-                                    key={v}
-                                    className="mqtt-topic-var-chip"
-                                    onClick={() => {
-                                      // Mevcut template'in sonuna ekle
-                                      const base = (mqttTopicTemplate || "").trim();
-                                      setMqttTopicTemplate(
-                                        base ? `${base}/${v}` : v
-                                      );
-                                    }}
-                                  >
-                                    {v}
-                                  </button>
-                                )
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="mqtt-topic-template-display">
-                            <code>{effectiveTemplate}</code>
-                          </div>
-                        )}
-
-                        {/* Canli preview */}
-                        <div className="mqtt-topic-preview">
-                          <small>{t("engineering.outbound.mqtt.topicCard.previewLabel")}:</small>
-                          <code>{topicPreview}</code>
-                        </div>
-                      </div>
+                      ) : null}
                     </div>
-
-                    {/* Gelismis (collapsible) */}
-                    <button
-                      type="button"
-                      className="link-btn mqtt-advanced-toggle"
-                      onClick={() => setShowMqttAdvanced((v) => !v)}
-                    >
-                      <span className="material-symbols-outlined">
-                        {showMqttAdvanced ? "expand_less" : "expand_more"}
-                      </span>
-                      {showMqttAdvanced
-                        ? t("engineering.outbound.mqtt.hideAdvanced")
-                        : t("engineering.outbound.mqtt.showAdvanced")}
-                    </button>
-                    {showMqttAdvanced ? (
-                      <div className="mqtt-panel-grid mqtt-advanced-grid">
-                        <label>
-                          {t("engineering.outbound.mqtt.keepaliveSec")}
-                          <input
-                            type="number"
-                            min={5}
-                            max={3600}
-                            value={mqttKeepalive}
-                            onChange={(event) => setMqttKeepalive(event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          {t("engineering.outbound.mqtt.connectTimeoutSec")}
-                          <input
-                            type="number"
-                            min={1}
-                            max={120}
-                            value={mqttConnectTimeout}
-                            onChange={(event) => setMqttConnectTimeout(event.target.value)}
-                          />
-                        </label>
-                      </div>
-                    ) : null}
                   </div>
                 ) : null}
               </>
@@ -1361,6 +1543,128 @@ export function OutboundTargetsPanel({
         </div>
       ) : null}
 
+      {isWebhookMode ? (
+        <div className="webhook-list">
+          {filteredTargets.length === 0 ? (
+            <div className="webhook-empty">
+              <span className="material-symbols-outlined">hub</span>
+              <h4>{t(titleKey)}</h4>
+              <p>{t("engineering.outbound.emptyHint")}</p>
+              <button type="button" className="primary-btn" onClick={openCreate}>
+                + {t(newTargetKey)}
+              </button>
+            </div>
+          ) : (
+            filteredTargets.map((item) => {
+              const rt = outboundRuntime[item.id];
+              const ok = !!rt?.last_success_at;
+              const last = rt?.last_success_at || rt?.last_failure_at;
+              const lastStr = last ? new Date(last).toLocaleTimeString() : null;
+              return (
+                <div
+                  key={item.id}
+                  className={`webhook-card ${item.is_active ? "" : "webhook-card--inactive"}`}
+                >
+                  <div className="webhook-card-icon">
+                    <span className="material-symbols-outlined">hub</span>
+                  </div>
+                  <div className="webhook-card-info">
+                    {/* Durum rozeti SADECE sag taraftaki runtime slotunda
+                        gosterilir; burada tekrar etmiyoruz (eskiden ayni
+                        kartta iki kez "Aktif" yaziyordu). */}
+                    <div className="webhook-card-name">
+                      <strong>{item.name}</strong>
+                    </div>
+                    <code className="webhook-card-url">{item.endpoint}</code>
+                    {webhookTestResults[item.id] ? (
+                      <span
+                        className={`webhook-test-result ${webhookTestResults[item.id].ok ? "is-ok" : "is-fail"}`}
+                      >
+                        <span className="material-symbols-outlined">
+                          {webhookTestResults[item.id].ok ? "check_circle" : "error"}
+                        </span>
+                        {webhookTestResults[item.id].detail}
+                      </span>
+                    ) : null}
+                  </div>
+                  {/* Tek durum rozeti: once konfigurasyon (Pasif), sonra
+                      runtime (Hata / Aktif). Zaman damgasi son basarili ya da
+                      son basarisiz denemenin saati. */}
+                  <div className="webhook-card-runtime">
+                    {!item.is_active ? (
+                      <span className="outbound-runtime-pill outbound-runtime-pill--off">
+                        <span className="status-dot" />
+                        {t("common.inactive")}
+                      </span>
+                    ) : rt?.last_failure_at && !ok ? (
+                      <span
+                        className="outbound-runtime-pill outbound-runtime-pill--bad"
+                        title={rt.last_error || undefined}
+                      >
+                        <span className="status-dot" />
+                        {t("engineering.outbound.runtime.webhookFailed")}
+                        {lastStr ? <small> · {lastStr}</small> : null}
+                      </span>
+                    ) : (
+                      <span
+                        className="outbound-runtime-pill outbound-runtime-pill--ok"
+                        title={
+                          lastStr
+                            ? `${t("engineering.outbound.runtime.lastSuccess")}: ${lastStr}`
+                            : undefined
+                        }
+                      >
+                        <span className="status-dot" />
+                        {t("common.active")}
+                        {lastStr ? <small> · {lastStr}</small> : null}
+                      </span>
+                    )}
+                  </div>
+                  <div className="webhook-card-actions">
+                    <button
+                      type="button"
+                      className="secondary-btn action-btn"
+                      disabled={webhookTestingId === item.id}
+                      onClick={() => void runWebhookTest(item)}
+                      title={t("notifications.settings.webhook.testHint")}
+                    >
+                      {webhookTestingId === item.id
+                        ? t("notifications.settings.webhook.testSending")
+                        : t("notifications.settings.webhook.testBtn")}
+                    </button>
+                    <button type="button" className="edit-btn action-btn" onClick={() => openEdit(item)}>
+                      {t("common.edit")}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-btn action-btn"
+                      onClick={async () => {
+                        if (await asyncConfirm(t("engineering.outbound.confirmDelete", { name: item.name }))) {
+                          void onDelete(item.id).catch((err: unknown) => {
+                            setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+                          });
+                        }
+                      }}
+                    >
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : filteredTargets.length === 0 ? (
+        <div className="outbound-empty">
+          <span className="material-symbols-outlined">cell_tower</span>
+          <h4>{t(titleKey)}</h4>
+          <p>{t("engineering.outbound.emptyHint")}</p>
+          <button type="button" className="primary-btn" onClick={openCreate}>
+            + {t(newTargetKey)}
+          </button>
+        </div>
+      ) : (
+      <>
       {/* Modern liste tablosu — Aktif sütun en başta, "Filtre" kaldırıldı,
           "Endpoint / Listen" basitleştirildi (default CA ekrandan kaldırıldı). */}
       <div className="outbound-modern-table-wrap">
@@ -1376,7 +1680,7 @@ export function OutboundTargetsPanel({
             </tr>
           </thead>
           <tbody>
-            {visibleTargets.map((item) => {
+            {filteredTargets.map((item) => {
               const isIec = item.protocol === "iec104";
               // listen_host wildcard ise (0.0.0.0 / :: / bos) SCADA buraya
               // dogrudan baglanamaz; tarayicinin eristigi host'u goster (ayni
@@ -1563,16 +1867,11 @@ export function OutboundTargetsPanel({
                 </tr>
               );
             })}
-            {visibleTargets.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="helper-text" style={{ padding: 24, textAlign: "center" }}>
-                  {t("engineering.outbound.emptyHint")}
-                </td>
-              </tr>
-            ) : null}
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
       {/* MQTT Custom Topic Mapping modal — buton tiklayinca acilir */}
       {mappingModalTarget ? (

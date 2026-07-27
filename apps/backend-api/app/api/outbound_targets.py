@@ -169,6 +169,53 @@ def create_outbound_target(
     return row
 
 
+@router.post("/{target_id}/test")
+def test_outbound_target(
+    target_id: int,
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+    db: Session = Depends(get_db),
+) -> dict:
+    """REST/webhook hedefine temsili bir olay POST'lar (n8n vb. dogrulamasi).
+
+    Kaydedilmis hedefin endpoint + auth_header/token ayarlarini kullanarak
+    ornek bir alarm event JSON'i gonderir; n8n'de "Listen for test event" ile
+    akis kurmak icin idealdir. Sonuc {ok, detail} doner ve 'Durum' sutununu
+    gunceller. Sadece REST protokolu desteklenir (MQTT/IEC104 haric)."""
+    from uuid import uuid4
+
+    from app.services.outbound_dispatch_service import _record_delivery, _send_rest
+
+    target = db.get(OutboundTarget, target_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found")
+    if target.protocol != "rest":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Test yalnizca REST/webhook hedefleri icin desteklenir.",
+        )
+
+    sample = {
+        "message_id": str(uuid4()),
+        "event_kind": "alarm",
+        "test": True,
+        "device_code": "DEV-001",
+        "device_name": "Ornek Fider",
+        "signal_key": "sat01.current_phase_a",
+        "value": 245.7,
+        "quality": "good",
+        "severity": "critical",
+        "message": "EnerjiOne Grid test webhook event",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        _send_rest(target, sample)
+        _record_delivery(target.id, ok=True)
+        return {"ok": True, "detail": f"Test verisi gonderildi -> {target.endpoint}"}
+    except Exception as exc:  # noqa: BLE001
+        _record_delivery(target.id, ok=False, error=str(exc))
+        return {"ok": False, "detail": str(exc)}
+
+
 @router.patch("/{target_id}", response_model=OutboundTargetRead)
 def update_outbound_target(
     target_id: int,
