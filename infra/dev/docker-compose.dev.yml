@@ -1,0 +1,39 @@
+# EnerjiOne Grid — YEREL GELISTIRME yardimci altyapisi.
+#
+# Sadece RabbitMQ + NATS ayaga kaldirir. Postgres'i host'a kendiniz
+# kuruyorsunuz (bu compose'a dahil DEGIL). Backend + frontend native calisir.
+#
+# Kullanim (repo kokunden):
+#   docker compose -f infra/dev/docker-compose.dev.yml up -d
+#   docker compose -f infra/dev/docker-compose.dev.yml down
+#
+# NOT: RabbitMQ/NATS SADECE telemetri + alarm pipeline'i (gateway -> worker)
+# icin gerekli. Sadece UI'i acip login olmak istiyorsaniz backend .env'de
+# EVENT_BUS_BACKEND=inprocess yeterli; bu compose'a gerek yok.
+name: enerjione-grid-dev
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: e1-grid-dev-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: e1
+      RABBITMQ_DEFAULT_PASS: e1pass
+      # Dev icin dedicated vhost'u imaj otomatik yaratsin.
+      RABBITMQ_DEFAULT_VHOST: e1
+    ports:
+      - "5672:5672"      # AMQP
+      - "15672:15672"    # Management UI -> http://localhost:15672 (e1/e1pass)
+
+  # NATS JetStream — dev'de AUTH KAPALI (allow-all). Production'daki
+  # infra/nats/nats-server.conf user/permission modeli kullanilmaz; dev
+  # kolayligi icin anonim baglanti serbest.
+  nats:
+    image: nats:2.10-alpine
+    container_name: e1-grid-dev-nats
+    restart: unless-stopped
+    command: ["-js", "-m", "8222"]   # -js: JetStream aktif, -m: monitoring :8222
+    ports:
+      - "4222:4222"      # client
+      - "8222:8222"      # monitoring -> http://localhost:8222
