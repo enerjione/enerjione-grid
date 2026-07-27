@@ -52,10 +52,19 @@ infra/scripts/windows/service_control_panel.config.json
 infra/nats/nats-server.conf
 !infra/nats/nats-server.conf.template
 
-# DB yedek dosyalari — update.sh tarafindan repo root'a yazilir; commit edilmemeli.
-# Basta '/' ZORUNLU: ankrasiz `backups/` her derinlikteki backups klasorunu
-# yakalar ve frontend'in `src/features/backups/` dizinini de ignore ederdi.
+# DB yedek dosyalari — ASLA commit edilmemeli (gercek musteri verisi icerir).
+# Ankrasiz `backups/` yazmak cazip ama frontend'in `src/features/backups/`
+# kaynak dizinini de yakalar; o yuzden yedek YAZILAN dizinler tek tek
+# ankrali listelenir:
+#   /backups/                  -> update.sh update oncesi otomatik yedek
+#   /apps/backend-api/backups/ -> backup_service.py manuel/zamanli yedekler
+# NOT: git .gitignore'da SATIR SONU yorumu desteklemez, pattern'in parcasi
+# sayar. Yorumlar bu yuzden ayri satirlarda.
 /backups/
+/apps/backend-api/backups/
+# Emniyet agi: yedek dosyalari nereye duserse dussun uzantidan yakalanir.
+*.dump
+*.sql.gz
 
 # Runtime lisans verisi (installation-id, license.lic) — makineye baglidir,
 # native backend calisinca LICENSE_DIR altinda olusur. Commit edilmez.
