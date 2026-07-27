@@ -36,6 +36,7 @@ export type EngineeringPage =
   | "backups"
   | "license"
   | "system-status"
+  | "network-settings"
   | "active-sessions";
 
 export type TabRoute =
@@ -109,6 +110,7 @@ export function tabLabel(
         backups: "engineering.nav.backups",
         license: "engineering.nav.license",
         "system-status": "header.systemStatus",
+        "network-settings": "engineering.nav.networkSettings",
         "active-sessions": "engineering.nav.activeSessions",
       };
       return t(map[route.page]);

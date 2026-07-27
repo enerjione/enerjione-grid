@@ -78,6 +78,38 @@ e1_confirm() {
   [[ "$ans" =~ ^[yY]([eE][sS])?$ ]]
 }
 
+# Onay sorma — varsayilan EVET. Otomatik tespit sonucu "bu makine appliance"
+# gibi guclu bir sinyal varken kullaniciya sadece "istemiyorsan hayir de"
+# demek icin. tty yoksa (curl | bash) EVET kabul edilir.
+e1_confirm_yes() {
+  local prompt="${1:-Devam edilsin mi?}"
+  if [[ "${ASSUME_YES:-0}" == "1" ]]; then return 0; fi
+  if [[ ! -t 0 ]]; then return 0; fi
+  read -r -p "  ${E1_YELLOW}?${E1_RESET}   ${prompt} [Y/n]: " ans
+  [[ ! "$ans" =~ ^[nN]([oO])?$ ]]
+}
+
+# Makinede WiFi arayuzu var mi? Appliance (mini PC) modunu otomatik acmak
+# icin kullanilir: bulut sunuculari/VPS'lerde WiFi karti YOKTUR, saha mini
+# PC'lerinde vardir. sysfs uzerinden bakariz — hicbir paket gerektirmez
+# (nmcli/iw bu asamada henuz kurulu olmayabilir).
+e1_has_wifi() {
+  local dir
+  for dir in /sys/class/net/*/wireless; do
+    [[ -d "$dir" ]] && return 0
+  done
+  # Bazi surucular 'wireless' yerine 'phy80211' symlink'i birakir.
+  for dir in /sys/class/net/*/phy80211; do
+    [[ -e "$dir" ]] && return 0
+  done
+  return 1
+}
+
+# Appliance modu bu makinede kurulu mu? (setup-appliance.sh calistirilmis mi)
+e1_appliance_installed() {
+  [[ -f /etc/systemd/system/e1-netd.path ]] || [[ -d /var/lib/e1-grid/net ]]
+}
+
 # Root kontrolu — install/uninstall icin zorunlu.
 e1_require_root() {
   if [[ $EUID -ne 0 ]]; then

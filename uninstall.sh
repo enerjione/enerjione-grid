@@ -61,6 +61,9 @@ if [[ $ASSUME_YES -ne 1 ]]; then
   e1_warn "  * Tum telemetri, alarm, kullanici, gateway, sinyal verileri"
   [[ $KEEP_IMAGES -ne 1 ]] && e1_warn "  * Docker image'lari (e1-grid/* + eski e1/*)"
   [[ $PURGE_DIR -eq 1 ]]   && e1_warn "  * ${SCRIPT_DIR} dizini (.env DAHIL)"
+  if e1_appliance_installed; then
+    e1_warn "  * Appliance katmani: WiFi AP 'EnerjiOne Grid' + ag ajani (ayrica sorulacak)"
+  fi
   echo
   if ! e1_confirm "Gercekten devam edilsin mi?"; then
     e1_info "Iptal edildi."
@@ -68,7 +71,43 @@ if [[ $ASSUME_YES -ne 1 ]]; then
   fi
 fi
 
-e1_set_steps 6
+APPLIANCE_PRESENT=0
+if e1_appliance_installed; then
+  APPLIANCE_PRESENT=1
+  e1_set_steps 7
+else
+  e1_set_steps 6
+fi
+
+# ---- Appliance host katmani (varsa) --------------------------------------
+# Ag ajani + WiFi AP + mDNS host'ta kalir; uygulama silinince bunlarin da
+# temizlenmesi gerekir, aksi halde sifresiz bir AP yayinda kalir.
+# Hostname ve netplan renderer degisikligi GERI ALINMAZ (sistem genelinde
+# baska seyleri etkileyebilir) — kullaniciya nasil geri alacagi soylenir.
+if [[ $APPLIANCE_PRESENT -eq 1 ]]; then
+  e1_step "Appliance host katmani (ag ajani + WiFi AP)..."
+  if [[ $ASSUME_YES -eq 1 ]] || e1_confirm "WiFi AP 'EnerjiOne Grid' ve ag ajani da kaldirilsin mi?"; then
+    for unit in e1-netd.path e1-netd-report.timer e1-netd.service e1-netd-report.service; do
+      systemctl stop "$unit" 2>/dev/null || true
+      systemctl disable "$unit" 2>/dev/null || true
+      rm -f "/etc/systemd/system/${unit}"
+    done
+    systemctl daemon-reload 2>/dev/null || true
+    if command -v nmcli >/dev/null 2>&1; then
+      nmcli connection down e1-grid-ap 2>/dev/null || true
+      nmcli connection delete e1-grid-ap 2>/dev/null || true
+    fi
+    rm -f /etc/NetworkManager/dnsmasq-shared.d/e1-grid.conf
+    rm -rf /var/lib/e1-grid
+    e1_ok "Ag ajani, AP profili ve durum dizini kaldirildi."
+    e1_info "Hostname (e1-grid) ve netplan renderer degisikligi KORUNDU."
+    e1_info "  Hostname geri al : sudo hostnamectl set-hostname <eski-ad>"
+    e1_info "  Netplan geri al  : sudo rm /etc/netplan/99-e1-grid-nm.yaml && sudo netplan apply"
+    e1_info "  Netplan yedegi   : /var/backups/e1-grid-netplan-*"
+  else
+    e1_info "Appliance katmani korundu."
+  fi
+fi
 
 # ---- 0/6: systemd unit (varsa) ------------------------------------------
 e1_step "systemd servis kaydi (varsa)..."

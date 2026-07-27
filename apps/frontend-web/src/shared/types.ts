@@ -243,6 +243,7 @@ export type UserNotificationPreferences = {
   email_enabled: boolean;
   sms_enabled: boolean;
   telegram_enabled?: boolean;
+  whatsapp_web_enabled?: boolean;
   min_level_rank: number;
 };
 
@@ -804,6 +805,77 @@ export type ServiceStatus = {
 export type ServicesReport = {
   services: ServiceStatus[];
   sampled_at: number;
+};
+
+// ---- Appliance ag ayarlari (`/network/*`) ---------------------------------
+// Kaynak: mini PC'de root ile calisan e1-netd ajaninin yazdigi state.json.
+// Backend host agina dokunmaz; sadece bu dosyayi okur.
+
+export type NetworkInterface = {
+  ifname: string;
+  type: string;
+  state?: string | null;
+  connection?: string | null;
+  managed_by_e1: boolean;
+  mac?: string | null;
+  /** Cihazin su anki adresleri — "192.168.1.50/24". */
+  addresses: string[];
+  gateway?: string | null;
+  dns: string[];
+  /** Profildeki kalici niyet: "auto" (DHCP) | "manual" (statik). */
+  method?: string | null;
+  profile_addresses: string[];
+  profile_gateway?: string | null;
+  profile_dns: string[];
+};
+
+export type AccessPointInfo = {
+  connection?: string | null;
+  exists: boolean;
+  active: boolean;
+  ssid?: string | null;
+  ifname?: string | null;
+  address?: string | null;
+  secured: boolean;
+};
+
+export type NetworkApplyStatus = {
+  request_id?: string | null;
+  /** applying | applied | rebooting | failed */
+  status?: string | null;
+  error?: string | null;
+  at?: string | null;
+  applied?: Record<string, unknown> | null;
+};
+
+export type NetworkStatus = {
+  available: boolean;
+  /** Kapaliysa sebep kodu: state_dir_missing | agent_never_reported | state_stale ... */
+  reason?: string | null;
+  hostname?: string | null;
+  mdns_name?: string | null;
+  updated_at?: string | null;
+  state_age_seconds?: number | null;
+  ap: AccessPointInfo;
+  interfaces: NetworkInterface[];
+  pending: boolean;
+  last_apply?: NetworkApplyStatus | null;
+};
+
+export type NetworkConfigPayload = {
+  ifname: string;
+  method: "dhcp" | "static";
+  address?: string | null;
+  prefix?: number | null;
+  gateway?: string | null;
+  dns: string[];
+  reboot: boolean;
+};
+
+export type NetworkConfigAccepted = {
+  request_id: string;
+  reboot: boolean;
+  next_url?: string | null;
 };
 
 /** Bildirim merkezi (Header zil ikonu). */

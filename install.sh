@@ -16,13 +16,20 @@
 # alanlari rastgele degerlerle doldurur, Docker'i atlar (zaten kuruluysa),
 # servisleri update eder.
 #
-# Env override'lar (her ikisi de opsiyonel):
+# Appliance (mini PC) modu OTOMATIKTIR: makinede WiFi karti varsa sifresiz
+# "EnerjiOne Grid" AP'si, e1-grid.local mDNS ve UI'dan IP/DNS ayari da ayni
+# komutla kurulur. VPS'lerde WiFi karti olmadigi icin devreye girmez.
+#
+# Env override'lar (hepsi opsiyonel):
 #   INSTALL_DIR  hedef dizin (default: /opt/enerjione-grid)
 #   BRANCH       checkout edilecek git branch'i (default: docker-linux-deploy)
 #   REPO_URL     git remote URL (default: github.com/fikretsafak/EnerjiOneGrid.git)
 #   INSTALL_USER kurulum sonrasi dosya sahibi olacak kullanici
 #                (default: SUDO_USER veya root)
 #   ASSUME_YES=1 tum onay sorularini atla
+#   E1_APPLIANCE 1 = appliance modunu zorla (WiFi karti yoksa bile)
+#                0 = hic kurma (WiFi karti olsa bile)
+#                bos/auto = WiFi kartina gore otomatik karar (varsayilan)
 # ===========================================================================
 
 set -euo pipefail
@@ -400,6 +407,47 @@ if [[ ! -f /etc/systemd/system/enerjione-grid.service ]]; then
   fi
 fi
 
+# ---- Appliance (mini PC) modu -------------------------------------------
+# Sifresiz WiFi AP ("EnerjiOne Grid"), e1-grid.local mDNS ve UI'dan IP/DNS
+# ayari (e1-netd ajani).
+#
+# OTOMATIK KARAR: makinede WiFi karti varsa bu bir saha mini PC'sidir ->
+# appliance modu kurulur. Bulut sunucularinda/VPS'lerde WiFi karti olmadigi
+# icin oralarda hic devreye girmez. Boylece tek komut hem VPS'te hem mini
+# PC'de dogru olani yapar.
+#
+# Manuel override:
+#   E1_APPLIANCE=1  -> WiFi olmasa bile kur (USB adaptor sonra takilacaksa)
+#   E1_APPLIANCE=0  -> WiFi olsa bile kurma (test laptop'u vb.)
+APPLIANCE_WANTED=0
+case "${E1_APPLIANCE:-auto}" in
+  1) APPLIANCE_WANTED=1 ;;
+  0) e1_info "Appliance modu E1_APPLIANCE=0 ile devre disi birakildi." ;;
+  *)
+    if e1_has_wifi; then
+      e1_info "WiFi arayuzu tespit edildi — bu makine saha mini PC'si gibi gorunuyor."
+      if e1_confirm_yes "Appliance modu kurulsun mu? (WiFi AP 'EnerjiOne Grid' + e1-grid.local + Ag Ayarlari sayfasi)"; then
+        APPLIANCE_WANTED=1
+      else
+        e1_info "Appliance modu atlandi. Sonradan: sudo bash infra/appliance/setup-appliance.sh"
+      fi
+    else
+      e1_info "WiFi arayuzu yok — sunucu kurulumu kabul edildi, appliance modu atlandi."
+    fi
+    ;;
+esac
+if [[ $APPLIANCE_WANTED -eq 1 ]]; then
+  if [[ -f "${INSTALL_DIR}/infra/appliance/setup-appliance.sh" ]]; then
+    bash "${INSTALL_DIR}/infra/appliance/setup-appliance.sh" \
+      || e1_warn "Appliance kurulumu tamamlanamadi; detay yukarida."
+    # Ag ajani dizini (state/request) yeni olusmus olabilir; backend'in
+    # mount'u gormesi icin recreate. Zaten dogruysa Docker no-op yapar.
+    docker compose up -d backend-api >/dev/null 2>&1 || true
+  else
+    e1_warn "infra/appliance/setup-appliance.sh bulunamadi (repo eski olabilir)."
+  fi
+fi
+
 # ---- Final rehber ---------------------------------------------------------
 VPS_IP="$(e1_detect_ip)"
 echo
@@ -433,3 +481,13 @@ echo "  ${E1_BOLD}Gateway eklemek icin:${E1_RESET}"
 echo "    Web arayuzu > Muhendislik > Gateway Yonetimi > 'Yeni Gateway'"
 echo "    Compose dosyasini indir, sahaya yukle, 'docker compose up -d'."
 echo
+if [[ $APPLIANCE_WANTED -eq 1 ]]; then
+  echo "  ${E1_BOLD}Appliance modu:${E1_RESET}"
+  echo "    WiFi   : ${E1_CYAN}EnerjiOne Grid${E1_RESET} (sifresiz) — baglanip http://e1-grid.local"
+  echo "    IP/DNS : Web arayuzu > Muhendislik > Sistem > Ag Ayarlari"
+  echo "    Detay  : docs/APPLIANCE.md"
+  echo
+else
+  echo "  ${E1_DIM}Mini PC (appliance) modu icin: sudo bash infra/appliance/setup-appliance.sh${E1_RESET}"
+  echo
+fi

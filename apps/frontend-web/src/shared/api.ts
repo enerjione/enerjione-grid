@@ -13,6 +13,9 @@ import type {
   HistoryBucket,
   HostStatus,
   LicenseStatus,
+  NetworkConfigAccepted,
+  NetworkConfigPayload,
+  NetworkStatus,
   TelemetryHistoryPoint,
   TelemetryAggregatePoint,
   NotificationItem,
@@ -2133,6 +2136,41 @@ export async function fetchServicesStatus(token: string): Promise<ServicesReport
     );
   }
   return (await response.json()) as ServicesReport;
+}
+
+/* ===== Appliance ag ayarlari (mini PC IP/DNS) ===== */
+
+/** Host'un ag durumu (arayuzler, WiFi AP, son uygulama sonucu).
+ *
+ *  Appliance modu kurulu degilse `available:false` + sebep doner — bu bir
+ *  hata degildir (VPS kurulumunda normal), sayfa bunu bilgilendirme olarak
+ *  gosterir. Polling icin session-expired event tetiklenmez. */
+export async function fetchNetworkStatus(token: string): Promise<NetworkStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/network/status`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 ? "session_polling_401" : "Ağ durumu alınamadı."
+    );
+  }
+  return (await response.json()) as NetworkStatus;
+}
+
+/** IP/DNS ayarini uygula. 202 doner: istek host ajanina kuyruklandi.
+ *  `reboot:true` ise cihaz birkac saniye icinde yeniden baslar ve bu, bu
+ *  oturumdaki son basarili cagridir. */
+export async function updateNetworkConfig(
+  token: string,
+  payload: NetworkConfigPayload
+): Promise<NetworkConfigAccepted> {
+  const response = await apiFetch(`${API_BASE_URL}/network/config`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Ağ ayarı uygulanamadı.");
+  return (await response.json()) as NetworkConfigAccepted;
 }
 
 /* ===== Bildirim merkezi (zil ikonu) ===== */

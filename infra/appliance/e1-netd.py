@@ -252,10 +252,11 @@ def _write_json(path: str, payload: dict, mode: int = 0o640) -> None:
         os.fsync(fh.fileno())
     os.chmod(tmp, mode)
     # Grup sahipligi backend container uid'sine ayarlanmis dizinden miras alinir.
+    # (AttributeError: os.chown Unix-only — testler Windows'ta da kosabilsin.)
     try:
         st = os.stat(STATE_DIR)
         os.chown(tmp, 0, st.st_gid)
-    except (PermissionError, OSError):
+    except (AttributeError, PermissionError, OSError):
         pass
     os.replace(tmp, path)
 

@@ -172,6 +172,14 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         canSee: isInstaller,
       },
       {
+        // Appliance (mini PC) modu: cihazin kendi IP/DNS ayari. Yanlis ayar
+        // cihazi kablolu agdan erisilemez yapabilir -> sadece installer.
+        page: "network-settings",
+        labelKey: "engineering.nav.networkSettings",
+        descKey: "engineering.navDesc.networkSettings",
+        canSee: isInstaller,
+      },
+      {
         page: "active-sessions",
         labelKey: "engineering.nav.activeSessions",
         descKey: "engineering.navDesc.activeSessions",

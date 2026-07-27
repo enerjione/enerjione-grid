@@ -23,6 +23,7 @@ import {
   MapPinned,
   Megaphone,
   MonitorSmartphone,
+  Network,
   Radio,
   Router,
   Settings,
@@ -50,6 +51,7 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   license: BadgeCheck,
   backups: DatabaseBackup,
   "system-status": HeartPulse,
+  "network-settings": Network,
   "active-sessions": MonitorSmartphone,
 };
 

@@ -263,7 +263,10 @@
       "alarmOpen": "Onaylanmamış aktif alarm",
       "alarmAcked": "Aktif alarm onaylandı, sürdürülüyor",
       "battery": "Batarya: %{{value}}",
-      "noBattery": "Batarya bilgisi yok"
+      "noBattery": "Batarya bilgisi yok",
+      "viewList": "Liste",
+      "viewTree": "Hat Ağacı",
+      "deviceItem": "cihaz"
     },
     "popup": {
       "close": "Kapat",
@@ -348,6 +351,17 @@
       "tooltipFault": "Arıza",
       "tooltipOnline": "Çevrimiçi",
       "tooltipOffline": "Çevrimdışı"
+    },
+    "tree": {
+      "poleSeq": "Direk {{seq}}",
+      "onlineOfTotal": "{{online}} / {{total}} cihaz çevrimiçi",
+      "alarmCount": "{{count}} cihazda aktif alarm",
+      "hideOnMap": "Bu hattı haritada soluklaştır",
+      "showOnMap": "Bu hattı haritada tekrar göster",
+      "gapHint": "Aradaki direklerde cihaz yok",
+      "faultCount": "{{count}} cihazda hat arizasi",
+      "commLostCount": "{{count}} cihazla haberlesme kopuk",
+      "faultHere": "Ariza bu iki direk arasinda"
     }
   },
   "alarms": {
@@ -740,6 +754,82 @@
       "close": "Kapat"
     }
   },
+  "network": {
+    "title": "Ağ Ayarları",
+    "access": {
+      "deviceAddress": "Cihaz adresi",
+      "deviceAddressHint": "Tarayıcıdan bu adresle bağlanın",
+      "copy": "Adresi kopyala",
+      "wifi": "WiFi erişim noktası",
+      "wifiActive": "Yayında · {{address}}",
+      "wifiInactive": "Yayında değil",
+      "wifiOpen": "Şifresiz",
+      "wired": "Kablolu bağlantı",
+      "noAddress": "Adres yok"
+    },
+    "method": {
+      "dhcp": "Otomatik (DHCP)",
+      "static": "Statik IP"
+    },
+    "form": {
+      "title": "Kablolu ağ yapılandırması",
+      "subtitle": "Bu ayar cihazın kendi IP adresini değiştirir. Kaydedince cihaz yeniden başlar.",
+      "interface": "Ağ arayüzü",
+      "noLink": "kablo yok",
+      "noEthernet": "Kablolu (ethernet) arayüz bulunamadı.",
+      "method": "Adres yöntemi",
+      "dhcpHint": "Adres ağdaki DHCP sunucusundan otomatik alınır.",
+      "staticHint": "Sabit adres verilir. Yanlış değer cihazı kablolu ağdan erişilemez yapar.",
+      "address": "IP adresi",
+      "prefix": "Ağ maskesi (prefix)",
+      "netmask": "= {{mask}}",
+      "gateway": "Ağ geçidi",
+      "dns1": "DNS 1",
+      "dns2": "DNS 2 (opsiyonel)",
+      "save": "Kaydet ve yeniden başlat",
+      "saveHint": "Onay ekranı gösterilecek."
+    },
+    "confirm": {
+      "title": "Cihaz yeniden başlatılacak",
+      "lead": "Ağ ayarı uygulanacak ve cihaz yeniden başlayacak. Bu işlem sırasında bağlantınız kopar; açılması yaklaşık 1 dakika sürer.",
+      "apSafety": "Güvenlik ağı: {{ssid}} WiFi ağı her zaman açık kalır. Bir sorun olursa bu ağa bağlanıp http://{{host}} adresinden ayarı düzeltebilirsiniz.",
+      "apply": "Uygula ve yeniden başlat",
+      "applying": "Uygulanıyor…"
+    },
+    "reboot": {
+      "title": "Cihaz yeniden başlatılıyor",
+      "lead": "Ağ ayarı kaydedildi. Cihaz kapanıp yeni ayarlarla açılıyor.",
+      "seconds": "saniye",
+      "goNew": "Yeni adrese git: {{url}}",
+      "goMdns": "Alternatif: {{url}}",
+      "apHint": "Yeni adrese ulaşamazsanız {{ssid}} WiFi ağına bağlanıp {{url}} adresini deneyin."
+    },
+    "pending": "Önceki ağ ayarı isteği hâlâ işleniyor…",
+    "staleAgent": "Host ağ ajanı bir süredir durum bildirmiyor; gösterilen bilgiler eski olabilir.",
+    "lastApplyFailed": "Son ağ ayarı uygulanamadı: {{error}}",
+    "unavailable": {
+      "title": "Appliance modu kurulu değil",
+      "hint": "Kurulumdan sonra sayfayı yenileyin. Bu sayfa yalnızca mini PC (appliance) kurulumlarında çalışır; sunucu/VPS kurulumlarında ağ ayarı sistem yöneticisi tarafından yapılır.",
+      "reason": {
+        "state_dir_missing": "Host ağ ajanı (e1-netd) kurulmamış — paylaşılan dizin yok.",
+        "state_dir_not_writable": "Ağ ajanı dizinine yazılamıyor (izin hatası).",
+        "agent_never_reported": "Ağ ajanı henüz hiç durum bildirmemiş. Kurulum scripti çalıştırıldı mı?",
+        "unknown": "Ağ ajanına ulaşılamıyor."
+      }
+    },
+    "errors": {
+      "load": "Ağ durumu alınamadı.",
+      "apply": "Ağ ayarı uygulanamadı.",
+      "pickInterface": "Bir ağ arayüzü seçin.",
+      "badAddress": "Geçerli bir IPv4 adresi girin (örn. 192.168.1.50).",
+      "badPrefix": "Ağ maskesi 1-32 arasında olmalı (örn. 24).",
+      "badGateway": "Geçerli bir ağ geçidi adresi girin.",
+      "badDns": "Geçerli bir DNS adresi girin.",
+      "gatewayIsSelf": "Ağ geçidi cihazın kendi IP'si olamaz.",
+      "gatewayOtherSubnet": "Ağ geçidi, IP adresiyle aynı alt ağda olmalı.",
+      "apSubnetClash": "Bu alt ağ WiFi erişim noktası ağıyla (10.42.0.0/24) çakışıyor."
+    }
+  },
   "systemStatus": {
     "title": "Sistem Durumu",
     "liveSocket": {
@@ -870,6 +960,7 @@
       "license": "Lisans durumunu ve cihaz kotasını görüntüle.",
       "backups": "Veritabanı yedeği al, geri yükle.",
       "systemStatus": "Servislerin ve bağlantıların sağlık durumunu izle.",
+      "networkSettings": "Cihazın IP, ağ geçidi ve DNS ayarlarını yapılandır.",
       "activeSessions": "Sisteme kimlerin bağlı olduğunu gör, oturum sonlandır."
     },
     "nav": {
@@ -888,6 +979,7 @@
       "backups": "Yedekler",
       "license": "Lisans",
       "deviceModels": "Cihaz Modelleri",
+      "networkSettings": "Ağ Ayarları",
       "activeSessions": "Aktif Oturumlar"
     },
     "users": {
@@ -2261,6 +2353,9 @@
       "sms": "SMS",
       "smsHint": "Acil/kritik durumlar için SMS.",
       "smsMissing": " (Telefon numarası eklenmemiş.)",
+      "whatsapp": "WhatsApp",
+      "whatsappHint": "WhatsApp Web üzerinden telefon numaranıza mesaj (bağlantı ayarları grup modundaysa mesaj yalnız gruba gider).",
+      "whatsappMissing": " (Telefon numarası eklenmemiş.)",
       "saveFail": "Tercih kaydedilemedi."
     },
     "actions": {

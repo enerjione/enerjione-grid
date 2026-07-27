@@ -263,7 +263,10 @@
       "alarmOpen": "Unacknowledged active alarm",
       "alarmAcked": "Active alarm acknowledged, in progress",
       "battery": "Battery: {{value}}%",
-      "noBattery": "No battery info"
+      "noBattery": "No battery info",
+      "viewList": "List",
+      "viewTree": "Line Tree",
+      "deviceItem": "devices"
     },
     "popup": {
       "close": "Close",
@@ -348,6 +351,17 @@
       "tooltipFault": "Fault",
       "tooltipOnline": "Online",
       "tooltipOffline": "Offline"
+    },
+    "tree": {
+      "poleSeq": "Pole {{seq}}",
+      "onlineOfTotal": "{{online}} / {{total}} devices online",
+      "alarmCount": "Active alarm on {{count}} device(s)",
+      "hideOnMap": "Dim this line on the map",
+      "showOnMap": "Show this line on the map again",
+      "gapHint": "No devices on the poles in between",
+      "faultCount": "Line fault on {{count}} device(s)",
+      "commLostCount": "Communication lost with {{count}} device(s)",
+      "faultHere": "Fault is between these two poles"
     }
   },
   "alarms": {
@@ -740,6 +754,82 @@
       "close": "Close"
     }
   },
+  "network": {
+    "title": "Network Settings",
+    "access": {
+      "deviceAddress": "Device address",
+      "deviceAddressHint": "Open this address in your browser",
+      "copy": "Copy address",
+      "wifi": "WiFi access point",
+      "wifiActive": "Broadcasting · {{address}}",
+      "wifiInactive": "Not broadcasting",
+      "wifiOpen": "Open network",
+      "wired": "Wired connection",
+      "noAddress": "No address"
+    },
+    "method": {
+      "dhcp": "Automatic (DHCP)",
+      "static": "Static IP"
+    },
+    "form": {
+      "title": "Wired network configuration",
+      "subtitle": "This changes the device's own IP address. The device reboots after saving.",
+      "interface": "Network interface",
+      "noLink": "no link",
+      "noEthernet": "No wired (ethernet) interface found.",
+      "method": "Address method",
+      "dhcpHint": "The address is obtained automatically from the network's DHCP server.",
+      "staticHint": "A fixed address is assigned. A wrong value makes the device unreachable over the wired network.",
+      "address": "IP address",
+      "prefix": "Subnet prefix",
+      "netmask": "= {{mask}}",
+      "gateway": "Gateway",
+      "dns1": "DNS 1",
+      "dns2": "DNS 2 (optional)",
+      "save": "Save and reboot",
+      "saveHint": "A confirmation step will follow."
+    },
+    "confirm": {
+      "title": "The device will reboot",
+      "lead": "The network setting will be applied and the device will restart. Your connection drops during this; booting takes about a minute.",
+      "apSafety": "Safety net: the {{ssid}} WiFi network always stays on. If anything goes wrong, connect to it and fix the setting at http://{{host}}.",
+      "apply": "Apply and reboot",
+      "applying": "Applying…"
+    },
+    "reboot": {
+      "title": "Device is restarting",
+      "lead": "The network setting was saved. The device is rebooting with the new configuration.",
+      "seconds": "seconds",
+      "goNew": "Go to the new address: {{url}}",
+      "goMdns": "Alternative: {{url}}",
+      "apHint": "If the new address is unreachable, join the {{ssid}} WiFi network and try {{url}}."
+    },
+    "pending": "A previous network request is still being processed…",
+    "staleAgent": "The host network agent has not reported for a while; the values shown may be stale.",
+    "lastApplyFailed": "The last network change failed: {{error}}",
+    "unavailable": {
+      "title": "Appliance mode is not installed",
+      "hint": "Refresh this page after installation. This page only applies to mini PC (appliance) deployments; on server/VPS installs the network is managed by the system administrator.",
+      "reason": {
+        "state_dir_missing": "The host network agent (e1-netd) is not installed — shared directory missing.",
+        "state_dir_not_writable": "The agent directory is not writable (permission error).",
+        "agent_never_reported": "The network agent has never reported. Was the setup script run?",
+        "unknown": "The network agent is unreachable."
+      }
+    },
+    "errors": {
+      "load": "Could not fetch network status.",
+      "apply": "Could not apply the network setting.",
+      "pickInterface": "Select a network interface.",
+      "badAddress": "Enter a valid IPv4 address (e.g. 192.168.1.50).",
+      "badPrefix": "The subnet prefix must be between 1 and 32 (e.g. 24).",
+      "badGateway": "Enter a valid gateway address.",
+      "badDns": "Enter a valid DNS address.",
+      "gatewayIsSelf": "The gateway cannot be the device's own IP.",
+      "gatewayOtherSubnet": "The gateway must be in the same subnet as the IP address.",
+      "apSubnetClash": "This subnet clashes with the WiFi access point network (10.42.0.0/24)."
+    }
+  },
   "systemStatus": {
     "title": "System Status",
     "liveSocket": {
@@ -870,6 +960,7 @@
       "license": "View license status and device quota.",
       "backups": "Take a database backup or restore one.",
       "systemStatus": "Monitor the health of services and connections.",
+      "networkSettings": "Configure the device IP address, gateway and DNS.",
       "activeSessions": "See who is connected and terminate sessions."
     },
     "nav": {
@@ -888,6 +979,7 @@
       "backups": "Backups",
       "license": "License",
       "deviceModels": "Device Models",
+      "networkSettings": "Network Settings",
       "activeSessions": "Active Sessions"
     },
     "users": {
@@ -2261,6 +2353,9 @@
       "sms": "SMS",
       "smsHint": "SMS for urgent/critical situations.",
       "smsMissing": " (No phone number set.)",
+      "whatsapp": "WhatsApp",
+      "whatsappHint": "WhatsApp message to your phone number (if connection settings use group mode, only the group is notified).",
+      "whatsappMissing": " (No phone number set.)",
       "saveFail": "Failed to save preference."
     },
     "actions": {

@@ -119,7 +119,26 @@ YAML
     ok "netplan zaten NetworkManager'a yonlendirilmis."
   fi
 fi
+# Docker ile cakismayi onle: NetworkManager docker0/veth/br- arayuzlerini
+# yonetmeye kalkarsa container aglarini bozabilir (DHCP denemesi, DNS
+# ele gecirme, arayuzu "down" etme). Bunlari unmanaged isaretliyoruz.
+NM_UNMANAGED=/etc/NetworkManager/conf.d/99-e1-unmanaged.conf
+mkdir -p /etc/NetworkManager/conf.d
+if [[ ! -f "$NM_UNMANAGED" ]]; then
+  cat > "$NM_UNMANAGED" <<'CONF'
+# EnerjiOne Grid — Docker'in olusturdugu sanal arayuzlere NetworkManager
+# dokunmasin. Aksi halde container aglari kopabilir.
+[keyfile]
+unmanaged-devices=interface-name:docker*;interface-name:veth*;interface-name:br-*;interface-name:virbr*
+CONF
+  chmod 644 "$NM_UNMANAGED"
+  ok "Docker arayuzleri NetworkManager'dan muaf tutuldu."
+else
+  ok "Docker muafiyet kurali zaten var."
+fi
+
 systemctl enable --now NetworkManager >/dev/null 2>&1 || die "NetworkManager baslatilamadi."
+systemctl reload NetworkManager >/dev/null 2>&1 || true
 ok "NetworkManager calisiyor."
 
 # ---------------------------------------------------------------------------
@@ -192,9 +211,17 @@ address=/${APPLIANCE_HOSTNAME}/${AP_ADDRESS}
 CONF
     ok "AP DNS kaydi: ${APPLIANCE_HOSTNAME}.local -> ${AP_ADDRESS}"
 
-    nmcli connection up "$AP_CON_NAME" >/dev/null 2>&1 \
-      && ok "AP yayinda: ${AP_SSID}" \
-      || warn "AP simdi baslatilamadi; reboot sonrasi otomatik denenecek."
+    # ONEMLI: AP zaten yayindaysa `connection up` yapmiyoruz — script her
+    # update.sh calismasinda tekrar kosar ve bu, AP'ye bagli sahadaki
+    # kullanicilarin (ve belki de update'i yapan kisinin) baglantisini keser.
+    if nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx "$AP_CON_NAME"; then
+      ok "AP zaten yayinda: ${AP_SSID} (kesintiye ugratilmadi)"
+      info "SSID/kanal degistirdiyseniz uygulamak icin: nmcli connection up ${AP_CON_NAME}"
+    elif nmcli connection up "$AP_CON_NAME" >/dev/null 2>&1; then
+      ok "AP yayinda: ${AP_SSID}"
+    else
+      warn "AP simdi baslatilamadi; reboot sonrasi otomatik denenecek."
+    fi
   fi
 fi
 

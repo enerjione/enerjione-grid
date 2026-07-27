@@ -15,6 +15,10 @@
 #   sudo bash update.sh ftp            # ftp-server (cihaz config transfer)
 #   sudo bash update.sh whatsapp       # whatsapp-web-gateway (Baileys sidecar)
 #
+# Appliance (mini PC) kurulumlarinda host katmani (ag ajani e1-netd, systemd
+# unit'leri, WiFi AP profili, mDNS) da otomatik guncellenir — ayrica bir
+# komut gerekmez. Zorlamak/kapatmak icin: E1_APPLIANCE=1 / E1_APPLIANCE=0.
+#
 # Idempotent. Compose Docker build cache'i kullanir; degismemis layer'lar
 # yeniden indirilmez.
 # ===========================================================================
@@ -40,12 +44,28 @@ echo "  ${E1_DIM}Branch      :${E1_RESET} $(git rev-parse --abbrev-ref HEAD 2>/d
 echo "  ${E1_DIM}Onceki HEAD :${E1_RESET} $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 echo
 
+# Appliance (mini PC) modu kurulu mu? Kuruluysa her update'te host katmani da
+# (ag ajani, systemd unit'leri, AP profili) yeni surume tazelenir — kullanici
+# ayrica bir komut calistirmak zorunda kalmasin.
+#   E1_APPLIANCE=1 -> kurulu degilse bile kur (mini PC'ye sonradan gecis)
+#   E1_APPLIANCE=0 -> kurulu olsa bile dokunma
+APPLIANCE_REFRESH=0
+case "${E1_APPLIANCE:-auto}" in
+  1) APPLIANCE_REFRESH=1 ;;
+  0) APPLIANCE_REFRESH=0 ;;
+  *) if e1_appliance_installed; then APPLIANCE_REFRESH=1; fi ;;
+esac
+
 # Backend'i kapsayan hedeflerde ek adimlar var (postgres sync, db-preflight,
 # alembic, historian ensure); digerlerinde sadece ilk 4 adim kosar.
 case "$TARGET" in
-  all|""|backend|api|backend-api) e1_set_steps 8 ;;
-  *)                              e1_set_steps 4 ;;
+  all|""|backend|api|backend-api) STEP_COUNT=8 ;;
+  *)                              STEP_COUNT=4 ;;
 esac
+if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
+  STEP_COUNT=$((STEP_COUNT + 1))
+fi
+e1_set_steps "$STEP_COUNT"
 
 # ---- 1/5: Lokal degisiklik kontrolu --------------------------------------
 e1_step "Lokal degisiklik kontrolu..."
@@ -172,6 +192,23 @@ if [[ $NEED_NATS_RENDER -eq 1 ]]; then
   if docker compose ps nats --status running --quiet 2>/dev/null | grep -q .; then
     e1_info "NATS container restart ediliyor (yeni conf icin)..."
     docker compose up -d --force-recreate nats
+  fi
+fi
+
+# ---- Appliance host katmani (ag ajani + AP + mDNS) -----------------------
+# Build'den ONCE calisir: /var/lib/e1-grid/net dizin izinleri (root:10001,
+# 0770) backend container ayaga kalkmadan dogru olsun. Script idempotent —
+# mevcut AP yayindaysa kesintiye ugratmaz.
+if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
+  e1_step "Appliance host katmani guncelleniyor (ag ajani + AP + mDNS)..."
+  if [[ -f infra/appliance/setup-appliance.sh ]]; then
+    if bash infra/appliance/setup-appliance.sh; then
+      e1_ok "Appliance katmani guncel."
+    else
+      e1_warn "Appliance guncellemesi tamamlanamadi; uygulama guncellemesi devam ediyor."
+    fi
+  else
+    e1_warn "infra/appliance/setup-appliance.sh yok — appliance katmani atlandi."
   fi
 fi
 
@@ -313,6 +350,12 @@ fi
 echo
 echo "${E1_GREEN}${E1_BOLD}Update tamamlandi.${E1_RESET}"
 echo
+if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
+  APPLIANCE_HOST="$(hostnamectl --static 2>/dev/null || echo e1-grid)"
+  echo "  ${E1_BOLD}Appliance:${E1_RESET} WiFi 'EnerjiOne Grid' · http://${APPLIANCE_HOST}.local"
+  echo "  ${E1_DIM}Ag durumu: cat /var/lib/e1-grid/net/state.json${E1_RESET}"
+  echo
+fi
 echo "  ${E1_BOLD}Servis durumu:${E1_RESET}"
 docker compose ps
 echo

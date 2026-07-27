@@ -14,6 +14,7 @@ import { EventsPage } from "../features/events/EventsPage";
 import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
 import { BulkNotificationPage } from "../features/bulk-notify/BulkNotificationPage";
 import { ActiveSessionsPage } from "../features/sessions/ActiveSessionsPage";
+import { NetworkSettingsPage } from "../features/network/NetworkSettingsPage";
 import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
 import { LicenseManagementPanel } from "../features/license/LicenseManagementPanel";
 import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
@@ -251,6 +252,43 @@ export function App() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("hsl.dashboard.sidebar-collapsed") === "1";
   });
+
+  // Hat Agaci'nda "goz" ile gizlenen hatlar. Cihazlar listede KALIR; haritada
+  // hat/direk/marker griye doner. Operator kalabalik haritayi sadelestirmek
+  // icin kullanir, secim oturumlar arasi korunur.
+  const [hiddenLineIds, setHiddenLineIds] = useState<Set<number>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("e1.dashboard.hidden-lines");
+      if (!raw) return new Set();
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? new Set(parsed.filter((v): v is number => typeof v === "number"))
+        : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "e1.dashboard.hidden-lines",
+        JSON.stringify(Array.from(hiddenLineIds))
+      );
+    } catch {
+      // localStorage kapali/quota — gizleme oturumluk kalir, sorun degil.
+    }
+  }, [hiddenLineIds]);
+
+  const handleToggleLineHidden = useCallback((lineId: number) => {
+    setHiddenLineIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineId)) next.delete(lineId);
+      else next.add(lineId);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1701,7 +1739,7 @@ export function App() {
   };
 
   const handleToggleNotifPref = async (
-    key: "web_enabled" | "email_enabled" | "sms_enabled"
+    key: "web_enabled" | "email_enabled" | "sms_enabled" | "whatsapp_web_enabled"
   ) => {
     if (!session || !notifPrefs) return;
     const next: Partial<UserNotificationPreferences> = { [key]: !notifPrefs[key] };
@@ -1910,16 +1948,15 @@ export function App() {
     return { total, online, offline: total - online, alarm };
   }, [devices]);
 
-  // Anasayfa otomatik secim: hicbir cihaz secili degilse (selectedDeviceId=0)
-  // veya secili cihaz mevcut filtrelenmis listede yoksa, listenin ilk elemanini
-  // sec. Boylece anasayfa ilk acildiginda harita o cihaza yaklasir (DeviceMapTab
-  // selectedDevice degisince flyTo cagiriyor) ve sidebar'da cihaz vurgulanir.
-  // Liste bos olunca dokunulmaz (0 kalir, secim olmaz).
+  // Anasayfa: OTOMATIK cihaz secimi YAPILMAZ — ilk acilista hicbir cihaz
+  // secili olmasin (kullanici tercihi). Karttan "kapat" (onSelectDevice(0))
+  // ile secim birakildiginda da kapali kalir. Tek istisna: secili bir cihaz
+  // filtre ile listeden cikarsa secimi birak (0), gecersiz secim kalmasin.
   useEffect(() => {
-    if (filteredDashboardDevices.length === 0) return;
+    if (selectedDeviceId === 0) return;
     const stillVisible = filteredDashboardDevices.some((d) => d.id === selectedDeviceId);
     if (!stillVisible) {
-      setSelectedDeviceId(filteredDashboardDevices[0].id);
+      setSelectedDeviceId(0);
     }
   }, [filteredDashboardDevices, selectedDeviceId]);
 
@@ -2239,6 +2276,9 @@ export function App() {
                 wsState={liveSocket.connectionState}
               />
             ) : null}
+            {engineeringPage === "network-settings" && session.role === "installer" ? (
+              <NetworkSettingsPage accessToken={session.accessToken} />
+            ) : null}
             {engineeringPage === "active-sessions" && session.role === "installer" ? (
               <ActiveSessionsPage accessToken={session.accessToken} />
             ) : null}
@@ -2323,6 +2363,9 @@ export function App() {
                       ])
                     )
                   }
+                  gridSnapshot={gridSnapshot}
+                  hiddenLineIds={hiddenLineIds}
+                  onToggleLineHidden={handleToggleLineHidden}
                 />
               ) : null}
               <main className="content dashboard-content map-active">
@@ -2334,6 +2377,7 @@ export function App() {
                   gridSnapshot={gridSnapshot}
                   alarms={alarms}
                   onOpenDetail={openDeviceDetail}
+                  hiddenLineIds={hiddenLineIds}
                 />
               </main>
             </div>
@@ -2434,6 +2478,22 @@ export function App() {
                     onClick={() => void handleToggleNotifPref("sms_enabled")}
                     disabled={notifPrefsSaving}
                     aria-label={t("userSettings.notifPrefs.sms")}
+                  />
+                </div>
+                <div className="notif-prefs-row">
+                  <div className="notif-prefs-row-label">
+                    <strong>{t("userSettings.notifPrefs.whatsapp")}</strong>
+                    <span>
+                      {t("userSettings.notifPrefs.whatsappHint")}
+                      {currentUser?.phone_number ? "" : t("userSettings.notifPrefs.whatsappMissing")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`notif-prefs-toggle ${notifPrefs.whatsapp_web_enabled ? "on" : ""}`}
+                    onClick={() => void handleToggleNotifPref("whatsapp_web_enabled")}
+                    disabled={notifPrefsSaving}
+                    aria-label={t("userSettings.notifPrefs.whatsapp")}
                   />
                 </div>
               </div>
