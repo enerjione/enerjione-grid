@@ -1,0 +1,14 @@
+[Unit]
+# Ag ayari isteklerini uygular. e1-netd.path tarafindan tetiklenir
+# (backend container /var/lib/e1-grid/net/request.json yazinca).
+Description=EnerjiOne Grid ag ajani - ayar isteklerini uygular
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-netd.py apply
+# Uygulama basarisiz olsa bile unit "failed" kalmasin; hata status.json'a
+# yazilir ve UI'da gosterilir.
+SuccessExitStatus=0 1
+TimeoutStartSec=120

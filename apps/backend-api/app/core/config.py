@@ -197,6 +197,13 @@ class Settings(BaseSettings):
     host_machine_id_path: str = "/run/host-machine-id"
     license_upload_max_bytes: int = 50 * 1024
 
+    # Appliance (mini PC) modu — host ag ajani (e1-netd) ile paylasilan dizin.
+    # Backend buraya SADECE request.json yazar; state.json/status.json'i okur.
+    # Host'ta root ile calisan ajan istekleri dogrulayip nmcli ile uygular.
+    # Dizin yoksa/yazilamiyorsa appliance modu "kapali" kabul edilir ve Ag
+    # Ayarlari sayfasi bunu kullaniciya soyler (hata degil).
+    network_state_dir: str = "/var/lib/e1-grid/net"
+
     # Hat Arizalari sayfasi gosterim gecikmesi (saniye). Bir ariza acildiktan
     # sonra bu sure gecene kadar listede GORUNMEZ; harita aninda gosterir.
     # Amac: haberlesme gecikmesiyle gec gelen alarmlar bu pencere icinde

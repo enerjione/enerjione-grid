@@ -1,0 +1,12 @@
+[Unit]
+Description=EnerjiOne Grid ag durumunu periyodik tazele
+
+[Timer]
+# Boot'tan 15 sn sonra ilk rapor (NetworkManager otursun), sonra 30 sn'de bir.
+OnBootSec=15s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Unit=e1-netd-report.service
+
+[Install]
+WantedBy=timers.target

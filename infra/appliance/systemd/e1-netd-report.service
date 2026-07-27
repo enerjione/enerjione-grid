@@ -1,0 +1,15 @@
+[Unit]
+# Host'un guncel ag durumunu state.json'a yazar; backend bu dosyayi okuyup
+# UI'da gosterir (container'in host agina erisimi yok).
+Description=EnerjiOne Grid ag durumu raporlayici
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-netd.py report
+SuccessExitStatus=0 1
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

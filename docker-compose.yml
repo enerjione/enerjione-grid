@@ -233,6 +233,9 @@ services:
       # OS machine-id'sinden gelir. USB/disk/MAC/container ID kullanilmaz.
       LICENSE_DIR: /var/lib/e1-license
       HOST_MACHINE_ID_PATH: /run/host-machine-id
+      # Appliance (mini PC) modu: host ag ajani e1-netd ile paylasilan dizin.
+      # Backend buraya ag ayari istegi yazar; ajan (root) dogrulayip uygular.
+      NETWORK_STATE_DIR: /var/lib/e1-grid/net
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -259,6 +262,12 @@ services:
       # Dosya yoksa kullanici install/update sirasinda uyarilir; FCM o zaman
       # devre disi kalir ama backend ayaga kalkmaya devam eder.
       - ./fcm-service-account.json:/app/fcm-service-account.json:ro
+      # Appliance modu: host ag ajani (e1-netd) ile tek temas noktasi.
+      # Backend'in host agina baska hicbir erisimi yoktur — privileged veya
+      # network_mode: host KULLANILMAZ. Dizin sadece bu iki tarafa acik
+      # (root:10001, 0770); infra/appliance/setup-appliance.sh olusturur.
+      # VPS kurulumlarinda dizin bos kalir, appliance modu kapali gorunur.
+      - /var/lib/e1-grid/net:/var/lib/e1-grid/net
     networks:
       - e1-net
     logging: *default-logging

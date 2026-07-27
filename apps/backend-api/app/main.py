@@ -9,7 +9,7 @@ from sqlalchemy import select as _select, text
 
 from app.core.rate_limit import limiter
 
-from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -95,6 +95,7 @@ app.include_router(internal.router, prefix=settings.api_prefix)
 app.include_router(project_settings_api.router, prefix=settings.api_prefix)
 app.include_router(grid_topology.router, prefix=settings.api_prefix)
 app.include_router(system_status.router, prefix=settings.api_prefix)
+app.include_router(network.router, prefix=settings.api_prefix)
 app.include_router(notifications_api.router, prefix=settings.api_prefix)
 app.include_router(sessions_api.router, prefix=settings.api_prefix)
 app.include_router(backups.router, prefix=settings.api_prefix)

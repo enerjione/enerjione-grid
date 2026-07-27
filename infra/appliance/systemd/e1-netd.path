@@ -1,0 +1,13 @@
+[Unit]
+Description=EnerjiOne Grid ag ayari istegi izleyici
+
+[Path]
+# Backend container bu dosyayi yazinca e1-netd.service tetiklenir.
+# PathExists + PathChanged birlikte: dosya yeni olusturulduysa da,
+# uzerine yazildiysa da yakalanir.
+PathExists=/var/lib/e1-grid/net/request.json
+PathChanged=/var/lib/e1-grid/net/request.json
+Unit=e1-netd.service
+
+[Install]
+WantedBy=multi-user.target
