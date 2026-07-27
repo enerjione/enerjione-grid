@@ -142,20 +142,46 @@ def login(
     # Aktif oturum kaydi — installer 'Aktif Oturumlar' sayfasinda gorur
     # ve istedigini revoke edebilir.
     try:
+        from app.core.client_ip import client_ip_from_request
         from app.models.user_session import UserSession
-        # Client IP: reverse proxy arkasinda X-Forwarded-For ilk degeri,
-        # yoksa request.client.host. uvicorn --forwarded-allow-ips=* bunu
-        # request.client.host'a otomatik koyar.
-        client_ip = request.client.host if request.client else None
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            client_ip = xff.split(",")[0].strip()
+
+        client_ip = client_ip_from_request(request)
         ua = (request.headers.get("user-agent") or "")[:255] or None
+        now = datetime.now(timezone.utc)
+
+        # Ayni tarayicidan onceki oturumu kapat. Frontend TEK token tutuyor
+        # (cookie + localStorage) ve login cevabi onu ezer; dolayisiyla ayni
+        # (kullanici, IP, user-agent) uclusune ait eski jti artik hicbir
+        # istemcide durmuyor — sadece listede "5 kere aktif" gorunuyor.
+        # Bu satirlari superseded olarak isaretliyoruz.
+        superseded = list(
+            db.execute(
+                select(UserSession).where(
+                    UserSession.user_id == user.id,
+                    UserSession.revoked_at.is_(None),
+                    UserSession.ip_address == client_ip,
+                    UserSession.user_agent == ua,
+                )
+            ).scalars()
+        )
+        for old in superseded:
+            old.revoked_at = now
+        if superseded:
+            import logging
+            logging.getLogger(__name__).info(
+                "user_session_superseded username=%s count=%d",
+                user.username, len(superseded),
+            )
+
         db.add(UserSession(
             jti=jti,
             user_id=user.id,
             ip_address=client_ip,
             user_agent=ua,
+            # ttl_sec create_access_token'dan geliyor (remember_me'ye gore
+            # 8 saat / 7 gun). Token exp'i ile ayni ani yaziyoruz ki liste
+            # sorgusu gecmis oturumlari filtreleyebilsin.
+            expires_at=now + _timedelta(seconds=ttl_sec),
         ))
     except Exception:  # noqa: BLE001
         # Session insert fail olsa bile login basarili kabul edilir;

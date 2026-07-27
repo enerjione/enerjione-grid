@@ -8,10 +8,13 @@ oturumu atabilir (revoke + revoked_at set).
 Schema:
   - jti: PK, JWT'nin unique kimliği
   - user_id: FK users(id)
-  - ip_address: login sirasinda alinan client IP (proxy varsa X-Forwarded-For)
+  - ip_address: son gorulen client IP (proxy varsa X-Forwarded-For); login'de
+    yazilir, sonraki isteklerde IP degistiyse guncellenir
   - user_agent: tarayici/cihaz tanimi (truncate 255)
   - login_at: oturum baslangici
   - last_seen_at: son istek zamani (debounce 30s)
+  - expires_at: JWT'nin exp'i. Bu ani gecen satir artik "aktif" degildir —
+    token dogrulanamaz. NULL = eski kayit (surum 0015 oncesi), bilinmiyor.
   - revoked_at: NULL = aktif, dolu = installer/logout ile sonlandirildi
   - revoked_by_user_id: kim revoke etti (audit)
 """
@@ -39,6 +42,11 @@ class UserSession(Base):
     )
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    # JWT exp — bu ani gecmis satirlar 'Aktif Oturumlar' listesinde
+    # gosterilmez. Nullable: 0015 oncesi kayitlarda bilinmiyor.
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
     )
 
     # Revoke: dolu ise oturum sonlandi (logout veya installer 'at')

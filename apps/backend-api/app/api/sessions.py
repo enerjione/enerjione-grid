@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
@@ -33,6 +33,7 @@ class SessionRead(BaseModel):
     user_agent: str | None
     login_at: str
     last_seen_at: str
+    expires_at: str | None
     is_self: bool
 
 
@@ -41,14 +42,27 @@ def list_active_sessions(
     current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    """Aktif (revoked_at IS NULL) tum oturumlari listele.
+    """Gercekten aktif olan oturumlari listele.
+
+    Iki kosul birlikte aranir:
+      * `revoked_at IS NULL` — logout / installer 'at' ile kapatilmamis
+      * `expires_at > now` — JWT'nin exp'i gecmemis
+
+    Ikinci kosul olmadan token'i coktan expire olmus her login satiri
+    sonsuza kadar "aktif" gorunuyordu; ayni kullanici onlarca kez
+    listelenebiliyordu. `expires_at IS NULL` (0015 oncesi kayitlar) toleransli
+    kabul edilir — migration bunlari login_at + 7 gun ile backfill ediyor.
 
     En son aktif olanlar uste gelir (last_seen_at DESC).
     """
+    now = datetime.now(timezone.utc)
     stmt = (
         select(UserSession, User)
         .join(User, UserSession.user_id == User.id)
-        .where(UserSession.revoked_at.is_(None))
+        .where(
+            UserSession.revoked_at.is_(None),
+            or_(UserSession.expires_at.is_(None), UserSession.expires_at > now),
+        )
         .order_by(UserSession.last_seen_at.desc())
         .limit(500)
     )
@@ -65,6 +79,7 @@ def list_active_sessions(
                 user_agent=sess.user_agent,
                 login_at=sess.login_at.isoformat(),
                 last_seen_at=sess.last_seen_at.isoformat(),
+                expires_at=sess.expires_at.isoformat() if sess.expires_at else None,
                 is_self=(sess.jti == _extract_self_jti(current_user)),
             )
         )

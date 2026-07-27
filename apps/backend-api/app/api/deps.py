@@ -2,7 +2,7 @@ import logging
 import threading
 from datetime import datetime, timezone
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy import select
@@ -24,8 +24,12 @@ _last_seen_writes: dict[str, float] = {}
 _last_seen_lock = threading.Lock()
 
 
-def _touch_user_session(db: Session, jti: str) -> None:
+def _touch_user_session(db: Session, jti: str, client_ip: str | None = None) -> None:
     """jti icin DB user_sessions.last_seen_at = now (debounce 30sn).
+
+    `client_ip` verilirse ve kayitlidan farkliysa `ip_address` da guncellenir —
+    kullanici ag degistirdiginde (VPN, mobil, farkli sube) 'Aktif Oturumlar'
+    login anindaki eski IP'yi degil guncel IP'yi gosterir.
 
     Hata olursa sessizce yutulur (auth akisi devam etmeli).
     """
@@ -47,6 +51,8 @@ def _touch_user_session(db: Session, jti: str) -> None:
         sess = db.get(UserSession, jti)
         if sess is not None and sess.revoked_at is None:
             sess.last_seen_at = datetime.now(timezone.utc)
+            if client_ip and sess.ip_address != client_ip:
+                sess.ip_address = client_ip
             db.commit()
     except Exception:  # noqa: BLE001
         # Auth akisini bloklamamak icin sessiz fallback
@@ -67,6 +73,7 @@ _AUTH_COOKIE_NAME = "e1_session"
 
 
 def get_current_user(
+    request: Request,
     db: Session = Depends(get_db),
     header_token: str | None = Depends(oauth2_scheme),
     cookie_token: str | None = Cookie(default=None, alias=_AUTH_COOKIE_NAME),
@@ -132,9 +139,11 @@ def get_current_user(
     if user is None:
         logger.warning("auth_401_user_not_found source=%s username=%s", source, username)
         raise credentials_exception
-    # Aktif oturum tracking — debounce'lu last_seen_at update.
+    # Aktif oturum tracking — debounce'lu last_seen_at + ip_address update.
     if jti:
-        _touch_user_session(db, str(jti))
+        from app.core.client_ip import client_ip_from_request
+
+        _touch_user_session(db, str(jti), client_ip_from_request(request))
     return user
 
 

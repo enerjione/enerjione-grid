@@ -1234,6 +1234,19 @@ export async function deleteOutboundTarget(token: string, targetId: number): Pro
   if (!response.ok) throw await buildApiError(response, "Outbound hedef silinemedi.");
 }
 
+/** REST/webhook hedefine ornek bir test olayi gonderir (n8n dogrulamasi icin). */
+export async function testOutboundTarget(
+  token: string,
+  targetId: number
+): Promise<{ ok: boolean; detail: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/test`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Webhook test gönderimi başarısız.");
+  return response.json();
+}
+
 // ===========================================================================
 // MQTT custom topic mappings — operator UI "Custom Topic Mapping" modal
 // ===========================================================================
@@ -1512,6 +1525,8 @@ export type ActiveSession = {
   user_agent: string | null;
   login_at: string;
   last_seen_at: string;
+  /** JWT exp — 0015 oncesi kayitlarda null olabilir. */
+  expires_at: string | null;
   is_self: boolean;
 };
 
