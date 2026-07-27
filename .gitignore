@@ -15,6 +15,20 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Python sanal ortamlari — makineye bagli, binlerce dosya.
+.venv/
+venv/
+
+# TypeScript incremental build artefakti — her build'de degisir.
+*.tsbuildinfo
+
+# Yapay zeka araclarinin yerel calisma dizinleri (agent worktree'leri,
+# oturum notlari). Ekip ayarlari `.claude/` altinda ayrica commit edilir.
+.agents/
+.codex/
+.claude/worktrees/
+memory/
+
 # Claude Code — ekip ayarlari (.claude/settings.json, commands/, CLAUDE.md) commit edilir.
 # Kisiye ozel local override ve gecici dosyalar commit edilmez.
 .claude/settings.local.json
