@@ -71,6 +71,8 @@ def update_my_preferences(
         pref.sms_enabled = bool(payload.sms_enabled)
     if payload.telegram_enabled is not None:
         pref.telegram_enabled = bool(payload.telegram_enabled)
+    if payload.whatsapp_web_enabled is not None:
+        pref.whatsapp_web_enabled = bool(payload.whatsapp_web_enabled)
     if payload.min_level_rank is not None:
         pref.min_level_rank = max(0, int(payload.min_level_rank))
     db.commit()
@@ -120,6 +122,8 @@ def update_user_preferences(
         pref.sms_enabled = bool(payload.sms_enabled)
     if payload.telegram_enabled is not None:
         pref.telegram_enabled = bool(payload.telegram_enabled)
+    if payload.whatsapp_web_enabled is not None:
+        pref.whatsapp_web_enabled = bool(payload.whatsapp_web_enabled)
     if payload.min_level_rank is not None:
         pref.min_level_rank = max(0, int(payload.min_level_rank))
     db.commit()

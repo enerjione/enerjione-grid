@@ -208,6 +208,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       setDetail(null);
       return;
     }
+    // Onceki hattin detayini HEMEN temizle — aksi halde yeni hat yuklenene
+    // kadar sortedPoles eski hattin direklerini tutuyor ve harita yanlis
+    // alana (onceki hatta) fit ediyor.
+    setDetail(null);
     void reloadDetail(selectedLineId);
   }, [selectedLineId]);
 
@@ -1822,9 +1826,12 @@ function FitToLine({
   const map = useMap();
   const lastLineRef = useRef<number | null>(null);
   useEffect(() => {
+    // Yeni hat secildiginde, poles YUKLENDIKTEN sonra bir kez fit et. "Yuklendi"
+    // isaretini poles hazir olunca koyariz; yoksa poles gelmeden isaretleyip
+    // bir daha fit etmiyordu (veya eski poles'a fit edip yanlis alana gidiyordu).
+    if (lineId === null || poles.length === 0) return;
     if (lineId === lastLineRef.current) return;
     lastLineRef.current = lineId;
-    if (lineId === null || poles.length === 0) return;
     if (poles.length === 1) {
       map.setView([poles[0].latitude, poles[0].longitude], 16, { animate: true });
       return;

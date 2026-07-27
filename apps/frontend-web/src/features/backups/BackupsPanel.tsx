@@ -394,69 +394,75 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
             ) : (
               <p className="backups-hero-sub">{t("backups.hero.noneYet")}</p>
             )}
-          </div>
-        </div>
 
-        <div className="backups-hero-side">
-          <button
-            type="button"
-            className={`backups-schedule-chip ${schedule?.enabled ? "is-on" : "is-off"}`}
-            onClick={() => setScheduleModalOpen(true)}
-            title={t("backups.schedule.title")}
-          >
-            <span className="material-symbols-outlined">
-              {schedule?.enabled ? "autorenew" : "timer_off"}
-            </span>
-            <span className="backups-schedule-chip-text">
-              <strong>
+            {/* Periyodik program: bir AKSIYON degil DURUM gostergesi, o yuzden
+                sag taraftaki buton grubunda degil kunye satirinin altinda.
+                Eskiden aksiyonlarla ayni satirdaydi, sigmayip sarmalanarak
+                butonlarin ustunde tek basina asili kaliyordu. */}
+            <button
+              type="button"
+              className={`backups-schedule-chip ${schedule?.enabled ? "is-on" : "is-off"}`}
+              onClick={() => setScheduleModalOpen(true)}
+              title={`${t("backups.schedule.title")} — ${
+                schedule?.enabled
+                  ? t("backups.hero.retention", { count: schedule.retention_count })
+                  : t("backups.hero.autoOffHint")
+              }`}
+            >
+              <span className="material-symbols-outlined">
+                {schedule?.enabled ? "autorenew" : "timer_off"}
+              </span>
+              <span className="backups-schedule-chip-text">
                 {schedule?.enabled
                   ? t("backups.hero.autoOn", { hours: schedule.interval_hours })
                   : t("backups.hero.autoOff")}
-              </strong>
-              <small>
+              </span>
+              <span className="backups-schedule-chip-hint">
                 {schedule?.enabled
                   ? t("backups.hero.retention", { count: schedule.retention_count })
                   : t("backups.hero.autoOffHint")}
-              </small>
-            </span>
-            <span className="material-symbols-outlined backups-schedule-chip-arrow">
-              chevron_right
-            </span>
-          </button>
-
-          <div className="backups-hero-actions">
-            <button
-              type="button"
-              className="secondary-btn backups-action-btn backups-restart-btn"
-              onClick={() => setConfirmRestart(true)}
-              title={t("backups.restart.title")}
-              disabled={restarting}
-            >
-              <span className="material-symbols-outlined">power_settings_new</span>
-              {t("backups.restart.btn")}
-            </button>
-            <button
-              type="button"
-              className="secondary-btn backups-action-btn backups-upload-btn"
-              onClick={handleUploadClick}
-              disabled={uploading}
-              title={t("backups.uploadHint")}
-            >
-              <span className="material-symbols-outlined">upload_file</span>
-              {uploading ? t("backups.uploading") : t("backups.uploadBackup")}
-            </button>
-            <button
-              type="button"
-              className="primary-btn backups-action-btn backups-create-btn"
-              onClick={() => void handleCreate()}
-              disabled={creating}
-            >
-              <span className="material-symbols-outlined">
-                {creating ? "progress_activity" : "backup"}
               </span>
-              {creating ? t("backups.creatingBackup") : t("backups.manualBackup")}
+              <span className="material-symbols-outlined backups-schedule-chip-arrow">
+                chevron_right
+              </span>
             </button>
           </div>
+        </div>
+
+        {/* Sadece aksiyonlar — program chip'i sola, kunye altina alindi.
+            Ucu birden tek satira rahat siger, sarmalanma yok. */}
+        <div className="backups-hero-actions">
+          <button
+            type="button"
+            className="secondary-btn backups-action-btn backups-restart-btn"
+            onClick={() => setConfirmRestart(true)}
+            title={t("backups.restart.title")}
+            disabled={restarting}
+          >
+            <span className="material-symbols-outlined">power_settings_new</span>
+            {t("backups.restart.btn")}
+          </button>
+          <button
+            type="button"
+            className="secondary-btn backups-action-btn backups-upload-btn"
+            onClick={handleUploadClick}
+            disabled={uploading}
+            title={t("backups.uploadHint")}
+          >
+            <span className="material-symbols-outlined">upload_file</span>
+            {uploading ? t("backups.uploading") : t("backups.uploadBackup")}
+          </button>
+          <button
+            type="button"
+            className="primary-btn backups-action-btn backups-create-btn"
+            onClick={() => void handleCreate()}
+            disabled={creating}
+          >
+            <span className="material-symbols-outlined">
+              {creating ? "progress_activity" : "backup"}
+            </span>
+            {creating ? t("backups.creatingBackup") : t("backups.manualBackup")}
+          </button>
         </div>
       </div>
 

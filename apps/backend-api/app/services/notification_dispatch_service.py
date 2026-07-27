@@ -505,7 +505,6 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     rule_whatsapp = bool(rule and rule.notify_whatsapp_web)
     alarm_rank = _level_rank(alarm.level)
     any_telegram_optin = False
-    any_whatsapp_optin = False
     for user in recipients:
         pref = _get_pref(db, user.id)
         # Min seviye filtresi
@@ -519,8 +518,11 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
         # SMS: kuralda notify_sms AND kullanici tercihi acik
         if rule_sms and pref.sms_enabled:
             _send_sms_for_user(settings, user, alarm)
-        # WhatsApp kisisel: kuralda notify_whatsapp_web AND kullanici tercihi acik
-        # AND grup modu kapali (grup modunda kisisel mesaj gitmez, tek mod).
+        # WhatsApp kisisel (grup modu KAPALI): kuralda notify_whatsapp_web +
+        # kullanicinin PROFIL tercihi (whatsapp_web_enabled) acik ise o
+        # kullanicinin telefon numarasina gider. Grup modu seciliyse kisisel
+        # gonderim YAPILMAZ (tek mod — grup hepsine tek mesaj). Master switch +
+        # telefon kontrolu _send_whatsapp_for_user icinde.
         if (
             rule_whatsapp
             and getattr(pref, "whatsapp_web_enabled", False)
@@ -530,18 +532,18 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
         # Telegram: kullanici tercihi opt-in oldu mu?
         if getattr(pref, "telegram_enabled", False):
             any_telegram_optin = True
-        if getattr(pref, "whatsapp_web_enabled", False):
-            any_whatsapp_optin = True
     # Telegram: kural izin verdi + en az 1 kullanici opt-in oldu ise
     # global broadcast. Bot tek bir kanaldan yayin yapar (ayar listesi
     # icinde tanimli chat_ids), bu yuzden kisi-bazli filtre yapamayiz
     # ama opt-in olan yoksa gondermeyiz.
     if rule_telegram and any_telegram_optin:
         _send_telegram_broadcast(settings, alarm)
-    # WhatsApp grup: kural izin verdi + grup modu acik + en az 1 kullanici
-    # opt-in oldu ise secili grup JID listesine broadcast. Kisisel mod ile
-    # grup modu ayni anda calismaz.
-    if rule_whatsapp and settings and settings.whatsapp_web_group_mode and any_whatsapp_optin:
+    # WhatsApp grup: kural izin verdi + grup modu acik ise secili grup JID
+    # listesine broadcast. GRUP hedefi operator tarafindan bilincli secildigi
+    # icin kullanici opt-in'i (whatsapp_web_enabled) ARANMAZ — kisisel moddan
+    # farki budur. Master switch (whatsapp_web_enabled) ve grup JID listesi
+    # kontrolu _send_whatsapp_group_broadcast icinde yapilir.
+    if rule_whatsapp and settings and settings.whatsapp_web_group_mode:
         _send_whatsapp_group_broadcast(settings, alarm)
 
 

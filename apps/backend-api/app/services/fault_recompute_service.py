@@ -12,25 +12,36 @@ Ne zaman cagirilir:
   - alarm_reconciliation worker bir alarmi cozdugunde
   - Manuel acknowledge/reset uclarinda (gerekirse)
 
-Algoritma (sade):
+Algoritma:
   Her hat icin (line_id):
     1) Hatta atanmis cihazlari pole sequence_no + slot ici sirayla diz.
-    2) Aktif alarm (reset=False) veren cihazlari isaretle (RED).
-    3) En yuksek seq'li RED cihazi bul (last_red).
-    4) last_red sonrasinda gelen ilk alarmsiz cihazi bul (first_green) — yoksa NULL.
-    5) Pole araligi: last_red'in slot'undan first_green'in slot'una kadar
-       kapsayacak sekilde hesapla. Sade yaklasim:
+    2) Aktif alarm (reset=False, produces_fault=True) veren cihazlari
+       isaretle (RED), digerleri GREEN.
+    3) Sirali listede her MAKSIMAL RED blogu bir ayri ariza bolgesidir:
+       blogun son cihazi = last_red, blogun hemen ardindaki cihaz =
+       first_green (blok hattin sonunda bitiyorsa first_green NULL).
+    4) Her bolge icin pole araligi:
          from_pole = last_red'in oturdugu slot'un from_pole'u
-         to_pole = first_green varsa onun slot'unun to_pole'u; yoksa
-                   last_red'in slot'unun to_pole'u (hat ucu).
-    6) Bir FaultEvent kaydi var mi (status=open, ayni line_id) -> guncelle.
-       Yoksa yeni kayit olustur. (Bir hatta tek aktif fault tutulur.)
+         to_pole   = first_green varsa onun slot'unun to_pole'u; yoksa
+                     last_red'in slot'unun to_pole'u (hat ucu).
+    5) Hesaplanan bolgeler, o hattin mevcut AKTIF FaultEvent kayitlariyla
+       eslestirilir (bkz. `_match_zones_to_faults`): eslesen guncellenir,
+       eslesmeyen bolge icin YENI kayit acilir, karsiligi kalmayan kayit
+       "resolved" edilir.
 
-  Cihazda artik aktif alarm yoksa -> mevcut open fault'i resolved'a cek.
+COKLU BOLGE (surum notu):
+  Onceki surum hat basina yalnizca EN SON RED cihazi buluyordu ve
+  `open_by_line` sozlugu ile hat basina tek aktif kayit zorluyordu; fazla
+  kayitlari "drift" sayip closed'a cekiyordu. Bu yuzden ayni hatta
+  birbirinden bagimsiz iki ariza bolgesi olustugunda (R-G-R-G deseni)
+  IKINCISI sessizce kayboluyordu. Artik her RED blogu kendi FaultEvent'ine
+  sahip; tek bolgeli (klasik) senaryoda davranis aynen korunur.
 
-NOT: Bu hesap basit ve "her hat tek aktif fault" varsayimini kullanir.
-Ileri seviye (cok bagimsiz fault, bransman propagasyonu) frontend
-haritasinda zaten daha sofistike — burada ozet/raporlama icin yeterli.
+  RED/GREEN deseni -> bolgeler:
+    R R G G      -> 1 bolge (last_red=#2, first_green=#3)
+    R G R G      -> 2 bolge (#1/#2 ve #3/#4)
+    R R G R G    -> 2 bolge (#2/#3 ve #4/#5)
+    R R R        -> 1 bolge (last_red=#3, first_green=NULL -> hat ucu)
 """
 
 from __future__ import annotations
@@ -126,6 +137,193 @@ def recompute_faults_debounced(db: Session) -> bool:
     return True
 
 
+class _FaultZone:
+    """Bir hat uzerindeki TEK bagimsiz ariza bolgesi (hesaplanmis, henuz
+    DB kaydiyla eslestirilmemis)."""
+
+    __slots__ = (
+        "last_red_device_id",
+        "first_green_device_id",
+        "from_pole",
+        "to_pole",
+    )
+
+    def __init__(
+        self,
+        last_red_device_id: int,
+        first_green_device_id: int | None,
+        from_pole: Pole,
+        to_pole: Pole,
+    ) -> None:
+        self.last_red_device_id = last_red_device_id
+        self.first_green_device_id = first_green_device_id
+        self.from_pole = from_pole
+        self.to_pole = to_pole
+
+    @property
+    def seq_range(self) -> tuple[int, int]:
+        a = self.from_pole.sequence_no
+        b = self.to_pole.sequence_no
+        return (a, b) if a <= b else (b, a)
+
+
+def _compute_line_zones(
+    line_devices: list[tuple[int, int, int, LineSegment]],
+    active_alarm_device_ids: set[int],
+    poles_by_id: dict[int, Pole],
+) -> list[_FaultZone]:
+    """Sirali cihaz listesinden TUM ariza bolgelerini cikar.
+
+    Her maksimal RED blogunun sonu bir ariza bolgesi uretir. Blogun hemen
+    ardindaki cihaz first_green'dir; blok hattin sonunda bitiyorsa
+    first_green NULL (ariza hat ucuna kadar uzuyor).
+    """
+    zones: list[_FaultZone] = []
+    total = len(line_devices)
+    for i, (_, _, _, seg) in enumerate(line_devices):
+        if seg.device_id not in active_alarm_device_ids:
+            continue
+        # Bu cihaz RED. Blogun SONU mu? (son cihaz ya da sonraki GREEN)
+        next_seg: LineSegment | None = None
+        if i + 1 < total:
+            next_seg = line_devices[i + 1][3]
+            if next_seg.device_id in active_alarm_device_ids:
+                # Blok devam ediyor — bolgeyi blogun sonunda uretecegiz.
+                continue
+        from_pole = poles_by_id.get(seg.from_pole_id)
+        last_red_to_pole = poles_by_id.get(seg.to_pole_id)
+        if from_pole is None or last_red_to_pole is None:
+            continue
+        first_green_id: int | None = None
+        to_pole = last_red_to_pole
+        if next_seg is not None:
+            first_green_id = next_seg.device_id
+            to_pole = poles_by_id.get(next_seg.to_pole_id) or last_red_to_pole
+        if seg.device_id is None:
+            continue
+        zones.append(
+            _FaultZone(
+                last_red_device_id=seg.device_id,
+                first_green_device_id=first_green_id,
+                from_pole=from_pole,
+                to_pole=to_pole,
+            )
+        )
+    return zones
+
+
+def _seq_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    return a[0] <= b[1] and b[0] <= a[1]
+
+
+def _match_zones_to_faults(
+    zones: list[_FaultZone],
+    existing: list[FaultEvent],
+) -> tuple[list[tuple[_FaultZone, FaultEvent]], list[_FaultZone], list[FaultEvent]]:
+    """Hesaplanan bolgeleri mevcut aktif kayitlarla esle.
+
+    Amac: her recompute'ta ayni ariza icin YENI satir acmamak (duplicate) ama
+    gercekten yeni bir bolge olustugunda da onu kacirmamak.
+
+    Eslestirme sirasi (once en guclu sinyal):
+      1. `last_red_device_id` ayni  — ariza ayni cihazin arkasinda duruyor.
+      2. Direk araliklari kesisiyor — ariza bolgesi buyudu/kaydi (cihaz
+         degisti ama ayni fiziksel bolge).
+
+    Returns: (eslesenler, yeni_bolgeler, karsiligi_kalmayan_kayitlar)
+    """
+    unmatched_zones = list(zones)
+    unmatched_faults = list(existing)
+    pairs: list[tuple[_FaultZone, FaultEvent]] = []
+
+    # 1) last_red_device_id tam eslesme
+    for zone in list(unmatched_zones):
+        hit = next(
+            (f for f in unmatched_faults if f.last_red_device_id == zone.last_red_device_id),
+            None,
+        )
+        if hit is not None:
+            pairs.append((zone, hit))
+            unmatched_zones.remove(zone)
+            unmatched_faults.remove(hit)
+
+    # 2) Direk araligi kesisimi
+    for zone in list(unmatched_zones):
+        zr = zone.seq_range
+        hit = None
+        for f in unmatched_faults:
+            if f.from_pole_seq is None or f.to_pole_seq is None:
+                continue
+            fr = (
+                (f.from_pole_seq, f.to_pole_seq)
+                if f.from_pole_seq <= f.to_pole_seq
+                else (f.to_pole_seq, f.from_pole_seq)
+            )
+            if _seq_overlap(zr, fr):
+                hit = f
+                break
+        if hit is not None:
+            pairs.append((zone, hit))
+            unmatched_zones.remove(zone)
+            unmatched_faults.remove(hit)
+
+    return pairs, unmatched_zones, unmatched_faults
+
+
+def _resolve_fault(
+    db: Session,
+    fault: FaultEvent,
+    line: Line | None,
+    regions_by_id: dict[int, Region],
+    now: datetime,
+) -> None:
+    """Bir ariza bolgesi duzeldi -> status="resolved" + olay kaydi.
+
+    Idempotent: kayit zaten "resolved" ise hicbir sey yapmaz (aksi halde her
+    recompute turunda "normale dondu" olayi tekrar yazilir -> event spam).
+    """
+    if fault.status == "resolved":
+        return
+    fault.status = "resolved"
+    fault.resolved_at = now
+    logger.info(
+        "fault_resolved fault_id=%d line_id=%d poles=%s-%s",
+        fault.id, fault.line_id, fault.from_pole_seq, fault.to_pole_seq,
+    )
+    try:
+        from app.services.event_service import record_event
+
+        region_obj = regions_by_id.get(line.region_id) if line else None
+        line_name = line.name if line else f"#{fault.line_id}"
+        msg = (
+            f"Hat arızası normale döndü: {line_name}"
+            + (f" ({region_obj.name})" if region_obj else "")
+            + f" — Direk #{fault.from_pole_seq} ↔ #{fault.to_pole_seq}"
+        )
+        record_event(
+            db,
+            category="fault",
+            event_type="fault_resolved",
+            severity="info",
+            message=msg,
+            metadata={
+                "fault_id": fault.id,
+                "line_id": fault.line_id,
+                "line_name": line_name,
+                "region_name": region_obj.name if region_obj else None,
+                "from_pole_seq": fault.from_pole_seq,
+                "to_pole_seq": fault.to_pole_seq,
+            },
+            i18n_key="fault_resolved",
+            i18n_params={
+                "line": line_name,
+                "region": region_obj.name if region_obj else "",
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("fault_resolved_record_event_failed")
+
+
 def recompute_faults(db: Session) -> None:
     """Tum aktif alarmlardan yola cikarak fault_events tablosunu senkronla."""
     # Aktif (reset=False) VE hat arizasi ureten (produces_fault=True) alarmli
@@ -186,67 +384,71 @@ def recompute_faults(db: Session) -> None:
         arr.sort(key=lambda t: (t[0], t[1], t[2]))
 
     now = datetime.now(timezone.utc)
-    # line_id -> mevcut AKTIF FaultEvent. "Aktif" = closed olmayan tum
-    # statusler (open/assigned/in_progress/resolved). Bir hatta tek aktif
-    # fault tutuyoruz; yeni alarm degisiklikleri mevcut kaydı GUNCELLER,
-    # yeni satir AÇMAZ (aksi halde duplicate olusur).
+    # line_id -> mevcut AKTIF FaultEvent listesi. "Aktif" = closed olmayan
+    # tum statusler (open/assigned/in_progress/resolved). Ayni hatta birden
+    # fazla bagimsiz ariza bolgesi olabilir; her bolge kendi kaydini tutar.
     open_faults = list(
         db.scalars(
             select(FaultEvent).where(FaultEvent.status != "closed")
         ).all()
     )
-    open_by_line: dict[int, FaultEvent] = {}
-    # Bir hatta birden fazla aktif kayit varsa (eski drift), en yenisini
-    # tut, digerlerini closed yap (silmek riskli — tarihce icin closed).
+    faults_by_line: dict[int, list[FaultEvent]] = {}
     for f in sorted(open_faults, key=lambda x: x.opened_at, reverse=True):
-        if f.line_id in open_by_line:
-            f.status = "closed"
-            f.closed_at = now
-            if f.resolved_at is None:
-                f.resolved_at = now
-        else:
-            open_by_line[f.line_id] = f
+        faults_by_line.setdefault(f.line_id, []).append(f)
 
     # Yeni fault'lar (bu turda olusturulanlar) — email dispatch icin biriktir.
     # commit'ten sonra dispatch ederiz ki fault.id atanmis olsun.
     new_faults_for_dispatch: list[tuple[FaultEvent, Pole | None]] = []
 
-    handled_lines: set[int] = set()
+    # Bu turda karsiligi bulunan (yani hala aktif olan) FaultEvent id/objeleri.
+    # Tur sonunda bu kumede OLMAYAN aktif kayitlar resolved edilir.
+    still_active: set[int] = set()
+    # id'si olmayan (yeni eklenen) kayitlari da takip etmemiz gerek.
+    newly_created: list[FaultEvent] = []
 
     for line in lines:
         line_devices = devices_per_line.get(line.id, [])
         if not line_devices:
             continue
-        # Son alarmli cihaz indexini bul
-        last_red_idx: int | None = None
-        for i, (_, _, _, seg) in enumerate(line_devices):
-            if seg.device_id in active_alarm_device_ids:
-                last_red_idx = i
-        if last_red_idx is None:
-            continue  # bu hatta aktif fault yok
-        last_red_seg = line_devices[last_red_idx][3]
-        next_seg: LineSegment | None = None
-        if last_red_idx + 1 < len(line_devices):
-            next_seg = line_devices[last_red_idx + 1][3]
 
-        from_pole = poles_by_id.get(last_red_seg.from_pole_id)
-        last_red_to_pole = poles_by_id.get(last_red_seg.to_pole_id)
-        if from_pole is None or last_red_to_pole is None:
-            continue
-        # to_pole: next varsa onun slot'unun to'su, yoksa last_red'in to'su
-        to_pole: Pole | None
-        first_green_id: int | None = None
-        if next_seg is not None:
-            to_pole = poles_by_id.get(next_seg.to_pole_id) or last_red_to_pole
-            first_green_id = next_seg.device_id
-        else:
-            to_pole = last_red_to_pole
+        zones = _compute_line_zones(line_devices, active_alarm_device_ids, poles_by_id)
+        existing_faults = faults_by_line.get(line.id, [])
+        pairs, fresh_zones, orphan_faults = _match_zones_to_faults(zones, existing_faults)
 
-        last_red_dev = devices_by_id.get(last_red_seg.device_id) if last_red_seg.device_id else None
-        first_green_dev = devices_by_id.get(first_green_id) if first_green_id else None
+        if len(zones) > 1:
+            logger.info(
+                "fault_multi_zone line_id=%d zone_count=%d ranges=%s",
+                line.id, len(zones), [z.seq_range for z in zones],
+            )
 
-        existing = open_by_line.get(line.id)
-        if existing is None:
+        # --- Eslesen bolgeler: mevcut kaydi guncelle ---
+        for zone, existing in pairs:
+            existing.last_red_device_id = zone.last_red_device_id
+            existing.first_green_device_id = zone.first_green_device_id
+            existing.from_pole_id = zone.from_pole.id
+            existing.to_pole_id = zone.to_pole.id
+            existing.from_pole_seq = zone.from_pole.sequence_no
+            existing.to_pole_seq = zone.to_pole.sequence_no
+            # Ariza tekrar aktif hale geldiyse (resolved iken yeniden alarm)
+            # yeniden "open" yapmayiz — operator akisini bozmamak icin
+            # mevcut status korunur; sadece resolved ise geri alinir.
+            if existing.status == "resolved":
+                existing.status = "open"
+                existing.resolved_at = None
+                logger.info(
+                    "fault_reopened fault_id=%d line_id=%d", existing.id, line.id
+                )
+            still_active.add(existing.id)
+
+        # --- Yeni bolgeler: yeni FaultEvent ac ---
+        for zone in fresh_zones:
+            last_red_dev = devices_by_id.get(zone.last_red_device_id)
+            first_green_dev = (
+                devices_by_id.get(zone.first_green_device_id)
+                if zone.first_green_device_id
+                else None
+            )
+            from_pole = zone.from_pole
             # Yeni fault olustur — OTOMATIK ATAMA YAPILMAZ. Ariza her zaman
             # "open" olarak acilir; atama, Hat Arizalari sayfasindan manuel
             # yapilir (faults.py assign endpoint). Onceden otomatik operator
@@ -255,18 +457,19 @@ def recompute_faults(db: Session) -> None:
             fault = FaultEvent(
                 line_id=line.id,
                 region_id=line.region_id,
-                last_red_device_id=last_red_seg.device_id,  # type: ignore[arg-type]
-                first_green_device_id=first_green_id,
-                from_pole_id=from_pole.id,
-                to_pole_id=to_pole.id if to_pole else last_red_to_pole.id,
-                from_pole_seq=from_pole.sequence_no,
-                to_pole_seq=(to_pole.sequence_no if to_pole else last_red_to_pole.sequence_no),
+                last_red_device_id=zone.last_red_device_id,
+                first_green_device_id=zone.first_green_device_id,
+                from_pole_id=zone.from_pole.id,
+                to_pole_id=zone.to_pole.id,
+                from_pole_seq=zone.from_pole.sequence_no,
+                to_pole_seq=zone.to_pole.sequence_no,
                 status="open",
                 opened_at=now,
                 assigned_to_username=None,
                 assigned_at=None,
             )
             db.add(fault)
+            newly_created.append(fault)
             logger.info(
                 "fault_opened line_id=%d from_pole_seq=%s to_pole_seq=%s last_red_dev=%s first_green_dev=%s assigned=None",
                 line.id, fault.from_pole_seq, fault.to_pole_seq,
@@ -322,63 +525,27 @@ def recompute_faults(db: Session) -> None:
             # Konum: from_pole'un koordinatlarini kullan (saha personeli
             # bu noktaya gider; fault aralık baslangici).
             new_faults_for_dispatch.append((fault, from_pole))
-        else:
-            # Mevcut fault'i guncelle (cihaz/pole degismis olabilir)
-            existing.last_red_device_id = last_red_seg.device_id  # type: ignore[assignment]
-            existing.first_green_device_id = first_green_id
-            existing.from_pole_id = from_pole.id
-            existing.to_pole_id = to_pole.id if to_pole else last_red_to_pole.id
-            existing.from_pole_seq = from_pole.sequence_no
-            existing.to_pole_seq = (
-                to_pole.sequence_no if to_pole else last_red_to_pole.sequence_no
-            )
-        handled_lines.add(line.id)
 
-    # Bu turda aktif alarm GORULMEYEN hatlardaki acik fault'lari resolve et.
-    # ONEMLI: fault zaten "resolved" durumundaysa tekrar yazma + event spam'i
-    # olusmasin. Sadece status != "resolved" ise gercek state transition var.
-    for line_id, fault in open_by_line.items():
-        if line_id in handled_lines:
-            continue
-        if fault.status == "resolved":
-            # Onceki turlarda zaten cozulmus — yeniden resolved'a cevirme,
-            # event de yazma. (closed yapmak ayri bir is.) Sessizce gec.
-            continue
-        fault.status = "resolved"
-        fault.resolved_at = now
-        logger.info("fault_resolved fault_id=%d line_id=%d", fault.id, line_id)
-        # Olay kaydi: ariza normale dondu.
-        try:
-            from app.services.event_service import record_event
-            line_obj = next((l for l in lines if l.id == line_id), None)
-            region_obj = regions_by_id.get(line_obj.region_id) if line_obj else None
-            line_name = line_obj.name if line_obj else f"#{line_id}"
-            msg = (
-                f"Hat arızası normale döndü: {line_name}"
-                + (f" ({region_obj.name})" if region_obj else "")
-            )
-            record_event(
-                db,
-                category="fault",
-                event_type="fault_resolved",
-                severity="info",
-                message=msg,
-                metadata={
-                    "fault_id": fault.id,
-                    "line_id": line_id,
-                    "line_name": line_name,
-                    "region_name": region_obj.name if region_obj else None,
-                },
-                i18n_key="fault_resolved",
-                i18n_params={
-                    "line": line_name,
-                    "region": region_obj.name if region_obj else "",
-                },
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("fault_resolved_record_event_failed")
+        # --- Karsiligi kalmayan kayitlar: bu hattaki o bolge duzeldi ---
+        # (Hattin tamami duzeldiginde zones bos gelir, tum kayitlar orphan
+        # olur; kismi duzelmede sadece ilgili bolge orphan olur.)
+        # `orphan_faults` degiskenini burada tuketmiyoruz — asagidaki son
+        # suzgec `still_active` uzerinden hepsini toplayacak. Yine de burada
+        # resolve etmek log sirasini anlasilir kiliyor (hat bazli).
+        for orphan in orphan_faults:
+            _resolve_fault(db, orphan, line, regions_by_id, now)
+
+    # Son suzgec: bu turda HICBIR bolgeye eslesmemis tum aktif kayitlari
+    # resolve et. Bu, dongu icinde orphan olarak zaten resolve edilenleri de
+    # kapsar (_resolve_fault idempotent, tekrar olay yazmaz) ve ayrica hic
+    # cihazi kalmamis hatlardaki kayitlari da toplar.
+    lines_by_id = {l.id: l for l in lines}
+    for line_faults in faults_by_line.values():
+        for fault in line_faults:
+            if fault.id in still_active:
+                continue
+            _resolve_fault(db, fault, lines_by_id.get(fault.line_id), regions_by_id, now)
     # cagiran fonksiyon commit yapacak
-    _ = regions_by_id  # used in API serializer
 
     # Yeni acilan fault'lar icin email dispatch — flush ile id atanmasi gerek.
     # commit cagiran fonksiyonda yapilacak; biz flush ederek id'leri elde
