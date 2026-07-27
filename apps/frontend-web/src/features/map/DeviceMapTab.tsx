@@ -17,6 +17,9 @@ type Props = {
   liveValues?: SignalLiveRow[];
   /** Şebeke topolojisi — anasayfada bölge/hat/direk/segment görselleri için. */
   gridSnapshot?: GridSnapshot | null;
+  /** Hat Agaci'nda gizlenen hatlar — hat, direkleri ve cihazlari haritada
+   *  grilesir. Kaldirilmaz: topoloji gorunur kalsin, sadece geri plana dussun. */
+  hiddenLineIds?: Set<number>;
   /** Aktif alarmlar — segment cihazının alarm durumunu hesaplamak için. */
   alarms?: AlarmEvent[];
   /** Verilirse "Tüm detayları göster" popup içi modal yerine cihaz detay
@@ -174,8 +177,13 @@ function AutoFitOnLoad({
 // DOM'u re-render olur ve CSS alarm-pulse animasyonu surekli %0'dan
 // baslayarak titrer (kullanici sikayeti).
 const _markerIconCache = new Map<string, L.DivIcon>();
-function markerIcon(status: DeviceRow["communicationStatus"], alarmActive: boolean) {
-  const key = `${status}|${alarmActive ? 1 : 0}`;
+function markerIcon(
+  status: DeviceRow["communicationStatus"],
+  alarmActive: boolean,
+  /** Bagli oldugu hat gizlendi — marker grilesir (kaldirilmaz). */
+  dimmed = false
+) {
+  const key = `${status}|${alarmActive ? 1 : 0}|${dimmed ? 1 : 0}`;
   const cached = _markerIconCache.get(key);
   if (cached) return cached;
   const color = alarmActive ? "#dc2626" : status === "online" ? "#10b981" : "#94a3b8";
@@ -184,13 +192,30 @@ function markerIcon(status: DeviceRow["communicationStatus"], alarmActive: boole
     : status === "online"
       ? "is-online"
       : "is-offline";
+  // Haberlesme kopuk (offline/unknown): marker'in sag-ust kosesine "sinyal
+  // yok" rozeti. Sadece gri renk yetmiyordu — operator gri marker'i "pasif
+  // cihaz" sanabiliyor; bu rozet acikca "veri gelmiyor" diyor. Alarm rozeti
+  // ile cakismaz: alarm kirmizi govde, bu ayri kose isareti.
+  const commLost = status !== "online";
+  const commBadge = commLost
+    ? `
+      <span class="device-marker-comm" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="9" height="9">
+          <path fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"
+                d="M3 3 L21 21"/>
+          <path fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"
+                d="M5 12.5a9 9 0 0 1 4.2-2.4M12 17.5h.01"/>
+        </svg>
+      </span>`
+    : "";
   const icon = L.divIcon({
-    className: "device-marker-wrap",
+    className: `device-marker-wrap${dimmed ? " is-dimmed" : ""}`,
     html: `
-      <div class="device-marker ${cls}" style="--c:${color}">
+      <div class="device-marker ${cls}${commLost ? " is-comm-lost" : ""}" style="--c:${color}">
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
           <path fill="#fff" d="M13 2 4 14h6l-1 8 9-12h-6z"/>
         </svg>
+        ${commBadge}
       </div>
     `,
     iconSize: [28, 28],
@@ -263,7 +288,7 @@ type LineInfoCard = {
   isFault: boolean;
 };
 
-export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms, onOpenDetail }: Props) {
+export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms, onOpenDetail, hiddenLineIds }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -353,6 +378,18 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     }
     return s;
   }, [alarms]);
+
+  // Gizlenen hatlara ait cihaz ve direkler — marker'lari grilestirmek icin.
+  // Hat gizleme bir GORSEL sadelestirme; veri filtresi degil, o yuzden
+  // `devices` listesi budanmaz, sadece bu kumeye giren marker'lar solar.
+  const dimmedDeviceIds = useMemo<Set<number>>(() => {
+    const s = new Set<number>();
+    if (!gridSnapshot || !hiddenLineIds?.size) return s;
+    for (const seg of gridSnapshot.segments) {
+      if (seg.device_id && hiddenLineIds.has(seg.line_id)) s.add(seg.device_id);
+    }
+    return s;
+  }, [gridSnapshot, hiddenLineIds]);
 
   // Cihaz id -> slot uzerindeki konum.
   // Coklu cihaz icin: ayni (from, to) ciftine sahip segmentler grupla, sira ile
@@ -1079,15 +1116,20 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               ayni listede normal edge gibi cizilir. */}
           {topology?.linePolylines.map((line) => {
             const isFault = line.kind === "fault";
+            // Gizlenen hat: gri + soluk + ince. Silmiyoruz ki sebekenin
+            // gectigi guzergah haritada okunabilir kalsin.
+            // lineId null olabilir (bransman baglanti parcalari); o durumda
+            // hangi hatta ait oldugu belirsiz, grilestirmiyoruz.
+            const dimmed = line.lineId !== null && (hiddenLineIds?.has(line.lineId) ?? false);
             return (
               <Polyline
                 key={line.id}
                 positions={line.positions}
                 pathOptions={{
-                  color: line.color,
-                  weight: isFault ? 5 : 4,
-                  opacity: isFault ? 0.9 : 0.85,
-                  dashArray: isFault ? "10 6" : undefined
+                  color: dimmed ? "#cbd5e1" : line.color,
+                  weight: dimmed ? 2.5 : isFault ? 5 : 4,
+                  opacity: dimmed ? 0.55 : isFault ? 0.9 : 0.85,
+                  dashArray: dimmed ? undefined : isFault ? "10 6" : undefined
                 }}
                 eventHandlers={{
                   click: () => {
@@ -1124,6 +1166,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             <Marker
               key={`pole-${p.id}`}
               position={[p.latitude, p.longitude]}
+              opacity={hiddenLineIds?.has(p.line_id) ? 0.35 : 1}
               icon={polePin(String(p.sequence_no), isStart, isEnd, p.pole_type, isBranchPoint, isBranchEntry)}
               eventHandlers={{
                 click: () => {
@@ -1172,11 +1215,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               ? override
               : [device.latitude, device.longitude];
             const isAlarmed = alarmActiveDeviceIds.has(device.id);
+            const dimmed = dimmedDeviceIds.has(device.id);
             return (
               <Marker
                 key={device.id}
                 position={position}
-                icon={markerIcon(device.communicationStatus, isAlarmed)}
+                icon={markerIcon(device.communicationStatus, isAlarmed, dimmed)}
                 eventHandlers={{
                   click: () => onSelectDevice(device.id)
                 }}
