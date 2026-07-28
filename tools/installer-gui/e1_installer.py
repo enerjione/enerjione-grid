@@ -535,36 +535,18 @@ class InstallerApp(tk.Tk):
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        # Sol panel: ustte KAYDIRILABILIR form, altta SABIT eylem seridi.
-        # Butonlar bilerek kaydirma alaninin DISINDA — icerideyken asagi
-        # kayinca gozden kayboluyorlardi ve en sik kullanilan seyin
-        # aranmasi gerekiyordu.
-        left = ttk.Frame(body)
+        # Sol panel: ustte form, altta SABIT eylem seridi. KAYDIRMA YOK —
+        # pencere tam ekran aciliyor ve form buna sigacak sekilde derli
+        # toplu tutuldu (IP+port ayni satirda, aciklama paragraflari yok).
+        left = ttk.Frame(body, width=290)
+        left.pack_propagate(False)   # ic icerik paneli genisletmesin
         body.add(left, weight=0)
 
         actions = ttk.Frame(left, padding=(0, 8, 0, 0))
         actions.pack(side="bottom", fill="x")      # once alt serit yer alsin
 
-        scroll_area = ttk.Frame(left)
-        scroll_area.pack(side="top", fill="both", expand=True)
-        canvas = tk.Canvas(scroll_area, highlightthickness=0, width=290)
-        vbar = ttk.Scrollbar(scroll_area, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        vbar.pack(side="right", fill="y")
-
-        form = ttk.Frame(canvas, padding=(0, 0, 12, 0))
-        win = canvas.create_window((0, 0), window=form, anchor="nw")
-        # Ic cerceve buyudukce kaydirma alanini guncelle; canvas genisleyince
-        # ic cerceveyi de genislet ki alanlar sagda bosluk birakmasin.
-        form.bind("<Configure>",
-                  lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>",
-                    lambda e: canvas.itemconfigure(win, width=e.width))
-        # Fare tekerlegi: imlec sol paneldeyken kaydirsin.
-        canvas.bind("<Enter>", lambda e: canvas.bind_all(
-            "<MouseWheel>", lambda ev: canvas.yview_scroll(-ev.delta // 120, "units")))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        form = ttk.Frame(left, padding=(0, 0, 12, 0))
+        form.pack(side="top", fill="both", expand=True)
 
         term_wrap = ttk.Frame(body)
         body.add(term_wrap, weight=1)
@@ -602,14 +584,24 @@ class InstallerApp(tk.Tk):
             return e
 
         # --- Cihaz ---
+        # IP ve port AYNI SATIRDA: kaydirma olmadigi icin her satir degerli
+        # ve port zaten iki-uc haneli.
         s = section("Cihaz baglantisi")
-        row(s, 0, "IP adresi", "host", self.profile.host)
-        row(s, 1, "SSH portu", "port", str(self.profile.port), width=6)
-        row(s, 2, "Kullanici", "user", self.profile.user)
-        row(s, 3, "Parola", "password", show="•")
-        ttk.Label(s, text="SSH anahtari").grid(row=4, column=0, sticky="w", pady=3)
+        ttk.Label(s, text="IP adresi").grid(row=0, column=0, sticky="w", pady=3)
+        ipf = ttk.Frame(s)
+        ipf.grid(row=0, column=1, sticky="ew", pady=3, padx=(8, 0))
+        ipf.columnconfigure(0, weight=1)
+        self.vars["host"] = tk.StringVar(value=self.profile.host)
+        ttk.Entry(ipf, textvariable=self.vars["host"]).grid(row=0, column=0, sticky="ew")
+        ttk.Label(ipf, text=":").grid(row=0, column=1, padx=2)
+        self.vars["port"] = tk.StringVar(value=str(self.profile.port))
+        ttk.Entry(ipf, textvariable=self.vars["port"], width=5).grid(row=0, column=2)
+
+        row(s, 1, "Kullanici", "user", self.profile.user)
+        row(s, 2, "Parola", "password", show="•")
+        ttk.Label(s, text="SSH anahtari").grid(row=3, column=0, sticky="w", pady=3)
         kf = ttk.Frame(s)
-        kf.grid(row=4, column=1, sticky="ew", pady=3, padx=(8, 0))
+        kf.grid(row=3, column=1, sticky="ew", pady=3, padx=(8, 0))
         kf.columnconfigure(0, weight=1)
         self.vars["key_path"] = tk.StringVar(value=self.profile.key_path)
         ttk.Entry(kf, textvariable=self.vars["key_path"]).grid(row=0, column=0, sticky="ew")
