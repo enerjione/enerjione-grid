@@ -48,15 +48,8 @@ else
   e1_warn() { printf '  ! %s\n' "$*" >&2; }
   e1_hint() { printf '    %s\n' "$*"; }
   e1_step() { printf '\n== %s\n' "$*"; }
-  e1_can_prompt() { [[ "${ASSUME_YES:-0}" != "1" ]] && [[ -t 0 || -r /dev/tty ]]; }
-  e1_ask() {
-    local prompt="$1" default="${2:-}" ans src=/dev/stdin
-    e1_can_prompt || { printf '%s' "$default"; return 0; }
-    [[ -t 0 ]] || src=/dev/tty
-    printf '  ? %s%s ' "$prompt" "${default:+ [$default]}" >&2
-    read -r -t "${E1_PROMPT_TIMEOUT:-300}" ans < "$src" || ans=""
-    printf '%s' "${ans:-$default}"
-  }
+  # Soru sorma yardimcilari BILEREK YOK: bu script hicbir sey sormaz,
+  # butun girdiler ortam degiskeni / install.env uzerinden gelir.
 fi
 
 SITE_ENV="${E1_SITE_ENV:-/etc/enerjione-grid/site.env}"
@@ -123,25 +116,15 @@ if [[ -f "$INSTALL_ENV" ]]; then
   [[ -n "$CUSTOMER$SITE$SITE_ID" ]] && e1_info "Saha bilgisi ${INSTALL_ENV} dosyasindan okundu."
 fi
 
-if [[ -z "$SITE_ID" && ( -z "$CUSTOMER" || -z "$SITE" ) ]]; then
-  if e1_can_prompt; then
-    e1_step "Saha kimligi"
-    e1_info "Bu kutu uzaktan bakim listesinde bu adla gorunecek."
-    e1_hint "Turkce yazabilirsiniz; teknik ad otomatik uretilir."
-    [[ -z "$CUSTOMER" ]] && CUSTOMER="$(e1_ask 'Musteri / firma adi' '')"
-    [[ -z "$SITE" ]]     && SITE="$(e1_ask 'Saha / proje adi' '')"
-    [[ -z "$UNIT" ]]     && UNIT="$(e1_ask 'Cihaz no (ayni sahada birden fazla kutu varsa)' '')"
-  elif [[ -z "$CUSTOMER$SITE" ]]; then
-    # Gozetimsiz kurulum ve hicbir bilgi yok: tahmin etmeyiz. Tailnet adi
-    # donanimdan turetilir; kurulumcu sonradan bu script'i calistirabilir.
-    e1_info "Saha bilgisi verilmedi ve soru sorulamiyor — atlandi."
-    e1_hint "Sonra tanimlamak icin: sudo bash ${BASH_SOURCE[0]}"
-    exit 0
-  else
-    # Kismi bilgi var (or. imajda sadece E1_CUSTOMER gomulu). Eksik alani
-    # soramiyoruz ama elimizdekini cope atmak da yanlis olur.
-    e1_info "Eksik alan sorulamadi; verilen bilgiyle devam ediliyor."
-  fi
+# SORU SORULMAZ. Saha bilgisi kurulum aracindan (tools/installer-gui) veya
+# ortam degiskeni / install.env uzerinden gelir. Hicbiri yoksa bu adim
+# sessizce atlanir: tailnet adi donanimdan turetilir ve kurulum devam eder.
+# Bilgi sonradan tanimlanabilir — bu script tek basina tekrar calistirilabilir.
+if [[ -z "$SITE_ID" && -z "$CUSTOMER$SITE" ]]; then
+  e1_info "Saha bilgisi verilmedi — tailnet adi donanimdan turetilecek."
+  e1_hint "Sonra tanimlamak icin:"
+  e1_hint "  sudo E1_CUSTOMER='TPAO' E1_SITE='Batman OSB' bash ${BASH_SOURCE[0]}"
+  exit 0
 fi
 
 if [[ -z "$SITE_ID" ]]; then

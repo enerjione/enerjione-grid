@@ -138,37 +138,31 @@ e1_kv "Hedef dizin" "${INSTALL_DIR}"
 [[ -n "${SUDO_USER:-}" ]] && e1_kv "Dosya sahibi" "${SUDO_USER}"
 e1_rule "─"
 
-# Baslangic onayi YALNIZCA stdin gercek bir terminal iken sorulur
-# (yani `sudo bash install.sh`). `curl ... | sudo bash` modunda stdin boru
-# hattidir; orada bu soruyu sormanin degeri yok — kullanici komutu zaten
-# bilerek yazdi — ama /dev/tty okumasi bazi terminallerde yanit alamayip
-# kurulumu tamamen kilitliyordu. Asil kararlar (systemd, appliance) daha
-# sonra, is bittikten sonra soruluyor.
-if [[ -t 0 ]] && [[ "${ASSUME_YES:-0}" != "1" ]]; then
-  if ! e1_confirm_yes "Kuruluma baslansin mi?"; then
-    e1_die "Kurulum kullanici tarafindan iptal edildi."
-  fi
-else
-  e1_info "Kurulum basliyor..."
-fi
+e1_info "Kurulum basliyor..."
 
 e1_set_steps 6
 
-# ---- Kurulum anahtari — BIR KEZ sorulur, iki yerde kullanilir -------------
+# ---- Kurulum anahtari -----------------------------------------------------
 # Depo private oldugu icin hem `git clone` hem `docker login ghcr.io` yetki
-# ister. Kurulumcuya iki ayri sifre sormak yerine tek anahtar aliyoruz.
-# Zaten kurulu bir sistemde .env'den okunur ve hic soru sorulmaz.
+# ister; ikisi de AYNI anahtari kullanir.
 #
-# Sirayla: E1_GHCR_TOKEN ortam degiskeni -> mevcut .env -> kullaniciya sor
+# KURULUM SESSIZDIR — hicbir sey SORULMAZ. Tum girdiler kurulum aracindan
+# (tools/installer-gui) veya ortam degiskeninden gelir. Sebep: saha
+# kurulumunda ekran basinda kimse beklemesin ve kurulum bir soruda
+# takilip kalmasin. Soru sormak eskiden `curl | bash` altinda kurulumu
+# tamamen kilitleyebiliyordu.
+#
+# Sirayla: E1_GHCR_TOKEN ortam degiskeni -> /etc/enerjione-grid/install.env
+#          -> mevcut kurulumun .env'i
 E1_TOKEN="$(E1_GHCR_TOKEN="${E1_GHCR_TOKEN:-}" e1_resolve_token "${INSTALL_DIR}/.env")"
-if [[ -z "$E1_TOKEN" ]] && e1_can_prompt; then
-  e1_info "EnerjiOne Grid deposu ve imajlari ozeldir; kurulum anahtari gerekir."
-  e1_hint "Anahtar size teslim edilen 'ghp_...' veya 'github_pat_...' ile baslayan dizedir."
-  E1_TOKEN="$(e1_ask 'Kurulum anahtari' '')"
+if [[ -z "$E1_TOKEN" && -f /etc/enerjione-grid/install.env ]]; then
+  E1_TOKEN="$(sed -n 's/^[[:space:]]*E1_GHCR_TOKEN[[:space:]]*=[[:space:]]*"\?\([^"#]*\)"\?.*/\1/p' \
+    /etc/enerjione-grid/install.env | tail -1 | tr -d '[:space:]')"
 fi
 if [[ -z "$E1_TOKEN" ]]; then
-  e1_warn "Kurulum anahtari verilmedi. Depo veya imajlar ozelse kurulum basarisiz olur."
-  e1_hint "Sonradan vermek icin: sudo E1_GHCR_TOKEN=<anahtar> bash install.sh"
+  e1_warn "Kurulum anahtari yok — depo ve imajlar ozel oldugu icin kurulum basarisiz olur."
+  e1_hint "Anahtari kurulum aracindan girin veya:"
+  e1_hint "  sudo E1_GHCR_TOKEN=<anahtar> bash install.sh"
 fi
 
 # ---- 1/6: Pre-req paketler -----------------------------------------------
@@ -616,18 +610,18 @@ else
   e1_warn "  cd ${INSTALL_DIR} && docker compose logs backend-api"
 fi
 
-# ---- (Opsiyonel) systemd servis kaydi -----------------------------------
-# install.sh non-interactive (ASSUME_YES=1) modunda systemd entegrasyonu
-# OTOMATIK yapilir. Interaktif modda kullaniciya sorulur. Eger zaten varsa
-# (idempotent) bir sey degismez.
-# Varsayilan EVET: saha cihazinda systemd kaydi istenen davranis (systemctl
-# ile yonetim + acilista garanti). Eskiden e1_confirm (varsayilan HAYIR) idi
-# ve `curl | bash` ile soru hic sorulamadigi icin kayit sessizce atlaniyordu.
-if [[ ! -f /etc/systemd/system/enerjione-grid.service ]]; then
-  if e1_confirm_yes "EnerjiOne Grid systemd servisi olarak kaydedilsin mi? (onerilen)"; then
-    if [[ -f "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" ]]; then
-      bash "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" || true
-    fi
+# ---- systemd servis kaydi ------------------------------------------------
+# SORU SORULMAZ. systemd kaydi bir tercih degil gereklilik: kaydedilmezse
+# cihaz yeniden baslatildiginda sistem AYAGA KALKMAZ ve sahadaki kutu
+# sessizce olu kalir. Eskiden sorulup atlanabiliyordu; tam da bu yuzden
+# atlanmis kurulumlar cikti.
+# Istemeyen kapatabilir:  E1_SYSTEMD=0 sudo bash install.sh
+if [[ "${E1_SYSTEMD:-1}" == "0" ]]; then
+  e1_info "systemd kaydi E1_SYSTEMD=0 ile atlandi — cihaz acilista OTOMATIK BASLAMAZ."
+elif [[ ! -f /etc/systemd/system/enerjione-grid.service ]]; then
+  if [[ -f "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" ]]; then
+    bash "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" || \
+      e1_warn "systemd kaydi tamamlanamadi; cihaz acilista otomatik baslamayabilir."
   fi
 fi
 
