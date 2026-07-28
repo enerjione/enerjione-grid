@@ -51,8 +51,13 @@ Aşağıdaki **tek satırı** olduğu gibi kopyalayıp terminale yapıştırın 
 Enter'a basın:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+curl -fsSL get.enerjione.com | sudo bash
 ```
+
+> Kısa adres çalışmazsa (DNS kaydı henüz yapılmamışsa) uzun hâlini kullanın:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+> ```
 
 Sudo şifrenizi soracaktır; kullanıcı şifrenizi yazın (yazarken ekranda
 görünmez, normaldir).

@@ -46,6 +46,15 @@ cp "$SCRIPT_DIR/solar.conf"          /etc/nginx/sites-available/solar
 ln -sf /etc/nginx/sites-available/enerjione-grid /etc/nginx/sites-enabled/enerjione-grid
 ln -sf /etc/nginx/sites-available/solar          /etc/nginx/sites-enabled/solar
 
+# Kisa kurulum adresi (get.enerjione.com -> GitHub install.sh yonlendirmesi).
+# DNS A kaydi yoksa nginx yine de acilir, sadece o host cozulmez; bu yuzden
+# kurulumu bloklamaz. E1_SKIP_GET=1 ile atlanabilir.
+if [[ "${E1_SKIP_GET:-0}" != "1" ]] && [[ -f "$SCRIPT_DIR/get-enerjione.conf" ]]; then
+  echo "      + get.enerjione.com (kisa kurulum adresi)"
+  cp "$SCRIPT_DIR/get-enerjione.conf" /etc/nginx/sites-available/get-enerjione
+  ln -sf /etc/nginx/sites-available/get-enerjione /etc/nginx/sites-enabled/get-enerjione
+fi
+
 # 4) Syntax check + reload
 echo "[4/4] nginx config dogrulanip yeniden yukleniyor"
 if nginx -t; then
@@ -56,10 +65,14 @@ if nginx -t; then
   echo "Test:"
   echo "  curl -I http://grid.enerjione.com/"
   echo "  curl -I http://solar.enerjione.com/"
+  echo "  curl -IL http://get.enerjione.com/     # 302 -> install.sh"
+  echo ""
+  echo "Kisa kurulum komutu (DNS A kaydi get.enerjione.com -> bu VPS ise):"
+  echo "  curl -fsSL get.enerjione.com | sudo bash"
   echo ""
   echo "SSL icin (opsiyonel):"
   echo "  sudo apt install -y certbot python3-certbot-nginx"
-  echo "  sudo certbot --nginx -d grid.enerjione.com -d solar.enerjione.com"
+  echo "  sudo certbot --nginx -d grid.enerjione.com -d solar.enerjione.com -d get.enerjione.com"
 else
   echo "HATA: nginx config gecersiz — durum degistirilmedi."
   exit 1
