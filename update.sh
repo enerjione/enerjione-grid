@@ -135,8 +135,9 @@ else
 fi
 
 # ---- 3/5: Git pull --------------------------------------------------------
-e1_step "Git pull..."
-git pull --ff-only
+e1_step "Yeni surum indiriliyor..."
+e1_hint "Internet hizina gore birkac saniye ile 1 dakika arasi surer."
+git pull --ff-only --progress
 NEW_HEAD="$(git rev-parse --short HEAD)"
 e1_ok "Yeni HEAD: ${NEW_HEAD}"
 
@@ -204,8 +205,8 @@ fi
 if [[ $NEED_NATS_RENDER -eq 1 ]]; then
   e1_info "NATS auth conf render ediliyor..."
   if ! python3 -c "import bcrypt" 2>/dev/null; then
-    DEBIAN_FRONTEND=noninteractive apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-bcrypt
+    DEBIAN_FRONTEND=noninteractive apt-get update -q
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-bcrypt
   fi
   set -a; source .env; set +a
   _bcrypt() {

@@ -102,8 +102,11 @@ for pkg in git curl openssl; do
 done
 if [[ ${#MISSING[@]} -gt 0 ]]; then
   e1_info "Eksik paketler: ${MISSING[*]} — apt ile kuruluyor..."
-  DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${MISSING[@]}" ca-certificates
+  # `-qq` KULLANMIYORUZ: tamamen sessiz kaliyor ve yavas baglantida dakikalarca
+  # hicbir cikti olmadigi icin kullanici kurulumun dondugunu saniyor.
+  e1_hint "Paket listesi guncelleniyor — internet hizina gore 30-90 sn."
+  DEBIAN_FRONTEND=noninteractive apt-get update -q
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${MISSING[@]}" ca-certificates
   e1_ok "Pre-req'ler kuruldu."
 else
   e1_ok "Tum pre-req'ler hazir."
@@ -117,16 +120,21 @@ if [[ -d "${INSTALL_DIR}/.git" ]]; then
   if ! git diff --quiet || ! git diff --cached --quiet; then
     e1_warn "Lokal degisiklik var; git pull ATLANDI. Mevcut commit ile devam."
   else
-    git fetch --quiet origin "${BRANCH}"
+    e1_hint "Guncellemeler indiriliyor..."
+    git fetch --progress origin "${BRANCH}"
     git checkout --quiet "${BRANCH}"
-    git pull --ff-only --quiet
+    git pull --ff-only --progress
   fi
 else
   if [[ -e "${INSTALL_DIR}" ]]; then
     e1_die "${INSTALL_DIR} mevcut ama git repo degil. Once silin veya farkli INSTALL_DIR verin."
   fi
   mkdir -p "$(dirname "${INSTALL_DIR}")"
-  git clone --quiet --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+  # `--quiet` DEGIL `--progress`: klonlama yavas baglantida dakikalar surer,
+  # sessiz kalirsa kullanici kurulumun kilitlendigini saniyor. --progress
+  # stderr terminal olmasa bile yuzde gosterir.
+  e1_hint "Kaynak kod indiriliyor — internet hizina gore 1-3 dakika."
+  git clone --progress --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
   cd "${INSTALL_DIR}"
 fi
 e1_ok "Repo hazir: $(git rev-parse --short HEAD) (${BRANCH})"
@@ -150,6 +158,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   e1_ok "Zaten kurulu: $(docker --version | head -1)"
 else
   e1_info "Docker yok, kuruluyor..."
+  e1_hint "Docker deposu eklenip paketler indiriliyor — 1-3 dakika."
   bash "${INSTALL_DIR}/infra/scripts/linux/install-docker.sh"
   e1_ok "Docker kuruldu."
 fi
@@ -320,8 +329,8 @@ if [[ ! -f infra/nats/nats-server.conf ]]; then
   e1_info "NATS bcrypt hash'leri uretiliyor (python3 + bcrypt)..."
   if ! python3 -c "import bcrypt" 2>/dev/null; then
     e1_info "python3-bcrypt eksik, apt ile kuruluyor..."
-    DEBIAN_FRONTEND=noninteractive apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-bcrypt
+    DEBIAN_FRONTEND=noninteractive apt-get update -q
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-bcrypt
   fi
   set -a; source .env; set +a
   _bcrypt() {
