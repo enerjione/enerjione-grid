@@ -23,8 +23,8 @@
 #   - anahtar degistirmek = dosyayi yeniden uretmek (depo gecmisi kirlenmez)
 #   - her musteri/saha icin ayri anahtarli dosya uretilebilir
 #
-# Bu, anahtari repoya koyan `infra/appliance/provision.env` yaklasiminin
-# yerine gecer; o dosyaya artik gerek yok.
+# Bir donem anahtari repoda tutan bir "fabrika dosyasi" tasarimi vardi;
+# kaldirildi. Depoda hicbir canli anahtar durmuyor — tek kaynak burasi.
 # ===========================================================================
 
 set -euo pipefail

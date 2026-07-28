@@ -102,81 +102,66 @@ Tailscale bu bölümü **"Trust credentials"** adı altına taşıdı:
 
 ---
 
-## 2. Cihaz tarafı — anahtar nereden gelir
+## 2. Cihaz tarafı — anahtarı nereye koyacaksın
 
-**Normal kurulumda hiçbir şey yapman gerekmez.** Fabrika anahtarı repoda
-`infra/appliance/provision.env` içinde gömülüdür; `sudo bash install.sh`
-komutundan başka bir işlem olmadan cihaz tailnet'e katılır.
-
-Kurulum anahtarı şu sırayla arar, ilk bulduğunu kullanır:
+Kurulum anahtarı şu sırayla arar; ilk bulduğunu kullanır:
 
 | # | Kaynak | Ne zaman |
 |---|--------|----------|
-| 1 | `E1_TAILSCALE_AUTHKEY` ortam değişkeni | Tek seferlik / özel anahtar |
-| 2 | `/etc/enerjione-grid/install.env` | Cihaza özel kalıcı anahtar |
+| 1 | `E1_TAILSCALE_AUTHKEY` ortam değişkeni | Tek seferlik kurulum |
+| 2 | `/etc/enerjione-grid/install.env` | **Sıfır dokunuşlu** (önerilen) |
 | 3 | `<kurulum dizini>/.env` | Eski kurulumlarla uyumluluk |
-| 4 | `infra/appliance/provision.env` | **Fabrika anahtarı — varsayılan** |
 
 `install.sh` ve `update.sh` bu sırayı **birebir aynı** uygular; kurulumda
-katılan bir cihaz güncellemeden sonra anahtarsız kalmaz.
+tailnet'e katılan bir cihaz güncellemeden sonra anahtarsız kalmaz.
 
-### Sıfır dokunuşlu kurulum (varsayılan davranış)
+### Sıfır dokunuşlu kurulum (önerilen)
 
-```bash
-sudo bash install.sh
-```
-
-Hepsi bu. Cihaz kurulum sırasında tailnet'e katılır, saha kimliğinden
-üretilmiş adıyla konsolda görünür.
-
-### Fabrika anahtarı — kabul edilen risk
-
-`provision.env` repoya **commit edilir** ve içinde canlı bir OAuth client
-secret vardır. Depo private, ama kurulum token'ı (`E1_GHCR_TOKEN`) depoya
-okuma yetkisi verir — **o token kimdeyse anahtarı da çıkarabilir.**
-
-Riski iki şey sınırlıyor, ikisi de bozulmamalı:
-
-1. Anahtar yalnızca **etiketli** cihaz üretir (`tag:e1-appliance`) ve ACL'de
-   bu etiketten **çıkan kural yoktur**. Anahtarı ele geçiren biri tailnet'e
-   sahte bir cihaz ekleyebilir ama o cihazla hiçbir yere erişemez.
-2. OAuth kapsamı yalnızca **Keys → Auth Keys → Write**. DNS, Policy File,
-   Users, Devices, Settings kapalı — tailnet yapılandırması değiştirilemez.
-
-> ACL'e `tag:e1-appliance`'tan **çıkan** bir kural eklersen bu dosyanın riski
-> aniden büyür. Böyle bir kural eklemeden önce buraya dön.
-
-**Anahtarı değiştirme (rotation):**
-
-1. `console.tailscale.com` → Settings → Keys → eski client'ı **Revoke**
-2. Yeni OAuth client üret (kapsam: Keys → Auth Keys → Write, `tag:e1-appliance`)
-3. `provision.env` içindeki satırı güncelle, commit et, yeni sürümü tag'le
-4. **Zaten kurulu cihazlar etkilenmez** — tailnet'e katılmış durumdalar ve
-   tekrar login denemezler (`setup-tailscale.sh` idempotent)
-
-Eski anahtar git geçmişinde kalır; bu yüzden **revoke etmek şart**, üstüne
-yazmak yetmez.
-
-### Cihaza özel anahtar vermek istersen
-
-Fabrika anahtarını ezmek için (örn. bir müşteri kendi tailnet'ini istiyorsa):
+Anahtarı sunucuda elle yazmana gerek yok — **kurulum dosyasını üret**,
+anahtarlar onun içine gömülür:
 
 ```bash
-sudo mkdir -p /etc/enerjione-grid
-sudo tee /etc/enerjione-grid/install.env >/dev/null <<'EOF'
-E1_TAILSCALE_AUTHKEY=tskey-client-MUSTERIYE-OZEL
-E1_TAILSCALE_TAGS=tag:e1-appliance
-EOF
-sudo chmod 600 /etc/enerjione-grid/install.env
+# kendi makinende, bir kez
+bash packaging/make-provisioner.sh
+# -> dist/enerjione-grid-kurulum.sh  (GHCR + Tailscale anahtarlari icinde)
 ```
 
-Ya da tek seferlik: `sudo -E E1_TAILSCALE_AUTHKEY=... bash install.sh` —
-`install.sh` elle verilen anahtarı bu dosyaya **kendisi kaydeder**, bir daha
-vermen gerekmez. Fabrika anahtarı ise `/etc/` altına kopyalanmaz; böylece
-`provision.env` tek değişiklik noktası olarak kalır.
+Bu tek dosyayı hedef sunucuya kopyala ve çalıştır:
 
-> **Golden image akışı:** Fabrika anahtarı repoda olduğu için imaj almana
-> gerek yok. İmaj alıyorsan cihaza özel **ad** için saha kimliğini doldur
+```bash
+sudo bash enerjione-grid-kurulum.sh
+```
+
+Gerisi otomatik: anahtarları `/etc/enerjione-grid/install.env`'e (chmod 600)
+yazar, `install.sh`'i private depodan çeker, kurulumu sürer ve cihaz saha
+kimliğinden üretilmiş adıyla tailnet'e katılır.
+
+> Üretilen dosya **gizlidir** — içinde canlı anahtarlar vardır. Depoya
+> koymayın, e-posta ile göndermeyin. `.gitignore` bunu zaten engeller
+> (`*-kurulum.sh`). Kurulumdan sonra `--wipe` ile sunucudan sildirebilirsiniz.
+>
+> Her müşteri/saha için ayrı anahtarlı dosya üretebilirsiniz:
+> `bash packaging/make-provisioner.sh --out /tmp/musteri-a-kurulum.sh`
+
+**Neden repoya gömmüyoruz:** depo private olsa da kurulum token'ı
+(`E1_GHCR_TOKEN`) depoya okuma yetkisi verir — o token kimdeyse repodaki bir
+anahtarı da çıkarabilirdi. Ayrıca git geçmişine giren anahtar oradan
+silinemez; değiştirmek commit + tüm cihazlara dağıtım gerektirirdi. Üretilen
+dosya yaklaşımında anahtar değiştirmek = dosyayı yeniden üretmek.
+
+### Elle vermek istersen
+
+```bash
+sudo -E E1_TAILSCALE_AUTHKEY=tskey-client-xxxx bash install.sh
+```
+
+`install.sh` elle verilen anahtarı `/etc/enerjione-grid/install.env`'e
+**kendisi kaydeder** (chmod 600, dosyadaki diğer ayarlar korunur); sonraki
+kurulum ve güncellemelerde tekrar vermen gerekmez.
+
+> **Golden image akışı:** `/etc/enerjione-grid/install.env` dolu bir mini PC'nin
+> disk imajını alırsan, o imajdan çıkan her cihaz kendiliğinden tailnet'e
+> girer. Cihaza özel **ad** için kurulumda sorulan saha kimliğini doldur
 > (bkz. aşağıdaki bölüm); `ASSUME_YES=1` ile soru sorulmayan imajlarda
 > `E1_CUSTOMER` / `E1_SITE` değişkenlerini ver.
 
@@ -356,7 +341,7 @@ listede. Oradan:
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
-| `E1_TAILSCALE_AUTHKEY` | *(`provision.env`'deki fabrika anahtarı)* | Elle verilirse fabrika anahtarını ezer ve `/etc/enerjione-grid/install.env`'e kaydedilir |
+| `E1_TAILSCALE_AUTHKEY` | *(boş)* | **Boşsa VPN adımı hiç çalışmaz.** Verilirse `/etc/enerjione-grid/install.env`'e kaydedilir, bir daha vermen gerekmez |
 | `E1_TAILSCALE_TAGS` | `tag:e1-appliance` | Cihaz etiketi; ACL yetkisi buna göre |
 | `E1_TAILSCALE_HOSTNAME` | *(saha kimliği → donanım)* | Tailnet adını elle sabitle; her şeyi ezer |
 | `E1_TAILSCALE_HOSTNAME_PREFIX` | `e1-grid` | Otomatik adın öneki (`<önek>-<saha>`) |
@@ -377,13 +362,15 @@ Saha kimliği (kurulumda sorulur, `/etc/enerjione-grid/site.env`):
 
 ## 5. Güvenlik notları
 
-- **Fabrika anahtarı bilinçli olarak repodadır** (`infra/appliance/provision.env`).
-  Bunun karşılığında sıfır dokunuşlu kurulum elde ediliyor; kabul edilen
-  riskin sınırları ve rotation yordamı için bkz. bölüm 2.
-  Cihaza özel anahtarlar (`.env`, `/etc/enerjione-grid/install.env`) git
-  dışındadır ve repoya girmemelidir.
+- **Anahtar bir tailnet anahtarıdır; repoya asla girmez.** `.env`,
+  `/etc/enerjione-grid/install.env` ve üretilen `*-kurulum.sh` dosyaları
+  `.gitignore`'dadır. Anahtarı repoya gömmeyin: kurulum token'ı
+  (`E1_GHCR_TOKEN`) depoya okuma yetkisi verdiği için o token kimdeyse
+  anahtarı da çıkarabilir, üstelik git geçmişinden silinemez.
 - **Şüphe varsa revoke edin.** Tailscale konsolu → Settings → Keys → Revoke.
-  Anahtar git geçmişinde kaldığı için üstüne yazmak yeterli değildir.
+  Sonra `packaging/make-provisioner.sh` ile yeni anahtarlı kurulum dosyasını
+  yeniden üretin; zaten kurulu cihazlar etkilenmez (`setup-tailscale.sh`
+  idempotenttir, tekrar login denemez).
 - Cihazlar **etiketli** katılır; ACL'de `tag:e1-appliance`'tan **çıkan**
   kural tanımlamayın ki ele geçirilen bir saha cihazı tailnet'te yanal
   hareket edemesin.

@@ -684,12 +684,9 @@ fi
 #   2. /etc/enerjione-grid/install.env  -> cihaza OZEL anahtar. Repo disindadir,
 #      yeniden kurulumda silinmez, disk imajina gomulebilir.
 #   3. ${INSTALL_DIR}/.env   -> mevcut kurulumu guncellerken.
-#   4. infra/appliance/provision.env -> FABRIKA anahtari; repoda commit'li.
-#      SIFIR DOKUNUSLU kurulumu bu saglar: kurulumcu hicbir sey vermez,
-#      cihaz yine tailnet'e katilir. Bilincli bir risk kabulu; gerekce,
-#      sinirlar ve degistirme (rotation) yordami o dosyanin basliginda.
-# 1-3 arasi kaynaklar repoya ASLA yazilmaz (.env ve /etc/... git disinda);
-# 4 ise kasten repodadir.
+# Anahtar repoya ASLA yazilmaz (.env ve /etc/... git disinda). SIFIR
+# DOKUNUSLU kurulum icin `packaging/make-provisioner.sh` ile uretilen tek
+# dosyayi kullanin: anahtarlari o dosya tasir ve (2)'yi kendisi yazar.
 _e1_read_key_from() {
   # `source` etmiyoruz: dosyada kurulum ortamini bozabilecek baska
   # degiskenler olabilir; sadece ilgili satiri cekiyoruz.
@@ -697,52 +694,35 @@ _e1_read_key_from() {
   sed -n 's/^[[:space:]]*E1_TAILSCALE_AUTHKEY[[:space:]]*=[[:space:]]*"\?\([^"#]*\)"\?.*/\1/p' \
     "$1" | tail -1 | tr -d '[:space:]'
 }
-E1_PROVISION_ENV="${INSTALL_DIR}/infra/appliance/provision.env"
-# Anahtarin fabrika dosyasindan gelip gelmedigini izliyoruz: geldiyse
-# /etc/... altina KOPYALANMAZ (bkz. asagidaki kalicilastirma blogu).
-E1_KEY_FROM_PROVISION=0
 if [[ -z "${E1_TAILSCALE_AUTHKEY:-}" ]]; then
-  for _keyfile in /etc/enerjione-grid/install.env "${INSTALL_DIR}/.env" "$E1_PROVISION_ENV"; do
+  for _keyfile in /etc/enerjione-grid/install.env "${INSTALL_DIR}/.env"; do
     _k="$(_e1_read_key_from "$_keyfile" || true)"
     if [[ -n "$_k" ]]; then
       E1_TAILSCALE_AUTHKEY="$_k"
       export E1_TAILSCALE_AUTHKEY
-      if [[ "$_keyfile" == "$E1_PROVISION_ENV" ]]; then
-        E1_KEY_FROM_PROVISION=1
-        e1_info "Tailscale fabrika anahtari kullaniliyor (provision.env)."
-      else
-        e1_info "Tailscale anahtari bulundu: ${_keyfile}"
-      fi
+      e1_info "Tailscale anahtari bulundu: ${_keyfile}"
       break
     fi
   done
   unset _keyfile _k
 fi
-# Diger Tailscale ayarlari (etiket, SSH...). SIRA ONEMLI: once cihaza ozel
-# /etc/... dosyasi, SONRA fabrika dosyasi — her degisken yalnizca hala bossa
-# yazildigi icin cihaza ozel ayar fabrika ayarini ezer.
-for _src in /etc/enerjione-grid/install.env "$E1_PROVISION_ENV"; do
-  [[ -f "$_src" ]] || continue
+# Diger Tailscale ayarlari da ayni dosyadan gelebilsin (etiket, SSH...).
+if [[ -f /etc/enerjione-grid/install.env ]]; then
   for _var in E1_TAILSCALE_TAGS E1_TAILSCALE_SSH E1_TAILSCALE_ACCEPT_DNS \
               E1_TAILSCALE_HOSTNAME E1_TAILSCALE_HOSTNAME_PREFIX; do
     if [[ -z "${!_var:-}" ]]; then
       _v="$(sed -n "s/^[[:space:]]*${_var}[[:space:]]*=[[:space:]]*\"\?\([^\"#]*\)\"\?.*/\1/p" \
-        "$_src" | tail -1 | tr -d '[:space:]')"
+        /etc/enerjione-grid/install.env | tail -1 | tr -d '[:space:]')"
       [[ -n "$_v" ]] && export "${_var}=${_v}"
     fi
   done
-done
-unset _src _var _v
-# Anahtar ELLE verildiyse KALICILASTIR: kurulumcu ayni anahtari bir daha
-# yazmasin. Bundan sonra `sudo bash install.sh` ve `update.sh` hicbir sey
-# sorulmadan tailnet'e katilir.
-#
-# Yazmiyoruz eger:
-#   * anahtar zaten bu dosyada ayni degerle duruyorsa (gereksiz yazma), veya
-#   * anahtar FABRIKA dosyasindan geldiyse. Kopyalasaydik provision.env'i
-#     guncelledigimizde cihazdaki eski kopya onu golgelerdi; boylece repo
-#     tek degisiklik noktasi olarak kalir.
-if [[ -n "${E1_TAILSCALE_AUTHKEY:-}" && "$E1_KEY_FROM_PROVISION" -eq 0 ]]; then
+  unset _var _v
+fi
+# Anahtar ORTAM DEGISKENIYLE verildiyse KALICILASTIR: kurulumcu ayni anahtari
+# bir daha yazmasin, sonraki `install.sh`/`update.sh` calistirmalari onu
+# kendiliginden bulsun. (Provisioner dosyasiyla kurulumda bu blok no-op'tur:
+# anahtar zaten ayni dosyadan gelmistir.)
+if [[ -n "${E1_TAILSCALE_AUTHKEY:-}" ]]; then
   _persisted="$(_e1_read_key_from /etc/enerjione-grid/install.env || true)"
   if [[ "$_persisted" != "$E1_TAILSCALE_AUTHKEY" ]]; then
     mkdir -p /etc/enerjione-grid

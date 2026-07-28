@@ -391,7 +391,7 @@ _e1_upd_var() {  # $1=dosya  $2=anahtar
   sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*\"\?\([^\"#]*\)\"\?.*/\1/p" \
     "$1" | tail -1 | tr -d '[:space:]'
 }
-for _src in /etc/enerjione-grid/install.env .env infra/appliance/provision.env; do
+for _src in /etc/enerjione-grid/install.env .env; do
   [[ -f "$_src" ]] || continue
   for _var in E1_TAILSCALE_AUTHKEY E1_TAILSCALE_TAGS E1_TAILSCALE_SSH \
               E1_TAILSCALE_ACCEPT_DNS E1_TAILSCALE_HOSTNAME E1_TAILSCALE_HOSTNAME_PREFIX; do
