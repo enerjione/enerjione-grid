@@ -63,14 +63,41 @@ if ! docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .
   docker compose up -d postgres >/dev/null
 fi
 
-# Socket hazir olana kadar bekle (max 60sn). pg_isready burada rol dogrulamaz;
-# sadece "server cevap veriyor mu" bakar — o yuzden -U vermiyoruz.
+# --- Postgres GERCEKTEN hazir mi? -----------------------------------------
+# TUZAK: resmi imaj ILK KURULUMDA iki asamali baslar. Once `initdb` icin
+# GECICI bir sunucu acar — bu sunucu YALNIZCA unix socket'i dinler — isi
+# bitince onu KAPATIR ("the database system is shutting down") ve asil
+# sunucuyu baslatir.
+#
+# Socket uzerinden `pg_isready` o gecici sunucuya "hazir" der. Tam kapanma
+# aninda DDL gonderirsek `ALTER ROLE` FATAL alir ve kurulum, sebebi
+# anlasilmaz bir "rol parolasi hizalanamadi" hatasiyla durur.
+#
+# COZUM: TCP uzerinden bekle. Gecici init sunucusu TCP DINLEMEZ; yani
+# `pg_isready -h 127.0.0.1` ancak ASIL sunucu ayaga kalktiginda basarili
+# olur. Ustune bir de gercek sorgu kosuyoruz — "kabul ediyor ama kapaniyor"
+# ara durumunu da eliyor.
+#
+# Sure: initdb + TimescaleDB extension yavas diskte 2 dakikayi bulabiliyor.
+e1_info "Postgres hazir olmasi bekleniyor (ilk kurulumda 1-2 dk surebilir)..."
 pg_up=0
-for _ in $(seq 1 30); do
-  if docker compose exec -T postgres pg_isready -q >/dev/null 2>&1; then pg_up=1; break; fi
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -h 127.0.0.1 -q >/dev/null 2>&1 \
+     && docker compose exec -T postgres psql -U postgres -d postgres -tAq \
+          -c 'SELECT 1' >/dev/null 2>&1; then
+    pg_up=1; break
+  fi
+  # Rol adi 'postgres' olmayabilir (volume baska isimle init edilmis);
+  # o durumda yukaridaki sorgu basarisiz olur ama TCP hazirsa yeter.
+  if docker compose exec -T postgres pg_isready -h 127.0.0.1 -q >/dev/null 2>&1; then
+    # TCP hazir — asil sunucu ayakta. Rol tespitini asagidaki blok yapacak.
+    sleep 2
+    pg_up=1; break
+  fi
   sleep 2
 done
-[[ "$pg_up" -eq 1 ]] || e1_die "Postgres 60 saniyede hazir olmadi. Log: docker compose logs postgres"
+[[ "$pg_up" -eq 1 ]] || e1_die "Postgres 2 dakikada hazir olmadi. Log: docker compose logs postgres"
+e1_ok "Postgres hazir (TCP dinliyor)."
 
 # psql helper — container icindeki unix socket uzerinden. Resmi imaj
 # 'local all all trust' ile initdb ettigi icin parola gerekmez; bu sayede
@@ -85,7 +112,33 @@ _psql() {
 # hatali komutta bile 0 doner.
 _psql_ddl() {
   local role="$1"; shift
-  docker compose exec -T postgres psql -U "$role" -d postgres -tAq -v ON_ERROR_STOP=1 "$@"
+  local try out rc
+  # Uc deneme: Postgres acilis/kapanis gecislerinde ("the database system is
+  # starting up / shutting down") tek seferlik FATAL donebiliyor. Bu gecici
+  # bir durum; tek denemede pes etmek kurulumu sebepsiz oldururdu.
+  # Gercek hatalarda (sozdizimi, yetki) uc deneme de ayni sonucu verir ve
+  # son ciktiyi gosteririz.
+  for try in 1 2 3; do
+    # `else` SART: `if cmd; then ...; fi` yapisinda kosul basarisiz olup
+    # hicbir dal calismazsa `$?` SIFIR doner. Disarida `rc=$?` yazsaydik
+    # gercek bir DDL hatasini "basarili" sayardik.
+    if out="$(docker compose exec -T postgres \
+                psql -U "$role" -d postgres -tAq -v ON_ERROR_STOP=1 "$@" 2>&1)"; then
+      printf '%s' "$out"
+      return 0
+    else
+      rc=$?
+    fi
+    case "$out" in
+      *"starting up"*|*"shutting down"*|*"not yet accepting"*)
+        e1_info "Postgres henuz gecis halinde, ${try}/3 tekrar deneniyor..."
+        sleep 4
+        ;;
+      *) break ;;
+    esac
+  done
+  printf '%s' "${out:-}" >&2
+  return "${rc:-1}"
 }
 
 # SQL literal/identifier escape — psql'in `-v` degisken interpolasyonu `-c`
