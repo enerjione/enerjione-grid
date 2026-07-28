@@ -186,11 +186,59 @@ fi
 # ---- Son dogrulama: backend'in kullandigi TCP + parola yolu --------------
 # Yukarisi unix socket (trust) uzerinden calisti. Backend TCP + scram
 # kullaniyor; asil kritik olan bu yolun calismasi.
-if docker compose exec -T -e PGPASSWORD="$PG_PASSWORD" postgres \
-     psql -h 127.0.0.1 -U "$PG_USER" -d "$PG_DB" -tAq -c 'SELECT 1' >/dev/null 2>&1; then
+_tcp_ok() {
+  docker compose exec -T -e PGPASSWORD="$PG_PASSWORD" postgres \
+    psql -h 127.0.0.1 -U "$PG_USER" -d "$PG_DB" -tAq -c 'SELECT 1' >/dev/null 2>&1
+}
+
+if _tcp_ok; then
   e1_ok "Backend'in kullandigi baglanti dogrulandi: ${PG_USER}@postgres/${PG_DB}"
 else
-  e1_die "TCP+parola ile baglanti hala basarisiz (${PG_USER}@${PG_DB}). Log: docker compose logs postgres"
+  # ---- Otomatik onarim: parola sifreleme yontemi uyumsuzlugu -------------
+  # En sik sebep: rol parolasi MD5 olarak saklanmis ama pg_hba SCRAM istiyor
+  # (ya da tersi). Bu, volume eski bir postgres imaji ile init edilip sonra
+  # imaj degistiginde olusur — `password_encryption` postgresql.conf'ta eski
+  # degerle kalir. ALTER ROLE "basarili" doner ama uretilen dogrulayici
+  # pg_hba'nin bekledigi turden degildir; giris sessizce reddedilir.
+  #
+  # Onarim: sunucunun sifreleme yontemini pg_hba ile hizala ve parolayi
+  # YENIDEN yaz (mevcut hash donusturulemez, yeniden uretilmeli).
+  CUR_ENC="$(_psql "$ACTUAL_ROLE" -c 'SHOW password_encryption' | tr -d '[:space:]')"
+  HBA_WANTS="$(docker compose exec -T postgres \
+      sh -c "grep -hE '^[[:space:]]*host' /var/lib/postgresql/data/pg_hba.conf 2>/dev/null | awk '{print \$NF}' | grep -E 'scram-sha-256|md5' | head -1" \
+      2>/dev/null | tr -d '[:space:]')"
+  e1_warn "TCP girisi reddedildi. Parola sifreleme kontrolu:"
+  e1_info "  sunucu (password_encryption) : ${CUR_ENC:-bilinmiyor}"
+  e1_info "  pg_hba'nin bekledigi          : ${HBA_WANTS:-bilinmiyor}"
+
+  if [[ -n "$HBA_WANTS" && -n "$CUR_ENC" && "$CUR_ENC" != "$HBA_WANTS" ]]; then
+    e1_warn "Uyumsuzluk tespit edildi — sunucu '${HBA_WANTS}' olarak hizalaniyor."
+    _psql_ddl "$ACTUAL_ROLE" -c "ALTER SYSTEM SET password_encryption = $(_lit "$HBA_WANTS")" >/dev/null \
+      || e1_die "password_encryption ayarlanamadi."
+    _psql "$ACTUAL_ROLE" -c 'SELECT pg_reload_conf()' >/dev/null || true
+    # Parolayi YENIDEN yaz: eski hash donusturulemez, yeni yontemle uretilmeli.
+    _psql_ddl "$ACTUAL_ROLE" -c "ALTER ROLE $(_ident "$PG_USER") WITH LOGIN PASSWORD $(_lit "$PG_PASSWORD")" >/dev/null \
+      || e1_die "Parola yeniden yazilamadi."
+    if _tcp_ok; then
+      e1_ok "Onarildi: parola '${HBA_WANTS}' ile yeniden uretildi, baglanti calisiyor."
+    else
+      e1_err "Onarim denendi ama baglanti hala basarisiz."
+      e1_err "Postgres loglarinin son satirlari:"
+      docker compose logs --tail 30 --no-color postgres 2>&1 | sed 's/^/      /' >&2 || true
+      e1_die "TCP+parola ile baglanti kurulamadi (${PG_USER}@${PG_DB})."
+    fi
+  else
+    # Sifreleme uyumlu ama giris yine reddediliyor — sebep baska.
+    # Kullaniciyi tahmine birakmak yerine kanitlari ekrana dokuyoruz.
+    e1_err "Sifreleme yontemi uyumlu gorunuyor; sebep baska."
+    e1_err "pg_hba 'host' satirlari:"
+    docker compose exec -T postgres \
+      sh -c "grep -hE '^[[:space:]]*host' /var/lib/postgresql/data/pg_hba.conf" 2>&1 \
+      | sed 's/^/      /' >&2 || true
+    e1_err "Postgres loglarinin son satirlari:"
+    docker compose logs --tail 30 --no-color postgres 2>&1 | sed 's/^/      /' >&2 || true
+    e1_die "TCP+parola ile baglanti hala basarisiz (${PG_USER}@${PG_DB})."
+  fi
 fi
 
 # ---- RabbitMQ admin kullanicisi ------------------------------------------

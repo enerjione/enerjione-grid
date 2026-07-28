@@ -10,3 +10,8 @@ docker-compose.yml text eol=lf
 *.yml        text eol=lf
 *.yaml       text eol=lf
 nginx.conf   text eol=lf
+
+# .env sablonu da LF olmali: Linux kurulumda .env buradan kopyalanir ve
+# CR karakteri parola/kullanici degerlerine sizip auth hatasi uretebilir.
+.env.example text eol=lf
+.env         text eol=lf
