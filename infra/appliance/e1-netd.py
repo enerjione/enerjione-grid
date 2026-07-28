@@ -45,11 +45,32 @@ ARCHIVE_DIR = os.path.join(STATE_DIR, "archive")
 # Ajanin yonettigi NetworkManager profil adlari.
 ETH_CON_NAME = "e1-grid-eth"
 AP_CON_NAME = "e1-grid-ap"
+# WiFi client (station) profili — appliance'i mevcut bir aga baglar.
+STA_CON_NAME = "e1-grid-wifi"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 NMCLI_TIMEOUT_SEC = 20
+# WiFi baglantisi DHCP + auth icin daha uzun surebilir.
+NMCLI_WIFI_TIMEOUT_SEC = 45
 # Reboot oncesi bekleme: status.json diske insin, backend son durumu okuyabilsin.
 REBOOT_DELAY_SEC = 3
+
+# --- WiFi client / AP geri donus korumasi ----------------------------------
+# Appliance'ta TEK WiFi karti var (setup-appliance.sh AP icin ilk wifi
+# arayuzunu secer). Tek radyo ayni anda hem AP hem client olamaz; bu yuzden
+# bir aga baglanirken AP DUSER. Yanlis sifre girilir veya ag kaybolursa
+# sahadaki cihaza erisim tamamen kopar.
+#
+# Koruma: baglanti kurulurken bir "muhafiz" dosyasi yazilir. `report`
+# komutu (systemd timer, 30 sn) her turda bu dosyayi kontrol eder:
+#   - STA baglantisi AKTIF ve IP almis  -> muhafiz silinir, is tamam.
+#   - Sure doldu ve hala baglanamamis    -> STA profili kapatilir, AP GERI ACILIR.
+# Boylece en kotu durumda cihaz WIFI_GUARD_SEC sonra AP'siyle geri gelir.
+GUARD_PATH = os.path.join(STATE_DIR, "wifi-guard.json")
+WIFI_GUARD_SEC = int(os.environ.get("E1_WIFI_GUARD_SEC", "180"))
+# Tarama sonucu ayri dosyaya yazilir (state.json'i sisirmemek + her
+# report turunda pahali rescan yapmamak icin).
+SCAN_PATH = os.path.join(STATE_DIR, "wifi-scan.json")
 
 
 def _now_iso() -> str:
@@ -62,15 +83,19 @@ def _log(msg: str) -> None:
 
 
 # --- nmcli yardimcilari -----------------------------------------------------
-def _nmcli(*args: str, check: bool = True) -> str:
-    """nmcli calistir, stdout dondur. Hata durumunda RuntimeError."""
+def _nmcli(*args: str, check: bool = True, timeout: float | None = None) -> str:
+    """nmcli calistir, stdout dondur. Hata durumunda RuntimeError.
+
+    `timeout` verilmezse NMCLI_TIMEOUT_SEC kullanilir; WiFi baglantisi gibi
+    uzun surebilecek islemler kendi suresini gecer.
+    """
     cmd = ["nmcli", *args]
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=NMCLI_TIMEOUT_SEC,
+            timeout=timeout if timeout is not None else NMCLI_TIMEOUT_SEC,
         )
     except FileNotFoundError as exc:
         raise RuntimeError("nmcli bulunamadi — NetworkManager kurulu degil.") from exc
@@ -80,6 +105,15 @@ def _nmcli(*args: str, check: bool = True) -> str:
         err = (proc.stderr or proc.stdout or "").strip()
         raise RuntimeError(f"nmcli hatasi ({proc.returncode}): {err[:300]}")
     return proc.stdout
+
+
+def _redact(payload: dict) -> dict:
+    """Log/arsiv icin kopya uret — WiFi sifresini ASLA disari sizdirma."""
+    safe = dict(payload)
+    for key in ("psk", "password", "wifi_psk"):
+        if key in safe:
+            safe[key] = "***"
+    return safe
 
 
 def _split_terse(line: str) -> list[str]:
@@ -242,6 +276,153 @@ def _ap_info(devices: list[dict]) -> dict:
     return info
 
 
+# --- WiFi client (station) --------------------------------------------------
+def _wifi_ifname(devices: list[dict]) -> str | None:
+    """Appliance'in WiFi arayuzu. setup-appliance.sh AP icin ilk wifi
+    arayuzunu seciyor; client de AYNI karti kullanir (tek radyo)."""
+    for dev in devices:
+        if dev["type"] == "wifi":
+            return dev["ifname"]
+    return None
+
+
+def _scan_networks(ifname: str) -> list[dict]:
+    """Gorunur aglari tara. AP aktifken de calisir (nmcli AP modunda da
+    tarama yapabilir, sonuc sinirli olabilir)."""
+    out = _nmcli(
+        "-t",
+        "-f",
+        "SSID,SIGNAL,SECURITY,FREQ,IN-USE",
+        "device",
+        "wifi",
+        "list",
+        "ifname",
+        ifname,
+        "--rescan",
+        "yes",
+        timeout=NMCLI_WIFI_TIMEOUT_SEC,
+    )
+    best: dict[str, dict] = {}
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        parts = _split_terse(line)
+        if len(parts) < 5:
+            continue
+        ssid = parts[0].strip()
+        if not ssid:
+            continue  # gizli ag — SSID'siz satiri gosterme
+        try:
+            signal = int(parts[1] or 0)
+        except ValueError:
+            signal = 0
+        security = (parts[2] or "").strip()
+        entry = {
+            "ssid": ssid,
+            "signal": signal,
+            "security": security or None,
+            "secured": bool(security and security != "--"),
+            "freq": (parts[3] or "").strip() or None,
+            "in_use": parts[4].strip() == "*",
+        }
+        # Ayni SSID birden fazla AP'den gorulebilir — en guclusunu tut.
+        prev = best.get(ssid)
+        if prev is None or entry["signal"] > prev["signal"]:
+            best[ssid] = entry
+    return sorted(best.values(), key=lambda e: e["signal"], reverse=True)
+
+
+def _sta_is_online(ifname: str) -> bool:
+    """STA profili aktif ve IPv4 adresi almis mi?"""
+    try:
+        rows = _device_rows()
+    except RuntimeError:
+        return False
+    dev = next((d for d in rows if d["ifname"] == ifname), None)
+    if dev is None or dev["connection"] != STA_CON_NAME:
+        return False
+    if (dev["state"] or "").lower() not in ("connected", "connected (site only)"):
+        return False
+    detail = _device_detail(ifname)
+    return bool(detail.get("addresses"))
+
+
+def _ap_restore(reason: str) -> None:
+    """STA'yi indirip AP'yi geri ac — kurtarma yolu."""
+    _log(f"AP geri aciliyor ({reason})")
+    try:
+        _nmcli("connection", "down", STA_CON_NAME, check=False)
+    except RuntimeError:
+        pass
+    try:
+        _nmcli("connection", "up", AP_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+    except RuntimeError as exc:
+        _log(f"AP geri acilamadi: {exc}")
+
+
+# --- AP geri donus muhafizi -------------------------------------------------
+def _guard_arm(ifname: str, ssid: str) -> None:
+    _write_json(
+        GUARD_PATH,
+        {
+            "schema": SCHEMA_VERSION,
+            "ifname": ifname,
+            "ssid": ssid,
+            "deadline": time.time() + WIFI_GUARD_SEC,
+            "armed_at": _now_iso(),
+        },
+        mode=0o640,
+    )
+
+
+def _guard_clear() -> None:
+    try:
+        os.remove(GUARD_PATH)
+    except OSError:
+        pass
+
+
+def _guard_check() -> None:
+    """`report` her turda cagirir (30 sn).
+
+    Baglanti kurulduysa muhafizi kaldirir; sure dolmus ve hala baglanti
+    yoksa AP'yi geri acar. Bu, tek radyolu cihazda yanlis sifre/kayip ag
+    durumunda erisimin tamamen kopmasini onler.
+    """
+    guard = _read_json(GUARD_PATH)
+    if not guard:
+        return
+    ifname = str(guard.get("ifname") or "")
+    if not ifname:
+        _guard_clear()
+        return
+    if _sta_is_online(ifname):
+        _log(f"WiFi baglantisi dogrulandi ({guard.get('ssid')}) — muhafiz kaldirildi.")
+        _guard_clear()
+        return
+    try:
+        deadline = float(guard.get("deadline") or 0)
+    except (TypeError, ValueError):
+        deadline = 0
+    if time.time() < deadline:
+        return  # hala sure var, bekle
+    _ap_restore(f"WiFi baglanamadi: {guard.get('ssid')}")
+    _guard_clear()
+    _write_json(
+        STATUS_PATH,
+        {
+            "schema": SCHEMA_VERSION,
+            "request_id": None,
+            "status": "failed",
+            "error": (
+                f"'{guard.get('ssid')}' agina baglanilamadi; erisim noktasi (AP) "
+                f"geri acildi. Sifreyi kontrol edip tekrar deneyin."
+            ),
+            "at": _now_iso(),
+        },
+    )
+
+
 # --- Dosya yazma ------------------------------------------------------------
 def _write_json(path: str, payload: dict, mode: int = 0o640) -> None:
     """Atomik yaz: once .tmp, sonra rename. Backend yarim dosya okumasin."""
@@ -316,12 +497,81 @@ def build_state() -> dict:
         "hostname": host,
         "mdns_name": f"{host}.local",
         "ap": _ap_info(devices),
+        "wifi": _wifi_state(devices),
         "interfaces": interfaces,
         "eth_connection": ETH_CON_NAME,
     }
 
 
+def _wifi_state(devices: list[dict]) -> dict:
+    """WiFi client (STA) durumu — UI'daki 'Baglі ag' karti icin."""
+    ifname = _wifi_ifname(devices)
+    info: dict = {
+        "supported": ifname is not None,
+        "ifname": ifname,
+        "connection": STA_CON_NAME,
+        "connected": False,
+        "ssid": None,
+        "signal": None,
+        "addresses": [],
+        # Kayitli profil var mi (baglanti kopmus olsa bile).
+        "saved": False,
+        # Muhafiz aktifse UI geri sayim gosterir.
+        "guard_active": False,
+        "guard_deadline": None,
+    }
+    if ifname is None:
+        return info
+
+    try:
+        out = _nmcli("-t", "-f", "NAME", "connection", "show", check=False)
+        info["saved"] = any(
+            _split_terse(line)[0].strip() == STA_CON_NAME
+            for line in out.splitlines()
+            if line.strip()
+        )
+    except RuntimeError:
+        pass
+
+    dev = next((d for d in devices if d["ifname"] == ifname), None)
+    if dev is not None and dev["connection"] == STA_CON_NAME:
+        detail = _device_detail(ifname)
+        info["connected"] = bool(detail.get("addresses"))
+        info["addresses"] = detail.get("addresses", [])
+        try:
+            out = _nmcli(
+                "-t", "-f", "IN-USE,SSID,SIGNAL", "device", "wifi", "list",
+                "ifname", ifname, "--rescan", "no",
+            )
+            for line in out.splitlines():
+                parts = _split_terse(line)
+                if len(parts) >= 3 and parts[0].strip() == "*":
+                    info["ssid"] = parts[1].strip() or None
+                    try:
+                        info["signal"] = int(parts[2] or 0)
+                    except ValueError:
+                        info["signal"] = None
+                    break
+        except RuntimeError:
+            pass
+
+    guard = _read_json(GUARD_PATH)
+    if guard:
+        info["guard_active"] = True
+        info["guard_deadline"] = guard.get("deadline")
+        if not info["ssid"]:
+            info["ssid"] = guard.get("ssid")
+    return info
+
+
 def cmd_report() -> int:
+    # AP geri donus muhafizi — her report turunda (30 sn) kontrol edilir.
+    # Ayri bir systemd unit'i gerektirmemesi icin bilerek buraya baglandi.
+    try:
+        _guard_check()
+    except Exception as exc:  # noqa: BLE001
+        _log(f"wifi muhafiz kontrolu basarisiz: {exc}")
+
     try:
         state = build_state()
     except RuntimeError as exc:
@@ -531,6 +781,99 @@ def _archive_request(raw: dict, result: dict) -> None:
         _log(f"arsivleme atlandi: {exc}")
 
 
+SSID_MAX_LEN = 32
+PSK_MIN_LEN = 8
+PSK_MAX_LEN = 63
+
+
+def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> int:
+    """WiFi client aksiyonlari: wifi_scan | wifi_connect | wifi_forget.
+
+    AP ayarlarina DOKUNULMAZ (kurtarma yolu kurulum script'inin kontrolunde).
+    Tek radyo oldugu icin wifi_connect AP'yi dusurur; muhafiz devreye girer.
+    """
+    ifname = _wifi_ifname(devices)
+    if ifname is None:
+        return write_result(False, "WiFi arayuzu bulunamadi (kart takili mi?).")
+
+    # ---- Tarama: sadece okur, hicbir sey degistirmez ----
+    if action == "wifi_scan":
+        try:
+            networks = _scan_networks(ifname)
+        except RuntimeError as exc:
+            return write_result(False, f"Tarama basarisiz: {exc}")
+        _write_json(
+            SCAN_PATH,
+            {
+                "schema": SCHEMA_VERSION,
+                "updated_at": _now_iso(),
+                "ifname": ifname,
+                "networks": networks,
+            },
+        )
+        _log(f"WiFi tarama: {len(networks)} ag bulundu ({ifname})")
+        return write_result(True, None, applied={"action": "wifi_scan", "count": len(networks)})
+
+    # ---- Kayitli agi unut: STA profilini sil, AP'yi geri ac ----
+    if action == "wifi_forget":
+        try:
+            _nmcli("connection", "delete", STA_CON_NAME, check=False)
+        except RuntimeError as exc:
+            _log(f"STA profili silinemedi: {exc}")
+        _guard_clear()
+        _ap_restore("kullanici agi unuttu")
+        _log("WiFi baglantisi kaldirildi, AP geri acildi.")
+        return write_result(True, None, applied={"action": "wifi_forget"})
+
+    # ---- Baglan ----
+    ssid = str(raw.get("ssid") or "").strip()
+    if not ssid or len(ssid) > SSID_MAX_LEN:
+        return write_result(False, "Gecersiz SSID.")
+    psk = str(raw.get("psk") or "")
+    if psk and not (PSK_MIN_LEN <= len(psk) <= PSK_MAX_LEN):
+        return write_result(
+            False, f"WiFi sifresi {PSK_MIN_LEN}-{PSK_MAX_LEN} karakter olmali."
+        )
+
+    # AP'nin dusecegini KAYIT ALTINA AL: muhafiz once kurulur ki baglanma
+    # sirasinda ajan olse bile bir sonraki report turu AP'yi geri acsin.
+    _guard_arm(ifname, ssid)
+
+    args = ["device", "wifi", "connect", ssid, "ifname", ifname, "name", STA_CON_NAME]
+    if psk:
+        args += ["password", psk]
+    try:
+        _nmcli(*args, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+    except RuntimeError as exc:
+        # Baglanti kurulamadi — AP'yi HEMEN geri ac, muhafizi bekletme.
+        _ap_restore("baglanti hatasi")
+        _guard_clear()
+        return write_result(False, f"'{ssid}' agina baglanilamadi: {exc}")
+
+    online = _sta_is_online(ifname)
+    if online:
+        _guard_clear()
+        _log(f"WiFi baglandi: {ssid} ({ifname})")
+    else:
+        # nmcli 0 dondurdu ama IP yok — muhafiz acik kalsin, report turu
+        # ya dogrulayacak ya da AP'yi geri acacak.
+        _log(f"WiFi baglantisi belirsiz ({ssid}) — muhafiz devrede.")
+
+    detail = _device_detail(ifname)
+    return write_result(
+        True,
+        None,
+        applied={
+            "action": "wifi_connect",
+            "ssid": ssid,
+            "ifname": ifname,
+            "online": online,
+            "addresses": detail.get("addresses", []),
+            "guard_seconds": None if online else WIFI_GUARD_SEC,
+        },
+    )
+
+
 def cmd_apply() -> int:
     raw = _read_json(REQUEST_PATH)
     if raw is None:
@@ -556,12 +899,34 @@ def cmd_apply() -> int:
             "at": _now_iso(),
         }
         _write_json(STATUS_PATH, result)
-        _archive_request(raw, result)
+        # _redact: WiFi sifresi arsive YAZILMAZ.
+        _archive_request(_redact(raw), result)
         try:
             os.remove(REQUEST_PATH)
         except OSError:
             pass
         return 1
+
+    def _write_result(ok: bool, error: str | None, applied: dict | None = None) -> int:
+        """WiFi aksiyonlarinin ortak sonuc yazicisi (reboot yok)."""
+        if not ok:
+            return _fail(error or "Bilinmeyen hata")
+        result = {
+            "schema": SCHEMA_VERSION,
+            "request_id": request_id,
+            "status": "applied",
+            "error": None,
+            "at": _now_iso(),
+            "applied": applied or {},
+        }
+        _write_json(STATUS_PATH, result)
+        _archive_request(_redact(raw), result)
+        try:
+            os.remove(REQUEST_PATH)
+        except OSError:
+            pass
+        cmd_report()
+        return 0
 
     _write_json(
         STATUS_PATH,
@@ -578,6 +943,14 @@ def cmd_apply() -> int:
         devices = _device_rows()
     except RuntimeError as exc:
         return _fail(str(exc))
+
+    # Aksiyon dagitimi. `action` YOKSA "ipv4" kabul edilir — eski surumun
+    # yazdigi request.json'lar (sadece ifname/method iceren) aynen calisir.
+    action = str(raw.get("action") or "ipv4").strip().lower()
+    if action in ("wifi_scan", "wifi_connect", "wifi_forget"):
+        return _handle_wifi(raw, action, devices, _write_result)
+    if action != "ipv4":
+        return _fail(f"Bilinmeyen aksiyon: {action}")
 
     try:
         req = _validate(raw, devices)
@@ -612,7 +985,7 @@ def cmd_apply() -> int:
         },
     }
     _write_json(STATUS_PATH, result)
-    _archive_request(raw, result)
+    _archive_request(_redact(raw), result)
     try:
         os.remove(REQUEST_PATH)
     except OSError:

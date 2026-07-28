@@ -311,6 +311,18 @@ if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
   fi
 fi
 
+# Kurulum adresini (enerjione.com/grid/install.sh) yayinlayan sunucuda,
+# yayinlanan kopya bu surumle tazelenir. Yayin dizini yoksa burasi hic
+# calismaz — saha PC'leri ve normal VPS'ler etkilenmez.
+E1_PUBLIC_WEBROOT="${E1_PUBLIC_WEBROOT:-/var/www/enerjione-grid-public}"
+if [[ -d "$E1_PUBLIC_WEBROOT" && -f infra/scripts/linux/publish-installer.sh ]]; then
+  if bash infra/scripts/linux/publish-installer.sh >/dev/null 2>&1; then
+    e1_ok "Kurulum adresi yeni surumle tazelendi (${E1_PUBLIC_WEBROOT})."
+  else
+    e1_warn "Kurulum adresi tazelenemedi; guncelleme devam ediyor."
+  fi
+fi
+
 # ---- 4/5: Build + up ------------------------------------------------------
 case "$TARGET" in
   frontend|frontend-web|web)        SVC="frontend-web" ;;

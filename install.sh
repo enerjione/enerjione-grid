@@ -10,7 +10,7 @@
 #        sudo bash install.sh
 #
 #   2) Tertemiz VPS'te (curl | bash):
-#        curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo bash
+#        curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
 #
 # Idempotent: tekrar calistirmak guvenli. Mevcut .env'i koruyup eksik
 # alanlari rastgele degerlerle doldurur, Docker'i atlar (zaten kuruluysa),
@@ -66,15 +66,29 @@ if [[ -n "$SCRIPT_DIR" ]] && [[ -f "$SCRIPT_DIR/infra/scripts/linux/_lib.sh" ]];
   source "$SCRIPT_DIR/infra/scripts/linux/_lib.sh"
   LIB_LOADED=1
 else
-  # curl | bash modu — lib'i GitHub'dan cek (tmpfile'a).
+  # curl | bash modu — lib'i uzaktan cek (tmpfile'a).
+  #
+  # SIRA ONEMLI: once kendi sunucumuz, sonra GitHub raw.
+  # Depo PRIVATE oldugu icin raw.githubusercontent.com kimliksiz istemciye
+  # 404 doner; asil kaynak artik enerjione.com. GitHub raw yalnizca depo
+  # public olan/olacak kurulumlar ve gelistirme icin yedek olarak duruyor.
+  # E1_LIB_URL ile tamamen override edilebilir (ozel dagitim, test).
   if command -v curl >/dev/null 2>&1; then
     TMP_LIB="$(mktemp)"
-    if curl -fsSL "https://raw.githubusercontent.com/enerjione/enerjione-grid/${BRANCH}/infra/scripts/linux/_lib.sh" -o "$TMP_LIB" 2>/dev/null; then
-      # shellcheck disable=SC1090
-      source "$TMP_LIB"
-      LIB_LOADED=1
-      rm -f "$TMP_LIB"
-    fi
+    for _src in \
+      "${E1_LIB_URL:-}" \
+      "https://enerjione.com/grid/_lib.sh" \
+      "https://raw.githubusercontent.com/enerjione/enerjione-grid/${BRANCH}/infra/scripts/linux/_lib.sh"
+    do
+      [[ -z "$_src" ]] && continue
+      if curl -fsSL "$_src" -o "$TMP_LIB" 2>/dev/null && [[ -s "$TMP_LIB" ]]; then
+        # shellcheck disable=SC1090
+        source "$TMP_LIB"
+        LIB_LOADED=1
+        break
+      fi
+    done
+    rm -f "$TMP_LIB"
   fi
 fi
 if [[ $LIB_LOADED -eq 0 ]]; then

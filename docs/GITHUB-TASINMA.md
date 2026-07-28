@@ -162,19 +162,42 @@ Adres taşıması otomatik. Token'ı `.env`'e eklemek isterseniz VDS ile aynı.
 
 ## 7. Kurulum kısayolunu güncelle
 
-`get.enerjione.com` yönlendirmesi eski adrese bakıyor. VDS'te:
+Eski kurulum adresi GitHub'a **302 yönlendiriyordu**. Depo private olduğu için
+bu artık çalışmaz: `raw.githubusercontent.com` kimliksiz istemciye 404 döner ve
+`curl | bash` boş gövdeyi çalıştırmaya kalkar.
+
+Yeni adres scripti **VDS'ten servis eder**:
+
+```
+curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+```
+
+VDS'te:
 
 ```bash
 cd /opt/enerjione-grid
-sudo bash infra/host-nginx/setup-host-nginx.sh
+sudo bash infra/host-nginx/setup-host-nginx.sh   # eski get-enerjione'ı kendisi devre dışı bırakır
 sudo nginx -t && sudo systemctl reload nginx
+```
+
+DNS A kaydı: `enerjione.com` → VDS IP. SSL:
+
+```bash
+sudo certbot --nginx -d enerjione.com -d www.enerjione.com -d get.enerjione.com
 ```
 
 **Doğrulama:**
 
 ```bash
-curl -sI https://get.enerjione.com | grep -i location
-# raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh dönmeli
+curl -fsS https://enerjione.com/grid/install.sh | head -3   # shebang görünmeli
+curl -fsS https://enerjione.com/grid/version.json           # {"version":"2.24.4",...}
+```
+
+Sürüm manifesti aynı zamanda backend'in güncelleme kontrolünü besler — private
+depo olduğu için GitHub Releases API kimliksiz kullanılamıyor. VDS `.env`'ine:
+
+```
+UPDATE_CHECK_URL=https://enerjione.com/grid/version.json
 ```
 
 ---
@@ -198,5 +221,6 @@ Her şey doğrulandıktan **sonra**:
 - [ ] Salt-okunur GHCR token'ı üretildi
 - [ ] VDS yeni depodan güncellendi ve ayakta
 - [ ] En az bir saha PC'si yeni depodan güncellendi
-- [ ] `get.enerjione.com` yeni adrese yönlendiriyor
+- [ ] `https://enerjione.com/grid/install.sh` scripti servis ediyor (302 değil, 200)
+- [ ] `https://enerjione.com/grid/version.json` sürümü döndürüyor
 - [ ] Eski depo arşivlendi

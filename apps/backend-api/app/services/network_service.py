@@ -33,11 +33,17 @@ from app.schemas.network import (
     NetworkConfigUpdate,
     NetworkInterface,
     NetworkStatus,
+    WifiConnectRequest,
+    WifiNetwork,
+    WifiScanResult,
+    WifiState,
 )
 
 STATE_FILE = "state.json"
 STATUS_FILE = "status.json"
 REQUEST_FILE = "request.json"
+# WiFi tarama sonucu ajan tarafindan buraya yazilir (state.json'i sismesin).
+SCAN_FILE = "wifi-scan.json"
 
 # state.json bu suredan eskiyse ajan durmus/timer kapali demektir.
 STALE_STATE_SECONDS = 180
@@ -87,6 +93,9 @@ def read_status() -> NetworkStatus:
     ]
     ap_raw = raw.get("ap")
     ap = AccessPointInfo(**ap_raw) if isinstance(ap_raw, dict) else AccessPointInfo()
+    wifi_raw = raw.get("wifi")
+    # Eski ajan surumu (schema 1) `wifi` alanini yazmaz — bos state ile devam.
+    wifi = WifiState(**wifi_raw) if isinstance(wifi_raw, dict) else WifiState()
 
     status_raw = _read_json(state_dir() / STATUS_FILE)
     last_apply = NetworkApplyStatus(**status_raw) if status_raw else None
@@ -105,6 +114,7 @@ def read_status() -> NetworkStatus:
         updated_at=raw.get("updated_at"),
         state_age_seconds=age,
         ap=ap,
+        wifi=wifi,
         interfaces=interfaces,
         pending=has_pending_request(),
         last_apply=last_apply,

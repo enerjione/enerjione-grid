@@ -50,6 +50,76 @@ class NetworkApplyStatus(BaseModel):
     applied: dict | None = None
 
 
+class WifiState(BaseModel):
+    """Appliance'in WiFi CLIENT (station) durumu.
+
+    AP (erisim noktasi) ayri bir sey ve `AccessPointInfo` ile temsil edilir;
+    arayuzden degistirilemez — kurtarma yolu olarak korunur.
+    """
+
+    supported: bool = False
+    ifname: str | None = None
+    connection: str | None = None
+    connected: bool = False
+    ssid: str | None = None
+    signal: int | None = None
+    addresses: list[str] = Field(default_factory=list)
+    # Kayitli profil var mi (baglanti kopuk olsa bile).
+    saved: bool = False
+    # AP geri donus muhafizi aktif mi + ne zaman dolacak (epoch).
+    guard_active: bool = False
+    guard_deadline: float | None = None
+
+
+class WifiNetwork(BaseModel):
+    """Taramada gorunen tek bir ag."""
+
+    ssid: str
+    signal: int = 0
+    security: str | None = None
+    secured: bool = True
+    freq: str | None = None
+    in_use: bool = False
+
+
+class WifiScanResult(BaseModel):
+    available: bool = False
+    updated_at: str | None = None
+    ifname: str | None = None
+    networks: list[WifiNetwork] = Field(default_factory=list)
+    # Tarama sonucunun yasi (sn) — UI "x sn once tarandi" gosterir.
+    age_seconds: float | None = None
+
+
+class WifiConnectRequest(BaseModel):
+    """Bir aga baglanma istegi.
+
+    UYARI (tek radyo): appliance'ta tek WiFi karti var; baglanti sirasinda
+    AP DUSER. Baglanti kurulamazsa host ajani muhafiz suresi sonunda AP'yi
+    otomatik geri acar (bkz. e1-netd `_guard_check`).
+    """
+
+    ssid: str = Field(..., min_length=1, max_length=32)
+    # Sifresiz (open) aglar icin bos birakilir. Saklanmaz: yalnizca ajana
+    # iletilir, ajan da arsive yazmaz.
+    psk: str | None = Field(default=None, min_length=8, max_length=63)
+
+    @field_validator("ssid")
+    @classmethod
+    def _check_ssid(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("SSID bos olamaz.")
+        return cleaned
+
+    @field_validator("psk")
+    @classmethod
+    def _check_psk(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        return value
+
+
 class NetworkStatus(BaseModel):
     """Ag Ayarlari sayfasinin tek okuma kaynagi."""
 
@@ -63,6 +133,7 @@ class NetworkStatus(BaseModel):
     # state.json'in yasi (sn). Buyukse ajan durmus demektir.
     state_age_seconds: float | None = None
     ap: AccessPointInfo = Field(default_factory=AccessPointInfo)
+    wifi: WifiState = Field(default_factory=WifiState)
     interfaces: list[NetworkInterface] = Field(default_factory=list)
     # Islenmeyi bekleyen istek (varsa) — UI "uygulaniyor" gosterir.
     pending: bool = False

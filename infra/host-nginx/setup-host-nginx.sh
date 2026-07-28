@@ -46,13 +46,30 @@ cp "$SCRIPT_DIR/solar.conf"          /etc/nginx/sites-available/solar
 ln -sf /etc/nginx/sites-available/enerjione-grid /etc/nginx/sites-enabled/enerjione-grid
 ln -sf /etc/nginx/sites-available/solar          /etc/nginx/sites-enabled/solar
 
-# Kisa kurulum adresi (get.enerjione.com -> GitHub install.sh yonlendirmesi).
-# DNS A kaydi yoksa nginx yine de acilir, sadece o host cozulmez; bu yuzden
-# kurulumu bloklamaz. E1_SKIP_GET=1 ile atlanabilir.
-if [[ "${E1_SKIP_GET:-0}" != "1" ]] && [[ -f "$SCRIPT_DIR/get-enerjione.conf" ]]; then
-  echo "      + get.enerjione.com (kisa kurulum adresi)"
-  cp "$SCRIPT_DIR/get-enerjione.conf" /etc/nginx/sites-available/get-enerjione
-  ln -sf /etc/nginx/sites-available/get-enerjione /etc/nginx/sites-enabled/get-enerjione
+# Kurulum adresi: https://enerjione.com/grid/install.sh
+# Script GitHub'a yonlendirilmez, BU SUNUCUDAN servis edilir — depo private
+# oldugu icin raw.githubusercontent.com kimliksiz istemciye 404 doner.
+# DNS A kaydi yoksa nginx yine de acilir, sadece o host cozulmez; kurulumu
+# bloklamaz. E1_SKIP_GET=1 ile atlanabilir.
+if [[ "${E1_SKIP_GET:-0}" != "1" ]] && [[ -f "$SCRIPT_DIR/grid-public.conf" ]]; then
+  echo "      + enerjione.com/grid/install.sh (kurulum adresi)"
+  cp "$SCRIPT_DIR/grid-public.conf" /etc/nginx/sites-available/e1-grid-public
+  ln -sf /etc/nginx/sites-available/e1-grid-public /etc/nginx/sites-enabled/e1-grid-public
+
+  # Eski 302-yonlendirmeli site varsa devre disi birak: private depoda
+  # calismaz ve `curl | bash` bos govde calistirmaya kalkar.
+  if [[ -L /etc/nginx/sites-enabled/get-enerjione ]]; then
+    echo "      - eski get-enerjione (GitHub yonlendirmesi) devre disi"
+    rm -f /etc/nginx/sites-enabled/get-enerjione
+  fi
+
+  # Scripti ve surum manifestini yayinla (idempotent).
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  if [[ -x "$REPO_ROOT/infra/scripts/linux/publish-installer.sh" ]] \
+     || [[ -f "$REPO_ROOT/infra/scripts/linux/publish-installer.sh" ]]; then
+    bash "$REPO_ROOT/infra/scripts/linux/publish-installer.sh" || \
+      echo "      ! yayin adimi basarisiz — nginx yine de kuruldu"
+  fi
 fi
 
 # 4) Syntax check + reload
@@ -65,14 +82,16 @@ if nginx -t; then
   echo "Test:"
   echo "  curl -I http://grid.enerjione.com/"
   echo "  curl -I http://solar.enerjione.com/"
-  echo "  curl -IL http://get.enerjione.com/     # 302 -> install.sh"
+  echo "  curl -fsS http://enerjione.com/grid/install.sh | head -3"
+  echo "  curl -fsS http://enerjione.com/grid/version.json"
   echo ""
-  echo "Kisa kurulum komutu (DNS A kaydi get.enerjione.com -> bu VPS ise):"
-  echo "  curl -fsSL get.enerjione.com | sudo bash"
+  echo "Kurulum komutu (DNS A kaydi enerjione.com -> bu VPS ise):"
+  echo "  curl -fsSL https://enerjione.com/grid/install.sh | sudo bash"
   echo ""
   echo "SSL icin (opsiyonel):"
   echo "  sudo apt install -y certbot python3-certbot-nginx"
-  echo "  sudo certbot --nginx -d grid.enerjione.com -d solar.enerjione.com -d get.enerjione.com"
+  echo "  sudo certbot --nginx -d grid.enerjione.com -d solar.enerjione.com \\"
+  echo "                       -d enerjione.com -d www.enerjione.com -d get.enerjione.com"
 else
   echo "HATA: nginx config gecersiz — durum degistirilmedi."
   exit 1

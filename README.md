@@ -22,7 +22,7 @@
 **Tek komutla sıfırdan ayağa kalkar.** Test edildi: Ubuntu 22.04/24.04, Debian 12.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo bash
+curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
 ```
 
 Veya manuel:
