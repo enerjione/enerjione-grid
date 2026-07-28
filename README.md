@@ -8,6 +8,9 @@
 
 ---
 
+> 🔧 **Saha kurulumu (mini PC):** [`docs/SAHA-KURULUM.md`](docs/SAHA-KURULUM.md) —
+> teknik bilgi gerektirmeyen, kopyala-yapıştır adım adım kılavuz.
+>
 > 📘 **Kapsamlı kurulum rehberi:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) —
 > nginx + SSL + multi-app + sorun giderme adım adım anlatıldı.
 
