@@ -1947,6 +1947,8 @@
     "license": {
       "title": "Lisans Yönetimi",
       "subtitle": "Bu kurulumun cihaz kapasitesi ve makineye bağlı lisans bilgileri.",
+      "gateTitle": "Sistem lisanslı değil",
+      "gateText": "Devam edebilmek için geçerli bir lisans dosyası yüklemeniz gerekiyor. Aşağıdan lisans istek dosyasını indirip tarafımıza iletin, gelen .lic dosyasını yükledikten sonra sistem açılacaktır.",
       "appVersionLabel": "EnerjiOne Grid sürümü",
       "updateAvailable": "Yeni sürüm: v{{version}}",
       "updateHint": "Güncelleme sunucu üzerinden (update.sh) yapılır; arayüzden başlatılamaz.",

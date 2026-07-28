@@ -12,6 +12,61 @@ body {
   margin: 0;
 }
 
+/* ----- Lisanssiz sistem kilidi -----------------------------------------
+   Gecerli lisans yokken kullanici bu ekrana kilitlenir; navigasyon YOKTUR,
+   sadece marka + kullanici + cikis. Kota dolulugu bu ekrani ACMAZ, bkz.
+   App.tsx `licenseGateActive`. */
+.license-gate-bar {
+  height: 68px;
+  flex: 0 0 auto;
+  background: #1f2937;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+/* Kullanici adi ile cikis butonu arasini acar; buton saga yaslanir. */
+.license-gate-bar__user {
+  margin-left: auto;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+/* `.secondary-btn` global `margin-right: 8px` tasir; kenarda bosluk kalmasin. */
+.license-gate-bar .secondary-btn {
+  margin-right: 0;
+}
+
+.license-gate-content {
+  gap: 12px;
+}
+
+.license-gate-notice {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #f0b37e;
+  border-left: 4px solid #e97800;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.license-gate-notice__title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.license-gate-notice__text {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 /* Lisans yonetimi — endustriyel kontrol paneli, tek seri kapasite meter'i. */
 .license-panel {
   --license-ink: #172033;

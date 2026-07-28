@@ -117,6 +117,7 @@ def test_status_unlicensed(tmp_path, monkeypatch):
     monkeypatch.setattr(license_service.settings, "license_dir", str(tmp_path))
     monkeypatch.setattr(license_service, "get_machine_fingerprint", lambda: "a" * 64)
     status = license_service.get_license_status(None, device_count=0)
+    assert status.state == "unlicensed"
     assert status.is_valid is False
     assert status.can_add_device is False
     assert status.reason_code == "LICENSE_REQUIRED"
@@ -126,6 +127,7 @@ def test_status_unlicensed(tmp_path, monkeypatch):
 def test_status_available(tmp_path, monkeypatch):
     _activate_license(tmp_path, monkeypatch, limit=2)
     status = license_service.get_license_status(None, device_count=1)
+    assert status.state == "valid"
     assert status.is_valid is True
     assert status.can_add_device is True
     assert status.quota_state == "available"
@@ -137,6 +139,10 @@ def test_status_available(tmp_path, monkeypatch):
 def test_status_full(tmp_path, monkeypatch):
     _activate_license(tmp_path, monkeypatch, limit=2)
     status = license_service.get_license_status(None, device_count=2)
+    # Kota dolu olsa da state "valid" KALIR. Arayuzdeki lisans kilidi
+    # (App.tsx LICENSE_GATE_STATES) buna gore karar verir: kotasi dolan
+    # sistem calismaya devam eder, lisans sayfasina kilitlenmez.
+    assert status.state == "valid"
     assert status.is_valid is True
     assert status.can_add_device is False
     assert status.quota_state == "full"
@@ -148,6 +154,7 @@ def test_status_over_limit_tolerated(tmp_path, monkeypatch):
     # Mevcut cihaz sayisi limitin uzerinde: cihazlar silinmez, ekleme kapanir.
     _activate_license(tmp_path, monkeypatch, limit=2)
     status = license_service.get_license_status(None, device_count=5)
+    assert status.state == "valid"
     assert status.is_valid is True
     assert status.can_add_device is False
     assert status.quota_state == "over_limit"
@@ -163,6 +170,9 @@ def test_status_fail_closed_on_storage_error(tmp_path, monkeypatch):
 
     monkeypatch.setattr(license_service, "get_installation_id", _boom)
     status = license_service.get_license_status(None, device_count=3)
+    # Sunucu tarafi arizasi; lisans durumu DEGIL. Arayuz kilidi bu state'i
+    # kapsam disi birakir, izleme acik kalir.
+    assert status.state == "machine_unavailable"
     assert status.is_valid is False
     assert status.can_add_device is False
     assert status.reason_code == "LICENSE_MACHINE_UNAVAILABLE"

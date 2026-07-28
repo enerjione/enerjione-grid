@@ -175,6 +175,16 @@ import type {
 // PageMode / EngineeringPage tipleri tabModel'den geliyor (tek kaynak). Sekme
 // sistemi bunlari uretir; App aktif sekmeden turetir.
 
+// Kullaniciyi lisans sayfasina kilitleyen lisans durumlari: uclunun ortak
+// yani "bu makinede kullanilabilir lisans yok". `machine_unavailable`
+// BILEREK disarida — o bir lisans durumu degil, sunucu tarafi arizasidir.
+// Gerekce icin bkz. App icindeki `licenseGateActive`.
+const LICENSE_GATE_STATES: ReadonlySet<LicenseStatus["state"]> = new Set([
+  "unlicensed",
+  "invalid",
+  "machine_mismatch"
+]);
+
 export function App() {
   const projectSettings = useProjectSettings();
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
@@ -1999,20 +2009,86 @@ export function App() {
     return <LoginForm onSubmit={handleLogin} loading={loadingLogin} />;
   }
 
+  // Zorunlu sifre degistirme her iki ekranin (kilit + normal) uzerinde ayni
+  // sekilde durur; tek yerde kurup iki yerde kullaniyoruz.
+  const forcePasswordModal = session.mustChangePassword ? (
+    <ChangePasswordModal
+      forceful
+      accessToken={session.accessToken}
+      onSuccess={() => {
+        // Backend basariyla sifreyi degistirdi; flag'i temizle ve devam et.
+        const cleared = { ...session, mustChangePassword: false };
+        saveSession(cleared, true);
+        setSession(cleared);
+      }}
+    />
+  ) : null;
+
+  // ---- Lisanssiz sistem kilidi -------------------------------------------
+  // Gecerli lisans YOKKEN kullanici hicbir sey yapamaz; dogrudan lisans
+  // sayfasina kilitlenir. Zorunlu sifre degisimi bunun ONUNDE durur (modal
+  // ustte render edilir), yani sira: giris -> sifre -> lisans.
+  //
+  // Kilit `state` uzerinden kurulur, `is_valid` uzerinden DEGIL. Ikisi ayni
+  // sey degil (bkz. license_service.get_license_status):
+  //
+  //   unlicensed | invalid | machine_mismatch -> lisans fiilen YOK  -> KILIT
+  //   machine_unavailable -> bizim tarafta depolama/machine-id arizasi.
+  //       is_valid false doner ama bu bir lisans durumu degildir; mevcut
+  //       tasarim burada "izleme acik kalir, cihaz ekleme kapanir" der.
+  //       Gecici bir dosya izni hatasi arayuzu kilitlememeli.       -> KILIT YOK
+  //   valid + kota dolu -> is_valid true kalir; sistem normal calisir,
+  //       sadece yeni cihaz eklenemez.                              -> KILIT YOK
+  //
+  // `licenseStatus === null` da kilitlemez: bu "lisans yok" degil "durum
+  // bilinmiyor" demektir — istek basarisiz olmus ya da rol
+  // (operator/ops_manager) /license/status okuyamiyordur.
+  const licenseGateActive =
+    (session.role === "engineer" || session.role === "installer") &&
+    licenseStatus !== null &&
+    LICENSE_GATE_STATES.has(licenseStatus.state);
+
+  if (licenseGateActive) {
+    return (
+      <div className="layout">
+        {forcePasswordModal}
+        <header className="license-gate-bar">
+          <div className="brand-logo-wrap">
+            <img src="/logo.png" alt="EnerjiOne" className="logo" />
+          </div>
+          <span className="license-gate-bar__user">
+            {currentUser?.full_name ?? session.username}
+          </span>
+          <button type="button" className="secondary-btn" onClick={handleLogout}>
+            {t("header.logout")}
+          </button>
+        </header>
+        <div className="body">
+          <main className="content license-gate-content">
+            <div className="license-gate-notice" role="alert">
+              <span className="license-gate-notice__title">
+                {t("engineering.license.gateTitle")}
+              </span>
+              <span className="license-gate-notice__text">
+                {t("engineering.license.gateText")}
+              </span>
+            </div>
+            <LicenseManagementPanel
+              accessToken={session.accessToken}
+              status={licenseStatus}
+              loading={licenseLoading}
+              onStatusChange={setLicenseStatus}
+              onRefresh={reloadLicenseStatus}
+            />
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="layout">
-      {session.mustChangePassword ? (
-        <ChangePasswordModal
-          forceful
-          accessToken={session.accessToken}
-          onSuccess={() => {
-            // Backend basariyla sifreyi degistirdi; flag'i temizle ve devam et.
-            const cleared = { ...session, mustChangePassword: false };
-            saveSession(cleared, true);
-            setSession(cleared);
-          }}
-        />
-      ) : null}
+      {forcePasswordModal}
       <Header
         fullName={currentUser?.full_name ?? session.username}
         role={session.role}

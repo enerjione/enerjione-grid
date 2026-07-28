@@ -1947,6 +1947,8 @@
     "license": {
       "title": "License Management",
       "subtitle": "Device capacity and machine-bound license details for this installation.",
+      "gateTitle": "System is not licensed",
+      "gateText": "A valid license file is required before you can continue. Download the license request below and send it to us; the system unlocks once you import the .lic file you receive.",
       "appVersionLabel": "EnerjiOne Grid version",
       "updateAvailable": "New version: v{{version}}",
       "updateHint": "Updates are applied on the server (update.sh); they cannot be started from the UI.",
