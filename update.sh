@@ -102,7 +102,12 @@ e1_step "Lokal degisiklik kontrolu..."
 # NOT: Sunucuda dosya IZIN biti (chmod +x) degisimi de "degisiklik" sayilir ve
 # operator icerik degistirmedigi halde update kilitlenir. Bu yaygin ve zararsiz
 # durumu gercek icerik degisikliginden ayirt ediyoruz.
-if ! git diff --quiet || ! git diff --cached --quiet; then
+#
+# Paket kurulumunda (.deb) git yoktur; dosyalarin butunlugunu dpkg garanti
+# eder. Korumasiz bir `git diff` burada `set -e` altinda update'i oldururdu.
+if [[ ! -d .git ]]; then
+  e1_ok "Paket kurulumu — dosya butunlugu dpkg tarafindan yonetiliyor."
+elif ! git diff --quiet || ! git diff --cached --quiet; then
   # Sadece izin biti mi degismis? (icerik ayni)
   content_changed="$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)"
   mode_only="$(git -c core.fileMode=false diff --name-only 2>/dev/null; \
@@ -157,9 +162,67 @@ else
 fi
 
 # ---- 3/5: Yayin surumune gec ----------------------------------------------
-# Cihaz bir DALIN UCUNU degil, yayinlanmis bir TAG'i takip eder: guncelleme
-# ancak release CI'dan gecmis bir surume gecirir. `--version X.Y.Z` ile belirli
-# bir surume (ileri veya GERI) gecilebilir — rollback bu komuttur.
+# IKI MOD:
+#
+#   paket : dosyalar .deb ile geldi, git yok. Uygulama kodu IMAJLARIN
+#           icinde oldugu icin cogu guncelleme sadece yeni imaj cekmek
+#           demektir — yeni .deb GEREKMEZ. Yeni .deb yalnizca dagitim
+#           katmani (compose, script, systemd, yeni zorunlu env) degistiginde
+#           gerekir; manifest bunu `min_package` ile soyler.
+#   git   : klasik klon — fetch + tag checkout.
+E1_PACKAGE_MODE=0
+[[ -d .git ]] || E1_PACKAGE_MODE=1
+
+E1_TOKEN="$(e1_resolve_token .env)"
+
+if [[ $E1_PACKAGE_MODE -eq 1 ]]; then
+  e1_step "Yayin bilgisi aliniyor..."
+  # Hedef surum: --version verildiyse o, yoksa GitHub'daki en son yayin.
+  # Depo private oldugu icin API'ye anahtar ile gidiyoruz (ayni anahtar).
+  if [[ -n "${E1_REF:-}" ]]; then
+    NEW_VERSION="${E1_REF#v}"
+    e1_info "Istenen surum: ${NEW_VERSION}"
+  else
+    LATEST_JSON="$(curl -fsSL \
+      ${E1_TOKEN:+-H "Authorization: token ${E1_TOKEN}"} \
+      -H "Accept: application/vnd.github+json" \
+      "https://api.github.com/repos/${E1_REPO_SLUG}/releases/latest" 2>/dev/null || true)"
+    NEW_VERSION="$(printf '%s' "$LATEST_JSON" \
+      | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -1)"
+    if [[ -z "$NEW_VERSION" ]]; then
+      e1_die "En son yayin ogrenilemedi.\n\n  Internet baglantisini ve .env icindeki GHCR_TOKEN degerini kontrol edin.\n  Belirli bir surume gecmek icin:\n    sudo enerjione-grid update 2.24.4"
+    fi
+    e1_ok "En son yayin: ${NEW_VERSION}"
+  fi
+
+  if [[ "$NEW_VERSION" == "$PREV_VERSION" ]]; then
+    e1_info "Zaten ${NEW_VERSION} surumundesiniz; imajlar yine de dogrulanacak."
+  fi
+
+  # Dagitim katmani yetiyor mu? Paketin tasidigi surum, hedef yayinin
+  # istedigi asgari paket surumunden eskiyse compose/script degismis
+  # demektir ve yeni .deb sart.
+  # Release notlarindaki `<!-- min_package=X.Y.Z -->` isareti. Tirnaksiz
+  # yazildigi icin JSON kacislarindan (\") etkilenmez.
+  MIN_PKG="$(printf '%s' "${LATEST_JSON:-}" \
+    | sed -n 's/.*min_package=\([0-9][0-9.]*\).*/\1/p' | head -1)"
+  if [[ -n "$MIN_PKG" ]]; then
+    # En kucuk surum karsilastirmasi: sort -V ile.
+    OLDEST="$(printf '%s\n%s\n' "$PREV_VERSION" "$MIN_PKG" | sort -V | head -1)"
+    if [[ "$OLDEST" == "$PREV_VERSION" && "$PREV_VERSION" != "$MIN_PKG" ]]; then
+      e1_die "Bu surum yeni bir kurulum paketi gerektiriyor.\n\n  Kurulu paket : ${PREV_VERSION}\n  Gereken      : ${MIN_PKG} veya ustu\n\n  Yeni paketi kurun, sonra bu komutu tekrar calistirin:\n    sudo apt install ./enerjione-grid_${NEW_VERSION}_all.deb"
+    fi
+  fi
+
+  # Imaj etiketini hedefe cek — asil guncelleme bu.
+  if grep -qE '^E1_VERSION=' .env; then
+    sed -i "s|^E1_VERSION=.*|E1_VERSION=${NEW_VERSION}|" .env
+  else
+    echo "E1_VERSION=${NEW_VERSION}" >> .env
+  fi
+  e1_ok "Hedef imaj surumu: ${NEW_VERSION}"
+else
+
 e1_step "Yeni surum indiriliyor..."
 e1_hint "Internet hizina gore birkac saniye ile 1 dakika arasi surer."
 
@@ -179,7 +242,6 @@ fi
 
 # Depo private: fetch de yetki ister. Anahtar .env'de (kurulumda yazildi);
 # e1_git_auth onu ne .git/config'e ne komut satirina koymadan git'e verir.
-E1_TOKEN="$(e1_resolve_token .env)"
 e1_run "Surum listesi guncelleniyor" \
   e1_git_auth "$E1_TOKEN" git fetch --tags --prune --force origin \
   || e1_die "Uzak repo'ya erisilemedi.\n\n  Internet baglantisini ve .env icindeki GHCR_TOKEN degerini kontrol edin\n  (anahtarin suresi dolmus olabilir)."
@@ -207,6 +269,9 @@ if [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "E1_VERSION=${NEW_VERSION}" >> .env
   fi
 fi
+
+fi   # <- git modu sonu (E1_PACKAGE_MODE)
+
 if ! grep -qE '^E1_REGISTRY=' .env; then
   echo "E1_REGISTRY=${E1_REGISTRY_DEFAULT}" >> .env
 fi
@@ -527,7 +592,17 @@ e1_rule "═"
 
 # Bu update'te ne degisti? Operator neyi test edecegini bilsin.
 NEW_HEAD_FULL="$(git rev-parse HEAD 2>/dev/null || echo '')"
-if [[ -n "$PREV_HEAD" && -n "$NEW_HEAD_FULL" && "$PREV_HEAD" != "$NEW_HEAD_FULL" ]]; then
+if [[ $E1_PACKAGE_MODE -eq 1 ]]; then
+  # Paket kurulumunda commit gecmisi yok; anlamli olan surum gecisi.
+  e1_box "SURUM"
+  if [[ "$PREV_VERSION" != "$NEW_VERSION" ]]; then
+    e1_kv "Onceki" "$PREV_VERSION"
+    e1_kv "Simdi" "$NEW_VERSION"
+    e1_hint "Degisiklik listesi: github.com/${E1_REPO_SLUG}/releases/tag/v${NEW_VERSION}"
+  else
+    e1_info "Zaten ${NEW_VERSION} surumundeydiniz; imajlar dogrulandi."
+  fi
+elif [[ -n "$PREV_HEAD" && -n "$NEW_HEAD_FULL" && "$PREV_HEAD" != "$NEW_HEAD_FULL" ]]; then
   CHANGE_COUNT="$(git rev-list --count "${PREV_HEAD}..${NEW_HEAD_FULL}" 2>/dev/null || echo 0)"
   e1_box "BU GUNCELLEMEDE NELER DEGISTI (${CHANGE_COUNT} degisiklik)"
   git --no-pager log "${PREV_HEAD}..${NEW_HEAD_FULL}" \

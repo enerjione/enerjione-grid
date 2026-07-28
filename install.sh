@@ -42,6 +42,13 @@
 #                  0 = hic kurma (WiFi karti olsa bile)
 #                  bos/auto = WiFi kartina gore otomatik karar (varsayilan)
 #
+# Saha kimligi (musteri/proje) — kurulumda BIR KEZ sorulur. Uzaktan bakim
+# listesinde cihazin hangi ad ile gorunecegini belirler. Soru sorulmasin
+# isteniyorsa bastan verilebilir:
+#   E1_CUSTOMER    musteri / firma adi     (or. "TPAO")
+#   E1_SITE        saha / proje adi        (or. "Batman OSB")
+#   E1_SITE_UNIT   ayni sahada 2. kutu ise (or. "pano-2")
+#
 # Uzaktan bakim VPN'i (Tailscale) — opsiyonel ama saha cihazlarinda onerilir:
 #   E1_TAILSCALE_AUTHKEY  auth key (tskey-auth-...) veya OAuth secret
 #                         (tskey-client-...). BOS ise VPN adimi hic calismaz.
@@ -186,9 +193,26 @@ else
   e1_ok "Tum pre-req'ler hazir."
 fi
 
-# ---- 2/6: Repo klonla / guncelle -----------------------------------------
-e1_step "Repo hazirlaniyor: ${INSTALL_DIR}"
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
+# ---- 2/6: Kaynak hazirla --------------------------------------------------
+# UC MOD var:
+#   paket : dosyalar .deb ile geldi — git YOK, indirilecek bir sey de yok
+#   git   : mevcut klon — fetch + tag checkout
+#   yeni  : bos makine — klonla
+#
+# Paket modu ONCE kontrol edilir: eskiden bu durum "dizin var ama git repo
+# degil" hatasina dusuyordu ve `enerjione-grid setup` daha ilk adimda oluyordu.
+E1_PACKAGE_MODE=0
+if [[ ! -d "${INSTALL_DIR}/.git" ]] && [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
+  E1_PACKAGE_MODE=1
+fi
+
+if [[ $E1_PACKAGE_MODE -eq 1 ]]; then
+  e1_step "Paket kurulumu dogrulaniyor: ${INSTALL_DIR}"
+  cd "${INSTALL_DIR}"
+  e1_ok "Dosyalar paketle geldi — indirme gerekmiyor."
+  e1_hint "Surum yukseltmesi yeni bir .deb kurmakla yapilir."
+elif [[ -d "${INSTALL_DIR}/.git" ]]; then
+  e1_step "Repo hazirlaniyor: ${INSTALL_DIR}"
   e1_info "Repo zaten mevcut; fetch + checkout..."
   cd "${INSTALL_DIR}"
   if ! git diff --quiet || ! git diff --cached --quiet; then
@@ -199,8 +223,9 @@ if [[ -d "${INSTALL_DIR}/.git" ]]; then
   fi
 else
   if [[ -e "${INSTALL_DIR}" ]]; then
-    e1_die "${INSTALL_DIR} mevcut ama git repo degil. Once silin veya farkli INSTALL_DIR verin."
+    e1_die "${INSTALL_DIR} mevcut ama ne git repo ne de paket kurulumu.\n  Once silin veya farkli bir INSTALL_DIR verin."
   fi
+  e1_step "Repo hazirlaniyor: ${INSTALL_DIR}"
   mkdir -p "$(dirname "${INSTALL_DIR}")"
   # `--quiet` DEGIL `--progress`: klonlama yavas baglantida dakikalar surer,
   # sessiz kalirsa kullanici kurulumun kilitlendigini saniyor. --progress
@@ -214,23 +239,26 @@ else
   e1_git_auth "$E1_TOKEN" git fetch --tags --quiet origin || true
 fi
 
-# Kararli kanal: en son yayin tag'i. Hic tag yoksa ana dal (yayin oncesi repo).
-TARGET_REF="$(e1_target_ref)"
-if git rev-parse --verify --quiet "refs/tags/${TARGET_REF}" >/dev/null; then
-  # Tag'e gecince HEAD detached olur — saha cihazinda dogru davranis budur:
-  # cihaz bir dalin ucunu degil, TEST EDILMIS bir yayini calistirir.
-  git checkout --quiet --detach "refs/tags/${TARGET_REF}"
-  e1_info "Yayin surumu: ${TARGET_REF}"
-elif git rev-parse --verify --quiet "refs/remotes/origin/${TARGET_REF}" >/dev/null; then
-  git checkout --quiet -B "${TARGET_REF}" "origin/${TARGET_REF}"
-  e1_warn "Yayin tag'i bulunamadi — '${TARGET_REF}' dali kullaniliyor (gelistirme surumu)."
-else
-  e1_warn "'${TARGET_REF}' bulunamadi; mevcut commit ile devam ediliyor."
+# Kararli kanal: en son yayin tag'i. Paket modunda surum zaten .deb ile
+# sabitlenmis; checkout edilecek bir sey yok.
+if [[ $E1_PACKAGE_MODE -eq 0 ]]; then
+  TARGET_REF="$(e1_target_ref)"
+  if git rev-parse --verify --quiet "refs/tags/${TARGET_REF}" >/dev/null; then
+    # Tag'e gecince HEAD detached olur — saha cihazinda dogru davranis budur:
+    # cihaz bir dalin ucunu degil, TEST EDILMIS bir yayini calistirir.
+    git checkout --quiet --detach "refs/tags/${TARGET_REF}"
+    e1_info "Yayin surumu: ${TARGET_REF}"
+  elif git rev-parse --verify --quiet "refs/remotes/origin/${TARGET_REF}" >/dev/null; then
+    git checkout --quiet -B "${TARGET_REF}" "origin/${TARGET_REF}"
+    e1_warn "Yayin tag'i bulunamadi — '${TARGET_REF}' dali kullaniliyor (gelistirme surumu)."
+  else
+    e1_warn "'${TARGET_REF}' bulunamadi; mevcut commit ile devam ediliyor."
+  fi
 fi
 
 # Surum artik biliniyor — bundan sonraki tum adim basliklarinda gorunur.
 E1_VERSION_LABEL="$(e1_version "${INSTALL_DIR}")"
-e1_ok "Repo hazir — surum ${E1_VERSION_LABEL}"
+e1_ok "Kaynak hazir — surum ${E1_VERSION_LABEL}"
 
 # Lisans makine bagi host'un sabit OS kimligine dayanir. USB, disk, RAM, MAC
 # veya container ID kullanilmaz; bunlar degisince lisans patlamamali.
@@ -243,6 +271,18 @@ e1_ok "Sabit host machine-id hazir (USB/disk/ag degisikliklerinden etkilenmez)."
 if [[ -n "$(e1_target_user)" ]]; then
   e1_info "Dizin sahipligi '$(e1_target_user)' kullanicisina devrediliyor..."
   e1_chown_target_recursive "${INSTALL_DIR}"
+fi
+
+# ---- Saha kimligi (musteri / proje) --------------------------------------
+# BURADA soruluyor, sonda degil: Docker kurulumu ve imaj indirme 5-15 dakika
+# surer; kurulumcu o sirada makinenin basindan ayrilir. Soru sonda olsaydi
+# kurulum yarim kalirdi. Repo yeni klonlandi, script erisilebilir.
+#
+# Amac: her kutunun uzaktan bakim listesinde ADIYLA gorunmesi. Detay ve
+# gerekce icin bkz. infra/appliance/setup-site-identity.sh basligi.
+if [[ -f "${INSTALL_DIR}/infra/appliance/setup-site-identity.sh" ]]; then
+  bash "${INSTALL_DIR}/infra/appliance/setup-site-identity.sh" \
+    || e1_warn "Saha kimligi adimi tamamlanamadi; kurulum devam ediyor."
 fi
 
 # ---- 3/6: Docker Engine + Compose ----------------------------------------
@@ -668,7 +708,8 @@ if [[ -z "${E1_TAILSCALE_AUTHKEY:-}" ]]; then
 fi
 # Diger Tailscale ayarlari da ayni dosyadan gelebilsin (etiket, SSH...).
 if [[ -f /etc/enerjione-grid/install.env ]]; then
-  for _var in E1_TAILSCALE_TAGS E1_TAILSCALE_SSH E1_TAILSCALE_ACCEPT_DNS E1_TAILSCALE_HOSTNAME; do
+  for _var in E1_TAILSCALE_TAGS E1_TAILSCALE_SSH E1_TAILSCALE_ACCEPT_DNS \
+              E1_TAILSCALE_HOSTNAME E1_TAILSCALE_HOSTNAME_PREFIX; do
     if [[ -z "${!_var:-}" ]]; then
       _v="$(sed -n "s/^[[:space:]]*${_var}[[:space:]]*=[[:space:]]*\"\?\([^\"#]*\)\"\?.*/\1/p" \
         /etc/enerjione-grid/install.env | tail -1 | tr -d '[:space:]')"
@@ -692,6 +733,27 @@ printf '  %s%sKURULUM TAMAMLANDI%s   %ssurum %s · %s%s\n' \
   "${E1_GREEN}" "${E1_BOLD}" "${E1_RESET}" \
   "${E1_DIM}" "$(e1_version "${INSTALL_DIR}")" "$(e1_total_elapsed)" "${E1_RESET}"
 e1_rule "═"
+
+# Saha kimligi tanimliysa ozetin en ustunde gorunsun: kurulumcu yanlis
+# musteriye kurulum yaptigini burada fark eder.
+if [[ -f /etc/enerjione-grid/site.env ]]; then
+  # Tirnakli deger once denenir; boylece "Saha #1" gibi adlarda '#' yorum
+  # sanilmaz. Kacirilmis tirnaklar geri acilir.
+  _e1_site_var() {
+    sed -n \
+      -e "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*\$/\1/p" \
+      -e "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^\"#][^#]*\).*\$/\1/p" \
+      /etc/enerjione-grid/site.env | tail -1 | sed -e 's/[[:space:]]*$//' -e 's/\\"/"/g'
+  }
+  _sc="$(_e1_site_var E1_CUSTOMER_NAME)"
+  _ss="$(_e1_site_var E1_SITE_NAME)"
+  if [[ -n "$_sc$_ss" ]]; then
+    e1_box "SAHA"
+    e1_kv "Musteri" "${_sc:-—}"
+    e1_kv "Saha" "${_ss:-—}"
+  fi
+  unset _sc _ss
+fi
 
 e1_box "1. ERISIM"
 if [[ $APPLIANCE_WANTED -eq 1 ]]; then

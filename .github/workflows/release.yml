@@ -141,6 +141,14 @@ jobs:
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
           set -euo pipefail
+          # min_package: bu yayinin CALISABILMESI icin gereken en dusuk paket
+          # surumu. Cihaz `enerjione-grid update` ile bunu okur; kurulu paket
+          # daha eskiyse "once yeni .deb kurun" der, degilse SADECE imaj ceker.
+          # Boylece cogu guncelleme .deb gerektirmez — uygulama kodu imajlarda.
+          # Bu dosya YALNIZCA dagitim katmani (compose/script/systemd/zorunlu
+          # yeni env) degistiginde elle yukseltilir.
+          MIN_PKG="$(tr -d ' \t\r\n' < packaging/MIN_PACKAGE_VERSION)"
+          gh release view "$TAG" >/dev/null 2>&1 || true
           {
             printf 'Kurulum (musteri makinesi):\n\n'
             printf '    sudo apt install ./enerjione-grid_%s_all.deb\n' "$VERSION"
@@ -148,7 +156,12 @@ jobs:
             printf 'Guncelleme / geri alma:\n\n'
             printf '    sudo enerjione-grid update\n'
             printf '    sudo enerjione-grid update 2.24.4\n\n'
-            printf 'Imajlar: `ghcr.io/%s/<servis>:%s`\n' "${{ github.repository }}" "$VERSION"
+            printf 'Imajlar: `ghcr.io/%s/<servis>:%s`\n\n' "${{ github.repository }}" "$VERSION"
+            # --- makine tarafindan okunur ---
+            # Cihaz bu satiri /releases/latest yanitindaki `body` alanindan
+            # okur. TIRNAKSIZ yaziyoruz: JSON govdesinde tirnaklar kacisla
+            # (\") gelir ve basit bir sed ile ayiklamak kirilgan olur.
+            printf '<!-- min_package=%s -->\n' "$MIN_PKG"
           } > /tmp/notes.md
           # Zaten varsa (workflow_dispatch ile tekrar calistirildi) uzerine yazma,
           # sadece notlari tazele.
