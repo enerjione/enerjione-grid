@@ -1,8 +1,8 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../../components/ToastProvider";
-import { downloadLicenseRequest, importLicense } from "../../shared/api";
-import type { LicenseStatus } from "../../shared/types";
+import { downloadLicenseRequest, fetchVersionInfo, importLicense } from "../../shared/api";
+import type { LicenseStatus, VersionInfo } from "../../shared/types";
 
 
 type Props = {
@@ -28,6 +28,22 @@ export function LicenseManagementPanel({
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<"request" | "import" | null>(null);
+  // Yazilim surumu — bir kez cekilir, degismez (backend restart edilirse
+  // sayfa da yenilenir).
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchVersionInfo(accessToken)
+      .then((info) => {
+        if (!cancelled) setVersionInfo(info);
+      })
+      .catch(() => {
+        /* surum gosterimi kritik degil, sessiz gec */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
 
   const handleRequest = async () => {
     setBusy("request");
@@ -104,6 +120,34 @@ export function LicenseManagementPanel({
 
   return (
     <section className="license-panel" aria-label={t("engineering.license.title")}>
+      {/* Yazilim surumu — lisans bilgisiyle birlikte, destek/kayit
+          taleplerinde ilk sorulan bilgi. Guncelleme durumu Sistem Durumu
+          sayfasinda; burada sadece calisan surum yazar.
+          Surum gelmeden (veya eski backend'de uc yoksa) HIC gosterilmez —
+          bos bir "—" seridi birakmak yerine tamamen gizli. */}
+      {versionInfo ? (
+        <div className="license-version-strip">
+          <span className="license-version-icon" aria-hidden="true">
+            <span className="material-symbols-outlined">deployed_code</span>
+          </span>
+          <div className="license-version-text">
+            <span className="license-version-label">
+              {t("engineering.license.appVersionLabel")}
+            </span>
+            <strong className="license-version-value">v{versionInfo.current}</strong>
+          </div>
+          {versionInfo.update_available && versionInfo.latest ? (
+            <span
+              className="license-version-badge"
+              title={t("engineering.license.updateHint")}
+            >
+              <span className="material-symbols-outlined">upgrade</span>
+              {t("engineering.license.updateAvailable", { version: versionInfo.latest })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Ust: uc durum karti */}
       <div className="license-status-cards">
         <article className={`license-stat-card license-stat-card--${stateKey}`}>

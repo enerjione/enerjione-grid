@@ -2148,6 +2148,22 @@ export async function fetchSignalLiveValues(token: string): Promise<SignalLiveRo
  *  vermesi durumunda kullaniciyi login'e atmak yerine sessizce hata firlat —
  *  caller bir-iki tur dene, beklemeden gercek user action'larda (login,
  *  save) session expired akisi normal islesin. */
+/** Calisan surum + guncelleme durumu (salt okunur; guncelleme uctan
+ *  tetiklenemez — bilerek boyle). Lisans ve Sistem Durumu sayfalari kullanir. */
+export async function fetchVersionInfo(
+  token: string
+): Promise<import("./types").VersionInfo> {
+  const response = await apiFetch(`${API_BASE_URL}/system-status/version`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 ? "session_polling_401" : "Sürüm bilgisi alınamadı."
+    );
+  }
+  return (await response.json()) as import("./types").VersionInfo;
+}
+
 export async function fetchHostStatus(token: string): Promise<HostStatus> {
   const response = await apiFetch(`${API_BASE_URL}/system-status/host`, {
     headers: authHeaders(token)

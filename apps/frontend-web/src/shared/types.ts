@@ -224,6 +224,19 @@ export type BackupSchedule = {
   last_run_at?: string | null;
 };
 
+/** Calisan surum + (bilgi amacli) guncelleme durumu.
+ *  `GET /system-status/version`. Panelden guncelleme YAPILAMAZ — bu veri
+ *  yalnizca gosterim icindir. */
+export type VersionInfo = {
+  current: string;
+  /** UPDATE_CHECK_URL tanimli mi; false ise "kontrol kapali". */
+  check_enabled: boolean;
+  latest?: string | null;
+  update_available: boolean;
+  error?: string | null;
+  checked_at?: number | null;
+};
+
 /** Hat Arizalari — ozet istatistikler. */
 export type FaultStats = {
   total: number;

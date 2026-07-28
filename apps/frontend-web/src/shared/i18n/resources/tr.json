@@ -917,6 +917,12 @@
       "errorMetrics": "Sunucu kaynak metrikleri alınamadı.",
       "loading": "Yükleniyor…"
     },
+    "version": {
+      "label": "Sürüm",
+      "upToDate": "Güncel",
+      "updateAvailable": "v{{version}} mevcut",
+      "updateHint": "Yeni bir sürüm yayınlandı. Güncelleme sunucu üzerinden (update.sh) yapılır — bu ekrandan başlatılamaz."
+    },
     "services": {
       "title": "Servis durumları",
       "loading": "Servisler kontrol ediliyor…",
@@ -1915,6 +1921,9 @@
     "license": {
       "title": "Lisans Yönetimi",
       "subtitle": "Bu kurulumun cihaz kapasitesi ve makineye bağlı lisans bilgileri.",
+      "appVersionLabel": "EnerjiOne Grid sürümü",
+      "updateAvailable": "Yeni sürüm: v{{version}}",
+      "updateHint": "Güncelleme sunucu üzerinden (update.sh) yapılır; arayüzden başlatılamaz.",
       "capacity": "Cihaz kapasitesi",
       "remaining": "kalan",
       "used": "{{count}} cihaz kullanılıyor",

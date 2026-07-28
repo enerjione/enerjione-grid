@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "save": "Save",
     "saveAll": "Save All Settings",
@@ -916,6 +916,12 @@
       "liveHint": "Last sample time — refreshed every 5 seconds",
       "errorMetrics": "Could not fetch host metrics.",
       "loading": "Loading…"
+    },
+    "version": {
+      "label": "Version",
+      "upToDate": "Up to date",
+      "updateAvailable": "v{{version}} available",
+      "updateHint": "A new version has been released. Updates are applied on the server (update.sh) — they cannot be started from this screen."
     },
     "services": {
       "title": "Service health",
@@ -1915,6 +1921,9 @@
     "license": {
       "title": "License Management",
       "subtitle": "Device capacity and machine-bound license details for this installation.",
+      "appVersionLabel": "EnerjiOne Grid version",
+      "updateAvailable": "New version: v{{version}}",
+      "updateHint": "Updates are applied on the server (update.sh); they cannot be started from the UI.",
       "capacity": "Device capacity",
       "remaining": "remaining",
       "used": "{{count}} devices in use",

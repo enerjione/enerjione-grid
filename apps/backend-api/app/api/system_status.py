@@ -122,6 +122,30 @@ def _safe_load_avg() -> tuple[float | None, float | None, float | None]:
         return None, None, None
 
 
+class VersionInfo(BaseModel):
+    """Calisan surum + (bilgi amacli) guncelleme durumu."""
+
+    current: str = Field(..., description="Calisan EnerjiOne Grid surumu")
+    check_enabled: bool = Field(..., description="UPDATE_CHECK_URL tanimli mi")
+    latest: str | None = Field(default=None, description="Uzakta duyurulan surum")
+    update_available: bool = Field(default=False, description="latest > current mi")
+    error: str | None = Field(default=None, description="Kontrol hatasi (varsa)")
+    checked_at: float | None = Field(default=None, description="Son kontrol (epoch)")
+
+
+@router.get("/version", response_model=VersionInfo)
+def get_version_info(_: User = Depends(get_current_user)):
+    """Surum bilgisi ve yeni surum uyarisi — SALT OKUNUR.
+
+    Bu uc bilerek yalnizca BILGI dondurur; guncelleme baslatan bir uc YOKTUR.
+    Guncelleme `update.sh` ile operator kontrolunde yapilir (calisan bir SCADA
+    sisteminin arayuzden tetiklenen bir islemle yeniden baslamasi istenmez).
+    """
+    from app.services.version_service import get_version_info as _info
+
+    return VersionInfo(**_info())
+
+
 @router.get("/host", response_model=HostStatus)
 def get_host_status(
     disk_path: str | None = Query(default=None, description="Override: hangi mount'un kullanim oranini doneyim"),

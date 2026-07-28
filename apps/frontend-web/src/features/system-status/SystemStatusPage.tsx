@@ -15,7 +15,9 @@ import {
   ArrowDown,
   ArrowLeftRight,
   ArrowUp,
+  ArrowUpCircle,
   BellRing,
+  CheckCircle2,
   Code,
   Cpu,
   Database,
@@ -42,7 +44,12 @@ import {
   type LucideIcon
 } from "lucide-react";
 
-import { fetchHostStatus, fetchServicesStatus, loadSession } from "../../shared/api";
+import {
+  fetchHostStatus,
+  fetchServicesStatus,
+  fetchVersionInfo,
+  loadSession
+} from "../../shared/api";
 import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
 import type {
   AlarmEvent,
@@ -50,7 +57,8 @@ import type {
   Gateway,
   HostStatus,
   ServicesReport,
-  ServiceStatus
+  ServiceStatus,
+  VersionInfo
 } from "../../shared/types";
 
 type Props = {
@@ -268,6 +276,25 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
   const [servicesError, setServicesError] = useState<string | null>(null);
   const servicesInFlightRef = useRef(false);
 
+  // Surum + guncelleme durumu. Backend sonucu 6 saat cache'liyor, o yuzden
+  // burada polling YOK — sayfa acilisinda bir kez cekiyoruz.
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  useEffect(() => {
+    const session = loadSession();
+    if (!session) return;
+    let cancelled = false;
+    void fetchVersionInfo(session.accessToken)
+      .then((info) => {
+        if (!cancelled) setVersionInfo(info);
+      })
+      .catch(() => {
+        /* surum gosterimi kritik degil */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [memHistory, setMemHistory] = useState<number[]>([]);
 
@@ -441,6 +468,39 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
             </div>
           ) : null}
         </div>
+
+        {/* Surum + guncelleme ibaresi.
+            BILEREK sadece BILGI: buradan guncelleme baslatilamaz. Guncelleme
+            `update.sh` ile operator kontrolunde yapilir; calisan bir SCADA
+            sisteminin arayuzden tetiklenen bir islemle yeniden baslamasi
+            istenmiyor. */}
+        {versionInfo ? (
+          <div className="sys-version-box">
+            <span className="sys-version-current">
+              <Package size={14} strokeWidth={2} />
+              <span>
+                <small>{t("systemStatus.version.label")}</small>
+                <strong>v{versionInfo.current}</strong>
+              </span>
+            </span>
+            {versionInfo.update_available && versionInfo.latest ? (
+              <span
+                className="sys-version-badge is-update"
+                title={t("systemStatus.version.updateHint")}
+              >
+                <ArrowUpCircle size={13} strokeWidth={2.2} />
+                {t("systemStatus.version.updateAvailable", {
+                  version: versionInfo.latest
+                })}
+              </span>
+            ) : versionInfo.check_enabled && !versionInfo.error ? (
+              <span className="sys-version-badge is-current">
+                <CheckCircle2 size={13} strokeWidth={2.2} />
+                {t("systemStatus.version.upToDate")}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {onRefresh ? (
           <button
             type="button"

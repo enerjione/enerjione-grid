@@ -1,5 +1,12 @@
-from pydantic import model_validator
+import re
+
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Imajla birlikte paketlenen surum. Kok dizindeki VERSION dosyasi ve
+# apps/frontend-web/package.json ile AYNI olmali; release CI ucunu de
+# birbirine karsi dogrular.
+_FALLBACK_APP_VERSION = "2.24.4"
 
 
 # Production'da reddedilen placeholder secret prefix'leri. Settings constructor
@@ -34,6 +41,24 @@ def _is_placeholder_secret(value: str) -> bool:
 
 class Settings(BaseSettings):
     app_name: str = "EnerjiOne Grid Dashboard API"
+    # Calisan surum. Deploy'da `E1_VERSION` ile gelir (docker-compose ayni
+    # degiskeni image tag'i icin de kullaniyor); yerel dev'de asagidaki
+    # varsayilan gecerli. Frontend bunu Lisans ve Sistem Durumu
+    # sayfalarinda gosterir.
+    # NOT: `apps/frontend-web/package.json` icindeki "version" ile ayni
+    # tutulmali — surum yukseltirken ikisi birlikte guncellenir.
+    app_version: str = Field(
+        default=_FALLBACK_APP_VERSION,
+        validation_alias=AliasChoices("E1_VERSION", "APP_VERSION"),
+    )
+    # Guncelleme kontrolu (SADECE BILGI AMACLI — panelden guncelleme YAPILMAZ).
+    # Bos ise kontrol tamamen kapalidir ve arayuzde "kontrol kapali" gorunur.
+    # Beklenen icerik: JSON. Su alanlardan ilk bulunan surum kabul edilir:
+    #   "version" | "latest" | "tag_name"  (GitHub Releases API de calisir)
+    update_check_url: str = ""
+    # Kontrol periyodu (saniye). Backend sonucu bu sure boyunca cache'ler;
+    # Sistem Durumu sayfasi 10sn'de bir sorguladigi icin cache sart.
+    update_check_interval_sec: int = 21_600  # 6 saat
     app_env: str = "development"
     api_prefix: str = "/api/v1"
     secret_key: str = "change-me-in-production"
@@ -217,6 +242,20 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @model_validator(mode="after")
+    def _normalize_app_version(self) -> "Settings":
+        """`E1_VERSION` bir IMAJ ETIKETI; her zaman surum degil.
+
+        docker-compose ayni degiskeni hem imaj tag'i hem app_version icin
+        kullaniyor. Tag 'latest' veya '2.25' (minor) olabilir; bunlar arayuzde
+        surum olarak gosterilemez. Semver'e benzemiyorsa paketle gelen
+        varsayilana doneriz.
+        """
+        raw = (self.app_version or "").strip()
+        if not re.fullmatch(r"\d+\.\d+\.\d+", raw):
+            self.app_version = _FALLBACK_APP_VERSION
+        return self
 
     @model_validator(mode="after")
     def _validate_production_safeguards(self) -> "Settings":
