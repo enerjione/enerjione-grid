@@ -74,3 +74,9 @@ apps/backend-api/license-data/
 # bilgisi icerir, makineye/session'a ozeldir. Docker'da named volume ile
 # kalici; native/yerel testte burada olusur, commit edilmez.
 apps/whatsapp-web-gateway/session-data/
+
+# Uretilen kurulum dosyalari — ICINDE CANLI ANAHTAR VAR, asla commit edilmez.
+# (packaging/make-provisioner.sh uretir; varsayilan cikti dist/ zaten yok sayili)
+enerjione-grid-kurulum*.sh
+*-kurulum.sh
+infra/appliance/provision.env
