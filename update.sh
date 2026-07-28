@@ -70,10 +70,34 @@ e1_set_steps "$STEP_COUNT"
 
 # ---- 1/5: Lokal degisiklik kontrolu --------------------------------------
 e1_step "Lokal degisiklik kontrolu..."
+# NOT: Sunucuda dosya IZIN biti (chmod +x) degisimi de "degisiklik" sayilir ve
+# operator icerik degistirmedigi halde update kilitlenir. Bu yaygin ve zararsiz
+# durumu gercek icerik degisikliginden ayirt ediyoruz.
 if ! git diff --quiet || ! git diff --cached --quiet; then
-  e1_die "Repo'da commit edilmemis lokal degisiklik var. 'git status' ile inceleyin, stash veya commit edin."
+  # Sadece izin biti mi degismis? (icerik ayni)
+  content_changed="$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)"
+  mode_only="$(git -c core.fileMode=false diff --name-only 2>/dev/null; \
+               git -c core.fileMode=false diff --cached --name-only 2>/dev/null)"
+  if [[ -n "$content_changed" && -z "$mode_only" ]]; then
+    e1_warn "Sadece dosya izin biti (chmod) degismis; icerik ayni. Yok sayiliyor."
+    git config core.fileMode false
+    e1_ok "core.fileMode=false ayarlandi (bu repo icin kalici)."
+  else
+    echo
+    e1_err "Repo'da commit edilmemis lokal degisiklik var:"
+    echo
+    git status --short | sed 's/^/    /'
+    echo
+    e1_err "Secenekler:"
+    e1_err "  Degisiklikler size ait DEGILSE (deploy artefakti vb.) at:"
+    e1_err "      git checkout -- . && sudo bash update.sh"
+    e1_err "  Bilerek yaptiysaniz sakla, update sonrasi geri al:"
+    e1_err "      git stash && sudo bash update.sh && git stash pop"
+    e1_die "Calisma agaci temizlenmeden update devam edemez."
+  fi
+else
+  e1_ok "Calisma agaci temiz."
 fi
-e1_ok "Calisma agaci temiz."
 
 # Lisans host machine-id'ye bagli. USB/disk/RAM/MAC degisimi etkisizdir;
 # machine-id yoksa backend fail-closed cihaz eklemeyi kapatir.
