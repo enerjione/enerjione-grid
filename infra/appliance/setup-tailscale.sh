@@ -27,7 +27,10 @@
 # Env:
 #   E1_TAILSCALE_AUTHKEY    auth key / OAuth secret (bos = kurulum atlanir)
 #   E1_TAILSCALE_TAGS       virgullu etiket listesi (default: tag:e1-appliance)
-#   E1_TAILSCALE_HOSTNAME   tailnet'te gorunecek ad (default: sistem hostname)
+#   E1_TAILSCALE_HOSTNAME   tailnet'te gorunecek ad. Bos ise once saha
+#                           kimliginden (/etc/enerjione-grid/site.env),
+#                           yoksa donanim seri no'sundan uretilir.
+#   E1_TAILSCALE_HOSTNAME_PREFIX  uretilen adin oneki (default: e1-grid)
 #   E1_TAILSCALE_SSH        1 = Tailscale SSH ac (default 1), 0 = kapali
 #   E1_TAILSCALE_ACCEPT_DNS 1 = tailnet DNS'ini kabul et (default 0)
 #                           0 onerilir: saha cihazinin yerel DNS'i bozulmasin.
@@ -45,14 +48,94 @@ else
   e1_info() { printf '  · %s\n' "$*"; }
   e1_ok()   { printf '  ✓ %s\n' "$*"; }
   e1_warn() { printf '  ! %s\n' "$*" >&2; }
+  e1_hint() { printf '    %s\n' "$*"; }
   e1_step() { printf '\n== %s\n' "$*"; }
 fi
 
 AUTHKEY="${E1_TAILSCALE_AUTHKEY:-}"
 TAGS="${E1_TAILSCALE_TAGS:-tag:e1-appliance}"
-TS_HOSTNAME="${E1_TAILSCALE_HOSTNAME:-$(hostnamectl --static 2>/dev/null || hostname)}"
 ENABLE_SSH="${E1_TAILSCALE_SSH:-1}"
 ACCEPT_DNS="${E1_TAILSCALE_ACCEPT_DNS:-0}"
+# Tailnet'te gorunecek adin oneki. Cihaza ozel kisim otomatik eklenir.
+TS_PREFIX="${E1_TAILSCALE_HOSTNAME_PREFIX:-e1-grid}"
+
+# --- Cihaza OZEL tailnet adi -----------------------------------------------
+# SORUN: sistem hostname'i her cihazda ayni (`e1-grid`) — cunku `e1-grid.local`
+# sahada standart erisim adresi ve site basina tek cihaz oldugu icin yerel
+# agda cakisma yok. Ama tailnet TEK bir isim alanidir; ayni adla katilan
+# cihazlari Tailscale `e1-grid-1`, `e1-grid-2`... diye numaralandirir ve
+# hangisinin hangi saha oldugu ANLASILMAZ olur.
+#
+# COZUM: sistem hostname'ine DOKUNMUYORUZ (e1-grid.local calismaya devam
+# eder); Tailscale'e ayri, cihaza ozel bir ad veriyoruz. Oncelik sirasi:
+#   1. E1_TAILSCALE_HOSTNAME          -> operator elle sabitlemis
+#   2. saha kimligi (site.env)        -> kurulumda sorulan musteri/saha adi
+#   3. DMI seri no (Dell "Service Tag")
+#   4. /etc/machine-id ilk 8 hane
+# (2) TERCIH EDILENDIR: konsolda "e1-grid-tpao-batman-osb" gorunur, seri
+# numarasi gorunmez. Seri no yedek yoldur — sanal makinelerde bulunmaz ve
+# bulundugunda bile hangi saha oldugunu soylemez.
+SITE_ENV="${E1_SITE_ENV:-/etc/enerjione-grid/site.env}"
+
+# site.env'i `source` ETMIYORUZ: kurulum ortamini bozabilecek satirlar
+# olabilir; sadece istenen anahtari cekiyoruz.
+_site_var() {
+  [[ -f "$SITE_ENV" ]] || return 1
+  sed -n \
+    -e "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*\$/\1/p" \
+    -e "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^\"#][^#]*\).*\$/\1/p" \
+    "$SITE_ENV" | tail -1 | sed -e 's/[[:space:]]*$//' -e 's/\\"/"/g'
+}
+
+# TS_HOSTNAME ve TS_NAME_SOURCE degiskenlerini DOGRUDAN atar (deger
+# dondurmez): kaynagi da bildirmesi gerekiyor ve `$( )` icinde yapilan
+# atamalar alt kabukta kalip kaybolurdu.
+_derive_ts_hostname() {
+  local serial="" f site
+  # (2) Saha kimligi — kurulumda sorulmus musteri/saha adi.
+  site="${E1_SITE_ID:-$(_site_var E1_SITE_ID || true)}"
+  site="$(printf '%s' "$site" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
+  if [[ -n "$site" ]]; then
+    TS_NAME_SOURCE="saha"
+    TS_HOSTNAME="${TS_PREFIX}-${site:0:48}"
+    return 0
+  fi
+  TS_NAME_SOURCE="donanim"
+  for f in /sys/class/dmi/id/product_serial /sys/class/dmi/id/board_serial; do
+    if [[ -r "$f" ]]; then
+      serial="$(tr -d '\0' < "$f" 2>/dev/null | tr -d '[:space:]')"
+      [[ -n "$serial" ]] && break
+    fi
+  done
+  # Uretici cogu zaman placeholder birakir — bunlari benzersiz sayma.
+  case "$(printf '%s' "$serial" | tr 'A-Z' 'a-z')" in
+    ""|none|default*|to*befilled*|systemserial*|serialnumber*|0123456789|na|n/a|unknown|invalid|0|00000000)
+      serial="" ;;
+  esac
+  if [[ -z "$serial" && -r /etc/machine-id ]]; then
+    # machine-id lisansta da kullaniliyor; her kurulumda benzersiz.
+    serial="$(cut -c1-8 /etc/machine-id 2>/dev/null || true)"
+  fi
+  # DNS-guvenli hale getir: kucuk harf, sadece harf/rakam/tire.
+  serial="$(printf '%s' "$serial" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
+  if [[ -z "$serial" ]]; then
+    TS_NAME_SOURCE="yok"
+    TS_HOSTNAME="$TS_PREFIX"          # hicbiri yoksa duz onek
+  else
+    # Tailscale adi 63 karakteri gecmemeli; seri no'yu kirp.
+    TS_HOSTNAME="${TS_PREFIX}-${serial:0:24}"
+  fi
+}
+
+# Operator elle verdiyse ona saygi duy; yoksa saha kimliginden/donanimdan turet.
+TS_HOSTNAME=""
+TS_NAME_SOURCE=""
+if [[ -n "${E1_TAILSCALE_HOSTNAME:-}" ]]; then
+  TS_HOSTNAME="$E1_TAILSCALE_HOSTNAME"
+  TS_NAME_SOURCE="elle"
+else
+  _derive_ts_hostname
+fi
 
 # --- Anahtar yoksa sessizce cik: kurulumu ASLA bozma ------------------------
 if [[ -z "$AUTHKEY" ]]; then
@@ -114,6 +197,23 @@ else
   UP_ARGS+=( --accept-dns=false )
 fi
 
+case "$TS_NAME_SOURCE" in
+  saha)
+    e1_info "Tailnet adi saha kimliginden uretildi: ${TS_HOSTNAME}"
+    e1_hint "Degistirmek icin: sudo E1_SITE_FORCE=1 bash infra/appliance/setup-site-identity.sh"
+    ;;
+  donanim)
+    e1_info "Tailnet adi donanimdan turetildi: ${TS_HOSTNAME}"
+    e1_hint "Saha adi tanimlamak daha okunakli: sudo bash infra/appliance/setup-site-identity.sh"
+    ;;
+  yok)
+    # Bu cihaz konsolda 'e1-grid' olarak gorunur; ikinci cihaz gelince
+    # Tailscale numaralandirmaya baslar. Ciddi bir uyari, ipucu degil.
+    e1_warn "Cihaza ozel ad uretilemedi — tailnet'te '${TS_HOSTNAME}' olarak gorunecek."
+    e1_warn "Ikinci bir cihaz katilirsa isimler karisir. Duzeltmek icin:"
+    e1_warn "  sudo bash infra/appliance/setup-site-identity.sh"
+    ;;
+esac
 e1_info "Tailnet'e katiliniyor (hostname: ${TS_HOSTNAME}, etiket: ${TAGS:-yok})..."
 # NOT: authkey komut satirinda; `ps` ile gorulebilir. Kisa sureli ve cihaz
 # zaten operatorun kontrolunde. Log'a DUSURMUYORUZ (asagida maskeli mesaj).

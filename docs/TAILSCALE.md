@@ -102,42 +102,184 @@ Tailscale bu bölümü **"Trust credentials"** adı altına taşıdı:
 
 ---
 
-## 2. Cihaz tarafı — anahtarı nereye koyacaksın
+## 2. Cihaz tarafı — anahtar nereden gelir
 
-Kurulum anahtarı şu sırayla arar; ilk bulduğunu kullanır:
+**Normal kurulumda hiçbir şey yapman gerekmez.** Fabrika anahtarı repoda
+`infra/appliance/provision.env` içinde gömülüdür; `sudo bash install.sh`
+komutundan başka bir işlem olmadan cihaz tailnet'e katılır.
+
+Kurulum anahtarı şu sırayla arar, ilk bulduğunu kullanır:
 
 | # | Kaynak | Ne zaman |
 |---|--------|----------|
-| 1 | `E1_TAILSCALE_AUTHKEY` ortam değişkeni | Tek seferlik kurulum |
-| 2 | `/etc/enerjione-grid/install.env` | **Sıfır dokunuşlu** (önerilen) |
-| 3 | `<kurulum dizini>/.env` | Mevcut kurulumu güncellerken |
+| 1 | `E1_TAILSCALE_AUTHKEY` ortam değişkeni | Tek seferlik / özel anahtar |
+| 2 | `/etc/enerjione-grid/install.env` | Cihaza özel kalıcı anahtar |
+| 3 | `<kurulum dizini>/.env` | Eski kurulumlarla uyumluluk |
+| 4 | `infra/appliance/provision.env` | **Fabrika anahtarı — varsayılan** |
 
-### Sıfır dokunuşlu kurulum (önerilen)
+`install.sh` ve `update.sh` bu sırayı **birebir aynı** uygular; kurulumda
+katılan bir cihaz güncellemeden sonra anahtarsız kalmaz.
 
-Anahtarı cihaza bir kez koy; sonraki tüm `install.sh` / `update.sh`
-çalıştırmaları onu otomatik bulur. Disk imajına da gömülebilir:
-
-```bash
-sudo mkdir -p /etc/enerjione-grid
-sudo tee /etc/enerjione-grid/install.env >/dev/null <<'EOF'
-E1_TAILSCALE_AUTHKEY=tskey-client-BURAYA-ANAHTAR
-E1_TAILSCALE_TAGS=tag:e1-appliance
-E1_TAILSCALE_SSH=1
-EOF
-sudo chmod 600 /etc/enerjione-grid/install.env
-```
-
-Sonra normal kurulum — başka hiçbir şey yapmadan cihaz tailnet'e katılır:
+### Sıfır dokunuşlu kurulum (varsayılan davranış)
 
 ```bash
 sudo bash install.sh
 ```
 
-> **Golden image akışı:** Bu dosyayı bir mini PC'ye yazıp diskin imajını
-> alırsan, o imajdan çıkan her cihaz ilk açılışta kendiliğinden tailnet'e
-> girer. Cihaz adı hostname'den gelir; her cihazın hostname'i farklı olmalı
-> (`setup-appliance.sh` varsayılan olarak `e1-grid` yapar — filo için
-> `APPLIANCE_HOSTNAME=e1-grid-023` gibi cihaza özel verin).
+Hepsi bu. Cihaz kurulum sırasında tailnet'e katılır, saha kimliğinden
+üretilmiş adıyla konsolda görünür.
+
+### Fabrika anahtarı — kabul edilen risk
+
+`provision.env` repoya **commit edilir** ve içinde canlı bir OAuth client
+secret vardır. Depo private, ama kurulum token'ı (`E1_GHCR_TOKEN`) depoya
+okuma yetkisi verir — **o token kimdeyse anahtarı da çıkarabilir.**
+
+Riski iki şey sınırlıyor, ikisi de bozulmamalı:
+
+1. Anahtar yalnızca **etiketli** cihaz üretir (`tag:e1-appliance`) ve ACL'de
+   bu etiketten **çıkan kural yoktur**. Anahtarı ele geçiren biri tailnet'e
+   sahte bir cihaz ekleyebilir ama o cihazla hiçbir yere erişemez.
+2. OAuth kapsamı yalnızca **Keys → Auth Keys → Write**. DNS, Policy File,
+   Users, Devices, Settings kapalı — tailnet yapılandırması değiştirilemez.
+
+> ACL'e `tag:e1-appliance`'tan **çıkan** bir kural eklersen bu dosyanın riski
+> aniden büyür. Böyle bir kural eklemeden önce buraya dön.
+
+**Anahtarı değiştirme (rotation):**
+
+1. `console.tailscale.com` → Settings → Keys → eski client'ı **Revoke**
+2. Yeni OAuth client üret (kapsam: Keys → Auth Keys → Write, `tag:e1-appliance`)
+3. `provision.env` içindeki satırı güncelle, commit et, yeni sürümü tag'le
+4. **Zaten kurulu cihazlar etkilenmez** — tailnet'e katılmış durumdalar ve
+   tekrar login denemezler (`setup-tailscale.sh` idempotent)
+
+Eski anahtar git geçmişinde kalır; bu yüzden **revoke etmek şart**, üstüne
+yazmak yetmez.
+
+### Cihaza özel anahtar vermek istersen
+
+Fabrika anahtarını ezmek için (örn. bir müşteri kendi tailnet'ini istiyorsa):
+
+```bash
+sudo mkdir -p /etc/enerjione-grid
+sudo tee /etc/enerjione-grid/install.env >/dev/null <<'EOF'
+E1_TAILSCALE_AUTHKEY=tskey-client-MUSTERIYE-OZEL
+E1_TAILSCALE_TAGS=tag:e1-appliance
+EOF
+sudo chmod 600 /etc/enerjione-grid/install.env
+```
+
+Ya da tek seferlik: `sudo -E E1_TAILSCALE_AUTHKEY=... bash install.sh` —
+`install.sh` elle verilen anahtarı bu dosyaya **kendisi kaydeder**, bir daha
+vermen gerekmez. Fabrika anahtarı ise `/etc/` altına kopyalanmaz; böylece
+`provision.env` tek değişiklik noktası olarak kalır.
+
+> **Golden image akışı:** Fabrika anahtarı repoda olduğu için imaj almana
+> gerek yok. İmaj alıyorsan cihaza özel **ad** için saha kimliğini doldur
+> (bkz. aşağıdaki bölüm); `ASSUME_YES=1` ile soru sorulmayan imajlarda
+> `E1_CUSTOMER` / `E1_SITE` değişkenlerini ver.
+
+### Cihaz adı: saha kimliğinden üretilir, sistem hostname'ine dokunulmaz
+
+**Sorun:** Sistem hostname'i her cihazda aynı (`e1-grid`) — çünkü
+`e1-grid.local` sahada standart erişim adresidir ve site başına tek cihaz
+olduğu için yerel ağda çakışma yok. Ama tailnet **tek bir isim alanıdır**:
+aynı adla katılan cihazları Tailscale `e1-grid-1`, `e1-grid-2`… diye
+numaralandırır ve hangisinin hangi saha olduğu anlaşılmaz.
+
+**Çözüm:** Sistem hostname'ine **dokunmuyoruz** (`e1-grid.local` çalışmaya
+devam eder); Tailscale'e ayrı, cihaza özel bir ad veriyoruz.
+
+#### Kurulumda sorulan saha kimliği (tercih edilen yol)
+
+`install.sh`, Docker adımından **önce** üç soru sorar:
+
+```
+== Saha kimligi
+  · Bu kutu uzaktan bakim listesinde bu adla gorunecek.
+    Turkce yazabilirsiniz; teknik ad otomatik uretilir.
+  ? Musteri / firma adi  Dicle EDAŞ
+  ? Saha / proje adi  Şırnak Cizre
+  ? Cihaz no (ayni sahada birden fazla kutu varsa)
+  ✓ Saha kimligi kaydedildi: dicle-edas-sirnak-cizre
+```
+
+Türkçe karakterler otomatik çevrilir (`Ş→s`, `ı→i`, `Ğ→g`…), boşluklar tireye
+iner. Sonuç `/etc/enerjione-grid/site.env` dosyasına yazılır:
+
+```bash
+E1_SITE_ID="dicle-edas-sirnak-cizre"
+E1_CUSTOMER_NAME="Dicle EDAŞ"
+E1_SITE_NAME="Şırnak Cizre"
+E1_SITE_UNIT=""
+```
+
+Tailnet adı: **`e1-grid-dicle-edas-sirnak-cizre`**. Konsolda hangi cihazın
+hangi müşteride olduğu doğrudan okunur — seri numarası ezberlemek gerekmez.
+
+Dosya repo dışındadır; **kurulum/güncellemede silinmez**, soru bir daha
+sorulmaz. Değiştirmek için:
+
+```bash
+sudo E1_SITE_FORCE=1 bash /opt/enerjione-grid/infra/appliance/setup-site-identity.sh
+```
+
+> **Aynı sahada birden fazla kutu varsa** üçüncü soruyu doldur (`Pano 2`) —
+> `e1-grid-dicle-edas-sirnak-cizre-pano-2`. Boş bırakılırsa iki cihaz aynı adı
+> alır ve Tailscale sonuna `-1`, `-2` ekler.
+
+#### Soru sorulamayan kurulumlar
+
+`ASSUME_YES=1`, golden image veya otomasyon: bilgiyi baştan ver, soru
+sorulmaz.
+
+```bash
+# /etc/enerjione-grid/install.env  ya da  sudo -E ile ortam değişkeni
+E1_CUSTOMER="Dicle EDAŞ"
+E1_SITE="Şırnak Cizre"
+E1_SITE_UNIT="Pano 2"     # opsiyonel
+```
+
+Hiçbiri verilmezse ve soru da sorulamıyorsa saha kimliği **atlanır** —
+kurulum durmaz, ad donanımdan türetilir (aşağıda).
+
+#### Yedek yol: donanımdan türetme
+
+Saha kimliği yoksa ad otomatik üretilir:
+
+| Sıra | Kaynak | Örnek sonuç |
+|---|---|---|
+| 1 | `E1_SITE_ID` (saha kimliği) | `e1-grid-dicle-edas-sirnak-cizre` |
+| 2 | DMI seri no — Dell'de **Service Tag**, kasanın üzerindeki etiket | `e1-grid-7x2k9m3` |
+| 3 | `/etc/machine-id` ilk 8 hane (her kurulumda benzersiz) | `e1-grid-abcdef12` |
+| 4 | Hiçbiri yoksa düz önek *(uyarı verilir)* | `e1-grid` |
+
+Üreticinin bıraktığı placeholder seri numaraları (`To Be Filled By O.E.M.`,
+`Default string`, `0123456789`…) **benzersiz sayılmaz**, `machine-id`'ye düşer.
+Sanal makinelerde genelde seri no bulunmaz — bu yüzden 2. sıraya güvenmek
+yerine saha kimliğini doldurmak önerilir.
+
+Ad DNS-güvenli hale getirilir (küçük harf, sadece harf/rakam/tire) ve 63
+karakter sınırına kırpılır. Kurulum çıktısı adın nereden geldiğini yazar:
+
+```
+· Tailnet adi saha kimliginden uretildi: e1-grid-dicle-edas-sirnak-cizre
+· Tailnet adi donanimdan turetildi: e1-grid-7x2k9m3
+```
+
+**Adı tamamen elle sabitlemek istersen** (saha kimliğini de ezer):
+
+```bash
+# /etc/enerjione-grid/install.env
+E1_TAILSCALE_HOSTNAME=e1-batman-tpao-01
+```
+
+Ya da sadece öneki değiştir — cihaza özel kısım yine otomatik eklenir:
+
+```bash
+E1_TAILSCALE_HOSTNAME_PREFIX=e1-batman     # -> e1-batman-dicle-edas-sirnak-cizre
+```
 
 ### Tek seferlik kurulum
 
@@ -180,9 +322,19 @@ Kurulum çıktısında şunu görmelisin:
 ```
 == Uzaktan bakim VPN'i (Tailscale)
   ✓ tailscale kuruldu.
-  · Tailnet'e katiliniyor (hostname: e1-grid, etiket: tag:e1-appliance)...
+  · Tailnet adi saha kimliginden uretildi: e1-grid-dicle-edas-sirnak-cizre
+  · Tailnet'e katiliniyor (hostname: e1-grid-dicle-edas-sirnak-cizre, etiket: tag:e1-appliance)...
   ✓ Tailnet'e katildi — 100.x.y.z
   ✓ Tailscale SSH acik (erisim tailnet ACL'i ile sinirli).
+```
+
+Ad `e1-grid` çıkıyorsa (uyarı verilir) saha kimliği tanımlı değildir ve
+donanımdan da benzersiz bir değer okunamamıştır — ikinci cihaz katılınca
+isimler karışır. Düzeltmek için:
+
+```bash
+sudo bash /opt/enerjione-grid/infra/appliance/setup-site-identity.sh
+sudo tailscale up --hostname=e1-grid-<saha>   # adi hemen guncelle
 ```
 
 Cihazda:
@@ -204,19 +356,34 @@ listede. Oradan:
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
-| `E1_TAILSCALE_AUTHKEY` | *(boş)* | **Boşsa VPN adımı hiç çalışmaz.** Anahtarsız kurulum etkilenmez. |
+| `E1_TAILSCALE_AUTHKEY` | *(`provision.env`'deki fabrika anahtarı)* | Elle verilirse fabrika anahtarını ezer ve `/etc/enerjione-grid/install.env`'e kaydedilir |
 | `E1_TAILSCALE_TAGS` | `tag:e1-appliance` | Cihaz etiketi; ACL yetkisi buna göre |
-| `E1_TAILSCALE_HOSTNAME` | sistem hostname'i | Tailnet'te görünecek ad |
+| `E1_TAILSCALE_HOSTNAME` | *(saha kimliği → donanım)* | Tailnet adını elle sabitle; her şeyi ezer |
+| `E1_TAILSCALE_HOSTNAME_PREFIX` | `e1-grid` | Otomatik adın öneki (`<önek>-<saha>`) |
 | `E1_TAILSCALE_SSH` | `1` | Tailscale SSH (0 = kapalı) |
 | `E1_TAILSCALE_ACCEPT_DNS` | `0` | **0 önerilir** — 1 olursa tailnet DNS'i cihazın yerel DNS'ini (AP dnsmasq, `e1-grid.local`) ezer |
+
+Saha kimliği (kurulumda sorulur, `/etc/enerjione-grid/site.env`):
+
+| Değişken | Açıklama |
+|---|---|
+| `E1_CUSTOMER` | Müşteri / firma adı — verilirse o soru sorulmaz |
+| `E1_SITE` | Saha / proje adı — verilirse o soru sorulmaz |
+| `E1_SITE_UNIT` | Aynı sahada 2. kutu ise ayırt edici (`Pano 2`) |
+| `E1_SITE_ID` | Üç alanı da atla, slug'ı doğrudan ver |
+| `E1_SITE_FORCE=1` | Kayıtlı bilgi olsa bile yeniden sor |
 
 ---
 
 ## 5. Güvenlik notları
 
-- **Anahtar bir tailnet anahtarıdır.** Repoya commit etmeyin — `.env` ve
-  `/etc/enerjione-grid/install.env` git dışındadır. Sızarsa Tailscale
-  konsolundan **hemen iptal edin** (Settings → Keys → Revoke).
+- **Fabrika anahtarı bilinçli olarak repodadır** (`infra/appliance/provision.env`).
+  Bunun karşılığında sıfır dokunuşlu kurulum elde ediliyor; kabul edilen
+  riskin sınırları ve rotation yordamı için bkz. bölüm 2.
+  Cihaza özel anahtarlar (`.env`, `/etc/enerjione-grid/install.env`) git
+  dışındadır ve repoya girmemelidir.
+- **Şüphe varsa revoke edin.** Tailscale konsolu → Settings → Keys → Revoke.
+  Anahtar git geçmişinde kaldığı için üstüne yazmak yeterli değildir.
 - Cihazlar **etiketli** katılır; ACL'de `tag:e1-appliance`'tan **çıkan**
   kural tanımlamayın ki ele geçirilen bir saha cihazı tailnet'te yanal
   hareket edemesin.

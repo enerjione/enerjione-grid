@@ -681,12 +681,15 @@ fi
 #
 # Anahtar kaynagi (oncelik sirasiyla):
 #   1. Ortam degiskeni       -> E1_TAILSCALE_AUTHKEY=... sudo bash install.sh
-#   2. /etc/enerjione-grid/install.env  -> SIFIR DOKUNUSLU kurulum icin.
-#      Bu dosya repo disindadir, yeniden kurulumda SILINMEZ ve disk imajina
-#      onceden gomulebilir; boylece sahaya giden her cihaz install.sh'i
-#      calistirdiginda elle bir sey yazmadan tailnet'e katilir.
+#   2. /etc/enerjione-grid/install.env  -> cihaza OZEL anahtar. Repo disindadir,
+#      yeniden kurulumda silinmez, disk imajina gomulebilir.
 #   3. ${INSTALL_DIR}/.env   -> mevcut kurulumu guncellerken.
-# Anahtar repoya ASLA yazilmaz (.env ve /etc/... git disinda).
+#   4. infra/appliance/provision.env -> FABRIKA anahtari; repoda commit'li.
+#      SIFIR DOKUNUSLU kurulumu bu saglar: kurulumcu hicbir sey vermez,
+#      cihaz yine tailnet'e katilir. Bilincli bir risk kabulu; gerekce,
+#      sinirlar ve degistirme (rotation) yordami o dosyanin basliginda.
+# 1-3 arasi kaynaklar repoya ASLA yazilmaz (.env ve /etc/... git disinda);
+# 4 ise kasten repodadir.
 _e1_read_key_from() {
   # `source` etmiyoruz: dosyada kurulum ortamini bozabilecek baska
   # degiskenler olabilir; sadece ilgili satiri cekiyoruz.
@@ -694,30 +697,75 @@ _e1_read_key_from() {
   sed -n 's/^[[:space:]]*E1_TAILSCALE_AUTHKEY[[:space:]]*=[[:space:]]*"\?\([^"#]*\)"\?.*/\1/p' \
     "$1" | tail -1 | tr -d '[:space:]'
 }
+E1_PROVISION_ENV="${INSTALL_DIR}/infra/appliance/provision.env"
+# Anahtarin fabrika dosyasindan gelip gelmedigini izliyoruz: geldiyse
+# /etc/... altina KOPYALANMAZ (bkz. asagidaki kalicilastirma blogu).
+E1_KEY_FROM_PROVISION=0
 if [[ -z "${E1_TAILSCALE_AUTHKEY:-}" ]]; then
-  for _keyfile in /etc/enerjione-grid/install.env "${INSTALL_DIR}/.env"; do
+  for _keyfile in /etc/enerjione-grid/install.env "${INSTALL_DIR}/.env" "$E1_PROVISION_ENV"; do
     _k="$(_e1_read_key_from "$_keyfile" || true)"
     if [[ -n "$_k" ]]; then
       E1_TAILSCALE_AUTHKEY="$_k"
       export E1_TAILSCALE_AUTHKEY
-      e1_info "Tailscale anahtari bulundu: ${_keyfile}"
+      if [[ "$_keyfile" == "$E1_PROVISION_ENV" ]]; then
+        E1_KEY_FROM_PROVISION=1
+        e1_info "Tailscale fabrika anahtari kullaniliyor (provision.env)."
+      else
+        e1_info "Tailscale anahtari bulundu: ${_keyfile}"
+      fi
       break
     fi
   done
   unset _keyfile _k
 fi
-# Diger Tailscale ayarlari da ayni dosyadan gelebilsin (etiket, SSH...).
-if [[ -f /etc/enerjione-grid/install.env ]]; then
+# Diger Tailscale ayarlari (etiket, SSH...). SIRA ONEMLI: once cihaza ozel
+# /etc/... dosyasi, SONRA fabrika dosyasi — her degisken yalnizca hala bossa
+# yazildigi icin cihaza ozel ayar fabrika ayarini ezer.
+for _src in /etc/enerjione-grid/install.env "$E1_PROVISION_ENV"; do
+  [[ -f "$_src" ]] || continue
   for _var in E1_TAILSCALE_TAGS E1_TAILSCALE_SSH E1_TAILSCALE_ACCEPT_DNS \
               E1_TAILSCALE_HOSTNAME E1_TAILSCALE_HOSTNAME_PREFIX; do
     if [[ -z "${!_var:-}" ]]; then
       _v="$(sed -n "s/^[[:space:]]*${_var}[[:space:]]*=[[:space:]]*\"\?\([^\"#]*\)\"\?.*/\1/p" \
-        /etc/enerjione-grid/install.env | tail -1 | tr -d '[:space:]')"
+        "$_src" | tail -1 | tr -d '[:space:]')"
       [[ -n "$_v" ]] && export "${_var}=${_v}"
     fi
   done
-  unset _var _v
+done
+unset _src _var _v
+# Anahtar ELLE verildiyse KALICILASTIR: kurulumcu ayni anahtari bir daha
+# yazmasin. Bundan sonra `sudo bash install.sh` ve `update.sh` hicbir sey
+# sorulmadan tailnet'e katilir.
+#
+# Yazmiyoruz eger:
+#   * anahtar zaten bu dosyada ayni degerle duruyorsa (gereksiz yazma), veya
+#   * anahtar FABRIKA dosyasindan geldiyse. Kopyalasaydik provision.env'i
+#     guncelledigimizde cihazdaki eski kopya onu golgelerdi; boylece repo
+#     tek degisiklik noktasi olarak kalir.
+if [[ -n "${E1_TAILSCALE_AUTHKEY:-}" && "$E1_KEY_FROM_PROVISION" -eq 0 ]]; then
+  _persisted="$(_e1_read_key_from /etc/enerjione-grid/install.env || true)"
+  if [[ "$_persisted" != "$E1_TAILSCALE_AUTHKEY" ]]; then
+    mkdir -p /etc/enerjione-grid
+    # Dosya varsa eski anahtar satirini cikarip yenisini ekle; icindeki
+    # diger ayarlar (saha bilgisi, etiket...) KORUNUR.
+    _tmp="$(mktemp)"
+    if [[ -f /etc/enerjione-grid/install.env ]]; then
+      grep -v '^[[:space:]]*E1_TAILSCALE_AUTHKEY[[:space:]]*=' \
+        /etc/enerjione-grid/install.env > "$_tmp" || true
+    else
+      printf '# EnerjiOne Grid — kalici kurulum ayarlari (git disinda).\n' > "$_tmp"
+    fi
+    printf 'E1_TAILSCALE_AUTHKEY=%s\n' "$E1_TAILSCALE_AUTHKEY" >> "$_tmp"
+    # Once izinleri kis, sonra tasi: anahtar hicbir an 644 ile durmasin.
+    chmod 600 "$_tmp"
+    mv "$_tmp" /etc/enerjione-grid/install.env
+    chmod 600 /etc/enerjione-grid/install.env
+    e1_ok "Tailscale anahtari kalici olarak kaydedildi (/etc/enerjione-grid/install.env)."
+    e1_hint "Sonraki kurulum/guncellemelerde anahtari tekrar vermeniz gerekmez."
+  fi
+  unset _persisted _tmp
 fi
+
 if [[ -f "${INSTALL_DIR}/infra/appliance/setup-tailscale.sh" ]]; then
   bash "${INSTALL_DIR}/infra/appliance/setup-tailscale.sh" \
     || e1_warn "Tailscale adimi tamamlanamadi; kurulum devam ediyor."

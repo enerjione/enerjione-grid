@@ -383,11 +383,25 @@ fi
 # Uzaktan bakim VPN'i — cihaz zaten tailnet'teyse script no-op yapar; yeni
 # eklenen bir anahtar varsa (veya baglanti kopmussa) burada devreye girer.
 # Anahtar yoksa hicbir sey yapmaz.
-if [[ -z "${E1_TAILSCALE_AUTHKEY:-}" && -f .env ]]; then
-  E1_TAILSCALE_AUTHKEY="$(sed -n 's/^[[:space:]]*E1_TAILSCALE_AUTHKEY[[:space:]]*=[[:space:]]*"\?\([^"#]*\)"\?.*/\1/p' \
-    .env | tail -1 | tr -d '[:space:]')"
-  export E1_TAILSCALE_AUTHKEY
-fi
+#
+# Kaynak sirasi install.sh ile AYNI olmali; aksi halde kurulumda katilan bir
+# cihaz guncellemeden sonra anahtarsiz kalir ve VPN adimi sessizce atlanir.
+_e1_upd_var() {  # $1=dosya  $2=anahtar
+  [[ -f "$1" ]] || return 1
+  sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*\"\?\([^\"#]*\)\"\?.*/\1/p" \
+    "$1" | tail -1 | tr -d '[:space:]'
+}
+for _src in /etc/enerjione-grid/install.env .env infra/appliance/provision.env; do
+  [[ -f "$_src" ]] || continue
+  for _var in E1_TAILSCALE_AUTHKEY E1_TAILSCALE_TAGS E1_TAILSCALE_SSH \
+              E1_TAILSCALE_ACCEPT_DNS E1_TAILSCALE_HOSTNAME E1_TAILSCALE_HOSTNAME_PREFIX; do
+    if [[ -z "${!_var:-}" ]]; then
+      _v="$(_e1_upd_var "$_src" "$_var" || true)"
+      [[ -n "$_v" ]] && export "${_var}=${_v}"
+    fi
+  done
+done
+unset _src _var _v
 if [[ -n "${E1_TAILSCALE_AUTHKEY:-}" && -f infra/appliance/setup-tailscale.sh ]]; then
   bash infra/appliance/setup-tailscale.sh || \
     e1_warn "Tailscale adimi tamamlanamadi; guncelleme devam ediyor."
