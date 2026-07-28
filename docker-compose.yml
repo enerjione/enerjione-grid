@@ -94,6 +94,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      # Ilk kurulumda initdb + TimescaleDB extension yaziliyor; saha mini
+      # PC'sinin diski yavas oldugunda 20-30 sn surebilir. start_period
+      # boyunca basarisiz denemeler retries'a sayilmaz.
+      start_period: 40s
     networks:
       - e1-net
     logging: *default-logging
@@ -113,6 +117,11 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
+      # RabbitMQ ilk acilista Erlang VM + Mnesia veritabanini kuruyor; 2 cekirdekli
+      # saha mini PC'sinde 60-90 sn surebiliyor. start_period olmadan bu sure
+      # icindeki denemeler retries'a sayilip container 'unhealthy' isaretleniyor,
+      # backend-api `depends_on: service_healthy` yuzunden hic baslamiyordu.
+      start_period: 90s
     ports:
       # AMQP — uzaktaki gateway'lerin (saha kurulumlari, baska VDS, ofis vs.)
       # bagh kabilmesi icin internet'e acik. Guvenlik: dedicated user/parola
@@ -153,6 +162,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+      start_period: 20s
     ports:
       # NATS client port — uzaktaki gateway'ler (leaf node veya dogrudan)
       # `nats://gateway:<password>@<host>:4222` ile baglanir.

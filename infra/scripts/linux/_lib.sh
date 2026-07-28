@@ -250,6 +250,58 @@ e1_run() {
 }
 
 # ---------------------------------------------------------------------------
+# Docker servisi saglikli olana kadar bekle
+# ---------------------------------------------------------------------------
+# `docker compose up -d` bir bagimlilik saglikli degilse geriye tek satirlik
+# "dependency failed to start: container X is unhealthy" birakir; kurulumcu
+# ekranda SEBEBI goremez ve kurulum yarida kalir. Bu yardimci servisi tek tek
+# bekler, ilerlemeyi ekrana yazar ve basarisiz olursa container'in son
+# loglarini otomatik doker — sebep her zaman ekranda kalir.
+#
+#   e1_wait_healthy rabbitmq 240
+#
+# Healthcheck tanimlanmamis servisler icin "running" yeterli sayilir.
+# Cagiran dizin compose dosyasinin bulundugu dizin olmali.
+e1_wait_healthy() {
+  local svc="$1" timeout="${2:-120}" secs=0 cid state health is_tty=0
+  [[ -t 1 ]] && is_tty=1
+  ((is_tty == 0)) && printf '  · %s hazir olmasi bekleniyor…\n' "$svc"
+
+  while ((secs < timeout)); do
+    cid="$(docker compose ps -q "$svc" 2>/dev/null || true)"
+    if [[ -n "$cid" ]]; then
+      state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo bilinmiyor)"
+      health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}yok{{end}}' "$cid" 2>/dev/null || echo yok)"
+      if [[ "$health" == "healthy" ]] || { [[ "$health" == "yok" && "$state" == "running" ]]; }; then
+        ((is_tty == 1)) && printf '\r%*s\r' $((E1_WIDTH + 24)) ''
+        e1_ok "${svc} hazir — $(e1_fmt_duration $secs)"
+        return 0
+      fi
+    else
+      state="baslatilmadi"
+      health="-"
+    fi
+
+    if ((is_tty == 1)); then
+      printf '\r  %s%s%s bekleniyor  %s[%s/%s]%s  %s%s%s  ' \
+        "${E1_CYAN}" "$svc" "${E1_RESET}" \
+        "${E1_ORANGE}" "$state" "$health" "${E1_RESET}" \
+        "${E1_DIM}" "$(e1_fmt_duration $secs)" "${E1_RESET}"
+    elif ((secs > 0 && secs % 15 == 0)); then
+      printf '    … %s (%s/%s)\n' "$(e1_fmt_duration $secs)" "$state" "$health"
+    fi
+    sleep 2
+    secs=$((secs + 2))
+  done
+
+  ((is_tty == 1)) && printf '\r%*s\r' $((E1_WIDTH + 24)) ''
+  e1_err "${svc}: $(e1_fmt_duration $timeout) icinde hazir olmadi (durum: ${state}/${health})."
+  e1_err "Son loglar (${svc}):"
+  docker compose logs --tail 40 --no-color "$svc" 2>&1 | sed 's/^/      /' >&2 || true
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # Hata cikisi + beklenmeyen hata yakalayici
 # ---------------------------------------------------------------------------
 E1_DYING=0

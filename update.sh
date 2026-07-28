@@ -290,6 +290,16 @@ fi
 if [[ -z "$SVC" ]]; then
   e1_step "Tum servisler yeniden derleniyor + ayaga kalkiyor..."
   docker compose build
+  # Altyapi once ve tek tek: backend-api rabbitmq/nats'a `service_healthy` ile
+  # bagli oldugu icin biri saglikli olmazsa duz `up -d` tek satirlik
+  # "dependency failed to start" ile patliyor ve sebep ekranda gorunmuyor.
+  docker compose up -d rabbitmq nats || true
+  wait_failed=""
+  e1_wait_healthy rabbitmq 240 || wait_failed+=" rabbitmq"
+  e1_wait_healthy nats 120     || wait_failed+=" nats"
+  if [[ -n "$wait_failed" ]]; then
+    e1_die "Altyapi servisleri hazir olmadi:${wait_failed}\n\n  Loglar yukarida. Durum: sudo docker compose ps"
+  fi
   docker compose up -d
 else
   e1_step "Servis '$SVC' yeniden derleniyor + force-recreate..."

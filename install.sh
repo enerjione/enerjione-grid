@@ -380,8 +380,44 @@ docker compose up -d postgres
 bash infra/scripts/linux/db-preflight.sh \
   || e1_die "Postgres kimlik on-kontrolu basarisiz. Detay yukarida."
 
-e1_info "docker compose up -d..."
-docker compose up -d
+# Altyapi (rabbitmq + nats) uygulama servislerinden ONCE ve TEK TEK ayaga
+# kaldirilir. Sebep: backend-api bunlara `depends_on: service_healthy` ile
+# bagli. Biri saglikli olmazsa duz `docker compose up -d` tek satirlik
+# "dependency failed to start: container ... is unhealthy" ile patliyor,
+# ERR trap kurulumu kesiyor ve kurulumcu ekranda SEBEBI goremiyordu.
+# e1_wait_healthy her birini ayri bekler ve basarisizlikta container'in son
+# 40 satir logunu ekrana doker.
+e1_info "Altyapi servisleri baslatiliyor (rabbitmq, nats)..."
+docker compose up -d rabbitmq nats \
+  || e1_die "rabbitmq/nats container'lari baslatilamadi. Detay yukarida."
+
+infra_failed=""
+e1_wait_healthy postgres 120 || infra_failed+=" postgres"
+e1_wait_healthy rabbitmq 240 || infra_failed+=" rabbitmq"
+e1_wait_healthy nats 120     || infra_failed+=" nats"
+
+if [[ -n "$infra_failed" ]]; then
+  # RabbitMQ'nun saha PC'sinde en sik takilma sebebi: onceki yarim kurulumdan
+  # kalan rabbitmq-data volume'u farkli bir node adiyla init edilmis olur ve
+  # yeni container o Mnesia dizinini acamaz. Ilk kurulumda bu volume'de
+  # korunmasi gereken veri YOKTUR; silmek guvenlidir.
+  extra=""
+  if [[ "$infra_failed" == *rabbitmq* ]]; then
+    extra="\n  Ilk kurulumda RabbitMQ takilirsa eski veri alanini sifirlayin:\n"
+    extra+="    cd ${INSTALL_DIR}\n"
+    extra+="    sudo docker compose down\n"
+    extra+="    sudo docker volume rm \$(sudo docker volume ls -q | grep rabbitmq-data)\n"
+    extra+="    sudo bash install.sh\n"
+  fi
+  e1_die "Altyapi servisleri hazir olmadi:${infra_failed}\n\n  Yukaridaki loglar sebebi gosterir. Durum ozeti icin:\n    cd ${INSTALL_DIR} && sudo docker compose ps\n${extra}"
+fi
+
+e1_info "Uygulama servisleri baslatiliyor..."
+if ! docker compose up -d; then
+  e1_err "Servis durumu:"
+  docker compose ps 2>&1 | sed 's/^/      /' >&2 || true
+  e1_die "Servisler baslatilamadi. Loglar:\n    cd ${INSTALL_DIR} && sudo docker compose logs --tail 60"
+fi
 e1_ok "Stack ayakta."
 
 # ---- 6/6: Backend healthy bekle + installer seed -------------------------
