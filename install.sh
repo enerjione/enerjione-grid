@@ -85,9 +85,18 @@ e1_kv "Hedef dizin" "${INSTALL_DIR}"
 [[ -n "${SUDO_USER:-}" ]] && e1_kv "Dosya sahibi" "${SUDO_USER}"
 e1_rule "─"
 
-# Yanlis makinede calistirmaya karsi son kontrol. ASSUME_YES=1 ise sorulmaz.
-if ! e1_confirm_yes "Kuruluma baslansin mi?"; then
-  e1_die "Kurulum kullanici tarafindan iptal edildi."
+# Baslangic onayi YALNIZCA stdin gercek bir terminal iken sorulur
+# (yani `sudo bash install.sh`). `curl ... | sudo bash` modunda stdin boru
+# hattidir; orada bu soruyu sormanin degeri yok — kullanici komutu zaten
+# bilerek yazdi — ama /dev/tty okumasi bazi terminallerde yanit alamayip
+# kurulumu tamamen kilitliyordu. Asil kararlar (systemd, appliance) daha
+# sonra, is bittikten sonra soruluyor.
+if [[ -t 0 ]] && [[ "${ASSUME_YES:-0}" != "1" ]]; then
+  if ! e1_confirm_yes "Kuruluma baslansin mi?"; then
+    e1_die "Kurulum kullanici tarafindan iptal edildi."
+  fi
+else
+  e1_info "Kurulum basliyor..."
 fi
 
 e1_set_steps 6

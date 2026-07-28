@@ -199,8 +199,20 @@ e1_run() {
 
   # Yuzde bilinemez (apt/git ilerleme yuzdesi vermiyor), bu yuzden gidip
   # gelen belirsiz ilerleme cubugu: kullanici "calisiyor" oldugunu gorur.
+  #
+  # ONEMLI: `-t 1` kontrolune BAGLI KALINMAZ. Terminal algilanmadigi bazi
+  # ortamlarda (sudo + boru hatti kombinasyonlari) hicbir ilerleme
+  # basilmiyordu ve kurulum donmus gorunuyordu. Terminal varsa \r ile ayni
+  # satir tazelenir; yoksa periyodik olarak YENI SATIR basilir. Her iki
+  # durumda da ekranda hareket olur.
+  local is_tty=0
+  [[ -t 1 ]] && is_tty=1
+
+  # Terminal yoksa ilk satiri hemen bas — kullanici adimin basladigini gorsun.
+  ((is_tty == 0)) && printf '  · %s…\n' "$label"
+
   while kill -0 "$pid" 2>/dev/null; do
-    if [[ -t 1 ]]; then
+    if ((is_tty == 1)); then
       bar=""
       for ((i = 0; i < E1_BAR_WIDTH; i++)); do
         if ((i >= pos && i < pos + 5)); then bar+="█"; else bar+="░"; fi
@@ -214,12 +226,16 @@ e1_run() {
       # donuyor ve `set -e` + ERR trap altinda gereksiz risk olusturuyor.
       if ((pos <= 0)); then dir=1; fi
       if ((pos >= E1_BAR_WIDTH - 5)); then dir=-1; fi
+    elif ((secs > 0 && secs % 15 == 0)); then
+      # Terminal yok: 15 saniyede bir yeni satir. Log dosyasini sismeden
+      # ilerlemeyi gosterir.
+      printf '    … %s\n' "$(e1_fmt_duration $secs)"
     fi
     sleep 1
     secs=$((secs + 1))
   done
   wait "$pid" || rc=$?
-  [[ -t 1 ]] && printf '\r%*s\r' $((E1_WIDTH + 24)) ''
+  ((is_tty == 1)) && printf '\r%*s\r' $((E1_WIDTH + 24)) ''
 
   if ((rc != 0)); then
     e1_err "${label}: BASARISIZ (cikis kodu ${rc})"
