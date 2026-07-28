@@ -1,0 +1,7 @@
+# Saha kurulum araci — tek dis bagimlilik.
+# Arayuz Tkinter ile; o Python ile birlikte geliyor, ayrica kurulmuyor.
+#
+# Neden sistem `ssh` komutu degil: Windows'ta parola ile otomatik giris
+# yapilamiyor (sshpass yok). paramiko hem parola hem anahtar ile calisiyor
+# ve ciktiyi satir satir okumamiza izin veriyor.
+paramiko==3.5.0
