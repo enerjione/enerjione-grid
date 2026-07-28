@@ -71,17 +71,24 @@ fi
 
 # ---- Root kontrolu --------------------------------------------------------
 e1_require_root "$@"
+e1_enable_error_trap
+E1_HELP_HINT="Kurulum kilavuzu: docs/SAHA-KURULUM.md"
 
-# ---- Banner ---------------------------------------------------------------
+# ---- Banner + kurulum ozeti ----------------------------------------------
 clear 2>/dev/null || true
 e1_banner
-echo "  ${E1_DIM}Hedef dizin :${E1_RESET} ${INSTALL_DIR}"
-echo "  ${E1_DIM}Branch      :${E1_RESET} ${BRANCH}"
-echo "  ${E1_DIM}Repo        :${E1_RESET} ${REPO_URL}"
-if [[ -n "${SUDO_USER:-}" ]]; then
-  echo "  ${E1_DIM}Sahip       :${E1_RESET} ${SUDO_USER}"
+
+# Surum burada YAZILMAZ: curl | bash modunda repo henuz klonlanmadigi icin
+# numarali surum bilinmiyor. Kurulum sonu ozetinde gosteriliyor.
+e1_box "KURULUM"
+e1_kv "Hedef dizin" "${INSTALL_DIR}"
+[[ -n "${SUDO_USER:-}" ]] && e1_kv "Dosya sahibi" "${SUDO_USER}"
+e1_rule "─"
+
+# Yanlis makinede calistirmaya karsi son kontrol. ASSUME_YES=1 ise sorulmaz.
+if ! e1_confirm_yes "Kuruluma baslansin mi?"; then
+  e1_die "Kurulum kullanici tarafindan iptal edildi."
 fi
-echo
 
 e1_set_steps 6
 
@@ -335,8 +342,10 @@ else
 fi
 
 # ---- 5/6: Build + up ------------------------------------------------------
-e1_step "Servisler build ediliyor ve ayaga kaldiriliyor..."
-e1_info "docker compose build --pull (yaklasik 3-8 dakika)..."
+e1_step "Servisler derleniyor ve ayaga kaldiriliyor..."
+e1_info "Docker imajlari derleniyor..."
+e1_hint "Bu adim 3-8 dakika surer. Ekran bir sure hareketsiz gorunebilir;"
+e1_hint "kurulum devam ediyor, kesmeyin."
 docker compose build --pull
 
 # Postgres'i once tek basina kaldirip kimlik on-kontrolunu yap. Ilk kurulumda
@@ -399,8 +408,11 @@ fi
 # install.sh non-interactive (ASSUME_YES=1) modunda systemd entegrasyonu
 # OTOMATIK yapilir. Interaktif modda kullaniciya sorulur. Eger zaten varsa
 # (idempotent) bir sey degismez.
+# Varsayilan EVET: saha cihazinda systemd kaydi istenen davranis (systemctl
+# ile yonetim + acilista garanti). Eskiden e1_confirm (varsayilan HAYIR) idi
+# ve `curl | bash` ile soru hic sorulamadigi icin kayit sessizce atlaniyordu.
 if [[ ! -f /etc/systemd/system/enerjione-grid.service ]]; then
-  if [[ "${ASSUME_YES:-0}" == "1" ]] || e1_confirm "EnerjiOne Grid'i systemd servisi olarak kaydet? (sudo systemctl ile yonetim)"; then
+  if e1_confirm_yes "EnerjiOne Grid systemd servisi olarak kaydedilsin mi? (onerilen)"; then
     if [[ -f "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" ]]; then
       bash "${INSTALL_DIR}/infra/systemd/setup-systemd.sh" || true
     fi
@@ -449,45 +461,66 @@ if [[ $APPLIANCE_WANTED -eq 1 ]]; then
 fi
 
 # ---- Final rehber ---------------------------------------------------------
+e1_step_done
 VPS_IP="$(e1_detect_ip)"
+
 echo
-echo "${E1_GREEN}${E1_BOLD}============================================================${E1_RESET}"
-echo "${E1_GREEN}${E1_BOLD}  Kurulum tamamlandi.${E1_RESET}"
-echo "${E1_GREEN}${E1_BOLD}============================================================${E1_RESET}"
-echo
-echo "  ${E1_BOLD}Web arayuzu :${E1_RESET}  http://${VPS_IP}/"
-echo "  ${E1_BOLD}Backend API :${E1_RESET}  http://${VPS_IP}/api/v1"
-echo "  ${E1_BOLD}NATS        :${E1_RESET}  nats://${VPS_IP}:4222 (auth: gateway/backend/worker)"
-echo "  ${E1_BOLD}IEC 104 out :${E1_RESET}  ${VPS_IP}:2404-2406"
-echo
-echo "  ${E1_BOLD}Ilk giris:${E1_RESET}"
-echo "    Kullanici : ${E1_CYAN}installer${E1_RESET}"
-echo "    Sifre     : ${E1_CYAN}ChangeMe123!${E1_RESET}    ${E1_YELLOW}<<< MUTLAKA DEGISTIR${E1_RESET}"
-echo
-echo "  ${E1_BOLD}Yonetim komutlari (Docker Compose):${E1_RESET}"
-echo "    Guncelleme  : cd ${INSTALL_DIR} && sudo bash update.sh"
-echo "    Kaldirma    : cd ${INSTALL_DIR} && sudo bash uninstall.sh"
-echo "    Servis log  : cd ${INSTALL_DIR} && docker compose logs -f"
-echo "    Servis dur. : cd ${INSTALL_DIR} && docker compose ps"
-echo
-echo "  ${E1_BOLD}Yonetim komutlari (systemd, kaydedildi ise):${E1_RESET}"
-echo "    Baslat      : sudo systemctl start enerjione-grid"
-echo "    Durdur      : sudo systemctl stop enerjione-grid"
-echo "    Yenile      : sudo systemctl restart enerjione-grid"
-echo "    Durum       : sudo systemctl status enerjione-grid"
-echo "    Canli log   : sudo journalctl -u enerjione-grid -f"
-echo
-echo "  ${E1_BOLD}Gateway eklemek icin:${E1_RESET}"
-echo "    Web arayuzu > Muhendislik > Gateway Yonetimi > 'Yeni Gateway'"
-echo "    Compose dosyasini indir, sahaya yukle, 'docker compose up -d'."
-echo
+e1_rule "═"
+printf '  %s%sKURULUM TAMAMLANDI%s   %ssurum %s · %s%s\n' \
+  "${E1_GREEN}" "${E1_BOLD}" "${E1_RESET}" \
+  "${E1_DIM}" "$(e1_version "${INSTALL_DIR}")" "$(e1_total_elapsed)" "${E1_RESET}"
+e1_rule "═"
+
+e1_box "1. ERISIM"
 if [[ $APPLIANCE_WANTED -eq 1 ]]; then
-  echo "  ${E1_BOLD}Appliance modu:${E1_RESET}"
-  echo "    WiFi   : ${E1_CYAN}EnerjiOne Grid${E1_RESET} (sifresiz) — baglanip http://e1-grid.local"
-  echo "    IP/DNS : Web arayuzu > Muhendislik > Sistem > Ag Ayarlari"
-  echo "    Detay  : docs/APPLIANCE.md"
-  echo
+  e1_kv "WiFi agi" "EnerjiOne Grid  (sifresiz)"
+  e1_kv "Adres" "http://e1-grid.local   veya   http://10.42.0.1"
+  e1_kv "Kablolu" "http://${VPS_IP}/"
 else
-  echo "  ${E1_DIM}Mini PC (appliance) modu icin: sudo bash infra/appliance/setup-appliance.sh${E1_RESET}"
-  echo
+  e1_kv "Web arayuzu" "http://${VPS_IP}/"
 fi
+
+e1_box "2. ILK GIRIS"
+e1_kv "Kullanici" "${E1_CYAN}installer${E1_RESET}"
+e1_kv "Sifre" "${E1_CYAN}ChangeMe123!${E1_RESET}"
+echo
+printf '  %s%sIlk giriste sifre degistirme ekrani otomatik acilir.%s\n' \
+  "${E1_YELLOW}" "${E1_BOLD}" "${E1_RESET}"
+printf '  %sYeni sifreyi guvenli bir yere not edin.%s\n' "${E1_YELLOW}" "${E1_RESET}"
+
+e1_box "3. OTOMATIK CALISMA"
+e1_ok "Cihaz kapanip acildiginda sistem kendiliginden ayaga kalkar."
+e1_hint "Docker acilista baslar; 12 servisin hepsi 'restart: unless-stopped'."
+if [[ -f /etc/systemd/system/enerjione-grid.service ]]; then
+  e1_ok "systemd servisi kayitli (enerjione-grid)."
+else
+  e1_warn "systemd servisi kayitli DEGIL — sistem yine acilista kalkar,"
+  e1_warn "ancak 'systemctl' ile yonetim icin: sudo bash infra/systemd/setup-systemd.sh"
+fi
+e1_hint "Dogrulamak icin: sudo reboot  (2-3 dk sonra arayuzu tekrar acin)"
+
+e1_box "4. GUNLUK KULLANIM"
+e1_kv "Guncelleme" "cd ${INSTALL_DIR} && sudo bash update.sh"
+e1_kv "Servis durumu" "cd ${INSTALL_DIR} && sudo docker compose ps"
+e1_kv "Canli log" "cd ${INSTALL_DIR} && sudo docker compose logs -f"
+e1_kv "Kaldirma" "cd ${INSTALL_DIR} && sudo bash uninstall.sh"
+
+if [[ $APPLIANCE_WANTED -eq 1 ]]; then
+  e1_box "5. AG AYARI"
+  e1_info "Kablolu IP/DNS: Muhendislik > Sistem > Ag Ayarlari"
+  e1_hint "Yanlis adres girerseniz WiFi agi her zaman acik kalir;"
+  e1_hint "http://10.42.0.1 uzerinden duzeltebilirsiniz."
+fi
+
+e1_box "TEKNIK BILGILER"
+e1_kv "Backend API" "http://${VPS_IP}/api/v1"
+e1_kv "NATS" "nats://${VPS_IP}:4222"
+e1_kv "IEC 104" "${VPS_IP}:2404-2406"
+e1_kv "Gateway ekleme" "Muhendislik > Cihazlar > Yeni Gateway"
+if [[ $APPLIANCE_WANTED -eq 1 ]]; then
+  e1_kv "Detayli dokuman" "docs/SAHA-KURULUM.md · docs/APPLIANCE.md"
+else
+  e1_kv "Detayli dokuman" "docs/DEPLOYMENT.md"
+  e1_hint "Mini PC modu icin: sudo bash infra/appliance/setup-appliance.sh"
+fi
+echo

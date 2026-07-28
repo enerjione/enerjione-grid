@@ -31,19 +31,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/infra/scripts/linux/_lib.sh"
 
 e1_require_root "$@"
+e1_enable_error_trap
+E1_HELP_HINT="Sorun giderme: docs/SAHA-KURULUM.md"
 
 TARGET="${1:-all}"
 
 cd "$SCRIPT_DIR"
 
+# Update oncesi HEAD — sonda "neler degisti" ozeti icin.
+PREV_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
+
 # ---- Banner ---------------------------------------------------------------
 clear 2>/dev/null || true
 e1_banner
-echo "  ${E1_DIM}Dizin       :${E1_RESET} ${SCRIPT_DIR}"
-echo "  ${E1_DIM}Hedef       :${E1_RESET} ${TARGET}"
-echo "  ${E1_DIM}Branch      :${E1_RESET} $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
-echo "  ${E1_DIM}Onceki HEAD :${E1_RESET} $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
-echo
+
+PREV_VERSION="$(e1_version "$SCRIPT_DIR")"
+e1_box "GUNCELLEME"
+e1_kv "Dizin" "${SCRIPT_DIR}"
+e1_kv "Hedef" "$([[ "$TARGET" == "all" ]] && echo "Tum servisler" || echo "$TARGET")"
+e1_kv "Mevcut surum" "${PREV_VERSION}"
+e1_rule "─"
 
 # Appliance (mini PC) modu kurulu mu? Kuruluysa her update'te host katmani da
 # (ag ajani, systemd unit'leri, AP profili) yeni surume tazelenir — kullanici
@@ -373,17 +380,59 @@ PY
   fi
 fi
 
+e1_step_done
+
+NEW_VERSION="$(e1_version "$SCRIPT_DIR")"
 echo
-echo "${E1_GREEN}${E1_BOLD}Update tamamlandi.${E1_RESET}"
+e1_rule "═"
+if [[ "$PREV_VERSION" != "$NEW_VERSION" ]]; then
+  printf '  %s%sGUNCELLEME TAMAMLANDI%s   %s%s → %s · %s%s\n' \
+    "${E1_GREEN}" "${E1_BOLD}" "${E1_RESET}" \
+    "${E1_DIM}" "$PREV_VERSION" "$NEW_VERSION" "$(e1_total_elapsed)" "${E1_RESET}"
+else
+  printf '  %s%sGUNCELLEME TAMAMLANDI%s   %ssurum %s · %s%s\n' \
+    "${E1_GREEN}" "${E1_BOLD}" "${E1_RESET}" \
+    "${E1_DIM}" "$NEW_VERSION" "$(e1_total_elapsed)" "${E1_RESET}"
+fi
+e1_rule "═"
+
+# Bu update'te ne degisti? Operator neyi test edecegini bilsin.
+NEW_HEAD_FULL="$(git rev-parse HEAD 2>/dev/null || echo '')"
+if [[ -n "$PREV_HEAD" && -n "$NEW_HEAD_FULL" && "$PREV_HEAD" != "$NEW_HEAD_FULL" ]]; then
+  CHANGE_COUNT="$(git rev-list --count "${PREV_HEAD}..${NEW_HEAD_FULL}" 2>/dev/null || echo 0)"
+  e1_box "BU GUNCELLEMEDE NELER DEGISTI (${CHANGE_COUNT} degisiklik)"
+  git --no-pager log "${PREV_HEAD}..${NEW_HEAD_FULL}" \
+      --format="  · %s" --no-merges 2>/dev/null | head -15
+  if [[ "$CHANGE_COUNT" -gt 15 ]]; then
+    e1_hint "... ve $((CHANGE_COUNT - 15)) degisiklik daha"
+  fi
+else
+  e1_box "SURUM"
+  e1_info "Yeni degisiklik yoktu — zaten guncel surumdesiniz."
+fi
+
+e1_box "SERVIS DURUMU"
+docker compose ps
+UNHEALTHY="$(docker compose ps --format '{{.Name}} {{.State}}' 2>/dev/null \
+             | grep -viE 'running|up' | wc -l || echo 0)"
 echo
+if [[ "$UNHEALTHY" -gt 0 ]]; then
+  e1_warn "${UNHEALTHY} servis calismiyor gorunuyor. Log: sudo docker compose logs --tail 50"
+else
+  e1_ok "Tum servisler calisiyor."
+fi
+
 if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
   APPLIANCE_HOST="$(hostnamectl --static 2>/dev/null || echo e1-grid)"
-  echo "  ${E1_BOLD}Appliance:${E1_RESET} WiFi 'EnerjiOne Grid' · http://${APPLIANCE_HOST}.local"
-  echo "  ${E1_DIM}Ag durumu: cat /var/lib/e1-grid/net/state.json${E1_RESET}"
-  echo
+  e1_box "APPLIANCE"
+  e1_kv "WiFi agi" "EnerjiOne Grid  (sifresiz)"
+  e1_kv "Adres" "http://${APPLIANCE_HOST}.local   veya   http://10.42.0.1"
+  e1_kv "Ag durumu" "cat /var/lib/e1-grid/net/state.json"
 fi
-echo "  ${E1_BOLD}Servis durumu:${E1_RESET}"
-docker compose ps
+
 echo
-echo "  ${E1_DIM}Tarayicidan Ctrl+Shift+R ile hard refresh edin (yeni frontend).${E1_RESET}"
+printf '  %s%sSON ADIM:%s tarayicida %sCtrl + Shift + R%s ile sayfayi yenileyin.\n' \
+  "${E1_YELLOW}" "${E1_BOLD}" "${E1_RESET}" "${E1_BOLD}" "${E1_RESET}"
+printf '  %sYenilemezseniz tarayici eski arayuzu gostermeye devam eder.%s\n' \
+  "${E1_DIM}" "${E1_RESET}"
 echo

@@ -51,14 +51,31 @@ Aşağıdaki **tek satırı** olduğu gibi kopyalayıp terminale yapıştırın 
 Enter'a basın:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo ASSUME_YES=1 bash
+curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
 ```
 
 Sudo şifrenizi soracaktır; kullanıcı şifrenizi yazın (yazarken ekranda
 görünmez, normaldir).
 
-> `ASSUME_YES=1` kısmı **hiç soru sormamasını** sağlar. Bunu yazmazsanız
-> kurulum bazı yerlerde onay ister ve beklemede kalır.
+### Kurulum size ne soracak?
+
+Üç soru sorulur. **Hepsinde sadece Enter'a basmanız yeterlidir** — köşeli
+parantezteki büyük harf varsayılan cevaptır (`[E/h]` → varsayılan Evet).
+
+| Soru | Cevap |
+|---|---|
+| `Kuruluma baslansin mi?` | **Enter** (Evet) |
+| `Appliance modu kurulsun mu?` | **Enter** (Evet) — WiFi ağı ve `e1-grid.local` bunu gerektirir |
+| `systemd servisi olarak kaydedilsin mi?` | **Enter** (Evet) — açılışta otomatik başlaması için |
+
+Soru başına 5 dakika süre vardır; cevap gelmezse varsayılan uygulanır ve
+kurulum devam eder, takılıp kalmaz.
+
+> **Hiç soru istemiyorsanız** komutu şöyle çalıştırın — hepsine otomatik
+> Evet denir:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo ASSUME_YES=1 bash
+> ```
 
 ---
 

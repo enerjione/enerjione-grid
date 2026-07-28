@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
-# EnerjiOne Grid — install/update/uninstall icin ortak banner + log helpers.
+# EnerjiOne Grid — install/update/uninstall icin ortak arayuz katmani.
 # Bu dosya 'source' ile dahil edilir, bagimsiz calistirilmaz.
+#
+# Tasarim notlari:
+#   * Tum ciktilar 74 karakterlik sabit bir govdeye hizalanir; adim satirlari,
+#     kutular ve ozet ayni kenar cizgisini paylasir.
+#   * Renk yalnizca stdout bir terminal ise kullanilir — `| tee`, journalctl
+#     veya dosyaya yonlendirmede duz metin kalir.
+#   * Sorular /dev/tty uzerinden okunur. `curl ... | sudo bash` kullaniminda
+#     stdin BORU HATTIDIR; eski surum bu yuzden hicbir soru soramiyor ve
+#     sessizce varsayilana dusuyordu (systemd kaydi bu yuzden atlaniyordu).
 
-# Renkli output (sadece tty ise) — pipe/journalctl'a duz metin gider.
+# ---------------------------------------------------------------------------
+# Renk paleti
+# ---------------------------------------------------------------------------
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
   E1_RED=$'\033[0;31m'
   E1_GREEN=$'\033[0;32m'
@@ -16,13 +27,13 @@ else
   E1_RED='' E1_GREEN='' E1_YELLOW='' E1_BLUE='' E1_CYAN='' E1_BOLD='' E1_DIM='' E1_RESET=''
 fi
 
-# Banner — repo kokunde aynisini yazmak yerine tek yerden basariz.
-# Tire + alt-cizgi karisik, "ENERJIONE GRID" stilize.
+# Govde genisligi — kutular ve ayraclar bunu kullanir.
+E1_WIDTH=74
+
+# ---------------------------------------------------------------------------
+# Banner
+# ---------------------------------------------------------------------------
 e1_banner() {
-  # 'subtitle' parametresi geriye uyumluluk icin alinir ama yazdirilmaz —
-  # banner sade olsun, alt-baslik sahip oldugu adim/durum mesaji yeterli.
-  cat <<'BANNER'
-BANNER
   printf '%s%s\n' "${E1_CYAN}" "${E1_BOLD}"
   printf '  ███████╗███╗   ██╗███████╗██████╗      ██╗██╗ ██████╗ ███╗   ██╗███████╗\n'
   printf '  ██╔════╝████╗  ██║██╔════╝██╔══██╗     ██║██║██╔═══██╗████╗  ██║██╔════╝\n'
@@ -40,59 +51,221 @@ BANNER
   printf '%s             Industrial Grid Monitoring Platform%s\n\n' "${E1_DIM}" "${E1_RESET}"
 }
 
-# Adim sayisi — ana adimlar [1/5] tarzi prefix icin.
-E1_STEP_TOTAL=0
-E1_STEP_CURRENT=0
-e1_set_steps() { E1_STEP_TOTAL="$1"; E1_STEP_CURRENT=0; }
-e1_step() {
-  E1_STEP_CURRENT=$((E1_STEP_CURRENT + 1))
-  echo
-  echo "${E1_BOLD}${E1_BLUE}[${E1_STEP_CURRENT}/${E1_STEP_TOTAL}]${E1_RESET} ${E1_BOLD}$*${E1_RESET}"
+# ---------------------------------------------------------------------------
+# Kutular ve satirlar
+# ---------------------------------------------------------------------------
+e1_rule() {
+  local ch="${1:-─}" out=""
+  local i
+  for ((i = 0; i < E1_WIDTH; i++)); do out+="$ch"; done
+  printf '  %s%s%s\n' "${E1_DIM}" "$out" "${E1_RESET}"
 }
 
-# Log seviyeleri — her birinin renkli prefix'i var.
-e1_info() { echo "  ${E1_CYAN}>${E1_RESET} $*"; }
-e1_ok()   { echo "  ${E1_GREEN}OK${E1_RESET}  $*"; }
-e1_warn() { echo "  ${E1_YELLOW}!${E1_RESET}   $*" >&2; }
-e1_err()  { echo "  ${E1_RED}X${E1_RESET}   $*" >&2; }
+# Baslikli kutu acilisi: e1_box "KURULUM ÖZETİ"
+e1_box() {
+  local title="$1"
+  echo
+  e1_rule "─"
+  printf '  %s%s%s\n' "${E1_BOLD}" "$title" "${E1_RESET}"
+  e1_rule "─"
+}
 
-# Hata + cikis — son hata mesajini vurgulu basar.
+# Hizali anahtar/deger satiri: e1_kv "Hedef dizin" "/opt/enerjione-grid"
+e1_kv() {
+  printf '  %s%-16s%s %s\n' "${E1_DIM}" "$1" "${E1_RESET}" "$2"
+}
+
+# ---------------------------------------------------------------------------
+# Adimlar — sure olcumu ile
+# ---------------------------------------------------------------------------
+E1_STEP_TOTAL=0
+E1_STEP_CURRENT=0
+E1_STEP_STARTED_AT=0
+# Acik adim var mi? `E1_STEP_STARTED_AT > 0` ile kontrol ETMEYIN: ilk adim
+# script'in 0. saniyesinde baslarsa degeri 0 kalir ve suresi hic basilmaz.
+E1_STEP_ACTIVE=0
+E1_RUN_STARTED_AT=$SECONDS
+
+e1_set_steps() {
+  E1_STEP_TOTAL="$1"
+  E1_STEP_CURRENT=0
+  E1_STEP_ACTIVE=0
+  E1_RUN_STARTED_AT=$SECONDS
+}
+
+# Saniyeyi "1 dk 12 sn" gibi okunur hale getirir.
+e1_fmt_duration() {
+  local s="${1:-0}"
+  if ((s < 60)); then
+    printf '%d sn' "$s"
+  else
+    printf '%d dk %d sn' "$((s / 60))" "$((s % 60))"
+  fi
+}
+
+# Onceki adimin suresini kapatip yenisini acar.
+e1_step() {
+  if ((E1_STEP_ACTIVE == 1)); then
+    printf '  %s└ %s%s\n' "${E1_DIM}" "$(e1_fmt_duration $((SECONDS - E1_STEP_STARTED_AT)))" "${E1_RESET}"
+  fi
+  E1_STEP_CURRENT=$((E1_STEP_CURRENT + 1))
+  E1_STEP_STARTED_AT=$SECONDS
+  E1_STEP_ACTIVE=1
+  echo
+  printf '  %s%s[%d/%d]%s %s%s%s\n' \
+    "${E1_BOLD}" "${E1_BLUE}" "$E1_STEP_CURRENT" "$E1_STEP_TOTAL" "${E1_RESET}" \
+    "${E1_BOLD}" "$*" "${E1_RESET}"
+}
+
+# Son adimin suresini kapat (ozet oncesi cagirilir).
+e1_step_done() {
+  if ((E1_STEP_ACTIVE == 1)); then
+    printf '  %s└ %s%s\n' "${E1_DIM}" "$(e1_fmt_duration $((SECONDS - E1_STEP_STARTED_AT)))" "${E1_RESET}"
+    E1_STEP_ACTIVE=0
+  fi
+}
+
+e1_total_elapsed() { e1_fmt_duration $((SECONDS - E1_RUN_STARTED_AT)); }
+
+# ---------------------------------------------------------------------------
+# Log seviyeleri
+# ---------------------------------------------------------------------------
+e1_info() { printf '  %s·%s %s\n' "${E1_CYAN}" "${E1_RESET}" "$*"; }
+e1_ok()   { printf '  %s✓%s %s\n' "${E1_GREEN}" "${E1_RESET}" "$*"; }
+e1_warn() { printf '  %s!%s %s\n' "${E1_YELLOW}" "${E1_RESET}" "$*" >&2; }
+e1_err()  { printf '  %s✗%s %s\n' "${E1_RED}" "${E1_RESET}" "$*" >&2; }
+
+# Uzun surecek adimlar icin beklenti yonetimi — kullanici donduk sanmasin.
+e1_hint() { printf '  %s  %s%s\n' "${E1_DIM}" "$*" "${E1_RESET}"; }
+
+# ---------------------------------------------------------------------------
+# Hata cikisi + beklenmeyen hata yakalayici
+# ---------------------------------------------------------------------------
+E1_DYING=0
+
 e1_die() {
+  E1_DYING=1
+  e1_step_done
   echo >&2
-  echo "${E1_RED}${E1_BOLD}HATA:${E1_RESET} $*" >&2
+  e1_rule "═" >&2
+  printf '  %s%sKURULUM DURDU%s\n' "${E1_RED}" "${E1_BOLD}" "${E1_RESET}" >&2
+  e1_rule "═" >&2
   echo >&2
+  printf '  %b\n' "$*" >&2
+  echo >&2
+  if [[ -n "${E1_HELP_HINT:-}" ]]; then
+    printf '  %s%s%s\n\n' "${E1_DIM}" "${E1_HELP_HINT}" "${E1_RESET}" >&2
+  fi
   exit 1
 }
 
-# Onay sorma — --yes/-y bypass icin ASSUME_YES degiskeni dis kodda set
-# edilebilir. tty yoksa default reddet (curl | bash icin onay gerektiren
-# adimlari atla).
+# `set -e` altinda beklenmeyen bir komut patlarsa sessizce kapanmak yerine
+# nerede kirildigini soyler. install.sh/update.sh basinda etkinlestirilir.
+e1__on_error() {
+  local code="$1" line="$2" cmd="$3"
+  [[ "$E1_DYING" == "1" ]] && return 0
+  e1_step_done
+  echo >&2
+  e1_rule "═" >&2
+  printf '  %s%sBEKLENMEYEN HATA%s\n' "${E1_RED}" "${E1_BOLD}" "${E1_RESET}" >&2
+  e1_rule "═" >&2
+  echo >&2
+  printf '  %sSatir      :%s %s\n' "${E1_DIM}" "${E1_RESET}" "$line" >&2
+  printf '  %sKomut      :%s %s\n' "${E1_DIM}" "${E1_RESET}" "$cmd" >&2
+  printf '  %sCikis kodu :%s %s\n' "${E1_DIM}" "${E1_RESET}" "$code" >&2
+  echo >&2
+  printf '  Bu ciktinin tamamini teknik destege iletin.\n' >&2
+  echo >&2
+  exit "$code"
+}
+
+e1_enable_error_trap() {
+  trap 'e1__on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
+}
+
+# ---------------------------------------------------------------------------
+# Sorular — /dev/tty uzerinden (curl | bash ile de calisir)
+# ---------------------------------------------------------------------------
+# Okuma kaynagi: stdin terminal ise stdin, degilse /dev/tty. Ikisi de yoksa
+# (systemd, cron, CI) soru sorulamaz; cagiran varsayilana duser.
+_e1_read_src() {
+  if [[ -t 0 ]]; then printf '/dev/stdin'; return 0; fi
+  # `-r` yetmez: kontrol terminali olmayan ortamlarda (systemd, bazi
+  # konteynerler) /dev/tty dosya olarak gorunur ama ACILAMAZ ve bash ham
+  # bir "No such device or address" hatasi sizdirir. Gercekten acilabiliyor
+  # mu diye deneriz.
+  if [[ -r /dev/tty ]] && (: < /dev/tty) 2>/dev/null; then
+    printf '/dev/tty'
+    return 0
+  fi
+  return 1
+}
+
+# Cevap gelmezse sonsuza kadar beklemeyiz: /dev/tty erisilebilir ama kimsenin
+# basinda olmadigi bir ortamda (konsola bagli cron/systemd) deploy asili
+# kalirdi. Sure dolunca varsayilan uygulanir ve bu ekrana yazilir.
+E1_PROMPT_TIMEOUT="${E1_PROMPT_TIMEOUT:-300}"
+
+# Evet/Hayir — varsayilan HAYIR. "e/evet/y/yes" kabul edilir.
 e1_confirm() {
-  local prompt="${1:-Devam edilsin mi?}"
+  local prompt="${1:-Devam edilsin mi?}" src ans
   if [[ "${ASSUME_YES:-0}" == "1" ]]; then return 0; fi
-  if [[ ! -t 0 ]]; then
-    e1_warn "Interaktif olmayan ortam (tty yok). Default: HAYIR."
+  if ! src="$(_e1_read_src)"; then
+    e1_warn "Terminal yok — soru sorulamadi, varsayilan kullanildi: HAYIR"
     return 1
   fi
-  read -r -p "  ${E1_YELLOW}?${E1_RESET}   ${prompt} [y/N]: " ans
-  [[ "$ans" =~ ^[yY]([eE][sS])?$ ]]
+  printf '  %s?%s %s %s[e/H]%s ' "${E1_YELLOW}" "${E1_RESET}" "$prompt" "${E1_DIM}" "${E1_RESET}"
+  if ! read -r -t "$E1_PROMPT_TIMEOUT" ans < "$src"; then
+    ans=""
+    echo
+    e1_warn "Sure doldu — varsayilan kullanildi: HAYIR"
+  fi
+  [[ "$ans" =~ ^([eE]([vV][eE][tT])?|[yY]([eE][sS])?)$ ]]
 }
 
-# Onay sorma — varsayilan EVET. Otomatik tespit sonucu "bu makine appliance"
-# gibi guclu bir sinyal varken kullaniciya sadece "istemiyorsan hayir de"
-# demek icin. tty yoksa (curl | bash) EVET kabul edilir.
+# Evet/Hayir — varsayilan EVET. Guclu bir otomatik tespit varken kullanilir.
 e1_confirm_yes() {
-  local prompt="${1:-Devam edilsin mi?}"
+  local prompt="${1:-Devam edilsin mi?}" src ans
   if [[ "${ASSUME_YES:-0}" == "1" ]]; then return 0; fi
-  if [[ ! -t 0 ]]; then return 0; fi
-  read -r -p "  ${E1_YELLOW}?${E1_RESET}   ${prompt} [Y/n]: " ans
-  [[ ! "$ans" =~ ^[nN]([oO])?$ ]]
+  if ! src="$(_e1_read_src)"; then
+    e1_warn "Terminal yok — soru sorulamadi, varsayilan kullanildi: EVET"
+    return 0
+  fi
+  printf '  %s?%s %s %s[E/h]%s ' "${E1_YELLOW}" "${E1_RESET}" "$prompt" "${E1_DIM}" "${E1_RESET}"
+  if ! read -r -t "$E1_PROMPT_TIMEOUT" ans < "$src"; then
+    ans=""
+    echo
+    e1_warn "Sure doldu — varsayilan kullanildi: EVET"
+  fi
+  [[ ! "$ans" =~ ^([hH]([aA][yY][iI][rR])?|[nN]([oO])?)$ ]]
 }
 
+# Serbest metin sorusu — bos birakilirsa varsayilan doner.
+#   ad="$(e1_ask 'Cihaz adi' 'e1-grid')"
+e1_ask() {
+  local prompt="$1" default="${2:-}" src ans
+  if [[ "${ASSUME_YES:-0}" == "1" ]] || ! src="$(_e1_read_src)"; then
+    printf '%s' "$default"
+    return 0
+  fi
+  if [[ -n "$default" ]]; then
+    printf '  %s?%s %s %s[%s]%s ' "${E1_YELLOW}" "${E1_RESET}" "$prompt" "${E1_DIM}" "$default" "${E1_RESET}" >&2
+  else
+    printf '  %s?%s %s ' "${E1_YELLOW}" "${E1_RESET}" "$prompt" >&2
+  fi
+  read -r -t "$E1_PROMPT_TIMEOUT" ans < "$src" || ans=""
+  printf '%s' "${ans:-$default}"
+}
+
+# Bu calistirmada soru sorulabilir mi? Ozet metinlerinde kullanilir.
+e1_can_prompt() { [[ "${ASSUME_YES:-0}" != "1" ]] && _e1_read_src >/dev/null; }
+
+# ---------------------------------------------------------------------------
+# Ortam tespiti
+# ---------------------------------------------------------------------------
 # Makinede WiFi arayuzu var mi? Appliance (mini PC) modunu otomatik acmak
-# icin kullanilir: bulut sunuculari/VPS'lerde WiFi karti YOKTUR, saha mini
-# PC'lerinde vardir. sysfs uzerinden bakariz — hicbir paket gerektirmez
-# (nmcli/iw bu asamada henuz kurulu olmayabilir).
+# icin: VPS'lerde WiFi karti YOKTUR, saha mini PC'lerinde vardir. sysfs
+# uzerinden bakariz — nmcli/iw bu asamada henuz kurulu olmayabilir.
 e1_has_wifi() {
   local dir
   for dir in /sys/class/net/*/wireless; do
@@ -110,10 +283,21 @@ e1_appliance_installed() {
   [[ -f /etc/systemd/system/e1-netd.path ]] || [[ -d /var/lib/e1-grid/net ]]
 }
 
-# Root kontrolu — install/uninstall icin zorunlu.
+# Urun surumu — tek kanonik kaynak apps/frontend-web/package.json "version".
+# Branch adi kullanici icin anlamsiz; ekranlarda numarali surum gosterilir.
+# Argüman: repo koku (verilmezse calisilan dizin).
+e1_version() {
+  local root="${1:-.}" pkg="${1:-.}/apps/frontend-web/package.json" v=""
+  [[ -f "$pkg" ]] || { echo "?"; return 0; }
+  v="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pkg" | head -1)"
+  echo "${v:-?}"
+  unset root
+}
+
+# Root kontrolu — install/update/uninstall icin zorunlu.
 e1_require_root() {
   if [[ $EUID -ne 0 ]]; then
-    e1_die "Bu komut root yetkisi ile calismali. Su sekilde:\n         sudo bash $0 $*"
+    e1_die "Bu komut yonetici (root) yetkisi ile calismali:\n\n      sudo bash $0 $*"
   fi
 }
 
@@ -144,15 +328,11 @@ e1_chown_target_recursive() {
 # bos string'in exit=0 dondurmesi tuzak; her adimi explicit kontrol et.
 e1_detect_ip() {
   local ip=""
-  # 1. hostname -I — Linux'ta her zaman calisir, network olmasa bile
-  #    aktif interface IP'sini doner. Birden fazla varsa ilkini al.
   ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
   if [[ -n "$ip" ]] && [[ "$ip" != "127.0.0.1" ]] && [[ "$ip" != "<vds-ip>" ]]; then
     echo "$ip"
     return 0
   fi
-  # 2. Fallback: ifconfig.me public IP (network gerektirir, NAT arkasinda VPS
-  #    icin gercek public IP'yi verir).
   ip="$(curl -fsS --max-time 3 ifconfig.me 2>/dev/null || true)"
   if [[ -n "$ip" ]]; then
     echo "$ip"
