@@ -293,7 +293,8 @@ class InstallWorker(threading.Thread):
     def run(self) -> None:
         action = self.cfg.get("action", "install")
         label = {"install": "Kurulum", "update": "Guncelleme",
-                 "uninstall": "Kaldirma"}.get(action, "Islem")
+                 "uninstall": "Kaldirma", "appliance": "Mini PC katmani",
+                 "tailscale": "VPN kurulumu"}.get(action, "Islem")
         try:
             self._connect()
             if self._stop.is_set():
@@ -321,6 +322,19 @@ class InstallWorker(threading.Thread):
                 rc = self._remote_only(
                     f"sudo -S -p '' bash {APP_DIR}/uninstall.sh {flags}",
                     "Kaldiriliyor...")
+            elif action == "appliance":
+                # Mini PC katmani: WiFi AP + e1-grid.local + ag ajani.
+                # Kurulumda WiFi karti yoksa atlaniyor; sonradan elle
+                # kurmak icin bu yol var (arayuz de ayni komutu oneriyor).
+                rc = self._remote_only(
+                    f"sudo -S -p '' bash {APP_DIR}/infra/appliance/setup-appliance.sh",
+                    "Mini PC katmani kuruluyor...")
+            elif action == "tailscale":
+                # Anahtar /etc/enerjione-grid/install.env'de; script onu
+                # kendisi okuyor. Anahtar yoksa hicbir sey yapmadan 0 doner.
+                rc = self._remote_only(
+                    f"sudo -S -p '' bash {APP_DIR}/infra/appliance/setup-tailscale.sh",
+                    "Uzaktan bakim VPN'i kuruluyor...")
             else:
                 return self.done(False, f"Bilinmeyen islem: {action}")
 
@@ -633,6 +647,16 @@ class InstallerApp(tk.Tk):
         self.start_btn.pack(fill="x", pady=2)
         self.update_btn = ttk.Button(btns, text="Guncelle", command=self._update)
         self.update_btn.pack(fill="x", pady=2)
+        # Sonradan kurulabilen katmanlar. Kurulum sirasinda atlanmis olabilir
+        # (or. sanal makinede WiFi karti yok -> appliance atlanir).
+        ttk.Separator(btns, orient="horizontal").pack(fill="x", pady=(8, 4))
+        self.appliance_btn = ttk.Button(btns, text="Mini PC katmanini kur",
+                                        command=lambda: self._extra("appliance"))
+        self.appliance_btn.pack(fill="x", pady=2)
+        self.tailscale_btn = ttk.Button(btns, text="Uzaktan bakim VPN'ini kur",
+                                        command=lambda: self._extra("tailscale"))
+        self.tailscale_btn.pack(fill="x", pady=2)
+
         # Kaldirma en altta ve ayri: yanlislikla tiklanacak yerde durmasin.
         self.uninstall_btn = ttk.Button(btns, text="Sistemi Kaldir", command=self._uninstall)
         self.uninstall_btn.pack(fill="x", pady=(8, 2))
@@ -782,6 +806,34 @@ class InstallerApp(tk.Tk):
         self.term.write("\n-- Guncelleme baslatiliyor --\n")
         self._run_worker(cfg, test_only=False)
 
+    def _extra(self, action: str) -> None:
+        """Sonradan kurulabilen katmanlar (mini PC / VPN).
+
+        Ikisi de cihazdaki hazir scriptleri calistiriyor; kurulum sirasinda
+        atlanmis olabilirler (or. sanal makinede WiFi karti yok -> appliance
+        atlanir, anahtar verilmemisse VPN atlanir).
+        """
+        cfg = self._collect()
+        if not cfg:
+            return
+        aciklama = {
+            "appliance": ("Mini PC katmani kurulacak:\n\n"
+                          "  - Sifresiz 'EnerjiOne Grid' WiFi agi\n"
+                          "  - e1-grid.local adresi (mDNS)\n"
+                          "  - Arayuzden IP/DNS ayari yapan ag ajani\n\n"
+                          "Cihazin ag ayarlari degisecek. Devam edilsin mi?"),
+            "tailscale": ("Uzaktan bakim VPN'i kurulacak.\n\n"
+                          "Anahtar cihazdaki /etc/enerjione-grid/install.env\n"
+                          "dosyasindan okunur; yoksa islem bir sey yapmaz.\n\n"
+                          "Devam edilsin mi?"),
+        }[action]
+        if not messagebox.askyesno(APP_TITLE, f"{cfg['user']}@{cfg['host']}\n\n{aciklama}"):
+            return
+        cfg["action"] = action
+        baslik = {"appliance": "Mini PC katmani", "tailscale": "VPN kurulumu"}[action]
+        self.term.write(f"\n-- {baslik} --\n")
+        self._run_worker(cfg, test_only=False)
+
     def _uninstall(self) -> None:
         cfg = self._collect()
         if not cfg:
@@ -823,7 +875,8 @@ class InstallerApp(tk.Tk):
             self.status_lbl.configure(text="Iptal ediliyor...")
 
     def _busy(self, on: bool) -> None:
-        for b in (self.start_btn, self.test_btn, self.update_btn, self.uninstall_btn):
+        for b in (self.start_btn, self.test_btn, self.update_btn,
+                  self.uninstall_btn, self.appliance_btn, self.tailscale_btn):
             b.configure(state="disabled" if on else "normal")
         self.cancel_btn.configure(state="normal" if on else "disabled")
         if on:

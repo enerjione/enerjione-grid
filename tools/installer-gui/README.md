@@ -47,6 +47,18 @@ Windows'ta çift tıklamayla açmak için `EnerjiOne-Kurulum.bat` kullanın.
 
 Bittiğinde arayüz adresi ve ilk giriş bilgileri terminale yazılır.
 
+## Sonradan kurulabilen katmanlar
+
+Kurulum sırasında atlanmış olabilecek iki katman ayrı butonlarla kurulur:
+
+| Buton | Ne yapar | Neden atlanmış olabilir |
+|---|---|---|
+| **Mini PC katmanını kur** | Şifresiz "EnerjiOne Grid" WiFi ağı, `e1-grid.local` adresi, arayüzden IP/DNS ayarı yapan ağ ajanı | Kurulumda WiFi kartı bulunamadıysa (sanal makine, sunucu) otomatik atlanır |
+| **Uzaktan bakım VPN'ini kur** | Tailscale ile tailnet'e katılım | Kurulumda anahtar verilmediyse atlanır |
+
+Uygulamanın Ağ Ayarları sayfası "Appliance modu kurulu değil" diyorsa
+birinci butonu kullanın — aynı işi yapar, SSH'a girmenize gerek kalmaz.
+
 ## Ne yapıyor
 
 1. SSH ile bağlanır
