@@ -20,11 +20,16 @@ if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
   E1_YELLOW=$'\033[1;33m'
   E1_BLUE=$'\033[0;34m'
   E1_CYAN=$'\033[0;36m'
+  E1_WHITE=$'\033[97m'
+  # Marka turuncusu (#e67c00). 256 renk paletinde en yakin ton 208; 8 renkli
+  # eski terminallerde otomatik olarak sariya duser.
+  E1_ORANGE=$'\033[38;5;208m'
   E1_BOLD=$'\033[1m'
   E1_DIM=$'\033[2m'
   E1_RESET=$'\033[0m'
 else
-  E1_RED='' E1_GREEN='' E1_YELLOW='' E1_BLUE='' E1_CYAN='' E1_BOLD='' E1_DIM='' E1_RESET=''
+  E1_RED='' E1_GREEN='' E1_YELLOW='' E1_BLUE='' E1_CYAN='' E1_WHITE='' E1_ORANGE=''
+  E1_BOLD='' E1_DIM='' E1_RESET=''
 fi
 
 # Govde genisligi — kutular ve ayraclar bunu kullanir.
@@ -33,22 +38,40 @@ E1_WIDTH=74
 # ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
+# "ENERJI" BEYAZ, "ONE" ve "GRID" TURUNCU.
+# ASCII sanatinda harfler bitisik oldugu icin ayirici bosluk sutunu yok;
+# bolme noktasi (45. sutun) harf genislikleri sayilarak bulundu. Sanat
+# degistirilirse bu satirlarin ikiye ayrilmasi da yeniden hesaplanmali.
 e1_banner() {
-  printf '%s%s\n' "${E1_CYAN}" "${E1_BOLD}"
-  printf '  ███████╗███╗   ██╗███████╗██████╗      ██╗██╗ ██████╗ ███╗   ██╗███████╗\n'
-  printf '  ██╔════╝████╗  ██║██╔════╝██╔══██╗     ██║██║██╔═══██╗████╗  ██║██╔════╝\n'
-  printf '  █████╗  ██╔██╗ ██║█████╗  ██████╔╝     ██║██║██║   ██║██╔██╗ ██║█████╗  \n'
-  printf '  ██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██   ██║██║██║   ██║██║╚██╗██║██╔══╝  \n'
-  printf '  ███████╗██║ ╚████║███████╗██║  ██║╚█████╔╝██║╚██████╔╝██║ ╚████║███████╗\n'
-  printf '  ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚════╝ ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝\n'
-  printf '                         ██████╗ ██████╗ ██╗██████╗ \n'
-  printf '                        ██╔════╝ ██╔══██╗██║██╔══██╗\n'
-  printf '                        ██║  ███╗██████╔╝██║██║  ██║\n'
-  printf '                        ██║   ██║██╔══██╗██║██║  ██║\n'
-  printf '                        ╚██████╔╝██║  ██║██║██████╔╝\n'
-  printf '                         ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝ \n'
-  printf '%s' "${E1_RESET}"
-  printf '%s             Industrial Grid Monitoring Platform%s\n\n' "${E1_DIM}" "${E1_RESET}"
+  local w="${E1_WHITE}${E1_BOLD}" o="${E1_ORANGE}${E1_BOLD}" r="${E1_RESET}"
+  echo
+  printf '  %s███████╗███╗   ██╗███████╗██████╗      ██╗██╗%s%s ██████╗ ███╗   ██╗███████╗%s\n' "$w" "$r" "$o" "$r"
+  printf '  %s██╔════╝████╗  ██║██╔════╝██╔══██╗     ██║██║%s%s██╔═══██╗████╗  ██║██╔════╝%s\n' "$w" "$r" "$o" "$r"
+  printf '  %s█████╗  ██╔██╗ ██║█████╗  ██████╔╝     ██║██║%s%s██║   ██║██╔██╗ ██║█████╗  %s\n' "$w" "$r" "$o" "$r"
+  printf '  %s██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██   ██║██║%s%s██║   ██║██║╚██╗██║██╔══╝  %s\n' "$w" "$r" "$o" "$r"
+  printf '  %s███████╗██║ ╚████║███████╗██║  ██║╚█████╔╝██║%s%s╚██████╔╝██║ ╚████║███████╗%s\n' "$w" "$r" "$o" "$r"
+  printf '  %s╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚════╝ ╚═╝%s%s ╚═════╝ ╚═╝  ╚═══╝╚══════╝%s\n' "$w" "$r" "$o" "$r"
+  printf '  %s                       ██████╗ ██████╗ ██╗██████╗ %s\n' "$o" "$r"
+  printf '  %s                      ██╔════╝ ██╔══██╗██║██╔══██╗%s\n' "$o" "$r"
+  printf '  %s                      ██║  ███╗██████╔╝██║██║  ██║%s\n' "$o" "$r"
+  printf '  %s                      ██║   ██║██╔══██╗██║██║  ██║%s\n' "$o" "$r"
+  printf '  %s                      ╚██████╔╝██║  ██║██║██████╔╝%s\n' "$o" "$r"
+  printf '  %s                       ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝ %s\n' "$o" "$r"
+  printf '%s             Industrial Grid Monitoring Platform%s\n' "${E1_DIM}" "${E1_RESET}"
+}
+
+# Adim basliklarinda tekrarlanan tek satirlik marka seridi.
+# Surum numarasi E1_VERSION_LABEL set edildiginde gosterilir — install.sh
+# repo klonlandiktan SONRA doldurur (oncesinde bilinmiyor).
+E1_VERSION_LABEL="${E1_VERSION_LABEL:-}"
+e1_brand() {
+  printf '%s%sENERJI%s%s%sONE%s %s%sGRID%s' \
+    "${E1_WHITE}" "${E1_BOLD}" "${E1_RESET}" \
+    "${E1_ORANGE}" "${E1_BOLD}" "${E1_RESET}" \
+    "${E1_ORANGE}" "${E1_BOLD}" "${E1_RESET}"
+  if [[ -n "$E1_VERSION_LABEL" ]]; then
+    printf '%s  v%s%s' "${E1_DIM}" "$E1_VERSION_LABEL" "${E1_RESET}"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -112,9 +135,20 @@ e1_step() {
   E1_STEP_STARTED_AT=$SECONDS
   E1_STEP_ACTIVE=1
   echo
-  printf '  %s%s[%d/%d]%s %s%s%s\n' \
-    "${E1_BOLD}" "${E1_BLUE}" "$E1_STEP_CURRENT" "$E1_STEP_TOTAL" "${E1_RESET}" \
-    "${E1_BOLD}" "$*" "${E1_RESET}"
+  # Marka seridi her adimda tekrarlanir: uzun kurulumda ekranin neresine
+  # bakarsa baksin kullanici hangi urunun kuruldugunu ve surumu gorur.
+  # Adim sayaci saga yaslanir.
+  local brand step_tag pad
+  brand="$(e1_brand)"
+  step_tag="[${E1_STEP_CURRENT}/${E1_STEP_TOTAL}]"
+  # Gorunur uzunluk: renk kodlari haric. `e1_brand` sabit metin urettigi icin
+  # dolgu hesabini ham uzunluktan degil bilinen etiketten yapiyoruz.
+  local visible="ENERJIONE GRID"
+  [[ -n "$E1_VERSION_LABEL" ]] && visible="${visible}  v${E1_VERSION_LABEL}"
+  pad=$((E1_WIDTH - ${#visible} - ${#step_tag}))
+  ((pad < 1)) && pad=1
+  printf '  %s%*s%s%s%s\n' "$brand" "$pad" "" "${E1_BOLD}${E1_BLUE}" "$step_tag" "${E1_RESET}"
+  printf '  %s%s%s\n' "${E1_BOLD}" "$*" "${E1_RESET}"
 }
 
 # Son adimin suresini kapat (ozet oncesi cagirilir).
@@ -137,6 +171,52 @@ e1_err()  { printf '  %s✗%s %s\n' "${E1_RED}" "${E1_RESET}" "$*" >&2; }
 
 # Uzun surecek adimlar icin beklenti yonetimi — kullanici donduk sanmasin.
 e1_hint() { printf '  %s  %s%s\n' "${E1_DIM}" "$*" "${E1_RESET}"; }
+
+# ---------------------------------------------------------------------------
+# Uzun komutlari CANLI sayacla calistir
+# ---------------------------------------------------------------------------
+# apt-get, git clone gibi adimlar cikti uretmeden dakikalarca surebiliyor ve
+# kurulumcu ekrana bakip "kilitlendi" diyerek Ctrl+C yapiyordu. Bu sarmalayici
+# komutu arka planda calistirip her 3 saniyede gecen sureyi ayni satira yazar;
+# ekranda HER ZAMAN hareket olur. Komut cikti uretse bile onu loga alir, hata
+# durumunda son satirlari gosterir.
+#
+#   e1_run "Kaynak kod indiriliyor" git clone --branch x URL DIR
+e1_run() {
+  local label="$1"; shift
+  local logf rc=0 secs=0 pid
+  logf="$(mktemp)"
+
+  "$@" >"$logf" 2>&1 &
+  pid=$!
+
+  printf '  %s·%s %s… ' "${E1_CYAN}" "${E1_RESET}" "$label"
+  # 1 sn'lik tik: gecen sure gercek suredir. 3 sn'lik tikte 4 sn suren bir
+  # komut "6 sn" gorunuyordu.
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1
+    secs=$((secs + 1))
+    # \r ile ayni satiri tazeleriz; log dosyasina yonlendirilmis calistirmada
+    # (tty yok) bu satir sadece bir kez yazilir, kirlilik olusturmaz.
+    if [[ -t 1 ]]; then
+      printf '\r  %s·%s %s… %s%s%s ' \
+        "${E1_CYAN}" "${E1_RESET}" "$label" "${E1_DIM}" "$(e1_fmt_duration $secs)" "${E1_RESET}"
+    fi
+  done
+  wait "$pid" || rc=$?
+  [[ -t 1 ]] && printf '\r%*s\r' 78 ''
+
+  if ((rc != 0)); then
+    e1_err "${label}: BASARISIZ (cikis kodu ${rc})"
+    e1_err "Son satirlar:"
+    tail -n 20 "$logf" | sed 's/^/      /' >&2
+    rm -f "$logf"
+    return "$rc"
+  fi
+  rm -f "$logf"
+  e1_ok "${label} — $(e1_fmt_duration $secs)"
+  return 0
+}
 
 # ---------------------------------------------------------------------------
 # Hata cikisi + beklenmeyen hata yakalayici

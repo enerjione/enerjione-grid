@@ -104,10 +104,12 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   e1_info "Eksik paketler: ${MISSING[*]} — apt ile kuruluyor..."
   # `-qq` KULLANMIYORUZ: tamamen sessiz kaliyor ve yavas baglantida dakikalarca
   # hicbir cikti olmadigi icin kullanici kurulumun dondugunu saniyor.
-  e1_hint "Paket listesi guncelleniyor — internet hizina gore 30-90 sn."
-  DEBIAN_FRONTEND=noninteractive apt-get update -q
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${MISSING[@]}" ca-certificates
-  e1_ok "Pre-req'ler kuruldu."
+  # e1_run: komut sessiz kalsa bile ekranda gecen sureyi sayar — kullanici
+  # kurulumun dondugunu sanmaz. Hata olursa son 20 satiri gosterir.
+  e1_run "Paket listesi guncelleniyor" \
+    env DEBIAN_FRONTEND=noninteractive apt-get update -q
+  e1_run "Paketler kuruluyor (${MISSING[*]})" \
+    env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${MISSING[@]}" ca-certificates
 else
   e1_ok "Tum pre-req'ler hazir."
 fi
@@ -133,11 +135,14 @@ else
   # `--quiet` DEGIL `--progress`: klonlama yavas baglantida dakikalar surer,
   # sessiz kalirsa kullanici kurulumun kilitlendigini saniyor. --progress
   # stderr terminal olmasa bile yuzde gosterir.
-  e1_hint "Kaynak kod indiriliyor — internet hizina gore 1-3 dakika."
-  git clone --progress --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+  e1_run "Kaynak kod indiriliyor" \
+    git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
   cd "${INSTALL_DIR}"
 fi
-e1_ok "Repo hazir: $(git rev-parse --short HEAD) (${BRANCH})"
+
+# Surum artik biliniyor — bundan sonraki tum adim basliklarinda gorunur.
+E1_VERSION_LABEL="$(e1_version "${INSTALL_DIR}")"
+e1_ok "Repo hazir — surum ${E1_VERSION_LABEL}"
 
 # Lisans makine bagi host'un sabit OS kimligine dayanir. USB, disk, RAM, MAC
 # veya container ID kullanilmaz; bunlar degisince lisans patlamamali.
@@ -158,9 +163,8 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   e1_ok "Zaten kurulu: $(docker --version | head -1)"
 else
   e1_info "Docker yok, kuruluyor..."
-  e1_hint "Docker deposu eklenip paketler indiriliyor — 1-3 dakika."
-  bash "${INSTALL_DIR}/infra/scripts/linux/install-docker.sh"
-  e1_ok "Docker kuruldu."
+  e1_run "Docker Engine indiriliyor ve kuruluyor" \
+    bash "${INSTALL_DIR}/infra/scripts/linux/install-docker.sh"
 fi
 
 # ---- 4/6: .env (secret'lar) ----------------------------------------------
