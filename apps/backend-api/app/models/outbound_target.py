@@ -114,7 +114,10 @@ class OutboundTarget(Base):
     # TEK Modbus okumasinda alinir (FC3/FC4 istek basina 125 register siniri).
     modbus_block_stride: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Ilk cihazin blogunun basladigi adres (0 tabanli).
-    modbus_base_address: Mapped[int] = mapped_column(Integer, default=0)
+    # Varsayilan 100: ilk 100 adres (0..99) sistem metrikleri icin rezerve
+    # (bkz. modbus_plan_service.SYSTEM_BLOCK_SIZE). Cihaz bloklari 100'un
+    # katlarindan baslar.
+    modbus_base_address: Mapped[int] = mapped_column(Integer, default=100)
     # IP allowlist (CSV). Modbus'ta kimlik dogrulama YOKTUR; salt-okunur olsa
     # bile veriyi kimin gorebilecegi yalnizca bununla sinirlanir.
     modbus_allowed_peers: Mapped[str | None] = mapped_column(String(2000), nullable=True)

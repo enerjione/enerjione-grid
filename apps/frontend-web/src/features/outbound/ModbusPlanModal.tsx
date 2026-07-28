@@ -47,6 +47,11 @@ export function ModbusPlanModal({
   const [search, setSearch] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
   const [downloading, setDownloading] = useState(false);
+  // Sayfalama — plan cihaz x sinyal carpimi oldugu icin hizla on binlerce
+  // satira cikar (100 cihaz x 160 nokta = 16.000). Hepsini birden DOM'a
+  // basmak sayfayi kilitliyordu; sayfa sayfa render ediyoruz.
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(100);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +89,18 @@ export function ModbusPlanModal({
       );
     });
   }, [plan, search, deviceFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  // Filtre/arama degisince gecerli sayfa aralik disinda kalabilir — basa al.
+  useEffect(() => {
+    setPage(0);
+  }, [search, deviceFilter, pageSize]);
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * pageSize;
+  const pageRows = useMemo(
+    () => filtered.slice(pageStart, pageStart + pageSize),
+    [filtered, pageStart, pageSize]
+  );
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -210,7 +227,7 @@ export function ModbusPlanModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.slice(0, 500).map((p) => (
+                  {pageRows.map((p) => (
                     <tr key={`${p.device_code}-${p.signal_key}`}>
                       <td>{p.device_code}</td>
                       <td className="mono">{p.unit_id}</td>
@@ -241,14 +258,73 @@ export function ModbusPlanModal({
                   ))}
                 </tbody>
               </table>
-              {filtered.length > 500 ? (
-                <p className="helper-text modbus-plan-truncated">
-                  {t("engineering.outbound.modbus.truncated", {
-                    shown: 500,
-                    total: filtered.length
+            </div>
+
+            {/* Sayfalama — filtrelenmis satirlar uzerinde. Tum plan tek
+                seferde DOM'a basilmiyor; buyuk kurulumlarda (binlerce nokta)
+                modal bu sayede aciliyor. */}
+            <div className="modbus-plan-pager">
+              <span className="modbus-plan-pager-info">
+                {filtered.length === 0
+                  ? t("engineering.outbound.modbus.pagerEmpty")
+                  : t("engineering.outbound.modbus.pagerRange", {
+                      from: pageStart + 1,
+                      to: Math.min(pageStart + pageSize, filtered.length),
+                      total: filtered.length
+                    })}
+              </span>
+
+              <label className="modbus-plan-pager-size">
+                {t("engineering.outbound.modbus.pagerPageSize")}
+                <select
+                  value={pageSize}
+                  onChange={(event) => setPageSize(Number(event.target.value))}
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                  <option value={500}>500</option>
+                </select>
+              </label>
+
+              <div className="modbus-plan-pager-nav">
+                <button
+                  type="button"
+                  onClick={() => setPage(0)}
+                  disabled={safePage === 0}
+                  title={t("engineering.outbound.modbus.pagerFirst")}
+                >
+                  «
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={safePage === 0}
+                >
+                  ‹ {t("engineering.outbound.modbus.pagerPrev")}
+                </button>
+                <span className="modbus-plan-pager-page">
+                  {t("engineering.outbound.modbus.pagerPageOf", {
+                    page: safePage + 1,
+                    total: pageCount
                   })}
-                </p>
-              ) : null}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                  disabled={safePage >= pageCount - 1}
+                >
+                  {t("engineering.outbound.modbus.pagerNext")} ›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(pageCount - 1)}
+                  disabled={safePage >= pageCount - 1}
+                  title={t("engineering.outbound.modbus.pagerLast")}
+                >
+                  »
+                </button>
+              </div>
             </div>
           </>
         ) : null}

@@ -145,9 +145,21 @@ def create_outbound_target(
     current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ):
+    # Hedef adi PROTOKOLDEN BAGIMSIZ benzersizdir. Eskiden mesaj sadece
+    # "already exists" diyordu; operator Modbus hedefi eklerken ayni ada
+    # sahip bir IEC 104 hedefi oldugunu anlamiyor, sistemin protokolleri
+    # karistirdigini saniyordu. Mesaj artik carpisan kaydin protokolunu de
+    # soyluyor.
     existing = db.scalar(select(OutboundTarget).where(OutboundTarget.name == payload.name))
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Outbound target already exists")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"'{payload.name}' adinda bir outbound hedef zaten var "
+                f"({existing.protocol.upper()}). Hedef adlari protokolden "
+                f"bagimsiz olarak benzersiz olmali — farkli bir ad girin."
+            ),
+        )
     row = OutboundTarget(**payload.model_dump())
     db.add(row)
     db.flush()

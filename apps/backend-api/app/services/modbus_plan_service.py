@@ -31,8 +31,24 @@ Veri alanlari (Modbus'ta 4 ayri adres uzayi vardir):
 
 Sinyal offset'leri tabloya yazilmaz — katalog siralamasindan deterministik
 uretilir. `signal_catalog.modbus_function` + `modbus_address` dolu ise o
-sinyal icin MANUEL OVERRIDE kabul edilir (mevcut bir SCADA adres planina
-uyum gerektiginde).
+sinyal icin MANUEL OVERRIDE kabul edilir (Sinyaller sayfasindan girilir;
+mevcut bir SCADA adres planina uyum gerektiginde de kullanilir).
+
+SISTEM BLOGU (0..99)
+--------------------
+`base_address` varsayilani 100'dur; ilk 100 adres (0..99) CIHAZ VERISI ICIN
+KULLANILMAZ, sistemin kendi metrikleri icin (CPU/RAM/disk, haberlesme
+durumu, servis sagligi) rezerve edilir. Boylece cihaz bloklari 100'un
+katlarindan baslar ve adres okumak kolaydir:
+
+    cihaz 1 -> 100..199     cihaz 2 -> 200..299     cihaz 3 -> 300..399
+
+Sinyaller sayfasindan bir sinyale offset 50 verildiyse o sinyal 1. cihazda
+150, 2. cihazda 250, 3. cihazda 350 adresinden yayinlanir.
+
+NOT: Rezerve blok su an BOS — sistem metriklerini yayinlayan taraf henuz
+yazilmadi (bkz. apps/modbus-outbound). Blok bilerek bos birakildi ki
+adresleme duzeni sonradan degismesin.
 """
 
 from __future__ import annotations
@@ -68,6 +84,12 @@ AUTO_STRIDE_INT16 = 100
 AUTO_STRIDE_FLOAT32 = 200
 # Bit alanlarinda (coil/discrete) cihaz basina ayrilan bit blogu.
 BIT_STRIDE = 100
+
+# Sistem metrikleri icin rezerve edilen ilk blok. Cihaz slotlari bu adresten
+# SONRA baslar (varsayilan base_address). 0..SYSTEM_BLOCK_SIZE-1 arasi cihaz
+# verisi ICIN KULLANILMAZ.
+SYSTEM_BLOCK_SIZE = 100
+DEFAULT_BASE_ADDRESS = SYSTEM_BLOCK_SIZE
 
 VALUE_FORMATS = ("int16", "float32")
 MODES = ("block", "unit")

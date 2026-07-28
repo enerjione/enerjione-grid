@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
@@ -17,7 +17,17 @@ const DEFAULT_PROTOCOLS: Protocol[] = ["rest", "mqtt", "iec104", "modbus"];
 
 // Modbus TCP: SCADA'nin baglandigi port. Container'da 502/5020/5021
 // yayinlaniyor (docker-compose.yml); baska port secilirse compose'a eklenmeli.
+// Ilk 100 adres (0..99) sistem metrikleri icin rezerve; cihaz bloklari
+// 100'un katlarindan baslar. Backend karsiligi:
+// modbus_plan_service.SYSTEM_BLOCK_SIZE
+const MODBUS_SYSTEM_BLOCK_SIZE = 100;
 const MODBUS_DEFAULT_PORT = "502";
+const IEC104_DEFAULT_PORT = "2404";
+
+/** Server tipi protokollerin varsayilan dinleme portu. */
+function defaultPortFor(protocol: Protocol): string {
+  return protocol === "modbus" ? MODBUS_DEFAULT_PORT : IEC104_DEFAULT_PORT;
+}
 
 // IEC104 listen_host'u bu degerlerden biriyse "tum arayuzler" anlamina gelir;
 // SCADA buraya dogrudan baglanamaz, tarayicinin host'unu gostermek gerekir.
@@ -102,6 +112,8 @@ type Props = {
   onCreate: (payload: OutboundTargetCreatePayload) => Promise<OutboundTarget | undefined>;
   onUpdate: (targetId: number, payload: OutboundTargetUpdatePayload) => Promise<void>;
   onDelete: (targetId: number) => Promise<void>;
+  /** @deprecated CSV butonu arayuzden kaldirildi (Excel ile ayni listeyi
+   *  indiriyordu). Backend ucu duruyor; geri eklenmek istenirse kullanilir. */
   onDownloadIec104Points?: (targetId: number, suggestedName: string) => Promise<void>;
   onDownloadIec104Xlsx?: (targetId: number, suggestedName: string) => Promise<void>;
   onUpdateDeviceCa?: (deviceCode: string, ca: number | null) => Promise<void>;
@@ -225,7 +237,9 @@ export function OutboundTargetsPanel({
   const [modbusValueFormat, setModbusValueFormat] = useState<"int16" | "float32">("int16");
   const [modbusWordOrder, setModbusWordOrder] = useState<"big" | "little">("big");
   const [modbusStride, setModbusStride] = useState("");
-  const [modbusBaseAddress, setModbusBaseAddress] = useState("0");
+  // 100: ilk 100 adres (0..99) sistem metrikleri icin rezerve; cihaz
+  // bloklari 100'un katlarindan baslar (cihaz 1 -> 100, cihaz 2 -> 200...).
+  const [modbusBaseAddress, setModbusBaseAddress] = useState("100");
   // Adres plani modal'i — hangi hedef icin acik?
   const [planTargetId, setPlanTargetId] = useState<number | null>(null);
 
@@ -286,7 +300,8 @@ export function OutboundTargetsPanel({
     setRetain(false);
     setIsActive(true);
     setListenHost("0.0.0.0");
-    setListenPort("2404");
+    // Form sifirlanirken port, secili olacak protokolun varsayilani olsun.
+    setListenPort(defaultPortFor(firstProtocol));
     setIec104Ca("1");
     setAllowedPeerList([]);
     setNewPeerIp("");
@@ -296,7 +311,7 @@ export function OutboundTargetsPanel({
     setModbusValueFormat("int16");
     setModbusWordOrder("big");
     setModbusStride("");
-    setModbusBaseAddress("0");
+    setModbusBaseAddress(String(MODBUS_SYSTEM_BLOCK_SIZE));
     setMqttPort("");
     setMqttUsername("");
     setMqttPassword("");
@@ -407,7 +422,7 @@ export function OutboundTargetsPanel({
         is_active: isActive,
         listen_host: isServer ? listenHost.trim() || "0.0.0.0" : null,
         listen_port: isServer
-          ? Number(listenPort) || (isModbus ? Number(MODBUS_DEFAULT_PORT) : 2404)
+          ? Number(listenPort) || Number(defaultPortFor(protocol))
           : null,
         iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : null,
         iec104_allowed_peers: isIec104 ? (allowedPeerList.join(",") || null) : null,
@@ -464,9 +479,7 @@ export function OutboundTargetsPanel({
     setListenPort(
       target.listen_port !== null && target.listen_port !== undefined
         ? String(target.listen_port)
-        : target.protocol === "modbus"
-        ? MODBUS_DEFAULT_PORT
-        : "2404"
+        : defaultPortFor(target.protocol as Protocol)
     );
     setIec104Ca(
       target.iec104_common_address !== null && target.iec104_common_address !== undefined
@@ -479,7 +492,7 @@ export function OutboundTargetsPanel({
     setModbusValueFormat(target.modbus_value_format === "float32" ? "float32" : "int16");
     setModbusWordOrder(target.modbus_word_order === "little" ? "little" : "big");
     setModbusStride(target.modbus_block_stride != null ? String(target.modbus_block_stride) : "");
-    setModbusBaseAddress(String(target.modbus_base_address ?? 0));
+    setModbusBaseAddress(String(target.modbus_base_address ?? MODBUS_SYSTEM_BLOCK_SIZE));
     // IP whitelist iki protokolde ayri kolonda tutulur; forma hangisi doluysa o gelir.
     const raw =
       (target.protocol === "modbus"
@@ -564,13 +577,6 @@ export function OutboundTargetsPanel({
     const safeName = target.name.replace(/[^A-Za-z0-9._-]+/g, "_");
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     await onDownloadIec104Xlsx(target.id, `iec104-points-${safeName}-${ts}.xlsx`);
-  };
-
-  const handleDownloadCsv = async (target: OutboundTarget) => {
-    if (!onDownloadIec104Points) return;
-    const safeName = target.name.replace(/[^A-Za-z0-9._-]+/g, "_");
-    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    await onDownloadIec104Points(target.id, `iec104-points-${safeName}-${ts}.csv`);
   };
 
   /** Modbus adres tablosunu CSV indir — SCADA'ya toplu tag girisi icin. */
@@ -868,7 +874,10 @@ export function OutboundTargetsPanel({
             className={`settings-modal ${(isCreatingIec104 || isEditingIec104) ? "iec104-edit-modal" : ""} ${activeProtocol === "mqtt" ? "mqtt-edit-modal" : ""} ${showModbusForm ? "modbus-edit-modal" : ""}`}
             onSubmit={editing ? handleEdit : handleCreate}
           >
-            <h3>{editing ? t("engineering.outbound.editTargetModal") : t("engineering.outbound.newTargetModal")}</h3>
+            <div className="outbound-modal-head">
+              <h3>{editing ? t("engineering.outbound.editTargetModal") : t("engineering.outbound.newTargetModal")}</h3>
+              <ActiveSwitch checked={isActive} onChange={setIsActive} />
+            </div>
             {/* Name + Protocol — kompakt yan yana iki sutun. IEC104 edit
                 modali genisken altta gelen Server | Whitelist grid'i ile
                 hizalanir; REST/MQTT modallarinda da daha az dikey alan kaplar. */}
@@ -888,8 +897,21 @@ export function OutboundTargetsPanel({
                     <select
                       value={protocol}
                       onChange={(event) => {
-                        setProtocol(event.target.value as Protocol);
+                        const next = event.target.value as Protocol;
+                        setProtocol(next);
                         setMqttStep(0);
+                        // Port alani IEC 104 ile Modbus arasinda PAYLASILIYOR.
+                        // Protokol degisince yeni protokolun varsayilanina
+                        // cek (Modbus 502, IEC 104 2404) — aksi halde Modbus
+                        // secildiginde alanda 2404 kaliyordu.
+                        // Operator elle ozel bir port yazdiysa dokunma.
+                        setListenPort((prev) =>
+                          prev === "" ||
+                          prev === MODBUS_DEFAULT_PORT ||
+                          prev === IEC104_DEFAULT_PORT
+                            ? defaultPortFor(next)
+                            : prev
+                        );
                       }}
                     >
                       {protocols.includes("rest") ? (
@@ -970,7 +992,9 @@ export function OutboundTargetsPanel({
                       placeholder="0.0.0.0"
                     />
                   </label>
-                  <label>
+                  {/* Aciklama metinleri form icinde satir satir yer kapliyordu;
+                      bilgi kaybolmasin diye title (hover) olarak tasindi. */}
+                  <label title={t("engineering.outbound.modbus.portHint")}>
                     {t("engineering.outbound.modbus.listenPort")}
                     <input
                       type="number"
@@ -980,11 +1004,14 @@ export function OutboundTargetsPanel({
                       onChange={(event) => setListenPort(event.target.value)}
                       placeholder={MODBUS_DEFAULT_PORT}
                     />
-                    <small className="helper-text">
-                      {t("engineering.outbound.modbus.portHint")}
-                    </small>
                   </label>
-                  <label>
+                  <label
+                    title={
+                      modbusValueFormat === "int16"
+                        ? t("engineering.outbound.modbus.int16Hint")
+                        : t("engineering.outbound.modbus.float32Hint")
+                    }
+                  >
                     {t("engineering.outbound.modbus.valueFormat")}
                     <select
                       value={modbusValueFormat}
@@ -995,11 +1022,6 @@ export function OutboundTargetsPanel({
                       <option value="int16">{t("engineering.outbound.modbus.int16")}</option>
                       <option value="float32">{t("engineering.outbound.modbus.float32")}</option>
                     </select>
-                    <small className="helper-text">
-                      {modbusValueFormat === "int16"
-                        ? t("engineering.outbound.modbus.int16Hint")
-                        : t("engineering.outbound.modbus.float32Hint")}
-                    </small>
                   </label>
                   {modbusValueFormat === "float32" ? (
                     <label>
@@ -1027,7 +1049,9 @@ export function OutboundTargetsPanel({
                           onChange={(event) => setModbusUnitId(event.target.value)}
                         />
                       </label>
-                      <label>
+                      {/* Placeholder zaten otomatik degeri (100 / 200) gosteriyor;
+                          ayri aciklama satirina gerek yok. */}
+                      <label title={t("engineering.outbound.modbus.strideHint")}>
                         {t("engineering.outbound.modbus.stride")}
                         <input
                           type="number"
@@ -1037,9 +1061,6 @@ export function OutboundTargetsPanel({
                           onChange={(event) => setModbusStride(event.target.value)}
                           placeholder={String(modbusValueFormat === "float32" ? 200 : 100)}
                         />
-                        <small className="helper-text">
-                          {t("engineering.outbound.modbus.strideHint")}
-                        </small>
                       </label>
                       <label>
                         {t("engineering.outbound.modbus.baseAddress")}
@@ -1301,8 +1322,6 @@ export function OutboundTargetsPanel({
                     <ol className="mqtt-steps">
                       {[
                         t("engineering.outbound.mqtt.section.connection"),
-                        t("engineering.outbound.mqtt.section.tls"),
-                        t("engineering.outbound.mqtt.section.publish"),
                         t("engineering.outbound.mqtt.topicCard.title")
                       ].map((label, i) => (
                         <li key={i}>
@@ -1326,6 +1345,11 @@ export function OutboundTargetsPanel({
 
                     <div className="mqtt-wizard-body">
                       {mqttStep === 0 ? (
+                        <>
+                        <div className="mqtt-sec-head">
+                          <span className="material-symbols-outlined">link</span>
+                          {t("engineering.outbound.mqtt.section.connection")}
+                        </div>
                         <div className="mqtt-panel-grid">
                           <label>
                             {t("engineering.outbound.mqtt.port")}
@@ -1364,9 +1388,10 @@ export function OutboundTargetsPanel({
                             />
                           </label>
                         </div>
-                      ) : null}
-
-                      {mqttStep === 1 ? (
+                        <div className="mqtt-sec-head mqtt-sec-head--gap">
+                          <span className="material-symbols-outlined">lock</span>
+                          {t("engineering.outbound.mqtt.section.tls")}
+                        </div>
                         <div className="mqtt-wizard-step-tls">
                           <label className="notify-option mqtt-tls-toggle">
                             <input
@@ -1444,10 +1469,10 @@ export function OutboundTargetsPanel({
                             </>
                           ) : null}
                         </div>
-                      ) : null}
-
-                      {mqttStep === 2 ? (
-                        <>
+                        <div className="mqtt-sec-head mqtt-sec-head--gap">
+                          <span className="material-symbols-outlined">send</span>
+                          {t("engineering.outbound.mqtt.section.publish")}
+                        </div>
                           <div className="mqtt-panel-grid">
                             <label>
                               {t("engineering.outbound.mqtt.publishIntervalSec")}
@@ -1530,7 +1555,7 @@ export function OutboundTargetsPanel({
                         </>
                       ) : null}
 
-                      {mqttStep === 3 ? (
+                      {mqttStep === 1 ? (
                         <div className="mqtt-topic-card mqtt-topic-card--full">
                           <div className="mqtt-topic-card-head">
                             <div>
@@ -1615,30 +1640,10 @@ export function OutboundTargetsPanel({
                       ) : null}
                     </div>
 
-                    <div className="mqtt-wizard-nav">
-                      <button
-                        type="button"
-                        className="secondary-btn"
-                        disabled={mqttStep === 0}
-                        onClick={() => setMqttStep((s) => Math.max(0, s - 1))}
-                      >
-                        {t("engineering.outbound.mqtt.stepPrev")}
-                      </button>
-                      {mqttStep < 3 ? (
-                        <button
-                          type="button"
-                          className="primary-btn"
-                          onClick={() => setMqttStep((s) => Math.min(3, s + 1))}
-                        >
-                          {t("engineering.outbound.mqtt.stepNext")}
-                        </button>
-                      ) : null}
-                    </div>
                   </div>
                 ) : null}
               </>
             )}
-            <ActiveSwitch checked={isActive} onChange={setIsActive} />
             <div className="settings-actions">
               <button type="button" onClick={() => (editing ? setEditing(null) : setCreateOpen(false))}>
                 {t("engineering.outbound.form.cancel")}
@@ -1977,18 +1982,25 @@ export function OutboundTargetsPanel({
         <table className="values-table outbound-modern-table">
           <thead>
             <tr>
-              <th scope="col" style={{ width: 70 }}>{t("engineering.outbound.runtime.connected")}</th>
+              {/* 1. sutun hedefin ACIK/KAPALI olmasini gosterir (is_active).
+                  Eskiden yanlislikla `runtime.connected` ("Bagli SCADA:")
+                  anahtarina baglanmisti. */}
+              <th scope="col" style={{ width: 90 }}>{t("engineering.outbound.table.active")}</th>
               <th scope="col">{t("engineering.outbound.table.name")}</th>
               <th scope="col" style={{ width: 110 }}>{t("engineering.outbound.table.protocol")}</th>
               <th scope="col">{t("engineering.outbound.table.endpoint")}</th>
-              <th scope="col" style={{ width: 130 }}>{t("engineering.outbound.table.status")}</th>
+              {/* Calisma/baglanti durumu — 1. sutundan ayrilsin diye "Baglanti". */}
+              <th scope="col" style={{ width: 130 }}>{t("engineering.outbound.table.connection")}</th>
               <th scope="col" className="actions-header">{t("engineering.outbound.table.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {filteredTargets.map((item) => {
               const isIec = item.protocol === "iec104";
-              // listen_host wildcard ise (0.0.0.0 / :: / bos) SCADA buraya
+              // Modbus da IEC 104 gibi TCP SUNUCUSU — adres kolonunda
+              // `endpoint` (bos) yerine dinlenen host:port gosterilmeli.
+              const isServerRow = isIec || item.protocol === "modbus";
+              // listen_host wildcard ise (0.0.0.0 / :: / bos) istemci buraya
               // dogrudan baglanamaz; tarayicinin eristigi host'u goster (ayni
               // sunucu). Operator spesifik bir IP girdiyse onu aynen birak.
               const rawHost = (item.listen_host ?? "0.0.0.0").trim();
@@ -1997,10 +2009,12 @@ export function OutboundTargetsPanel({
                 isWildcardHost && typeof window !== "undefined"
                   ? window.location.hostname
                   : rawHost || "0.0.0.0";
-              const endpointDisplay = isIec
-                ? `${connectHost}:${item.listen_port ?? 2404}`
+              const endpointDisplay = isServerRow
+                ? `${connectHost}:${
+                    item.listen_port ?? Number(defaultPortFor(item.protocol as Protocol))
+                  }`
                 : item.endpoint;
-              const showAddrHint = isIec && isWildcardHost;
+              const showAddrHint = isServerRow && isWildcardHost;
               const badge = isIec ? runtimeBadges[item.id] : undefined;
               return (
                 <tr key={item.id} className={item.is_active ? "" : "outbound-row--inactive"}>
@@ -2134,16 +2148,10 @@ export function OutboundTargetsPanel({
                         {t("engineering.outbound.downloadXlsx")}
                       </button>
                     ) : null}
-                    {isIec && onDownloadIec104Points ? (
-                      <button
-                        type="button"
-                        className="secondary-btn action-btn"
-                        title={t("engineering.outbound.downloadCsvTitle")}
-                        onClick={() => void handleDownloadCsv(item)}
-                      >
-                        CSV
-                      </button>
-                    ) : null}
+                    {/* Eski "CSV" butonu KALDIRILDI — ayni sinyal listesini
+                        Excel butonu zaten indiriyordu, iki buton yan yana
+                        duruyordu. CSV ucu (onDownloadIec104Points) backend'de
+                        duruyor; gerekirse geri eklenebilir. */}
                     {item.protocol === "mqtt" ? (
                       <>
                         <button

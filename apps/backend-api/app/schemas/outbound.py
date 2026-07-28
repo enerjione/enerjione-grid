@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+﻿from pydantic import BaseModel, Field
 
 
 class OutboundTopicMappingBase(BaseModel):
@@ -44,7 +44,7 @@ class ModbusTargetFields(BaseModel):
     modbus_word_order: str = Field(default="big", pattern="^(big|little)$")
     # NULL = otomatik (int16 -> 100, float32 -> 200)
     modbus_block_stride: int | None = Field(default=None, ge=1, le=4096)
-    modbus_base_address: int = Field(default=0, ge=0, le=65_535)
+    modbus_base_address: int = Field(default=100, ge=0, le=65_535)
     modbus_allowed_peers: str | None = None
 
 
@@ -88,7 +88,7 @@ class OutboundTargetCreate(BaseModel):
     modbus_value_format: str = Field(default="int16", pattern="^(int16|float32)$")
     modbus_word_order: str = Field(default="big", pattern="^(big|little)$")
     modbus_block_stride: int | None = Field(default=None, ge=1, le=4096)
-    modbus_base_address: int = Field(default=0, ge=0, le=65_535)
+    modbus_base_address: int = Field(default=100, ge=0, le=65_535)
     modbus_allowed_peers: str | None = None
 
 
@@ -167,7 +167,7 @@ class OutboundTargetRead(BaseModel):
     modbus_value_format: str = "int16"
     modbus_word_order: str = "big"
     modbus_block_stride: int | None = None
-    modbus_base_address: int = 0
+    modbus_base_address: int = 100
     modbus_allowed_peers: str | None = None
     # Mapping listesi UI'da target detayi cekildiginde gelir.
     topic_mappings: list[OutboundTopicMappingRead] = []

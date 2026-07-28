@@ -2199,7 +2199,7 @@ export function App() {
                 targets={outboundTargets}
                 devices={devices}
                 accessToken={session.accessToken}
-                allowedProtocols={["mqtt", "iec104"]}
+                allowedProtocols={["mqtt", "iec104", "modbus"]}
                 onCreate={handleCreateOutboundTarget}
                 onUpdate={handleUpdateOutboundTarget}
                 onDelete={handleDeleteOutboundTarget}

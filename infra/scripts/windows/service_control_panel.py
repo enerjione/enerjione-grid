@@ -47,6 +47,41 @@ CREATE_NEW_PROCESS_GROUP = 0x00000200 if os.name == "nt" else 0
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
+# ---------------------------------------------------------------------------
+# Gorsel palet
+# ---------------------------------------------------------------------------
+# Web arayuzuyle ayni tonlar (slate + turuncu vurgu) kullanildi ki panel
+# uygulamanin parcasi gibi dursun. Tek yerden degistirilebilsin diye sozluk.
+PALETTE = {
+    "canvas": "#eef1f6",       # pencere zemini
+    "card": "#ffffff",         # kart/satir zemini
+    "row_alt": "#f8fafc",      # zebra satir
+    "row_head": "#f1f5f9",     # tablo baslik seridi
+    "border": "#dfe4ec",       # kart kenarligi
+    "border_soft": "#eef2f7",  # satir ayiricisi
+    "text": "#0f172a",
+    "muted": "#64748b",
+    "accent": "#c2410c",       # EnerjiOne turuncusu (koyu ton)
+    "accent_soft": "#fff1e6",
+    "btn": "#e2e8f0",
+    "btn_hover": "#cbd5e1",
+    "ok": "#15803d",
+    "warn": "#b45309",
+    "bad": "#dc2626",
+    "info": "#1d4ed8",
+}
+
+# Aksiyon butonu turleri. ttk.Button 'vista' temasinda arka plan rengini
+# yok sayiyordu (butun butonlar ayni gri gorunuyordu); tk.Button + bu
+# renklerle Baslat/Durdur/Yeniden Baslat gorsel olarak ayrisiyor.
+BUTTON_KINDS = {
+    "start":   {"bg": "#16a34a", "hover": "#15803d", "active": "#166534", "fg": "#ffffff"},
+    "stop":    {"bg": "#dc2626", "hover": "#b91c1c", "active": "#991b1b", "fg": "#ffffff"},
+    "restart": {"bg": "#0284c7", "hover": "#0369a1", "active": "#075985", "fg": "#ffffff"},
+    "neutral": {"bg": "#475569", "hover": "#334155", "active": "#1e293b", "fg": "#ffffff"},
+}
+
+
 @dataclass
 class ServiceConfig:
     name: str
@@ -445,80 +480,117 @@ class ServiceControlPanel:
     # ------------------------------------------------------------------ UI ---
 
     def _build_ui(self) -> None:
-        self.root.title("Horstman Servis Kontrol Paneli")
-        self.root.geometry("1320x820")
-        self.root.minsize(1320, 820)
-        self.root.maxsize(1320, 820)
-        self.root.resizable(False, False)
+        self.root.title("EnerjiOne Grid — Servis Kontrol Paneli")
+        # Pencere ARTIK yeniden boyutlandirilabilir. Onceki surumde
+        # minsize == maxsize == 1320x820 ve resizable(False, False) idi;
+        # 11 servis 820px'e sigmadigi icin son satir (Frontend Web)
+        # erisilemez halde kaliyordu. Buyutme/maximize serbest, servis
+        # listesi de kendi icinde scroll ediyor (bkz. _build_service_table).
+        self.root.geometry("1360x860")
+        self.root.minsize(1080, 620)
+        self.root.resizable(True, True)
         self._configure_styles()
-        self.root.configure(bg="#f3f4f6")
+        self.root.configure(bg=PALETTE["canvas"])
 
-        top = ttk.Frame(self.root, padding=12)
-        top.pack(fill=tk.BOTH, expand=True)
+        top = tk.Frame(self.root, bg=PALETTE["canvas"])
+        top.pack(fill=tk.BOTH, expand=True, padx=14, pady=12)
 
-        status_card = ttk.LabelFrame(top, text="Durum", padding=(10, 8))
-        status_card.pack(fill=tk.X, pady=(0, 10))
-        self.action_info = ttk.Label(status_card, text="Hazır.", foreground="#334155")
-        self.action_info.pack(anchor="w")
+        # ---------- Ust serit: baslik + canli durum ----------
+        header = tk.Frame(top, bg=PALETTE["canvas"])
+        header.pack(fill=tk.X, pady=(0, 12))
 
-        actions_card = ttk.LabelFrame(top, text="Hızlı Aksiyonlar", padding=(10, 10))
-        actions_card.pack(fill=tk.X, pady=(0, 10))
-        actions = ttk.Frame(actions_card)
-        actions.pack(fill=tk.X)
-        ttk.Button(
-            actions,
-            text="Akıllı Başlat (sıralı)",
-            command=self.smart_start_all,
-            style="Primary.TButton",
-            width=28,
-        ).grid(row=0, column=0, padx=(0, 8), pady=4, sticky="w")
-        ttk.Button(
-            actions,
-            text="Uygulamaları Durdur",
-            command=self.stop_all,
-            style="Warn.TButton",
-            width=28,
-        ).grid(row=0, column=1, padx=8, pady=4, sticky="w")
-        ttk.Button(
-            actions,
-            text="Uygulamaları Yeniden Başlat",
-            command=self.restart_all,
-            style="Secondary.TButton",
-            width=28,
-        ).grid(row=0, column=2, padx=8, pady=4, sticky="w")
+        brand = tk.Frame(header, bg=PALETTE["canvas"])
+        brand.pack(side=tk.LEFT)
+        tk.Label(
+            brand,
+            text="Servis Kontrol Paneli",
+            bg=PALETTE["canvas"],
+            fg=PALETTE["text"],
+            font=("Segoe UI Semibold", 15),
+        ).pack(anchor="w")
+        tk.Label(
+            brand,
+            text="EnerjiOne Grid · yerel servis yonetimi",
+            bg=PALETTE["canvas"],
+            fg=PALETTE["muted"],
+            font=("Segoe UI", 9),
+        ).pack(anchor="w")
 
-        ttk.Button(
-            actions,
-            text="Gatewayleri Başlat",
-            command=self.start_gateways,
-            style="Primary.TButton",
-            width=28,
-        ).grid(row=1, column=0, padx=(0, 8), pady=4, sticky="w")
-        ttk.Button(
-            actions,
-            text="Gatewayleri Durdur",
-            command=self.stop_gateways,
-            style="Warn.TButton",
-            width=28,
-        ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
-        ttk.Button(
-            actions,
-            text="Gatewayleri Yeniden Başlat",
-            command=self.restart_gateways,
-            style="Secondary.TButton",
-            width=28,
-        ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
+        # Durum kutusu — eskiden ayri bir LabelFrame satiriydi, artik
+        # basligin sagindaki canli bir serit.
+        status_wrap = self._card(header)
+        status_wrap.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(24, 0))
+        status_inner = tk.Frame(status_wrap, bg=PALETTE["card"])
+        status_inner.pack(fill=tk.X, padx=12, pady=9)
+        self.status_dot = tk.Label(
+            status_inner, text="●", bg=PALETTE["card"], fg=PALETTE["muted"],
+            font=("Segoe UI", 11),
+        )
+        self.status_dot.pack(side=tk.LEFT, padx=(0, 8))
+        self.action_info = tk.Label(
+            status_inner,
+            text="Hazır.",
+            bg=PALETTE["card"],
+            fg=PALETTE["text"],
+            font=("Segoe UI", 9),
+            anchor="w",
+            justify="left",
+        )
+        self.action_info.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        # ---------- Hizli aksiyonlar ----------
+        actions_card = self._card(top)
+        actions_card.pack(fill=tk.X, pady=(0, 12))
+        actions_head = tk.Frame(actions_card, bg=PALETTE["card"])
+        actions_head.pack(fill=tk.X, padx=14, pady=(11, 0))
+        tk.Label(
+            actions_head,
+            text="HIZLI AKSİYONLAR",
+            bg=PALETTE["card"],
+            fg=PALETTE["muted"],
+            font=("Segoe UI Semibold", 8),
+        ).pack(anchor="w")
+
+        actions = tk.Frame(actions_card, bg=PALETTE["card"])
+        actions.pack(fill=tk.X, padx=14, pady=(8, 13))
+        groups = [
+            ("Uygulamalar", [
+                ("Akıllı Başlat", self.smart_start_all, "start"),
+                ("Durdur", self.stop_all, "stop"),
+                ("Yeniden Başlat", self.restart_all, "restart"),
+            ]),
+            ("Gatewayler", [
+                ("Başlat", self.start_gateways, "start"),
+                ("Durdur", self.stop_gateways, "stop"),
+                ("Yeniden Başlat", self.restart_gateways, "restart"),
+            ]),
+        ]
+        for col, (group_label, buttons) in enumerate(groups):
+            block = tk.Frame(actions, bg=PALETTE["card"])
+            block.grid(row=0, column=col, sticky="w", padx=(0, 28))
+            tk.Label(
+                block,
+                text=group_label,
+                bg=PALETTE["card"],
+                fg=PALETTE["text"],
+                font=("Segoe UI Semibold", 9),
+            ).pack(anchor="w", pady=(0, 6))
+            row = tk.Frame(block, bg=PALETTE["card"])
+            row.pack(anchor="w")
+            for text, cmd, kind in buttons:
+                self._pill_button(row, text, cmd, kind).pack(side=tk.LEFT, padx=(0, 7))
+
+        # ---------- Sekmeler ----------
         notebook = ttk.Notebook(top)
-        notebook.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
-        core_tab = ttk.Frame(notebook, padding=(4, 8, 4, 8))
+        notebook.pack(fill=tk.BOTH, expand=True)
+        core_tab = ttk.Frame(notebook, padding=(0, 10, 0, 0))
         gateway_tab = ttk.Frame(notebook, padding=(4, 8, 4, 8))
         setup_tab = ttk.Frame(notebook, padding=(10, 10, 10, 10))
         events_tab = ttk.Frame(notebook, padding=(8, 8, 8, 8))
-        notebook.add(core_tab, text="Temel Servisler")
-        notebook.add(gateway_tab, text="Gateway Yönetimi")
-        notebook.add(setup_tab, text="Kurulum")
-        notebook.add(events_tab, text="Olay Günlüğü")
+        notebook.add(core_tab, text="  Temel Servisler  ")
+        notebook.add(gateway_tab, text="  Gateway Yönetimi  ")
+        notebook.add(setup_tab, text="  Kurulum  ")
+        notebook.add(events_tab, text="  Olay Günlüğü  ")
 
         self._build_service_table(core_tab, self.services)
         self._build_remote_gateways_tab(gateway_tab)
@@ -527,62 +599,226 @@ class ServiceControlPanel:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    # ------------------------------------------------------- gorsel yardim ---
+
+    def _card(self, parent: tk.Misc) -> tk.Frame:
+        """Beyaz, ince kenarli kart cercevesi (ttk.LabelFrame yerine).
+
+        ttk.LabelFrame'in kenar/zemin rengi 'vista' temasinda kontrol
+        edilemiyordu; duz tk.Frame ile 1px kenarlik daha temiz duruyor.
+        """
+        return tk.Frame(
+            parent,
+            bg=PALETTE["card"],
+            highlightbackground=PALETTE["border"],
+            highlightthickness=1,
+            bd=0,
+        )
+
+    def _pill_button(
+        self, parent: tk.Misc, text: str, command: Callable[[], None], kind: str
+    ) -> tk.Button:
+        """Renkli, flat aksiyon butonu.
+
+        ttk.Button 'vista' temasinda arka plan rengini kabul etmiyor (hepsi
+        ayni griydi); tk.Button ile start/stop/restart renkleri ayrisiyor.
+        """
+        spec = BUTTON_KINDS[kind]
+        btn = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=spec["bg"],
+            fg=spec["fg"],
+            activebackground=spec["active"],
+            activeforeground=spec["fg"],
+            font=("Segoe UI Semibold", 9),
+            relief=tk.FLAT,
+            bd=0,
+            padx=14,
+            pady=7,
+            cursor="hand2",
+            highlightthickness=0,
+        )
+        btn.bind("<Enter>", lambda _e, b=btn, s=spec: b.configure(bg=s["hover"]))
+        btn.bind("<Leave>", lambda _e, b=btn, s=spec: b.configure(bg=s["bg"]))
+        return btn
+
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
+        # 'clam' secildi: 'vista' temasi arka plan/kenar renklerini yok
+        # sayiyor, bu yuzden butun kartlar/sekme seridi sistem grisinde
+        # kaliyordu. clam tam temalanabilir.
         try:
-            style.theme_use("vista")
+            style.theme_use("clam")
         except Exception:
             pass
-        style.configure("TButton", padding=(10, 7), font=("Segoe UI", 9, "bold"))
-        style.configure("Primary.TButton", padding=(10, 7), font=("Segoe UI", 9, "bold"))
-        style.configure("Secondary.TButton", padding=(10, 7), font=("Segoe UI", 9, "bold"))
-        style.configure("Warn.TButton", padding=(10, 7), font=("Segoe UI", 9, "bold"))
-        style.configure("Setup.TButton", padding=(10, 8), font=("Segoe UI", 9, "bold"))
-        style.configure("TNotebook.Tab", padding=(14, 8), font=("Segoe UI", 9, "bold"))
-        style.configure("TLabelframe", padding=(8, 6))
-        style.configure("TLabelframe.Label", font=("Segoe UI", 9, "bold"))
+
+        style.configure("TFrame", background=PALETTE["canvas"])
+        style.configure("TLabel", background=PALETTE["canvas"], foreground=PALETTE["text"])
+        style.configure(
+            "TButton", padding=(10, 7), font=("Segoe UI Semibold", 9),
+            background=PALETTE["btn"], foreground=PALETTE["text"],
+            borderwidth=0, focusthickness=0,
+        )
+        style.map(
+            "TButton",
+            background=[("active", PALETTE["btn_hover"]), ("disabled", PALETTE["border"])],
+            foreground=[("disabled", PALETTE["muted"])],
+        )
+        for name, key in (
+            ("Primary.TButton", "start"),
+            ("Warn.TButton", "stop"),
+            ("Secondary.TButton", "restart"),
+            ("Setup.TButton", "neutral"),
+        ):
+            spec = BUTTON_KINDS[key]
+            style.configure(
+                name, padding=(10, 7), font=("Segoe UI Semibold", 9),
+                background=spec["bg"], foreground=spec["fg"],
+                borderwidth=0, focusthickness=0,
+            )
+            style.map(
+                name,
+                background=[("active", spec["hover"]), ("disabled", PALETTE["border"])],
+                foreground=[("disabled", PALETTE["muted"])],
+            )
+
+        # Sekme seridi
+        style.configure("TNotebook", background=PALETTE["canvas"], borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            padding=(16, 9),
+            font=("Segoe UI Semibold", 9),
+            background=PALETTE["canvas"],
+            foreground=PALETTE["muted"],
+            borderwidth=0,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", PALETTE["card"])],
+            foreground=[("selected", PALETTE["accent"])],
+        )
+
+        # Treeview (Gateway / Olay Gunlugu sekmeleri)
+        style.configure(
+            "Treeview",
+            background=PALETTE["card"],
+            fieldbackground=PALETTE["card"],
+            foreground=PALETTE["text"],
+            rowheight=26,
+            borderwidth=0,
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "Treeview.Heading",
+            background=PALETTE["row_head"],
+            foreground=PALETTE["muted"],
+            font=("Segoe UI Semibold", 9),
+            borderwidth=0,
+        )
+        style.map("Treeview", background=[("selected", PALETTE["accent_soft"])],
+                  foreground=[("selected", PALETTE["accent"])])
+
+        style.configure("Vertical.TScrollbar", background=PALETTE["btn"],
+                        troughcolor=PALETTE["canvas"], borderwidth=0, arrowsize=12)
+        style.configure("TLabelframe", background=PALETTE["canvas"],
+                        borderwidth=1, relief="solid")
+        style.configure("TLabelframe.Label", background=PALETTE["canvas"],
+                        foreground=PALETTE["text"], font=("Segoe UI Semibold", 9))
 
     def _build_service_table(self, parent: ttk.Frame, services: list[ServiceConfig]) -> None:
-        table = ttk.Frame(parent)
-        table.pack(fill=tk.BOTH, expand=True)
-        headers = ["Servis", "Tip", "Durum", "Sağlık", "Aksiyon"]
-        widths = [220, 150, 200, 220, 380]
-        for i, text in enumerate(headers):
-            lbl = ttk.Label(table, text=text, font=("Segoe UI", 10, "bold"))
-            lbl.grid(row=0, column=i, sticky="w", padx=6, pady=4)
-            table.grid_columnconfigure(i, minsize=widths[i])
+        """Servis listesi — KAYDIRILABILIR.
 
-        for idx, svc in enumerate(services, start=1):
+        Onceki surumde satirlar dogrudan sabit yuksekli bir frame'e
+        grid'leniyordu; pencere 820px'e kilitli oldugu icin 11. servis
+        (Frontend Web) ekranin altinda kaliyor ve hicbir sekilde
+        gorulemiyordu. Artik Canvas + Scrollbar var, fare tekerlegi de
+        bagli.
+        """
+        shell = self._card(parent)
+        shell.pack(fill=tk.BOTH, expand=True)
+
+        # --- Sabit baslik satiri (scroll etmez) ---
+        head = tk.Frame(shell, bg=PALETTE["row_head"])
+        head.pack(fill=tk.X)
+        headers = [("SERVİS", 210), ("TİP", 140), ("DURUM", 190), ("SAĞLIK", 230), ("AKSİYON", 300)]
+        for i, (text, width) in enumerate(headers):
+            tk.Label(
+                head, text=text, bg=PALETTE["row_head"], fg=PALETTE["muted"],
+                font=("Segoe UI Semibold", 8), anchor="w",
+            ).grid(row=0, column=i, sticky="w", padx=(14 if i == 0 else 8, 8), pady=9)
+            head.grid_columnconfigure(i, minsize=width, weight=1 if i == 3 else 0)
+
+        # --- Kaydirilabilir govde ---
+        body = tk.Frame(shell, bg=PALETTE["card"])
+        body.pack(fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(body, bg=PALETTE["card"], highlightthickness=0, bd=0)
+        vsb = ttk.Scrollbar(body, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        table = tk.Frame(canvas, bg=PALETTE["card"])
+        window_id = canvas.create_window((0, 0), window=table, anchor="nw")
+
+        def _on_table_resize(_event: object) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_resize(event: object) -> None:
+            # Ic frame'i canvas genisligine yay ki kolonlar hizali kalsin.
+            canvas.itemconfigure(window_id, width=event.width)  # type: ignore[attr-defined]
+
+        table.bind("<Configure>", _on_table_resize)
+        canvas.bind("<Configure>", _on_canvas_resize)
+
+        def _on_wheel(event: object) -> None:
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")  # type: ignore[attr-defined]
+
+        # Fare tekerlegi: imlec liste uzerindeyken bagla, cikinca birak
+        # (global bind sekmelerdeki diger scroll alanlarini bozardi).
+        canvas.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", _on_wheel))
+        canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
+
+        for i, (_text, width) in enumerate(headers):
+            table.grid_columnconfigure(i, minsize=width, weight=1 if i == 3 else 0)
+
+        for idx, svc in enumerate(services):
             self._build_service_row(table, idx, svc)
 
-    def _build_service_row(self, table: ttk.Frame, idx: int, svc: ServiceConfig) -> None:
-        name_lbl = ttk.Label(table, text=svc.name)
-        type_lbl = ttk.Label(table, text=self._friendly_service_type(svc.service_type))
-        state_lbl = tk.Label(table, text="-", anchor="w", font=("Segoe UI", 9, "bold"))
-        health_lbl = tk.Label(table, text="-", anchor="w", font=("Segoe UI", 9, "bold"))
-        btns = ttk.Frame(table)
-        start_btn = ttk.Button(
-            btns, text="Başlat", command=lambda s=svc: self.start_service(s), style="Primary.TButton", width=9
-        )
-        stop_btn = ttk.Button(
-            btns, text="Durdur", command=lambda s=svc: self.stop_service(s), style="Warn.TButton", width=9
-        )
-        restart_btn = ttk.Button(
-            btns,
-            text="Yeniden Başlat",
-            command=lambda s=svc: self.restart_service(s),
-            style="Secondary.TButton",
-            width=13,
-        )
-        start_btn.pack(side=tk.LEFT, padx=2)
-        stop_btn.pack(side=tk.LEFT, padx=2)
-        restart_btn.pack(side=tk.LEFT, padx=2)
+    def _build_service_row(self, table: tk.Frame, idx: int, svc: ServiceConfig) -> None:
+        # Zebra: okunurlugu artirir, 11 satirda satir kaymasini onler.
+        row_bg = PALETTE["card"] if idx % 2 == 0 else PALETTE["row_alt"]
+        grid_row = idx
 
-        name_lbl.grid(row=idx, column=0, sticky="w", padx=6, pady=6)
-        type_lbl.grid(row=idx, column=1, sticky="w", padx=6, pady=6)
-        state_lbl.grid(row=idx, column=2, sticky="w", padx=6, pady=6)
-        health_lbl.grid(row=idx, column=3, sticky="w", padx=6, pady=6)
-        btns.grid(row=idx, column=4, sticky="w", padx=6, pady=6)
+        def cell(col: int, **kw) -> tk.Label:
+            lbl = tk.Label(table, bg=row_bg, anchor="w", **kw)
+            lbl.grid(row=grid_row, column=col, sticky="we",
+                     padx=(14 if col == 0 else 8, 8), pady=8)
+            return lbl
+
+        name_lbl = cell(0, text=svc.name, fg=PALETTE["text"],
+                        font=("Segoe UI Semibold", 9.5))
+        type_lbl = cell(1, text=self._friendly_service_type(svc.service_type),
+                        fg=PALETTE["muted"], font=("Segoe UI", 9))
+        state_lbl = cell(2, text="—", fg=PALETTE["muted"],
+                         font=("Segoe UI Semibold", 9))
+        health_lbl = cell(3, text="—", fg=PALETTE["muted"], font=("Segoe UI", 9))
+
+        btns = tk.Frame(table, bg=row_bg)
+        btns.grid(row=grid_row, column=4, sticky="w", padx=8, pady=6)
+        start_btn = self._pill_button(btns, "Başlat", lambda s=svc: self.start_service(s), "start")
+        stop_btn = self._pill_button(btns, "Durdur", lambda s=svc: self.stop_service(s), "stop")
+        restart_btn = self._pill_button(
+            btns, "Yeniden Başlat", lambda s=svc: self.restart_service(s), "restart"
+        )
+        start_btn.pack(side=tk.LEFT, padx=(0, 6))
+        stop_btn.pack(side=tk.LEFT, padx=(0, 6))
+        restart_btn.pack(side=tk.LEFT)
+
+        # Alt ince ayirici (son satir haric)
+        sep = tk.Frame(table, bg=PALETTE["border_soft"], height=1)
+        sep.grid(row=grid_row, column=0, columnspan=5, sticky="wes")
 
         self.rows[svc.name] = {
             "state": state_lbl,
@@ -591,6 +827,9 @@ class ServiceControlPanel:
             "start_btn": start_btn,
             "stop_btn": stop_btn,
             "restart_btn": restart_btn,
+            "cells": [name_lbl, type_lbl, state_lbl, health_lbl],
+            "row_frame": btns,
+            "row_bg": row_bg,
         }
 
     # ------------------------------------------------------------- Kurulum ---
@@ -1694,7 +1933,11 @@ class ServiceControlPanel:
     # ----------------------------------------------------- status & info ---
 
     def _set_action_info(self, text: str, is_error: bool = False) -> None:
-        self.action_info.configure(text=text, foreground="#b91c1c" if is_error else "#166534")
+        color = PALETTE["bad"] if is_error else PALETTE["ok"]
+        self.action_info.configure(text=text, fg=color)
+        # Basligin yanindaki nokta da durumu yansitsin.
+        if getattr(self, "status_dot", None) is not None:
+            self.status_dot.configure(fg=color)
         if text and text != self._last_action_info_text:
             self._last_action_info_text = text
             level, source, message = self._classify_action_info(text, is_error)
