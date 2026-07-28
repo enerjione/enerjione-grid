@@ -56,7 +56,7 @@ curl -fsSL get.enerjione.com | sudo bash
 
 > Kısa adres çalışmazsa (DNS kaydı henüz yapılmamışsa) uzun hâlini kullanın:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+> curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo bash
 > ```
 
 Sudo şifrenizi soracaktır; kullanıcı şifrenizi yazın (yazarken ekranda
@@ -79,7 +79,7 @@ kurulum devam eder, takılıp kalmaz.
 > **Hiç soru istemiyorsanız** komutu şöyle çalıştırın — hepsine otomatik
 > Evet denir:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo ASSUME_YES=1 bash
+> curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo ASSUME_YES=1 bash
 > ```
 
 ---

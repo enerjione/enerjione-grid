@@ -178,7 +178,7 @@ services:
     build:
       context: ./apps/backend-api
       dockerfile: Dockerfile
-    image: e1-grid/backend-api:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/backend-api:${E1_VERSION:-latest}
     container_name: e1-grid-backend-api
     restart: unless-stopped
     depends_on:
@@ -195,6 +195,15 @@ services:
         condition: service_healthy
     environment:
       APP_ENV: production
+      # Calisan surum — Lisans ve Sistem Durumu sayfalari bunu gosterir.
+      # Ayni degisken imaj etiketi olarak da kullaniliyor; 'latest' gibi
+      # semver olmayan bir deger gelirse config.py imajla paketlenen
+      # surume duser (arayuzde "latest" yazmasin diye).
+      E1_VERSION: ${E1_VERSION:-latest}
+      # Guncelleme kontrolu SADECE BILGI amaclidir; arayuzden guncelleme
+      # baslatilamaz. Bos ise kontrol tamamen kapalidir.
+      UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-}
+      UPDATE_CHECK_INTERVAL_SEC: ${UPDATE_CHECK_INTERVAL_SEC:-21600}
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY .env'de olmali}
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-enerjione_grid}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-enerjione_grid}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
@@ -287,7 +296,7 @@ services:
     build:
       context: ./apps/tag-engine
       dockerfile: Dockerfile
-    image: e1-grid/tag-engine:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/tag-engine:${E1_VERSION:-latest}
     container_name: e1-grid-tag-engine
     restart: unless-stopped
     depends_on:
@@ -316,7 +325,7 @@ services:
     build:
       context: ./apps/alarm-service
       dockerfile: Dockerfile
-    image: e1-grid/alarm-service:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/alarm-service:${E1_VERSION:-latest}
     container_name: e1-grid-alarm-service
     restart: unless-stopped
     depends_on:
@@ -353,7 +362,7 @@ services:
     build:
       context: ./apps/notification-worker
       dockerfile: Dockerfile
-    image: e1-grid/notification-worker:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/notification-worker:${E1_VERSION:-latest}
     container_name: e1-grid-notification-worker
     restart: unless-stopped
     depends_on:
@@ -384,7 +393,7 @@ services:
     build:
       context: ./apps/iec104-outbound
       dockerfile: Dockerfile
-    image: e1-grid/iec104-outbound:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/iec104-outbound:${E1_VERSION:-latest}
     container_name: e1-grid-iec104-outbound
     restart: unless-stopped
     depends_on:
@@ -422,7 +431,7 @@ services:
     build:
       context: ./apps/modbus-outbound
       dockerfile: Dockerfile
-    image: e1-grid/modbus-outbound:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/modbus-outbound:${E1_VERSION:-latest}
     container_name: e1-grid-modbus-outbound
     restart: unless-stopped
     depends_on:
@@ -465,7 +474,7 @@ services:
     build:
       context: ./apps/ftp-server
       dockerfile: Dockerfile
-    image: e1-grid/ftp-server:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/ftp-server:${E1_VERSION:-latest}
     container_name: e1-grid-ftp-server
     restart: unless-stopped
     environment:
@@ -499,7 +508,7 @@ services:
     build:
       context: ./apps/whatsapp-web-gateway
       dockerfile: Dockerfile
-    image: e1-grid/whatsapp-web-gateway:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/whatsapp-web-gateway:${E1_VERSION:-latest}
     container_name: e1-grid-whatsapp-web-gateway
     restart: unless-stopped
     security_opt:
@@ -521,7 +530,7 @@ services:
     build:
       context: ./apps/frontend-web
       dockerfile: Dockerfile
-    image: e1-grid/frontend-web:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/frontend-web:${E1_VERSION:-latest}
     container_name: e1-grid-frontend-web
     restart: unless-stopped
     depends_on:

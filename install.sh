@@ -10,7 +10,7 @@
 #        sudo bash install.sh
 #
 #   2) Tertemiz VPS'te (curl | bash):
-#        curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+#        curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo bash
 #
 # Idempotent: tekrar calistirmak guvenli. Mevcut .env'i koruyup eksik
 # alanlari rastgele degerlerle doldurur, Docker'i atlar (zaten kuruluysa),
@@ -20,23 +20,36 @@
 # "EnerjiOne Grid" AP'si, e1-grid.local mDNS ve UI'dan IP/DNS ayari da ayni
 # komutla kurulur. VPS'lerde WiFi karti olmadigi icin devreye girmez.
 #
+# Surum modeli: cihaz bir DALI degil, yayinlanmis bir TAG'i takip eder.
+# Varsayilan olarak en son `v*` tag'ine gecer (kararli kanal). Gelistirme
+# surumunu denemek icin: E1_REF=main
+#
+# Imajlar: release CI tarafindan derlenip ghcr.io'ya basilir. Kurulum imaji
+# INDIRIR, derlemez — saha PC'sinde 3-8 dakikalik build adimi ortadan kalkar
+# ve her cihazda birebir ayni imaj calisir. Imaj cekilemezse (token yok,
+# internet yok) otomatik olarak yerel build'e duser.
+#
 # Env override'lar (hepsi opsiyonel):
-#   INSTALL_DIR  hedef dizin (default: /opt/enerjione-grid)
-#   BRANCH       checkout edilecek git branch'i (default: docker-linux-deploy)
-#   REPO_URL     git remote URL (default: github.com/fikretsafak/EnerjiOneGrid.git)
-#   INSTALL_USER kurulum sonrasi dosya sahibi olacak kullanici
-#                (default: SUDO_USER veya root)
-#   ASSUME_YES=1 tum onay sorularini atla
-#   E1_APPLIANCE 1 = appliance modunu zorla (WiFi karti yoksa bile)
-#                0 = hic kurma (WiFi karti olsa bile)
-#                bos/auto = WiFi kartina gore otomatik karar (varsayilan)
+#   INSTALL_DIR    hedef dizin (default: /opt/enerjione-grid)
+#   E1_REF         checkout edilecek tag/dal (default: en son v* tag, yoksa main)
+#   E1_REPO_URL    git remote URL (default: github.com/enerjione/enerjione-grid)
+#   E1_GHCR_TOKEN  private imajlari cekmek icin read:packages token'i
+#   E1_BUILD=1     imaji cekmek yerine her zaman yerel derle
+#   INSTALL_USER   kurulum sonrasi dosya sahibi olacak kullanici
+#                  (default: SUDO_USER veya root)
+#   ASSUME_YES=1   tum onay sorularini atla
+#   E1_APPLIANCE   1 = appliance modunu zorla (WiFi karti yoksa bile)
+#                  0 = hic kurma (WiFi karti olsa bile)
+#                  bos/auto = WiFi kartina gore otomatik karar (varsayilan)
 # ===========================================================================
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/fikretsafak/EnerjiOneGrid.git}"
-BRANCH="${BRANCH:-docker-linux-deploy}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/enerjione-grid}"
+# Bootstrap sirasinda (curl | bash) _lib.sh henuz yuklenmedi; asagidaki iki
+# deger lib yuklenince oradaki merkezi tanimla hizalanir.
+REPO_URL="${E1_REPO_URL:-${REPO_URL:-https://github.com/enerjione/enerjione-grid.git}}"
+BRANCH="${E1_BOOTSTRAP_REF:-main}"
 
 # ---- Bootstrap: bu script repo icinden mi yoksa curl | bash mi? ----------
 # Iki senaryo: (a) repo kokunden bash install.sh — `infra/scripts/linux/_lib.sh`
@@ -56,7 +69,7 @@ else
   # curl | bash modu — lib'i GitHub'dan cek (tmpfile'a).
   if command -v curl >/dev/null 2>&1; then
     TMP_LIB="$(mktemp)"
-    if curl -fsSL "https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/${BRANCH}/infra/scripts/linux/_lib.sh" -o "$TMP_LIB" 2>/dev/null; then
+    if curl -fsSL "https://raw.githubusercontent.com/enerjione/enerjione-grid/${BRANCH}/infra/scripts/linux/_lib.sh" -o "$TMP_LIB" 2>/dev/null; then
       # shellcheck disable=SC1090
       source "$TMP_LIB"
       LIB_LOADED=1
@@ -129,12 +142,9 @@ if [[ -d "${INSTALL_DIR}/.git" ]]; then
   e1_info "Repo zaten mevcut; fetch + checkout..."
   cd "${INSTALL_DIR}"
   if ! git diff --quiet || ! git diff --cached --quiet; then
-    e1_warn "Lokal degisiklik var; git pull ATLANDI. Mevcut commit ile devam."
+    e1_warn "Lokal degisiklik var; guncelleme ATLANDI. Mevcut commit ile devam."
   else
-    e1_hint "Guncellemeler indiriliyor..."
-    git fetch --progress origin "${BRANCH}"
-    git checkout --quiet "${BRANCH}"
-    git pull --ff-only --progress
+    e1_run "Guncellemeler indiriliyor" git fetch --tags --prune origin
   fi
 else
   if [[ -e "${INSTALL_DIR}" ]]; then
@@ -147,6 +157,21 @@ else
   e1_run "Kaynak kod indiriliyor" \
     git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
   cd "${INSTALL_DIR}"
+  git fetch --tags --quiet origin || true
+fi
+
+# Kararli kanal: en son yayin tag'i. Hic tag yoksa ana dal (yayin oncesi repo).
+TARGET_REF="$(e1_target_ref)"
+if git rev-parse --verify --quiet "refs/tags/${TARGET_REF}" >/dev/null; then
+  # Tag'e gecince HEAD detached olur — saha cihazinda dogru davranis budur:
+  # cihaz bir dalin ucunu degil, TEST EDILMIS bir yayini calistirir.
+  git checkout --quiet --detach "refs/tags/${TARGET_REF}"
+  e1_info "Yayin surumu: ${TARGET_REF}"
+elif git rev-parse --verify --quiet "refs/remotes/origin/${TARGET_REF}" >/dev/null; then
+  git checkout --quiet -B "${TARGET_REF}" "origin/${TARGET_REF}"
+  e1_warn "Yayin tag'i bulunamadi — '${TARGET_REF}' dali kullaniliyor (gelistirme surumu)."
+else
+  e1_warn "'${TARGET_REF}' bulunamadi; mevcut commit ile devam ediliyor."
 fi
 
 # Surum artik biliniyor — bundan sonraki tum adim basliklarinda gorunur.
@@ -244,6 +269,26 @@ _ensure_env_var "NATS_GATEWAY_PASSWORD" "$NG"
 # kendisi olusturur (docker-compose.yml POSTGRES_DB).
 _set_env_var "POSTGRES_DB" "enerjione_grid"
 _set_env_var "POSTGRES_USER" "enerjione_grid"
+
+# --- Imaj kaynagi + surum -------------------------------------------------
+# E1_VERSION 'latest' DEGIL, checkout edilen surum olmali: rollback ancak
+# imaj etiketi somut bir semver ise mumkun. E1_REGISTRY compose'un imajlari
+# nereden cekecegini belirler.
+_set_env_var "E1_REGISTRY" "${E1_REGISTRY:-$E1_REGISTRY_DEFAULT}"
+if [[ "$E1_VERSION_LABEL" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  _set_env_var "E1_VERSION" "$E1_VERSION_LABEL"
+else
+  # Surum okunamadi (yayin oncesi checkout, bozuk VERSION dosyasi): 'latest'
+  # ile devam et ama bunu gizleme — rollback imkani olmadigini kullanici bilsin.
+  _set_env_var "E1_VERSION" "latest"
+  e1_warn "Surum semver olarak okunamadi; imaj etiketi 'latest' olacak (rollback zorlasir)."
+fi
+
+# GHCR token'i: env ile verilmisse .env'e yaz. Yoksa sonraki adimda sorulur.
+if [[ -n "${E1_GHCR_TOKEN:-}" ]]; then
+  _set_env_var "GHCR_TOKEN" "$E1_GHCR_TOKEN"
+  _set_env_var "GHCR_USERNAME" "${E1_GHCR_USERNAME:-x-access-token}"
+fi
 
 # APP_ENV — install.sh production deploy yapiyor, default production.
 # CORS_ORIGINS '*' bu env'de backend tarafindan reddedilir (config.py guard).
@@ -364,11 +409,40 @@ else
 fi
 
 # ---- 5/6: Build + up ------------------------------------------------------
-e1_step "Servisler derleniyor ve ayaga kaldiriliyor..."
-e1_info "Docker imajlari derleniyor..."
-e1_hint "Bu adim 3-8 dakika surer. Ekran bir sure hareketsiz gorunebilir;"
-e1_hint "kurulum devam ediyor, kesmeyin."
-docker compose build --pull
+e1_step "Servis imajlari hazirlaniyor..."
+
+# Imajlari CI derler, cihaz sadece INDIRIR. Boylece saha kurulumu dakikalar
+# yerine saniyeler surer ve her cihazda bit-bit ayni imaj calisir (derleme
+# ortami farkliliklarindan dogan "bende calisiyordu" sinifi biter).
+# Cekilemezse yerel derlemeye duseriz: internet kisitli veya token verilmemis
+# kurulumlar da calismaya devam etsin.
+IMAGE_SOURCE="build"
+if [[ "${E1_BUILD:-0}" != "1" ]]; then
+  # Private paket: once ghcr.io girisi. Token yoksa ve soru sorulabiliyorsa iste.
+  if ! e1_ghcr_login .env; then
+    if e1_can_prompt; then
+      e1_info "Hazir imajlari indirmek icin kurulum anahtari (GHCR token) gerekir."
+      e1_hint "Bos birakirsaniz imajlar bu cihazda derlenir (daha yavas)."
+      _tok="$(e1_ask 'Kurulum anahtari' '')"
+      if [[ -n "$_tok" ]]; then
+        _set_env_var "GHCR_TOKEN" "$_tok"
+        _set_env_var "GHCR_USERNAME" "${E1_GHCR_USERNAME:-x-access-token}"
+        e1_ghcr_login .env || true
+      fi
+    fi
+  fi
+  if e1_run "Hazir imajlar indiriliyor" docker compose pull; then
+    IMAGE_SOURCE="pull"
+  else
+    e1_warn "Imajlar indirilemedi — bu cihazda derlemeye geciliyor."
+  fi
+fi
+
+if [[ "$IMAGE_SOURCE" == "build" ]]; then
+  e1_hint "Derleme 3-8 dakika surer; kurulum devam ediyor, kesmeyin."
+  e1_run "Imajlar derleniyor" docker compose build --pull \
+    || e1_die "Imaj derlemesi basarisiz. Detay yukarida."
+fi
 
 # Postgres'i once tek basina kaldirip kimlik on-kontrolunu yap. Ilk kurulumda
 # volume bos -> imaj enerjione_grid rol+DB'sini kendisi olusturur, preflight

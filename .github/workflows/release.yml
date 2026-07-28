@@ -1,0 +1,185 @@
+# Release — `v*` tag'i push edilince calisir.
+#
+#   git tag v2.25.0 && git push origin v2.25.0
+#     -> dogrulama (tag == VERSION == package.json)
+#     -> 9 servis imaji derlenir ve GHCR'a basilir
+#     -> GitHub Release olusur (otomatik degisiklik listesi)
+#     -> VDS'e deploy (secret tanimliysa)
+#
+# Saha PC'leri buradan ETKILENMEZ; kendi zamanlarinda `sudo bash update.sh`
+# ile ayni tag'e gecerler. Kontrollu yayilim istedigimiz icin boyle.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Yeniden yayinlanacak tag (orn. v2.25.0)"
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository }}   # enerjione/enerjione-grid
+
+jobs:
+  verify:
+    name: Surum dogrulama
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      major_minor: ${{ steps.v.outputs.major_minor }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - id: v
+        name: Tag == VERSION == package.json
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${raw#v}"
+          v_file="$(tr -d ' \t\r\n' < VERSION)"
+          v_pkg="$(node -p "require('./apps/frontend-web/package.json').version")"
+          echo "tag=${version}  VERSION=${v_file}  package.json=${v_pkg}"
+          # Uc kaynak da ayni olmali. Aksi halde 'v2.25.0' tag'i 2.24.4 kodunu
+          # iceren bir imaj uretir ve rollback yaparken hangi surumun ne oldugu
+          # anlasilmaz olur.
+          if [ "${version}" != "${v_file}" ] || [ "${version}" != "${v_pkg}" ]; then
+            echo "::error::Tag/VERSION/package.json uyusmuyor. Once VERSION ve package.json'u guncelleyip commit'leyin, sonra tag atin."
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$(echo "${version}" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.service }} imaji
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # Bir servis kirilirsa digerlerinin de sonucunu gorelim; yarim kalan
+      # release'i tek tek degil topluca duzeltmek daha hizli.
+      fail-fast: false
+      matrix:
+        service:
+          - backend-api
+          - frontend-web
+          - tag-engine
+          - alarm-service
+          - notification-worker
+          - iec104-outbound
+          - modbus-outbound
+          - ftp-server
+          - whatsapp-web-gateway
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: GHCR login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/${{ matrix.service }}
+          push: true
+          # Tek platform (linux/amd64): hem VDS hem saha mini PC x86.
+          # ARM cihaz (Raspberry Pi vb.) gerekirse buraya linux/arm64 eklenir —
+          # maliyeti build suresinin ~2 katina cikmasi.
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:${{ needs.verify.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:${{ needs.verify.outputs.major_minor }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:latest
+          # GitHub Actions cache: ikinci release'ten itibaren degismeyen
+          # katmanlar yeniden derlenmez (9 servis x tam build cok pahali).
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          # Imaji kaynak commit'e baglar: GHCR'da paket -> repo -> commit izi.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.verify.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  release:
+    name: GitHub Release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Release olustur
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            printf 'Sahaya kurulum / guncelleme:\n\n'
+            printf '    cd /opt/enerjione-grid && sudo bash update.sh\n\n'
+            printf 'Imajlar: `ghcr.io/%s/<servis>:%s`\n' "${{ github.repository }}" "$VERSION"
+          } > /tmp/notes.md
+          # Zaten varsa (workflow_dispatch ile tekrar calistirildi) uzerine yazma,
+          # sadece notlari tazele.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file /tmp/notes.md
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "EnerjiOne Grid ${VERSION}" \
+            --generate-notes \
+            --notes-file /tmp/notes.md
+
+  deploy-vds:
+    name: VDS deploy
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    # Ortam korumasi: GitHub UI'dan 'production' environment'ina onay/kisit
+    # eklenebilir (belirli kisiler onaylamadan deploy calismaz).
+    environment: production
+    steps:
+      - name: SSH ile deploy
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_USER: ${{ secrets.VDS_USER }}
+          VDS_SSH_KEY: ${{ secrets.VDS_SSH_KEY }}
+          VDS_PATH: ${{ vars.VDS_PATH || '/opt/enerjione-grid' }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VDS_HOST:-}" ] || [ -z "${VDS_SSH_KEY:-}" ]; then
+            echo "::notice::VDS_HOST/VDS_SSH_KEY secret'lari tanimli degil — otomatik deploy atlandi."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VDS_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Host key'i sabitle: ilk baglantida korumasiz kabul etmek yerine
+          # VDS_HOST_KEY secret'i varsa onu kullan.
+          if [ -n "${{ secrets.VDS_HOST_KEY }}" ]; then
+            printf '%s\n' "${{ secrets.VDS_HOST_KEY }}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$VDS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
+            "${VDS_USER}@${VDS_HOST}" \
+            "sudo bash ${VDS_PATH}/update.sh --version ${TAG#v} --yes"

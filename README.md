@@ -2,9 +2,12 @@
 
 **Endüstriyel Akıllı Şebeke İzleme Platformu** — Horstmann Smart Navigator 2.0 arıza-geçiş göstergesi cihazları için açık kaynak izleme/yönetim platformu.
 
+[![CI](https://github.com/enerjione/enerjione-grid/actions/workflows/ci.yml/badge.svg)](https://github.com/enerjione/enerjione-grid/actions/workflows/ci.yml)
+[![Release](https://github.com/enerjione/enerjione-grid/actions/workflows/release.yml/badge.svg)](https://github.com/enerjione/enerjione-grid/actions/workflows/release.yml)
+
 > 🌐 **Web:** `https://grid.enerjione.com`
-> 📦 **Repo:** [github.com/fikretsafak/EnerjiOneGrid](https://github.com/fikretsafak/EnerjiOneGrid)
-> 📅 **Sürüm:** 2.24.4
+> 📦 **Repo:** [github.com/enerjione/enerjione-grid](https://github.com/enerjione/enerjione-grid)
+> 📅 **Sürüm:** [`VERSION`](VERSION) dosyası — tek kaynak
 
 ---
 
@@ -19,14 +22,14 @@
 **Tek komutla sıfırdan ayağa kalkar.** Test edildi: Ubuntu 22.04/24.04, Debian 12.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo bash
 ```
 
 Veya manuel:
 
 ```bash
-sudo git clone --branch docker-linux-deploy \
-  https://github.com/fikretsafak/EnerjiOneGrid.git /opt/enerjione-grid
+sudo git clone --branch main \
+  https://github.com/enerjione/enerjione-grid.git /opt/enerjione-grid
 cd /opt/enerjione-grid
 sudo bash install.sh
 ```
@@ -34,6 +37,24 @@ sudo bash install.sh
 Kurulum sonrası:
 - 🌐 Web: `http://<VPS-IP>/`
 - 👤 İlk giriş: `installer` / `ChangeMe123!` _(mutlaka değiştir)_
+
+> ℹ️ Kurulum **imajları indirir, cihazda derlemez**. İmajlar release CI'da
+> üretilip `ghcr.io/enerjione/enerjione-grid/*` altına basılır. Depo private
+> olduğu için salt-okunur bir GHCR token'ı gerekir; kurulum sorar. Token
+> verilmezse imajlar cihazda derlenir (çalışır, sadece yavaştır).
+
+## 🔄 Güncelleme ve geri alma
+
+```bash
+cd /opt/enerjione-grid
+sudo bash update.sh                    # en son yayına geç
+sudo bash update.sh backend            # tek servis
+sudo bash update.sh --version 2.24.4   # belirli sürüme dön (rollback)
+sudo bash update.sh --edge             # geliştirme dalı (main)
+```
+
+Saha cihazları bir dalın ucunu değil, **yayınlanmış bir tag**'i takip eder.
+Süreç: [`docs/CI-CD.md`](docs/CI-CD.md)
 
 ---
 
@@ -312,7 +333,7 @@ docker system prune -af --volumes   # eski/dangling temizliği
 
 - **Geliştirici:** Fikret Şafak
 - **Şirket:** [Form Elektrik](https://www.formelektrik.com.tr)
-- **Issue tracker:** [GitHub Issues](https://github.com/fikretsafak/EnerjiOneGrid/issues)
+- **Issue tracker:** [GitHub Issues](https://github.com/enerjione/enerjione-grid/issues)
 
 ---
 

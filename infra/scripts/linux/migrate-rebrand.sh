@@ -21,8 +21,8 @@ set -euo pipefail
 
 OLD_DIR="${OLD_DIR:-/opt/enerjione}"
 NEW_DIR="${NEW_DIR:-/opt/enerjione-grid}"
-REPO_URL="${REPO_URL:-https://github.com/fikretsafak/EnerjiOneGrid.git}"
-BRANCH="${BRANCH:-docker-linux-deploy}"
+REPO_URL="${REPO_URL:-https://github.com/enerjione/enerjione-grid.git}"
+BRANCH="${BRANCH:-main}"
 TS=$(date +%Y%m%d-%H%M%S)
 DUMP_FILE="/tmp/enerjione-pre-rebrand-${TS}.sql.gz"
 

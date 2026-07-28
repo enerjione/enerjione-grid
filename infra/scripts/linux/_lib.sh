@@ -12,6 +12,24 @@
 #     sessizce varsayilana dusuyordu (systemd kaydi bu yuzden atlaniyordu).
 
 # ---------------------------------------------------------------------------
+# Kaynak / registry konfigurasyonu — TEK YER
+# ---------------------------------------------------------------------------
+# Repo veya registry adresi degisince tek dosya duzeltilir. Hepsi env ile
+# override edilebilir (test kurulumu, fork, ozel registry).
+#
+# Surum modeli: saha cihazlari DALI degil TAG'i takip eder. Yayin `v2.25.0`
+# tag'i ile yapilir; install/update varsayilan olarak en son `v*` tag'ine
+# gecer. Bir dala sabitlenmek istenirse E1_REF=main verilir (edge kanali).
+E1_REPO_SLUG="${E1_REPO_SLUG:-enerjione/enerjione-grid}"
+E1_REPO_URL="${E1_REPO_URL:-https://github.com/${E1_REPO_SLUG}.git}"
+E1_RAW_BASE="${E1_RAW_BASE:-https://raw.githubusercontent.com/${E1_REPO_SLUG}}"
+# curl | bash modunda _lib.sh'in cekilecegi ref. Tag'ler henuz bilinmedigi
+# icin bootstrap her zaman ana daldan okunur.
+E1_BOOTSTRAP_REF="${E1_BOOTSTRAP_REF:-main}"
+# Imajlarin bulundugu registry yolu. compose bunu ${E1_REGISTRY} ile okur.
+E1_REGISTRY_DEFAULT="${E1_REGISTRY_DEFAULT:-ghcr.io/${E1_REPO_SLUG}}"
+
+# ---------------------------------------------------------------------------
 # Renk paleti
 # ---------------------------------------------------------------------------
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
@@ -524,6 +542,56 @@ e1_ask() {
 e1_can_prompt() { [[ "${ASSUME_YES:-0}" != "1" ]] && _e1_read_src >/dev/null; }
 
 # ---------------------------------------------------------------------------
+# Yayin (release) kanali — cihazlar dali degil TAG'i takip eder
+# ---------------------------------------------------------------------------
+# Repo icinde en son semver tag'ini bulur (v2.25.0 gibi). Tag yoksa bos doner
+# ve cagiran ana dala duser — henuz hic yayin yapilmamis repolarda calisir.
+# `--sort=-v:refname` semver'e gore siralar; alfabetik siralama v2.10.0'i
+# v2.9.0'dan ONCE koyardi.
+e1_latest_tag() {
+  git tag -l 'v[0-9]*' --sort=-v:refname 2>/dev/null | head -n1
+}
+
+# Cihazin gececegi ref'i belirle:
+#   E1_REF verilmisse aynen kullan (tag, dal veya commit)
+#   verilmemisse en son yayin tag'i
+#   hic tag yoksa ana dal
+e1_target_ref() {
+  if [[ -n "${E1_REF:-}" ]]; then printf '%s' "$E1_REF"; return 0; fi
+  local t
+  t="$(e1_latest_tag)"
+  printf '%s' "${t:-$E1_BOOTSTRAP_REF}"
+}
+
+# ---------------------------------------------------------------------------
+# GHCR — private imajlar icin login
+# ---------------------------------------------------------------------------
+# Repo private oldugu icin paketler de private; cihaz salt-okunur bir token
+# ile ghcr.io'ya login olmadan imaj CEKEMEZ. Token .env'de GHCR_TOKEN.
+# Zaten login ise (~/.docker/config.json) tekrar denemez.
+# Donus: 0 = imaj cekilebilir, 1 = cekilemez (cagiran build'e duser).
+e1_ghcr_login() {
+  local env_file="${1:-.env}" user="" token="" registry="ghcr.io"
+  [[ -n "${GHCR_TOKEN:-}" ]] && token="$GHCR_TOKEN"
+  [[ -n "${GHCR_USERNAME:-}" ]] && user="$GHCR_USERNAME"
+  if [[ -z "$token" && -f "$env_file" ]]; then
+    token="$(sed -n 's/^GHCR_TOKEN=//p' "$env_file" | tail -n1 | tr -d '"'"'"'\r')"
+    user="$(sed -n 's/^GHCR_USERNAME=//p' "$env_file" | tail -n1 | tr -d '"'"'"'\r')"
+  fi
+  if [[ -z "$token" ]]; then
+    return 1
+  fi
+  # Kullanici adi bos birakilabilir: GHCR token dogrulamasinda kullanici adi
+  # onemsizdir, token belirleyicidir. Yine de bos gecilemedigi icin doldururuz.
+  [[ -z "$user" ]] && user="x-access-token"
+  if printf '%s' "$token" | docker login "$registry" -u "$user" --password-stdin >/dev/null 2>&1; then
+    return 0
+  fi
+  e1_warn "ghcr.io girisi basarisiz — token gecersiz veya suresi dolmus olabilir."
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # Ortam tespiti
 # ---------------------------------------------------------------------------
 # Makinede WiFi arayuzu var mi? Appliance (mini PC) modunu otomatik acmak
@@ -549,8 +617,16 @@ e1_appliance_installed() {
 # Urun surumu — tek kanonik kaynak apps/frontend-web/package.json "version".
 # Branch adi kullanici icin anlamsiz; ekranlarda numarali surum gosterilir.
 # Argüman: repo koku (verilmezse calisilan dizin).
+# Surumun TEK KAYNAGI kok dizindeki VERSION dosyasidir; release CI hem bu
+# dosyayi hem git tag'ini hem de package.json'i ayni olmaya zorlar.
+# package.json fallback'i eski kurulumlarda (VERSION dosyasi yokken klonlanmis)
+# calismaya devam etsin diye duruyor.
 e1_version() {
-  local root="${1:-.}" pkg="${1:-.}/apps/frontend-web/package.json" v=""
+  local root="${1:-.}" vf="${1:-.}/VERSION" pkg="${1:-.}/apps/frontend-web/package.json" v=""
+  if [[ -f "$vf" ]]; then
+    v="$(tr -d ' \t\r\n' < "$vf")"
+    [[ -n "$v" ]] && { echo "$v"; return 0; }
+  fi
   [[ -f "$pkg" ]] || { echo "?"; return 0; }
   v="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pkg" | head -1)"
   echo "${v:-?}"

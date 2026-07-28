@@ -1,0 +1,149 @@
+# CI — her PR ve main push'unda calisir.
+#
+# Amac: "main her an release edilebilir" garantisi. Release workflow'u bu
+# kontrollerin gectigini varsayar; burada yakalanmayan hata sahaya gider.
+#
+# Isler bilerek AYRI job: biri kirildiginda digerlerinin sonucunu da gormek
+# istiyoruz (tek job'da ilk hata kalanlari maskeler).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Ayni dal icin ust uste push atilirsa eskisini iptal et — runner israfi olmasin.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend — typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/frontend-web/package-lock.json
+      - name: Bagimliliklar (npm ci — lockfile birebir)
+        working-directory: apps/frontend-web
+        run: npm ci
+      # `npm run build` = `tsc -b && vite build`. Ayri `tsc --noEmit` KOSMUYORUZ:
+      # gecmiste --noEmit'in kacirdigi bir hatayi vite build yakalamisti, yani
+      # asil kapi build. Typecheck zaten build'in ilk adimi.
+      - name: Build (tsc -b + vite build)
+        working-directory: apps/frontend-web
+        run: npm run build
+
+  backend:
+    name: Backend — ruff + pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/backend-api/requirements.txt
+      - name: Bagimliliklar
+        working-directory: apps/backend-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Ruff (gercek hata kurallari)
+        run: ruff check .
+      - name: pytest
+        working-directory: apps/backend-api
+        run: pytest -q
+
+  migrations:
+    name: Alembic — tek head kontrolu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Alembic kur
+        run: pip install alembic
+      # Iki dal ayni anda migration urettiginde zincir catallanir ve `upgrade
+      # head` "Multiple head revisions" ile patlar — bunu MERGE ONCESI yakala.
+      # `alembic heads` DB'ye baglanmaz, sadece versions/ dizinini okur.
+      - name: Tek head mi?
+        working-directory: apps/backend-api
+        run: |
+          set -euo pipefail
+          heads="$(alembic heads 2>/dev/null | grep -c '(head)' || true)"
+          echo "Bulunan head sayisi: ${heads}"
+          alembic heads
+          if [ "${heads}" != "1" ]; then
+            echo "::error::Alembic zinciri catallanmis (${heads} head). 'alembic merge heads' ile birlestirin."
+            exit 1
+          fi
+
+  scripts:
+    name: Kurulum scriptleri — syntax + shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Saha kurulumu bu scriptlere bagli; bir syntax hatasi mini PC'de
+      # kurulumu yarida birakir. Once ucuz kontrol (bash -n), sonra shellcheck.
+      - name: bash -n
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r f; do
+            bash -n "$f" || { echo "::error file=$f::bash syntax hatasi"; fail=1; }
+          done < <(git ls-files '*.sh')
+          exit $fail
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # SC1091: source edilen dosyayi CI'da cozemiyor (runtime'da var).
+          # Ciddi bulgular (error) kapi; uyarilar rapor.
+          git ls-files '*.sh' | xargs shellcheck -e SC1091 -S error
+
+  compose:
+    name: docker-compose dogrulama
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # `compose config` YAML + interpolasyon + anchor'lari cozer. .env.example
+      # ile kosuyoruz: zorunlu degiskenlerden biri (?: ile isaretli) orada
+      # eksikse burada patlar, sahada degil.
+      - name: compose config (.env.example ile)
+        run: |
+          set -euo pipefail
+          cp .env.example .env
+          docker compose config --quiet
+          echo "Cozulen image referanslari:"
+          docker compose config --images
+
+  version:
+    name: Surum tutarliligi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # VERSION tek kaynak. package.json ondan sapmissa release tag'i hangi
+      # surumu temsil ediyor belirsizlesir.
+      - name: VERSION == package.json
+        run: |
+          set -euo pipefail
+          v_file="$(tr -d ' \t\r\n' < VERSION)"
+          v_pkg="$(node -p "require('./apps/frontend-web/package.json').version")"
+          echo "VERSION=${v_file}  package.json=${v_pkg}"
+          if [ "${v_file}" != "${v_pkg}" ]; then
+            echo "::error::VERSION (${v_file}) ile package.json (${v_pkg}) uyusmuyor."
+            exit 1
+          fi
+          if ! echo "${v_file}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::VERSION semver degil: ${v_file}"
+            exit 1
+          fi

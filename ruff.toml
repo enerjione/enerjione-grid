@@ -1,0 +1,24 @@
+# Ruff — CI'da "gercek hata" kapisi olarak calisir, stil polisi olarak DEGIL.
+#
+# Neden dar bir kural seti: kod tabani ruff olmadan buyudu. Tum varsayilan
+# kurallari acmak CI'i ilk gunden kirmizi yapar ve kimse bakmaz olur. Burada
+# sadece CALISMA ZAMANINDA PATLAYACAK seyleri yakaliyoruz:
+#   E9  — syntax / IndentationError
+#   F63 — anlamsiz karsilastirma (`if x is "str"` gibi)
+#   F7  — yanlis yerde break/continue/return
+#   F82 — tanimsiz isim (undefined name) — en degerlisi, import unutmayi yakalar
+#   F401 nin dahil OLMADIGINA dikkat: kullanilmayan import runtime'i bozmaz.
+#
+# Stil/format kurallarini sonradan modul modul acmak icin: [lint] select'e
+# ekleyip once o dizini duzelt, sonra CI'a al.
+target-version = "py311"
+line-length = 120
+
+exclude = [
+  ".venv",
+  "alembic_migrations/versions",
+  "**/__pycache__",
+]
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]

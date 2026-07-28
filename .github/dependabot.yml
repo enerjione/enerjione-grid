@@ -1,0 +1,52 @@
+# Dependabot — bagimlilik guncellemeleri PR olarak gelir, otomatik MERGE OLMAZ.
+#
+# Haftalik ve SINIRLI sayida acilir: endustriyel bir urunde her minor bump'i
+# takip etmek yerine, guvenlik yamalarini ve birikmis majorlari kontrollu
+# almak istiyoruz. Python runtime bagimliliklari hash-locked oldugu icin
+# (requirements.txt) Dependabot requirements.in'i degil txt'yi gunceller;
+# merge ettikten sonra pip-compile ile yeniden uretmek gerekebilir.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /apps/frontend-web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Tek tek 20 PR yerine gruplanmis tek PR: inceleme yuku dusuyor.
+      minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /apps/backend-api
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-patch:
+        update-types: [minor, patch]
+
+  # Workflow action'lari (checkout, setup-node, build-push-action...).
+  # Supply-chain acisindan en kritik olani bu: pinlenmis surumler eskirse
+  # guvenlik yamasi almazlar.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  # Servis imajlarinin taban imajlari (python:3.11-slim, node:20-alpine, ...).
+  - package-ecosystem: docker
+    directories:
+      - /apps/backend-api
+      - /apps/frontend-web
+      - /apps/tag-engine
+      - /apps/alarm-service
+      - /apps/notification-worker
+      - /apps/iec104-outbound
+      - /apps/modbus-outbound
+      - /apps/ftp-server
+      - /apps/whatsapp-web-gateway
+    schedule:
+      interval: monthly

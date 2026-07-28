@@ -69,7 +69,7 @@ sudo ufw status
 ### 2.1 Otomatik (önerilen)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo bash
 ```
 
 Script otomatik yapar:
@@ -85,8 +85,8 @@ Script otomatik yapar:
 
 ```bash
 # 1. Repo klonla
-sudo git clone --branch docker-linux-deploy \
-  https://github.com/fikretsafak/EnerjiOneGrid.git \
+sudo git clone --branch main \
+  https://github.com/enerjione/enerjione-grid.git \
   /opt/enerjione-grid
 
 # 2. Install script çalıştır
@@ -470,7 +470,7 @@ sudo bash uninstall.sh --yes --purge-dir
 # DNS kaydı + Let's Encrypt cert'i kalır.
 
 # Tekrar kurmak için:
-curl -fsSL https://raw.githubusercontent.com/fikretsafak/EnerjiOneGrid/docker-linux-deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo bash
 ```
 
 ---
@@ -481,7 +481,7 @@ Sorun çözülmediyse:
 1. `sudo docker compose logs --tail 200 backend-api` çıktısını kaydet
 2. `sudo systemctl status enerjione-grid --no-pager` çıktısını ekle
 3. `cat /opt/enerjione-grid/.env | grep -v PASSWORD | grep -v SECRET | grep -v TOKEN` (hassas alanlar maskelenmiş)
-4. GitHub Issues'da issue aç: https://github.com/fikretsafak/EnerjiOneGrid/issues
+4. GitHub Issues'da issue aç: https://github.com/enerjione/enerjione-grid/issues
 
 ---
 

@@ -34,7 +34,29 @@ e1_require_root "$@"
 e1_enable_error_trap
 E1_HELP_HINT="Sorun giderme: docs/SAHA-KURULUM.md"
 
-TARGET="${1:-all}"
+# ---- Argumanlar -----------------------------------------------------------
+#   [servis]              sadece o servisi guncelle (bkz. basliktaki liste)
+#   --version X.Y.Z       belirli bir surume gec (rollback dahil)
+#   --edge                yayin tag'i yerine ana dali kullan (gelistirme)
+#   --build               hazir imaji indirmek yerine bu cihazda derle
+#   --yes                 tum onay sorularini atla (CI/otomatik deploy)
+TARGET="all"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --version)
+      [[ -n "${2:-}" ]] || e1_die "--version bir surum bekler, orn: --version 2.25.0"
+      # 'v' onekiyle de yazilabilsin: --version v2.25.0 == --version 2.25.0
+      E1_REF="v${2#v}"
+      shift 2
+      ;;
+    --version=*) _v="${1#--version=}"; E1_REF="v${_v#v}"; shift ;;
+    --edge)      E1_REF="$E1_BOOTSTRAP_REF"; shift ;;
+    --build)     E1_BUILD=1; shift ;;
+    --yes|-y)    ASSUME_YES=1; shift ;;
+    -*)          e1_die "Bilinmeyen secenek: $1" ;;
+    *)           TARGET="$1"; shift ;;
+  esac
+done
 
 cd "$SCRIPT_DIR"
 
@@ -134,12 +156,56 @@ else
   e1_info "Postgres ayakta degil — yedek atlandi (ilk kurulum sonrasi?)."
 fi
 
-# ---- 3/5: Git pull --------------------------------------------------------
+# ---- 3/5: Yayin surumune gec ----------------------------------------------
+# Cihaz bir DALIN UCUNU degil, yayinlanmis bir TAG'i takip eder: guncelleme
+# ancak release CI'dan gecmis bir surume gecirir. `--version X.Y.Z` ile belirli
+# bir surume (ileri veya GERI) gecilebilir — rollback bu komuttur.
 e1_step "Yeni surum indiriliyor..."
 e1_hint "Internet hizina gore birkac saniye ile 1 dakika arasi surer."
-git pull --ff-only --progress
+
+# Depo yeni organizasyona tasindi. Eski adrese bakan kurulumlar guncelleme
+# alamaz; remote'u sessizce degil, GORUNUR sekilde tasiriz. Kullanici kendi
+# fork'unu kullaniyorsa (ne eski ne yeni adres) dokunmayiz.
+CURRENT_REMOTE="$(git remote get-url origin 2>/dev/null || echo '')"
+if [[ -n "$CURRENT_REMOTE" && "$CURRENT_REMOTE" != "$E1_REPO_URL" ]]; then
+  if [[ "$CURRENT_REMOTE" == *"fikretsafak/EnerjiOneGrid"* ]]; then
+    e1_warn "Depo adresi degismis. origin guncelleniyor:"
+    e1_hint "  eski: ${CURRENT_REMOTE}"
+    e1_hint "  yeni: ${E1_REPO_URL}"
+    git remote set-url origin "$E1_REPO_URL"
+    e1_ok "origin yeni depoya tasindi."
+  fi
+fi
+
+e1_run "Surum listesi guncelleniyor" git fetch --tags --prune --force origin \
+  || e1_die "Uzak repo'ya erisilemedi. Internet baglantisini kontrol edin."
+
+TARGET_REF="$(e1_target_ref)"
+if git rev-parse --verify --quiet "refs/tags/${TARGET_REF}" >/dev/null; then
+  git checkout --quiet --detach "refs/tags/${TARGET_REF}"
+  e1_ok "Yayin surumu: ${TARGET_REF}"
+elif git rev-parse --verify --quiet "refs/remotes/origin/${TARGET_REF}" >/dev/null; then
+  git checkout --quiet -B "${TARGET_REF}" "origin/${TARGET_REF}"
+  e1_warn "'${TARGET_REF}' bir yayin tag'i degil, dal — gelistirme surumu kuruluyor."
+else
+  e1_die "'${TARGET_REF}' bulunamadi. Mevcut surumler:\n$(git tag -l 'v[0-9]*' --sort=-v:refname | head -10 | sed 's/^/    /')"
+fi
 NEW_HEAD="$(git rev-parse --short HEAD)"
 e1_ok "Yeni HEAD: ${NEW_HEAD}"
+
+# Imaj etiketi checkout edilen surumle AYNI olmali; aksi halde yeni kod eski
+# imajla veya tam tersi calisir.
+NEW_VERSION="$(e1_version "$SCRIPT_DIR")"
+if [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  if grep -qE '^E1_VERSION=' .env; then
+    sed -i "s|^E1_VERSION=.*|E1_VERSION=${NEW_VERSION}|" .env
+  else
+    echo "E1_VERSION=${NEW_VERSION}" >> .env
+  fi
+fi
+if ! grep -qE '^E1_REGISTRY=' .env; then
+  echo "E1_REGISTRY=${E1_REGISTRY_DEFAULT}" >> .env
+fi
 
 # Docker bind mount kazasi koruma: compose `./infra/nats/nats-server.conf:
 # /etc/nats/nats-server.conf:ro` mount'u, host'ta dosya YOKSA Docker bunu
@@ -287,9 +353,27 @@ if [[ "$NEEDS_BACKEND" -eq 1 ]]; then
     || e1_die "DB on-kontrolu basarisiz. Detay yukarida; duzeltmeden update devam edemez."
 fi
 
+# Imajlar: release CI'da derlendi, cihaz sadece indirir. `--build` verilirse
+# veya indirme basarisiz olursa yerel derlemeye duseriz.
+_e1_prepare_images() {
+  local svc="${1:-}"
+  if [[ "${E1_BUILD:-0}" == "1" ]]; then
+    e1_run "Imajlar derleniyor${svc:+ (${svc})}" docker compose build ${svc:+"$svc"} \
+      || e1_die "Imaj derlemesi basarisiz. Detay yukarida."
+    return 0
+  fi
+  e1_ghcr_login .env || true
+  if e1_run "Yeni imajlar indiriliyor${svc:+ (${svc})}" docker compose pull ${svc:+"$svc"}; then
+    return 0
+  fi
+  e1_warn "Imajlar indirilemedi — bu cihazda derlemeye geciliyor."
+  e1_run "Imajlar derleniyor${svc:+ (${svc})}" docker compose build ${svc:+"$svc"} \
+    || e1_die "Ne indirme ne derleme basarili oldu. Detay yukarida."
+}
+
 if [[ -z "$SVC" ]]; then
-  e1_step "Tum servisler yeniden derleniyor + ayaga kalkiyor..."
-  docker compose build
+  e1_step "Servis imajlari hazirlaniyor + ayaga kalkiyor..."
+  _e1_prepare_images
   # Altyapi once ve tek tek: backend-api rabbitmq/nats'a `service_healthy` ile
   # bagli oldugu icin biri saglikli olmazsa duz `up -d` tek satirlik
   # "dependency failed to start" ile patliyor ve sebep ekranda gorunmuyor.
@@ -307,8 +391,8 @@ if [[ -z "$SVC" ]]; then
   fi
   docker compose up -d
 else
-  e1_step "Servis '$SVC' yeniden derleniyor + force-recreate..."
-  docker compose build "$SVC"
+  e1_step "Servis '$SVC' guncelleniyor + force-recreate..."
+  _e1_prepare_images "$SVC"
   docker compose up -d --force-recreate "$SVC"
 fi
 

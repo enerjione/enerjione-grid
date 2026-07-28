@@ -5,7 +5,8 @@ göstergesi cihazlarını izler/yönetir. Event-driven mikroservis mimarisi, Doc
 ile deploy edilir.
 
 - **Sürüm:** 2.24.4
-- **Aktif branch:** `docker-linux-deploy` (main değil — deploy bundan yapılır)
+- **Ana dal:** `main` (tek gövde, her an release edilebilir). Sürümler `v2.25.0` gibi
+  **tag** ile çıkar; deploy tag'den tetiklenir, daldan değil. İş dalları: `feat/...`, `fix/...`.
 - **Dil:** Kod yorumları ve UI **Türkçe**. Kod tabanında ASCII-only yorum tercih edilir
   (bazı dosyalarda Türkçe karakter var, yeni yorumda ASCII kullan: "ariza" gibi).
 
@@ -131,7 +132,7 @@ cd apps/frontend-web && npx tsc --noEmit    # type check
 ## Commit
 
 Conventional commit, Türkçe açıklama: `feat(scope): ...`, `fix(dashboard): ...`.
-Kullanıcı istemeden commit/push yapma. Push edilecekse `docker-linux-deploy` branch'ine.
+Kullanıcı istemeden commit/push yapma. İş dalı aç (`feat/...`, `fix/...`), `main`'e PR ile gir.
 
 ---
 
