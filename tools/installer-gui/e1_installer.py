@@ -535,13 +535,20 @@ class InstallerApp(tk.Tk):
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        # Sol panel KAYDIRILABILIR: alan sayisi artinca kucuk ekranlarda
-        # alttaki butonlar goruntunun disinda kaliyordu. Canvas + ic frame
-        # klasik Tk cozumu; ttk'nin hazir kaydirilabilir kabi yok.
+        # Sol panel: ustte KAYDIRILABILIR form, altta SABIT eylem seridi.
+        # Butonlar bilerek kaydirma alaninin DISINDA — icerideyken asagi
+        # kayinca gozden kayboluyorlardi ve en sik kullanilan seyin
+        # aranmasi gerekiyordu.
         left = ttk.Frame(body)
         body.add(left, weight=0)
-        canvas = tk.Canvas(left, highlightthickness=0, width=330)
-        vbar = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)
+
+        actions = ttk.Frame(left, padding=(0, 8, 0, 0))
+        actions.pack(side="bottom", fill="x")      # once alt serit yer alsin
+
+        scroll_area = ttk.Frame(left)
+        scroll_area.pack(side="top", fill="both", expand=True)
+        canvas = tk.Canvas(scroll_area, highlightthickness=0, width=290)
+        vbar = ttk.Scrollbar(scroll_area, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         vbar.pack(side="right", fill="y")
@@ -563,7 +570,19 @@ class InstallerApp(tk.Tk):
         body.add(term_wrap, weight=1)
 
         self._build_form(form)
+        self._build_actions(actions)
         self._build_terminal(term_wrap)
+
+        # Tam ekran ac: saha kurulumunda terminal ciktisi ne kadar genis
+        # olursa o kadar iyi. 'zoomed' Windows'ta calisir; digerlerinde
+        # -zoomed ozniteligi denenir, o da yoksa normal boyutta kalir.
+        try:
+            self.state("zoomed")
+        except tk.TclError:
+            try:
+                self.attributes("-zoomed", True)
+            except tk.TclError:
+                pass
 
     def _build_form(self, parent: ttk.Frame) -> None:
         self.vars: dict[str, tk.Variable] = {}
@@ -574,7 +593,7 @@ class InstallerApp(tk.Tk):
             f.columnconfigure(1, weight=1)
             return f
 
-        def row(parent_, r: int, label: str, key: str, default="", show=None, width=26):
+        def row(parent_, r: int, label: str, key: str, default="", show=None, width=18):
             ttk.Label(parent_, text=label).grid(row=r, column=0, sticky="w", pady=3)
             var = tk.StringVar(value=default)
             e = ttk.Entry(parent_, textvariable=var, width=width, show=show)
@@ -585,7 +604,7 @@ class InstallerApp(tk.Tk):
         # --- Cihaz ---
         s = section("Cihaz baglantisi")
         row(s, 0, "IP adresi", "host", self.profile.host)
-        row(s, 1, "SSH portu", "port", str(self.profile.port), width=8)
+        row(s, 1, "SSH portu", "port", str(self.profile.port), width=6)
         row(s, 2, "Kullanici", "user", self.profile.user)
         row(s, 3, "Parola", "password", show="•")
         ttk.Label(s, text="SSH anahtari").grid(row=4, column=0, sticky="w", pady=3)
@@ -614,7 +633,7 @@ class InstallerApp(tk.Tk):
         s = section("Kurulacak surum")
         self.version_var = tk.StringVar(value=VERSION_LATEST)
         self.version_box = ttk.Combobox(s, textvariable=self.version_var,
-                                        state="readonly", width=30)
+                                        state="readonly", width=24)
         self.version_box["values"] = (VERSION_LATEST, VERSION_EDGE)
         self.version_box.grid(row=0, column=0, columnspan=2, sticky="ew")
         ttk.Button(s, text="Surumleri yenile", command=self._refresh_versions) \
@@ -629,7 +648,7 @@ class InstallerApp(tk.Tk):
         s = section("Cihaz tipi")
         self.appliance_var = tk.StringVar(value="auto")
         self.appliance_box = ttk.Combobox(
-            s, state="readonly", width=30,
+            s, state="readonly", width=24,
             values=(
                 "Otomatik belirle (onerilen)",
                 "Saha kutusu — WiFi agi + e1-grid.local kur",
@@ -638,33 +657,42 @@ class InstallerApp(tk.Tk):
         self.appliance_box.current(0)
         self.appliance_box.grid(row=0, column=0, columnspan=2, sticky="ew")
 
-        # --- Butonlar ---
-        btns = ttk.Frame(parent)
-        btns.pack(fill="x", pady=(4, 0))
-        self.test_btn = ttk.Button(btns, text="Baglantiyi Test Et", command=self._test)
-        self.test_btn.pack(fill="x", pady=2)
-        self.start_btn = ttk.Button(btns, text="Kurulumu Baslat", command=self._start)
-        self.start_btn.pack(fill="x", pady=2)
-        self.update_btn = ttk.Button(btns, text="Guncelle", command=self._update)
-        self.update_btn.pack(fill="x", pady=2)
-        # Sonradan kurulabilen katmanlar. Kurulum sirasinda atlanmis olabilir
-        # (or. sanal makinede WiFi karti yok -> appliance atlanir).
-        ttk.Separator(btns, orient="horizontal").pack(fill="x", pady=(8, 4))
-        self.appliance_btn = ttk.Button(btns, text="Mini PC katmanini kur",
-                                        command=lambda: self._extra("appliance"))
-        self.appliance_btn.pack(fill="x", pady=2)
-        self.tailscale_btn = ttk.Button(btns, text="Uzaktan bakim VPN'ini kur",
-                                        command=lambda: self._extra("tailscale"))
-        self.tailscale_btn.pack(fill="x", pady=2)
+    def _build_actions(self, parent: ttk.Frame) -> None:
+        """Sabit eylem seridi — kaydirma alaninin disinda, hep gorunur."""
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
 
-        # Kaldirma en altta ve ayri: yanlislikla tiklanacak yerde durmasin.
-        self.uninstall_btn = ttk.Button(btns, text="Sistemi Kaldir", command=self._uninstall)
-        self.uninstall_btn.pack(fill="x", pady=(8, 2))
-        self.cancel_btn = ttk.Button(btns, text="Iptal", command=self._cancel, state="disabled")
-        self.cancel_btn.pack(fill="x", pady=2)
+        # Birincil eylemler yan yana: dikey yer kazandiriyor ve en sik
+        # kullanilanlar bir arada duruyor.
+        self.test_btn = ttk.Button(parent, text="Baglantiyi Test Et", command=self._test)
+        self.test_btn.grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
+        self.start_btn = ttk.Button(parent, text="Kur", command=self._start)
+        self.start_btn.grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
+
+        self.update_btn = ttk.Button(parent, text="Guncelle", command=self._update)
+        self.update_btn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
+
+        ttk.Separator(parent, orient="horizontal")             .grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 6))
+
+        # Sonradan kurulabilen katmanlar.
+        self.appliance_btn = ttk.Button(parent, text="Mini PC katmani",
+                                        command=lambda: self._extra("appliance"))
+        self.appliance_btn.grid(row=3, column=0, sticky="ew", padx=(0, 3), pady=2)
+        self.tailscale_btn = ttk.Button(parent, text="Uzaktan bakim VPN",
+                                        command=lambda: self._extra("tailscale"))
+        self.tailscale_btn.grid(row=3, column=1, sticky="ew", padx=(3, 0), pady=2)
+
+        # Kaldirma en altta, ayri ve tek basina: yanlislikla tiklanmasin.
+        self.uninstall_btn = ttk.Button(parent, text="Sistemi Kaldir",
+                                        command=self._uninstall)
+        self.uninstall_btn.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(10, 2))
+
+        self.cancel_btn = ttk.Button(parent, text="Iptal", command=self._cancel,
+                                     state="disabled")
+        self.cancel_btn.grid(row=5, column=0, columnspan=2, sticky="ew", pady=2)
 
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
-        self.progress.pack(fill="x", pady=(8, 0))
+        self.progress.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
     def _build_terminal(self, parent: ttk.Frame) -> None:
         bar = ttk.Frame(parent)
