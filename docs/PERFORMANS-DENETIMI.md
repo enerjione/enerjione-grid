@@ -7,17 +7,32 @@
 
 ## Özet
 
-Dört gerçek darboğaz var. İkisi **ölçek büyüdükçe sistemi durdurur**, ikisi
-kullanıcı deneyimini bozar.
+Dört gerçek darboğaz vardı. **Üçü giderildi** (`700b1e7`), biri bilinçli
+olarak ertelendi.
 
-| # | Darboğaz | Etki | Efor |
-|---|---|---|---|
-| 1 | Telemetri temizleme sorgusu tüm tabloyu tarıyor | 🔴 Ölçekte DB'yi kilitler | 1 saat |
-| 2 | 3.7 MB ikon fontu (122 ikon için) | 🔴 İlk açılış | 2 saat |
-| 3 | Alarm reconcile'da N+1 | 🟡 Alarm çokken gecikme | 2 saat |
-| 4 | Kod bölme yok — 2.1 MB tek JS | 🟡 İlk açılış | 4 saat |
+| # | Darboğaz | Durum |
+|---|---|---|
+| 1 | Telemetri temizleme sorgusu tüm tabloyu tarıyor | ✅ Düzeltildi |
+| 2 | 3.7 MB ikon fontu (122 ikon için) | ⏸ Ertelendi — aşağıda gerekçe |
+| 3 | Alarm reconcile'da N+1 | ✅ Düzeltildi |
+| 4 | Kod bölme yok — 2.1 MB tek JS | ✅ 2.1 MB → 739 KB |
 
 Ayrıca **bellek limitleri saha donanımıyla uyumsuz** (aşağıda).
+
+### Ölçülen sonuç
+
+```
+                    ÖNCE      SONRA     fark
+ana JS             2150 K      739 K   -1411 K  (-66%)
+CSS                 544 K      542 K
+ikon fontu         3789 K     3739 K   (ertelendi)
+                   ──────    ───────
+ilk yükleme        6483 K     5021 K     -23%
+font hariç         2694 K     1282 K     -52%
+```
+
+JS 29 parçaya bölündü; en büyüğü `DeviceDetailPage` (848 K) ve yalnızca bir
+cihaz açıldığında iniyor.
 
 ---
 
@@ -166,16 +181,51 @@ Denetimde doğruladığım, doğru kurulmuş kısımlar:
 
 ## Plan
 
-**Önce (yarım gün):**
-1. Temizleme sorgusunu düzelt — `EXPLAIN ANALYZE` ile önce/sonra ölç
-2. Fontu subset'le — 3.7 MB → ~30 KB
+**Yapıldı** (`700b1e7`): temizleme sorgusu, alarm reconcile, kod bölme.
 
-**Sonra (bir gün):**
-3. Alarm reconcile'ı tek sorguya indir
-4. Saha RAM'ini netleştir, limitleri hizala
+**Sırada:**
+1. Saha RAM'ini netleştir, bellek limitlerini hizala
+2. Temizleme sorgusunu gerçek veriyle `EXPLAIN ANALYZE` ile doğrula —
+   statik analiz "index artık kullanılabilir" diyor, ölçüm bunu teyit etmeli
+3. Lucide geçişini tamamla → ikon fontu tamamen kalkar (3.7 MB)
 
-**Fırsat oldukça:**
-5. Rota bazlı kod bölme
+**Yük altında ölçüldükten sonra:**
+4. `signals.py:204` hydration maliyeti (~105 K satır)
+
+---
+
+## İkinci tarama (düzeltmelerden sonra)
+
+Düzeltmeler uygulandıktan sonra sistem yeniden tarandı.
+
+**Doğrulananlar:**
+- Temizleme sorgusunda filtre pencerenin içinde, dışarıda kalmadı
+- Alarm reconcile döngüsünde DB çağrısı **sıfır**
+- İlk yükleme JS'i 739 K, 29 parça
+
+**Kalan döngü-içi sorgular — 6 yer, hiçbiri sıcak yolda değil:**
+
+| Yer | Neden sorun değil |
+|---|---|
+| `alarm_engine_service.py:307` | Toplu onay — kullanıcı seçimiyle sınırlı |
+| `notification_service.py:63` | Geçersiz FCM token temizliği — genelde 0 |
+| `responsibility_areas.py:448` | Bölge-hat atama — tek seferlik yönetim işi |
+| `auth.py:459` | Oturum işlemleri |
+| `bulk_notification_scheduler.py:67` | İş başına, dakikalık döngü |
+| `grid_import_service.py:853` | Excel içe aktarma — tek seferlik |
+
+Hiçbiri saniyede/30 saniyede bir koşan telemetri yolunda değil.
+
+**Sonraki aday — `signals.py:204`:**
+Tüm cihazların son sinyal değerlerini tek `DISTINCT ON` ile çekiyor. Sorgu
+şekli doğru (yorumda eski GROUP BY+JOIN'in tam tarama yaptığı ve bunun
+düzeltildiği yazıyor) ama **satır sayısı sınırsız**: 600 cihaz × 175 sinyal
+= ~105 000 satır her çağrıda ORM nesnesine dönüşüyor. Sorgunun kendisi hızlı,
+maliyet hydration'da. Sayfalama veya `Row` tuple kullanımı gerekebilir —
+ama önce gerçek yükte ölçülmeli.
+
+**`public.py:189`** aynı GROUP BY+JOIN desenini kullanıyor ama alt sorgu
+cihaz kapsamlı (`device_id == device.id`), yani sınırlı. Sorun değil.
 
 ---
 
