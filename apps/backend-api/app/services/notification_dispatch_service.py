@@ -22,12 +22,19 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.alarm import AlarmEvent
+
+# FaultEvent yalnizca TIP olarak lazim. Calisma zamaninda modul icinde
+# fonksiyon govdesinden import ediliyor (dairesel import kacinmasi); burada
+# TYPE_CHECKING altinda tanitmak anotasyonu tip denetleyicileri icin
+# cozulebilir yapar, calisma zamanina hicbir maliyet getirmez.
+if TYPE_CHECKING:
+    from app.models.fault import FaultEvent
 from app.models.alarm_rule import AlarmRule
 from app.models.device import Device
 from app.models.notification_settings import NotificationSettings

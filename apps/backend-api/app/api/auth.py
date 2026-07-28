@@ -181,7 +181,7 @@ def login(
             # ttl_sec create_access_token'dan geliyor (remember_me'ye gore
             # 8 saat / 7 gun). Token exp'i ile ayni ani yaziyoruz ki liste
             # sorgusu gecmis oturumlari filtreleyebilsin.
-            expires_at=now + _timedelta(seconds=ttl_sec),
+            expires_at=now + timedelta(seconds=ttl_sec),
         ))
     except Exception:  # noqa: BLE001
         # Session insert fail olsa bile login basarili kabul edilir;
