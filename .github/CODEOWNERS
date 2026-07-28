@@ -1,20 +1,20 @@
 # CODEOWNERS — bu yollara dokunan her PR'a otomatik inceleyici atanir.
 # Branch protection'da "Require review from Code Owners" acilirsa onay ZORUNLU olur.
 #
-# NOT: asagidaki kullanici/takim adlari yeni org'a gecince guncellenmeli.
-# Takim kullanmak (orn. @enerjione/platform) tek kisiye bagimliligi kaldirir.
+# Depo tek bir hesabin altinda (enerjione). Ekip buyudugunde burada takim
+# kullanmak tek kisiye bagimliligi kaldirir (orn. @enerjione/platform).
 
-*                           @fikretsafak
+*                           @enerjione
 
 # Sahaya dokunan her sey: bir hata mini PC'yi kurulamaz hale getirir.
-/install.sh                 @fikretsafak
-/update.sh                  @fikretsafak
-/uninstall.sh               @fikretsafak
-/infra/                     @fikretsafak
-/docker-compose.yml         @fikretsafak
+/install.sh                 @enerjione
+/update.sh                  @enerjione
+/uninstall.sh               @enerjione
+/infra/                     @enerjione
+/docker-compose.yml         @enerjione
 
 # CI/CD ve release: imaj uretimi ve deploy anahtarlarina dokunur.
-/.github/                   @fikretsafak
+/.github/                   @enerjione
 
 # Sema/migration: geri alinmasi en pahali degisiklikler.
-/apps/backend-api/alembic_migrations/  @fikretsafak
+/apps/backend-api/alembic_migrations/  @enerjione
