@@ -392,24 +392,15 @@ docker compose up -d rabbitmq nats \
   || e1_die "rabbitmq/nats container'lari baslatilamadi. Detay yukarida."
 
 infra_failed=""
-e1_wait_healthy postgres 120 || infra_failed+=" postgres"
-e1_wait_healthy rabbitmq 240 || infra_failed+=" rabbitmq"
-e1_wait_healthy nats 120     || infra_failed+=" nats"
+e1_wait_healthy postgres 120 || e1_repair_service postgres 150 || infra_failed+=" postgres"
+e1_wait_healthy rabbitmq 240 || e1_repair_service rabbitmq 240 || infra_failed+=" rabbitmq"
+e1_wait_healthy nats     120 || e1_repair_service nats     120 || infra_failed+=" nats"
 
 if [[ -n "$infra_failed" ]]; then
-  # RabbitMQ'nun saha PC'sinde en sik takilma sebebi: onceki yarim kurulumdan
-  # kalan rabbitmq-data volume'u farkli bir node adiyla init edilmis olur ve
-  # yeni container o Mnesia dizinini acamaz. Ilk kurulumda bu volume'de
-  # korunmasi gereken veri YOKTUR; silmek guvenlidir.
-  extra=""
-  if [[ "$infra_failed" == *rabbitmq* ]]; then
-    extra="\n  Ilk kurulumda RabbitMQ takilirsa eski veri alanini sifirlayin:\n"
-    extra+="    cd ${INSTALL_DIR}\n"
-    extra+="    sudo docker compose down\n"
-    extra+="    sudo docker volume rm \$(sudo docker volume ls -q | grep rabbitmq-data)\n"
-    extra+="    sudo bash install.sh\n"
-  fi
-  e1_die "Altyapi servisleri hazir olmadi:${infra_failed}\n\n  Yukaridaki loglar sebebi gosterir. Durum ozeti icin:\n    cd ${INSTALL_DIR} && sudo docker compose ps\n${extra}"
+  # Otomatik onarim da yetmedi: kurulumcu elle ugrasmasin, tek dosyalik
+  # teshis raporu birakip destege gondermesini isteriz.
+  report="$(e1_write_diag_report "${INSTALL_DIR}" "$infra_failed")"
+  e1_die "Altyapi servisleri hazir olmadi:${infra_failed}\n\n  Otomatik onarim denendi ama sonuc vermedi.\n  Teshis raporu olusturuldu:\n\n    ${report}\n\n  Bu dosyayi teknik destege gonderin."
 fi
 
 e1_info "Uygulama servisleri baslatiliyor..."

@@ -302,6 +302,106 @@ e1_wait_healthy() {
 }
 
 # ---------------------------------------------------------------------------
+# Saglikli olmayan servisi OTOMATIK onar
+# ---------------------------------------------------------------------------
+# Saha PC'sinin basinda teknik biri yok: kurulum "su komutlari calistirin"
+# deyip durmamali, kendisi toparlamayi denemeli. Iki asamali:
+#
+#   1) Container'i sifirdan yarat. Yarim kalan kurulumdan artakalan bozuk
+#      container/ag durumunu temizler; VERI ALANINA DOKUNMAZ.
+#   2) Hala olmuyorsa servisin veri volume'unu silip sifirdan baslat.
+#
+# 2. asama YALNIZCA veri kaybi kabul edilebilir servisler icin yapilir
+# (rabbitmq, nats). RabbitMQ'da kuyruklar gecicidir ve gateway kullanicilarini
+# backend yeniden uretir; NATS JetStream stream'lerini backend acilista ensure
+# eder. POSTGRES bu listede DEGILDIR — orada silinecek sey abonenin verisidir,
+# asla otomatik silmeyiz.
+#
+#   e1_repair_service rabbitmq 240
+E1_WIPEABLE_SERVICES=" rabbitmq nats "
+
+e1_repair_service() {
+  local svc="$1" timeout="${2:-180}" cid vol dest
+
+  e1_warn "${svc} hazir olmadi — otomatik onarim (1/2): container yeniden yaratiliyor."
+  docker compose up -d --force-recreate "$svc" >/dev/null 2>&1 || true
+  if e1_wait_healthy "$svc" "$timeout"; then
+    e1_ok "${svc} onarildi (container yeniden yaratildi)."
+    return 0
+  fi
+
+  if [[ "$E1_WIPEABLE_SERVICES" != *" $svc "* ]]; then
+    e1_err "${svc} icin veri alani sifirlama GUVENLI DEGIL — otomatik onarim burada duruyor."
+    return 1
+  fi
+
+  # Volume adini tahmin etmek yerine container'in kendi mount tablosundan
+  # okuruz; compose proje adi dizin adina gore degistigi icin sabit isim
+  # varsaymak hataliydi.
+  cid="$(docker compose ps -aq "$svc" 2>/dev/null | head -n1 || true)"
+  vol=""
+  if [[ -n "$cid" ]]; then
+    vol="$(docker inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' "$cid" 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  if [[ -z "$vol" ]]; then
+    vol="$(docker volume ls -q 2>/dev/null | grep -E "(^|_)${svc}-data$" | head -n1 || true)"
+  fi
+  if [[ -z "$vol" ]]; then
+    e1_err "${svc} veri alani bulunamadi — otomatik onarim burada duruyor."
+    return 1
+  fi
+
+  e1_warn "Otomatik onarim (2/2): ${svc} veri alani sifirlaniyor (${vol})."
+  e1_hint "Bu alanda kalici veri yok — kuyruk/stream tanimlari yeniden uretilir."
+  docker compose rm -sf "$svc" >/dev/null 2>&1 || true
+  docker volume rm "$vol" >/dev/null 2>&1 || true
+  docker compose up -d "$svc" >/dev/null 2>&1 || true
+  if e1_wait_healthy "$svc" "$timeout"; then
+    e1_ok "${svc} onarildi (veri alani sifirlandi)."
+    return 0
+  fi
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Teshis raporu — tek dosya, destege gonderilecek
+# ---------------------------------------------------------------------------
+# Kurulumcudan ekrandaki loglari kopyalamasini beklemek gercekci degil.
+# Basarisizlikta her seyi tek dosyaya yazip yolunu ekrana veririz.
+# Stdout'a SADECE dosya yolunu basar (cagiran $(...) ile yakalar).
+e1_write_diag_report() {
+  local dir="${1:-.}" failed="${2:-}" f svc
+  f="${dir}/kurulum-hata-raporu.txt"
+  {
+    echo "EnerjiOne Grid — kurulum teshis raporu"
+    echo "Surum      : ${E1_VERSION_LABEL:-bilinmiyor}"
+    echo "Tarih      : $(date -Is 2>/dev/null || true)"
+    echo "Basarisiz  :${failed}"
+    echo
+    echo "===== sistem ====="
+    uname -a 2>&1 || true
+    echo "--- bellek ---";  free -m 2>&1 || true
+    echo "--- disk ---";    df -h "$dir" / 2>&1 || true
+    echo "--- docker ---";  docker version 2>&1 || true
+    echo
+    echo "===== docker compose ps ====="
+    docker compose ps -a 2>&1 || true
+    for svc in $failed; do
+      echo
+      echo "===== ${svc} — son 200 satir log ====="
+      docker compose logs --tail 200 --no-color "$svc" 2>&1 || true
+      echo
+      echo "===== ${svc} — healthcheck gecmisi ====="
+      docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}[{{.ExitCode}}] {{.Output}}{{end}}{{else}}healthcheck yok{{end}}' \
+        "$(docker compose ps -aq "$svc" 2>/dev/null | head -n1)" 2>&1 || true
+    done
+  } > "$f" 2>&1
+  chmod 644 "$f" 2>/dev/null || true
+  e1_chown_target "$f" 2>/dev/null || true
+  printf '%s' "$f"
+}
+
+# ---------------------------------------------------------------------------
 # Hata cikisi + beklenmeyen hata yakalayici
 # ---------------------------------------------------------------------------
 E1_DYING=0

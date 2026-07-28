@@ -294,11 +294,16 @@ if [[ -z "$SVC" ]]; then
   # bagli oldugu icin biri saglikli olmazsa duz `up -d` tek satirlik
   # "dependency failed to start" ile patliyor ve sebep ekranda gorunmuyor.
   docker compose up -d rabbitmq nats || true
+  # Onarimin veri-silme asamasi update'te KAPALI: calisan bir kurulumda
+  # gateway kullanicilari/kuyruklar duruyor olabilir. Sadece container
+  # yeniden yaratma denenir (E1_WIPEABLE_SERVICES bos).
+  E1_WIPEABLE_SERVICES=""
   wait_failed=""
-  e1_wait_healthy rabbitmq 240 || wait_failed+=" rabbitmq"
-  e1_wait_healthy nats 120     || wait_failed+=" nats"
+  e1_wait_healthy rabbitmq 240 || e1_repair_service rabbitmq 240 || wait_failed+=" rabbitmq"
+  e1_wait_healthy nats     120 || e1_repair_service nats     120 || wait_failed+=" nats"
   if [[ -n "$wait_failed" ]]; then
-    e1_die "Altyapi servisleri hazir olmadi:${wait_failed}\n\n  Loglar yukarida. Durum: sudo docker compose ps"
+    report="$(e1_write_diag_report "$(pwd)" "$wait_failed")"
+    e1_die "Altyapi servisleri hazir olmadi:${wait_failed}\n\n  Teshis raporu:\n\n    ${report}\n\n  Bu dosyayi teknik destege gonderin."
   fi
   docker compose up -d
 else
