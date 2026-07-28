@@ -126,6 +126,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Debian paketi: musteriye giden dagitim bicimi. Icinde uygulama
+      # KAYNAK KODU YOK — sadece compose tanimi, altyapi konfigurasyonu,
+      # systemd unit'i ve yonetim komutu. Release asset'i olarak eklenir ki
+      # musteri depoya hic erismeden kurabilsin.
+      - name: Debian paketini uret
+        run: bash packaging/build-deb.sh "${{ needs.verify.outputs.version }}"
+
       - name: Release olustur
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -134,20 +142,27 @@ jobs:
         run: |
           set -euo pipefail
           {
-            printf 'Sahaya kurulum / guncelleme:\n\n'
-            printf '    cd /opt/enerjione-grid && sudo bash update.sh\n\n'
+            printf 'Kurulum (musteri makinesi):\n\n'
+            printf '    sudo apt install ./enerjione-grid_%s_all.deb\n' "$VERSION"
+            printf '    sudo enerjione-grid setup\n\n'
+            printf 'Guncelleme / geri alma:\n\n'
+            printf '    sudo enerjione-grid update\n'
+            printf '    sudo enerjione-grid update 2.24.4\n\n'
             printf 'Imajlar: `ghcr.io/%s/<servis>:%s`\n' "${{ github.repository }}" "$VERSION"
           } > /tmp/notes.md
           # Zaten varsa (workflow_dispatch ile tekrar calistirildi) uzerine yazma,
           # sadece notlari tazele.
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file /tmp/notes.md
+            # --clobber: yeniden yayinlamada eski asset'i degistir.
+            gh release upload "$TAG" dist/*.deb --clobber
             exit 0
           fi
           gh release create "$TAG" \
             --title "EnerjiOne Grid ${VERSION}" \
             --generate-notes \
-            --notes-file /tmp/notes.md
+            --notes-file /tmp/notes.md \
+            dist/*.deb
 
   deploy-vds:
     name: VDS deploy

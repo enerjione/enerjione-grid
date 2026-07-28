@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# ===========================================================================
+# enerjione-grid — saha yonetim komutu
+# ===========================================================================
+# Paketle birlikte /usr/bin'e kurulur. Kurulumcunun ezberlemesi gereken
+# tek komut budur; `docker compose` veya `systemctl` bilmesine gerek yok.
+#
+#   sudo enerjione-grid setup            ilk kurulum (anahtar sorar, imaj indirir)
+#   sudo enerjione-grid update           en son yayina gec
+#   sudo enerjione-grid update 2.24.4    belirli surume gec (geri alma dahil)
+#   sudo enerjione-grid start|stop|restart
+#        enerjione-grid status           servis + surum ozeti
+#        enerjione-grid logs [servis]    canli log
+#   sudo enerjione-grid backup           elle DB yedegi
+#        enerjione-grid version
+#        enerjione-grid help
+# ===========================================================================
+
+set -euo pipefail
+
+APP_DIR="${E1_APP_DIR:-/opt/enerjione-grid}"
+UNIT=enerjione-grid.service
+
+# Ortak arayuz katmani (renkler, kutular, adim gostergesi). Pakette birlikte
+# geliyor; yoksa komut yine calissin diye asgari yedekler tanimlanir.
+if [[ -f "$APP_DIR/infra/scripts/linux/_lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$APP_DIR/infra/scripts/linux/_lib.sh"
+else
+  e1_info() { printf '  · %s\n' "$*"; }
+  e1_ok()   { printf '  ✓ %s\n' "$*"; }
+  e1_warn() { printf '  ! %s\n' "$*" >&2; }
+  e1_err()  { printf '  ✗ %s\n' "$*" >&2; }
+  e1_die()  { printf '\n  HATA: %b\n\n' "$*" >&2; exit 1; }
+  e1_kv()   { printf '  %-18s %s\n' "$1" "$2"; }
+fi
+
+_need_root() {
+  [[ $EUID -eq 0 ]] || e1_die "Bu komut root yetkisi ister:\n    sudo enerjione-grid $*"
+}
+
+_need_install() {
+  [[ -f "$APP_DIR/docker-compose.yml" ]] \
+    || e1_die "Kurulum bulunamadi ($APP_DIR).\n  Paket dogru kuruldu mu?  dpkg -l enerjione-grid"
+}
+
+_compose() { (cd "$APP_DIR" && docker compose "$@"); }
+
+usage() {
+  cat <<'USAGE'
+EnerjiOne Grid — saha yonetim komutu
+
+  sudo enerjione-grid setup             Ilk kurulum: anahtar sorar, imajlari
+                                        indirir, sistemi baslatir
+  sudo enerjione-grid update [surum]    Guncelle. Surum verilirse o surume
+                                        gecer (GERI ALMA da budur)
+  sudo enerjione-grid start             Baslat
+  sudo enerjione-grid stop              Durdur
+  sudo enerjione-grid restart           Yeniden baslat
+       enerjione-grid status            Servis durumu + surum
+       enerjione-grid logs [servis]     Canli log (Ctrl+C ile cik)
+  sudo enerjione-grid backup            Elle veritabani yedegi
+       enerjione-grid version           Kurulu surum
+       enerjione-grid help              Bu ekran
+
+Ornekler
+  sudo enerjione-grid update            en son yayina gec
+  sudo enerjione-grid update 2.24.4     2.24.4'e don (geri alma)
+       enerjione-grid logs backend-api  sadece backend loglari
+USAGE
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  setup)
+    _need_root setup
+    _need_install
+    # Kurulumun tamami install.sh'te; burada onu cagiriyoruz ki tek bir
+    # dogruluk kaynagi olsun (paket ve git kurulumu ayni kodu kossun).
+    exec bash "$APP_DIR/install.sh" "$@"
+    ;;
+
+  update)
+    _need_root update
+    _need_install
+    if [[ -n "${1:-}" ]]; then
+      exec bash "$APP_DIR/update.sh" --version "$1" "${@:2}"
+    fi
+    exec bash "$APP_DIR/update.sh" "$@"
+    ;;
+
+  start)   _need_root start;   systemctl start   "$UNIT"; e1_ok "Baslatildi." ;;
+  stop)    _need_root stop;    systemctl stop    "$UNIT"; e1_ok "Durduruldu." ;;
+  restart) _need_root restart; systemctl restart "$UNIT"; e1_ok "Yeniden baslatildi." ;;
+
+  status)
+    _need_install
+    e1_kv "Surum" "$(cat "$APP_DIR/VERSION" 2>/dev/null || echo '?')"
+    e1_kv "Dizin" "$APP_DIR"
+    if systemctl is-enabled --quiet "$UNIT" 2>/dev/null; then
+      e1_kv "Acilista" "otomatik baslar"
+    else
+      e1_kv "Acilista" "OTOMATIK BASLAMAZ (sudo systemctl enable $UNIT)"
+    fi
+    echo
+    _compose ps
+    ;;
+
+  logs)
+    _need_install
+    # --tail: bastan itibaren tum gecmisi dokmek yerine son 100 satir.
+    _compose logs -f --tail 100 ${1:+"$1"}
+    ;;
+
+  backup)
+    _need_root backup
+    _need_install
+    cd "$APP_DIR"
+    ts="$(date +%Y%m%d-%H%M%S)"
+    mkdir -p backups
+    pg_user="$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n1)"
+    pg_db="$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n1)"
+    out="backups/manual-${ts}.sql.gz"
+    if _compose exec -T postgres pg_dump -U "${pg_user:-enerjione_grid}" -d "${pg_db:-enerjione_grid}" | gzip > "$out"; then
+      e1_ok "Yedek alindi: ${APP_DIR}/${out} ($(du -h "$out" | cut -f1))"
+    else
+      rm -f "$out"
+      e1_die "Yedek alinamadi. Postgres ayakta mi?  enerjione-grid status"
+    fi
+    ;;
+
+  version|--version|-v)
+    cat "$APP_DIR/VERSION" 2>/dev/null || echo "?"
+    ;;
+
+  help|--help|-h) usage ;;
+  *)
+    e1_err "Bilinmeyen komut: $cmd"
+    echo
+    usage
+    exit 1
+    ;;
+esac

@@ -1,0 +1,43 @@
+#!/bin/sh
+# EnerjiOne Grid — paket kaldirildiktan sonra.
+#
+# VERI ASLA OTOMATIK SILINMEZ.
+# `apt purge` calistirildiginda bile Docker volume'larina (postgres-data,
+# yedekler, lisans) DOKUNULMAZ: bir saha kurulumunda bu veriler abonenin
+# olcum gecmisidir ve yanlislikla purge yazan bir operator geri
+# alinamayacak bir kayip yasatmamalidir. Silme islemi acik ve ayri:
+#
+#     sudo enerjione-grid purge-data
+set -e
+
+case "$1" in
+  remove)
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload || true
+    fi
+    ;;
+
+  purge)
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload || true
+    fi
+    cat <<'NOTE'
+
+  EnerjiOne Grid paketi kaldirildi.
+
+  VERILER DURUYOR — hicbir sey silinmedi:
+    - Docker volume'lari (veritabani, yedekler, lisans)
+    - /opt/enerjione-grid/.env  (secret'lar)
+
+  Yeniden kurarsaniz sistem kaldiginiz yerden devam eder.
+  Kalici olarak silmek isterseniz (GERI ALINAMAZ):
+
+      sudo docker volume ls | grep enerjione-grid
+      sudo docker volume rm <volume-adi>
+      sudo rm -rf /opt/enerjione-grid
+
+NOTE
+    ;;
+esac
+
+exit 0

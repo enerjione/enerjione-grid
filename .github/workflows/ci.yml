@@ -126,6 +126,59 @@ jobs:
           echo "Cozulen image referanslari:"
           docker compose config --images
 
+  package:
+    name: Debian paketi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: lintian kur
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lintian
+      # Paketi HER PR'da uretiyoruz: bozuk bir paket ancak yayin gunu fark
+      # edilirse saha kurulumu durur. Burada ucuz, orada pahali.
+      - name: Paketi uret
+        run: bash packaging/build-deb.sh
+      # build-deb.sh kaynak sizintisini kendi de kontrol ediyor; burada
+      # BAGIMSIZ olarak tekrar bakiyoruz — paketin varlik sebebi bu.
+      - name: Kaynak kod sizintisi kontrolu
+        run: |
+          set -euo pipefail
+          deb="$(ls dist/*.deb)"
+          echo "Paket: $deb"
+          if dpkg-deb --contents "$deb" | grep -E '/(apps|node_modules|\.git)/'; then
+            echo "::error::Pakete uygulama kaynagi sizmis."
+            exit 1
+          fi
+          echo "Temiz: uygulama kaynagi pakette yok."
+      - name: Kurulum provasi (temiz konteyner)
+        run: |
+          set -euo pipefail
+          deb="$(ls dist/*.deb)"
+          # Gercek bir Debian'da kurup kaldiriyoruz: postinst/prerm/postrm
+          # hatalari ancak boyle yakalanir (sozdizimi kontrolu yetmez).
+          # Paket yolu env ile geciyor — tirnak icinde string kaynastirmak
+          # kolayca bozuluyor.
+          docker run --rm -e DEB="/w/$deb" -v "$PWD:/w" -w /w debian:12-slim bash -eux -c '
+            apt-get update -qq
+            apt-get install -y -qq "$DEB"
+            test -f /opt/enerjione-grid/docker-compose.yml
+            test -x /usr/bin/enerjione-grid
+            test -f /opt/enerjione-grid/.env
+            # .env chmod 600 olmali: icinde secret var
+            [ "$(stat -c %a /opt/enerjione-grid/.env)" = "600" ]
+            # Uygulama kaynagi kurulmamis olmali
+            ! test -d /opt/enerjione-grid/apps
+            enerjione-grid help >/dev/null
+            apt-get purge -y -qq enerjione-grid
+            # purge sonrasi .env DURMALI (veri kaybi olmamali)
+            test -f /opt/enerjione-grid/.env
+            echo "KURULUM PROVASI TAMAM"
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: enerjione-grid-deb
+          path: dist/*.deb
+          retention-days: 14
+
   version:
     name: Surum tutarliligi
     runs-on: ubuntu-latest

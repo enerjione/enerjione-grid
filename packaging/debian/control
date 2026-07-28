@@ -1,0 +1,23 @@
+Package: enerjione-grid
+Version: __VERSION__
+Section: net
+Priority: optional
+Architecture: all
+Maintainer: EnerjiOne <destek@enerjione.com>
+Homepage: https://enerjione.com
+Depends: ca-certificates, curl, openssl, python3
+Recommends: docker-ce | docker.io
+Description: EnerjiOne Grid - endustriyel akilli sebeke izleme platformu
+ Horstmann Smart Navigator 2.0 ariza-gecis gostergesi cihazlarini izler
+ ve yonetir. Olay-guduml (event-driven) mikroservis mimarisi Docker
+ Compose ile calisir.
+ .
+ Bu paket UYGULAMA KAYNAK KODUNU ICERMEZ. Yalnizca dagitim katmanini
+ tasir: compose tanimi, altyapi konfigurasyonu, systemd unit'i ve
+ yonetim komutu. Servis imajlari ghcr.io uzerinden indirilir; bunun
+ icin salt-okunur bir kurulum anahtari gerekir.
+ .
+ Kurulumdan sonra:
+   sudo enerjione-grid setup     ilk kurulum sihirbazi
+   sudo enerjione-grid update    en son yayina gec
+   sudo enerjione-grid status    servis durumu

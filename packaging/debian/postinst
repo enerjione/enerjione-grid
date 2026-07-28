@@ -1,0 +1,101 @@
+#!/bin/sh
+# EnerjiOne Grid — paket kurulum sonrasi.
+#
+# TASARIM KURALI: burada AGIR IS YAPILMAZ.
+# postinst dpkg'yi bloklar; imaj indirmek veya container ayaga kaldirmak
+# dakikalar surer ve basarisiz olursa paket "yarim kurulmus" durumda kalir
+# (`dpkg --configure -a` gerektirir). Bu yuzden burada sadece:
+#   - dizinleri ve izinleri hazirla
+#   - .env yoksa uret (secret'lar rastgele)
+#   - systemd'yi tani
+# Asil kurulum kullanicinin acikca calistirdigi `enerjione-grid setup` ile.
+set -e
+
+APP_DIR=/opt/enerjione-grid
+ENV_FILE="$APP_DIR/.env"
+
+case "$1" in
+  configure)
+    mkdir -p "$APP_DIR"
+    chmod 755 "$APP_DIR"
+
+    # --- .env: varsa DOKUNMA ------------------------------------------------
+    # Yukseltmede mevcut secret'larin uzerine yazmak, calisan sistemin
+    # veritabani/rabbitmq kimliklerini bozar. Sadece yoksa uretilir.
+    if [ ! -f "$ENV_FILE" ]; then
+      cp "$APP_DIR/.env.example" "$ENV_FILE"
+      chmod 600 "$ENV_FILE"
+
+      # Secret uretimi: openssl yoksa paket zaten Depends ile onu cekiyor.
+      _rand_hex() { openssl rand -hex 32; }
+      _rand_pw()  { openssl rand -base64 24 | tr -d '/+=' | cut -c1-24; }
+
+      _set() {
+        key="$1"; val="$2"
+        # `|` ayraci: base64 ciktisinda `/` olabilir. `&` sed'de ozeldir.
+        esc=$(printf '%s' "$val" | sed 's/[&|]/\\&/g')
+        if grep -qE "^${key}=" "$ENV_FILE"; then
+          sed -i "s|^${key}=.*|${key}=${esc}|" "$ENV_FILE"
+        else
+          printf '%s=%s\n' "$key" "$val" >> "$ENV_FILE"
+        fi
+      }
+
+      _set SECRET_KEY            "$(_rand_hex)"
+      _set INTERNAL_SERVICE_TOKEN "$(_rand_hex)"
+      _set POSTGRES_PASSWORD     "$(_rand_pw)"
+      _set RABBITMQ_PASSWORD     "$(_rand_pw)"
+      _set NATS_BACKEND_PASSWORD "$(_rand_pw)"
+      _set NATS_WORKER_PASSWORD  "$(_rand_pw)"
+      _set NATS_GATEWAY_PASSWORD "$(_rand_pw)"
+      _set POSTGRES_DB           "enerjione_grid"
+      _set POSTGRES_USER         "enerjione_grid"
+      _set APP_ENV               "production"
+
+      echo "EnerjiOne Grid: .env olusturuldu, secret'lar uretildi."
+    else
+      echo "EnerjiOne Grid: mevcut .env korundu."
+    fi
+
+    # E1_VERSION paketin surumu ile hizali olmali: imaj etiketi bundan
+    # cozuluyor. Yukseltmede bu deger DEGISMELI, secret'lar degismemeli.
+    if grep -qE '^E1_VERSION=' "$ENV_FILE"; then
+      sed -i "s|^E1_VERSION=.*|E1_VERSION=__VERSION__|" "$ENV_FILE"
+    else
+      printf 'E1_VERSION=%s\n' "__VERSION__" >> "$ENV_FILE"
+    fi
+
+    # Kurulum artefaktlarinin sahibi: sudo ile kuran gercek kullanici.
+    if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+      chown -R "${SUDO_USER}:${SUDO_USER}" "$APP_DIR" 2>/dev/null || true
+      chown "${SUDO_USER}:${SUDO_USER}" "$ENV_FILE" 2>/dev/null || true
+    fi
+    chmod 600 "$ENV_FILE"
+
+    # --- systemd ------------------------------------------------------------
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload || true
+      # enable: acilista otomatik baslasin. START ETMIYORUZ — imajlar henuz
+      # indirilmedi; `enerjione-grid setup` bunu sirasi gelince yapar.
+      systemctl enable enerjione-grid.service >/dev/null 2>&1 || true
+    fi
+
+    cat <<'BANNER'
+
+  EnerjiOne Grid kuruldu.
+
+  Sirada tek adim kaldi:
+
+      sudo enerjione-grid setup
+
+  Bu komut kurulum anahtarini sorar, servis imajlarini indirir ve
+  sistemi baslatir. Yardim icin: enerjione-grid help
+
+BANNER
+    ;;
+
+  abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+esac
+
+exit 0

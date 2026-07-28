@@ -1,0 +1,19 @@
+#!/bin/sh
+# EnerjiOne Grid — paket kaldirilmadan / yukseltilmeden once.
+set -e
+
+case "$1" in
+  remove|deconfigure)
+    # Yukseltmede DEGIL, gercek kaldirmada servisi durdur. `upgrade`
+    # durumunda durdurmuyoruz: dosyalar degisecek ama container'lar
+    # `restart: unless-stopped` ile ayakta kalabilir, kesinti kisalir.
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl stop enerjione-grid.service >/dev/null 2>&1 || true
+      systemctl disable enerjione-grid.service >/dev/null 2>&1 || true
+    fi
+    ;;
+  upgrade|failed-upgrade)
+    ;;
+esac
+
+exit 0
