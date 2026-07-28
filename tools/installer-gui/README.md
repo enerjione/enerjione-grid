@@ -81,3 +81,19 @@ Bittiğinde arayüz adresi ve ilk giriş bilgileri terminale yazılır.
 
 Çıktıyı **Kaydet** ile dosyaya alıp destekle paylaşabilirsiniz — anahtarlar
 maskeli olduğu için güvenle gönderilebilir.
+
+## Logo / simge güncelleme
+
+Kaynak görseller `assets/logo-source.png` ve `apps/frontend-web/public/favicon.png`.
+Arayüz **önceden ölçeklenmiş** kopyaları kullanır — Tkinter yalnızca tam sayı
+bölme ile küçültebiliyor ve 3261 px'lik logoyu makul boyuta indiremiyor.
+
+Logoyu değiştirdikten sonra ölçekli kopyayı yeniden üretin:
+
+```powershell
+py -3.11 -c "from PIL import Image; im=Image.open('tools/installer-gui/assets/logo-source.png').convert('RGBA'); im=im.crop(im.getbbox()); h=40; im.resize((round(im.width*h/im.height),h), Image.LANCZOS).save('tools/installer-gui/assets/logo.png', optimize=True)"
+```
+
+Şeffaf kenar boşluğu kırpılır (`getbbox`), yoksa başlıkta hizalama bozulur ve
+logo olduğundan küçük görünür. Pillow yalnızca bu üretim adımında gerekir;
+aracın kendisi çalışırken Pillow'a ihtiyaç duymaz.
