@@ -22,7 +22,7 @@
 **Tek komutla sıfırdan ayağa kalkar.** Test edildi: Ubuntu 22.04/24.04, Debian 12.
 
 ```bash
-curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \n  https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \n  | sudo E1_GHCR_TOKEN=$TOKEN bash
 ```
 
 Veya manuel:

@@ -191,6 +191,99 @@ def submit_request(payload: NetworkConfigUpdate, actor_username: str) -> str:
     return request_id
 
 
+# ---------------------------------------------------------------- WiFi ---
+def _write_request(body: dict) -> str:
+    """request.json'i atomik yaz (tmp + rename) ve request id dondur.
+
+    Dosya izni 0600: WiFi sifresi kisa sure de olsa diskte durur, sadece
+    yazan/okuyan surecler gorebilsin. Ajan isledikten sonra siler ve
+    arsive maskelenmis kopyayi yazar (bkz. e1-netd `_redact`).
+    """
+    available, reason = availability()
+    if not available:
+        raise NetworkRequestError(reason or "unavailable")
+    if has_pending_request():
+        raise NetworkRequestError("request_pending")
+
+    target = state_dir() / REQUEST_FILE
+    tmp = state_dir() / f"{REQUEST_FILE}.tmp"
+    try:
+        # Once 0600 ile olustur, sonra icerigi yaz — sifre hicbir an
+        # genis izinli bir dosyada bulunmasin.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(body, fh, ensure_ascii=False, indent=2)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, target)
+    except OSError as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise NetworkRequestError(f"write_failed: {exc}") from exc
+    return str(body["id"])
+
+
+def _base_request(action: str, actor_username: str) -> dict:
+    return {
+        "id": uuid.uuid4().hex,
+        "action": action,
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "requested_by": actor_username,
+    }
+
+
+def request_wifi_scan(actor_username: str) -> str:
+    """Ajana 'agları tara' de. Sonuc wifi-scan.json'a yazilir."""
+    return _write_request(_base_request("wifi_scan", actor_username))
+
+
+def request_wifi_connect(payload: WifiConnectRequest, actor_username: str) -> str:
+    """Bir aga baglanma istegi kuyruga al.
+
+    Sifre burada SAKLANMAZ: sadece request.json'a yazilir, ajan uygulayip
+    dosyayi siler. Log'a da dusurulmez.
+    """
+    body = _base_request("wifi_connect", actor_username)
+    body["ssid"] = payload.ssid
+    if payload.psk:
+        body["psk"] = payload.psk
+    return _write_request(body)
+
+
+def request_wifi_forget(actor_username: str) -> str:
+    """Kayitli WiFi profilini sil ve AP'yi geri ac."""
+    return _write_request(_base_request("wifi_forget", actor_username))
+
+
+def read_scan() -> WifiScanResult:
+    """Ajanin yazdigi son tarama sonucunu oku."""
+    available, _reason = availability()
+    if not available:
+        return WifiScanResult(available=False)
+    raw = _read_json(state_dir() / SCAN_FILE)
+    if not raw:
+        return WifiScanResult(available=True)
+    networks = [
+        WifiNetwork(**item)
+        for item in raw.get("networks", [])
+        if isinstance(item, dict) and item.get("ssid")
+    ]
+    age: float | None = None
+    try:
+        age = max(0.0, time.time() - (state_dir() / SCAN_FILE).stat().st_mtime)
+    except OSError:
+        age = None
+    return WifiScanResult(
+        available=True,
+        updated_at=raw.get("updated_at"),
+        ifname=raw.get("ifname"),
+        networks=networks,
+        age_seconds=age,
+    )
+
+
 def next_url_for(payload: NetworkConfigUpdate, mdns_name: str | None) -> str | None:
     """Reboot sonrasi kullanicinin acmasi gereken adres.
 

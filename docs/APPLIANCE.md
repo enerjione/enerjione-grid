@@ -38,7 +38,7 @@ veya **Atheros AR9271** tabanli ucuz USB adaptorler AP modunu destekler.
 ## 2. Kurulum — tek komut
 
 ```bash
-curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \n  https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \n  | sudo E1_GHCR_TOKEN=$TOKEN bash
 ```
 
 Bu tek komut her seyi kurar: Docker stack, systemd, **ve** appliance katmani

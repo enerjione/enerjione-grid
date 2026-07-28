@@ -4,8 +4,17 @@ Yetki: SADECE installer. Ag ayari yanlis girilirse cihaz kablolu agdan
 erisilemez hale gelir; bu yuzden en dar rol.
 
 Endpoint'ler:
-  GET  /network/status   -> host ag durumu (arayuzler, AP, son uygulama)
-  PUT  /network/config   -> ethernet IP/DNS ayarini uygula (+ yeniden baslat)
+  GET  /network/status        -> host ag durumu (arayuzler, AP, WiFi, son uygulama)
+  PUT  /network/config        -> ethernet IP/DNS ayarini uygula (+ yeniden baslat)
+  GET  /network/wifi/scan     -> son tarama sonucu
+  POST /network/wifi/scan     -> yeni tarama tetikle
+  POST /network/wifi/connect  -> bir aga baglan (SSID + sifre)
+  POST /network/wifi/forget   -> kayitli agi unut, AP'yi geri ac
+
+WiFi NOTU (tek radyo): appliance'ta tek WiFi karti var; client baglantisi
+sirasinda AP (kurtarma yolu) DUSER. Baglanti kurulamazsa host ajani muhafiz
+suresi (varsayilan 180 sn) sonunda AP'yi OTOMATIK geri acar. AP'nin kendi
+ayarlari bu API'den DEGISTIRILEMEZ.
 
 Backend host agina DOKUNMAZ: istegi /var/lib/e1-grid/net/request.json'a
 yazar, host'ta root ile calisan `e1-netd` ajani dogrulayip nmcli ile uygular
@@ -24,6 +33,8 @@ from app.schemas.network import (
     NetworkConfigAccepted,
     NetworkConfigUpdate,
     NetworkStatus,
+    WifiConnectRequest,
+    WifiScanResult,
 )
 from app.services import network_service
 from app.services.event_service import record_event
@@ -115,3 +126,78 @@ def update_network_config(
         reboot=payload.reboot,
         next_url=network_service.next_url_for(payload, current.mdns_name),
     )
+
+
+# --------------------------------------------------------------- WiFi ---
+def _queue(fn, *args) -> str:
+    """Ajan istegi kuyrukla; servis hatasini 409'a cevir."""
+    try:
+        return fn(*args)
+    except network_service.NetworkRequestError as exc:
+        code = str(exc)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_ERROR_MESSAGES.get(code, f"Islem uygulanamadi: {code}"),
+        ) from exc
+
+
+@router.get("/wifi/scan", response_model=WifiScanResult)
+def get_wifi_scan(
+    _: User = Depends(require_roles([UserRole.INSTALLER])),
+):
+    """Host ajaninin yazdigi SON tarama sonucu (yeni tarama tetiklemez)."""
+    return network_service.read_scan()
+
+
+@router.post("/wifi/scan", status_code=status.HTTP_202_ACCEPTED)
+def trigger_wifi_scan(
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
+):
+    """Yeni tarama tetikle. Sonuc birkac saniye icinde GET /wifi/scan'de."""
+    request_id = _queue(network_service.request_wifi_scan, current_user.username)
+    return {"request_id": request_id}
+
+
+@router.post("/wifi/connect", status_code=status.HTTP_202_ACCEPTED)
+def connect_wifi(
+    payload: WifiConnectRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
+):
+    """Appliance'i bir WiFi agina baglar.
+
+    DIKKAT (tek radyo): baglanti sirasinda AP duser. Basarisiz olursa host
+    ajani muhafiz suresi sonunda AP'yi otomatik geri acar — cihaz erisilemez
+    kalmaz.
+    """
+    request_id = _queue(network_service.request_wifi_connect, payload, current_user.username)
+    # Olay kaydi: SSID yazilir, SIFRE ASLA yazilmaz.
+    record_event(
+        db,
+        category="system",
+        event_type="wifi_connect_requested",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"WiFi baglantisi istendi: {payload.ssid} (AP gecici olarak duser)",
+        metadata={"request_id": request_id, "ssid": payload.ssid},
+    )
+    return {"request_id": request_id}
+
+
+@router.post("/wifi/forget", status_code=status.HTTP_202_ACCEPTED)
+def forget_wifi(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
+):
+    """Kayitli WiFi profilini siler ve AP'yi geri acar."""
+    request_id = _queue(network_service.request_wifi_forget, current_user.username)
+    record_event(
+        db,
+        category="system",
+        event_type="wifi_forgotten",
+        severity="info",
+        actor_username=current_user.username,
+        message="WiFi baglantisi kaldirildi, erisim noktasi (AP) geri acildi.",
+        metadata={"request_id": request_id},
+    )
+    return {"request_id": request_id}

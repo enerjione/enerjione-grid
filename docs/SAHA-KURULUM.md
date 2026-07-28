@@ -51,12 +51,12 @@ Aşağıdaki **tek satırı** olduğu gibi kopyalayıp terminale yapıştırın 
 Enter'a basın:
 
 ```bash
-curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \n  https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \n  | sudo E1_GHCR_TOKEN=$TOKEN bash
 ```
 
 > Kısa adres çalışmazsa (DNS kaydı henüz yapılmamışsa) uzun hâlini kullanın:
 > ```bash
-> curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+> TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \n  https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \n  | sudo E1_GHCR_TOKEN=$TOKEN bash
 > ```
 
 Sudo şifrenizi soracaktır; kullanıcı şifrenizi yazın (yazarken ekranda
@@ -79,7 +79,7 @@ kurulum devam eder, takılıp kalmaz.
 > **Hiç soru istemiyorsanız** komutu şöyle çalıştırın — hepsine otomatik
 > Evet denir:
 > ```bash
-> curl -fsSL https://enerjione.com/grid/install.sh | sudo ASSUME_YES=1 bash
+> curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo ASSUME_YES=1 bash
 > ```
 
 ---

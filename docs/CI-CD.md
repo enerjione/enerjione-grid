@@ -141,7 +141,7 @@ Kuruluma verme yolları:
 # 1. Kurulum sırasında sorulur (hiçbir şey yapmanıza gerek yok)
 
 # 2. Ortam değişkeni ile (otomatik kurulum)
-curl -fsSL https://enerjione.com/grid/install.sh \
+curl -fsSL https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \
   | sudo E1_GHCR_TOKEN=ghp_xxx ASSUME_YES=1 bash
 
 # 3. Sonradan .env'e

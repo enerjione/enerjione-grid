@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "save": "Save",
     "saveAll": "Save All Settings",
@@ -866,6 +866,32 @@
       "gatewayIsSelf": "The gateway cannot be the device's own IP.",
       "gatewayOtherSubnet": "The gateway must be in the same subnet as the IP address.",
       "apSubnetClash": "This subnet clashes with the WiFi access point network (10.42.0.0/24)."
+    },
+    "wifi": {
+      "title": "WiFi Connection",
+      "scan": "Scan Networks",
+      "scanning": "Scanning...",
+      "connect": "Connect",
+      "connecting": "Connecting...",
+      "forget": "Forget Network",
+      "current": "Connected",
+      "open": "Open",
+      "connectedTo": "Connected network",
+      "notConnected": "Not connected to any WiFi network",
+      "apActiveTitle": "Access point (AP) is on",
+      "apActiveHint": "The AP stays on whenever the device is not connected to a network; join \"EnerjiOne Grid\" and open http://10.42.0.1 to get in.",
+      "connectTo": "Connect to {{ssid}}",
+      "password": "WiFi password",
+      "passwordPlaceholder": "At least 8 characters",
+      "passwordHint": "The password is only forwarded to the device; it is never stored or logged.",
+      "openHint": "This network is open; it will connect directly.",
+      "apDropTitle": "The access point will drop temporarily",
+      "apDropHint": "The device has a single WiFi card. The \"EnerjiOne Grid\" network goes down while connecting. If the connection fails, the AP comes back automatically within a few minutes — you will not lose access to the device.",
+      "guardTitle": "Connecting to {{ssid}}",
+      "guardHint": "If it fails, the access point will return automatically in {{seconds}}s.",
+      "emptyScan": "No visible networks found. Try scanning again.",
+      "notScanned": "Press \"Scan Networks\" to see available networks.",
+      "noAdapter": "No WiFi card found on the device. Plug in a USB WiFi adapter and re-run setup."
     }
   },
   "systemStatus": {

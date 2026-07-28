@@ -564,6 +564,58 @@ e1_target_ref() {
 }
 
 # ---------------------------------------------------------------------------
+# Kurulum anahtari (token) — private depo + private imajlar icin TEK anahtar
+# ---------------------------------------------------------------------------
+# Ayni token iki yerde kullanilir: `git clone/fetch` ve `docker login ghcr.io`.
+# Kurulumcuya bir kez sorulur, .env'e yazilir, sonraki update'lerde oradan
+# okunur.
+#
+# Sirayla bakilir: ortam degiskeni -> .env -> (sorulabiliyorsa) kullaniciya sor
+# Donus: token stdout'a basilir; bulunamazsa bos string.
+e1_resolve_token() {
+  local env_file="${1:-.env}" tok=""
+  tok="${E1_GHCR_TOKEN:-${GHCR_TOKEN:-}}"
+  if [[ -z "$tok" && -f "$env_file" ]]; then
+    tok="$(sed -n 's/^GHCR_TOKEN=//p' "$env_file" | tail -n1 | tr -d '"'"'"'\r')"
+  fi
+  printf '%s' "$tok"
+}
+
+# Token'i git'e GUVENLI sekilde verir.
+#
+# Neden URL'e gomulmuyor: `https://user:token@github.com/...` bicimi token'i
+# .git/config'e KALICI olarak yazar ve her `git remote -v` ciktisinda gosterir.
+# Neden `-c credential.helper='!echo ...'` degil: o bicim token'i komut
+# satirina koyar, makinedeki her kullanici `ps` ile gorebilir.
+#
+# GIT_ASKPASS bir script yolu bekler; token script'e ORTAM DEGISKENI ile
+# gecer, yani ne diskte ne process listesinde gorunur.
+#   e1_git_auth "$TOKEN" git clone "$URL" "$DIR"
+e1_git_auth() {
+  local tok="$1"; shift
+  local ask rc=0
+  if [[ -z "$tok" ]]; then
+    # Token yoksa dogrudan calistir (public depo veya zaten yetkili remote).
+    "$@"
+    return $?
+  fi
+  ask="$(mktemp)"
+  {
+    printf '#!/bin/sh\n'
+    printf 'case "$1" in\n'
+    printf '  Username*) printf %%s "x-access-token" ;;\n'
+    printf '  *)         printf %%s "$E1_GIT_TOKEN" ;;\n'
+    printf 'esac\n'
+  } > "$ask"
+  chmod 700 "$ask"
+  # GIT_TERMINAL_PROMPT=0: token gecersizse sessizce takilip beklemesin,
+  # hemen hata versin (saha kurulumunda "donmus" gorunumunun sebebi budur).
+  E1_GIT_TOKEN="$tok" GIT_ASKPASS="$ask" GIT_TERMINAL_PROMPT=0 "$@" || rc=$?
+  rm -f "$ask"
+  return $rc
+}
+
+# ---------------------------------------------------------------------------
 # GHCR — private imajlar icin login
 # ---------------------------------------------------------------------------
 # Repo private oldugu icin paketler de private; cihaz salt-okunur bir token

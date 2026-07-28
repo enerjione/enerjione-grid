@@ -102,7 +102,9 @@ class WifiConnectRequest(BaseModel):
     ssid: str = Field(..., min_length=1, max_length=32)
     # Sifresiz (open) aglar icin bos birakilir. Saklanmaz: yalnizca ajana
     # iletilir, ajan da arsive yazmaz.
-    psk: str | None = Field(default=None, min_length=8, max_length=63)
+    # NOT: Uzunluk kisiti Field'da DEGIL validator'da — `min_length=8` bos
+    # string'i de reddediyordu, oysa bos = "sifresiz ag" demek.
+    psk: str | None = None
 
     @field_validator("ssid")
     @classmethod
@@ -116,7 +118,9 @@ class WifiConnectRequest(BaseModel):
     @classmethod
     def _check_psk(cls, value: str | None) -> str | None:
         if value is None or value == "":
-            return None
+            return None  # sifresiz (open) ag
+        if not 8 <= len(value) <= 63:
+            raise ValueError("WiFi sifresi 8-63 karakter olmali.")
         return value
 
 

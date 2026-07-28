@@ -382,6 +382,46 @@ def _guard_clear() -> None:
         pass
 
 
+def _ensure_ap_when_offline() -> None:
+    """DEGISMEZ KURAL: WiFi client'a bagli DEGILSEK, AP acik olmali.
+
+    Amac: cihazin IP'si bilinmese bile her zaman bir giris yolu bulunsun.
+    Kullanici "EnerjiOne Grid" agina baglanip http://10.42.0.1 ile girer.
+
+    Tek radyo oldugu icin AP ile client ayni anda calisamaz; bu yuzden kural
+    "client baglantisi YOKSA AP'yi ac" seklinde. Baglanti KURULMA ANINDA
+    (muhafiz aktifken) dokunmayiz, aksi halde denemeyi bogar.
+
+    `report` her turda (30 sn) cagirir; boylece AP elle kapatilsa veya
+    baglanti kopsa bile en gec yarim dakikada geri gelir.
+    """
+    if os.path.exists(GUARD_PATH):
+        return  # baglanma denemesi suruyor — _guard_check ilgilenecek
+
+    try:
+        devices = _device_rows()
+    except RuntimeError:
+        return
+    ifname = _wifi_ifname(devices)
+    if ifname is None:
+        return  # WiFi karti yok
+
+    if _sta_is_online(ifname):
+        return  # bir aga bagliyiz, AP zaten olamaz (tek radyo)
+
+    ap = _ap_info(devices)
+    if not ap.get("exists"):
+        return  # AP profili kurulmamis (SKIP_AP ile kurulmus olabilir)
+    if ap.get("active"):
+        return  # zaten acik
+
+    _log("WiFi baglantisi yok ve AP kapali — AP aciliyor (erisim garantisi).")
+    try:
+        _nmcli("connection", "up", AP_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+    except RuntimeError as exc:
+        _log(f"AP acilamadi: {exc}")
+
+
 def _guard_check() -> None:
     """`report` her turda cagirir (30 sn).
 
@@ -565,10 +605,12 @@ def _wifi_state(devices: list[dict]) -> dict:
 
 
 def cmd_report() -> int:
-    # AP geri donus muhafizi — her report turunda (30 sn) kontrol edilir.
-    # Ayri bir systemd unit'i gerektirmemesi icin bilerek buraya baglandi.
+    # AP geri donus muhafizi + "bagli degilse AP acik" kurali. Her report
+    # turunda (30 sn) kontrol edilir; ayri systemd unit'i gerektirmesin diye
+    # bilerek buraya baglandi.
     try:
         _guard_check()
+        _ensure_ap_when_offline()
     except Exception as exc:  # noqa: BLE001
         _log(f"wifi muhafiz kontrolu basarisiz: {exc}")
 

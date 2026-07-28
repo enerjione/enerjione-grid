@@ -938,6 +938,41 @@ export type AccessPointInfo = {
   secured: boolean;
 };
 
+/** Appliance'in WiFi CLIENT (station) durumu — bir aga baglanma tarafi.
+ *  AP (erisim noktasi) ayri: `AccessPointInfo`. AP arayuzden degistirilemez. */
+export type WifiState = {
+  supported: boolean;
+  ifname?: string | null;
+  connection?: string | null;
+  connected: boolean;
+  ssid?: string | null;
+  signal?: number | null;
+  addresses: string[];
+  /** Kayitli profil var mi (baglanti kopuk olsa bile). */
+  saved: boolean;
+  /** AP geri donus muhafizi aktif mi + ne zaman dolacak (epoch saniye). */
+  guard_active: boolean;
+  guard_deadline?: number | null;
+};
+
+/** Taramada gorunen tek bir WiFi agi. */
+export type WifiNetwork = {
+  ssid: string;
+  signal: number;
+  security?: string | null;
+  secured: boolean;
+  freq?: string | null;
+  in_use: boolean;
+};
+
+export type WifiScanResult = {
+  available: boolean;
+  updated_at?: string | null;
+  ifname?: string | null;
+  networks: WifiNetwork[];
+  age_seconds?: number | null;
+};
+
 export type NetworkApplyStatus = {
   request_id?: string | null;
   /** applying | applied | rebooting | failed */
@@ -956,6 +991,8 @@ export type NetworkStatus = {
   updated_at?: string | null;
   state_age_seconds?: number | null;
   ap: AccessPointInfo;
+  /** WiFi client (station) durumu — bir aga baglanma tarafi. */
+  wifi?: WifiState;
   interfaces: NetworkInterface[];
   pending: boolean;
   last_apply?: NetworkApplyStatus | null;

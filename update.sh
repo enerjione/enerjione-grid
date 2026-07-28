@@ -177,8 +177,12 @@ if [[ -n "$CURRENT_REMOTE" && "$CURRENT_REMOTE" != "$E1_REPO_URL" ]]; then
   fi
 fi
 
-e1_run "Surum listesi guncelleniyor" git fetch --tags --prune --force origin \
-  || e1_die "Uzak repo'ya erisilemedi. Internet baglantisini kontrol edin."
+# Depo private: fetch de yetki ister. Anahtar .env'de (kurulumda yazildi);
+# e1_git_auth onu ne .git/config'e ne komut satirina koymadan git'e verir.
+E1_TOKEN="$(e1_resolve_token .env)"
+e1_run "Surum listesi guncelleniyor" \
+  e1_git_auth "$E1_TOKEN" git fetch --tags --prune --force origin \
+  || e1_die "Uzak repo'ya erisilemedi.\n\n  Internet baglantisini ve .env icindeki GHCR_TOKEN degerini kontrol edin\n  (anahtarin suresi dolmus olabilir)."
 
 TARGET_REF="$(e1_target_ref)"
 if git rev-parse --verify --quiet "refs/tags/${TARGET_REF}" >/dev/null; then
@@ -309,6 +313,19 @@ if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
   else
     e1_warn "infra/appliance/setup-appliance.sh yok — appliance katmani atlandi."
   fi
+fi
+
+# Uzaktan bakim VPN'i — cihaz zaten tailnet'teyse script no-op yapar; yeni
+# eklenen bir anahtar varsa (veya baglanti kopmussa) burada devreye girer.
+# Anahtar yoksa hicbir sey yapmaz.
+if [[ -z "${E1_TAILSCALE_AUTHKEY:-}" && -f .env ]]; then
+  E1_TAILSCALE_AUTHKEY="$(sed -n 's/^[[:space:]]*E1_TAILSCALE_AUTHKEY[[:space:]]*=[[:space:]]*"\?\([^"#]*\)"\?.*/\1/p' \
+    .env | tail -1 | tr -d '[:space:]')"
+  export E1_TAILSCALE_AUTHKEY
+fi
+if [[ -n "${E1_TAILSCALE_AUTHKEY:-}" && -f infra/appliance/setup-tailscale.sh ]]; then
+  bash infra/appliance/setup-tailscale.sh || \
+    e1_warn "Tailscale adimi tamamlanamadi; guncelleme devam ediyor."
 fi
 
 # Kurulum adresini (enerjione.com/grid/install.sh) yayinlayan sunucuda,

@@ -203,7 +203,7 @@ if [[ $PURGE_DIR -eq 1 ]]; then
   echo
   echo "${E1_GREEN}${E1_BOLD}EnerjiOne Grid tamamen kaldirildi.${E1_RESET}"
   echo "Yeniden kurmak icin:"
-  echo "  curl -fsSL https://enerjione.com/grid/install.sh | sudo bash"
+  echo "  TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo E1_GHCR_TOKEN=$TOKEN bash"
 else
   e1_info "Install dizini korundu: ${SCRIPT_DIR}"
   e1_info "Tamamen silmek icin: sudo rm -rf ${SCRIPT_DIR}"

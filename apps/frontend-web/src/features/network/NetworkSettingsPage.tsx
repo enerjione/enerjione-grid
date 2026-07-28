@@ -39,6 +39,8 @@ type Props = {
   accessToken: string;
 };
 
+import { WifiPanel } from "./WifiPanel";
+
 const REFRESH_INTERVAL_SEC = 10;
 /** Reboot sonrasi tahmini acilis suresi — geri sayim bunun uzerinden isler. */
 const REBOOT_COUNTDOWN_SEC = 75;
@@ -569,6 +571,14 @@ export function NetworkSettingsPage({ accessToken }: Props) {
           </div>
         )}
       </section>
+
+      {/* ---- WiFi (client) bolumu ----
+           Cihazi mevcut bir aga baglar. AP buradan DEGISTIRILMEZ. */}
+      <WifiPanel
+        accessToken={accessToken}
+        wifi={status?.wifi}
+        onRefreshStatus={() => void load()}
+      />
 
       {/* ---- Onay modali ---- */}
       {confirmOpen ? (

@@ -866,6 +866,32 @@
       "gatewayIsSelf": "Ağ geçidi cihazın kendi IP'si olamaz.",
       "gatewayOtherSubnet": "Ağ geçidi, IP adresiyle aynı alt ağda olmalı.",
       "apSubnetClash": "Bu alt ağ WiFi erişim noktası ağıyla (10.42.0.0/24) çakışıyor."
+    },
+    "wifi": {
+      "title": "WiFi Bağlantısı",
+      "scan": "Ağları Tara",
+      "scanning": "Taranıyor...",
+      "connect": "Bağlan",
+      "connecting": "Bağlanıyor...",
+      "forget": "Bağlantıyı Kaldır",
+      "current": "Bağlı",
+      "open": "Şifresiz",
+      "connectedTo": "Bağlı olduğu ağ",
+      "notConnected": "Herhangi bir WiFi ağına bağlı değil",
+      "apActiveTitle": "Erişim noktası (AP) açık",
+      "apActiveHint": "Cihaz bir ağa bağlı olmadığı sürece AP açık kalır; \"EnerjiOne Grid\" ağına bağlanıp http://10.42.0.1 adresinden girebilirsiniz.",
+      "connectTo": "{{ssid}} ağına bağlan",
+      "password": "WiFi şifresi",
+      "passwordPlaceholder": "En az 8 karakter",
+      "passwordHint": "Şifre yalnızca cihaza iletilir; kaydedilmez ve kayıtlara yazılmaz.",
+      "openHint": "Bu ağ şifresiz; doğrudan bağlanılacak.",
+      "apDropTitle": "Erişim noktası geçici olarak kapanacak",
+      "apDropHint": "Cihazda tek WiFi kartı var. Bağlantı kurulurken \"EnerjiOne Grid\" ağı kapanır. Bağlantı başarısız olursa AP birkaç dakika içinde otomatik geri açılır — cihaza erişiminizi kaybetmezsiniz.",
+      "guardTitle": "{{ssid}} ağına bağlanılıyor",
+      "guardHint": "Başarısız olursa erişim noktası {{seconds}} sn içinde otomatik geri açılacak.",
+      "emptyScan": "Görünür ağ bulunamadı. Tekrar taramayı deneyin.",
+      "notScanned": "Ağları görmek için \"Ağları Tara\"ya basın.",
+      "noAdapter": "Cihazda WiFi kartı bulunamadı. USB WiFi adaptörü takıp kurulumu tekrar çalıştırın."
     }
   },
   "systemStatus": {

@@ -31469,6 +31469,318 @@ th.event-col-category {
   color: #0f172a;
 }
 
+/* =========================================================================
+   WiFi bolumu (Ag Ayarlari > WifiPanel)
+   AP degistirilemez; burasi yalnizca CLIENT baglantisini yonetir.
+   ========================================================================= */
+.wifi-card {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.wifi-card .net-card-head {
+  align-items: center;
+}
+.wifi-card .net-card-head h3 {
+  margin: 0;
+  flex: 1;
+  font-size: 1rem;
+  color: #0f172a;
+}
+.wifi-card .net-card-head > svg {
+  color: #2563eb;
+}
+
+.wifi-scan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wifi-scan-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.wifi-scan-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- Bagli / bagli degil kunyesi ---- */
+.wifi-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.wifi-current.is-connected {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+.wifi-current-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #e2e8f0;
+  color: #64748b;
+}
+.wifi-current.is-connected .wifi-current-icon {
+  background: #dcfce7;
+  color: #15803d;
+}
+.wifi-current-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.wifi-current-body small {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.wifi-current-body strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+.wifi-current-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: #475569;
+}
+.wifi-forget-btn {
+  padding: 7px 13px;
+  border: 1px solid #fecdd3;
+  border-radius: 9px;
+  background: #fff1f2;
+  color: #e11d48;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wifi-forget-btn:hover:not(:disabled) {
+  background: #ffe4e6;
+}
+
+/* ---- AP geri donus muhafizi (geri sayim) ---- */
+.wifi-guard {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 14px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.wifi-guard svg { color: #ea580c; flex-shrink: 0; }
+.wifi-guard div { display: flex; flex-direction: column; gap: 2px; }
+.wifi-guard strong { font-size: 13px; }
+.wifi-guard span { font-size: 12px; color: #b45309; }
+
+/* ---- Ag listesi ---- */
+.wifi-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.wifi-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+.wifi-list li:last-child { border-bottom: 0; }
+.wifi-list li:hover { background: #f8fafc; }
+.wifi-list li.is-current { background: #f0fdf4; }
+
+.wifi-list-ssid {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.wifi-list-ssid svg { color: #94a3b8; flex-shrink: 0; }
+.wifi-list-sec {
+  font-size: 11.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.wifi-list-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.wifi-connect-btn {
+  padding: 6px 13px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wifi-connect-btn:hover:not(:disabled) { background: #dbeafe; }
+
+/* Sinyal cubuklari */
+.wifi-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.wifi-bars i {
+  width: 3px;
+  border-radius: 1px;
+  background: #cbd5e1;
+}
+.wifi-bars i.is-on { background: #2563eb; }
+
+.wifi-empty {
+  padding: 18px;
+  text-align: center;
+}
+
+/* ---- Baglanma dialogu ---- */
+.net-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.net-modal {
+  width: min(460px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px 20px 16px;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.net-modal > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.net-modal > header h4 {
+  margin: 0;
+  font-size: 15.5px;
+  color: #0f172a;
+}
+.net-modal > header button {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+}
+.net-modal > header button:hover { background: #f1f5f9; color: #334155; }
+
+/* Tek radyo uyarisi — baglanmadan once acikca soylenir. */
+.wifi-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid #fed7aa;
+  border-radius: 11px;
+  background: #fff7ed;
+}
+.wifi-warn svg { color: #ea580c; flex-shrink: 0; margin-top: 1px; }
+.wifi-warn div { display: flex; flex-direction: column; gap: 3px; }
+.wifi-warn strong { font-size: 12.5px; color: #9a3412; }
+.wifi-warn span { font-size: 12px; color: #b45309; line-height: 1.45; }
+
+.wifi-psk-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+.wifi-psk-label input {
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-family: inherit;
+}
+.wifi-psk-label input:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+.wifi-psk-label small {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.net-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.net-modal-actions button {
+  padding: 9px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.net-modal-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+.wifi-connect-confirm {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+
 .net-refresh {
   display: inline-flex;
   align-items: center;

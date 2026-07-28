@@ -2205,6 +2205,51 @@ export async function fetchServicesStatus(token: string): Promise<ServicesReport
  *  Appliance modu kurulu degilse `available:false` + sebep doner — bu bir
  *  hata degildir (VPS kurulumunda normal), sayfa bunu bilgilendirme olarak
  *  gosterir. Polling icin session-expired event tetiklenmez. */
+// ---- WiFi (appliance client baglantisi) ----------------------------------
+// AP (erisim noktasi) buradan DEGISTIRILEMEZ; kurtarma yolu olarak korunur.
+// Tek radyo oldugu icin bir aga baglanirken AP duser, baglanti kurulamazsa
+// host ajani AP'yi otomatik geri acar.
+
+export async function fetchWifiScan(
+  token: string
+): Promise<import("./types").WifiScanResult> {
+  const response = await apiFetch(`${API_BASE_URL}/network/wifi/scan`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "WiFi taraması alınamadı.");
+  return (await response.json()) as import("./types").WifiScanResult;
+}
+
+export async function triggerWifiScan(token: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/network/wifi/scan`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "WiFi taraması başlatılamadı.");
+}
+
+export async function connectWifi(
+  token: string,
+  ssid: string,
+  psk: string | null
+): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/network/wifi/connect`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    // psk null ise sifresiz ag.
+    body: JSON.stringify({ ssid, psk: psk || null })
+  });
+  if (!response.ok) throw await buildApiError(response, "WiFi ağına bağlanılamadı.");
+}
+
+export async function forgetWifi(token: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/network/wifi/forget`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "WiFi ağı unutulamadı.");
+}
+
 export async function fetchNetworkStatus(token: string): Promise<NetworkStatus> {
   const response = await apiFetch(`${API_BASE_URL}/network/status`, {
     headers: authHeaders(token)

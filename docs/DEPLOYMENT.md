@@ -69,7 +69,7 @@ sudo ufw status
 ### 2.1 Otomatik (önerilen)
 
 ```bash
-curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \n  https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \n  | sudo E1_GHCR_TOKEN=$TOKEN bash
 ```
 
 Script otomatik yapar:
@@ -470,7 +470,7 @@ sudo bash uninstall.sh --yes --purge-dir
 # DNS kaydı + Let's Encrypt cert'i kalır.
 
 # Tekrar kurmak için:
-curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \n  https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \n  | sudo E1_GHCR_TOKEN=$TOKEN bash
 ```
 
 ---

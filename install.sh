@@ -10,7 +10,7 @@
 #        sudo bash install.sh
 #
 #   2) Tertemiz VPS'te (curl | bash):
-#        curl -fsSL https://enerjione.com/grid/install.sh | sudo bash
+#        TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo E1_GHCR_TOKEN=$TOKEN bash
 #
 # Idempotent: tekrar calistirmak guvenli. Mevcut .env'i koruyup eksik
 # alanlari rastgele degerlerle doldurur, Docker'i atlar (zaten kuruluysa),
@@ -41,6 +41,13 @@
 #   E1_APPLIANCE   1 = appliance modunu zorla (WiFi karti yoksa bile)
 #                  0 = hic kurma (WiFi karti olsa bile)
 #                  bos/auto = WiFi kartina gore otomatik karar (varsayilan)
+#
+# Uzaktan bakim VPN'i (Tailscale) — opsiyonel ama saha cihazlarinda onerilir:
+#   E1_TAILSCALE_AUTHKEY  auth key (tskey-auth-...) veya OAuth secret
+#                         (tskey-client-...). BOS ise VPN adimi hic calismaz.
+#   E1_TAILSCALE_TAGS     cihaz etiketi (default: tag:e1-appliance)
+#   E1_TAILSCALE_SSH      1 = Tailscale SSH acik (default), 0 = kapali
+#   Anahtar `.env` dosyasindan da okunur; repoya ASLA yazilmaz.
 # ===========================================================================
 
 set -euo pipefail
@@ -66,22 +73,22 @@ if [[ -n "$SCRIPT_DIR" ]] && [[ -f "$SCRIPT_DIR/infra/scripts/linux/_lib.sh" ]];
   source "$SCRIPT_DIR/infra/scripts/linux/_lib.sh"
   LIB_LOADED=1
 else
-  # curl | bash modu — lib'i uzaktan cek (tmpfile'a).
+  # curl | bash modu — lib'i GitHub'dan cek (tmpfile'a).
   #
-  # SIRA ONEMLI: once kendi sunucumuz, sonra GitHub raw.
-  # Depo PRIVATE oldugu icin raw.githubusercontent.com kimliksiz istemciye
-  # 404 doner; asil kaynak artik enerjione.com. GitHub raw yalnizca depo
-  # public olan/olacak kurulumlar ve gelistirme icin yedek olarak duruyor.
-  # E1_LIB_URL ile tamamen override edilebilir (ozel dagitim, test).
+  # DEPO PRIVATE: bu istek de yetki ister, aksi halde raw 404 doner.
+  # Anahtar E1_GHCR_TOKEN ile gelir; onerilen kurulum komutu onu hem curl'e
+  # hem script'e ayni anda verir (bkz. docs/SAHA-KURULUM.md).
+  # E1_LIB_URL ile kaynak tamamen degistirilebilir (ozel dagitim, test).
   if command -v curl >/dev/null 2>&1; then
     TMP_LIB="$(mktemp)"
+    _CURL_AUTH=()
+    [[ -n "${E1_GHCR_TOKEN:-}" ]] && _CURL_AUTH=(-H "Authorization: token ${E1_GHCR_TOKEN}")
     for _src in \
       "${E1_LIB_URL:-}" \
-      "https://enerjione.com/grid/_lib.sh" \
       "https://raw.githubusercontent.com/enerjione/enerjione-grid/${BRANCH}/infra/scripts/linux/_lib.sh"
     do
       [[ -z "$_src" ]] && continue
-      if curl -fsSL "$_src" -o "$TMP_LIB" 2>/dev/null && [[ -s "$TMP_LIB" ]]; then
+      if curl -fsSL "${_CURL_AUTH[@]}" "$_src" -o "$TMP_LIB" 2>/dev/null && [[ -s "$TMP_LIB" ]]; then
         # shellcheck disable=SC1090
         source "$TMP_LIB"
         LIB_LOADED=1
@@ -92,7 +99,19 @@ else
   fi
 fi
 if [[ $LIB_LOADED -eq 0 ]]; then
-  echo "HATA: _lib.sh yuklenemedi (ne yerel ne uzak)." >&2
+  echo "HATA: kurulum kutuphanesi (_lib.sh) indirilemedi." >&2
+  echo >&2
+  if [[ -z "${E1_GHCR_TOKEN:-}" ]]; then
+    echo "Sebep muhtemelen kurulum anahtarinin verilmemis olmasi: depo ozeldir." >&2
+    echo "Dogru kullanim (ANAHTAR yerine size verilen anahtari yazin):" >&2
+    echo >&2
+    echo '  TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \' >&2
+    echo '    https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \' >&2
+    echo '    | sudo E1_GHCR_TOKEN=$TOKEN bash' >&2
+  else
+    echo "Anahtar verilmis ama kabul edilmedi — suresi dolmus veya yetkisi yetersiz olabilir." >&2
+    echo "Anahtarin 'Contents: Read' ve 'Packages: Read' yetkisi olmali." >&2
+  fi
   exit 1
 fi
 
@@ -128,6 +147,23 @@ fi
 
 e1_set_steps 6
 
+# ---- Kurulum anahtari — BIR KEZ sorulur, iki yerde kullanilir -------------
+# Depo private oldugu icin hem `git clone` hem `docker login ghcr.io` yetki
+# ister. Kurulumcuya iki ayri sifre sormak yerine tek anahtar aliyoruz.
+# Zaten kurulu bir sistemde .env'den okunur ve hic soru sorulmaz.
+#
+# Sirayla: E1_GHCR_TOKEN ortam degiskeni -> mevcut .env -> kullaniciya sor
+E1_TOKEN="$(E1_GHCR_TOKEN="${E1_GHCR_TOKEN:-}" e1_resolve_token "${INSTALL_DIR}/.env")"
+if [[ -z "$E1_TOKEN" ]] && e1_can_prompt; then
+  e1_info "EnerjiOne Grid deposu ve imajlari ozeldir; kurulum anahtari gerekir."
+  e1_hint "Anahtar size teslim edilen 'ghp_...' veya 'github_pat_...' ile baslayan dizedir."
+  E1_TOKEN="$(e1_ask 'Kurulum anahtari' '')"
+fi
+if [[ -z "$E1_TOKEN" ]]; then
+  e1_warn "Kurulum anahtari verilmedi. Depo veya imajlar ozelse kurulum basarisiz olur."
+  e1_hint "Sonradan vermek icin: sudo E1_GHCR_TOKEN=<anahtar> bash install.sh"
+fi
+
 # ---- 1/6: Pre-req paketler -----------------------------------------------
 e1_step "Pre-req paketler kontrol ediliyor (git, curl, openssl)..."
 MISSING=()
@@ -158,7 +194,8 @@ if [[ -d "${INSTALL_DIR}/.git" ]]; then
   if ! git diff --quiet || ! git diff --cached --quiet; then
     e1_warn "Lokal degisiklik var; guncelleme ATLANDI. Mevcut commit ile devam."
   else
-    e1_run "Guncellemeler indiriliyor" git fetch --tags --prune origin
+    e1_run "Guncellemeler indiriliyor" \
+      e1_git_auth "$E1_TOKEN" git fetch --tags --prune origin
   fi
 else
   if [[ -e "${INSTALL_DIR}" ]]; then
@@ -168,10 +205,13 @@ else
   # `--quiet` DEGIL `--progress`: klonlama yavas baglantida dakikalar surer,
   # sessiz kalirsa kullanici kurulumun kilitlendigini saniyor. --progress
   # stderr terminal olmasa bile yuzde gosterir.
+  # Token URL'e GOMULMEZ (bkz. e1_git_auth): gomulseydi .git/config'te kalici
+  # olarak dururdu ve her `git remote -v` ciktisinda gorunurdu.
   e1_run "Kaynak kod indiriliyor" \
-    git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+    e1_git_auth "$E1_TOKEN" git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}" \
+    || e1_die "Kaynak kod indirilemedi.\n\n  En sik sebep: kurulum anahtari yanlis veya suresi dolmus.\n  Yeniden denemek icin:\n    sudo E1_GHCR_TOKEN=<anahtar> bash install.sh"
   cd "${INSTALL_DIR}"
-  git fetch --tags --quiet origin || true
+  e1_git_auth "$E1_TOKEN" git fetch --tags --quiet origin || true
 fi
 
 # Kararli kanal: en son yayin tag'i. Hic tag yoksa ana dal (yayin oncesi repo).
@@ -298,9 +338,10 @@ else
   e1_warn "Surum semver olarak okunamadi; imaj etiketi 'latest' olacak (rollback zorlasir)."
 fi
 
-# GHCR token'i: env ile verilmisse .env'e yaz. Yoksa sonraki adimda sorulur.
-if [[ -n "${E1_GHCR_TOKEN:-}" ]]; then
-  _set_env_var "GHCR_TOKEN" "$E1_GHCR_TOKEN"
+# Kurulum anahtarini .env'e yaz — update.sh sonraki guncellemelerde bunu
+# kullanir, kurulumcuya bir daha sorulmaz. .env zaten chmod 600.
+if [[ -n "$E1_TOKEN" ]]; then
+  _set_env_var "GHCR_TOKEN" "$E1_TOKEN"
   _set_env_var "GHCR_USERNAME" "${E1_GHCR_USERNAME:-x-access-token}"
 fi
 
@@ -432,18 +473,12 @@ e1_step "Servis imajlari hazirlaniyor..."
 # kurulumlar da calismaya devam etsin.
 IMAGE_SOURCE="build"
 if [[ "${E1_BUILD:-0}" != "1" ]]; then
-  # Private paket: once ghcr.io girisi. Token yoksa ve soru sorulabiliyorsa iste.
-  if ! e1_ghcr_login .env; then
-    if e1_can_prompt; then
-      e1_info "Hazir imajlari indirmek icin kurulum anahtari (GHCR token) gerekir."
-      e1_hint "Bos birakirsaniz imajlar bu cihazda derlenir (daha yavas)."
-      _tok="$(e1_ask 'Kurulum anahtari' '')"
-      if [[ -n "$_tok" ]]; then
-        _set_env_var "GHCR_TOKEN" "$_tok"
-        _set_env_var "GHCR_USERNAME" "${E1_GHCR_USERNAME:-x-access-token}"
-        e1_ghcr_login .env || true
-      fi
-    fi
+  # Anahtar zaten kurulum basinda BIR KEZ alindi (depo klonu icin de ayni
+  # anahtar kullanildi); burada tekrar SORULMAZ.
+  if [[ -n "$E1_TOKEN" ]]; then
+    GHCR_TOKEN="$E1_TOKEN" e1_ghcr_login .env || true
+  else
+    e1_info "Kurulum anahtari yok — imajlar bu cihazda derlenecek."
   fi
   if e1_run "Hazir imajlar indiriliyor" docker compose pull; then
     IMAGE_SOURCE="pull"
@@ -574,12 +609,14 @@ case "${E1_APPLIANCE:-auto}" in
   0) e1_info "Appliance modu E1_APPLIANCE=0 ile devre disi birakildi." ;;
   *)
     if e1_has_wifi; then
-      e1_info "WiFi arayuzu tespit edildi — bu makine saha mini PC'si gibi gorunuyor."
-      if e1_confirm_yes "Appliance modu kurulsun mu? (WiFi AP 'EnerjiOne Grid' + e1-grid.local + Ag Ayarlari sayfasi)"; then
-        APPLIANCE_WANTED=1
-      else
-        e1_info "Appliance modu atlandi. Sonradan: sudo bash infra/appliance/setup-appliance.sh"
-      fi
+      # SORU SORULMAZ: WiFi karti olan makine saha mini PC'sidir ve appliance
+      # katmani (AP + mDNS + e1-netd) o cihazin ERISIM YOLUDUR — kurulmazsa
+      # IP bilinmediginde cihaza hic girilemez. Kurulumu operator onayina
+      # birakmak, tek komutla sahaya cikan bir kutuda en kritik parcayi
+      # atlanabilir yapiyordu. Istemeyen `E1_APPLIANCE=0` ile kapatir.
+      e1_info "WiFi arayuzu tespit edildi — saha mini PC'si; appliance modu kuruluyor."
+      e1_info "Istemiyorsaniz: E1_APPLIANCE=0 sudo bash install.sh"
+      APPLIANCE_WANTED=1
     else
       e1_info "WiFi arayuzu yok — sunucu kurulumu kabul edildi, appliance modu atlandi."
     fi
@@ -595,6 +632,54 @@ if [[ $APPLIANCE_WANTED -eq 1 ]]; then
   else
     e1_warn "infra/appliance/setup-appliance.sh bulunamadi (repo eski olabilir)."
   fi
+fi
+
+# ---- Uzaktan bakim VPN'i (Tailscale) -------------------------------------
+# Anahtar tanimliysa cihaz kurulumda OTOMATIK tailnet'e katilir; boylece
+# saha PC'sine port acmadan uzaktan bakim yapilabilir. Anahtar yoksa script
+# hicbir sey yapmadan doner — anahtarsiz kurulumlar etkilenmez.
+#
+# Anahtar kaynagi (oncelik sirasiyla):
+#   1. Ortam degiskeni       -> E1_TAILSCALE_AUTHKEY=... sudo bash install.sh
+#   2. /etc/enerjione-grid/install.env  -> SIFIR DOKUNUSLU kurulum icin.
+#      Bu dosya repo disindadir, yeniden kurulumda SILINMEZ ve disk imajina
+#      onceden gomulebilir; boylece sahaya giden her cihaz install.sh'i
+#      calistirdiginda elle bir sey yazmadan tailnet'e katilir.
+#   3. ${INSTALL_DIR}/.env   -> mevcut kurulumu guncellerken.
+# Anahtar repoya ASLA yazilmaz (.env ve /etc/... git disinda).
+_e1_read_key_from() {
+  # `source` etmiyoruz: dosyada kurulum ortamini bozabilecek baska
+  # degiskenler olabilir; sadece ilgili satiri cekiyoruz.
+  [[ -f "$1" ]] || return 1
+  sed -n 's/^[[:space:]]*E1_TAILSCALE_AUTHKEY[[:space:]]*=[[:space:]]*"\?\([^"#]*\)"\?.*/\1/p' \
+    "$1" | tail -1 | tr -d '[:space:]'
+}
+if [[ -z "${E1_TAILSCALE_AUTHKEY:-}" ]]; then
+  for _keyfile in /etc/enerjione-grid/install.env "${INSTALL_DIR}/.env"; do
+    _k="$(_e1_read_key_from "$_keyfile" || true)"
+    if [[ -n "$_k" ]]; then
+      E1_TAILSCALE_AUTHKEY="$_k"
+      export E1_TAILSCALE_AUTHKEY
+      e1_info "Tailscale anahtari bulundu: ${_keyfile}"
+      break
+    fi
+  done
+  unset _keyfile _k
+fi
+# Diger Tailscale ayarlari da ayni dosyadan gelebilsin (etiket, SSH...).
+if [[ -f /etc/enerjione-grid/install.env ]]; then
+  for _var in E1_TAILSCALE_TAGS E1_TAILSCALE_SSH E1_TAILSCALE_ACCEPT_DNS E1_TAILSCALE_HOSTNAME; do
+    if [[ -z "${!_var:-}" ]]; then
+      _v="$(sed -n "s/^[[:space:]]*${_var}[[:space:]]*=[[:space:]]*\"\?\([^\"#]*\)\"\?.*/\1/p" \
+        /etc/enerjione-grid/install.env | tail -1 | tr -d '[:space:]')"
+      [[ -n "$_v" ]] && export "${_var}=${_v}"
+    fi
+  done
+  unset _var _v
+fi
+if [[ -f "${INSTALL_DIR}/infra/appliance/setup-tailscale.sh" ]]; then
+  bash "${INSTALL_DIR}/infra/appliance/setup-tailscale.sh" \
+    || e1_warn "Tailscale adimi tamamlanamadi; kurulum devam ediyor."
 fi
 
 # ---- Final rehber ---------------------------------------------------------
