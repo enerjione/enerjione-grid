@@ -80,3 +80,8 @@ apps/whatsapp-web-gateway/session-data/
 enerjione-grid-kurulum*.sh
 *-kurulum.sh
 infra/appliance/provision.env
+
+# Elle tutulan anahtar notlari — ASLA commit edilmez.
+tokenler.txt
+*token*.txt
+*anahtar*.txt
