@@ -333,18 +333,21 @@ export function NetworkSettingsPage({ accessToken }: Props) {
   const lastFailed = status?.last_apply?.status === "failed";
 
   return (
-    <section className="net-page">
-      {/* ---- Ust serit: erisim adresleri ---- */}
-      <div className="net-access-grid">
-        <article className="net-access-card net-access-card--primary">
-          <div className="net-access-icon">
-            <Globe size={20} />
-          </div>
-          <div className="net-access-body">
+    <section className="tab-panel net-page">
+      {/* ---- Ust serit: erisim adresleri ----
+          Uc ayri KPI karti yerine TEK satir: bunlar birbirinden bagimsiz
+          metrikler degil, "cihaza nasil ulasilir"in uc yolu. Tek serit hem
+          daha az dikey yer kaplar hem de diger sayfalardaki cubuk diliyle
+          ayni durur. */}
+      <div className="net-access-bar">
+        <div className="net-access-item">
+          <span className="net-access-icon">
+            <Globe size={16} />
+          </span>
+          <span className="net-access-body">
             <span className="net-access-label">{t("network.access.deviceAddress")}</span>
             <strong className="net-access-value">{status?.mdns_name ?? "—"}</strong>
-            <span className="net-access-sub">{t("network.access.deviceAddressHint")}</span>
-          </div>
+          </span>
           {mdnsUrl ? (
             <button
               type="button"
@@ -352,53 +355,50 @@ export function NetworkSettingsPage({ accessToken }: Props) {
               onClick={() => void copy(mdnsUrl)}
               title={t("network.access.copy")}
             >
-              {copied === mdnsUrl ? <Check size={16} /> : <Copy size={16} />}
+              {copied === mdnsUrl ? <Check size={15} /> : <Copy size={15} />}
             </button>
           ) : null}
-        </article>
+        </div>
 
-        <article
-          className={`net-access-card ${
-            status?.ap?.active ? "net-access-card--ok" : "net-access-card--warn"
-          }`}
-        >
-          <div className="net-access-icon">
-            <Wifi size={20} />
-          </div>
-          <div className="net-access-body">
+        <span className="net-access-sep" aria-hidden="true" />
+
+        <div className={`net-access-item ${status?.ap?.active ? "is-ok" : "is-warn"}`}>
+          <span className="net-access-icon">
+            <Wifi size={16} />
+          </span>
+          <span className="net-access-body">
             <span className="net-access-label">{t("network.access.wifi")}</span>
-            <strong className="net-access-value">{status?.ap?.ssid ?? "—"}</strong>
-            <span className="net-access-sub">
+            <strong className="net-access-value">
               {status?.ap?.active
-                ? t("network.access.wifiActive", { address: status?.ap?.address ?? "—" })
+                ? status?.ap?.address ?? status?.ap?.ssid ?? "—"
                 : t("network.access.wifiInactive")}
-            </span>
-          </div>
+            </strong>
+          </span>
           {status?.ap?.exists && !status.ap.secured ? (
             <span className="net-chip net-chip--open">{t("network.access.wifiOpen")}</span>
           ) : null}
-        </article>
+        </div>
 
-        <article className="net-access-card">
-          <div className="net-access-icon">
-            <Cable size={20} />
-          </div>
-          <div className="net-access-body">
+        <span className="net-access-sep" aria-hidden="true" />
+
+        <div className="net-access-item">
+          <span className="net-access-icon">
+            <Cable size={16} />
+          </span>
+          <span className="net-access-body">
             <span className="net-access-label">{t("network.access.wired")}</span>
             <strong className="net-access-value">
               {selected?.addresses[0] ?? t("network.access.noAddress")}
             </strong>
-            <span className="net-access-sub">
-              {selected
-                ? `${selected.ifname} · ${
-                    interfaceMethod(selected) === "static"
-                      ? t("network.method.static")
-                      : t("network.method.dhcp")
-                  }`
-                : "—"}
+          </span>
+          {selected ? (
+            <span className="net-chip">
+              {interfaceMethod(selected) === "static"
+                ? t("network.method.static")
+                : t("network.method.dhcp")}
             </span>
-          </div>
-        </article>
+          ) : null}
+        </div>
       </div>
 
       {loadError ? <p className="error-text">{loadError}</p> : null}
@@ -427,10 +427,10 @@ export function NetworkSettingsPage({ accessToken }: Props) {
       {/* ---- Ayar formu ---- */}
       <section className="net-card">
         <header className="net-card-head">
-          <div>
-            <h2>{t("network.form.title")}</h2>
-            <p className="helper-text">{t("network.form.subtitle")}</p>
-          </div>
+          {/* Aciklama metni kaldirildi — "cihazin IP'sini degistirir,
+              yeniden baslar" uyarisi zaten kaydet oncesi onay modalinda
+              cikiyor; burada tekrar etmek gurultu. */}
+          <h2>{t("network.form.title")}</h2>
           <button
             type="button"
             className="secondary-btn net-refresh"
@@ -489,11 +489,6 @@ export function NetworkSettingsPage({ accessToken }: Props) {
                   {t("network.method.static")}
                 </button>
               </div>
-              <small className="helper-text">
-                {form.method === "dhcp"
-                  ? t("network.form.dhcpHint")
-                  : t("network.form.staticHint")}
-              </small>
             </div>
 
             {form.method === "static" ? (
@@ -570,7 +565,6 @@ export function NetworkSettingsPage({ accessToken }: Props) {
               >
                 {t("network.form.save")}
               </button>
-              <span className="helper-text">{t("network.form.saveHint")}</span>
             </div>
           </div>
         )}
