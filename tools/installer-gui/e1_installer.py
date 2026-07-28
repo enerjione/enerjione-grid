@@ -45,12 +45,44 @@ except ImportError:  # pragma: no cover - kurulum talimati
 APP_TITLE = "EnerjiOne Grid — Saha Kurulum Araci"
 REPO_SLUG = "enerjione/enerjione-grid"
 REMOTE_TMP = "/tmp/e1-kurulum.sh"
+APP_DIR = "/opt/enerjione-grid"
 
 # Profil: SIR ICERMEZ. Sadece tekrar tekrar yazmak zorunda kalinmayan alanlar.
 PROFILE_PATH = Path(os.environ.get("APPDATA", Path.home())) / "EnerjiOneGrid" / "installer.json"
 
 # SGR/CSI dizileri: "\033[1;33m" gibi. Renkleri metne katmadan atiyoruz.
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+
+# Surum listesindeki sabit girdiler. Anahtar = ekranda gorunen, deger = ref.
+VERSION_LATEST = "En son yayin (onerilen)"
+VERSION_EDGE = "Gelistirme surumu (main) — test icin"
+
+
+def fetch_releases(token: str, limit: int = 15) -> list[str]:
+    """Depodaki yayin etiketlerini getirir (yeniden eskiye).
+
+    Depo private oldugu icin istek anahtarla imzalanir. Basarisiz olursa
+    bos liste doner — arayuz yine calisir, sadece liste dolmaz. Kurulum
+    aracinin surum listesi cekemedi diye kullanilamaz hale gelmesi kotu
+    olurdu.
+    """
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{REPO_SLUG}/releases?per_page={limit}",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "EnerjiOneGrid-Installer",
+            **({"Authorization": f"token {token}"} if token else {}),
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return []
+    return [r["tag_name"] for r in data if isinstance(r, dict) and r.get("tag_name")]
 
 
 # ---------------------------------------------------------------------------
@@ -67,9 +99,18 @@ E1_GHCR_TOKEN='{ghcr}'
 E1_TAILSCALE_AUTHKEY='{tskey}'
 E1_TAILSCALE_TAGS='{tstags}'
 E1_REPO_SLUG='{slug}'
-E1_REF_BOOTSTRAP='{ref}'
 E1_CUSTOMER='{customer}'
 E1_SITE='{site}'
+# Kurulacak surum.
+#   E1_REF       : install.sh'in kodu getirecegi ref. BOS ise install.sh
+#                  "en son yayin tag'i" diye yorumlar — arac ile cihaz
+#                  arasinda surum bilgisi ayrismaz.
+#   BOOTSTRAP_REF: install.sh'in KENDISININ indirilecegi ref. Somut olmak
+#                  ZORUNDA (bos olsa URL bozulurdu). Belirli bir surum
+#                  secildiyse ayni tag, aksi halde main.
+E1_REF='{ref}'
+BOOTSTRAP_REF='{bootstrap}'
+E1_APPLIANCE='{appliance}'
 
 if [[ $EUID -ne 0 ]]; then echo "root ile calistirilmali" >&2; exit 1; fi
 
@@ -96,7 +137,7 @@ command -v curl >/dev/null 2>&1 || {{
 # 3) install.sh'i private depodan cek
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
-URL="https://raw.githubusercontent.com/${{E1_REPO_SLUG}}/${{E1_REF_BOOTSTRAP}}/install.sh"
+URL="https://raw.githubusercontent.com/${{E1_REPO_SLUG}}/${{BOOTSTRAP_REF}}/install.sh"
 echo "  Kurulum scripti indiriliyor..."
 if ! curl -fsSL -H "Authorization: token ${{E1_GHCR_TOKEN}}" "$URL" -o "$TMP" || [[ ! -s "$TMP" ]]; then
   echo "HATA: kurulum scripti indirilemedi. Anahtar gecersiz veya suresi dolmus olabilir." >&2
@@ -105,6 +146,8 @@ fi
 
 # 4) Kurulumu calistir
 export E1_GHCR_TOKEN E1_TAILSCALE_AUTHKEY E1_TAILSCALE_TAGS E1_CUSTOMER E1_SITE
+[[ -n "$E1_REF" ]] && export E1_REF
+[[ "$E1_APPLIANCE" != "auto" ]] && export E1_APPLIANCE
 export ASSUME_YES=1
 bash "$TMP"
 """
@@ -120,7 +163,9 @@ class Profile:
     key_path: str = ""
     customer: str = ""
     site: str = ""
-    ref: str = "main"
+    # Bos = "en son yayin". Bilerek dal adi DEGIL: sahaya kurulan sey
+    # yayinlanmis bir surum olmali, gelistirme dalinin ucu degil.
+    ref: str = ""
 
     @classmethod
     def load(cls) -> "Profile":
@@ -246,18 +291,43 @@ class InstallWorker(threading.Thread):
 
     # -- akis ---------------------------------------------------------------
     def run(self) -> None:
+        action = self.cfg.get("action", "install")
+        label = {"install": "Kurulum", "update": "Guncelleme",
+                 "uninstall": "Kaldirma"}.get(action, "Islem")
         try:
             self._connect()
             if self._stop.is_set():
                 return self.done(False, "Kullanici tarafindan iptal edildi.")
-            self._upload()
-            if self._stop.is_set():
-                return self.done(False, "Kullanici tarafindan iptal edildi.")
-            rc = self._execute()
-            if rc == 0:
-                self.done(True, "Kurulum tamamlandi.")
+
+            if action == "install":
+                self._upload()
+                if self._stop.is_set():
+                    return self.done(False, "Kullanici tarafindan iptal edildi.")
+                rc = self._execute()
+            elif action == "update":
+                # Surum secildiyse ona gec; secilmediyse en son yayina.
+                # `--yes`: arayuzden onay zaten alindi, cihazda tekrar sorma.
+                ver = self.cfg.get("ref", "")
+                extra = f" --version {ver.lstrip('v')}" if ver and ver != "main" else ""
+                extra = " --edge" if ver == "main" else extra
+                rc = self._remote_only(
+                    f"sudo -S -p '' bash {APP_DIR}/update.sh --yes{extra}",
+                    "Guncelleme calisiyor...")
+            elif action == "uninstall":
+                # --purge-dir BILEREK yok: kurulum dizinini silmek yerine
+                # birakiyoruz ki yedekler ve .env elde kalsin. Tam silme
+                # ayri ve acik bir islem olmali.
+                flags = "--yes" + (" --keep-images" if self.cfg.get("keep_images") else "")
+                rc = self._remote_only(
+                    f"sudo -S -p '' bash {APP_DIR}/uninstall.sh {flags}",
+                    "Kaldiriliyor...")
             else:
-                self.done(False, f"Kurulum basarisiz (cikis kodu {rc}).")
+                return self.done(False, f"Bilinmeyen islem: {action}")
+
+            if rc == 0:
+                self.done(True, f"{label} tamamlandi.")
+            else:
+                self.done(False, f"{label} basarisiz (cikis kodu {rc}).")
         except paramiko.AuthenticationException:
             self.log("\n✗ SSH kimlik dogrulama basarisiz.\n")
             self.done(False, "Kullanici adi / parola / anahtar hatali.")
@@ -295,6 +365,17 @@ class InstallWorker(threading.Thread):
         self.client.connect(**kwargs)
         self.log("✓ SSH baglantisi kuruldu\n\n")
 
+    def _remote_only(self, cmd: str, title: str) -> int:
+        """Cihazda hazir duran bir scripti calistir (dosya gondermeden).
+
+        Guncelleme ve kaldirma icin: ikisi de zaten kurulu sistemin kendi
+        scriptleri. Anahtar cihazda (/etc/enerjione-grid/install.env), yeniden
+        gondermeye gerek yok.
+        """
+        self.status(title)
+        self.log(f"· {cmd}\n\n")
+        return self._run_remote(cmd)
+
     def _upload(self) -> None:
         self.status("Kurulum dosyasi gonderiliyor...")
         script = PROVISIONER.format(
@@ -302,7 +383,9 @@ class InstallWorker(threading.Thread):
             tskey=self.cfg.get("ts_key", ""),
             tstags=self.cfg.get("ts_tags", "tag:e1-appliance"),
             slug=REPO_SLUG,
-            ref=self.cfg.get("ref", "main"),
+            ref=self.cfg.get("ref", ""),
+            bootstrap=self.cfg.get("bootstrap") or "main",
+            appliance=self.cfg.get("appliance", "auto"),
             customer=self.cfg.get("customer", ""),
             site=self.cfg.get("site", ""),
         )
@@ -318,11 +401,17 @@ class InstallWorker(threading.Thread):
 
     def _execute(self) -> int:
         self.status("Kurulum calisiyor...")
+        # Kurulum dosyasi calistiktan sonra SILINIR: icinde canli anahtar var,
+        # cihazda kalmasin.
+        return self._run_remote(
+            f"sudo -S -p '' bash {REMOTE_TMP}; rc=$?; rm -f {REMOTE_TMP}; exit $rc")
+
+    def _run_remote(self, cmd: str) -> int:
+        """Uzak komutu calistirir ve ciktisini CANLI kuyruga akitir."""
         password = self.cfg.get("password") or ""
         # PTY istiyoruz: install.sh terminal gorunce ilerleme cubugunu cizer.
         # `sudo -S` parolayi stdin'den okur; -p '' ile istemi bastiririz ki
         # terminale karisik bir "password:" satiri dusmesin.
-        cmd = f"sudo -S -p '' bash {REMOTE_TMP}; rc=$?; rm -f {REMOTE_TMP}; exit $rc"
         chan = self.client.get_transport().open_session()
         chan.get_pty(term="xterm", width=100, height=40)
         chan.exec_command(cmd)
@@ -373,15 +462,24 @@ class InstallerApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("1180x720")
-        self.minsize(980, 600)
+        self.geometry("1280x860")
+        self.minsize(1060, 700)
 
         self.profile = Profile.load()
         self.queue: queue.Queue = queue.Queue()
         self.worker: InstallWorker | None = None
+        self._last_action = "install"
 
         self._build()
         self._pump()
+
+    @staticmethod
+    def _load_png(path: Path) -> "tk.PhotoImage | None":
+        """PNG yukle; bulunamazsa None don (arac gorselsiz de calissin)."""
+        try:
+            return tk.PhotoImage(file=str(path))
+        except (tk.TclError, OSError):
+            return None
 
     # -- yerlesim -----------------------------------------------------------
     def _build(self) -> None:
@@ -393,8 +491,29 @@ class InstallerApp(tk.Tk):
 
         head = ttk.Frame(self, padding=(14, 10))
         head.pack(fill="x")
-        ttk.Label(head, text="EnerjiOne Grid", font=("Segoe UI", 15, "bold")).pack(side="left")
-        ttk.Label(head, text="  Saha Kurulum Araci", font=("Segoe UI", 11),
+
+        # Logo + pencere simgesi. Gorseller ONCEDEN dogru boyuta getirildi
+        # (assets/); Tkinter'in PhotoImage'i yalnizca tam sayi bolme ile
+        # kucultebiliyor ve 3261px'lik markali logoyu makul bir boyuta
+        # indiremiyordu. Referanslari nesnede TUTUYORUZ: yerel degiskende
+        # kalsalardi cop toplayici alir ve gorsel bos gorunurdu.
+        assets = Path(__file__).resolve().parent / "assets"
+        self._img_logo = self._load_png(assets / "logo.png")
+        self._img_icon = self._load_png(assets / "favicon.png")
+
+        if self._img_logo is not None:
+            ttk.Label(head, image=self._img_logo).pack(side="left", padx=(0, 10))
+        else:
+            # Gorsel yoksa arac yine calissin — sadece yazi ile.
+            ttk.Label(head, text="EnerjiOne Grid",
+                      font=("Segoe UI", 15, "bold")).pack(side="left")
+        if self._img_icon is not None:
+            try:
+                self.iconphoto(True, self._img_icon)
+            except tk.TclError:
+                pass
+
+        ttk.Label(head, text="Saha Kurulum Araci", font=("Segoe UI", 11),
                   foreground="#6e7681").pack(side="left")
         self.status_lbl = ttk.Label(head, text="Hazir", foreground="#6e7681")
         self.status_lbl.pack(side="right")
@@ -402,8 +521,30 @@ class InstallerApp(tk.Tk):
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        form = ttk.Frame(body, padding=(0, 0, 12, 0))
-        body.add(form, weight=0)
+        # Sol panel KAYDIRILABILIR: alan sayisi artinca kucuk ekranlarda
+        # alttaki butonlar goruntunun disinda kaliyordu. Canvas + ic frame
+        # klasik Tk cozumu; ttk'nin hazir kaydirilabilir kabi yok.
+        left = ttk.Frame(body)
+        body.add(left, weight=0)
+        canvas = tk.Canvas(left, highlightthickness=0, width=330)
+        vbar = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        vbar.pack(side="right", fill="y")
+
+        form = ttk.Frame(canvas, padding=(0, 0, 12, 0))
+        win = canvas.create_window((0, 0), window=form, anchor="nw")
+        # Ic cerceve buyudukce kaydirma alanini guncelle; canvas genisleyince
+        # ic cerceveyi de genislet ki alanlar sagda bosluk birakmasin.
+        form.bind("<Configure>",
+                  lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfigure(win, width=e.width))
+        # Fare tekerlegi: imlec sol paneldeyken kaydirsin.
+        canvas.bind("<Enter>", lambda e: canvas.bind_all(
+            "<MouseWheel>", lambda ev: canvas.yview_scroll(-ev.delta // 120, "units")))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
         term_wrap = ttk.Frame(body)
         body.add(term_wrap, weight=1)
 
@@ -440,21 +581,48 @@ class InstallerApp(tk.Tk):
         self.vars["key_path"] = tk.StringVar(value=self.profile.key_path)
         ttk.Entry(kf, textvariable=self.vars["key_path"]).grid(row=0, column=0, sticky="ew")
         ttk.Button(kf, text="...", width=3, command=self._pick_key).grid(row=0, column=1, padx=(4, 0))
-        ttk.Label(s, text="Parola VEYA anahtar; anahtar verilirse parola onun\nparolasi olarak kullanilir.",
-                  foreground="#6e7681", font=("Segoe UI", 8)).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
-
         # --- Anahtarlar ---
         s = section("Kurulum anahtarlari")
-        row(s, 0, "GitHub anahtari", "ghcr_token", show="•")
+        row(s, 0, "GitHub anahtari *", "ghcr_token", show="•")
         row(s, 1, "Tailscale anahtari", "ts_key", show="•")
-        ttk.Label(s, text="Tailscale bos birakilabilir — o zaman uzaktan\nbakim VPN'i kurulmaz.",
-                  foreground="#6e7681", font=("Segoe UI", 8)).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        # --- Saha kimligi ---
-        s = section("Saha kimligi (opsiyonel)")
-        row(s, 0, "Musteri", "customer", self.profile.customer)
-        row(s, 1, "Saha / proje", "site", self.profile.site)
-        row(s, 2, "Surum (dal/tag)", "ref", self.profile.ref)
+        # --- Saha kimligi (ZORUNLU) ---
+        # Cihazin uzaktan bakim listesinde hangi ad ile gorunecegini bu
+        # belirliyor. Bos gecilirse tailnet'te "e1-grid-1", "e1-grid-2" diye
+        # numaralanir ve hangisinin hangi saha oldugu anlasilmaz olur.
+        s = section("Saha kimligi")
+        row(s, 0, "Musteri *", "customer", self.profile.customer)
+        row(s, 1, "Saha / proje *", "site", self.profile.site)
+
+        # --- Surum ---
+        # Serbest metin DEGIL, liste: kurulumcunun dal/tag adi bilmesi
+        # gerekmesin ve yanlislikla gelistirme dalini sahaya kurmasin.
+        s = section("Kurulacak surum")
+        self.version_var = tk.StringVar(value=VERSION_LATEST)
+        self.version_box = ttk.Combobox(s, textvariable=self.version_var,
+                                        state="readonly", width=30)
+        self.version_box["values"] = (VERSION_LATEST, VERSION_EDGE)
+        self.version_box.grid(row=0, column=0, columnspan=2, sticky="ew")
+        ttk.Button(s, text="Surumleri yenile", command=self._refresh_versions) \
+            .grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
+        # --- Cihaz tipi ---
+        # "Mini PC modu" = appliance katmani: sifresiz "EnerjiOne Grid" WiFi
+        # agi, e1-grid.local adresi ve arayuzden IP/DNS ayari yapan ag ajani.
+        # Sahada cihazin IP'sini bilmeden ona ULASMANIN YOLU budur.
+        # Normalde otomatik: WiFi karti varsa saha kutusu sayilir. SANAL
+        # MAKINEDE WiFi KARTI YOKTUR, o yuzden test kurulumlarinda atlanir.
+        s = section("Cihaz tipi")
+        self.appliance_var = tk.StringVar(value="auto")
+        self.appliance_box = ttk.Combobox(
+            s, state="readonly", width=30,
+            values=(
+                "Otomatik belirle (onerilen)",
+                "Saha kutusu — WiFi agi + e1-grid.local kur",
+                "Sunucu / sanal makine — WiFi agi kurma",
+            ))
+        self.appliance_box.current(0)
+        self.appliance_box.grid(row=0, column=0, columnspan=2, sticky="ew")
 
         # --- Butonlar ---
         btns = ttk.Frame(parent)
@@ -463,6 +631,11 @@ class InstallerApp(tk.Tk):
         self.test_btn.pack(fill="x", pady=2)
         self.start_btn = ttk.Button(btns, text="Kurulumu Baslat", command=self._start)
         self.start_btn.pack(fill="x", pady=2)
+        self.update_btn = ttk.Button(btns, text="Guncelle", command=self._update)
+        self.update_btn.pack(fill="x", pady=2)
+        # Kaldirma en altta ve ayri: yanlislikla tiklanacak yerde durmasin.
+        self.uninstall_btn = ttk.Button(btns, text="Sistemi Kaldir", command=self._uninstall)
+        self.uninstall_btn.pack(fill="x", pady=(8, 2))
         self.cancel_btn = ttk.Button(btns, text="Iptal", command=self._cancel, state="disabled")
         self.cancel_btn.pack(fill="x", pady=2)
 
@@ -492,6 +665,39 @@ class InstallerApp(tk.Tk):
         if p:
             self.vars["key_path"].set(p)
 
+    def _refresh_versions(self) -> None:
+        """Yayin listesini GitHub'dan tazele. Anahtar gerekir (depo private)."""
+        token = self.vars["ghcr_token"].get().strip()
+        if not token:
+            messagebox.showinfo(APP_TITLE, "Once GitHub kurulum anahtarini girin.")
+            return
+        self.status_lbl.configure(text="Surumler aliniyor...")
+        self.update_idletasks()
+        tags = fetch_releases(token)
+        if not tags:
+            self.status_lbl.configure(text="Surum listesi alinamadi")
+            self.term.write("! Surum listesi alinamadi — anahtari ve internet baglantisini kontrol edin.\n"
+                            "  'En son yayin' secenegi yine calisir: cihaz en guncel yayini kendisi bulur.\n")
+            return
+        self.version_box["values"] = (VERSION_LATEST, *tags, VERSION_EDGE)
+        self.status_lbl.configure(text=f"{len(tags)} yayin bulundu")
+        self.term.write(f"· Yayinlar: {', '.join(tags[:5])}"
+                        f"{' …' if len(tags) > 5 else ''}\n")
+
+    def _selected_ref(self) -> str:
+        """Secimi install.sh'in anladigi ref'e cevir.
+
+        'En son yayin' -> BOS string. install.sh bos E1_REF'i "en son v* tag"
+        diye yorumluyor; somut bir tag yazmak yerine bunu birakmak, arac ile
+        cihaz arasinda surum bilgisi ayrismasini onler.
+        """
+        sel = self.version_var.get()
+        if sel == VERSION_LATEST:
+            return ""
+        if sel == VERSION_EDGE:
+            return "main"
+        return sel
+
     def _collect(self) -> dict | None:
         cfg = {k: v.get().strip() for k, v in self.vars.items()}
         if not cfg["host"]:
@@ -508,7 +714,22 @@ class InstallerApp(tk.Tk):
         except ValueError:
             messagebox.showerror(APP_TITLE, "SSH portu sayi olmali.")
             return None
-        cfg["ref"] = cfg.get("ref") or "main"
+
+        if not cfg["customer"] or not cfg["site"]:
+            messagebox.showerror(
+                APP_TITLE,
+                "Musteri ve saha adi zorunludur.\n\n"
+                "Cihaz uzaktan bakim listesinde bu adla gorunur; bos "
+                "gecilirse hangi kutunun hangi saha oldugu anlasilmaz.")
+            return None
+
+        # Surum secimi -> iki ayri deger.
+        #   ref       : install.sh'in kodu getirecegi ref (bos = en son yayin)
+        #   bootstrap : install.sh'in kendisinin indirilecegi ref (somut olmali)
+        cfg["ref"] = self._selected_ref()
+        cfg["bootstrap"] = cfg["ref"] or "main"
+        # Combobox sirasi -> install.sh'in bekledigi deger.
+        cfg["appliance"] = ("auto", "1", "0")[self.appliance_box.current()]
         return cfg
 
     def _save_profile(self, cfg: dict) -> None:
@@ -521,7 +742,7 @@ class InstallerApp(tk.Tk):
         cfg = self._collect()
         if not cfg:
             return
-        cfg["_test_only"] = True
+        cfg["action"] = "test"
         self._save_profile(cfg)
         self.term.write("\n── Baglanti testi ──\n")
         self._run_worker(cfg, test_only=True)
@@ -543,7 +764,55 @@ class InstallerApp(tk.Tk):
         self.term.write("\n── Kurulum baslatiliyor ──\n")
         self._run_worker(cfg, test_only=False)
 
+    def _update(self) -> None:
+        cfg = self._collect()
+        if not cfg:
+            return
+        hedef = cfg["ref"] or "en son yayin"
+        if not messagebox.askyesno(
+            APP_TITLE,
+            f"{cfg['user']}@{cfg['host']} guncellenecek.\n\n"
+            f"Hedef surum: {hedef}\n\n"
+            "Guncelleme oncesi veritabani yedegi OTOMATIK alinir.\n"
+            "Devam edilsin mi?",
+        ):
+            return
+        cfg["action"] = "update"
+        self._save_profile(cfg)
+        self.term.write("\n-- Guncelleme baslatiliyor --\n")
+        self._run_worker(cfg, test_only=False)
+
+    def _uninstall(self) -> None:
+        cfg = self._collect()
+        if not cfg:
+            return
+        # IKI ASAMALI ONAY: bu islem TUM VERIYI siler ve geri alinamaz.
+        # Tek tiklamayla ulasilabilir olmasi kabul edilemez.
+        if not messagebox.askyesno(
+            APP_TITLE,
+            f"DIKKAT - {cfg['user']}@{cfg['host']}\n\n"
+            "EnerjiOne Grid kaldirilacak:\n"
+            "  - Tum container'lar durdurulup silinecek\n"
+            "  - VERITABANI VE TUM OLCUM GECMISI SILINECEK\n"
+            "  - Docker imajlari silinecek\n\n"
+            "Bu islem GERI ALINAMAZ. Devam edilsin mi?",
+            icon="warning",
+        ):
+            return
+        if not messagebox.askyesno(
+            APP_TITLE,
+            "Son onay.\n\nVeritabani yedeginiz var mi?\n\n"
+            "Kaldirmayi gercekten onayliyor musunuz?",
+            icon="warning", default="no",
+        ):
+            return
+        cfg["action"] = "uninstall"
+        self.term.write("\n-- Kaldirma baslatiliyor --\n")
+        self._run_worker(cfg, test_only=False)
+
+
     def _run_worker(self, cfg: dict, test_only: bool) -> None:
+        self._last_action = cfg.get("action", "install")
         self.worker = _TestWorker(cfg, self.queue) if test_only else InstallWorker(cfg, self.queue)
         self._busy(True)
         self.worker.start()
@@ -554,8 +823,8 @@ class InstallerApp(tk.Tk):
             self.status_lbl.configure(text="Iptal ediliyor...")
 
     def _busy(self, on: bool) -> None:
-        self.start_btn.configure(state="disabled" if on else "normal")
-        self.test_btn.configure(state="disabled" if on else "normal")
+        for b in (self.start_btn, self.test_btn, self.update_btn, self.uninstall_btn):
+            b.configure(state="disabled" if on else "normal")
         self.cancel_btn.configure(state="normal" if on else "disabled")
         if on:
             self.progress.start(12)
@@ -583,7 +852,7 @@ class InstallerApp(tk.Tk):
                     self._busy(False)
                     self.status_lbl.configure(text=msg)
                     self.term.write(f"\n{'✓' if ok else '✗'} {msg}\n")
-                    if ok:
+                    if ok and self._last_action == "install":
                         host = self.vars["host"].get().strip()
                         self.term.write(
                             f"\nArayuz : http://{host}/\n"
