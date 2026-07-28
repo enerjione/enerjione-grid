@@ -149,6 +149,68 @@ jobs:
             --generate-notes \
             --notes-file /tmp/notes.md
 
+  publish-installer:
+    name: Kurulum adresini yayinla (enerjione.com/grid)
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # enerjione.com ANA SITE BASKA BIR SUNUCUDA ve kendi deposundan
+      # (enerjione-web) deploy ediliyor. Site kok dizini statik servis ettigi
+      # icin oraya birakilan `grid/` klasoru dogrudan
+      # https://enerjione.com/grid/install.sh olarak yayinlanir.
+      #
+      # Neden GitHub'a yonlendirme degil: bu depo PRIVATE. raw.githubusercontent
+      # kimliksiz istemciye 404 doner ve `curl | bash` bos govdeyi calistirmaya
+      # kalkar — saha kurulumcusu icin en kotu hata bicimi.
+      #
+      # _lib.sh de yayinlanir: install.sh `curl | bash` modunda repo
+      # klonlamadan ONCE ona ihtiyac duyuyor.
+      #
+      # version.json backend'in UPDATE_CHECK_URL'ini besler; private depoda
+      # GitHub Releases API kimliksiz kullanilamadigi icin manifest sart.
+      - name: Web deposuna yayinla
+        env:
+          WEB_REPO: ${{ vars.WEB_REPO || 'enerjione/enerjione-web' }}
+          WEB_TOKEN: ${{ secrets.WEB_REPO_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEB_TOKEN:-}" ]; then
+            echo "::notice::WEB_REPO_TOKEN tanimli degil — kurulum adresi yayini atlandi."
+            echo "Elle yayinlamak icin: infra/scripts/linux/publish-installer.sh"
+            exit 0
+          fi
+          git clone --depth 1 --quiet \
+            "https://x-access-token:${WEB_TOKEN}@github.com/${WEB_REPO}.git" web
+          mkdir -p web/grid
+          cp install.sh                      web/grid/install.sh
+          cp infra/scripts/linux/_lib.sh      web/grid/_lib.sh
+          {
+            printf '{\n'
+            printf '  "version": "%s",\n' "$VERSION"
+            printf '  "published_at": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '  "install_url": "https://enerjione.com/grid/install.sh",\n'
+            printf '  "notes_url": "https://github.com/%s/releases/tag/v%s"\n' \
+              "${{ github.repository }}" "$VERSION"
+            printf '}\n'
+          } > web/grid/version.json
+          cd web
+          git config user.name  "enerjione-release"
+          git config user.email "release@enerjione.com"
+          git add grid
+          # Degisiklik yoksa bos commit atma (install.sh her surumde degismez).
+          if git diff --cached --quiet; then
+            echo "Kurulum dosyalari zaten guncel."
+            exit 0
+          fi
+          git commit -m "chore(grid): kurulum scripti ve surum manifesti ${VERSION}"
+          git push
+          echo "::notice::enerjione.com/grid guncellendi — site sunucusunda pull sonrasi yayinda."
+
   deploy-vds:
     name: VDS deploy
     needs: [verify, build]
