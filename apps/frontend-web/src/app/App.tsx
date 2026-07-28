@@ -1,36 +1,20 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asyncConfirm } from "../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 import { ChangePasswordModal } from "../components/ChangePasswordModal";
 import { Header } from "../components/Header";
 import { useToast } from "../components/ToastProvider";
 import { LoginForm } from "../features/auth/LoginForm";
-import { UserManagementPanel } from "../features/auth/UserManagementPanel";
-import { AlarmsPage } from "../features/alarms/AlarmsPage";
-import { FaultListPage } from "../features/faults/FaultListPage";
-import { BackupsPanel } from "../features/backups/BackupsPanel";
-import { ResponsibilityAreasPage } from "../features/responsibility-areas/ResponsibilityAreasPage";
-import { EventsPage } from "../features/events/EventsPage";
-import { SystemStatusPage } from "../features/system-status/SystemStatusPage";
-import { BulkNotificationPage } from "../features/bulk-notify/BulkNotificationPage";
-import { ActiveSessionsPage } from "../features/sessions/ActiveSessionsPage";
-import { NetworkSettingsPage } from "../features/network/NetworkSettingsPage";
-import { DeviceManagementPanel } from "../features/devices/DeviceManagementPanel";
-import { LicenseManagementPanel } from "../features/license/LicenseManagementPanel";
-import { OutboundTargetsPanel } from "../features/outbound/OutboundTargetsPanel";
-import { ApiAccessPanel } from "../features/api-access/ApiAccessPanel";
-import { NotificationSettingsPanel } from "../features/settings/NotificationSettingsPanel";
-import { ProjectSettingsPanel } from "../features/settings/ProjectSettingsPanel";
-import { GridManagementPanel } from "../features/grid/GridManagementPanel";
+
 import { DeviceSidebar } from "../features/devices/DeviceSidebar";
-import { LiveValuesPage } from "../features/live-values/LiveValuesPage";
+
 import { DeviceMapTab } from "../features/map/DeviceMapTab";
 import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/DashboardFilterBar";
 import { TabBar } from "../features/tabs/TabBar";
 import { EngineeringNav } from "../features/tabs/EngineeringNav";
-import { useTabs } from "../features/tabs/useTabs";
+
 import { routeToPageState, type PageMode, type EngineeringPage } from "../features/tabs/tabModel";
-import { DeviceDetailPage } from "../features/device-detail/DeviceDetailPage";
+
 import { GlobalLoading } from "../components/GlobalLoading";
 import { useProjectSettings } from "../components/ProjectSettingsProvider";
 import {
@@ -41,8 +25,7 @@ import {
   type SupportedLanguage,
 } from "../shared/i18n";
 import { locateDevice } from "../shared/geoLookup";
-import { SignalsPage } from "../features/signals/SignalsPage";
-import { AlarmRulesPage } from "../features/alarm-rules/AlarmRulesPage";
+
 import {
   changeMyPassword,
   clearSession,
@@ -147,6 +130,34 @@ import {
   API_BASE_URL
 } from "../shared/api";
 import { useLiveValuesSocket } from "../shared/useLiveValuesSocket";
+import { useTabs } from "../features/tabs/useTabs";
+
+// --- Tembel yuklenen sayfalar --------------------------------------
+// Muhendislik sayfalari ilk yuklemede GELMEZ; kullanici o sekmeyi acinca
+// indirilir. Onceden hepsi tek bundle'daydi (2.1 MB) ve panoya bakan bir
+// kullanici bile Modbus plan ekranini, grafik kutuphanesini indiriyordu.
+// Named export olduklari icin .then ile default'a cevriliyor.
+const ActiveSessionsPage = lazy(() => import("../features/sessions/ActiveSessionsPage").then((m) => ({ default: m.ActiveSessionsPage })));
+const AlarmRulesPage = lazy(() => import("../features/alarm-rules/AlarmRulesPage").then((m) => ({ default: m.AlarmRulesPage })));
+const AlarmsPage = lazy(() => import("../features/alarms/AlarmsPage").then((m) => ({ default: m.AlarmsPage })));
+const ApiAccessPanel = lazy(() => import("../features/api-access/ApiAccessPanel").then((m) => ({ default: m.ApiAccessPanel })));
+const BackupsPanel = lazy(() => import("../features/backups/BackupsPanel").then((m) => ({ default: m.BackupsPanel })));
+const BulkNotificationPage = lazy(() => import("../features/bulk-notify/BulkNotificationPage").then((m) => ({ default: m.BulkNotificationPage })));
+const DeviceDetailPage = lazy(() => import("../features/device-detail/DeviceDetailPage").then((m) => ({ default: m.DeviceDetailPage })));
+const DeviceManagementPanel = lazy(() => import("../features/devices/DeviceManagementPanel").then((m) => ({ default: m.DeviceManagementPanel })));
+const EventsPage = lazy(() => import("../features/events/EventsPage").then((m) => ({ default: m.EventsPage })));
+const FaultListPage = lazy(() => import("../features/faults/FaultListPage").then((m) => ({ default: m.FaultListPage })));
+const GridManagementPanel = lazy(() => import("../features/grid/GridManagementPanel").then((m) => ({ default: m.GridManagementPanel })));
+const LicenseManagementPanel = lazy(() => import("../features/license/LicenseManagementPanel").then((m) => ({ default: m.LicenseManagementPanel })));
+const LiveValuesPage = lazy(() => import("../features/live-values/LiveValuesPage").then((m) => ({ default: m.LiveValuesPage })));
+const NetworkSettingsPage = lazy(() => import("../features/network/NetworkSettingsPage").then((m) => ({ default: m.NetworkSettingsPage })));
+const NotificationSettingsPanel = lazy(() => import("../features/settings/NotificationSettingsPanel").then((m) => ({ default: m.NotificationSettingsPanel })));
+const OutboundTargetsPanel = lazy(() => import("../features/outbound/OutboundTargetsPanel").then((m) => ({ default: m.OutboundTargetsPanel })));
+const ProjectSettingsPanel = lazy(() => import("../features/settings/ProjectSettingsPanel").then((m) => ({ default: m.ProjectSettingsPanel })));
+const ResponsibilityAreasPage = lazy(() => import("../features/responsibility-areas/ResponsibilityAreasPage").then((m) => ({ default: m.ResponsibilityAreasPage })));
+const SignalsPage = lazy(() => import("../features/signals/SignalsPage").then((m) => ({ default: m.SignalsPage })));
+const SystemStatusPage = lazy(() => import("../features/system-status/SystemStatusPage").then((m) => ({ default: m.SystemStatusPage })));
+const UserManagementPanel = lazy(() => import("../features/auth/UserManagementPanel").then((m) => ({ default: m.UserManagementPanel })));
 import type {
   AlarmComment,
   AlarmEvent,
@@ -2087,6 +2098,9 @@ export function App() {
   }
 
   return (
+    // Tembel yuklenen sayfalar Suspense OLMADAN render edilemez.
+    // Tek sarmalayici yeterli: ayni anda yalnizca bir sayfa aciliyor.
+    <Suspense fallback={<GlobalLoading show />}>
     <div className="layout">
       {forcePasswordModal}
       <Header
@@ -2593,5 +2607,6 @@ export function App() {
         show={loadingData || alarmsLoading || dashboardAreaLoading}
       />
     </div>
+    </Suspense>
   );
 }

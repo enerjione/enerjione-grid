@@ -27,6 +27,7 @@ import os
 import queue
 import re
 import socket
+import sys
 import threading
 import time
 import tkinter as tk
@@ -56,6 +57,18 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
 # Surum listesindeki sabit girdiler. Anahtar = ekranda gorunen, deger = ref.
 VERSION_LATEST = "En son yayin (onerilen)"
 VERSION_EDGE = "Gelistirme surumu (main) — test icin"
+
+
+def _asset_dir() -> Path:
+    """Gorsellerin bulundugu dizin.
+
+    EXE olarak paketlendiginde (PyInstaller --onefile) program gecici bir
+    dizine acilir ve `__file__` ORAYI gosterir; varliklar da oraya kopyalanir.
+    `sys._MEIPASS` o dizinin yoludur. Kaynaktan calistirildiginda boyle bir
+    oznitelik yoktur ve dosyanin yani basina bakariz.
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    return Path(base) / "assets" if base else Path(__file__).resolve().parent / "assets"
 
 
 def fetch_releases(token: str, limit: int = 15) -> list[str]:
@@ -511,7 +524,7 @@ class InstallerApp(tk.Tk):
         # kucultebiliyor ve 3261px'lik markali logoyu makul bir boyuta
         # indiremiyordu. Referanslari nesnede TUTUYORUZ: yerel degiskende
         # kalsalardi cop toplayici alir ve gorsel bos gorunurdu.
-        assets = Path(__file__).resolve().parent / "assets"
+        assets = _asset_dir()
         self._img_logo = self._load_png(assets / "logo.png")
         self._img_icon = self._load_png(assets / "favicon.png")
 

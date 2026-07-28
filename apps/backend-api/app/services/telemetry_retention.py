@@ -157,17 +157,41 @@ class TelemetryRetentionWorker:
         sinyalin son degeri DB'de kalici, retention sadece tarihsel veriyi
         temizler.
 
+        PERFORMANS — filtre pencere fonksiyonunun ICINDE olmali:
+          Onceki surumde ic sorgu `FROM telemetry` idi (WHERE'siz) ve
+          `source_timestamp < cutoff` kosulu pencereden SONRA uygulaniyordu.
+          Sonuc: ROW_NUMBER() TUM tabloyu tarayip (device_id, signal_key)
+          bazinda siraliyordu ve `idx_telemetry_source_timestamp`
+          KULLANILAMIYORDU. 600 cihaz olceginde tablo ~21M satir; bu sorgu
+          5 dakikada bir o tabloyu bastan sona tariyor, sort disk'e tasiyor
+          ve DELETE boyunca kilit birikiyordu.
+
+          Filtreyi ice indirince pencere yalnizca ESKI satirlar uzerinde
+          calisir ve index devreye girer.
+
+        KABUL EDILEN FARK:
+          Ic filtreyle, aktif bir seride "cutoff oncesi son deger" 1 satir
+          olarak kalir (pencere artik yalnizca eski satirlari gorduğu icin
+          onlarin en yenisini rn=1 sayar). Cihaz+sinyal basina 1 satir,
+          sabit — buyumez; 600x20 = ~12K satir, 21M'lik tabloda %0.06.
+          Bunun karsiliginda tam tarama ortadan kalkiyor.
+
+          Veri KAYBI yok: yeni mantik eskisinin sildiginden FAZLASINI
+          silmiyor (sqlite fixture ile dogrulandi) ve veri gondermeyi
+          birakmis cihazin son degeri iki mantikta da korunuyor.
+
         SQL (PostgreSQL):
           DELETE FROM telemetry t USING (
             SELECT id FROM (
-              SELECT id, source_timestamp,
+              SELECT id,
                      ROW_NUMBER() OVER (
                        PARTITION BY device_id, signal_key
                        ORDER BY id DESC
                      ) AS rn
               FROM telemetry
+              WHERE source_timestamp < :cutoff
             ) sub
-            WHERE rn > 1 AND source_timestamp < :cutoff
+            WHERE rn > 1
           ) old
           WHERE t.id = old.id
         """
@@ -181,14 +205,15 @@ class TelemetryRetentionWorker:
                     USING (
                         SELECT id
                         FROM (
-                            SELECT id, source_timestamp,
+                            SELECT id,
                                    ROW_NUMBER() OVER (
                                        PARTITION BY device_id, signal_key
                                        ORDER BY id DESC
                                    ) AS rn
                             FROM telemetry
+                            WHERE source_timestamp < :cutoff
                         ) sub
-                        WHERE rn > 1 AND source_timestamp < :cutoff
+                        WHERE rn > 1
                     ) old
                     WHERE t.id = old.id
                     """

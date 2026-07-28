@@ -33,7 +33,7 @@ import threading
 import time as _time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as _pg_insert
 
 from app.db.session import SessionLocal
@@ -282,6 +282,40 @@ class AlarmReconciliationWorker:
                 rules_by_name.setdefault(r.name, r)
 
             cutoff = datetime.now(timezone.utc) - timedelta(minutes=_lookback_minutes())
+
+            # --- Son telemetri degerlerini TEK SORGUDA cek ------------------
+            # Onceden bu dongu her acik alarm icin AYRI bir sorgu atiyordu
+            # (N+1). Bir hat arizasinda 100+ alarm acik olabiliyor ve bu is
+            # 30 saniyede bir kosuyor — 100+ gidis-donus. Sorgular indeksli
+            # oldugu icin her biri hizli, ama tur sayisi kendi basina yuk.
+            #
+            # DISTINCT ON (PostgreSQL) her (device_id, signal_key) icin
+            # yalnizca en yeni satiri dondurur; idx_telemetry_device_signal_ts
+            # ile dogrudan index taramasi olur.
+            ilgili = {
+                (a.device_id, a.signal_key)
+                for a in open_alarms
+                if a.device_id is not None and a.signal_key
+            }
+            son_degerler: dict[tuple[int, str], Telemetry] = {}
+            if ilgili:
+                satirlar = db.scalars(
+                    select(Telemetry)
+                    .where(Telemetry.source_timestamp >= cutoff)
+                    .where(
+                        tuple_(Telemetry.device_id, Telemetry.signal_key).in_(
+                            list(ilgili)
+                        )
+                    )
+                    .distinct(Telemetry.device_id, Telemetry.signal_key)
+                    .order_by(
+                        Telemetry.device_id,
+                        Telemetry.signal_key,
+                        Telemetry.source_timestamp.desc(),
+                    )
+                ).all()
+                son_degerler = {(r.device_id, r.signal_key): r for r in satirlar}
+
             cleared_count = 0
             for alarm in open_alarms:
                 rule = rules_by_name.get(alarm.title)
@@ -291,15 +325,9 @@ class AlarmReconciliationWorker:
                     # olabilir, alarm tarihce icin durabilir). Manuel silinsin.
                 if not alarm.signal_key:
                     continue  # Eski kayit — sinyal bilinmiyor; reconcile edilemez.
-                # Bu cihaz icin bu sinyalin son telemetri degeri
-                last = db.scalar(
-                    select(Telemetry)
-                    .where(Telemetry.device_id == alarm.device_id)
-                    .where(Telemetry.signal_key == alarm.signal_key)
-                    .where(Telemetry.source_timestamp >= cutoff)
-                    .order_by(Telemetry.source_timestamp.desc())
-                    .limit(1)
-                )
+                # Bu cihaz icin bu sinyalin son telemetri degeri —
+                # yukarida tek sorguda toplandi, burada sadece okunuyor.
+                last = son_degerler.get((alarm.device_id, alarm.signal_key))
                 if last is None or last.value is None:
                     continue  # Yeterli yeni veri yok — guvenli karar veremeyiz.
                 # Kural kosulu artik karsilanmiyorsa cozeriz.
