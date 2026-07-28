@@ -247,10 +247,13 @@ def _match_zones_to_faults(
             unmatched_zones.remove(zone)
             unmatched_faults.remove(hit)
 
-    # 2) Direk araligi kesisimi
+    # 2) Direk araligi kesisimi. Komsu bolgeler bir direk PAYLASIR (orn.
+    #    1-3 ve 3-5), o yuzden "ilk kesisen"i almak yanlis kayda yazabilir;
+    #    en BUYUK kesisime sahip kaydi seciyoruz.
     for zone in list(unmatched_zones):
         zr = zone.seq_range
-        hit = None
+        best: FaultEvent | None = None
+        best_overlap = 0
         for f in unmatched_faults:
             if f.from_pole_seq is None or f.to_pole_seq is None:
                 continue
@@ -259,13 +262,15 @@ def _match_zones_to_faults(
                 if f.from_pole_seq <= f.to_pole_seq
                 else (f.to_pole_seq, f.from_pole_seq)
             )
-            if _seq_overlap(zr, fr):
-                hit = f
-                break
-        if hit is not None:
-            pairs.append((zone, hit))
+            if not _seq_overlap(zr, fr):
+                continue
+            overlap = min(zr[1], fr[1]) - max(zr[0], fr[0]) + 1
+            if overlap > best_overlap:
+                best, best_overlap = f, overlap
+        if best is not None:
+            pairs.append((zone, best))
             unmatched_zones.remove(zone)
-            unmatched_faults.remove(hit)
+            unmatched_faults.remove(best)
 
     return pairs, unmatched_zones, unmatched_faults
 

@@ -12,6 +12,7 @@
 #   sudo bash update.sh tag            # tag-engine
 #   sudo bash update.sh notification   # notification-worker
 #   sudo bash update.sh iec            # iec104-outbound
+#   sudo bash update.sh modbus         # modbus-outbound (Modbus TCP yayini)
 #   sudo bash update.sh ftp            # ftp-server (cihaz config transfer)
 #   sudo bash update.sh whatsapp       # whatsapp-web-gateway (Baileys sidecar)
 #
@@ -220,11 +221,12 @@ case "$TARGET" in
   tag|tag-engine)                   SVC="tag-engine" ;;
   notification|notification-worker) SVC="notification-worker" ;;
   iec|iec104|iec104-outbound)       SVC="iec104-outbound" ;;
+  modbus|modbus-outbound)           SVC="modbus-outbound" ;;
   ftp|ftp-server)                   SVC="ftp-server" ;;
   whatsapp|whatsapp-web-gateway)    SVC="whatsapp-web-gateway" ;;
   all|"")                           SVC="" ;;
   *)
-    e1_die "Bilinmeyen servis: $TARGET. Gecerli: frontend, backend, alarm, tag, notification, iec, ftp, whatsapp, all"
+    e1_die "Bilinmeyen servis: $TARGET. Gecerli: frontend, backend, alarm, tag, notification, iec, modbus, ftp, whatsapp, all"
     ;;
 esac
 

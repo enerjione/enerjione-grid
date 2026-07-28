@@ -114,8 +114,12 @@ def list_faults(
     # ISTISNA: resolved/closed arizalar gecikme dolmasa bile GORUNUR. Cunku
     # kisa omurlu (test) arizalar 30sn dolmadan normale donebilir; kullanici
     # bunlarin "resetlendi/normale dondu" olarak listede gorunmesini istiyor.
+    # NOT: "all" de bu filtreye DAHIL. Frontend "Hat Arizalari" sayfasi tek
+    # istekte hem aktif hem gecmis kayitlari cekip iki sekmeye ayiriyor;
+    # olgunlasmamis aktif arizalarin o sekmede de gizli kalmasi gerekiyor.
+    # resolved/closed her durumda gorunur (asagidaki OR kolu).
     delay = settings.fault_display_delay_sec
-    if delay > 0 and status_filter in ("active", "open"):
+    if delay > 0 and status_filter in ("active", "open", "all"):
         cutoff = datetime.now(timezone.utc) - timedelta(seconds=delay)
         stmt = stmt.where(
             (FaultEvent.opened_at <= cutoff)
@@ -144,6 +148,8 @@ def fault_stats(
       avg_resolution_seconds: kapatilan fault'larin (resolved/closed) ort.
         cozum suresi (saniye). Henuz kapatilmis kayit yoksa null.
       last_30d_count: son 30 gunde acilan fault sayisi.
+      resolved_today_count: bugun (yerel gun degil, UTC gun basi) normale
+        donen/kapatilan fault sayisi — "Bugun Cozulen" KPI karti icin.
     """
     stmt = select(FaultEvent)
     line_scope = get_visible_line_ids(db, current_user)
@@ -158,6 +164,7 @@ def fault_stats(
                 "closed": 0,
                 "avg_resolution_seconds": None,
                 "last_30d_count": 0,
+                "resolved_today_count": 0,
             }
         stmt = stmt.where(FaultEvent.line_id.in_(line_scope))
 
@@ -171,26 +178,27 @@ def fault_stats(
         "closed": 0,
     }
     durations: list[float] = []
-    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=30)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     last_30d_count = 0
+    resolved_today_count = 0
+
+    def _aware(dt):
+        """Naive datetime gelirse UTC kabul et (eski kayitlar icin guvenlik)."""
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
     for f in rows:
         s = f.status
         if s in counts:
             counts[s] += 1
         end = f.closed_at or f.resolved_at
+        opened = _aware(f.opened_at)
         if end is not None:
-            opened = f.opened_at
-            if opened.tzinfo is None:
-                from datetime import timezone as _tz
-                opened = opened.replace(tzinfo=_tz.utc)
-            if end.tzinfo is None:
-                from datetime import timezone as _tz
-                end = end.replace(tzinfo=_tz.utc)
+            end = _aware(end)
             durations.append((end - opened).total_seconds())
-        opened = f.opened_at
-        if opened.tzinfo is None:
-            from datetime import timezone as _tz
-            opened = opened.replace(tzinfo=_tz.utc)
+            if end >= today_start:
+                resolved_today_count += 1
         if opened >= cutoff:
             last_30d_count += 1
 
@@ -201,6 +209,7 @@ def fault_stats(
         **counts,
         "avg_resolution_seconds": avg_res,
         "last_30d_count": last_30d_count,
+        "resolved_today_count": resolved_today_count,
     }
 
 

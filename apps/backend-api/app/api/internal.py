@@ -17,8 +17,10 @@ from app.schemas.alarm_rule import AlarmRuleRead
 from app.schemas.device import DeviceRead
 from app.schemas.gateway import GatewayRead
 from app.schemas.internal import InternalAlarmClear, InternalAlarmIngest
+from app.schemas.modbus import ModbusPlanRead
 from app.schemas.outbound import OutboundTargetRead
 from app.schemas.signal_catalog import SignalCatalogRead
+from app.services import modbus_plan_service
 from app.services.event_service import record_event
 from app.services.notification_service import create_notification
 
@@ -117,6 +119,36 @@ def list_outbound_targets_internal(
         .order_by(OutboundTarget.id.asc())
     )
     return list(db.scalars(stmt).all())
+
+
+@router.get("/modbus-plans", response_model=list[ModbusPlanRead])
+def list_modbus_plans_internal(
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """modbus-outbound worker'inin yayinlayacagi adres planlari.
+
+    Worker adresleri KENDISI HESAPLAMAZ; backend'in urettigi plani birebir
+    uygular. Boylece web arayuzunde gosterilen / CSV ile disa aktarilan adres
+    tablosu ile sahada yayinlanan adres arasinda ayrisma olamaz.
+
+    Eksik cihaz slotlari bu cagri sirasinda atanip kalici yazilir (mevcut
+    slotlar korunur), yani yeni bir cihaz eklendiginde worker'in bir sonraki
+    refresh'inde otomatik yayina girer.
+    """
+    _require_service_token(x_service_token)
+    targets = list(
+        db.scalars(
+            select(OutboundTarget)
+            .where(OutboundTarget.is_active.is_(True))
+            .where(OutboundTarget.protocol == "modbus")
+            .order_by(OutboundTarget.id.asc())
+        ).all()
+    )
+    return [
+        ModbusPlanRead(**modbus_plan_service.serialize_plan(db, target))
+        for target in targets
+    ]
 
 
 _IDEMPOTENCY_CONSUMER_INTERNAL_ALARMS = "internal-alarms"

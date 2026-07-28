@@ -12071,6 +12071,33 @@ th.event-col-category {
   font-size: 13px;
 }
 
+/* Harita cihaz karti v2 — detay sidebar'i ile ayni gorunum (durum noktasi
+   solda + alarm kutusu + BILGILER listesi). */
+.device-popup-v2-body {
+  padding: 16px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.device-popup-v2-id {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 34px;
+}
+.device-popup-v2-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.device-popup-card--v2 .device-sidebar-code {
+  font-size: 17px;
+  margin: 0;
+}
+.device-popup-card--v2 .device-sidebar-kicker {
+  margin-bottom: 2px;
+}
+
 .device-popup-close {
   position: absolute;
   top: 8px;
@@ -12080,9 +12107,9 @@ th.event-col-category {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  color: #cbd5e1;
+  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #475569;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
@@ -12090,9 +12117,9 @@ th.event-col-category {
 }
 
 .device-popup-close:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.32);
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
 .device-popup-close .material-symbols-outlined {
@@ -18969,7 +18996,9 @@ th.event-col-category {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid #94a3b8;
+  /* Ariza olmayan direkler saglikli = yesil. Arizali direkler .is-fault ile
+     kirmizi olur (asagida override). */
+  border: 2px solid #16a34a;
   background: #fff;
   box-sizing: border-box;
 }
@@ -21618,651 +21647,6 @@ th.event-col-category {
 .grid-device-name-label.leaflet-tooltip-top::before {
   border-top-color: rgba(15, 23, 42, 0.85);
 }
-
-/* ===========================================================================
-   Hat Arizalari Sayfasi (FaultListPage)
-   =========================================================================== */
-.faults-page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 6px 0;
-  background: transparent;
-  width: 100%;
-  max-width: none;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-/* Filtre/arama seridi — chip'lerin altinda, ince */
-.faults-toolbar-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  background: #ffffff;
-  padding: 10px 14px;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
-}
-.faults-toolbar-row .faults-search {
-  flex: 1;
-  width: auto;
-  min-width: 0;
-}
-.faults-toolbar-count {
-  margin-left: auto;
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.faults-page-header {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 16px 20px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-}
-@media (min-width: 900px) {
-  .faults-page-header {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-}
-.faults-page-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.faults-page-icon {
-  font-size: 28px !important;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  padding: 8px;
-  border-radius: 10px;
-}
-.faults-page-title-wrap h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #0f172a;
-}
-.faults-page-sub {
-  margin: 2px 0 0 0;
-  font-size: 12.5px;
-  color: #64748b;
-}
-.faults-page-toolbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.faults-search {
-  width: 240px;
-  padding: 8px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 8px;
-  font-size: 13px;
-  background: #f9fafb;
-}
-.faults-filter {
-  padding: 8px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 8px;
-  font-size: 13px;
-  background: #ffffff;
-}
-
-.faults-page-body {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-  flex: 1 1 auto;
-  min-height: 0;
-  align-items: start;
-}
-@media (min-width: 1100px) {
-  .faults-page-body {
-    grid-template-columns: minmax(0, 1fr) 400px;
-  }
-}
-
-/* ==== Sayac chip seridi ==== */
-.faults-stats {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.faults-stat-chip {
-  flex: 1 1 120px;
-  min-width: 110px;
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
-  border-left: 4px solid #cbd5e1;
-}
-.faults-stat-chip--total      { border-left-color: #475569; }
-.faults-stat-chip--open       { border-left-color: #ef4444; }
-.faults-stat-chip--assigned   { border-left-color: #f59e0b; }
-.faults-stat-chip--progress   { border-left-color: #ff8c00; }
-.faults-stat-chip--resolved   { border-left-color: #10b981; }
-.faults-stat-chip--closed     { border-left-color: #94a3b8; }
-.faults-stat-chip--avg        { border-left-color: #6366f1; }
-.faults-stat-chip--avg .faults-stat-num {
-  color: #4338ca;
-  font-size: 18px;
-}
-.faults-stat-num {
-  font-size: 22px;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1;
-}
-.faults-stat-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #64748b;
-  font-weight: 600;
-}
-
-/* ==== Kart liste ==== */
-.faults-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  width: 100%;
-}
-.faults-empty-card {
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 80px 24px;
-  text-align: center;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 360px;
-}
-.faults-empty-card .material-symbols-outlined {
-  font-size: 56px !important;
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
-  padding: 14px;
-  border-radius: 50%;
-}
-.faults-empty-card h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #0f172a;
-}
-.faults-empty-card p {
-  margin: 0;
-  font-size: 13px;
-  color: #64748b;
-  max-width: 380px;
-  line-height: 1.5;
-}
-.faults-card {
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-left: 4px solid #ef4444;
-  border-radius: 10px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  width: 100%;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
-}
-.faults-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
-}
-.faults-card.selected {
-  outline: 2px solid rgba(255, 140, 0, 0.55);
-  outline-offset: -2px;
-  background: rgba(255, 140, 0, 0.04);
-}
-.faults-card-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.faults-card-row--top {
-  justify-content: space-between;
-}
-.faults-card-row--mid {
-  border-top: 1px dashed rgba(148, 163, 184, 0.25);
-  border-bottom: 1px dashed rgba(148, 163, 184, 0.25);
-  padding: 10px 0;
-}
-.faults-card-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.faults-card-line-icon {
-  font-size: 22px !important;
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.1);
-  padding: 6px;
-  border-radius: 8px;
-}
-.faults-card-line strong {
-  display: block;
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
-}
-.faults-card-line span {
-  display: block;
-  font-size: 11.5px;
-  color: #64748b;
-}
-.faults-card-range {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 130px;
-}
-.faults-card-range-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  font-weight: 700;
-}
-.faults-card-range strong {
-  font-size: 14px;
-  color: #6366f1;
-  font-weight: 700;
-}
-.faults-card-devices {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-.faults-card-dev {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.faults-card-dev > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.faults-card-dev span {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #94a3b8;
-  font-weight: 700;
-  line-height: 1.1;
-}
-.faults-card-dev strong {
-  font-size: 12.5px;
-  color: #0f172a;
-  font-weight: 600;
-}
-.faults-card-dev-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-block;
-}
-.faults-card-dev--red .faults-card-dev-dot {
-  background: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
-}
-.faults-card-dev--green .faults-card-dev-dot {
-  background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
-}
-.faults-card-arrow {
-  color: #cbd5e1;
-  font-size: 16px;
-  font-weight: 700;
-}
-.faults-card-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: #475569;
-}
-.faults-card-meta .material-symbols-outlined {
-  font-size: 16px !important;
-  color: #94a3b8;
-}
-.faults-card-meta-dim {
-  color: #cbd5e1;
-  font-style: italic;
-}
-
-.faults-list {
-  background: #ffffff;
-  border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-  overflow: hidden;
-}
-.faults-empty {
-  padding: 40px;
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-}
-.faults-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.faults-table thead th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 14px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #64748b;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-}
-.faults-table tbody td {
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-  color: #0f172a;
-  vertical-align: middle;
-}
-.faults-row {
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.faults-row:hover {
-  background: rgba(255, 140, 0, 0.06);
-}
-.faults-row.selected {
-  background: rgba(255, 140, 0, 0.12);
-}
-.faults-cell-date {
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: #475569;
-  white-space: nowrap;
-}
-.faults-cell-line strong {
-  display: block;
-  font-weight: 600;
-  font-size: 13px;
-}
-.faults-cell-line span {
-  display: block;
-  font-size: 11px;
-  color: #64748b;
-}
-.faults-cell-range {
-  font-weight: 600;
-  color: #6366f1;
-  white-space: nowrap;
-}
-.faults-cell-dev strong {
-  display: block;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.faults-cell-dev span {
-  display: block;
-  font-size: 10.5px;
-  color: #94a3b8;
-  font-family: monospace;
-}
-.faults-cell-dim {
-  color: #94a3b8;
-  font-style: italic;
-  font-size: 12px;
-}
-.faults-cell-assignee {
-  font-weight: 500;
-  color: #0f172a;
-}
-.faults-status-pill {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.faults-detail {
-  background: #ffffff;
-  border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-height: calc(100vh - 180px);
-  overflow-y: auto;
-}
-.faults-detail-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px dashed rgba(148, 163, 184, 0.25);
-}
-.faults-detail-head h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #0f172a;
-}
-.faults-detail-sub {
-  display: block;
-  margin-top: 2px;
-  font-size: 11.5px;
-  color: #64748b;
-}
-.faults-detail-close {
-  background: rgba(15, 23, 42, 0.06);
-  border: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  color: #475569;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.faults-detail-close:hover {
-  background: rgba(15, 23, 42, 0.12);
-}
-.faults-detail-info {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 14px;
-  font-size: 12px;
-}
-.faults-detail-info > div {
-  display: flex;
-  flex-direction: column;
-}
-.faults-detail-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  font-weight: 700;
-  margin-bottom: 2px;
-}
-.faults-detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.faults-detail-section select,
-.faults-detail-section textarea {
-  padding: 8px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: inherit;
-  background: #f9fafb;
-  resize: vertical;
-}
-.faults-detail-section select:focus,
-.faults-detail-section textarea:focus {
-  outline: none;
-  border-color: #ff8c00;
-  background: #ffffff;
-}
-.faults-status-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.faults-status-btn {
-  padding: 6px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: #ffffff;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.faults-status-btn:hover:not(:disabled) {
-  border-color: #6366f1;
-  color: #6366f1;
-}
-.faults-status-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.faults-status-btn.active {
-  border-color: transparent;
-}
-.faults-detail-save {
-  align-self: flex-start;
-  padding: 6px 14px;
-  background: #ff8c00;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.faults-detail-save:hover:not(:disabled) {
-  background: #e67c00;
-}
-.faults-detail-save:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.faults-comments {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 240px;
-  overflow-y: auto;
-}
-.faults-comments-empty {
-  font-size: 12px;
-  color: #94a3b8;
-  font-style: italic;
-  padding: 8px;
-}
-.faults-comment-item {
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 8px 10px;
-  border-left: 3px solid #6366f1;
-}
-.faults-comment-item header {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-.faults-comment-item header strong {
-  color: #0f172a;
-  font-weight: 700;
-}
-.faults-comment-item p {
-  margin: 0;
-  font-size: 13px;
-  color: #0f172a;
-  white-space: pre-wrap;
-  line-height: 1.4;
-}
-.faults-comment-add {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
-}
-.faults-comment-add textarea {
-  padding: 8px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 13px;
-  resize: vertical;
-}
-.faults-comment-add button {
-  align-self: flex-start;
-  padding: 6px 14px;
-  background: #16a34a;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.faults-comment-add button:hover:not(:disabled) {
-  background: #15803d;
-}
-.faults-comment-add button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.faults-detail-error {
-  background: rgba(239, 68, 68, 0.1);
-  color: #b91c1c;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-
 /* ===========================================================================
    Kullanici Bildirim Tercihleri (Profil > Ayarlar > Bildirimler)
    =========================================================================== */
@@ -22334,352 +21718,789 @@ th.event-col-category {
   transform: translateX(20px);
 }
 
+
 /* ===========================================================================
-   Hat Arizalari — zenginlestirilmis KART (rich card) tasarimi
+   Hat Arizalari Sayfasi (FaultListPage)
+
+   Ikonografi: lucide-react (material-symbols DEGIL) — sematik direk seridi
+   cizgisel oldugu icin ayni gorsel dil. Sinif oneki `fx-`.
+
+   Duzen: KPI seridi -> sekmeler -> (aktif kart listesi | gecmis tablosu).
+   Bir hatta birden fazla ariza bolgesi olabildigi icin aktif sekme KART
+   LISTESI'dir; ayni hattan iki kart yan yana cikabilir.
    =========================================================================== */
-.faults-cards--full {
-  width: 100%;
-  /* Kart içeriği boşsa bile sayfanın altına kadar uzasın —
-     "No active faults" ortada hislaşmasın, kart full-height kalsın. */
-  flex: 1 1 auto;
-  min-height: calc(100vh - 320px);
+.faults-page {
   display: flex;
   flex-direction: column;
-}
-.faults-empty-card {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
-}
-.faults-card.faults-card--rich {
-  padding: 0;
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  position: relative;
-  overflow: hidden;
-}
-.faults-card-rich-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(190px, 1fr) minmax(320px, 1.9fr) minmax(160px, 0.85fr);
   gap: 14px;
-  padding: 8px 14px;
-  align-items: center;
+  padding: 4px 0 20px;
+  background: transparent;
+  width: 100%;
+  max-width: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
+
+/* ---------- KPI seridi ---------- */
+.fx-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 12px;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
 @media (max-width: 1100px) {
-  .faults-card-rich-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 10px 12px;
+  .fx-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fx-kpi-updated {
+    grid-column: 1 / -1;
   }
 }
-.faults-card-rich-block {
+
+.fx-kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.fx-kpi:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+}
+
+.fx-kpi-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.fx-kpi--bad .fx-kpi-icon   { background: #fee2e2; color: #dc2626; }
+.fx-kpi--ok .fx-kpi-icon    { background: #dcfce7; color: #059669; }
+.fx-kpi--info .fx-kpi-icon  { background: #e0e7ff; color: #4f46e5; }
+.fx-kpi--muted .fx-kpi-icon { background: #f1f5f9; color: #64748b; }
+
+.fx-kpi-body {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
 }
-.faults-card-rich-block--devices {
-  flex-direction: row;
-  align-items: stretch;
-  gap: 8px;
-  border-left: 1px dashed rgba(148, 163, 184, 0.3);
-  border-right: 1px dashed rgba(148, 163, 184, 0.3);
-  padding: 0 12px;
+.fx-kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
 }
-@media (max-width: 1100px) {
-  .faults-card-rich-block--devices {
-    border-left: none;
-    border-right: none;
-    border-top: 1px dashed rgba(148, 163, 184, 0.3);
-    border-bottom: 1px dashed rgba(148, 163, 184, 0.3);
-    padding: 8px 0;
-  }
+.fx-kpi-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
 }
-.faults-card-rich-block--status {
-  align-items: flex-start;
-  gap: 6px;
+.fx-kpi--bad .fx-kpi-value  { color: #dc2626; }
+.fx-kpi--ok .fx-kpi-value   { color: #059669; }
+.fx-kpi--info .fx-kpi-value { color: #4338ca; }
+
+/* Son guncelleme kutusu — KPI'larin sagina yapisir. */
+.fx-kpi-updated {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  color: #64748b;
+  white-space: nowrap;
 }
-.faults-card-region {
+.fx-kpi-updated svg { color: #94a3b8; }
+.fx-kpi-updated span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.fx-kpi-updated small { font-size: 11px; }
+.fx-kpi-updated strong {
+  font-size: 13px;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-spin { animation: fx-spin-rotate 1s linear infinite; }
+@keyframes fx-spin-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ---------- Sekmeler ---------- */
+.fx-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #6366f1;
-  font-weight: 700;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e2e8f0;
 }
-.faults-card-region .material-symbols-outlined {
-  font-size: 14px !important;
-}
-.faults-card-line-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.faults-card-line-name .material-symbols-outlined {
-  font-size: 18px !important;
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.1);
-  padding: 3px;
-  border-radius: 6px;
-}
-.faults-card-line-name strong {
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
-}
-.faults-card-range-row {
+
+.fx-tab {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
-.faults-card-range-tag {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
+.fx-tab:hover { color: #334155; }
+.fx-tab svg { color: #94a3b8; }
+.fx-tab.is-active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+.fx-tab.is-active svg { color: #2563eb; }
+
+.fx-tab-count {
+  display: inline-flex;
+  align-items: center;
+  min-width: 20px;
+  justify-content: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11.5px;
   font-weight: 700;
 }
-.faults-card-range-text {
-  font-size: 12.5px;
-  color: #ef4444;
-  font-weight: 700;
+.fx-tab.is-active .fx-tab-count {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
-.faults-card-dev-card {
-  flex: 1;
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 6px 10px;
+
+/* Sekme altindaki icerik bolumu sayfanin DIBINE kadar uzar — kart yarida
+   kesilip altta bos beyaz alan kalmasin. `flex: 1 0 auto`: kalan alani
+   doldurur ama icerigin altina asla SIKISMAZ (uzun listede .faults-page
+   scroll eder). */
+.fx-active-list,
+.fx-history,
+.fx-empty {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+/* ---------- Aktif ariza kartlari ---------- */
+.fx-active-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  gap: 12px;
+}
+
+.fx-card {
+  display: grid;
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(170px, 190px);
+  gap: 20px;
+  align-items: stretch;
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #ef4444;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.18s ease;
+}
+.fx-card:hover { box-shadow: 0 4px 16px rgba(15, 23, 42, 0.09); }
+.fx-card--assigned    { border-left-color: #f59e0b; }
+.fx-card--in_progress { border-left-color: #3b82f6; }
+
+@media (max-width: 1240px) {
+  .fx-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- sol: kimlik --- */
+.fx-card-ident {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
 }
-.faults-card-dev-card--red {
-  border-left: 3px solid #ef4444;
-  background: rgba(239, 68, 68, 0.04);
-}
-.faults-card-dev-card--green {
-  border-left: 3px solid #10b981;
-  background: rgba(16, 185, 129, 0.04);
-}
-.faults-card-dev-card-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #64748b;
+.fx-card-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
   font-weight: 700;
-  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #2563eb;
 }
-.faults-card-dev-card-name {
+.fx-card-line {
+  margin: 2px 0 6px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+  line-height: 1.05;
+}
+.fx-card-range-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.fx-card-range {
+  font-size: 15px;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 8px;
+}
+
+.fx-card-badges {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.fx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  white-space: nowrap;
+}
+.fx-badge--status-open {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.fx-badge--status-assigned {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.fx-badge--status-in_progress {
+  background: #dbeafe;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.fx-badge--status-resolved,
+.fx-badge--status-closed {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.fx-badge--located {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.fx-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+}
+.fx-card-meta > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.fx-card-meta dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 86px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.fx-card-meta dt svg { color: #cbd5e1; }
+.fx-card-meta dd {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+.fx-card-meta-live {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  color: #dc2626 !important;
 }
-.faults-card-dev-card-dot {
-  width: 9px;
-  height: 9px;
+.fx-live-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  flex-shrink: 0;
-}
-.faults-card-dev-card--red .faults-card-dev-card-dot {
   background: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
+  animation: fx-pulse 1.6s ease-in-out infinite;
 }
-.faults-card-dev-card--green .faults-card-dev-card-dot {
-  background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+@keyframes fx-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
 }
-.faults-card-dev-card-name strong {
+.fx-dim {
+  color: #94a3b8;
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* --- orta: sematik ariza bolgesi --- */
+.fx-card-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 8px;
+}
+.fx-card-zone-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.fx-strip {
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  display: block;
+}
+.fx-strip-pin.is-active {
+  animation: fx-pin-bob 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+@keyframes fx-pin-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+.fx-card-devices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+}
+.fx-dev {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  min-width: 0;
+}
+.fx-dev--red   { background: #fef2f2; border-color: #fecaca; }
+.fx-dev--green { background: #f0fdf4; border-color: #bbf7d0; }
+.fx-dev-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: #fff;
+}
+.fx-dev--red .fx-dev-icon   { color: #dc2626; }
+.fx-dev--green .fx-dev-icon { color: #059669; }
+.fx-dev-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.fx-dev-text small {
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.25;
+}
+.fx-dev-text strong {
   font-size: 13px;
   font-weight: 700;
   color: #0f172a;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.faults-card-dev-card-code {
+.fx-dev-text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10.5px;
   color: #94a3b8;
-  font-family: monospace;
 }
-.faults-card-dev-arrow {
+
+/* --- sag: aksiyonlar --- */
+.fx-card-actions {
   display: flex;
-  align-items: center;
-  font-size: 18px !important;
-  color: #cbd5e1;
-}
-.faults-status-pill--lg {
-  padding: 3px 10px;
-  font-size: 11px;
-}
-
-/* === Sag blokta durum + sure ust satiri === */
-.faults-card-status-row {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
+  justify-content: center;
 }
 
-/* Sure pill — kompakt, ozel renkli, etiket yok (sadece sayisal deger) */
-.faults-card-time-pill {
+.fx-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.faults-card-time-pill strong {
-  font-size: 12px;
-  font-weight: 700;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-}
-.faults-card-time-pill.is-live {
-  background: linear-gradient(135deg, #fef2f2 0%, #ffe4e6 100%);
-  border-color: rgba(239, 68, 68, 0.35);
-}
-.faults-card-time-pill.is-live strong {
-  color: #b91c1c;
-}
-.faults-card-time-pill.is-final {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-color: rgba(16, 185, 129, 0.3);
-}
-.faults-card-time-pill.is-final strong {
-  color: #047857;
-}
-.faults-card-time-pill.is-final .material-symbols-outlined {
-  font-size: 14px !important;
-  color: #10b981;
-}
-.faults-card-time-pulse {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ef4444;
-  display: inline-block;
-  flex-shrink: 0;
-  animation: fault-elapsed-pulse 1.4s ease-out infinite;
-}
-
-/* === Modern info grid (Acilis / Atanan / Yorum) === */
-.faults-card-info-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 4px;
-  width: 100%;
-}
-@media (max-width: 1280px) {
-  .faults-card-info-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-@media (max-width: 1100px) {
-  .faults-card-info-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-@media (max-width: 720px) {
-  .faults-card-info-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.faults-card-info-chip {
-  display: inline-flex;
-  align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 6px 10px;
-  background: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
-  min-width: 0;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.faults-card.faults-card--rich:hover .faults-card-info-chip {
-  background: #ffffff;
-  border-color: rgba(99, 102, 241, 0.25);
-}
-.faults-card-info-chip .material-symbols-outlined {
-  font-size: 16px !important;
-  color: #94a3b8;
-  flex-shrink: 0;
-}
-.faults-card-info-chip > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 0;
-  line-height: 1.2;
-}
-.faults-card-info-label {
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  font-weight: 700;
-}
-.faults-card-info-chip strong {
-  font-size: 12px;
-  color: #0f172a;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.fx-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.fx-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.fx-btn svg { flex-shrink: 0; }
+
+.fx-btn--primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border-color: #2563eb;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
+}
+.fx-btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border-color: #1d4ed8;
 }
 
-/* Acilis chip'i: datetime iki satirli (tarih ust, saat alt). Boylece
-   "06.05.2026 21:16:58" tek satira sigmadigi durumda kesilmeden tarih
-   ve saat ayri ayri rahatca okunur. */
-.faults-card-info-datetime {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.15;
-  white-space: nowrap;
+.fx-btn--soft {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
 }
-.faults-card-info-datetime > span:first-child {
-  font-size: 12px;
-  font-weight: 700;
-  color: #0f172a;
+.fx-btn--soft:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
 }
-.faults-card-info-time {
-  font-size: 11px;
-  font-weight: 600;
+
+.fx-btn--ghost {
+  background: transparent;
+  border-color: #e2e8f0;
   color: #64748b;
-  font-variant-numeric: tabular-nums;
-}
-.faults-card-info-chip--time {
-  align-items: center;
 }
 
-.faults-card-meta-stack {
+/* ---------- Bos durum ---------- */
+.fx-empty {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 64px 32px;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.fx-empty svg { color: #cbd5e1; }
+.fx-empty--ok svg { color: #34d399; }
+.fx-empty h4 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  color: #334155;
+}
+.fx-empty p {
+  margin: 0;
+  max-width: 46ch;
+  line-height: 1.5;
+}
+
+/* ---------- Gecmis arizalar ---------- */
+.fx-history {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.fx-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
-  gap: 3px 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+}
+.fx-history-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.fx-history-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fx-history-filters select {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fx-history-filters select:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.fx-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.fx-search:focus-within {
+  border-color: #93c5fd;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.fx-search svg { color: #94a3b8; flex-shrink: 0; }
+.fx-search input {
+  width: 260px;
+  max-width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  color: #0f172a;
+}
+.fx-search input:focus { outline: none; }
+
+.fx-history-table-wrap {
+  overflow-x: auto;
+}
+.fx-history-table {
   width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 900px;
 }
-.faults-card-meta-stack .faults-card-meta {
-  font-size: 11.5px;
+.fx-history-table th {
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
 }
-/* .faults-card-cta kaldirildi (kullanici sade istedi); kart tamami zaten
-   tiklanabilir buton. */
+.fx-history-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 13px;
+  color: #334155;
+  vertical-align: middle;
+}
+.fx-col-toggle { width: 40px; }
+
+.fx-history-row {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.fx-history-row:hover td { background: #f8fafc; }
+.fx-history-row.is-open td {
+  background: #f1f5f9;
+  border-bottom-color: transparent;
+}
+
+.fx-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.fx-history-row.is-open .fx-toggle-btn {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.fx-history-line {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #2563eb;
+}
+.fx-history-region {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+}
+.fx-history-range {
+  color: #dc2626;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fx-history-date,
+.fx-history-duration {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- acilir detay: yorum + cozum --- */
+.fx-history-detail-row td {
+  padding: 0 14px 14px !important;
+  background: #f1f5f9;
+}
+.fx-history-detail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 960px) {
+  .fx-history-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fx-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 15px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+.fx-panel-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+}
+.fx-panel-head svg { color: #94a3b8; }
+.fx-panel > p { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.fx-note-body {
+  color: #334155;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fx-comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+.fx-comment-list li {
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-left: 3px solid #bfdbfe;
+  border-radius: 8px;
+}
+.fx-comment-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.fx-comment-meta strong { font-size: 12px; color: #1d4ed8; }
+.fx-comment-meta span { font-size: 10.5px; color: #94a3b8; }
+.fx-comment-list p {
+  margin: 0;
+  font-size: 12.5px;
+  color: #334155;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fx-inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.fx-inline-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: #0f172a;
+  resize: vertical;
+  background: #f8fafc;
+}
+.fx-inline-form textarea:focus {
+  outline: none;
+  border-color: #93c5fd;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.fx-inline-form-actions {
+  display: flex;
+  gap: 8px;
+}
 
 /* ===========================================================================
    Hat Arizalari — DETAY MODAL (popup)
@@ -31305,81 +31126,92 @@ th.event-col-category {
 /* ============================================================
  * AG AYARLARI (appliance / mini PC) — Muhendislik > Sistem
  * ============================================================ */
+/* Sayfa diger panellerle ayni kabuga oturur (.tab-panel) ve dikeyde
+   viewport'u doldurur; form karti alt bosluga kadar uzar. */
 .net-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  padding: 4px 2px 24px;
+  /* .tab-panel'in overflow:auto'su burada cift kaydirma yapardi — kaydirma
+     .net-card icinde olsun (sinyaller/canli degerler sayfalari da boyle). */
+  overflow: hidden;
 }
 
-/* --- Ust serit: cihaza nasil erisilir --- */
-.net-access-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.net-access-card {
-  position: relative;
+/* --- Ust serit: cihaza nasil erisilir ---
+   Uc ayri KPI karti degil TEK cubuk: bunlar bagimsiz metrikler degil,
+   ayni seyin (cihaza erisim) uc yolu. Diger sayfalardaki filtre cubugu
+   ile ayni gorsel dil. */
+.net-access-bar {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 8px 12px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-left: 5px solid #cbd5e1;
   border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.net-access-card--primary { border-left-color: #6366f1; }
-.net-access-card--ok { border-left-color: #10b981; }
-.net-access-card--warn { border-left-color: #f59e0b; }
+.net-access-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+.net-access-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
 
 .net-access-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: #f1f5f9;
-  color: #475569;
+  color: #64748b;
   flex-shrink: 0;
 }
-
-.net-access-card--primary .net-access-icon { background: #e0e7ff; color: #4338ca; }
-.net-access-card--ok .net-access-icon { background: #d1fae5; color: #047857; }
-.net-access-card--warn .net-access-icon { background: #fef3c7; color: #b45309; }
+.net-access-item.is-ok .net-access-icon { background: #d1fae5; color: #047857; }
+.net-access-item.is-warn .net-access-icon { background: #fef3c7; color: #b45309; }
 
 .net-access-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   min-width: 0;
   flex: 1;
 }
 
 .net-access-label {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #64748b;
+  color: #94a3b8;
+  line-height: 1.4;
 }
 
 .net-access-value {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   color: #0f172a;
-  word-break: break-all;
-  letter-spacing: -0.01em;
-}
-
-.net-access-sub {
-  font-size: 11.5px;
-  color: #64748b;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .net-copy-btn {
@@ -31396,11 +31228,13 @@ th.event-col-category {
 .net-copy-btn:hover { background: #f1f5f9; color: #0f172a; border-color: #cbd5e1; }
 
 .net-chip {
-  align-self: flex-start;
-  font-size: 10.5px;
+  flex-shrink: 0;
+  font-size: 10px;
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
   white-space: nowrap;
 }
 
@@ -31423,7 +31257,9 @@ th.event-col-category {
 .net-banner--warn { background: #fffbeb; border-color: #fde68a; color: #b45309; }
 .net-banner--bad { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 
-/* --- Form karti --- */
+/* --- Form karti ---
+   flex:1 ile kalan dikey alani doldurur; eskiden icerik bitince sayfanin
+   alt yarisi bos beyaz kaliyordu. */
 .net-card {
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -31432,7 +31268,10 @@ th.event-col-category {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .net-card-head {
@@ -31731,4 +31570,261 @@ th.event-col-category {
 
 @media (prefers-reduced-motion: reduce) {
   .net-spin { animation: none; }
+}
+
+/* ============================================================
+ * MODBUS TCP OUTBOUND — hedef formu + adres plani modali
+ * ============================================================ */
+.modbus-edit-modal {
+  width: min(900px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+}
+
+.modbus-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* --- Iki adresleme yolu: kart secimi --- */
+.modbus-mode-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.modbus-mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 14px 16px;
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.modbus-mode-card:hover { border-color: #cbd5e1; }
+
+.modbus-mode-card.is-active {
+  border-color: #6366f1;
+  background: #eef2ff;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.18);
+}
+
+.modbus-mode-card strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.modbus-mode-card span {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.modbus-mode-card code {
+  font-size: 11.5px;
+  color: #4338ca;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.modbus-capacity {
+  margin: 0;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.modbus-capacity-good { color: #047857; font-weight: 700; }
+
+.modbus-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.modbus-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.modbus-readonly-note {
+  margin: 0;
+  padding: 10px 12px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #065f46;
+  line-height: 1.5;
+}
+
+.modbus-peers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+/* --- Adres plani modali --- */
+.modbus-plan-modal {
+  width: min(1100px, 97vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modbus-plan-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modbus-plan-head h3 { margin: 0; font-size: 1.05rem; color: #0f172a; }
+.modbus-plan-head p { margin: 2px 0 0; }
+
+.modbus-plan-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.modbus-plan-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.modbus-plan-stat span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.modbus-plan-stat strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.modbus-plan-stat em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.modbus-plan-note {
+  margin: 0;
+  padding: 8px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1e40af;
+  line-height: 1.5;
+}
+
+.modbus-plan-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.modbus-plan-toolbar input[type="search"] {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.modbus-plan-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.modbus-plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.modbus-plan-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.modbus-plan-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.modbus-plan-table tbody tr:hover { background: #f8fafc; }
+
+.modbus-plan-table .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.modbus-fc {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.modbus-fc--1 { background: #ffedd5; color: #c2410c; }
+.modbus-fc--2 { background: #e0f2fe; color: #0369a1; }
+.modbus-fc--3 { background: #ede9fe; color: #6d28d9; }
+.modbus-fc--4 { background: #d1fae5; color: #047857; }
+
+.modbus-plan-truncated {
+  margin: 0;
+  padding: 8px 12px;
+  text-align: center;
+  background: #f8fafc;
 }

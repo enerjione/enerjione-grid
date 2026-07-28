@@ -1,0 +1,6 @@
+# modbus-outbound: telemetri JetStream'den, adres plani backend HTTP'den.
+# Modbus TCP sunucusu STDLIB ile yazildi (asyncio + struct) — salt okunur bir
+# sunucu icin protokol 4 fonksiyon kodundan ibaret; harici kutuphane surum
+# bagimliligi ve genis yazma yuzeyi getirirdi.
+nats-py>=2.6,<3
+requests

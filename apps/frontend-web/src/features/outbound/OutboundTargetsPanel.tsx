@@ -9,9 +9,15 @@ import type { MqttPayloadFields, OutboundRuntimeStatus, OutboundAutoTopic } from
 import { fetchOutboundRuntimeStatus, fetchOutboundAutoTopics, uploadMqttCert, testOutboundTarget } from "../../shared/api";
 import { MqttTopicMappingModal } from "./MqttTopicMappingModal";
 import { MqttCertUploader } from "./MqttCertUploader";
+import { ModbusPlanModal } from "./ModbusPlanModal";
+import { downloadModbusPointsCsv } from "../../shared/api";
 
-type Protocol = "rest" | "mqtt" | "iec104";
-const DEFAULT_PROTOCOLS: Protocol[] = ["rest", "mqtt", "iec104"];
+type Protocol = "rest" | "mqtt" | "iec104" | "modbus";
+const DEFAULT_PROTOCOLS: Protocol[] = ["rest", "mqtt", "iec104", "modbus"];
+
+// Modbus TCP: SCADA'nin baglandigi port. Container'da 502/5020/5021
+// yayinlaniyor (docker-compose.yml); baska port secilirse compose'a eklenmeli.
+const MODBUS_DEFAULT_PORT = "502";
 
 // IEC104 listen_host'u bu degerlerden biriyse "tum arayuzler" anlamina gelir;
 // SCADA buraya dogrudan baglanamaz, tarayicinin host'unu gostermek gerekir.
@@ -47,6 +53,14 @@ export type OutboundTargetCreatePayload = {
   listen_port?: number | null;
   iec104_common_address?: number | null;
   iec104_allowed_peers?: string | null;
+  // Modbus TCP (protocol='modbus')
+  modbus_mode?: "block" | "unit";
+  modbus_unit_id?: number;
+  modbus_value_format?: "int16" | "float32";
+  modbus_word_order?: "big" | "little";
+  modbus_block_stride?: number | null;
+  modbus_base_address?: number;
+  modbus_allowed_peers?: string | null;
 } & MqttPayloadFields;
 
 export type OutboundTargetUpdatePayload = {
@@ -62,6 +76,14 @@ export type OutboundTargetUpdatePayload = {
   listen_port?: number | null;
   iec104_common_address?: number | null;
   iec104_allowed_peers?: string | null;
+  // Modbus TCP (protocol='modbus')
+  modbus_mode?: "block" | "unit";
+  modbus_unit_id?: number;
+  modbus_value_format?: "int16" | "float32";
+  modbus_word_order?: "big" | "little";
+  modbus_block_stride?: number | null;
+  modbus_base_address?: number;
+  modbus_allowed_peers?: string | null;
 } & MqttPayloadFields;
 
 type Props = {
@@ -197,6 +219,16 @@ export function OutboundTargetsPanel({
   const [newPeerIp, setNewPeerIp] = useState("");
   const [peerError, setPeerError] = useState("");
 
+  // Modbus TCP state (protocol=modbus formunda gosterilir)
+  const [modbusMode, setModbusMode] = useState<"block" | "unit">("block");
+  const [modbusUnitId, setModbusUnitId] = useState("1");
+  const [modbusValueFormat, setModbusValueFormat] = useState<"int16" | "float32">("int16");
+  const [modbusWordOrder, setModbusWordOrder] = useState<"big" | "little">("big");
+  const [modbusStride, setModbusStride] = useState("");
+  const [modbusBaseAddress, setModbusBaseAddress] = useState("0");
+  // Adres plani modal'i — hangi hedef icin acik?
+  const [planTargetId, setPlanTargetId] = useState<number | null>(null);
+
   // MQTT-specific state (protocol=mqtt formunda gosterilir)
   const [mqttPort, setMqttPort] = useState<string>("");
   const [mqttUsername, setMqttUsername] = useState("");
@@ -259,6 +291,12 @@ export function OutboundTargetsPanel({
     setAllowedPeerList([]);
     setNewPeerIp("");
     setPeerError("");
+    setModbusMode("block");
+    setModbusUnitId("1");
+    setModbusValueFormat("int16");
+    setModbusWordOrder("big");
+    setModbusStride("");
+    setModbusBaseAddress("0");
     setMqttPort("");
     setMqttUsername("");
     setMqttPassword("");
@@ -348,10 +386,14 @@ export function OutboundTargetsPanel({
       const isIec104 = protocol === "iec104";
       const isRest = protocol === "rest";
       const isMqtt = protocol === "mqtt";
+      const isModbus = protocol === "modbus";
+      // IEC104 ve Modbus ikisi de TCP sunucusudur; listen_host/port ikisinde de
+      // anlamli, sadece varsayilan portlari farkli (2404 vs 502).
+      const isServer = isIec104 || isModbus;
       const created = await onCreate({
         name,
         protocol,
-        endpoint: isIec104 ? "" : endpoint,
+        endpoint: isServer ? "" : endpoint,
         // Topic yalniz MQTT icin anlamli; REST/IEC104'te gonderme.
         topic: isMqtt && topic.trim() ? topic.trim() : null,
         event_filter: eventFilter,
@@ -363,10 +405,23 @@ export function OutboundTargetsPanel({
         qos: isMqtt ? qos : 0,
         retain: isMqtt ? retain : false,
         is_active: isActive,
-        listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : null,
-        listen_port: isIec104 ? Number(listenPort) || 2404 : null,
+        listen_host: isServer ? listenHost.trim() || "0.0.0.0" : null,
+        listen_port: isServer
+          ? Number(listenPort) || (isModbus ? Number(MODBUS_DEFAULT_PORT) : 2404)
+          : null,
         iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : null,
         iec104_allowed_peers: isIec104 ? (allowedPeerList.join(",") || null) : null,
+        ...(isModbus
+          ? {
+              modbus_mode: modbusMode,
+              modbus_unit_id: Number(modbusUnitId) || 1,
+              modbus_value_format: modbusValueFormat,
+              modbus_word_order: modbusWordOrder,
+              modbus_block_stride: modbusStride.trim() ? Number(modbusStride) : null,
+              modbus_base_address: Number(modbusBaseAddress) || 0,
+              modbus_allowed_peers: allowedPeerList.join(",") || null,
+            }
+          : {}),
         ...collectMqttPayload(),
       });
       // MQTT + TLS + pending sertifika dosyalari varsa: yeni target id ile
@@ -406,13 +461,30 @@ export function OutboundTargetsPanel({
     setRetain(target.retain);
     setIsActive(target.is_active);
     setListenHost(target.listen_host ?? "0.0.0.0");
-    setListenPort(target.listen_port !== null && target.listen_port !== undefined ? String(target.listen_port) : "2404");
+    setListenPort(
+      target.listen_port !== null && target.listen_port !== undefined
+        ? String(target.listen_port)
+        : target.protocol === "modbus"
+        ? MODBUS_DEFAULT_PORT
+        : "2404"
+    );
     setIec104Ca(
       target.iec104_common_address !== null && target.iec104_common_address !== undefined
         ? String(target.iec104_common_address)
         : "1"
     );
-    const raw = target.iec104_allowed_peers ?? "";
+    // Modbus alanlari
+    setModbusMode(target.modbus_mode === "unit" ? "unit" : "block");
+    setModbusUnitId(String(target.modbus_unit_id ?? 1));
+    setModbusValueFormat(target.modbus_value_format === "float32" ? "float32" : "int16");
+    setModbusWordOrder(target.modbus_word_order === "little" ? "little" : "big");
+    setModbusStride(target.modbus_block_stride != null ? String(target.modbus_block_stride) : "");
+    setModbusBaseAddress(String(target.modbus_base_address ?? 0));
+    // IP whitelist iki protokolde ayri kolonda tutulur; forma hangisi doluysa o gelir.
+    const raw =
+      (target.protocol === "modbus"
+        ? target.modbus_allowed_peers
+        : target.iec104_allowed_peers) ?? "";
     setAllowedPeerList(
       raw.split(",").map((p) => p.trim()).filter((p) => p.length > 0)
     );
@@ -446,10 +518,12 @@ export function OutboundTargetsPanel({
       const isIec104 = editing.protocol === "iec104";
       const isRest = editing.protocol === "rest";
       const isMqtt = editing.protocol === "mqtt";
+      const isModbus = editing.protocol === "modbus";
+      const isServer = isIec104 || isModbus;
       // MQTT alanlari: editing.protocol === 'mqtt' ise gonder, degilse undefined.
       const mqttFields: MqttPayloadFields = isMqtt ? collectMqttPayload(true) : {};
       await onUpdate(editing.id, {
-        endpoint: isIec104 ? "" : endpoint,
+        endpoint: isServer ? "" : endpoint,
         // Topic yalniz MQTT'de anlamli.
         topic: isMqtt && topic.trim() ? topic.trim() : null,
         event_filter: eventFilter,
@@ -460,10 +534,23 @@ export function OutboundTargetsPanel({
         qos: isMqtt ? qos : 0,
         retain: isMqtt ? retain : false,
         is_active: isActive,
-        listen_host: isIec104 ? listenHost.trim() || "0.0.0.0" : undefined,
-        listen_port: isIec104 ? Number(listenPort) || 2404 : undefined,
+        listen_host: isServer ? listenHost.trim() || "0.0.0.0" : undefined,
+        listen_port: isServer
+          ? Number(listenPort) || (isModbus ? Number(MODBUS_DEFAULT_PORT) : 2404)
+          : undefined,
         iec104_common_address: isIec104 ? Number(iec104Ca) || 1 : undefined,
         iec104_allowed_peers: isIec104 ? (allowedPeerList.join(",") || null) : undefined,
+        ...(isModbus
+          ? {
+              modbus_mode: modbusMode,
+              modbus_unit_id: Number(modbusUnitId) || 1,
+              modbus_value_format: modbusValueFormat,
+              modbus_word_order: modbusWordOrder,
+              modbus_block_stride: modbusStride.trim() ? Number(modbusStride) : null,
+              modbus_base_address: Number(modbusBaseAddress) || 0,
+              modbus_allowed_peers: allowedPeerList.join(",") || null,
+            }
+          : {}),
         ...mqttFields,
       });
       setEditing(null);
@@ -484,6 +571,15 @@ export function OutboundTargetsPanel({
     const safeName = target.name.replace(/[^A-Za-z0-9._-]+/g, "_");
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     await onDownloadIec104Points(target.id, `iec104-points-${safeName}-${ts}.csv`);
+  };
+
+  /** Modbus adres tablosunu CSV indir — SCADA'ya toplu tag girisi icin. */
+  const handleDownloadModbusCsv = async (targetId: number, suggestedName: string) => {
+    try {
+      await downloadModbusPointsCsv(accessToken, targetId, suggestedName);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.errorOccurred"));
+    }
   };
 
   const handleAutoAssign = async (target: OutboundTarget, overwrite: boolean) => {
@@ -535,6 +631,13 @@ export function OutboundTargetsPanel({
 
   const isCreatingIec104 = protocol === "iec104";
   const isEditingIec104 = editing?.protocol === "iec104";
+  const showModbusForm = editing ? editing.protocol === "modbus" : protocol === "modbus";
+  // Cihaz basina ihtiyac: 75 analog + 6 sayac (2 word) = 87 word (int16) /
+  // 162 word (float32). Otomatik blok bunun ustune pay birakir.
+  const effectiveStride =
+    Number(modbusStride) || (modbusValueFormat === "float32" ? 200 : 100);
+  const modbusCapacity =
+    modbusMode === "unit" ? 247 : Math.floor(65536 / Math.max(1, effectiveStride));
   // Aktif protokol — edit'te target.protocol (kilitli), create'de kullanici secimi.
   // Form alanlari hangi blokta gosterilecek diye bu degisken kullanilir; kullanici
   // REST sectiyse MQTT alanlari, MQTT sectiyse REST alanlari gizlenir.
@@ -762,7 +865,7 @@ export function OutboundTargetsPanel({
       {(isCreateOpen || editing) && (
         <div className="settings-modal-backdrop">
           <form
-            className={`settings-modal ${(isCreatingIec104 || isEditingIec104) ? "iec104-edit-modal" : ""} ${activeProtocol === "mqtt" ? "mqtt-edit-modal" : ""}`}
+            className={`settings-modal ${(isCreatingIec104 || isEditingIec104) ? "iec104-edit-modal" : ""} ${activeProtocol === "mqtt" ? "mqtt-edit-modal" : ""} ${showModbusForm ? "modbus-edit-modal" : ""}`}
             onSubmit={editing ? handleEdit : handleCreate}
           >
             <h3>{editing ? t("engineering.outbound.editTargetModal") : t("engineering.outbound.newTargetModal")}</h3>
@@ -798,6 +901,9 @@ export function OutboundTargetsPanel({
                       {protocols.includes("iec104") ? (
                         <option value="iec104">{t("engineering.outbound.proto.iec104")}</option>
                       ) : null}
+                      {protocols.includes("modbus") ? (
+                        <option value="modbus">{t("engineering.outbound.proto.modbus")}</option>
+                      ) : null}
                     </select>
                   </label>
                 </>
@@ -815,7 +921,207 @@ export function OutboundTargetsPanel({
               )}
             </div>
 
-            {(isCreatingIec104 || isEditingIec104) ? (
+            {showModbusForm ? (
+              <div className="modbus-form">
+                {/* --- Adresleme modu: iki yol --- */}
+                <div className="modbus-mode-cards">
+                  <button
+                    type="button"
+                    className={`modbus-mode-card ${modbusMode === "block" ? "is-active" : ""}`}
+                    onClick={() => setModbusMode("block")}
+                  >
+                    <strong>{t("engineering.outbound.modbus.modeBlock")}</strong>
+                    <span>{t("engineering.outbound.modbus.modeBlockDesc")}</span>
+                    <code>
+                      {t("engineering.outbound.modbus.modeBlockExample", {
+                        stride: effectiveStride,
+                        second: effectiveStride,
+                        third: effectiveStride * 2
+                      })}
+                    </code>
+                  </button>
+                  <button
+                    type="button"
+                    className={`modbus-mode-card ${modbusMode === "unit" ? "is-active" : ""}`}
+                    onClick={() => setModbusMode("unit")}
+                  >
+                    <strong>{t("engineering.outbound.modbus.modeUnit")}</strong>
+                    <span>{t("engineering.outbound.modbus.modeUnitDesc")}</span>
+                    <code>{t("engineering.outbound.modbus.modeUnitExample")}</code>
+                  </button>
+                </div>
+
+                <p className="modbus-capacity">
+                  {t("engineering.outbound.modbus.capacity", { count: modbusCapacity })}
+                  {modbusValueFormat === "int16" && effectiveStride <= 125 ? (
+                    <span className="modbus-capacity-good">
+                      {" · "}
+                      {t("engineering.outbound.modbus.singleRead")}
+                    </span>
+                  ) : null}
+                </p>
+
+                <div className="modbus-form-grid">
+                  <label>
+                    {t("engineering.outbound.modbus.listenHost")}
+                    <input
+                      value={listenHost}
+                      onChange={(event) => setListenHost(event.target.value)}
+                      placeholder="0.0.0.0"
+                    />
+                  </label>
+                  <label>
+                    {t("engineering.outbound.modbus.listenPort")}
+                    <input
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={listenPort}
+                      onChange={(event) => setListenPort(event.target.value)}
+                      placeholder={MODBUS_DEFAULT_PORT}
+                    />
+                    <small className="helper-text">
+                      {t("engineering.outbound.modbus.portHint")}
+                    </small>
+                  </label>
+                  <label>
+                    {t("engineering.outbound.modbus.valueFormat")}
+                    <select
+                      value={modbusValueFormat}
+                      onChange={(event) =>
+                        setModbusValueFormat(event.target.value as "int16" | "float32")
+                      }
+                    >
+                      <option value="int16">{t("engineering.outbound.modbus.int16")}</option>
+                      <option value="float32">{t("engineering.outbound.modbus.float32")}</option>
+                    </select>
+                    <small className="helper-text">
+                      {modbusValueFormat === "int16"
+                        ? t("engineering.outbound.modbus.int16Hint")
+                        : t("engineering.outbound.modbus.float32Hint")}
+                    </small>
+                  </label>
+                  {modbusValueFormat === "float32" ? (
+                    <label>
+                      {t("engineering.outbound.modbus.wordOrder")}
+                      <select
+                        value={modbusWordOrder}
+                        onChange={(event) =>
+                          setModbusWordOrder(event.target.value as "big" | "little")
+                        }
+                      >
+                        <option value="big">{t("engineering.outbound.modbus.wordBig")}</option>
+                        <option value="little">{t("engineering.outbound.modbus.wordLittle")}</option>
+                      </select>
+                    </label>
+                  ) : null}
+                  {modbusMode === "block" ? (
+                    <>
+                      <label>
+                        {t("engineering.outbound.modbus.unitId")}
+                        <input
+                          type="number"
+                          min={1}
+                          max={247}
+                          value={modbusUnitId}
+                          onChange={(event) => setModbusUnitId(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        {t("engineering.outbound.modbus.stride")}
+                        <input
+                          type="number"
+                          min={1}
+                          max={4096}
+                          value={modbusStride}
+                          onChange={(event) => setModbusStride(event.target.value)}
+                          placeholder={String(modbusValueFormat === "float32" ? 200 : 100)}
+                        />
+                        <small className="helper-text">
+                          {t("engineering.outbound.modbus.strideHint")}
+                        </small>
+                      </label>
+                      <label>
+                        {t("engineering.outbound.modbus.baseAddress")}
+                        <input
+                          type="number"
+                          min={0}
+                          max={65535}
+                          value={modbusBaseAddress}
+                          onChange={(event) => setModbusBaseAddress(event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                </div>
+
+                <p className="modbus-readonly-note">
+                  {t("engineering.outbound.modbus.readOnlyNote")}
+                </p>
+
+                {/* IP allowlist — Modbus'ta kimlik dogrulama yok, tek koruma bu. */}
+                <div className="modbus-peers">
+                  <div className="iec104-whitelist-head">
+                    <h4 className="iec104-edit-col-title">
+                      {t("engineering.outbound.iec104.whitelistTitle")}
+                    </h4>
+                    <span
+                      className={`iec104-whitelist-status ${allowedPeerList.length > 0 ? "iec104-whitelist-status--active" : "iec104-whitelist-status--open"}`}
+                    >
+                      <span className="status-dot" />
+                      {allowedPeerList.length > 0
+                        ? t("engineering.outbound.iec104.whitelistActive", { count: allowedPeerList.length })
+                        : t("engineering.outbound.iec104.whitelistOff")}
+                    </span>
+                  </div>
+                  <p className="helper-text">
+                    {t("engineering.outbound.modbus.whitelistHint")}
+                  </p>
+                  <div className="iec104-peer-input-row">
+                    <input
+                      type="text"
+                      value={newPeerIp}
+                      onChange={(event) => {
+                        setNewPeerIp(event.target.value);
+                        if (peerError) setPeerError("");
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          handleAddPeerIp();
+                        }
+                      }}
+                      placeholder={t("engineering.outbound.iec104.ipPlaceholder")}
+                    />
+                    <button type="button" className="secondary-btn" onClick={handleAddPeerIp}>
+                      {t("common.add")}
+                    </button>
+                  </div>
+                  {peerError ? <p className="error-text">{peerError}</p> : null}
+                  {allowedPeerList.length > 0 ? (
+                    <ul className="iec104-peer-list">
+                      {allowedPeerList.map((ip) => (
+                        <li key={ip}>
+                          <code>{ip}</code>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAllowedPeerList((prev) => prev.filter((x) => x !== ip))
+                            }
+                            aria-label={t("common.delete")}
+                          >
+                            ×
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Modbus formu yukarida cizildi; burada REST/MQTT/IEC104 kollari. */}
+            {showModbusForm ? null : (isCreatingIec104 || isEditingIec104) ? (
               <div className="iec104-edit-grid">
                 <div className="iec104-edit-col">
                   <h4 className="iec104-edit-col-title">{t("engineering.outbound.iec104.serverColTitle")}</h4>
@@ -1798,6 +2104,16 @@ export function OutboundTargetsPanel({
                     )}
                   </td>
                   <td className="actions-cell">
+                    {item.protocol === "modbus" ? (
+                      <button
+                        type="button"
+                        className="secondary-btn action-btn"
+                        title={t("engineering.outbound.modbus.planBtnTitle")}
+                        onClick={() => setPlanTargetId(item.id)}
+                      >
+                        {t("engineering.outbound.modbus.planBtn")}
+                      </button>
+                    ) : null}
                     {isIec && onUpdateDeviceCa ? (
                       <button
                         type="button"
@@ -1880,6 +2196,17 @@ export function OutboundTargetsPanel({
           target={mappingModalTarget}
           devices={devices ?? []}
           onClose={() => setMappingModalTarget(null)}
+        />
+      ) : null}
+
+      {/* Modbus adres plani — hangi sinyal hangi adreste (SCADA'ya verilecek liste) */}
+      {planTargetId !== null ? (
+        <ModbusPlanModal
+          accessToken={accessToken}
+          targetId={planTargetId}
+          targetName={targets.find((x) => x.id === planTargetId)?.name ?? ""}
+          onClose={() => setPlanTargetId(null)}
+          onDownloadCsv={handleDownloadModbusCsv}
         />
       ) : null}
 

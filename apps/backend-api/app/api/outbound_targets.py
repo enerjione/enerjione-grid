@@ -17,6 +17,7 @@ from app.models.enums import UserRole
 from app.models.outbound_target import OutboundTarget, OutboundTopicMapping
 from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
+from app.schemas.modbus import ModbusPlanRead
 from app.schemas.outbound import (
     OutboundTargetCreate,
     OutboundTargetRead,
@@ -25,6 +26,7 @@ from app.schemas.outbound import (
     OutboundTopicMappingRead,
     OutboundTopicMappingUpdate,
 )
+from app.services import modbus_plan_service
 from app.services.event_service import record_event
 from app.services.iec104.bootstrap import redeploy_target
 from app.services.iec104.registry import build_point_registry
@@ -595,6 +597,92 @@ def export_iec104_points_xlsx(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Point-Count": str(len(sorted_points)),
+            "Access-Control-Expose-Headers": "Content-Disposition, X-Point-Count",
+        },
+    )
+
+
+def _require_modbus_target(db: Session, target_id: int) -> OutboundTarget:
+    target = db.get(OutboundTarget, target_id)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Outbound target not found"
+        )
+    if target.protocol != "modbus":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bu hedef Modbus degil; adres plani yalnizca Modbus hedefler icin uretilir.",
+        )
+    return target
+
+
+@router.get("/{target_id}/modbus-plan", response_model=ModbusPlanRead)
+def get_modbus_plan(
+    target_id: int,
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+    db: Session = Depends(get_db),
+):
+    """Bu Modbus hedefinin adres plani: cihaz slotlari + tam adres tablosu.
+
+    Plan `modbus_plan_service` tarafindan uretilir; worker da AYNI fonksiyonun
+    ciktisini kullanir, yani burada gorunen adres sahada yayinlanan adrestir.
+    Cagri sirasinda eksik cihaz slotlari otomatik atanir ve kalici yazilir
+    (mevcut slotlar korunur — adresler kaymaz).
+    """
+    target = _require_modbus_target(db, target_id)
+    return ModbusPlanRead(**modbus_plan_service.serialize_plan(db, target))
+
+
+@router.get("/{target_id}/modbus-points.csv")
+def export_modbus_points_csv(
+    target_id: int,
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Adres tablosunu CSV olarak indir — SCADA'ya toplu tag girisi icin.
+
+    Sutunlar: device_code, device_name, unit_id, function, function_name,
+    address, modicon (40001 tarzi klasik gosterim), signal_key, label, source,
+    data_type, unit, word_count, scale, offset
+    """
+    target = _require_modbus_target(db, target_id)
+    plan = modbus_plan_service.serialize_plan(db, target)
+
+    fn_names = {1: "coil", 2: "discrete_input", 3: "holding_register", 4: "input_register"}
+    # Klasik "Modicon" gosterimi: coil 1-tabanli 00001, discrete 10001,
+    # input register 30001, holding register 40001.
+    fn_bases = {1: 1, 2: 10_001, 3: 40_001, 4: 30_001}
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "device_code", "device_name", "unit_id", "function", "function_name",
+            "address", "modicon", "signal_key", "label", "source", "data_type",
+            "unit", "word_count", "scale", "offset",
+        ]
+    )
+    for p in plan["points"]:
+        writer.writerow(
+            [
+                p["device_code"], p["device_name"], p["unit_id"], p["function"],
+                fn_names.get(p["function"], str(p["function"])),
+                p["address"], fn_bases.get(p["function"], 0) + p["address"],
+                p["signal_key"], p["label"], p["source"], p["data_type"],
+                p["unit"] or "", p["word_count"], p["scale"], p["offset"],
+            ]
+        )
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "-" for c in target.name)
+    filename = f"modbus-points-{safe_name}-{stamp}.csv"
+    # UTF-8 BOM: Excel'in Turkce karakterleri dogru acmasi icin.
+    return Response(
+        content="﻿" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Point-Count": str(len(plan["points"])),
             "Access-Control-Expose-Headers": "Content-Disposition, X-Point-Count",
         },
     )

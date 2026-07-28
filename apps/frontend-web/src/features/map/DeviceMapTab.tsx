@@ -365,6 +365,34 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     return result;
   }, [selectedDevice, liveValues, voltageToPercent]);
 
+  // Secili cihazin topoloji (bolge/hat) bilgisi — segment.device_id eslesmesi.
+  const selectedTopo = useMemo(() => {
+    if (!selectedDevice || !gridSnapshot) return null;
+    const seg = gridSnapshot.segments?.find((s) => s.device_id === selectedDevice.id);
+    if (!seg) return null;
+    const line = gridSnapshot.lines?.find((l) => l.id === seg.line_id);
+    const region = line ? gridSnapshot.regions?.find((r) => r.id === line.region_id) : undefined;
+    return { regionName: region?.name ?? "", lineName: line?.name ?? "" };
+  }, [selectedDevice, gridSnapshot]);
+
+  // Master modem RSSI -> sebeke sinyali (4 kademeli cubuk + dBm) — detay
+  // sidebar'i ile ayni esikler.
+  const selectedSignal = useMemo(() => {
+    const row =
+      selectedDevice && liveValues
+        ? liveValues.find(
+            (r) => r.device_id === selectedDevice.id && r.signal_key === "master.modem_rssi"
+          )
+        : undefined;
+    const rssi = typeof row?.value === "number" ? row.value : null;
+    if (rssi == null) return { key: "none", dbm: "—", bars: 0 };
+    const dbm = `${Math.round(rssi)} dBm`;
+    if (rssi >= -70) return { key: "good", dbm, bars: 4 };
+    if (rssi >= -85) return { key: "fair", dbm, bars: 3 };
+    if (rssi >= -100) return { key: "poor", dbm, bars: 2 };
+    return { key: "poor", dbm, bars: 1 };
+  }, [selectedDevice, liveValues]);
+
   // ===== Sebeke topolojisi: hatlar + direkler + cihaz segmentleri =====
   // Cihazda aktif (reset edilmemis) VE hat arizasi ureten alarm var mi?
   // Marker + polyline kirmizi rengi icin. produces_fault === false olan
@@ -1351,7 +1379,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         ) : null}
 
         {selectedDevice ? (
-          <div className="device-popup-card device-popup-card--modern">
+          <div className="device-popup-card device-popup-card--modern device-popup-card--v2">
             <button
               type="button"
               className="device-popup-close"
@@ -1361,87 +1389,103 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               <span className="material-symbols-outlined">close</span>
             </button>
 
-            {/* Üst başlık — alarm + durum + cihaz adı */}
-            <header className="device-popup-header">
-              <div className="device-popup-title">
-                <h4>{selectedDevice.name}</h4>
-                <span className="device-popup-code">{selectedDevice.code}</span>
+            <div className="device-popup-v2-body">
+              {/* Kimlik — durum noktasi SOLDA (detay sidebar'i ile ayni) */}
+              <div className="device-popup-v2-id">
+                <div className="device-sidebar-idrow">
+                  <span
+                    className={`device-sidebar-statusdot ${selectedDevice.communicationStatus === "online" ? "is-online" : "is-offline"}`}
+                    title={selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
+                  />
+                  <h2 className="device-sidebar-code">{selectedDevice.name}</h2>
+                </div>
+                <div className="device-sidebar-name">{selectedDevice.code}</div>
               </div>
-              <div className="device-popup-badges">
-                {selectedDevice.alarmActive ? (
-                  <span className="device-popup-alarm-badge" title={t("dashboard.popup.alarmActive")}>
-                    <span className="material-symbols-outlined">warning</span>
-                    {t("dashboard.popup.alarmBadge")}
+
+              {/* Genel alarm durum karti — yesil "Normal" / kirmizi "Aktif Alarm" */}
+              <div className={`device-sidebar-alarmcard ${selectedDevice.alarmActive ? "is-alarm" : "is-ok"}`}>
+                <span className="device-sidebar-alarmcard-icon">
+                  <span className="material-symbols-outlined">
+                    {selectedDevice.alarmActive ? "notification_important" : "check_circle"}
                   </span>
-                ) : null}
-                <span
-                  className={`device-popup-status ${
-                    selectedDevice.communicationStatus === "online" ? "online" : "offline"
-                  }`}
-                  title={selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
-                >
-                  <span className="device-popup-status-dot" />
-                  {selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
                 </span>
-              </div>
-            </header>
-
-            {/* Bilgi satırı: konum + son veri */}
-            <div className="device-popup-info">
-              <div className="device-popup-info-item">
-                <span className="material-symbols-outlined">place</span>
-                <div>
-                  <span className="device-popup-info-label">{t("dashboard.popup.location")}</span>
-                  <span className="device-popup-info-value">
-                    {locateDevice(selectedDevice.latitude, selectedDevice.longitude).label}
+                <div className="device-sidebar-alarmcard-body">
+                  <span className="device-sidebar-alarmcard-title">
+                    {selectedDevice.alarmActive
+                      ? t("deviceDetail.sidebar.alarmActive")
+                      : t("deviceDetail.sidebar.alarmClear")}
+                  </span>
+                  <span className="device-sidebar-alarmcard-sub">
+                    {selectedDevice.alarmActive
+                      ? t("deviceDetail.sidebar.alarmActiveSub")
+                      : t("deviceDetail.sidebar.alarmClearSub")}
                   </span>
                 </div>
+                {selectedDevice.alarmActive ? (
+                  <span className="device-sidebar-alarmcard-pulse" aria-hidden="true" />
+                ) : null}
               </div>
-              <div className="device-popup-info-item">
-                <span className="material-symbols-outlined">schedule</span>
-                <div>
-                  <span className="device-popup-info-label">{t("dashboard.popup.lastData")}</span>
-                  <span className="device-popup-info-value">
-                    {formatRelative(selectedDevice.lastUpdateAt, localeTag, t)}
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {/* Master / Sat01 / Sat02 batarya kartları */}
-            <div className="device-popup-batteries">
-              {(["master", "sat01", "sat02"] as SourceKey[]).map((src) => {
-                const data = sourceBatteries[src];
-                const pct = data?.percent ?? null;
-                const voltage = data?.voltage ?? null;
-                return (
-                  <div
-                    key={src}
-                    className={`device-popup-battery-card ${batteryClass(pct)}`}
-                    title={voltage !== null ? `${voltage.toFixed(2)} V` : t("dashboard.popup.noData")}
-                  >
-                    <div className="device-popup-battery-card-head">
-                      <span className={`badge badge-source badge-source-${src}`}>
-                        {SOURCE_LABEL[src]}
+              {/* BILGILER — detay sayfasindaki ozellikler */}
+              <div className="device-popup-v2-info">
+                <span className="device-sidebar-kicker">{t("deviceDetail.sidebar.info")}</span>
+                <ul className="device-sidebar-info">
+                  <li className="device-sidebar-info-row">
+                    <span className="material-symbols-outlined">wifi</span>
+                    <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.deviceStatus")}</span>
+                    <span className={`device-sidebar-info-value tone-${selectedDevice.communicationStatus === "online" ? "green" : "slate"}`}>
+                      <span className={`device-sidebar-info-dot dot-${selectedDevice.communicationStatus === "online" ? "green" : "slate"}`} aria-hidden="true" />
+                      {selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
+                    </span>
+                  </li>
+                  <li className="device-sidebar-info-row">
+                    <span className="material-symbols-outlined">schedule</span>
+                    <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.lastCommShort")}</span>
+                    <span className="device-sidebar-info-value">
+                      {formatRelative(selectedDevice.lastUpdateAt, localeTag, t)}
+                    </span>
+                  </li>
+                  {selectedTopo?.regionName ? (
+                    <li className="device-sidebar-info-row">
+                      <span className="material-symbols-outlined">map</span>
+                      <span className="device-sidebar-info-label">{t("deviceDetail.meta.region")}</span>
+                      <span className="device-sidebar-info-value">{selectedTopo.regionName}</span>
+                    </li>
+                  ) : null}
+                  {selectedTopo?.lineName ? (
+                    <li className="device-sidebar-info-row">
+                      <span className="material-symbols-outlined">timeline</span>
+                      <span className="device-sidebar-info-label">{t("deviceDetail.meta.line")}</span>
+                      <span className="device-sidebar-info-value">{selectedTopo.lineName}</span>
+                    </li>
+                  ) : null}
+                  <li className="device-sidebar-info-row">
+                    <span className="material-symbols-outlined">battery_full</span>
+                    <span className="device-sidebar-info-label">{t("deviceDetail.meta.battery")}</span>
+                    <span className={`device-sidebar-battery ${batteryClass(selectedDevice.batteryPercent)}`}>
+                      <span className="device-battery-icon" aria-hidden="true">
+                        <span
+                          className="device-battery-fill"
+                          style={{ width: `${Math.max(0, Math.min(100, selectedDevice.batteryPercent))}%` }}
+                        />
                       </span>
-                      {voltage !== null ? (
-                        <span className="device-popup-battery-voltage">
-                          {voltage.toFixed(2)} V
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="device-popup-battery-bar">
-                      <span
-                        className="device-popup-battery-fill"
-                        style={{ width: `${pct ?? 0}%` }}
-                      />
-                    </div>
-                    <div className="device-popup-battery-percent">
-                      {pct !== null ? `%${pct}` : "—"}
-                    </div>
-                  </div>
-                );
-              })}
+                      <span className="device-sidebar-battery-text">%{Math.round(selectedDevice.batteryPercent)}</span>
+                    </span>
+                  </li>
+                  <li className="device-sidebar-info-row">
+                    <span className="material-symbols-outlined">signal_cellular_alt</span>
+                    <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.networkSignal")}</span>
+                    <span className={`device-sidebar-signal sig-${selectedSignal.key}`}>
+                      <span className="device-sidebar-signal-bars" aria-hidden="true">
+                        {[1, 2, 3, 4].map((b) => (
+                          <span key={b} className={`bar${b <= selectedSignal.bars ? " on" : ""}`} />
+                        ))}
+                      </span>
+                      <span className="device-sidebar-signal-text">{selectedSignal.dbm}</span>
+                    </span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <button

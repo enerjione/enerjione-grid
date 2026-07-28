@@ -404,6 +404,48 @@ services:
     logging: *default-logging
     <<: [*worker-resources, *hardened-worker]
 
+  # Modbus TCP outbound — sinyalleri Modbus register/bit adreslerine yayinlar.
+  # IEC104 gibi backend'den BAGIMSIZ ayri bir servis: SCADA'nin tarama hizi
+  # (saniyede yuzlerce istek olabilir) backend'i veya telemetri akisini
+  # etkilemez. Adres planini backend'den ceker, kendisi hesaplamaz.
+  modbus-outbound:
+    build:
+      context: ./apps/modbus-outbound
+      dockerfile: Dockerfile
+    image: e1-grid/modbus-outbound:${E1_VERSION:-latest}
+    container_name: e1-grid-modbus-outbound
+    restart: unless-stopped
+    depends_on:
+      backend-api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
+      NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
+      BACKEND_API_BASE: http://backend-api:8000/api/v1
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: 8017
+      MODBUS_DEFAULT_LISTEN_HOST: 0.0.0.0
+    # Modbus standart portu 502'dir ve <1024'tur. Servis non-root (uid 10001)
+    # calistigi ve `cap_drop: ALL` uygulandigi icin bu sysctl olmadan bind
+    # edemez. Namespace'e ozel bir ayardir; host'un port politikasini
+    # DEGISTIRMEZ, sadece bu container icinde gecerlidir.
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+    ports:
+      # SCADA sistemleri bu portlara baglanir. Hedefin `listen_port` degeri
+      # buradaki araliktan biri olmali; baska port kullanilacaksa bu listeye
+      # eklenmeli (IEC104'teki 2404-2406 mantiginin aynisi).
+      - "502:502"
+      - "5020:5020"
+      - "5021:5021"
+    networks:
+      - e1-net
+    logging: *default-logging
+    <<: [*worker-resources, *hardened-worker]
+
   # Gomulu FTP sunucusu — Horstmann SN2 cihazlari config/firmware dosyalarini
   # buraya yazar/okur (cihaz FTP ekrani: Server/Port 21/User/Pass/Dir).
   # NOT: `*hardened-worker` KULLANILMAZ — FTP writable volume'a yazar (read_only

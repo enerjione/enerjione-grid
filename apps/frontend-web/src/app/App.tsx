@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asyncConfirm } from "../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 import { ChangePasswordModal } from "../components/ChangePasswordModal";
@@ -646,7 +646,11 @@ export function App() {
     if (!session) return;
     const tick = async () => {
       try {
-        const rows = await fetchFaults(session.accessToken, "active");
+        // "all": Hat Arizalari sayfasi hem "Aktif Ariza" hem "Gecmis
+        // Arizalar" sekmesini tek istekten besliyor. Backend olgunlasmamis
+        // (display-delay dolmamis) aktif arizalari yine gizler; resolved/
+        // closed her durumda gelir.
+        const rows = await fetchFaults(session.accessToken, "all");
         setFaults(rows);
       } catch {
         // ignore
@@ -1473,7 +1477,7 @@ export function App() {
 
   const handleCreateOutboundTarget = async (payload: {
     name: string;
-    protocol: "rest" | "mqtt" | "iec104";
+    protocol: "rest" | "mqtt" | "iec104" | "modbus";
     endpoint: string;
     topic?: string | null;
     event_filter: "all" | "telemetry" | "alarm";

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AlarmComment,
   AlarmEvent,
   AlarmRuleRow,
@@ -13,6 +13,7 @@ import type {
   HistoryBucket,
   HostStatus,
   LicenseStatus,
+  ModbusPlan,
   NetworkConfigAccepted,
   NetworkConfigPayload,
   NetworkStatus,
@@ -1179,7 +1180,7 @@ export async function createOutboundTarget(
   token: string,
   payload: {
     name: string;
-    protocol: "rest" | "mqtt" | "iec104";
+    protocol: "rest" | "mqtt" | "iec104" | "modbus";
     endpoint: string;
     topic?: string | null;
     event_filter: "all" | "telemetry" | "alarm";
@@ -1624,6 +1625,49 @@ export async function downloadIec104PointsCsv(
   a.remove();
   // Blob'u biraz sonra revoke et — bazi tarayicilarda click async indirmeyi
   // tetikler, hemen revoke edersen "failed - network error" alirsin.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return count;
+}
+
+/* ===== Modbus TCP outbound adres plani ===== */
+
+/** Bir Modbus hedefinin adres plani (cihaz slotlari + tam adres tablosu).
+ *
+ *  Cagri sirasinda backend eksik cihaz slotlarini otomatik atar ve kalici
+ *  yazar; mevcut slotlar korunur (adresler kaymaz). */
+export async function fetchModbusPlan(
+  token: string,
+  targetId: number
+): Promise<ModbusPlan> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/modbus-plan`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Modbus adres planı alınamadı.");
+  return (await response.json()) as ModbusPlan;
+}
+
+/** Adres tablosunu CSV indir (Modicon gosterimi dahil). */
+export async function downloadModbusPointsCsv(
+  token: string,
+  targetId: number,
+  suggestedName: string
+): Promise<number | null> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/outbound-targets/${targetId}/modbus-points.csv`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Modbus adres listesi indirilemedi.");
+  const countHeader = response.headers.get("X-Point-Count");
+  const count = countHeader !== null ? Number(countHeader) : null;
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = suggestedName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   return count;
 }

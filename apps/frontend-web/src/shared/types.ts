@@ -1,4 +1,4 @@
-export type CommunicationStatus = "online" | "offline" | "unknown";
+﻿export type CommunicationStatus = "online" | "offline" | "unknown";
 
 export type IpEndpointType = "initiating" | "listening";
 
@@ -234,6 +234,8 @@ export type FaultStats = {
   closed: number;
   avg_resolution_seconds: number | null;
   last_30d_count: number;
+  /** Bugun (UTC gun basindan itibaren) normale donen/kapatilan ariza sayisi. */
+  resolved_today_count?: number;
 };
 
 /** Kullanici-bazli bildirim kanal tercihleri. */
@@ -310,7 +312,7 @@ export type OutboundTopicMapping = {
 export type OutboundTarget = {
   id: number;
   name: string;
-  protocol: "rest" | "mqtt" | "iec104";
+  protocol: "rest" | "mqtt" | "iec104" | "modbus";
   endpoint: string;
   topic?: string | null;
   event_filter: "all" | "telemetry" | "alarm";
@@ -325,6 +327,16 @@ export type OutboundTarget = {
   iec104_common_address?: number | null;
   /** Virgulle ayrilmis IP whitelist; bos = serbest. */
   iec104_allowed_peers?: string | null;
+  // Modbus TCP hedefi icin (protocol === "modbus"):
+  /** block = tek unit, cihazlar adres bloklarinda | unit = cihaz basina unit id */
+  modbus_mode?: "block" | "unit";
+  modbus_unit_id?: number;
+  modbus_value_format?: "int16" | "float32";
+  modbus_word_order?: "big" | "little";
+  /** null = otomatik (int16 -> 100, float32 -> 200) */
+  modbus_block_stride?: number | null;
+  modbus_base_address?: number;
+  modbus_allowed_peers?: string | null;
   // MQTT hedefi icin (protocol === "mqtt"):
   mqtt_port?: number | null;
   mqtt_username?: string | null;
@@ -805,6 +817,80 @@ export type ServiceStatus = {
 export type ServicesReport = {
   services: ServiceStatus[];
   sampled_at: number;
+};
+
+// ---- Modbus TCP outbound adres plani (`/outbound-targets/{id}/modbus-plan`) --
+// Plan backend'de uretilir; modbus-outbound worker'i AYNI plani uygular.
+// Yani buradaki adres, sahada yayinlanan adresin ta kendisidir.
+
+export type ModbusLayoutSummary = {
+  register_words: number;
+  discrete_bits: number;
+  coil_bits: number;
+  analog_count: number;
+  counter_count: number;
+  binary_count: number;
+  binary_output_count: number;
+  /** Modbus'a dahil edilmeyen string sinyal sayisi. */
+  excluded_string_count: number;
+};
+
+export type ModbusCapacity = {
+  mode: string;
+  stride: number;
+  max_devices: number;
+  device_count: number;
+  remaining: number;
+  /** Cihazin tum register'lari tek Modbus okumasina (125) siginiyor mu? */
+  single_read_per_device: boolean;
+  /** address_space | bit_space | unit_id_range */
+  limit_reason: string;
+};
+
+export type ModbusDeviceSlot = {
+  device_id: number;
+  device_code: string;
+  device_name: string;
+  slot_index: number;
+  unit_id: number;
+  block_start: number;
+};
+
+export type ModbusPlanPoint = {
+  device_code: string;
+  device_name: string;
+  signal_key: string;
+  label: string;
+  source: string;
+  data_type: string;
+  unit?: string | null;
+  unit_id: number;
+  /** 1=coil, 2=discrete input, 3=holding register (4=input register aynasi) */
+  function: number;
+  address: number;
+  word_count: number;
+  scale: number;
+  offset: number;
+  manual: boolean;
+};
+
+export type ModbusPlan = {
+  target_id: number;
+  target_name: string;
+  mode: string;
+  value_format: string;
+  word_order: string;
+  unit_id: number;
+  base_address: number;
+  stride: number;
+  listen_host: string;
+  listen_port: number;
+  is_active: boolean;
+  allowed_peers: string[];
+  summary: ModbusLayoutSummary;
+  capacity: ModbusCapacity;
+  devices: ModbusDeviceSlot[];
+  points: ModbusPlanPoint[];
 };
 
 // ---- Appliance ag ayarlari (`/network/*`) ---------------------------------

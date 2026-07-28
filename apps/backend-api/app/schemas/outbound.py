@@ -31,9 +31,26 @@ class OutboundTopicMappingRead(OutboundTopicMappingBase):
         from_attributes = True
 
 
+class ModbusTargetFields(BaseModel):
+    """Modbus TCP hedefine ozel alanlar (protocol='modbus').
+
+    mode='block' -> tek unit id, cihazlar adres bloklarina dagilir.
+    mode='unit'  -> her cihaz kendi unit (slave) id'sinde, ayni offset duzeni.
+    """
+
+    modbus_mode: str = Field(default="block", pattern="^(block|unit)$")
+    modbus_unit_id: int = Field(default=1, ge=1, le=247)
+    modbus_value_format: str = Field(default="int16", pattern="^(int16|float32)$")
+    modbus_word_order: str = Field(default="big", pattern="^(big|little)$")
+    # NULL = otomatik (int16 -> 100, float32 -> 200)
+    modbus_block_stride: int | None = Field(default=None, ge=1, le=4096)
+    modbus_base_address: int = Field(default=0, ge=0, le=65_535)
+    modbus_allowed_peers: str | None = None
+
+
 class OutboundTargetCreate(BaseModel):
     name: str
-    # rest | mqtt | iec104 (ileride modbus/opcua)
+    # rest | mqtt | iec104 | modbus (ileride opcua)
     protocol: str
     endpoint: str = ""
     topic: str | None = None
@@ -65,6 +82,14 @@ class OutboundTargetCreate(BaseModel):
     mqtt_topic_template: str | None = None
     mqtt_topic_prefix: str = "e1"
     mqtt_customer_id: str | None = None
+    # Modbus TCP (protocol='modbus' icin):
+    modbus_mode: str = Field(default="block", pattern="^(block|unit)$")
+    modbus_unit_id: int = Field(default=1, ge=1, le=247)
+    modbus_value_format: str = Field(default="int16", pattern="^(int16|float32)$")
+    modbus_word_order: str = Field(default="big", pattern="^(big|little)$")
+    modbus_block_stride: int | None = Field(default=None, ge=1, le=4096)
+    modbus_base_address: int = Field(default=0, ge=0, le=65_535)
+    modbus_allowed_peers: str | None = None
 
 
 class OutboundTargetUpdate(BaseModel):
@@ -96,6 +121,13 @@ class OutboundTargetUpdate(BaseModel):
     mqtt_topic_template: str | None = None
     mqtt_topic_prefix: str | None = None
     mqtt_customer_id: str | None = None
+    modbus_mode: str | None = Field(default=None, pattern="^(block|unit)$")
+    modbus_unit_id: int | None = Field(default=None, ge=1, le=247)
+    modbus_value_format: str | None = Field(default=None, pattern="^(int16|float32)$")
+    modbus_word_order: str | None = Field(default=None, pattern="^(big|little)$")
+    modbus_block_stride: int | None = Field(default=None, ge=1, le=4096)
+    modbus_base_address: int | None = Field(default=None, ge=0, le=65_535)
+    modbus_allowed_peers: str | None = None
 
 
 class OutboundTargetRead(BaseModel):
@@ -130,6 +162,13 @@ class OutboundTargetRead(BaseModel):
     mqtt_topic_template: str | None = None
     mqtt_topic_prefix: str = "e1"
     mqtt_customer_id: str | None = None
+    modbus_mode: str = "block"
+    modbus_unit_id: int = 1
+    modbus_value_format: str = "int16"
+    modbus_word_order: str = "big"
+    modbus_block_stride: int | None = None
+    modbus_base_address: int = 0
+    modbus_allowed_peers: str | None = None
     # Mapping listesi UI'da target detayi cekildiginde gelir.
     topic_mappings: list[OutboundTopicMappingRead] = []
 

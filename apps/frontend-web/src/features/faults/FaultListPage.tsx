@@ -1,5 +1,27 @@
+/**
+ * Hat Arizalari sayfasi.
+ *
+ * Duzen:
+ *   1. KPI seridi        — Aktif Ariza / Bugun Cozulen / Ort. Cozum / Gecmis
+ *   2. Sekmeler          — "Aktif Ariza" | "Gecmis Arizalar"
+ *   3. Aktif sekmesi     — her ARIZA BOLGESI icin bir kart (ActiveFaultCard)
+ *      Gecmis sekmesi    — tablo + acilir yorum/cozum panelleri
+ *
+ * ONEMLI — aktif/gecmis ayrimi:
+ *   Ana ekranda YALNIZCA gercekten devam eden arizalar gorunur:
+ *     aktif  = open | assigned | in_progress
+ *     gecmis = resolved | closed
+ *   Backend ariza normale donunce status'u otomatik "resolved" yapar
+ *   (fault_recompute_service._resolve_fault), yani kayit kendiliginden
+ *   Gecmis sekmesine gecer; kullanicinin elle isaretlemesi gerekmez.
+ *
+ * Bir hatta birden fazla bagimsiz ariza bolgesi olabilir (backend
+ * _compute_line_zones her RED blogu icin ayri FaultEvent uretir); bu yuzden
+ * aktif sekmesi tek kart degil KART LISTESI render eder.
+ */
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CheckCircle2, Clock, FileText, RefreshCw, TriangleAlert } from "lucide-react";
 
 import type { GridSnapshot } from "../../shared/api";
 import type {
@@ -10,7 +32,9 @@ import type {
   FaultStats,
   UserRead
 } from "../../shared/types";
+import { ActiveFaultCard } from "./ActiveFaultCard";
 import { FaultDetailModal } from "./FaultDetailModal";
+import { FaultHistoryTable } from "./FaultHistoryTable";
 
 type Props = {
   faults: FaultEvent[];
@@ -31,30 +55,8 @@ type Props = {
   onAddComment: (faultId: number, body: string) => Promise<void>;
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  open: "#ef4444",
-  assigned: "#f59e0b",
-  in_progress: "#3b82f6",
-  resolved: "#10b981",
-  closed: "#64748b"
-};
-
-function fmtDate(iso: string | null | undefined, localeTag: string): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString(localeTag);
-}
-
-function fmtDateParts(
-  iso: string | null | undefined,
-  localeTag: string
-): { date: string; time: string } {
-  if (!iso) return { date: "—", time: "" };
-  const d = new Date(iso);
-  return {
-    date: d.toLocaleDateString(localeTag),
-    time: d.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" })
-  };
-}
+/** Devam eden ariza statusleri — ana ekranda yalnizca bunlar gorunur. */
+const ACTIVE_STATUSES = new Set(["open", "assigned", "in_progress"]);
 
 function fmtDurationSeconds(totalSec: number): string {
   let sec = Math.max(0, Math.round(totalSec));
@@ -64,23 +66,9 @@ function fmtDurationSeconds(totalSec: number): string {
   sec -= hours * 3600;
   const mins = Math.floor(sec / 60);
   if (days > 0) return `${days}g ${hours}sa`;
-  if (hours > 0) return `${hours}sa ${mins}dk`;
+  if (hours > 0) return `${hours}sa ${String(mins).padStart(2, "0")}dk`;
   if (mins > 0) return `${mins}dk`;
-  return `<1dk`;
-}
-
-function fmtElapsed(openedIso: string, endMs: number): string {
-  const start = new Date(openedIso).getTime();
-  let sec = Math.max(0, Math.round((endMs - start) / 1000));
-  const days = Math.floor(sec / 86400);
-  sec -= days * 86400;
-  const hours = Math.floor(sec / 3600);
-  sec -= hours * 3600;
-  const mins = Math.floor(sec / 60);
-  if (days > 0) return `${days}g ${hours}sa ${mins}dk`;
-  if (hours > 0) return `${hours}sa ${mins}dk`;
-  if (mins > 0) return `${mins}dk`;
-  return `<1dk`;
+  return "<1dk";
 }
 
 export function FaultListPage({
@@ -101,284 +89,175 @@ export function FaultListPage({
 }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
-  const [statusFilter, setStatusFilter] = useState<"active" | "all" | "closed">("active");
-  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<"active" | "history">("active");
   const [openFaultId, setOpenFaultId] = useState<number | null>(null);
-  // Canlı süre sayacı için "now" — kart üzerindeki "x sa y dk" güncel kalsin.
-  // Kart sayisi çok değil, 30sn'lik tick yeterli (ms hassasiyet anlamsız).
+
+  // Canli sure sayaci — kartlardaki "x sa y dk" guncel kalsin. Kart sayisi
+  // az, 30sn'lik tick yeterli (ms hassasiyet anlamsiz).
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, []);
 
-  const stats = useMemo(() => {
-    const total = faults.length;
-    const open = faults.filter((f) => f.status === "open").length;
-    const assigned = faults.filter((f) => f.status === "assigned").length;
-    const inProgress = faults.filter((f) => f.status === "in_progress").length;
-    const resolved = faults.filter((f) => f.status === "resolved").length;
-    const closed = faults.filter((f) => f.status === "closed").length;
-    return { total, open, assigned, inProgress, resolved, closed };
-  }, [faults]);
+  const activeFaults = useMemo(
+    () =>
+      faults
+        .filter((f) => ACTIVE_STATUSES.has(f.status))
+        .sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime()),
+    [faults]
+  );
 
-  const filtered = useMemo(() => {
-    let arr = faults;
-    if (statusFilter === "active") {
-      arr = arr.filter((f) => f.status !== "closed");
-    } else if (statusFilter === "closed") {
-      arr = arr.filter((f) => f.status === "closed");
+  const historyFaults = useMemo(
+    () => faults.filter((f) => f.status === "resolved" || f.status === "closed"),
+    [faults]
+  );
+
+  /** line_id -> hattin tum direk sira numaralari (sematik serit icin). */
+  const poleSeqsByLine = useMemo(() => {
+    const m = new Map<number, number[]>();
+    for (const p of gridSnapshot?.poles ?? []) {
+      const arr = m.get(p.line_id);
+      if (arr) arr.push(p.sequence_no);
+      else m.set(p.line_id, [p.sequence_no]);
     }
-    const q = search.trim().toLowerCase();
-    if (q) {
-      arr = arr.filter((f) => {
-        const hay = `${f.line_name} ${f.region_name} ${f.last_red_device_name ?? ""} ${f.last_red_device_code ?? ""} ${f.first_green_device_name ?? ""} ${f.first_green_device_code ?? ""} ${f.assigned_to_username ?? ""}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
-    return [...arr].sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime());
-  }, [faults, statusFilter, search]);
+    for (const arr of m.values()) arr.sort((a, b) => a - b);
+    return m;
+  }, [gridSnapshot]);
 
   const openFault = useMemo(
     () => (openFaultId !== null ? faults.find((f) => f.id === openFaultId) ?? null : null),
     [faults, openFaultId]
   );
 
+  const avgText =
+    backendStats && backendStats.avg_resolution_seconds != null
+      ? fmtDurationSeconds(backendStats.avg_resolution_seconds)
+      : "—";
+
+  const kpis = [
+    {
+      key: "active",
+      tone: "bad",
+      icon: TriangleAlert,
+      label: t("faults.kpi.active"),
+      value: String(activeFaults.length)
+    },
+    {
+      key: "today",
+      tone: "ok",
+      icon: CheckCircle2,
+      label: t("faults.kpi.resolvedToday"),
+      value: String(backendStats?.resolved_today_count ?? 0)
+    },
+    {
+      key: "avg",
+      tone: "info",
+      icon: Clock,
+      label: t("faults.kpi.avgResolution"),
+      value: avgText
+    },
+    {
+      key: "history",
+      tone: "muted",
+      icon: FileText,
+      label: t("faults.kpi.history"),
+      value: String(historyFaults.length)
+    }
+  ] as const;
+
   return (
     <div className="faults-page">
-      {/* Sayaç şeridi */}
-      <div className="faults-stats">
-        <div className="faults-stat-chip faults-stat-chip--total">
-          <span className="faults-stat-num">{stats.total}</span>
-          <span className="faults-stat-label">{t("faults.stats.total")}</span>
-        </div>
-        <div className="faults-stat-chip faults-stat-chip--open">
-          <span className="faults-stat-num">{stats.open}</span>
-          <span className="faults-stat-label">{t("faults.stats.open")}</span>
-        </div>
-        <div className="faults-stat-chip faults-stat-chip--assigned">
-          <span className="faults-stat-num">{stats.assigned}</span>
-          <span className="faults-stat-label">{t("faults.stats.assigned")}</span>
-        </div>
-        <div className="faults-stat-chip faults-stat-chip--progress">
-          <span className="faults-stat-num">{stats.inProgress}</span>
-          <span className="faults-stat-label">{t("faults.stats.inProgress")}</span>
-        </div>
-        <div className="faults-stat-chip faults-stat-chip--resolved">
-          <span className="faults-stat-num">{stats.resolved}</span>
-          <span className="faults-stat-label">{t("faults.stats.resolved")}</span>
-        </div>
-        <div className="faults-stat-chip faults-stat-chip--closed">
-          <span className="faults-stat-num">{stats.closed}</span>
-          <span className="faults-stat-label">{t("faults.stats.closed")}</span>
-        </div>
-        {/* Ortalama Çözüm Süresi — backend istatistiği (resolved/closed
-            kayitlardan ortalama). Henuz kapatilmis kayit yoksa "—". */}
-        <div className="faults-stat-chip faults-stat-chip--avg">
-          <span className="faults-stat-num">
-            {backendStats && backendStats.avg_resolution_seconds != null
-              ? fmtDurationSeconds(backendStats.avg_resolution_seconds)
-              : "—"}
+      {/* ---- KPI seridi ---- */}
+      <div className="fx-kpis">
+        {kpis.map((k) => {
+          const Icon = k.icon;
+          return (
+            <article key={k.key} className={`fx-kpi fx-kpi--${k.tone}`}>
+              <span className="fx-kpi-icon">
+                <Icon size={19} strokeWidth={2.1} />
+              </span>
+              <span className="fx-kpi-body">
+                <span className="fx-kpi-label">{k.label}</span>
+                <strong className="fx-kpi-value">{k.value}</strong>
+              </span>
+            </article>
+          );
+        })}
+        <div className="fx-kpi-updated" title={t("faults.kpi.updatedHint")}>
+          <RefreshCw size={14} strokeWidth={2.1} className={loading ? "fx-spin" : undefined} />
+          <span>
+            <small>{t("faults.kpi.lastUpdate")}</small>
+            <strong>{new Date(now).toLocaleTimeString(localeTag)}</strong>
           </span>
-          <span className="faults-stat-label">{t("faults.stats.avgResolution")}</span>
         </div>
       </div>
 
-      {/* Filtre satırı */}
-      <div className="faults-toolbar-row">
-        <input
-          type="search"
-          placeholder={t("faults.filter.search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="faults-search"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-          className="faults-filter"
+      {/* ---- Sekmeler ---- */}
+      <div className="fx-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "active"}
+          className={`fx-tab ${tab === "active" ? "is-active" : ""}`}
+          onClick={() => setTab("active")}
         >
-          <option value="active">{t("faults.filter.active")}</option>
-          <option value="closed">{t("faults.filter.closed")}</option>
-          <option value="all">{t("faults.filter.all")}</option>
-        </select>
-        <span className="faults-toolbar-count">{t("faults.filter.count", { count: filtered.length })}</span>
+          <TriangleAlert size={16} strokeWidth={2.1} />
+          {t("faults.tab.active")}
+          <span className="fx-tab-count">{activeFaults.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "history"}
+          className={`fx-tab ${tab === "history" ? "is-active" : ""}`}
+          onClick={() => setTab("history")}
+        >
+          <FileText size={16} strokeWidth={2.1} />
+          {t("faults.tab.history")}
+          <span className="fx-tab-count">{historyFaults.length}</span>
+        </button>
       </div>
 
-      {/* Tam genişlik kart listesi */}
-      <div className="faults-cards faults-cards--full">
-        {loading && filtered.length === 0 ? (
-          <div className="faults-empty-card">
-            <span className="material-symbols-outlined">hourglass_empty</span>
+      {/* ---- Aktif sekmesi ---- */}
+      {tab === "active" ? (
+        loading && activeFaults.length === 0 ? (
+          <div className="fx-empty">
+            <RefreshCw size={40} strokeWidth={1.6} className="fx-spin" />
             <p>{t("faults.empty.loading")}</p>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="faults-empty-card">
-            <span className="material-symbols-outlined">check_circle</span>
-            <h3>{t("faults.empty.noActive")}</h3>
-            <p>
-              {search
-                ? t("faults.empty.noResultsForSearch")
-                : statusFilter === "closed"
-                ? t("faults.empty.noClosed")
-                : t("faults.empty.systemClean")}
-            </p>
+        ) : activeFaults.length === 0 ? (
+          <div className="fx-empty fx-empty--ok">
+            <CheckCircle2 size={48} strokeWidth={1.6} />
+            <h4>{t("faults.empty.noActive")}</h4>
+            <p>{t("faults.empty.systemClean")}</p>
           </div>
         ) : (
-          filtered.map((f) => {
-            const sc = STATUS_COLOR[f.status] ?? "#64748b";
-            const statusKey = `faults.status.${f.status}`;
-            const statusLabel = i18n.exists(statusKey) ? t(statusKey) : f.status;
-            return (
-              <button
+          <div className="fx-active-list">
+            {activeFaults.map((f) => (
+              <ActiveFaultCard
                 key={f.id}
-                type="button"
-                className="faults-card faults-card--rich"
-                onClick={() => setOpenFaultId(f.id)}
-                style={{ borderLeftColor: sc }}
-                title={t("faults.card.openTooltip", { at: fmtDate(f.opened_at, localeTag) })}
-              >
-                <div className="faults-card-rich-grid">
-                  {/* Sol: Bölge + Hat + Aralık */}
-                  <div className="faults-card-rich-block">
-                    <div className="faults-card-region">
-                      <span className="material-symbols-outlined">place</span>
-                      <strong>{f.region_name}</strong>
-                    </div>
-                    <div className="faults-card-line-name">
-                      <span className="material-symbols-outlined">timeline</span>
-                      <strong>{f.line_name}</strong>
-                    </div>
-                    <div className="faults-card-range-row">
-                      <span className="faults-card-range-tag">{t("faults.card.rangeTag")}</span>
-                      <strong className="faults-card-range-text">
-                        {t("faults.card.rangeText", { from: f.from_pole_seq ?? "?", to: f.to_pole_seq ?? "?" })}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {/* Orta: Cihaz akışı */}
-                  <div className="faults-card-rich-block faults-card-rich-block--devices">
-                    <div className="faults-card-dev-card faults-card-dev-card--red">
-                      <span className="faults-card-dev-card-label">
-                        {t("faults.card.lastRedLabel")}
-                      </span>
-                      <div className="faults-card-dev-card-name">
-                        <span className="faults-card-dev-card-dot" />
-                        <strong>{f.last_red_device_name ?? "—"}</strong>
-                      </div>
-                      {f.last_red_device_code ? (
-                        <span className="faults-card-dev-card-code">{f.last_red_device_code}</span>
-                      ) : null}
-                    </div>
-                    <span className="faults-card-dev-arrow material-symbols-outlined">
-                      arrow_forward
-                    </span>
-                    <div className="faults-card-dev-card faults-card-dev-card--green">
-                      <span className="faults-card-dev-card-label">
-                        {t("faults.card.firstGreenLabel")}
-                      </span>
-                      <div className="faults-card-dev-card-name">
-                        <span className="faults-card-dev-card-dot" />
-                        <strong>{f.first_green_device_name ?? t("faults.card.lineEnd")}</strong>
-                      </div>
-                      {f.first_green_device_code ? (
-                        <span className="faults-card-dev-card-code">{f.first_green_device_code}</span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Sağ: Durum + atanan + zaman (modern grid) */}
-                  <div className="faults-card-rich-block faults-card-rich-block--status">
-                    {/* Üst satır: Durum + Süre pill yan yana */}
-                    <div className="faults-card-status-row">
-                      <span
-                        className="faults-status-pill faults-status-pill--lg"
-                        style={{ background: `${sc}22`, color: sc }}
-                      >
-                        {statusLabel}
-                      </span>
-                      {(() => {
-                        const isLive =
-                          f.status !== "closed" && f.status !== "resolved";
-                        const endMs = isLive
-                          ? now
-                          : f.closed_at
-                            ? new Date(f.closed_at).getTime()
-                            : f.resolved_at
-                              ? new Date(f.resolved_at).getTime()
-                              : now;
-                        return (
-                          <div
-                            className={`faults-card-time-pill ${
-                              isLive ? "is-live" : "is-final"
-                            }`}
-                            title={isLive ? t("faults.card.durationLive") : t("faults.card.durationFinal")}
-                          >
-                            {isLive ? (
-                              <span
-                                className="faults-card-time-pulse"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <span className="material-symbols-outlined">
-                                hourglass_top
-                              </span>
-                            )}
-                            <strong>{fmtElapsed(f.opened_at, endMs)}</strong>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Alt: zaman + atanan + yorum, daha modern info chip'leri */}
-                    <div className="faults-card-info-grid">
-                      {(() => {
-                        const parts = fmtDateParts(f.opened_at, localeTag);
-                        return (
-                          <div
-                            className="faults-card-info-chip faults-card-info-chip--time"
-                            title={fmtDate(f.opened_at, localeTag)}
-                          >
-                            <span className="material-symbols-outlined">schedule</span>
-                            <div>
-                              <span className="faults-card-info-label">{t("faults.card.openedAt")}</span>
-                              <strong className="faults-card-info-datetime">
-                                <span>{parts.date}</span>
-                                <span className="faults-card-info-time">{parts.time}</span>
-                              </strong>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      <div className="faults-card-info-chip">
-                        <span className="material-symbols-outlined">person</span>
-                        <div>
-                          <span className="faults-card-info-label">{t("faults.card.assignedTo")}</span>
-                          <strong>
-                            {f.assigned_to_full_name ?? f.assigned_to_username ?? (
-                              <em className="faults-card-meta-dim">{t("faults.card.noAssignee")}</em>
-                            )}
-                          </strong>
-                        </div>
-                      </div>
-                      <div className="faults-card-info-chip">
-                        <span className="material-symbols-outlined">forum</span>
-                        <div>
-                          <span className="faults-card-info-label">{t("faults.card.comment")}</span>
-                          <strong>
-                            {f.comment_count > 0 ? t("faults.card.commentCount", { count: f.comment_count }) : "—"}
-                          </strong>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </button>
-            );
-          })
-        )}
-      </div>
+                fault={f}
+                poleSeqs={poleSeqsByLine.get(f.line_id) ?? []}
+                localeTag={localeTag}
+                now={now}
+                canAssign={canAssign}
+                onOpenDetail={() => setOpenFaultId(f.id)}
+                onAssignClick={() => setOpenFaultId(f.id)}
+                onShowOnMap={() => setOpenFaultId(f.id)}
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        <FaultHistoryTable
+          faults={historyFaults}
+          localeTag={localeTag}
+          onLoadComments={onLoadComments}
+          onAddComment={onAddComment}
+          onUpdateNote={onUpdateNote}
+        />
+      )}
 
       {openFault ? (
         <FaultDetailModal

@@ -502,6 +502,15 @@ def get_services_status(
                 default_port=8014,
             ),
         ),
+        (
+            "modbus_outbound",
+            lambda: _check_worker(
+                "Modbus Outbound",
+                env_prefix="MODBUS_OUTBOUND",
+                default_hosts=("modbus-outbound", "modbus_outbound", "e1-grid-modbus-outbound", "e1-modbus-outbound", "127.0.0.1"),
+                default_port=8017,
+            ),
+        ),
         # ---- Sonradan eklenen servisler (compose'ta var, raporda yoktu) ----
         (
             "ftp_server",
@@ -572,6 +581,7 @@ def get_services_status(
         "alarm_service",
         "notification_worker",
         "iec104_outbound",
+        "modbus_outbound",
         "ftp_server",
         "whatsapp_web_gateway",
     )
