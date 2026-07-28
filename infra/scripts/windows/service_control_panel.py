@@ -74,12 +74,22 @@ PALETTE = {
 # Aksiyon butonu turleri. ttk.Button 'vista' temasinda arka plan rengini
 # yok sayiyordu (butun butonlar ayni gri gorunuyordu); tk.Button + bu
 # renklerle Baslat/Durdur/Yeniden Baslat gorsel olarak ayrisiyor.
+#
+# Satir butonlari DOLGU DEGIL, yumusak tint + renkli yazi: 11 satir x 3 dolu
+# renkli buton ekrani cok gurultulu yapiyordu. Vurgu gereken tek yer ust
+# seritteki "Akilli Baslat" (kind="primary", dolgu).
 BUTTON_KINDS = {
-    "start":   {"bg": "#16a34a", "hover": "#15803d", "active": "#166534", "fg": "#ffffff"},
-    "stop":    {"bg": "#dc2626", "hover": "#b91c1c", "active": "#991b1b", "fg": "#ffffff"},
-    "restart": {"bg": "#0284c7", "hover": "#0369a1", "active": "#075985", "fg": "#ffffff"},
-    "neutral": {"bg": "#475569", "hover": "#334155", "active": "#1e293b", "fg": "#ffffff"},
+    "start":   {"bg": "#e8f6ee", "hover": "#d3edde", "active": "#c2e6d1", "fg": "#15803d"},
+    "stop":    {"bg": "#fdecec", "hover": "#fadada", "active": "#f6c9c9", "fg": "#b91c1c"},
+    "restart": {"bg": "#eaf1fb", "hover": "#d8e6f8", "active": "#c7daf4", "fg": "#1d4ed8"},
+    "neutral": {"bg": "#eef1f6", "hover": "#e2e8f0", "active": "#cbd5e1", "fg": "#334155"},
+    "primary": {"bg": "#15803d", "hover": "#166534", "active": "#14532d", "fg": "#ffffff"},
 }
+
+# Servis tablosu kolon duzeni — baslik seridi ve satirlar AYNI listeyi
+# kullanir, aksi halde kolonlar kayiyor.
+SERVICE_COL_LABELS = ("SERVİS", "TİP", "DURUM", "SAĞLIK", "AKSİYON")
+SERVICE_COL_WIDTHS = (210, 150, 175, 250, 300)
 
 
 @dataclass
@@ -519,7 +529,7 @@ class ServiceControlPanel:
         # Durum kutusu — eskiden ayri bir LabelFrame satiriydi, artik
         # basligin sagindaki canli bir serit.
         status_wrap = self._card(header)
-        status_wrap.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(24, 0))
+        status_wrap.pack(side=tk.RIGHT, padx=(24, 0))
         status_inner = tk.Frame(status_wrap, bg=PALETTE["card"])
         status_inner.pack(fill=tk.X, padx=12, pady=9)
         self.status_dot = tk.Label(
@@ -555,7 +565,8 @@ class ServiceControlPanel:
         actions.pack(fill=tk.X, padx=14, pady=(8, 13))
         groups = [
             ("Uygulamalar", [
-                ("Akıllı Başlat", self.smart_start_all, "start"),
+                # Panelin ana eylemi — tek dolgu renkli buton.
+                ("Akıllı Başlat", self.smart_start_all, "primary"),
                 ("Durdur", self.stop_all, "stop"),
                 ("Yeniden Başlat", self.restart_all, "restart"),
             ]),
@@ -742,13 +753,15 @@ class ServiceControlPanel:
         # --- Sabit baslik satiri (scroll etmez) ---
         head = tk.Frame(shell, bg=PALETTE["row_head"])
         head.pack(fill=tk.X)
-        headers = [("SERVİS", 210), ("TİP", 140), ("DURUM", 190), ("SAĞLIK", 230), ("AKSİYON", 300)]
-        for i, (text, width) in enumerate(headers):
+        for i, (text, width) in enumerate(zip(SERVICE_COL_LABELS, SERVICE_COL_WIDTHS)):
             tk.Label(
                 head, text=text, bg=PALETTE["row_head"], fg=PALETTE["muted"],
                 font=("Segoe UI Semibold", 8), anchor="w",
-            ).grid(row=0, column=i, sticky="w", padx=(14 if i == 0 else 8, 8), pady=9)
+            ).grid(row=0, column=i, sticky="w", padx=(16 if i == 0 else 10, 10), pady=10)
             head.grid_columnconfigure(i, minsize=width, weight=1 if i == 3 else 0)
+        tk.Frame(head, bg=PALETTE["border"], height=1).grid(
+            row=0, column=0, columnspan=len(SERVICE_COL_WIDTHS), sticky="wes"
+        )
 
         # --- Kaydirilabilir govde ---
         body = tk.Frame(shell, bg=PALETTE["card"])
@@ -780,33 +793,41 @@ class ServiceControlPanel:
         canvas.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", _on_wheel))
         canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
 
-        for i, (_text, width) in enumerate(headers):
-            table.grid_columnconfigure(i, minsize=width, weight=1 if i == 3 else 0)
-
         for idx, svc in enumerate(services):
             self._build_service_row(table, idx, svc)
 
     def _build_service_row(self, table: tk.Frame, idx: int, svc: ServiceConfig) -> None:
-        # Zebra: okunurlugu artirir, 11 satirda satir kaymasini onler.
+        """Tek servis satiri.
+
+        Satir, TAM GENISLIKTE bir kendi frame'i olarak kurulur (onceki surumde
+        hucreler dogrudan tabloya grid'leniyordu; zebra zemini yalnizca etiket
+        genisligi kadar boyaniyor, arada kesik gri bloklar olusuyordu).
+        """
         row_bg = PALETTE["card"] if idx % 2 == 0 else PALETTE["row_alt"]
-        grid_row = idx
+
+        row = tk.Frame(table, bg=row_bg)
+        row.grid(row=idx, column=0, sticky="we")
+        table.grid_columnconfigure(0, weight=1)
+        for i, width in enumerate(SERVICE_COL_WIDTHS):
+            row.grid_columnconfigure(i, minsize=width, weight=1 if i == 3 else 0)
 
         def cell(col: int, **kw) -> tk.Label:
-            lbl = tk.Label(table, bg=row_bg, anchor="w", **kw)
-            lbl.grid(row=grid_row, column=col, sticky="we",
-                     padx=(14 if col == 0 else 8, 8), pady=8)
+            lbl = tk.Label(row, bg=row_bg, anchor="w", **kw)
+            lbl.grid(row=0, column=col, sticky="w",
+                     padx=(16 if col == 0 else 10, 10), pady=9)
             return lbl
 
+        # NOT: Tk font boyutu TAM SAYI olmali (9.5 -> TclError).
         name_lbl = cell(0, text=svc.name, fg=PALETTE["text"],
-                        font=("Segoe UI Semibold", 9.5))
+                        font=("Segoe UI Semibold", 10))
         type_lbl = cell(1, text=self._friendly_service_type(svc.service_type),
                         fg=PALETTE["muted"], font=("Segoe UI", 9))
         state_lbl = cell(2, text="—", fg=PALETTE["muted"],
                          font=("Segoe UI Semibold", 9))
         health_lbl = cell(3, text="—", fg=PALETTE["muted"], font=("Segoe UI", 9))
 
-        btns = tk.Frame(table, bg=row_bg)
-        btns.grid(row=grid_row, column=4, sticky="w", padx=8, pady=6)
+        btns = tk.Frame(row, bg=row_bg)
+        btns.grid(row=0, column=4, sticky="e", padx=(10, 16), pady=6)
         start_btn = self._pill_button(btns, "Başlat", lambda s=svc: self.start_service(s), "start")
         stop_btn = self._pill_button(btns, "Durdur", lambda s=svc: self.stop_service(s), "stop")
         restart_btn = self._pill_button(
@@ -816,9 +837,10 @@ class ServiceControlPanel:
         stop_btn.pack(side=tk.LEFT, padx=(0, 6))
         restart_btn.pack(side=tk.LEFT)
 
-        # Alt ince ayirici (son satir haric)
-        sep = tk.Frame(table, bg=PALETTE["border_soft"], height=1)
-        sep.grid(row=grid_row, column=0, columnspan=5, sticky="wes")
+        # Satirlar arasi 1px ayirici — tam genislikte, ayri grid satirinda.
+        tk.Frame(table, bg=PALETTE["border_soft"], height=1).grid(
+            row=idx, column=0, sticky="wes"
+        )
 
         self.rows[svc.name] = {
             "state": state_lbl,
@@ -827,9 +849,6 @@ class ServiceControlPanel:
             "start_btn": start_btn,
             "stop_btn": stop_btn,
             "restart_btn": restart_btn,
-            "cells": [name_lbl, type_lbl, state_lbl, health_lbl],
-            "row_frame": btns,
-            "row_bg": row_bg,
         }
 
     # ------------------------------------------------------------- Kurulum ---
@@ -2061,28 +2080,28 @@ class ServiceControlPanel:
     def _format_state(state: str) -> tuple[str, str]:
         normalized = state.upper().strip()
         if normalized == "RUNNING":
-            return "● ÇALIŞIYOR", "#15803d"
+            return "● Çalışıyor", PALETTE["ok"]
         if normalized == "RUNNING_EXTERNAL":
-            return "● ÇALIŞIYOR (dış)", "#15803d"
+            return "● Çalışıyor (dış)", PALETTE["ok"]
         if normalized == "STOPPED":
-            return "● DURDU", "#b45309"
+            return "● Durdu", PALETTE["warn"]
         if normalized == "STOP_PENDING":
-            return "● DURDURULUYOR…", "#b45309"
+            return "◌ Durduruluyor…", PALETTE["warn"]
         if normalized in {"START_PENDING", "CONTINUE_PENDING"}:
-            return "● BAŞLATILIYOR…", "#1d4ed8"
+            return "◌ Başlatılıyor…", PALETTE["info"]
         if normalized in {"PAUSED", "PAUSE_PENDING"}:
-            return "● DURAKLATILDI", "#7c3aed"
+            return "◍ Duraklatıldı", "#7c3aed"
         if normalized == "NOT_FOUND":
-            return "● SERVİS BULUNAMADI", "#dc2626"
-        return f"● {normalized}", "#475569"
+            return "○ Servis bulunamadı", PALETTE["bad"]
+        return f"● {normalized.title()}", PALETTE["muted"]
 
     @staticmethod
     def _format_health(health: str, host: str, port: int) -> tuple[str, str]:
         if health == "UP":
-            return f"● ERİŞİLEBİLİR ({host}:{port})", "#15803d"
+            return f"● Erişilebilir · {host}:{port}", PALETTE["ok"]
         if port <= 0:
-            return "● (kontrol yok)", "#64748b"
-        return f"● ERİŞİLEMİYOR ({host}:{port})", "#dc2626"
+            return "○ kontrol yok", PALETTE["muted"]
+        return f"● Erişilemiyor · {host}:{port}", PALETTE["bad"]
 
     @staticmethod
     def _friendly_service_type(service_type: str) -> str:
