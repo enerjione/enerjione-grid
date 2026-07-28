@@ -128,6 +128,29 @@
       "health_port": 8014
     },
     {
+      "name": "Modbus Outbound",
+      "type": "process",
+      "working_dir": "apps/modbus-outbound",
+      "command": [
+        "py",
+        "-3.11",
+        "-m",
+        "modbus_outbound"
+      ],
+      "env": {
+        "NATS_URL": "nats://localhost:4222",
+        "NATS_SUBJECT_TELEMETRY_NORMALIZED": "e1.telemetry.normalized.>",
+        "BACKEND_API_BASE": "http://127.0.0.1:8000/api/v1",
+        "INTERNAL_SERVICE_TOKEN": "change-me-internal-token",
+        "WORKER_HEALTH_HOST": "127.0.0.1",
+        "WORKER_HEALTH_PORT": "8017",
+        "MODBUS_DEFAULT_LISTEN_HOST": "0.0.0.0",
+        "MODBUS_CATALOG_REFRESH_SEC": "30"
+      },
+      "health_host": "127.0.0.1",
+      "health_port": 8017
+    },
+    {
       "name": "WhatsApp Web Gateway",
       "type": "process",
       "working_dir": "apps/whatsapp-web-gateway",

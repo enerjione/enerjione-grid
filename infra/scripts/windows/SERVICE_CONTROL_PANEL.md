@@ -5,13 +5,28 @@ Bu panel; altyapı servisleri + Python microservice'leri + gateway instance'lar�
 
 ## Yönetilen Servisler
 
-- PostgreSQL (Windows service)
-- RabbitMQ (Windows service)
-- Backend API (FastAPI process)
-- Tag Engine Service (process)
-- Alarm Service (process)
-- Notification Service (process)
-- Frontend Web (Vite dev server)
+Liste `.py` içine gömülü değildir; `service_control_panel.config.json`'dan
+okunur. Yeni bir servis eklemek için tek yapılması gereken config'e bir kayıt
+girmektir (kurulum sekmesindeki `pip install` adımı da otomatik türetilir).
+
+| Servis | Tip | Health portu |
+|---|---|---|
+| PostgreSQL | Windows service | 5432 |
+| RabbitMQ | process / Windows service | 5672 |
+| NATS JetStream | process | 4222 |
+| Backend API | FastAPI process | 8000 |
+| Tag Engine Service | process | 8011 |
+| Alarm Service | process | 8012 |
+| Notification Service | process | 8013 |
+| IEC104 Outbound | process | 8014 |
+| **Modbus Outbound** | process | **8017** |
+| WhatsApp Web Gateway | Node process | 8016 |
+| Frontend Web | Vite dev server | 5173 |
+
+> Modbus Outbound salt-okunur bir Modbus TCP sunucusudur; dinlediği veri
+> portları (502/5020/5021) backend'deki outbound hedef kaydından gelir.
+> Panelin izlediği 8017 ise servisin kendi `/health` portudur.
+> Detay: [docs/MODBUS.md](../../../docs/MODBUS.md)
 
 Gateway'ler ayrı **Gateway Yönetimi** sekmesinde tutulur ve **backend'deki
 kayıtlardan** otomatik listelenir. Gateway'in lokalde ya da farklı sunucuda

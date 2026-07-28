@@ -118,9 +118,6 @@ function DeviceTreeRow({
       {/* Seri no satirda YAZMAZ — dar sidebar'da gurultu yapiyordu; tam
           kunye (ad, kod, konum) tooltip'te. */}
       <span className="device-tree-row-name">{device.name}</span>
-      {!isOnline ? (
-        <WifiOff size={12} strokeWidth={2.4} className="device-tree-row-comm" />
-      ) : null}
       {alarmState ? (
         <TriangleAlert size={13} strokeWidth={2.4} className="device-tree-row-alarm" />
       ) : null}

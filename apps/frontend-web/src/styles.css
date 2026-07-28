@@ -18978,7 +18978,9 @@ th.event-col-category {
   left: 4px;
   width: 2px;
   border-radius: 1px;
-  background: #e2e8f0;
+  /* Saglikli hat = yesil eksen. Arizali segmentler .device-tl-span.is-fault
+     ::before ile bu cizginin uzerine kirmizi yanip-sonen bar bindirir. */
+  background: #16a34a;
 }
 
 /* Direk dugumu — eksen uzerinde halka + etiket. */
@@ -19177,7 +19179,6 @@ th.event-col-category {
 }
 .device-tree-row.selected {
   background: #eef2ff;
-  border-left-color: #6366f1;
   color: #1e1b4b;
 }
 
