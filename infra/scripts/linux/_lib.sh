@@ -51,12 +51,12 @@ e1_banner() {
   printf '  %s██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██   ██║██║%s%s██║   ██║██║╚██╗██║██╔══╝  %s\n' "$w" "$r" "$o" "$r"
   printf '  %s███████╗██║ ╚████║███████╗██║  ██║╚█████╔╝██║%s%s╚██████╔╝██║ ╚████║███████╗%s\n' "$w" "$r" "$o" "$r"
   printf '  %s╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚════╝ ╚═╝%s%s ╚═════╝ ╚═╝  ╚═══╝╚══════╝%s\n' "$w" "$r" "$o" "$r"
-  printf '  %s                       ██████╗ ██████╗ ██╗██████╗ %s\n' "$o" "$r"
-  printf '  %s                      ██╔════╝ ██╔══██╗██║██╔══██╗%s\n' "$o" "$r"
-  printf '  %s                      ██║  ███╗██████╔╝██║██║  ██║%s\n' "$o" "$r"
-  printf '  %s                      ██║   ██║██╔══██╗██║██║  ██║%s\n' "$o" "$r"
-  printf '  %s                      ╚██████╔╝██║  ██║██║██████╔╝%s\n' "$o" "$r"
-  printf '  %s                       ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝ %s\n' "$o" "$r"
+  printf '  %s                       ██████╗ ██████╗ ██╗██████╗ %s\n' "$w" "$r"
+  printf '  %s                      ██╔════╝ ██╔══██╗██║██╔══██╗%s\n' "$w" "$r"
+  printf '  %s                      ██║  ███╗██████╔╝██║██║  ██║%s\n' "$w" "$r"
+  printf '  %s                      ██║   ██║██╔══██╗██║██║  ██║%s\n' "$w" "$r"
+  printf '  %s                      ╚██████╔╝██║  ██║██║██████╔╝%s\n' "$w" "$r"
+  printf '  %s                       ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝ %s\n' "$w" "$r"
   printf '%s             Industrial Grid Monitoring Platform%s\n' "${E1_DIM}" "${E1_RESET}"
 }
 
@@ -65,10 +65,11 @@ e1_banner() {
 # repo klonlandiktan SONRA doldurur (oncesinde bilinmiyor).
 E1_VERSION_LABEL="${E1_VERSION_LABEL:-}"
 e1_brand() {
+  # ENERJI beyaz · ONE turuncu · GRID beyaz
   printf '%s%sENERJI%s%s%sONE%s %s%sGRID%s' \
     "${E1_WHITE}" "${E1_BOLD}" "${E1_RESET}" \
     "${E1_ORANGE}" "${E1_BOLD}" "${E1_RESET}" \
-    "${E1_ORANGE}" "${E1_BOLD}" "${E1_RESET}"
+    "${E1_WHITE}" "${E1_BOLD}" "${E1_RESET}"
   if [[ -n "$E1_VERSION_LABEL" ]]; then
     printf '%s  v%s%s' "${E1_DIM}" "$E1_VERSION_LABEL" "${E1_RESET}"
   fi
@@ -182,29 +183,43 @@ e1_hint() { printf '  %s  %s%s\n' "${E1_DIM}" "$*" "${E1_RESET}"; }
 # durumunda son satirlari gosterir.
 #
 #   e1_run "Kaynak kod indiriliyor" git clone --branch x URL DIR
+E1_BAR_WIDTH=26
+
 e1_run() {
   local label="$1"; shift
-  local logf rc=0 secs=0 pid
+  local logf rc=0 secs=0 pid pos=0 dir=1 i bar
+
   logf="$(mktemp)"
 
-  "$@" >"$logf" 2>&1 &
+  # `< /dev/null` KRITIK: `curl ... | sudo bash` kullaniminda script'in
+  # kendisi stdin'den (boru hattindan) okunur. Arka plan komutu ayni stdin'i
+  # devralirsa script metnini yiyebilir veya okumaya calisip kilitlenebilir.
+  "$@" >"$logf" 2>&1 </dev/null &
   pid=$!
 
-  printf '  %s·%s %s… ' "${E1_CYAN}" "${E1_RESET}" "$label"
-  # 1 sn'lik tik: gecen sure gercek suredir. 3 sn'lik tikte 4 sn suren bir
-  # komut "6 sn" gorunuyordu.
+  # Yuzde bilinemez (apt/git ilerleme yuzdesi vermiyor), bu yuzden gidip
+  # gelen belirsiz ilerleme cubugu: kullanici "calisiyor" oldugunu gorur.
   while kill -0 "$pid" 2>/dev/null; do
+    if [[ -t 1 ]]; then
+      bar=""
+      for ((i = 0; i < E1_BAR_WIDTH; i++)); do
+        if ((i >= pos && i < pos + 5)); then bar+="█"; else bar+="░"; fi
+      done
+      printf '\r  %s%s%s  %s[%s]%s  %s%s%s  ' \
+        "${E1_CYAN}" "$label" "${E1_RESET}" \
+        "${E1_ORANGE}" "$bar" "${E1_RESET}" \
+        "${E1_DIM}" "$(e1_fmt_duration $secs)" "${E1_RESET}"
+      pos=$((pos + dir))
+      # `((...)) && x` kalibi yerine if: kosul yanlis oldugunda satir 1
+      # donuyor ve `set -e` + ERR trap altinda gereksiz risk olusturuyor.
+      if ((pos <= 0)); then dir=1; fi
+      if ((pos >= E1_BAR_WIDTH - 5)); then dir=-1; fi
+    fi
     sleep 1
     secs=$((secs + 1))
-    # \r ile ayni satiri tazeleriz; log dosyasina yonlendirilmis calistirmada
-    # (tty yok) bu satir sadece bir kez yazilir, kirlilik olusturmaz.
-    if [[ -t 1 ]]; then
-      printf '\r  %s·%s %s… %s%s%s ' \
-        "${E1_CYAN}" "${E1_RESET}" "$label" "${E1_DIM}" "$(e1_fmt_duration $secs)" "${E1_RESET}"
-    fi
   done
   wait "$pid" || rc=$?
-  [[ -t 1 ]] && printf '\r%*s\r' 78 ''
+  [[ -t 1 ]] && printf '\r%*s\r' $((E1_WIDTH + 24)) ''
 
   if ((rc != 0)); then
     e1_err "${label}: BASARISIZ (cikis kodu ${rc})"
