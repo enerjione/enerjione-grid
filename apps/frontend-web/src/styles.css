@@ -31497,6 +31497,38 @@ th.event-col-category {
 /* --- Form karti ---
    flex:1 ile kalan dikey alani doldurur; eskiden icerik bitince sayfanin
    alt yarisi bos beyaz kaliyordu. */
+/* Ag ayarlari: kablolu (sol) + WiFi (sag) yan yana.
+   `minmax(0, 1fr)`: grid ogesinin varsayilan `min-width: auto`'su uzun SSID
+   veya IP metinlerinde sutunu tasirirdi. Iki kart da .net-card oldugu icin
+   `min-height: 0` + `overflow-y: auto` tasiyor; her biri KENDI icinde kayar,
+   sayfa kaymaz. */
+.net-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Dar ekranda yan yana sigmaz; alt alta duser ve dogal yuksekligini alir
+   (sabit yukseklikte iki kart mobilde kullanilamaz hale geliyordu).
+   Kartlar artik kendi icinde kaymadigi icin kaydirma SAYFAYA gecer —
+   .net-page'in overflow:hidden'i burada icerigi kirpardi. */
+@media (max-width: 1180px) {
+  .net-page {
+    overflow-y: auto;
+  }
+  .net-columns {
+    grid-template-columns: minmax(0, 1fr);
+    flex: 0 0 auto;
+    min-height: auto;
+  }
+  .net-columns > .net-card {
+    flex: 0 0 auto;
+    overflow-y: visible;
+  }
+}
+
 .net-card {
   background: #fff;
   border: 1px solid #e2e8f0;

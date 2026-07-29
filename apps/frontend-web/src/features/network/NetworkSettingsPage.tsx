@@ -426,8 +426,12 @@ export function NetworkSettingsPage({ accessToken }: Props) {
         </p>
       ) : null}
 
-      {/* ---- Ayar formu ---- */}
-      <section className="net-card">
+      {/* ---- Iki sutun: solda kablolu yapilandirma, sagda WiFi ----
+           Ikisi de ayni seyin (cihazin aga baglanmasi) alternatifi; alt alta
+           dizildiginde WiFi listesi katlanma altinda kaliyordu. Dar ekranda
+           tek sutuna duser (bkz. .net-columns). */}
+      <div className="net-columns">
+        <section className="net-card">
         <header className="net-card-head">
           {/* Aciklama metni kaldirildi — "cihazin IP'sini degistirir,
               yeniden baslar" uyarisi zaten kaydet oncesi onay modalinda
@@ -570,15 +574,16 @@ export function NetworkSettingsPage({ accessToken }: Props) {
             </div>
           </div>
         )}
-      </section>
+        </section>
 
-      {/* ---- WiFi (client) bolumu ----
-           Cihazi mevcut bir aga baglar. AP buradan DEGISTIRILMEZ. */}
-      <WifiPanel
-        accessToken={accessToken}
-        wifi={status?.wifi}
-        onRefreshStatus={() => void load()}
-      />
+        {/* ---- WiFi (client) bolumu ----
+             Cihazi mevcut bir aga baglar. AP buradan DEGISTIRILMEZ. */}
+        <WifiPanel
+          accessToken={accessToken}
+          wifi={status?.wifi}
+          onRefreshStatus={() => void load()}
+        />
+      </div>
 
       {/* ---- Onay modali ---- */}
       {confirmOpen ? (

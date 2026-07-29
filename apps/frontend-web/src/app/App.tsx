@@ -430,19 +430,19 @@ export function App() {
         } catch {
           setEvents([]);
         }
+        // NOT: lisans durumu burada YUKLENMEZ — kendi efektinde yuklenir.
+        // Bu dizideki herhangi bir istek patlayinca ardindaki her sey atlanir;
+        // lisans durumu buraya bagli oldugunda `null` kalip lisans kilidini
+        // sessizce devre disi birakiyordu.
         if (session.role === "engineer" || session.role === "installer") {
-          const allUsers = await fetchUsers(session.accessToken);
-          setUsers(allUsers);
-          // Lisans servisi gecici olarak erisilemezse session'i gecersiz sayma.
-          // Status null kalir ve cihaz ekleme fail-closed disabled olur.
           try {
-            setLicenseStatus(await fetchLicenseStatus(session.accessToken));
+            setUsers(await fetchUsers(session.accessToken));
           } catch {
-            setLicenseStatus(null);
+            // Kullanici listesi alinamazsa acilisin GERISI devam etmeli.
+            setUsers([]);
           }
         } else {
           setUsers([]);
-          setLicenseStatus(null);
         }
         if (session.role === "installer") {
           const outboundRows = await fetchOutboundTargets(session.accessToken);
@@ -493,6 +493,54 @@ export function App() {
       }
     };
     void load();
+  }, [session]);
+
+  // ---- Lisans durumu: BAGIMSIZ yukleme -----------------------------------
+  // Kendi efektinde duruyor cunku lisans kilidi (bkz. `licenseGateActive`)
+  // buna bagli: buyuk acilis dizisinin icinde oldugunda, ondan onceki
+  // herhangi bir istegin patlamasi lisans durumunu `null` birakiyor ve kilit
+  // sessizce ACILMIYORDU. Artik hicbir sey bu istegi engelleyemez.
+  //
+  // Gecici ag hatasinda birkac kez tekrar denenir: tek seferlik bir "Failed
+  // to fetch" yuzunden lisansi olmayan bir sistem kilitsiz kalmamali.
+  useEffect(() => {
+    if (!session) return;
+    if (session.role !== "engineer" && session.role !== "installer") {
+      // Diger roller /license/status okuyamaz; durum bilinmiyor olarak kalir.
+      setLicenseStatus(null);
+      return;
+    }
+    let cancelled = false;
+    const token = session.accessToken;
+    const load = async () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (cancelled) return;
+        try {
+          const status = await fetchLicenseStatus(token);
+          if (!cancelled) setLicenseStatus(status);
+          return;
+        } catch (error) {
+          if (attempt === 2) {
+            // Ucunde de basarisiz: durum BILINMIYOR. Kilitlemiyoruz —
+            // gecici bir arizanin kullaniciyi sistemden atmasi kabul edilemez.
+            // Ama sessiz de kalmiyoruz: lisansi olmayan bir sistemin kilitsiz
+            // acilmasinin TEK sebebi budur, sahada bunu gorebilmek gerekiyor.
+            console.warn(
+              "[lisans] /license/status okunamadi (3 deneme) — lisans kilidi " +
+                "devre disi kalir. Sebep:",
+              error
+            );
+            if (!cancelled) setLicenseStatus(null);
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   // Rol bazli sekme gorunurlugu artik useTabs icinde (visibleTabs / canAccessRoute
