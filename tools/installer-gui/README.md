@@ -68,6 +68,26 @@ birinci butonu kullanın — aynı işi yapar, SSH'a girmenize gerek kalmaz.
 4. Kurulum dosyası anahtarları `/etc/enerjione-grid/install.env`'e yazar,
    `install.sh`'i özel depodan çeker ve kurulumu yürütür
 
+## İnternet yoksa
+
+Cihaz ethernet ile bilgisayarınıza bağlıyken **internetsiz** olabilir — o
+bağlantı yalnızca sizinle cihaz arasındadır. Kurulum GitHub'dan indirdiği
+için internet zorunludur.
+
+**Bağlantıyı Test Et** çıktısında `Internet: YOK` görürseniz:
+
+1. **Cihazdaki ağları tara** butonuna basın — cihazın gördüğü ağlar listelenir
+   (sizin bilgisayarınızın gördükleri değil; farklı anten, farklı konum)
+2. WiFi ağı ve parolasını girin
+3. Kurulumu başlatın — bağlantı kurulumdan **önce** yapılır
+
+Cihazda NetworkManager (`nmcli`) yoksa otomatik ayarlama çalışmaz; kurulum
+bunu açıkça söyler ve `apt-get install network-manager` komutunu verir.
+
+Kurulum ayrıca WiFi bağlandıktan sonra **gerçekten internete çıkılabildiğini**
+doğrular — misafir ağlarında sık görülen "bağlandı ama portal istiyor"
+durumunu yakalar.
+
 ## Güvenlik
 
 - **Anahtarlar diske yazılmaz.** Profil kaydı yalnızca IP, kullanıcı, müşteri

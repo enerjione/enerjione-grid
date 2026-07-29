@@ -124,6 +124,9 @@ E1_SITE='{site}'
 E1_REF='{ref}'
 BOOTSTRAP_REF='{bootstrap}'
 E1_APPLIANCE='{appliance}'
+# Internet yoksa bu ag ile baglanilir (bos = deneme yapilmaz).
+E1_WIFI_SSID='{wifi_ssid}'
+E1_WIFI_PASSWORD='{wifi_pass}'
 
 if [[ $EUID -ne 0 ]]; then echo "root ile calistirilmali" >&2; exit 1; fi
 
@@ -146,6 +149,63 @@ command -v curl >/dev/null 2>&1 || {{
   DEBIAN_FRONTEND=noninteractive apt-get update -q
   DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl ca-certificates
 }}
+
+# 2b) INTERNET — kurulumun tamami buna bagli
+# Cihaz ethernet ile kurulumcunun dizustune bagli olabilir ve o baglantida
+# INTERNET OLMAYABILIR. Bu durumda `git clone` ve imaj indirme oluyor; hata
+# da "depo bulunamadi" gibi yaniltici bir yerde cikiyor. Once burada tespit
+# edip, WiFi bilgisi verildiyse cihazi agi baglayip devam ediyoruz.
+_internet_var() {{
+  curl -fsS --max-time 8 -o /dev/null https://api.github.com 2>/dev/null
+}}
+
+if _internet_var; then
+  echo "  Internet erisimi: VAR"
+else
+  echo "  Internet erisimi: YOK"
+  if [[ -n "$E1_WIFI_SSID" ]]; then
+    echo "  WiFi agina baglaniliyor: ${{E1_WIFI_SSID}}"
+    if ! command -v nmcli >/dev/null 2>&1; then
+      echo "HATA: nmcli (NetworkManager) yok; WiFi otomatik ayarlanamiyor." >&2
+      echo "      Cihaza elle internet verin veya NetworkManager kurun:" >&2
+      echo "        sudo apt-get install -y network-manager" >&2
+      exit 1
+    fi
+    # Radyo kapali olabilir (rfkill / nmcli radio off).
+    nmcli radio wifi on >/dev/null 2>&1 || true
+    # Tarama listesini tazele; nmcli bazen onbellekten eski liste doner ve
+    # "ag bulunamadi" der.
+    nmcli device wifi rescan >/dev/null 2>&1 || true
+    sleep 3
+    if nmcli device wifi connect "$E1_WIFI_SSID" \
+         ${{E1_WIFI_PASSWORD:+password "$E1_WIFI_PASSWORD"}} >/dev/null 2>&1; then
+      echo "  WiFi baglantisi kuruldu."
+    else
+      echo "HATA: WiFi agina baglanilamadi ($E1_WIFI_SSID)." >&2
+      echo "      Ag adi ve parolayi kontrol edin. Gorunen aglar:" >&2
+      nmcli -t -f SSID,SIGNAL device wifi list 2>/dev/null | head -10 | sed 's/^/        /' >&2
+      exit 1
+    fi
+    # DHCP + DNS oturana kadar biraz bekle, sonra tekrar dogrula.
+    for _ in 1 2 3 4 5 6; do
+      _internet_var && break
+      sleep 3
+    done
+    if _internet_var; then
+      echo "  Internet erisimi: VAR (WiFi uzerinden)"
+    else
+      echo "HATA: WiFi baglandi ama internete cikilamiyor." >&2
+      echo "      Ag parolali bir portal isteyebilir veya DNS engelli olabilir." >&2
+      exit 1
+    fi
+  else
+    echo "HATA: Cihazda internet yok ve WiFi bilgisi verilmedi." >&2
+    echo "      Kurulum GitHub'dan indirme yapacagi icin internet ZORUNLU." >&2
+    echo "      Kurulum aracindan WiFi ag adi/parolasi girin veya cihaza" >&2
+    echo "      kablolu internet verin." >&2
+    exit 1
+  fi
+fi
 
 # 3) install.sh'i private depodan cek
 TMP="$(mktemp)"
@@ -307,6 +367,7 @@ class InstallWorker(threading.Thread):
         action = self.cfg.get("action", "install")
         label = {"install": "Kurulum", "update": "Guncelleme",
                  "uninstall": "Kaldirma", "appliance": "Mini PC katmani",
+                 "wifi_scan": "WiFi taramasi",
                  "tailscale": "VPN kurulumu"}.get(action, "Islem")
         try:
             self._connect()
@@ -342,6 +403,15 @@ class InstallWorker(threading.Thread):
                 rc = self._remote_only(
                     f"sudo -S -p '' bash {APP_DIR}/infra/appliance/setup-appliance.sh",
                     "Mini PC katmani kuruluyor...")
+            elif action == "wifi_scan":
+                # `nmcli device wifi list` — sinyal gucune gore sirali.
+                # rescan onbellekten eski liste donmesini onler.
+                rc = self._remote_only(
+                    "sudo -S -p '' sh -c '"
+                    "nmcli radio wifi on >/dev/null 2>&1; "
+                    "nmcli device wifi rescan >/dev/null 2>&1; sleep 3; "
+                    "nmcli -f SSID,SIGNAL,SECURITY device wifi list'",
+                    "WiFi aglari taraniyor...")
             elif action == "tailscale":
                 # Anahtar /etc/enerjione-grid/install.env'de; script onu
                 # kendisi okuyor. Anahtar yoksa hicbir sey yapmadan 0 doner.
@@ -413,6 +483,8 @@ class InstallWorker(threading.Thread):
             ref=self.cfg.get("ref", ""),
             bootstrap=self.cfg.get("bootstrap") or "main",
             appliance=self.cfg.get("appliance", "auto"),
+            wifi_ssid=self.cfg.get("wifi_ssid", ""),
+            wifi_pass=self.cfg.get("wifi_pass", ""),
             customer=self.cfg.get("customer", ""),
             site=self.cfg.get("site", ""),
         )
@@ -624,6 +696,15 @@ class InstallerApp(tk.Tk):
         row(s, 0, "GitHub anahtari *", "ghcr_token", show="•")
         row(s, 1, "Tailscale anahtari", "ts_key", show="•")
 
+        # --- Internet / WiFi ---
+        # Cihaz ethernet ile dizustune bagliyken INTERNETSIZ olabilir; kurulum
+        # GitHub'dan indirdigi icin internet zorunlu. Bilgi verilirse kurulum
+        # once WiFi'a baglaniyor.
+        s = section("Internet (gerekirse)")
+        row(s, 0, "WiFi agi", "wifi_ssid")
+        row(s, 1, "WiFi parolasi", "wifi_pass", show="•")
+        ttk.Button(s, text="Cihazdaki aglari tara", command=self._wifi_scan)             .grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
         # --- Saha kimligi (ZORUNLU) ---
         # Cihazin uzaktan bakim listesinde hangi ad ile gorunecegini bu
         # belirliyor. Bos gecilirse tailnet'te "e1-grid-1", "e1-grid-2" diye
@@ -721,6 +802,19 @@ class InstallerApp(tk.Tk):
         p = filedialog.askopenfilename(title="SSH ozel anahtari secin")
         if p:
             self.vars["key_path"].set(p)
+
+    def _wifi_scan(self) -> None:
+        """Cihazdaki WiFi arayuzunden gorunen aglari listele.
+
+        Tarama CIHAZDA yapilmali — kurulumcunun dizustunun gordugu aglar
+        cihazin gordukleriyle ayni degil (farkli anten, farkli konum).
+        """
+        cfg = self._collect()
+        if not cfg:
+            return
+        cfg["action"] = "wifi_scan"
+        self.term.write("\n-- WiFi aglari taraniyor --\n")
+        self._run_worker(cfg, test_only=False)
 
     def _refresh_versions(self) -> None:
         """Yayin listesini GitHub'dan tazele. Anahtar gerekir (depo private)."""
@@ -964,6 +1058,11 @@ class _TestWorker(InstallWorker):
                 ("Docker", "docker --version 2>/dev/null || echo 'kurulu degil (kurulum kuracak)'"),
                 ("sudo", "sudo -n true 2>/dev/null && echo 'parolasiz' || echo 'parola gerekli'"),
                 ("Kurulu surum", "cat /opt/enerjione-grid/VERSION 2>/dev/null || echo 'yok (ilk kurulum)'"),
+                # Kurulumun TAMAMI internete bagli; en sik takilma noktasi bu.
+                ("Internet", "curl -fsS --max-time 8 -o /dev/null https://api.github.com "
+                             "&& echo 'VAR' || echo 'YOK — WiFi bilgisi girin'"),
+                ("WiFi arayuzu", "nmcli -t -f DEVICE,TYPE device 2>/dev/null | "
+                                 "awk -F: '$2==\"wifi\"{print $1}' | head -1 || echo 'yok'"),
             ):
                 _, out, _ = self.client.exec_command(cmd, timeout=10)
                 val = out.read().decode("utf-8", errors="replace").strip() or "?"
