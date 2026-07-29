@@ -17,7 +17,7 @@ olarak ertelendi.
 | 3 | Alarm reconcile'da N+1 | ✅ Düzeltildi |
 | 4 | Kod bölme yok — 2.1 MB tek JS | ✅ 2.1 MB → 739 KB |
 
-Ayrıca **bellek limitleri saha donanımıyla uyumsuz** (aşağıda).
+Ayrıca Postgres varsayılan ayarlarla koşuyordu — düzeltildi (madde 5).
 
 ### Ölçülen sonuç
 
@@ -142,22 +142,37 @@ yapar; ilk yükleme muhtemelen yarıya iner.
 
 ---
 
-## 5. 🟡 Bellek limitleri saha donanımıyla uyumsuz
+## 5. ✅ Bellek — Postgres varsayılanlarla çalışıyordu
+
+Saha donanımı **en az 16 GB** olarak netleşti; tavan toplamı (13 GB) sorun
+değil — `limits` tavandır, boş belleği tutmaz. Gerçek rezervasyon 3 GB.
+
+Asıl bulgu bu değildi: **Postgres tamamen varsayılan ayarlarla koşuyordu.**
 
 ```
-heavy  4 × 2 GB   = 8 GB    (postgres, rabbitmq, nats, backend-api)
-worker 8 × 512 MB = 4 GB
-                    ─────
-toplam limit        12 GB
+shared_buffers   128 MB      ← 21M satırlık telemetri için çok düşük
+work_mem           4 MB      ← pencere/sıralama DİSKE taşıyor
 ```
 
-Limit tavandır, hepsi aynı anda dolmaz — ama **4 GB RAM'li bir mini PC'de**
-Postgres tek başına 2 GB'a kadar şişebilir ve OOM killer devreye girer.
+`work_mem=4MB`, madde 1'de "sıralama `work_mem`'e sığmazsa diske taşıyor"
+dediğim durumun **doğrudan sebebiydi**. Sorgu düzeltildi ama ayar da
+düzeltilmeliydi.
 
-**Yapılacak:** Saha donanımının gerçek RAM'ini netleştirin. 8 GB altındaysa
-`x-heavy-resources` limitlerini düşürün (Postgres 1 GB, backend 768 MB gibi)
-ve `shared_buffers`'ı buna göre ayarlayın. Kurulum aracının "Bağlantıyı Test
-Et" adımı RAM'i zaten gösteriyor — 4 GB altında uyarı verilmeli.
+**Uygulandı:** Postgres'e kendi kaynak bloğu (3 GB tavan) ve ayarlar:
+
+| Ayar | Değer | Neden |
+|---|---|---|
+| `shared_buffers` | 768 MB | Tavanın ~%25'i (PostgreSQL önerisi) |
+| `work_mem` | 16 MB | × en fazla 50 bağlantı = 800 MB en kötü durum |
+| `maintenance_work_mem` | 256 MB | VACUUM / index oluşturma |
+| `effective_cache_size` | 2 GB | **Planlayıcı ipucu** — bellek ayırmaz |
+| `max_wal_size` | 2 GB | Checkpoint'leri seyrelt (yazma yoğun) |
+| `checkpoint_completion_target` | 0.9 | I/O tepe noktalarını yay |
+
+768 + 800 + 256 ≈ 1.8 GB < 3 GB tavan.
+
+> RAM 8 GB'ın altına inerse bu değerler **ve** container tavanı düşürülmeli.
+> Kurulum aracının "Bağlantıyı Test Et" adımı RAM'i zaten gösteriyor.
 
 ---
 
@@ -184,13 +199,12 @@ Denetimde doğruladığım, doğru kurulmuş kısımlar:
 **Yapıldı** (`700b1e7`): temizleme sorgusu, alarm reconcile, kod bölme.
 
 **Sırada:**
-1. Saha RAM'ini netleştir, bellek limitlerini hizala
-2. Temizleme sorgusunu gerçek veriyle `EXPLAIN ANALYZE` ile doğrula —
+1. Temizleme sorgusunu gerçek veriyle `EXPLAIN ANALYZE` ile doğrula —
    statik analiz "index artık kullanılabilir" diyor, ölçüm bunu teyit etmeli
-3. Lucide geçişini tamamla → ikon fontu tamamen kalkar (3.7 MB)
+2. Lucide geçişini tamamla → ikon fontu tamamen kalkar (3.7 MB)
 
 **Yük altında ölçüldükten sonra:**
-4. `signals.py:204` hydration maliyeti (~105 K satır)
+3. `signals.py:204` hydration maliyeti (~105 K satır)
 
 ---
 

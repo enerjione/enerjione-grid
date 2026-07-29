@@ -54,6 +54,22 @@ x-heavy-resources: &heavy-resources
       reservations:
         memory: 512M
 
+# Postgres'e ayri ve daha genis bir tavan: telemetri yukunun tamami buradan
+# geciyor ve shared_buffers + work_mem + maintenance_work_mem toplami 2G'ye
+# sikisik kaliyordu (bkz. postgres servisindeki hesap).
+#
+# NOT: 'limits' TAVAN, rezervasyon degil. Bos duran bellegi tutmaz. Saha
+# donanimi 16 GB; tum servislerin tavan toplami ~13 GB, gercek rezervasyon
+# 3 GB. RAM 8 GB'in altina inerse burasi ve postgres ayarlari dusurulmeli.
+x-postgres-resources: &postgres-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "2.0"
+        memory: 3G
+      reservations:
+        memory: 768M
+
 # Container hardening — stateless worker'lar icin defense-in-depth.
 # `no-new-privileges`: setuid binary'leri ile yetki yukseltme blok.
 # `cap_drop: ALL`: Linux capability'leri (CAP_NET_BIND, CAP_SYS_ADMIN, ...) sifirla.
@@ -82,7 +98,42 @@ services:
     # init edilirken otomatik yazar; mevcut (postgres:16'dan devralinan) dolu
     # volume'de bu ayar yok, o yuzden burada explicit veriyoruz. Aksi halde
     # `CREATE EXTENSION timescaledb` "could not access file" ile basarisiz olur.
-    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+    #
+    # Bellek ayarlari — saha donanimi en az 16 GB RAM, container tavani 3 GB.
+    # Varsayilanlarla (shared_buffers=128MB, work_mem=4MB) calisiliyordu; bu
+    # telemetri yuku icin cok dusuk: 21M satirlik tabloda pencere/sort
+    # islemleri 4 MB'a sigmayip DISKE tasiyordu.
+    #
+    # Hesap (3 GB tavan icin):
+    #   shared_buffers      768M  ~ tavanin %25'i (PostgreSQL onerisi)
+    #   work_mem             16M  x en fazla 50 baglanti (pool 30+20) = 800M
+    #                             en kotu durumda; hepsi ayni anda siralamaz
+    #   maintenance_work_mem 256M  VACUUM / index olusturma
+    #   effective_cache_size  2G   PLANLAYICI IPUCU — bellek AYIRMAZ, sadece
+    #                              "OS cache'inde ne kadar veri bulurum"
+    #                              tahmini; index taramasini tercih ettirir
+    #   768M + 800M + 256M = ~1.8G  < 3G tavan
+    #
+    # RAM 8 GB'in altina inerse bu degerler ve asagidaki limit DUSURULMELI.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=timescaledb"
+      - "-c"
+      - "shared_buffers=768MB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=256MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      # Telemetri yazma yogun: WAL checkpoint'lerini seyrelt, I/O tepe
+      # noktalarini yay. Varsayilan 1GB/5dk saniyede binlerce satir yazan
+      # bir sistemde surekli checkpoint tetikliyor.
+      - "-c"
+      - "max_wal_size=2GB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-enerjione_grid}
       POSTGRES_USER: ${POSTGRES_USER:-enerjione_grid}
@@ -101,7 +152,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *heavy-resources
+    <<: *postgres-resources
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
