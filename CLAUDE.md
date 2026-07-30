@@ -4,7 +4,7 @@ Endüstriyel akıllı şebeke izleme platformu. Horstmann Smart Navigator 2.0 ar
 göstergesi cihazlarını izler/yönetir. Event-driven mikroservis mimarisi, Docker + systemd
 ile deploy edilir.
 
-- **Sürüm:** 2.24.5
+- **Sürüm:** 2.24.6
 - **Ana dal:** `main` (tek gövde, her an release edilebilir). Sürümler `v2.25.0` gibi
   **tag** ile çıkar; deploy tag'den tetiklenir, daldan değil. İş dalları: `feat/...`, `fix/...`.
 - **Dil:** Kod yorumları ve UI **Türkçe**. Kod tabanında ASCII-only yorum tercih edilir

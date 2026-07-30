@@ -14,6 +14,32 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.24.6] — 2026-07-30
+
+### Düzeltildi
+- **Lisans kilidi ağ ayarlarını da kilitliyordu** — lisanssız cihazda ağ
+  yapılandırmasına erişilemiyor, dolayısıyla lisans da alınamıyordu.
+- **Tailscale SSH** zaten tailnet'e katılmış cihazlarda açılmıyordu.
+- **Postgres varsayılan ayarlarla koşuyordu** (`shared_buffers=128MB`,
+  `work_mem=4MB`) — sıralamalar diske taşıyordu.
+- Telemetri temizleme sorgusu tüm tabloyu tarıyordu; filtre pencere
+  fonksiyonunun içine indirildi.
+- Alarm reconcile'da N+1 — açık alarm başına bir sorgu atılıyordu.
+
+### Değişti
+- **İlk yükleme 2.1 MB → 739 KB** (%66): 21 sayfa tembel yüklemeye alındı.
+- Kurulum artık **sessiz "hiçbir şey olmadı" durumlarını görünür kılıyor**:
+  appliance atlandığında sonucu, güncellemede yayınlanmamış değişiklik
+  olduğunu açıkça söylüyor.
+
+### Eklendi
+- Kurulum aracına **WiFi ayarı ve internet kontrolü** — cihazda internet
+  yoksa kurulum GitHub'dan indirme yapamıyordu.
+- Kurulum aracı sekmeli arayüz, ağ listesi, GitHub anahtarı alma yardımcısı.
+
+
+---
+
 ## [2.24.5] — 2026-07-28
 
 ### Eklendi
