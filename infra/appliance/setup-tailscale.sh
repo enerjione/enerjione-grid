@@ -137,14 +137,84 @@ else
   _derive_ts_hostname
 fi
 
-# --- Anahtar yoksa sessizce cik: kurulumu ASLA bozma ------------------------
-if [[ -z "$AUTHKEY" ]]; then
-  e1_info "Tailscale anahtari tanimli degil (E1_TAILSCALE_AUTHKEY) — uzaktan bakim VPN'i atlandi."
-  exit 0
-fi
+# --- SSH ve etiket dogrulama yardimcilari -----------------------------------
+# NEDEN GEREKLI: `tailscale up --ssh` yalnizca KATILIM aninda uygulanir.
+# Daha once katilmis bir cihaz (or. bu bayrak eklenmeden once kurulanlar, ya
+# da etiketsiz geri donus yolundan katilanlar) asagidaki idempotent erken
+# cikisa takiliyor ve SSH'i HIC acilmiyordu — "tailscale ile ssh
+# baglanamiyorum"un sebebi tam olarak bu. Artik durumu okuyup gerekiyorsa
+# `tailscale set` ile aciyoruz; bu yeniden giris (authkey) GEREKTIRMEZ.
+
+# `tailscale debug prefs` JSON'unda RunSSH alani var mi? (eski surumlerde yok)
+_prefs_has_runssh() {
+  tailscale debug prefs 2>/dev/null | grep -q '"RunSSH"'
+}
+
+_ssh_is_on() {
+  tailscale debug prefs 2>/dev/null | grep -qE '"RunSSH"[[:space:]]*:[[:space:]]*true'
+}
+
+_ensure_ssh() {
+  if [[ "$ENABLE_SSH" != "1" ]]; then
+    # Acikca kapatilmis. Aciksa kapat, degilse dokunma.
+    if _ssh_is_on; then
+      e1_info "Tailscale SSH kapatiliyor (E1_TAILSCALE_SSH=0)..."
+      tailscale set --ssh=false >/dev/null 2>&1 \
+        || e1_warn "SSH kapatilamadi. Elle: sudo tailscale set --ssh=false"
+    fi
+    return 0
+  fi
+
+  if ! _prefs_has_runssh; then
+    # Durum okunamiyor (eski tailscale). Yine de uygula — `set` idempotent.
+    if tailscale set --ssh >/dev/null 2>&1; then
+      e1_ok "Tailscale SSH ayari uygulandi (surum eski, durum dogrulanamadi)."
+    else
+      e1_warn "Tailscale SSH acilamadi. Elle: sudo tailscale set --ssh"
+    fi
+    return 0
+  fi
+
+  if _ssh_is_on; then
+    e1_ok "Tailscale SSH acik."
+    return 0
+  fi
+
+  e1_info "Tailscale SSH kapali — aciliyor..."
+  if tailscale set --ssh >/dev/null 2>&1 && _ssh_is_on; then
+    e1_ok "Tailscale SSH acildi."
+  else
+    e1_warn "Tailscale SSH acilamadi. Elle: sudo tailscale set --ssh"
+  fi
+}
+
+# Cihaz etiketsiz katildiysa ACL'deki `dst: tag:e1-appliance` kurallari
+# ESLESMEZ; SSH acik olsa bile baglanti REDDEDILIR. Sessiz kalinirsa
+# "SSH acik" mesaji yaniltici olur.
+_warn_if_untagged() {
+  [[ -n "$TAGS" ]] || return 0
+  local prefs advertised
+  prefs="$(tailscale debug prefs 2>/dev/null | tr -d ' \n')"
+  # Alan HIC yoksa (eski tailscale) durum BILINMIYOR demektir; "etiketsiz"
+  # diye uyarmak yanlis olur. Sadece alan var ve BOS ise uyariyoruz.
+  printf '%s' "$prefs" | grep -q '"AdvertiseTags"' || return 0
+  advertised="$(printf '%s' "$prefs" | sed -n 's/.*"AdvertiseTags":\[\([^]]*\)\].*/\1/p')"
+  if [[ -z "$advertised" ]]; then
+    e1_warn "Cihaz ETIKETSIZ katilmis (beklenen: ${TAGS})."
+    e1_warn "ACL'de 'dst: ${TAGS}' yazan SSH kurallari bu cihaza UYMAZ; baglanti reddedilir."
+    e1_warn "Duzeltmek icin anahtari '${TAGS}' etiketiyle uretip:"
+    e1_warn "  sudo tailscale up --advertise-tags=${TAGS} --ssh --reset"
+  fi
+}
 
 if [[ "$(id -u)" -ne 0 ]]; then
   e1_warn "Tailscale kurulumu root gerektirir — atlandi."
+  exit 0
+fi
+
+# Tailscale hic kurulu degil ve anahtar da yok -> yapacak bir sey yok.
+if ! command -v tailscale >/dev/null 2>&1 && [[ -z "$AUTHKEY" ]]; then
+  e1_info "Tailscale anahtari tanimli degil (E1_TAILSCALE_AUTHKEY) — uzaktan bakim VPN'i atlandi."
   exit 0
 fi
 
@@ -174,6 +244,16 @@ CURRENT_STATE="$(tailscale status --json 2>/dev/null | sed -n 's/.*"BackendState
 if [[ "$CURRENT_STATE" == "Running" ]]; then
   TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
   e1_ok "Cihaz zaten tailnet'te${TS_IP:+ (${TS_IP})} — yeniden giris yapilmadi."
+  # Yeniden giris YOK ama SSH/etiket durumu her calistirmada DOGRULANIR:
+  # anahtar gerekmez, `update.sh` bu sayede eski cihazlarda SSH'i acar.
+  _ensure_ssh
+  _warn_if_untagged
+  exit 0
+fi
+
+# Buradan sonrasi tailnet'e KATILMA yolu; anahtar sart.
+if [[ -z "$AUTHKEY" ]]; then
+  e1_info "Cihaz tailnet'te degil ve anahtar tanimli degil (E1_TAILSCALE_AUTHKEY) — atlandi."
   exit 0
 fi
 
@@ -245,6 +325,13 @@ fi
 
 TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
 e1_ok "Tailnet'e katildi${TS_IP:+ — ${TS_IP}}"
-[[ "$ENABLE_SSH" == "1" ]] && e1_ok "Tailscale SSH acik (erisim tailnet ACL'i ile sinirli)."
+# SSH durumu VARSAYILMAZ, okunur: `up --ssh` sessizce dusmus olabilir.
+# Etiketsiz geri donus yolundan katildiysak da burada uyari cikar.
+_ensure_ssh
+_warn_if_untagged
 e1_info "Cihaz Tailscale yonetim konsolunda '${TS_HOSTNAME}' adiyla gorunur."
+if [[ "$ENABLE_SSH" == "1" ]]; then
+  e1_hint "Baglanmak icin: ssh root@${TS_HOSTNAME}"
+  e1_hint "Baglanti reddedilirse tailnet ACL'inde 'ssh' blogu eksiktir (bkz. docs/TAILSCALE.md)."
+fi
 exit 0

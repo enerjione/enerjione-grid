@@ -380,9 +380,9 @@ if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
   fi
 fi
 
-# Uzaktan bakim VPN'i — cihaz zaten tailnet'teyse script no-op yapar; yeni
-# eklenen bir anahtar varsa (veya baglanti kopmussa) burada devreye girer.
-# Anahtar yoksa hicbir sey yapmaz.
+# Uzaktan bakim VPN'i — yeni eklenen bir anahtar varsa (veya baglanti
+# kopmussa) burada devreye girer. Cihaz zaten tailnet'teyse yeniden giris
+# YAPILMAZ, ama SSH ve etiket durumu her guncellemede dogrulanir.
 #
 # Kaynak sirasi install.sh ile AYNI olmali; aksi halde kurulumda katilan bir
 # cihaz guncellemeden sonra anahtarsiz kalir ve VPN adimi sessizce atlanir.
@@ -402,7 +402,12 @@ for _src in /etc/enerjione-grid/install.env .env; do
   done
 done
 unset _src _var _v
-if [[ -n "${E1_TAILSCALE_AUTHKEY:-}" && -f infra/appliance/setup-tailscale.sh ]]; then
+# ANAHTAR KOSULU YOK: zaten tailnet'te olan bir cihazda SSH'i acmak icin
+# anahtar gerekmiyor ve bu kosul tam da onu engelliyordu — anahtari
+# /etc/... altinda olmayan eski cihazlar guncelleme sonrasi da SSH'siz
+# kaliyordu. Script anahtar gerekip gerekmedigine KENDI karar verir ve
+# gereksizse sessizce cikar.
+if [[ -f infra/appliance/setup-tailscale.sh ]]; then
   bash infra/appliance/setup-tailscale.sh || \
     e1_warn "Tailscale adimi tamamlanamadi; guncelleme devam ediyor."
 fi

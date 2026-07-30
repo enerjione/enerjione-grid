@@ -335,6 +335,73 @@ listede. Oradan:
 - `ssh root@<hostname>` (Tailscale SSH — ACL'de izin verdiğin kadar)
 - `http://<tailnet-ip>` → cihazın web arayüzü
 
+### 3.1 SSH bağlanamıyorsanız
+
+Üç ayrı sebep var; **sırayla** kontrol edin.
+
+**1) Cihazda SSH açık mı?**
+
+```bash
+sudo tailscale debug prefs | grep RunSSH     # "RunSSH": true olmali
+```
+
+`false` ise:
+
+```bash
+sudo tailscale set --ssh
+```
+
+> `tailscale up --ssh` yalnızca **katılım anında** uygulanır. Bu bayrak
+> eklenmeden önce kurulan cihazlarda SSH hiç açılmamıştı; `setup-tailscale.sh`
+> artık her `install.sh`/`update.sh` çalıştırmasında bunu **kendisi düzeltir**
+> (yeniden giriş gerekmez, anahtar da gerekmez).
+
+**2) Cihaz etiketli mi katılmış?**
+
+```bash
+sudo tailscale debug prefs | grep AdvertiseTags   # ["tag:e1-appliance"] olmali
+```
+
+Boşsa ACL'deki `dst: ["tag:e1-appliance"]` kuralları bu cihaza **uymaz** ve
+SSH açık olsa bile bağlantı reddedilir. Anahtarı doğru etiketle üretip:
+
+```bash
+sudo tailscale up --advertise-tags=tag:e1-appliance --ssh --reset
+```
+
+**3) Tailnet ACL'inde `ssh` bloğu var mı?** ← en sık atlanan adım
+
+Bu **cihazdan yapılamaz**, tailnet politikasıdır. `tailscale up --ssh`
+yalnızca "bu cihaz SSH kabul edebilir" der; **kimin** bağlanabileceğini ACL
+belirler. `ssh` bloğu yoksa her bağlantı reddedilir.
+
+`https://console.tailscale.com/admin/acls` → şu blok **bulunmalı**:
+
+```jsonc
+"ssh": [
+  {
+    "action": "accept",
+    "src":    ["autogroup:admin"],
+    "dst":    ["tag:e1-appliance"],
+    "users":  ["root", "autogroup:nonroot"]
+  }
+]
+```
+
+- `src`: kimler bağlanabilir. `autogroup:admin` değilseniz kendi
+  kullanıcınızı/grubunuzu yazın — aksi halde kendi cihazınızdan bağlanamazsınız.
+- `users`: cihazda hangi yerel kullanıcıya girilebilir. `root` olmadan
+  `ssh root@...` reddedilir.
+- `"action": "check"` yazarsanız her bağlantıda tarayıcıdan yeniden doğrulama
+  ister; otomasyon için `accept` kullanın.
+
+**Bağlanan taraf:** Tailscale istemcisi kurulu ve **aynı tailnet'te** oturum
+açmış olmalı. Bağlantı tailnet adıyla yapılır:
+
+```bash
+ssh root@e1-grid-dicle-edas-sirnak-cizre
+```
+
 ---
 
 ## 4. Ayarlar
