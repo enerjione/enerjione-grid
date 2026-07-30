@@ -1,0 +1,544 @@
+"""Cevrimdisi harita karolari — disk onbellegi, alan indirme, servis.
+
+MIMARI: TUM karolar backend uzerinden gecer (`/map-tiles/{layer}/{z}/{x}/{y}`).
+Backend once diske bakar; yoksa ve internet varsa yukari akistan ceker, diske
+yazar ve dondurur. Boylece TEK adres hem cevrimici hem cevrimdisi calisir ve
+"alan indirme" aslinda bu onbellegi ONDEN doldurmaktan ibarettir.
+
+Alternatif (frontend'in dogrudan internete gitmesi + ayri bir offline katman)
+denenmedi cunku Leaflet'te "once yerel, olmazsa uzak" davranisi istemci
+tarafinda temiz kurulamiyor; sunucu tarafinda tek satir.
+
+ONEMLI — KARO KAYNAGI VE LISANS:
+    Varsayilan yukari akislar (OSM, Esri, OpenTopoMap, CARTO) ucretsiz servis
+    verir ama TOPLU INDIRMEYE izin vermez. Bu modul bu yuzden:
+      * indirmeyi kullanicinin sectigi KUCUK bir dikdortgenle sinirlar,
+      * zoom ust sinirini dusuk tutar (karo sayisi 4^z ile patlar),
+      * es zamanli baglantiyi 2 ile sinirlar ve her istek arasi bekler,
+      * tanimlayici bir User-Agent gonderir.
+    Yine de yuzlerce cihaza buyuk alanlar dagitacaksaniz kendi karo
+    sunucunuzu (veya lisansli bir saglayiciyi) `E1_MAP_TILE_UPSTREAM_*` ile
+    tanimlayin; asagidaki varsayilanlar saha basina kucuk alan icindir.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import shutil
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterator
+
+import requests
+
+from app.core.config import settings
+
+
+# ---------------------------------------------------------------------------
+# Katman kayitlari
+# ---------------------------------------------------------------------------
+# Frontend katman ANAHTARINI gonderir, URL'i degil: boylece yukari akis adresi
+# tek yerde durur ve istemci keyfi bir adrese proxy yaptiramaz (SSRF).
+@dataclass(frozen=True)
+class TileLayerDef:
+    key: str
+    label: str
+    url_template: str
+    max_zoom: int
+    subdomains: tuple[str, ...] = ()
+    attribution: str = ""
+
+
+LAYERS: dict[str, TileLayerDef] = {
+    "osm": TileLayerDef(
+        key="osm",
+        label="Sokak (OSM)",
+        url_template="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        max_zoom=19,
+        subdomains=("a", "b", "c"),
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    ),
+    "satellite": TileLayerDef(
+        key="satellite",
+        label="Uydu (Esri)",
+        # DIKKAT: Esri {z}/{y}/{x} sirasi kullanir, digerleri {z}/{x}/{y}.
+        url_template="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        max_zoom=19,
+        attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics",
+    ),
+    "topo": TileLayerDef(
+        key="topo",
+        label="Topografya (OpenTopoMap)",
+        url_template="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        max_zoom=17,
+        subdomains=("a", "b", "c"),
+        attribution='Map data: &copy; OpenStreetMap, SRTM | Style: OpenTopoMap (CC-BY-SA)',
+    ),
+    "dark": TileLayerDef(
+        key="dark",
+        label="Karanlik (CARTO)",
+        url_template="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        max_zoom=19,
+        subdomains=("a", "b", "c", "d"),
+        attribution='&copy; OpenStreetMap &copy; CARTO',
+    ),
+}
+
+
+class MapTileError(Exception):
+    """Kullaniciya gosterilebilir hata (kod + mesaj)."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+# ---------------------------------------------------------------------------
+# Slippy map matematigi
+# ---------------------------------------------------------------------------
+def deg2num(lat: float, lon: float, zoom: int) -> tuple[int, int]:
+    """WGS84 -> karo indeksi (Web Mercator, OSM 'slippy map' semasi)."""
+    lat = max(min(lat, 85.05112878), -85.05112878)
+    lat_rad = math.radians(lat)
+    n = 2.0**zoom
+    x = int((lon + 180.0) / 360.0 * n)
+    y = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
+    # Kutup/kenar durumlarinda tasabilir; gecerli araliga kirp.
+    return max(0, min(int(n) - 1, x)), max(0, min(int(n) - 1, y))
+
+
+def tile_range(bbox: tuple[float, float, float, float], zoom: int) -> tuple[int, int, int, int]:
+    """bbox=(guney, bati, kuzey, dogu) -> (x_min, y_min, x_max, y_max)."""
+    south, west, north, east = bbox
+    x_min, y_min = deg2num(north, west, zoom)  # kuzeybati -> sol ust
+    x_max, y_max = deg2num(south, east, zoom)  # guneydogu -> sag alt
+    if x_min > x_max:
+        x_min, x_max = x_max, x_min
+    if y_min > y_max:
+        y_min, y_max = y_max, y_min
+    return x_min, y_min, x_max, y_max
+
+
+def count_tiles(bbox: tuple[float, float, float, float], zoom_min: int, zoom_max: int) -> int:
+    total = 0
+    for z in range(zoom_min, zoom_max + 1):
+        x0, y0, x1, y1 = tile_range(bbox, z)
+        total += (x1 - x0 + 1) * (y1 - y0 + 1)
+    return total
+
+
+def _iter_tiles(
+    bbox: tuple[float, float, float, float], zoom_min: int, zoom_max: int
+) -> Iterator[tuple[int, int, int]]:
+    for z in range(zoom_min, zoom_max + 1):
+        x0, y0, x1, y1 = tile_range(bbox, z)
+        for x in range(x0, x1 + 1):
+            for y in range(y0, y1 + 1):
+                yield z, x, y
+
+
+# ---------------------------------------------------------------------------
+# Disk
+# ---------------------------------------------------------------------------
+def _root() -> Path:
+    return Path(settings.map_tile_dir)
+
+
+def tile_path(layer: str, z: int, x: int, y: int) -> Path:
+    return _root() / layer / str(z) / str(x) / f"{y}.png"
+
+
+def _packs_file() -> Path:
+    return _root() / "packs.json"
+
+
+def cache_size_bytes() -> int:
+    """Onbellegin toplam boyutu. Buyuk agaclarda pahali; sadece ozet/guard."""
+    total = 0
+    root = _root()
+    if not root.exists():
+        return 0
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for name in filenames:
+            try:
+                total += (Path(dirpath) / name).stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Yukari akistan karo cekme
+# ---------------------------------------------------------------------------
+_session_lock = threading.Lock()
+_session: requests.Session | None = None
+
+
+def _http() -> requests.Session:
+    global _session
+    with _session_lock:
+        if _session is None:
+            s = requests.Session()
+            # Tanimlayici User-Agent: OSM kullanim politikasi bunu SART kosar,
+            # jenerik/eksik UA ile istekler engellenir.
+            s.headers["User-Agent"] = settings.map_tile_user_agent
+            _session = s
+        return _session
+
+
+def _upstream_url(layer: TileLayerDef, z: int, x: int, y: int) -> str:
+    url = layer.url_template.replace("{z}", str(z)).replace("{x}", str(x)).replace("{y}", str(y))
+    if layer.subdomains:
+        # Alan adi dagitimi: karo koordinatindan deterministik sec ki ayni
+        # karo hep ayni sunucudan gelsin (uzak taraf cache'i isabet etsin).
+        url = url.replace("{s}", layer.subdomains[(x + y) % len(layer.subdomains)])
+    return url
+
+
+def fetch_tile(layer_key: str, z: int, x: int, y: int) -> bytes:
+    """Yukari akistan tek karo ceker. Diske YAZMAZ."""
+    layer = LAYERS.get(layer_key)
+    if layer is None:
+        raise MapTileError("MAP_LAYER_UNKNOWN", f"Bilinmeyen katman: {layer_key}")
+    resp = _http().get(_upstream_url(layer, z, x, y), timeout=settings.map_tile_timeout_sec)
+    resp.raise_for_status()
+    return resp.content
+
+
+def store_tile(layer_key: str, z: int, x: int, y: int, data: bytes) -> None:
+    path = tile_path(layer_key, z, x, y)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Atomik yazim: yarim dosya okunmasin (paralel indirme + servis birlikte).
+    tmp = path.with_suffix(f".{os.getpid()}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
+def read_tile(layer_key: str, z: int, x: int, y: int) -> bytes | None:
+    try:
+        return tile_path(layer_key, z, x, y).read_bytes()
+    except (OSError, ValueError):
+        return None
+
+
+def get_tile(layer_key: str, z: int, x: int, y: int) -> tuple[bytes, str]:
+    """Karoyu dondurur. -> (icerik, kaynak) ; kaynak: 'cache' | 'upstream'.
+
+    Once disk. Yoksa ve cevrimici cekme aciksa yukari akistan al ve YAZ.
+    Boylece kullanicinin gezindigi alan kendiliginden onbellege girer.
+    """
+    if layer_key not in LAYERS:
+        raise MapTileError("MAP_LAYER_UNKNOWN", f"Bilinmeyen katman: {layer_key}")
+    cached = read_tile(layer_key, z, x, y)
+    if cached is not None:
+        return cached, "cache"
+    if not settings.map_tile_online_fallback:
+        raise MapTileError("MAP_TILE_OFFLINE", "Karo onbellekte yok ve cevrimici cekme kapali")
+    data = fetch_tile(layer_key, z, x, y)
+    # Gezinme sirasinda biriken onbellek sinirsiz buyumesin.
+    if cache_size_bytes() < settings.map_tile_max_cache_bytes:
+        try:
+            store_tile(layer_key, z, x, y, data)
+        except OSError:
+            pass  # disk dolu/izin yok — servis etmeye devam
+    return data, "upstream"
+
+
+# ---------------------------------------------------------------------------
+# Alan paketleri (indirme isleri)
+# ---------------------------------------------------------------------------
+@dataclass
+class Pack:
+    id: str
+    name: str
+    layer: str
+    bbox: tuple[float, float, float, float]
+    zoom_min: int
+    zoom_max: int
+    tile_total: int
+    tile_done: int = 0
+    tile_failed: int = 0
+    bytes_written: int = 0
+    status: str = "pending"  # pending | running | done | failed | cancelled
+    error: str = ""
+    created_at: str = ""
+    finished_at: str = ""
+
+    def to_dict(self) -> dict:
+        d = self.__dict__.copy()
+        d["bbox"] = list(self.bbox)
+        return d
+
+    @staticmethod
+    def from_dict(d: dict) -> "Pack":
+        data = dict(d)
+        data["bbox"] = tuple(data.get("bbox") or (0, 0, 0, 0))  # type: ignore[assignment]
+        known = {f for f in Pack.__dataclass_fields__}  # type: ignore[attr-defined]
+        return Pack(**{k: v for k, v in data.items() if k in known})
+
+
+_packs_lock = threading.RLock()
+_packs: dict[str, Pack] = {}
+_cancel_flags: set[str] = set()
+_active_thread: threading.Thread | None = None
+_loaded = False
+
+
+def _load_packs() -> None:
+    global _loaded
+    with _packs_lock:
+        if _loaded:
+            return
+        _loaded = True
+        try:
+            raw = json.loads(_packs_file().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        for item in raw if isinstance(raw, list) else []:
+            try:
+                pack = Pack.from_dict(item)
+            except TypeError:
+                continue
+            # Yeniden baslatma sonrasi "running" kalmis is yoktur; yarim
+            # birakilmis say ki kullanici tekrar baslatabilsin.
+            if pack.status in ("running", "pending"):
+                pack.status = "failed"
+                pack.error = "Servis yeniden baslatildi"
+            _packs[pack.id] = pack
+
+
+def _save_packs() -> None:
+    with _packs_lock:
+        items = [p.to_dict() for p in _packs.values()]
+    path = _packs_file()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def list_packs() -> list[Pack]:
+    _load_packs()
+    with _packs_lock:
+        return sorted(_packs.values(), key=lambda p: p.created_at, reverse=True)
+
+
+def get_pack(pack_id: str) -> Pack | None:
+    _load_packs()
+    with _packs_lock:
+        return _packs.get(pack_id)
+
+
+def _validate_request(
+    bbox: tuple[float, float, float, float], layer_key: str, zoom_min: int, zoom_max: int
+) -> int:
+    layer = LAYERS.get(layer_key)
+    if layer is None:
+        raise MapTileError("MAP_LAYER_UNKNOWN", f"Bilinmeyen katman: {layer_key}")
+    south, west, north, east = bbox
+    if not (-90 <= south < north <= 90) or not (-180 <= west < east <= 180):
+        raise MapTileError("MAP_BBOX_INVALID", "Secilen alan gecersiz")
+    if zoom_min < 0 or zoom_max < zoom_min:
+        raise MapTileError("MAP_ZOOM_INVALID", "Zoom araligi gecersiz")
+    if zoom_max > min(layer.max_zoom, settings.map_tile_max_download_zoom):
+        raise MapTileError(
+            "MAP_ZOOM_TOO_HIGH",
+            f"En fazla zoom {min(layer.max_zoom, settings.map_tile_max_download_zoom)} indirilebilir",
+        )
+    total = count_tiles(bbox, zoom_min, zoom_max)
+    if total > settings.map_tile_max_pack_tiles:
+        raise MapTileError(
+            "MAP_AREA_TOO_LARGE",
+            f"Secilen alan cok buyuk ({total} karo). "
+            f"Sinir {settings.map_tile_max_pack_tiles}; alani kucultun veya zoom'u dusurun.",
+        )
+    return total
+
+
+def estimate(
+    bbox: tuple[float, float, float, float], layer_key: str, zoom_min: int, zoom_max: int
+) -> dict:
+    """Indirmeden once karo sayisi + kaba boyut tahmini."""
+    total = _validate_request(bbox, layer_key, zoom_min, zoom_max)
+    return {
+        "tile_count": total,
+        "estimated_bytes": total * settings.map_tile_avg_bytes,
+        "max_tiles": settings.map_tile_max_pack_tiles,
+    }
+
+
+def _run_pack(pack_id: str) -> None:
+    pack = get_pack(pack_id)
+    if pack is None:
+        return
+    with _packs_lock:
+        pack.status = "running"
+    _save_packs()
+
+    written = 0
+    done = 0
+    failed = 0
+    lock = threading.Lock()
+
+    def work(item: tuple[int, int, int]) -> None:
+        nonlocal written, done, failed
+        z, x, y = item
+        if pack_id in _cancel_flags:
+            return
+        # Zaten indirilmis karoyu tekrar cekme: hem hizli hem yukari akisa
+        # saygili (ayni alan iki kez indirilirse ikincisi neredeyse bedava).
+        if tile_path(pack.layer, z, x, y).exists():
+            with lock:
+                done += 1
+            return
+        try:
+            data = fetch_tile(pack.layer, z, x, y)
+            store_tile(pack.layer, z, x, y, data)
+            with lock:
+                written += len(data)
+                done += 1
+        except Exception:  # noqa: BLE001 - tek karo hatasi isi bitirmemeli
+            with lock:
+                failed += 1
+        # Politika geregi nazik davran: es zamanlilik zaten 2, ustune kisa bekleme.
+        time.sleep(settings.map_tile_request_delay_sec)
+
+    try:
+        tiles = list(_iter_tiles(pack.bbox, pack.zoom_min, pack.zoom_max))
+        with ThreadPoolExecutor(max_workers=settings.map_tile_concurrency) as pool:
+            for idx, _ in enumerate(pool.map(work, tiles), start=1):
+                if idx % 50 == 0:
+                    with _packs_lock:
+                        pack.tile_done = done
+                        pack.tile_failed = failed
+                        pack.bytes_written = written
+                    _save_packs()
+        with _packs_lock:
+            pack.tile_done = done
+            pack.tile_failed = failed
+            pack.bytes_written = written
+            if pack_id in _cancel_flags:
+                pack.status = "cancelled"
+            elif failed and done == 0:
+                pack.status = "failed"
+                pack.error = "Hicbir karo indirilemedi (internet yok olabilir)"
+            else:
+                pack.status = "done"
+            pack.finished_at = datetime.now(timezone.utc).isoformat()
+    except Exception as exc:  # noqa: BLE001
+        with _packs_lock:
+            pack.status = "failed"
+            pack.error = str(exc)[:300]
+            pack.finished_at = datetime.now(timezone.utc).isoformat()
+    finally:
+        _cancel_flags.discard(pack_id)
+        _save_packs()
+
+
+def start_pack(
+    *,
+    name: str,
+    layer: str,
+    bbox: tuple[float, float, float, float],
+    zoom_min: int,
+    zoom_max: int,
+) -> Pack:
+    total = _validate_request(bbox, layer, zoom_min, zoom_max)
+    _load_packs()
+    global _active_thread
+    with _packs_lock:
+        # TEK is: paralel iki indirme hem yukari akisi zorlar hem ilerleme
+        # takibini anlamsizlastirir.
+        if _active_thread is not None and _active_thread.is_alive():
+            raise MapTileError("MAP_DOWNLOAD_BUSY", "Zaten devam eden bir indirme var")
+        pack = Pack(
+            id=str(uuid.uuid4()),
+            name=name.strip() or "Alan",
+            layer=layer,
+            bbox=bbox,
+            zoom_min=zoom_min,
+            zoom_max=zoom_max,
+            tile_total=total,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        _packs[pack.id] = pack
+    _save_packs()
+    thread = threading.Thread(target=_run_pack, args=(pack.id,), daemon=True, name="map-pack")
+    _active_thread = thread
+    thread.start()
+    return pack
+
+
+def cancel_pack(pack_id: str) -> bool:
+    pack = get_pack(pack_id)
+    if pack is None or pack.status not in ("pending", "running"):
+        return False
+    _cancel_flags.add(pack_id)
+    return True
+
+
+def delete_pack(pack_id: str, *, remove_tiles: bool = False) -> bool:
+    """Paket kaydini siler. remove_tiles=True ise alandaki karolari da siler.
+
+    Karolar KATMAN AGACINDA ortak: iki paket ayni karoyu paylasabilir, bu
+    yuzden silme varsayilan olarak KAPALI — kayit gider, disk kalir.
+    """
+    pack = get_pack(pack_id)
+    if pack is None:
+        return False
+    if pack.status in ("pending", "running"):
+        _cancel_flags.add(pack_id)
+    if remove_tiles:
+        for z, x, y in _iter_tiles(pack.bbox, pack.zoom_min, pack.zoom_max):
+            try:
+                tile_path(pack.layer, z, x, y).unlink(missing_ok=True)
+            except OSError:
+                continue
+    with _packs_lock:
+        _packs.pop(pack_id, None)
+    _save_packs()
+    return True
+
+
+def clear_cache() -> None:
+    """Tum karo onbellegini siler (paket kayitlari dahil)."""
+    root = _root()
+    if root.exists():
+        shutil.rmtree(root, ignore_errors=True)
+    with _packs_lock:
+        _packs.clear()
+    _save_packs()
+
+
+def summary() -> dict:
+    packs = list_packs()
+    return {
+        "layers": [
+            {
+                "key": layer.key,
+                "label": layer.label,
+                "max_zoom": layer.max_zoom,
+                "attribution": layer.attribution,
+            }
+            for layer in LAYERS.values()
+        ],
+        "cache_bytes": cache_size_bytes(),
+        "max_cache_bytes": settings.map_tile_max_cache_bytes,
+        "max_download_zoom": min(
+            settings.map_tile_max_download_zoom, max(l.max_zoom for l in LAYERS.values())
+        ),
+        "max_pack_tiles": settings.map_tile_max_pack_tiles,
+        "online_fallback": settings.map_tile_online_fallback,
+        "packs": [p.to_dict() for p in packs],
+    }

@@ -338,6 +338,9 @@ services:
       # (root:10001, 0770); infra/appliance/setup-appliance.sh olusturur.
       # VPS kurulumlarinda dizin bos kalir, appliance modu kapali gorunur.
       - /var/lib/e1-grid/net:/var/lib/e1-grid/net
+      # Cevrimdisi harita karolari. Named volume: imaj guncellemesinde
+      # SILINMEZ -- sahada tekrar indirmek 4G uzerinden pahali/uzun olur.
+      - map-tile-data:/var/lib/e1-map-tiles
     networks:
       - e1-net
     logging: *default-logging
@@ -606,6 +609,7 @@ networks:
     driver: bridge
 
 volumes:
+  map-tile-data:
   postgres-data:
   rabbitmq-data:
   nats-data:

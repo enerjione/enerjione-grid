@@ -229,6 +229,24 @@ class Settings(BaseSettings):
     # Ayarlari sayfasi bunu kullaniciya soyler (hata degil).
     network_state_dir: str = "/var/lib/e1-grid/net"
 
+    # Cevrimdisi harita karolari. Tum karolar backend uzerinden gecer:
+    # once disk, yoksa yukari akis (ve diske yaz). Saha cihazinda internet
+    # kesilse bile indirilmis alan calismaya devam eder.
+    #
+    # Sinirlar KASITLI dusuk: ucretsiz karo servisleri toplu indirmeye izin
+    # vermez, zoom basina karo sayisi 4 katina cikar ve saha diski kucuktur.
+    # Kendi karo sunucunuz varsa bu degerleri yukseltebilirsiniz.
+    map_tile_dir: str = "/var/lib/e1-map-tiles"
+    map_tile_online_fallback: bool = True     # onbellekte yoksa internetten cek
+    map_tile_max_download_zoom: int = 17      # z18+ bir ilcede bile milyonlarca karo
+    map_tile_max_pack_tiles: int = 60_000     # tek alan indirmesinde ust sinir
+    map_tile_max_cache_bytes: int = 4 * 1024**3
+    map_tile_avg_bytes: int = 18 * 1024       # boyut tahmini icin ortalama karo
+    map_tile_concurrency: int = 2             # OSM politikasi: en fazla 2
+    map_tile_request_delay_sec: float = 0.05
+    map_tile_timeout_sec: int = 20
+    map_tile_user_agent: str = "EnerjiOne-Grid/1.0 (+https://enerjione.com; saha cihazi)"
+
     # Hat Arizalari sayfasi gosterim gecikmesi (saniye). Bir ariza acildiktan
     # sonra bu sure gecene kadar listede GORUNMEZ; harita aninda gosterir.
     # Amac: haberlesme gecikmesiyle gec gelen alarmlar bu pencere icinde
