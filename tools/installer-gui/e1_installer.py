@@ -124,6 +124,7 @@ E1_SITE='{site}'
 E1_REF='{ref}'
 BOOTSTRAP_REF='{bootstrap}'
 E1_APPLIANCE='{appliance}'
+E1_BUILD='{build}'
 # Internet yoksa bu ag ile baglanilir (bos = deneme yapilmaz).
 E1_WIFI_SSID='{wifi_ssid}'
 E1_WIFI_PASSWORD='{wifi_pass}'
@@ -221,6 +222,7 @@ fi
 export E1_GHCR_TOKEN E1_TAILSCALE_AUTHKEY E1_TAILSCALE_TAGS E1_CUSTOMER E1_SITE
 [[ -n "$E1_REF" ]] && export E1_REF
 [[ "$E1_APPLIANCE" != "auto" ]] && export E1_APPLIANCE
+[[ "$E1_BUILD" == "1" ]] && export E1_BUILD
 export ASSUME_YES=1
 bash "$TMP"
 """
@@ -385,6 +387,8 @@ class InstallWorker(threading.Thread):
                 ver = self.cfg.get("ref", "")
                 extra = f" --version {ver.lstrip('v')}" if ver and ver != "main" else ""
                 extra = " --edge" if ver == "main" else extra
+                if self.cfg.get("build"):
+                    extra += " --build"
                 rc = self._remote_only(
                     f"sudo -S -p '' bash {APP_DIR}/update.sh --yes{extra}",
                     "Guncelleme calisiyor...")
@@ -522,6 +526,7 @@ class InstallWorker(threading.Thread):
             ref=self.cfg.get("ref", ""),
             bootstrap=self.cfg.get("bootstrap") or "main",
             appliance=self.cfg.get("appliance", "auto"),
+            build="1" if self.cfg.get("build") else "",
             wifi_ssid=self.cfg.get("wifi_ssid", ""),
             wifi_pass=self.cfg.get("wifi_pass", ""),
             customer=self.cfg.get("customer", ""),
@@ -779,7 +784,18 @@ class InstallerApp(tk.Tk):
         self.version_box.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
         ttk.Button(sek_kurulum, text="Sürümleri yenile", command=self._refresh_versions)             .grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
-        baslik(sek_kurulum, 5, "CİHAZ TİPİ")
+        # TUZAK: "main" secildiginde kod main'den gelir ama IMAJ etiketi
+        # VERSION dosyasindan cozulur. VERSION yayinlanmis bir surumle
+        # ayniysa pull BASARILI olur ve tag'in ESKI imajlari iner — yani
+        # scriptler yeni, uygulama eski. Derleme bunu keser.
+        self.build_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            sek_kurulum,
+            text="İmajları cihazda derle (main'i test ederken şart)",
+            variable=self.build_var,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        baslik(sek_kurulum, 6, "CİHAZ TİPİ")
         self.appliance_box = ttk.Combobox(
             sek_kurulum, state="readonly",
             values=(
@@ -788,7 +804,7 @@ class InstallerApp(tk.Tk):
                 "Sunucu / sanal makine — WiFi ağı kurma",
             ))
         self.appliance_box.current(0)
-        self.appliance_box.grid(row=6, column=0, columnspan=2, sticky="ew", pady=2)
+        self.appliance_box.grid(row=7, column=0, columnspan=2, sticky="ew", pady=2)
 
         # ================= AG =================
         ttk.Label(sek_ag, text="Cihazda internet yoksa kurulum GitHub'dan\n"
@@ -984,6 +1000,7 @@ class InstallerApp(tk.Tk):
         cfg["bootstrap"] = cfg["ref"] or "main"
         # Combobox sirasi -> install.sh'in bekledigi deger.
         cfg["appliance"] = ("auto", "1", "0")[self.appliance_box.current()]
+        cfg["build"] = bool(self.build_var.get())
         return cfg
 
     def _save_profile(self, cfg: dict) -> None:
