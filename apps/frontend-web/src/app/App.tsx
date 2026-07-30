@@ -190,10 +190,17 @@ import type {
 // yani "bu makinede kullanilabilir lisans yok". `machine_unavailable`
 // BILEREK disarida — o bir lisans durumu degil, sunucu tarafi arizasidir.
 // Gerekce icin bkz. App icindeki `licenseGateActive`.
+// Kullaniciyi lisans sayfasina KILITLEYEN tek durum: bu kuruluma HIC lisans
+// yuklenmemis olmasi. Digerlerinde sistem calismaya devam eder:
+//   invalid / machine_mismatch : lisans VAR ama bu makinede gecerli degil.
+//     Sahada calisan bir SCADA'yi tamamen kapatmak izlemeyi de durdurur —
+//     ariza takibi lisans sorunundan daha kritiktir.
+//   quota full / over_limit    : CIHAZ SINIRI dolmus. Lisanslarda sure siniri
+//     YOKTUR, yalnizca cihaz sayisi sinirlidir. Sistem calisir; sadece yeni
+//     cihaz ekleme reddedilir (backend 403 doner, arayuz toast gosterir).
+// `machine_unavailable` bir lisans durumu degil, sunucu tarafi arizasidir.
 const LICENSE_GATE_STATES: ReadonlySet<LicenseStatus["state"]> = new Set([
   "unlicensed",
-  "invalid",
-  "machine_mismatch"
 ]);
 
 export function App() {
@@ -221,8 +228,6 @@ export function App() {
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
   const [licenseLoading, setLicenseLoading] = useState(false);
   // Lisans kilidi ekranindaki aktif sayfa. Ag ayarlari bilerek kilidin
-  // disinda tutuluyor; bkz. `licenseGateActive` yanindaki aciklama.
-  const [gatePage, setGatePage] = useState<"license" | "network">("license");
 
   // i18n: kullanici tercihi degistiginde (login sonrasi me yuklenince veya
   // ayarlardan dil secildiginde) react-i18next'i ona gore senkronize et.
@@ -1430,7 +1435,16 @@ export function App() {
     iec104_common_address?: number | null;
   }) => {
     if (!session) return;
-    await createDevice(session.accessToken, payload);
+    try {
+      await createDevice(session.accessToken, payload);
+    } catch (err) {
+      // Lisansta SURE siniri yok, CIHAZ SAYISI siniri var. Sinir dolunca
+      // backend 403 doner; sistem calismaya devam eder, yalnizca ekleme
+      // reddedilir. Kullaniciya sebebi toast ile soyluyoruz — sessizce
+      // basarisiz olmasi "kaydet calismiyor" gibi gorunuyordu.
+      toast.error(err instanceof Error ? err.message : t("toasts.deviceAddFailed"));
+      throw err;   // form acik kalsin, kullanici duzeltip tekrar denesin
+    }
     const all = await fetchDevices(session.accessToken);
     setDevices(all);
     if (payload.gateway_code) {
@@ -2110,81 +2124,33 @@ export function App() {
     licenseStatus !== null &&
     LICENSE_GATE_STATES.has(licenseStatus.state);
 
-  if (licenseGateActive) {
-    // AG AYARLARI KILIDIN DISINDA. Kisir dongu olmasin: lisansi
-    // etkinlestirmek icin istek dosyasini indirip .lic yuklemek gerekiyor,
-    // bunun icin de cihazin agda/internette olmasi lazim. Ag ayarlarini da
-    // kilitleseydik, IP/WiFi yanlis olan bir cihaz asla lisanslanamazdi.
-    // Cihaz ekleme, kullanici yonetimi vb. HER SEY kapali kalir.
-    const canNetwork = session.role === "installer";
-    const showNetwork = canNetwork && gatePage === "network";
-    return (
-      <div className="layout">
-        {forcePasswordModal}
-        <header className="license-gate-bar">
-          <div className="brand-logo-wrap">
-            <img src="/logo.png" alt="EnerjiOne" className="logo" />
-          </div>
-          {canNetwork ? (
-            <nav className="license-gate-nav">
-              <button
-                type="button"
-                className={`license-gate-nav__btn${showNetwork ? "" : " is-active"}`}
-                onClick={() => setGatePage("license")}
-              >
-                {t("engineering.nav.license")}
-              </button>
-              <button
-                type="button"
-                className={`license-gate-nav__btn${showNetwork ? " is-active" : ""}`}
-                onClick={() => setGatePage("network")}
-              >
-                {t("engineering.nav.networkSettings")}
-              </button>
-            </nav>
-          ) : null}
-          <span className="license-gate-bar__user">
-            {currentUser?.full_name ?? session.username}
-          </span>
-          <button type="button" className="secondary-btn" onClick={handleLogout}>
-            {t("header.logout")}
-          </button>
-        </header>
-        <div className="body">
-          <main className="content license-gate-content">
-            {showNetwork ? (
-              <NetworkSettingsPage accessToken={session.accessToken} />
-            ) : (
-              <>
-                <div className="license-gate-notice" role="alert">
-                  <span className="license-gate-notice__title">
-                    {t("engineering.license.gateTitle")}
-                  </span>
-                  <span className="license-gate-notice__text">
-                    {t("engineering.license.gateText")}
-                  </span>
-                </div>
-                <LicenseManagementPanel
-                  accessToken={session.accessToken}
-                  status={licenseStatus}
-                  loading={licenseLoading}
-                  onStatusChange={setLicenseStatus}
-                  onRefresh={reloadLicenseStatus}
-                />
-              </>
-            )}
-          </main>
-        </div>
+
+  // Lisans kilidi ARTIK AYRI BIR EKRAN DEGIL: normal kabuk (header, sekmeler)
+  // oldugu gibi duruyor, icerik bulaniklastiriliyor ve tek bir popup lisans
+  // sayfasina yonlendiriyor. Onceki surum kendi header'ini ciziyordu ve
+  // uygulamanin geri kalanindan kopuk gorunuyordu.
+  const licenseGateOpen =
+    licenseGateActive && !(pageMode === "engineering" && engineeringPage === "license");
+
+  const licenseGateModal = licenseGateOpen ? (
+    <div className="license-gate-overlay" role="alertdialog" aria-modal="true">
+      <div className="license-gate-dialog">
+        <h2>{t("engineering.license.gateTitle")}</h2>
+        <p>{t("engineering.license.gateShort")}</p>
+        <button type="button" className="primary-btn" onClick={() => openEng("license")}>
+          {t("engineering.license.gateGo")}
+        </button>
       </div>
-    );
-  }
+    </div>
+  ) : null;
 
   return (
     // Tembel yuklenen sayfalar Suspense OLMADAN render edilemez.
     // Tek sarmalayici yeterli: ayni anda yalnizca bir sayfa aciliyor.
     <Suspense fallback={<GlobalLoading show />}>
-    <div className="layout">
+    <div className={`layout${licenseGateOpen ? " is-license-locked" : ""}`}>
       {forcePasswordModal}
+      {licenseGateModal}
       <Header
         fullName={currentUser?.full_name ?? session.username}
         role={session.role}
@@ -2554,6 +2520,10 @@ export function App() {
                   alarms={alarms}
                   onOpenDetail={openDeviceDetail}
                   hiddenLineIds={hiddenLineIds}
+                  accessToken={session.accessToken}
+                  canManageOfflineMap={
+                    session.role === "engineer" || session.role === "installer"
+                  }
                 />
               </main>
             </div>

@@ -1948,7 +1948,6 @@
       "title": "Lisans Yönetimi",
       "subtitle": "Bu kurulumun cihaz kapasitesi ve makineye bağlı lisans bilgileri.",
       "gateTitle": "Sistem lisanslı değil",
-      "gateText": "Devam edebilmek için geçerli bir lisans dosyası yüklemeniz gerekiyor. Aşağıdan lisans istek dosyasını indirip tarafımıza iletin, gelen .lic dosyasını yükledikten sonra sistem açılacaktır.",
       "appVersionLabel": "EnerjiOne Grid sürümü",
       "updateAvailable": "Yeni sürüm: v{{version}}",
       "updateHint": "Güncelleme sunucu üzerinden (update.sh) yapılır; arayüzden başlatılamaz.",
@@ -2011,7 +2010,9 @@
         "machine_mismatch": "Farklı makine",
         "machine_unavailable": "Makine kimliği okunamadı",
         "unavailable": "Kapasite kapalı"
-      }
+      },
+      "gateShort": "Bu kuruluma henüz lisans yüklenmedi.",
+      "gateGo": "Lisans sayfasına git"
     },
     "liveValues": {
       "title": "Canlı Değerler",
@@ -2626,7 +2627,8 @@
     "poleDeleted": "Direk silindi.",
     "poleDeleteFail": "Direk silinemedi.",
     "changesSaved": "Değişiklikler kaydedildi.",
-    "draftReverted": "Taslak değişiklikler geri alındı."
+    "draftReverted": "Taslak değişiklikler geri alındı.",
+    "deviceAddFailed": "Cihaz eklenemedi."
   },
   "tabs": {
     "close": "Sekmeyi kapat",
@@ -2903,6 +2905,42 @@
         "faultDuration": "Arıza Süresi",
         "lastGood": "Son İyi Akım",
         "tripLevel": "Trip Seviyesi"
+      }
+    }
+  },
+  "map": {
+    "layers": {
+      "street": "Sokak (OSM)",
+      "satellite": "Uydu (Esri)",
+      "topo": "Topografya",
+      "dark": "Karanlık"
+    },
+    "offline": {
+      "button": "Çevrimdışı",
+      "title": "Çevrimdışı harita indir",
+      "intro": "Haritada şu an gördüğünüz alan indirilir. İnternet kesildiğinde bu alan çalışmaya devam eder; dışındaki bölgeler internet varken yüklenir.",
+      "name": "Alan adı",
+      "namePlaceholder": "örn. Batman OSB hattı",
+      "layer": "Harita katmanı",
+      "detail": "Detay seviyesi (z{{zoom}})",
+      "detailHint": "Yükselttikçe sokak detayı artar; indirilecek boyut her kademede yaklaşık 4 katına çıkar.",
+      "tiles": "karo",
+      "diskSpace": "disk alanı",
+      "start": "İndirmeyi başlat",
+      "started": "İndirme başlatıldı. Arka planda sürüyor, bu pencereyi kapatabilirsiniz.",
+      "busyHint": "Devam eden bir indirme var; bitmesini bekleyin.",
+      "cancel": "Durdur",
+      "delete": "Sil",
+      "confirmDelete": "\"{{name}}\" alanı ve indirilmiş karoları silinsin mi?",
+      "packsTitle": "İndirilmiş alanlar",
+      "noPacks": "Henüz çevrimdışı alan indirilmedi.",
+      "failedTiles": "{{count}} karo indirilemedi (internet kesintisi olabilir).",
+      "status": {
+        "pending": "Sırada",
+        "running": "İndiriliyor",
+        "done": "Hazır",
+        "failed": "Başarısız",
+        "cancelled": "Durduruldu"
       }
     }
   }

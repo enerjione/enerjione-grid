@@ -8,6 +8,7 @@
 
 import { useTranslation } from "react-i18next";
 import { MapContainer, Marker, TileLayer, Tooltip } from "react-leaflet";
+import { tileUrl } from "../../shared/mapTiles";
 import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
@@ -252,7 +253,7 @@ export function DeviceSidebar({
               attributionControl={false}
               style={{ height: "100%", width: "100%" }}
             >
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <TileLayer url={tileUrl("osm")} />
               <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN}>
                 <Tooltip permanent direction="top" offset={[0, -10]} className="device-map-label">
                   {device.code}

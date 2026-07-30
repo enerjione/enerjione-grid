@@ -12,96 +12,29 @@ body {
   margin: 0;
 }
 
-/* ----- Lisanssiz sistem kilidi -----------------------------------------
-   Gecerli lisans yokken kullanici bu ekrana kilitlenir; navigasyon YOKTUR,
-   sadece marka + kullanici + cikis. Kota dolulugu bu ekrani ACMAZ, bkz.
-   App.tsx `licenseGateActive`. */
-.license-gate-bar {
-  height: 68px;
-  flex: 0 0 auto;
-  background: #1f2937;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-}
 
-/* Kilit ekranindaki tek navigasyon: Lisans <-> Ag Ayarlari.
-   Ag ayarlari bilerek kilidin disinda; IP/WiFi duzeltilemeden lisans
-   etkinlestirilemez (bkz. App.tsx licenseGateActive). */
-.license-gate-nav {
-  display: flex;
-  gap: 4px;
-  margin-left: 8px;
-}
 
-.license-gate-nav__btn {
-  border: 1px solid transparent;
-  background: transparent;
-  color: #cbd5e1;
-  font-size: 14px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
 
-.license-gate-nav__btn:hover {
-  background: rgba(148, 163, 184, 0.18);
-  color: #fff;
-}
 
-.license-gate-nav__btn.is-active {
-  background: rgba(233, 120, 0, 0.16);
-  border-color: rgba(233, 120, 0, 0.55);
-  color: #fdba74;
-}
 
-.license-gate-nav__btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.3);
-}
 
-/* Kullanici adi ile cikis butonu arasini acar; buton saga yaslanir. */
-.license-gate-bar__user {
-  margin-left: auto;
-  font-size: 14px;
-  color: #cbd5e1;
-}
 
-/* `.secondary-btn` global `margin-right: 8px` tasir; kenarda bosluk kalmasin. */
-.license-gate-bar .secondary-btn {
-  margin-right: 0;
-}
 
-.license-gate-content {
-  gap: 12px;
-}
 
-.license-gate-notice {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid #f0b37e;
-  border-left: 4px solid #e97800;
-  border-radius: 8px;
-  background: #fff7ed;
-  color: #7c2d12;
-}
 
-.license-gate-notice__title {
-  font-weight: 700;
-  font-size: 15px;
-}
 
-.license-gate-notice__text {
-  font-size: 13px;
-  line-height: 1.45;
-}
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Lisans yonetimi — endustriyel kontrol paneli, tek seri kapasite meter'i. */
 .license-panel {
@@ -32517,4 +32450,313 @@ th.event-col-category {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: #334155;
+}
+
+/* ---------------------------------------------------------------------------
+   Lisans kilidi — normal kabuk uzerinde bulanik + tek popup
+   ---------------------------------------------------------------------------
+   Onceki surum kendi header'ini ve kendi sayfa duzenini ciziyordu; uygulamanin
+   geri kalanindan kopuk gorunuyordu. Artik header ve sekmeler oldugu gibi
+   duruyor, yalnizca ICERIK bulaniklasip tiklanamaz hale geliyor.
+   Bulanikligi `.layout` degil `.body` uzeriden veriyoruz ki header net kalsin.
+--------------------------------------------------------------------------- */
+.layout.is-license-locked .body {
+  filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.license-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;              /* header (100) ve toast'in altinda degil */
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.license-gate-dialog {
+  background: #fff;
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+}
+
+.license-gate-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+
+.license-gate-dialog p {
+  margin: 0 0 20px;
+  color: #57606a;
+}
+
+/* ===== Cevrimdisi harita ==================================================
+   Karolar backend uzerinden gelir (once disk, yoksa internet). Buradaki
+   arayuz o onbellegi ONDEN doldurur: kullanici haritayi ilgilendigi bolgeye
+   getirir, "Cevrimdisi" der ve gordugu alani indirir. */
+
+/* Harita uzerinde sag altta duran acma butonu. Leaflet kontrolleri
+   z-index 400-1000 araligini kullanir; ustte kalmasi icin 1001. */
+.map-offline-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 26px;
+  z-index: 1001;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.map-offline-btn:hover {
+  background: #fff;
+}
+
+.map-offline-btn:active {
+  transform: scale(0.97);
+}
+
+.offline-map-modal {
+  width: min(620px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.offline-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.offline-map-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 17px;
+}
+
+.offline-map-close {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.offline-map-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.offline-map-intro {
+  margin: 8px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.offline-map-form {
+  display: grid;
+  gap: 12px;
+}
+
+.offline-map-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.offline-map-field input[type="text"],
+.offline-map-field select {
+  padding: 7px 9px;
+  font-size: 13px;
+  font-weight: 400;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+}
+
+.offline-map-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #64748b;
+}
+
+/* Tahmin seridi — indirmeden ONCE kac karo / kac MB oldugunu soyler.
+   Sinir asilinca kirmiziya doner ve baslat butonu kapanir. */
+.offline-map-estimate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.offline-map-estimate.is-bad {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.offline-map-estimate__sep {
+  color: #cbd5e1;
+}
+
+.offline-map-estimate__bad {
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.offline-map-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.offline-map-packs {
+  margin-top: 18px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
+}
+
+.offline-map-packs__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.offline-map-packs__head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.offline-map-empty {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.offline-map-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.offline-map-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.offline-map-item.is-failed {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.offline-map-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.offline-map-item__main strong {
+  font-size: 13px;
+}
+
+.offline-map-item__side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.offline-map-progress {
+  width: 100%;
+  height: 5px;
+  margin-top: 3px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.offline-map-progress__bar {
+  height: 100%;
+  background: #e97800;
+  transition: width 0.3s ease;
+}
+
+.offline-map-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.offline-map-badge.is-done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.offline-map-badge.is-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.offline-map-badge.is-running,
+.offline-map-badge.is-pending {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.offline-map-del {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #b91c1c;
+  border-radius: 7px;
+  padding: 5px 7px;
+  cursor: pointer;
+}
+
+.offline-map-del:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
 }

@@ -1948,7 +1948,6 @@
       "title": "License Management",
       "subtitle": "Device capacity and machine-bound license details for this installation.",
       "gateTitle": "System is not licensed",
-      "gateText": "A valid license file is required before you can continue. Download the license request below and send it to us; the system unlocks once you import the .lic file you receive.",
       "appVersionLabel": "EnerjiOne Grid version",
       "updateAvailable": "New version: v{{version}}",
       "updateHint": "Updates are applied on the server (update.sh); they cannot be started from the UI.",
@@ -2011,7 +2010,9 @@
         "machine_mismatch": "Different machine",
         "machine_unavailable": "Machine ID unavailable",
         "unavailable": "Capacity unavailable"
-      }
+      },
+      "gateShort": "No licence has been installed on this system yet.",
+      "gateGo": "Go to licence page"
     },
     "liveValues": {
       "title": "Live Values",
@@ -2626,7 +2627,8 @@
     "poleDeleted": "Pole deleted.",
     "poleDeleteFail": "Failed to delete pole.",
     "changesSaved": "Changes saved.",
-    "draftReverted": "Draft changes reverted."
+    "draftReverted": "Draft changes reverted.",
+    "deviceAddFailed": "Could not add device."
   },
   "tabs": {
     "close": "Close tab",
@@ -2903,6 +2905,42 @@
         "faultDuration": "Fault Duration",
         "lastGood": "Last Good Current",
         "tripLevel": "Trip Level"
+      }
+    }
+  },
+  "map": {
+    "layers": {
+      "street": "Street (OSM)",
+      "satellite": "Satellite (Esri)",
+      "topo": "Topographic",
+      "dark": "Dark"
+    },
+    "offline": {
+      "button": "Offline",
+      "title": "Download offline map",
+      "intro": "The area currently shown on the map will be downloaded. It keeps working when the internet is down; areas outside it load only while online.",
+      "name": "Area name",
+      "namePlaceholder": "e.g. Batman OSB feeder",
+      "layer": "Map layer",
+      "detail": "Detail level (z{{zoom}})",
+      "detailHint": "Higher levels add street detail; the download size roughly quadruples at each step.",
+      "tiles": "tiles",
+      "diskSpace": "disk space",
+      "start": "Start download",
+      "started": "Download started. It continues in the background; you can close this window.",
+      "busyHint": "A download is already running; wait for it to finish.",
+      "cancel": "Stop",
+      "delete": "Delete",
+      "confirmDelete": "Delete area \"{{name}}\" and its downloaded tiles?",
+      "packsTitle": "Downloaded areas",
+      "noPacks": "No offline area downloaded yet.",
+      "failedTiles": "{{count}} tiles could not be downloaded (possible connection loss).",
+      "status": {
+        "pending": "Queued",
+        "running": "Downloading",
+        "done": "Ready",
+        "failed": "Failed",
+        "cancelled": "Stopped"
       }
     }
   }

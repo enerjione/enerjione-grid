@@ -1061,3 +1061,50 @@ export type TelemetryAggregatePoint = {
   max_value: number | null;
   sample_count: number;
 };
+
+// ---- Cevrimdisi harita karolari ------------------------------------------
+export type MapPackStatus = "pending" | "running" | "done" | "failed" | "cancelled";
+
+export type MapPack = {
+  id: string;
+  name: string;
+  layer: string;
+  /** [guney, bati, kuzey, dogu] */
+  bbox: number[];
+  zoom_min: number;
+  zoom_max: number;
+  tile_total: number;
+  tile_done: number;
+  tile_failed: number;
+  bytes_written: number;
+  status: MapPackStatus;
+  error: string;
+  created_at: string;
+  finished_at: string;
+};
+
+export type MapTileSummary = {
+  layers: { key: string; label: string; max_zoom: number; attribution: string }[];
+  cache_bytes: number;
+  max_cache_bytes: number;
+  max_download_zoom: number;
+  max_pack_tiles: number;
+  online_fallback: boolean;
+  packs: MapPack[];
+};
+
+export type MapAreaRequest = {
+  layer: string;
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+  zoom_min: number;
+  zoom_max: number;
+};
+
+export type MapEstimate = {
+  tile_count: number;
+  estimated_bytes: number;
+  max_tiles: number;
+};

@@ -194,10 +194,12 @@ export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
           <span className="wifi-current-icon">
             <WifiOff size={18} strokeWidth={2.2} />
           </span>
+          {/* AP adresi ve "nasil baglanirim" aciklamasi ustteki durum
+              seridinde zaten duruyor; burada tekrar etmek listeyi
+              gereksiz uzatiyordu. */}
           <div className="wifi-current-body">
             <small>{t("network.wifi.notConnected")}</small>
             <strong>{t("network.wifi.apActiveTitle")}</strong>
-            <span className="net-hint">{t("network.wifi.apActiveHint")}</span>
           </div>
         </div>
       )}

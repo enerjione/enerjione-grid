@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import { MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
 import L from "leaflet";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 
@@ -907,23 +908,20 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 >
                   <LayersControl position="topright">
                     <LayersControl.BaseLayer checked name="Sokak (OSM)">
-                      <TileLayer
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                      />
+                      <TileLayer url={tileUrl("osm")} attribution={MAP_LAYERS[0].attribution} />
                     </LayersControl.BaseLayer>
                     <LayersControl.BaseLayer name="Uydu (Esri)">
                       <TileLayer
-                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                        attribution="Tiles &copy; Esri"
-                        maxZoom={19}
+                        url={tileUrl("satellite")}
+                        attribution={MAP_LAYERS[1].attribution}
+                        maxZoom={MAP_LAYERS[1].maxZoom}
                       />
                     </LayersControl.BaseLayer>
                     <LayersControl.BaseLayer name="Topografya">
                       <TileLayer
-                        url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
-                        attribution='&copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
-                        maxZoom={17}
+                        url={tileUrl("topo")}
+                        attribution={MAP_LAYERS[2].attribution}
+                        maxZoom={MAP_LAYERS[2].maxZoom}
                       />
                     </LayersControl.BaseLayer>
                   </LayersControl>

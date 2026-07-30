@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { DEFAULT_MAP_LAYER, MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
+import { Download } from "lucide-react";
+import { OfflineMapModal } from "./OfflineMapModal";
 import L from "leaflet";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
@@ -25,6 +28,10 @@ type Props = {
   /** Verilirse "Tüm detayları göster" popup içi modal yerine cihaz detay
    *  SEKMESI acar (Chrome tarzi sekme sistemi). Verilmezse eski modal davranisi. */
   onOpenDetail?: (deviceId: number) => void;
+  /** Cevrimdisi harita indirme icin oturum token'i. */
+  accessToken?: string;
+  /** Cevrimdisi harita paketlerini yonetme yetkisi (engineer/installer). */
+  canManageOfflineMap?: boolean;
 };
 
 const DEFAULT_LINE_COLOR = "#2563eb";
@@ -101,6 +108,18 @@ const polePin = (
   _polePinCache.set(key, icon);
   return icon;
 };
+
+/** Leaflet harita ornegini MapContainer DISINA tasir.
+ *  react-leaflet'te `useMap` sadece MapContainer'in ICINDE calisir; cevrimdisi
+ *  indirme modali "o anki gorunum"u bilmek zorunda oldugu icin ornegi bir kez
+ *  yukari veriyoruz. */
+function MapRefBridge({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
 
 function FlyToSelected({
   selectedDevice,
@@ -288,10 +307,12 @@ type LineInfoCard = {
   isFault: boolean;
 };
 
-export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms, onOpenDetail, hiddenLineIds }: Props) {
+export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms, onOpenDetail, hiddenLineIds, accessToken, canManageOfflineMap }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [offlineMapOpen, setOfflineMapOpen] = useState(false);
+  const mapRef = useRef<L.Map | null>(null);
   const [poleInfo, setPoleInfo] = useState<PoleInfoCard | null>(null);
   const [lineInfo, setLineInfo] = useState<LineInfoCard | null>(null);
   // Cihaz değişince modali kapat (yanlışlıkla başka cihazın detayını gösterme)
@@ -1099,35 +1120,21 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       <div className="world-map-shell">
         <MapContainer className="world-map" center={[39.0, 35.0]} zoom={5} scrollWheelZoom>
           <LayersControl position="topright">
-            <LayersControl.BaseLayer checked name="Sokak (OSM)">
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              />
-            </LayersControl.BaseLayer>
-            <LayersControl.BaseLayer name="Uydu (Esri)">
-              <TileLayer
-                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
-                maxZoom={19}
-              />
-            </LayersControl.BaseLayer>
-            <LayersControl.BaseLayer name="Topografya (OpenTopoMap)">
-              <TileLayer
-                url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
-                attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM | Style: <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'
-                maxZoom={17}
-              />
-            </LayersControl.BaseLayer>
-            <LayersControl.BaseLayer name="Karanlık (CARTO)">
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                subdomains="abcd"
-                maxZoom={19}
-              />
-            </LayersControl.BaseLayer>
+            {MAP_LAYERS.map((layer) => (
+              <LayersControl.BaseLayer
+                key={layer.key}
+                checked={layer.key === DEFAULT_MAP_LAYER}
+                name={t(layer.labelKey)}
+              >
+                <TileLayer
+                  url={tileUrl(layer.key)}
+                  attribution={layer.attribution}
+                  maxZoom={layer.maxZoom}
+                />
+              </LayersControl.BaseLayer>
+            ))}
           </LayersControl>
+          <MapRefBridge onReady={(map) => { mapRef.current = map; }} />
           <FlyToSelected
             selectedDevice={selectedDevice}
             override={selectedDevice ? deviceLocationOverride.get(selectedDevice.id) : undefined}
@@ -1266,6 +1273,17 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             );
           })}
         </MapContainer>
+        {canManageOfflineMap && accessToken ? (
+          <button
+            type="button"
+            className="map-offline-btn"
+            title={t("map.offline.title")}
+            onClick={() => setOfflineMapOpen(true)}
+          >
+            <Download size={16} />
+            <span>{t("map.offline.button")}</span>
+          </button>
+        ) : null}
 
         {/* Direk bilgi karti — pin'e tiklaninca sag ust kosede acilir */}
         {poleInfo && !selectedDevice ? (
@@ -1516,6 +1534,17 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           />
         ) : null}
       </div>
+    {offlineMapOpen && accessToken && mapRef.current ? (
+      <OfflineMapModal
+        accessToken={accessToken}
+        bounds={(() => {
+          const b = mapRef.current.getBounds();
+          return [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()] as [number, number, number, number];
+        })()}
+        currentZoom={mapRef.current.getZoom()}
+        onClose={() => setOfflineMapOpen(false)}
+      />
+    ) : null}
     </section>
   );
 }

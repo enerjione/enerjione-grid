@@ -148,6 +148,17 @@ async function buildApiError(response: Response, fallbackMessage: string): Promi
     if (typeof detail === "string" && detail.trim()) {
       return new Error(sanitizeErrorDetail(detail, response.status, fallbackMessage));
     }
+    // Backend bazi hatalarda `detail`i NESNE olarak doner:
+    //   {"code": "license_capacity_exceeded", "message": "..."}
+    // Once yalnizca string ve dizi isleniyordu; nesne hali sessizce
+    // fallback'e dusuyor ve kullaniciya "islem basarisiz" gibi genel bir
+    // mesaj gidiyordu. Lisans kapasitesi tam bu yoldan geliyor.
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      const msg = (detail as { message?: unknown }).message;
+      if (typeof msg === "string" && msg.trim()) {
+        return new Error(sanitizeErrorDetail(msg, response.status, fallbackMessage));
+      }
+    }
     if (Array.isArray(detail) && detail.length > 0) {
       const first = detail[0];
       if (typeof first === "string" && first.trim()) {
@@ -2549,4 +2560,62 @@ export async function purgeApiKey(token: string, keyId: number): Promise<void> {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "API anahtarı silinemedi.");
+}
+
+// ---- Cevrimdisi harita karolari ------------------------------------------
+export async function fetchMapTileSummary(
+  token: string
+): Promise<import("./types").MapTileSummary> {
+  const response = await apiFetch(`${API_BASE_URL}/map-tiles/summary`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Harita durumu alınamadı.");
+  return (await response.json()) as import("./types").MapTileSummary;
+}
+
+export async function estimateMapArea(
+  token: string,
+  payload: import("./types").MapAreaRequest
+): Promise<import("./types").MapEstimate> {
+  const response = await apiFetch(`${API_BASE_URL}/map-tiles/estimate`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Alan hesaplanamadı.");
+  return (await response.json()) as import("./types").MapEstimate;
+}
+
+export async function startMapPack(
+  token: string,
+  payload: import("./types").MapAreaRequest & { name: string }
+): Promise<import("./types").MapPack> {
+  const response = await apiFetch(`${API_BASE_URL}/map-tiles/packs`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "İndirme başlatılamadı.");
+  return (await response.json()) as import("./types").MapPack;
+}
+
+export async function cancelMapPack(token: string, packId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/map-tiles/packs/${packId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "İndirme durdurulamadı.");
+}
+
+/** removeTiles=true ise alandaki karolar diskten de silinir. */
+export async function deleteMapPack(
+  token: string,
+  packId: string,
+  removeTiles: boolean
+): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/map-tiles/packs/${packId}?remove_tiles=${removeTiles ? "true" : "false"}`,
+    { method: "DELETE", headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Paket silinemedi.");
 }
