@@ -183,6 +183,14 @@ export type FaultEvent = {
   to_pole_id: number;
   from_pole_seq?: number | null;
   to_pole_seq?: number | null;
+  /** Hat basindan arizanin en yakin sinirina TEL mesafesi (metre, kus ucusu
+      degil). Sinir = son arizayi goren cihazin konumu. */
+  zone_start_m?: number | null;
+  /** Hat basindan arizanin en uzak sinirina tel mesafesi (metre). Sinir = ilk
+      arizayi gormeyen cihaz; yoksa hattin son diregi. */
+  zone_end_m?: number | null;
+  /** Belirsizlik araligi = zone_end_m - zone_start_m (metre). */
+  zone_length_m?: number | null;
   status: "open" | "assigned" | "in_progress" | "resolved" | "closed" | string;
   opened_at: string;
   resolved_at?: string | null;

@@ -12,6 +12,16 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+### Eklendi
+- **Arıza tel mesafesi** — arıza bölgesinin hat başından kaç metre uzakta
+  olduğu artık hesaplanıyor ve gösteriliyor. Kuş uçuşu değil: direk
+  koordinatları üzerinden hat boyunca, cihazların direkler arasındaki
+  konumu da hesaba katılarak. Arıza kartında, arıza detayında ve haritadaki
+  kırmızı arıza çizgisinin üzerinde görünür. Branşman hatlarda mesafe ana
+  hattaki dallanma direğinden itibaren toplanır.
+- **Çevrimdışı harita** artık modal yerine Mühendislik altında ayrı bir
+  sayfa; alan seçimi harita üzerinde sürükleyerek yapılıyor.
+
 ---
 
 ## [2.24.6] — 2026-07-30

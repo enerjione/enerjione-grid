@@ -6,6 +6,7 @@ import L from "leaflet";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 
 import type { GridSnapshot } from "../../shared/api";
+import { formatDistanceM, formatDistanceRange } from "../../shared/lineDistance";
 import type { AlarmEvent, DeviceRow, FaultComment, FaultEvent, UserRead } from "../../shared/types";
 
 type Props = {
@@ -630,6 +631,55 @@ export function FaultDetailModal({
                 </div>
               )}
             </div>
+
+            {/* Tel mesafesi — hat basindan ve son arizali cihazdan itibaren.
+                Degerler backend'de direk + cihaz koordinatlarindan hat boyunca
+                hesaplanip fault kaydina yazilir (line_distance_service). */}
+            {formatDistanceRange(fault.zone_start_m, fault.zone_end_m) ? (
+              <div className="fault-modal-section">
+                <h4>{t("faults.detail.distanceTitle")}</h4>
+                <div className="fault-modal-distance">
+                  <div className="fault-modal-distance-row">
+                    <span className="fault-modal-distance-label">
+                      {t("faults.detail.distanceFromStart")}
+                    </span>
+                    <strong className="fault-modal-distance-value">
+                      {formatDistanceRange(fault.zone_start_m, fault.zone_end_m)}
+                    </strong>
+                  </div>
+                  {fault.zone_length_m != null ? (
+                    <>
+                      <div className="fault-modal-distance-row">
+                        <span className="fault-modal-distance-label">
+                          {t("faults.detail.distanceFromDevice", {
+                            device:
+                              fault.last_red_device_name ??
+                              fault.last_red_device_code ??
+                              "—"
+                          })}
+                        </span>
+                        <strong className="fault-modal-distance-value">
+                          {t("faults.detail.distanceAheadRange", {
+                            span: formatDistanceM(fault.zone_length_m)
+                          })}
+                        </strong>
+                      </div>
+                      <div className="fault-modal-distance-row">
+                        <span className="fault-modal-distance-label">
+                          {t("faults.detail.distanceSpanLabel")}
+                        </span>
+                        <strong className="fault-modal-distance-value">
+                          {formatDistanceM(fault.zone_length_m)}
+                        </strong>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+                <p className="fault-modal-distance-hint">
+                  {t("faults.detail.distanceHint")}
+                </p>
+              </div>
+            ) : null}
 
             {/* Arıza aralığındaki direklerin koordinat listesi */}
             {mapView && mapView.rangePoles.length > 0 ? (

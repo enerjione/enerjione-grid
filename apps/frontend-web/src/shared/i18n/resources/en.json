@@ -719,6 +719,10 @@
     "card": {
       "rangeTag": "Fault Range",
       "rangeText": "Pole #{{from}} — Pole #{{to}}",
+      "distanceTag": "Conductor Distance",
+      "distanceFromStart": "from line start",
+      "distanceSpan": "{{span}} uncertainty",
+      "distanceAhead": "0 – {{span}} beyond this device",
       "zoneTitle": "Estimated Fault Zone",
       "locationFound": "Location identified",
       "duration": "Duration",
@@ -764,6 +768,12 @@
       "changeStatus": "Change status",
       "statusLabel": "Status",
       "coordinates": "Pole Coordinates",
+      "distanceTitle": "Conductor Distance",
+      "distanceFromStart": "From line start",
+      "distanceFromDevice": "From device {{device}}",
+      "distanceAheadRange": "0 – {{span}} beyond",
+      "distanceSpanLabel": "Uncertainty span",
+      "distanceHint": "Distances follow the line through the pole coordinates, not straight-line. Device positions between poles are taken into account. Elevation change and conductor sag are not included.",
       "rangePolesTitle": "Poles in Fault Range",
       "poleRangeStart": "Fault start",
       "poleRangeEnd": "Fault end",
@@ -2911,6 +2921,7 @@
     }
   },
   "map": {
+    "faultDistance": "{{range}} from line start",
     "layers": {
       "street": "Street (OSM)",
       "satellite": "Satellite (Esri)",

@@ -17,6 +17,7 @@ import {
   List,
   MapPin,
   Map as MapIcon,
+  Ruler,
   Timer,
   UserPlus,
   User as UserIcon,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 
 import type { FaultEvent } from "../../shared/types";
+import { formatDistanceM, formatDistanceRange } from "../../shared/lineDistance";
 import { FaultPoleStrip } from "./FaultPoleStrip";
 
 type Props = {
@@ -77,6 +79,10 @@ export function ActiveFaultCard({
   const { t } = useTranslation();
   const assignee = f.assigned_to_full_name ?? f.assigned_to_username ?? null;
   const hasLocation = f.from_pole_seq != null && f.to_pole_seq != null;
+  // Tel mesafesi backend'de hesaplanip kayda yazilir (bkz.
+  // line_distance_service). Eski kayitlarda / koordinatsiz topolojide NULL
+  // gelebilir — o durumda mesafe blogu hic cizilmez.
+  const distanceRange = formatDistanceRange(f.zone_start_m, f.zone_end_m);
 
   return (
     <article className={`fx-card fx-card--${f.status}`}>
@@ -95,6 +101,24 @@ export function ActiveFaultCard({
             to: f.to_pole_seq ?? "?"
           })}
         </div>
+
+        {distanceRange ? (
+          <div className="fx-card-distance">
+            <span className="fx-card-distance-head">
+              <Ruler size={13} strokeWidth={2.2} />
+              {t("faults.card.distanceTag")}
+            </span>
+            <strong className="fx-card-distance-value">{distanceRange}</strong>
+            <small className="fx-card-distance-hint">
+              {t("faults.card.distanceFromStart")}
+              {f.zone_length_m != null
+                ? ` · ${t("faults.card.distanceSpan", {
+                    span: formatDistanceM(f.zone_length_m)
+                  })}`
+                : ""}
+            </small>
+          </div>
+        ) : null}
 
         <div className="fx-card-badges">
           <span className={`fx-badge fx-badge--status-${f.status}`}>
@@ -159,6 +183,15 @@ export function ActiveFaultCard({
               <small>{t("faults.card.lastRedLabel")}</small>
               <strong>{f.last_red_device_name ?? f.last_red_device_code ?? "—"}</strong>
               {f.last_red_device_code ? <code>{f.last_red_device_code}</code> : null}
+              {/* Bu cihaz arizanin YUKARI sinirindir: ariza cihazdan sonraki
+                  0..zone_length_m araliginda bir yerdedir. */}
+              {f.zone_length_m != null ? (
+                <em className="fx-dev-dist">
+                  {t("faults.card.distanceAhead", {
+                    span: formatDistanceM(f.zone_length_m)
+                  })}
+                </em>
+              ) : null}
             </span>
           </div>
           <div className="fx-dev fx-dev--green">

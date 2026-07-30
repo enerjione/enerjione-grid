@@ -29,7 +29,7 @@ Mantik:
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -70,6 +70,19 @@ class FaultEvent(Base):
     # Pole sequence_no'larini aciklayici metin/UI icin saklayalim (denormalized).
     from_pole_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     to_pole_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # --- Tel mesafesi (METRE) --------------------------------------------
+    # Direk koordinatlari + cihazin slot icindeki konumu (device_position_t)
+    # kullanilarak hat boyunca (kus ucusu DEGIL) hesaplanir; bkz.
+    # `line_distance_service`. Ariza her recompute'ta yeniden yazilir, yani
+    # topoloji koordinati duzeltilirse bir sonraki turda guncellenir.
+    #   zone_start_m : hat basindan son RED cihaza (arizanin en yakin sinirina)
+    #   zone_end_m   : hat basindan ilk GREEN cihaza (yoksa hattin ucuna)
+    #   zone_length_m: belirsizlik araligi = zone_end_m - zone_start_m
+    # Koordinat/topoloji eksikse NULL kalir — UI mesafe blogunu gizler.
+    zone_start_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zone_end_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zone_length_m: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # status:
     #   "open"        - yeni acildi, henuz kimse atanmadi

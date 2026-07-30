@@ -9,6 +9,7 @@ import type { GridSnapshot } from "../../shared/api";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { locateDevice } from "../../shared/geoLookup";
+import { buildLineDistanceIndex, formatDistanceRange } from "../../shared/lineDistance";
 
 type Props = {
   devices: DeviceRow[];
@@ -477,6 +478,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     return m;
   }, [gridSnapshot]);
 
+  // Tel mesafesi indeksi — direk koordinatlarindan hat boyunca kumulatif
+  // mesafeler. Ariza edge'inin tooltip'inde "hat basindan ~X m" gostermek
+  // icin. Backend `line_distance_service` ile ayni formul.
+  const lineDistIndex = useMemo(
+    () => (gridSnapshot ? buildLineDistanceIndex(gridSnapshot) : null),
+    [gridSnapshot]
+  );
+
   const topology = useMemo(() => {
     if (!gridSnapshot) return null;
     const polesById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
@@ -506,6 +515,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       kind: "healthy" | "fault";   // saglikli yesil / arizali kirmizi kesik
       name: string;
       regionName: string;
+      // Ariza parcalari icin: parcanin iki ucunun hat basindan TEL mesafesi
+      // (metre). Saglikli parcalarda null — tooltip'te gosterilmiyor.
+      distFromM: number | null;
+      distToM: number | null;
     };
     const linePolylines: LinePart[] = [];
     const HEALTHY_DEFAULT = HEALTHY_FAULT_LINE_COLOR;
@@ -999,6 +1012,23 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     }
 
     // 5) RENDER: edge'leri polyline olarak ureti.
+    //
+    // Ariza parcalari icin tel mesafesi de tasiniyor: edge'in uc node'lari
+    // ya bir direk (`p-<id>`) ya bir cihazdir (`d-<id>`); ikisinin de hat
+    // basindan mesafesi lineDistIndex'te hazir. Bransman baglanti edge'leri
+    // (lineId=null) icin de node bazli calisir.
+    const nodeDistM = (nodeId: string): number | null => {
+      if (!lineDistIndex) return null;
+      const n = nodes.get(nodeId);
+      if (!n) return null;
+      if (n.kind === "pole" && n.poleId != null) {
+        return lineDistIndex.poleDistM.get(n.poleId) ?? null;
+      }
+      if (n.kind === "device" && n.deviceId != null) {
+        return lineDistIndex.deviceDistM.get(n.deviceId) ?? null;
+      }
+      return null;
+    };
     for (const e of edges) {
       const isFault = faultEdgeIds.has(e.id);
       linePolylines.push({
@@ -1008,7 +1038,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
         color: isFault ? FAULT_COLOR : HEALTHY_DEFAULT,
         kind: isFault ? "fault" : "healthy",
         name: e.lineName,
-        regionName: e.regionName
+        regionName: e.regionName,
+        distFromM: isFault ? nodeDistM(e.fromNodeId) : null,
+        distToM: isFault ? nodeDistM(e.toNodeId) : null
       });
     }
 
@@ -1106,7 +1138,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     const branchLinks: never[] = [];
 
     return { linePolylines, alarmedSegments, polesWithRole, branchLinks };
-  }, [gridSnapshot, devices, alarmActiveDeviceIds]);
+  }, [gridSnapshot, devices, alarmActiveDeviceIds, deviceLocationOverride, lineDistIndex]);
 
   return (
     <section className="map-full">
@@ -1177,6 +1209,18 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   {line.regionName ? <><br />{line.regionName}</> : null}
                   {isFault ? (
                     <><br /><em style={{ color: FAULT_COLOR }}>Tahmini arıza yeri</em></>
+                  ) : null}
+                  {/* Tel mesafesi: bu parcanin hat basindan uzakligi. Kus
+                      ucusu degil, direkler uzerinden hat boyunca olculur. */}
+                  {isFault && formatDistanceRange(line.distFromM, line.distToM) ? (
+                    <>
+                      <br />
+                      <span style={{ opacity: 0.85 }}>
+                        {t("map.faultDistance", {
+                          range: formatDistanceRange(line.distFromM, line.distToM)
+                        })}
+                      </span>
+                    </>
                   ) : null}
                 </Tooltip>
               </Polyline>

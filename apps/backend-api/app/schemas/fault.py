@@ -24,6 +24,12 @@ class FaultEventRead(BaseModel):
     from_pole_seq: int | None = None
     to_pole_seq: int | None = None
 
+    # Tel mesafesi (metre) — hat basindan olculur, kus ucusu degil hat boyunca.
+    # NULL: topoloji/koordinat eksik ya da kayit henuz recompute'tan gecmedi.
+    zone_start_m: float | None = None
+    zone_end_m: float | None = None
+    zone_length_m: float | None = None
+
     status: str
     opened_at: datetime
     resolved_at: datetime | None = None

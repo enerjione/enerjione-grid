@@ -719,6 +719,10 @@
     "card": {
       "rangeTag": "Arıza Aralığı",
       "rangeText": "Direk #{{from}} — Direk #{{to}}",
+      "distanceTag": "Tel Mesafesi",
+      "distanceFromStart": "hat başından",
+      "distanceSpan": "{{span}} belirsizlik",
+      "distanceAhead": "Bu cihazdan 0 – {{span}} ileride",
       "zoneTitle": "Tahmini Arıza Bölgesi",
       "locationFound": "Konum tespit edildi",
       "duration": "Süre",
@@ -764,6 +768,12 @@
       "changeStatus": "Durumu değiştir",
       "statusLabel": "Durum",
       "coordinates": "Direk Koordinatları",
+      "distanceTitle": "Tel Mesafesi",
+      "distanceFromStart": "Hat başından",
+      "distanceFromDevice": "{{device}} cihazından",
+      "distanceAheadRange": "0 – {{span}} ileride",
+      "distanceSpanLabel": "Belirsizlik aralığı",
+      "distanceHint": "Mesafeler kuş uçuşu değil, direk koordinatları üzerinden hat boyunca hesaplanır. Cihazların direkler arasındaki konumu da hesaba katılır. Kot farkı ve iletken sarkması dâhil değildir.",
       "rangePolesTitle": "Arıza Aralığındaki Direkler",
       "poleRangeStart": "Arıza başlangıcı",
       "poleRangeEnd": "Arıza bitişi",
@@ -2911,6 +2921,7 @@
     }
   },
   "map": {
+    "faultDistance": "Hat başından {{range}}",
     "layers": {
       "street": "Sokak (OSM)",
       "satellite": "Uydu (Esri)",

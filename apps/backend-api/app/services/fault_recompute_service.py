@@ -59,6 +59,10 @@ from app.models.alarm import AlarmEvent
 from app.models.device import Device
 from app.models.fault import FaultEvent
 from app.models.grid_topology import Line, LineSegment, Pole, Region
+from app.services.line_distance_service import (
+    LineDistanceIndex,
+    build_line_distance_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +150,8 @@ class _FaultZone:
         "first_green_device_id",
         "from_pole",
         "to_pole",
+        "start_m",
+        "end_m",
     )
 
     def __init__(
@@ -154,11 +160,18 @@ class _FaultZone:
         first_green_device_id: int | None,
         from_pole: Pole,
         to_pole: Pole,
+        start_m: float | None = None,
+        end_m: float | None = None,
     ) -> None:
         self.last_red_device_id = last_red_device_id
         self.first_green_device_id = first_green_device_id
         self.from_pole = from_pole
         self.to_pole = to_pole
+        # Tel mesafesi (m, hat basindan). Ariza son RED cihaz ile ilk GREEN
+        # cihaz ARASINDA oldugu icin sinirlar direk degil CIHAZ konumlaridir;
+        # bu yuzden from_pole/to_pole araligindan daha dardir.
+        self.start_m = start_m
+        self.end_m = end_m
 
     @property
     def seq_range(self) -> tuple[int, int]:
@@ -166,17 +179,36 @@ class _FaultZone:
         b = self.to_pole.sequence_no
         return (a, b) if a <= b else (b, a)
 
+    @property
+    def distance_range(self) -> tuple[float | None, float | None, float | None]:
+        """(start_m, end_m, length_m) — kucukten buyuge normalize edilmis.
+
+        Ters siralanmis (to_pole_seq < from_pole_seq) topolojilerde de
+        start <= end garantisi verir; herhangi biri NULL ise ucu de NULL."""
+        if self.start_m is None or self.end_m is None:
+            return (None, None, None)
+        lo, hi = (self.start_m, self.end_m)
+        if lo > hi:
+            lo, hi = hi, lo
+        return (lo, hi, hi - lo)
+
 
 def _compute_line_zones(
     line_devices: list[tuple[int, int, int, LineSegment]],
     active_alarm_device_ids: set[int],
     poles_by_id: dict[int, Pole],
+    dist_index: LineDistanceIndex,
+    line_id: int,
 ) -> list[_FaultZone]:
     """Sirali cihaz listesinden TUM ariza bolgelerini cikar.
 
     Her maksimal RED blogunun sonu bir ariza bolgesi uretir. Blogun hemen
     ardindaki cihaz first_green'dir; blok hattin sonunda bitiyorsa
     first_green NULL (ariza hat ucuna kadar uzuyor).
+
+    `dist_index` ile ayni anda tel mesafesi de doldurulur: bolgenin baslangici
+    son RED cihazin, bitisi ilk GREEN cihazin (yoksa hattin son diregi) hat
+    basindan olculen mesafesidir.
     """
     zones: list[_FaultZone] = []
     total = len(line_devices)
@@ -201,12 +233,22 @@ def _compute_line_zones(
             to_pole = poles_by_id.get(next_seg.to_pole_id) or last_red_to_pole
         if seg.device_id is None:
             continue
+        # Tel mesafesi sinirlari: baslangic = son RED cihaz, bitis = ilk GREEN
+        # cihaz. Ilk GREEN yoksa ariza hat ucuna kadar uzuyor demektir.
+        start_m = dist_index.device_distance.get(seg.id)
+        end_m = (
+            dist_index.device_distance.get(next_seg.id)
+            if next_seg is not None
+            else dist_index.line_end_distance(line_id)
+        )
         zones.append(
             _FaultZone(
                 last_red_device_id=seg.device_id,
                 first_green_device_id=first_green_id,
                 from_pole=from_pole,
                 to_pole=to_pole,
+                start_m=start_m,
+                end_m=end_m,
             )
         )
     return zones
@@ -358,6 +400,11 @@ def recompute_faults(db: Session) -> None:
     devices_by_id = {d.id: d for d in db.scalars(select(Device)).all()}
     regions_by_id = {r.id: r for r in db.scalars(select(Region)).all()}
 
+    # Tel mesafesi indeksi — direk koordinatlarindan hat boyunca kumulatif
+    # mesafeler + cihazlarin slot ici interpolasyonu. Bir kez kurulur, tum
+    # hatlarda paylasilir.
+    dist_index = build_line_distance_index(lines, all_poles, segments)
+
     # line_id -> sirali cihaz listesi (slot from_pole_seq -> orderInSlot)
     type_seg_list = list[tuple[int, int, int, LineSegment]]
     devices_per_line: dict[int, type_seg_list] = {}
@@ -416,7 +463,9 @@ def recompute_faults(db: Session) -> None:
         if not line_devices:
             continue
 
-        zones = _compute_line_zones(line_devices, active_alarm_device_ids, poles_by_id)
+        zones = _compute_line_zones(
+            line_devices, active_alarm_device_ids, poles_by_id, dist_index, line.id
+        )
         existing_faults = faults_by_line.get(line.id, [])
         pairs, fresh_zones, orphan_faults = _match_zones_to_faults(zones, existing_faults)
 
@@ -434,6 +483,13 @@ def recompute_faults(db: Session) -> None:
             existing.to_pole_id = zone.to_pole.id
             existing.from_pole_seq = zone.from_pole.sequence_no
             existing.to_pole_seq = zone.to_pole.sequence_no
+            # Tel mesafesi her turda yeniden yazilir — topoloji koordinati
+            # duzeltildiginde eski kayit da guncel degere gecer.
+            (
+                existing.zone_start_m,
+                existing.zone_end_m,
+                existing.zone_length_m,
+            ) = zone.distance_range
             # Ariza tekrar aktif hale geldiyse (resolved iken yeniden alarm)
             # yeniden "open" yapmayiz — operator akisini bozmamak icin
             # mevcut status korunur; sadece resolved ise geri alinir.
@@ -454,6 +510,7 @@ def recompute_faults(db: Session) -> None:
                 else None
             )
             from_pole = zone.from_pole
+            zone_start_m, zone_end_m, zone_length_m = zone.distance_range
             # Yeni fault olustur — OTOMATIK ATAMA YAPILMAZ. Ariza her zaman
             # "open" olarak acilir; atama, Hat Arizalari sayfasindan manuel
             # yapilir (faults.py assign endpoint). Onceden otomatik operator
@@ -468,6 +525,9 @@ def recompute_faults(db: Session) -> None:
                 to_pole_id=zone.to_pole.id,
                 from_pole_seq=zone.from_pole.sequence_no,
                 to_pole_seq=zone.to_pole.sequence_no,
+                zone_start_m=zone_start_m,
+                zone_end_m=zone_end_m,
+                zone_length_m=zone_length_m,
                 status="open",
                 opened_at=now,
                 assigned_to_username=None,
@@ -513,6 +573,10 @@ def recompute_faults(db: Session) -> None:
                         "to_pole_seq": fault.to_pole_seq,
                         "last_red_device_id": fault.last_red_device_id,
                         "first_green_device_id": fault.first_green_device_id,
+                        # Tel mesafesi (m) — raporlama/analiz icin.
+                        "zone_start_m": zone_start_m,
+                        "zone_end_m": zone_end_m,
+                        "zone_length_m": zone_length_m,
                         "assigned_to": None,
                     },
                     i18n_key="fault_opened",
