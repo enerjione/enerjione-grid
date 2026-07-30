@@ -220,6 +220,9 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
   const [licenseLoading, setLicenseLoading] = useState(false);
+  // Lisans kilidi ekranindaki aktif sayfa. Ag ayarlari bilerek kilidin
+  // disinda tutuluyor; bkz. `licenseGateActive` yanindaki aciklama.
+  const [gatePage, setGatePage] = useState<"license" | "network">("license");
 
   // i18n: kullanici tercihi degistiginde (login sonrasi me yuklenince veya
   // ayarlardan dil secildiginde) react-i18next'i ona gore senkronize et.
@@ -2108,6 +2111,13 @@ export function App() {
     LICENSE_GATE_STATES.has(licenseStatus.state);
 
   if (licenseGateActive) {
+    // AG AYARLARI KILIDIN DISINDA. Kisir dongu olmasin: lisansi
+    // etkinlestirmek icin istek dosyasini indirip .lic yuklemek gerekiyor,
+    // bunun icin de cihazin agda/internette olmasi lazim. Ag ayarlarini da
+    // kilitleseydik, IP/WiFi yanlis olan bir cihaz asla lisanslanamazdi.
+    // Cihaz ekleme, kullanici yonetimi vb. HER SEY kapali kalir.
+    const canNetwork = session.role === "installer";
+    const showNetwork = canNetwork && gatePage === "network";
     return (
       <div className="layout">
         {forcePasswordModal}
@@ -2115,6 +2125,24 @@ export function App() {
           <div className="brand-logo-wrap">
             <img src="/logo.png" alt="EnerjiOne" className="logo" />
           </div>
+          {canNetwork ? (
+            <nav className="license-gate-nav">
+              <button
+                type="button"
+                className={`license-gate-nav__btn${showNetwork ? "" : " is-active"}`}
+                onClick={() => setGatePage("license")}
+              >
+                {t("engineering.nav.license")}
+              </button>
+              <button
+                type="button"
+                className={`license-gate-nav__btn${showNetwork ? " is-active" : ""}`}
+                onClick={() => setGatePage("network")}
+              >
+                {t("engineering.nav.networkSettings")}
+              </button>
+            </nav>
+          ) : null}
           <span className="license-gate-bar__user">
             {currentUser?.full_name ?? session.username}
           </span>
@@ -2124,21 +2152,27 @@ export function App() {
         </header>
         <div className="body">
           <main className="content license-gate-content">
-            <div className="license-gate-notice" role="alert">
-              <span className="license-gate-notice__title">
-                {t("engineering.license.gateTitle")}
-              </span>
-              <span className="license-gate-notice__text">
-                {t("engineering.license.gateText")}
-              </span>
-            </div>
-            <LicenseManagementPanel
-              accessToken={session.accessToken}
-              status={licenseStatus}
-              loading={licenseLoading}
-              onStatusChange={setLicenseStatus}
-              onRefresh={reloadLicenseStatus}
-            />
+            {showNetwork ? (
+              <NetworkSettingsPage accessToken={session.accessToken} />
+            ) : (
+              <>
+                <div className="license-gate-notice" role="alert">
+                  <span className="license-gate-notice__title">
+                    {t("engineering.license.gateTitle")}
+                  </span>
+                  <span className="license-gate-notice__text">
+                    {t("engineering.license.gateText")}
+                  </span>
+                </div>
+                <LicenseManagementPanel
+                  accessToken={session.accessToken}
+                  status={licenseStatus}
+                  loading={licenseLoading}
+                  onStatusChange={setLicenseStatus}
+                  onRefresh={reloadLicenseStatus}
+                />
+              </>
+            )}
           </main>
         </div>
       </div>

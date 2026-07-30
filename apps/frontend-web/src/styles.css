@@ -28,6 +28,42 @@ body {
   border-bottom: 1px solid rgba(148, 163, 184, 0.25);
 }
 
+/* Kilit ekranindaki tek navigasyon: Lisans <-> Ag Ayarlari.
+   Ag ayarlari bilerek kilidin disinda; IP/WiFi duzeltilemeden lisans
+   etkinlestirilemez (bkz. App.tsx licenseGateActive). */
+.license-gate-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.license-gate-nav__btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.license-gate-nav__btn:hover {
+  background: rgba(148, 163, 184, 0.18);
+  color: #fff;
+}
+
+.license-gate-nav__btn.is-active {
+  background: rgba(233, 120, 0, 0.16);
+  border-color: rgba(233, 120, 0, 0.55);
+  color: #fdba74;
+}
+
+.license-gate-nav__btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.3);
+}
+
 /* Kullanici adi ile cikis butonu arasini acar; buton saga yaslanir. */
 .license-gate-bar__user {
   margin-left: auto;
