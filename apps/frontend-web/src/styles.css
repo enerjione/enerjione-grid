@@ -31950,21 +31950,11 @@ th.event-col-category {
   font-size: 13px;
 }
 
-/* --- Appliance modu kapali --- */
-.net-unavailable {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 20px 22px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 14px;
-  color: #1e40af;
-}
 
-.net-unavailable h2 { margin: 0 0 6px; font-size: 1rem; color: #1e3a8a; }
-.net-unavailable p { margin: 0 0 8px; font-size: 13px; }
-.net-unavailable-cmd { font-size: 12.5px; }
+
+
+
+
 
 /* --- Onay modali --- */
 .net-confirm { width: min(520px, 94vw); gap: 12px; }

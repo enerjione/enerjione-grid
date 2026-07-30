@@ -20,7 +20,6 @@ import {
   Check,
   Copy,
   Globe,
-  Info,
   Loader2,
   RefreshCw,
   RotateCw,
@@ -310,27 +309,11 @@ export function NetworkSettingsPage({ accessToken }: Props) {
     );
   }
 
-  // ---- Appliance modu kurulu degil ----------------------------------------
-  if (!loading && status && !status.available) {
-    return (
-      <section className="net-page">
-        <div className="net-unavailable">
-          <Info size={28} />
-          <div>
-            <h2>{t("network.unavailable.title")}</h2>
-            <p>{t(`network.unavailable.reason.${status.reason ?? "unknown"}`)}</p>
-            <p className="net-unavailable-cmd">
-              <code className="inline-code">
-                sudo bash infra/appliance/setup-appliance.sh
-              </code>
-            </p>
-            <p className="helper-text">{t("network.unavailable.hint")}</p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
+  // Ag ajani (e1-netd) kurulu olmasa da SAYFAYI GOSTERIYORUZ.
+  // Onceden burada tam sayfalik bir "appliance modu kurulu degil" bilgisi
+  // vardi ve kablolu/WiFi alanlari hic gorunmuyordu. Kullanici sayfaya
+  // baktiginda ne yapabilecegini goremiyordu. Artik normal duzen cikiyor;
+  // ajan yoksa uygulama denemesi zaten hata dondurup toast gosteriyor.
   const busy = Boolean(status?.pending) || submitting;
   const lastFailed = status?.last_apply?.status === "failed";
 
