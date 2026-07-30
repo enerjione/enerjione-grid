@@ -81,65 +81,14 @@ body {
 .license-panel > .license-dashboard     { grid-row: 3; }
 .license-panel > .license-ops-card      { grid-row: 4; }
 
-/* ----- Yazilim surumu seridi (Lisans sayfasi ust kismi) ----- */
-.license-version-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 11px 16px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-.license-version-icon {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: #eef2ff;
-  color: #4338ca;
-}
-.license-version-icon .material-symbols-outlined { font-size: 20px; }
-.license-version-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-.license-version-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #94a3b8;
-}
-.license-version-value {
-  font-size: 17px;
-  font-weight: 800;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-/* Yeni surum rozeti — bilgi amacli, tiklanabilir bir aksiyon DEGIL. */
-.license-version-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  color: #c2410c;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: help;
-}
-.license-version-badge .material-symbols-outlined { font-size: 16px; }
+
+
+
+
+
+
+
+
 
 .license-status-cards {
   display: grid;
@@ -32749,4 +32698,13 @@ th.event-col-category {
 .offline-map-del:hover {
   background: #fef2f2;
   border-color: #fecaca;
+}
+
+/* Lisans bilgileri satirindaki "yeni surum var" rozeti.
+   Tam genislikteki eski surum seridinin yerine geldi. */
+.license-update-badge {
+  margin-left: 8px;
+  background: #fff4e5;
+  color: #9a5b00;
+  border-color: #f3c98b;
 }

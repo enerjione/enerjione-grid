@@ -125,29 +125,6 @@ export function LicenseManagementPanel({
           sayfasinda; burada sadece calisan surum yazar.
           Surum gelmeden (veya eski backend'de uc yoksa) HIC gosterilmez —
           bos bir "—" seridi birakmak yerine tamamen gizli. */}
-      {versionInfo ? (
-        <div className="license-version-strip">
-          <span className="license-version-icon" aria-hidden="true">
-            <span className="material-symbols-outlined">deployed_code</span>
-          </span>
-          <div className="license-version-text">
-            <span className="license-version-label">
-              {t("engineering.license.appVersionLabel")}
-            </span>
-            <strong className="license-version-value">v{versionInfo.current}</strong>
-          </div>
-          {versionInfo.update_available && versionInfo.latest ? (
-            <span
-              className="license-version-badge"
-              title={t("engineering.license.updateHint")}
-            >
-              <span className="material-symbols-outlined">upgrade</span>
-              {t("engineering.license.updateAvailable", { version: versionInfo.latest })}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-
       {/* Ust: uc durum karti */}
       <div className="license-status-cards">
         <article className={`license-stat-card license-stat-card--${stateKey}`}>
@@ -264,6 +241,24 @@ export function LicenseManagementPanel({
         <article className="license-identity-card">
           <h3>{t("engineering.license.infoTitle")}</h3>
           <dl>
+            {/* Surum burada: tam genislikteki serit cok yer kapliyordu.
+                Yeni surum varsa ayni satirda rozet olarak gorunur. */}
+            {versionInfo ? (
+              <div>
+                <dt>{t("engineering.license.appVersionLabel")}</dt>
+                <dd>
+                  v{versionInfo.current}
+                  {versionInfo.update_available && versionInfo.latest ? (
+                    <span
+                      className="license-inline-badge license-update-badge"
+                      title={t("engineering.license.updateHint")}
+                    >
+                      {t("engineering.license.updateAvailable", { version: versionInfo.latest })}
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+            ) : null}
             <div><dt>{t("engineering.license.customerCode")}</dt><dd>{status.customer_code || "—"}</dd></div>
             <div><dt>{t("engineering.license.customerName")}</dt><dd>{status.customer_name || "—"}</dd></div>
             <div><dt>{t("engineering.license.projectName")}</dt><dd>{status.project_name || "—"}</dd></div>
