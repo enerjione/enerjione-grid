@@ -404,14 +404,7 @@ class InstallWorker(threading.Thread):
                     f"sudo -S -p '' bash {APP_DIR}/infra/appliance/setup-appliance.sh",
                     "Mini PC katmani kuruluyor...")
             elif action == "wifi_scan":
-                # `nmcli device wifi list` — sinyal gucune gore sirali.
-                # rescan onbellekten eski liste donmesini onler.
-                rc = self._remote_only(
-                    "sudo -S -p '' sh -c '"
-                    "nmcli radio wifi on >/dev/null 2>&1; "
-                    "nmcli device wifi rescan >/dev/null 2>&1; sleep 3; "
-                    "nmcli -f SSID,SIGNAL,SECURITY device wifi list'",
-                    "WiFi aglari taraniyor...")
+                rc = self._wifi_scan()
             elif action == "tailscale":
                 # Anahtar /etc/enerjione-grid/install.env'de; script onu
                 # kendisi okuyor. Anahtar yoksa hicbir sey yapmadan 0 doner.
@@ -462,6 +455,52 @@ class InstallWorker(threading.Thread):
         self.client.connect(**kwargs)
         self.log("✓ SSH baglantisi kuruldu\n\n")
 
+    def _wifi_scan(self) -> int:
+        """Cihazdaki WiFi aglarini tara ve arayuze LISTE olarak don.
+
+        Ciktiyi terminale dokmuyoruz: nmcli'nin insan-okur bicimi sayfalayici
+        artiklari ("lines 1-39"), renk kodlari ve mukerrer SSID'ler iceriyor —
+        ekrani cop ediyordu. `--terse` makine-okur bicim verir; burada
+        ayristirilip SSID'ler tekillestiriliyor.
+        """
+        self.status("WiFi aglari taraniyor...")
+        # TERM=dumb + --terse: sayfalayici ve renk yok.
+        cmd = (
+            "sudo -S -p '' env TERM=dumb sh -c '"
+            "nmcli radio wifi on >/dev/null 2>&1; "
+            "nmcli device wifi rescan >/dev/null 2>&1; sleep 3; "
+            "nmcli --terse --fields SSID,SIGNAL,SECURITY device wifi list'"
+        )
+        cikti: list[str] = []
+        rc = self._run_remote(cmd, topla=cikti)
+
+        # nmcli --terse: "SSID:SIGNAL:SECURITY", ozel karakterler \: ile kacisli
+        aglar: dict[str, tuple[int, str]] = {}
+        for satir in "".join(cikti).splitlines():
+            parcalar = re.split(r"(?<!\\):", satir.strip())
+            if len(parcalar) < 2:
+                continue
+            ssid = parcalar[0].replace("\\:", ":").strip()
+            if not ssid or ssid == "--":
+                continue  # gizli ag — secilemez, listeye koymanin anlami yok
+            try:
+                sinyal = int(parcalar[1])
+            except ValueError:
+                continue
+            guvenlik = parcalar[2] if len(parcalar) > 2 else ""
+            # Ayni ag birden fazla eriximi noktasindan gorunuyor; EN GUCLU
+            # olani tut. Aksi halde liste ayni adla onlarca satir oluyordu.
+            if ssid not in aglar or sinyal > aglar[ssid][0]:
+                aglar[ssid] = (sinyal, guvenlik)
+
+        sirali = sorted(aglar.items(), key=lambda kv: -kv[1][0])
+        self.out.put(("wifi_list", sirali))
+        if sirali:
+            self.log(f"✓ {len(sirali)} ag bulundu — soldaki listeden secin\n")
+        else:
+            self.log("! Ag bulunamadi. WiFi karti var mi, radyo acik mi?\n")
+        return rc
+
     def _remote_only(self, cmd: str, title: str) -> int:
         """Cihazda hazir duran bir scripti calistir (dosya gondermeden).
 
@@ -505,8 +544,12 @@ class InstallWorker(threading.Thread):
         return self._run_remote(
             f"sudo -S -p '' bash {REMOTE_TMP}; rc=$?; rm -f {REMOTE_TMP}; exit $rc")
 
-    def _run_remote(self, cmd: str) -> int:
-        """Uzak komutu calistirir ve ciktisini CANLI kuyruga akitir."""
+    def _run_remote(self, cmd: str, topla: list[str] | None = None) -> int:
+        """Uzak komutu calistirir ve ciktisini CANLI kuyruga akitir.
+
+        `topla` verilirse cikti terminale YAZILMAZ, listeye biriktirilir —
+        makine-okur ciktilar (nmcli --terse) ekrani kirletmesin diye.
+        """
         password = self.cfg.get("password") or ""
         # PTY istiyoruz: install.sh terminal gorunce ilerleme cubugunu cizer.
         # `sudo -S` parolayi stdin'den okur; -p '' ile istemi bastiririz ki
@@ -529,7 +572,10 @@ class InstallWorker(threading.Thread):
             try:
                 if chan.recv_ready():
                     data = chan.recv(8192).decode("utf-8", errors="replace")
-                    self.log(self._sanitize(data, secret_values))
+                    if topla is not None:
+                        topla.append(self._sanitize(data, secret_values))
+                    else:
+                        self.log(self._sanitize(data, secret_values))
                     continue
                 if chan.exit_status_ready() and not chan.recv_ready():
                     break
@@ -541,7 +587,8 @@ class InstallWorker(threading.Thread):
                 continue
         # Kanalda kalan son baytlari da al.
         while chan.recv_ready():
-            self.log(self._sanitize(chan.recv(8192).decode("utf-8", errors="replace"), secret_values))
+            son = self._sanitize(chan.recv(8192).decode("utf-8", errors="replace"), secret_values)
+            (topla.append(son) if topla is not None else self.log(son))
         return chan.recv_exit_status()
 
     @staticmethod
@@ -652,29 +699,41 @@ class InstallerApp(tk.Tk):
                 pass
 
     def _build_form(self, parent: ttk.Frame) -> None:
+        """Sol panel — SEKMELI.
+
+        Onceden alti ayri kutu alt alta duruyordu; ekran "parca parca"
+        gorunuyor ve her alan icin asagi kaydirmak gerekiyordu. Sekmeler
+        ilgili alanlari bir arada tutuyor ve panel yuksekligini sabitliyor.
+        """
         self.vars: dict[str, tk.Variable] = {}
 
-        def section(title: str) -> ttk.LabelFrame:
-            f = ttk.LabelFrame(parent, text=title, padding=10)
-            f.pack(fill="x", pady=(0, 10))
+        nb = ttk.Notebook(parent)
+        nb.pack(fill="both", expand=True)
+        sek_cihaz = ttk.Frame(nb, padding=12)
+        sek_kurulum = ttk.Frame(nb, padding=12)
+        sek_ag = ttk.Frame(nb, padding=12)
+        nb.add(sek_cihaz, text="  Cihaz  ")
+        nb.add(sek_kurulum, text="  Kurulum  ")
+        nb.add(sek_ag, text="  Ağ  ")
+        for f in (sek_cihaz, sek_kurulum, sek_ag):
             f.columnconfigure(1, weight=1)
-            return f
 
-        def row(parent_, r: int, label: str, key: str, default="", show=None, width=18):
-            ttk.Label(parent_, text=label).grid(row=r, column=0, sticky="w", pady=3)
+        def row(kap, r: int, etiket: str, key: str, default="", show=None):
+            ttk.Label(kap, text=etiket).grid(row=r, column=0, sticky="w", pady=4)
             var = tk.StringVar(value=default)
-            e = ttk.Entry(parent_, textvariable=var, width=width, show=show)
-            e.grid(row=r, column=1, sticky="ew", pady=3, padx=(8, 0))
+            ttk.Entry(kap, textvariable=var, show=show).grid(
+                row=r, column=1, sticky="ew", pady=4, padx=(8, 0))
             self.vars[key] = var
-            return e
 
-        # --- Cihaz ---
-        # IP ve port AYNI SATIRDA: kaydirma olmadigi icin her satir degerli
-        # ve port zaten iki-uc haneli.
-        s = section("Cihaz baglantisi")
-        ttk.Label(s, text="IP adresi").grid(row=0, column=0, sticky="w", pady=3)
-        ipf = ttk.Frame(s)
-        ipf.grid(row=0, column=1, sticky="ew", pady=3, padx=(8, 0))
+        def baslik(kap, r: int, metin: str):
+            ttk.Label(kap, text=metin, font=("Segoe UI", 9, "bold"),
+                      foreground="#57606a").grid(
+                row=r, column=0, columnspan=2, sticky="w", pady=(10, 2))
+
+        # ================= CIHAZ =================
+        ttk.Label(sek_cihaz, text="IP adresi").grid(row=0, column=0, sticky="w", pady=4)
+        ipf = ttk.Frame(sek_cihaz)
+        ipf.grid(row=0, column=1, sticky="ew", pady=4, padx=(8, 0))
         ipf.columnconfigure(0, weight=1)
         self.vars["host"] = tk.StringVar(value=self.profile.host)
         ttk.Entry(ipf, textvariable=self.vars["host"]).grid(row=0, column=0, sticky="ew")
@@ -682,66 +741,74 @@ class InstallerApp(tk.Tk):
         self.vars["port"] = tk.StringVar(value=str(self.profile.port))
         ttk.Entry(ipf, textvariable=self.vars["port"], width=5).grid(row=0, column=2)
 
-        row(s, 1, "Kullanici", "user", self.profile.user)
-        row(s, 2, "Parola", "password", show="•")
-        ttk.Label(s, text="SSH anahtari").grid(row=3, column=0, sticky="w", pady=3)
-        kf = ttk.Frame(s)
-        kf.grid(row=3, column=1, sticky="ew", pady=3, padx=(8, 0))
+        row(sek_cihaz, 1, "Kullanıcı", "user", self.profile.user)
+        row(sek_cihaz, 2, "Parola", "password", show="•")
+
+        ttk.Label(sek_cihaz, text="SSH anahtarı").grid(row=3, column=0, sticky="w", pady=4)
+        kf = ttk.Frame(sek_cihaz)
+        kf.grid(row=3, column=1, sticky="ew", pady=4, padx=(8, 0))
         kf.columnconfigure(0, weight=1)
         self.vars["key_path"] = tk.StringVar(value=self.profile.key_path)
         ttk.Entry(kf, textvariable=self.vars["key_path"]).grid(row=0, column=0, sticky="ew")
         ttk.Button(kf, text="...", width=3, command=self._pick_key).grid(row=0, column=1, padx=(4, 0))
-        # --- Anahtarlar ---
-        s = section("Kurulum anahtarlari")
-        row(s, 0, "GitHub anahtari *", "ghcr_token", show="•")
-        row(s, 1, "Tailscale anahtari", "ts_key", show="•")
 
-        # --- Internet / WiFi ---
-        # Cihaz ethernet ile dizustune bagliyken INTERNETSIZ olabilir; kurulum
-        # GitHub'dan indirdigi icin internet zorunlu. Bilgi verilirse kurulum
-        # once WiFi'a baglaniyor.
-        s = section("Internet (gerekirse)")
-        row(s, 0, "WiFi agi", "wifi_ssid")
-        row(s, 1, "WiFi parolasi", "wifi_pass", show="•")
-        ttk.Button(s, text="Cihazdaki aglari tara", command=self._wifi_scan)             .grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        baslik(sek_cihaz, 4, "SAHA KİMLİĞİ")
+        row(sek_cihaz, 5, "Müşteri *", "customer", self.profile.customer)
+        row(sek_cihaz, 6, "Saha / proje *", "site", self.profile.site)
 
-        # --- Saha kimligi (ZORUNLU) ---
-        # Cihazin uzaktan bakim listesinde hangi ad ile gorunecegini bu
-        # belirliyor. Bos gecilirse tailnet'te "e1-grid-1", "e1-grid-2" diye
-        # numaralanir ve hangisinin hangi saha oldugu anlasilmaz olur.
-        s = section("Saha kimligi")
-        row(s, 0, "Musteri *", "customer", self.profile.customer)
-        row(s, 1, "Saha / proje *", "site", self.profile.site)
+        # ================= KURULUM =================
+        ttk.Label(sek_kurulum, text="GitHub anahtarı *").grid(row=0, column=0, sticky="w", pady=4)
+        gf = ttk.Frame(sek_kurulum)
+        gf.grid(row=0, column=1, sticky="ew", pady=4, padx=(8, 0))
+        gf.columnconfigure(0, weight=1)
+        self.vars["ghcr_token"] = tk.StringVar()
+        ttk.Entry(gf, textvariable=self.vars["ghcr_token"], show="•").grid(
+            row=0, column=0, sticky="ew")
+        # Anahtar uretme sayfasi kapsamlar ON-DOLDURULMUS acilir; kullanici
+        # hangi kutuyu isaretleyecegini aramak zorunda kalmasin.
+        ttk.Button(gf, text="Al", width=4, command=self._token_al).grid(
+            row=0, column=1, padx=(4, 0))
 
-        # --- Surum ---
-        # Serbest metin DEGIL, liste: kurulumcunun dal/tag adi bilmesi
-        # gerekmesin ve yanlislikla gelistirme dalini sahaya kurmasin.
-        s = section("Kurulacak surum")
+        row(sek_kurulum, 1, "Tailscale anahtarı", "ts_key", show="•")
+
+        baslik(sek_kurulum, 2, "SÜRÜM")
         self.version_var = tk.StringVar(value=VERSION_LATEST)
-        self.version_box = ttk.Combobox(s, textvariable=self.version_var,
-                                        state="readonly", width=24)
+        self.version_box = ttk.Combobox(sek_kurulum, textvariable=self.version_var,
+                                        state="readonly")
         self.version_box["values"] = (VERSION_LATEST, VERSION_EDGE)
-        self.version_box.grid(row=0, column=0, columnspan=2, sticky="ew")
-        ttk.Button(s, text="Surumleri yenile", command=self._refresh_versions) \
-            .grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.version_box.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
+        ttk.Button(sek_kurulum, text="Sürümleri yenile", command=self._refresh_versions)             .grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
-        # --- Cihaz tipi ---
-        # "Mini PC modu" = appliance katmani: sifresiz "EnerjiOne Grid" WiFi
-        # agi, e1-grid.local adresi ve arayuzden IP/DNS ayari yapan ag ajani.
-        # Sahada cihazin IP'sini bilmeden ona ULASMANIN YOLU budur.
-        # Normalde otomatik: WiFi karti varsa saha kutusu sayilir. SANAL
-        # MAKINEDE WiFi KARTI YOKTUR, o yuzden test kurulumlarinda atlanir.
-        s = section("Cihaz tipi")
-        self.appliance_var = tk.StringVar(value="auto")
+        baslik(sek_kurulum, 5, "CİHAZ TİPİ")
         self.appliance_box = ttk.Combobox(
-            s, state="readonly", width=24,
+            sek_kurulum, state="readonly",
             values=(
-                "Otomatik belirle (onerilen)",
-                "Saha kutusu — WiFi agi + e1-grid.local kur",
-                "Sunucu / sanal makine — WiFi agi kurma",
+                "Otomatik belirle (önerilen)",
+                "Saha kutusu — WiFi ağı + e1-grid.local kur",
+                "Sunucu / sanal makine — WiFi ağı kurma",
             ))
         self.appliance_box.current(0)
-        self.appliance_box.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self.appliance_box.grid(row=6, column=0, columnspan=2, sticky="ew", pady=2)
+
+        # ================= AG =================
+        ttk.Label(sek_ag, text="Cihazda internet yoksa kurulum GitHub'dan\n"
+                          "indirme yapamaz. Ağı buradan tanımlayın.",
+                  foreground="#57606a", justify="left").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+
+        ttk.Button(sek_ag, text="Cihazdaki ağları tara", command=self._wifi_scan)             .grid(row=1, column=0, columnspan=2, sticky="ew")
+
+        ttk.Label(sek_ag, text="WiFi ağı").grid(row=2, column=0, sticky="w", pady=(10, 4))
+        self.vars["wifi_ssid"] = tk.StringVar()
+        # Combobox: taramadan gelen aglar buraya dolar ama ELLE de yazilabilir
+        # (gizli ag veya taramada gorunmeyen durumlar icin).
+        self.wifi_box = ttk.Combobox(sek_ag, textvariable=self.vars["wifi_ssid"])
+        self.wifi_box.grid(row=2, column=1, sticky="ew", pady=(10, 4), padx=(8, 0))
+
+        row(sek_ag, 3, "WiFi parolası", "wifi_pass", show="•")
+
+        self.wifi_bilgi = ttk.Label(sek_ag, text="", foreground="#57606a")
+        self.wifi_bilgi.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
     def _build_actions(self, parent: ttk.Frame) -> None:
         """Sabit eylem seridi — kaydirma alaninin disinda, hep gorunur."""
@@ -815,6 +882,42 @@ class InstallerApp(tk.Tk):
         cfg["action"] = "wifi_scan"
         self.term.write("\n-- WiFi aglari taraniyor --\n")
         self._run_worker(cfg, test_only=False)
+
+    def _wifi_doldur(self, aglar: list) -> None:
+        """Taramadan gelen aglari combobox'a yaz (en guclu ustte)."""
+        if not aglar:
+            self.wifi_bilgi.configure(text="Ağ bulunamadı.")
+            return
+        self.wifi_box["values"] = [ssid for ssid, _ in aglar]
+        # Zaten bir sey yazilmissa kullanicinin girdisini EZME.
+        if not self.vars["wifi_ssid"].get().strip():
+            self.wifi_box.current(0)
+        en_iyi = aglar[0]
+        self.wifi_bilgi.configure(
+            text=f"{len(aglar)} ağ bulundu · en güçlü: {en_iyi[0]} (%{en_iyi[1][0]})")
+
+    def _token_al(self) -> None:
+        """GitHub anahtar uretme sayfasini KAPSAMLAR DOLU olarak ac.
+
+        Kullanicilar dogru kutulari bulmakta zorlaniyor; GitHub `scopes`
+        parametresini destekliyor ve sayfa isaretli gelir. Geriye yalnizca
+        'Generate token' demek ve degeri kopyalamak kaliyor.
+        """
+        import webbrowser
+        url = (
+            "https://github.com/settings/tokens/new"
+            "?scopes=repo,read:packages"
+            "&description=EnerjiOne%20Grid%20saha%20kurulumu"
+        )
+        messagebox.showinfo(
+            APP_TITLE,
+            "Tarayıcıda anahtar üretme sayfası açılacak.\n\n"
+            "1. Sayfada 'repo' ve 'read:packages' ZATEN İŞARETLİ gelir\n"
+            "2. Expiration (süre) seçin\n"
+            "3. En altta 'Generate token' düğmesine basın\n"
+            "4. Çıkan 'ghp_...' değerini kopyalayıp buraya yapıştırın\n\n"
+            "Not: Değer YALNIZCA BİR KEZ gösterilir; sayfayı kapatmadan kopyalayın.")
+        webbrowser.open(url)
 
     def _refresh_versions(self) -> None:
         """Yayin listesini GitHub'dan tazele. Anahtar gerekir (depo private)."""
@@ -1025,6 +1128,8 @@ class InstallerApp(tk.Tk):
                 kind, payload = self.queue.get_nowait()
                 if kind == "log":
                     self.term.write(payload)
+                elif kind == "wifi_list":
+                    self._wifi_doldur(payload)
                 elif kind == "status":
                     self.status_lbl.configure(text=payload)
                 elif kind == "done":
