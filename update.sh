@@ -380,6 +380,17 @@ if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
   fi
 fi
 
+# ---- Gateway kurulum ajani (e1-gwd) --------------------------------------
+# APPLIANCE_REFRESH'ten BAGIMSIZ: bu ozellik VPS kurulumlarinda da kullanilir.
+# Ayrica bu ajan sonradan eklendigi icin, sahadaki mevcut cihazlar yalnizca
+# burada kavusur — kosula baglanirsa VPS'ler ve appliance disi kurulumlar
+# "bu cihaza kur" secenegini hic goremez.
+if [[ -f infra/appliance/setup-gateway-agent.sh ]]; then
+  INSTALL_DIR="$SCRIPT_DIR" bash infra/appliance/setup-gateway-agent.sh >/dev/null 2>&1 \
+    && e1_ok "Gateway kurulum ajani (e1-gwd) guncel." \
+    || e1_warn "e1-gwd guncellenemedi; 'bu cihaza kur' secenegi calismayabilir."
+fi
+
 # Uzaktan bakim VPN'i — yeni eklenen bir anahtar varsa (veya baglanti
 # kopmussa) burada devreye girer. Cihaz zaten tailnet'teyse yeniden giris
 # YAPILMAZ, ama SSH ve etiket durumu her guncellemede dogrulanir.

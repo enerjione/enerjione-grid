@@ -229,6 +229,14 @@ class Settings(BaseSettings):
     # Ayarlari sayfasi bunu kullaniciya soyler (hata degil).
     network_state_dir: str = "/var/lib/e1-grid/net"
 
+    # Gateway kurulum ajani (e1-gwd) ile paylasilan dizin. Backend buraya
+    # SADECE request.json yazar (compose govdesi dahil); state.json/status.json
+    # okur. Docker soketine erisimi YOKTUR — container'a docker.sock vermek
+    # host'ta root vermekle esdegerdir ve compose'daki cap_drop/read_only
+    # sertlestirmesini anlamsizlastirirdi. Dizin yoksa "bu cihaza kur" secenegi
+    # kapali gorunur; "baska cihaza kur" akisi etkilenmez.
+    gateway_state_dir: str = "/var/lib/e1-grid/gw"
+
     # Cevrimdisi harita karolari. Tum karolar backend uzerinden gecer:
     # once disk, yoksa yukari akis (ve diske yaz). Saha cihazinda internet
     # kesilse bile indirilmis alan calismaya devam eder.

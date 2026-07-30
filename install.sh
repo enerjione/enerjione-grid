@@ -625,6 +625,17 @@ elif [[ ! -f /etc/systemd/system/enerjione-grid.service ]]; then
   fi
 fi
 
+# ---- Gateway kurulum ajani (e1-gwd) --------------------------------------
+# Arayuzdeki "gateway'i bu cihaza kur" akisi icin gerekli. Backend container'i
+# Docker'a erisemez (bilincli); ajan host'ta root olarak compose'u calistirir.
+# Appliance'a ozgu degil, VPS'te de kullanilir. Basarisiz olursa kurulum
+# durmaz — yalnizca o akis devre disi kalir, "baska cihaza kur" calisir.
+if [[ -f "${INSTALL_DIR}/infra/appliance/setup-gateway-agent.sh" ]]; then
+  INSTALL_DIR="$INSTALL_DIR" bash "${INSTALL_DIR}/infra/appliance/setup-gateway-agent.sh" \
+    >/dev/null 2>&1 && e1_ok "Gateway kurulum ajani (e1-gwd) aktif." \
+    || e1_warn "e1-gwd kurulamadi; 'bu cihaza kur' secenegi calismayacak."
+fi
+
 # ---- Appliance (mini PC) modu -------------------------------------------
 # Sifresiz WiFi AP ("EnerjiOne Grid"), e1-grid.local mDNS ve UI'dan IP/DNS
 # ayari (e1-netd ajani).

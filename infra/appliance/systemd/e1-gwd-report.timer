@@ -1,0 +1,14 @@
+[Unit]
+Description=EnerjiOne Grid gateway durumunu periyodik tazele
+
+[Timer]
+# Boot'tan 25 sn sonra ilk rapor (docker otursun), sonra 30 sn'de bir.
+# Ag ajanindan 10 sn kaydirildi ki iki rapor ayni anda docker/nmcli'yi
+# yormasin.
+OnBootSec=25s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Unit=e1-gwd-report.service
+
+[Install]
+WantedBy=timers.target

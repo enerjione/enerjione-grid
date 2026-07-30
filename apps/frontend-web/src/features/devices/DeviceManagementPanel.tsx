@@ -5,6 +5,8 @@ import i18n from "../../shared/i18n";
 import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway, LicenseStatus } from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
+import { GatewayCreateModal } from "../gateways/GatewayCreateModal";
+import { GatewayEditModal } from "../gateways/GatewayEditModal";
 
 /** Son sinyal bundan eskiyse yeşil değil, kırmızı (kapalı/erişilemez collector için pencere) */
 const GATEWAY_LIVE_SEC = 60;
@@ -69,6 +71,8 @@ type DevicePropsTab = "system" | "comms";
 
 type Props = {
   role: "operator" | "engineer" | "installer" | "ops_manager";
+  /** Gateway kurulum sihirbazi host ajanina dogrudan sorgu attigi icin gerekli. */
+  accessToken: string;
   gateways: Gateway[];
   devices: DeviceRow[];
   unassignedCount: number;
@@ -145,6 +149,7 @@ type Props = {
 
 export function DeviceManagementPanel({
   role,
+  accessToken,
   gateways,
   devices,
   unassignedCount,
@@ -173,7 +178,6 @@ export function DeviceManagementPanel({
   const [selectedDeviceCode, setSelectedDeviceCode] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGatewayCreateModal, setShowGatewayCreateModal] = useState(false);
-  const [showGatewayEditModal, setShowGatewayEditModal] = useState(false);
   const [error, setError] = useState("");
 
   const defaultBackendIp = (() => {
@@ -226,16 +230,6 @@ export function DeviceManagementPanel({
     }
   };
 
-  const generateGatewayToken = () => {
-    const len = 48;
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    const arr = new Uint32Array(len);
-    window.crypto.getRandomValues(arr);
-    let out = "";
-    for (let i = 0; i < len; i += 1) out += chars.charAt(arr[i] % chars.length);
-    setGatewayToken(out);
-  };
-
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("horstmann_sn_2_0");
@@ -270,17 +264,18 @@ export function DeviceManagementPanel({
   const [createRetryCount, setCreateRetryCount] = useState("2");
   const [createLatitude, setCreateLatitude] = useState("0");
   const [createLongitude, setCreateLongitude] = useState("0");
-  const [gatewayCode, setGatewayCode] = useState("");
-  const [gatewayName, setGatewayName] = useState("");
-  const [gatewayToken, setGatewayToken] = useState("");
-  const [editGatewayCode, setEditGatewayCode] = useState("");
-  const [editGatewayName, setEditGatewayName] = useState("");
-  const [editGatewayHost, setEditGatewayHost] = useState("");
-  const [editGatewayPort, setEditGatewayPort] = useState("20000");
-  const [editGatewayToken, setEditGatewayToken] = useState("");
+  // Duzenlenen gateway'in KODU tutulur, kopyasi degil: liste tazelendiginde
+  // (ornegin kurulum bitip last_seen_at guncellendiginde) modal eski veriyi
+  // gostermesin.
+  const [editingGatewayCode, setEditingGatewayCode] = useState<string | null>(null);
   const [devicePropsTab, setDevicePropsTab] = useState<DevicePropsTab>("system");
 
   const lastDeviceRef = useRef<DeviceRow | null>(null);
+
+  const editingGateway = useMemo(
+    () => gateways.find((g) => g.code === editingGatewayCode) ?? null,
+    [gateways, editingGatewayCode]
+  );
 
   const selectedGateway = useMemo(
     () => gateways.find((g) => g.code === selectedGatewayCode) ?? null,
@@ -500,11 +495,15 @@ export function DeviceManagementPanel({
     }
   };
 
-  const handleCreateGateway = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  /** Sihirbazdan gelen kayit istegi.
+   *
+   *  Hata YUTULMAZ — sihirbaz kendi adiminda gostersin diye yeniden firlatilir;
+   *  yutulursa kullanici "olustu" saniyor ve bir sonraki adima gecmis oluyordu.
+   */
+  const handleCreateGateway = async (payload: { code: string; name: string; token: string }) => {
     setError("");
-    const createdCode = gatewayCode.trim();
-    const enteredName = gatewayName.trim() || createdCode;
+    const createdCode = payload.code.trim();
+    const enteredName = payload.name.trim() || createdCode;
     try {
       await onCreateGateway({
         code: createdCode,
@@ -518,19 +517,15 @@ export function DeviceManagementPanel({
         batch_interval_sec: 5,
         max_devices: 200,
         device_code_prefix: null,
-        token: gatewayToken,
+        token: payload.token,
         is_active: true,
         control_host: "127.0.0.1",
         control_port: 0,
         initiating_port_count: 0
       });
-      setShowGatewayCreateModal(false);
-      setGatewayCode("");
-      setGatewayName("");
-      setGatewayToken("");
-      openComposeModal(createdCode);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+      throw err;
     }
   };
 
@@ -555,31 +550,24 @@ export function DeviceManagementPanel({
   };
 
   const handleStartGatewayEdit = (gateway: Gateway) => {
-    setEditGatewayCode(gateway.code);
-    setEditGatewayName(gateway.name);
-    setEditGatewayHost(gateway.host);
-    setEditGatewayPort(String(gateway.listen_port));
-    setEditGatewayToken(gateway.token);
-    setShowGatewayEditModal(true);
+    setEditingGatewayCode(gateway.code);
   };
 
-  const handleUpdateGateway = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!editGatewayCode) return;
+  /** Host/listen_port GONDERILMEZ: gateway DNP3 master rolunde, bu iki alan
+   *  create akisindaki placeholder'lardi ("auto"/0) ve duzenlenebilir birer
+   *  ayar degil. Yalnizca gercekten degistirilebilen alanlar PATCH edilir. */
+  const handleUpdateGateway = async (payload: { name: string; token: string }) => {
+    const targetCode = editingGatewayCode;
+    if (!targetCode) return;
     setError("");
     try {
-      await onUpdateGateway(editGatewayCode, {
-        name: editGatewayName,
-        host: editGatewayHost,
-        listen_port: Number(editGatewayPort),
-        token: editGatewayToken
-      });
-      setShowGatewayEditModal(false);
-      if (selectedGatewayCode === editGatewayCode) {
-        await onSelectGateway(editGatewayCode);
+      await onUpdateGateway(targetCode, { name: payload.name, token: payload.token });
+      if (selectedGatewayCode === targetCode) {
+        await onSelectGateway(targetCode);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+      throw err; // modal kendi hata satirinda gostersin ve acik kalsin
     }
   };
 
@@ -1066,53 +1054,12 @@ export function DeviceManagementPanel({
       {error ? <p className="error-text">{error}</p> : null}
 
       {showGatewayCreateModal ? (
-        <div className="settings-modal-backdrop">
-          <form className="settings-modal" onSubmit={handleCreateGateway}>
-            <h3>{t("engineering.gateways.newGatewayModal")}</h3>
-            <label>
-              {t("engineering.gateways.form.code")}
-              <input
-                value={gatewayCode}
-                onChange={(event) => setGatewayCode(event.target.value)}
-                required
-                placeholder={t("engineering.gateways.form.codePlaceholder")}
-              />
-            </label>
-            <label>
-              {t("engineering.gateways.form.name")}
-              <input
-                value={gatewayName}
-                onChange={(event) => setGatewayName(event.target.value)}
-                required
-                placeholder={t("engineering.gateways.form.namePlaceholder")}
-              />
-            </label>
-            <label>
-              {t("engineering.gateways.form.token")}
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input
-                  style={{ flex: 1 }}
-                  value={gatewayToken}
-                  onChange={(event) => setGatewayToken(event.target.value)}
-                  required
-                  minLength={16}
-                  placeholder={t("engineering.gateways.form.tokenPlaceholder")}
-                />
-                <button type="button" className="secondary-btn" onClick={generateGatewayToken}>
-                  {t("engineering.gateways.form.generate")}
-                </button>
-              </div>
-            </label>
-            <div className="modal-actions">
-              <button type="button" className="secondary-btn" onClick={() => setShowGatewayCreateModal(false)}>
-                {t("engineering.gateways.form.cancel")}
-              </button>
-              <button type="submit" className="primary-btn">
-                {t("engineering.gateways.form.create")}
-              </button>
-            </div>
-          </form>
-        </div>
+        <GatewayCreateModal
+          accessToken={accessToken}
+          existingCodes={gateways.map((g) => g.code)}
+          onCreate={handleCreateGateway}
+          onClose={() => setShowGatewayCreateModal(false)}
+        />
       ) : null}
 
       {composeFor
@@ -1342,47 +1289,13 @@ export function DeviceManagementPanel({
         </div>
       ) : null}
 
-      {showGatewayEditModal ? (
-        <div className="settings-modal-backdrop">
-          <form className="settings-modal" onSubmit={handleUpdateGateway}>
-            <h3>{t("engineering.gateways.editGatewayModal")}</h3>
-            <label>
-              {t("engineering.gateways.form.code")}
-              <input value={editGatewayCode} disabled readOnly />
-            </label>
-            <label>
-              {t("engineering.gateways.form.name")}
-              <input value={editGatewayName} onChange={(event) => setEditGatewayName(event.target.value)} required />
-            </label>
-            <label>
-              {t("engineering.gateways.form.host")}
-              <input value={editGatewayHost} onChange={(event) => setEditGatewayHost(event.target.value)} required />
-            </label>
-            <label>
-              {t("engineering.gateways.form.port")}
-              <input
-                type="number"
-                min={1}
-                max={65535}
-                value={editGatewayPort}
-                onChange={(event) => setEditGatewayPort(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              {t("engineering.gateways.form.token")}
-              <input value={editGatewayToken} onChange={(event) => setEditGatewayToken(event.target.value)} required />
-            </label>
-            <div className="modal-actions">
-              <button type="button" className="secondary-btn" onClick={() => setShowGatewayEditModal(false)}>
-                {t("engineering.gateways.form.cancel")}
-              </button>
-              <button type="submit" className="primary-btn">
-                {t("engineering.gateways.form.save")}
-              </button>
-            </div>
-          </form>
-        </div>
+      {editingGateway ? (
+        <GatewayEditModal
+          accessToken={accessToken}
+          gateway={editingGateway}
+          onSave={handleUpdateGateway}
+          onClose={() => setEditingGatewayCode(null)}
+        />
       ) : null}
 
     </section>

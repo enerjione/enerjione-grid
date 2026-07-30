@@ -32821,3 +32821,539 @@ th.event-col-category {
   color: #9a5b00;
   border-color: #f3c98b;
 }
+
+/* ============================================================
+   Gateway ekleme sihirbazi (GatewayCreateModal)
+   Uc adim: kimlik -> hedef secimi -> kurulum/adimlar.
+   ============================================================ */
+.gw-wizard {
+  width: min(680px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 0;
+  gap: 0;
+}
+
+.gw-wizard-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.gw-wizard-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.gw-wizard-head p {
+  margin: 3px 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.gw-wizard-close {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 8px;
+  padding: 5px;
+  cursor: pointer;
+  color: #475569;
+  display: inline-flex;
+  line-height: 0;
+}
+
+.gw-wizard-close:hover {
+  background: #f8fafc;
+}
+
+/* Adim gostergesi — sadece gorsel, ilerlemeyi anlatir. */
+.gw-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 12px 20px 0;
+}
+
+.gw-steps li {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: #e2e8f0;
+}
+
+.gw-steps li span {
+  display: none;
+}
+
+.gw-steps li.is-active {
+  background: #e67c00;
+}
+
+.gw-steps li.is-done {
+  background: #f7c88a;
+}
+
+.gw-wizard-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 20px 18px;
+}
+
+.gw-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.gw-field {
+  display: grid;
+  gap: 5px;
+}
+
+.gw-field > span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.gw-field input {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.gw-field input:focus {
+  outline: none;
+  border-color: #e67c00;
+  box-shadow: 0 0 0 3px rgba(230, 124, 0, 0.12);
+}
+
+.gw-field small {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.gw-inline-warn {
+  margin: -6px 0 0;
+  font-size: 0.78rem;
+  color: #b45309;
+}
+
+.gw-inline-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.84rem;
+  color: #475569;
+}
+
+/* --- Token kutusu --- */
+.gw-token-box {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 7px;
+}
+
+.gw-token-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.gw-token-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.gw-token-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  /* 48 karakterlik token tasmasin; sarilarak tam gorunsun. */
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.gw-token-box small {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.gw-copy-btn {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 7px;
+  padding: 5px 7px;
+  cursor: pointer;
+  color: #475569;
+  display: inline-flex;
+  line-height: 0;
+}
+
+.gw-copy-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* --- Hedef secimi --- */
+.gw-target-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.gw-target-card {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 16px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.gw-target-card:hover:not(:disabled) {
+  border-color: #e67c00;
+  box-shadow: 0 4px 14px rgba(230, 124, 0, 0.13);
+  transform: translateY(-1px);
+}
+
+.gw-target-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gw-target-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #fff4e5;
+  color: #cc7000;
+}
+
+.gw-target-card strong {
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+
+.gw-target-desc {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.gw-target-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.gw-target-badge.is-ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.gw-target-badge.is-off {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* --- Bu cihaza kurulum: canli durum --- */
+.gw-install-live,
+.gw-install-result {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 26px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.gw-install-live strong,
+.gw-install-result strong {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.gw-install-live span,
+.gw-install-result span {
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.5;
+  max-width: 44ch;
+}
+
+.gw-install-live svg {
+  color: #e67c00;
+}
+
+.gw-install-result.is-ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.gw-install-result.is-ok svg {
+  color: #16a34a;
+}
+
+.gw-install-result.is-fail {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.gw-install-result.is-fail svg {
+  color: #dc2626;
+}
+
+.gw-install-log {
+  width: 100%;
+  max-height: 160px;
+  overflow: auto;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- Baska cihaza kurulum: numarali adimlar --- */
+.gw-manual-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.gw-manual-steps li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.gw-manual-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff4e5;
+  color: #cc7000;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.gw-manual-steps strong {
+  display: block;
+  font-size: 0.86rem;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+
+.gw-manual-desc {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.gw-manual-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gw-manual-actions .secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gw-cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.gw-cmd-row code {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  color: #e2e8f0;
+  word-break: break-all;
+}
+
+.gw-cmd-row .gw-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #e2e8f0;
+}
+
+.gw-cmd-row .gw-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+/* Dar ekran: iki kolonlu bloklar tek kolona insin. */
+@media (max-width: 620px) {
+  .gw-field-row,
+  .gw-target-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Detay onizleme kisayollari — "z17" rakaminin ne demek oldugunu
+   haritada gostermek icin. */
+.offline-detail-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.offline-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0369a1;
+  cursor: pointer;
+}
+
+.offline-link-btn:hover {
+  text-decoration: underline;
+}
+
+/* --- Gateway duzenleme modali: token uyarisi + yerel kurulum kutusu --- */
+.gw-token-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #92400e;
+}
+
+.gw-token-warn svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.gw-local-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 7px;
+}
+
+.gw-local-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gw-local-head > div {
+  flex: 1;
+  display: grid;
+  gap: 1px;
+}
+
+.gw-local-head strong {
+  font-size: 0.85rem;
+  color: #0f172a;
+}
+
+.gw-local-head small {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.gw-local-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.gw-local-dot.is-on {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+}
+
+.gw-local-dot.is-off {
+  background: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+}
+
+.gw-local-hint {
+  font-size: 0.74rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.gw-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gw-danger-btn:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.gw-danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

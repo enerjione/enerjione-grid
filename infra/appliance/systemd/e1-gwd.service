@@ -1,0 +1,19 @@
+[Unit]
+# Gateway kurulum/kaldirma isteklerini uygular. e1-gwd.path tarafindan
+# tetiklenir (backend container /var/lib/e1-grid/gw/request.json yazinca).
+Description=EnerjiOne Grid gateway ajani - kurulum isteklerini uygular
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-gwd.py apply
+# Uygulama basarisiz olsa bile unit "failed" kalmasin; hata status.json'a
+# yazilir ve UI'da gosterilir.
+SuccessExitStatus=0 1
+# Imaj cekme ilk kurulumda uzun surebilir (~200 MB); ajan icindeki
+# PULL_TIMEOUT_SEC 900 sn, unit onu kesmesin.
+TimeoutStartSec=1200
+
+[Install]
+WantedBy=multi-user.target

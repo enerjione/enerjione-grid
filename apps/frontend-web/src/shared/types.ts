@@ -316,6 +316,52 @@ export type Gateway = {
   initiating_port_count?: number;
 };
 
+/** Bu cihazda (host ajani e1-gwd ile) kurulu bir gateway container'i. */
+export type LocalGateway = {
+  code: string;
+  name?: string | null;
+  container?: string | null;
+  /** running | exited | created | absent | unknown */
+  state: string;
+  status?: string | null;
+  image?: string | null;
+  ports?: string | null;
+  installed_at?: string | null;
+};
+
+/** Host ajaninin isledigi son kurulum/kaldirma istegi. */
+export type GatewayApplyStatus = {
+  id?: string | null;
+  action?: string | null;
+  code?: string | null;
+  ok?: boolean | null;
+  /** validate | pull | up | down | restart | cleanup | done | docker */
+  stage?: string | null;
+  message?: string | null;
+  /** Docker ciktisinin son satirlari — hata durumunda UI'da gosterilir. */
+  detail?: string | null;
+  running: boolean;
+  at?: string | null;
+};
+
+/** Gateway kurulum ajaninin (e1-gwd) durumu.
+ *
+ *  `available: false` HATA DEGIL: ajan kurulu olmayan bir kurulumda (ornegin
+ *  setup-gateway-agent.sh calistirilmamis) "bu cihaza kur" secenegi kapali
+ *  gosterilir; dosya indirip baska cihaza kurma akisi etkilenmez. */
+export type GatewayAgentStatus = {
+  available: boolean;
+  /** state_dir_missing | state_dir_not_writable | agent_never_reported |
+   *  state_stale | unreachable */
+  reason?: string | null;
+  docker_available: boolean;
+  updated_at?: string | null;
+  state_age_seconds?: number | null;
+  gateways: LocalGateway[];
+  pending: boolean;
+  last_apply?: GatewayApplyStatus | null;
+};
+
 /** MQTT outbound target icin custom topic mapping satiri.
  *  Operator UI "Custom Topic Mapping" modal'inda her satir bir mapping.
  *  device_codes/signal_keys CSV (bos = tum cihazlar/sinyaller). */

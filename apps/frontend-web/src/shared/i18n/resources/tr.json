@@ -1257,14 +1257,8 @@
       "delete": "Gateway Sil",
       "form": {
         "code": "Gateway Kodu",
-        "codePlaceholder": "GW-001",
         "name": "Gateway Adı",
         "namePlaceholder": "Örn: Saha A SCADA",
-        "token": "Token",
-        "tokenPlaceholder": "En az 16 karakter (Üret butonu rastgele 48 karakter üretir)",
-        "generate": "Üret",
-        "host": "Host",
-        "port": "Port",
         "cancel": "İptal",
         "create": "Oluştur",
         "save": "Kaydet"
@@ -1280,6 +1274,58 @@
         "close": "Kapat",
         "download": "İndir",
         "downloading": "İndiriliyor..."
+      },
+      "wizard": {
+        "title": "Yeni gateway ekle",
+        "sub": {
+          "identity": "Gateway kimligi",
+          "target": "Nereye kurulacak?",
+          "local": "Bu cihaza kuruluyor",
+          "remote": "Baska cihaza kurulum adimlari"
+        },
+        "codeTaken": "Bu kod zaten kullaniliyor.",
+        "codeInvalid": "Kod harf/rakam ile baslamali; bosluk ve Turkce karakter icermemeli.",
+        "tokenTitle": "Gateway token'i",
+        "tokenRegenerate": "Yeniden uret",
+        "tokenHint": "Otomatik uretildi. Gateway kimlik dogrulamasi icin kullanilir; compose dosyasina gomulu gelir, ayrica saklamaniza gerek yok.",
+        "localTitle": "Bu cihaza kur",
+        "localDesc": "Gateway bu makinede calisir. Kurulum otomatik yapilir, ek islem gerekmez.",
+        "localReady": "Hazir",
+        "remoteTitle": "Baska cihaza kur",
+        "remoteDesc": "Gateway ayri bir makinede calisir. Compose dosyasi indirilir ve o makinede calistirilir.",
+        "remoteBadge": "Docker adimlari",
+        "agentReason": {
+          "loading": "Kontrol ediliyor...",
+          "unavailable": "Bu cihazda kullanilamiyor",
+          "docker_missing": "Docker bulunamadi",
+          "state_dir_missing": "Kurulum ajani yuklu degil",
+          "state_dir_not_writable": "Kurulum ajani dizini yazilamiyor",
+          "agent_never_reported": "Kurulum ajani calismiyor",
+          "state_stale": "Kurulum ajani yanit vermiyor",
+          "unreachable": "Kurulum ajanina erisilemedi"
+        },
+        "creating": "Gateway kaydi olusturuluyor...",
+        "stageStarting": "Kurulum baslatiliyor",
+        "stageValidate": "Yapilandirma dogrulaniyor",
+        "stagePull": "Docker imaji indiriliyor",
+        "stageUp": "Gateway baslatiliyor",
+        "installWait": "Imaj ilk kurulumda birkac dakika surebilir. Bu pencereyi acik birakin.",
+        "installOk": "{{code}} bu cihazda calisiyor",
+        "installOkHint": "Artik bu gateway'e cihaz ekleyebilirsiniz.",
+        "installFail": "Kurulum tamamlanamadi",
+        "fallbackToManual": "Elle kurulum adimlarini goster",
+        "backendIpHint": "Gateway'in bu sunucuya erisecegi IP veya alan adi. Ayni ag icindeyse yerel IP yeterli.",
+        "step1Title": "Compose dosyasini indirin",
+        "step2Title": "Dosyayi hedef makineye kopyalayin",
+        "step2Desc": "Docker kurulu olmali. Dosyayi istediginiz bir dizine koyun.",
+        "step3Title": "Hedef makinede calistirin"
+      },
+      "editForm": {
+        "tokenWarnLocal": "Token degisecek. Kaydettiginizde bu cihazdaki gateway yeni token ile otomatik yeniden kurulur.",
+        "tokenWarnRemote": "Token degisecek. Gateway baska bir cihazda calisiyorsa compose dosyasini yeniden indirip orada guncellemeniz gerekir; aksi halde baglanti kesilir.",
+        "localTitle": "Bu cihazda kurulu",
+        "localRemove": "Kaldir",
+        "localHint": "Yalnizca bu makinedeki container kaldirilir; gateway kaydi ve cihazlari silinmez."
       }
     },
     "devicesPanel": {

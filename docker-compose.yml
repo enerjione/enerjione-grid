@@ -306,6 +306,9 @@ services:
       # Appliance (mini PC) modu: host ag ajani e1-netd ile paylasilan dizin.
       # Backend buraya ag ayari istegi yazar; ajan (root) dogrulayip uygular.
       NETWORK_STATE_DIR: /var/lib/e1-grid/net
+      # Gateway kurulum ajani (e1-gwd) ile paylasilan dizin. Backend buraya
+      # "gateway'i bu cihaza kur" istegi yazar; ajan (root) compose'u calistirir.
+      GATEWAY_STATE_DIR: /var/lib/e1-grid/gw
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -338,6 +341,11 @@ services:
       # (root:10001, 0770); infra/appliance/setup-appliance.sh olusturur.
       # VPS kurulumlarinda dizin bos kalir, appliance modu kapali gorunur.
       - /var/lib/e1-grid/net:/var/lib/e1-grid/net
+      # Gateway kurulum ajani (e1-gwd) ile tek temas noktasi. Backend Docker
+      # soketini GORMEZ; buraya bir JSON istegi yazar, gerisini host'taki ajan
+      # yapar ve compose'u kendi kurallariyla yeniden dogrular.
+      # infra/appliance/setup-gateway-agent.sh olusturur (root:10001, 0770).
+      - /var/lib/e1-grid/gw:/var/lib/e1-grid/gw
       # Cevrimdisi harita karolari. Named volume: imaj guncellemesinde
       # SILINMEZ -- sahada tekrar indirmek 4G uzerinden pahali/uzun olur.
       - map-tile-data:/var/lib/e1-map-tiles

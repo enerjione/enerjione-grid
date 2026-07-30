@@ -10,8 +10,10 @@
   DeviceCommandQueued,
   DeviceCommandRow,
   Gateway,
+  GatewayAgentStatus,
   HistoryBucket,
   HostStatus,
+  LicenseGate,
   LicenseStatus,
   ModbusPlan,
   NetworkConfigAccepted,
@@ -1157,6 +1159,53 @@ export async function downloadGatewayCompose(
   const filename = headerName || (match ? match[1] : fallback);
   const blob = await response.blob();
   return { blob, filename };
+}
+
+/** Host ajaninin (e1-gwd) durumu + bu cihazda kurulu gateway'ler.
+ *
+ *  Ajan kurulu degilse `available: false` doner — HATA DEGIL. UI "bu cihaza
+ *  kur" secenegini kapali gosterir, "baska cihaza kur" akisi calismaya
+ *  devam eder. Bu yuzden burada throw etmiyoruz. */
+export async function fetchGatewayAgentStatus(token: string): Promise<GatewayAgentStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/local-agent`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    return { available: false, reason: "unreachable", docker_available: false, gateways: [], pending: false };
+  }
+  return (await response.json()) as GatewayAgentStatus;
+}
+
+/** Gateway'i BU cihaza kur. 202 doner; kurulum asenkron ilerler ve
+ *  `fetchGatewayAgentStatus` ile izlenir. */
+export async function installGatewayLocally(
+  token: string,
+  gatewayCode: string,
+  opts: { backendUrl?: string; hostPort?: number; image?: string } = {}
+): Promise<{ request_id: string; code: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/local-install`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      backend_url: opts.backendUrl ?? null,
+      host_port: opts.hostPort ?? null,
+      image: opts.image ?? null,
+      app_environment: "production"
+    })
+  });
+  if (!response.ok) throw await buildApiError(response, "Gateway bu cihaza kurulamadı.");
+  // request_id ile ajanin yazdigi status.json eslestirilir; boylece ONCEKI
+  // bir kurulumun sonucunu yanlislikla "bizim sonucumuz" sanmayiz.
+  return (await response.json()) as { request_id: string; code: string };
+}
+
+/** Bu cihazdaki gateway container'ini durdur ve kaldir. Gateway KAYDI silinmez. */
+export async function removeGatewayLocally(token: string, gatewayCode: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/local-install`, {
+    method: "DELETE",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Gateway bu cihazdan kaldırılamadı.");
 }
 
 export async function fetchOutboundTargets(token: string): Promise<OutboundTarget[]> {

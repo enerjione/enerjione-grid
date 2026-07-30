@@ -1,0 +1,15 @@
+[Unit]
+# Bu cihazda kurulu gateway container'larinin durumunu state.json'a yazar;
+# backend bu dosyayi okuyup UI'da gosterir (container'in Docker'a erisimi yok).
+Description=EnerjiOne Grid gateway durumu raporlayici
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-gwd.py report
+SuccessExitStatus=0 1
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

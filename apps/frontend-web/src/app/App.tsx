@@ -2219,6 +2219,7 @@ export function App() {
             (session.role === "engineer" || session.role === "installer") ? (
               <DeviceManagementPanel
                 role={session.role}
+                accessToken={session.accessToken}
                 gateways={gateways}
                 devices={panelDevices}
                 unassignedCount={devices.filter(

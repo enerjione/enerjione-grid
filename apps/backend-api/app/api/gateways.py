@@ -19,6 +19,11 @@ from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.signal_catalog import SignalCatalog
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
+from app.schemas.gateway_agent import (
+    GatewayAgentStatus,
+    LocalInstallRequest,
+    LocalInstallResponse,
+)
 from app.schemas.gateway import (
     CommandResultItem,
     GatewayConfigCommand,
@@ -30,7 +35,9 @@ from app.schemas.gateway import (
     GatewayRead,
     GatewayUpdate,
 )
+from app.services import gateway_agent_service
 from app.services.event_service import record_event
+from app.services.gateway_agent_service import GatewayAgentError
 from app.services.gateway_compose import (
     ComposeRenderError,
     ComposeRenderInput,
@@ -103,6 +110,11 @@ def list_gateways(
 _INITIATING_PORT_BLOCK_SIZE = 1000  # her gateway 1000'lik blok alir
 _INITIATING_PORT_BASE_FIRST = 20100  # ilk gateway buradan baslar
 _INITIATING_PORT_BASE_MAX = 60000  # 65535 - 1000 buffer; ustu kabul edilmez
+
+# DNP3 gateway imaji. Hem "dosya indir" hem "bu cihaza kur" akisi ayni
+# varsayilani kullanmali; aksi halde indirilen compose ile kurulan container
+# farkli surumden olur.
+_DEFAULT_GATEWAY_IMAGE = "ghcr.io/fikretsafak/enerjionegrid-dnp3-gateway:latest"
 
 
 def _allocate_initiating_port_base(db: Session) -> int:
@@ -364,6 +376,65 @@ def refresh_gateway_all_devices(
     return row
 
 
+def _build_render_input(
+    db: Session,
+    gateway: Gateway,
+    *,
+    backend_url: str,
+    nats_url: str | None,
+    host_port: int | None,
+    image: str,
+    app_environment: str,
+) -> ComposeRenderInput:
+    """compose/env render girdisini hazirla.
+
+    Hem "baska cihaza kur" (dosya indirme) hem "bu cihaza kur" (host ajani)
+    akisi ayni girdiyi kullanir; port/NATS turetme mantigi tek yerde dursun
+    diye ayri fonksiyon. Iki akis ayrisirsa uretilen compose da ayrisir ve
+    sahada "indirdigimle kurulan ayni degil" hatasi cikar.
+    """
+    # Container icinden erisim icin localhost/127.0.0.1 -> host.docker.internal
+    effective_backend_url = normalize_backend_url_for_container(backend_url)
+    # NATS URL onceligi:
+    #   1) caller explicit override gondermisse
+    #   2) aksi halde backend host'undan otomatik turetilir (nats://<host>:4222)
+    if (nats_url or "").strip():
+        effective_nats_url = nats_url.strip()
+    else:
+        effective_nats_url = derive_nats_url(
+            backend_url,
+            gateway_password=settings.nats_gateway_password,
+        )
+    if host_port is None:
+        # Gateway'in olusturulma sirasina gore 8020 + index. Birden fazla gateway
+        # ayni host'ta calisirsa health portlari catismaz.
+        all_gw_codes = list(db.scalars(select(Gateway.code).order_by(Gateway.id.asc())).all())
+        try:
+            index = all_gw_codes.index(gateway.code)
+        except ValueError:
+            index = 0
+        effective_host_port = 8020 + index
+    else:
+        effective_host_port = host_port
+
+    # Port araligi: gateway'e atanmis benzersiz block + sayisi.
+    # initiating_port_count = 0 ise hic port acilmaz (sadece listening cihazlar).
+    port_base = int(gateway.initiating_port_base or _INITIATING_PORT_BASE_FIRST)
+    port_count = int(gateway.initiating_port_count or 0)
+    return ComposeRenderInput(
+        code=gateway.code,
+        token=gateway.token,
+        name=gateway.name,
+        backend_url=effective_backend_url,
+        nats_url=effective_nats_url,
+        host_port=effective_host_port,
+        image=image,
+        app_environment=app_environment,
+        initiating_port_base=port_base,
+        initiating_port_count=port_count,
+    )
+
+
 @router.get("/{gateway_code}/docker-compose")
 def download_gateway_compose(
     gateway_code: str,
@@ -386,7 +457,7 @@ def download_gateway_compose(
         description="(Opsiyonel) Host'ta health/metrics endpoint icin acilacak port. Verilmezse gateway sirasina gore 8020/8021/... olarak otomatik atanir.",
     ),
     image: str = Query(
-        "ghcr.io/fikretsafak/enerjionegrid-dnp3-gateway:latest",
+        _DEFAULT_GATEWAY_IMAGE,
         description="Docker image tag (registry/name:tag). Varsayilan GHCR public paketidir; ozel registry kullanilacaksa override edilir.",
     ),
     app_environment: Literal["development", "staging", "production"] = Query(
@@ -414,55 +485,17 @@ def download_gateway_compose(
     gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if gateway is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
-    # Container icinden erisim icin localhost/127.0.0.1 -> host.docker.internal
-    effective_backend_url = normalize_backend_url_for_container(backend_url)
-    # NATS URL onceligi:
-    #   1) caller endpoint'e ?nats_url= ile explicit override gondermisse
-    #   2) aksi halde backend host'undan otomatik turetilir (nats://<host>:4222)
     # Eski rabbitmq_url parametresi DEPRECATED — sessizce goz ardi edilir.
     _ = rabbitmq_url  # legacy param, kullanilmiyor
-    if (nats_url or "").strip():
-        effective_nats_url = nats_url.strip()
-    else:
-        # Backend Settings'ten gateway user password'u oku — `infra/nats/
-        # nats-server.conf`'taki `gateway` user'ina karsilik gelir.
-        # Production'da bos olmamalı (validator boş varsa boot'ta fail eder).
-        effective_nats_url = derive_nats_url(
-            backend_url,
-            gateway_password=settings.nats_gateway_password,
-        )
-    if host_port is None:
-        # Gateway'in olusturulma sirasina gore 8020 + index. Birden fazla gateway
-        # ayni host'ta calisirsa health portlari catismaz. Frontend kullanicisi
-        # explicit port istiyorsa query param ile override edebilir.
-        all_gw_codes = list(
-            db.scalars(select(Gateway.code).order_by(Gateway.id.asc())).all()
-        )
-        try:
-            index = all_gw_codes.index(gateway.code)
-        except ValueError:
-            index = 0
-        effective_host_port = 8020 + index
-    else:
-        effective_host_port = host_port
     try:
-        # Port araligi: gateway'e atanmis benzersiz block + sayisi.
-        # initiating_port_count = 0 ise hic port acilmaz (sadece listening
-        # cihazlar). Default 50; kullanici frontend'den artirabilir.
-        port_base = int(gateway.initiating_port_base or _INITIATING_PORT_BASE_FIRST)
-        # 0 = sadece listening cihazlar; compose'da hic port publish edilmez.
-        port_count = int(gateway.initiating_port_count or 0)
-        render_input = ComposeRenderInput(
-            code=gateway.code,
-            token=gateway.token,
-            name=gateway.name,
-            backend_url=effective_backend_url,
-            nats_url=effective_nats_url,
-            host_port=effective_host_port,
+        render_input = _build_render_input(
+            db,
+            gateway,
+            backend_url=backend_url,
+            nats_url=nats_url,
+            host_port=host_port,
             image=image,
             app_environment=app_environment,
-            initiating_port_base=port_base,
-            initiating_port_count=port_count,
         )
     except (ComposeRenderError, TypeError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -481,6 +514,135 @@ def download_gateway_compose(
         "X-Filename": filename,
     }
     return Response(content=body, media_type=media_type, headers=headers)
+
+
+# --------------------------------------------------------------------------
+# "Gateway'i bu cihaza kur" — host ajani (e1-gwd) akisi
+#
+# Backend Docker'a ERISMEZ; /var/lib/e1-grid/gw/request.json yazar, host'ta
+# root ile calisan ajan compose'u kendi kurallariyla dogrulayip calistirir.
+# Ajan kurulu degilse endpoint'ler 503 doner ve UI bu secenegi kapali gosterir
+# — "baska cihaza kur" akisi bundan etkilenmez.
+# --------------------------------------------------------------------------
+_AGENT_ERROR_STATUS = {
+    "request_pending": status.HTTP_409_CONFLICT,
+}
+
+
+def _agent_http_error(exc: GatewayAgentError) -> HTTPException:
+    reason = str(exc)
+    code = _AGENT_ERROR_STATUS.get(reason, status.HTTP_503_SERVICE_UNAVAILABLE)
+    return HTTPException(status_code=code, detail={"code": reason, "message": reason})
+
+
+@router.get("/local-agent", response_model=GatewayAgentStatus)
+def get_local_agent_status(
+    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+):
+    """Host ajaninin durumu + bu cihazda kurulu gateway'ler.
+
+    NOT: bu route parametreli `/{gateway_code}/...` route'larindan ONCE
+    tanimli olmali degil — bu dosyada `GET /{gateway_code}` yok, cakisma
+    olusmuyor. Ileride eklenirse sira onemli hale gelir.
+    """
+    return gateway_agent_service.read_status()
+
+
+@router.post(
+    "/{gateway_code}/local-install",
+    response_model=LocalInstallResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def install_gateway_locally(
+    gateway_code: str,
+    payload: LocalInstallRequest,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Gateway'i bu cihaza kur (host ajani uzerinden).
+
+    202 doner: kurulum ASENKRONDUR. Ajan imaji ceker (ilk kurulumda dakikalar
+    surebilir) ve durumu status.json'a yazar; frontend `GET /local-agent`
+    ile ilerlemeyi izler.
+    """
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+
+    # Varsayilan backend adresi: host'un kendi nginx'i. Gateway ayni makinede
+    # oldugu icin LAN IP'sine gerek yok — ve IP degisse bile kurulum bozulmaz
+    # (compose sablonunda extra_hosts ile host-gateway zaten tanimli).
+    backend_url = (payload.backend_url or "").strip() or "http://host.docker.internal/api/v1"
+    image = (payload.image or "").strip() or _DEFAULT_GATEWAY_IMAGE
+
+    try:
+        render_input = _build_render_input(
+            db,
+            gateway,
+            backend_url=backend_url,
+            nats_url=payload.nats_url,
+            host_port=payload.host_port,
+            image=image,
+            app_environment=payload.app_environment,
+        )
+        compose_body = render_compose(render_input)
+    except (ComposeRenderError, TypeError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    try:
+        request_id = gateway_agent_service.request_install(
+            gateway.code, gateway.name, compose_body, current_user.username
+        )
+    except GatewayAgentError as exc:
+        raise _agent_http_error(exc) from exc
+
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_local_install_requested",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"{gateway.name} ({gateway.code}) — bu cihaza kurulum istegi",
+        metadata={"gateway_code": gateway.code, "request_id": request_id, "image": image},
+        i18n_key="gateway_local_install_requested",
+        i18n_params={"name": gateway.name, "code": gateway.code},
+    )
+    db.commit()
+    return LocalInstallResponse(request_id=request_id, code=gateway.code)
+
+
+@router.delete("/{gateway_code}/local-install", status_code=status.HTTP_202_ACCEPTED)
+def remove_gateway_locally(
+    gateway_code: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Bu cihazdaki gateway container'ini durdur ve kaldir.
+
+    Gateway KAYDI silinmez — sadece bu makinedeki kurulumu kaldirilir.
+    Kaydi silmek icin `DELETE /gateways/{code}` kullanilir.
+    """
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    try:
+        request_id = gateway_agent_service.request_remove(gateway.code, current_user.username)
+    except GatewayAgentError as exc:
+        raise _agent_http_error(exc) from exc
+
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_local_remove_requested",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"{gateway.name} ({gateway.code}) — bu cihazdan kaldirma istegi",
+        metadata={"gateway_code": gateway.code, "request_id": request_id},
+        i18n_key="gateway_local_remove_requested",
+        i18n_params={"name": gateway.name, "code": gateway.code},
+    )
+    db.commit()
+    return LocalInstallResponse(request_id=request_id, code=gateway.code)
 
 
 @router.get("/{gateway_code}/config", response_model=GatewayConfigResponse)
