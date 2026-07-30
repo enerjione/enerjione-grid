@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import { DEFAULT_MAP_LAYER, MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
-import { Download } from "lucide-react";
-import { OfflineMapModal } from "./OfflineMapModal";
 import L from "leaflet";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
@@ -28,10 +26,6 @@ type Props = {
   /** Verilirse "Tüm detayları göster" popup içi modal yerine cihaz detay
    *  SEKMESI acar (Chrome tarzi sekme sistemi). Verilmezse eski modal davranisi. */
   onOpenDetail?: (deviceId: number) => void;
-  /** Cevrimdisi harita indirme icin oturum token'i. */
-  accessToken?: string;
-  /** Cevrimdisi harita paketlerini yonetme yetkisi (engineer/installer). */
-  canManageOfflineMap?: boolean;
 };
 
 const DEFAULT_LINE_COLOR = "#2563eb";
@@ -307,11 +301,10 @@ type LineInfoCard = {
   isFault: boolean;
 };
 
-export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms, onOpenDetail, hiddenLineIds, accessToken, canManageOfflineMap }: Props) {
+export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValues, gridSnapshot, alarms, onOpenDetail, hiddenLineIds }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [offlineMapOpen, setOfflineMapOpen] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
   const [poleInfo, setPoleInfo] = useState<PoleInfoCard | null>(null);
   const [lineInfo, setLineInfo] = useState<LineInfoCard | null>(null);
@@ -1273,17 +1266,6 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             );
           })}
         </MapContainer>
-        {canManageOfflineMap && accessToken ? (
-          <button
-            type="button"
-            className="map-offline-btn"
-            title={t("map.offline.title")}
-            onClick={() => setOfflineMapOpen(true)}
-          >
-            <Download size={16} />
-            <span>{t("map.offline.button")}</span>
-          </button>
-        ) : null}
 
         {/* Direk bilgi karti — pin'e tiklaninca sag ust kosede acilir */}
         {poleInfo && !selectedDevice ? (
@@ -1534,17 +1516,6 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           />
         ) : null}
       </div>
-    {offlineMapOpen && accessToken && mapRef.current ? (
-      <OfflineMapModal
-        accessToken={accessToken}
-        bounds={(() => {
-          const b = mapRef.current.getBounds();
-          return [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()] as [number, number, number, number];
-        })()}
-        currentZoom={mapRef.current.getZoom()}
-        onClose={() => setOfflineMapOpen(false)}
-      />
-    ) : null}
     </section>
   );
 }

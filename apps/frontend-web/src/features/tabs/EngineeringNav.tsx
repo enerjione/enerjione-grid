@@ -180,6 +180,15 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         canSee: isInstaller,
       },
       {
+        // Cevrimdisi harita: sahaya cikmadan ONCE indirilir. Yonetim
+        // alaninda olmasi dogru -- indirilmis alanlar harita uzerinde
+        // gorunur ve yeni alan buradan secilir.
+        page: "offline-map",
+        labelKey: "engineering.nav.offlineMap",
+        descKey: "engineering.navDesc.offlineMap",
+        canSee: isInstallerOrEngineer,
+      },
+      {
         page: "active-sessions",
         labelKey: "engineering.nav.activeSessions",
         descKey: "engineering.navDesc.activeSessions",

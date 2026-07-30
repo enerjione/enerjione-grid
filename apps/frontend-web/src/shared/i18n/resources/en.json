@@ -1031,7 +1031,8 @@
       "backups": "Take a database backup or restore one.",
       "systemStatus": "Monitor the health of services and connections.",
       "networkSettings": "Configure the device IP address, gateway and DNS.",
-      "activeSessions": "See who is connected and terminate sessions."
+      "activeSessions": "See who is connected and terminate sessions.",
+      "offlineMap": "Download map areas for sites without internet; view and manage downloaded areas."
     },
     "nav": {
       "devices": "Devices",
@@ -1050,7 +1051,8 @@
       "license": "License",
       "deviceModels": "Device Models",
       "networkSettings": "Network Settings",
-      "activeSessions": "Active Sessions"
+      "activeSessions": "Active Sessions",
+      "offlineMap": "Offline Map"
     },
     "users": {
       "title": "Users",
@@ -2935,6 +2937,11 @@
       "packsTitle": "Downloaded areas",
       "noPacks": "No offline area downloaded yet.",
       "failedTiles": "{{count}} tiles could not be downloaded (possible connection loss).",
+      "newArea": "Download new area",
+      "noSelection": "Select an area on the map. Click \"Select area\" and drag to draw a rectangle.",
+      "pick": "Select area",
+      "pickCancel": "Cancel selection",
+      "pickHint": "Press and drag on the map to draw the area you want to download.",
       "status": {
         "pending": "Queued",
         "running": "Downloading",

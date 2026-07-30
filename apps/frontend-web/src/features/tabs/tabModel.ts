@@ -37,6 +37,7 @@ export type EngineeringPage =
   | "license"
   | "system-status"
   | "network-settings"
+  | "offline-map"
   | "active-sessions";
 
 export type TabRoute =
@@ -111,6 +112,7 @@ export function tabLabel(
         license: "engineering.nav.license",
         "system-status": "header.systemStatus",
         "network-settings": "engineering.nav.networkSettings",
+        "offline-map": "engineering.nav.offlineMap",
         "active-sessions": "engineering.nav.activeSessions",
       };
       return t(map[route.page]);
@@ -165,6 +167,8 @@ const ENGINEER_ENG: EngineeringPage[] = [
   "api-access",
   "backups",
   "license",
+  // Cevrimdisi harita: saha oncesi hazirlik isi, engineer da yapabilmeli.
+  "offline-map",
 ];
 // installer: tum engineering sayfalari.
 

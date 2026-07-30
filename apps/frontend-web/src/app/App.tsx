@@ -151,6 +151,7 @@ const GridManagementPanel = lazy(() => import("../features/grid/GridManagementPa
 const LicenseManagementPanel = lazy(() => import("../features/license/LicenseManagementPanel").then((m) => ({ default: m.LicenseManagementPanel })));
 const LiveValuesPage = lazy(() => import("../features/live-values/LiveValuesPage").then((m) => ({ default: m.LiveValuesPage })));
 const NetworkSettingsPage = lazy(() => import("../features/network/NetworkSettingsPage").then((m) => ({ default: m.NetworkSettingsPage })));
+const OfflineMapPage = lazy(() => import("../features/map/OfflineMapPage").then((m) => ({ default: m.OfflineMapPage })));
 const NotificationSettingsPanel = lazy(() => import("../features/settings/NotificationSettingsPanel").then((m) => ({ default: m.NotificationSettingsPanel })));
 const OutboundTargetsPanel = lazy(() => import("../features/outbound/OutboundTargetsPanel").then((m) => ({ default: m.OutboundTargetsPanel })));
 const ProjectSettingsPanel = lazy(() => import("../features/settings/ProjectSettingsPanel").then((m) => ({ default: m.ProjectSettingsPanel })));
@@ -2421,6 +2422,10 @@ export function App() {
             {engineeringPage === "network-settings" && session.role === "installer" ? (
               <NetworkSettingsPage accessToken={session.accessToken} />
             ) : null}
+            {engineeringPage === "offline-map" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <OfflineMapPage accessToken={session.accessToken} />
+            ) : null}
             {engineeringPage === "active-sessions" && session.role === "installer" ? (
               <ActiveSessionsPage accessToken={session.accessToken} />
             ) : null}
@@ -2520,10 +2525,6 @@ export function App() {
                   alarms={alarms}
                   onOpenDetail={openDeviceDetail}
                   hiddenLineIds={hiddenLineIds}
-                  accessToken={session.accessToken}
-                  canManageOfflineMap={
-                    session.role === "engineer" || session.role === "installer"
-                  }
                 />
               </main>
             </div>

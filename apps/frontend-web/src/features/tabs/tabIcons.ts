@@ -30,7 +30,8 @@ import {
   Share2,
   TriangleAlert,
   Users,
-  type LucideIcon,
+  MapPin,
+  type LucideIcon
 } from "lucide-react";
 
 import type { EngineeringPage, PageMode, TabRoute } from "./tabModel";
@@ -52,6 +53,7 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   backups: DatabaseBackup,
   "system-status": HeartPulse,
   "network-settings": Network,
+  "offline-map": MapPin,
   "active-sessions": MonitorSmartphone,
 };
 

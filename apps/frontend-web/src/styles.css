@@ -32438,12 +32438,41 @@ th.event-col-category {
    arayuz o onbellegi ONDEN doldurur: kullanici haritayi ilgilendigi bolgeye
    getirir, "Cevrimdisi" der ve gordugu alani indirir. */
 
-/* Harita uzerinde sag altta duran acma butonu. Leaflet kontrolleri
-   z-index 400-1000 araligini kullanir; ustte kalmasi icin 1001. */
-.map-offline-btn {
+/* ---- Sayfa yerlesimi: solda harita, sagda panel ---- */
+.offline-page {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+.offline-page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.offline-page-map {
+  position: relative;
+  min-height: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.offline-page-leaflet {
+  height: 100%;
+  width: 100%;
+}
+
+/* Secim modu dugmesi — Leaflet kontrolleri z-index 400-1000 kullanir. */
+.offline-pick-btn {
   position: absolute;
-  right: 12px;
-  bottom: 26px;
+  left: 12px;
+  top: 12px;
   z-index: 1001;
   display: inline-flex;
   align-items: center;
@@ -32457,62 +32486,62 @@ th.event-col-category {
   border-radius: 8px;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
-  transition: background 0.15s ease, transform 0.12s ease;
 }
 
-.map-offline-btn:hover {
-  background: #fff;
+.offline-pick-btn.is-active {
+  background: #e97800;
+  border-color: #cc7000;
+  color: #fff;
 }
 
-.map-offline-btn:active {
-  transform: scale(0.97);
+.offline-pick-hint {
+  position: absolute;
+  left: 12px;
+  top: 52px;
+  z-index: 1001;
+  max-width: 260px;
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid #f0b37e;
+  border-radius: 8px;
 }
 
-.offline-map-modal {
-  width: min(620px, 94vw);
-  max-height: 88vh;
+.offline-page-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
   overflow-y: auto;
 }
 
-.offline-map-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.offline-page-card {
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
 }
 
-.offline-map-head h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 17px;
+.offline-page-card--grow {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
-.offline-map-close {
-  border: none;
-  background: transparent;
-  color: #64748b;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+.offline-page-card h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
 }
 
-.offline-map-close:hover {
-  background: #f1f5f9;
-  color: #0f172a;
-}
-
-.offline-map-intro {
-  margin: 8px 0 14px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #475569;
-}
-
-.offline-map-form {
-  display: grid;
-  gap: 12px;
+@media (max-width: 1100px) {
+  .offline-page-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .offline-page-map {
+    min-height: 420px;
+  }
 }
 
 .offline-map-field {

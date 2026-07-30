@@ -1031,7 +1031,8 @@
       "backups": "Veritabanı yedeği al, geri yükle.",
       "systemStatus": "Servislerin ve bağlantıların sağlık durumunu izle.",
       "networkSettings": "Cihazın IP, ağ geçidi ve DNS ayarlarını yapılandır.",
-      "activeSessions": "Sisteme kimlerin bağlı olduğunu gör, oturum sonlandır."
+      "activeSessions": "Sisteme kimlerin bağlı olduğunu gör, oturum sonlandır.",
+      "offlineMap": "İnternet olmayan sahalar için harita alanı indir; indirilmiş alanları gör ve yönet."
     },
     "nav": {
       "devices": "Cihazlar",
@@ -1050,7 +1051,8 @@
       "license": "Lisans",
       "deviceModels": "Cihaz Modelleri",
       "networkSettings": "Ağ Ayarları",
-      "activeSessions": "Aktif Oturumlar"
+      "activeSessions": "Aktif Oturumlar",
+      "offlineMap": "Çevrimdışı Harita"
     },
     "users": {
       "title": "Kullanıcılar",
@@ -2935,6 +2937,11 @@
       "packsTitle": "İndirilmiş alanlar",
       "noPacks": "Henüz çevrimdışı alan indirilmedi.",
       "failedTiles": "{{count}} karo indirilemedi (internet kesintisi olabilir).",
+      "newArea": "Yeni alan indir",
+      "noSelection": "Haritada bir alan seçin. \"Alan seç\" düğmesine basıp haritada sürükleyerek dikdörtgen çizin.",
+      "pick": "Alan seç",
+      "pickCancel": "Seçimi bırak",
+      "pickHint": "Haritada basılı tutup sürükleyerek indirmek istediğiniz alanı çizin.",
       "status": {
         "pending": "Sırada",
         "running": "İndiriliyor",
