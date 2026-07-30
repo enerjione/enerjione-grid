@@ -631,7 +631,19 @@ elif [[ -n "$PREV_HEAD" && -n "$NEW_HEAD_FULL" && "$PREV_HEAD" != "$NEW_HEAD_FUL
   fi
 else
   e1_box "SURUM"
-  e1_info "Yeni degisiklik yoktu — zaten guncel surumdesiniz."
+  e1_info "Yeni degisiklik yoktu — '${TARGET_REF}' zaten kuruluydu."
+  # "Guncel" YANILTICI olabilir: cihaz bir YAYIN tag'ini takip eder, ana dal
+  # ondan ileride olabilir. Kullanici bekledigi degisikligi goremeyince
+  # guncellemeyi bozuk saniyor — yayinlanmamis is varsa acikca soyluyoruz.
+  if [[ "$TARGET_REF" != "$E1_BOOTSTRAP_REF" ]]; then
+    AHEAD="$(git rev-list --count "${TARGET_REF}..origin/${E1_BOOTSTRAP_REF}" 2>/dev/null || echo 0)"
+    if [[ "${AHEAD:-0}" -gt 0 ]]; then
+      e1_warn "Ana dalda (${E1_BOOTSTRAP_REF}) henuz YAYINLANMAMIS ${AHEAD} degisiklik var."
+      e1_warn "Bu cihaz yayin surumunu takip ediyor; o degisiklikler BU GUNCELLEMEYE GIRMEDI."
+      e1_hint "Hemen denemek icin:  sudo bash update.sh --edge"
+      e1_hint "Kalici cozum: yeni bir surum tag'i yayinlayin (cihazlar tag takip eder)."
+    fi
+  fi
 fi
 
 e1_box "SERVIS DURUMU"

@@ -652,7 +652,16 @@ case "${E1_APPLIANCE:-auto}" in
       e1_info "Istemiyorsaniz: E1_APPLIANCE=0 sudo bash install.sh"
       APPLIANCE_WANTED=1
     else
+      # SESSIZ ATLAMA YOK: bu adim atlaninca ag ajani (e1-netd) kurulmaz ve
+      # arayuzdeki "Ag Ayarlari" sayfasi CALISMAZ. Sanal makinelerde WiFi
+      # karti olmadigi icin buraya sik dusuluyor ve sayfanin neden bos
+      # geldigi anlasilmiyor.
       e1_info "WiFi arayuzu yok — sunucu kurulumu kabul edildi, appliance modu atlandi."
+      e1_hint "Bunun sonucu: Muhendislik > Sistem > Ag Ayarlari sayfasi calismaz"
+      e1_hint "(IP/DNS ve WiFi yonetimi icin gereken e1-netd ajani kurulmadi)."
+      e1_hint "Ag ayarlarini arayuzden yonetmek isterseniz WiFi karti olmadan da kurulabilir:"
+      e1_hint "  cd ${INSTALL_DIR} && sudo SKIP_AP=1 bash infra/appliance/setup-appliance.sh"
+      e1_hint "veya bastan: E1_APPLIANCE=1 sudo bash install.sh"
     fi
     ;;
 esac
