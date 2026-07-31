@@ -26,8 +26,14 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine
 USER root
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Guvenlik basliklari snippet'i — nginx.conf'ta `add_header` iceren her
+# location bunu include eder (nginx'te add_header miras alinmaz; bkz. dosya
+# basindaki aciklama). conf.d ALTINDA DEGIL: conf.d/*.conf otomatik yuklenir
+# ve snippet http context'inde tek basina gecersizdir.
+COPY security-headers.conf /etc/nginx/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-RUN chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d
+RUN chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d \
+ && chown nginx:nginx /etc/nginx/security-headers.conf
 USER nginx
 
 EXPOSE 8080
