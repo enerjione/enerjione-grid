@@ -29,6 +29,7 @@ import ipaddress
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -48,10 +49,13 @@ AP_CON_NAME = "e1-grid-ap"
 # WiFi client (station) profili — appliance'i mevcut bir aga baglar.
 STA_CON_NAME = "e1-grid-wifi"
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 NMCLI_TIMEOUT_SEC = 20
 # WiFi baglantisi DHCP + auth icin daha uzun surebilir.
 NMCLI_WIFI_TIMEOUT_SEC = 45
+# `report` turu icinden yapilan yeniden baglanma denemesi. Report unit'i
+# TimeoutStartSec ile sinirli; oradaki cagrilar kisa tutulmali.
+NMCLI_RETRY_TIMEOUT_SEC = 25
 # Reboot oncesi bekleme: status.json diske insin, backend son durumu okuyabilsin.
 REBOOT_DELAY_SEC = 3
 
@@ -72,6 +76,48 @@ WIFI_GUARD_SEC = int(os.environ.get("E1_WIFI_GUARD_SEC", "180"))
 # report turunda pahali rescan yapmamak icin).
 SCAN_PATH = os.path.join(STATE_DIR, "wifi-scan.json")
 
+# --- WiFi kartinin GOREVI (kalici tercih) -----------------------------------
+# Tek radyo ayni anda hem erisim noktasi (AP) hem client OLAMAZ. Kullanicinin
+# hangisini istedigi KALICI bir tercihtir ve burada tutulur:
+#     "ap"     -> cihaz kendi agini yayinlar (ulasim garantisi, internet yok)
+#     "client" -> cihaz kayitli bir aga katilir (internet var, AP kapanir)
+# Dosya YOKSA "ap" kabul edilir; bu, bugunku ortuk davranisla ayni.
+#
+# Tercih ayrica NetworkManager'in kendi `connection.autoconnect` bayragina
+# yazilir (bkz. _apply_mode_profiles). Boylece biz hic kosmasak da, boot'ta da
+# gecerli olur — 30 sn'lik bir dongunun surekli dayatmasina gerek kalmaz.
+MODE_PATH = os.path.join(STATE_DIR, "mode.json")
+DEFAULT_MODE = "ap"
+# STA profilinin autoconnect onceligi. AP profili setup-appliance.sh'ta
+# autoconnect-priority 100 ile kuruluyor; client tercihi secildiginde boot'ta
+# AP'nin onune gecmesi icin daha YUKSEK bir deger sart. Aksi halde kullanici
+# "internete baglan" dese bile cihaz her reboot'ta AP ile geliyor.
+STA_AUTOCONNECT_PRIORITY = 110
+
+# Client moduna gecildi ama baglanti yok: AP'yi hemen acmayiz, once NM'in
+# kendi yeniden baglanmasina sans veririz.
+CLIENT_GRACE_SEC = int(os.environ.get("E1_CLIENT_GRACE_SEC", "120"))
+# Fallback ile AP'ye dondukten sonra kayitli agi ne siklikla yeniden deneriz.
+# TEK SEFERLIK fallback, musterinin WiFi'si bir saat kesilirse cihazi sonsuza
+# dek internetsiz birakirdi (guncelleme/uzaktan bakim/saat senkronu olur).
+CLIENT_RETRY_SEC = int(os.environ.get("E1_CLIENT_RETRY_SEC", "600"))
+# Radyo kapaliyken kablo da giderse cihaz TAMAMEN erisilemez kalir ve kimse
+# radyoyu geri acamaz. Bu sure boyunca hicbir arayuzde IP yoksa ajan WiFi'yi
+# kendiliginden geri acar. 0 = kapali.
+RADIO_RESCUE_SEC = int(os.environ.get("E1_RADIO_RESCUE_SEC", "300"))
+# `nmcli radio wifi on` DONANIM kilidi varken de basari doner; komuttan sonra
+# durumu bu sure boyunca dogrulariz, yalan soylemeyelim.
+RADIO_VERIFY_SEC = int(os.environ.get("E1_RADIO_VERIFY_SEC", "10"))
+# NM "connectivity" bilgisini vermiyorsa (unknown) kendi TCP kontrolumuz —
+# en fazla bu siklikta ve YALNIZCA varsayilan rota varken.
+NET_PROBE_SEC = int(os.environ.get("E1_NET_PROBE_SEC", "300"))
+NET_PROBE_HOST = os.environ.get("E1_NET_PROBE_HOST", "connectivity-check.ubuntu.com")
+NET_PROBE_PORT = int(os.environ.get("E1_NET_PROBE_PORT", "80"))
+NET_PROBE_TIMEOUT_SEC = 3
+# Varsayilan rota sinamasi icin hedef (paket GONDERILMEZ, sadece cekirdegin
+# yonlendirme tablosuna sorulur).
+ROUTE_PROBE_TARGET = os.environ.get("E1_ROUTE_TARGET", "1.1.1.1")
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -88,14 +134,22 @@ def _nmcli(*args: str, check: bool = True, timeout: float | None = None) -> str:
 
     `timeout` verilmezse NMCLI_TIMEOUT_SEC kullanilir; WiFi baglantisi gibi
     uzun surebilecek islemler kendi suresini gecer.
+
+    LC_ALL/LANG=C ZORUNLU: nmcli durum metinlerini ("connected", "enabled",
+    "full") YERELLESTIRIR. Turkce kurulmus bir sistemde "bagli" doner ve
+    metne bakan tum kontroller (_sta_is_online, _wifi_client_online, radyo ve
+    internet ayristirmalari) SESSIZCE yanlis sonuc verir — cihaz ya AP'yi hic
+    acmaz ya da kurulumcunun baglantisini keser.
     """
     cmd = ["nmcli", *args]
+    env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout if timeout is not None else NMCLI_TIMEOUT_SEC,
+            env=env,
         )
     except FileNotFoundError as exc:
         raise RuntimeError("nmcli bulunamadi — NetworkManager kurulu degil.") from exc
@@ -138,6 +192,193 @@ def _split_terse(line: str) -> list[str]:
             buf.append(ch)
     parts.append("".join(buf))
     return parts
+
+
+# --- Saf ayristirma / karar fonksiyonlari -----------------------------------
+# Buradakiler subprocess CAGIRMAZ: girdi olarak komut ciktisini (string) veya
+# hazir sozluk alirlar. Sahadaki kritik yollar donanima bagli oldugu icin
+# dogrulanabilir tek katman burasi — testler bu fonksiyonlari cagirir
+# (apps/backend-api/tests/test_netd_radio.py).
+def parse_general_status(out: str) -> dict:
+    """`nmcli -t -f STATE,CONNECTIVITY,WIFI-HW,WIFI general status` ciktisi.
+
+    Ornek: "connected:limited:enabled:disabled"
+
+    WIFI-HW = NetworkManager WirelessHardwareEnabled -> DONANIM anahtari.
+              "disabled" ise fiziksel anahtar/BIOS kapali demektir; yazilimla
+              ACILAMAZ, kullaniciya bunu soylemek gerekir.
+    WIFI    = WirelessEnabled -> YAZILIM kilidi; bu arayuzden acilabilir.
+
+    `nmcli radio wifi` tek basina yalnizca yazilim durumunu verir ve iki
+    durumu AYIRMAZ; bu yuzden kullanilmiyor.
+    """
+    result: dict = {"state": None, "connectivity": None, "wifi_hw": None, "wifi": None}
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        cols = [c.strip().lower() for c in _split_terse(line)]
+        keys = ("state", "connectivity", "wifi_hw", "wifi")
+        for idx, key in enumerate(keys):
+            if idx < len(cols) and cols[idx]:
+                result[key] = cols[idx]
+        break  # tek satirlik cikti
+    return result
+
+
+def radio_from_general(general: dict, wifi_device_present: bool) -> dict:
+    """Radyo durumu: destekleniyor mu, acik mi, neden kapali.
+
+    Soft/hard block ayrimi olmadan UI ya yalan soyler ("actim" der ama
+    acilmaz) ya da hicbir sey soyleyemez. Sahadaki "AP yayinda degil" +
+    "gorunur ag bulunamadi" ikilisinin ortak sebebi burada OLCULUR.
+    """
+    hw = general.get("wifi_hw")
+    sw = general.get("wifi")
+    hardware_enabled = hw != "disabled"
+    # Donanim kilidi varken cihaz satiri kaybolabilir; "disabled" cevabi
+    # zaten ortada bir radyo OLDUGUNU kanitlar.
+    supported = bool(wifi_device_present) or hw == "disabled"
+    if sw is None:
+        # Alan okunamadi (eski nmcli / hata): cihaz varsa acik kabul et,
+        # uydurma bir "kapali" gostergesi cikarmaktansa sessiz kal.
+        enabled = bool(wifi_device_present)
+    else:
+        enabled = sw == "enabled"
+    blocked_by: str | None = None
+    if supported and not enabled:
+        blocked_by = "hardware" if not hardware_enabled else "software"
+    return {
+        "supported": supported,
+        "enabled": bool(supported and enabled),
+        "hardware_enabled": hardware_enabled,
+        "blocked_by": blocked_by,
+    }
+
+
+def parse_ip_route_get(out: str) -> dict:
+    """`ip route get <hedef>` ciktisindan cikis arayuzu + gateway.
+
+    Ornek: "1.1.1.1 via 192.168.1.1 dev enp1s0 src 192.168.1.50 uid 0"
+    Varsayilan rota yoksa komut hata verir; bos cikti -> hepsi None.
+    PAKET GONDERMEZ: yalnizca cekirdegin yonlendirme tablosuna sorar.
+    """
+    info: dict = {"ifname": None, "gateway": None, "src": None}
+    text = " ".join(out.split())
+    if not text or "unreachable" in text.lower():
+        return info
+    parts = text.split(" ")
+    for idx, token in enumerate(parts):
+        if idx + 1 >= len(parts):
+            break
+        if token == "dev" and info["ifname"] is None:
+            info["ifname"] = parts[idx + 1]
+        elif token == "via" and info["gateway"] is None:
+            info["gateway"] = parts[idx + 1]
+        elif token == "src" and info["src"] is None:
+            info["src"] = parts[idx + 1]
+    return info
+
+
+def via_kind(iftype: str | None) -> str | None:
+    """nmcli cihaz tipini kullaniciya anlatilabilir bir sinifa cevir."""
+    if not iftype:
+        return None
+    lowered = iftype.lower()
+    if lowered in ("ethernet", "802-3-ethernet"):
+        return "ethernet"
+    if lowered in ("wifi", "802-11-wireless"):
+        return "wifi"
+    if lowered in ("vpn", "wireguard", "tun"):
+        return "vpn"
+    return "other"
+
+
+def resolve_internet(
+    connectivity: str | None,
+    route: dict,
+    via: str | None,
+    probe_ok: bool | None = None,
+) -> dict:
+    """Internet durumunu KATMANLI oku — "AP acik" ile "internet var" ayri seyler.
+
+    Katman 1: NM'in onbellekli CONNECTIVITY degeri (paket gondermez).
+    Katman 2: varsayilan rota (paket gondermez, hangi arayuz oldugunu soyler).
+    Katman 3: NM "unknown" diyorsa kendi TCP kontrolumuz (probe_ok).
+
+    DEGISMEZ: "unknown" ASLA "internet var" gibi gosterilmez.
+    """
+    valid = ("full", "portal", "limited", "none")
+    ifname = route.get("ifname")
+    if not ifname:
+        # Varsayilan rota yok: hicbir yere paket cikamaz. Katman 3 hic kosmaz.
+        return {
+            "state": "none",
+            "source": "route",
+            "ifname": None,
+            "via": None,
+            "gateway": None,
+        }
+    state = connectivity if connectivity in valid else "unknown"
+    source = "nm" if state != "unknown" else None
+    if state == "unknown" and probe_ok is not None:
+        state = "full" if probe_ok else "limited"
+        source = "probe"
+    return {
+        "state": state,
+        "source": source,
+        "ifname": ifname,
+        "via": via,
+        "gateway": route.get("gateway"),
+    }
+
+
+def derive_effective(radio_enabled: bool, ap_active: bool, client_online: bool) -> str:
+    """WiFi kartinin SU AN ne yaptigi — KURAL DEGIL, OLCUM.
+
+    Sahadaki celiskinin carasi budur: panel "AP acik" derken ust serit
+    "yayinda degil" diyordu, cunku panel "client yoksa AP olmali" KURALINI
+    olcum gibi gosteriyordu.
+    """
+    if not radio_enabled:
+        return "off"
+    if ap_active:
+        return "ap"
+    if client_online:
+        return "client"
+    return "idle"
+
+
+def is_global_ipv4(cidr: str) -> bool:
+    """"192.168.1.50/24" gercek bir adres mi? (link-local/loopback sayilmaz)"""
+    text = (cidr or "").strip().split("/")[0]
+    if not text:
+        return False
+    try:
+        addr = ipaddress.IPv4Address(text)
+    except ipaddress.AddressValueError:
+        return False
+    return not (
+        addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_unspecified
+    )
+
+
+def pick_wired_fallback(rows: list[dict]) -> dict | None:
+    """WiFi kapatilirsa cihaza ulasilacak IKINCI yol var mi?
+
+    Kriter OBJEKTIF tutuldu: bagli + gercek IPv4 almis bir ethernet.
+    Kullanicinin "nereden bagli oldugunu" tahmin etmeye calismiyoruz;
+    nginx arkasinda `request.client.host` zaten proxy IP'sini verir ve
+    guvenilir degildir.
+    """
+    for row in rows:
+        if (row.get("type") or "").lower() != "ethernet":
+            continue
+        if (row.get("state") or "").lower() not in ("connected", "connected (site only)"):
+            continue
+        addresses = [a for a in (row.get("addresses") or []) if is_global_ipv4(a)]
+        if addresses:
+            return {"ifname": row.get("ifname"), "addresses": addresses}
+    return None
 
 
 def _device_rows() -> list[dict]:
