@@ -834,15 +834,40 @@
     }
   },
   "network": {
+    "errorCode": {
+      "wifi_not_supported": "No WiFi adapter was found on this device.",
+      "radio_off": "Turn the WiFi adapter on first.",
+      "radio_off_would_strand": "WiFi cannot be turned off: there is no other way (cable) to reach the device. Turning it off would make the device unreachable.",
+      "radio_hardware_blocked": "WiFi is switched off by the physical switch on the device. Software cannot turn it on; use the WiFi switch on the device.",
+      "no_saved_network": "There is no saved WiFi network. Pick one from the list and connect first.",
+      "invalid_mode": "Invalid selection.",
+      "request_pending": "The previous request is still being processed. Try again in a few seconds."
+    },
     "title": "Network Settings",
     "access": {
       "deviceAddress": "Device address",
       "copy": "Copy address",
-      "wifi": "WiFi access point",
+      "wifi": "Access point",
       "wifiInactive": "Not broadcasting",
       "wifiOpen": "Open network",
+      "internet": "Internet",
       "wired": "Wired connection",
       "noAddress": "No address"
+    },
+    "internet": {
+      "yesWired": "Yes — over the wired network",
+      "yesWifi": "Yes — over WiFi",
+      "yesOther": "Yes",
+      "portal": "Limited — sign-in required",
+      "limited": "Limited — cannot reach the internet",
+      "no": "None",
+      "unknown": "Unknown",
+      "check": "Test now",
+      "checking": "Testing…",
+      "impactNone": "The device has no internet connection: software updates, remote maintenance and clock sync will not work. On-site monitoring, alarms and recording continue normally.",
+      "impactLimited": "The device is on a network but cannot reach the internet: software updates, remote maintenance and clock sync will not work. On-site monitoring, alarms and recording continue normally.",
+      "impactPortal": "The network asks for a sign-in before allowing internet access. The device cannot fill that in, so updates, remote maintenance and clock sync will not work.",
+      "impactUnknown": "The internet connection could not be read; the device software may not report it."
     },
     "method": {
       "dhcp": "Automatic (DHCP)",
@@ -865,7 +890,8 @@
     "confirm": {
       "title": "The device will reboot",
       "lead": "The network setting will be applied and the device will restart. Your connection drops during this; booting takes about a minute.",
-      "apSafety": "Safety net: the {{ssid}} WiFi network always stays on. If anything goes wrong, connect to it and fix the setting at http://{{host}}.",
+      "apSafety": "Safety net: the {{ssid}} WiFi network is broadcasting right now. If anything goes wrong, connect to it and fix the setting at http://{{host}}.",
+      "noApSafety": "The device is not broadcasting its own WiFi network right now. If the address you entered is wrong, the device cannot be reached wirelessly and fixing it may require physical access. Double-check the address before continuing.",
       "apply": "Apply and reboot",
       "applying": "Applying…"
     },
@@ -878,16 +904,17 @@
       "apHint": "If the new address is unreachable, join the {{ssid}} WiFi network and try {{url}}."
     },
     "pending": "A previous network request is still being processed…",
-    "staleAgent": "The host network agent has not reported for a while; the values shown may be stale.",
+    "staleAgent": "The device has not reported its network status for a while; the values here may be out of date.",
+    "agentOld": "The device software is out of date: whether the WiFi adapter is on, what it is used for and the internet connection are not reported. These will appear once the device is updated.",
     "lastApplyFailed": "The last network change failed: {{error}}",
     "unavailable": {
       "title": "Appliance mode is not installed",
       "hint": "Refresh this page after installation. This page only applies to mini PC (appliance) deployments; on server/VPS installs the network is managed by the system administrator.",
       "reason": {
-        "state_dir_missing": "The host network agent (e1-netd) is not installed — shared directory missing.",
-        "state_dir_not_writable": "The agent directory is not writable (permission error).",
-        "agent_never_reported": "The network agent has never reported. Was the setup script run?",
-        "unknown": "The network agent is unreachable."
+        "state_dir_missing": "Network settings are not available on this device. They work only on EnerjiOne mini PC installations.",
+        "state_dir_not_writable": "The network status cannot be read (permission problem). Please contact technical support.",
+        "agent_never_reported": "The device has not reported its network status yet. Setup may not be complete.",
+        "unknown": "The device's network status cannot be read."
       }
     },
     "errors": {
@@ -912,27 +939,124 @@
       "current": "Connected",
       "open": "Open",
       "connectedTo": "Connected network",
-      "notConnected": "Not connected to any WiFi network",
-      "apActiveTitle": "Access point (AP) is on",
-      "apActiveHint": "The AP stays on whenever the device is not connected to a network; join \"EnerjiOne Grid\" and open http://10.42.0.1 to get in.",
+      "savedNetwork": "Saved network",
+      "noSavedNetwork": "No saved network",
+      "clientNotConnected": "Not connected right now",
       "connectTo": "Connect to {{ssid}}",
       "password": "WiFi password",
       "passwordPlaceholder": "At least 8 characters",
       "passwordHint": "The password is only forwarded to the device; it is never stored or logged.",
       "openHint": "This network is open; it will connect directly.",
-      "apDropTitle": "The access point will drop temporarily",
-      "apDropHint": "The device has a single WiFi card. The \"EnerjiOne Grid\" network goes down while connecting. If the connection fails, the AP comes back automatically within a few minutes — you will not lose access to the device.",
       "guardTitle": "Connecting to {{ssid}}",
       "guardHint": "If it fails, the access point will return automatically in {{seconds}}s.",
       "emptyScan": "No visible networks found. Try scanning again.",
       "notScanned": "Press \"Scan Networks\" to see available networks.",
-      "noAdapter": "No WiFi card found on the device. Plug in a USB WiFi adapter and re-run setup."
+      "noAdapter": "No WiFi card found on the device. Plug in a USB WiFi adapter and re-run setup.",
+      "radioLabel": "WiFi adapter",
+      "radioOn": "On",
+      "radioOff": "Off",
+      "radioUnknown": "State unavailable",
+      "radioHardBlocked": "The WiFi switch on the device is off",
+      "radioOffHint": "While the WiFi adapter is off, the device can neither broadcast its own network nor join one.",
+      "radioHardBlockedHint": "That switch can only be turned on at the device itself; it cannot be turned on from here.",
+      "radioUnknownHint": "The device software does not report the WiFi adapter state. It will appear here once the device is updated.",
+      "radioTurnOn": "Turn the WiFi adapter on",
+      "radioTurnOff": "Turn the WiFi adapter off",
+      "radioAutoRestored": "The wired connection was lost, so the device turned the WiFi adapter back on by itself to keep you from losing access.",
+      "roleLabel": "What the WiFi adapter is used for",
+      "roleAp": "To reach this device",
+      "roleApSub": "Access point",
+      "roleClient": "To reach the internet",
+      "roleClientSub": "Join a network",
+      "roleOneCardHint": "The device has a single WiFi adapter, so only one of these can be done at a time.",
+      "roleApHint": "The device broadcasts its own network; you join it from your phone or laptop to open this screen. In this role the device cannot reach the internet over WiFi.",
+      "roleClientHint": "The device joins the network you pick and gets internet access. In this role the \"{{ssid}}\" network is not broadcast.",
+      "roleUnknown": "The device does not report what the WiFi adapter is used for. Pick a role to set it.",
+      "roleSwitching": "Changing the role; waiting for the device to confirm…",
+      "apStateLabel": "Access point",
+      "apOn": "Broadcasting",
+      "apOff": "Not broadcasting",
+      "apUnknown": "State unavailable",
+      "apJoinHint": "Join \"{{ssid}}\" from your phone and open {{url}}.",
+      "apRetry": "Try again",
+      "apOffReason": {
+        "no_adapter": "The device has no WiFi adapter",
+        "hard_blocked": "The WiFi switch on the device is off",
+        "radio_off": "The WiFi adapter is off",
+        "client_mode": "The adapter is being used to join a network",
+        "profile_missing": "No access point is defined on this device",
+        "unknown": "The reason could not be read"
+      },
+      "apOffHelp": {
+        "no_adapter": "The device can only be reached over the wired network. Plug in a USB WiFi adapter and re-run setup.",
+        "hard_blocked": "Turn on the WiFi switch on the device; it cannot be turned on from here.",
+        "radio_off": "Turn the WiFi adapter on first so the device can broadcast its own network.",
+        "client_mode": "With a single WiFi adapter the two cannot happen at once. Set the role to \"To reach this device\" for it to broadcast its own network.",
+        "profile_missing": "This device was set up without an access point. It can only be reached over the wired network; contact the team that installed it.",
+        "unknown": "The device software does not report the reason. It will appear here once the device is updated."
+      },
+      "fallbackTitle": "The saved network could not be reached",
+      "fallbackHint": "The device brought its own network back so you do not lose access; it will keep retrying the connection.",
+      "fallbackRetry": "The device brought its own network back so you do not lose access; it will retry in {{seconds}}s.",
+      "foreignClient": "The device is joined to \"{{ssid}}\", which was not set from this screen. That connection is never dropped automatically.",
+      "manualAdd": "Add a network manually",
+      "manualTitle": "Add a network manually",
+      "manualSsid": "Network name",
+      "manualSsidPlaceholder": "Type the network name exactly",
+      "manualPskPlaceholder": "Leave empty for an open network",
+      "manualHint": "Network names are case sensitive. You can join networks that are hidden or missing from the list by typing their name.",
+      "scanAge": "Scanned {{seconds}}s ago",
+      "scanNever": "Not scanned yet",
+      "scanDeep": "Scan harder (briefly takes the device's own network down)",
+      "emptyScanApMode": "No networks found. While the device broadcasts its own network, nearby networks may not all be visible; try \"Scan harder\" or type yours with \"Add a network manually\".",
+      "emptyScanRadioOff": "The WiFi adapter is off; networks cannot be scanned.",
+      "confirm": {
+        "radioOff": "Turn the WiFi adapter off?",
+        "toAp": "Set the role to \"To reach this device\"?",
+        "toClient": "Set the role to \"To reach the internet\"?",
+        "forget": "Delete the saved network?",
+        "deepScan": "Run the harder scan?",
+        "effects": "What this will do:",
+        "proceed": "Continue",
+        "proceedRisky": "Continue anyway",
+        "working": "Sending…",
+        "blockedNoPath": "The device currently has no wired address to reach it on. Turning the WiFi adapter off would leave no way in at all, so it cannot be turned off. Connect the wired network first."
+      },
+      "effect": {
+        "apDown": "The device's own network (\"{{ssid}}\") will go down.",
+        "apDownTemp": "The device's own network (\"{{ssid}}\") goes down briefly during the scan, then comes back.",
+        "apUp": "The device's own network (\"{{ssid}}\") will come up.",
+        "internetLost": "Internet over WiFi will be cut; updates, remote maintenance and clock sync will not work.",
+        "sessionDropsAp": "You are viewing this screen over the device's own WiFi network — the page will stop responding.",
+        "sessionDropsWifi": "You are viewing this screen over the WiFi network the device joined — the page will stop responding.",
+        "sessionMayDrop": "We could not detect which network you are viewing this screen over; if it is WiFi, the page will stop responding.",
+        "sessionPausesAp": "You are viewing this screen over the device's own WiFi network — the page will pause briefly and come back when the scan ends.",
+        "sessionMayPause": "We could not detect which network you are viewing this screen over; if it is the device's own network, the page will pause briefly.",
+        "scanThenBack": "Your connection to this screen is unaffected.",
+        "wiredSafe": "The wired connection is unaffected: you can keep reaching the device at {{address}}.",
+        "guardBack": "If the connection fails, the device brings its own network (\"{{ssid}}\") back automatically within a few minutes.",
+        "forgetPassword": "The saved password will be deleted; you will have to enter it again to reconnect."
+      },
+      "handover": {
+        "title": "The request was sent to the device",
+        "mayDrop": "This page may stop responding within a few seconds; that is expected.",
+        "backVia": "To get back: join \"{{ssid}}\" and open {{url}}.",
+        "backWired": "To get back: open {{url}} over the wired network."
+      }
     }
   },
   "remoteAccess": {
+    "endReason": {
+      "expired": "Time expired",
+      "revoked": "Closed by an authorised user",
+      "clock_skew": "Closed as a precaution because the device clock was inconsistent",
+      "lease_corrupt": "Permission record could not be read, closed for safety",
+      "cli": "Closed on the device"
+    },
     "loading": "Reading status…",
     "state": {
       "loading": "READING",
+      "applying": "APPLYING",
       "on": "ON",
       "off": "OFF",
       "unknown": "UNKNOWN"
@@ -940,6 +1064,8 @@
     "hero": {
       "loadingTitle": "Reading status…",
       "loadingLead": "Fetching the remote maintenance status of this device.",
+      "applyingTitle": "Applying the change on the device",
+      "applyingLead": "Your request reached the device. The result will appear here in a few seconds.",
       "onTitle": "Remote maintenance is ON",
       "onLead": "The EnerjiOne support team can connect to this device right now. Access closes by itself when the time runs out; if you would rather not wait, close it now.",
       "offTitle": "Remote maintenance is OFF",
@@ -975,6 +1101,7 @@
       "reasonHint": "This note is written to the log so the support team knows what to look at before connecting.",
       "pickDuration": "Pick a duration first.",
       "endsAtPreview": "Access will close by itself at:",
+      "shortensWarn": "Note: this choice does not extend the current time — it SHORTENS it. Access will close at the time above.",
       "submit": "Allow remote maintenance",
       "submitExtend": "Extend"
     },
@@ -2329,6 +2456,18 @@
       },
       "binaryActive": "ACTIVE (1)",
       "binaryInactive": "INACTIVE (0)",
+      "clock": {
+        "unsynchronized": "Clock unsynchronized",
+        "invalid": "Clock invalid",
+        "unsynchronizedHint": "The device reports that its clock is not time-synchronised. The measured value is valid; only event ordering is unreliable.",
+        "invalidHint": "The device event timestamp is invalid (e.g. a dead RTC battery). The measured value is valid; alarm times are always taken from the server clock.",
+        "deviceTime": "Device clock",
+        "offset": "Offset",
+        "unitSec": "s",
+        "unitMin": "min",
+        "unitHour": "h",
+        "unitDay": "d"
+      },
       "noRows": "No rows match the filter.",
       "noRowsInitial": "No rows to display: at least one device and an active signal catalog are required. Once devices are added, all signal rows are listed here; values populate as telemetry arrives.",
       "itemLabel": "signal"

@@ -5,10 +5,14 @@
  * modali (baglanti kopacak uyarisi) -> istek host ajanina kuyruklanir ->
  * cihaz yeniden baslar -> kullanici yeni adrese gider.
  *
- * Guvenlik agi: WiFi AP (EnerjiOne Grid) her zaman aciktir ve bu sayfadan
- * degistirilemez. Yanlis statik IP girilse bile cihaza AP uzerinden
- * http://e1-grid.local ile donulup duzeltilebilir — sayfa bunu her adimda
- * kullaniciya hatirlatir.
+ * Ust serit DORT ayri seyi birbirine karistirmadan soyler:
+ *   cihaz adresi | erisim noktasi (AP) | INTERNET | kablolu baglanti
+ * "AP acik" ile "internet var" BAMBASKA seylerdir: AP cihaza ulasmayi saglar
+ * ama internet vermez. Kullanici guncelleme / uzaktan bakim / saat senkronunun
+ * calisip calismayacagini bilmek zorunda oldugu icin internet AYRI okunur.
+ *
+ * DEGISMEZ KURAL: her deger cihazin BILDIRDIGI olcumdur. Bilinmiyorsa
+ * "Bilinmiyor" yazilir ve rozet ne yesil ne kirmizi olur.
  *
  * Ikonografi: lucide-react (Sistem Durumu sayfasi ile ayni dil).
  */
@@ -20,6 +24,7 @@ import {
   Check,
   Copy,
   Globe,
+  Globe2,
   Loader2,
   RefreshCw,
   RotateCw,
@@ -27,7 +32,7 @@ import {
   Wifi
 } from "lucide-react";
 
-import { fetchNetworkStatus, updateNetworkConfig } from "../../shared/api";
+import { checkInternet, fetchNetworkStatus, updateNetworkConfig } from "../../shared/api";
 import type {
   NetworkConfigAccepted,
   NetworkInterface,
@@ -40,6 +45,14 @@ type Props = {
 
 import { WifiPanel } from "./WifiPanel";
 import { usePolling } from "../../shared/usePolling";
+import {
+  hasLayers,
+  internetImpactKey,
+  internetLabelKey,
+  internetOf,
+  internetTone,
+  roleOf
+} from "./networkAccess";
 
 const REFRESH_INTERVAL_SEC = 10;
 /** Reboot sonrasi tahmini acilis suresi — geri sayim bunun uzerinden isler. */
@@ -126,6 +139,7 @@ export function NetworkSettingsPage({ accessToken }: Props) {
   const [accepted, setAccepted] = useState<NetworkConfigAccepted | null>(null);
   const [countdown, setCountdown] = useState(REBOOT_COUNTDOWN_SEC);
   const [copied, setCopied] = useState<string | null>(null);
+  const [internetChecking, setInternetChecking] = useState(false);
 
   const ethernetInterfaces = useMemo(
     () => (status?.interfaces ?? []).filter((i) => i.type === "ethernet"),
@@ -294,13 +308,16 @@ export function NetworkSettingsPage({ accessToken }: Props) {
               </a>
             ) : null}
           </div>
-          <p className="net-reboot-hint">
-            <Wifi size={16} />
-            {t("network.reboot.apHint", {
-              ssid: status?.ap?.ssid ?? "EnerjiOne Grid",
-              url: mdnsUrl ?? apUrl ?? ""
-            })}
-          </p>
+          {/* Yalnizca AP GERCEKTEN yayindayken "bu aga baglanin" denir. */}
+          {status?.ap?.active ? (
+            <p className="net-reboot-hint">
+              <Wifi size={16} />
+              {t("network.reboot.apHint", {
+                ssid: status?.ap?.ssid ?? "EnerjiOne Grid",
+                url: mdnsUrl ?? apUrl ?? ""
+              })}
+            </p>
+          ) : null}
         </div>
       </section>
     );
@@ -314,14 +331,45 @@ export function NetworkSettingsPage({ accessToken }: Props) {
   const busy = Boolean(status?.pending) || submitting;
   const lastFailed = status?.last_apply?.status === "failed";
 
+  // ---- Ust seridin OLCULEN girdileri --------------------------------------
+  const internet = internetOf(status);
+  const role = roleOf(status);
+  const internetImpact = internetImpactKey(internet);
+  const netTone = internetTone(internet);
+  // AP kapali ama gorev zaten "internete baglan" ise bu BEKLENEN bir durum;
+  // uyari tonu vermek yanlis alarm olur. Gorev bilinmiyorsa uyar.
+  const apTone = status?.ap?.active
+    ? "is-ok"
+    : role?.mode === "client"
+      ? ""
+      : "is-warn";
+  // Ajan durum bildirmeyeli cok olduysa yesil/kirmizi noktalar guven vermesin.
+  const staleBar = status?.reason === "state_stale";
+
+  const runInternetCheck = async () => {
+    setInternetChecking(true);
+    try {
+      await checkInternet(accessToken);
+      // Ajan sonucu birkac saniye icinde state.json'a yazar.
+      await new Promise((r) => setTimeout(r, 4000));
+      await load();
+    } catch {
+      // Hata mesaji seritte yer kaplamasin; bir sonraki yoklama zaten
+      // gercek durumu getirir.
+    } finally {
+      setInternetChecking(false);
+    }
+  };
+
   return (
     <section className="tab-panel net-page">
-      {/* ---- Ust serit: erisim adresleri ----
-          Uc ayri KPI karti yerine TEK satir: bunlar birbirinden bagimsiz
-          metrikler degil, "cihaza nasil ulasilir"in uc yolu. Tek serit hem
-          daha az dikey yer kaplar hem de diger sayfalardaki cubuk diliyle
-          ayni durur. */}
-      <div className="net-access-bar">
+      {/* ---- Ust serit: cihazin disariyla iliskisi ----
+          Dort oge: cihaz adresi | erisim noktasi | internet | kablolu.
+          Erisim noktasi ile internet AYRI: ilki cihaza ulasmayi saglar,
+          ikincisi guncelleme/uzaktan bakim/saat senkronunu belirler. */}
+      <div className={`net-access-bar ${staleBar ? "is-stale" : ""}`}
+        title={staleBar ? t("network.staleAgent") : undefined}
+      >
         <div className="net-access-item">
           <span className="net-access-icon">
             <Globe size={16} />
@@ -344,7 +392,9 @@ export function NetworkSettingsPage({ accessToken }: Props) {
 
         <span className="net-access-sep" aria-hidden="true" />
 
-        <div className={`net-access-item ${status?.ap?.active ? "is-ok" : "is-warn"}`}>
+        {/* Erisim noktasi — YALNIZCA olculen ap.active. Kuraldan ("client
+            yoksa AP acik olmali") durum TURETILMEZ. */}
+        <div className={`net-access-item ${apTone}`}>
           <span className="net-access-icon">
             <Wifi size={16} />
           </span>
@@ -356,9 +406,24 @@ export function NetworkSettingsPage({ accessToken }: Props) {
                 : t("network.access.wifiInactive")}
             </strong>
           </span>
-          {status?.ap?.exists && !status.ap.secured ? (
+          {status?.ap?.active && status.ap.exists && !status.ap.secured ? (
             <span className="net-chip net-chip--open">{t("network.access.wifiOpen")}</span>
           ) : null}
+        </div>
+
+        <span className="net-access-sep" aria-hidden="true" />
+
+        {/* Internet — "AP acik" ile ayni sey DEGIL. */}
+        <div className={`net-access-item ${netTone ? `is-${netTone}` : ""}`}>
+          <span className="net-access-icon">
+            <Globe2 size={16} />
+          </span>
+          <span className="net-access-body">
+            <span className="net-access-label">{t("network.access.internet")}</span>
+            {/* Metin TEK anahtardan gelir; "Var" + " — " + "kablolu" gibi
+                parca birlestirme ceviride kirilir. */}
+            <strong className="net-access-value">{t(internetLabelKey(internet))}</strong>
+          </span>
         </div>
 
         <span className="net-access-sep" aria-hidden="true" />
@@ -384,6 +449,32 @@ export function NetworkSettingsPage({ accessToken }: Props) {
       </div>
 
       {loadError ? <p className="error-text">{loadError}</p> : null}
+
+      {/* Internet kotu/bilinmiyorken NE ETKILENIR — serit icine sigmaz,
+          tooltip dokunmatikte calismaz. Internet varken banner cikmaz. */}
+      {status?.available && hasLayers(status) && internetImpact ? (
+        <p className="net-banner net-banner--warn net-banner--action">
+          <AlertTriangle size={16} />
+          <span>{t(internetImpact)}</span>
+          <button
+            type="button"
+            className="net-banner-btn"
+            disabled={internetChecking}
+            onClick={() => void runInternetCheck()}
+          >
+            {internetChecking ? t("network.internet.checking") : t("network.internet.check")}
+          </button>
+        </p>
+      ) : null}
+
+      {/* Ajan eski: radyo/gorev/internet bloklarini hic yazmiyor. Varsayilan
+          degerleri OLCUM gibi gostermek, duzelttigimiz yalanin aynisi olurdu. */}
+      {status?.available && !hasLayers(status) ? (
+        <p className="net-banner net-banner--info">
+          <AlertTriangle size={16} />
+          {t("network.agentOld")}
+        </p>
+      ) : null}
 
       {status?.reason === "state_stale" ? (
         <p className="net-banner net-banner--warn">
@@ -556,11 +647,12 @@ export function NetworkSettingsPage({ accessToken }: Props) {
         )}
         </section>
 
-        {/* ---- WiFi (client) bolumu ----
-             Cihazi mevcut bir aga baglar. AP buradan DEGISTIRILMEZ. */}
+        {/* ---- WiFi bolumu: kart -> gorev -> olculen sonuc ----
+             Tum durum gecirilir; panel `ap`, `radio`, `role`, `interfaces` ve
+             `mdns_name` bilgilerinin hepsine dayaniyor. */}
         <WifiPanel
           accessToken={accessToken}
-          wifi={status?.wifi}
+          status={status}
           onRefreshStatus={() => void load()}
         />
       </div>
@@ -614,13 +706,23 @@ export function NetworkSettingsPage({ accessToken }: Props) {
               ) : null}
             </ul>
 
-            <p className="net-confirm-warn">
-              <Wifi size={16} />
-              {t("network.confirm.apSafety", {
-                ssid: status?.ap?.ssid ?? "EnerjiOne Grid",
-                host: status?.mdns_name ?? "e1-grid.local"
-              })}
-            </p>
+            {/* Guvenlik agi metni AP GERCEKTEN yayindaysa verilir. Eskiden
+                kosulsuz yaziliyordu; AP kapaliyken bu bir yalandi ve
+                kullaniciyi olmayan bir kurtarma yoluna guvendiriyordu. */}
+            {status?.ap?.active ? (
+              <p className="net-confirm-warn">
+                <Wifi size={16} />
+                {t("network.confirm.apSafety", {
+                  ssid: status?.ap?.ssid ?? "EnerjiOne Grid",
+                  host: status?.mdns_name ?? "enerjione.local"
+                })}
+              </p>
+            ) : (
+              <p className="net-confirm-warn is-bad">
+                <ShieldAlert size={16} />
+                {t("network.confirm.noApSafety")}
+              </p>
+            )}
 
             <div className="net-confirm-actions">
               <button

@@ -247,6 +247,10 @@ def list_live_values(
             Telemetry.value_string,
             Telemetry.quality,
             Telemetry.source_timestamp,
+            # Cihaz saati durumu (0026). Ayri sorgu DEGIL ayni satirdan iki
+            # kolon: DISTINCT ON zaten dogru satiri seciyor, ek maliyet yok.
+            Telemetry.timestamp_quality,
+            Telemetry.device_event_at,
         )
         .where(Telemetry.device_id.in_(device_ids))
         .distinct(Telemetry.device_id, Telemetry.signal_key)
@@ -256,12 +260,27 @@ def list_live_values(
             Telemetry.id.desc(),
         )
     )
-    # (device_id, signal_key) -> (value, value_string, quality, source_timestamp)
+    # (device_id, signal_key) -> (value, value_string, quality, source_timestamp,
+    #                             timestamp_quality, device_event_at)
     latest_by_pair: dict[tuple[int, str], tuple] = {}
-    for dev_id, sig_key, value, value_string, quality, source_ts in db.execute(
-        latest_telemetry_stmt
-    ):
-        latest_by_pair[(dev_id, sig_key)] = (value, value_string, quality, source_ts)
+    for (
+        dev_id,
+        sig_key,
+        value,
+        value_string,
+        quality,
+        source_ts,
+        ts_quality,
+        device_event_at,
+    ) in db.execute(latest_telemetry_stmt):
+        latest_by_pair[(dev_id, sig_key)] = (
+            value,
+            value_string,
+            quality,
+            source_ts,
+            ts_quality,
+            device_event_at,
+        )
 
     # Modele gore on-grupla, ki her cihaz icin sadece kendi modelinin sinyallerini iterate edelim.
     catalog_by_model: dict[str, list[SignalCatalog]] = {}
@@ -275,7 +294,14 @@ def list_live_values(
             key = (device.id, signal.key)
             row = latest_by_pair.get(key)
             if row is not None:
-                value, value_string, quality, source_ts = row
+                (
+                    value,
+                    value_string,
+                    quality,
+                    source_ts,
+                    ts_quality,
+                    device_event_at,
+                ) = row
                 result.append(
                     SignalLiveValue(
                         signal_key=signal.key,
@@ -290,6 +316,10 @@ def list_live_values(
                         value_string=value_string,
                         quality=quality,
                         source_timestamp=source_ts.isoformat() if source_ts else None,
+                        timestamp_quality=ts_quality,
+                        device_event_at=(
+                            device_event_at.isoformat() if device_event_at else None
+                        ),
                     )
                 )
             else:

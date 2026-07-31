@@ -43,3 +43,19 @@ class Telemetry(Base):
     value_string: Mapped[str | None] = mapped_column(Text, nullable=True)
     quality: Mapped[str] = mapped_column(String(50), default="good")
     source_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    # --- CIHAZ SAATI (teshis/goruntu) -------------------------------------
+    # `telemetry_history`'deki ayni ikilinin canli karsiligi (migration 0026).
+    # Arsivde isaretli olmasi yetmiyordu: canli deger ekrani ve WS yayini BU
+    # tablodan okudugu icin saati bozuk bir cihaz ekranda normal gorunuyordu.
+    #
+    # `quality` ile KARISTIRMA. O alan DNP3 olcum kalitesidir ve alarm akisini
+    # yonetir (bkz. tag_engine_service.ALARM_BLOCKING_QUALITIES). Saat kaymasi
+    # olcumu gecersiz KILMAZ — 45 saniye ileri giden bir saat, akim degerini
+    # bozmaz. Ikisini tek kolonda birlestirmek bozuk saatli bir cihazin
+    # alarmlarini sessizce bastirirdi.
+    device_event_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # "synchronized" | "unsynchronized" | "invalid" | None (bilgi yok)
+    timestamp_quality: Mapped[str | None] = mapped_column(String(20), nullable=True)

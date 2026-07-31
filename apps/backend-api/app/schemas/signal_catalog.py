@@ -107,3 +107,18 @@ class SignalLiveValue(BaseModel):
     value_string: str | None = None
     quality: str | None = None
     source_timestamp: str | None = None
+    # --- CIHAZ SAATI DURUMU ----------------------------------------------
+    # `quality`den AYRI alanlar. Saat kaymasi olcumu gecersiz kilmaz; ikisini
+    # tek alanda birlestirmek saati bozuk bir cihazi "kalitesiz veri" gibi
+    # gosterip alarmlarini bastirirdi.
+    #
+    # timestamp_quality: "synchronized" | "unsynchronized" | "invalid" | None.
+    # None = bilgi yok (0.4.x gateway alani hic gondermiyor) — UI bu durumda
+    # HICBIR uyari gostermez, cunku "bilmiyoruz" ile "saat bozuk" ayni sey
+    # degildir.
+    timestamp_quality: str | None = None
+    # Cihazin kendi bildirdigi olay zamani. `source_timestamp` (gateway saati)
+    # ile yan yana gosterilince operator kaymanin YONUNU ve BUYUKLUGUNU
+    # gorebilir; ham deger saklandigi icin "2000-01-01" gibi bir damga RTC
+    # pilinin bittigini dogrudan soyler.
+    device_event_at: str | None = None

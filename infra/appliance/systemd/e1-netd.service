@@ -12,3 +12,7 @@ ExecStart=/opt/enerjione-grid/infra/appliance/e1-netd.py apply
 # yazilir ve UI'da gosterilir.
 SuccessExitStatus=0 1
 TimeoutStartSec=120
+# nmcli durum metinleri yerellesirse tum durum ayristirmalari sessizce
+# yanlis sonuc verir (bkz. e1-netd.py _nmcli).
+Environment=LC_ALL=C
+Environment=LANG=C

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Literal
@@ -717,19 +718,6 @@ def get_gateway_config(
         ).all()
     )
 
-    device_seed = "|".join(
-        f"{device.code}:{device.ip_address}:{device.dnp3_address}:{device.poll_interval_sec}"
-        for device in devices
-    )
-    signal_seed = "|".join(
-        f"{signal.source}:{signal.key}:{signal.data_type}:{signal.dnp3_object_group}:{signal.dnp3_index}:{signal.scale}"
-        for signal in signals_rows
-    )
-    config_version = hashlib.sha1(
-        f"{gateway.code}:{gateway.batch_interval_sec}:{device_seed}::{signal_seed}".encode("utf-8"),
-        usedforsecurity=False,
-    ).hexdigest()[:12]
-    etag = f'"{config_version}"'
 
     # `last_seen_at` ETag eslese bile her istekte guncellenmeli — konfigiyuon
     # degismemis bile olsa gateway canlilik sinyali veriyor.
@@ -739,14 +727,6 @@ def get_gateway_config(
     # Komutlar artik AYRI /pending endpoint'inden gelir (config'ten ayrildi).
     # Config saf ETag/304: config degismemisse fast-path 304 doner (5dk poll'de
     # cogunlukla). Komut varligi config'i etkilemez.
-    normalized_inm = (if_none_match or "").strip()
-    if normalized_inm in (etag, config_version):
-        response.status_code = status.HTTP_304_NOT_MODIFIED
-        response.headers["ETag"] = etag
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
-
-    response.headers["ETag"] = etag
-
     # Initiating mode cihazlar icin host port range: gateway her cihaz icin
     # ayri bir TCP server portu acar. OpenDNP3'un TCPServer kanali tek
     # client kabul ettigi icin cihaz basina port mecbur. Backend cihaz
@@ -823,6 +803,58 @@ def get_gateway_config(
         for signal in signals_rows
     ]
 
+    # --- config_version: PAYLOAD'IN KENDISINDEN turetilir ------------------
+    #
+    # ESKIDEN elle tutulan bir "seed" string'i vardi ve yalnizca su alanlari
+    # iceriyordu: code, ip_address, dnp3_address, poll_interval_sec (+ sinyal
+    # tarafinda source/key/data_type/group/index/scale).
+    # Oysa payload BUNLARDAN FAZLASINI tasiyor: dnp3_tcp_port, master_address,
+    # ip_endpoint_type, master_ip_port, timeout_ms, retry_count,
+    # signal_profile, sinyal `offset`i...
+    #
+    # Sonucu CANLI BIR HATAYDI: bir cihazin TCP portunu degistirdiginizde
+    # payload degisiyor ama config_version AYNI kaliyordu -> ETag esleşiyor ->
+    # gateway 304 aliyor -> DEGISIKLIGI HIC OGRENMIYOR. Ustelik gateway disk
+    # cache'ini de tazelemedigi icin, backend erisilemezken restart eden bir
+    # gateway ESKI ayarla aciliyordu.
+    #
+    # Artik hash dogrudan gonderilecek veriden hesaplaniyor: payload degisirse
+    # surum DE degisir. Elle liste tutulmadigi icin bir daha sapamaz.
+    #
+    # MALIYET: 304 durumunda da payload'i INSA ediyoruz (serialize maliyeti),
+    # ama ASIL kazanc olan AG TRAFIGI korunuyor — 175 sinyali tel uzerinden
+    # tekrar gondermiyoruz. Yerel serialize maliyeti dakikada ~12 cagri icin
+    # ihmal edilebilir; sessizce yanlis konfigurasyonla calisan bir saha
+    # cihazi ise ihmal edilemez.
+    _version_material = json.dumps(
+        {
+            "gateway_name": gateway.name,
+            "batch_interval_sec": gateway.batch_interval_sec,
+            "max_devices": gateway.max_devices,
+            "is_active": gateway.is_active,
+            "devices": [d.model_dump(mode="json") for d in config_devices],
+            "signals": [sg.model_dump(mode="json") for sg in config_signals],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    config_version = hashlib.sha1(
+        _version_material.encode("utf-8"), usedforsecurity=False
+    ).hexdigest()[:12]
+    etag = f'"{config_version}"'
+
+    # NOT: refresh_nonce / config_nonce hash'e DAHIL DEGIL — onlar ayri
+    # tetikleyiciler ve kendi mekanizmalari var; hash'e girselerdi her nonce
+    # artisi tum sinyal listesinin yeniden gonderilmesine yol acardi.
+    normalized_inm = (if_none_match or "").strip()
+    if normalized_inm in (etag, config_version):
+        response.status_code = status.HTTP_304_NOT_MODIFIED
+        response.headers["ETag"] = etag
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+
+    response.headers["ETag"] = etag
+
     config_resp = GatewayConfigResponse(
         gateway_code=gateway.code,
         gateway_name=gateway.name,
@@ -849,6 +881,7 @@ def get_gateway_pending(
     gateway_code: str,
     db: Session = Depends(get_db),
     x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+    x_gateway_health: str | None = Header(default=None, alias="X-E1-Gateway-Health"),
 ):
     """Hafif komut-poll — gateway 1sn'de bir ceker (komut anlik gelsin).
 
@@ -900,12 +933,41 @@ def get_gateway_pending(
             cmd.sent_at = now
 
     gateway.last_seen_at = datetime.now(timezone.utc)
+
+    # --- Gateway saglik heartbeat'i (opsiyonel) --------------------------
+    # Saha gateway'i NAT arkasinda; backend onun /health ucuna ULASAMAZ.
+    # Bu yuzden saglik ozeti gateway'in ZATEN saniyede bir attigi bu istege
+    # basligla biniyor (ek istek maliyeti YOK).
+    #
+    # KOMUT KANALI KUTSAL: burasi SCADA komut yolu. Bozuk base64, gecersiz
+    # JSON, devasa baslik ya da DB hatasi bu ucu ASLA dusurmemeli — aksi
+    # halde saglik raporlamak icin eklenen ozellik kesici komutlarinin
+    # iletilmesini engeller. Bu yuzden her sey try/except icinde ve
+    # ayristirici hicbir kosulda istisna firlatmiyor.
+    if x_gateway_health:
+        try:
+            from app.services.gateway_health_service import (
+                parse_health_header,
+                record_health,
+            )
+
+            payload = parse_health_header(x_gateway_health)
+            if payload is not None:
+                record_health(db, gateway.code, payload)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "gateway_health_ingest_failed gateway=%s — komut kanali etkilenmedi",
+                gateway_code,
+                exc_info=True,
+            )
+
     resp = GatewayPendingResponse(
         gateway_code=gateway.code,
         is_active=gateway.is_active,
         commands=commands,
         config_nonce=int(getattr(gateway, "config_nonce", 0) or 0),
         refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
+        heartbeat_interval_sec=settings.gateway_heartbeat_interval_sec,
     )
     db.commit()
     return _signed_json_response(gateway, resp)

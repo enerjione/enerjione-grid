@@ -19,6 +19,7 @@ hata firlatmaz; `read_status()` available=False + sebep doner ve UI bunu
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import time
@@ -29,12 +30,15 @@ from pathlib import Path
 from app.core.config import settings
 from app.schemas.network import (
     AccessPointInfo,
+    InternetState,
     NetworkApplyStatus,
     NetworkConfigUpdate,
     NetworkInterface,
     NetworkStatus,
     WifiConnectRequest,
     WifiNetwork,
+    WifiRadioState,
+    WifiRoleState,
     WifiScanResult,
     WifiState,
 )
@@ -59,6 +63,38 @@ def _read_json(path: Path) -> dict | None:
             data = json.load(fh)
         return data if isinstance(data, dict) else None
     except (FileNotFoundError, json.JSONDecodeError, OSError, PermissionError):
+        return None
+
+
+def _model(model_cls, raw):
+    """Ajanin yazdigi blogu modele cevir; blok yok/bozuksa varsayilan.
+
+    Ajan ile backend ayri ayri guncellenebilir (eski state.json + yeni
+    backend). Bilinmeyen/eksik alan 500 uretmemeli.
+    """
+    if not isinstance(raw, dict):
+        return model_cls()
+    try:
+        return model_cls(**raw)
+    except (TypeError, ValueError):
+        return model_cls()
+
+
+def _model_or_none(model_cls, raw):
+    """Blok YOKSA None dondur — "olcum yok" ile "olcum negatif"i AYIRIR.
+
+    NEDEN: `_model` blok yokken bos bir nesne uretiyordu (supported=False).
+    Ajan `build_state()` icinde hata alip kisa bir hata state'i yazdiginda
+    (nmcli zaman asimi, NetworkManager cevap vermiyor) radio/role/internet
+    bloklari HIC olmuyor; bos nesne yuzunden arayuz "Cihazda WiFi karti
+    bulunamadi" diyordu. Bu OLCULMUS bir donanim iddiasi, oysa tek
+    bildigimiz ajanin cevap veremedigi. UI None gorunce "Bilinmiyor" der.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return model_cls(**raw)
+    except (TypeError, ValueError):
         return None
 
 
@@ -95,7 +131,13 @@ def read_status() -> NetworkStatus:
     ap = AccessPointInfo(**ap_raw) if isinstance(ap_raw, dict) else AccessPointInfo()
     wifi_raw = raw.get("wifi")
     # Eski ajan surumu (schema 1) `wifi` alanini yazmaz — bos state ile devam.
-    wifi = WifiState(**wifi_raw) if isinstance(wifi_raw, dict) else WifiState()
+    wifi = _model_or_none(WifiState, wifi_raw)
+    # schema 3 bloklari. Eski ajan bunlari yazmaz; varsayilanla devam eder ve
+    # UI `agent_schema`ya bakip "ag ajani eski, guncelleyin" der (varsayilani
+    # olcum gibi gosterip yalan soylemek YASAK).
+    radio = _model_or_none(WifiRadioState, raw.get("radio"))
+    role = _model_or_none(WifiRoleState, raw.get("wifi_role"))
+    internet = _model_or_none(InternetState, raw.get("internet"))
 
     status_raw = _read_json(state_dir() / STATUS_FILE)
     last_apply = NetworkApplyStatus(**status_raw) if status_raw else None
@@ -106,6 +148,7 @@ def read_status() -> NetworkStatus:
     except OSError:
         age = None
 
+    agent_schema = raw.get("schema")
     return NetworkStatus(
         available=True,
         reason="state_stale" if (age is not None and age > STALE_STATE_SECONDS) else None,
@@ -113,8 +156,12 @@ def read_status() -> NetworkStatus:
         mdns_name=raw.get("mdns_name"),
         updated_at=raw.get("updated_at"),
         state_age_seconds=age,
+        agent_schema=agent_schema if isinstance(agent_schema, int) else None,
         ap=ap,
         wifi=wifi,
+        radio=radio,
+        role=role,
+        internet=internet,
         interfaces=interfaces,
         pending=has_pending_request(),
         last_apply=last_apply,
@@ -234,9 +281,54 @@ def _base_request(action: str, actor_username: str) -> dict:
     }
 
 
-def request_wifi_scan(actor_username: str) -> str:
-    """Ajana 'agları tara' de. Sonuc wifi-scan.json'a yazilir."""
-    return _write_request(_base_request("wifi_scan", actor_username))
+def _require_radio_on() -> None:
+    """WiFi eylemleri icin fiziksel onkosul: kart acik olmali.
+
+    ERKEN UYARI: nihai otorite yine ajandir (ayni kurallari bagimsiz
+    uygular). Amac, kullaniciya "istek gonderildi" deyip 20 sn sonra
+    sessizce basarisiz olmak yerine sebebi HEMEN soylemek.
+    """
+    status = read_status()
+    if status.agent_schema is None or status.agent_schema < 3:
+        return  # eski ajan radyo durumunu olcmuyor; engelleme, ona birak
+    if not status.radio.supported:
+        raise NetworkRequestError("wifi_not_supported")
+    if not status.radio.enabled:
+        raise NetworkRequestError("radio_off")
+
+
+def has_wired_fallback() -> bool:
+    """WiFi kapatilirsa cihaza ulasilacak IKINCI yol var mi?
+
+    Kriter ajandakiyle AYNI olmali (bagli + gercek IPv4 almis ethernet);
+    ayrisirlarsa kullanici burada "olur" cevabi alip ajandan ret yer.
+    """
+    for iface in read_status().interfaces:
+        if iface.type != "ethernet":
+            continue
+        if (iface.state or "").lower() not in ("connected", "connected (site only)"):
+            continue
+        for cidr in iface.addresses:
+            text = cidr.split("/")[0].strip()
+            try:
+                addr = ipaddress.IPv4Address(text)
+            except ipaddress.AddressValueError:
+                continue
+            if not (addr.is_loopback or addr.is_link_local or addr.is_unspecified):
+                return True
+    return False
+
+
+def request_wifi_scan(deep: bool, actor_username: str) -> str:
+    """Ajana 'aglari tara' de. Sonuc wifi-scan.json'a yazilir.
+
+    `deep=True` cihazin kendi agini ~15 sn indirir; tek radyo AP modunda
+    kanal degistiremedigi icin normal tarama bos donebilir.
+    """
+    _require_radio_on()
+    body = _base_request("wifi_scan", actor_username)
+    body["deep"] = bool(deep)
+    return _write_request(body)
 
 
 def request_wifi_connect(payload: WifiConnectRequest, actor_username: str) -> str:
@@ -245,6 +337,7 @@ def request_wifi_connect(payload: WifiConnectRequest, actor_username: str) -> st
     Sifre burada SAKLANMAZ: sadece request.json'a yazilir, ajan uygulayip
     dosyayi siler. Log'a da dusurulmez.
     """
+    _require_radio_on()
     body = _base_request("wifi_connect", actor_username)
     body["ssid"] = payload.ssid
     if payload.psk:
@@ -255,6 +348,50 @@ def request_wifi_connect(payload: WifiConnectRequest, actor_username: str) -> st
 def request_wifi_forget(actor_username: str) -> str:
     """Kayitli WiFi profilini sil ve AP'yi geri ac."""
     return _write_request(_base_request("wifi_forget", actor_username))
+
+
+def request_wifi_radio(enabled: bool, actor_username: str) -> str:
+    """WiFi kartini ac/kapa.
+
+    KAPATMA ENGELLENMEZ, KOSULLANIR: tek radyo kapaninca erisim noktasi da
+    duser, yani cihaza kablosuz ulasim tamamen biter. Bu yuzden IP almis
+    bagli bir ethernet sart. Kosul saglansa bile AP uzerinden bagli
+    kullanicinin oturumu KOPAR — UI onay istemeli.
+    """
+    status = read_status()
+    if status.agent_schema is not None and status.agent_schema >= 3:
+        if not status.radio.supported:
+            raise NetworkRequestError("wifi_not_supported")
+        if enabled and not status.radio.hardware_enabled:
+            raise NetworkRequestError("radio_hardware_blocked")
+    if not enabled and not has_wired_fallback():
+        raise NetworkRequestError("radio_off_would_strand")
+    body = _base_request("wifi_radio", actor_username)
+    body["enabled"] = bool(enabled)
+    return _write_request(body)
+
+
+def request_wifi_mode(mode: str, actor_username: str) -> str:
+    """WiFi kartinin gorevini sec: "ap" (kendi agini yayinla) | "client".
+
+    "client" KAYITLI profili kullanir; yeni ag secmek ayri akistir.
+    """
+    if mode not in ("ap", "client"):
+        raise NetworkRequestError("invalid_mode")
+    _require_radio_on()
+    if mode == "client" and not read_status().wifi.saved:
+        raise NetworkRequestError("no_saved_network")
+    body = _base_request("wifi_mode", actor_username)
+    body["mode"] = mode
+    return _write_request(body)
+
+
+def request_internet_check(actor_username: str) -> str:
+    """Internet durumunu SIMDI sina (tek seferlik, kullanici istegi).
+
+    Periyodik rapor bu kontrolu YAPMAZ: ag trafigi uretir ve bloklar.
+    """
+    return _write_request(_base_request("net_check", actor_username))
 
 
 def read_scan() -> WifiScanResult:
@@ -281,6 +418,8 @@ def read_scan() -> WifiScanResult:
         ifname=raw.get("ifname"),
         networks=networks,
         age_seconds=age,
+        deep=bool(raw.get("deep")),
+        ap_was_active=bool(raw.get("ap_was_active")),
     )
 
 
@@ -288,7 +427,7 @@ def next_url_for(payload: NetworkConfigUpdate, mdns_name: str | None) -> str | N
     """Reboot sonrasi kullanicinin acmasi gereken adres.
 
     Statikte yeni IP kesindir. DHCP'de adres onceden bilinemez; mDNS adi
-    (e1-grid.local) her iki durumda da calisir, onu oneriyoruz.
+    (enerjione.local) her iki durumda da calisir, onu oneriyoruz.
     """
     if payload.method == "static" and payload.address:
         return f"http://{payload.address}/"

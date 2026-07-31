@@ -71,6 +71,79 @@ class WifiState(BaseModel):
     guard_deadline: float | None = None
 
 
+class WifiRadioState(BaseModel):
+    """WiFi KARTININ kendisi — fiziksel onkosul.
+
+    Kart kapaliyken ne erisim noktasi yayinlanabilir ne de ag taranabilir;
+    sahadaki "AP yayinda degil" + "gorunur ag bulunamadi" ikilisinin ortak
+    sebebi budur ve ilk kez OLCULUYOR.
+
+    `blocked_by`:
+      "hardware" -> cihaz uzerindeki fiziksel WiFi anahtari/BIOS kapali.
+                    Arayuzden ACILAMAZ; kullaniciya bunu soylemek gerekir.
+      "software" -> yalnizca yazilim kilidi; buradan acilabilir.
+    """
+
+    supported: bool = False
+    enabled: bool = False
+    hardware_enabled: bool = True
+    blocked_by: Literal["software", "hardware"] | None = None
+    # Kullanicinin arayuzden verdigi son ACIK karar (None = hic dokunulmamis).
+    # Ajan bunu surekli DAYATMAZ; yerel yoneticiyle kavga etmemek icin.
+    desired: Literal["on", "off"] | None = None
+    changed_at: str | None = None
+    # Kablolu baglanti kayboldugu icin ajanin WiFi'yi kendiliginden actigi an.
+    auto_restored_at: str | None = None
+
+
+class WifiRoleState(BaseModel):
+    """WiFi kartinin GOREVI — tercih ve olcum AYRI alanlarda.
+
+    `mode`      = kullanicinin KALICI tercihi (ne istiyor).
+    `effective` = radyonun SU AN ne yaptigi (olcum).
+
+    Bu ikisi UI'da ASLA ayni rozete baglanmamalidir: eski panel "client'a
+    bagli degilsek AP acik olmali" KURALINI olcum gibi gosteriyordu ve AP
+    gercekte kapaliyken "erisim noktasi acik" yaziyordu. Alanlar ayrisiyorsa
+    (or. mode="client", effective="ap") bu bir hata degil, anlatilacak bir
+    durumdur: "internete baglanmak secili ama aga ulasilamiyor; cihaz
+    simdilik kendi agini yayinliyor."
+    """
+
+    mode: Literal["ap", "client"] = "ap"
+    effective: Literal["ap", "client", "off", "idle"] = "off"
+    # Tercihin ne zaman / kim tarafindan verildigi.
+    since: str | None = None
+    set_by: str | None = None
+    # Tercih "client" ama aga ulasilamadigi icin erisim garantisi olarak
+    # AP'ye donuldu mu (epoch saniye — guard_deadline ile ayni birim).
+    fallback_active: bool = False
+    fallback_since: float | None = None
+    next_retry_at: float | None = None
+    # Radyoda BIZIM olmayan bir client baglantisi varsa (kurulumcunun kendi
+    # profili olabilir) SSID'i. Otomatik dongu bunu ASLA dusurmez.
+    foreign_client: str | None = None
+
+
+class InternetState(BaseModel):
+    """Internet erisimi — "erisim noktasi acik" ile AYNI SEY DEGIL.
+
+    Kullanici guncelleme / uzaktan bakim / saat senkronunun calisip
+    calismayacagini bilmeli. DEGISMEZ: "unknown" asla "internet var" gibi
+    gosterilmez.
+    """
+
+    state: Literal["full", "portal", "limited", "none", "unknown"] = "unknown"
+    # "nm"    -> NetworkManager'in onbellekli degeri (trafik uretmez)
+    # "route" -> varsayilan rota yok, cikis imkansiz
+    # "probe" -> ajanin kendi TCP kontrolu
+    source: Literal["nm", "route", "probe"] | None = None
+    ifname: str | None = None
+    via: Literal["ethernet", "wifi", "vpn", "other"] | None = None
+    gateway: str | None = None
+    checked_at: str | None = None
+
+
 class WifiNetwork(BaseModel):
     """Taramada gorunen tek bir ag."""
 
@@ -89,6 +162,46 @@ class WifiScanResult(BaseModel):
     networks: list[WifiNetwork] = Field(default_factory=list)
     # Tarama sonucunun yasi (sn) — UI "x sn once tarandi" gosterir.
     age_seconds: float | None = None
+    # Bu sonuc AP indirilerek mi alindi (derin tarama)?
+    deep: bool = False
+    # Tarama sirasinda cihazin kendi agi yayindaydi: tek radyo AP modunda
+    # kanal degistiremez, sonuc SINIRLI olabilir. UI "hic ag yok" diye yalan
+    # soylemesin diye tasiniyor.
+    ap_was_active: bool = False
+
+
+class WifiScanRequest(BaseModel):
+    """Tarama istegi.
+
+    `deep=true`: cihazin kendi agi ~15 sn kapatilir ve tam tarama yapilir.
+    Tavuk-yumurta cozumu — AP yayindayken cogu surucu bos liste dondurur,
+    kullanici da baglanacak agi secemez. AP uzerinden bagli kullanicinin
+    oturumu kisa sureligine kopar; UI bunu ONCEDEN soylemeli.
+    """
+
+    deep: bool = False
+
+
+class WifiRadioRequest(BaseModel):
+    """WiFi kartini ac/kapa.
+
+    Kapatma mesrudur ama tek radyo kapaninca erisim noktasi da duser; bu
+    yuzden ajan kabul etmeden once IP almis bir ethernet KANITLAR.
+    """
+
+    enabled: bool
+
+
+class WifiModeRequest(BaseModel):
+    """WiFi kartinin gorevini sec.
+
+    SSID BILINCLI OLARAK YOK: "client" moduna gecis KAYITLI profili kullanir.
+    Yeni bir ag secmek ayri bir akistir (POST /network/wifi/connect — o da
+    modu client yapar). Iki kavrami tek endpoint'e sikistirmak dogrulamayi
+    ve hata mesajlarini bulandirir.
+    """
+
+    mode: Literal["ap", "client"]
 
 
 class WifiConnectRequest(BaseModel):
@@ -136,8 +249,28 @@ class NetworkStatus(BaseModel):
     updated_at: str | None = None
     # state.json'in yasi (sn). Buyukse ajan durmus demektir.
     state_age_seconds: float | None = None
+    # Ajanin state.json sema surumu. UI yeni bolumleri (radio/role/internet)
+    # `agent_schema >= 3` kosuluna baglamali: eski ajan bu bloklari hic
+    # yazmaz ve varsayilanlar "WiFi karti yok" gibi gorunur — yani
+    # duzeltmeye calistigimiz YALANIN aynisini baska yerde uretirdik.
+    agent_schema: int | None = None
     ap: AccessPointInfo = Field(default_factory=AccessPointInfo)
-    wifi: WifiState = Field(default_factory=WifiState)
+    # radio/role/internet ile AYNI gerekce: blok yoksa None. Bos bir
+    # WifiState (supported=False) arayuzde "WiFi karti yok" diye
+    # olculmus bir iddiaya donusuyordu.
+    wifi: WifiState | None = None
+    # Uc DURUST katman: fiziksel onkosul / gorev / internet.
+    #
+    # None = OLCUM YOK (ajan bu blogu hic yazmamis: eski surum ya da
+    # `build_state()` hata verip kisa bir hata state'i yazmis). VARSAYILAN
+    # NESNE URETMIYORUZ: supported=False iceren bos bir nesne, arayuzde
+    # "Cihazda WiFi karti bulunamadi" gibi OLCULMUS bir donanim iddiasina
+    # donusuyordu — oysa tek bildigimiz ajanin cevap veremedigi. Bu, tam da
+    # bu turda duzelttigimiz "olcmedigin durumu gosterme" hatasinin ta
+    # kendisiydi. UI None gorunce "Bilinmiyor" demeli.
+    radio: WifiRadioState | None = None
+    role: WifiRoleState | None = None
+    internet: InternetState | None = None
     interfaces: list[NetworkInterface] = Field(default_factory=list)
     # Islenmeyi bekleyen istek (varsa) — UI "uygulaniyor" gosterir.
     pending: bool = False

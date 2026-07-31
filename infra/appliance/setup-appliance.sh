@@ -4,11 +4,13 @@
 # ===========================================================================
 # Mini PC'yi "acinca calisan cihaz" haline getirir:
 #
-#   1. Hostname -> e1-grid  (avahi ile http://e1-grid.local calisir)
+#   1. Hostname -> enerjione  (avahi ile http://enerjione.local calisir)
+#      Eski ad e1-grid.local da yasatiliyor (AP DNS + mDNS takma adi) —
+#      sahadaki kurulumlarin yer imleri ve notlari kirilmasin.
 #   2. NetworkManager ag yoneticisi olur (netplan renderer dahil)
 #   3. Sifresiz WiFi AP: musteri adiyla (or. "E1GRID-TPAO") — boot'ta acilir,
-#      istemcilere 10.42.0.0/24 DHCP dagitir, e1-grid.local -> 10.42.0.1
-#   4. avahi-daemon (mDNS) — kablolu agdan da e1-grid.local calisir
+#      istemcilere 10.42.0.0/24 DHCP dagitir, enerjione.local -> 10.42.0.1
+#   4. avahi-daemon (mDNS) — kablolu agdan da enerjione.local calisir
 #   5. e1-netd ag ajani + systemd unit'leri (UI'dan IP/DNS ayari)
 #
 # Calistirma (repo kokunde, kurulum sonrasi):
@@ -24,7 +26,9 @@
 #                  de okunur)
 #   AP_CHANNEL     2.4GHz kanal     (default: 6)
 #   AP_IFNAME      WiFi arayuzu     (default: otomatik tespit)
-#   APPLIANCE_HOSTNAME               (default: e1-grid)
+#   APPLIANCE_HOSTNAME               (default: enerjione)
+#   APPLIANCE_HOSTNAME_LEGACY        eski ad, takma ad olarak yayinlanir
+#                                    (default: e1-grid)
 #   BACKEND_UID    backend container uid (default: 10001)
 #   SKIP_AP=1      AP kurulumunu atla (WiFi karti yoksa)
 # ===========================================================================
@@ -76,7 +80,11 @@ if [[ -z "${AP_SSID:-}" ]]; then
 fi
 AP_CON_NAME="e1-grid-ap"
 AP_CHANNEL="${AP_CHANNEL:-6}"
-APPLIANCE_HOSTNAME="${APPLIANCE_HOSTNAME:-e1-grid}"
+# Cihazin mDNS adi: http://enerjione.local
+# ESKI AD (e1-grid) sahadaki kurulumlarda kullaniliyordu; asagida AP
+# DNS kaydinda ALIAS olarak yasatiliyor ki eski yer imleri kirilmasin.
+APPLIANCE_HOSTNAME="${APPLIANCE_HOSTNAME:-enerjione}"
+APPLIANCE_HOSTNAME_LEGACY="${APPLIANCE_HOSTNAME_LEGACY:-e1-grid}"
 BACKEND_UID="${BACKEND_UID:-10001}"
 STATE_DIR="/var/lib/e1-grid/net"
 INSTALL_DIR="${INSTALL_DIR:-/opt/enerjione-grid}"
@@ -104,6 +112,9 @@ step "[1/7] Gerekli paketler"
 NEEDED=()
 command -v nmcli   >/dev/null 2>&1 || NEEDED+=(network-manager)
 command -v avahi-daemon >/dev/null 2>&1 || NEEDED+=(avahi-daemon)
+# avahi-publish: eski mDNS adini (e1-grid.local) takma ad olarak yayinlamak
+# icin. Olmazsa kurulum bozulmaz, sadece eski ad calismaz.
+command -v avahi-publish >/dev/null 2>&1 || NEEDED+=(avahi-utils)
 command -v python3 >/dev/null 2>&1 || NEEDED+=(python3)
 # AP modunda NetworkManager dnsmasq'i icsel kullanir (shared mode).
 dpkg -s dnsmasq-base >/dev/null 2>&1 || NEEDED+=(dnsmasq-base)
@@ -153,7 +164,7 @@ fi
 
 # mDNS TUM arayuzlerden cevap vermeli: kullanici cihaza kabloyla da,
 # cihazin kendi AP'sinden de, cihazin istemci olarak katildigi WiFi agindan
-# da ayni adresle (e1-grid.local) ulasabilmeli.
+# da ayni adresle (enerjione.local) ulasabilmeli.
 #
 # Avahi'nin varsayilani zaten "tum arayuzler" ama BUNA GUVENMIYORUZ: OEM
 # imajlari (Dell/Lenovo Ubuntu) avahi-daemon.conf'u kisitli gonderebiliyor
@@ -174,6 +185,43 @@ fi
 systemctl enable --now avahi-daemon >/dev/null 2>&1 || warn "avahi-daemon baslatilamadi."
 systemctl reload avahi-daemon >/dev/null 2>&1 || systemctl restart avahi-daemon >/dev/null 2>&1 || true
 ok "mDNS aktif — kablolu, AP ve WiFi aglarinin hepsinden http://${APPLIANCE_HOSTNAME}.local"
+
+# --- ESKI AD icin mDNS takma adi -------------------------------------------
+# Cihazin adi e1-grid -> enerjione olarak degisti. Sahada e1-grid.local ile
+# kurulmus cihazlar, kayitli yer imleri ve yazili kurulum notlari var; ad
+# degisince hepsi bir anda calismaz olurdu.
+#
+# avahi yalnizca KENDI hostname'ini yayinlar; ikinci bir ad icin
+# `avahi-publish -a` surekli calisan bir surec ister (kayit, surec yasadigi
+# surece durur). Kucuk bir systemd unit'i ile cozuyoruz.
+#
+# avahi-utils kurulu degilse SESSIZCE geciyoruz: bu bir kolaylik, kurulumu
+# bloke etmemeli. Yeni ad her durumda calisir.
+if command -v avahi-publish >/dev/null 2>&1 \
+   && [[ "$APPLIANCE_HOSTNAME_LEGACY" != "$APPLIANCE_HOSTNAME" ]]; then
+  cat > /etc/systemd/system/e1-mdns-alias.service <<UNIT
+[Unit]
+Description=EnerjiOne Grid - eski mDNS adi (${APPLIANCE_HOSTNAME_LEGACY}.local)
+After=avahi-daemon.service
+Requires=avahi-daemon.service
+
+[Service]
+# -a: adres kaydi, -R: cakisma olursa yeniden dene. Surec yasadigi surece
+# kayit durur; bu yuzden Restart=always.
+ExecStart=/usr/bin/avahi-publish -a -R ${APPLIANCE_HOSTNAME_LEGACY}.local \$(hostname -I | awk '{print \$1}')
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now e1-mdns-alias.service >/dev/null 2>&1 \
+    && ok "Eski ad da calisiyor: http://${APPLIANCE_HOSTNAME_LEGACY}.local" \
+    || warn "Eski mDNS adi (${APPLIANCE_HOSTNAME_LEGACY}.local) etkinlestirilemedi."
+else
+  info "avahi-publish yok — yalnizca ${APPLIANCE_HOSTNAME}.local yayinlanacak."
+fi
 
 # ---------------------------------------------------------------------------
 step "[3/7] NetworkManager ag yoneticisi yapiliyor"
@@ -382,6 +430,14 @@ ap_activation_safe() {   # $1 = AP'nin kurulacagi WiFi arayuzu
   AP_HOLD_REASON=""
   [[ -n "$ifname" ]] || return 0
 
+  # Kullanici WiFi'yi BILEREK kapattiysa AP'yi acmaya CALISMA. Radyo zaten
+  # kapali oldugu icin komut hata verirdi; ama asil sebep su: sifresiz bir
+  # agi, kullanicinin kapatma karari duruyorken geri yayina sokmak yanlis.
+  if [[ "$(_radio_user_wish)" == "off" ]]; then
+    AP_HOLD_REASON="WiFi radyosu kullanici tarafindan kapatilmis"
+    return 1
+  fi
+
   # --- ANA KRITER: bu radyoda SU AN calisan bir WiFi CLIENT baglantisi -----
   # Kontrol ARAYUZ BAZLI: iki radyolu cihazda AP wlan0'a kurulurken client
   # wlan1'deyse yanlis alarm vermez, eski davranis korunur.
@@ -450,7 +506,23 @@ else
       fi
     fi
     # WiFi radyosu acik olmali (rfkill).
-    nmcli radio wifi on >/dev/null 2>&1 || true
+    # WiFi radyosunu ac — AMA KULLANICI BILEREK KAPATTIYSA DOKUNMA.
+    #
+    # Bu script her `update.sh` kosusunda tekrar calisir. Kosulsuz `radio on`
+    # yazmak, kullanicinin arayuzden verdigi "WiFi kapali kalsin" kararini her
+    # guncellemede SESSIZCE geri aliyordu — ve bununla birlikte SIFRESIZ AP
+    # yeniden yayina giriyordu. Musteri kapattigi bir radyonun geri aciladigini
+    # fark etmiyor; bu bir riza ihlali.
+    #
+    # Karar e1-netd'nin mode.json'undaki `radio_desired` alaninda duruyor
+    # ("on" | "off" | null). "off" ise radyoya DOKUNMUYORUZ; kullanici
+    # arayuzden tekrar acabilir.
+    if [[ "$(_radio_user_wish)" == "off" ]]; then
+      warn "WiFi radyosu kullanici tarafindan KAPATILMIS — dokunulmuyor."
+      info "Acmak icin: arayuzde Muhendislik > Ag Ayarlari > WiFi karti."
+    else
+      nmcli radio wifi on >/dev/null 2>&1 || true
+    fi
 
     if nmcli -t -f NAME connection show | grep -qx "$AP_CON_NAME"; then
       info "AP profili mevcut, ayarlar guncelleniyor."
@@ -492,8 +564,12 @@ else
 # EnerjiOne Grid AP istemcileri icin sabit isim cozumlemesi.
 address=/${APPLIANCE_HOSTNAME}.local/${AP_ADDRESS}
 address=/${APPLIANCE_HOSTNAME}/${AP_ADDRESS}
+# ESKI AD — sahada e1-grid.local ile kurulmus cihazlar ve yer imleri
+# calismaya devam etsin. AP'ye baglanan istemci iki addan da girebilir.
+address=/${APPLIANCE_HOSTNAME_LEGACY}.local/${AP_ADDRESS}
+address=/${APPLIANCE_HOSTNAME_LEGACY}/${AP_ADDRESS}
 CONF
-    ok "AP DNS kaydi: ${APPLIANCE_HOSTNAME}.local -> ${AP_ADDRESS}"
+    ok "AP DNS kaydi: ${APPLIANCE_HOSTNAME}.local -> ${AP_ADDRESS} (eski ad: ${APPLIANCE_HOSTNAME_LEGACY}.local)"
 
     # AP'yi "up" etmek TEK RADYODA mevcut baglantiyi dusurur. Iki koruma:
     #   1. AP zaten yayindaysa dokunma -> script her update.sh calismasinda

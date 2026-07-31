@@ -834,15 +834,40 @@
     }
   },
   "network": {
+    "errorCode": {
+      "wifi_not_supported": "Bu cihazda WiFi kartı bulunamadı.",
+      "radio_off": "Önce WiFi kartını açın.",
+      "radio_off_would_strand": "WiFi kapatılamaz: cihaza başka bir yoldan (kablo) erişim yok. Kapatılırsa cihaza ulaşılamaz hâle gelir.",
+      "radio_hardware_blocked": "WiFi cihaz üzerindeki fiziksel anahtarla kapatılmış. Yazılımdan açılamaz; cihazın üzerindeki WiFi anahtarını açın.",
+      "no_saved_network": "Kayıtlı bir WiFi ağı yok. Önce listeden bir ağ seçip bağlanın.",
+      "invalid_mode": "Geçersiz seçim.",
+      "request_pending": "Önceki istek hâlâ işleniyor. Birkaç saniye sonra tekrar deneyin."
+    },
     "title": "Ağ Ayarları",
     "access": {
       "deviceAddress": "Cihaz adresi",
       "copy": "Adresi kopyala",
-      "wifi": "WiFi erişim noktası",
+      "wifi": "Erişim noktası",
       "wifiInactive": "Yayında değil",
       "wifiOpen": "Şifresiz",
+      "internet": "İnternet",
       "wired": "Kablolu bağlantı",
       "noAddress": "Adres yok"
+    },
+    "internet": {
+      "yesWired": "Var — kablolu ağdan",
+      "yesWifi": "Var — WiFi ağından",
+      "yesOther": "Var",
+      "portal": "Sınırlı — oturum açma gerekiyor",
+      "limited": "Sınırlı — dışarı çıkamıyor",
+      "no": "Yok",
+      "unknown": "Bilinmiyor",
+      "check": "Şimdi sına",
+      "checking": "Sınanıyor…",
+      "impactNone": "Cihazın internet bağlantısı yok: yazılım güncellemesi, uzaktan bakım ve saat eşitlemesi çalışmaz. Sahadaki izleme, alarm ve kayıt normal sürer.",
+      "impactLimited": "Cihaz bir ağa bağlı ama internete çıkamıyor: yazılım güncellemesi, uzaktan bakım ve saat eşitlemesi çalışmaz. Sahadaki izleme, alarm ve kayıt normal sürer.",
+      "impactPortal": "Ağ, internete çıkmadan önce oturum açma istiyor. Cihaz bu ekranı dolduramadığı için güncelleme, uzaktan bakım ve saat eşitlemesi çalışmaz.",
+      "impactUnknown": "İnternet bağlantısı okunamadı; cihaz yazılımı bu bilgiyi bildirmiyor olabilir."
     },
     "method": {
       "dhcp": "Otomatik (DHCP)",
@@ -865,7 +890,8 @@
     "confirm": {
       "title": "Cihaz yeniden başlatılacak",
       "lead": "Ağ ayarı uygulanacak ve cihaz yeniden başlayacak. Bu işlem sırasında bağlantınız kopar; açılması yaklaşık 1 dakika sürer.",
-      "apSafety": "Güvenlik ağı: {{ssid}} WiFi ağı her zaman açık kalır. Bir sorun olursa bu ağa bağlanıp http://{{host}} adresinden ayarı düzeltebilirsiniz.",
+      "apSafety": "Güvenlik ağı: {{ssid}} WiFi ağı şu anda yayında. Bir sorun olursa bu ağa bağlanıp http://{{host}} adresinden ayarı düzeltebilirsiniz.",
+      "noApSafety": "Cihazın kendi WiFi ağı şu anda yayında değil. Girdiğiniz adres yanlışsa cihaza kablosuz ulaşılamaz ve düzeltmek için cihazın başına gitmek gerekebilir. Devam etmeden önce adresi kontrol edin.",
       "apply": "Uygula ve yeniden başlat",
       "applying": "Uygulanıyor…"
     },
@@ -878,16 +904,17 @@
       "apHint": "Yeni adrese ulaşamazsanız {{ssid}} WiFi ağına bağlanıp {{url}} adresini deneyin."
     },
     "pending": "Önceki ağ ayarı isteği hâlâ işleniyor…",
-    "staleAgent": "Host ağ ajanı bir süredir durum bildirmiyor; gösterilen bilgiler eski olabilir.",
+    "staleAgent": "Cihaz bir süredir ağ durumunu bildirmiyor; burada görünen bilgiler eski olabilir.",
+    "agentOld": "Cihaz yazılımı eski: WiFi kartının açık/kapalı durumu, kartın görevi ve internet bağlantısı bildirilmiyor. Bu bilgiler cihaz güncellendikten sonra görünecek.",
     "lastApplyFailed": "Son ağ ayarı uygulanamadı: {{error}}",
     "unavailable": {
       "title": "Appliance modu kurulu değil",
       "hint": "Kurulumdan sonra sayfayı yenileyin. Bu sayfa yalnızca mini PC (appliance) kurulumlarında çalışır; sunucu/VPS kurulumlarında ağ ayarı sistem yöneticisi tarafından yapılır.",
       "reason": {
-        "state_dir_missing": "Host ağ ajanı (e1-netd) kurulmamış — paylaşılan dizin yok.",
-        "state_dir_not_writable": "Ağ ajanı dizinine yazılamıyor (izin hatası).",
-        "agent_never_reported": "Ağ ajanı henüz hiç durum bildirmemiş. Kurulum scripti çalıştırıldı mı?",
-        "unknown": "Ağ ajanına ulaşılamıyor."
+        "state_dir_missing": "Bu cihazda ağ ayarları özelliği kurulu değil. Yalnızca EnerjiOne mini PC kurulumlarında çalışır.",
+        "state_dir_not_writable": "Ağ durumu okunamıyor (izin sorunu). Teknik destekle görüşün.",
+        "agent_never_reported": "Cihaz henüz ağ durumunu bildirmedi. Kurulum tamamlanmamış olabilir.",
+        "unknown": "Cihazın ağ durumu okunamıyor."
       }
     },
     "errors": {
@@ -912,27 +939,124 @@
       "current": "Bağlı",
       "open": "Şifresiz",
       "connectedTo": "Bağlı olduğu ağ",
-      "notConnected": "Herhangi bir WiFi ağına bağlı değil",
-      "apActiveTitle": "Erişim noktası (AP) açık",
-      "apActiveHint": "Cihaz bir ağa bağlı olmadığı sürece AP açık kalır; \"EnerjiOne Grid\" ağına bağlanıp http://10.42.0.1 adresinden girebilirsiniz.",
+      "savedNetwork": "Kayıtlı ağ",
+      "noSavedNetwork": "Kayıtlı ağ yok",
+      "clientNotConnected": "Şu anda bağlı değil",
       "connectTo": "{{ssid}} ağına bağlan",
       "password": "WiFi şifresi",
       "passwordPlaceholder": "En az 8 karakter",
       "passwordHint": "Şifre yalnızca cihaza iletilir; kaydedilmez ve kayıtlara yazılmaz.",
       "openHint": "Bu ağ şifresiz; doğrudan bağlanılacak.",
-      "apDropTitle": "Erişim noktası geçici olarak kapanacak",
-      "apDropHint": "Cihazda tek WiFi kartı var. Bağlantı kurulurken \"EnerjiOne Grid\" ağı kapanır. Bağlantı başarısız olursa AP birkaç dakika içinde otomatik geri açılır — cihaza erişiminizi kaybetmezsiniz.",
       "guardTitle": "{{ssid}} ağına bağlanılıyor",
       "guardHint": "Başarısız olursa erişim noktası {{seconds}} sn içinde otomatik geri açılacak.",
       "emptyScan": "Görünür ağ bulunamadı. Tekrar taramayı deneyin.",
       "notScanned": "Ağları görmek için \"Ağları Tara\"ya basın.",
-      "noAdapter": "Cihazda WiFi kartı bulunamadı. USB WiFi adaptörü takıp kurulumu tekrar çalıştırın."
+      "noAdapter": "Cihazda WiFi kartı bulunamadı. USB WiFi adaptörü takıp kurulumu tekrar çalıştırın.",
+      "radioLabel": "WiFi kartı",
+      "radioOn": "Açık",
+      "radioOff": "Kapalı",
+      "radioUnknown": "Durumu okunamadı",
+      "radioHardBlocked": "Cihaz üzerindeki WiFi anahtarı kapalı",
+      "radioOffHint": "WiFi kartı kapalıyken cihaz ne kendi ağını yayınlayabilir ne de bir ağa bağlanabilir.",
+      "radioHardBlockedHint": "Bu anahtar yalnızca cihazın üzerinden açılabilir; buradan açılamaz.",
+      "radioUnknownHint": "Cihaz yazılımı WiFi kartının durumunu bildirmiyor. Cihaz güncellendikten sonra burada görünecek.",
+      "radioTurnOn": "WiFi kartını aç",
+      "radioTurnOff": "WiFi kartını kapat",
+      "radioAutoRestored": "Kablolu bağlantı kesildiği için cihaz WiFi kartını kendiliğinden açtı; erişimsiz kalmamanız için.",
+      "roleLabel": "WiFi kartının görevi",
+      "roleAp": "Cihaza bağlanmak için",
+      "roleApSub": "Erişim noktası",
+      "roleClient": "İnternete bağlanmak için",
+      "roleClientSub": "Bir ağa katıl",
+      "roleOneCardHint": "Cihazda tek WiFi kartı var; aynı anda yalnızca bunlardan biri yapılabilir.",
+      "roleApHint": "Cihaz kendi ağını yayınlar; telefon veya bilgisayarınızla bu ağa bağlanıp bu ekrana girersiniz. Bu görevdeyken cihaz WiFi üzerinden internete çıkamaz.",
+      "roleClientHint": "Cihaz seçtiğiniz ağa katılır ve internete çıkar. Bu görevdeyken \"{{ssid}}\" ağı yayında olmaz.",
+      "roleUnknown": "Cihaz, WiFi kartının görevini bildirmiyor. Bir görev seçerek belirleyebilirsiniz.",
+      "roleSwitching": "Görev değiştiriliyor; cihazın yanıtı bekleniyor…",
+      "apStateLabel": "Erişim noktası",
+      "apOn": "Yayında",
+      "apOff": "Yayında değil",
+      "apUnknown": "Durumu okunamadı",
+      "apJoinHint": "Telefonunuzla \"{{ssid}}\" ağına bağlanıp {{url}} adresini açın.",
+      "apRetry": "Yeniden dene",
+      "apOffReason": {
+        "no_adapter": "Cihazda WiFi kartı yok",
+        "hard_blocked": "Cihazdaki WiFi anahtarı kapalı",
+        "radio_off": "WiFi kartı kapalı",
+        "client_mode": "Kart bir ağa bağlanmak için kullanılıyor",
+        "profile_missing": "Bu cihazda erişim noktası tanımlı değil",
+        "unknown": "Nedeni okunamadı"
+      },
+      "apOffHelp": {
+        "no_adapter": "Cihaza yalnızca kablolu ağdan ulaşılabilir. USB WiFi adaptörü takıp kurulumu tekrar çalıştırın.",
+        "hard_blocked": "Cihazın üzerindeki WiFi anahtarını açın; bu anahtar buradan açılamaz.",
+        "radio_off": "Kendi ağını yayınlaması için önce WiFi kartını açın.",
+        "client_mode": "Tek WiFi kartı olduğu için ikisi aynı anda olamaz. Kendi ağını yayınlaması için görevi \"Cihaza bağlanmak için\" yapın.",
+        "profile_missing": "Kurulum erişim noktası olmadan yapılmış. Cihaza yalnızca kablolu ağdan ulaşılabilir; kurulumu yapan servise başvurun.",
+        "unknown": "Cihaz yazılımı nedenini bildirmiyor. Cihaz güncellendikten sonra burada görünecek."
+      },
+      "fallbackTitle": "Kayıtlı ağa ulaşılamadı",
+      "fallbackHint": "Cihaza erişimi kaybetmemeniz için kendi ağı geri açıldı; bağlantı yeniden denenecek.",
+      "fallbackRetry": "Cihaza erişimi kaybetmemeniz için kendi ağı geri açıldı; {{seconds}} sn içinde yeniden denenecek.",
+      "foreignClient": "Cihaz, bu ekrandan tanımlanmayan \"{{ssid}}\" ağına bağlı. Bu bağlantı otomatik olarak kapatılmaz.",
+      "manualAdd": "Ağı elle ekle",
+      "manualTitle": "Ağı elle ekleyin",
+      "manualSsid": "Ağ adı",
+      "manualSsidPlaceholder": "Ağ adını tam olarak yazın",
+      "manualPskPlaceholder": "Şifresiz ağ için boş bırakın",
+      "manualHint": "Ağ adı büyük/küçük harfe duyarlıdır. Listede görünmeyen veya gizli ağlara adını yazarak bağlanabilirsiniz.",
+      "scanAge": "{{seconds}} sn önce tarandı",
+      "scanNever": "Henüz taranmadı",
+      "scanDeep": "Daha iyi tara (kendi ağını kısa süre kapatır)",
+      "emptyScanApMode": "Görünür ağ bulunamadı. Cihaz kendi ağını yayınlarken çevredeki ağların tamamı görünmeyebilir; \"Daha iyi tara\"yı deneyin veya ağınızı \"Ağı elle ekle\" ile yazın.",
+      "emptyScanRadioOff": "WiFi kartı kapalı; ağlar taranamıyor.",
+      "confirm": {
+        "radioOff": "WiFi kartı kapatılsın mı?",
+        "toAp": "Görev \"Cihaza bağlanmak için\" olsun mu?",
+        "toClient": "Görev \"İnternete bağlanmak için\" olsun mu?",
+        "forget": "Kayıtlı ağ silinsin mi?",
+        "deepScan": "Daha iyi tarama yapılsın mı?",
+        "effects": "Bu işlemin sonuçları:",
+        "proceed": "Devam et",
+        "proceedRisky": "Yine de devam et",
+        "working": "Gönderiliyor…",
+        "blockedNoPath": "Cihaza şu anda kablolu bir adresten ulaşılamıyor. WiFi kartı kapatılırsa cihaza hiçbir yoldan ulaşılamaz; bu yüzden kapatma yapılamaz. Önce kablolu ağı bağlayın."
+      },
+      "effect": {
+        "apDown": "Cihazın kendi ağı (\"{{ssid}}\") kapanacak.",
+        "apDownTemp": "Cihazın kendi ağı (\"{{ssid}}\") tarama boyunca kısa süre kapanacak, sonra geri açılacak.",
+        "apUp": "Cihazın kendi ağı (\"{{ssid}}\") açılacak.",
+        "internetLost": "WiFi'den gelen internet bağlantısı kesilecek; güncelleme, uzaktan bakım ve saat eşitlemesi çalışmaz.",
+        "sessionDropsAp": "Bu ekrana cihazın kendi WiFi ağından bağlısınız — sayfa yanıt vermeyi bırakacak.",
+        "sessionDropsWifi": "Bu ekrana cihazın katıldığı WiFi ağından bağlısınız — sayfa yanıt vermeyi bırakacak.",
+        "sessionMayDrop": "Bu ekrana hangi ağdan bağlandığınızı tespit edemedik; WiFi üzerinden bağlıysanız sayfa yanıt vermeyi bırakacak.",
+        "sessionPausesAp": "Bu ekrana cihazın kendi WiFi ağından bağlısınız — sayfa kısa süre yanıt vermeyecek, tarama bitince geri gelecek.",
+        "sessionMayPause": "Bu ekrana hangi ağdan bağlandığınızı tespit edemedik; cihazın kendi ağından bağlıysanız sayfa kısa süre yanıt vermeyecek.",
+        "scanThenBack": "Bu ekrana bağlantınız etkilenmez.",
+        "wiredSafe": "Kablolu bağlantı etkilenmez: {{address}} adresinden ulaşmaya devam edebilirsiniz.",
+        "guardBack": "Bağlantı kurulamazsa cihaz kendi ağını (\"{{ssid}}\") birkaç dakika içinde otomatik geri açar.",
+        "forgetPassword": "Kayıtlı ağ parolası silinecek; tekrar bağlanmak için parolayı yeniden girmeniz gerekir."
+      },
+      "handover": {
+        "title": "İşlem cihaza gönderildi",
+        "mayDrop": "Bu sayfa birkaç saniye içinde yanıt vermeyi bırakabilir; bu beklenen bir durumdur.",
+        "backVia": "Geri dönmek için: \"{{ssid}}\" ağına bağlanıp {{url}} adresini açın.",
+        "backWired": "Geri dönmek için: kablolu ağdan {{url}} adresini açın."
+      }
     }
   },
   "remoteAccess": {
+    "endReason": {
+      "expired": "Süre doldu",
+      "revoked": "Yetkili kullanıcı kapattı",
+      "clock_skew": "Cihaz saati tutarsız olduğu için güvenli tarafta kapatıldı",
+      "lease_corrupt": "İzin kaydı okunamadı, güvenlik gereği kapatıldı",
+      "cli": "Cihaz üzerinden kapatıldı"
+    },
     "loading": "Durum okunuyor…",
     "state": {
       "loading": "OKUNUYOR",
+      "applying": "UYGULANIYOR",
       "on": "AÇIK",
       "off": "KAPALI",
       "unknown": "BİLİNMİYOR"
@@ -940,6 +1064,8 @@
     "hero": {
       "loadingTitle": "Durum okunuyor…",
       "loadingLead": "Cihazın uzaktan bakım durumu alınıyor.",
+      "applyingTitle": "Değişiklik cihaza uygulanıyor",
+      "applyingLead": "İsteğiniz cihaza iletildi. Sonuç birkaç saniye içinde burada görünecek.",
       "onTitle": "Uzaktan bakım AÇIK",
       "onLead": "EnerjiOne teknik destek ekibi şu anda bu cihaza bağlanabiliyor. Süre dolduğunda erişim kendiliğinden kapanacak; beklemek istemezseniz hemen kapatabilirsiniz.",
       "offTitle": "Uzaktan bakım KAPALI",
@@ -975,6 +1101,7 @@
       "reasonHint": "Bu not kayıtlara yazılır; destek ekibi neye bakacağını bilerek bağlanır.",
       "pickDuration": "Önce bir süre seçin.",
       "endsAtPreview": "Erişim şu saatte kendiliğinden kapanacak:",
+      "shortensWarn": "Dikkat: bu seçim mevcut süreyi UZATMAZ, KISALTIR. Erişim yukarıdaki saatte kapanır.",
       "submit": "Uzaktan bakıma izin ver",
       "submitExtend": "Süreyi uzat"
     },
@@ -2329,6 +2456,18 @@
       },
       "binaryActive": "AKTİF (1)",
       "binaryInactive": "PASİF (0)",
+      "clock": {
+        "unsynchronized": "Saat senkronsuz",
+        "invalid": "Saat geçersiz",
+        "unsynchronizedHint": "Cihaz kendi saatinin senkronize edilmediğini bildiriyor. Ölçüm değeri geçerlidir; yalnızca olay sıralaması güvenilmez.",
+        "invalidHint": "Cihazın olay zaman damgası geçersiz (örn. RTC pili bitmiş olabilir). Ölçüm değeri geçerlidir; alarm saatleri her zaman sunucu saatine göre belirlenir.",
+        "deviceTime": "Cihaz saati",
+        "offset": "Fark",
+        "unitSec": "sn",
+        "unitMin": "dk",
+        "unitHour": "sa",
+        "unitDay": "gün"
+      },
       "noRows": "Filtreye uygun satır bulunamadı.",
       "noRowsInitial": "Gösterilecek satır yok: en az bir cihaz ve aktif sinyal kataloğu gerekir. Cihaz eklediğinizde tüm sinyal satırları burada listelenir; değerler telemetri geldikçe dolacaktır.",
       "itemLabel": "sinyal"

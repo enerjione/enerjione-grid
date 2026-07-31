@@ -158,15 +158,26 @@ export function Header({
             type="button"
             className="header-remote-badge"
             onClick={() => onOpenRemoteAccess?.()}
-            title={t("remoteAccess.badge.title")}
-            aria-label={t("remoteAccess.badge.title")}
+            /* Rozet header'da SADECE SIMGE: eskiden metin + geri sayimla
+               genis bir serit kapliyordu ve arama kutusunu sikistiriyordu.
+               Ayrinti hover/odakta aciliyor. Uyarinin kendisi (nabiz atan
+               nokta) her zaman gorunur kaliyor — asil is o. */
+            aria-label={`${t("remoteAccess.badge.title")}${
+              remoteAccessLabel ? ` — ${remoteAccessLabel}` : ""
+            }`}
           >
             <span className="header-remote-dot" aria-hidden="true" />
-            <LockOpen size={15} strokeWidth={2.2} />
-            <span className="header-remote-text">{t("remoteAccess.badge.short")}</span>
-            {remoteAccessLabel ? (
-              <span className="header-remote-time">{remoteAccessLabel}</span>
-            ) : null}
+            <LockOpen size={15} strokeWidth={2.2} aria-hidden="true" />
+            {/* Ipucu: hover/odakta gorunur. aria-hidden — erisilebilir ad
+                zaten butonun aria-label'inda ve orada sure de var. */}
+            <span className="header-remote-tip" aria-hidden="true">
+              <span className="header-remote-tip-text">
+                {t("remoteAccess.badge.short")}
+              </span>
+              {remoteAccessLabel ? (
+                <span className="header-remote-time">{remoteAccessLabel}</span>
+              ) : null}
+            </span>
           </button>
         ) : null}
 

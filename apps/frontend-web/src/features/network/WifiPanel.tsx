@@ -1,39 +1,78 @@
 /**
  * WifiPanel — Ag Ayarlari sayfasindaki WiFi bolumu.
  *
- * Appliance'i mevcut bir WiFi agina baglar (client/station modu). Erisim
- * noktasi (AP) buradan DEGISTIRILMEZ; o kurtarma yolu olarak korunur.
+ * UC DURUST KATMAN (yukaridan asagi: onkosul -> secim -> olculen sonuc):
+ *   1. WiFi karti  — radyo acik mi. Kapaliysa ne AP yayinlanabilir ne ag
+ *                    taranabilir; buradan acilip kapatilabilir.
+ *   2. Kartin gorevi — "cihaza baglanmak icin (erisim noktasi)" VEYA
+ *                    "internete baglanmak icin (bir aga katil)". Cihazda TEK
+ *                    WiFi karti var; ikisi ayni anda OLAMAZ.
+ *   3. Secilen gorevin OLCULEN sonucu — AP gercekten yayinda mi, ag gercekten
+ *                    bagli mi.
  *
- * TEK RADYO UYARISI:
- *   Cihazda tek WiFi karti var. Bir aga baglanirken AP DUSER. Baglanti
- *   kurulamazsa host ajani muhafiz suresi sonunda AP'yi otomatik geri acar;
- *   ayrica "bagli degilse AP acik" kurali her 30 sn'de dogrulanir. Bu yuzden
- *   kullanici hicbir senaryoda cihaza erisimini tamamen kaybetmez.
- *   Arayuz bunu baglanma oncesi acikca soyler ve muhafiz suresince geri
- *   sayim gosterir.
+ * DEGISMEZ KURAL: her satirin arkasinda cihazdan gelen bir OLCUM olacak.
+ * Alan yoksa "Bilinmiyor" yazilir; KURALDAN durum uydurulmaz. Eski panel
+ * "client'a bagli degilsek AP acik olmali" kuralini olcum gibi gosteriyor ve
+ * AP gercekte kapaliyken "erisim noktasi acik" diyordu — sahadaki celiskinin
+ * kaynagi buydu.
+ *
+ * IYIMSER (optimistic) UI YOK: gorev secimi yerinde kalir, cihaz yeni durumu
+ * bildirene kadar "degistiriliyor" gosterilir. Aksi halde ayni yalan sinifi
+ * baska kilikta geri doner.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  CircleHelp,
+  Globe,
   Loader2,
   Lock,
   LockOpen,
+  Plus,
+  RadioTower,
   RefreshCw,
+  RotateCw,
   ShieldAlert,
   Wifi,
   WifiOff,
   X
 } from "lucide-react";
 
-import { connectWifi, fetchWifiScan, forgetWifi, triggerWifiScan } from "../../shared/api";
-import type { WifiNetwork, WifiScanResult, WifiState } from "../../shared/types";
+import {
+  connectWifi,
+  fetchWifiScan,
+  forgetWifi,
+  setWifiMode,
+  setWifiRadio,
+  triggerWifiScan
+} from "../../shared/api";
+import type { NetworkStatus, WifiNetwork, WifiScanResult } from "../../shared/types";
+import {
+  apOffReason,
+  apUrl,
+  blockReason,
+  consequencesOf,
+  detectAccessPath,
+  networkErrorText,
+  radioOf,
+  roleOf,
+  willDropSession,
+  wiredAddress,
+  type WifiAction
+} from "./networkAccess";
+import { WifiActionConfirm, WifiConsequences } from "./WifiActionConfirm";
 
 type Props = {
   accessToken: string;
-  wifi: WifiState | undefined;
-  /** Ust sayfanin durum yenileyicisi — baglanti sonrasi tazelemek icin. */
+  /** Tum sayfa durumu: panel artik yalnizca `wifi` degil `radio`, `role`,
+   *  `ap`, `interfaces` ve `mdns_name` bilgilerine de dayaniyor. */
+  status: NetworkStatus | null;
+  /** Ust sayfanin durum yenileyicisi. */
   onRefreshStatus: () => void;
 };
+
+/** Bekleyen bir onay: islem + baslik anahtari. */
+type PendingAsk = { action: WifiAction; titleKey: string };
 
 /** Sinyal yuzdesini 0-4 arasi cubuk sayisina cevir. */
 function signalBars(signal: number): number {
@@ -55,87 +94,200 @@ function SignalIcon({ signal }: { signal: number }) {
   );
 }
 
-export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
+export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   const { t } = useTranslation();
+
   const [scan, setScan] = useState<WifiScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Baglanma dialogu
-  const [target, setTarget] = useState<WifiNetwork | null>(null);
-  const [psk, setPsk] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  const loadScan = async () => {
+  // Baglanma dialogu (listeden secilen ag)
+  const [target, setTarget] = useState<WifiNetwork | null>(null);
+  const [psk, setPsk] = useState("");
+
+  // "Agi elle ekle" dialogu — AP modunda tarama eksik donebilir, gizli aglar
+  // hic gorunmez. Bu, ilk kurulumu kilitleyen sinifin cikis kapisi.
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualSsid, setManualSsid] = useState("");
+  const [manualPsk, setManualPsk] = useState("");
+
+  const [ask, setAsk] = useState<PendingAsk | null>(null);
+  // Istek gonderildi ve oturumumuz kopabilir: polling "basarisiz" oldugunda
+  // kullanici hata sanmasin diye ne olacagini onceden yaziyoruz.
+  const [handoverAt, setHandoverAt] = useState<number | null>(null);
+
+  // ---- OLCULEN degerler. Varsayim YOK: alan yoksa null = "bilinmiyor". ----
+  const wifi = status?.wifi;
+  const radio = radioOf(status);
+  const role = roleOf(status);
+  const radioOn: boolean | null = radio ? radio.enabled : null;
+  const hardBlocked = radio ? !radio.hardware_enabled || radio.blocked_by === "hardware" : false;
+  const roleMode: "ap" | "client" | null = role ? role.mode : null;
+  const apActive: boolean | null = status?.ap ? status.ap.active : null;
+  const apSsid = status?.ap?.ssid ?? "EnerjiOne Grid";
+  const offReason = apOffReason(status);
+
+  const path = useMemo(() => detectAccessPath(status), [status]);
+  const busy = Boolean(status?.pending) || submitting;
+  // Kablolu adres yoksa WiFi'yi kapatmak cihazi erisilemez birakir; ajan da
+  // ayni istegi reddeder (409). Dugmeyi kapatip sebebini altina yaziyoruz.
+  const radioOffBlocked = blockReason({ kind: "radio_off" }, status) !== null;
+  // Radyo kapaliyken tarama anlamsiz; bilinmiyorsa engellemiyoruz (eski ajan).
+  const canScan = radioOn !== false;
+
+  const loadScan = useCallback(async () => {
     try {
       setScan(await fetchWifiScan(accessToken));
     } catch {
       /* tarama yoksa sessiz gec */
     }
-  };
+  }, [accessToken]);
 
   useEffect(() => {
     void loadScan();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+  }, [loadScan]);
 
-  // Muhafiz geri sayimi icin saniyelik tick (yalnizca muhafiz aktifken).
+  // Muhafiz / yeniden deneme geri sayimi icin saniyelik tick.
+  const ticking = Boolean(wifi?.guard_active) || Boolean(role?.fallback_active) || handoverAt !== null;
   useEffect(() => {
-    if (!wifi?.guard_active) return;
+    if (!ticking) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [wifi?.guard_active]);
+  }, [ticking]);
+
+  // Devir teslim bilgisi: cihaz yeni durumu bildirdiyse ve makul sure gectiyse
+  // kendiliginden kalkar (kullanici da kapatabilir).
+  useEffect(() => {
+    if (handoverAt === null) return;
+    if (!status?.pending && now - handoverAt > 15000) setHandoverAt(null);
+  }, [handoverAt, now, status?.pending]);
 
   const guardLeft = useMemo(() => {
     if (!wifi?.guard_active || !wifi.guard_deadline) return null;
-    return Math.max(0, Math.round(wifi.guard_deadline * 1000 - now) / 1000);
+    return Math.max(0, Math.ceil((wifi.guard_deadline * 1000 - now) / 1000));
   }, [wifi?.guard_active, wifi?.guard_deadline, now]);
 
-  const handleScan = async () => {
-    setScanning(true);
+  const retryLeft = useMemo(() => {
+    if (!role?.fallback_active || !role.next_retry_at) return null;
+    return Math.max(0, Math.ceil((role.next_retry_at * 1000 - now) / 1000));
+  }, [role?.fallback_active, role?.next_retry_at, now]);
+
+  // ---- Islem calistirici -------------------------------------------------
+  /** WiFi kartini ac — hicbir seyi bozmaz, onay sorulmaz. */
+  const turnRadioOn = useCallback(async () => {
+    setSubmitting(true);
     setError(null);
     try {
-      await triggerWifiScan(accessToken);
-      // Ajan path unit ile tetiklenir; sonuc birkac saniye icinde dosyaya duser.
-      await new Promise((r) => setTimeout(r, 3500));
-      await loadScan();
+      await setWifiRadio(accessToken, true);
+      onRefreshStatus();
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : t("common.errorOccurred"));
+      setError(networkErrorText(exc, t));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [accessToken, onRefreshStatus, t]);
+
+  /** Istegi cihaza gonder. Oturumu koparacaksa devir teslim bilgisini ac.
+   *  `secret` yalnizca baglanma isleminde kullanilir; state uzerinden
+   *  okunmaz cunku setState asenkrondur ve bir onceki sifreyi gonderirdi. */
+  const run = useCallback(
+    async (action: WifiAction, secret?: string | null) => {
+      setSubmitting(true);
+      setError(null);
+      const drops = willDropSession(action, status, path);
+      try {
+        switch (action.kind) {
+          case "radio_off":
+            await setWifiRadio(accessToken, false);
+            break;
+          case "role":
+            await setWifiMode(accessToken, action.mode);
+            break;
+          case "connect":
+            await connectWifi(accessToken, action.ssid, secret ?? null);
+            setTarget(null);
+            setManualOpen(false);
+            setPsk("");
+            setManualSsid("");
+            setManualPsk("");
+            break;
+          case "forget":
+            await forgetWifi(accessToken);
+            break;
+          case "deep_scan":
+            await runScan(true);
+            break;
+        }
+        if (drops) setHandoverAt(Date.now());
+        onRefreshStatus();
+      } catch (exc) {
+        setError(networkErrorText(exc, t));
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    // runScan asagida bir fonksiyon bildirimi (hoisted) — kimlikte degismedigi
+    // icin bagimlilik listesine alinmiyor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [accessToken, onRefreshStatus, path, status, t]
+  );
+
+  /** Onay gerekiyorsa sor, gerekmiyorsa dogrudan uygula. */
+  const request = useCallback(
+    (action: WifiAction, titleKey: string) => {
+      setError(null);
+      if (blockReason(action, status)) {
+        setError(t("network.wifi.confirm.blockedNoPath"));
+        return;
+      }
+      if (consequencesOf(action, status, path).length === 0) {
+        void run(action);
+        return;
+      }
+      setAsk({ action, titleKey });
+    },
+    [path, run, status, t]
+  );
+
+  // ---- Tarama ------------------------------------------------------------
+  /** Tarama tetikle ve sonuc dosyasi tazelenene kadar bekle.
+   *  Derin taramada AP ~15 sn indirildigi icin bekleme suresi uzun. */
+  async function runScan(deep: boolean) {
+    setScanning(true);
+    setError(null);
+    const previous = scan?.updated_at ?? null;
+    try {
+      await triggerWifiScan(accessToken, deep);
+      const deadline = Date.now() + (deep ? 45000 : 15000);
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2500));
+        try {
+          const next = await fetchWifiScan(accessToken);
+          setScan(next);
+          if (next.updated_at && next.updated_at !== previous) break;
+        } catch {
+          /* ajan dosyayi yaziyor olabilir — beklemeye devam */
+        }
+      }
+      onRefreshStatus();
+    } catch (exc) {
+      setError(networkErrorText(exc, t));
     } finally {
       setScanning(false);
     }
-  };
+  }
 
-  const handleConnect = async () => {
-    if (!target) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await connectWifi(accessToken, target.ssid, target.secured ? psk : null);
-      setTarget(null);
-      setPsk("");
-      onRefreshStatus();
-    } catch (exc) {
-      setError(exc instanceof Error ? exc.message : t("common.errorOccurred"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleForget = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await forgetWifi(accessToken);
-      onRefreshStatus();
-    } catch (exc) {
-      setError(exc instanceof Error ? exc.message : t("common.errorOccurred"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (wifi && !wifi.supported) {
+  // ---- WiFi karti yok ----------------------------------------------------
+  // "Cihazda WiFi karti yok" OLCULMUS bir donanim iddiasidir; yalnizca ajan
+  // GERCEKTEN olctuyse soyleriz. Blok hic yoksa (eski ajan ya da ajan hata
+  // state'i yazmis) `radio`/`wifi` null gelir ve biz "bilinmiyor" tarafinda
+  // kaliriz — aksi halde nmcli bir kez zaman asimina ugradiginda ekran
+  // "USB WiFi adaptoru takin" diyerek kullaniciyi yanlis ise yonlendiriyordu.
+  const noAdapter =
+    radio != null ? !radio.supported : wifi != null ? !wifi.supported : false;
+  if (noAdapter) {
     return (
       <section className="net-card wifi-card">
         <header className="net-card-head">
@@ -147,6 +299,14 @@ export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
     );
   }
 
+  const askItems = ask ? consequencesOf(ask.action, status, path) : [];
+  const connectAction: WifiAction | null = target
+    ? { kind: "connect", ssid: target.ssid }
+    : manualOpen && manualSsid.trim()
+      ? { kind: "connect", ssid: manualSsid.trim() }
+      : null;
+  const connectItems = connectAction ? consequencesOf(connectAction, status, path) : [];
+
   return (
     <section className="net-card wifi-card">
       <header className="net-card-head">
@@ -155,8 +315,8 @@ export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
         <button
           type="button"
           className="wifi-scan-btn"
-          onClick={() => void handleScan()}
-          disabled={scanning || busy}
+          onClick={() => void runScan(false)}
+          disabled={scanning || busy || !canScan}
         >
           {scanning ? (
             <Loader2 size={15} strokeWidth={2.2} className="net-spin" />
@@ -167,42 +327,207 @@ export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
         </button>
       </header>
 
-      {/* Bagli ag kunyesi */}
-      {wifi?.connected ? (
-        <div className="wifi-current is-connected">
-          <span className="wifi-current-icon">
+      {/* ================= KATMAN 1: WiFi karti (fiziksel onkosul) ========= */}
+      <div
+        className={`wifi-radio-row ${
+          radioOn === true ? "is-on" : radioOn === false ? "is-off" : "is-unknown"
+        }`}
+      >
+        <span className="wifi-current-icon">
+          {radioOn === true ? (
             <Wifi size={18} strokeWidth={2.2} />
-          </span>
-          <div className="wifi-current-body">
-            <small>{t("network.wifi.connectedTo")}</small>
-            <strong>{wifi.ssid ?? "—"}</strong>
-            {wifi.addresses.length > 0 ? (
-              <code>{wifi.addresses.join(", ")}</code>
-            ) : null}
-          </div>
+          ) : radioOn === false ? (
+            <WifiOff size={18} strokeWidth={2.2} />
+          ) : (
+            <CircleHelp size={18} strokeWidth={2.2} />
+          )}
+        </span>
+        <div className="wifi-current-body">
+          <small>{t("network.wifi.radioLabel")}</small>
+          <strong aria-live="polite">
+            {radioOn === true
+              ? t("network.wifi.radioOn")
+              : radioOn === false
+                ? hardBlocked
+                  ? t("network.wifi.radioHardBlocked")
+                  : t("network.wifi.radioOff")
+                : t("network.wifi.radioUnknown")}
+          </strong>
+        </div>
+        {/* Durum bilinmiyorken ac/kapa GOSTERILMEZ: kapali konumdaki bir
+            anahtar "kapali" demektir, oysa biz bilmiyoruz. */}
+        {radioOn !== null ? (
           <button
             type="button"
-            className="wifi-forget-btn"
-            onClick={() => void handleForget()}
-            disabled={busy}
+            role="switch"
+            className="wifi-switch"
+            aria-checked={radioOn}
+            aria-label={radioOn ? t("network.wifi.radioTurnOff") : t("network.wifi.radioTurnOn")}
+            title={radioOn ? t("network.wifi.radioTurnOff") : t("network.wifi.radioTurnOn")}
+            disabled={busy || hardBlocked || (radioOn && radioOffBlocked)}
+            onClick={() => {
+              if (radioOn) request({ kind: "radio_off" }, "network.wifi.confirm.radioOff");
+              else void turnRadioOn();
+            }}
+          />
+        ) : null}
+      </div>
+
+      {radioOn !== true ? (
+        <p className="wifi-hint">
+          {hardBlocked
+            ? t("network.wifi.radioHardBlockedHint")
+            : radioOn === false
+              ? t("network.wifi.radioOffHint")
+              : t("network.wifi.radioUnknownHint")}
+        </p>
+      ) : null}
+
+      {radio?.auto_restored_at ? (
+        <p className="wifi-hint">{t("network.wifi.radioAutoRestored")}</p>
+      ) : null}
+
+      {/* Engelleme: cihaza giden tum yollari kapatacak islem YAPILMAZ. */}
+      {radioOn === true && radioOffBlocked ? (
+        <p className="wifi-hint is-muted">{t("network.wifi.confirm.blockedNoPath")}</p>
+      ) : null}
+
+      {/* ================= KATMAN 2: kartin gorevi ========================= */}
+      <div className="wifi-role" aria-disabled={radioOn !== true}>
+        <span className="wifi-role-label">{t("network.wifi.roleLabel")}</span>
+        <div className="net-segment wifi-role-seg" role="radiogroup" aria-label={t("network.wifi.roleLabel")}>
+          <button
+            type="button"
+            aria-pressed={roleMode === "ap"}
+            className={roleMode === "ap" ? "is-active" : ""}
+            disabled={busy || radioOn !== true}
+            // Zaten secili gorevi tekrar istemek anlamsiz bir onay diyalogu
+            // acardi; AP'yi yeniden zorlamak icin ayri "Yeniden dene" var.
+            onClick={() => {
+              if (roleMode !== "ap") {
+                request({ kind: "role", mode: "ap" }, "network.wifi.confirm.toAp");
+              }
+            }}
           >
-            {t("network.wifi.forget")}
+            <RadioTower size={15} strokeWidth={2.2} />
+            <span>{t("network.wifi.roleAp")}</span>
+            <small>{t("network.wifi.roleApSub")}</small>
+          </button>
+          <button
+            type="button"
+            aria-pressed={roleMode === "client"}
+            className={roleMode === "client" ? "is-active" : ""}
+            disabled={busy || radioOn !== true}
+            onClick={() => {
+              if (roleMode !== "client") {
+                request({ kind: "role", mode: "client" }, "network.wifi.confirm.toClient");
+              }
+            }}
+          >
+            <Globe size={15} strokeWidth={2.2} />
+            <span>{t("network.wifi.roleClient")}</span>
+            <small>{t("network.wifi.roleClientSub")}</small>
           </button>
         </div>
-      ) : (
-        <div className="wifi-current">
-          <span className="wifi-current-icon">
-            <WifiOff size={18} strokeWidth={2.2} />
-          </span>
-          {/* AP adresi ve "nasil baglanirim" aciklamasi ustteki durum
-              seridinde zaten duruyor; burada tekrar etmek listeyi
-              gereksiz uzatiyordu. */}
-          <div className="wifi-current-body">
-            <small>{t("network.wifi.notConnected")}</small>
-            <strong>{t("network.wifi.apActiveTitle")}</strong>
-          </div>
+        <p className="wifi-role-hint">
+          {roleMode === "ap"
+            ? t("network.wifi.roleApHint")
+            : roleMode === "client"
+              ? t("network.wifi.roleClientHint", { ssid: apSsid })
+              : t("network.wifi.roleUnknown")}
+        </p>
+        <p className="wifi-role-hint is-muted">{t("network.wifi.roleOneCardHint")}</p>
+        {status?.pending ? (
+          <p className="wifi-role-hint" aria-live="polite">
+            {t("network.wifi.roleSwitching")}
+          </p>
+        ) : null}
+      </div>
+
+      {/* ============ KATMAN 3: secilen gorevin OLCULEN sonucu ============= */}
+      {/* Erisim noktasi — YALNIZCA olculen ap.active'e dayanir. */}
+      <div
+        className={`wifi-ap-state ${
+          apActive === true
+            ? "is-ok"
+            : apActive === false
+              ? roleMode === "client"
+                ? "is-unknown"
+                : "is-bad"
+              : "is-unknown"
+        }`}
+      >
+        <span className="wifi-current-icon">
+          <RadioTower size={18} strokeWidth={2.2} />
+        </span>
+        <div className="wifi-current-body">
+          <small>{t("network.wifi.apStateLabel")}</small>
+          <strong aria-live="polite">
+            {apActive === true
+              ? t("network.wifi.apOn")
+              : apActive === false
+                ? t("network.wifi.apOff")
+                : t("network.wifi.apUnknown")}
+          </strong>
+          {apActive === true ? <code>{apUrl(status)}</code> : null}
+          {apActive === false ? (
+            <span className="wifi-reason">{t(`network.wifi.apOffReason.${offReason}`)}</span>
+          ) : null}
         </div>
+        {apActive === false && radioOn === true && roleMode === "ap" ? (
+          <button
+            type="button"
+            className="wifi-retry-btn"
+            disabled={busy}
+            onClick={() => void run({ kind: "role", mode: "ap" })}
+          >
+            <RotateCw size={14} strokeWidth={2.2} />
+            {t("network.wifi.apRetry")}
+          </button>
+        ) : null}
+      </div>
+
+      {apActive === true ? (
+        <p className="wifi-hint">
+          {t("network.wifi.apJoinHint", { ssid: apSsid, url: apUrl(status) })}
+        </p>
+      ) : (
+        <p className="wifi-hint">{t(`network.wifi.apOffHelp.${offReason}`)}</p>
       )}
+
+      {/* Bagli ag kunyesi — olculen wifi.connected. */}
+      {wifi && (wifi.connected || wifi.saved || roleMode === "client") ? (
+        <div className={`wifi-current ${wifi.connected ? "is-connected" : ""}`}>
+          <span className="wifi-current-icon">
+            {wifi.connected ? (
+              <Wifi size={18} strokeWidth={2.2} />
+            ) : (
+              <WifiOff size={18} strokeWidth={2.2} />
+            )}
+          </span>
+          <div className="wifi-current-body">
+            <small>
+              {wifi.connected ? t("network.wifi.connectedTo") : t("network.wifi.savedNetwork")}
+            </small>
+            <strong>{wifi.ssid ?? t("network.wifi.noSavedNetwork")}</strong>
+            {wifi.connected && wifi.addresses.length > 0 ? (
+              <code>{wifi.addresses.join(", ")}</code>
+            ) : !wifi.connected && wifi.saved ? (
+              <span className="wifi-reason">{t("network.wifi.clientNotConnected")}</span>
+            ) : null}
+          </div>
+          {wifi.saved ? (
+            <button
+              type="button"
+              className="wifi-forget-btn"
+              disabled={busy}
+              onClick={() => request({ kind: "forget" }, "network.wifi.confirm.forget")}
+            >
+              {t("network.wifi.forget")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Muhafiz geri sayimi — baglanma denemesi surerken */}
       {guardLeft !== null ? (
@@ -210,61 +535,158 @@ export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
           <Loader2 size={16} strokeWidth={2.2} className="net-spin" />
           <div>
             <strong>{t("network.wifi.guardTitle", { ssid: wifi?.ssid ?? "" })}</strong>
+            <span>{t("network.wifi.guardHint", { seconds: guardLeft })}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Tercih "internete baglan" ama aga ulasilamiyor: cihaz erisim
+          garantisi icin kendi agini geri acti. Bu bir hata degil, anlatilacak
+          bir durum. */}
+      {role?.fallback_active ? (
+        <div className="wifi-guard">
+          <ShieldAlert size={16} strokeWidth={2.2} />
+          <div>
+            <strong>{t("network.wifi.fallbackTitle")}</strong>
             <span>
-              {t("network.wifi.guardHint", { seconds: Math.ceil(guardLeft) })}
+              {retryLeft !== null
+                ? t("network.wifi.fallbackRetry", { seconds: retryLeft })
+                : t("network.wifi.fallbackHint")}
             </span>
           </div>
         </div>
       ) : null}
 
+      {role?.foreign_client ? (
+        <p className="wifi-hint">
+          {t("network.wifi.foreignClient", { ssid: role.foreign_client })}
+        </p>
+      ) : null}
+
+      {/* Islem gonderildi, baglantimiz kopabilir. */}
+      {handoverAt !== null ? (
+        <div className="wifi-handover">
+          <Loader2 size={16} strokeWidth={2.2} className="net-spin" />
+          <div>
+            <strong>{t("network.wifi.handover.title")}</strong>
+            <span>{t("network.wifi.handover.mayDrop")}</span>
+            <span>
+              {wiredAddress(status)
+                ? t("network.wifi.handover.backWired", {
+                    url: `http://${wiredAddress(status)}`
+                  })
+                : t("network.wifi.handover.backVia", { ssid: apSsid, url: apUrl(status) })}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="wifi-handover-close"
+            onClick={() => setHandoverAt(null)}
+            aria-label={t("common.close")}
+          >
+            <X size={16} strokeWidth={2.2} />
+          </button>
+        </div>
+      ) : null}
+
       {error ? <p className="net-error">{error}</p> : null}
 
-      {/* Ag listesi */}
-      {scan && scan.networks.length > 0 ? (
-        <ul className="wifi-list">
-          {scan.networks.map((n) => {
-            const isCurrent = wifi?.connected && wifi.ssid === n.ssid;
-            return (
-              <li key={n.ssid} className={isCurrent ? "is-current" : undefined}>
-                <SignalIcon signal={n.signal} />
-                <span className="wifi-list-ssid">
-                  {n.ssid}
-                  {n.secured ? (
-                    <Lock size={12} strokeWidth={2.4} />
-                  ) : (
-                    <LockOpen size={12} strokeWidth={2.4} />
-                  )}
-                </span>
-                <span className="wifi-list-sec">
-                  {n.secured ? n.security ?? "WPA" : t("network.wifi.open")}
-                </span>
-                {isCurrent ? (
-                  <span className="wifi-list-badge">{t("network.wifi.current")}</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="wifi-connect-btn"
-                    onClick={() => {
-                      setTarget(n);
-                      setPsk("");
-                      setError(null);
-                    }}
-                    disabled={busy}
-                  >
-                    {t("network.wifi.connect")}
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+      {/* ---- Ag listesi ---- */}
+      {canScan ? (
+        <>
+          <div className="wifi-list-head">
+            <span className="wifi-scan-age">
+              {scan?.age_seconds != null
+                ? t("network.wifi.scanAge", { seconds: Math.round(scan.age_seconds) })
+                : t("network.wifi.scanNever")}
+            </span>
+            <button
+              type="button"
+              className="wifi-manual-btn"
+              disabled={busy}
+              onClick={() => {
+                setManualSsid("");
+                setManualPsk("");
+                setManualOpen(true);
+              }}
+            >
+              <Plus size={14} strokeWidth={2.4} />
+              {t("network.wifi.manualAdd")}
+            </button>
+          </div>
+
+          {scan && scan.networks.length > 0 ? (
+            <ul className="wifi-list">
+              {scan.networks.map((n) => {
+                // Bagli ag listede de ISARETLENIR. Once taramanin KENDI
+                // olcumu (nmcli IN-USE) — en dogrudan kanit; `wifi` blogu
+                // okunamasa ya da SSID yazimi ayrissa bile dogru satiri
+                // isaretler. Ikincil olarak baglanti kunyesiyle eslesme.
+                const isCurrent =
+                  n.in_use || (Boolean(wifi?.connected) && wifi?.ssid === n.ssid);
+                return (
+                  <li key={n.ssid} className={isCurrent ? "is-current" : undefined}>
+                    <SignalIcon signal={n.signal} />
+                    <span className="wifi-list-ssid">
+                      {n.ssid}
+                      {n.secured ? (
+                        <Lock size={12} strokeWidth={2.4} />
+                      ) : (
+                        <LockOpen size={12} strokeWidth={2.4} />
+                      )}
+                    </span>
+                    <span className="wifi-list-sec">
+                      {n.secured ? n.security ?? "WPA" : t("network.wifi.open")}
+                    </span>
+                    {isCurrent ? (
+                      <span className="wifi-list-badge">{t("network.wifi.current")}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="wifi-connect-btn"
+                        disabled={busy}
+                        onClick={() => {
+                          setTarget(n);
+                          setPsk("");
+                          setError(null);
+                        }}
+                      >
+                        {t("network.wifi.connect")}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="net-hint wifi-empty">
+              {!scan
+                ? t("network.wifi.notScanned")
+                : scan.ap_was_active
+                  ? t("network.wifi.emptyScanApMode")
+                  : t("network.wifi.emptyScan")}
+            </p>
+          )}
+
+          {/* Derin tarama — AP yayindayken tek radyo kanal degistiremez ve
+              liste EKSIK doner. Bedeli AP'nin ~15 sn inmesidir; bu yuzden
+              ayri dugme ve ayri onay. */}
+          {apActive === true ? (
+            <button
+              type="button"
+              className="wifi-deep-btn"
+              disabled={busy || scanning}
+              onClick={() => request({ kind: "deep_scan" }, "network.wifi.confirm.deepScan")}
+            >
+              {t("network.wifi.scanDeep")}
+            </button>
+          ) : null}
+        </>
       ) : (
-        <p className="net-hint wifi-empty">
-          {scan ? t("network.wifi.emptyScan") : t("network.wifi.notScanned")}
-        </p>
+        <p className="net-hint wifi-empty">{t("network.wifi.emptyScanRadioOff")}</p>
       )}
 
-      {/* Baglanma dialogu */}
+      {/* ---- Baglanma dialogu (listeden secilen ag) ---- */}
       {target ? (
         <div className="net-modal-backdrop" onClick={() => !busy && setTarget(null)}>
           <div className="net-modal wifi-modal" onClick={(e) => e.stopPropagation()}>
@@ -275,14 +697,8 @@ export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
               </button>
             </header>
 
-            {/* AP dusecek uyarisi — tek radyo gercegi bastan soylenir. */}
-            <div className="wifi-warn">
-              <ShieldAlert size={18} strokeWidth={2.1} />
-              <div>
-                <strong>{t("network.wifi.apDropTitle")}</strong>
-                <span>{t("network.wifi.apDropHint")}</span>
-              </div>
-            </div>
+            <p className="wifi-consequences-lead">{t("network.wifi.confirm.effects")}</p>
+            <WifiConsequences items={connectItems} />
 
             {target.secured ? (
               <label className="wifi-psk-label">
@@ -309,14 +725,102 @@ export function WifiPanel({ accessToken, wifi, onRefreshStatus }: Props) {
               <button
                 type="button"
                 className="wifi-connect-confirm"
-                onClick={() => void handleConnect()}
                 disabled={busy || (target.secured && psk.length < 8)}
+                onClick={() =>
+                  void run({ kind: "connect", ssid: target.ssid }, target.secured ? psk : null)
+                }
               >
                 {busy ? t("network.wifi.connecting") : t("network.wifi.connect")}
               </button>
             </div>
           </div>
         </div>
+      ) : null}
+
+      {/* ---- Agi elle ekle ---- */}
+      {manualOpen ? (
+        <div className="net-modal-backdrop" onClick={() => !busy && setManualOpen(false)}>
+          <div className="net-modal wifi-modal" onClick={(e) => e.stopPropagation()}>
+            <header>
+              <h4>{t("network.wifi.manualTitle")}</h4>
+              <button type="button" onClick={() => setManualOpen(false)} disabled={busy}>
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            </header>
+
+            <label className="wifi-psk-label">
+              {t("network.wifi.manualSsid")}
+              <input
+                type="text"
+                value={manualSsid}
+                onChange={(e) => setManualSsid(e.target.value)}
+                placeholder={t("network.wifi.manualSsidPlaceholder")}
+                autoFocus
+                maxLength={32}
+              />
+              <small>{t("network.wifi.manualHint")}</small>
+            </label>
+
+            <label className="wifi-psk-label">
+              {t("network.wifi.password")}
+              <input
+                type="password"
+                value={manualPsk}
+                onChange={(e) => setManualPsk(e.target.value)}
+                placeholder={t("network.wifi.manualPskPlaceholder")}
+                minLength={8}
+                maxLength={63}
+              />
+              <small>{t("network.wifi.passwordHint")}</small>
+            </label>
+
+            {connectItems.length > 0 ? (
+              <>
+                <p className="wifi-consequences-lead">{t("network.wifi.confirm.effects")}</p>
+                <WifiConsequences items={connectItems} />
+              </>
+            ) : null}
+
+            <div className="net-modal-actions">
+              <button type="button" onClick={() => setManualOpen(false)} disabled={busy}>
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="wifi-connect-confirm"
+                disabled={
+                  busy ||
+                  manualSsid.trim().length === 0 ||
+                  (manualPsk.length > 0 && manualPsk.length < 8)
+                }
+                onClick={() =>
+                  void run(
+                    { kind: "connect", ssid: manualSsid.trim() },
+                    manualPsk.length > 0 ? manualPsk : null
+                  )
+                }
+              >
+                {busy ? t("network.wifi.connecting") : t("network.wifi.connect")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ---- Tek onay diyalogu (radyo kapat / gorev / unut / derin tarama) ---- */}
+      {ask ? (
+        <WifiActionConfirm
+          titleKey={ask.titleKey}
+          items={askItems}
+          risky={askItems.some((i) => i.tone === "bad")}
+          busy={busy}
+          onCancel={() => setAsk(null)}
+          onConfirm={() => {
+            const pending = ask.action;
+            setAsk(null);
+            void run(pending);
+          }}
+        />
       ) : null}
     </section>
   );

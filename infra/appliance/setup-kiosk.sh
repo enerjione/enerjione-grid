@@ -5,6 +5,17 @@
 # Cihaz acildiginda arayuz KENDILIGINDEN tam ekran gelir. Operator hicbir sey
 # yapmaz: parola yok, masaustu yok, tarayici penceresi yok.
 #
+# NASIL: kiosk KENDI X OTURUMUDUR (/usr/share/xsessions/enerjione-kiosk.desktop)
+# ve ekran yoneticisi dogrudan ona yonlendirilir. Eskiden tam bir masaustu
+# oturumu acilip tarayici onun USTUNDE calisiyordu; operator once duvar
+# kagidini/panelleri goruyordu ve masaustunun ekran kilidi devreye girince
+# parolasi KILITLI hesapta cihaz kullanilamaz hale geliyordu. Masaustu hic
+# acilmayinca ikisi de kokunden bitiyor.
+#
+# OTURUM KIMLIGI SABITTIR (`enerjione-kiosk`). Musteri adi yalnizca GORUNEN
+# ada girer; kimlige girseydi musteri adi degisince ekran yoneticisinin
+# isaretcisi gecersiz kalir ve cihaz KARA EKRANA duserdi.
+#
 # ROL AYRIMI — bu kurulumun asil sebebi:
 #
 #   <musteri>  (bu script olusturur)  Operator hesabi. Kurulum aracinda
@@ -34,6 +45,15 @@
 #   E1_KIOSK_URL    acilacak adres             (default: http://localhost/)
 #   E1_KIOSK_BROWSER  tarayici yolu            (default: otomatik tespit)
 #   E1_KIOSK=0      kurulumu atla
+#   E1_KIOSK_SESSION=0  KURTARMA ANAHTARI. Kendi X oturumuna gecme; ekran
+#                   yoneticisindeki isaretciyi KALDIR. Cihaz eski davranisa
+#                   (masaustu + autostart) doner. Kara ekran halinde:
+#                   Ctrl+Alt+F3 -> yonetim hesabi ->
+#                   sudo E1_KIOSK_SESSION=0 bash infra/appliance/setup-kiosk.sh
+#   E1_KIOSK_KEEP_GECOS=1  giris ekranindaki adi oldugu gibi birak (surum
+#                   geri alma senaryosu)
+#   E1_KIOSK_WM     pencere yoneticisi komutu  (default: otomatik tespit/kur)
+#   E1_KIOSK_NO_SLEEP=1  uyku hedeflerini kapat (SISTEM GENELI, opsiyonel)
 #
 # GUI YOKSA bu script hicbir sey yapmadan 0 doner — VPS/sunucu kurulumlari
 # etkilenmez.
@@ -56,11 +76,26 @@ KIOSK_URL="${E1_KIOSK_URL:-http://localhost/}"
 SESSION_BIN="/usr/local/bin/e1-kiosk-session"
 SITE_ENV="${E1_SITE_ENV:-/etc/enerjione-grid/site.env}"
 INSTALL_ENV="${E1_INSTALL_ENV:-/etc/enerjione-grid/install.env}"
-# Bu hesabi BIZIM actigimizi anlamak icin GECOS'a birakilan imza. Ayni adda
-# baska bir hesap varsa (yonetim hesabi, musteri IT'sinin actigi bir kullanici)
-# ONA DOKUNMAYIZ — asagida parolasini kilitliyoruz, yanlis hesaba yapilirsa
-# birini sistemden kilitler.
-KIOSK_GECOS="EnerjiOne Grid operator ekrani"
+
+# X oturumunun kimligi. SABIT — musteri adindan TURETILMEZ: ekran yoneticisine
+# yazdigimiz isaretci bu ada bakar, musteri adi degisince bozulmamali.
+XSESSION_ID="enerjione-kiosk"
+# /usr/local/share/xsessions'i LightDM ve SDDM taramaz; /usr/share zorunlu.
+XSESSION_FILE="/usr/share/xsessions/${XSESSION_ID}.desktop"
+SHARE_DIR="/usr/local/share/enerjione-grid"
+SPLASH_FILE="${SHARE_DIR}/kiosk-splash.html"
+
+# Bu hesabi BIZIM actigimizi anlamak icin birakilan izler. Ayni adda baska bir
+# hesap varsa (yonetim hesabi, musteri IT'sinin actigi bir kullanici) ONA
+# DOKUNMAYIZ — asagida parolasini kilitliyoruz, yanlis hesaba yapilirsa birini
+# sistemden kilitler.
+#   KIOSK_GECOS_LEGACY : v2.24 ve oncesinde yazilan SABIT imza. Sahadaki
+#                        CALISAN cihazlarda bu var; taninmazsa script kendi
+#                        actigi hesabi yabanci sanip IKINCI bir hesap acar.
+#   KIOSK_MARK_DIR     : root'a ait imza dosyasi. GECOS artik musteri adiyla
+#                        degistigi icin tek basina kanit degil; asil kanit bu.
+KIOSK_GECOS_LEGACY="EnerjiOne Grid operator ekrani"
+KIOSK_MARK_DIR="/var/lib/enerjione-grid/kiosk-users"
 
 # --- Operator hesabinin adi -------------------------------------------------
 # Kurulum aracinda girilen MUSTERI ADINDAN turetilir: "TPAO" -> `tpao`.
@@ -90,16 +125,43 @@ _user_slug() {
   printf '%s' "${out%-}"
 }
 
+# GECOS TEK SATIRDIR; ':' /etc/passwd alan ayiricisi, ',' GECOS alt-alan
+# ayiricisidir. Musteri adinda gecerse passwd bozulur -> temizle ve kirp.
+# Kirpma UTF-8 ortasindan kesip bozuk bayt birakmasin diye iconv ile dogrula.
+_gecos_safe() {
+  local out
+  out="$(printf '%s' "$1" | tr -d ':,\n\r' | tr -s ' ' | sed -e 's/^ *//' -e 's/ *$//')"
+  out="${out:0:48}"
+  if command -v iconv >/dev/null 2>&1; then
+    while [[ -n "$out" ]] && ! printf '%s' "$out" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; do
+      out="${out%?}"
+    done
+  fi
+  printf '%s' "$out"
+}
+
+# Musteri adi cozumu E1_KIOSK_USER'dan BAGIMSIZ: hesap adi elle verilmis olsa
+# bile GORUNEN AD (GECOS) icin musteri adi lazim.
+E1_CUSTOMER_RESOLVED="${E1_CUSTOMER:-}"
+[[ -z "$E1_CUSTOMER_RESOLVED" ]] && E1_CUSTOMER_RESOLVED="$(_read_var "$SITE_ENV" E1_CUSTOMER_NAME || true)"
+[[ -z "$E1_CUSTOMER_RESOLVED" ]] && E1_CUSTOMER_RESOLVED="$(_read_var "$INSTALL_ENV" E1_CUSTOMER || true)"
+CUSTOMER_SAFE="$(_gecos_safe "${E1_CUSTOMER_RESOLVED:-}")"
+
+# Giris ekraninda gorunen ad: "EnerjiOne Grid TPAO".
+# Musteri adi YOKSA eski metnin TA KENDISI -> boyle cihazlarda sifir regresyon.
+if [[ -n "$CUSTOMER_SAFE" ]]; then
+  KIOSK_GECOS="EnerjiOne Grid ${CUSTOMER_SAFE}"
+else
+  KIOSK_GECOS="$KIOSK_GECOS_LEGACY"
+fi
+
 if [[ -n "${E1_KIOSK_USER:-}" ]]; then
   KIOSK_USER="$E1_KIOSK_USER"          # operator acikca belirtmis
 else
-  _customer="${E1_CUSTOMER:-}"
-  [[ -z "$_customer" ]] && _customer="$(_read_var "$SITE_ENV" E1_CUSTOMER_NAME || true)"
-  [[ -z "$_customer" ]] && _customer="$(_read_var "$INSTALL_ENV" E1_CUSTOMER || true)"
   # Musteri adi yoksa slug'a HIC girme: bos girdi "e1" gibi anlamsiz bir
   # hesap adi uretiyordu.
-  if [[ -n "${_customer// /}" ]]; then
-    KIOSK_USER="$(_user_slug "$_customer")"
+  if [[ -n "${E1_CUSTOMER_RESOLVED// /}" ]]; then
+    KIOSK_USER="$(_user_slug "$E1_CUSTOMER_RESOLVED")"
   fi
   [[ -z "${KIOSK_USER:-}" || "$KIOSK_USER" == "e1" ]] && KIOSK_USER="e1-kiosk"
 fi
@@ -146,15 +208,34 @@ e1_ok "Ekran yoneticisi: ${DM}"
 # --- 1) Operator hesabi -----------------------------------------------------
 # YETKISIZ olmasi kritik: sudo grubuna EKLENMEZ, parolasi kilitlenir
 # (`!` ile) — bu hesapla parola girerek baska bir yere gecilemez.
+# Verilen hesap BIZIM actigimiz kiosk hesabi mi?
+# Sirayla: (1) imza dosyasi, (2) eski SABIT GECOS (sahadaki mevcut cihazlar),
+# (3) bu surumun yazacagi GECOS, (4) "EnerjiOne Grid " oneki + BIZIM
+# yazdigimiz bir dosyanin varligi.
+# (4)'te EK KANIT SART: musterinin actigi "EnerjiOne Grid Test" gibi bir hesabi
+# ele gecirip parolasini kilitlemeyelim. Kanit yoksa YABANCI sayilir — hatanin
+# guvenli yonu budur (ikinci hesap acilir, kimse sistemden kilitlenmez).
+_kiosk_bizim_mi() {
+  local kul="$1" gecos ev
+  [[ -f "${KIOSK_MARK_DIR}/${kul}" ]] && return 0
+  # GECOS'un ilk alt-alani = gorunen ad (chfn virgullu yazabilir).
+  gecos="$(getent passwd "$kul" | cut -d: -f5 | cut -d, -f1)"
+  [[ "$gecos" == "$KIOSK_GECOS_LEGACY" ]] && return 0
+  [[ "$gecos" == "$KIOSK_GECOS" ]] && return 0
+  if [[ "$gecos" == "EnerjiOne Grid "* ]]; then
+    ev="$(getent passwd "$kul" | cut -d: -f6)"
+    [[ -n "$ev" && -f "${ev}/.config/autostart/enerjione-kiosk.desktop" ]] && return 0
+  fi
+  return 1
+}
+
 if id -u "$KIOSK_USER" >/dev/null 2>&1; then
   # BASKASININ hesabini ele gecirme. Asagida parola kilitleyip otomatik
   # girise baglayacagiz; yanlis hesaba yapilirsa o kisiyi sistemden kilitler.
-  _gecos="$(getent passwd "$KIOSK_USER" | cut -d: -f5)"
-  if [[ "$_gecos" != "$KIOSK_GECOS" ]]; then
+  if ! _kiosk_bizim_mi "$KIOSK_USER"; then
     e1_warn "'${KIOSK_USER}' adinda BASKA bir hesap zaten var — dokunulmuyor."
     _alt="$(printf '%s' "${KIOSK_USER}-ekran" | cut -c1-32)"
-    if id -u "$_alt" >/dev/null 2>&1 \
-       && [[ "$(getent passwd "$_alt" | cut -d: -f5)" != "$KIOSK_GECOS" ]]; then
+    if id -u "$_alt" >/dev/null 2>&1 && ! _kiosk_bizim_mi "$_alt"; then
       e1_warn "'${_alt}' de dolu — kiosk hesabi olusturulamadi."
       e1_hint "Elle ad verin: sudo E1_KIOSK_USER=<ad> bash ${BASH_SOURCE[0]}"
       exit 0
@@ -179,6 +260,31 @@ for grp in sudo adm admin wheel docker; do
   fi
 done
 
+# Imza dosyasi: bundan SONRA sahiplik GECOS'a BAGLI DEGIL. Once bunu yaz,
+# sonra adi degistir — ters sirada bir kesinti hesabi "yabanci" birakir ve
+# bir sonraki kosuda ikinci bir hesap acilir.
+if install -d -m 0755 "$KIOSK_MARK_DIR" 2>/dev/null \
+   && printf 'created-by=setup-kiosk.sh\nuser=%s\n' "$KIOSK_USER" \
+        > "${KIOSK_MARK_DIR}/${KIOSK_USER}" 2>/dev/null; then
+  chmod 0644 "${KIOSK_MARK_DIR}/${KIOSK_USER}" 2>/dev/null || true
+else
+  e1_warn "Kiosk imza dosyasi yazilamadi (${KIOSK_MARK_DIR}) — ad degisikligi riskli."
+fi
+
+# Giris ekraninda gorunen ad musteri adina gore guncellenir (sahadaki eski
+# hesaplar dahil). Surum geri alma senaryosunda E1_KIOSK_KEEP_GECOS=1 ile
+# kapatilabilir. usermod calisan oturumlarda nadiren reddeder -> chfn yedegi.
+_gecos_cur="$(getent passwd "$KIOSK_USER" | cut -d: -f5 | cut -d, -f1)"
+if [[ "${E1_KIOSK_KEEP_GECOS:-0}" != "1" && "$_gecos_cur" != "$KIOSK_GECOS" ]]; then
+  if usermod -c "$KIOSK_GECOS" "$KIOSK_USER" 2>/dev/null \
+     || chfn -f "$KIOSK_GECOS" "$KIOSK_USER" >/dev/null 2>&1; then
+    e1_ok "Giris ekranindaki ad: ${KIOSK_GECOS}"
+  else
+    e1_warn "Gorunen ad guncellenemedi (${KIOSK_GECOS}) — kurulum etkilenmez."
+  fi
+fi
+unset _gecos_cur
+
 KIOSK_HOME="$(getent passwd "$KIOSK_USER" | cut -d: -f6)"
 KIOSK_HOME="${KIOSK_HOME:-/home/${KIOSK_USER}}"
 
@@ -194,6 +300,53 @@ fi
 # Grafik oturum gecerli bir kabuk ister; eski kurulumlarda nologin kalmis
 # olabilir. Parola kilitli oldugu icin bu bir zafiyet degil.
 usermod --shell /bin/bash "$KIOSK_USER" >/dev/null 2>&1 || true
+
+# --- 1b) Ekran kilidi / koruyucu: SADECE kiosk hesabi icin kapat ------------
+# Parolasi KILITLI bir hesapta kilit ekrani = cihaz reboot'a kadar
+# KULLANILAMAZ ("baska bir sifre soylemedin" sikayeti buradan geliyor).
+# Asil cozum kiosk'un kendi X oturumu olmasi (masaustu yoksa kilitleyici de
+# yok) ama yedek masaustu yoluna dusulurse kilitleyiciler XDG autostart ile
+# geri gelir. Kullanicinin kendi autostart dizini sistemdekini AD BAZINDA
+# ezer; Hidden=true "bu girdi yok" demektir.
+_AUTOSTART_DIR="${KIOSK_HOME}/.config/autostart"
+mkdir -p "$_AUTOSTART_DIR"
+for _lock in light-locker xscreensaver xfce4-screensaver gnome-screensaver \
+             mate-screensaver xfce4-power-manager; do
+  cat > "${_AUTOSTART_DIR}/${_lock}.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=${_lock} (EnerjiOne Grid kiosk: kapali)
+Exec=/bin/true
+Hidden=true
+NoDisplay=true
+X-GNOME-Autostart-enabled=false
+EOF
+done
+unset _lock
+
+# GNOME/dconf ayarlari OTURUM DISINDA yazilir: dbus-run-session gecici bir veri
+# yolu acar, gsettings kullanicinin ~/.config/dconf/user dosyasina yazar. Oturum
+# icinde yazmak GEC kaliyordu (masaustu kendi varsayilanini uygulamis oluyordu)
+# ve DBus yoksa hic calismiyordu.
+_as_kiosk() {
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$KIOSK_USER" -- "$@"
+  else
+    sudo -u "$KIOSK_USER" -H -- "$@"
+  fi
+}
+if command -v dbus-run-session >/dev/null 2>&1 && command -v gsettings >/dev/null 2>&1; then
+  _as_kiosk dbus-run-session -- bash -c '
+    gsettings set org.gnome.desktop.session idle-delay 0
+    gsettings set org.gnome.desktop.screensaver lock-enabled false
+    gsettings set org.gnome.desktop.screensaver idle-activation-enabled false
+    gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type nothing
+    gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type nothing
+    exit 0
+  ' >/dev/null 2>&1 || true
+fi
+chown -R "$KIOSK_USER:$KIOSK_USER" "${KIOSK_HOME}/.config" 2>/dev/null || true
+e1_ok "Ekran kilidi/kararma kiosk hesabi icin kapatildi."
 
 # --- 2) Tarayici ------------------------------------------------------------
 detect_browser() {
@@ -222,20 +375,114 @@ if [[ -z "$BROWSER" ]]; then
 fi
 e1_ok "Tarayici: ${BROWSER}"
 
+# --- 2b) Pencere yoneticisi -------------------------------------------------
+# Ciplak X oturumunda masaustunun WM'i gelmez. WM'siz chromium --kiosk TAM
+# EKRAN OLAMAZ (tam ekrani WM'e EWMH ile yaptirir; pencere sol ustte kucuk
+# kalir) ve klavye odagi imlecin altinda kalir -> giris formuna yazilamaz.
+resolve_wm() {
+  [[ -n "${E1_KIOSK_WM:-}" ]] && { printf '%s' "$E1_KIOSK_WM"; return 0; }
+  # matchbox once: dekorasyon, kok menu, kisayol, taskbar YOK — operatore
+  # kiosk'tan cikacak hicbir tutamac birakmaz. Digerleri "varsa kullan"
+  # yedegi; mutter/kwin agir olduklari icin listenin sonunda.
+  command -v matchbox-window-manager >/dev/null 2>&1 \
+    && { printf '%s' "matchbox-window-manager -use_titlebar no"; return 0; }
+  command -v openbox >/dev/null 2>&1 && { printf '%s' "openbox --sm-disable"; return 0; }
+  command -v xfwm4 >/dev/null 2>&1 \
+    && { printf '%s' "xfwm4 --sm-client-disable --compositor=off"; return 0; }
+  command -v marco >/dev/null 2>&1 && { printf '%s' "marco --no-composite"; return 0; }
+  for w in fluxbox icewm jwm; do
+    command -v "$w" >/dev/null 2>&1 && { printf '%s' "$w"; return 0; }
+  done
+  command -v mutter >/dev/null 2>&1 && { printf '%s' "mutter --x11"; return 0; }
+  command -v kwin_x11 >/dev/null 2>&1 && { printf '%s' "kwin_x11"; return 0; }
+  return 1
+}
+
+WM_CMD="$(resolve_wm || true)"
+if [[ -z "$WM_CMD" ]]; then
+  # ~100 KB'lik bir paket; tarayicinin yaninda ihmal edilebilir ve YALNIZCA
+  # hicbir WM yokken tetiklenir. Basarisiz olursa akis kirilmaz.
+  e1_info "Pencere yoneticisi yok, matchbox kuruluyor..."
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get install -y -qq --no-install-recommends matchbox-window-manager >/dev/null 2>&1 \
+    || apt-get install -y -qq --no-install-recommends openbox >/dev/null 2>&1 || true
+  WM_CMD="$(resolve_wm || true)"
+fi
+if [[ -n "$WM_CMD" ]]; then
+  e1_ok "Pencere yoneticisi: ${WM_CMD%% *}"
+else
+  e1_warn "Pencere yoneticisi bulunamadi — tarayici elle boyutlandirilacak."
+fi
+
 # --- 3) Oturum betigi -------------------------------------------------------
 # ROOT'A AIT, operator YAZAMAZ (0755): kiosk kullanicisi kendi oturum
 # betigini degistirip baska bir komut calistiramasin.
-cat > "$SESSION_BIN" <<EOF
-#!/usr/bin/env bash
-# EnerjiOne Grid kiosk oturumu — setup-kiosk.sh tarafindan uretildi.
-# ELLE DUZENLEMEYIN; setup-kiosk.sh tekrar calisinca uzerine yazilir.
+#
+# Yapilandirma degerleri basa `printf %q` ile yaziliyor, GOVDE TIRNAKLI
+# heredoc: tirnaksiz heredoc icinde $ kacirmak bu dosyada zaten bir hataya yol
+# acmisti (LightDM ayarina literal komut-ikamesi yazilmasi) — tekrarlamiyoruz.
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' '# EnerjiOne Grid kiosk oturumu - setup-kiosk.sh tarafindan uretildi.'
+  printf '%s\n' '# ELLE DUZENLEMEYIN; setup-kiosk.sh tekrar calisinca uzerine yazilir.'
+  printf 'E1_URL_DEFAULT=%q\n' "$KIOSK_URL"
+  printf 'E1_BROWSER=%q\n'     "$BROWSER"
+  printf 'E1_SPLASH=%q\n'      "$SPLASH_FILE"
+  printf 'E1_WM=%q\n'          "$WM_CMD"
+  cat <<'E1_SESSION_EOF'
 set -u
 
-URL="\${E1_KIOSK_URL:-${KIOSK_URL}}"
-BROWSER="${BROWSER}"
+# Once tanimlanir: asagidaki kilit/dbus bloklari da kullaniyor.
+_log() { command -v logger >/dev/null 2>&1 && logger -t e1-kiosk "$*" 2>/dev/null || true; }
 
-# Ekran hic sonmesin / kilitlenmesin — pano 7/24 acik kalir.
-# gsettings oturum ICINDE calismali (DBus gerekir), bu yuzden burada.
+# DBUS: ciplak X oturumunda oturum veri yolu olmayabilir; gsettings ve Chromium
+# onsuz gurultu cikarir. Kilitten ONCE sarmaliyoruz, cunku exec ile kendimizi
+# bastan calistiriyoruz.
+# BU BETIK ASLA CIKMAMALI. Cikarsa X oturumu kapanir, ekran yoneticisi
+# greeter'a doner ve parolasi KILITLI operator hesabi giris YAPAMAZ —
+# cihaz yeniden baslatilana kadar kullanilamaz. Asagidaki iki adim
+# (dbus ve kilit) eskiden bu kurali deliyordu; ikisi de artik
+# "cikmak yerine bekle/atla" seklinde.
+
+# DBUS: ciplak X oturumunda oturum veri yolu olmayabilir; gsettings ve Chromium
+# onsuz gurultu cikarir. Kilitten ONCE sarmaliyoruz.
+# `exec` KULLANILMIYOR: dbus-run-session baslatilamazsa exec ile kabugu
+# degistirdigimiz icin surec olur ve OTURUM KAPANIRDI. Simdi calistirmayi
+# deniyoruz; olmazsa dbus'siz devam ediyoruz (gurultu olur, oturum yasar).
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -z "${E1_KIOSK_DBUS:-}" ] \
+   && command -v dbus-run-session >/dev/null 2>&1; then
+  E1_KIOSK_DBUS=1; export E1_KIOSK_DBUS
+  dbus-run-session -- "$0" "$@"
+  # Buraya DUSMEK beklenmez: ic kopya sonsuz dongude kalir. Yine de dondu ise
+  # CIKMIYORUZ — cikis = X oturumu kapanir = greeter = parolasi kilitli
+  # hesap giremez. Ekranda ne varsa kalsin, oturum ayakta dursun.
+  _log "kiosk ic kopyasi dondu — oturum ayakta tutuluyor"
+  while true; do sleep 60; done
+fi
+
+# TEK CALISMA KILIDI: eski autostart girisi YEDEK yol olarak duruyor (X oturumu
+# tutmazsa cihaz eski davranisa duser, kara ekrana degil). Ikisi birden
+# tetiklenirse iki tarayici acilmasin.
+#
+# KILIT ALINAMAZSA CIKMIYORUZ:
+#   * fd acilamadi (XDG_RUNTIME_DIR silinmis, /tmp'de root'a ait artik kilit
+#     dosyasi) -> `exec 9>` hatasi `|| true` ile yutulur ama fd 9 ACILMAMIS
+#     kalirdi; sonraki `flock -n 9` "Bad file descriptor" verip `exit 0`
+#     dedigi icin oturum SESSIZCE kapanirdi. Artik kilidi tamamen atliyoruz.
+#   * kilit baskasinda -> diger ornek ekrani zaten dolduruyor; biz sadece
+#     oturumu ayakta tutmak icin bekliyoruz, CIKMIYORUZ.
+if command -v flock >/dev/null 2>&1 \
+   && exec 9>"${XDG_RUNTIME_DIR:-/tmp}/e1-kiosk.lock" 2>/dev/null; then
+  if ! flock -n 9; then
+    _log "kiosk zaten calisiyor — bu oturum bekleme moduna geciyor"
+    while true; do sleep 60; done
+  fi
+fi
+
+URL="${E1_KIOSK_URL:-$E1_URL_DEFAULT}"
+
+# Ekran hic sonmesin / kilitlenmesin — pano 7/24 acik kalir. Asil ayar kurulum
+# aninda offline dconf'a yazildi; burasi ikinci savunma hatti.
 if command -v gsettings >/dev/null 2>&1; then
   gsettings set org.gnome.desktop.session idle-delay 0 2>/dev/null || true
   gsettings set org.gnome.desktop.screensaver lock-enabled false 2>/dev/null || true
@@ -243,56 +490,252 @@ if command -v gsettings >/dev/null 2>&1; then
   gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type nothing 2>/dev/null || true
   gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type nothing 2>/dev/null || true
 fi
-# X11 oturumunda ekran koruyucuyu da kapat (Wayland'de bu araclar yok).
-if [ "\${XDG_SESSION_TYPE:-}" = "x11" ]; then
-  command -v xset >/dev/null 2>&1 && { xset s off; xset -dpms; xset s noblank; } 2>/dev/null || true
+
+# X sunucusunun KENDI ekran koruyucusu (varsayilan ~10 dk) ve DPMS masaustu
+# olmadan da calisir; parola sormaz ama ekrani karartir ve operator bunu ariza
+# saniyor. ESKI KOSUL (XDG_SESSION_TYPE=x11) ciplak oturumda bos kalip blogu
+# atliyordu — DISPLAY'e bakiyoruz.
+if [ -n "${DISPLAY:-}" ]; then
+  if command -v xset >/dev/null 2>&1; then
+    xset s off -dpms s noblank 2>/dev/null || true
+    # Bazi araclar ayari geri acabiliyor; 60 sn'de bir tazele. Oturum bitince
+    # bu arka plan da biter, ayri bir unit gerekmiyor.
+    ( while sleep 60; do xset s off -dpms 2>/dev/null || true; done ) &
+  fi
+  # X'in acilisi ile tarayicinin ilk boyamasi arasindaki bosluk gri stipple
+  # degil kurumsal renk olsun.
+  if command -v xsetroot >/dev/null 2>&1; then
+    xsetroot -solid '#0b1220' 2>/dev/null || true
+  fi
   command -v unclutter >/dev/null 2>&1 && unclutter -idle 3 &
 fi
+# Bir sekilde baslamis bir kilitleyici varsa (yedek masaustu yolu) sustur.
+command -v xscreensaver-command >/dev/null 2>&1 && { xscreensaver-command -exit >/dev/null 2>&1 || true; }
+command -v light-locker-command >/dev/null 2>&1 && { light-locker-command -d >/dev/null 2>&1 || true; }
 
-# Uygulama ayaga kalkmadan tarayiciyi acmak "baglanilamadi" sayfasi gosterir
-# ve operator bunu hata saniyor. Once servisi bekle (en fazla 3 dakika).
-for _ in \$(seq 1 90); do
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsS --max-time 2 -o /dev/null "\$URL" && break
-  else
-    break
+# Pencere yoneticisi: yalnizca HIC calismiyorsa baslat. Yedek masaustu yoluna
+# dusuldugunde zaten bir WM vardir, ikincisi onunla cakisir.
+_wm_var() {
+  for _p in mutter xfwm4 marco kwin_x11 openbox matchbox-window-manager fluxbox icewm jwm; do
+    if pgrep -x "$_p" >/dev/null 2>&1; then return 0; fi
+  done
+  return 1
+}
+if [ -n "${DISPLAY:-}" ] && [ -n "$E1_WM" ] && ! _wm_var; then
+  # Kelime bolunmesi ISTENIYOR: E1_WM komut + arguman.
+  # shellcheck disable=SC2086
+  $E1_WM >/dev/null 2>&1 &
+  sleep 1
+fi
+
+EXTRA=""
+if [ -z "$E1_WM" ]; then
+  # WM yok: tam ekran yaptirabilecegimiz kimse yok. Cozunurlugu X'ten cozup
+  # pencereyi elle kaplatiyoruz — bozuk degil, sadece dusuk kaliteli yedek.
+  _res=""
+  if command -v xdpyinfo >/dev/null 2>&1; then
+    _res="$(xdpyinfo 2>/dev/null | awk '/dimensions:/{print $2; exit}')"
   fi
-  sleep 2
-done
+  if [ -z "$_res" ] && command -v xrandr >/dev/null 2>&1; then
+    _res="$(xrandr 2>/dev/null | awk '/\*/{print $1; exit}')"
+  fi
+  case "$_res" in
+    [0-9]*x[0-9]*) EXTRA="--window-position=0,0 --window-size=${_res%x*},${_res#*x}" ;;
+  esac
+fi
 
-# Tarayici cokerse/kapatilirsa ekran BOS KALMASIN: yeniden baslat.
+if [ ! -x "$E1_BROWSER" ]; then
+  _log "tarayici bulunamadi: $E1_BROWSER"
+  command -v xmessage >/dev/null 2>&1 \
+    && xmessage -center "EnerjiOne Grid: tarayici bulunamadi. Teknik ekibi arayin." &
+  # OTURUMU BITIRME: oturum biterse ekran yoneticisi greeter'a doner, parola
+  # ister ve hesabin parolasi KILITLI oldugu icin operator giremez (cihaz
+  # yeniden baslatilana kadar kullanilamaz).
+  while true; do sleep 60; done
+fi
+
+# Hedef: uygulama ayakta ise dogrudan adres, degilse YEREL splash sayfasi.
+# Splash uygulamayi kendisi yoklar ve hazir olunca yonlenir; boylece ekran ILK
+# SANIYEDEN itibaren doludur. (Eskiden burada 3 dakikaya kadar suren bir
+# bekleme dongusu vardi ve o sure boyunca ekranda masaustu/siyahlik kaliyordu.)
+_hedef() {
+  if command -v curl >/dev/null 2>&1 \
+     && curl -fsS --max-time 2 -o /dev/null "$URL" 2>/dev/null; then
+    printf '%s' "$URL"
+  elif [ -f "$E1_SPLASH" ]; then
+    printf 'file://%s' "$E1_SPLASH"
+  else
+    printf '%s' "$URL"
+  fi
+}
+
+# Tarayici cokerse/kapatilirsa ekran BOS KALMASIN: yeniden baslat. Bu dongu
+# ASLA bitmemeli (yukaridaki greeter aciklamasi).
 while true; do
-  case "\$BROWSER" in
+  TARGET="$(_hedef)"
+  case "$E1_BROWSER" in
     *firefox*)
-      "\$BROWSER" --kiosk "\$URL"
+      "$E1_BROWSER" --kiosk "$TARGET"
       ;;
     *)
       # Cokme/oturum uyarilari kiosk'ta kullaniciya gosterilemez; kapatiyoruz.
-      "\$BROWSER" \\
-        --kiosk \\
-        --start-fullscreen \\
-        --noerrdialogs \\
-        --disable-infobars \\
-        --disable-session-crashed-bubble \\
-        --disable-features=TranslateUI \\
-        --no-first-run \\
-        --check-for-update-interval=31536000 \\
-        --password-store=basic \\
-        --disable-pinch \\
-        --overscroll-history-navigation=0 \\
-        "\$URL"
+      # shellcheck disable=SC2086
+      "$E1_BROWSER" \
+        --kiosk \
+        --start-fullscreen \
+        --noerrdialogs \
+        --disable-infobars \
+        --disable-session-crashed-bubble \
+        --disable-features=TranslateUI \
+        --no-first-run \
+        --check-for-update-interval=31536000 \
+        --password-store=basic \
+        --disable-pinch \
+        --overscroll-history-navigation=0 \
+        $EXTRA \
+        "$TARGET"
       ;;
   esac
-  sleep 3
+  # Ekran yoneticileri cok kisa suren oturumlarda otomatik girisi tekrarlamayi
+  # birakir; hizli dongu yapma.
+  sleep 5
 done
-EOF
+E1_SESSION_EOF
+} > "${SESSION_BIN}.tmp"
+mv -f "${SESSION_BIN}.tmp" "$SESSION_BIN"
 chmod 0755 "$SESSION_BIN"
 chown root:root "$SESSION_BIN"
 e1_ok "Oturum betigi: ${SESSION_BIN}"
 
-# --- 4) Oturum acilisinda calistir -----------------------------------------
-# `install -d -o <user>` kullanici cozulemezse ISI YARIDA BIRAKIR; once
-# dizini ac, sahipligi ayrica ver.
+# --- 3b) Gecis ekrani (splash) ---------------------------------------------
+# Ek paket YOK: sayfa tarayicinin kendisiyle gosteriliyor. file:// kaynagindan
+# fetch/XHR CORS'a takilir, <img> yuklemesi takilmaz — uygulamayi favicon ile
+# yokluyoruz (onload=ayakta, onerror=henuz degil).
+# Yazilamazsa OLUMCUL DEGIL: oturum betigi splash dosyasi yoksa dogrudan
+# uygulama adresini acar (eski davranis).
+install -d -m 0755 "$SHARE_DIR" 2>/dev/null || true
+if [[ -f "${SCRIPT_DIR}/assets/e1-avatar.png" ]]; then
+  install -m 0644 "${SCRIPT_DIR}/assets/e1-avatar.png" "${SHARE_DIR}/kiosk-logo.png" \
+    2>/dev/null || true
+fi
+_sp=1
+{ cat > "${SPLASH_FILE}.tmp" <<'E1_SPLASH_EOF'
+<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<title>EnerjiOne Grid</title><style>
+ html,body{height:100%;margin:0;background:#0b1220;color:#e6edf6;cursor:none;
+   font:16px/1.5 system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
+ img{width:96px;height:96px;border-radius:24px}
+ h1{font-size:20px;font-weight:600;margin:16px 0 4px}
+ p{margin:0;color:#93a4bd}
+ .b{margin:24px auto 0;width:220px;height:4px;background:#1e2a3d;border-radius:2px;overflow:hidden}
+ .b i{display:block;width:40%;height:100%;background:#f28b30;animation:s 1.2s ease-in-out infinite}
+ @keyframes s{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+</style></head><body><div style="text-align:center">
+ <img src="kiosk-logo.png" alt=""><h1>EnerjiOne Grid</h1>
+ <p id="m">Sistem baslatiliyor...</p><div class="b"><i></i></div></div>
+<script>
+ var U="__E1_URL__",n=0;
+ function go(){location.replace(U);}
+ function msg(t){document.getElementById('m').textContent=t;}
+ /* ASLA PES ETME. Eskiden 90 denemeden (3 dk) sonra uygulama ayakta olmasa
+    bile adrese gidiliyordu; Chromium hata sayfasi cikiyor, splash gittigi
+    icin geri donus olmuyordu ve operator ekranda tarayici hatasi
+    goruyordu. Ilk acilista imaj indirme/DB kurulumu 3 dakikayi rahat
+    gecebilir. Artik surekli yokluyoruz ve mesaji kademelendiriyoruz. */
+ function probe(){var im=new Image();
+   im.onload=go;
+   im.onerror=function(){n++;
+     if(n===20)msg('Uygulama bekleniyor...');
+     else if(n===90)msg('Ilk kurulum uzun surebilir, bekleniyor...');
+     else if(n===300)msg('Hala baslamadi. Cihazi kapatmayin; sorun surerse teknik destege bildirin.');
+     setTimeout(probe,2000);};
+   im.src=U.replace(/\/$/,'')+'/favicon.png?t='+Date.now();}
+ probe();
+</script></body></html>
+E1_SPLASH_EOF
+} 2>/dev/null || _sp=0
+# URL'yi tirnakli heredoc'tan SONRA sed ile yerlestiriyoruz: heredoc icinde
+# genisletseydik $ / backtick kacis tuzagina girerdik (bkz. LightDM notu).
+if [[ "$_sp" == "1" ]] \
+   && sed -i "s|__E1_URL__|${KIOSK_URL}|g" "${SPLASH_FILE}.tmp" 2>/dev/null \
+   && mv -f "${SPLASH_FILE}.tmp" "$SPLASH_FILE" 2>/dev/null; then
+  chmod 0644 "$SPLASH_FILE" 2>/dev/null || true
+  e1_ok "Gecis ekrani: ${SPLASH_FILE}"
+else
+  rm -f "${SPLASH_FILE}.tmp" 2>/dev/null || true
+  e1_warn "Gecis ekrani yazilamadi — tarayici dogrudan uygulamayi acacak."
+fi
+unset _sp
+
+# --- 4) X oturumu -----------------------------------------------------------
+# ASIL YOL: kiosk kendi X oturumudur. Masaustu oturum yoneticisi (gnome-session
+# /xfce4-session) hic calismaz -> duvar kagidi, panel, ikon ve ekran kilidi HIC
+# olusmaz. Dosya adi = oturum kimligi ve SABIT; musteri adi yalnizca Name=
+# icine girer.
+#
+# ONCE .tmp'ye yaz, sonra atomik `mv`: yarim yazilmis bir oturum dosyasi
+# ekran yoneticisinde kara ekran demektir.
+_sess_name="EnerjiOne Grid"
+[[ -n "$CUSTOMER_SAFE" ]] && _sess_name="EnerjiOne Grid (${CUSTOMER_SAFE})"
+install -d -m 0755 /usr/share/xsessions 2>/dev/null || true
+_xs=1
+{ cat > "${XSESSION_FILE}.tmp" <<EOF
+[Desktop Entry]
+Type=Application
+Name=${_sess_name}
+GenericName=Operator ekrani
+Comment=EnerjiOne Grid tam ekran operator arayuzu
+Exec=${SESSION_BIN}
+TryExec=${SESSION_BIN}
+DesktopNames=E1Kiosk
+X-LightDM-DesktopName=EnerjiOne Grid
+EOF
+} 2>/dev/null || _xs=0
+# Salt-okunur /usr olan imajlarda yazma basarisiz olabilir; bu OLUMCUL DEGIL —
+# asagidaki dogrulama SESSION_OK'i dusurur, cihaz eski yolda calismaya devam
+# eder. Script'in burada olmesi kurulumun kalanini (otomatik giris) kacirirdi.
+if [[ "$_xs" == "1" ]] && mv -f "${XSESSION_FILE}.tmp" "$XSESSION_FILE" 2>/dev/null; then
+  chmod 0644 "$XSESSION_FILE" 2>/dev/null || true
+  chown root:root "$XSESSION_FILE" 2>/dev/null || true
+  e1_ok "X oturumu: ${XSESSION_FILE}"
+else
+  rm -f "${XSESSION_FILE}.tmp" 2>/dev/null || true
+  e1_warn "X oturum dosyasi yazilamadi (${XSESSION_FILE})."
+fi
+unset _xs
+
+# Ekran yoneticisini bu oturuma yonlendirmek RISKLI adimdir: yanlis/eksik bir
+# oturum = acilmayan oturum = kara ekran. Once dogrula, sonra yonlendir.
+has_xorg() {
+  command -v Xorg >/dev/null 2>&1 || command -v X >/dev/null 2>&1 \
+    || [[ -x /usr/lib/xorg/Xorg ]] || [[ -x /usr/libexec/Xorg ]]
+}
+SESSION_OK=1
+if [[ "${E1_KIOSK_SESSION:-1}" == "0" ]]; then
+  SESSION_OK=0
+  e1_warn "E1_KIOSK_SESSION=0 — kendi X oturumu KULLANILMIYOR, isaretci kaldiriliyor."
+elif [[ ! -f "$XSESSION_FILE" || ! -x "$SESSION_BIN" ]]; then
+  SESSION_OK=0
+  e1_warn "Oturum dosyasi/betigi dogrulanamadi — ekran yoneticisine dokunulmuyor."
+elif ! has_xorg; then
+  SESSION_OK=0
+  e1_warn "Xorg bulunamadi (Wayland-only imaj) — ekran yoneticisine dokunulmuyor."
+  e1_hint "Elle: sudo apt-get install -y xserver-xorg && sudo bash ${BASH_SOURCE[0]}"
+fi
+if [[ "$SESSION_OK" == "1" ]] && command -v desktop-file-validate >/dev/null 2>&1; then
+  desktop-file-validate "$XSESSION_FILE" >/dev/null 2>&1 \
+    || e1_warn "desktop-file-validate uyari verdi — oturum yine de kullanilacak."
+fi
+
+# --- 4b) Yedek yol: masaustu autostart girisi -------------------------------
+# SILMIYORUZ. Ciplak X oturumunda /etc/X11/Xsession zinciri ~/.config/autostart
+# ISLEMEZ, yani bu girdi yeni oturumda zaten calismaz. Ama X oturumu bir sebeple
+# tutmazsa (Xorg yok, DM oturumu bulamadi, greeter'dan masaustu secildi) cihaz
+# BUGUNKU davranisa duser ve KULLANILABILIR kalir. Silseydik ayni senaryoda
+# operator ciplak masaustu ile kalirdi. Cift baslatmayi oturum betigindeki
+# flock kilidi engelliyor.
+# AYRICA: _kiosk_bizim_mi() bu dosyayi "hesabi biz actik" kaniti olarak
+# kullaniyor — kaldirilmamali.
 mkdir -p "${KIOSK_HOME}/.config/autostart"
 cat > "${KIOSK_HOME}/.config/autostart/enerjione-kiosk.desktop" <<EOF
 [Desktop Entry]
@@ -307,18 +750,71 @@ chown -R "$KIOSK_USER:$KIOSK_USER" "${KIOSK_HOME}/.config" 2>/dev/null || true
 # GNOME'un ilk acilis sihirbazi ve "hos geldiniz" turu kiosk ekranini kapatir.
 touch "${KIOSK_HOME}/.config/gnome-initial-setup-done"
 chown -R "$KIOSK_USER:$KIOSK_USER" "${KIOSK_HOME}/.config" 2>/dev/null || true
-e1_ok "Oturum acilisina eklendi."
+e1_ok "Yedek acilis girdisi hazir."
 
 # --- 5) Otomatik giris ------------------------------------------------------
+# /var/lib/AccountsService/users/<kul> bir INI ve BASKA anahtarlar tasiyor
+# (Icon= avatar script'inden geliyor). Dosyayi EZMIYORUZ; anahtar bazinda
+# birlestiriyoruz — setup-user-avatars.sh ile ayni uc dalli mantik.
+_as_set() {  # $1=dosya $2=anahtar $3=deger
+  local f="$1" k="$2" v="$3"
+  if [[ -f "$f" ]] && grep -qE "^[[:space:]]*${k}[[:space:]]*=" "$f"; then
+    sed -i -E "s|^[[:space:]]*${k}[[:space:]]*=.*|${k}=${v}|" "$f"
+  elif [[ -f "$f" ]] && grep -qE '^[[:space:]]*\[User\]' "$f"; then
+    sed -i -E "0,/^[[:space:]]*\[User\]/s||[User]\n${k}=${v}|" "$f"
+  else
+    printf '[User]\n%s=%s\n' "$k" "$v" >> "$f"
+  fi
+}
+_as_del() {  # $1=dosya $2=anahtar  (E1_KIOSK_SESSION=0 geri alma yolu)
+  [[ -f "$1" ]] || return 0
+  sed -i -E "/^[[:space:]]*${2}[[:space:]]*=/d" "$1"
+}
+
 case "$DM" in
   gdm3|gdm)
-    GDM_CONF="/etc/gdm3/custom.conf"
-    [[ -f "$GDM_CONF" ]] || GDM_CONF="/etc/gdm/custom.conf"
-    if [[ ! -f "$GDM_CONF" ]]; then
-      install -D -m 0644 /dev/null "$GDM_CONF"
-      printf '[daemon]\n' > "$GDM_CONF"
+    # GDM'in okudugu dosya DAGITIMA GORE DEGISIR:
+    #   Debian 12 (bookworm) : /etc/gdm3/daemon.conf   <- custom.conf YOK
+    #   Ubuntu               : /etc/gdm3/custom.conf
+    #   Fedora/RHEL          : /etc/gdm/custom.conf
+    # Eskiden yalnizca son ikisi deneniyordu. Debian 12'de hicbiri
+    # bulunmadigi icin `install -D` UYDURMA bir dosya yaratiyor, ayarlar
+    # oraya yaziliyor ve ekrana "GDM otomatik girisi ✓" basiliyordu — ama
+    # GDM o dosyayi HIC OKUMAZ. Sonuc: otomatik giris yok, greeter aciliyor
+    # ve parolasi KILITLI kiosk hesabi giremiyor; cihaz operator icin
+    # kullanilamaz hale geliyordu. Debian 12 belgelenmis hedef
+    # (bkz. docs/DEPLOYMENT.md, install.sh basligi).
+    GDM_CONF=""
+    for _c in /etc/gdm3/daemon.conf /etc/gdm3/custom.conf /etc/gdm/custom.conf; do
+      [[ -f "$_c" ]] && { GDM_CONF="$_c"; break; }
+    done
+    if [[ -z "$GDM_CONF" ]]; then
+      # Dosya yok: UYDURMA. Yalnizca GDM'in KENDI dizinine yaz.
+      if [[ -d /etc/gdm3 ]]; then
+        GDM_CONF=/etc/gdm3/daemon.conf
+      elif [[ -d /etc/gdm ]]; then
+        GDM_CONF=/etc/gdm/custom.conf
+      fi
+      if [[ -n "$GDM_CONF" ]]; then
+        install -D -m 0644 /dev/null "$GDM_CONF"
+        printf '[daemon]\n' > "$GDM_CONF"
+      fi
     fi
-    cp -a "$GDM_CONF" "${GDM_CONF}.e1-bak" 2>/dev/null || true
+    if [[ -z "$GDM_CONF" ]]; then
+      # GDM tespit edildi ama yapilandirma dizini yok — okunmayacak bir
+      # dosyaya yazip "basarili" demektense ACIKCA uyariyoruz.
+      e1_warn "GDM yapilandirma dizini bulunamadi — otomatik giris KURULAMADI."
+      e1_warn "Cihaz acilista giris ekraninda kalir; kiosk hesabinin parolasi"
+      e1_warn "kilitli oldugu icin operator giremez. Elle ayarlayin:"
+      e1_hint "  GDM ayar dosyasina [daemon] altina:"
+      e1_hint "    AutomaticLoginEnable=true"
+      e1_hint "    AutomaticLogin=${KIOSK_USER}"
+    fi
+    if [[ -n "$GDM_CONF" ]]; then
+    # Yedek: ILK kosuda alinan orijinali KORU. Her kosuda uzerine yazilirsa
+    # ikinci update.sh sonrasi yedek "bizim yazdigimiz" hali gosterir ve
+    # geri donus imkani kaybolur.
+    [[ -f "${GDM_CONF}.e1-bak" ]] || cp -a "$GDM_CONF" "${GDM_CONF}.e1-bak" 2>/dev/null || true
     # Mevcut satirlari temizleyip [daemon] bolumune yeniden ekle.
     sed -i '/^\s*AutomaticLoginEnable\s*=/d; /^\s*AutomaticLogin\s*=/d' "$GDM_CONF"
     if grep -q '^\[daemon\]' "$GDM_CONF"; then
@@ -326,35 +822,145 @@ case "$DM" in
     else
       printf '\n[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=%s\n' "$KIOSK_USER" >> "$GDM_CONF"
     fi
-    e1_ok "GDM otomatik girisi: ${KIOSK_USER}"
+    e1_ok "GDM otomatik girisi: ${KIOSK_USER}  (${GDM_CONF})"
+    fi
+    # GDM oturumu kullanicinin AccountsService dosyasindan cozer (otomatik
+    # giriste de). Dosya EZILMEZ: avatar script'i ayni dosyaya Icon= yaziyor,
+    # anahtar bazinda birlestiriyoruz.
+    # NOT: WaylandEnable=false YAZMIYORUZ — greeter dahil tum sistemi etkileyen
+    # buyuk cekic; Xorg eksikse greeter'i da oldurur.
+    AS_FILE="/var/lib/AccountsService/users/${KIOSK_USER}"
+    if [[ -d /var/lib/AccountsService ]]; then
+      install -d -m 700 /var/lib/AccountsService/users
+      [[ -f "$AS_FILE" && ! -f "${AS_FILE}.e1-bak" ]] \
+        && cp -a "$AS_FILE" "${AS_FILE}.e1-bak" 2>/dev/null || true
+      if [[ "$SESSION_OK" == "1" ]]; then
+        # XSession= eski anahtar (gdm 3.x), Session= yeni anahtar (>= 3.34),
+        # SessionType=x11 tanimayan surumlerde zararsiz, taniyan surumde
+        # Wayland denemesini engeller. Ubuntu'nun kendi accountsservice'i de
+        # ucunu birden yazar.
+        _as_set "$AS_FILE" Session     "$XSESSION_ID"
+        _as_set "$AS_FILE" XSession    "$XSESSION_ID"
+        _as_set "$AS_FILE" SessionType x11
+        e1_ok "GDM oturumu: ${XSESSION_ID}"
+      else
+        _as_del "$AS_FILE" Session
+        _as_del "$AS_FILE" XSession
+        _as_del "$AS_FILE" SessionType
+        e1_info "GDM oturum isaretcisi kaldirildi (varsayilan masaustu)."
+      fi
+      chmod 600 "$AS_FILE" 2>/dev/null || true
+      # accounts-daemon dosyayi onbellekler.
+      systemctl try-restart accounts-daemon >/dev/null 2>&1 || true
+    fi
     ;;
   lightdm)
     install -d -m 0755 /etc/lightdm/lightdm.conf.d
-    cat > /etc/lightdm/lightdm.conf.d/50-enerjione-kiosk.conf <<EOF
-[Seat:*]
-autologin-user=${KIOSK_USER}
-autologin-user-timeout=0
-user-session=\$(basename "\$(ls /usr/share/xsessions/*.desktop 2>/dev/null | head -1)" .desktop)
-EOF
-    # user-session satiri cozulemezse LightDM varsayilani kullanir; hatali
-    # bir deger oturumu hic actirmaz, o yuzden bos ise satiri siliyoruz.
-    sed -i '/^user-session=$/d' /etc/lightdm/lightdm.conf.d/50-enerjione-kiosk.conf
+    # DIKKAT: heredoc DEGIL, satir satir printf — icinde HIC komut ikamesi
+    # yok. Eski surumde tirnaksiz heredoc + kacirilmis "$(...)" bu dosyaya
+    # LITERAL bir
+    # komut-ikamesi metni yaziliyordu; lightdm.conf bir INI, onu calistirmaz,
+    # gecersiz oturum adi bulup VARSAYILAN masaustune donuyordu. Dosya her
+    # kosuda bastan yazildigi icin sahadaki bozuk satir da boylece duzelir.
+    {
+      printf '[Seat:*]\n'
+      printf 'autologin-user=%s\n' "$KIOSK_USER"
+      printf 'autologin-user-timeout=0\n'
+      if [[ "$SESSION_OK" == "1" ]]; then
+        # Otomatik giriste once autologin-session'a bakilir, yoksa
+        # user-session'a dusulur (LightDM < 1.10 yalnizca ikincisini bilir).
+        printf 'autologin-session=%s\n' "$XSESSION_ID"
+        printf 'user-session=%s\n' "$XSESSION_ID"
+      fi
+    } > /etc/lightdm/lightdm.conf.d/50-enerjione-kiosk.conf.tmp
+    mv -f /etc/lightdm/lightdm.conf.d/50-enerjione-kiosk.conf.tmp \
+          /etc/lightdm/lightdm.conf.d/50-enerjione-kiosk.conf
+    chmod 0644 /etc/lightdm/lightdm.conf.d/50-enerjione-kiosk.conf
     e1_ok "LightDM otomatik girisi: ${KIOSK_USER}"
+    [[ "$SESSION_OK" == "1" ]] && e1_ok "LightDM oturumu: ${XSESSION_ID}"
     ;;
   sddm)
     install -d -m 0755 /etc/sddm.conf.d
-    cat > /etc/sddm.conf.d/50-enerjione-kiosk.conf <<EOF
-[Autologin]
-User=${KIOSK_USER}
-Session=plasma
-EOF
+    # Eskiden sabit `Session=plasma` yaziyordu; Plasma kurulu degilse otomatik
+    # giris HIC calismiyordu. Kendi oturumumuz her durumda var.
+    # `.desktop` uzantili yazilir: eski SDDM (0.13) tam dosya adi ister, yeni
+    # surumler ikisini de kabul eder.
+    # SDDM'de `[Autologin]` yalnizca User ile CALISMAZ: Session= yoksa
+    # otomatik giris sessizce hic olmaz ve cihaz greeter'da kalir —
+    # parolasi kilitli hesap giremedigi icin bu, cihazin kullanilamamasi
+    # demektir. Bu yuzden kendi oturumumuz dogrulanamadiysa BOS BIRAKMIYORUZ,
+    # sistemde kurulu ILK oturuma dusuyoruz (masaustu acilir ama autostart
+    # yedegi tarayiciyi yine baslatir; greeter'da kilitli kalmaktan iyidir).
+    _sddm_session="$XSESSION_ID"
+    if [[ "$SESSION_OK" != "1" ]]; then
+      _sddm_session="$(basename "$(ls /usr/share/xsessions/*.desktop 2>/dev/null | head -1)" .desktop 2>/dev/null || true)"
+    fi
+    {
+      printf '[Autologin]\n'
+      printf 'User=%s\n' "$KIOSK_USER"
+      if [[ -n "$_sddm_session" ]]; then
+        printf 'Session=%s.desktop\n' "$_sddm_session"
+        # Oturum kapanirsa greeter'da kilitli-parola cikmazina dusmeyelim.
+        printf 'Relogin=true\n'
+      fi
+    } > /etc/sddm.conf.d/50-enerjione-kiosk.conf.tmp
+    mv -f /etc/sddm.conf.d/50-enerjione-kiosk.conf.tmp \
+          /etc/sddm.conf.d/50-enerjione-kiosk.conf
+    chmod 0644 /etc/sddm.conf.d/50-enerjione-kiosk.conf
     e1_ok "SDDM otomatik girisi: ${KIOSK_USER}"
+    if [[ "$SESSION_OK" != "1" ]]; then
+      if [[ -n "$_sddm_session" ]]; then
+        e1_warn "Kendi oturumumuz dogrulanamadi — yedek oturum: ${_sddm_session}"
+      else
+        e1_warn "Hic oturum bulunamadi — SDDM otomatik girisi ELLE ayarlanmali."
+      fi
+    fi
     ;;
   *)
+    # Cogu DM /usr/share/xsessions'i zaten tarar; oturum dosyasi yazildi ama
+    # DM yapilandirmasina DOKUNMUYORUZ (riskli adim yalnizca bildigimiz
+    # DM'lerde yapilir). Autostart yedegi duruyor, cihaz calisir kalir.
     e1_warn "Bilinmeyen ekran yoneticisi (${DM}) — otomatik giris ELLE ayarlanmali."
-    e1_hint "Oturum betigi hazir: ${SESSION_BIN}"
+    e1_hint "Oturum: ${XSESSION_ID}   betik: ${SESSION_BIN}"
     ;;
 esac
+
+# --- 5b) Bosta kalma eylemi (systemd-logind) --------------------------------
+# IdleAction masaustunden BAGIMSIZ calisan tek uyku/kilit tetikleyicisidir.
+# SISTEM GENELIDIR (yonetim hesabinin oturumlarini da kapsar) — per-session
+# ayarlanamaz. Yazdigimiz deger zaten Debian/Ubuntu VARSAYILANI; amac bir
+# golden image'in bunu 'lock/suspend' yapmis olmasini engellemek.
+# logind.conf'u DEGISTIRMIYORUZ: drop-in geri almayi tek `rm`e indiriyor.
+if [[ -d /etc/systemd ]]; then
+  install -d -m 0755 /etc/systemd/logind.conf.d
+  _lg=/etc/systemd/logind.conf.d/50-enerjione-kiosk.conf
+  _lg_new="$(mktemp)"
+  cat > "$_lg_new" <<'EOF'
+# EnerjiOne Grid kiosk - pano 7/24 acik kalir, bosta kalma eylemi yok.
+# Kaldirmak icin:
+#   sudo rm /etc/systemd/logind.conf.d/50-enerjione-kiosk.conf
+#   sudo systemctl reload systemd-logind
+[Login]
+IdleAction=ignore
+EOF
+  if ! cmp -s "$_lg_new" "$_lg" 2>/dev/null; then
+    install -m 0644 "$_lg_new" "$_lg"
+    # reload YETER. `restart systemd-logind` acik oturumlari dusurebilir —
+    # update.sh sirasinda calisan bir kiosk ekranini karartir. KULLANMA.
+    systemctl reload systemd-logind >/dev/null 2>&1 || true
+    e1_ok "Bosta kalma eylemi kapatildi (logind)."
+  fi
+  rm -f "$_lg_new"
+fi
+
+# Uyku hedeflerini kapatmak SISTEM GENELIDIR ve geri almayi zorlastirir.
+# Masaustu olmayan bir kiosk oturumunda otomatik uyku ZATEN olmaz (uyku bir
+# masaustu guc yoneticisi ozelligi), bu yuzden VARSAYILAN KAPALI.
+if [[ "${E1_KIOSK_NO_SLEEP:-0}" == "1" ]]; then
+  systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target \
+    >/dev/null 2>&1 && e1_ok "Uyku hedefleri kapatildi (E1_KIOSK_NO_SLEEP=1)." \
+    || e1_warn "Uyku hedefleri kapatilamadi."
+fi
 
 # --- 6) Grafik hedef acilista ----------------------------------------------
 # Sunucu profilinden gelen sistemlerde varsayilan hedef multi-user olabilir;
@@ -365,10 +971,42 @@ if [[ "$(systemctl get-default 2>/dev/null)" != "graphical.target" ]]; then
     || e1_warn "Acilis hedefi degistirilemedi."
 fi
 
+ADMIN_USER="$(e1_target_user 2>/dev/null || echo "${SUDO_USER:-enerjione}")"
+[[ -n "$ADMIN_USER" ]] || ADMIN_USER="${SUDO_USER:-enerjione}"
+
 echo
 e1_ok "Kiosk modu hazir."
-e1_hint "Operator ekrani : ${KIOSK_USER} (otomatik giris, yetkisiz)"
-e1_hint "Yonetim hesabi  : $(e1_target_user 2>/dev/null || echo "${SUDO_USER:-enerjione}") (SSH/sudo/update)"
+e1_hint "Operator ekrani : ${KIOSK_USER}   (giris ekraninda: ${KIOSK_GECOS})"
+e1_hint "                  Otomatik giris — ISLETIM SISTEMI PAROLASI YOKTUR."
+if [[ "$SESSION_OK" == "1" ]]; then
+  e1_hint "Oturum          : ${XSESSION_ID} (kendi X oturumu — masaustu ACILMAZ)"
+else
+  e1_hint "Oturum          : masaustu + autostart (yedek yol; kendi oturum KAPALI)"
+fi
+e1_hint "Ekran kilidi    : KAPALI (kararma, kilit ve uyku devre disi)."
+e1_hint "Yonetim hesabi  : ${ADMIN_USER}   (SSH / sudo / update — ayri parola)"
 e1_hint "Acilan adres    : ${KIOSK_URL}"
-e1_hint "Devre disi      : sudo E1_KIOSK=0 bash ${BASH_SOURCE[0]}  (once bkz. docs)"
+echo
+e1_info "OPERATORE TESLIM METNI (musteriye aynen okuyun):"
+e1_hint "  1) Cihazi acmaniz yeterli. Arayuz kendiliginden tam ekran gelir."
+e1_hint "     Bu cihazin bir isletim sistemi parolasi YOKTUR; size verilmedi,"
+e1_hint "     cunku hicbir zaman sorulmayacak."
+e1_hint "  2) Ekranda kullanici adi/sifre isteyen bir pencere gorurseniz, bu"
+e1_hint "     cihazin kilidi DEGILDIR — EnerjiOne Grid uygulamasinin kendi"
+e1_hint "     giris ekranidir. Oraya size ayrica verilen UYGULAMA kullanicisini"
+e1_hint "     yazin (or. installer)."
+e1_hint "  3) Ekran karardiysa once ekrana dokunun / fareyi oynatin. Duzelmezse"
+e1_hint "     cihazi kapatip acin: arayuz 1-2 dakika icinde kendiliginden geri"
+e1_hint "     gelir. Parola sorulmaz."
+e1_hint "  4) Cihaz uzerinde ayar veya guncelleme YAPILMAZ. Bakim, guncelleme ve"
+e1_hint "     ag ayarlari yetkili teknik ekipte, ayri bir yonetim hesabindadir."
+echo
+e1_info "YONETICI NOTU — buna ragmen bir kilit/kara ekran kalirsa:"
+e1_hint "  Ctrl+Alt+F3 -> ${ADMIN_USER} ile giris -> sudo loginctl unlock-sessions"
+e1_hint "  Eski davranisa don : sudo E1_KIOSK_SESSION=0 bash ${BASH_SOURCE[0]}"
+e1_hint "  Duzelmezse         : sudo systemctl restart ${DM}    (son care: reboot)"
+e1_hint "  Operator hesabinin parolasi BILEREK kilitlidir; parola aramayin."
+e1_hint "Gorunen adi degistir : sudo E1_CUSTOMER='TPAO' bash ${BASH_SOURCE[0]}"
+e1_hint "Adi oldugu gibi birak: sudo E1_KIOSK_KEEP_GECOS=1 bash ${BASH_SOURCE[0]}"
+e1_hint "Devre disi           : sudo E1_KIOSK=0 bash ${BASH_SOURCE[0]}"
 exit 0

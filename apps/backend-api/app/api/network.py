@@ -4,17 +4,34 @@ Yetki: SADECE installer. Ag ayari yanlis girilirse cihaz kablolu agdan
 erisilemez hale gelir; bu yuzden en dar rol.
 
 Endpoint'ler:
-  GET  /network/status        -> host ag durumu (arayuzler, AP, WiFi, son uygulama)
-  PUT  /network/config        -> ethernet IP/DNS ayarini uygula (+ yeniden baslat)
-  GET  /network/wifi/scan     -> son tarama sonucu
-  POST /network/wifi/scan     -> yeni tarama tetikle
-  POST /network/wifi/connect  -> bir aga baglan (SSID + sifre)
-  POST /network/wifi/forget   -> kayitli agi unut, AP'yi geri ac
+  GET  /network/status         -> host ag durumu (arayuzler, AP, WiFi, radyo,
+                                  gorev, internet, son uygulama)
+  PUT  /network/config         -> ethernet IP/DNS ayarini uygula (+ yeniden baslat)
+  GET  /network/wifi/scan      -> son tarama sonucu
+  POST /network/wifi/scan      -> yeni tarama tetikle (deep=true: AP'yi indirir)
+  POST /network/wifi/connect   -> bir aga baglan (SSID + sifre)
+  POST /network/wifi/forget    -> kayitli agi unut, AP'yi geri ac
+  POST /network/wifi/radio     -> WiFi kartini ac/kapa
+  POST /network/wifi/mode      -> kartin gorevi: erisim noktasi | internete baglan
+  POST /network/internet/check -> internet durumunu simdi sina
 
-WiFi NOTU (tek radyo): appliance'ta tek WiFi karti var; client baglantisi
-sirasinda AP (kurtarma yolu) DUSER. Baglanti kurulamazsa host ajani muhafiz
-suresi (varsayilan 180 sn) sonunda AP'yi OTOMATIK geri acar. AP'nin kendi
-ayarlari bu API'den DEGISTIRILEMEZ.
+WiFi NOTU (tek radyo): appliance'ta tek WiFi karti var; AP ile client AYNI
+ANDA calisamaz. Bu yuzden kullaniciya uc AYRI sey raporlanir ve hicbiri
+digerinin yerine gecmez:
+  status.radio    -> kart acik mi (yazilim/DONANIM kilidi ayri ayri)
+  status.role     -> `mode` KALICI TERCIH, `effective` ise OLCUM. Bu ikisi
+                     UI'da ayni rozete BAGLANMAMALI; eskiden "client yoksa AP
+                     acik olmali" KURALI olcum gibi gosteriliyordu ve AP
+                     gercekte kapaliyken "acik" yaziyordu.
+  status.internet -> internet var/yok + hangi arayuzden ("AP acik" ile ayni
+                     sey DEGIL: guncelleme/uzaktan bakim/saat senkronu buna
+                     bagli).
+
+DEGISMEZ: cihaz erisilemez kalmaz. Client baglantisi kurulamazsa ajan muhafiz
+suresi (varsayilan 180 sn) sonunda AP'yi otomatik geri acar; WiFi'yi kapatmak
+yalnizca IP almis bir ethernet varken kabul edilir; radyo kapaliyken kablo da
+giderse ajan WiFi'yi kendiliginden geri acar. AP'nin kendi ayarlari bu
+API'den DEGISTIRILEMEZ.
 
 Backend host agina DOKUNMAZ: istegi /var/lib/e1-grid/net/request.json'a
 yazar, host'ta root ile calisan `e1-netd` ajani dogrulayip nmcli ile uygular
@@ -34,6 +51,9 @@ from app.schemas.network import (
     NetworkConfigUpdate,
     NetworkStatus,
     WifiConnectRequest,
+    WifiModeRequest,
+    WifiRadioRequest,
+    WifiScanRequest,
     WifiScanResult,
 )
 from app.services import network_service
@@ -54,6 +74,19 @@ _ERROR_MESSAGES = {
     "request_pending": "Onceki ag ayari istegi hala isleniyor.",
     "interface_not_found": "Secilen ag arayuzu bulunamadi.",
     "interface_not_ethernet": "Sadece kablolu (ethernet) arayuz ayarlanabilir.",
+    "radio_off_would_strand": (
+        "WiFi kapatilirsa cihaza ulasilacak baska yol kalmiyor. "
+        "Once kablolu baglantiyi kurun."
+    ),
+    "radio_hardware_blocked": (
+        "Cihaz uzerindeki WiFi anahtari kapali; WiFi arayuzden acilamaz."
+    ),
+    "wifi_not_supported": "Bu cihazda WiFi karti bulunamadi.",
+    "no_saved_network": (
+        "Kayitli bir WiFi agi yok. Once listeden bir ag secip baglanin."
+    ),
+    "radio_off": "WiFi karti kapali. Once WiFi'yi acin.",
+    "invalid_mode": "Gecersiz gorev secimi.",
 }
 
 
@@ -151,10 +184,21 @@ def get_wifi_scan(
 
 @router.post("/wifi/scan", status_code=status.HTTP_202_ACCEPTED)
 def trigger_wifi_scan(
+    payload: WifiScanRequest | None = None,
     current_user: User = Depends(require_roles([UserRole.INSTALLER])),
 ):
-    """Yeni tarama tetikle. Sonuc birkac saniye icinde GET /wifi/scan'de."""
-    request_id = _queue(network_service.request_wifi_scan, current_user.username)
+    """Yeni tarama tetikle. Sonuc birkac saniye icinde GET /wifi/scan'de.
+
+    `deep=true`: cihazin kendi agi ~15 sn kapatilir. Tek radyo AP modunda
+    kanal degistiremedigi icin normal tarama cogu surucude bos doner ve
+    kullanici baglanacak agi SECEMEZ. Bedeli: AP uzerinden bagli olanin
+    sayfasi kisa sureligine acilmaz — UI bunu onceden soylemeli.
+    """
+    request_id = _queue(
+        network_service.request_wifi_scan,
+        bool(payload.deep) if payload else False,
+        current_user.username,
+    )
     return {"request_id": request_id}
 
 
@@ -200,4 +244,89 @@ def forget_wifi(
         message="WiFi baglantisi kaldirildi, erisim noktasi (AP) geri acildi.",
         metadata={"request_id": request_id},
     )
+    return {"request_id": request_id}
+
+
+@router.post("/wifi/radio", status_code=status.HTTP_202_ACCEPTED)
+def set_wifi_radio(
+    payload: WifiRadioRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
+):
+    """WiFi kartini ac/kapa (fiziksel onkosul).
+
+    KAPATMA: tek radyo kapaninca erisim noktasi da duser; cihaza kablosuz
+    ulasim tamamen biter. Bu yuzden yalnizca IP almis bagli bir ethernet
+    varsa kabul edilir (409 aksi halde). Kosul saglansa bile AP uzerinden
+    bagli kullanicinin oturumu KOPAR.
+
+    ACMA: donanim anahtari kapaliysa yazilimla acilamaz — bu da 409.
+    """
+    request_id = _queue(
+        network_service.request_wifi_radio, payload.enabled, current_user.username
+    )
+    record_event(
+        db,
+        category="system",
+        event_type="wifi_radio_changed",
+        severity="info" if payload.enabled else "warning",
+        actor_username=current_user.username,
+        message=(
+            "WiFi karti acildi."
+            if payload.enabled
+            else "WiFi karti kapatildi (cihaza yalnizca kablolu adresten ulasilir)."
+        ),
+        metadata={"request_id": request_id, "enabled": payload.enabled},
+    )
+    return {"request_id": request_id}
+
+
+@router.post("/wifi/mode", status_code=status.HTTP_202_ACCEPTED)
+def set_wifi_mode(
+    payload: WifiModeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
+):
+    """WiFi kartinin gorevini sec (tek radyo, ikisi ayni anda olmaz).
+
+    "ap"     -> cihaz kendi agini yayinlar. Ulasim garantisi, INTERNET YOK.
+    "client" -> KAYITLI aga katilir, internet gelir, AP kapanir. Baglanti
+                kurulamazsa ajan AP'yi otomatik geri acar ve ag geri
+                geldiginde yeniden dener.
+
+    NOT: otomatik dongu calisan bir client baglantisini asla dusurmez; bu
+    ACIK bir istektir ve UI kullaniciyi uyarmis olmalidir.
+    """
+    request_id = _queue(
+        network_service.request_wifi_mode, payload.mode, current_user.username
+    )
+    record_event(
+        db,
+        category="system",
+        event_type="wifi_mode_changed",
+        severity="warning",
+        actor_username=current_user.username,
+        message=(
+            "WiFi gorevi degistirildi: cihaz kendi agini yayinlayacak "
+            "(internet baglantisi kesilir)."
+            if payload.mode == "ap"
+            else "WiFi gorevi degistirildi: kayitli aga baglanilacak "
+            "(cihazin kendi agi kapanir)."
+        ),
+        metadata={"request_id": request_id, "mode": payload.mode},
+    )
+    return {"request_id": request_id}
+
+
+@router.post("/internet/check", status_code=status.HTTP_202_ACCEPTED)
+def check_internet(
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
+):
+    """Internet durumunu SIMDI sina.
+
+    Periyodik rapor bunu yapmaz (ag trafigi uretir ve bloklar); sonuc
+    birkac saniye icinde GET /network/status -> internet alaninda.
+    Kalici bir state degisimi olmadigi icin audit kaydi da yok.
+    """
+    request_id = _queue(network_service.request_internet_check, current_user.username)
     return {"request_id": request_id}

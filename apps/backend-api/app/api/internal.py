@@ -275,6 +275,20 @@ def ingest_alarm(
     if deleted_any:
         db.flush()
 
+    # ZAMAN OTORITESI: alarm saati DAIMA backend'in olayi ALGILADIGI andir.
+    #
+    # `payload.source_timestamp` gelir ama created_at'e ASLA yazilmaz; yalnizca
+    # asagidaki olay metadata'sinda teshis amaciyla saklanir. Gerekce:
+    #   * Cihaz/gateway saati kayabilir (RTC pili biter, saat 2000-01-01'e
+    #     doner). O damgayla acilan alarm listede 26 yil once gorunur, operator
+    #     onu HIC gormez.
+    #   * Ileri kaymis bir saat alarmi listenin tepesine cakar ve gercek yeni
+    #     alarmlari bastirir.
+    #   * SLA/mudahale suresi olcumu cihaz saatine baglanamaz: mudahale suresi
+    #     "biz ne zaman haberdar olduk"tan itibaren isler.
+    # Cihazin kendi zamani teshis icin ayri kolonlarda duruyor (bkz.
+    # telemetry.device_event_at) ve alarm akisina KARISMAZ.
+    # Bu kural tests/test_alarm_time_authority.py ile kilitlidir.
     alarm = AlarmEvent(
         device_id=device_id,
         level=payload.level,

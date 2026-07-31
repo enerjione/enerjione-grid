@@ -312,6 +312,20 @@ class _WsNatsBridge:
         # DUZ SUBSCRIBE — queue group VERILMEZ. Verilseydi mesajlar abone
         # surecler arasinda paylastirilir ve her surec 1/N gorurdu.
         await self._nc.subscribe(settings.ws_fanout_subject, cb=_handler)
+        # FLUSH SART — `subscribe()` donmesi aboneligin SUNUCUYA ULASTIGI
+        # anlamina GELMEZ. nats-py SUB cercevesini tampona yazip hemen doner.
+        # Flush olmadan, hazir isaretini verdikten hemen sonra yayinlanan
+        # mesajlar kendi abonemize DUSMEDEN once sunucuya varir ve KAYBOLUR.
+        #
+        # Bu yalnizca teorik degil: koprunun kendi testi bu yuzden ~3 kosumda
+        # 1 kirmizi oluyordu. Uretimde pencere dar ama gercek — surec acilir
+        # acilmaz gelen ilk telemetri mesajlari sessizce dusebilirdi.
+        try:
+            await self._nc.flush(timeout=2)
+        except Exception:  # noqa: BLE001
+            # Flush basarisiz olsa bile abonelik muhtemelen kurulmustur;
+            # hazir isaretini vermeyi engellemeyelim.
+            logger.debug("ws_fanout_flush_failed", exc_info=True)
         self._ready.set()
         logger.info(
             "ws_fanout_bridge_ready subject=%s url=%s",

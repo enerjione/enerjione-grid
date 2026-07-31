@@ -43,6 +43,7 @@ from app.models.device import Device
 from app.models.telemetry import Telemetry
 from app.models.telemetry_history import TelemetryHistory
 from app.services.event_service import record_event
+from app.services.tag_engine_service import quality_blocks_alarm
 
 logger = logging.getLogger(__name__)
 
@@ -330,6 +331,21 @@ class AlarmReconciliationWorker:
                 last = son_degerler.get((alarm.device_id, alarm.signal_key))
                 if last is None or last.value is None:
                     continue  # Yeterli yeni veri yok — guvenli karar veremeyiz.
+                # KALITE KAPISI — bu satir olmadan sistem, cihazla baglanti
+                # koptugu anda "ariza gecti" diyordu.
+                #
+                # Haberlesmesi kopan cihaz icin gateway `comm_lost` kalitesiyle
+                # 0.0 basiyor. Asagidaki `_evaluate_rule(rule, 0.0)` cagrisi
+                # "esik artik saglanmiyor" sonucunu uretiyor ve `_resolve_alarm`
+                # ACIK ARIZA ALARMINI KAPATIYORDU; ardindan fault_recompute
+                # tetiklenip harita YESILE donuyordu. Onaylanmis alarmlar ise
+                # kalici siliniyordu (bkz. internal.py clear akisi).
+                #
+                # SCADA doktrini: veri kaybinda SON BILINEN DURUM korunur.
+                # `Telemetry.quality` zaten elde (telemetry_consumer yaziyor),
+                # ek sorgu maliyeti YOK.
+                if quality_blocks_alarm(last.quality):
+                    continue
                 # Kural kosulu artik karsilanmiyorsa cozeriz.
                 still_active = _evaluate_rule(rule, float(last.value))
                 if still_active:

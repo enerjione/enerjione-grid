@@ -2366,10 +2366,17 @@ export async function fetchWifiScan(
   return (await response.json()) as import("./types").WifiScanResult;
 }
 
-export async function triggerWifiScan(token: string): Promise<void> {
+/** Yeni tarama tetikle.
+ *
+ *  `deep=true`: cihazin kendi agi ~15 sn KAPATILIR ve tam tarama yapilir.
+ *  Tek radyo AP yayindayken kanal degistiremedigi icin normal tarama cogu
+ *  surucude bos doner; bedeli, AP uzerinden bagli kullanicinin sayfasinin
+ *  kisa sureligine acilmamasidir. Cagiran taraf bunu ONCEDEN soylemeli. */
+export async function triggerWifiScan(token: string, deep = false): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/network/wifi/scan`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ deep })
   });
   if (!response.ok) throw await buildApiError(response, "WiFi taraması başlatılamadı.");
 }
@@ -2394,6 +2401,44 @@ export async function forgetWifi(token: string): Promise<void> {
     headers: authHeaders(token)
   });
   if (!response.ok) throw await buildApiError(response, "WiFi ağı unutulamadı.");
+}
+
+/** WiFi kartini ac/kapa (fiziksel onkosul).
+ *
+ *  Kapatma yalnizca IP almis bagli bir kablolu arayuz varken kabul edilir;
+ *  aksi halde 409 doner ve `detail` metni dogrudan gosterilebilir. Donanim
+ *  anahtari kapaliysa acma da 409 olur — yazilimla acilamaz. */
+export async function setWifiRadio(token: string, enabled: boolean): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/network/wifi/radio`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled })
+  });
+  if (!response.ok) throw await buildApiError(response, "WiFi kartı açılıp kapatılamadı.");
+}
+
+/** WiFi kartinin gorevini sec (tek radyo — ikisi ayni anda olmaz).
+ *
+ *  "ap"     -> cihaz kendi agini yayinlar; ulasim garantisi, INTERNET YOK.
+ *  "client" -> KAYITLI aga katilir, AP kapanir. Yeni bir ag secmek ayri akis:
+ *              `connectWifi` (o da gorevi client yapar). */
+export async function setWifiMode(token: string, mode: "ap" | "client"): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/network/wifi/mode`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ mode })
+  });
+  if (!response.ok) throw await buildApiError(response, "WiFi kartının görevi değiştirilemedi.");
+}
+
+/** Internet durumunu SIMDI sina. Sonuc birkac saniye icinde
+ *  `GET /network/status` -> `internet` alaninda gorunur. */
+export async function checkInternet(token: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/network/internet/check`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "İnternet durumu sınanamadı.");
 }
 
 export async function fetchNetworkStatus(token: string): Promise<NetworkStatus> {

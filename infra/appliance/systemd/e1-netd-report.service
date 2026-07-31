@@ -9,7 +9,14 @@ Wants=NetworkManager.service
 Type=oneshot
 ExecStart=/opt/enerjione-grid/infra/appliance/e1-netd.py report
 SuccessExitStatus=0 1
-TimeoutStartSec=60
+# Rapor turu okuma agirlikli, ama gerektiginde AP'yi acar veya kayitli aga
+# yeniden baglanmayi dener (nmcli connection up 25-45 sn surebilir).
+# Bu yuzden 60 sn dar kaliyordu.
+TimeoutStartSec=120
+# nmcli durum metinlerini yerellestirir; ajan da kendi icinde LC_ALL=C
+# zorluyor ama unit tarafinda da sabitlemek ucuz bir emniyet.
+Environment=LC_ALL=C
+Environment=LANG=C
 
 [Install]
 WantedBy=multi-user.target

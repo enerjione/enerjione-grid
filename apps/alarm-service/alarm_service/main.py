@@ -287,9 +287,39 @@ def _rules_refresh_loop(stop_event: Event) -> None:
         stop_event.wait(timeout=max(5, RULES_REFRESH_SEC))
 
 
+# Alarm degerlendirmesini ENGELLEYEN kaliteler.
+#
+# Backend'deki `tag_engine_service._OFFLINE_QUALITIES` ile AYNI olmali —
+# iki servis ayri paketler oldugu icin kod paylasilamiyor, bu yuzden burada
+# tekrarlaniyor. Birini degistiren digerini de degistirmeli.
+#
+# `comm_lost` ve `restart` BURADA OLMAK ZORUNDA: gateway'in haberlesmesi
+# kopan cihaz icin bastigi kalite tam olarak `comm_lost`. Eski kume bu ikisini
+# icermiyordu ve fonksiyon zaten HIC CAGRILMIYORDU.
+_ALARM_BLOCKING_QUALITIES = frozenset(
+    {"bad", "offline", "invalid", "comm_lost", "restart", "forced"}
+)
+
+
 def _quality_is_bad(payload: dict) -> bool:
-    quality = str(payload.get("quality", "good")).lower()
-    return quality in {"bad", "offline", "invalid"}
+    """Bu okuma alarm mantiginda KULLANILMAMALI mi?
+
+    True ise okuma ne yeni alarm acar ne de acik alarmi kapatir; alarm
+    durumu DONAR.
+
+    NEDEN KAPATMAMAK ASIL MESELE: haberlesmesi kopan cihaz icin gateway
+    `comm_lost` kalitesiyle 0.0 basar. Kalite kapisi olmadan bu 0.0 "esik
+    artik saglanmiyor" diye yorumlanip ACIK ARIZA ALARMINI KAPATIR ve
+    harita yesile doner — yani baglanti koptugu anda sistem "ariza gecti"
+    der. SCADA doktrini bunun tersidir: veri kaybinda SON BILINEN DURUM
+    korunur.
+
+    KARA LISTE (beyaz liste DEGIL): taninmayan bir kalite token'i
+    degerlendirmeyi ENGELLEMEZ. Beyaz liste olsaydi gateway ileride yeni bir
+    kalite adi yayinladiginda tum alarm motoru sessizce durabilirdi.
+    """
+    quality = str(payload.get("quality", "good")).strip().lower()
+    return quality in _ALARM_BLOCKING_QUALITIES
 
 
 _SOURCE_LABEL_TR = {
@@ -449,6 +479,12 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
     device_code = payload.get("device_code")
     value_raw = payload.get("value")
     if signal_key is None or value_raw is None:
+        return
+    # KALITE KAPISI — bu satir olmadan sistem, cihazla baglanti koptugu anda
+    # "ariza gecti" diyordu. Erken donuyoruz: ne kural degerlendirilir, ne
+    # canli deger/ornek onbellegi guncellenir, ne de clear cagrisi atilir.
+    # (Fonksiyon zaten tanimliydi ama HIC CAGRILMIYORDU — olu kod.)
+    if _quality_is_bad(payload):
         return
     if not _CACHE.is_alarmable(str(signal_key)):
         return
