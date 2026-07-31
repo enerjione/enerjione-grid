@@ -182,6 +182,15 @@ done
 KIOSK_HOME="$(getent passwd "$KIOSK_USER" | cut -d: -f6)"
 KIOSK_HOME="${KIOSK_HOME:-/home/${KIOSK_USER}}"
 
+# --- Operator hesabinin profil resmi: EnerjiOne logosu ----------------------
+# Giris ekraninda varsayilan gri avatar yerine urun logosu gorunsun.
+# Uygulamayi TEKRARLAMIYORUZ: ayni is sunucudaki diger hesaplar icin de
+# gerekiyor, o yuzden ortak script'te duruyor (AccountsService + ~/.face,
+# ekran yoneticileri farkli yerlere bakiyor).
+if [[ -f "${SCRIPT_DIR}/setup-user-avatars.sh" ]]; then
+  bash "${SCRIPT_DIR}/setup-user-avatars.sh" "$KIOSK_USER" ||     e1_warn "Profil resmi ayarlanamadi (kurulum etkilenmez)."
+fi
+
 # Grafik oturum gecerli bir kabuk ister; eski kurulumlarda nologin kalmis
 # olabilir. Parola kilitli oldugu icin bu bir zafiyet degil.
 usermod --shell /bin/bash "$KIOSK_USER" >/dev/null 2>&1 || true

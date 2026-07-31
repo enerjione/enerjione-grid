@@ -698,6 +698,17 @@ if [[ -f "${INSTALL_DIR}/infra/appliance/setup-kiosk.sh" ]]; then
     || e1_warn "Kiosk modu tamamlanamadi; kurulum devam ediyor."
 fi
 
+# ---- Hesaplarin profil resmi (giris ekrani avatari) ----------------------
+# Cihazdaki insan hesaplarinin avatari EnerjiOne logosu yapilir; makine
+# acildiginda varsayilan gri siluet yerine urun logosu gorunur.
+# KIOSK'TAN SONRA calisir: operator hesabi o adimda olusuyor, once
+# calistirilsaydi yeni hesabi kacirirdi. Masaustu olmayan kurulumlarda
+# zararsiz (avatar yazilir, gosteren olmaz).
+if [[ -f "${INSTALL_DIR}/infra/appliance/setup-user-avatars.sh" ]]; then
+  bash "${INSTALL_DIR}/infra/appliance/setup-user-avatars.sh" \
+    || e1_warn "Profil resimleri ayarlanamadi; kurulum devam ediyor."
+fi
+
 # ---- Uzaktan bakim VPN'i (Tailscale) -------------------------------------
 # Anahtar tanimliysa cihaz kurulumda OTOMATIK tailnet'e katilir; boylece
 # saha PC'sine port acmadan uzaktan bakim yapilabilir. Anahtar yoksa script

@@ -389,6 +389,14 @@ if [[ -f infra/appliance/setup-kiosk.sh ]]; then
     || e1_warn "Kiosk modu guncellenemedi; guncelleme devam ediyor."
 fi
 
+# ---- Hesaplarin profil resmi --------------------------------------------
+# Kurulumdan SONRA acilmis hesaplar (musteri IT'sinin ekledigi bir kullanici)
+# da urun logosunu alsin. Idempotent ve ucuz; her guncellemede tazelenir.
+if [[ -f infra/appliance/setup-user-avatars.sh ]]; then
+  bash infra/appliance/setup-user-avatars.sh \
+    || e1_warn "Profil resimleri guncellenemedi; guncelleme devam ediyor."
+fi
+
 # ---- Gateway kurulum ajani (e1-gwd) --------------------------------------
 # APPLIANCE_REFRESH'ten BAGIMSIZ: bu ozellik VPS kurulumlarinda da kullanilir.
 # Ayrica bu ajan sonradan eklendigi icin, sahadaki mevcut cihazlar yalnizca

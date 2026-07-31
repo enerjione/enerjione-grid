@@ -12,6 +12,11 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+### Eklendi
+- Cihazdaki hesapların profil resmi EnerjiOne logosu yapılıyor; giriş ekranında
+  varsayılan gri siluet yerine ürün logosu görünüyor. Masaüstü olmayan
+  kurulumlarda zararsız (avatar yazılır, gösteren olmaz).
+
 ---
 
 ## [2.26.0] — 2026-07-31
