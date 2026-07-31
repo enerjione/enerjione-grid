@@ -461,6 +461,62 @@ açmış olmalı. Bağlantı tailnet adıyla yapılır:
 ssh root@e1-grid-dicle-edas-sirnak-cizre
 ```
 
+> ### ⚠ Bağlanacak bilgisayar `tag:e1-appliance` etiketi TAŞIMAMALI
+>
+> Saha vakası: bakım bilgisayarına Tailscale kurulurken saha cihazının OAuth
+> anahtarı kullanılmış, laptop da `tag:e1-appliance` etiketiyle katılmıştı.
+> Sonuç: SSH her denemede `tailnet policy does not permit you to SSH to this
+> node` ile reddedildi.
+>
+> Sebebi şu: **etiketli düğümün kullanıcı kimliği yoktur.** Trafiği "fikret"
+> olarak değil "tag:e1-appliance" olarak değerlendirilir, dolayısıyla
+> `src: ["autogroup:member"]` / `autogroup:admin` kurallarıyla **eşleşmez**.
+> Üstüne, bu politikada `src: tag:e1-appliance` olan kural bilerek yoktur
+> (saha cihazı yanal hareket edemesin diye) — yani laptop kendi kurduğunuz
+> kilidin içine düşer.
+>
+> Konsolda **Machines** listesinde bağlanacak bilgisayarın altında
+> `tag:e1-appliance` yazıyorsa kaldırın: **⋯ → Edit ACL tags**, ya da o
+> bilgisayarda `tailscale up --advertise-tags=tag:e1-bakim --force-reauth`.
+
+### Yalnızca belirli bir bilgisayardan bağlanılsın
+
+Tailscale SSH kurallarında `src` olarak IP veya makine adı yazılamaz —
+kurallar kimlik temellidir. Tek bir makineyi kısıtlamanın yolu ona **kendi
+etiketini** vermektir (etiket cihaza özeldir):
+
+```jsonc
+{
+  "tagOwners": {
+    "tag:e1-appliance": ["autogroup:admin"],
+    "tag:e1-bakim":     ["autogroup:admin"]   // bakim bilgisayari
+  },
+
+  "acls": [
+    { "action": "accept", "src": ["tag:e1-bakim"], "dst": ["tag:e1-appliance:*"] }
+  ],
+
+  "ssh": [
+    {
+      "action": "accept",
+      "src":    ["tag:e1-bakim"],
+      "dst":    ["tag:e1-appliance"],
+      "users":  ["root", "autogroup:nonroot"]
+    }
+  ]
+}
+```
+
+Sıra önemli: **önce politikayı kaydedin** (`tag:e1-bakim` tanımlı olmadan
+cihaza atanamaz), sonra bilgisayara etiketi verin. `action` **`accept`**
+olmalı; etiketli kaynağın kullanıcı kimliği olmadığı için `check` (tarayıcıdan
+yeniden doğrulama) çalışmaz.
+
+Alternatif — bilgisayarı etiketlemek istemiyorsanız normal kullanıcı cihazı
+olarak katın (`tailscale logout` → `tailscale login`) ve `src` olarak kendi
+e-postanızı yazın. O zaman kısıt "bu bilgisayar" değil, "bu kişinin tüm
+cihazları" olur.
+
 **4) Kullanıcı adını açıkça yaz.** Tailscale SSH **şifre sormaz** — kimlik
 tailnet üyeliğinden gelir, şifre isteminin gelmemesi arıza değildir. Ama
 kullanıcı adını yazmazsan SSH istemcisi *kendi* oturum adını gönderir
