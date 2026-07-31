@@ -431,14 +431,67 @@ def get_bus() -> JetStreamBus | None:
     return _bus
 
 
-def start_bus_if_enabled() -> None:
-    """Backend startup'inda cagrilir; JetStream bus'i baslat, stream'leri ensure et.
+# Bus kurulamazsa yeniden deneme araligi.
+#
+# NEDEN VAR: eskiden TEK bir deneme yapiliyordu ve basarisiz olursa `_bus`
+# None'da KILITLENIYORDU. Hicbir kod yolu onu yeniden baslatmiyordu.
+#
+# Yasanan senaryo: NATS container'i cokup yeniden baslarken backend de yeniden
+# baslar (OOM kill, `update.sh backend`, watchdog). `depends_on:
+# service_healthy` YALNIZCA `compose up` siralamasinda gecerlidir, restart'ta
+# UYGULANMAZ. Backend NATS hazir olmadan kalkar, tek deneme basarisiz olur ve
+# NATS saniyeler icinde saglikli hale gelse bile telemetri BIR DAHA HIC
+# yayinlanmaz: outbox_flush_worker her turda RuntimeError alir, cihazlar
+# arayuzde "Kesik" gorunur, `outbox_events` published=False satirlarla
+# sinirsiz buyur (purge_published_outbox bunlara dokunmaz).
+#
+# /health 503 doner ama compose'da autoheal yok ve `restart: unless-stopped`
+# healthcheck'e TEPKI VERMEZ — basinda kimse olmayan bir saha cihazi aylarca
+# veri kaydetmeden ayakta kalabilir.
+_RETRY_INTERVAL_SEC = 15.0
+_supervisor_thread: threading.Thread | None = None
+_supervisor_stop = threading.Event()
 
-    Bu fonksiyon artik HER ZAMAN bus'i baslatmaya calisir — telemetri JetStream'e
-    tasindi, opsiyonel degil. NATS server'a baglanilamiyorsa warning log + None
-    birakir; baglanti gelince ileride baska bir startup'ta veya manuel tetikle
-    yeniden denenebilir (su an basit: bir kez deneyip biraktiriyor).
+
+def _supervisor_loop() -> None:
+    """Bus yoksa periyodik olarak yeniden kurmayi dener.
+
+    Sessiz calisir: her basarisiz denemede log basmak, NATS uzun sure yokken
+    disk dolduran bir gurultu uretirdi. Basarili kurulum ZATEN loglanir.
     """
+    while not _supervisor_stop.wait(_RETRY_INTERVAL_SEC):
+        if _bus is not None:
+            continue
+        try:
+            _try_start_once(quiet=True)
+        except Exception:  # noqa: BLE001
+            logger.debug("jetstream_retry_failed", exc_info=True)
+
+
+def _ensure_supervisor() -> None:
+    global _supervisor_thread
+    if _supervisor_thread is not None and _supervisor_thread.is_alive():
+        return
+    _supervisor_stop.clear()
+    _supervisor_thread = threading.Thread(
+        target=_supervisor_loop, name="jetstream-supervisor", daemon=True
+    )
+    _supervisor_thread.start()
+
+
+def start_bus_if_enabled() -> None:
+    """JetStream bus'i baslatir ve KURULANA KADAR yeniden dener.
+
+    Telemetri JetStream'e tasindi; bu opsiyonel bir yol degil. Ilk deneme
+    basarisiz olursa arka planda bir gozetmen her `_RETRY_INTERVAL_SEC`
+    saniyede yeniden dener — NATS geri geldigi anda akis kendiliginden
+    devam eder, elle mudahale gerekmez.
+    """
+    _try_start_once(quiet=False)
+    _ensure_supervisor()
+
+
+def _try_start_once(*, quiet: bool) -> None:
     from app.core.config import settings  # local import — module cycles'i kir
 
     global _bus
@@ -473,17 +526,22 @@ def start_bus_if_enabled() -> None:
             )
         else:
             _bus = None
-            logger.error(
-                "jetstream_bus_unavailable url=%s — telemetri akisi DURABILIR! "
-                "NATS server'i kontrol edin. Backend ayagi kalmaya devam ediyor "
-                "ama gelen telemetri publish'leri basarisiz olacak.",
-                settings.nats_url,
-            )
+            if not quiet:
+                logger.error(
+                    "jetstream_bus_unavailable url=%s — telemetri akisi DURABILIR! "
+                    "NATS server'i kontrol edin. Backend ayagi kalmaya devam ediyor; "
+                    "baglanti kurulana kadar %ds araliklarla yeniden denenecek.",
+                    settings.nats_url,
+                    int(_RETRY_INTERVAL_SEC),
+                )
 
 
 def stop_bus() -> None:
     """Backend shutdown'inda cagrilir."""
     global _bus
+    # Gozetmeni ONCE durdur: aksi halde kapanis sirasinda bus'i yeniden
+    # kurmaya calisip asili baglanti birakabilir.
+    _supervisor_stop.set()
     with _lock:
         if _bus is None:
             return
