@@ -46,6 +46,10 @@
 #                           kalir; yalnizca tailnet IP'sine dogrudan baglanti.
 #   E1_TAILSCALE_ACCEPT_DNS 1 = tailnet DNS'ini kabul et (default 0)
 #                           0 onerilir: saha cihazinin yerel DNS'i bozulmasin.
+#   E1_TAILSCALE_EPHEMERAL  1 = dugum ephemeral katilsin (default 0). Ephemeral
+#                           dugum cevrimdisi kalinca tailnet'ten SILINIR; saha
+#                           cihazi icin ISTENMEZ. Yalnizca gecici/test
+#                           kurulumlari icin acin.
 #
 # Idempotent: cihaz zaten tailnet'e bagliysa tekrar login DENENMEZ.
 # ===========================================================================
@@ -70,6 +74,29 @@ ENABLE_SSH="${E1_TAILSCALE_SSH:-1}"
 ACCEPT_DNS="${E1_TAILSCALE_ACCEPT_DNS:-0}"
 # Tailnet'te gorunecek adin oneki. Cihaza ozel kisim otomatik eklenir.
 TS_PREFIX="${E1_TAILSCALE_HOSTNAME_PREFIX:-e1-grid}"
+
+# --- Anahtar secenekleri: KALICI dugum ------------------------------------
+# SAHA VAKASI — cihaz konsolda "Ephemeral" rozetiyle gorunuyordu.
+# Ephemeral dugum, bir sure CEVRIMDISI kalinca tailnet'ten OTOMATIK SILINIR.
+# Saha cihazi icin tam ters davranis: elektrik kesilir, cihaz birkac saat
+# kapali kalir, geri acildiginda tailnet'te YOKTUR. Uzaktan bakim kalici
+# olarak kopar; duzeltmek icin yerinde yeniden kurulum gerekir.
+#
+# SEBEP: OAuth client secret'i (tskey-client-...) dogrudan --authkey olarak
+# verildiginde Tailscale'in URETTIGI anahtar VARSAYILAN OLARAK ephemeral.
+# Biz hic istemedik; varsayilan boyle geliyor. OAuth secret'ina sorgu
+# parametresi eklenebiliyor, uretilen anahtarin ozellikleri boyle secilir.
+#
+# Bu YALNIZCA OAuth secret'i icin gecerli: tskey-auth-... anahtarlarinin
+# ephemeral/preauthorized ayari konsolda anahtar uretilirken belirlenir,
+# sonuna '?...' eklenirse anahtarin KENDISI bozulur ve giris reddedilir.
+_authkey_kalici() {
+  local k="$1"
+  [[ "$k" == tskey-client-* ]]  || { printf '%s' "$k"; return; }  # duz auth key
+  [[ "$k" != *'?'* ]]           || { printf '%s' "$k"; return; }  # elle ayarlanmis
+  [[ "${E1_TAILSCALE_EPHEMERAL:-0}" != "1" ]] || { printf '%s' "$k"; return; }
+  printf '%s?ephemeral=false&preauthorized=true' "$k"
+}
 
 # --- Cihaza OZEL tailnet adi -----------------------------------------------
 # SORUN: sistem hostname'i her cihazda ayni (`e1-grid`) — cunku `e1-grid.local`
@@ -314,7 +341,8 @@ fi
 
 # --- 3) Tailnet'e katil -----------------------------------------------------
 UP_ARGS=(
-  --authkey="${AUTHKEY}"
+  # ?ephemeral=false — dugum cevrimdisi kalinca tailnet'ten silinmesin.
+  --authkey="$(_authkey_kalici "${AUTHKEY}")"
   --hostname="${TS_HOSTNAME}"
   # Saha cihazi kalici olmali: yeniden baslatinca ayni dugum olarak donsun.
   --reset

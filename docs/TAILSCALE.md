@@ -461,6 +461,39 @@ açmış olmalı. Bağlantı tailnet adıyla yapılır:
 ssh root@e1-grid-dicle-edas-sirnak-cizre
 ```
 
+**4) Kullanıcı adını açıkça yaz.** Tailscale SSH **şifre sormaz** — kimlik
+tailnet üyeliğinden gelir, şifre isteminin gelmemesi arıza değildir. Ama
+kullanıcı adını yazmazsan SSH istemcisi *kendi* oturum adını gönderir
+(Windows'ta `ad.soyad` gibi) ve cihazda öyle bir hesap yoktur:
+
+```bash
+ssh enerjione@<tailnet-adi>     # yönetim hesabı
+ssh root@<tailnet-adi>          # ACL'de users icinde "root" varsa
+```
+
+Kiosk operatör hesabı (müşteri adından türer, örn. `tpao`) SSH için değildir:
+şifresi kilitli ve `sudo` yetkisi yoktur.
+
+### Konsolda cihazın yanında `Ephemeral` yazıyorsa
+
+Ephemeral düğüm, bir süre **çevrimdışı kalınca tailnet'ten otomatik silinir**.
+Saha cihazı için yanlıştır: elektrik kesilir, cihaz kapalı kalır, geri
+açıldığında tailnet'te **yoktur** — uzaktan bakım kopar.
+
+Sebebi, OAuth client secret'ı ile üretilen anahtarların varsayılan olarak
+ephemeral olmasıydı. `setup-tailscale.sh` artık anahtara `?ephemeral=false`
+ekliyor, **yeni kurulumlar kalıcı katılır**. Hâlihazırda ephemeral katılmış
+bir cihaz için:
+
+```bash
+sudo tailscale up --authkey='tskey-client-<secret>?ephemeral=false&preauthorized=true' \
+     --advertise-tags=tag:e1-appliance --force-reauth
+```
+
+Rozet bundan sonra da duruyorsa kesin çözüm: cihazı konsoldan **sil**, sonra
+cihazda `sudo bash infra/appliance/setup-tailscale.sh` çalıştır — aynı adla,
+kalıcı olarak yeniden katılır (tailnet IP'si değişir).
+
 ---
 
 ## 4. Ayarlar
@@ -473,6 +506,7 @@ ssh root@e1-grid-dicle-edas-sirnak-cizre
 | `E1_TAILSCALE_HOSTNAME_PREFIX` | `e1-grid` | Otomatik adın öneki (`<önek>-<saha>`) |
 | `E1_TAILSCALE_SSH` | `1` | Tailscale SSH (0 = kapalı) |
 | `E1_TAILSCALE_ACCEPT_DNS` | `0` | **0 önerilir** — 1 olursa tailnet DNS'i cihazın yerel DNS'ini (AP dnsmasq, `e1-grid.local`) ezer |
+| `E1_TAILSCALE_EPHEMERAL` | `0` | 1 = düğüm çevrimdışı kalınca tailnet'ten silinsin. **Saha cihazında açmayın**; sadece geçici/test kurulumu için |
 
 Saha kimliği (kurulumda sorulur, `/etc/enerjione-grid/site.env`):
 
