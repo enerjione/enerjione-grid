@@ -72,6 +72,30 @@ jobs:
         working-directory: apps/backend-api
         run: pytest -q
 
+  alarm-service:
+    # Bu servisin CI'da HIC test kapsami yoktu; yalnizca backend-api
+    # kosuluyordu. Denetim raporundaki A5 (ornek tamponu 512M container
+    # limitini asip birkac saatte OOM-kill'e goturuyordu) tam da bu yuzden
+    # kimsenin fark etmedigi bir davranisti. Kural motoru sahada alarm
+    # uretmekten sorumlu; testsiz birakilacak son yer burasi.
+    name: Alarm service — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/alarm-service/requirements.txt
+      - name: Bagimliliklar
+        working-directory: apps/alarm-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: pytest
+        working-directory: apps/alarm-service
+        run: pytest -q
+
   migrations:
     name: Alembic — tek head kontrolu
     runs-on: ubuntu-latest

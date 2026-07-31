@@ -176,12 +176,31 @@ class _SamplesCache:
     # ~8 GB. TTL ile silinen cihazlar disari atilir.
     _CLEANUP_INTERVAL_SEC = 600  # 10 dakikada bir
 
+    # Kural yoksa/pencere okunamazsa kullanilacak taban saklama suresi.
+    # `put` zaten yalnizca agg kurali olan sinyaller icin cagrildigi icin bu
+    # deger pratikte nadiren devreye girer.
+    MIN_RETAIN_SEC = 300
+
     def __init__(self) -> None:
         self._lock = Lock()
         # (signal_key, device_code) -> deque[(monotonic_ts, value)]
         self._buf: dict[tuple[str, str], Deque[tuple[float, float]]] = {}
         # Son cleanup zamani (periyodik prune icin)
         self._last_cleanup: float = 0.0
+
+    def _retain_sec(self) -> float:
+        """Kurallarin ihtiyac duydugu saklama suresi (+%20 emniyet payi).
+
+        Kural onbellegi henuz hazir degilse taban degere duser; boylece
+        acilista gelen ilk ornekler kaybolmaz.
+        """
+        try:
+            pencere = _CACHE.max_agg_window_sec()
+        except Exception:  # noqa: BLE001
+            pencere = 0
+        if pencere <= 0:
+            return float(self.MIN_RETAIN_SEC)
+        return float(min(self.MAX_RETAIN_SEC, max(self.MIN_RETAIN_SEC, pencere * 1.2)))
 
     def put(self, signal_key: str, device_code: str, value: float, now: float) -> None:
         with self._lock:
@@ -191,9 +210,13 @@ class _SamplesCache:
                 dq = deque(maxlen=self.MAX_PER_KEY)
                 self._buf[key] = dq
             dq.append((now, value))
-            # Geriye dogru cok eski ornekleri sil (24 saat oncesi). deque
-            # FIFO oldugu icin sol bastan pop yeterli.
-            cutoff = now - self.MAX_RETAIN_SEC
+            # Geriye dogru KURALLARIN BAKMADIGI ornekleri sil.
+            #
+            # Sabit 24 saat tutmak, hicbir kuralin okumayacagi veriyi saklamak
+            # demekti. Pencere artik en uzun `agg_window_sec`'e gore belirlenir
+            # (uzerine bir emniyet payi). Kural yoksa `retain_sec` taban degere
+            # duser ve zaten `put` hic cagrilmaz.
+            cutoff = now - self._retain_sec()
             while dq and dq[0][0] < cutoff:
                 dq.popleft()
             # Periyodik global cleanup: silinmis cihaz/sinyal'in key'lerini
@@ -497,7 +520,23 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
     # Live-value + samples cache'i her telemetri ile guncelle; composite
     # kurallar (Faz 1 compare + Faz 2 agg) bu cache'lerden okur.
     _LIVE.put(str(signal_key), str(device_code or ""), value, now)
-    _SAMPLES.put(str(signal_key), str(device_code or ""), value, now)
+    # Gecmis ornekler YALNIZCA ihtiyaci olan sinyaller icin biriktirilir.
+    #
+    # YASANAN SORUN: her telemetri okumasi, composite/agg kurali olsun olmasin,
+    # (sinyal, cihaz) basina 5000 orneklik bir deque'e yaziliyordu. Ornekler
+    # ise yalnizca `kind == "agg"` terimlerinde okunuyor — katalogdaki 175
+    # sinyalin cogunun boyle bir kurali yok.
+    #
+    # 200 cihaz x 20 aktif sinyal = 4000 anahtar; her biri ~14 saatte
+    # maxlen=5000'e doyar -> ~20M tuple, kabaca 1.5-2 GB. Container tavani
+    # 512M oldugu icin alarm-service birkac saatte OOM-kill yiyordu.
+    # `restart: unless-stopped` onu geri kaldiriyor ama `_STATE` (aktif alarm
+    # durumu) BELLEKTE oldugu icin sifirlaniyor: acik alarmlar yeniden "yeni
+    # alarm" olarak POST ediliyor — mukerrer bildirim seli, birkac saatte bir.
+    # TTL temizligi bunu cozmuyordu; o yalnizca 24 saattir veri gelmeyen
+    # anahtarlari atiyor, aktif cihazlarda hicbir sey serbest birakmiyor.
+    if _CACHE.needs_samples(str(signal_key)):
+        _SAMPLES.put(str(signal_key), str(device_code or ""), value, now)
 
     for rule in _CACHE.rules_for(str(signal_key), str(device_code) if device_code else None):
         # Composite kural ise anchor cihazi tetikleyen telemetri'nin

@@ -96,6 +96,10 @@ class AlarmRuleCache:
         self._lock = Lock()
         self._rules_by_signal: dict[str, list[AlarmRule]] = {}
         self._alarmable_keys: set[str] = set()
+        # Gecmis ornek GEREKTIREN sinyaller (yalnizca composite `agg` terimleri)
+        # ve kurallarin ihtiyac duydugu en uzun pencere. Bkz. needs_samples.
+        self._agg_keys: set[str] = set()
+        self._max_agg_window_sec: int = 0
         self._ready = False
 
     def refresh(self) -> bool:
@@ -192,11 +196,52 @@ class AlarmRuleCache:
                 if ck == rule.signal_key:
                     continue
                 by_signal.setdefault(ck, []).append(rule)
+        # Ornek tamponu GEREKTIREN sinyaller + en uzun pencere.
+        #
+        # Ornekler yalnizca `kind == "agg"` terimleri icin okunuyor
+        # (evaluate_composite: agg disindaki terimler anlik degeri kullanir).
+        # Buna ragmen HER telemetri okumasi tampona yaziliyordu; katalogdaki
+        # 175 sinyalin cogunun hicbir agg kurali yok.
+        agg_keys: set[str] = set()
+        max_window = 0
+        for kurallar in by_signal.values():
+            for rule in kurallar:
+                expr = getattr(rule, "expression", None)
+                if expr is None:
+                    continue
+                for term in expr.terms:
+                    if term.kind != "agg":
+                        continue
+                    agg_keys.add(term.signal_key)
+                    if term.agg_window_sec > max_window:
+                        max_window = term.agg_window_sec
+
         with self._lock:
             self._rules_by_signal = by_signal
             self._alarmable_keys = alarmable
+            self._agg_keys = agg_keys
+            self._max_agg_window_sec = max_window
             self._ready = True
         return True
+
+    def needs_samples(self, signal_key: str) -> bool:
+        """Bu sinyal icin gecmis ornek tutmak GEREKLI mi?
+
+        Yalnizca en az bir composite kuralin `agg` terimi bu sinyale referans
+        veriyorsa True. Aksi halde ornekler hicbir zaman okunmaz ve tutmak
+        SAF ISRAFTIR — hem de bellek olarak olcusuz bir israf.
+        """
+        with self._lock:
+            return signal_key in self._agg_keys
+
+    def max_agg_window_sec(self) -> int:
+        """Kurallarin ihtiyac duydugu EN UZUN pencere (saniye).
+
+        Tampon derinligi buna gore boyutlanir; sabit 24 saat tutmak
+        kurallarin hicbirinin bakmadigi veriyi saklamaktir.
+        """
+        with self._lock:
+            return self._max_agg_window_sec
 
     def rules_for(self, signal_key: str, device_code: str | None) -> list[AlarmRule]:
         with self._lock:
