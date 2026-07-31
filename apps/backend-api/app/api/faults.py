@@ -43,22 +43,91 @@ from app.services.scope_service import get_visible_line_ids
 router = APIRouter(prefix="/faults", tags=["faults"])
 
 
-def _serialize_fault(db: Session, f: FaultEvent) -> FaultEventRead:
-    line = db.get(Line, f.line_id)
-    region = db.get(Region, f.region_id)
-    last_red = db.get(Device, f.last_red_device_id) if f.last_red_device_id else None
-    first_green = db.get(Device, f.first_green_device_id) if f.first_green_device_id else None
-    assigned_user = (
-        db.scalar(select(User).where(User.username == f.assigned_to_username))
-        if f.assigned_to_username
-        else None
+class _FaultRefs:
+    """Bir ariza listesini serialize etmek icin gereken TUM yan veriler.
+
+    NEDEN: `_serialize_fault` her satir icin 6 ayri sorgu atiyordu (line,
+    region, iki device, atanan kullanici, yorum sayisi). Hat Arizalari sayfasi
+    `status=all` ile 5 SANIYEDE BIR polling yapiyor; 200 gecmis arizada bu
+    5 saniyede 1.200 sorgu demekti — kullanici basina. DB havuzu 30+20.
+
+    Simdi liste basina SABIT 5 sorgu: ilgili id'ler toplanip tek `IN` ile
+    cekiliyor, yorum sayilari tek GROUP BY ile geliyor.
+    """
+
+    __slots__ = ("lines", "regions", "devices", "users", "comment_counts")
+
+    def __init__(self) -> None:
+        self.lines: dict[int, Line] = {}
+        self.regions: dict[int, Region] = {}
+        self.devices: dict[int, Device] = {}
+        self.users: dict[str, User] = {}
+        self.comment_counts: dict[int, int] = {}
+
+
+def _load_fault_refs(db: Session, faults: list[FaultEvent]) -> _FaultRefs:
+    """Ariza listesi icin yan verileri TOPLU cek (N+1 yerine sabit sorgu)."""
+    refs = _FaultRefs()
+    if not faults:
+        return refs
+
+    line_ids = {f.line_id for f in faults if f.line_id is not None}
+    region_ids = {f.region_id for f in faults if f.region_id is not None}
+    device_ids = {
+        did
+        for f in faults
+        for did in (f.last_red_device_id, f.first_green_device_id)
+        if did is not None
+    }
+    usernames = {f.assigned_to_username for f in faults if f.assigned_to_username}
+    fault_ids = [f.id for f in faults]
+
+    if line_ids:
+        refs.lines = {
+            row.id: row for row in db.scalars(select(Line).where(Line.id.in_(line_ids))).all()
+        }
+    if region_ids:
+        refs.regions = {
+            row.id: row for row in db.scalars(select(Region).where(Region.id.in_(region_ids))).all()
+        }
+    if device_ids:
+        refs.devices = {
+            row.id: row for row in db.scalars(select(Device).where(Device.id.in_(device_ids))).all()
+        }
+    if usernames:
+        refs.users = {
+            row.username: row
+            for row in db.scalars(select(User).where(User.username.in_(usernames))).all()
+        }
+    # Yorum sayilari: satir basina COUNT yerine tek GROUP BY.
+    if fault_ids:
+        refs.comment_counts = {
+            fid: int(cnt)
+            for fid, cnt in db.execute(
+                select(FaultComment.fault_id, func.count())
+                .where(FaultComment.fault_id.in_(fault_ids))
+                .group_by(FaultComment.fault_id)
+            )
+        }
+    return refs
+
+
+def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None) -> FaultEventRead:
+    """Tek ariza -> FaultEventRead.
+
+    `refs` verilirse (liste yolu) hicbir ek sorgu atilmaz. Verilmezse (tek
+    kayit yolu) yan veriler o kayit icin tek seferlik cekilir.
+    """
+    if refs is None:
+        refs = _load_fault_refs(db, [f])
+    line = refs.lines.get(f.line_id) if f.line_id is not None else None
+    region = refs.regions.get(f.region_id) if f.region_id is not None else None
+    last_red = refs.devices.get(f.last_red_device_id) if f.last_red_device_id else None
+    first_green = (
+        refs.devices.get(f.first_green_device_id) if f.first_green_device_id else None
     )
-    comment_count = (
-        db.scalar(
-            select(func.count()).select_from(FaultComment).where(FaultComment.fault_id == f.id)
-        )
-        or 0
-    )
+    assigned_user = refs.users.get(f.assigned_to_username) if f.assigned_to_username else None
+    comment_count = refs.comment_counts.get(f.id, 0)
     return FaultEventRead(
         id=f.id,
         line_id=f.line_id,
@@ -136,7 +205,9 @@ def list_faults(
         stmt = stmt.where(FaultEvent.line_id.in_(line_scope))
 
     rows = list(db.scalars(stmt).all())
-    return [_serialize_fault(db, r) for r in rows]
+    # Yan veriler TOPLU cekilir: liste basina sabit 5 sorgu (satir basina 6 degil).
+    refs = _load_fault_refs(db, rows)
+    return [_serialize_fault(db, r, refs) for r in rows]
 
 
 @router.get("/stats")
@@ -153,67 +224,69 @@ def fault_stats(
       last_30d_count: son 30 gunde acilan fault sayisi.
       resolved_today_count: bugun (yerel gun degil, UTC gun basi) normale
         donen/kapatilan fault sayisi — "Bugun Cozulen" KPI karti icin.
-    """
-    stmt = select(FaultEvent)
-    line_scope = get_visible_line_ids(db, current_user)
-    if line_scope is not None:
-        if not line_scope:
-            return {
-                "total": 0,
-                "open": 0,
-                "assigned": 0,
-                "in_progress": 0,
-                "resolved": 0,
-                "closed": 0,
-                "avg_resolution_seconds": None,
-                "last_30d_count": 0,
-                "resolved_today_count": 0,
-            }
-        stmt = stmt.where(FaultEvent.line_id.in_(line_scope))
 
-    rows = list(db.scalars(stmt).all())
-    counts = {
-        "total": len(rows),
+    OLCEK NOTU: onceden TUM FaultEvent satirlari ORM ile cekilip Python'da
+    sayiliyordu. Bu uc 30 saniyede bir pollenıyor ve ariza tablosu kalicidir
+    (retention yok) — birkac bin kayitta her poll tum tabloyu hidrate ediyordu.
+    Simdi iki SQL aggregate sorgusu: satir sayisindan bagimsiz sabit maliyet.
+    """
+    empty = {
+        "total": 0,
         "open": 0,
         "assigned": 0,
         "in_progress": 0,
         "resolved": 0,
         "closed": 0,
+        "avg_resolution_seconds": None,
+        "last_30d_count": 0,
+        "resolved_today_count": 0,
     }
-    durations: list[float] = []
+    line_scope = get_visible_line_ids(db, current_user)
+    scope_clause = None
+    if line_scope is not None:
+        if not line_scope:
+            return empty
+        scope_clause = FaultEvent.line_id.in_(line_scope)
+
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=30)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    last_30d_count = 0
-    resolved_today_count = 0
 
-    def _aware(dt):
-        """Naive datetime gelirse UTC kabul et (eski kayitlar icin guvenlik)."""
-        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    # 1) Status bazinda sayim. `total` AYRI hesaplanir: bilinmeyen bir status
+    #    degeri varsa (eski/elle girilmis kayit) bes anahtarin toplamina
+    #    girmez ama total'a girer — eski davranis buydu, korunuyor.
+    status_stmt = select(FaultEvent.status, func.count()).group_by(FaultEvent.status)
+    if scope_clause is not None:
+        status_stmt = status_stmt.where(scope_clause)
+    counts = dict(empty)
+    counts["avg_resolution_seconds"] = None
+    total = 0
+    for status_value, cnt in db.execute(status_stmt):
+        cnt = int(cnt)
+        total += cnt
+        if status_value in ("open", "assigned", "in_progress", "resolved", "closed"):
+            counts[status_value] = cnt
+    counts["total"] = total
 
-    for f in rows:
-        s = f.status
-        if s in counts:
-            counts[s] += 1
-        end = f.closed_at or f.resolved_at
-        opened = _aware(f.opened_at)
-        if end is not None:
-            end = _aware(end)
-            durations.append((end - opened).total_seconds())
-            if end >= today_start:
-                resolved_today_count += 1
-        if opened >= cutoff:
-            last_30d_count += 1
+    # 2) Sure/pencere aggregate'leri tek satirda.
+    #    `end_at` = closed_at varsa o, yoksa resolved_at (eski COALESCE mantigi).
+    end_at = func.coalesce(FaultEvent.closed_at, FaultEvent.resolved_at)
+    agg_stmt = select(
+        # Ortalama cozum suresi (saniye) — yalnizca kapanmis kayitlar.
+        func.avg(
+            func.extract("epoch", end_at) - func.extract("epoch", FaultEvent.opened_at)
+        ).filter(end_at.isnot(None)),
+        func.count().filter(FaultEvent.opened_at >= cutoff),
+        func.count().filter(end_at >= today_start),
+    )
+    if scope_clause is not None:
+        agg_stmt = agg_stmt.where(scope_clause)
+    avg_res, last_30d_count, resolved_today_count = db.execute(agg_stmt).one()
 
-    avg_res = None
-    if durations:
-        avg_res = sum(durations) / len(durations)
-    return {
-        **counts,
-        "avg_resolution_seconds": avg_res,
-        "last_30d_count": last_30d_count,
-        "resolved_today_count": resolved_today_count,
-    }
+    counts["avg_resolution_seconds"] = float(avg_res) if avg_res is not None else None
+    counts["last_30d_count"] = int(last_30d_count or 0)
+    counts["resolved_today_count"] = int(resolved_today_count or 0)
+    return counts
 
 
 @router.get("/{fault_id}", response_model=FaultEventRead)

@@ -157,19 +157,48 @@ def reset_signals_to_defaults(
 
 @router.get("/live", response_model=list[SignalLiveValue])
 def list_live_values(
+    device_codes: str | None = Query(
+        default=None,
+        description=(
+            "Virgulle ayrilmis cihaz kodlari; yalnizca bu cihazlarin satirlari "
+            "doner. Bos = kullanicinin gordugu tum cihazlar."
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Aktif sinyal kataloğu × tüm cihazlar. Telemetri yoksa değer/kalite/zaman boş döner.
+    """Aktif sinyal kataloğu × cihazlar. Telemetri yoksa değer/kalite/zaman boş döner.
 
     Operator rolü için kapsam (scope) uygulanır: yalnızca kendi sorumluluk
-    alanlarındaki cihazların satırları döner."""
+    alanlarındaki cihazların satırları döner.
+
+    OLCEK NOTU: yanit cihaz x sinyal kartezyen carpimi (Horstmann SN2 = 193
+    sinyal/cihaz). 600 cihazda ~115.800 satir eder; bu yuzden
+      * `device_codes` ile daraltmak MUMKUN (tek cihaz ekrani bunu kullanmali),
+      * kapsam filtresi Python'da DEGIL SQL'de uygulanir (asagida),
+      * telemetri sorgusu ORM entity yerine kolon tuple'i ceker (115.800 ORM
+        nesnesi hidrate etmek tek basina saniyeler suruyordu).
+    """
     from app.services.scope_service import get_visible_device_ids
 
-    device_rows: list[Device] = list(db.scalars(select(Device).order_by(Device.name.asc())).all())
+    device_stmt = select(Device).order_by(Device.name.asc())
+
+    # Kapsam filtresi SQL'e iner: operator 5 cihaz goruyorsa 600 cihazi
+    # cekip Python'da atmak yerine 5 satir doner.
     visible_ids = get_visible_device_ids(db, current_user)
     if visible_ids is not None:
-        device_rows = [d for d in device_rows if d.id in visible_ids]
+        if not visible_ids:
+            return []
+        device_stmt = device_stmt.where(Device.id.in_(visible_ids))
+
+    # Istemci daraltmasi — kapsamla BIRLIKTE uygulanir (kapsam disina cikilamaz).
+    requested_codes = {c.strip() for c in (device_codes or "").split(",") if c.strip()}
+    if requested_codes:
+        device_stmt = device_stmt.where(Device.code.in_(requested_codes))
+
+    device_rows: list[Device] = list(db.scalars(device_stmt).all())
+    if not device_rows:
+        return []
     catalog_rows: list[SignalCatalog] = list(
         db.scalars(
             select(SignalCatalog)
@@ -179,7 +208,8 @@ def list_live_values(
     )
 
     # Cihaz varken katalog hic doldurulmadiysa (ilk kurulum, seed atlanmis vb.) self-heal.
-    if device_rows and not catalog_rows:
+    # `device_rows` bos olma durumu yukarida ele alindi; buraya cihaz VARSA gelinir.
+    if not catalog_rows:
         defaults = load_default_signals()
         if defaults:
             seed_default_signals(db, strict=False)
@@ -191,17 +221,34 @@ def list_live_values(
                 ).all()
             )
 
-    if not device_rows or not catalog_rows:
+    if not catalog_rows:
         return []
 
     # Her (device_id, signal_key) icin son telemetry kaydini DISTINCT ON ile
     # cek — PostgreSQL'in idx_telemetry_device_signal_ts composite index'i
     # uzerinde index-only scan calisir, GROUP BY+JOIN yerine ~10x hizli.
     # Eski GROUP BY+JOIN her cagride tablo full scan tetikledigi icin polling
-    # yuku artiyordu (600 cihaz x 175 sinyal x 30dk telemetri = milyonlarca
+    # yuku artiyordu (600 cihaz x 193 sinyal x 30dk telemetri = milyonlarca
     # satir). DISTINCT ON ile sorgu <50ms.
+    #
+    # ORM entity DEGIL kolon tuple'i: `select(Telemetry)` her cift icin bir
+    # Telemetry nesnesi hidrate ediyordu (identity map + attribute state).
+    # 115.800 ciftte bu tek basina sorgudan daha pahaliydi. Ihtiyacimiz olan
+    # dort kolonu tuple olarak cekiyoruz.
+    #
+    # Cihaz filtresi de SQL'e iner: kapsam/istemci daraltmasi sonrasi yalnizca
+    # gorunen cihazlarin telemetrisi taranir.
+    device_ids = [d.id for d in device_rows]
     latest_telemetry_stmt = (
-        select(Telemetry)
+        select(
+            Telemetry.device_id,
+            Telemetry.signal_key,
+            Telemetry.value,
+            Telemetry.value_string,
+            Telemetry.quality,
+            Telemetry.source_timestamp,
+        )
+        .where(Telemetry.device_id.in_(device_ids))
         .distinct(Telemetry.device_id, Telemetry.signal_key)
         .order_by(
             Telemetry.device_id,
@@ -209,9 +256,12 @@ def list_live_values(
             Telemetry.id.desc(),
         )
     )
-    latest_by_pair: dict[tuple[int, str], Telemetry] = {}
-    for row in db.scalars(latest_telemetry_stmt).all():
-        latest_by_pair[(row.device_id, row.signal_key)] = row
+    # (device_id, signal_key) -> (value, value_string, quality, source_timestamp)
+    latest_by_pair: dict[tuple[int, str], tuple] = {}
+    for dev_id, sig_key, value, value_string, quality, source_ts in db.execute(
+        latest_telemetry_stmt
+    ):
+        latest_by_pair[(dev_id, sig_key)] = (value, value_string, quality, source_ts)
 
     # Modele gore on-grupla, ki her cihaz icin sadece kendi modelinin sinyallerini iterate edelim.
     catalog_by_model: dict[str, list[SignalCatalog]] = {}
@@ -225,6 +275,7 @@ def list_live_values(
             key = (device.id, signal.key)
             row = latest_by_pair.get(key)
             if row is not None:
+                value, value_string, quality, source_ts = row
                 result.append(
                     SignalLiveValue(
                         signal_key=signal.key,
@@ -235,10 +286,10 @@ def list_live_values(
                         device_id=device.id,
                         device_code=device.code,
                         device_name=device.name,
-                        value=row.value,
-                        value_string=row.value_string,
-                        quality=row.quality,
-                        source_timestamp=row.source_timestamp.isoformat(),
+                        value=value,
+                        value_string=value_string,
+                        quality=quality,
+                        source_timestamp=source_ts.isoformat() if source_ts else None,
                     )
                 )
             else:
