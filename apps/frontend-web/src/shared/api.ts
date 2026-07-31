@@ -19,6 +19,9 @@
   NetworkConfigAccepted,
   NetworkConfigPayload,
   NetworkStatus,
+  RemoteAccessAccepted,
+  RemoteAccessGrantPayload,
+  RemoteAccessStatus,
   TelemetryHistoryPoint,
   TelemetryAggregatePoint,
   HistorianStatus,
@@ -2394,6 +2397,90 @@ export async function updateNetworkConfig(
   });
   if (!response.ok) throw await buildApiError(response, "Ağ ayarı uygulanamadı.");
   return (await response.json()) as NetworkConfigAccepted;
+}
+
+/* ===== Uzaktan bakim izni (`/remote-access/*`) =====
+   Backend host'a DOKUNMAZ: istegi request.json'a yazar, host'ta root ile
+   calisan `e1-rad` ajani uygular (network/* ile ayni desen). Bu yuzden
+   grant/revoke 202 doner ve sonuc bir sonraki durum okumasinda gorunur. */
+
+/** Rol bu ucu goremiyor (backend: engineer/installer/ops_manager). Cagiran
+ *  taraf bu sentinel'i gorunce yoklamayi KALICI olarak kapatir. */
+export const REMOTE_ACCESS_FORBIDDEN = "remote_access_forbidden";
+
+export async function fetchRemoteAccessStatus(
+  token: string
+): Promise<RemoteAccessStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/remote-access/status`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    // DIKKAT: burada buildApiError KULLANILMAZ. O, 401'de session-expired
+    // event'i yayiyor; bu uc periyodik yoklandigi icin gecici bir 401 tum
+    // kullanicilari login ekranina dusururdu (bkz. fetchNetworkStatus).
+    throw new Error(
+      response.status === 401
+        ? "session_polling_401"
+        : response.status === 403
+        ? REMOTE_ACCESS_FORBIDDEN
+        : "Uzaktan bakım durumu alınamadı."
+    );
+  }
+  return (await response.json()) as RemoteAccessStatus;
+}
+
+/** Sureli izin ver (acikken cagrilirsa sure TOPLANMAZ, yenisiyle DEGISIR).
+ *  202: istek ajana kuyruklandi; kesin son tarihi ajan kendi saatinden verir. */
+export async function grantRemoteAccess(
+  token: string,
+  payload: RemoteAccessGrantPayload
+): Promise<RemoteAccessAccepted> {
+  const response = await apiFetch(`${API_BASE_URL}/remote-access/grant`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "Uzaktan bakım izni verilemedi.");
+  }
+  return (await response.json()) as RemoteAccessAccepted;
+}
+
+/** Izni HEMEN kapat; sure dolmasini beklemez. Kapali olsa bile cagrilabilir
+ *  (yakinsama garantisi + "kapat" niyetinin denetime yazilmasi). */
+export async function revokeRemoteAccess(
+  token: string,
+  reason?: string | null
+): Promise<RemoteAccessAccepted> {
+  const response = await apiFetch(`${API_BASE_URL}/remote-access/revoke`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ reason: reason ?? null })
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "Uzaktan bakım izni kapatılamadı.");
+  }
+  return (await response.json()) as RemoteAccessAccepted;
+}
+
+/** Denetim izi. Yeni DB modeli YOK: kaynak mevcut `system_events` tablosu,
+ *  backend her izin/uzatma/kapatma icin `remote_access_*` olayi yaziyor.
+ *  Ayri bir `/remote-access/history` ucu bilerek eklenmedi — filtre zaten
+ *  `/events` uzerinde var, sayfa yalnizca kendi olay tiplerini suzer. */
+export async function fetchRemoteAccessAudit(
+  token: string,
+  limit = 12
+): Promise<SystemEvent[]> {
+  const response = await apiFetch(`${API_BASE_URL}/events?category=security`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "İşlem geçmişi alınamadı.");
+  }
+  const rows = (await response.json()) as SystemEvent[];
+  return rows
+    .filter((row) => row.event_type.startsWith("remote_access_"))
+    .slice(0, limit);
 }
 
 /* ===== Bildirim merkezi (zil ikonu) ===== */

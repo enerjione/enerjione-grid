@@ -18,6 +18,7 @@ import {
   FileText,
   GitBranch,
   HeartPulse,
+  Headset,
   Home,
   KeyRound,
   MapPinned,
@@ -53,6 +54,9 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   backups: DatabaseBackup,
   "system-status": HeartPulse,
   "network-settings": Network,
+  // Uzaktan bakim izni: "destek/kulaklik" — sayfa ICINDE durum ikonu kilit
+  // (Lock/LockOpen), menu ikonuyla karismasin diye bilerek farkli.
+  "remote-access": Headset,
   "offline-map": MapPin,
   "active-sessions": MonitorSmartphone,
 };

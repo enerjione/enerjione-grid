@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Home, Bell, TriangleAlert, FileText, Settings, type LucideIcon } from "lucide-react";
+import { Home, Bell, TriangleAlert, FileText, Settings, LockOpen, type LucideIcon } from "lucide-react";
 
 import { NotificationBell } from "./NotificationBell";
 import { HeaderSearch } from "./HeaderSearch";
@@ -23,6 +23,13 @@ type Props = {
   isEngineeringView?: boolean;
   onToggleEngineering?: () => void;
   onOpenSystemStatus?: () => void;
+  /** Uzaktan bakim izni SU AN acik mi. Acikken header'da kalici uyari rozeti
+   *  cikar — "acik unutma" bu ozelligin bilinen en buyuk riski. */
+  remoteAccessActive?: boolean;
+  /** Kalan sure metni ("3 sa 12 dk"). Bicimleme App'te yapilir: `components/`
+   *  katmani `features/` altindan import etmiyor, bu sinir korunuyor. */
+  remoteAccessLabel?: string;
+  onOpenRemoteAccess?: () => void;
   activePage: NavPage;
   onChangePage: (page: NavPage) => void;
   // Global arama (cihaz + hat + bolge).
@@ -52,6 +59,9 @@ export function Header({
   isEngineeringView,
   onToggleEngineering,
   onOpenSystemStatus,
+  remoteAccessActive,
+  remoteAccessLabel,
+  onOpenRemoteAccess,
   activePage,
   onChangePage,
   devices,
@@ -140,6 +150,26 @@ export function Header({
       </div>
 
       <div className="header-right">
+        {/* Uzaktan bakim izni ACIK uyarisi. Kapatilamaz ve sureli degil:
+            erisim 8 saat surebilir, kaybolan bir bildirim bunu garanti
+            edemez. Tiklaninca izin sayfasina goturur. */}
+        {remoteAccessActive ? (
+          <button
+            type="button"
+            className="header-remote-badge"
+            onClick={() => onOpenRemoteAccess?.()}
+            title={t("remoteAccess.badge.title")}
+            aria-label={t("remoteAccess.badge.title")}
+          >
+            <span className="header-remote-dot" aria-hidden="true" />
+            <LockOpen size={15} strokeWidth={2.2} />
+            <span className="header-remote-text">{t("remoteAccess.badge.short")}</span>
+            {remoteAccessLabel ? (
+              <span className="header-remote-time">{remoteAccessLabel}</span>
+            ) : null}
+          </button>
+        ) : null}
+
         {/* Global cihaz + bolge aramasi — sag tarafta, cark'in solunda */}
         <HeaderSearch
           devices={devices}

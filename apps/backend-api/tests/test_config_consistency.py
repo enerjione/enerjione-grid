@@ -118,3 +118,147 @@ def test_env_examples_declare_access_token(path: Path):
     assert _env_example_value(path, "ACCESS_TOKEN_MINUTES") is not None, (
         f"{path.name} icinde ACCESS_TOKEN_MINUTES yok"
     )
+
+
+# --------------------------------------------------------------------------
+# Retention / TTL ayarlari
+#
+# Ayni sinif hata bu ayarlarda daha pahaliya patlar: retention degerleri
+# UCUNU birden guncellemeyi unutmak "disk dolana kadar fark edilmeyen" bir
+# sapma yaratir. Uc dosyayi birbirine kilitliyoruz.
+# --------------------------------------------------------------------------
+
+RETENTION_FIELDS = [
+    ("telemetry_retention_minutes", "TELEMETRY_RETENTION_MINUTES"),
+    ("telemetry_retention_interval_sec", "TELEMETRY_RETENTION_INTERVAL_SEC"),
+    ("processed_messages_retention_hours", "PROCESSED_MESSAGES_RETENTION_HOURS"),
+    ("processed_messages_interval_sec", "PROCESSED_MESSAGES_INTERVAL_SEC"),
+    ("system_events_retention_days", "SYSTEM_EVENTS_RETENTION_DAYS"),
+    ("system_events_interval_sec", "SYSTEM_EVENTS_INTERVAL_SEC"),
+    ("system_events_max_rows", "SYSTEM_EVENTS_MAX_ROWS"),
+    ("retention_delete_batch", "RETENTION_DELETE_BATCH"),
+    ("retention_max_batches_per_run", "RETENTION_MAX_BATCHES_PER_RUN"),
+    ("disk_guard_reserve_percent", "DISK_GUARD_RESERVE_PERCENT"),
+    ("disk_guard_reserve_min_gb", "DISK_GUARD_RESERVE_MIN_GB"),
+    ("disk_guard_interval_sec", "DISK_GUARD_INTERVAL_SEC"),
+    ("disk_guard_emergency_backup_keep", "DISK_GUARD_EMERGENCY_BACKUP_KEEP"),
+]
+
+
+@pytest.mark.parametrize("field,env", RETENTION_FIELDS, ids=[f[1] for f in RETENTION_FIELDS])
+def test_retention_defaults_match_everywhere(field: str, env: str):
+    expected = _settings_default(field)
+    sources = {
+        "docker-compose.yml": _compose_default(env),
+        ".env.example": _env_example_value(REPO / ".env.example", env),
+    }
+    mismatched = {k: v for k, v in sources.items() if v is not None and v != expected}
+    assert not mismatched, (
+        f"{env} config.py'de {expected} ama su dosyalarda farkli: {mismatched}. "
+        "Ucunu birlikte guncelleyin."
+    )
+
+
+@pytest.mark.parametrize("field,env", RETENTION_FIELDS, ids=[f[1] for f in RETENTION_FIELDS])
+def test_retention_settings_are_declared_in_examples(field: str, env: str):
+    """Operator ayarin VARLIGINDAN haberdar olmali.
+
+    Bu testin somut gerekcesi var: PROCESSED_MESSAGES_* ayarlari kodda
+    `os.getenv` ile okunuyordu ama ne config.py'de ne ornek dosyalarda vardi.
+    Sonuc: 7 gunluk varsayilan kimsenin gormedigi bir sekilde tabloyu
+    ~180M satira cikariyordu.
+    """
+    assert _env_example_value(REPO / ".env.example", env) is not None, (
+        f".env.example icinde {env} yok — operator bu ayari goremez"
+    )
+    assert _compose_default(env) is not None, (
+        f"docker-compose.yml icinde {env} varsayilani yok"
+    )
+
+
+def test_processed_messages_window_exceeds_redelivery_window():
+    """Idempotency penceresi NATS redelivery penceresinden buyuk olmali.
+
+    Gercek pencere = ack_wait(60sn) x nats_worker_max_deliver. Bu degerin
+    altina dusurmek duplicate telemetri yazilmasina yol acar.
+    """
+    max_deliver = _settings_default("nats_worker_max_deliver")
+    window_sec = _settings_default("processed_messages_retention_hours") * 3600
+    assert window_sec > 60 * max_deliver, (
+        f"processed_messages penceresi ({window_sec}sn) redelivery penceresinden "
+        f"({60 * max_deliver}sn) kisa — duplicate riski."
+    )
+
+
+NATS_BYTE_FIELDS = [
+    ("nats_stream_raw_max_bytes", "NATS_STREAM_RAW_MAX_BYTES"),
+    ("nats_stream_normalized_max_bytes", "NATS_STREAM_NORMALIZED_MAX_BYTES"),
+    ("nats_stream_dlq_max_bytes", "NATS_STREAM_DLQ_MAX_BYTES"),
+]
+
+
+@pytest.mark.parametrize("field,env", NATS_BYTE_FIELDS, ids=[f[1] for f in NATS_BYTE_FIELDS])
+def test_nats_stream_byte_caps_match_everywhere(field: str, env: str):
+    expected = _settings_default(field)
+    sources = {
+        "docker-compose.yml": _compose_default(env),
+        ".env.example": _env_example_value(REPO / ".env.example", env),
+    }
+    mismatched = {k: v for k, v in sources.items() if v is not None and v != expected}
+    assert not mismatched, f"{env} config.py'de {expected} ama farkli: {mismatched}"
+
+
+def test_nats_stream_caps_are_positive():
+    """max_bytes=0 SINIRSIZ demektir — disk tavani ortadan kalkar.
+
+    Bu testin gerekcesi: streamler bir zamanlar max_bytes=0 ile
+    olusturuluyordu ve tek fren hesap seviyesindeki max_file_store idi; o da
+    budama yapmaz, dolunca publish REDDEDILIR ve telemetri akisi durur.
+    """
+    for field, env in NATS_BYTE_FIELDS:
+        value = _settings_default(field)
+        assert value > 0, f"{env} sifir — stream disk tavani yok demektir"
+
+
+def test_nats_stream_caps_stay_under_account_limit():
+    """Stream tavanlari toplami, nats-server.conf hesap tavaninin ALTINDA olmali.
+
+    Ustune cikarsa once HESAP tavani carpar ve tam da kacinmak istedigimiz
+    davranis geri gelir: publish reddi = telemetri akisinin durmasi.
+    """
+    # .template okunur, `nats-server.conf` DEGIL: ikincisi .gitignore'da
+    # (sifre hash'leri iceriyor) ve temiz bir klonda / CI'da HIC bulunmaz.
+    # Takip edilen tek kaynak template'tir.
+    conf = _read(REPO / "infra" / "nats" / "nats-server.conf.template")
+    m = re.search(r"^\s*max_file_store:\s*(\d+)\s*GB", conf, re.MULTILINE)
+    assert m, "nats-server.conf.template icinde max_file_store bulunamadi"
+    account_bytes = int(m.group(1)) * 1000**3  # NATS 'GB' = 10^9
+    total = sum(_settings_default(f) for f, _e in NATS_BYTE_FIELDS)
+    assert total < account_bytes, (
+        f"stream tavanlari toplami ({total}) hesap tavanini ({account_bytes}) "
+        "asiyor — hesap tavani once carpar ve publish reddedilir"
+    )
+
+
+def test_disk_guard_reserve_is_sane():
+    """Rezerv yuzdesi makul aralikta olmali.
+
+    Cok dusuk (%0-2): guard cok gec devreye girer, mudahale icin alan kalmaz.
+    Cok yuksek (%30+): diskin ucte biri bosa yatirilir.
+    """
+    pct = _settings_default("disk_guard_reserve_percent")
+    assert 5 <= pct <= 25, f"disk_guard_reserve_percent akil disi: %{pct}"
+    floor = _settings_default("disk_guard_reserve_min_gb")
+    assert 1 <= floor <= 50, f"disk_guard_reserve_min_gb akil disi: {floor} GB"
+
+
+def test_retention_batch_settings_are_sane():
+    """Batch'li silmenin anlamli olmasi icin makul araliklar.
+
+    batch cok kucukse purge periyoda yetismez, cok buyukse batch'li silmenin
+    amaci (kisa lock, dusuk WAL tepe noktasi) ortadan kalkar.
+    """
+    batch = _settings_default("retention_delete_batch")
+    cap = _settings_default("retention_max_batches_per_run")
+    assert 1_000 <= batch <= 100_000, f"retention_delete_batch akil disi: {batch}"
+    assert 1 <= cap <= 1_000, f"retention_max_batches_per_run akil disi: {cap}"

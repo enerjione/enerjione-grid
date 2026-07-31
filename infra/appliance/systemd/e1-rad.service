@@ -1,0 +1,15 @@
+[Unit]
+# Uzaktan bakim izni verme/geri alma isteklerini uygular. e1-rad.path
+# tetikler (backend container /var/lib/e1-grid/remote/request.json yazinca).
+Description=EnerjiOne Grid uzaktan bakim ajani - izin isteklerini uygular
+After=tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=oneshot
+# Ajan ayarlari (E1_TAILSCALE_SSH, E1_RAD_LOCK_MODE) — bkz. e1-rad-report.service.
+EnvironmentFile=-/etc/enerjione-grid/e1-rad.env
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-rad.py apply
+# Reddedilen istek unit'i "failed" birakmasin; hata status.json'a yazilir.
+SuccessExitStatus=0 1
+TimeoutStartSec=120

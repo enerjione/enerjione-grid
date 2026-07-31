@@ -91,6 +91,12 @@ def _call(method: str, path: str, *, locked: bool, scope_type: str = "http"):
         ("POST", f"{PREFIX}/license/import"),
         ("GET", f"{PREFIX}/network/status"),
         ("POST", f"{PREFIX}/network/wifi/connect"),
+        # Kisir dongu korumasi (2): lisans bozuksa musterinin yetkili
+        # kullanicisi uzaktan bakim izni verebilmeli ki lisansi uzaktan
+        # duzeltebilelim. Kilit icinde olsaydi tek cozum sahaya gitmek olurdu.
+        ("GET", f"{PREFIX}/remote-access/status"),
+        ("POST", f"{PREFIX}/remote-access/grant"),
+        ("POST", f"{PREFIX}/remote-access/revoke"),
         ("GET", f"{PREFIX}/project-settings"),
         # api_prefix disi (dokuman/statik) kilit kapsaminda degil
         ("GET", "/openapi.json"),
@@ -177,6 +183,8 @@ def test_allowlist_does_not_leak_to_other_roots():
     assert _is_allowed(f"{PREFIX}/network/status", "GET")
     assert not _is_allowed(f"{PREFIX}/devices/network", "GET")
     assert not _is_allowed(f"{PREFIX}/gateways", "GET")
+    assert _is_allowed(f"{PREFIX}/remote-access/status", "GET")
+    assert not _is_allowed(f"{PREFIX}/devices/remote-access", "GET")
 
 
 # --- get_enforcement_state: dosya okuma + cache -----------------------------

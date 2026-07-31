@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -37,13 +37,12 @@ class TelemetryHistory(Base):
     value_string: Mapped[str | None] = mapped_column(Text, nullable=True)
     quality: Mapped[str] = mapped_column(String(50), default="good")
 
-    # Cihaz+sinyal+aralik sorgusu icin (DeviceDetailPage grafik, aggregate
-    # kaynagi). Hypertable chunk'lari uzerinde bu index her chunk'a uygulanir.
-    __table_args__ = (
-        Index(
-            "ix_telemetry_history_device_signal_ts",
-            "device_id",
-            "signal_key",
-            "source_timestamp",
-        ),
-    )
+    # NOT: Burada bir zamanlar `ix_telemetry_history_device_signal_ts` adinda
+    # (device_id, signal_key, source_timestamp) index'i vardi. BIREBIR AYNI
+    # kolonlari ayni sirada tasiyan PRIMARY KEY zaten mevcut oldugu icin bu
+    # index tamamen karsiliksizdi: hicbir sorguya hizmet etmiyor, ama her
+    # INSERT'te (gunde ~26M) ikinci kez yazilip diskte ~%28 fazladan yer
+    # kapliyordu. Migration 0022 mevcut kurulumlarda dusuruyor.
+    #
+    # Cihaz+sinyal+aralik sorgulari (DeviceDetailPage grafigi, aggregate
+    # kaynagi) PK uzerinden ayni performansla karsilanir.

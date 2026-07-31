@@ -9,6 +9,65 @@ Tailscale (WireGuard) **giden** bağlantı kurar; cihazda dinleyen port
 
 ---
 
+## 0. Erişim VARSAYILAN KAPALI — müşteri izin verir
+
+> **Davranış değişikliği (v2.25+).** Bu sürümden sonra sahadaki tüm cihazlarda
+> uzaktan erişim kapanır. Bağlanabilmek için müşterinin izin vermesi gerekir.
+
+Cihaz tailnet'e **kayıtlı** katılır ama `--shields-up` ile katılır: düğüm
+konsolda **online** görünür (canlılık sinyali korunur), fakat **tüm gelen
+bağlantılar reddedilir**. Tailscale SSH de kapalıdır.
+
+| | |
+|---|---|
+| İzni kim verir | **Yalnızca `engineer` rolü.** `installer` (üretici tarafı), `ops_manager` ve `operator` veremez. |
+| Nereden | Mühendislik > Sistem > Uzaktan Bakım |
+| Süre | 15 dk – 24 saat (varsayılan seçenekler 1 sa / 8 sa / 24 sa) |
+| Süre dolunca | Erişim **kendiliğinden** kapanır (≈30 sn içinde) |
+| Yeniden başlatma | İzni silmez ama **uzatmaz** — orijinal bitiş saati geçerli |
+| Denetim | `system_events`, `category=security`: kim, hangi rolle, hangi IP'den, ne kadar süreyle |
+
+Süreyi host'ta root ile çalışan **`e1-rad`** ajanı sayar. Son tarih mutlak zaman
+olarak `/var/lib/e1-grid/remote-priv/lease.json` içinde durur; `e1-rad-report.timer`
+30 sn'de bir "istenen durum"u lease'ten hesaplar, "gerçek durum"u
+`tailscale debug prefs` ile **ölçer** ve farklıysa yakınsar. Backend, veritabanı
+ve container tamamen kapalı olsa bile izin kapanır. Lease yok / bozuk / saat
+tutarsız ⇒ **kapat** (fail-closed).
+
+```bash
+# Cihazda durum
+sudo /opt/enerjione-grid/infra/appliance/e1-rad.py report
+cat /var/lib/e1-grid/remote/state.json
+
+# Acil elle kapatma (müşteri kullanıcısına ulaşılamıyorsa)
+sudo /opt/enerjione-grid/infra/appliance/e1-rad.py close
+
+# Zamanlayıcı ayakta mı? Durursa AÇIK BİR İZİN KAPANMAZ.
+systemctl status e1-rad-report.timer
+```
+
+**Neden `tailscale down` değil:** düğüm `down` iken konsolda offline görünür ve
+o andan itibaren "elektrik kesik", "internet yok", "cihaz bozuk" ve "müşteri
+izin vermemiş" ayırt edilemez. Ayrıca `down` sonrası açmak kontrol düzlemine
+gitmek demektir; erişilemezse müşteri "İzin ver" der ve hiçbir şey olmaz —
+üstelik cihaz offline olduğu için teşhis de edilemez. Tam kapatma isteyen
+kurulum için `/etc/enerjione-grid/e1-rad.env` içinde `E1_RAD_LOCK_MODE=down`
+seçilebilir; kayıtlılık her iki modda da korunur (`tailscale logout` **asla**
+çalıştırılmaz, ajanda authkey **yoktur**).
+
+**Dürüst sınır:** `shields-up` istemci tarafında `tailscaled` içinde uygulanır.
+Cihazda root'u ele geçiren biri bunu kapatabilir. Bu kapının verdiği garanti
+"satıcı asla giremez" değil; **varsayılan kapalı + süresi dolan + denetlenebilir
+rıza kaydı**dır.
+
+**Güncelleme tuzağı:** güncelleme Tailscale SSH üzerinden yapılıyorsa kapıyı
+kapatmak kendi oturumunuzu keserdi. `setup-remote-access.sh` bunu tespit eder
+(SSH istemci IP'si `100.64.0.0/10` içinde mi) ve 60 dakikalık kurulum mahsubu
+yazar (`E1_RAD_GRACE_MIN`, `0` = mahsup yok). Yerelden koşulan rutin güncelleme
+mahsup **yazmaz**.
+
+---
+
 ## 1. Tailscale tarafında yapılacaklar (bir kez)
 
 > Admin konsolu: `https://console.tailscale.com/admin`

@@ -177,6 +177,106 @@ class Settings(BaseSettings):
     # deny-all ile reddeder — production'da set EDILMEDIGI surece gateway calismaz.
     nats_gateway_password: str = ""
 
+    # ----- JetStream DISK TAVANI (stream basina) ----------------------------
+    # `max_age` bir ZAMAN siniridir, disk sinirini GARANTI ETMEZ: disk
+    # kullanimi hiz x zamandir ve hiz kontrol edilmedigi surece yas tabanli
+    # retention hicbir bayt tavani vermez. Onceden her uc stream de
+    # max_bytes=0 (SINIRSIZ) ile olusturuluyordu; tek gercek fren
+    # nats-server.conf'taki hesap seviyesi `max_file_store` idi ve o da
+    # BUDAMA yapmaz — tavana carpinca publish REDDEDILIR, yani telemetri
+    # akisi tamamen DURUR.
+    #
+    # Artik her stream kendi bayt tavanini tasiyor ve discard=OLD ile tavana
+    # carpinca EN ESKI mesajlar dusuruluyor; akis DEVAM EDER. Bu bilincli bir
+    # takas: uzun bir kesintide (raw icin ~19 saat) en eski mesajlar sessizce
+    # kaybolur, ama sistem asla durmaz.
+    #
+    # Toplam: 8 + 3 + 1 = 12 GiB. nats-server.conf `max_file_store` bunun
+    # UZERINDE kalmali (aksi halde hesap tavani once dolar ve sert red geri
+    # gelir).
+    # Degerler BAYT cinsinden ve LITERAL yazilir (ifade degil): hem
+    # tests/test_config_consistency.py bunlari kaynaktan okuyup .env.example /
+    # docker-compose.yml ile karsilastirabilsin, hem de operator neye baktigini
+    # tereddutsuz gorsun.
+    nats_stream_raw_max_bytes: int = 8_589_934_592         # 8 GiB (~19 saat tampon)
+    nats_stream_normalized_max_bytes: int = 3_221_225_472  # 3 GiB
+    nats_stream_dlq_max_bytes: int = 1_073_741_824         # 1 GiB
+
+    # ----- Retention / TTL: "disk asla dolmamali" ---------------------------
+    # Bu degerler ONCEDEN telemetry_retention.py icinde dogrudan os.getenv ile
+    # okunuyordu. config.py'de tanimli olmadiklari icin ne `.env.example`'da ne
+    # docker-compose.yml'de goruniyorlardi; operator varliklarindan habersizdi.
+    # Artik tek kaynak burasi ve tests/test_config_consistency.py uc dosyayi
+    # birbirine kilitliyor.
+    #
+    # `telemetry` — CANLI DEGER tablosu, kisa kayan pencere. Her (cihaz, sinyal)
+    # ikilisinin SON degeri retention'dan muaftir (bkz. _purge_telemetry), yani
+    # sure ne olursa olsun canli ekran bosalmaz.
+    telemetry_retention_minutes: int = 30
+    telemetry_retention_interval_sec: int = 300
+    # `processed_messages` — idempotency defteri (ayni mesaj iki kez islenmesin).
+    # GERCEK redelivery penceresi ack_wait(60s) x max_deliver(10) = 10 DAKIKA.
+    # Ustelik ikinci bir dedup katmani daha var: telemetry_history dogal
+    # anahtarinda (device_id, signal_key, source_timestamp) ON CONFLICT DO
+    # NOTHING. Onceki 7 gunluk deger gercek ihtiyacin ~1000 katiydi ve tabloyu
+    # ~180M satira cikariyordu. 24 saat hala 144 kat marj birakir.
+    # NOT: birim GUN'den SAAT'e cevrildi; eski PROCESSED_MESSAGES_RETENTION_DAYS
+    # artik okunmuyor — telemetry_retention.py set edilmisse uyari loglar.
+    processed_messages_retention_hours: int = 24
+    processed_messages_interval_sec: int = 600
+    # `system_events` — denetim/olay kaydi. Onceden HIC retention yoktu.
+    # 2 yil: operator karari (yasal/operasyonel geriye donuk inceleme ufku).
+    system_events_retention_days: int = 730
+    system_events_interval_sec: int = 21_600  # 6 saat
+    # FIFO tavani: beklenmedik bir olay firtinasinda 2 yil DOLMADAN da sinir
+    # devreye girsin, en eski kayitlar dusulsun. 0 = kapali (yalnizca sure).
+    system_events_max_rows: int = 5_000_000
+    # Retention DELETE'leri LIMIT'li TURLAR halinde kosar. Tek transaction'da
+    # milyonlarca satir silmek WAL'i sisirir, tabloyu uzun sure kilitler ve
+    # autovacuum'u geride birakir (tablo sismesi). Her tur ayri commit.
+    retention_delete_batch: int = 20_000
+    # Bir tetikte en fazla kac tur. Tavan, tek bir purge'un saatlerce surmesini
+    # onler; artan satirlar bir sonraki tetikte silinir (birikme olmaz cunku
+    # tavan x batch >> periyottaki uretim).
+    retention_max_batches_per_run: int = 50
+
+    # ----- DISK GUARD: son emniyet subabi ----------------------------------
+    # Yukaridaki TTL'ler ve NATS/yedek/harita tavanlari "normalde dolmaz"
+    # garantisi verir. Disk guard ise "tavanlardan biri YANLIS hesaplanmis
+    # olsa bile disk DOLMASIN" garantisidir. Hicbir tavana guvenmez, gercek
+    # bos alani olcer.
+    #
+    # Rezerv YUZDE tabanlidir cunku disk boyutu kurulumdan kuruluma degisir
+    # (saha standardi 500 GB, ama 128 GB'lik eski kutular da var). Sabit bir
+    # GB degeri kucuk diskte sistemi bogar, buyuk diskte alani bosa yatirir.
+    #
+    # Cok kucuk disklerde yuzde tek basina yetersiz kalir: PostgreSQL'in
+    # VACUUM / index yeniden kurma / pg_dump icin calisma alani ister. Bu
+    # yuzden taban = max(toplam x yuzde, mutlak_taban).
+    disk_guard_enabled: bool = True
+    disk_guard_reserve_percent: int = 10
+    disk_guard_reserve_min_gb: int = 5
+    disk_guard_interval_sec: int = 300
+    # Olculecek yol. Bos ise BACKUP_DIR kullanilir — o GERCEK bir mount'tur
+    # (docker volume), container'in `/` overlay'inden daha dogru bir
+    # gostergedir. O da yoksa `/` (Windows'ta C:\).
+    disk_guard_path: str = ""
+    # ACIL seviyede kac yedek korunur. En yeni BASARILI yedek her kosulda
+    # korunur; bu deger onun altina inemez.
+    disk_guard_emergency_backup_keep: int = 2
+
+    # Manuel / yuklenen yedekler icin YAS bazli temizlik (gun).
+    # 0 = KAPALI (varsayilan) — bilincli tercih: operator "buyuk degisiklik
+    # oncesi" diye elle aldigi bir yedegi habersiz kaybetmemeli. Zamanlanmis
+    # yedekler zaten `retention_count` ile sinirli.
+    # Disk ACIL seviyeye gelirse disk_guard bu ayardan BAGIMSIZ olarak fazla
+    # yedekleri temizler; yani "disk dolmasin" garantisi bu 0 degeriyle de
+    # korunur. Operator duzenli temizlik isterse 90 gibi bir deger verir.
+    backup_manual_retention_days: int = 0
+    # Basarisiz yedek kayitlari ve yarim kalmis dosyalar KOSULSUZ temizlenir
+    # (bunlar tanim geregi cop; yarim .dump dosyasi geri yuklenemez).
+    backup_failed_retention_days: int = 7
+
     internal_service_token: str = "change-me-internal-token"
     # DB'de saklanan secret'lar (SMTP/SMS/Telegram credentials, outbound auth
     # token) icin Fernet sifreleme anahtari. Bos ise SECRET_KEY'den HKDF ile
@@ -236,6 +336,24 @@ class Settings(BaseSettings):
     # sertlestirmesini anlamsizlastirirdi. Dizin yoksa "bu cihaza kur" secenegi
     # kapali gorunur; "baska cihaza kur" akisi etkilenmez.
     gateway_state_dir: str = "/var/lib/e1-grid/gw"
+
+    # Uzaktan bakim izni ajani (e1-rad) ile paylasilan dizin. Backend buraya
+    # SADECE request.json yazar; state.json/status.json okur. Tailscale'i
+    # CALISTIRMAZ.
+    #
+    # Uzaktan erisim VARSAYILAN KAPALIDIR: musterinin yetkili kullanicisi
+    # (engineer rolu) arayuzden sureli izin verir, sure dolunca erisim
+    # kendiliginden kapanir. Sureyi HOST ajani sayar — backend/DB kapali olsa
+    # bile izin kapanmali, bu yuzden son tarih DB'de DEGIL ajanin lease
+    # dosyasinda (root:root 0700, /var/lib/e1-grid/remote-priv) tutulur.
+    remote_access_state_dir: str = "/var/lib/e1-grid/remote"
+
+    # Site basina ust sinir (dakika). Semadaki ve ajandaki mutlak tavan 1440
+    # (24 saat); bu ayar yalnizca DAHA DUSUGE cekebilir, yukari cikaramaz —
+    # sinirsiz sure "her zaman acik"i geri getirir ve ozelligi iptal ederdi.
+    # docker-compose.yml'e BILEREK konmadi: ayni sayiyi dort dosyada tutmak
+    # tests/test_config_consistency.py'nin kilitledigi hatanin ta kendisi.
+    remote_access_max_minutes: int = 1440
 
     # Cevrimdisi harita karolari. Tum karolar backend uzerinden gecer:
     # once disk, yoksa yukari akis (ve diske yaz). Saha cihazinda internet

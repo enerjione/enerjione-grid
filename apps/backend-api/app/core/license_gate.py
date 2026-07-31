@@ -19,6 +19,14 @@ Beyaz liste (lisanssiz da erisilebilir) ve gerekcesi:
                      sistem kendini asla acamazdi (kisir dongu).
   /network/*       - agi bozuk lisanssiz bir cihaz once agi duzeltmek
                      zorunda; bkz. commit 144539f.
+  /remote-access/* - /network ile AYNI gerekce. Lisans bozuksa musterinin
+                     yetkili kullanicisi (engineer) bize uzaktan bakim izni
+                     verebilmeli ki lisansi biz duzeltelim. Kilit icinde
+                     olsaydi kisir dongu olurdu: lisans yok -> API kapali ->
+                     musteri izin veremiyor -> uzaktan duzeltilemiyor -> sahaya
+                     gitmek gerekiyor. Urun islevi degil, kurtarma koludur;
+                     ustelik kapiyi ACAN degil, ACMA IZNI VEREN uctur ve
+                     yetkisi zaten yalnizca engineer rolundedir.
   /project-settings (GET) - giris ekranindaki logo/baslik. Urun islevi
                      tasimaz, sadece markalama.
 
@@ -48,6 +56,8 @@ _ALLOWED: tuple[tuple[str, frozenset[str] | None], ...] = (
     ("/license", None),
     ("/network/", None),
     ("/network", None),
+    ("/remote-access/", None),
+    ("/remote-access", None),
     ("/project-settings", frozenset({"GET", "HEAD", "OPTIONS"})),
 )
 

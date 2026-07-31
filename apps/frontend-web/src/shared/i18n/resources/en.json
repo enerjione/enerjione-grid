@@ -642,7 +642,12 @@
       "device_command_sent": "Command sent: {{command}} ({{code}})",
       "device_command_failed": "Command failed: {{command}} ({{code}})",
       "device_command_queued": "Command queued: {{command}} ({{code}})",
-      "device_command_result": "Command result: {{command}} ({{code}})"
+      "device_command_result": "Command result: {{command}} ({{code}})",
+      "remote_access_granted": "Remote maintenance allowed for {{minutes}} minutes",
+      "remote_access_extended": "Remote maintenance extended to {{minutes}} minutes",
+      "remote_access_revoked": "Remote maintenance access closed",
+      "remote_access_session_ended": "Remote maintenance access ended ({{reason}})",
+      "remote_access_apply_failed": "Remote maintenance request could not be applied: {{error}}"
     },
     "category": {
       "auth": "Login & session",
@@ -924,6 +929,134 @@
       "noAdapter": "No WiFi card found on the device. Plug in a USB WiFi adapter and re-run setup."
     }
   },
+  "remoteAccess": {
+    "loading": "Reading status…",
+    "state": {
+      "loading": "READING",
+      "on": "ON",
+      "off": "OFF",
+      "unknown": "UNKNOWN"
+    },
+    "hero": {
+      "loadingTitle": "Reading status…",
+      "loadingLead": "Fetching the remote maintenance status of this device.",
+      "onTitle": "Remote maintenance is ON",
+      "onLead": "The EnerjiOne support team can connect to this device right now. Access closes by itself when the time runs out; if you would rather not wait, close it now.",
+      "offTitle": "Remote maintenance is OFF",
+      "offLead": "Nobody can reach this device remotely right now. The device stays enrolled in the maintenance network — the support team can see that it is alive — but every incoming connection is refused by the device itself.",
+      "unknownTitle": "Remote maintenance is unavailable",
+      "unknownLead": "Remote maintenance cannot be used on this device right now. The reason is shown below.",
+      "endsAt": "Closes automatically at {{time}}",
+      "grantedBy": "Allowed by {{user}} · {{time}}",
+      "grantReason": "Stated reason: {{note}}",
+      "remaining": "time left"
+    },
+    "fmt": {
+      "hm": "{{h}} h {{m}} min",
+      "ms": "{{m}} min {{s}} s",
+      "s": "{{s}} s",
+      "durHm": "{{h}} h {{m}} min",
+      "durH_one": "{{count}} hour",
+      "durH_other": "{{count}} hours",
+      "durM_one": "{{count}} minute",
+      "durM_other": "{{count}} minutes"
+    },
+    "grant": {
+      "title": "Allow remote maintenance",
+      "titleExtend": "Extend the time",
+      "durationLabel": "Access duration",
+      "custom": "Custom",
+      "customLabel": "How many minutes?",
+      "customUnit": "minutes",
+      "customInvalid": "Please enter a number of minutes.",
+      "customRange": "At least {{min}}, at most {{max}}.",
+      "reasonLabel": "Reason (optional)",
+      "reasonPlaceholder": "e.g. no data coming from line 3",
+      "reasonHint": "This note is written to the log so the support team knows what to look at before connecting.",
+      "pickDuration": "Pick a duration first.",
+      "endsAtPreview": "Access will close by itself at:",
+      "submit": "Allow remote maintenance",
+      "submitExtend": "Extend"
+    },
+    "confirm": {
+      "title": "You are about to allow remote maintenance",
+      "titleExtend": "You are about to extend remote maintenance",
+      "lead": "Confirming opens the access described below. You can close it with one click at any time before it expires.",
+      "who": "Who gets in: only the EnerjiOne support team. The device leaves no door open to the internet; the connection runs over the vendor's closed maintenance network.",
+      "what": "What they can do: reach the device itself and the EnerjiOne services on it. They can read logs, restart services and correct settings. Their level of access equals that of a technician standing at the device.",
+      "howLong": "How long: {{duration}}. When that time is up, access closes without anyone having to do anything.",
+      "earlyClose": "Early close: you can press “Close access now” on this page at any moment.",
+      "audit": "Record: this grant is written to the event log with your name and the time.",
+      "rowDuration": "Duration",
+      "rowEndsAt": "Closes automatically",
+      "rowReason": "Reason",
+      "approve": "I confirm, open access",
+      "working": "Applying…"
+    },
+    "revoke": {
+      "button": "Close access now",
+      "working": "Closing…"
+    },
+    "explain": {
+      "title": "What exactly are you allowing?",
+      "whoTitle": "Who gets in",
+      "whoText": "Only the EnerjiOne support team. Nobody else can reach the device this way.",
+      "howLongTitle": "How long it lasts",
+      "howLongText": "Only for the time you pick; at most {{max}}. This screen cannot leave it permanently open.",
+      "afterTitle": "What happens when time is up",
+      "afterText": "Access closes by itself. The device does this on its own — it closes even if the server, the internet or this screen is down."
+    },
+    "device": {
+      "name": "Device name on the maintenance network",
+      "address": "Maintenance network address",
+      "link": "Maintenance network enrollment",
+      "linkRegistered": "Enrolled",
+      "linkMissing": "Not enrolled"
+    },
+    "log": {
+      "title": "Recent activity",
+      "hint": "Who, when and for how long",
+      "empty": "Nothing recorded yet."
+    },
+    "blocked": {
+      "title": "Access cannot be granted right now",
+      "hint": "Remote maintenance only works on EnerjiOne mini PC (appliance) installations. If the problem persists, contact the support team.",
+      "reason": {
+        "state_dir_missing": "The remote maintenance software is not installed on this device.",
+        "state_dir_not_writable": "The remote maintenance software files cannot be accessed (permission error).",
+        "agent_never_reported": "The remote maintenance software has never reported its status. Setup may be incomplete.",
+        "state_stale": "The remote maintenance software has not reported for a while.",
+        "not_registered": "This device is not enrolled in the vendor maintenance network. Enrollment happens during setup.",
+        "key_expired": "The device's maintenance network enrollment has expired; it must be enrolled again.",
+        "daemon_not_running": "The maintenance network service on the device is not running.",
+        "unknown": "The remote maintenance software cannot be reached."
+      }
+    },
+    "readOnly": {
+      "title": "You are viewing this page",
+      "lead": "You can see the status and the history; allowing remote maintenance is reserved for the Engineer and Installer roles."
+    },
+    "warn": {
+      "overdue": "The access period has expired but access still appears to be open. The timer on the device may have stopped — close access manually and contact the support team.",
+      "staleAgent": "The device has not reported for a while. The information shown may be out of date and an open grant may not close by itself.",
+      "applyFailed": "The last action could not be applied on the device: {{error}}",
+      "pending": "The previous request is still being processed…",
+      "expiringSoon": "Less than 15 minutes of access left. If maintenance is still in progress you need to extend it."
+    },
+    "badge": {
+      "title": "Remote maintenance is on — click to manage",
+      "short": "Remote maintenance on"
+    },
+    "errors": {
+      "load": "Could not read the remote maintenance status.",
+      "grant": "Could not allow remote maintenance.",
+      "revoke": "Could not close remote maintenance."
+    },
+    "toasts": {
+      "granted": "Remote maintenance opened — {{duration}}.",
+      "revoked": "Remote maintenance closed."
+    }
+  },
   "systemStatus": {
     "title": "System Status",
     "liveSocket": {
@@ -1091,7 +1224,8 @@
       "systemStatus": "Monitor the health of services and connections.",
       "networkSettings": "Configure the device IP address, gateway and DNS.",
       "activeSessions": "See who is connected and terminate sessions.",
-      "offlineMap": "Download map areas for sites without internet; view and manage downloaded areas."
+      "offlineMap": "Download map areas for sites without internet; view and manage downloaded areas.",
+      "remoteAccess": "Grant the support team time-limited remote access; close it whenever you want."
     },
     "nav": {
       "devices": "Devices",
@@ -1111,7 +1245,8 @@
       "deviceModels": "Device Models",
       "networkSettings": "Network Settings",
       "activeSessions": "Active Sessions",
-      "offlineMap": "Offline Map"
+      "offlineMap": "Offline Map",
+      "remoteAccess": "Remote Maintenance"
     },
     "users": {
       "title": "Users",

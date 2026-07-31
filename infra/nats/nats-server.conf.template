@@ -22,9 +22,23 @@ http_port: 8222
 
 jetstream {
     store_dir: "/data"
-    # Disk doluluk korumasi — disk'in %95'i dolarsa publish'leri reddeder.
-    # 600 cihaz x 7 gun raw telemetri tipik 5-20GB; production'da disk'i
-    # genis tutun veya bu degeri buyutmek isteyebilirsiniz.
+    # HESAP SEVIYESI ACIL TAVAN — MUTLAK bayt siniri (diskin yuzdesi DEGIL).
+    #
+    # Eskiden buradaki yorum "disk'in %95'i dolarsa" diyordu; bu YANLISTI ve
+    # yanlis guven veriyordu: bu deger diskin ne kadar dolu oldugundan
+    # tamamen bagimsiz mutlak bir tavandir. Diskte 50GB bos alan yoksa NATS
+    # kendi tavanina ULASMADAN once HOST DISKINI doldurur (nats-data ve
+    # postgres-data ayni dosya sisteminde -> Postgres de duser).
+    #
+    # AYRICA: hesap tavani BUDAMA yapmaz — dolunca publish REDDEDILIR ve
+    # telemetri akisi durur. Bu yuzden asil sinir burasi DEGIL, stream basina
+    # `max_bytes` + `discard=old` olmali (bkz. config.py nats_stream_*_max_bytes
+    # ve services/jetstream_bus.py). Backend bunlari her boot'ta idempotent
+    # uygular; toplam 12 GiB (raw 8 + normalized 3 + dlq 1).
+    #
+    # Buradaki 50GB o 12 GiB'in USTUNDE bir emniyet subabidir: normal
+    # sartlarda ASLA devreye girmez. Stream tavanlarini buyutursen bunu da
+    # buyutmen gerekir; kucultursen once bu carpar ve sert red geri gelir.
     max_file_store: 50GB
     max_memory_store: 1GB
 }

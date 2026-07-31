@@ -11,6 +11,15 @@
 #   yonlendirme istemek hem guvenlik hem operasyon yuku. Tailscale (WireGuard)
 #   giden baglanti kurar, dinleyen port ACMAZ.
 #
+# DAVRANIS DEGISIKLIGI (v2.25+): UZAKTAN ERISIM ARTIK VARSAYILAN KAPALI.
+#   Cihaz tailnet'e KAYITLI katilir ama `--shields-up` ile katilir: tum GELEN
+#   baglantilar reddedilir. Musterinin yetkili kullanicisi (engineer rolu)
+#   arayuzden SURELI izin verir (Muhendislik > Sistem > Uzaktan Bakim); sure
+#   dolunca erisim kendiliginden kapanir. Zorlayici host ajani `e1-rad`dir
+#   (bkz. infra/appliance/e1-rad.py, setup-remote-access.sh).
+#   Bu script artik erisimi ACMAZ — yalnizca cihazi tailnet'e katar ve ajani
+#   kurar. Aksi halde her `update.sh` musterinin kapattigi kapiyi geri acardi.
+#
 # ANAHTAR (E1_TAILSCALE_AUTHKEY) — ZORUNLU:
 #   Bos ise bu script HICBIR SEY YAPMAZ ve 0 doner (kurulumu bozmaz).
 #   Iki tur anahtar da calisir:
@@ -31,7 +40,10 @@
 #                           kimliginden (/etc/enerjione-grid/site.env),
 #                           yoksa donanim seri no'sundan uretilir.
 #   E1_TAILSCALE_HOSTNAME_PREFIX  uretilen adin oneki (default: e1-grid)
-#   E1_TAILSCALE_SSH        1 = Tailscale SSH ac (default 1), 0 = kapali
+#   E1_TAILSCALE_SSH        ANLAMI DEGISTI: artik "SSH surekli acik" degil,
+#                           "izin VERILDIGINDE Tailscale SSH de acilsin mi"
+#                           (default 1). 0 ise izin acikken de SSH kapali
+#                           kalir; yalnizca tailnet IP'sine dogrudan baglanti.
 #   E1_TAILSCALE_ACCEPT_DNS 1 = tailnet DNS'ini kabul et (default 0)
 #                           0 onerilir: saha cihazinin yerel DNS'i bozulmasin.
 #
@@ -137,60 +149,100 @@ else
   _derive_ts_hostname
 fi
 
-# --- SSH ve etiket dogrulama yardimcilari -----------------------------------
-# NEDEN GEREKLI: `tailscale up --ssh` yalnizca KATILIM aninda uygulanir.
-# Daha once katilmis bir cihaz (or. bu bayrak eklenmeden once kurulanlar, ya
-# da etiketsiz geri donus yolundan katilanlar) asagidaki idempotent erken
-# cikisa takiliyor ve SSH'i HIC acilmiyordu — "tailscale ile ssh
-# baglanamiyorum"un sebebi tam olarak bu. Artik durumu okuyup gerekiyorsa
-# `tailscale set` ile aciyoruz; bu yeniden giris (authkey) GEREKTIRMEZ.
+# --- Kayitlilik / izin ajani yardimcilari -----------------------------------
+# ESKI `_ensure_ssh` KALDIRILDI — BILINCLI:
+#   Eski surum "SSH kapaliysa ac" yapiyordu ve bu fonksiyon her `update.sh`
+#   kosusunda cagriliyordu. Uzaktan bakim izni eklendikten sonra bu davranis
+#   musterinin kapattigi kapiyi HER GUNCELLEMEDE sessizce geri acardi; yani
+#   ozelligin tamamini iptal ederdi. SSH artik yalnizca izin verildiginde
+#   e1-rad tarafindan acilir (`tailscale set --ssh=true`) ve sure dolunca yine
+#   e1-rad tarafindan kapatilir.
 
-# `tailscale debug prefs` JSON'unda RunSSH alani var mi? (eski surumlerde yok)
-_prefs_has_runssh() {
-  tailscale debug prefs 2>/dev/null | grep -q '"RunSSH"'
+# Dugum tailnet'e KAYITLI mi? (`down`/`shields-up` kayitliligi BOZMAZ)
+#
+# NEDEN BackendState=="Running" YETMEZ: E1_RAD_LOCK_MODE=down modunda kapi
+# kapaliyken BackendState "Stopped" olur. Eski idempotent erken cikis buna
+# takilmiyordu; script asagi duser ve ortamda anahtar varsa
+# `tailscale up --authkey --reset` calistirip KAPIYI GERI ACARDI. Kayitliligi
+# `LoggedOut` uzerinden okuyoruz — `logout` calistirilmadikca false kalir.
+_node_is_registered() {
+  local prefs state
+  prefs="$(tailscale debug prefs 2>/dev/null || true)"
+  if printf '%s' "$prefs" | grep -q '"LoggedOut"'; then
+    # `set -e` tuzagi: basarisiz grep'i kosul disinda birakma.
+    if printf '%s' "$prefs" | grep -qE '"LoggedOut"[[:space:]]*:[[:space:]]*false'; then
+      return 0
+    fi
+    return 1
+  fi
+  # Eski tailscale: prefs alani yok — BackendState'e dus. "Stopped" da
+  # kayitli demektir (tunel inik ama dugum duruyor).
+  state="$(tailscale status --json 2>/dev/null \
+    | sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  [[ "$state" == "Running" || "$state" == "Stopped" ]]
 }
 
-_ssh_is_on() {
-  tailscale debug prefs 2>/dev/null | grep -qE '"RunSSH"[[:space:]]*:[[:space:]]*true'
-}
-
-_ensure_ssh() {
-  if [[ "$ENABLE_SSH" != "1" ]]; then
-    # Acikca kapatilmis. Aciksa kapat, degilse dokunma.
-    if _ssh_is_on; then
-      e1_info "Tailscale SSH kapatiliyor (E1_TAILSCALE_SSH=0)..."
-      tailscale set --ssh=false >/dev/null 2>&1 \
-        || e1_warn "SSH kapatilamadi. Elle: sudo tailscale set --ssh=false"
-    fi
+# Uzaktan bakim izni ajanini kur/guncelle ve durumu bas. Ajan kurulu degilse
+# erisim KAPANMAZ — bu yuzden her kosuda cagriliyor.
+_install_remote_access() {
+  if [[ ! -f "${SCRIPT_DIR}/setup-remote-access.sh" ]]; then
+    e1_warn "setup-remote-access.sh bulunamadi (repo eski olabilir)."
+    e1_warn "Uzaktan bakim izni ajani (e1-rad) kurulamadi; erisim durumu yonetilemez."
     return 0
   fi
-
-  if ! _prefs_has_runssh; then
-    # Durum okunamiyor (eski tailscale). Yine de uygula — `set` idempotent.
-    if tailscale set --ssh >/dev/null 2>&1; then
-      e1_ok "Tailscale SSH ayari uygulandi (surum eski, durum dogrulanamadi)."
-    else
-      e1_warn "Tailscale SSH acilamadi. Elle: sudo tailscale set --ssh"
-    fi
-    return 0
-  fi
-
-  if _ssh_is_on; then
-    e1_ok "Tailscale SSH acik."
-    return 0
-  fi
-
-  e1_info "Tailscale SSH kapali — aciliyor..."
-  if tailscale set --ssh >/dev/null 2>&1 && _ssh_is_on; then
-    e1_ok "Tailscale SSH acildi."
-  else
-    e1_warn "Tailscale SSH acilamadi. Elle: sudo tailscale set --ssh"
-  fi
+  # E1_TAILSCALE_SSH ajana AKTARILIR: systemd unit'leri kabuk ortamini miras
+  # ALMAZ, bu yuzden setup-remote-access.sh degeri kalici bir env dosyasina
+  # yazar (/etc/enerjione-grid/e1-rad.env).
+  E1_RAD_FRESH_JOIN="${1:-0}" E1_TAILSCALE_SSH="$ENABLE_SSH" \
+    bash "${SCRIPT_DIR}/setup-remote-access.sh" \
+    || e1_warn "Uzaktan bakim izni ajani kurulamadi; detay yukarida."
 }
 
 # Cihaz etiketsiz katildiysa ACL'deki `dst: tag:e1-appliance` kurallari
 # ESLESMEZ; SSH acik olsa bile baglanti REDDEDILIR. Sessiz kalinirsa
 # "SSH acik" mesaji yaniltici olur.
+# Cihazin anahtari GERCEKTEN suresiz mi? Etikete bakip tahmin etmek yerine
+# durumu OLCUYORUZ: tailscale 1.36+ `status --json` ciktisinda Self.KeyExpiry
+# (zaman damgasi) ve Self.Expired (bool) alanlarini veriyor.
+#   KeyExpiry yok/null -> sure uygulanmiyor, cihaz kalici (istedigimiz durum)
+#   KeyExpiry dolu     -> cihaz O TARIHTE tailnet'ten duser
+# Boylece "etiketli katildi ama tailnet politikasi yine de sure uyguluyor"
+# gibi durumlar da yakalanir.
+_report_key_expiry() {
+  local json expiry
+  json="$(tailscale status --json 2>/dev/null)" || return 0
+  [[ -n "$json" ]] || return 0
+  if command -v python3 >/dev/null 2>&1; then
+    expiry="$(printf '%s' "$json" | python3 -c '
+import json,sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+self_ = d.get("Self") or {}
+if self_.get("Expired"):
+    print("DOLMUS")
+elif self_.get("KeyExpiry"):
+    print(self_["KeyExpiry"])
+' 2>/dev/null)"
+  else
+    # python3 yoksa kaba ayristirma; alan yoksa cikti bos kalir.
+    expiry="$(printf '%s' "$json" | sed -n 's/.*"KeyExpiry":"\([^"]*\)".*/\1/p')"
+  fi
+
+  if [[ -z "$expiry" ]]; then
+    e1_ok "Anahtar suresi uygulanmiyor — cihaz tailnet'te kalici."
+  elif [[ "$expiry" == "DOLMUS" ]]; then
+    e1_warn "Cihazin anahtari DOLMUS — uzaktan erisim su an calismiyor."
+    e1_warn "Duzeltme: sudo tailscale up --advertise-tags=${TAGS} --ssh --force-reauth"
+  else
+    e1_warn "DIKKAT: cihazin anahtari ${expiry%%T*} tarihinde dolacak."
+    e1_warn "O tarihte cihaz uzaktan erisimden DUSER. Kalici yapmak icin"
+    e1_warn "Tailscale konsolunda cihazi acip 'Disable key expiry' isaretleyin"
+    e1_warn "ya da cihazi '${TAGS}' etiketiyle yeniden katin."
+  fi
+}
+
 _warn_if_untagged() {
   [[ -n "$TAGS" ]] || return 0
   local prefs advertised
@@ -238,16 +290,19 @@ systemctl enable --now tailscaled >/dev/null 2>&1 || {
   exit 0
 }
 
-# --- 2) Zaten bagli mi? (idempotent) ---------------------------------------
-# `tailscale status --json` -> BackendState: Running | NeedsLogin | Stopped ...
-CURRENT_STATE="$(tailscale status --json 2>/dev/null | sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
-if [[ "$CURRENT_STATE" == "Running" ]]; then
+# --- 2) Zaten kayitli mi? (idempotent) -------------------------------------
+# DIKKAT: kosul "Running" DEGIL "kayitli". Kapi kapaliyken (ozellikle
+# E1_RAD_LOCK_MODE=down) durum "Stopped" olur; "Running" arayan eski kosul
+# buraya takilmaz, asagi duser ve `tailscale up --authkey --reset` ile
+# musterinin kapattigi erisimi GERI ACARDI.
+if _node_is_registered; then
   TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
-  e1_ok "Cihaz zaten tailnet'te${TS_IP:+ (${TS_IP})} — yeniden giris yapilmadi."
-  # Yeniden giris YOK ama SSH/etiket durumu her calistirmada DOGRULANIR:
-  # anahtar gerekmez, `update.sh` bu sayede eski cihazlarda SSH'i acar.
-  _ensure_ssh
+  e1_ok "Cihaz zaten tailnet'e kayitli${TS_IP:+ (${TS_IP})} — yeniden giris yapilmadi."
   _warn_if_untagged
+  _report_key_expiry
+  # Sahadaki mevcut cihazlar uzaktan bakim izni ajanini ILK GUNCELLEMEDE
+  # burada alir. Erisim durumuna DOKUNMUYORUZ; karar ajanindir.
+  _install_remote_access 0
   exit 0
 fi
 
@@ -263,13 +318,14 @@ UP_ARGS=(
   --hostname="${TS_HOSTNAME}"
   # Saha cihazi kalici olmali: yeniden baslatinca ayni dugum olarak donsun.
   --reset
+  # VARSAYILAN KAPALI: dugum tailnet'e kayitli olur ama TUM GELEN baglantilar
+  # reddedilir. Musterinin yetkili kullanicisi arayuzden sureli izin verince
+  # e1-rad `--shields-up=false` yapar; sure dolunca geri kapatir.
+  --shields-up
 )
 [[ -n "$TAGS" ]] && UP_ARGS+=( --advertise-tags="${TAGS}" )
-if [[ "$ENABLE_SSH" == "1" ]]; then
-  # Tailscale SSH: erisim tailnet ACL'i ile kontrol edilir, ayri anahtar
-  # dagitmaya gerek kalmaz. Kapatmak icin E1_TAILSCALE_SSH=0.
-  UP_ARGS+=( --ssh )
-fi
+# `--ssh` BILINCLI OLARAK YOK: Tailscale SSH artik katilim aninda degil,
+# yalnizca izin verildiginde e1-rad tarafindan acilir (E1_TAILSCALE_SSH=1 ise).
 if [[ "$ACCEPT_DNS" == "1" ]]; then
   UP_ARGS+=( --accept-dns=true )
 else
@@ -306,14 +362,40 @@ TS_ERR="$(tailscale up "${UP_ARGS[@]}" 2>&1)" && TS_OK=1 || TS_OK=0
 # (Etiketsiz katilan cihaz anahtari ureten KULLANICIYA baglanir ve 6 ayda
 #  bir anahtar yenileme ister — bu yuzden uyari veriyoruz.)
 if [[ $TS_OK -eq 0 && -n "$TAGS" ]] && printf '%s' "$TS_ERR" | grep -qiE 'tag|not permitted|invalid'; then
-  e1_warn "Anahtar '${TAGS}' etiketini tasimiyor — etiketsiz deneniyor."
+  # SAHA VAKASI — "cihazlar bir sure sonra tailnet'ten siliniyor":
+  # Bu geri donus yolu eskiden OTOMATIKTI. Etiketsiz katilan cihaz calisir
+  # gorunur, kurulumcu ekrandaki uyariyi kaydirip gecer ve cihaz 180 GUN
+  # SONRA sessizce tailnet'ten duser (Tailscale varsayilan anahtar suresi).
+  # O anda cihaz sahada, uzaktan erisim yok, kimse neden oldugunu bilmiyor.
+  #
+  # Tailscale dokumantasyonu: "When tags are first applied, the tagged device
+  # will have key expiry disabled by default." Yani KALICI baglanti icin
+  # cihazin ETIKETLI katilmasi sart.
+  #
+  # Artik varsayilan olarak ETIKETSIZ KATILMIYORUZ. Kurulumcu ekranin
+  # basindayken anahtari duzeltip tekrar denemesi, alti ay sonra cihazi
+  # kaybetmekten iyidir. Bilerek etiketsiz istenirse:
+  #     E1_TAILSCALE_ALLOW_UNTAGGED=1
+  if [[ "${E1_TAILSCALE_ALLOW_UNTAGGED:-0}" != "1" ]]; then
+    e1_warn "Anahtar '${TAGS}' etiketini tasimiyor — tailnet'e KATILINMADI."
+    e1_warn "Etiketsiz katilan cihazin anahtari 180 gunde dolar ve cihaz"
+    e1_warn "uzaktan erisimden DUSER. Bu yuzden otomatik olarak yapilmiyor."
+    e1_warn ""
+    e1_warn "Yapilacak: Tailscale konsolunda anahtari '${TAGS}' etiketiyle"
+    e1_warn "yeniden uretin (Settings > Keys > Generate > Tags), sonra:"
+    e1_warn "  sudo E1_TAILSCALE_AUTHKEY=<yeni-anahtar> bash infra/appliance/setup-tailscale.sh"
+    e1_warn ""
+    e1_warn "Yine de etiketsiz katmak icin: E1_TAILSCALE_ALLOW_UNTAGGED=1"
+    exit 0
+  fi
+  e1_warn "E1_TAILSCALE_ALLOW_UNTAGGED=1 — etiketsiz deneniyor."
   UP_RETRY=()
   for a in "${UP_ARGS[@]}"; do [[ "$a" == --advertise-tags=* ]] || UP_RETRY+=( "$a" ); done
   TS_ERR="$(tailscale up "${UP_RETRY[@]}" 2>&1)" && TS_OK=1 || TS_OK=0
   if [[ $TS_OK -eq 1 ]]; then
-    e1_warn "Cihaz ETIKETSIZ katildi. Onerilen: anahtari '${TAGS}' etiketiyle"
-    e1_warn "yeniden uretip 'sudo tailscale up --advertise-tags=${TAGS}' calistirin."
-    e1_warn "Etiketsiz cihazlar periyodik anahtar yenilemesi ister (bkz. docs/TAILSCALE.md)."
+    e1_warn "Cihaz ETIKETSIZ katildi — anahtari 180 gunde dolacak."
+    e1_warn "Tailscale konsolunda cihazi acip 'Disable key expiry' isaretleyin,"
+    e1_warn "yoksa cihaz alti ay sonra uzaktan erisimden duser."
   fi
 fi
 
@@ -325,13 +407,17 @@ fi
 
 TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
 e1_ok "Tailnet'e katildi${TS_IP:+ — ${TS_IP}}"
-# SSH durumu VARSAYILMAZ, okunur: `up --ssh` sessizce dusmus olabilir.
-# Etiketsiz geri donus yolundan katildiysak da burada uyari cikar.
-_ensure_ssh
+# Etiketsiz geri donus yolundan katildiysak burada uyari cikar.
 _warn_if_untagged
+_report_key_expiry
 e1_info "Cihaz Tailscale yonetim konsolunda '${TS_HOSTNAME}' adiyla gorunur."
-if [[ "$ENABLE_SSH" == "1" ]]; then
-  e1_hint "Baglanmak icin: ssh root@${TS_HOSTNAME}"
-  e1_hint "Baglanti reddedilirse tailnet ACL'inde 'ssh' blogu eksiktir (bkz. docs/TAILSCALE.md)."
-fi
+e1_warn "UZAKTAN ERISIM VARSAYILAN KAPALI (--shields-up ile katildi)."
+e1_hint "Musterinin yetkili kullanicisi (engineer rolu) arayuzden sureli izin verir:"
+e1_hint "  Muhendislik > Sistem > Uzaktan Bakim  (1 saat / 8 saat / 24 saat)"
+e1_hint "Izin acikken baglanmak icin: ssh root@${TS_HOSTNAME}"
+e1_hint "Baglanti reddedilirse ya izin kapalidir ya da tailnet ACL'inde 'ssh' blogu eksiktir"
+e1_hint "(bkz. docs/TAILSCALE.md). Cihazda durum: sudo ${SCRIPT_DIR}/e1-rad.py report"
+# Taze katilim: kurulumcu ACL/SSH testini bitirebilsin diye kisa sureli
+# kurulum mahsubu yazilir (E1_RAD_GRACE_MIN, varsayilan 60 dk; 0 = yok).
+_install_remote_access 1
 exit 0

@@ -312,6 +312,119 @@ systemctl enable --now NetworkManager >/dev/null 2>&1 || die "NetworkManager bas
 systemctl reload NetworkManager >/dev/null 2>&1 || true
 ok "NetworkManager calisiyor."
 
+# --- AP'yi SIMDI acmak mevcut baglantiyi keser mi? --------------------------
+# SAHA VAKASI: kurulumcu musteri WiFi'sine SSH ile bagliyken kurulum/guncelleme
+# calistirdi; [4/7] adimi `nmcli connection up e1-grid-ap` yapinca SSH oturumu
+# koptu, script SIGHUP aldi ve kurulum YARIDA KALDI.
+#
+# NEDEN: appliance'ta TEK WiFi karti var. Tek radyo ayni anda hem AP hem client
+# olamaz. Cihaz bir aga CLIENT olarak bagliyken AP'yi kaldirmak o baglantiyi
+# DUSURUR — hem kurulumcunun oturumu hem de cihazin tek internet cikisi
+# (docker pull, tailscale, saat senkronu) o link uzerinde olabilir.
+#
+# COZUM: AP profili HER ZAMAN hazirlanir (asagidaki bloklar degismedi), ama
+# AKTIVASYON kesinti yaratacaksa yapilmaz; aktivasyon e1-netd'ye birakilir.
+# "Client'a bagli degilsek AP acik olmali" kurali e1-netd-report.timer ile
+# 30 sn'de bir kosar (OnBootSec=15s). Ayrica AP profili autoconnect yes +
+# autoconnect-priority 100 ile kayitli oldugu icin baglanti bosaldigi an
+# NetworkManager'in kendi autoconnect'i de acar. Yani "AP simdi acilmadi"
+# KALICI bir durum degildir; en gec ilk reboot'ta AP ile gelinir.
+AP_HOLD_REASON=""
+
+# SSH oturumunun geldigi arayuzu bul; bulunamazsa bos doner.
+#
+# $SSH_CONNECTION'a TEK BASINA GUVENILEMEZ: kanonik kurulum
+# `curl -fsSL ... | sudo bash` ve sudo varsayilan olarak env_reset uygular;
+# SSH_* degiskenleri env_keep listesinde YOKTUR, yani bu script'e hic ulasmaz.
+# root oldugumuz icin ust surec zincirindeki oturumun ortamini dogrudan
+# okuyoruz; o da yoksa cekirdekteki kurulu SSH oturumlarina bakiyoruz.
+_ssh_ingress_ifname() {
+  local peer="" raw="" pid hop=0
+
+  # (a) Ortamda varsa (root shell / `sudo -E`) — en ucuzu.
+  [[ -n "${SSH_CONNECTION:-}" ]] && peer="${SSH_CONNECTION%% *}"
+
+  # (b) Ust surec zinciri: sudo degiskeni silse bile giris kabugunun
+  #     (ve sshd'nin) environ'unda durur.
+  if [[ -z "$peer" ]]; then
+    pid=$$
+    while [[ -n "$pid" && "$pid" -gt 1 && $hop -lt 20 ]]; do
+      if [[ -r "/proc/$pid/environ" ]]; then
+        raw="$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null \
+               | sed -n 's/^SSH_CONNECTION=//p' | head -1)" || true
+        if [[ -n "$raw" ]]; then peer="${raw%% *}"; break; fi
+      fi
+      # PPid'i /proc/PID/status'tan aliyoruz: /proc/PID/stat'in 2. alani (comm)
+      # bosluk/parantez icerebilir ve alan numaralari kayar.
+      pid="$(sed -n 's/^PPid:[[:space:]]*//p' "/proc/$pid/status" 2>/dev/null)" || true
+      hop=$((hop + 1))
+    done
+  fi
+
+  # (c) Son care: kurulu SSH oturumlari. Baska bir yoneticinin oturumunu da
+  #     kapsar — istenen davranis budur. (Yalnizca 22/tcp.)
+  if [[ -z "$peer" ]] && command -v ss >/dev/null 2>&1; then
+    peer="$(ss -Htn state established '( sport = :22 )' 2>/dev/null \
+            | awk 'NF{print $NF; exit}' \
+            | sed -e 's/:[0-9]*$//' -e 's/^\[//' -e 's/\]$//')" || true
+  fi
+
+  [[ -z "$peer" ]] && return 0
+  # Cevaplarin cikacagi arayuz = oturumu tasiyan arayuz.
+  ip route get "$peer" 2>/dev/null \
+    | awk '{for (i = 1; i < NF; i++) if ($i == "dev") { print $(i+1); exit }}'
+}
+
+# AP aktivasyonu su an guvenli mi?
+#   0 = guvenli (acilabilir)   1 = acilmamali (sebep AP_HOLD_REASON'da)
+ap_activation_safe() {   # $1 = AP'nin kurulacagi WiFi arayuzu
+  local ifname="$1" con mode ssh_if
+  AP_HOLD_REASON=""
+  [[ -n "$ifname" ]] || return 0
+
+  # --- ANA KRITER: bu radyoda SU AN calisan bir WiFi CLIENT baglantisi -----
+  # Kontrol ARAYUZ BAZLI: iki radyolu cihazda AP wlan0'a kurulurken client
+  # wlan1'deyse yanlis alarm vermez, eski davranis korunur.
+  con="$(nmcli -g GENERAL.CONNECTION device show "$ifname" 2>/dev/null \
+         | sed 's/\\:/:/g')" || true
+  if [[ -n "$con" && "$con" != "--" && "$con" != "$AP_CON_NAME" ]]; then
+    # Profil ADI onemsiz: masaustu NM applet'i, netplan devri veya UI
+    # (e1-grid-wifi) kurmus olabilir. Belirleyici olan RADYO MODU.
+    mode="$(nmcli -g 802-11-wireless.mode connection show "$con" 2>/dev/null)" || true
+    # Bos deger = eski NM'de varsayilan 'infrastructure' (client).
+    if [[ "$mode" != "ap" ]]; then
+      # IPv4 sarti ONEMLI: IP'siz link ne SSH tasir ne uplink olur. Ayrica
+      # e1-netd de "bagli + IP var" diye bakar; ayni kritere bakmazsak ajan
+      # 30 sn sonra AP'yi yine acar ve iki taraf birbiriyle kavga eder.
+      if ip -4 -o addr show dev "$ifname" scope global 2>/dev/null | grep -q .; then
+        AP_HOLD_REASON="${ifname} su an '${con}' agina CLIENT olarak bagli"
+        return 1
+      fi
+      # GECIS ANI: [3/7] netplan devrini ARKA PLANDA baslatiyor. Tam o
+      # sirada arayuz baglanmis ama IPv4 henuz gelmemis olabilir
+      # (connecting / ip-config). O anda "IP yok, demek client degil" deyip
+      # AP'yi acarsak yarisi kaybeder ve baglantiyi keseriz. Belirsizken
+      # GUVENLI taraf: bekletmek.
+      dev_state="$(nmcli -g GENERAL.STATE device show "$ifname" 2>/dev/null)" || true
+      case "$(printf '%s' "$dev_state" | tr 'A-Z' 'a-z')" in
+        *connecting*|*config*|*prepare*|*ip-check*)
+          AP_HOLD_REASON="${ifname} '${con}' agina baglanmak uzere (durum: ${dev_state})"
+          return 1 ;;
+      esac
+    fi
+  fi
+
+  # --- IKINCIL EMNIYET: SSH oturumu bu arayuzden mi geliyor? --------------
+  # nmcli durumu yanlis raporlarsa (ekzotik surucu/NM surumu) son savunma.
+  ssh_if="$(_ssh_ingress_ifname)" || true
+  if [[ -n "$ssh_if" && "$ssh_if" == "$ifname" ]]; then
+    AP_HOLD_REASON="SSH oturumu ${ifname} uzerinden geliyor"
+    return 1
+  fi
+
+  return 0
+}
+
 # ---------------------------------------------------------------------------
 step "[4/7] WiFi erisim noktasi: ${AP_SSID}"
 if [[ "${SKIP_AP:-0}" == "1" ]]; then
@@ -382,12 +495,52 @@ address=/${APPLIANCE_HOSTNAME}/${AP_ADDRESS}
 CONF
     ok "AP DNS kaydi: ${APPLIANCE_HOSTNAME}.local -> ${AP_ADDRESS}"
 
-    # ONEMLI: AP zaten yayindaysa `connection up` yapmiyoruz — script her
-    # update.sh calismasinda tekrar kosar ve bu, AP'ye bagli sahadaki
-    # kullanicilarin (ve belki de update'i yapan kisinin) baglantisini keser.
+    # AP'yi "up" etmek TEK RADYODA mevcut baglantiyi dusurur. Iki koruma:
+    #   1. AP zaten yayindaysa dokunma -> script her update.sh calismasinda
+    #      tekrar kosar; sahadaki AP kullanicilarinin (ve belki update'i
+    #      yapan kisinin) baglantisi dusmesin.
+    #   2. Radyo su an CLIENT olarak bir aga bagliysa dokunma -> kurulumcunun
+    #      SSH oturumu ve cihazin internet cikisi orada olabilir. Profil
+    #      hazir; aktivasyonu e1-netd ustlenir (report timer 30 sn:
+    #      "client bagli degilse AP acik olmali").
     if nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx "$AP_CON_NAME"; then
       ok "AP zaten yayinda: ${AP_SSID} (kesintiye ugratilmadi)"
       info "SSID/kanal degistirdiyseniz uygulamak icin: nmcli connection up ${AP_CON_NAME}"
+    elif ! ap_activation_safe "$WIFI_IF"; then
+      AP_PENDING=1
+      warn "AP simdi ACILMADI: ${AP_HOLD_REASON}."
+      info "Tek WiFi karti ayni anda hem AP hem client olamaz; acmak bu"
+      info "baglantiyi (ve muhtemelen bu SSH oturumunu) keserdi."
+      info "AP profili kayitli ve otomatik: baglanti dustugu an e1-netd 30 sn"
+      info "icinde acar; ilk yeniden baslatmada da AP ile gelinir."
+      info "Hemen acmak icin (BU baglantiyi keser, konsoldan calistirin):"
+      info "  sudo nmcli connection up ${AP_CON_NAME}"
+
+      # BEKCI — AP'nin acilmasini e1-netd'ye TEK BASINA emanet etmiyoruz.
+      # Bu karar [4/7]'de veriliyor ama guvenlik agi (e1-netd + timer)
+      # [5/7]'de kuruluyor. Script arada olurse (SSH kopmasi, hata, ERR
+      # trap) AP profili kayitli kalir ama HIC acilmaz; cihaz client agina
+      # bagli kalir ve o ag giderse erisim yolu kalmaz.
+      #
+      # Bu yuzden hold verildigi anda, netplan geri alma muhafiziyla ayni
+      # desende bagimsiz bir bekci baslatiyoruz: 5 dakika sonra hala AP
+      # yayinda DEGILSE ve radyoda calisan bir client da yoksa AP'yi acar.
+      # Client hala bagliysa DOKUNMAZ — kurulumcunun oturumunu kesmez.
+      setsid nohup bash -c "
+        sleep 300
+        # AP zaten acildiysa (e1-netd ya da NM autoconnect) isimiz yok.
+        nmcli -t -f NAME connection show --active 2>/dev/null \
+          | grep -qx '${AP_CON_NAME}' && exit 0
+        # Radyoda hala calisan bir client varsa DOKUNMA.
+        con=\"\$(nmcli -g GENERAL.CONNECTION device show '${WIFI_IF}' 2>/dev/null)\"
+        if [ -n \"\$con\" ] && [ \"\$con\" != '--' ] && [ \"\$con\" != '${AP_CON_NAME}' ]; then
+          if nmcli -g IP4.ADDRESS device show '${WIFI_IF}' 2>/dev/null | grep -q .; then
+            exit 0
+          fi
+        fi
+        nmcli connection up '${AP_CON_NAME}' >/dev/null 2>&1 \
+          && logger -t e1-appliance 'bekci: AP acildi (client baglantisi yok)'
+      " >/dev/null 2>&1 </dev/null &
     elif nmcli connection up "$AP_CON_NAME" >/dev/null 2>&1; then
       ok "AP yayinda: ${AP_SSID}"
     else
@@ -448,11 +601,26 @@ echo "${C_GREEN}${C_BOLD}=======================================================
 echo "${C_GREEN}${C_BOLD}  Appliance modu hazir.${C_RESET}"
 echo "${C_GREEN}${C_BOLD}============================================================${C_RESET}"
 echo
-echo "  ${C_BOLD}Ilk kullanim:${C_RESET}"
-echo "    1. Telefon/laptop WiFi listesinden ${C_BOLD}${AP_SSID}${C_RESET} agina baglan (sifre yok)"
-echo "    2. Tarayicidan  ${C_BOLD}http://${APPLIANCE_HOSTNAME}.local${C_RESET}  (veya http://${AP_ADDRESS})"
-echo "    3. Giris yap -> Muhendislik > Sistem > ${C_BOLD}Ag Ayarlari${C_RESET}"
-echo "    4. Kablolu arayuze statik IP ver -> cihaz yeniden baslar"
+# Ozet, AP'nin GERCEK durumunu soylemeli. AP bekletildiyse "AP'ye baglan"
+# demek kullaniciyi olmayan bir aga yonlendirir ve cihazi erisilemez sanir.
+if [[ "${AP_PENDING:-0}" == "1" ]]; then
+  echo "  ${C_BOLD}Ilk kullanim:${C_RESET}"
+  echo "    ${C_YELLOW}AP su an KAPALI${C_RESET} — ${AP_HOLD_REASON}."
+  echo "    Cihaza SU ANDA baglandiginiz adresten erisin:"
+  echo "      ${C_BOLD}http://${APPLIANCE_HOSTNAME}.local${C_RESET}"
+  _ap_cur_ip="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -3 | tr '\n' ' ')"
+  [[ -n "${_ap_cur_ip// /}" ]] && echo "      veya http://${_ap_cur_ip% }"
+  echo "    ${C_BOLD}${AP_SSID}${C_RESET} agi, client baglantisi dustugunde"
+  echo "    kendiliginden acilir (e1-netd ~30 sn, en gec ilk yeniden baslatmada)."
+  echo "    Hemen acmak icin (BU baglantiyi keser, konsoldan): sudo nmcli connection up ${AP_CON_NAME}"
+  echo "    Sonra: Giris yap -> Muhendislik > Sistem > ${C_BOLD}Ag Ayarlari${C_RESET}"
+else
+  echo "  ${C_BOLD}Ilk kullanim:${C_RESET}"
+  echo "    1. Telefon/laptop WiFi listesinden ${C_BOLD}${AP_SSID}${C_RESET} agina baglan (sifre yok)"
+  echo "    2. Tarayicidan  ${C_BOLD}http://${APPLIANCE_HOSTNAME}.local${C_RESET}  (veya http://${AP_ADDRESS})"
+  echo "    3. Giris yap -> Muhendislik > Sistem > ${C_BOLD}Ag Ayarlari${C_RESET}"
+  echo "    4. Kablolu arayuze statik IP ver -> cihaz yeniden baslar"
+fi
 echo
 echo "  ${C_BOLD}Tanilama:${C_RESET}"
 echo "    Ag durumu   : cat ${STATE_DIR}/state.json"
@@ -460,6 +628,8 @@ echo "    Ajan logu   : sudo journalctl -u e1-netd -n 50"
 echo "    AP durumu   : nmcli connection show ${AP_CON_NAME}"
 echo "    AP istemci  : nmcli device wifi list ifname <wlan>"
 echo
-echo "  ${C_YELLOW}Not:${C_RESET} AP sifresizdir ve her zaman aciktir; yanlis statik IP"
-echo "  girilse bile cihaza AP uzerinden baglanip duzeltebilirsiniz."
+echo "  ${C_YELLOW}Not:${C_RESET} AP sifresizdir. Tek WiFi karti hem AP hem client olamadigi"
+echo "  icin cihaz bir WiFi agina bagliyken AP KAPALIDIR; o baglanti dustugu an"
+echo "  e1-netd AP'yi geri acar. Yani yanlis statik IP girilse bile cihaza"
+echo "  AP uzerinden baglanip duzeltebilirsiniz."
 echo

@@ -133,6 +133,9 @@ import {
 import { useLiveValuesSocket } from "../shared/useLiveValuesSocket";
 import { usePolling } from "../shared/usePolling";
 import { useTabs } from "../features/tabs/useTabs";
+// Uzaktan bakim izni ACIKKEN header'da duran uyari rozeti. Sayfanin kendisi
+// lazy; rozet oturum acilir acilmaz gerektigi icin bu kucuk modul eager.
+import { formatRemaining, useRemoteAccessBadge } from "../features/remote-access/remoteAccessShared";
 
 // --- Tembel yuklenen sayfalar --------------------------------------
 // Muhendislik sayfalari ilk yuklemede GELMEZ; kullanici o sekmeyi acinca
@@ -157,6 +160,7 @@ const OfflineMapPage = lazy(() => import("../features/map/OfflineMapPage").then(
 const NotificationSettingsPanel = lazy(() => import("../features/settings/NotificationSettingsPanel").then((m) => ({ default: m.NotificationSettingsPanel })));
 const OutboundTargetsPanel = lazy(() => import("../features/outbound/OutboundTargetsPanel").then((m) => ({ default: m.OutboundTargetsPanel })));
 const ProjectSettingsPanel = lazy(() => import("../features/settings/ProjectSettingsPanel").then((m) => ({ default: m.ProjectSettingsPanel })));
+const RemoteAccessPage = lazy(() => import("../features/remote-access/RemoteAccessPage").then((m) => ({ default: m.RemoteAccessPage })));
 const ResponsibilityAreasPage = lazy(() => import("../features/responsibility-areas/ResponsibilityAreasPage").then((m) => ({ default: m.ResponsibilityAreasPage })));
 const SignalsPage = lazy(() => import("../features/signals/SignalsPage").then((m) => ({ default: m.SignalsPage })));
 const SystemStatusPage = lazy(() => import("../features/system-status/SystemStatusPage").then((m) => ({ default: m.SystemStatusPage })));
@@ -313,6 +317,15 @@ export function App() {
     tabsApi.activeRoute.kind === "device-detail"
       ? tabsApi.activeRoute.deviceId
       : null;
+
+  // Uzaktan bakim izni acikken HER SAYFADA gorunen header rozeti icin.
+  // AnyDesk mantiginda en buyuk risk "acik unutmak"; rozet bunu aktif olarak
+  // engeller. Hook kosulsuz cagrilir (hook kurali) — token/rol uygun degilse
+  // kendisi hic istek atmaz, appliance olmayan kurulumda ilk cevapta susar.
+  const remoteAccessBadge = useRemoteAccessBadge(
+    session?.accessToken ?? "",
+    session?.role
+  );
 
   // Ana sayfa (dashboard) ortak filtre state'i — Harita ve Tablo aynı filtreyi paylaşır.
   const [dashboardSearch, setDashboardSearch] = useState("");
@@ -2404,6 +2417,13 @@ export function App() {
         isEngineeringView={pageMode === "engineering"}
         onToggleEngineering={() => handleChangePage("engineering")}
         onOpenSystemStatus={() => openEng("system-status")}
+        remoteAccessActive={remoteAccessBadge.active}
+        remoteAccessLabel={
+          remoteAccessBadge.remainingSeconds === null
+            ? undefined
+            : formatRemaining(remoteAccessBadge.remainingSeconds, t)
+        }
+        onOpenRemoteAccess={() => openEng("remote-access")}
         onSettings={handleOpenSettings}
         onLogout={handleLogout}
         devices={devices}
@@ -2671,6 +2691,17 @@ export function App() {
             ) : null}
             {engineeringPage === "network-settings" && session.role === "installer" ? (
               <NetworkSettingsPage accessToken={session.accessToken} />
+            ) : null}
+            {/* Uzaktan bakim izni. Gorunurluk UC yerde tanimli ve hepsi
+                birbiriyle ayni olmali: EngineeringNav.canSee, tabModel'deki
+                rol listeleri ve buradaki kosul. Izin VERME yetkisi ayrica
+                backend'de (yalnizca engineer) — sayfa `can_grant` ile
+                kendini kisitlar. */}
+            {engineeringPage === "remote-access" &&
+            (session.role === "installer" ||
+              session.role === "engineer" ||
+              session.role === "ops_manager") ? (
+              <RemoteAccessPage accessToken={session.accessToken} />
             ) : null}
             {engineeringPage === "offline-map" &&
             (session.role === "engineer" || session.role === "installer") ? (

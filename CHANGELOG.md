@@ -12,6 +12,31 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+### Güvenlik
+- **Uzaktan bakım artık varsayılan KAPALI (davranış değişikliği).** Saha cihazı
+  tailnet'e kayıtlı kalır ama gelen tüm bağlantılar reddedilir
+  (`tailscale set --shields-up=true --ssh=false`). Müşterinin yetkili
+  kullanıcısı — **yalnızca `engineer` rolü** — arayüzden süreli izin verir
+  (Mühendislik > Sistem > Uzaktan Bakım; 15 dk – 24 saat), süre dolunca erişim
+  kendiliğinden kapanır. `installer` rolü izin **veremez**: installer üretici
+  tarafıdır, kendi kendine açabilseydi "müşteri izin verir" mekanizması
+  anlamsızlaşırdı.
+  - Süreyi host'ta root ile çalışan yeni `e1-rad` ajanı sayar; son tarih mutlak
+    zaman olarak `lease.json`da durur ve 30 sn'lik systemd timer'ı uygular.
+    **Backend, veritabanı ve container tamamen kapalı olsa bile izin kapanır.**
+    Yeniden başlatma izni silmez ama uzatmaz da.
+  - İzin verme/geri alma ve otomatik kapanma `system_events`e
+    (`category=security`) yazılır: kim, hangi rolle, hangi IP'den, ne kadar
+    süreyle. Otomatik kapanma olayları **gerçekleştiği zamanla** kaydedilir.
+  - `setup-tailscale.sh` artık erişimi AÇMAZ. Önceki sürümde her `update.sh`
+    çalışmasında `_ensure_ssh()` SSH'i geri açıyordu ve idempotent erken çıkış
+    yalnızca `BackendState == "Running"` iken devreye giriyordu — bu ikisi
+    birlikte müşterinin kapattığı kapıyı sessizce geri açardı.
+  - **Sahaya çıkışta dikkat:** güncelleme tailnet üzerinden yapılıyorsa
+    `setup-remote-access.sh` kendi SSH oturumunuzu kesmemek için 60 dakikalık
+    kurulum mahsubu yazar (`E1_RAD_GRACE_MIN`). Bu tespit ilk olarak TEK bir
+    test cihazında, yerel/fiziksel erişim elde tutularak denenmelidir.
+
 ---
 
 ## [2.25.0] — 2026-07-31

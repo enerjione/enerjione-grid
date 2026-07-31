@@ -382,6 +382,59 @@ def _guard_clear() -> None:
         pass
 
 
+def _wifi_client_online(ifname: str, devices: list[dict]) -> bool:
+    """Bu radyoda PROFIL ADINDAN BAGIMSIZ olarak calisan bir client var mi?
+
+    NEDEN AYRI BIR FONKSIYON: `_sta_is_online` yalnizca BIZIM profilimize
+    (STA_CON_NAME = "e1-grid-wifi") bakar ve bu bilincli bir tercihtir —
+    muhafiz akisi (_guard_check) kendi baglanma denemesini dogrulamak
+    zorundadir, baskasinin kurdugu bir baglantiyi "basarili" saymamalidir.
+
+    Ama "AP'yi ac" karari icin o kriter YANLIS ve sahada kurulumu kirdi:
+    ilk kurulumda kurulumcu cihaza kendi WiFi'sinden baglaniyor ve o profil
+    ASLA "e1-grid-wifi" adini tasimiyor (netplan devri "netplan-wlan0-SSID",
+    masaustu applet'i ya da `nmcli device wifi connect` dogrudan SSID adini
+    verir; "e1-grid-wifi" adini yalnizca UI uzerinden yapilan WiFi baglama
+    uretir ve o da backend ayakta olmadan calismaz). Sonuc: ajan "client
+    bagli degil" deyip AP'yi aciyor, tek radyo AP moduna geciyor,
+    kurulumcunun SSH oturumu kopuyor ve kurulum yarida kaliyor.
+
+    Bu yuzden AP karari icin RADYONUN GERCEK DURUMUNA bakiyoruz:
+    arayuzde aktif bir baglanti var + o baglanti AP profilimiz degil +
+    radyo modu 'ap' degil (yani client) + IPv4 adresi almis.
+    """
+    dev = next((d for d in devices if d["ifname"] == ifname), None)
+    if dev is None:
+        return False
+    con = (dev.get("connection") or "").strip()
+    if not con or con == "--" or con == AP_CON_NAME:
+        return False
+    if (dev.get("state") or "").lower() not in ("connected", "connected (site only)"):
+        return False
+    # Mod okunamazsa eski NM varsayilani 'infrastructure' = client kabul edilir.
+    try:
+        mode = _nmcli(
+            "-g", "802-11-wireless.mode", "connection", "show", con, check=False
+        ).strip()
+    except RuntimeError:
+        mode = ""
+    if mode == "ap":
+        return False
+    # IPv4 sarti: adressiz link ne SSH tasir ne uplink olur. setup-appliance.sh
+    # tarafindaki ap_activation_safe AYNI kritere bakar; ikisi ayrisirsa biri
+    # AP'yi bekletirken digeri acar ve taraflar birbiriyle kavga eder.
+    return bool(_connection_ipv4_addrs(ifname))
+
+
+def _connection_ipv4_addrs(ifname: str) -> list[str]:
+    """Arayuzun global IPv4 adresleri (yoksa bos liste)."""
+    try:
+        out = _nmcli("-g", "IP4.ADDRESS", "device", "show", ifname, check=False)
+    except RuntimeError:
+        return []
+    return [p.strip() for p in out.replace("|", "\n").splitlines() if p.strip()]
+
+
 def _ensure_ap_when_offline() -> None:
     """DEGISMEZ KURAL: WiFi client'a bagli DEGILSEK, AP acik olmali.
 
@@ -407,7 +460,11 @@ def _ensure_ap_when_offline() -> None:
     if ifname is None:
         return  # WiFi karti yok
 
-    if _sta_is_online(ifname):
+    # DIKKAT: burada _sta_is_online KULLANILMAZ. O fonksiyon profil ADINA
+    # bakar ve ilk kurulumda kurulumcunun WiFi profilini goremez; sahada
+    # tam olarak bu yuzden AP acilip SSH oturumu koptu ve kurulum yarida
+    # kaldi. Ayrintili gerekce icin bkz. _wifi_client_online.
+    if _wifi_client_online(ifname, devices):
         return  # bir aga bagliyiz, AP zaten olamaz (tek radyo)
 
     ap = _ap_info(devices)

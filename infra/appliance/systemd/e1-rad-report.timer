@@ -1,0 +1,17 @@
+[Unit]
+Description=EnerjiOne Grid uzaktan bakim iznini periyodik denetle
+
+[Timer]
+# Boot'tan 20 sn sonra ilk tur (tailscaled otursun), sonra 30 sn'de bir.
+# e1-netd (15 sn) ve e1-gwd (25 sn) ile cakismasin diye kaydirildi.
+#
+# Suresi dolmus bir izin en gec 30 sn icinde kapanir. Izinler saat
+# mertebesinde oldugu icin bu gecikme onemsizdir; UI'da yine de "yaklasik"
+# ifadesi kullanilir.
+OnBootSec=20s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Unit=e1-rad-report.service
+
+[Install]
+WantedBy=timers.target

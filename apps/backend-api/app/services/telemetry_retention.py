@@ -1,27 +1,42 @@
-"""Telemetri + idempotency retention worker.
+"""Retention worker — sinirsiz buyuyen tablolarin zaman/adet bazli temizligi.
 
-Iki tablonun zaman bazli temizligi:
-  1. `telemetry` — son N dakikalik kayan pencere (canli deger / kisa trend)
-  2. `processed_messages` — idempotency UNIQUE check icin tutuluyor; ayni
-     `message_id` 7 gun icinde tekrar gelirse duplicate olarak ele alinir.
-     Daha eski mesajlarin yeniden gelme ihtimali (RabbitMQ persistent + outbox
-     ile bile) cok dusuktur; 7 gun guvenli marja.
+Uc tablonun sorumlulugu burada:
 
-Tablonun sinirsiz buyumesi production'da en buyuk risklerden biri:
-  * 600 cihaz × ~30 sinyal degisimi/dk × 60 dk × 24 saat = 26M row/gun
-  * 30 gun: 780M row, ~50 GB
-  * Idempotency check her telemetry mesaji icin tabloya SELECT yapar — tablo
-    buyudukce her sorgu yavaslayarak cascade gecikmeler olusturur.
+  1. `telemetry`          — canli deger, kisa kayan pencere (default 30 dk).
+                            Her (cihaz, sinyal) ikilisinin SON degeri MUAF;
+                            sure ne olursa olsun canli ekran bosalmaz.
+  2. `processed_messages` — idempotency defteri (default 24 saat).
+  3. `system_events`      — denetim/olay kaydi (default 2 yil + FIFO tavani).
 
-Konfigurasyon (env):
-  TELEMETRY_RETENTION_MINUTES         default 30
-  TELEMETRY_RETENTION_INTERVAL_SEC    default 300  (5 dk)
-  PROCESSED_MESSAGES_RETENTION_DAYS   default 7
-  PROCESSED_MESSAGES_INTERVAL_SEC     default 3600 (1 saat)
+NEDEN KRITIK
+------------
+600 cihaz olceginde telemetri ~26M satir/gun uretir; `processed_messages`
+mesaj basina bir satir tuttugu icin AYNI hizda buyur. Retention olmazsa:
+  * disk dolar ve once Postgres yazamaz hale gelir, telemetri akisi durur,
+  * idempotency SELECT'i her batch'te devasa bir tabloya bakar ve yavaslar,
+  * autovacuum geride kalir, tablo sisip index'ler bozulur.
 
-Production'da konservatif degerler — hot-loop'ta gereksiz lock contention
-olusturmamak icin saatlik calisir, batch'de DELETE LIMIT'siz (PostgreSQL'in
-HOT update + autovacuum'i halleder).
+`system_events` daha yavas buyur ama HIC temizlenmiyordu — sonsuza kadar
+birikiyordu. Artik 2 yillik pencere + adet tavani var.
+
+BATCH'LI SILME — NEDEN SART
+---------------------------
+Onceki surumde `processed_messages` LIMIT'siz tek DELETE ile temizleniyordu.
+Saatlik tetikte ~1.1M satir TEK transaction'da siliniyordu; bu:
+  * WAL'i tepe noktasina cikarir (checkpoint firtinasi),
+  * tabloyu islem boyunca kilitler,
+  * autovacuum'un araya girmesini engeller -> olu satirlar birikir (bloat).
+Artik her purge LIMIT'li TURLAR halinde kosar ve HER TUR AYRI COMMIT eder.
+Tur tavani (`retention_max_batches_per_run`) tek bir tetigin saatlerce
+surmesini onler; artan satirlar bir sonraki tetikte silinir. Birikme olmaz
+cunku tavan x batch, periyot boyunca uretilenden cok daha buyuktur.
+
+KONFIGURASYON
+-------------
+Tum degerler `app.core.config.settings` uzerinden gelir (env ile override
+edilebilir); `.env.example` ve docker-compose.yml ile senkronu
+`tests/test_config_consistency.py` kilitler. Onceden bu ayarlar burada
+dogrudan `os.getenv` ile okunuyordu ve hicbir ornek dosyada gorunmuyordu.
 """
 
 from __future__ import annotations
@@ -31,58 +46,95 @@ import os
 import threading
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, text  # `delete` processed_messages purge'unde kullaniliyor
+from sqlalchemy import and_, delete, select, text
 
+from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.processed_message import ProcessedMessage
+from app.models.system_event import SystemEvent
 from app.models.telemetry import Telemetry
 
 logger = logging.getLogger(__name__)
 
+# Birimi GUN'den SAAT'e cevrilen eski ayar. Sahada set edilmis olma ihtimali
+# dusuk (hicbir ornek dosyada yer almiyordu) ama sessizce yok saymak yerine
+# operatoru uyariyoruz.
+_LEGACY_ENV = "PROCESSED_MESSAGES_RETENTION_DAYS"
 
-def _telemetry_retention_minutes() -> int:
-    raw = os.getenv("TELEMETRY_RETENTION_MINUTES", "30")
-    try:
-        n = int(raw)
-        return max(1, n)
-    except ValueError:
-        return 30
-
-
-def _telemetry_interval_sec() -> int:
-    raw = os.getenv("TELEMETRY_RETENTION_INTERVAL_SEC", "300")
-    try:
-        n = int(raw)
-        return max(30, n)
-    except ValueError:
-        return 300
-
-
-def _processed_messages_retention_days() -> int:
-    raw = os.getenv("PROCESSED_MESSAGES_RETENTION_DAYS", "7")
-    try:
-        n = int(raw)
-        return max(1, n)
-    except ValueError:
-        return 7
+# FIFO adet tavani YALNIZCA asagidaki gurultu satirlarini dusurebilir.
+#
+# NEDEN ALLOWLIST (denylist DEGIL): denetim kaydinda "en eskiyi sil" kurali
+# tek basina TERS calisir. Bir olay firtinasi (ornegin bir entegrasyon
+# dongude hata uretmesi) tabloyu sisirdiginde en eski satirlar genelde
+# kurulum donemindeki `security` / `auth` / `license` kayitlaridir — yani
+# denetim izinin EN DEGERLI kismi, gecici bir telemetri gurultusu ugruna
+# silinirdi.
+#
+# Allowlist olmasi sayesinde ileride eklenecek YENI bir kategori otomatik
+# KORUNUR (unutulup silinme tarafina dusmez). Korunan kayitlar yalnizca
+# sure bazli pencere (system_events_retention_days) dolunca duser.
+_FIFO_EXPENDABLE_CATEGORIES = ("telemetry", "outbound", "outbound_target")
+_FIFO_EXPENDABLE_SEVERITIES = ("debug", "info")
 
 
-def _processed_messages_interval_sec() -> int:
-    raw = os.getenv("PROCESSED_MESSAGES_INTERVAL_SEC", "3600")
-    try:
-        n = int(raw)
-        return max(60, n)
-    except ValueError:
-        return 3600
+def _warn_legacy_env() -> None:
+    if os.getenv(_LEGACY_ENV):
+        logger.warning(
+            "%s artik KULLANILMIYOR (birim gun -> saat degisti). Yerine "
+            "PROCESSED_MESSAGES_RETENTION_HOURS kullanin; su an gecerli deger "
+            "%d saat.",
+            _LEGACY_ENV,
+            settings.processed_messages_retention_hours,
+        )
 
 
-class TelemetryRetentionWorker:
-    """Arka plan thread'i; periyodik DELETE çalıştırır.
+def _batch_delete(model, where, *, label: str) -> int:
+    """`where` kosuluna uyan satirlari LIMIT'li turlarla siler.
 
-    Hem `telemetry` (sik, kisa pencere) hem `processed_messages` (yavas, uzun
-    pencere) tablolarini temizler. Iki ayri timer; iki farkli interval. Her
-    biri kendi periodu geldiginde tetiklenir.
+    Her tur AYRI transaction: kisa islemler -> WAL tepe noktasi dusuk, lock
+    suresi kisa, autovacuum arayi yakalar. Bir tur tam dolu donmediyse
+    (removed < batch) silinecek satir kalmamistir, erken cikilir.
+
+    `model` PK'si `id` olan bir ORM sinifi olmali (subquery LIMIT icin gerekir).
     """
+    batch = settings.retention_delete_batch
+    total = 0
+    for _ in range(settings.retention_max_batches_per_run):
+        db = SessionLocal()
+        try:
+            ids = (
+                select(model.id)
+                .where(where)
+                .order_by(model.id.asc())
+                .limit(batch)
+            )
+            result = db.execute(delete(model).where(model.id.in_(ids)))
+            db.commit()
+            removed = int(getattr(result, "rowcount", 0) or 0)
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            raise
+        finally:
+            db.close()
+        total += removed
+        if removed < batch:
+            break
+    else:
+        # Tur tavanina dayandik: bu tetikte hepsini bitiremedik. Normal degil,
+        # operator gorsun (retention periyodu cok uzun ya da yuk beklenenden
+        # yuksek olabilir).
+        logger.warning(
+            "retention_batch_cap_reached label=%s removed=%d cap=%d "
+            "(kalan satirlar sonraki tetikte silinecek)",
+            label,
+            total,
+            settings.retention_max_batches_per_run,
+        )
+    return total
+
+
+class RetentionWorker:
+    """Arka plan thread'i; her tablo icin ayri periyotla purge tetikler."""
 
     def __init__(self) -> None:
         self._stop = threading.Event()
@@ -92,18 +144,23 @@ class TelemetryRetentionWorker:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
+        _warn_legacy_env()
         self._thread = threading.Thread(
-            target=self._run, name="telemetry-retention", daemon=True
+            target=self._run, name="retention-worker", daemon=True
         )
         self._thread.start()
         logger.info(
-            "telemetry_retention_started telemetry_keep_minutes=%d "
-            "telemetry_interval_sec=%d processed_messages_keep_days=%d "
-            "processed_messages_interval_sec=%d",
-            _telemetry_retention_minutes(),
-            _telemetry_interval_sec(),
-            _processed_messages_retention_days(),
-            _processed_messages_interval_sec(),
+            "retention_started telemetry_keep_min=%d/%ds "
+            "processed_messages_keep_h=%d/%ds "
+            "system_events_keep_d=%d/%ds max_rows=%d batch=%d",
+            settings.telemetry_retention_minutes,
+            settings.telemetry_retention_interval_sec,
+            settings.processed_messages_retention_hours,
+            settings.processed_messages_interval_sec,
+            settings.system_events_retention_days,
+            settings.system_events_interval_sec,
+            settings.system_events_max_rows,
+            settings.retention_delete_batch,
         )
 
     def stop(self) -> None:
@@ -113,147 +170,231 @@ class TelemetryRetentionWorker:
             self._thread = None
 
     def _run(self) -> None:
-        # Acilis sonrasi hemen telemetry temizle; processed_messages bir
-        # sonraki tetik anina kadar bekler. monotonic timer ile kac saniye
-        # geçtiyse o tetigi calistirsin.
-        last_telemetry_purge = 0.0
-        last_processed_purge = 0.0
-        # Initial run flag — backend acilir acilmaz mevcut buyukluk hakkinda
-        # bilgi vermek icin hemen bir kez bakalim
+        # (etiket, periyot_getter, fonksiyon, son_calisma_zamani)
+        jobs: list[list] = [
+            ["telemetry", lambda: settings.telemetry_retention_interval_sec, self.purge_telemetry, 0.0],
+            ["processed_messages", lambda: settings.processed_messages_interval_sec, self.purge_processed_messages, 0.0],
+            ["system_events", lambda: settings.system_events_interval_sec, self._purge_system_events, 0.0],
+            # Disk guard: yukaridaki TTL'lerin hepsi dogru calissa BILE diskin
+            # dolmadigini gercek olcumle dogrular; dolmaya yaklasilirsa
+            # yeniden uretilebilir veriden baslayarak alan acar.
+            ["disk_guard", lambda: settings.disk_guard_interval_sec, self._disk_guard_tick, 0.0],
+        ]
         first_iteration = True
         while not self._stop.is_set():
             now_mono = _monotonic()
-            try:
-                if first_iteration or now_mono - last_telemetry_purge >= _telemetry_interval_sec():
-                    self._purge_telemetry()
-                    last_telemetry_purge = now_mono
-            except Exception:  # noqa: BLE001
-                logger.exception("telemetry_retention_purge_failed")
-
-            try:
-                if first_iteration or now_mono - last_processed_purge >= _processed_messages_interval_sec():
-                    self._purge_processed_messages()
-                    last_processed_purge = now_mono
-            except Exception:  # noqa: BLE001
-                logger.exception("processed_messages_retention_purge_failed")
+            for job in jobs:
+                label, interval_fn, fn, last_run = job[0], job[1], job[2], job[3]
+                if not (first_iteration or now_mono - last_run >= interval_fn()):
+                    continue
+                try:
+                    fn()
+                except Exception:  # noqa: BLE001
+                    # Bir tablonun purge'u patlarsa digerleri calismaya devam
+                    # etmeli; retention topluca durursa disk dolar.
+                    logger.exception("retention_purge_failed label=%s", label)
+                job[3] = now_mono
 
             first_iteration = False
-            # Iki interval'in en kucugu kadar bekle (saniye granularitesi)
-            sleep_s = min(_telemetry_interval_sec(), _processed_messages_interval_sec())
+            # En kisa periyodun yarisi kadar uyu (en az 30sn) — tetik anlarini
+            # kacirmadan bosuna donmeyi de onler.
+            sleep_s = min(interval_fn() for _l, interval_fn, _f, _t in jobs)
             self._stop.wait(max(30, sleep_s // 2))
 
-    def _purge_telemetry(self) -> int:
-        """Eski telemetri row'larini siler — AMA her (device_id, signal_key)
-        icin EN SON row'u her zaman korur.
+    # ------------------------------------------------------------------ jobs
 
-        Eski davranis: timestamp < cutoff olan tum row'lar silinir. Bir sinyal
-        30 dakikadir degismiyorsa son row'u da silinir, frontend canli
-        degerler tablosunda bos kalir. Kullanici "değer kayboluyor" diye
-        bildirdi.
+    def _disk_guard_tick(self) -> None:
+        """Disk guard turu.
 
-        Yeni davranis: window function ile her sinyalin id-DESC sirasindaki
-        ilk row'unu (ROW_NUMBER=1) hicbir zaman silmeyiz. Geri kalan eski
-        row'lar (ROW_NUMBER>=2) cutoff'tan onceyse silinir. Boylece her
-        sinyalin son degeri DB'de kalici, retention sadece tarihsel veriyi
-        temizler.
+        Lazy import: disk_guard bu modulu (kisaltilmis pencereyle purge
+        cagirmak icin) import ediyor; ust duzeyde import etsek dongu olurdu.
+        """
+        from app.services import disk_guard
+
+        disk_guard.tick()
+
+    def purge_telemetry(self, *, retention_minutes: int | None = None) -> int:
+        """Eski telemetri satirlarini siler — AMA her (device_id, signal_key)
+        icin EN SON satiri her zaman korur.
+
+        `retention_minutes` verilirse yapilandirilmis degerin YERINE o pencere
+        kullanilir. Disk guard baski altinda pencereyi gecici olarak kisaltmak
+        icin bunu kullanir; kalici ayar DEGISMEZ.
+
+        Neden koruma: bir sinyal 30 dakikadir degismiyorsa son satiri da
+        silinirse canli degerler tablosunda o hucre BOSALIR. Kullanici
+        "deger kayboluyor" diye bildirmisti.
 
         PERFORMANS — filtre pencere fonksiyonunun ICINDE olmali:
-          Onceki surumde ic sorgu `FROM telemetry` idi (WHERE'siz) ve
-          `source_timestamp < cutoff` kosulu pencereden SONRA uygulaniyordu.
-          Sonuc: ROW_NUMBER() TUM tabloyu tarayip (device_id, signal_key)
-          bazinda siraliyordu ve `idx_telemetry_source_timestamp`
-          KULLANILAMIYORDU. 600 cihaz olceginde tablo ~21M satir; bu sorgu
-          5 dakikada bir o tabloyu bastan sona tariyor, sort disk'e tasiyor
-          ve DELETE boyunca kilit birikiyordu.
-
+          Ic sorgu WHERE'siz olsaydi ROW_NUMBER() TUM tabloyu tarayip
+          siralar ve `idx_telemetry_source_timestamp` KULLANILAMAZDI.
           Filtreyi ice indirince pencere yalnizca ESKI satirlar uzerinde
           calisir ve index devreye girer.
 
-        KABUL EDILEN FARK:
-          Ic filtreyle, aktif bir seride "cutoff oncesi son deger" 1 satir
-          olarak kalir (pencere artik yalnizca eski satirlari gorduğu icin
-          onlarin en yenisini rn=1 sayar). Cihaz+sinyal basina 1 satir,
-          sabit — buyumez; 600x20 = ~12K satir, 21M'lik tabloda %0.06.
-          Bunun karsiliginda tam tarama ortadan kalkiyor.
+        KABUL EDILEN FARK: aktif bir seride "cutoff oncesi son deger" 1 satir
+        olarak kalir (pencere yalnizca eski satirlari gordugu icin onlarin en
+        yenisini rn=1 sayar). Cihaz+sinyal basina sabit 1 satir — buyumez.
 
-          Veri KAYBI yok: yeni mantik eskisinin sildiginden FAZLASINI
-          silmiyor (sqlite fixture ile dogrulandi) ve veri gondermeyi
-          birakmis cihazin son degeri iki mantikta da korunuyor.
-
-        SQL (PostgreSQL):
-          DELETE FROM telemetry t USING (
-            SELECT id FROM (
-              SELECT id,
-                     ROW_NUMBER() OVER (
-                       PARTITION BY device_id, signal_key
-                       ORDER BY id DESC
-                     ) AS rn
-              FROM telemetry
-              WHERE source_timestamp < :cutoff
-            ) sub
-            WHERE rn > 1
-          ) old
-          WHERE t.id = old.id
+        BATCH: `LIMIT :batch` ic sorguda. Worker bir sure durmussa (ya da
+        yuk beklenenden yuksekse) tek DELETE 26M satira dayanabilir; turlara
+        boluyoruz.
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=_telemetry_retention_minutes())
-        db = SessionLocal()
-        try:
-            result = db.execute(
-                text(
-                    """
-                    DELETE FROM telemetry t
-                    USING (
-                        SELECT id
-                        FROM (
-                            SELECT id,
-                                   ROW_NUMBER() OVER (
-                                       PARTITION BY device_id, signal_key
-                                       ORDER BY id DESC
-                                   ) AS rn
-                            FROM telemetry
-                            WHERE source_timestamp < :cutoff
-                        ) sub
-                        WHERE rn > 1
-                    ) old
-                    WHERE t.id = old.id
-                    """
-                ),
-                {"cutoff": cutoff},
-            )
-            db.commit()
-            removed = int(getattr(result, "rowcount", 0) or 0)
-            if removed > 0:
-                logger.info(
-                    "telemetry_retention_purged removed=%d cutoff=%s "
-                    "(her sinyalin son row'u korundu)",
-                    removed,
-                    cutoff.isoformat(),
+        minutes = (
+            retention_minutes
+            if retention_minutes is not None
+            else settings.telemetry_retention_minutes
+        )
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        batch = settings.retention_delete_batch
+        total = 0
+        for _ in range(settings.retention_max_batches_per_run):
+            db = SessionLocal()
+            try:
+                result = db.execute(
+                    text(
+                        """
+                        DELETE FROM telemetry t
+                        USING (
+                            SELECT id
+                            FROM (
+                                SELECT id,
+                                       ROW_NUMBER() OVER (
+                                           PARTITION BY device_id, signal_key
+                                           ORDER BY id DESC
+                                       ) AS rn
+                                FROM telemetry
+                                WHERE source_timestamp < :cutoff
+                            ) sub
+                            WHERE rn > 1
+                            LIMIT :batch
+                        ) old
+                        WHERE t.id = old.id
+                        """
+                    ),
+                    {"cutoff": cutoff, "batch": batch},
                 )
-            return removed
-        finally:
-            db.close()
+                db.commit()
+                removed = int(getattr(result, "rowcount", 0) or 0)
+            except Exception:  # noqa: BLE001
+                db.rollback()
+                raise
+            finally:
+                db.close()
+            total += removed
+            if removed < batch:
+                break
+        if total:
+            logger.info(
+                "telemetry_retention_purged removed=%d cutoff=%s "
+                "(her sinyalin son satiri korundu)",
+                total,
+                cutoff.isoformat(),
+            )
+        return total
 
-    def _purge_processed_messages(self) -> int:
-        """Eski idempotency kayitlarini siler. PostgreSQL'in autovacuum'i
-        sonrasi yer geri kazanir. Her gun ~26M row eklendigi icin bu cleanup
-        kritik."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=_processed_messages_retention_days())
-        db = SessionLocal()
-        try:
-            result = db.execute(
-                delete(ProcessedMessage).where(ProcessedMessage.processed_at < cutoff)
+    def purge_processed_messages(self, *, retention_hours: int | None = None) -> int:
+        """Eski idempotency kayitlarini siler.
+
+        `retention_hours` verilirse yapilandirilmis degerin YERINE o pencere
+        kullanilir (disk guard baski altinda kisaltir; kalici ayar degismez).
+
+        Gercek redelivery penceresi ack_wait(60s) x max_deliver(10) = 10 dakika
+        (bkz. telemetry_consumer.py consumer_cfg). Default 24 saat bunun 144
+        kati; ustelik `telemetry_history` dogal anahtarinda ON CONFLICT DO
+        NOTHING ikinci bir dedup katmani var. Yani bu tabloyu kisa tutmak
+        at-least-once garantisini ZAYIFLATMAZ.
+        """
+        hours = (
+            retention_hours
+            if retention_hours is not None
+            else settings.processed_messages_retention_hours
+        )
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        removed = _batch_delete(
+            ProcessedMessage,
+            ProcessedMessage.processed_at < cutoff,
+            label="processed_messages",
+        )
+        if removed:
+            logger.info(
+                "processed_messages_retention_purged removed=%d cutoff=%s",
+                removed,
+                cutoff.isoformat(),
             )
-            db.commit()
-            removed = int(getattr(result, "rowcount", 0) or 0)
-            if removed > 0:
-                logger.info(
-                    "processed_messages_retention_purged removed=%d cutoff=%s",
-                    removed,
-                    cutoff.isoformat(),
+        return removed
+
+    def _purge_system_events(self) -> int:
+        """Denetim/olay kaydi temizligi: once SURE, sonra ADET tavani (FIFO).
+
+        Sure bazli pencere normal calisma sartlarinda tek basina yeterlidir.
+        Adet tavani, beklenmedik bir olay firtinasinda (ornegin bir entegrasyon
+        dongude hata uretirse) tablonun 2 yil dolmadan sismesini onleyen
+        emniyet subabidir — en ESKI kayitlar dusulur, en yeniler kalir.
+        """
+        removed = 0
+
+        # 1) Sure bazli pencere.
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            days=settings.system_events_retention_days
+        )
+        removed += _batch_delete(
+            SystemEvent,
+            SystemEvent.created_at < cutoff,
+            label="system_events_age",
+        )
+
+        # 2) FIFO tavani. En yeni N. satirin id'sini bulup altindakileri sil —
+        # AMA yalnizca dusurulebilir gurultu satirlarini (bkz.
+        # _FIFO_EXPENDABLE_*). OFFSET, PK index'i uzerinde yurur; tablo
+        # taranmaz.
+        max_rows = settings.system_events_max_rows
+        if max_rows > 0:
+            db = SessionLocal()
+            try:
+                threshold_id = db.scalar(
+                    select(SystemEvent.id)
+                    .order_by(SystemEvent.id.desc())
+                    .offset(max_rows)
+                    .limit(1)
                 )
-            return removed
-        finally:
-            db.close()
+            finally:
+                db.close()
+            if threshold_id is not None:
+                over = _batch_delete(
+                    SystemEvent,
+                    and_(
+                        SystemEvent.id <= threshold_id,
+                        SystemEvent.category.in_(_FIFO_EXPENDABLE_CATEGORIES),
+                        SystemEvent.severity.in_(_FIFO_EXPENDABLE_SEVERITIES),
+                    ),
+                    label="system_events_fifo",
+                )
+                if over:
+                    logger.warning(
+                        "system_events_fifo_cap_applied removed=%d max_rows=%d "
+                        "(olay uretimi beklenenden yuksek — kaynagi inceleyin)",
+                        over,
+                        max_rows,
+                    )
+                else:
+                    # Tavan asilmis ama dusurulebilir satir YOK: fazlalik
+                    # korunan denetim kayitlarindan geliyor. Bunlari FIFO ile
+                    # SILMIYORUZ (bilincli); operator gorsun diye uyariyoruz.
+                    # Disk baskisi varsa disk guard katmani devreye girer.
+                    logger.warning(
+                        "system_events_fifo_cap_exceeded_but_protected max_rows=%d "
+                        "(fazlalik korunan denetim kategorilerinde — silinmedi)",
+                        max_rows,
+                    )
+                removed += over
+
+        if removed:
+            logger.info(
+                "system_events_retention_purged removed=%d cutoff=%s",
+                removed,
+                cutoff.isoformat(),
+            )
+        return removed
 
 
 def _monotonic() -> float:
@@ -263,7 +404,12 @@ def _monotonic() -> float:
     return _time.monotonic()
 
 
-_worker = TelemetryRetentionWorker()
+# Geriye uyumluluk: modul adi ve disari acilan API degismedi (main.py
+# `telemetry_retention.start()` cagiriyor). Sinif adi TelemetryRetentionWorker
+# -> RetentionWorker oldu cunku artik yalnizca telemetri temizlemiyor.
+TelemetryRetentionWorker = RetentionWorker
+
+_worker = RetentionWorker()
 
 
 def start() -> None:

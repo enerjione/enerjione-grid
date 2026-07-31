@@ -432,6 +432,21 @@ if [[ -f infra/appliance/setup-tailscale.sh ]]; then
     e1_warn "Tailscale adimi tamamlanamadi; guncelleme devam ediyor."
 fi
 
+# ---- Uzaktan bakim izni ajani (e1-rad) -----------------------------------
+# DAVRANIS DEGISIKLIGI: bu surumden sonra uzaktan erisim VARSAYILAN KAPALI.
+# Sahadaki mevcut cihazlar ajani ilk guncellemede burada alir.
+#
+# Bu betik, guncellemenin TAILNET UZERINDEN kosuldugunu tespit ederse kisa
+# sureli bir "kurulum mahsubu" yazar — aksi halde kapiyi kapatirken kendi SSH
+# oturumumuzu keser ve update.sh yarida kalirdi. Yerelden kosulan rutin
+# guncelleme mahsup YAZMAZ (her guncelleme sessizce kapi acmasin).
+# APPLIANCE_REFRESH'ten BAGIMSIZ: VPS kurulumlarinda da gecerli.
+if [[ -f infra/appliance/setup-remote-access.sh ]]; then
+  INSTALL_DIR="$SCRIPT_DIR" bash infra/appliance/setup-remote-access.sh \
+    >/dev/null 2>&1 && e1_ok "Uzaktan bakim izni ajani (e1-rad) guncel." \
+    || e1_warn "e1-rad guncellenemedi; 'Uzaktan Bakim' sayfasi calismayabilir."
+fi
+
 # Kurulum adresini (enerjione.com/grid/install.sh) yayinlayan sunucuda,
 # yayinlanan kopya bu surumle tazelenir. Yayin dizini yoksa burasi hic
 # calismaz — saha PC'leri ve normal VPS'ler etkilenmez.

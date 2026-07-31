@@ -36,7 +36,12 @@ logger = logging.getLogger(__name__)
 try:
     import nats  # type: ignore[import-not-found]
     from nats.errors import TimeoutError as NatsTimeoutError  # noqa: F401
-    from nats.js.api import RetentionPolicy, StorageType, StreamConfig  # type: ignore[import-not-found]
+    from nats.js.api import (  # type: ignore[import-not-found]
+        DiscardPolicy,
+        RetentionPolicy,
+        StorageType,
+        StreamConfig,
+    )
 
     NATS_AVAILABLE = True
 except ImportError:  # pragma: no cover - optional dependency
@@ -92,6 +97,12 @@ class JetStreamBus:
         max_age_days_normalized: int,
         max_age_days_dlq: int,
         connect_timeout_sec: int,
+        # Stream basina DISK tavani. 0 = sinirsiz (eski davranis). Varsayilan
+        # deger vermiyoruz ki cagiran taraf bilincli gecsin; bkz. config.py
+        # nats_stream_*_max_bytes.
+        max_bytes_raw: int = 0,
+        max_bytes_normalized: int = 0,
+        max_bytes_dlq: int = 0,
     ) -> None:
         self._url = url
         self._stream_raw = stream_raw
@@ -109,6 +120,9 @@ class JetStreamBus:
         self._max_age_raw_sec = max_age_days_raw * 24 * 60 * 60
         self._max_age_normalized_sec = max_age_days_normalized * 24 * 60 * 60
         self._max_age_dlq_sec = max_age_days_dlq * 24 * 60 * 60
+        self._max_bytes_raw = max_bytes_raw
+        self._max_bytes_normalized = max_bytes_normalized
+        self._max_bytes_dlq = max_bytes_dlq
         self._connect_timeout = connect_timeout_sec
 
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -221,11 +235,13 @@ class JetStreamBus:
             name=self._stream_raw,
             subject=self._subject_raw,
             max_age_sec=self._max_age_raw_sec,
+            max_bytes=self._max_bytes_raw,
         )
         await self._ensure_stream(
             name=self._stream_normalized,
             subject=self._subject_normalized,
             max_age_sec=self._max_age_normalized_sec,
+            max_bytes=self._max_bytes_normalized,
         )
         # DLQ stream — workerlarin max_deliver'a takilan "poison" mesajlari
         # manual publish ile buraya tasinir. NATS default'unda max_deliver
@@ -235,6 +251,7 @@ class JetStreamBus:
             name=self._stream_dlq,
             subject=self._subject_dlq,
             max_age_sec=self._max_age_dlq_sec,
+            max_bytes=self._max_bytes_dlq,
         )
 
     async def _disconnect(self) -> None:
@@ -244,16 +261,24 @@ class JetStreamBus:
             except Exception:  # noqa: BLE001
                 logger.debug("jetstream_drain_error", exc_info=True)
 
-    async def _ensure_stream(self, *, name: str, subject: str, max_age_sec: int) -> None:
-        """Stream yoksa olustur; varsa subject/retention farkliysa otomatik
-        update_stream cagrir.
+    async def _ensure_stream(
+        self, *, name: str, subject: str, max_age_sec: int, max_bytes: int = 0
+    ) -> None:
+        """Stream yoksa olustur; varsa config drift'i varsa update_stream cagrir.
 
         Drift senaryosu: stream daha onceki cutover'da eski subject
         (`hsl.telemetry.*`) ile olusturuldu; cati `e1.*`'ye gecti. Eger
         sadece add_stream çağrılırsa "Stream already exists" hatası alınır
         ve eski subject kalir → yeni mesajlar stream'e DUSEMEZ.
 
-        update_stream ile farkli subject/retention durumunda zorlanir.
+        DRIFT KONTROLU NEYE BAKAR — ve neden onemli:
+          Bu kontrol bir zamanlar YALNIZCA `subjects` + `max_age`
+          karsilastiriyordu. Sonucu su oldu: stream'e yeni bir sinir
+          (ornegin `max_bytes`) eklendiginde MEVCUT kurulumlarda hicbir sey
+          degismiyordu — cunku subject ve max_age ayni kaldigi icin "drift
+          yok" deyip erken donuyordu. Yani "disk tavani ekledik" denip
+          release edilir, sahadaki diskler dolmaya devam ederdi. Yeni bir
+          sinir alani eklerken BU LISTEYE DE EKLEYIN.
         """
         # NOT: NATS 2.10 server `-1`'i max_msgs / max_bytes icin REDDEDIYOR
         # (BadRequestError code=10025 err='invalid JSON'). Doğru konvansiyon
@@ -273,7 +298,15 @@ class JetStreamBus:
             storage=StorageType.FILE,  # type: ignore[union-attr]
             max_age=max_age_sec,
             max_msgs=0,
-            max_bytes=0,
+            # DISK TAVANI. 0 = sinirsiz (eski davranis). max_age tek basina
+            # bayt tavani VERMEZ: disk kullanimi hiz x zamandir.
+            max_bytes=max_bytes,
+            # Tavana carpinca EN ESKI mesajlari dus, publish'i REDDETME.
+            # Bu, "izleme sistemi asla durmasin" tercihinin ta kendisi:
+            # DiscardPolicy.NEW olsaydi tampon dolunca gateway telemetri
+            # basamaz ve akis tamamen dururdu. Takas bilincli — uzun bir
+            # kesintide en eski mesajlar sessizce kaybolur.
+            discard=DiscardPolicy.OLD,  # type: ignore[union-attr]
         )
         try:
             info = await self._js.stream_info(name)
@@ -282,9 +315,25 @@ class JetStreamBus:
             # ikisi de saniye, dogrudan karsilastirilir.
             existing_subjects = list(getattr(info.config, "subjects", []) or [])
             existing_max_age = int(getattr(info.config, "max_age", 0) or 0)
-            if sorted(existing_subjects) == sorted([subject]) and existing_max_age == max_age_sec:
+            existing_max_bytes = int(getattr(info.config, "max_bytes", 0) or 0)
+            existing_discard = getattr(info.config, "discard", None)
+            # DiscardPolicy bir str enum; hem enum hem ham string gelebilir.
+            existing_discard_val = getattr(existing_discard, "value", existing_discard)
+            if (
+                sorted(existing_subjects) == sorted([subject])
+                and existing_max_age == max_age_sec
+                and existing_max_bytes == max_bytes
+                and existing_discard_val == DiscardPolicy.OLD.value  # type: ignore[union-attr]
+            ):
                 # Drift yok — dokunma
                 return
+            logger.info(
+                "jetstream_stream_drift name=%s max_bytes %s->%s discard %s->old",
+                name,
+                existing_max_bytes,
+                max_bytes,
+                existing_discard_val,
+            )
             # Drift var — update_stream ile yenile
             await self._js.update_stream(cfg)
             logger.warning(
@@ -408,6 +457,12 @@ def start_bus_if_enabled() -> None:
             max_age_days_normalized=settings.nats_stream_normalized_max_age_days,
             max_age_days_dlq=settings.nats_stream_dlq_max_age_days,
             connect_timeout_sec=settings.nats_connect_timeout_sec,
+            # Stream basina disk tavani — max_age tek basina bayt siniri
+            # vermez. Tavana carpinca discard=OLD ile en eskiler duser,
+            # publish REDDEDILMEZ (akis durmaz).
+            max_bytes_raw=settings.nats_stream_raw_max_bytes,
+            max_bytes_normalized=settings.nats_stream_normalized_max_bytes,
+            max_bytes_dlq=settings.nats_stream_dlq_max_bytes,
         )
         ok = bus.start()
         if ok:

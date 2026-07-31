@@ -1113,6 +1113,116 @@ export type NetworkConfigAccepted = {
   next_url?: string | null;
 };
 
+// ---- Uzaktan bakim izni (`/remote-access/*`) -------------------------------
+// Cihaz uretici bakim agina KAYITLI kalir; gelen baglantilar VARSAYILAN OLARAK
+// reddedilir. Musterinin yetkili kullanicisi SURELI izin verir, sure dolunca
+// host ajani erisimi kendiliginden kapatir (sayaci backend DEGIL ajan tutar).
+// Kaynak: apps/backend-api/app/schemas/remote_access.py
+
+/** Cihazin bakim agindaki dugum bilgisi. Kullaniciya gosterilen kisim
+ *  bilincli olarak dar: ad + adres + kayitli/cevrimici. */
+export type RemoteAccessLink = {
+  installed: boolean;
+  version?: string | null;
+  daemon_running: boolean;
+  /** Running | Stopped | NeedsLogin | NoState | Starting */
+  backend_state?: string | null;
+  registered: boolean;
+  hostname?: string | null;
+  dns_name?: string | null;
+  ipv4?: string | null;
+  tags: string[];
+  /** null = kayit suresi uygulanmiyor (etiketli katilimda istenen durum). */
+  key_expiry?: string | null;
+  key_expired: boolean;
+  ssh_enabled: boolean;
+  shields_up: boolean;
+};
+
+/** SU ANKI izin penceresi. Kapali ise open=false ve alanlar null. */
+export type RemoteAccessGrantState = {
+  /** OLCULEN deger — ajan gercekten "gelen baglanti acik" diyorsa true. */
+  open: boolean;
+  verified: boolean;
+  /** prefs_unreadable | open_failed | close_failed */
+  mismatch?: string | null;
+  session_id?: string | null;
+  granted_by?: string | null;
+  granted_by_role?: string | null;
+  granted_at?: string | null;
+  expires_at?: string | null;
+  duration_minutes?: number | null;
+  reason?: string | null;
+  /** ui | install | update | cli */
+  source?: string | null;
+  /** Kalan sure — SUNUCU hesaplar. Istemci saati saha PC'lerinde guvenilmez. */
+  remaining_seconds?: number | null;
+  /** Son tarih gecmis ama hala acik: ajan durmus olabilir -> kirmizi uyari. */
+  overdue: boolean;
+};
+
+/** Kapanmis son oturumun ozeti. */
+export type RemoteAccessSession = {
+  session_id?: string | null;
+  granted_by?: string | null;
+  granted_by_role?: string | null;
+  granted_at?: string | null;
+  expires_at?: string | null;
+  ended_at?: string | null;
+  /** expired | revoked | clock_skew | lease_corrupt | cli */
+  end_reason?: string | null;
+  duration_minutes?: number | null;
+  reason?: string | null;
+  source?: string | null;
+};
+
+export type RemoteAccessApplyStatus = {
+  request_id?: string | null;
+  /** grant | revoke */
+  action?: string | null;
+  /** applying | applied | failed */
+  status?: string | null;
+  error?: string | null;
+  at?: string | null;
+  applied?: Record<string, unknown> | null;
+};
+
+export type RemoteAccessStatus = {
+  available: boolean;
+  /** state_dir_missing | state_dir_not_writable | agent_never_reported | state_stale */
+  reason?: string | null;
+  /** tailscale_not_installed | daemon_not_running | not_registered | key_expired */
+  agent_reason?: string | null;
+  updated_at?: string | null;
+  /** state.json'in yasi (sn). Buyukse zamanlayici durmus demektir. */
+  state_age_seconds?: number | null;
+  /** shields | down */
+  lock_mode?: string | null;
+  tailscale: RemoteAccessLink;
+  access: RemoteAccessGrantState;
+  last_session?: RemoteAccessSession | null;
+  pending: boolean;
+  last_apply?: RemoteAccessApplyStatus | null;
+  /** Hazir sure butonlari BU sinirlara gore uretilir; koda gomulmez. */
+  min_duration_minutes: number;
+  max_duration_minutes: number;
+  /** Izin verme yetkisi (backend: yalnizca engineer). UI butonu buna bakar. */
+  can_grant: boolean;
+};
+
+export type RemoteAccessGrantPayload = {
+  duration_minutes: number;
+  reason?: string | null;
+  allow_ssh?: boolean;
+};
+
+export type RemoteAccessAccepted = {
+  request_id: string;
+  action: "grant" | "revoke";
+  /** TAHMINI son tarih; kesin deger ajanda. Bir sonraki durum okumasi tazeler. */
+  expires_at?: string | null;
+};
+
 /** Bildirim merkezi (Header zil ikonu). */
 export type NotificationCategory =
   | "alarm"

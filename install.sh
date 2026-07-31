@@ -775,6 +775,21 @@ if [[ -f "${INSTALL_DIR}/infra/appliance/setup-tailscale.sh" ]]; then
     || e1_warn "Tailscale adimi tamamlanamadi; kurulum devam ediyor."
 fi
 
+# ---- Uzaktan bakim izni ajani (e1-rad) -----------------------------------
+# Uzaktan erisim VARSAYILAN KAPALI; musterinin yetkili kullanicisi (engineer)
+# arayuzden sureli izin verir ve sure dolunca erisim kendiliginden kapanir.
+# Sureyi HOST'ta root ile calisan bu ajan sayar — backend/DB kapali olsa bile.
+#
+# setup-tailscale.sh bunu zaten cagiriyor; buradaki cagri tailscale hic
+# kurulmadigi (anahtar verilmedigi) kurulumlar icin: paylasilan dizin dogru
+# izinlerle olussun ki Docker bind mount'u root:root 0755 yaratmasin ve
+# backend "dizine yazilamiyor" demesin. Idempotent, mahsup YAZMAZ.
+if [[ -f "${INSTALL_DIR}/infra/appliance/setup-remote-access.sh" ]]; then
+  INSTALL_DIR="$INSTALL_DIR" bash "${INSTALL_DIR}/infra/appliance/setup-remote-access.sh" \
+    >/dev/null 2>&1 && e1_ok "Uzaktan bakim izni ajani (e1-rad) aktif." \
+    || e1_warn "e1-rad kurulamadi; 'Uzaktan Bakim' sayfasi calismayacak."
+fi
+
 # ---- Final rehber ---------------------------------------------------------
 e1_step_done
 VPS_IP="$(e1_detect_ip)"
