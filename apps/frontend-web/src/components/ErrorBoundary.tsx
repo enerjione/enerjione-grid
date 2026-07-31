@@ -1,5 +1,7 @@
 import React from "react";
 
+import i18n from "../shared/i18n";
+
 /**
  * ErrorBoundary — render path'inde fırlatılan exception'ları yakalar.
  *
@@ -55,11 +57,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
         }}
       >
         <h1 style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>
-          Beklenmeyen bir hata oluştu
+          {i18n.t("errors.crashTitle", { defaultValue: "Beklenmeyen bir hata oluştu" })}
         </h1>
         <p style={{ color: "#666", maxWidth: 480, marginBottom: "1.5rem" }}>
-          Arayüz beklenmedik bir durum nedeniyle yanıt veremez hale geldi. Sayfayı yeniden
-          yüklemek sorunu çoğunlukla çözer. Sorun devam ederse sistem yöneticisine bildirin.
+          {i18n.t("errors.crashBody", {
+            defaultValue:
+              "Arayüz beklenmedik bir durum nedeniyle yanıt veremez hale geldi. Sayfayı yeniden yüklemek sorunu çoğunlukla çözer. Sorun devam ederse sistem yöneticisine bildirin.",
+          })}
         </p>
         <button
           onClick={this.handleReload}
@@ -73,7 +77,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             cursor: "pointer",
           }}
         >
-          Sayfayı yeniden yükle
+          {i18n.t("errors.crashReload", { defaultValue: "Sayfayı yeniden yükle" })}
         </button>
       </div>
     );

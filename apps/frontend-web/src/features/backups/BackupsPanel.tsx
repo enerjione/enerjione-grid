@@ -17,6 +17,7 @@ import {
 import type { RestoreStatus } from "../../shared/api";
 import type { BackupJob, BackupSchedule } from "../../shared/types";
 import { useToast } from "../../components/ToastProvider";
+import { usePolling } from "../../shared/usePolling";
 
 type Props = {
   accessToken: string;
@@ -112,14 +113,7 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
     }
   };
 
-  useEffect(() => {
-    void reload();
-    const id = window.setInterval(() => {
-      void reload();
-    }, 15000);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+  usePolling({ enabled: Boolean(accessToken), intervalMs: 15000, fn: reload });
 
   const handleCreate = async () => {
     setCreating(true);

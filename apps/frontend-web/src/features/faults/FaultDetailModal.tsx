@@ -8,6 +8,7 @@ import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import type { GridSnapshot } from "../../shared/api";
 import { formatDistanceM, formatDistanceRange } from "../../shared/lineDistance";
 import type { AlarmEvent, DeviceRow, FaultComment, FaultEvent, UserRead } from "../../shared/types";
+import { useModalDialog } from "../../shared/useModalDialog";
 
 type Props = {
   fault: FaultEvent;
@@ -146,14 +147,9 @@ export function FaultDetailModal({
     })();
   }, [fault.id, onLoadComments, t]);
 
-  // ESC ile kapatma
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // ESC ile kapatma + odak tuzagi. Dinleyici window yerine modal
+  // kapsayicisinda: ic ice diyalogda ESC ikisini birden kapatmasin.
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
 
   const userOptions = useMemo(
     () => [...users].sort((a, b) => a.full_name.localeCompare(b.full_name, localeTag)),
@@ -468,6 +464,7 @@ export function FaultDetailModal({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        ref={dialogRef}
       >
         <button
           type="button"

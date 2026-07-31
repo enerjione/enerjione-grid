@@ -10,6 +10,7 @@
  * araligindaki direkler cizilir (degraded ama yine anlamli).
  */
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   /** Hattin tum direk sira numaralari (artan). */
@@ -48,6 +49,7 @@ function Tower({ x, highlight }: { x: number; highlight: boolean }) {
 }
 
 export function FaultPoleStrip({ poleSeqs, fromSeq, toSeq, active = true }: Props) {
+  const { t } = useTranslation();
   const seqs = useMemo(() => {
     const uniq = Array.from(new Set(poleSeqs)).sort((a, b) => a - b);
     if (uniq.length >= 2) return uniq;
@@ -84,8 +86,8 @@ export function FaultPoleStrip({ poleSeqs, fromSeq, toSeq, active = true }: Prop
       role="img"
       aria-label={
         hasSpan
-          ? `Arıza aralığı: direk ${lo} ile ${hi} arası`
-          : "Arıza aralığı belirlenemedi"
+          ? t("faults.poleStrip.range", { from: lo, to: hi })
+          : t("faults.poleStrip.unknown")
       }
     >
       <defs>

@@ -39,6 +39,7 @@ type Props = {
 };
 
 import { WifiPanel } from "./WifiPanel";
+import { usePolling } from "../../shared/usePolling";
 
 const REFRESH_INTERVAL_SEC = 10;
 /** Reboot sonrasi tahmini acilis suresi — geri sayim bunun uzerinden isler. */
@@ -173,11 +174,7 @@ export function NetworkSettingsPage({ accessToken }: Props) {
     }
   }, [accessToken, fillFromInterface, t]);
 
-  useEffect(() => {
-    void load();
-    const id = window.setInterval(() => void load(), REFRESH_INTERVAL_SEC * 1000);
-    return () => window.clearInterval(id);
-  }, [load]);
+  usePolling({ enabled: true, intervalMs: REFRESH_INTERVAL_SEC * 1000, fn: load });
 
   // Yeniden baslatma geri sayimi.
   useEffect(() => {

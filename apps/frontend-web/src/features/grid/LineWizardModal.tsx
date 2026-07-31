@@ -15,6 +15,7 @@ import {
   type GridImportPreview,
 } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
+import { useModalDialog } from "../../shared/useModalDialog";
 
 type Props = {
   accessToken: string;
@@ -26,6 +27,8 @@ type Method = null | "excel" | "qa";
 
 export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
   const { t } = useTranslation();
+  // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -98,7 +101,13 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
 
   return (
     <div className="settings-modal-backdrop" onClick={onClose}>
-      <div className="settings-modal grid-wizard-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="settings-modal grid-wizard-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        ref={dialogRef}
+      >
         <div className="grid-wizard-head">
           <h3>{t("engineering.grid.wizard.title")}</h3>
           {method ? (

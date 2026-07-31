@@ -8,7 +8,7 @@
  * Yeni ikon eklerken lucide'dan named import edin, `material-symbols`
  * class'ini bu dosyada KULLANMAYIN.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
@@ -45,16 +45,19 @@ import {
 } from "lucide-react";
 
 import {
+  fetchHistorianStatus,
   fetchHostStatus,
   fetchServicesStatus,
   fetchVersionInfo,
   loadSession
 } from "../../shared/api";
 import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
+import { usePolling } from "../../shared/usePolling";
 import type {
   AlarmEvent,
   DeviceRow,
   Gateway,
+  HistorianStatus,
   HostStatus,
   ServicesReport,
   ServiceStatus,
@@ -74,6 +77,9 @@ type Props = {
 /** Sunucu kaynak / servis durumu yenileme aralığı (sn). */
 const HOST_REFRESH_INTERVAL_SEC = 5;
 const SERVICES_REFRESH_INTERVAL_SEC = 10;
+/** Historian saglik yenileme araligi (sn). Backend zaten 60 sn cache'liyor ve
+ *  bu bilgi (hypertable/retention politikasi) saniyeler icinde degismez. */
+const HISTORIAN_REFRESH_INTERVAL_SEC = 60;
 const HOST_HISTORY_LEN = 24;
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
@@ -274,6 +280,8 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
   // Servis durumlari
   const [services, setServices] = useState<ServicesReport | null>(null);
   const [servicesError, setServicesError] = useState<string | null>(null);
+  const [historian, setHistorian] = useState<HistorianStatus | null>(null);
+  const [historianError, setHistorianError] = useState<string | null>(null);
   const servicesInFlightRef = useRef(false);
 
   // Surum + guncelleme durumu. Backend sonucu 6 saat cache'liyor, o yuzden
@@ -304,89 +312,94 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
   const [netRate, setNetRate] = useState<{ up: number; down: number } | null>(null);
   const prevNetRef = useRef<{ sent: number; recv: number; at: number } | null>(null);
 
-  // Host metrikleri polling
-  useEffect(() => {
-    let cancelled = false;
-    async function tick() {
-      if (hostInFlightRef.current) return;
-      const session = loadSession();
-      if (!session) return;
-      hostInFlightRef.current = true;
-      try {
-        const status = await fetchHostStatus(session.accessToken);
-        if (!cancelled) {
-          setHost(status);
-          setHostError(null);
-          setCpuHistory((prev) => {
-            const next = [...prev, status.cpu.percent];
-            return next.length > HOST_HISTORY_LEN ? next.slice(-HOST_HISTORY_LEN) : next;
-          });
-          setMemHistory((prev) => {
-            const next = [...prev, status.memory.percent];
-            return next.length > HOST_HISTORY_LEN ? next.slice(-HOST_HISTORY_LEN) : next;
-          });
-          const prev = prevNetRef.current;
-          const dt = prev ? status.sampled_at - prev.at : 0;
-          if (prev && dt > 0.5) {
-            setNetRate({
-              up: Math.max(0, (status.network.bytes_sent - prev.sent) / dt),
-              down: Math.max(0, (status.network.bytes_recv - prev.recv) / dt)
-            });
-          }
-          prevNetRef.current = {
-            sent: status.network.bytes_sent,
-            recv: status.network.bytes_recv,
-            at: status.sampled_at
-          };
-        }
-      } catch (exc) {
-        if (!cancelled) {
-          const msg = exc instanceof Error ? exc.message : t("systemStatus.host.errorMetrics");
-          // session_polling_401 sentinel'ini kullaniciya gosterme — loading banner kalsin
-          setHostError(msg === "session_polling_401" ? null : msg);
-        }
-      } finally {
-        hostInFlightRef.current = false;
+  // Host metrikleri polling.
+  //
+  // `cancelled` bayragi kaldirildi: usePolling unmount'ta interval'i temizler,
+  // React 18'de unmount sonrasi setState zaten sessiz no-op. inFlight ref'i
+  // duruyor — yavas yanit ust uste istek yigmasin.
+  const pollHost = useCallback(async () => {
+    if (hostInFlightRef.current) return;
+    const session = loadSession();
+    if (!session) return;
+    hostInFlightRef.current = true;
+    try {
+      const status = await fetchHostStatus(session.accessToken);
+      setHost(status);
+      setHostError(null);
+      setCpuHistory((prev) => {
+        const next = [...prev, status.cpu.percent];
+        return next.length > HOST_HISTORY_LEN ? next.slice(-HOST_HISTORY_LEN) : next;
+      });
+      setMemHistory((prev) => {
+        const next = [...prev, status.memory.percent];
+        return next.length > HOST_HISTORY_LEN ? next.slice(-HOST_HISTORY_LEN) : next;
+      });
+      const prev = prevNetRef.current;
+      const dt = prev ? status.sampled_at - prev.at : 0;
+      if (prev && dt > 0.5) {
+        setNetRate({
+          up: Math.max(0, (status.network.bytes_sent - prev.sent) / dt),
+          down: Math.max(0, (status.network.bytes_recv - prev.recv) / dt)
+        });
       }
+      prevNetRef.current = {
+        sent: status.network.bytes_sent,
+        recv: status.network.bytes_recv,
+        at: status.sampled_at
+      };
+    } catch (exc) {
+      const msg = exc instanceof Error ? exc.message : t("systemStatus.host.errorMetrics");
+      // session_polling_401 sentinel'ini kullaniciya gosterme — loading banner kalsin
+      setHostError(msg === "session_polling_401" ? null : msg);
+    } finally {
+      hostInFlightRef.current = false;
     }
-    void tick();
-    const id = window.setInterval(tick, HOST_REFRESH_INTERVAL_SEC * 1000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
+  }, [t]);
+
+  usePolling({ enabled: true, intervalMs: HOST_REFRESH_INTERVAL_SEC * 1000, fn: pollHost });
 
   // Servis durumlari polling (DB/Rabbit/worker'lar)
-  useEffect(() => {
-    let cancelled = false;
-    async function tick() {
-      if (servicesInFlightRef.current) return;
-      const session = loadSession();
-      if (!session) return;
-      servicesInFlightRef.current = true;
-      try {
-        const report = await fetchServicesStatus(session.accessToken);
-        if (!cancelled) {
-          setServices(report);
-          setServicesError(null);
-        }
-      } catch (exc) {
-        if (!cancelled) {
-          const msg = exc instanceof Error ? exc.message : t("systemStatus.services.errorFetch");
-          setServicesError(msg === "session_polling_401" ? null : msg);
-        }
-      } finally {
-        servicesInFlightRef.current = false;
-      }
+  const pollServices = useCallback(async () => {
+    if (servicesInFlightRef.current) return;
+    const session = loadSession();
+    if (!session) return;
+    servicesInFlightRef.current = true;
+    try {
+      const report = await fetchServicesStatus(session.accessToken);
+      setServices(report);
+      setServicesError(null);
+    } catch (exc) {
+      const msg = exc instanceof Error ? exc.message : t("systemStatus.services.errorFetch");
+      setServicesError(msg === "session_polling_401" ? null : msg);
+    } finally {
+      servicesInFlightRef.current = false;
     }
-    void tick();
-    const id = window.setInterval(tick, SERVICES_REFRESH_INTERVAL_SEC * 1000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
+  }, [t]);
+
+  usePolling({
+    enabled: true,
+    intervalMs: SERVICES_REFRESH_INTERVAL_SEC * 1000,
+    fn: pollServices
+  });
+
+  // --- Historian (telemetri arsivi) sagligi -------------------------------
+  const pollHistorian = useCallback(async () => {
+    const session = loadSession();
+    if (!session) return;
+    try {
+      setHistorian(await fetchHistorianStatus(session.accessToken));
+      setHistorianError(null);
+    } catch (exc) {
+      const msg = exc instanceof Error ? exc.message : t("systemStatus.historian.errorFetch");
+      setHistorianError(msg === "session_polling_401" ? null : msg);
+    }
+  }, [t]);
+
+  usePolling({
+    enabled: true,
+    intervalMs: HISTORIAN_REFRESH_INTERVAL_SEC * 1000,
+    fn: pollHistorian
+  });
 
   // Cihaz ozeti — sadece sayilar, tablo yok.
   const deviceStats = useMemo(() => {
@@ -1007,6 +1020,142 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
               </div>
             </div>
           </div>
+        </section>
+      ) : null}
+
+      {/* --- Historian (telemetri arsivi) sagligi --------------------------
+          NEDEN AYRI KART: `telemetry_history` 90 gun retention'li bir
+          TimescaleDB hypertable olarak tasarlandi. Retention kurulmamissa
+          tablo sinirsiz buyur (600 cihazda gunde ~26M satir) ve bunun TEK
+          belirtisi diskin dolmasidir. Operatorun bunu onceden gormesi icin
+          durumu burada acikca gosteriyoruz. */}
+      {historian ? (
+        <section className="sys-card">
+          <header className="sys-card-head">
+            <div className="sys-card-title-wrap">
+              <span className="sys-card-icon sys-card-icon--svc">
+                <Database size={17} strokeWidth={2.1} />
+              </span>
+              <h2 className="sys-card-title">{t("systemStatus.historian.title")}</h2>
+            </div>
+            <div className="sys-head-meta">
+              <span
+                className={
+                  historian.severity === "ok"
+                    ? "sys-version-badge is-current"
+                    : "sys-version-badge is-update"
+                }
+              >
+                {historian.severity === "ok" ? (
+                  <CheckCircle2 size={13} strokeWidth={2.4} />
+                ) : (
+                  <BellRing size={13} strokeWidth={2.4} />
+                )}
+                {t(`systemStatus.historian.severity.${historian.severity}`)}
+              </span>
+            </div>
+          </header>
+          <div className="sys-card-body">
+            {historian.problems.length > 0 ? (
+              <ul className="sys-card-list">
+                {historian.problems.map((code) => (
+                  <li key={code} className="sys-svc-row">
+                    <span className="sys-svc-name">
+                      {t(`systemStatus.historian.problem.${code}`)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="sys-info-tiles">
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <FolderTree size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.historian.retention")}
+                  </span>
+                  <strong className="sys-info-tile-val">
+                    {historian.retention_days != null
+                      ? t("systemStatus.historian.retentionDays", {
+                          count: historian.retention_days
+                        })
+                      : t("systemStatus.historian.retentionNone")}
+                  </strong>
+                  <span className="sys-info-tile-sub">
+                    {historian.is_hypertable
+                      ? t("systemStatus.historian.hypertableYes")
+                      : t("systemStatus.historian.hypertableNo")}
+                  </span>
+                </div>
+              </div>
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <HardDrive size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.historian.size")}
+                  </span>
+                  <strong className="sys-info-tile-val">
+                    {formatBytes(historian.total_bytes)}
+                  </strong>
+                  <span className="sys-info-tile-sub">
+                    {historian.compression_enabled
+                      ? t("systemStatus.historian.compressionOn")
+                      : t("systemStatus.historian.compressionOff")}
+                  </span>
+                </div>
+              </div>
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <LayoutGrid size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.historian.rows")}
+                  </span>
+                  <strong className="sys-info-tile-val">
+                    {historian.row_estimate != null
+                      ? historian.row_estimate.toLocaleString()
+                      : "—"}
+                  </strong>
+                  {/* Tahmin oldugu ACIKCA yazilir: tam sayim (COUNT(*)) bu
+                      tabloda tam tarama demek, bilerek yapmiyoruz. */}
+                  <span className="sys-info-tile-sub">
+                    {t("systemStatus.historian.rowsEstimate")}
+                  </span>
+                </div>
+              </div>
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <Timer size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.historian.newest")}
+                  </span>
+                  <strong className="sys-info-tile-val sys-info-tile-val--mono">
+                    {historian.newest_sample_at
+                      ? new Date(historian.newest_sample_at).toLocaleString()
+                      : "—"}
+                  </strong>
+                  {historian.oldest_sample_at ? (
+                    <span className="sys-info-tile-sub">
+                      {t("systemStatus.historian.oldest", {
+                        value: new Date(historian.oldest_sample_at).toLocaleDateString()
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : historianError ? (
+        <section className="sys-card">
+          <div className="sys-card-body">{historianError}</div>
         </section>
       ) : null}
     </section>

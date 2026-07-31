@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 
 import { API_BASE_URL } from "../shared/api";
+import { useModalDialog } from "../shared/useModalDialog";
 
 /**
  * ChangePasswordModal — Backend must_change_password=true dondurduyse
@@ -24,6 +25,12 @@ interface Props {
 }
 
 export function ChangePasswordModal({ forceful = true, onClose, onSuccess, accessToken }: Props) {
+  // Odak tuzagi HER ZAMAN devrede: zorunlu sifre degisiminde arkadaki panele
+  // Tab ile gecilememeli. ESC ise yalnizca kapatilabilir modda is gorur
+  // (forceful=true iken bilerek no-op).
+  const dialogRef = useModalDialog<HTMLDivElement>(() => {
+    if (!forceful) onClose?.();
+  });
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
@@ -75,6 +82,7 @@ export function ChangePasswordModal({ forceful = true, onClose, onSuccess, acces
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cpw-title"

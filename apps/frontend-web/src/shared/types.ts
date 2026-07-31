@@ -77,8 +77,23 @@ export type DeviceRow = {
 
 export type UserRole = "operator" | "engineer" | "installer" | "ops_manager";
 
+export type LicenseState =
+  | "valid"
+  | "unlicensed"
+  | "invalid"
+  | "machine_mismatch"
+  | "machine_unavailable";
+
+/** Arayuz kilidinin minimal gorunumu (GET /license/gate) — tum rollere acik.
+    Ticari bilgi TASIMAZ; sadece "kilitli mi, neden". */
+export type LicenseGate = {
+  locked: boolean;
+  state: LicenseState;
+  reason_code: string;
+};
+
 export type LicenseStatus = {
-  state: "valid" | "unlicensed" | "invalid" | "machine_mismatch" | "machine_unavailable";
+  state: LicenseState;
   reason_code: string;
   is_valid: boolean;
   can_add_device: boolean;
@@ -886,6 +901,36 @@ export type ServicesReport = {
   sampled_at: number;
 };
 
+/** Historian (`telemetry_history`) yapisal sagligi — `/system-status/historian`.
+ *
+ *  Bu tablo 90 gun retention'li bir TimescaleDB hypertable olarak tasarlandi.
+ *  Retention kurulmazsa 600 cihazda gunde ~26M satir birikir ve disk dolana
+ *  kadar hicbir belirti vermez; bu kart o sessiz arizayi gorunur kilar. */
+export type HistorianProblem =
+  | "timescaledb_missing"
+  | "not_hypertable"
+  | "no_retention"
+  | "no_compression"
+  | "retention_failing"
+  | "retention_mismatch";
+
+export type HistorianStatus = {
+  table: string;
+  timescaledb: "installed" | "available_not_installed" | "unavailable";
+  is_hypertable: boolean;
+  retention_days?: number | null;
+  compression_enabled: boolean;
+  continuous_aggregates: string[];
+  /** pg_class.reltuples TAHMINI — tam sayim degil (COUNT(*) cok pahali). */
+  row_estimate?: number | null;
+  total_bytes?: number | null;
+  oldest_sample_at?: string | null;
+  newest_sample_at?: string | null;
+  retention_last_run_status?: string | null;
+  severity: "ok" | "warning" | "critical";
+  problems: HistorianProblem[];
+};
+
 // ---- Modbus TCP outbound adres plani (`/outbound-targets/{id}/modbus-plan`) --
 // Plan backend'de uretilir; modbus-outbound worker'i AYNI plani uygular.
 // Yani buradaki adres, sahada yayinlanan adresin ta kendisidir.
@@ -1144,6 +1189,9 @@ export type MapTileSummary = {
   max_download_zoom: number;
   max_pack_tiles: number;
   online_fallback: boolean;
+  prefer_online: boolean;
+  /** Yukari akis su an erisilebilir sayiliyor mu. */
+  online: boolean;
   packs: MapPack[];
 };
 

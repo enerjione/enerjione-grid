@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { setupPassword } from "../../shared/api";
 
@@ -12,6 +13,7 @@ import { setupPassword } from "../../shared/api";
  */
 
 export function SetupPasswordPage() {
+  const { t } = useTranslation();
   // URLSearchParams ile basit ?token= okuma — router'a bagimlilik yok.
   const params = new URLSearchParams(window.location.search);
   const token = (params.get("token") || "").trim();
@@ -24,9 +26,9 @@ export function SetupPasswordPage() {
 
   if (!token) {
     return (
-      <PageShell title="Gecersiz Bag">
+      <PageShell title={t("setupPassword.invalidTitle")}>
         <p style={{ color: "#991b1b" }}>
-          Davet bagi gecersiz. Eksik token. Admin'den yeni bir davet linki isteyin.
+          {t("setupPassword.invalidBody")}
         </p>
       </PageShell>
     );
@@ -34,15 +36,15 @@ export function SetupPasswordPage() {
 
   if (success) {
     return (
-      <PageShell title="Sifre Belirlendi">
+      <PageShell title={t("setupPassword.doneTitle")}>
         <p style={{ color: "#065f46" }}>
-          Sifreniz basariyla belirlendi. Simdi giris yapabilirsiniz.
+          {t("setupPassword.doneBody")}
         </p>
         <a
           href="/"
           style={{ display: "inline-block", marginTop: "1rem", padding: "0.5rem 1rem", background: "#2563eb", color: "#fff", borderRadius: 6, textDecoration: "none" }}
         >
-          Giris Yap
+          {t("setupPassword.goLogin")}
         </a>
       </PageShell>
     );
@@ -52,11 +54,11 @@ export function SetupPasswordPage() {
     e.preventDefault();
     setError(null);
     if (pwd.length < 8) {
-      setError("Sifre en az 8 karakter olmali.");
+      setError(t("setupPassword.tooShort"));
       return;
     }
     if (pwd !== confirmPwd) {
-      setError("Sifreler eslesmiyor.");
+      setError(t("setupPassword.mismatch"));
       return;
     }
     setBusy(true);
@@ -64,21 +66,21 @@ export function SetupPasswordPage() {
       await setupPassword(token, pwd);
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Beklenmeyen hata.");
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <PageShell title="Hesabinizi Aktive Edin">
+    <PageShell title={t("setupPassword.title")}>
       <p style={{ color: "#6b7280", marginBottom: "1.5rem", fontSize: "0.875rem" }}>
-        Davet edildiniz. EnerjiOne Grid'e ilk girisiniz icin bir sifre belirleyin.
+        {t("setupPassword.intro")}
       </p>
       <form onSubmit={submit}>
         <label style={{ display: "block", marginBottom: "0.75rem" }}>
           <span style={{ display: "block", fontSize: "0.875rem", color: "#374151", marginBottom: 4 }}>
-            Yeni Sifre (min 8 karakter)
+            {t("setupPassword.newPassword")}
           </span>
           <input
             type="password"
@@ -93,7 +95,7 @@ export function SetupPasswordPage() {
         </label>
         <label style={{ display: "block", marginBottom: "1rem" }}>
           <span style={{ display: "block", fontSize: "0.875rem", color: "#374151", marginBottom: 4 }}>
-            Sifre (Tekrar)
+            {t("setupPassword.confirmPassword")}
           </span>
           <input
             type="password"
@@ -115,7 +117,7 @@ export function SetupPasswordPage() {
           disabled={busy}
           style={{ width: "100%", padding: "0.625rem 1rem", background: busy ? "#9ca3af" : "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: busy ? "default" : "pointer", fontSize: "0.875rem", fontWeight: 500 }}
         >
-          {busy ? "Belirleniyor..." : "Sifreyi Belirle"}
+          {busy ? t("setupPassword.submitting") : t("setupPassword.submit")}
         </button>
       </form>
     </PageShell>

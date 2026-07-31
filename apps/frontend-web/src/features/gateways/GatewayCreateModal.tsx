@@ -32,6 +32,7 @@ import {
 } from "../../shared/api";
 import type { GatewayAgentStatus } from "../../shared/types";
 import { CopyButton, generateToken } from "./gatewayShared";
+import { useModalDialog } from "../../shared/useModalDialog";
 
 type CreatePayload = {
   code: string;
@@ -67,6 +68,8 @@ export function GatewayCreateModal({
   onClose
 }: Props) {
   const { t } = useTranslation();
+  // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
 
   const [step, setStep] = useState<Step>("identity");
   const [code, setCode] = useState(() => suggestCode(existingCodes));
@@ -212,7 +215,7 @@ export function GatewayCreateModal({
 
   return (
     <div className="settings-modal-backdrop">
-      <div className="settings-modal gw-wizard" role="dialog" aria-modal="true">
+      <div className="settings-modal gw-wizard" role="dialog" aria-modal="true" ref={dialogRef}>
         <header className="gw-wizard-head">
           <div>
             <h3>{t("engineering.gateways.wizard.title")}</h3>

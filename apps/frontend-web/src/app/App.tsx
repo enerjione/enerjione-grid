@@ -67,6 +67,7 @@ import {
   fetchDeviceModels,
   fetchDevices,
   fetchGateways,
+  fetchLicenseGate,
   fetchLicenseStatus,
   fetchResponsibilityAreaDetail,
   fetchResponsibilityAreas,
@@ -130,6 +131,7 @@ import {
   API_BASE_URL
 } from "../shared/api";
 import { useLiveValuesSocket } from "../shared/useLiveValuesSocket";
+import { usePolling } from "../shared/usePolling";
 import { useTabs } from "../features/tabs/useTabs";
 
 // --- Tembel yuklenen sayfalar --------------------------------------
@@ -200,9 +202,53 @@ import type {
 //     YOKTUR, yalnizca cihaz sayisi sinirlidir. Sistem calisir; sadece yeni
 //     cihaz ekleme reddedilir (backend 403 doner, arayuz toast gosterir).
 // `machine_unavailable` bir lisans durumu degil, sunucu tarafi arizasidir.
+// NOT: Bu kume backend'deki `license_service.ENFORCED_STATES` ile AYNI olmak
+// zorunda. Biri degisirse digeri de degismeli — yoksa arayuz kilitli
+// gorunurken API acik (veya tersi) kalir.
 const LICENSE_GATE_STATES: ReadonlySet<LicenseStatus["state"]> = new Set([
   "unlicensed",
 ]);
+
+// Lisans durumu sorgusunun sonucu.
+//   "checking" : henuz cevap yok (yalnizca HIC lisans gorulmemis kurulumda)
+//   "open"     : lisans var, sistem serbest
+//   "locked"   : lisans yok -> icerik RENDER EDILMEZ
+//   "unknown"  : sorgu 3 denemede basarisiz VE daha once hic gecerli lisans
+//                gorulmemis -> fail-closed
+type LicenseGatePhase = "checking" | "open" | "locked" | "unknown";
+
+// --- Lisans kilidi bir ILK KURULUM kontroludur ------------------------------
+// Amac: yazilimi izinsiz indirip kuran birinin sisteme girememesi. Bizim
+// kurdugumuz sahalarda lisans aktiflestirilir ve sistem acilir; ondan SONRA
+// kullaniciyi bir daha rahatsiz etmemeli — gecici bir ag hatasi yuzunden
+// "lisansiniz yok" demek yanlis alarmdir.
+//
+// Bu yuzden bir kez "lisans gecerli" cevabi alindiginda isaretliyoruz:
+//   - acilista iyimser davran (kilit ekrani/bekleme hic gosterme),
+//   - sonraki sorgu hatalarinda KILITLEME.
+//
+// GUVENLIK bu bayraga DAYANMAZ. Gercek zorlama backend'dedir
+// (apps/backend-api/app/core/license_gate.py): lisanssiz kurulumda API zaten
+// 403 doner, bayragi elle set etmek bos bir arayuzden baskasini vermez.
+const LICENSE_ACTIVATED_KEY = "e1_license_activated";
+
+function hasLicenseBeenActivated(): boolean {
+  try {
+    return window.localStorage.getItem(LICENSE_ACTIVATED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setLicenseActivatedFlag(activated: boolean): void {
+  try {
+    if (activated) window.localStorage.setItem(LICENSE_ACTIVATED_KEY, "1");
+    else window.localStorage.removeItem(LICENSE_ACTIVATED_KEY);
+  } catch {
+    // localStorage kapali (gizli sekme/politika) — bayrak olmadan da calisir,
+    // sadece acilista kisa bir bekleme gorunur.
+  }
+}
 
 export function App() {
   const projectSettings = useProjectSettings();
@@ -228,7 +274,15 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
   const [licenseLoading, setLicenseLoading] = useState(false);
-  // Lisans kilidi ekranindaki aktif sayfa. Ag ayarlari bilerek kilidin
+  // Kilit karari BU state uzerinden verilir, `licenseStatus` uzerinden DEGIL:
+  // licenseStatus yalnizca engineer/installer'a acik olan detayli uctan gelir,
+  // kilit ise her rol icin gecerli olmali.
+  // Lisansi bir kez aktiflestirilmis kurulumda IYIMSER basla: bekleme ekrani
+  // bile gosterme. Yanlis olsa dahi zararsiz — backend lisanssizsa API'yi
+  // zaten kapatiyor ve gate cevabi gelince "locked"a duseriz.
+  const [licenseGatePhase, setLicenseGatePhase] = useState<LicenseGatePhase>(() =>
+    hasLicenseBeenActivated() ? "open" : "checking"
+  );
 
   // i18n: kullanici tercihi degistiginde (login sonrasi me yuklenince veya
   // ayarlardan dil secildiginde) react-i18next'i ona gore senkronize et.
@@ -385,23 +439,40 @@ export function App() {
 
   const signalLiveFetchIdRef = useRef(0);
 
+  // Canli degerleri GERCEKTEN tuketen sayfalar. Baska bir sekmede (Alarmlar,
+  // Olaylar, Ayarlar, ...) WS'i acik tutmak bedavaya cihaz x sinyal akisini
+  // tarayiciya tasimak demekti: 600 cihazda kullanicinin bakmadigi bir ekran
+  // icin saniyede yuzlerce mesaj islenmesi. Sekme degisince WS kapanir,
+  // geri donunce ~100ms'de (ticket + handshake) yeniden baglanir.
+  const liveValuesNeeded =
+    pageMode === "home" ||
+    pageMode === "device-detail" ||
+    (pageMode === "engineering" && engineeringPage === "live-values");
+
   // WebSocket-based canli telemetri akisi. Polling fallback ile birlikte
   // calisir; WS bagli iken ~200ms gecikme. Bagi kopunca polling devam eder.
   const liveSocket = useLiveValuesSocket({
     token: session?.accessToken ?? "",
     apiBaseUrl: API_BASE_URL,
-    enabled: Boolean(session?.accessToken)
+    enabled: Boolean(session?.accessToken) && liveValuesNeeded
   });
 
+  // WS mesajlari hook icinde 250ms tamponlanip BATCH olarak gelir; tek
+  // setState + satir dizisinde tek gecis. Mesaj basina render yok.
   useEffect(() => {
-    liveSocket.registerHandler((msg) => {
-      setSignalLiveValues((prev) => liveSocket.apply(prev, msg));
+    liveSocket.registerHandler((msgs) => {
+      setSignalLiveValues((prev) => liveSocket.applyMessages(prev, msgs));
     });
   }, [liveSocket]);
 
   useEffect(() => {
     const load = async () => {
       if (!session) return;
+      // Lisans kilidi acik degilse veri CEKME. Backend lisanssiz kurulumda bu
+      // uclarin hepsini 403'le reddediyor (core/license_gate.py); istekleri
+      // yine de atmak sadece hata gurultusu uretir. "checking" fazinda da
+      // beklenir — kilit karari verilmeden veri istemeyiz.
+      if (licenseGatePhase !== "open") return;
       setSignalLiveValues([]);
       setSignalLiveError("");
       setLoadingData(true);
@@ -502,7 +573,9 @@ export function App() {
       }
     };
     void load();
-  }, [session]);
+    // licenseGatePhase bagimliliktir: kilit acilinca (lisans yuklendiginde
+    // veya acilis kontrolu bitince) veri yuklemesi bir kez calissin.
+  }, [session, licenseGatePhase]);
 
   // ---- Lisans durumu: BAGIMSIZ yukleme -----------------------------------
   // Kendi efektinde duruyor cunku lisans kilidi (bkz. `licenseGateActive`)
@@ -514,32 +587,81 @@ export function App() {
   // to fetch" yuzunden lisansi olmayan bir sistem kilitsiz kalmamali.
   useEffect(() => {
     if (!session) return;
-    if (session.role !== "engineer" && session.role !== "installer") {
-      // Diger roller /license/status okuyamaz; durum bilinmiyor olarak kalir.
-      setLicenseStatus(null);
-      return;
-    }
     let cancelled = false;
     const token = session.accessToken;
+    const isLicenseAdmin =
+      session.role === "engineer" || session.role === "installer";
+    // Lisansi aktiflestirilmis kurulumda "checking"e GERI DUSME — kullanici
+    // her girisde bir bekleme/kilit ekrani gormemeli.
+    if (!hasLicenseBeenActivated()) setLicenseGatePhase("checking");
+    // Kilit karari netlestiginde tek yerden uygula: acik ise kurulumu
+    // "aktiflestirilmis" olarak isaretle, kilitli ise isareti kaldir.
+    const applyGate = (locked: boolean) => {
+      setLicenseActivatedFlag(!locked);
+      setLicenseGatePhase(locked ? "locked" : "open");
+    };
     const load = async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         if (cancelled) return;
         try {
-          const status = await fetchLicenseStatus(token);
-          if (!cancelled) setLicenseStatus(status);
+          // Kilit karari her rol icin ayni uctan: /license/gate.
+          const gate = await fetchLicenseGate(token);
+          if (cancelled) return;
+          if (gate === null) {
+            // Backend /license/gate'i tanimiyor (eski surum). Lisansi OLAN bir
+            // sistemi surum uyusmazligi yuzunden kilitlemeyiz: eski yola dus.
+            if (isLicenseAdmin) {
+              const status = await fetchLicenseStatus(token);
+              if (cancelled) return;
+              setLicenseStatus(status);
+              applyGate(LICENSE_GATE_STATES.has(status.state));
+            } else {
+              // Eski backend bu role kilit bilgisi veremiyor -> eski davranis.
+              setLicenseStatus(null);
+              setLicenseGatePhase("open");
+            }
+            return;
+          }
+          applyGate(gate.locked);
+          // Detayli durum (musteri, kota, limit) yalnizca lisans yonetebilen
+          // roller icin; basarisiz olmasi kilidi ETKILEMEZ.
+          if (isLicenseAdmin) {
+            try {
+              const status = await fetchLicenseStatus(token);
+              if (!cancelled) setLicenseStatus(status);
+            } catch {
+              if (!cancelled) setLicenseStatus(null);
+            }
+          } else {
+            setLicenseStatus(null);
+          }
           return;
         } catch (error) {
           if (attempt === 2) {
-            // Ucunde de basarisiz: durum BILINMIYOR. Kilitlemiyoruz —
-            // gecici bir arizanin kullaniciyi sistemden atmasi kabul edilemez.
-            // Ama sessiz de kalmiyoruz: lisansi olmayan bir sistemin kilitsiz
-            // acilmasinin TEK sebebi budur, sahada bunu gorebilmek gerekiyor.
+            // Ucunde de basarisiz. Ne yapacagimiz kurulumun GECMISINE bagli:
+            //
+            //   Lisans daha once aktiflestirilmis -> KILITLEME. Calisan bir
+            //     sahayi gecici bir ag hatasi yuzunden "lisansiniz yok" diye
+            //     durdurmak yanlis alarm; kaldi ki lisans dosyasi silinmiyor.
+            //   Hic lisans gorulmemis (ilk kurulum) -> fail-closed. Korumanin
+            //     asil hedefi bu: yazilimi izinsiz kuran biri istegi
+            //     bloklayarak kilidi atlayamasin.
+            //
+            // Her iki durumda da son soz backend'in: lisanssizsa API 403
+            // dondugu icin arayuz zaten bos kalir.
+            const previouslyActivated = hasLicenseBeenActivated();
             console.warn(
-              "[lisans] /license/status okunamadi (3 deneme) — lisans kilidi " +
-                "devre disi kalir. Sebep:",
+              "[lisans] /license/gate okunamadi (3 deneme) — " +
+                (previouslyActivated
+                  ? "kurulum daha once aktiflestirilmis, kilit UYGULANMIYOR."
+                  : "hic lisans gorulmemis, sistem KILITLI kabul edilir.") +
+                " Sebep:",
               error
             );
-            if (!cancelled) setLicenseStatus(null);
+            if (!cancelled) {
+              setLicenseGatePhase(previouslyActivated ? "open" : "unknown");
+              setLicenseStatus(null);
+            }
             return;
           }
           await new Promise((resolve) => window.setTimeout(resolve, 1500));
@@ -665,7 +787,11 @@ export function App() {
   // Alarm listesini arka planda her 5 sn yenile — alarm-service yeni alarm
   // urettiginde kullanici sayfayi yenilemeden anlik gorebilsin. Yeni (onceden
   // gorulmemis, aktif) alarm gelince toast bildirimi at.
-  useEffect(() => {
+  //
+  // Sayfa gecidi YOK (enabled: session var mi): alarm toast'i hangi sayfada
+  // olursak olalim gorunmeli — operator alarmi kacirmasin. Yalnizca sekme
+  // arka plandayken durur (usePolling).
+  const pollAlarms = useCallback(async () => {
     if (!session) return;
     const notifyNew = (rows: AlarmEvent[]) => {
       const active = rows.filter((a) => !a.reset);
@@ -701,121 +827,166 @@ export function App() {
         else toast.warning(body, opts);
       }
     };
-    const tick = async () => {
-      try {
-        const rows = await fetchAlarmEvents(session.accessToken);
-        setAlarms(rows);
-        notifyNew(rows);
-      } catch {
-        // sessizce yutuyoruz — gecici ag hatalari polling'i durdurmamali
-      }
-    };
-    const id = window.setInterval(() => {
-      void tick();
-    }, 5000);
-    return () => window.clearInterval(id);
+    try {
+      const rows = await fetchAlarmEvents(session.accessToken);
+      setAlarms(rows);
+      notifyNew(rows);
+    } catch {
+      // sessizce yutuyoruz — gecici ag hatalari polling'i durdurmamali
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, devices, toast, t, openTab]);
+
+  usePolling({ enabled: Boolean(session), intervalMs: 5000, fn: pollAlarms, immediate: false });
 
   // Hat Arizalari (faults) canli refresh: 5 sn'de bir. Backend'in
   // fault_recompute_service'i alarm degistikce DB'yi senkronlar; biz de
   // burada UI'da liste tazelenir.
-  useEffect(() => {
+  // `faults` YALNIZCA FaultListPage'e gidiyor — baska sayfadayken cekmenin
+  // anlami yok. Sayfa acilinca usePolling hemen bir kez ceker (immediate).
+  const pollFaults = useCallback(async () => {
     if (!session) return;
-    const tick = async () => {
-      try {
-        // "all": Hat Arizalari sayfasi hem "Aktif Ariza" hem "Gecmis
-        // Arizalar" sekmesini tek istekten besliyor. Backend olgunlasmamis
-        // (display-delay dolmamis) aktif arizalari yine gizler; resolved/
-        // closed her durumda gelir.
-        const rows = await fetchFaults(session.accessToken, "all");
-        setFaults(rows);
-      } catch {
-        // ignore
-      }
-    };
-    void tick();
-    const id = window.setInterval(() => {
-      void tick();
-    }, 5000);
-    return () => window.clearInterval(id);
+    try {
+      // "all": Hat Arizalari sayfasi hem "Aktif Ariza" hem "Gecmis
+      // Arizalar" sekmesini tek istekten besliyor. Backend olgunlasmamis
+      // (display-delay dolmamis) aktif arizalari yine gizler; resolved/
+      // closed her durumda gelir.
+      const rows = await fetchFaults(session.accessToken, "all");
+      setFaults(rows);
+    } catch {
+      // ignore
+    }
   }, [session]);
 
+  usePolling({
+    enabled: Boolean(session) && pageMode === "faults",
+    intervalMs: 5000,
+    fn: pollFaults
+  });
+
   // Hat Arizalari ozet istatistikleri (avg cozum suresi vb) — 30sn polling.
-  useEffect(() => {
+  // `faults` gibi sadece FaultListPage'de gosteriliyor.
+  const pollFaultStats = useCallback(async () => {
     if (!session) return;
-    const tick = async () => {
-      try {
-        const s = await fetchFaultStats(session.accessToken);
-        setFaultStats(s);
-      } catch {
-        // ignore
-      }
-    };
-    void tick();
-    const id = window.setInterval(() => {
-      void tick();
-    }, 30000);
-    return () => window.clearInterval(id);
+    try {
+      const s = await fetchFaultStats(session.accessToken);
+      setFaultStats(s);
+    } catch {
+      // ignore
+    }
   }, [session]);
+
+  usePolling({
+    enabled: Boolean(session) && pageMode === "faults",
+    intervalMs: 30000,
+    fn: pollFaultStats
+  });
 
   // Olaylar (system events) canli refresh: 5 sn'de bir. Olay sayfasinda
   // kullanici yeni kayitlari sayfa yenilemeden gorebilsin.
-  useEffect(() => {
+  //
+  // `events` iki yere gidiyor: Olaylar sayfasi ve Alarmlar sayfasi (alarm
+  // detayindaki olay zaman cizelgesi). Ikisi disinda cekilmiyor.
+  const pollEvents = useCallback(async () => {
     if (!session) return;
-    const tick = async () => {
-      try {
-        const rows = await fetchSystemEvents(session.accessToken);
-        setEvents(rows);
-      } catch {
-        // ignore
-      }
-    };
-    const id = window.setInterval(() => {
-      void tick();
-    }, 5000);
-    return () => window.clearInterval(id);
+    try {
+      const rows = await fetchSystemEvents(session.accessToken);
+      setEvents(rows);
+    } catch {
+      // ignore
+    }
   }, [session]);
 
-  // Grid topology snapshot canli refresh: 5 sn'de bir. Hat Yonetimi'nde
-  // yapilan degisiklikler (cihaz konumu, direk ekle/sil/tasi, bransman)
-  // anasayfa haritasina hizla yansisin.
-  useEffect(() => {
+  usePolling({
+    enabled: Boolean(session) && (pageMode === "events" || pageMode === "alarms"),
+    intervalMs: 5000,
+    fn: pollEvents
+  });
+
+  // Grid topology snapshot: Hat Yonetimi'nde yapilan degisiklikler (cihaz
+  // konumu, direk ekle/sil/tasi, bransman) haritaya yansisin.
+  //
+  // Sayfa gecidi YOK: topolojiden turetilen `deviceTopologyInfo` (cihaz ->
+  // bolge/hat) Header'da (her sayfada), Alarmlar'da, Arizalar'da ve cihaz
+  // detayinda kullaniliyor; tek sayfaya baglanamaz.
+  //
+  // Onun yerine PERIYOT sayfaya bagli. Topoloji neredeyse STATIK bir veri
+  // (yalnizca bir kullanici Hat Yonetimi'nden degistirince degisir) ama
+  // /grid/snapshot yanitin en agirlarindan: 600 cihazli sahada
+  // regions+lines+poles+segments birlikte binlerce satir. Bunu her sayfada
+  // 5 saniyede bir cekmek yukun buyuk bolumuydu.
+  //
+  // Hizli periyot YALNIZCA topolojinin DUZENLENDIGI sayfalarda: orada kullanici
+  // kendi degisikliginin yansimasini gormek istiyor.
+  //
+  // Digerleri (anasayfa haritasi dahil) 60 sn: topoloji ancak biri Hat
+  // Yonetimi'nden degistirince degisir, kullanici haritaya bakarken kendiliginden
+  // degismez. Kritik durum "baska sekmede duzenledim, haritaya geciyorum" —
+  // onu periyot DEGIL, sayfa degisimindeki aninda cekme kapatiyor: pageMode
+  // degisince intervalMs degisir, usePolling efekti yeniden kurulur ve
+  // `immediate` ile hemen bir kez ceker.
+  //
+  // (Anasayfayi da 10 sn yapmayi denedim; sayfa basina istek yuku olcumunde
+  // kazanci gotururken karsiliginda bir sey vermiyordu — geometri o pencerede
+  // degismiyor.)
+  const topologyIsHot =
+    pageMode === "engineering" &&
+    (engineeringPage === "grid" || engineeringPage === "responsibility-areas");
+
+  const pollGridSnapshot = useCallback(async () => {
     if (!session) return;
-    const tick = async () => {
-      try {
-        const snap = await fetchGridSnapshot(session.accessToken);
-        setGridSnapshot(snap);
-      } catch {
-        // ignore
-      }
-    };
-    const id = window.setInterval(() => {
-      void tick();
-    }, 5000);
-    return () => window.clearInterval(id);
+    try {
+      const snap = await fetchGridSnapshot(session.accessToken);
+      setGridSnapshot(snap);
+    } catch {
+      // ignore
+    }
   }, [session]);
 
-  // Cihaz listesi canli refresh: 5sn'de bir. Anasayfa cihaz panelindeki
-  // haberlesme durumlari (yesil/gri dot), batarya, alarm bayraklari
-  // sayfa yenilenmeden guncellensin. Onceden sadece ilk yuklemede ve
-  // manuel refresh'te cekiliyordu — bu yuzden cihaz online olsa bile
-  // UI'da stale "haberlesme yok" goruntusu kaliyordu.
-  useEffect(() => {
+  usePolling({
+    enabled: Boolean(session),
+    intervalMs: topologyIsHot ? 10000 : 60000,
+    fn: pollGridSnapshot
+  });
+
+  // Cihaz listesi canli refresh. Haberlesme durumlari (yesil/gri dot),
+  // batarya ve alarm bayraklari sayfa yenilenmeden guncellensin: cihaz online
+  // olsa bile UI'da stale "haberlesme yok" goruntusu kalmasin.
+  //
+  // Sayfa gecidi YOK: `devices` Header ve TabBar'da (her sayfada; sekme
+  // basliklarindaki cihaz adi buradan geliyor) kullaniliyor, gate edilemez.
+  //
+  // PERIYOT sayfaya bagli:
+  //   * Cihaz DURUMUNU gosteren sayfalarda 5 sn — bu hizli periyot
+  //     "haberlesme yok yaziyor ama cihaz online" sikayeti icin eklenmisti,
+  //     o davranis korunuyor.
+  //   * Diger sayfalarda 30 sn — orada `devices` yalnizca ad/kod eslemesi
+  //     icin okunuyor (Header, sekme basliklari) ve bu veri statik.
+  // Sayfa degisince intervalMs degisir, efekt yeniden kurulur ve `immediate`
+  // ile aninda taze veri gelir; durum sayfasina gecen kullanici beklemez.
+  const deviceStatusIsHot =
+    pageMode === "home" ||
+    pageMode === "device-detail" ||
+    (pageMode === "engineering" &&
+      (engineeringPage === "devices" ||
+        engineeringPage === "system-status" ||
+        engineeringPage === "live-values"));
+
+  const pollDevices = useCallback(async () => {
     if (!session) return;
-    const tick = async () => {
-      try {
-        const list = await fetchDevices(session.accessToken);
-        setDevices(list);
-      } catch {
-        // ignore
-      }
-    };
-    const id = window.setInterval(() => {
-      void tick();
-    }, 5000);
-    return () => window.clearInterval(id);
+    try {
+      const list = await fetchDevices(session.accessToken);
+      setDevices(list);
+    } catch {
+      // ignore
+    }
   }, [session]);
+
+  usePolling({
+    enabled: Boolean(session),
+    intervalMs: deviceStatusIsHot ? 5000 : 30000,
+    fn: pollDevices
+  });
 
   const reloadSignals = async () => {
     if (!session) return;
@@ -893,28 +1064,20 @@ export function App() {
     }
   }, [session, pageMode, engineeringPage, handleRefreshSignalLive]);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-    // Anasayfada — harita ve tablo ikisi de canli degerlere ihtiyac duyar:
-    //   - Tablo: liste hucreleri
-    //   - Harita: popup batarya kartlari + sidebar master batarya yuzdesi
-    //
-    // WS bagli iken: telemetri push ile saniye altinda gelir; polling sadece
-    // bir guvenlik agi (yeni cihaz eklenmesi, WS drop ettigi mesajlar). 30sn
-    // polling yeterli — backend'e gereksiz yuk vermiyor, frontend hala canli.
-    // WS bagli degilken (WS unsupported / nginx config eksik): polling 5sn
-    // (degerler "yeterince" canli gozuksun).
-    if (pageMode !== "home") return;
-    void handleRefreshSignalLive();
-    const wsConnected = liveSocket.connectionState === "open";
-    const intervalMs = wsConnected ? 30000 : 5000;
-    const interval = window.setInterval(() => {
-      void handleRefreshSignalLive();
-    }, intervalMs);
-    return () => window.clearInterval(interval);
-  }, [session, pageMode, handleRefreshSignalLive, liveSocket.connectionState]);
+  // Anasayfada — harita ve tablo ikisi de canli degerlere ihtiyac duyar:
+  //   - Tablo: liste hucreleri
+  //   - Harita: popup batarya kartlari + sidebar master batarya yuzdesi
+  //
+  // WS bagli iken: telemetri push ile saniye altinda gelir; polling sadece
+  // bir guvenlik agi (yeni cihaz eklenmesi, WS drop ettigi mesajlar). 30sn
+  // polling yeterli — backend'e gereksiz yuk vermiyor, frontend hala canli.
+  // WS bagli degilken (WS unsupported / nginx config eksik): polling 5sn
+  // (degerler "yeterince" canli gozuksun).
+  usePolling({
+    enabled: Boolean(session) && pageMode === "home",
+    intervalMs: liveSocket.connectionState === "open" ? 30000 : 5000,
+    fn: handleRefreshSignalLive
+  });
 
   const reloadAlarmRules = async () => {
     if (!session) return;
@@ -1365,16 +1528,20 @@ export function App() {
     setDevicePanelGatewayCode(gatewayCode);
   }, []);
 
+  // Cihaz Yonetimi paneli icin GATEWAY envanteri.
+  //
+  // Onceden burada `fetchDevices` de cagriliyordu; ama global cihaz polling'i
+  // (bkz. `pollDevices`) bu sayfada zaten 5 saniyede bir ayni ucu cekiyor.
+  // Ikisi birlikte kosunca `/devices` ayni sayfada iki timer'dan (5 sn + 12 sn)
+  // isteniyordu — ayni veri icin iki kat yuk ve `devices` dizisinin kimligi
+  // beklenenden sik degisip memo'lari bosa dusuruyordu. Cihazlari global
+  // polling'e biraktik; burada yalnizca gateway'ler cekiliyor.
   const refreshDevicePanelData = useCallback(async () => {
     if (!session) return;
     if (session.role !== "engineer" && session.role !== "installer") return;
     try {
-      const [gw, allDev] = await Promise.all([
-        fetchGateways(session.accessToken),
-        fetchDevices(session.accessToken)
-      ]);
+      const gw = await fetchGateways(session.accessToken);
       setGateways(gw);
-      setDevices(allDev);
       setDeviceInventoryError("");
       setDevicePanelGatewayCode((current) =>
         current && gw.some((gateway) => gateway.code === current)
@@ -1389,24 +1556,39 @@ export function App() {
     }
   }, [session, t]);
 
-  useEffect(() => {
-    if (!session) return;
-    if (pageMode !== "engineering" || engineeringPage !== "devices") return;
-    if (session.role !== "engineer" && session.role !== "installer") return;
-    // Sekme her acildiginda hemen taze veri cek - aksi halde stale gateway
-    // durumu (haberlesme yok gibi) gosterilebiliyor.
-    void refreshDevicePanelData();
-    const id = window.setInterval(() => {
-      void refreshDevicePanelData();
-    }, 12000);
-    return () => window.clearInterval(id);
-  }, [pageMode, engineeringPage, session, refreshDevicePanelData]);
+  // Sekme her acildiginda hemen taze veri cek (immediate) - aksi halde stale
+  // gateway durumu (haberlesme yok gibi) gosterilebiliyor.
+  usePolling({
+    enabled:
+      Boolean(session) &&
+      pageMode === "engineering" &&
+      engineeringPage === "devices" &&
+      (session?.role === "engineer" || session?.role === "installer"),
+    intervalMs: 12000,
+    fn: refreshDevicePanelData
+  });
 
   const reloadLicenseStatus = useCallback(async () => {
-    if (!session || (session.role !== "engineer" && session.role !== "installer")) return;
+    if (!session) return;
     setLicenseLoading(true);
     try {
-      setLicenseStatus(await fetchLicenseStatus(session.accessToken));
+      // Kilit durumunu da tazele: lisans import edildikten sonra kilidin
+      // ACILMASI buna bagli (backend cache'i import'ta zaten dusuruluyor).
+      try {
+        const gate = await fetchLicenseGate(session.accessToken);
+        // gate === null: eski backend, bu ucu tanimiyor -> kilide dokunma.
+        if (gate !== null) {
+          setLicenseActivatedFlag(!gate.locked);
+          setLicenseGatePhase(gate.locked ? "locked" : "open");
+        }
+      } catch {
+        // Yenileme hatasi mevcut kilidi DEGISTIRMEZ. Kullanici bir aksiyonun
+        // (cihaz ekleme/silme) ardindan gecici bir ag hatasi yuzunden
+        // sistemden atilmamali.
+      }
+      if (session.role === "engineer" || session.role === "installer") {
+        setLicenseStatus(await fetchLicenseStatus(session.accessToken));
+      }
     } catch {
       // Fail-closed: status bilinmiyorsa cihaz ekleme disabled kalir; cihaz
       // ekleme/silme akisini lisans status yenileme hatasiyla basarisiz gosterme.
@@ -2117,33 +2299,93 @@ export function App() {
   //   valid + kota dolu -> is_valid true kalir; sistem normal calisir,
   //       sadece yeni cihaz eklenemez.                              -> KILIT YOK
   //
-  // `licenseStatus === null` da kilitlemez: bu "lisans yok" degil "durum
-  // bilinmiyor" demektir — istek basarisiz olmus ya da rol
-  // (operator/ops_manager) /license/status okuyamiyordur.
-  const licenseGateActive =
-    (session.role === "engineer" || session.role === "installer") &&
-    licenseStatus !== null &&
-    LICENSE_GATE_STATES.has(licenseStatus.state);
+  // Kilit `licenseGatePhase` uzerinden kurulur (bkz. LicenseGatePhase):
+  //   locked  -> lisans yok
+  //   unknown -> durum okunamadi, FAIL-CLOSED
+  //   checking-> acilis, henuz cevap yok. Icerik yine RENDER EDILMEZ; aksi
+  //              halde lisanssiz sistemde sayfalar bir an gorunurdu.
+  const licenseGateActive = licenseGatePhase !== "open";
 
+  // ONEMLI: Kilit artik CSS ile GIZLEME degil. Onceki surum sayfalari normal
+  // render edip `.is-license-locked .body { filter: blur; pointer-events:none }`
+  // ile bulaniklastiriyordu — DevTools'tan o kurali silmek (ya da klavyeyle
+  // Tab'lamak) kilidi tamamen atlatiyordu. Artik icerik DOM'a HIC basilmaz;
+  // ayrica backend de lisanssiz kurulumda API'yi kapatir
+  // (bkz. apps/backend-api/app/core/license_gate.py).
+  //
+  // Kilidin DISINDA kalan sayfalar — ikisi de cikis yolu, kapatilirsa sistem
+  // kendini asla acamaz:
+  //   license          : lisansin yuklendigi sayfa.
+  //   network-settings : agi bozuk lisanssiz cihaz once agi duzeltmeli
+  //                      (bkz. commit 144539f; 1d8c605'te kaybolmustu).
+  const licenseGateExemptPage =
+    pageMode === "engineering" &&
+    (engineeringPage === "license" || engineeringPage === "network-settings");
+  const licenseGateOpen = licenseGateActive && !licenseGateExemptPage;
 
-  // Lisans kilidi ARTIK AYRI BIR EKRAN DEGIL: normal kabuk (header, sekmeler)
-  // oldugu gibi duruyor, icerik bulaniklastiriliyor ve tek bir popup lisans
-  // sayfasina yonlendiriyor. Onceki surum kendi header'ini ciziyordu ve
-  // uygulamanin geri kalanindan kopuk gorunuyordu.
-  const licenseGateOpen =
-    licenseGateActive && !(pageMode === "engineering" && engineeringPage === "license");
+  // Icerigin render edilip edilmeyecegi. Muaf sayfalar kilitliyken de acilir.
+  const licenseAllowsContent = !licenseGateActive || licenseGateExemptPage;
 
-  const licenseGateModal = licenseGateOpen ? (
-    <div className="license-gate-overlay" role="alertdialog" aria-modal="true">
-      <div className="license-gate-dialog">
-        <h2>{t("engineering.license.gateTitle")}</h2>
-        <p>{t("engineering.license.gateShort")}</p>
-        <button type="button" className="primary-btn" onClick={() => openEng("license")}>
-          {t("engineering.license.gateGo")}
-        </button>
+  // KULLANICIYI BOSA KORKUTMA: lisans uyarisi YALNIZCA kesinlesmis bir sorun
+  // varsa cikar. "checking" fazinda (her acilista birkac yuz ms) hicbir lisans
+  // metni gosterilmez — lisansi OLAN sistemde de caktigi icin yanlis alarmdi.
+  // O sirada sadece normal yukleniyor gostergesi vardir.
+  const licenseGateModal =
+    licenseGateOpen && licenseGatePhase !== "checking" ? (
+      <div className="license-gate-overlay" role="alertdialog" aria-modal="true">
+        <div className="license-gate-dialog">
+          {licenseGatePhase === "unknown" ? (
+            // Lisans YOK demiyoruz — durumu DOGRULAYAMADIK diyoruz. Ikisi
+            // farkli sey; lisansli bir sistemde ag hatasi da buraya duser.
+            <>
+              <h2>{t("engineering.license.gateUnknownTitle")}</h2>
+              <p>{t("engineering.license.gateUnknown")}</p>
+              <div className="license-gate-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => void reloadLicenseStatus()}
+                >
+                  {t("engineering.license.gateRetry")}
+                </button>
+                {session.role === "installer" ? (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => openEng("network-settings")}
+                  >
+                    {t("engineering.license.gateNetwork")}
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <h2>{t("engineering.license.gateTitle")}</h2>
+              <p>{t("engineering.license.gateShort")}</p>
+              <div className="license-gate-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => openEng("license")}
+                >
+                  {t("engineering.license.gateGo")}
+                </button>
+                {session.role === "installer" ? (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => openEng("network-settings")}
+                  >
+                    {t("engineering.license.gateNetwork")}
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   return (
     // Tembel yuklenen sayfalar Suspense OLMADAN render edilemez.
@@ -2192,6 +2434,13 @@ export function App() {
         }}
       />
       <div className="body">
+        {/* Lisans kilidi: icerik DOM'a hic basilmaz (CSS ile gizleme DEGIL).
+            Muaf sayfalar — lisans + ag ayarlari — kilitliyken de acilir.
+            "checking" fazinda notr yukleniyor gostergesi; lisans metni YOK. */}
+        {!licenseAllowsContent ? (
+          licenseGatePhase === "checking" ? <GlobalLoading show /> : null
+        ) : (
+        <>
         {pageMode === "device-detail" && activeDeviceDetailId !== null ? (
           <main className="content">
             <DeviceDetailPage
@@ -2530,6 +2779,8 @@ export function App() {
               </main>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
 

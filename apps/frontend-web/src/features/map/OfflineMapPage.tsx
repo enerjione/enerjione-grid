@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MapContainer, Rectangle, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
-import type { LatLngBoundsExpression, LeafletMouseEvent } from "leaflet";
-import { Download, HardDrive, Loader2, MousePointerSquareDashed, Trash2 } from "lucide-react";
+import type { LatLngBoundsExpression, LeafletMouseEvent, Map as LeafletMap } from "leaflet";
+import {
+  Download,
+  Eye,
+  HardDrive,
+  Maximize2,
+  Layers,
+  Loader2,
+  MousePointerSquareDashed,
+  RotateCw,
+  Trash2,
+  Wifi,
+  WifiOff
+} from "lucide-react";
 
 import { useToast } from "../../components/ToastProvider";
 import {
@@ -10,9 +22,11 @@ import {
   deleteMapPack,
   estimateMapArea,
   fetchMapTileSummary,
+  restartMapPack,
   startMapPack
 } from "../../shared/api";
 import { MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
+import type { MapLayerKey } from "../../shared/mapTiles";
 import type { MapAreaRequest, MapPack, MapTileSummary } from "../../shared/types";
 
 /**
@@ -55,6 +69,15 @@ type Selection = { south: number; west: number; north: number; east: number };
  * Secim modunda harita suruklemesi kapatilir; aksi halde basip cekmek
  * haritayi kaydirir ve dikdortgen hic cizilemez. Mod kapaninca geri acilir.
  */
+/** Leaflet ornegini disari verir; onizleme (zoom/katman) icin gerekli. */
+function MapRefBridge({ onReady }: { onReady: (map: LeafletMap) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
 function AreaPicker({
   active,
   onPick
@@ -133,6 +156,7 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
   const [estimateError, setEstimateError] = useState("");
   const [busy, setBusy] = useState(false);
   const pollRef = useRef<number | null>(null);
+  const [mapObj, setMapObj] = useState<LeafletMap | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -199,6 +223,39 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, layer, zoomMax, selection]);
 
+  /** Secilen alanin tamamini ekrana sigdir (onizlemeden geri donus). */
+  const fitSelection = useCallback(() => {
+    if (!mapObj || !selection) return;
+    mapObj.fitBounds(
+      [
+        [selection.south, selection.west],
+        [selection.north, selection.east]
+      ],
+      { padding: [24, 24] }
+    );
+  }, [mapObj, selection]);
+
+  /**
+   * Detay seviyesini GOSTER: harita, secimin merkezinde o zoom'a gider.
+   * Kullanici "z17" rakaminin ne demek oldugunu tahmin etmek yerine
+   * gorur. Kaydiricinin her tikinda degil BIRAKILDIGINDA calisir;
+   * aksi halde harita surekli zipliyordu.
+   */
+  const previewDetail = useCallback(() => {
+    if (!mapObj || !selection) return;
+    mapObj.setView(
+      [(selection.south + selection.north) / 2, (selection.west + selection.east) / 2],
+      zoomMax,
+      { animate: true }
+    );
+  }, [mapObj, selection, zoomMax]);
+
+  // Alan ilk secildiginde ekrana sigdir.
+  useEffect(() => {
+    if (selection) fitSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection]);
+
   const handleStart = async () => {
     if (!request) return;
     setBusy(true);
@@ -224,6 +281,15 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
     }
   };
 
+  const handleRestart = async (pack: MapPack) => {
+    try {
+      await restartMapPack(accessToken, pack.id);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.errorOccurred"));
+    }
+  };
+
   const handleDelete = async (pack: MapPack) => {
     if (!window.confirm(t("map.offline.confirmDelete", { name: pack.name }))) return;
     try {
@@ -239,13 +305,70 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
   const packs = summary?.packs ?? [];
   const center = useMemo(() => initialCenter ?? TURKEY_CENTER, [initialCenter]);
 
+  const readyCount = packs.filter((pack) => pack.status === "done").length;
+
   return (
     <section className="tab-panel offline-page">
+      {/* Ust serit — diger sistem sayfalariyla ayni gorsel dil (bkz. Ag
+          Ayarlari .net-access-bar): bagimsiz KPI kartlari degil, tek cubukta
+          "cevrimdisi harita ne durumda" ozeti. */}
+      <div className="offline-bar">
+        <div className="offline-bar-item">
+          <span className="offline-bar-icon">
+            <Layers size={16} />
+          </span>
+          <span className="offline-bar-body">
+            <span className="offline-bar-label">{t("map.offline.barReady")}</span>
+            <strong className="offline-bar-value">
+              {readyCount} / {packs.length}
+            </strong>
+          </span>
+        </div>
+
+        <span className="offline-bar-sep" aria-hidden="true" />
+
+        <div className="offline-bar-item">
+          <span className="offline-bar-icon">
+            <HardDrive size={16} />
+          </span>
+          <span className="offline-bar-body">
+            <span className="offline-bar-label">{t("map.offline.barDisk")}</span>
+            <strong className="offline-bar-value">
+              {summary ? formatBytes(summary.cache_bytes) : "—"}
+            </strong>
+          </span>
+        </div>
+
+        <span className="offline-bar-sep" aria-hidden="true" />
+
+        <div className={`offline-bar-item ${summary?.online ? "is-ok" : "is-warn"}`}>
+          <span className="offline-bar-icon">
+            {summary?.online ? <Wifi size={16} /> : <WifiOff size={16} />}
+          </span>
+          <span className="offline-bar-body">
+            <span className="offline-bar-label">{t("map.offline.barSource")}</span>
+            <strong className="offline-bar-value">
+              {t(summary?.online ? "map.offline.barSourceOnline" : "map.offline.barSourceCache")}
+            </strong>
+          </span>
+        </div>
+      </div>
+
       <div className="offline-page-grid">
         {/* ---- Harita: indirilmis alanlar + secim ---- */}
         <div className="offline-page-map">
           <MapContainer center={center} zoom={6} scrollWheelZoom className="offline-page-leaflet">
-            <TileLayer url={tileUrl("osm")} attribution={MAP_LAYERS[0].attribution} />
+            {/* Secilen katman haritada ANINDA gorunur: "Uydu" secip sokak
+                haritasi izlemek kafa karistiriciydi. */}
+            <TileLayer
+              key={layer}
+              url={tileUrl(layer as MapLayerKey)}
+              attribution={
+                MAP_LAYERS.find((item) => item.key === layer)?.attribution ??
+                MAP_LAYERS[0].attribution
+              }
+              maxZoom={MAP_LAYERS.find((item) => item.key === layer)?.maxZoom ?? 19}
+            />
 
             {/* Indirilmis alanlar — hangi bolge cevrimdisi hazir, bir bakista. */}
             {packs
@@ -280,6 +403,7 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
               />
             ) : null}
 
+            <MapRefBridge onReady={setMapObj} />
             <AreaPicker
               active={picking}
               onPick={(sel) => {
@@ -289,21 +413,26 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
             />
           </MapContainer>
 
-          <button
-            type="button"
-            className={`offline-pick-btn${picking ? " is-active" : ""}`}
-            onClick={() => setPicking((value) => !value)}
-          >
-            <MousePointerSquareDashed size={15} />
-            {picking ? t("map.offline.pickCancel") : t("map.offline.pick")}
-          </button>
+          {/* Secim modunda haritanin UST ORTASINDA sadece bir ipucu seridi.
+              Dugme buraya KONMUYOR: sol ustte Leaflet'in zoom kontrolunun
+              uzerine biniyordu. Eylem sag paneldeki kartta. */}
           {picking ? <div className="offline-pick-hint">{t("map.offline.pickHint")}</div> : null}
         </div>
 
         {/* ---- Yan panel: indirme formu + paket listesi ---- */}
         <aside className="offline-page-side">
           <div className="offline-page-card">
-            <h3>{t("map.offline.newArea")}</h3>
+            <header className="offline-card-head">
+              <h2>{t("map.offline.newArea")}</h2>
+              <button
+                type="button"
+                className={`offline-pick-btn${picking ? " is-active" : ""}`}
+                onClick={() => setPicking((value) => !value)}
+              >
+                <MousePointerSquareDashed size={15} />
+                {picking ? t("map.offline.pickCancel") : t("map.offline.pick")}
+              </button>
+            </header>
 
             {!selection ? (
               <p className="offline-map-empty">{t("map.offline.noSelection")}</p>
@@ -339,7 +468,19 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
                     max={maxZoom}
                     value={zoomMax}
                     onChange={(event) => setZoomMax(Number(event.target.value))}
+                    onPointerUp={previewDetail}
+                    onKeyUp={previewDetail}
                   />
+                  <div className="offline-detail-actions">
+                    <button type="button" className="offline-link-btn" onClick={previewDetail}>
+                      <Eye size={13} />
+                      {t("map.offline.previewDetail")}
+                    </button>
+                    <button type="button" className="offline-link-btn" onClick={fitSelection}>
+                      <Maximize2 size={13} />
+                      {t("map.offline.fitArea")}
+                    </button>
+                  </div>
                   <span className="offline-map-hint">{t("map.offline.detailHint")}</span>
                 </label>
 
@@ -362,7 +503,7 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
                   <button
                     type="button"
                     className="primary-btn"
-                    disabled={busy || tooLarge || !estimate || hasActive}
+                    disabled={busy || tooLarge || !estimate}
                     onClick={() => void handleStart()}
                   >
                     {busy ? <Loader2 size={15} className="net-spin" /> : <Download size={15} />}
@@ -377,21 +518,16 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
                   </button>
                 </div>
                 {hasActive ? (
-                  <span className="offline-map-hint">{t("map.offline.busyHint")}</span>
+                  <span className="offline-map-hint">{t("map.offline.queueHint")}</span>
                 ) : null}
               </>
             )}
           </div>
 
           <div className="offline-page-card offline-page-card--grow">
-            <div className="offline-map-packs__head">
-              <h3>{t("map.offline.packsTitle")}</h3>
-              {summary ? (
-                <span className="offline-map-hint">
-                  <HardDrive size={13} /> {formatBytes(summary.cache_bytes)}
-                </span>
-              ) : null}
-            </div>
+            <header className="offline-card-head">
+              <h2>{t("map.offline.packsTitle")}</h2>
+            </header>
 
             {loading ? (
               <p className="offline-map-empty">
@@ -444,14 +580,28 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
                             {t("map.offline.cancel")}
                           </button>
                         ) : (
-                          <button
-                            type="button"
-                            className="offline-map-del"
-                            title={t("map.offline.delete")}
-                            onClick={() => void handleDelete(pack)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          <>
+                            {/* Yarim kalan alan: bastan degil KALDIGI YERDEN
+                                devam eder — diskteki karolar atlanir. */}
+                            {pack.status === "failed" || pack.status === "cancelled" ? (
+                              <button
+                                type="button"
+                                className="offline-map-resume"
+                                title={t("map.offline.resume")}
+                                onClick={() => void handleRestart(pack)}
+                              >
+                                <RotateCw size={15} />
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="offline-map-del"
+                              title={t("map.offline.delete")}
+                              onClick={() => void handleDelete(pack)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
                         )}
                       </div>
                     </li>

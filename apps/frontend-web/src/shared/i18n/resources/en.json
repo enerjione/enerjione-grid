@@ -37,6 +37,7 @@
     "refreshing": "Refreshing",
     "retry": "Retry",
     "confirm": "Confirm",
+    "confirmTitle": "Confirmation",
     "errorOccurred": "An error occurred",
     "noData": "No data found",
     "required": "Required",
@@ -217,6 +218,21 @@
     "resultTitle": "Sent to {{count}} recipients",
     "resultDetail": "Web: {{web}} · Email: {{email}} · SMS: {{sms}} · WhatsApp: {{whatsapp}}",
     "resultFail": "Failed → email: {{emailFail}}, SMS: {{smsFail}}, WhatsApp: {{whatsappFail}}"
+  },
+  "setupPassword": {
+    "invalidTitle": "Invalid Link",
+    "invalidBody": "The invitation link is invalid. The token is missing. Ask your administrator for a new invitation link.",
+    "doneTitle": "Password Set",
+    "doneBody": "Your password has been set successfully. You can sign in now.",
+    "goLogin": "Sign In",
+    "title": "Activate Your Account",
+    "intro": "You have been invited. Set a password for your first sign-in to EnerjiOne Grid.",
+    "newPassword": "New Password (at least 8 characters)",
+    "confirmPassword": "Password (Repeat)",
+    "submit": "Set Password",
+    "submitting": "Setting...",
+    "tooShort": "The password must be at least 8 characters.",
+    "mismatch": "Passwords do not match."
   },
   "login": {
     "title": "Sign In",
@@ -654,6 +670,10 @@
     }
   },
   "faults": {
+    "poleStrip": {
+      "range": "Fault section: between poles {{from}} and {{to}}",
+      "unknown": "Fault section could not be determined"
+    },
     "title": "Line Faults",
     "stats": {
       "total": "Total",
@@ -981,6 +1001,35 @@
         "ftp": "File server",
         "web": "Web server",
         "self": "API"
+      }
+    },
+    "historian": {
+      "title": "Telemetry Archive (Historian)",
+      "errorFetch": "Could not load historian status.",
+      "retention": "Retention",
+      "retentionDays": "{{count}} days",
+      "retentionNone": "NONE",
+      "hypertableYes": "Hypertable active",
+      "hypertableNo": "NOT a hypertable",
+      "size": "Disk usage",
+      "compressionOn": "Compression on",
+      "compressionOff": "Compression off",
+      "rows": "Row count",
+      "rowsEstimate": "estimate",
+      "newest": "Latest sample",
+      "oldest": "Oldest: {{value}}",
+      "severity": {
+        "ok": "Healthy",
+        "warning": "Attention",
+        "critical": "Critical"
+      },
+      "problem": {
+        "timescaledb_missing": "TimescaleDB is not installed — the archive is a plain table and is never pruned.",
+        "not_hypertable": "The archive table was never converted to a hypertable — the retention policy is not running and the table grows without bound.",
+        "no_retention": "No retention policy — old rows are never deleted and the disk will fill up over time.",
+        "no_compression": "No compression policy — the archive uses more disk than necessary.",
+        "retention_failing": "A retention policy exists but is not running (last run failed) — old rows are not being deleted.",
+        "retention_mismatch": "Retention differs from the expected value (expected 90 days)."
       }
     }
   },
@@ -2070,7 +2119,11 @@
         "unavailable": "Capacity unavailable"
       },
       "gateShort": "No licence has been installed on this system yet.",
-      "gateGo": "Go to licence page"
+      "gateUnknownTitle": "Licence status could not be verified",
+      "gateUnknown": "The server could not be reached, so licence status is unknown. Your licence may well be valid; access is held back until it can be verified. Check the network connection and try again.",
+      "gateRetry": "Try again",
+      "gateGo": "Go to licence page",
+      "gateNetwork": "Network settings"
     },
     "liveValues": {
       "title": "Live Values",
@@ -2576,7 +2629,10 @@
     "unauthorized": "Unauthorized",
     "notFound": "Not found",
     "validation": "Invalid data",
-    "unknown": "An unexpected error occurred"
+    "unknown": "An unexpected error occurred",
+    "crashTitle": "An unexpected error occurred",
+    "crashBody": "The interface stopped responding due to an unexpected condition. Reloading the page usually resolves it. If the problem persists, notify your system administrator.",
+    "crashReload": "Reload the page"
   },
   "toasts": {
     "sessionExpiredTitle": "Session ended",
@@ -2692,6 +2748,52 @@
     "close": "Close tab",
     "closeOthers": "Close others",
     "closeToRight": "Close tabs to the right"
+  },
+  "deviceSummary": {
+    "tabs": {
+      "all": "Overview"
+    },
+    "kpi": {
+      "totalSignals": "Total Signals",
+      "good": "Good",
+      "bad": "Bad",
+      "pending": "Pending",
+      "battery": "Battery",
+      "alarm": "Alarm",
+      "alarmActive": "Active",
+      "alarmNone": "None"
+    },
+    "searchPlaceholder": "Search signal...",
+    "autoRefresh": {
+      "label": "Auto refresh",
+      "off": "Off",
+      "sec": "{{count}} s",
+      "min": "{{count}} min"
+    },
+    "table": {
+      "source": "Source",
+      "signal": "Signal",
+      "type": "Type",
+      "value": "Value",
+      "quality": "Quality",
+      "time": "Time"
+    },
+    "dataType": {
+      "analog": "Analog",
+      "binary": "Binary",
+      "counter": "Counter",
+      "string": "String",
+      "binaryOutput": "Command",
+      "analogOutput": "AO"
+    },
+    "binaryOn": "ACTIVE (1)",
+    "binaryOff": "INACTIVE (0)",
+    "noStream": "No data stream has started for this device yet.",
+    "noMatch": "No signal matches the search.",
+    "empty": {
+      "title": "Select a device",
+      "body": "Pick a device from the list on the left to see its summary here. Switch between the tabs to inspect master and satellite signals."
+    }
   },
   "deviceDetail": {
     "title": "Device Detail",
@@ -2987,7 +3089,6 @@
       "diskSpace": "disk space",
       "start": "Start download",
       "started": "Download started. It continues in the background; you can close this window.",
-      "busyHint": "A download is already running; wait for it to finish.",
       "cancel": "Stop",
       "delete": "Delete",
       "confirmDelete": "Delete area \"{{name}}\" and its downloaded tiles?",
@@ -2999,6 +3100,15 @@
       "pick": "Select area",
       "pickCancel": "Cancel selection",
       "pickHint": "Press and drag on the map to draw the area you want to download.",
+      "barReady": "Ready areas",
+      "barDisk": "Disk usage",
+      "queueHint": "A download is running; this area will be queued.",
+      "resume": "Resume where it left off",
+      "barSource": "Map source",
+      "barSourceOnline": "Internet (live)",
+      "barSourceCache": "Downloaded map",
+      "previewDetail": "Preview detail",
+      "fitArea": "Fit area",
       "status": {
         "pending": "Queued",
         "running": "Downloading",

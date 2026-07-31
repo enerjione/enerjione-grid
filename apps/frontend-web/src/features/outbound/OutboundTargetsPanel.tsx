@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 
@@ -11,6 +11,7 @@ import { MqttTopicMappingModal } from "./MqttTopicMappingModal";
 import { MqttCertUploader } from "./MqttCertUploader";
 import { ModbusPlanModal } from "./ModbusPlanModal";
 import { downloadModbusPointsCsv } from "../../shared/api";
+import { usePolling } from "../../shared/usePolling";
 
 type Protocol = "rest" | "mqtt" | "iec104" | "modbus";
 const DEFAULT_PROTOCOLS: Protocol[] = ["rest", "mqtt", "iec104", "modbus"];
@@ -722,82 +723,81 @@ export function OutboundTargetsPanel({
   ).length;
 
   // Runtime modal — 5 sn'de bir refresh
-  useEffect(() => {
+  const pollRuntime = useCallback(async () => {
     if (!runtimeTarget || !onFetchIec104Runtime) return;
-    let cancelled = false;
-    const tick = async () => {
-      setRuntimeLoading(true);
-      try {
-        const data = await onFetchIec104Runtime(runtimeTarget.id);
-        if (!cancelled) setRuntime(data);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : t("common.errorOccurred"));
-      } finally {
-        if (!cancelled) setRuntimeLoading(false);
-      }
-    };
-    void tick();
-    const interval = window.setInterval(() => void tick(), 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [runtimeTarget, onFetchIec104Runtime]);
+    setRuntimeLoading(true);
+    try {
+      const data = await onFetchIec104Runtime(runtimeTarget.id);
+      setRuntime(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+    } finally {
+      setRuntimeLoading(false);
+    }
+  }, [runtimeTarget, onFetchIec104Runtime, t]);
+
+  usePolling({
+    enabled: Boolean(runtimeTarget && onFetchIec104Runtime),
+    intervalMs: 5000,
+    fn: pollRuntime
+  });
 
   // Liste rozetleri 10 sn'de bir
+  const iec104Ids = useMemo(
+    () => visibleTargets.filter((tg) => tg.protocol === "iec104").map((tg) => tg.id),
+    [visibleTargets]
+  );
+
+  // Listede hic IEC104 hedefi kalmadiysa rozetleri temizle (poll de durur).
   useEffect(() => {
+    if (iec104Ids.length === 0) setRuntimeBadges({});
+  }, [iec104Ids]);
+
+  const pollRuntimeBadges = useCallback(async () => {
     if (!onFetchIec104Runtime) return;
-    const iec104Ids = visibleTargets.filter((t) => t.protocol === "iec104").map((t) => t.id);
-    if (iec104Ids.length === 0) {
-      setRuntimeBadges({});
-      return;
-    }
-    let cancelled = false;
-    const tick = async () => {
-      const updates: Record<number, { running: boolean; clients: number }> = {};
-      await Promise.all(
-        iec104Ids.map(async (id) => {
-          try {
-            const r = await onFetchIec104Runtime(id);
-            updates[id] = { running: r.server_running, clients: r.connected_clients.length };
-          } catch {
-            // ignore
-          }
-        })
-      );
-      if (!cancelled) setRuntimeBadges(updates);
-    };
-    void tick();
-    const interval = window.setInterval(() => void tick(), 10000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [visibleTargets, onFetchIec104Runtime]);
+    const updates: Record<number, { running: boolean; clients: number }> = {};
+    await Promise.all(
+      iec104Ids.map(async (id) => {
+        try {
+          const r = await onFetchIec104Runtime(id);
+          updates[id] = { running: r.server_running, clients: r.connected_clients.length };
+        } catch {
+          // ignore
+        }
+      })
+    );
+    setRuntimeBadges(updates);
+  }, [iec104Ids, onFetchIec104Runtime]);
+
+  usePolling({
+    enabled: Boolean(onFetchIec104Runtime) && iec104Ids.length > 0,
+    intervalMs: 10000,
+    fn: pollRuntimeBadges
+  });
 
   // REST/MQTT runtime status — 'Durum' sutunu icin 5sn poll
+  const hasRestMqttTarget = useMemo(
+    () => visibleTargets.some((tg) => tg.protocol !== "iec104"),
+    [visibleTargets]
+  );
+
   useEffect(() => {
-    const restMqttIds = visibleTargets.filter((t) => t.protocol !== "iec104").map((t) => t.id);
-    if (restMqttIds.length === 0) {
-      setOutboundRuntime({});
-      return;
+    if (!hasRestMqttTarget) setOutboundRuntime({});
+  }, [hasRestMqttTarget]);
+
+  const pollOutboundRuntime = useCallback(async () => {
+    try {
+      setOutboundRuntime(await fetchOutboundRuntimeStatus(accessToken));
+    } catch {
+      // sessiz: bildirim spamlamasin
     }
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const data = await fetchOutboundRuntimeStatus(accessToken);
-        if (!cancelled) setOutboundRuntime(data);
-      } catch {
-        // sessiz: bildirim spamlamasin
-      }
-    };
-    void tick();
-    const interval = window.setInterval(() => void tick(), 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [visibleTargets, accessToken]);
+  }, [accessToken]);
+
+  usePolling({
+    enabled: hasRestMqttTarget,
+    intervalMs: 5000,
+    fn: pollOutboundRuntime
+  });
 
   // Otomatik Topic'ler popup acildiginda backend'den cek
   useEffect(() => {

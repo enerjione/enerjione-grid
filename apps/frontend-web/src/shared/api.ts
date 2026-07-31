@@ -21,6 +21,7 @@
   NetworkStatus,
   TelemetryHistoryPoint,
   TelemetryAggregatePoint,
+  HistorianStatus,
   NotificationItem,
   ServicesReport,
   NotificationSettings,
@@ -1950,6 +1951,24 @@ export async function commitGridImport(
 
 // ----- Offline cihaz lisansi -----
 
+/**
+ * Arayuz kilidi icin minimal lisans durumu — TUM rollere acik.
+ * `fetchLicenseStatus` ticari bilgi tasidigi icin engineer+installer ile
+ * sinirli; operator/ops_manager kilidi bu uctan ogrenir.
+ */
+export async function fetchLicenseGate(token: string): Promise<LicenseGate | null> {
+  const response = await apiFetch(`${API_BASE_URL}/license/gate`, {
+    headers: authHeaders(token)
+  });
+  // 404 = backend bu ucu HENUZ tanimiyor (frontend backend'den yeni). Bu bir
+  // lisans sorunu DEGIL; surum uyusmazligi. `null` donup cagirana eski yola
+  // dusmesini soyluyoruz — aksi halde guncel arayuz + eski backend
+  // kombinasyonu lisansi OLAN bir sistemi kilitler.
+  if (response.status === 404) return null;
+  if (!response.ok) throw await buildApiError(response, "Lisans durumu alınamadı.");
+  return (await response.json()) as LicenseGate;
+}
+
 export async function fetchLicenseStatus(token: string): Promise<LicenseStatus> {
   const response = await apiFetch(`${API_BASE_URL}/license/status`, {
     headers: authHeaders(token)
@@ -2194,8 +2213,23 @@ export async function deleteSignal(token: string, signalKey: string): Promise<vo
   if (!response.ok) throw await buildApiError(response, "Sinyal silinemedi.");
 }
 
-export async function fetchSignalLiveValues(token: string): Promise<SignalLiveRow[]> {
-  const response = await apiFetch(`${API_BASE_URL}/signals/live`, { headers: authHeaders(token) });
+/** Canli sinyal degerleri (cihaz x sinyal).
+ *
+ *  `deviceCodes` verilirse yanit yalnizca o cihazlarla sinirlanir. Yanit
+ *  cihaz x sinyal kartezyen carpimi oldugu (Horstmann SN2 = 193 sinyal/cihaz)
+ *  ve 600 cihazda ~115.800 satira ulastigi icin, tek cihaz gosteren ekranlar
+ *  bu filtreyi KULLANMALI. */
+export async function fetchSignalLiveValues(
+  token: string,
+  deviceCodes?: readonly string[]
+): Promise<SignalLiveRow[]> {
+  const query =
+    deviceCodes && deviceCodes.length > 0
+      ? `?${new URLSearchParams({ device_codes: deviceCodes.join(",") }).toString()}`
+      : "";
+  const response = await apiFetch(`${API_BASE_URL}/signals/live${query}`, {
+    headers: authHeaders(token)
+  });
   if (!response.ok) throw await buildApiError(response, "Canlı sinyal değerleri alınamadı.");
   return (await response.json()) as SignalLiveRow[];
 }
@@ -2256,6 +2290,30 @@ export async function fetchServicesStatus(token: string): Promise<ServicesReport
     );
   }
   return (await response.json()) as ServicesReport;
+}
+
+/** Historian (telemetri arsivi) yapisal sagligi.
+ *
+ *  AYRI bir uc (servis listesine dahil degil): servis probe'lari ~1 sn toplam
+ *  butceyle 10 sn'de bir kosuyor, historian introspection'i o butceye
+ *  girmemeli. Backend 60 sn cache'liyor; bu yuzden sik pollemenin anlami yok.
+ *
+ *  Polling icin session-expired event TETIKLENMEZ (diger sistem-durumu
+ *  uclariyla ayni davranis). */
+export async function fetchHistorianStatus(
+  token: string,
+  opts?: { refresh?: boolean }
+): Promise<HistorianStatus> {
+  const query = opts?.refresh ? "?refresh=true" : "";
+  const response = await apiFetch(`${API_BASE_URL}/system-status/historian${query}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 ? "session_polling_401" : "Historian durumu alınamadı."
+    );
+  }
+  return (await response.json()) as HistorianStatus;
 }
 
 /* ===== Appliance ag ayarlari (mini PC IP/DNS) ===== */
@@ -2645,6 +2703,19 @@ export async function startMapPack(
     body: JSON.stringify(payload)
   });
   if (!response.ok) throw await buildApiError(response, "İndirme başlatılamadı.");
+  return (await response.json()) as import("./types").MapPack;
+}
+
+/** Yarim kalmis alani kuyruga geri koyar; diskteki karolar atlanir. */
+export async function restartMapPack(
+  token: string,
+  packId: string
+): Promise<import("./types").MapPack> {
+  const response = await apiFetch(`${API_BASE_URL}/map-tiles/packs/${packId}/restart`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "İndirme sürdürülemedi.");
   return (await response.json()) as import("./types").MapPack;
 }
 

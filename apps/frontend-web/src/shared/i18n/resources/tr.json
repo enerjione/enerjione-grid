@@ -37,6 +37,7 @@
     "refreshing": "Yenileniyor",
     "retry": "Tekrar Dene",
     "confirm": "Onayla",
+    "confirmTitle": "Onay",
     "errorOccurred": "Bir hata oluştu",
     "noData": "Kayıt bulunamadı",
     "required": "Zorunlu alan",
@@ -217,6 +218,21 @@
     "resultTitle": "{{count}} kişiye gönderildi",
     "resultDetail": "Web: {{web}} · E-posta: {{email}} · SMS: {{sms}} · WhatsApp: {{whatsapp}}",
     "resultFail": "Başarısız → e-posta: {{emailFail}}, SMS: {{smsFail}}, WhatsApp: {{whatsappFail}}"
+  },
+  "setupPassword": {
+    "invalidTitle": "Geçersiz Bağlantı",
+    "invalidBody": "Davet bağlantısı geçersiz. Token eksik. Yöneticinizden yeni bir davet bağlantısı isteyin.",
+    "doneTitle": "Şifre Belirlendi",
+    "doneBody": "Şifreniz başarıyla belirlendi. Şimdi giriş yapabilirsiniz.",
+    "goLogin": "Giriş Yap",
+    "title": "Hesabınızı Aktive Edin",
+    "intro": "Davet edildiniz. EnerjiOne Grid'e ilk girişiniz için bir şifre belirleyin.",
+    "newPassword": "Yeni Şifre (en az 8 karakter)",
+    "confirmPassword": "Şifre (Tekrar)",
+    "submit": "Şifreyi Belirle",
+    "submitting": "Belirleniyor...",
+    "tooShort": "Şifre en az 8 karakter olmalı.",
+    "mismatch": "Şifreler eşleşmiyor."
   },
   "login": {
     "title": "Giriş Yap",
@@ -654,6 +670,10 @@
     }
   },
   "faults": {
+    "poleStrip": {
+      "range": "Arıza aralığı: direk {{from}} ile {{to}} arası",
+      "unknown": "Arıza aralığı belirlenemedi"
+    },
     "title": "Hat Arızaları",
     "stats": {
       "total": "Toplam",
@@ -981,6 +1001,35 @@
         "ftp": "Dosya sunucusu",
         "web": "Web sunucusu",
         "self": "API"
+      }
+    },
+    "historian": {
+      "title": "Telemetri Arsivi (Historian)",
+      "errorFetch": "Historian durumu alinamadi.",
+      "retention": "Saklama suresi",
+      "retentionDays": "{{count}} gun",
+      "retentionNone": "YOK",
+      "hypertableYes": "Hypertable aktif",
+      "hypertableNo": "Hypertable DEGIL",
+      "size": "Disk kullanimi",
+      "compressionOn": "Sikistirma acik",
+      "compressionOff": "Sikistirma kapali",
+      "rows": "Kayit sayisi",
+      "rowsEstimate": "yaklasik deger",
+      "newest": "Son kayit",
+      "oldest": "En eski: {{value}}",
+      "severity": {
+        "ok": "Saglikli",
+        "warning": "Dikkat",
+        "critical": "Kritik"
+      },
+      "problem": {
+        "timescaledb_missing": "TimescaleDB kurulu degil — arsiv tablosu duz tablo olarak calisiyor ve otomatik temizlenmiyor.",
+        "not_hypertable": "Arsiv tablosu hypertable'a cevrilmemis — saklama suresi politikasi calismiyor, tablo sinirsiz buyuyor.",
+        "no_retention": "Saklama suresi politikasi kurulu degil — eski kayitlar hic silinmiyor, disk zamanla dolar.",
+        "no_compression": "Sikistirma politikasi kurulu degil — arsiv gereginden fazla yer kapliyor.",
+        "retention_failing": "Saklama politikasi tanimli ama calismiyor (son calistirma basarisiz) — eski kayitlar silinmiyor.",
+        "retention_mismatch": "Saklama suresi beklenen degerden farkli (beklenen 90 gun)."
       }
     }
   },
@@ -2070,7 +2119,11 @@
         "unavailable": "Kapasite kapalı"
       },
       "gateShort": "Bu kuruluma henüz lisans yüklenmedi.",
-      "gateGo": "Lisans sayfasına git"
+      "gateUnknownTitle": "Lisans durumu doğrulanamadı",
+      "gateUnknown": "Sunucuya ulaşılamadığı için lisans durumu okunamadı. Lisansınız geçerli olabilir; güvenlik gereği doğrulanana kadar bekletiliyor. Ağ bağlantısını kontrol edip tekrar deneyin.",
+      "gateRetry": "Tekrar dene",
+      "gateGo": "Lisans sayfasına git",
+      "gateNetwork": "Ağ ayarları"
     },
     "liveValues": {
       "title": "Canlı Değerler",
@@ -2576,7 +2629,10 @@
     "unauthorized": "Yetkisiz",
     "notFound": "Bulunamadı",
     "validation": "Geçersiz veri",
-    "unknown": "Beklenmeyen bir hata oluştu"
+    "unknown": "Beklenmeyen bir hata oluştu",
+    "crashTitle": "Beklenmeyen bir hata oluştu",
+    "crashBody": "Arayüz beklenmedik bir durum nedeniyle yanıt veremez hale geldi. Sayfayı yeniden yüklemek sorunu çoğunlukla çözer. Sorun devam ederse sistem yöneticisine bildirin.",
+    "crashReload": "Sayfayı yeniden yükle"
   },
   "toasts": {
     "sessionExpiredTitle": "Oturum sona erdi",
@@ -2692,6 +2748,52 @@
     "close": "Sekmeyi kapat",
     "closeOthers": "Diğerlerini kapat",
     "closeToRight": "Sağdakileri kapat"
+  },
+  "deviceSummary": {
+    "tabs": {
+      "all": "Genel"
+    },
+    "kpi": {
+      "totalSignals": "Toplam Sinyal",
+      "good": "İyi",
+      "bad": "Kötü",
+      "pending": "Bekleyen",
+      "battery": "Batarya",
+      "alarm": "Alarm",
+      "alarmActive": "Aktif",
+      "alarmNone": "Yok"
+    },
+    "searchPlaceholder": "Sinyal ara...",
+    "autoRefresh": {
+      "label": "Otomatik yenile",
+      "off": "Kapalı",
+      "sec": "{{count}} sn",
+      "min": "{{count}} dk"
+    },
+    "table": {
+      "source": "Kaynak",
+      "signal": "Sinyal",
+      "type": "Tip",
+      "value": "Değer",
+      "quality": "Kalite",
+      "time": "Zaman"
+    },
+    "dataType": {
+      "analog": "Analog",
+      "binary": "Binary",
+      "counter": "Counter",
+      "string": "String",
+      "binaryOutput": "Komut",
+      "analogOutput": "AO"
+    },
+    "binaryOn": "AKTİF (1)",
+    "binaryOff": "PASİF (0)",
+    "noStream": "Bu cihaz için henüz veri akışı başlamadı.",
+    "noMatch": "Aramaya uygun sinyal yok.",
+    "empty": {
+      "title": "Cihaz seçin",
+      "body": "Soldaki listeden bir cihaz seçtiğinizde buraya o cihazın özet gösterimi gelir. Master ve uydu sinyallerini sekmeler arasında geçerek inceleyebilirsiniz."
+    }
   },
   "deviceDetail": {
     "title": "Cihaz Detayı",
@@ -2987,7 +3089,6 @@
       "diskSpace": "disk alanı",
       "start": "İndirmeyi başlat",
       "started": "İndirme başlatıldı. Arka planda sürüyor, bu pencereyi kapatabilirsiniz.",
-      "busyHint": "Devam eden bir indirme var; bitmesini bekleyin.",
       "cancel": "Durdur",
       "delete": "Sil",
       "confirmDelete": "\"{{name}}\" alanı ve indirilmiş karoları silinsin mi?",
@@ -2999,6 +3100,15 @@
       "pick": "Alan seç",
       "pickCancel": "Seçimi bırak",
       "pickHint": "Haritada basılı tutup sürükleyerek indirmek istediğiniz alanı çizin.",
+      "barReady": "Hazır alan",
+      "barDisk": "Disk kullanımı",
+      "queueHint": "Devam eden bir indirme var; bu alan sıraya alınacak.",
+      "resume": "Kaldığı yerden devam et",
+      "barSource": "Harita kaynağı",
+      "barSourceOnline": "İnternet (güncel)",
+      "barSourceCache": "İndirilen harita",
+      "previewDetail": "Detayı göster",
+      "fitArea": "Alanı sığdır",
       "status": {
         "pending": "Sırada",
         "running": "İndiriliyor",

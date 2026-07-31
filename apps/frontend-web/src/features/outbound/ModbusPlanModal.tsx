@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { fetchModbusPlan } from "../../shared/api";
 import type { ModbusPlan } from "../../shared/types";
+import { useModalDialog } from "../../shared/useModalDialog";
 
 type Props = {
   accessToken: string;
@@ -41,6 +42,8 @@ export function ModbusPlanModal({
   onDownloadCsv
 }: Props) {
   const { t } = useTranslation();
+  // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
   const [plan, setPlan] = useState<ModbusPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +121,7 @@ export function ModbusPlanModal({
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
       >
         <header className="modbus-plan-head">
           <div>

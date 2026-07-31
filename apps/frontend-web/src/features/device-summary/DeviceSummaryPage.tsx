@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { TablePagination } from "../../components/TablePagination";
+import { usePolling } from "../../shared/usePolling";
 import type {
   DeviceRow,
   Gateway,
@@ -21,20 +24,21 @@ type Props = {
 
 type TabKey = "all" | "master" | "sat01" | "sat02";
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "all", label: "Genel" },
+// Master/Satellite urun terimi — cevrilmiyor; yalnizca "Genel" yerellesiyor.
+const TABS: { key: TabKey; label: string | null }[] = [
+  { key: "all", label: null },
   { key: "master", label: "Master" },
   { key: "sat01", label: "Satellite 01" },
   { key: "sat02", label: "Satellite 02" }
 ];
 
-const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
-  analog: "Analog",
-  binary: "Binary",
-  counter: "Counter",
-  string: "String",
-  binary_output: "Komut",
-  analog_output: "AO"
+const DATA_TYPE_KEY: Record<SignalDataType, string> = {
+  analog: "analog",
+  binary: "binary",
+  counter: "counter",
+  string: "string",
+  binary_output: "binaryOutput",
+  analog_output: "analogOutput"
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -59,6 +63,7 @@ const NUMBER_FORMATTER = new Intl.NumberFormat("tr-TR", {
 });
 
 function formatValue(
+  t: TFunction,
   value: number | null,
   dataType: SignalDataType | undefined,
   unit?: string | null,
@@ -71,7 +76,8 @@ function formatValue(
     return txt.length > 0 ? txt : "—";
   }
   if (value === null || value === undefined) return "—";
-  if (dataType === "binary") return value ? "AKTİF (1)" : "PASİF (0)";
+  if (dataType === "binary")
+    return value ? t("deviceSummary.binaryOn") : t("deviceSummary.binaryOff");
   if (!Number.isFinite(value)) return String(value);
   const text = dataType === "counter" ? Math.round(value).toString() : NUMBER_FORMATTER.format(value);
   return unit ? `${text} ${unit}` : text;
@@ -86,15 +92,14 @@ function formatTimestamp(ts: string | null): string {
   }
 }
 
-const AUTO_REFRESH_OPTIONS = [
-  { value: 0, label: "Kapalı" },
-  { value: 1, label: "1 sn" },
-  { value: 2, label: "2 sn" },
-  { value: 5, label: "5 sn" },
-  { value: 10, label: "10 sn" },
-  { value: 30, label: "30 sn" },
-  { value: 60, label: "1 dk" }
-];
+const AUTO_REFRESH_VALUES = [0, 1, 2, 5, 10, 30, 60];
+
+/** 0 -> "Kapalı", 60 -> "1 dk", digerleri -> "{n} sn". */
+function autoRefreshLabel(t: TFunction, value: number): string {
+  if (value === 0) return t("deviceSummary.autoRefresh.off");
+  if (value >= 60) return t("deviceSummary.autoRefresh.min", { count: Math.round(value / 60) });
+  return t("deviceSummary.autoRefresh.sec", { count: value });
+}
 
 const AUTO_REFRESH_KEY = "hsl.device-summary.auto-refresh-sec";
 // Default 10sn -> 2sn: cihaz detay sayfasinda anlik takip.
@@ -109,6 +114,7 @@ export function DeviceSummaryPage({
   error,
   onRefresh
 }: Props) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -133,14 +139,16 @@ export function DeviceSummaryPage({
   useEffect(() => {
     loadingRef.current = loading;
   }, [loading]);
-  useEffect(() => {
-    if (autoRefreshSec <= 0) return;
-    const id = window.setInterval(() => {
+  usePolling({
+    enabled: autoRefreshSec > 0,
+    intervalMs: autoRefreshSec * 1000,
+    fn: () => {
       if (loadingRef.current) return;
       void onRefreshRef.current();
-    }, autoRefreshSec * 1000);
-    return () => window.clearInterval(id);
-  }, [autoRefreshSec]);
+    },
+    // Periyot secimi degistirilirken her adimda istek atmasin.
+    immediate: false
+  });
 
   const signalByKey = useMemo(() => {
     const map = new Map<string, SignalCatalogRow>();
@@ -217,11 +225,8 @@ export function DeviceSummaryPage({
       <section className="device-summary-empty">
         <div className="device-summary-empty-card">
           <span className="material-symbols-outlined device-summary-empty-icon">router</span>
-          <h3>Cihaz seçin</h3>
-          <p className="helper-text">
-            Soldaki listeden bir cihaz seçtiğinizde buraya o cihazın özet gösterimi gelir.
-            Master ve uydu sinyallerini sekmeler arasında geçerek inceleyebilirsiniz.
-          </p>
+          <h3>{t("deviceSummary.empty.title")}</h3>
+          <p className="helper-text">{t("deviceSummary.empty.body")}</p>
         </div>
       </section>
     );
@@ -242,36 +247,40 @@ export function DeviceSummaryPage({
           <span
             className={`device-summary-status ${gwOnline && selectedDevice.communicationStatus === "online" ? "online" : "offline"}`}
           >
-            {gwOnline && selectedDevice.communicationStatus === "online" ? "Çevrimiçi" : "Çevrimdışı"}
+            {gwOnline && selectedDevice.communicationStatus === "online"
+              ? t("common.online")
+              : t("common.offline")}
           </span>
         </div>
         <div className="device-summary-kpis">
           <div className="device-summary-kpi">
-            <span className="device-summary-kpi-label">Toplam Sinyal</span>
+            <span className="device-summary-kpi-label">{t("deviceSummary.kpi.totalSignals")}</span>
             <span className="device-summary-kpi-value">{counts.all}</span>
           </div>
           <div className="device-summary-kpi device-summary-kpi--good">
-            <span className="device-summary-kpi-label">İyi</span>
+            <span className="device-summary-kpi-label">{t("deviceSummary.kpi.good")}</span>
             <span className="device-summary-kpi-value">{kpis.goodCount}</span>
           </div>
           <div className="device-summary-kpi device-summary-kpi--bad">
-            <span className="device-summary-kpi-label">Kötü</span>
+            <span className="device-summary-kpi-label">{t("deviceSummary.kpi.bad")}</span>
             <span className="device-summary-kpi-value">{kpis.badCount}</span>
           </div>
           <div className="device-summary-kpi device-summary-kpi--pending">
-            <span className="device-summary-kpi-label">Bekleyen</span>
+            <span className="device-summary-kpi-label">{t("deviceSummary.kpi.pending")}</span>
             <span className="device-summary-kpi-value">{kpis.pendingCount}</span>
           </div>
           <div className="device-summary-kpi device-summary-kpi--battery">
-            <span className="device-summary-kpi-label">Batarya</span>
+            <span className="device-summary-kpi-label">{t("deviceSummary.kpi.battery")}</span>
             <span className="device-summary-kpi-value">
               {battPct !== null ? `%${Math.round(battPct)}` : "—"}
             </span>
           </div>
           <div className="device-summary-kpi device-summary-kpi--alarm">
-            <span className="device-summary-kpi-label">Alarm</span>
+            <span className="device-summary-kpi-label">{t("deviceSummary.kpi.alarm")}</span>
             <span className="device-summary-kpi-value">
-              {selectedDevice.alarmActive ? "Aktif" : "Yok"}
+              {selectedDevice.alarmActive
+                ? t("deviceSummary.kpi.alarmActive")
+                : t("deviceSummary.kpi.alarmNone")}
             </span>
           </div>
         </div>
@@ -280,35 +289,35 @@ export function DeviceSummaryPage({
       {/* Sekmeler + arama + yenile */}
       <div className="device-summary-toolbar">
         <div className="device-summary-tabs">
-          {TABS.map((t) => (
+          {TABS.map((tab) => (
             <button
-              key={t.key}
+              key={tab.key}
               type="button"
-              className={`device-summary-tab ${activeTab === t.key ? "active" : ""}`}
-              onClick={() => setActiveTab(t.key)}
+              className={`device-summary-tab ${activeTab === tab.key ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.key)}
             >
-              <span>{t.label}</span>
-              <span className="device-summary-tab-count">{counts[t.key]}</span>
+              <span>{tab.label ?? t("deviceSummary.tabs.all")}</span>
+              <span className="device-summary-tab-count">{counts[tab.key]}</span>
             </button>
           ))}
         </div>
         <input
           type="search"
           className="device-summary-search"
-          placeholder="Sinyal ara..."
+          placeholder={t("deviceSummary.searchPlaceholder")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
         <label className="auto-refresh-control">
-          <span className="auto-refresh-label">Otomatik yenile</span>
+          <span className="auto-refresh-label">{t("deviceSummary.autoRefresh.label")}</span>
           <select
             className="auto-refresh-select"
             value={autoRefreshSec}
             onChange={(event) => setAutoRefreshSec(Number.parseInt(event.target.value, 10) || 0)}
           >
-            {AUTO_REFRESH_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            {AUTO_REFRESH_VALUES.map((value) => (
+              <option key={value} value={value}>
+                {autoRefreshLabel(t, value)}
               </option>
             ))}
           </select>
@@ -330,12 +339,12 @@ export function DeviceSummaryPage({
         <table className="values-table device-summary-table">
           <thead>
             <tr>
-              {activeTab === "all" ? <th scope="col" className="cell-center">Kaynak</th> : null}
-              <th scope="col">Sinyal</th>
-              <th scope="col" className="cell-center">Tip</th>
-              <th scope="col">Değer</th>
-              <th scope="col" className="cell-center">Kalite</th>
-              <th scope="col">Zaman</th>
+              {activeTab === "all" ? <th scope="col" className="cell-center">{t("deviceSummary.table.source")}</th> : null}
+              <th scope="col">{t("deviceSummary.table.signal")}</th>
+              <th scope="col" className="cell-center">{t("deviceSummary.table.type")}</th>
+              <th scope="col">{t("deviceSummary.table.value")}</th>
+              <th scope="col" className="cell-center">{t("deviceSummary.table.quality")}</th>
+              <th scope="col">{t("deviceSummary.table.time")}</th>
             </tr>
           </thead>
           <tbody>
@@ -359,7 +368,9 @@ export function DeviceSummaryPage({
                   </td>
                   <td className="cell-center">
                     {dataType ? (
-                      <span className={`badge badge-${dataType}`}>{DATA_TYPE_LABEL[dataType]}</span>
+                      <span className={`badge badge-${dataType}`}>
+                        {t(`deviceSummary.dataType.${DATA_TYPE_KEY[dataType]}`)}
+                      </span>
                     ) : (
                       <span className="helper-text">-</span>
                     )}
@@ -378,7 +389,7 @@ export function DeviceSummaryPage({
                         return <span className="live-string-chip" title={txt}>{txt}</span>;
                       })()
                     ) : (
-                      formatValue(row.value, dataType, row.unit, row.value_string)
+                      formatValue(t, row.value, dataType, row.unit, row.value_string)
                     )}
                   </td>
                   <td className="cell-center">
@@ -396,8 +407,8 @@ export function DeviceSummaryPage({
               <tr>
                 <td colSpan={activeTab === "all" ? 6 : 5} className="device-summary-empty-row">
                   {deviceValues.length === 0
-                    ? "Bu cihaz için henüz veri akışı başlamadı."
-                    : "Aramaya uygun sinyal yok."}
+                    ? t("deviceSummary.noStream")
+                    : t("deviceSummary.noMatch")}
                 </td>
               </tr>
             ) : null}

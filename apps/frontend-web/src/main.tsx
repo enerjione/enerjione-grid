@@ -10,7 +10,9 @@ import "./shared/i18n";
 import "leaflet/dist/leaflet.css";
 // Material Symbols self-host — Google Fonts CDN bagimliligi kaldirildi.
 // 4G sahada DNS/proxy bloku ikonlari kirsa bile uygulama calismaya devam eder.
-import "material-symbols/outlined.css";
+// Paketin tamami (3.83 MB / ~3600 ikon) degil, kullandigimiz ~210 ikonluk
+// subset (151 kB) yukleniyor — bkz. scripts/subset-icons.py.
+import "./assets/fonts/material-symbols-subset.css";
 import "./styles.css";
 
 // Basit route gate: /setup-password yolunda main App'i hic mount etme,

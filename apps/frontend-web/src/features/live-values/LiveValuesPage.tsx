@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TablePagination } from "../../components/TablePagination";
 import { SearchableSelect } from "../../components/SearchableSelect";
+import { usePolling } from "../../shared/usePolling";
 import type {
   DeviceRow,
   Gateway,
@@ -171,14 +172,17 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     window.localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, String(autoRefreshSec));
   }, [autoRefreshSec]);
 
-  useEffect(() => {
-    if (autoRefreshSec <= 0) return;
-    const id = window.setInterval(() => {
+  usePolling({
+    enabled: autoRefreshSec > 0,
+    intervalMs: autoRefreshSec * 1000,
+    fn: () => {
       if (loadingRef.current) return;
       void onRefreshRef.current();
-    }, autoRefreshSec * 1000);
-    return () => window.clearInterval(id);
-  }, [autoRefreshSec]);
+    },
+    // Kullanici periyodu degistirdiginde aninda istek atma — secim yaparken
+    // (5s -> 10s -> 30s) her adimda bir cagri gitmesin.
+    immediate: false
+  });
 
   const signalByKey = useMemo(() => {
     const map = new Map<string, SignalCatalogRow>();

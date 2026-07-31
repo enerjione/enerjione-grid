@@ -12,11 +12,12 @@
  *
  * Polling 10sn; tablo last_seen_at DESC sirali, en aktif olanlar uste.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useToast } from "../../components/ToastProvider";
+import { usePolling } from "../../shared/usePolling";
 import {
   fetchActiveSessions,
   revokeSession,
@@ -94,12 +95,11 @@ export function ActiveSessionsPage({ accessToken }: Props) {
     }
   };
 
-  useEffect(() => {
-    void load();
-    const id = window.setInterval(() => void load(), POLL_INTERVAL_SEC * 1000);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+  usePolling({
+    enabled: Boolean(accessToken),
+    intervalMs: POLL_INTERVAL_SEC * 1000,
+    fn: load
+  });
 
   /** Listede gorunen rollerden filtre secenekleri. */
   const roleOptions = useMemo(

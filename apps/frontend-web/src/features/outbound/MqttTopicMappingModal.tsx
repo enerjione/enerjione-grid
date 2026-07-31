@@ -29,6 +29,7 @@ import {
   deleteTopicMapping,
 } from "../../shared/api";
 import type { DeviceRow, OutboundTarget, OutboundTopicMapping } from "../../shared/types";
+import { useModalDialog } from "../../shared/useModalDialog";
 
 type Props = {
   accessToken: string;
@@ -39,6 +40,8 @@ type Props = {
 
 export function MqttTopicMappingModal({ accessToken, target, devices, onClose }: Props) {
   const { t } = useTranslation();
+  // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
   const [mappings, setMappings] = useState<OutboundTopicMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -156,6 +159,7 @@ export function MqttTopicMappingModal({ accessToken, target, devices, onClose }:
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        ref={dialogRef}
       >
         <div className="mqtt-mapping-header">
           <div>

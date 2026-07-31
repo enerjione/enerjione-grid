@@ -22,6 +22,7 @@ import {
 } from "../../shared/api";
 import type { Gateway, GatewayAgentStatus, LocalGateway } from "../../shared/types";
 import { CopyButton, generateToken } from "./gatewayShared";
+import { useModalDialog } from "../../shared/useModalDialog";
 
 type Props = {
   accessToken: string;
@@ -32,6 +33,8 @@ type Props = {
 
 export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Props) {
   const { t } = useTranslation();
+  // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
   const [name, setName] = useState(gateway.name);
   const [token, setToken] = useState(gateway.token);
   const [error, setError] = useState("");
@@ -89,7 +92,7 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
 
   return (
     <div className="settings-modal-backdrop">
-      <div className="settings-modal gw-wizard" role="dialog" aria-modal="true">
+      <div className="settings-modal gw-wizard" role="dialog" aria-modal="true" ref={dialogRef}>
         <header className="gw-wizard-head">
           <div>
             <h3>{t("engineering.gateways.editGatewayModal")}</h3>

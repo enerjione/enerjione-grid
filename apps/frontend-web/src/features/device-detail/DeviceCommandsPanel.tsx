@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { fetchDeviceCommands } from "../../shared/api";
 import { formatDateTime, formatRelative } from "../../shared/format";
 import type { DeviceCommandRow, SignalCatalogRow } from "../../shared/types";
+import { usePolling } from "../../shared/usePolling";
 
 type CmdGroup = "general" | "alarm_reset" | "config" | "danger";
 
@@ -126,11 +127,12 @@ export function DeviceCommandsPanel({
     () => cmdHistory.some((c) => c.status === "pending" || c.status === "sent"),
     [cmdHistory]
   );
-  useEffect(() => {
-    if (!hasOpenCmd) return;
-    const id = window.setInterval(() => void reloadCommands(), 10000);
-    return () => window.clearInterval(id);
-  }, [hasOpenCmd, reloadCommands]);
+  usePolling({
+    enabled: hasOpenCmd,
+    intervalMs: 10000,
+    fn: reloadCommands,
+    immediate: false
+  });
 
   const runCommand = async (slug: string, label: string) => {
     setBusyCmd(slug);

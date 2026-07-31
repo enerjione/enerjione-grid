@@ -3249,9 +3249,11 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   /* Leaflet'in USTUNDE kalmali. Leaflet kendi katmanlarina 200-700, kontrol
      dugmelerine 800-1000 z-index verir; menu 40'ta kaldigi icin haritali
      sayfalarda (Sebeke, Cevrimdisi Harita) acilir liste haritanin ALTINDA
-     kaliyor ve tiklanamiyordu. 1200: leaflet'in tamaminin ustu, header
-     (1100) ile cakismaz cunku menu asagi dogru acilir. */
-  z-index: 1200;
+     kaliyor ve tiklanamiyordu.
+     1150 SECILDI, 1200 degil: header'in kendi acilir panelleri (bildirim,
+     profil) 1200'de. Esit verseydik DOM'da sonra gelen bu menu onlarin
+     ustune cikardi. 1000 < 1150 < 1200: leaflet'in ustu, header'in alti. */
+  z-index: 1150;
   display: flex;
   flex-direction: column;
   min-width: 290px;
@@ -32476,18 +32478,17 @@ th.event-col-category {
 }
 
 /* ---------------------------------------------------------------------------
-   Lisans kilidi — normal kabuk uzerinde bulanik + tek popup
+   Lisans kilidi — normal kabuk uzerinde tek popup
    ---------------------------------------------------------------------------
-   Onceki surum kendi header'ini ve kendi sayfa duzenini ciziyordu; uygulamanin
-   geri kalanindan kopuk gorunuyordu. Artik header ve sekmeler oldugu gibi
-   duruyor, yalnizca ICERIK bulaniklasip tiklanamaz hale geliyor.
-   Bulanikligi `.layout` degil `.body` uzeriden veriyoruz ki header net kalsin.
+   GUVENLIK NOTU: Buradaki kurallar SADECE GORSEL. Kilidin kendisi CSS DEGIL:
+   lisanssiz durumda App.tsx sayfa agacini hic render etmez ve backend
+   api_prefix altindaki her istegi 403'ler (core/license_gate.py).
+
+   Onceki surum `.is-license-locked .body { filter: blur; pointer-events:none }`
+   ile icerigi yalnizca bulaniklastiriyordu; DevTools'tan o kurali silmek
+   (veya klavyeyle Tab'lamak) tum uygulamayi verisiyle birlikte aciyordu.
+   Bu yuzden blur kurali KALDIRILDI — geri eklemeyin, kilit sanilir ama degil.
 --------------------------------------------------------------------------- */
-.layout.is-license-locked .body {
-  filter: blur(4px);
-  pointer-events: none;
-  user-select: none;
-}
 
 .license-gate-overlay {
   position: fixed;
@@ -32512,6 +32513,13 @@ th.event-col-category {
   font-size: 1.15rem;
 }
 
+.license-gate-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .license-gate-dialog p {
   margin: 0 0 20px;
   color: #57606a;
@@ -32525,9 +32533,111 @@ th.event-col-category {
 /* ---- Sayfa yerlesimi: solda harita, sagda panel ---- */
 .offline-page {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
   flex: 1;
   min-height: 0;
-  padding: 0;
+  /* padding SIFIRLANMIYOR: .tab-panel'in 12px'i kartlarin cerceveye
+     yapismasini onluyor (Ag Ayarlari sayfasi da boyle). */
+  /* Kaydirma kart ICINDE olsun; .tab-panel'in overflow'u cift kaydirma
+     yapardi. */
+  overflow: hidden;
+}
+
+/* Ust ozet seridi — Ag Ayarlari'ndaki .net-access-bar ile AYNI gorsel dil:
+   uc bagimsiz KPI karti degil, tek cubukta ayni seyin (cevrimdisi harita
+   durumu) uc yuzu. */
+.offline-bar {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.offline-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+.offline-bar-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
+
+.offline-bar-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.offline-bar-item.is-ok .offline-bar-icon {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.offline-bar-item.is-warn .offline-bar-icon {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.offline-bar-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.offline-bar-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.offline-bar-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Kart basligi — .net-card-head ile ayni olcu ve tipografi. */
+.offline-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.offline-card-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .offline-page-grid {
@@ -32543,8 +32653,9 @@ th.event-col-category {
   position: relative;
   min-height: 0;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .offline-page-leaflet {
@@ -32552,24 +32663,27 @@ th.event-col-category {
   width: 100%;
 }
 
-/* Secim modu dugmesi — Leaflet kontrolleri z-index 400-1000 kullanir. */
+/* Secim modu dugmesi — kart BASLIGINDA duruyor.
+   Onceden haritanin sol ustunde mutlak konumdaydi ve Leaflet'in zoom
+   kontrolunun (+/-) uzerine biniyordu. */
 .offline-pick-btn {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  z-index: 1001;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
+  flex-shrink: 0;
+  padding: 6px 11px;
+  font-size: 12px;
   font-weight: 600;
-  color: #1f2937;
-  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+  background: #f8fafc;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.offline-pick-btn:hover {
+  background: #f1f5f9;
 }
 
 .offline-pick-btn.is-active {
@@ -32580,17 +32694,22 @@ th.event-col-category {
 
 .offline-pick-hint {
   position: absolute;
-  left: 12px;
-  top: 52px;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  /* Leaflet kontrolleri 1000'e kadar cikiyor; ipucu onlarin ustunde ama
+     nav menusunun (1150) altinda kalmali. */
   z-index: 1001;
-  max-width: 260px;
-  padding: 7px 10px;
+  max-width: 340px;
+  padding: 8px 14px;
   font-size: 12px;
   line-height: 1.4;
+  text-align: center;
   color: #7c2d12;
   background: #fff7ed;
   border: 1px solid #f0b37e;
-  border-radius: 8px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
 }
 
 .offline-page-side {
@@ -32602,7 +32721,7 @@ th.event-col-category {
 }
 
 .offline-page-card {
-  padding: 14px 16px;
+  padding: 18px 20px;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -32612,11 +32731,6 @@ th.event-col-category {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-}
-
-.offline-page-card h3 {
-  margin: 0 0 10px;
-  font-size: 14px;
 }
 
 @media (max-width: 1100px) {
@@ -32797,6 +32911,20 @@ th.event-col-category {
 .offline-map-badge.is-pending {
   background: #ffedd5;
   color: #9a3412;
+}
+
+.offline-map-resume {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #0369a1;
+  border-radius: 7px;
+  padding: 5px 7px;
+  cursor: pointer;
+}
+
+.offline-map-resume:hover {
+  background: #f0f9ff;
+  border-color: #bae6fd;
 }
 
 .offline-map-del {

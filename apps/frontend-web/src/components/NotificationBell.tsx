@@ -7,6 +7,7 @@ import {
   markNotificationRead
 } from "../shared/api";
 import type { NotificationItem } from "../shared/types";
+import { usePolling } from "../shared/usePolling";
 
 type Props = {
   token: string;
@@ -189,12 +190,9 @@ export function NotificationBell({ token, onNavigate }: Props) {
     }
   }, [token]);
 
-  // Sayim polling
-  useEffect(() => {
-    void refreshUnread();
-    const id = window.setInterval(() => void refreshUnread(), POLL_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [refreshUnread]);
+  // Sayim polling — zil header'da her sayfada acik oldugu icin bu poll
+  // uygulama boyunca calisir; sekme arka plandayken durmasi onemli.
+  usePolling({ enabled: true, intervalMs: POLL_INTERVAL_MS, fn: refreshUnread });
 
   // Disari tiklayinca kapan
   useEffect(() => {

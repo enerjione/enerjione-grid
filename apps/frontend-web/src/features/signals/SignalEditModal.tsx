@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import type { SignalCatalogRow, SignalDataType, SignalSource } from "../../shared/types";
+import { useModalDialog } from "../../shared/useModalDialog";
 import {
   DATA_TYPES,
   DATA_TYPE_LABEL,
@@ -26,6 +27,8 @@ type Props = {
 
 export function SignalEditModal({ signal, onSave, onClose }: Props) {
   const { t } = useTranslation();
+  // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
   const dataTypeLabel = (type: SignalDataType): string =>
     t(`engineering.liveValues.dataType.${type}`, { defaultValue: DATA_TYPE_LABEL[type] });
 
@@ -150,6 +153,7 @@ export function SignalEditModal({ signal, onSave, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        ref={dialogRef}
       >
         <div className="mqtt-mapping-header signal-edit-header">
           <div>

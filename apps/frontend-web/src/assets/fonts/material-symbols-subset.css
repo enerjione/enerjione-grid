@@ -1,0 +1,47 @@
+/*
+ * Material Symbols Outlined — SUBSET.
+ *
+ * Upstream `material-symbols/outlined.css` ~3600 ikonluk 3.83 MB'lik fontu
+ * yukluyordu. `font-display: block` oldugu icin font inene kadar TUM ikonlar
+ * gorunmez kutu olarak duruyordu; 4G sahada ilk acilis onlarca saniye
+ * ikonsuz geciyordu.
+ *
+ * Burada kodda GERCEKTEN kullanilan ~210 ikonluk subset kullaniliyor (151 kB).
+ * Variable eksenler (FILL, wght, GRAD, opsz) korundu -- styles.css dorduku de
+ * kullaniyor, instance alinsaydi dolu/ince ikon varyantlari bozulurdu.
+ *
+ * `font-display: block` KASITLI olarak korundu: ligature tabanli ikon
+ * fontunda `swap` kullanilirsa font inene kadar ikon yerine ikon ADI
+ * ("notifications") duz metin olarak gorunur. 151 kB'da blok suresi zaten
+ * goz ardi edilebilir.
+ *
+ * YENI IKON EKLEYINCE fontu yeniden uret (aksi halde ikon yerine adi cikar):
+ *     cd apps/frontend-web && python scripts/subset-icons.py
+ *
+ * Kural govdesi upstream outlined.css ile birebir ayni -- gorunum degismesin.
+ */
+@font-face {
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url("./material-symbols-outlined-subset.woff2") format("woff2");
+}
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "liga";
+}

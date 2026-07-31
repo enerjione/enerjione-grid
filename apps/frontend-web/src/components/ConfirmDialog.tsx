@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * ConfirmDialog — `await asyncConfirm()` yerine kullanılan stillendirilmiş onay diyaloğu.
@@ -42,6 +43,7 @@ interface PendingItem extends ConfirmOptions {
 let _globalConfirm: ((opts: ConfirmOptions) => Promise<boolean>) | null = null;
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const [pending, setPending] = useState<PendingItem | null>(null);
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -132,7 +134,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               id="confirm-title"
               style={{ margin: 0, marginBottom: "0.75rem", fontSize: "1.125rem" }}
             >
-              {pending.title ?? "Onay"}
+              {pending.title ?? t("common.confirmTitle")}
             </h2>
             <p
               id="confirm-message"
@@ -154,7 +156,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   fontSize: "0.875rem",
                 }}
               >
-                {pending.cancelText ?? "İptal"}
+                {pending.cancelText ?? t("common.cancel")}
               </button>
               <button
                 ref={confirmBtnRef}
@@ -171,7 +173,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   fontWeight: 500,
                 }}
               >
-                {pending.confirmText ?? (pending.danger ? "Sil" : "Onayla")}
+                {pending.confirmText ?? (pending.danger ? t("common.delete") : t("common.confirm"))}
               </button>
             </div>
           </div>
