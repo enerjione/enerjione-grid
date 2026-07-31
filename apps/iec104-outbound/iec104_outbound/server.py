@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+import time as _time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -64,6 +65,22 @@ logger = logging.getLogger(__name__)
 # Client en fazla bu kadar I-frame'i onaylamadan tasiyabilir (K parametresi).
 MAX_UNACKED_I = 12
 
+# IEC 60870-5-104 t3 — bosta kalma suresi. Bu kadar sure hicbir sey gelmezse
+# TEST_ACT (keepalive) gonderilir; standardin onerdigi varsayilan 20 sn.
+#
+# NEDEN SART: bu zamanlayici olmadan yari-acik bir TCP baglantisi HIC fark
+# edilmiyordu. Master donar ya da aradaki switch yeniden baslarsa FIN gelmez;
+# sunucu 12 I-frame gonderip S-frame bekler, `unacked` 12'de sabitlenir ve o
+# oturuma giden TUM telemetri sessizce duser. Yazma da durdugu icin TCP'nin
+# kendisi de kopuklugu anlayamaz.
+T3_IDLE_SEC = 20.0
+
+# k-penceresi dolu uyarisinin oturum basina en sik basilma araligi.
+# Rate-limit yokken her dusen frame bir WARNING uretiyordu; 600 cihaz yukunde
+# log dosyalari saniyeler icinde donuyor ve ariza aninda bakilacak diger
+# kayitlar supuruluyordu.
+KWINDOW_WARN_INTERVAL_SEC = 30.0
+
 
 @dataclass
 class PointValue:
@@ -87,6 +104,14 @@ class _ClientSession:
         self.unacked = 0
         self._write_lock = asyncio.Lock()
         self.connected_at_iso: str = ""
+        # TEST_ACT gonderildi, cevap (TESTFR_CON) bekleniyor. Ikinci bir
+        # bosluk turunda hala True ise baglanti OLU sayilir.
+        self.test_pending = False
+        # k-penceresi dolu uyarisinin son basildigi an (monotonic).
+        # Rate-limit YOK iken her dusen frame icin WARNING basiliyordu; 600
+        # cihaz yukunde bu, log dosyalarini saniyeler icinde dondurup DIGER
+        # tum teshis kayitlarini supuruyordu.
+        self.last_kwindow_warn_at: float = 0.0
 
     async def send(self, apdu: bytes) -> None:
         async with self._write_lock:
@@ -235,9 +260,41 @@ class IEC104Server:
         buffer = bytearray()
         try:
             while True:
-                chunk = await reader.read(4096)
+                # OKUMA ZAMAN ASIMI + TEST_ACT KEEPALIVE (IEC 60870-5-104 t1/t3)
+                #
+                # YASANAN SORUN: `reader.read()` suresiz bekliyordu ve sunucu
+                # tarafinda hicbir zamanlayici yoktu. Aradaki switch/router
+                # yeniden baslarsa ya da master sureci donarsa TCP YARI-ACIK
+                # kalir; FIN gelmez.
+                #
+                # Sonuc zinciri: sunucu 12 I-frame gonderir, S-frame ack
+                # gelmez, `unacked` 12'de SABITLENIR. `_send_i` artik hicbir
+                # sey yazmadigi icin TCP de kopuklugu FARK EDEMEZ (SO_KEEPALIVE
+                # yok, TEST_ACT gonderilmiyor). Oturum `started=True` olarak
+                # sonsuza kadar kalir ve TUM telemetri sessizce duser: SCADA'da
+                # veriler donar, IEC 104 cikisi olur ve container yeniden
+                # baslatilana kadar KENDILIGINDEN duzelmez.
+                try:
+                    chunk = await asyncio.wait_for(reader.read(4096), timeout=T3_IDLE_SEC)
+                except asyncio.TimeoutError:
+                    if session.test_pending:
+                        # Onceki TEST_ACT'e cevap gelmedi -> baglanti olu.
+                        logger.warning(
+                            "iec104_session_dead name=%s peer=%s — TEST_ACT cevapsiz, "
+                            "oturum kapatiliyor",
+                            self.name, peer_str,
+                        )
+                        break
+                    session.test_pending = True
+                    try:
+                        await session.send(build_u_frame(APCI_U_TEST_ACT))
+                    except Exception:  # noqa: BLE001
+                        break
+                    continue
                 if not chunk:
                     break
+                # Herhangi bir veri geldi: baglanti canli.
+                session.test_pending = False
                 buffer.extend(chunk)
                 while buffer:
                     if buffer[0] != START_BYTE:
@@ -422,12 +479,21 @@ class IEC104Server:
         # IEC 60870-5-104 spec'i: k aşılırsa master pause etmeli.
         # Sonsuz beklemek yerine drop + log — slow SCADA tum kuyrugu tikamasin.
         if session.unacked >= 12:
-            logger.warning(
-                "iec104_k_window_full name=%s peer=%s unacked=%d — frame drop",
-                self.name,
-                session.peer,
-                session.unacked,
-            )
+            # Uyari OTURUM BASINA rate-limit'li. Sinirsiz iken her dusen frame
+            # bir WARNING basiyordu; 600 cihaz yukunde log dosyalari saniyeler
+            # icinde donuyor ve DIGER tum teshis kayitlari supuruluyordu —
+            # yani ariza aninda bakilacak log da kalmiyordu.
+            simdi = _time.monotonic()
+            if simdi - session.last_kwindow_warn_at >= KWINDOW_WARN_INTERVAL_SEC:
+                session.last_kwindow_warn_at = simdi
+                logger.warning(
+                    "iec104_k_window_full name=%s peer=%s unacked=%d — frame drop "
+                    "(bu uyari %ds'de bir basilir)",
+                    self.name,
+                    session.peer,
+                    session.unacked,
+                    int(KWINDOW_WARN_INTERVAL_SEC),
+                )
             return
         # ns wrap: IEC 60870-5-104'te sequence number 15-bit (mod 32768).
         # Eski kod `session.ns += 1` 32768'de build_i_frame_asdu ValueError

@@ -96,6 +96,29 @@ jobs:
         working-directory: apps/alarm-service
         run: pytest -q
 
+  iec104-outbound:
+    # SCADA cikisi. Testleri VARDI ama CI'da hic kosmuyordu — yani sozde
+    # korumaliydi. Denetimdeki A7 (yari-acik oturumda k-penceresi kilitlenip
+    # tum telemetrinin sessizce dusmesi) tam da kimsenin kosturmadigi bir
+    # alanda duruyordu.
+    name: IEC 104 outbound — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/iec104-outbound/requirements.txt
+      - name: Bagimliliklar
+        working-directory: apps/iec104-outbound
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: pytest
+        working-directory: apps/iec104-outbound
+        run: pytest -q
+
   migrations:
     name: Alembic — tek head kontrolu
     runs-on: ubuntu-latest
