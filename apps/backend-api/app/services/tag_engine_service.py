@@ -31,6 +31,30 @@ def map_quality_to_status(quality: str) -> CommunicationStatus:
     )
 
 
+def quality_blocks_alarm(quality: str | None) -> bool:
+    """Bu kalitedeki bir okuma alarm degerlendirmesine GIRMELI Mi?
+
+    True donerse okuma alarm mantiginda HIC KULLANILMAZ: ne yeni alarm acar
+    ne de acik bir alarmi kapatir. Alarm durumu DONAR.
+
+    NEDEN KAPATMAMAK ASIL MESELE:
+      Haberlesmesi kopan bir cihaz icin gateway `comm_lost` kalitesiyle 0.0
+      basar. Kalite kontrolu olmadan bu 0.0, "esik artik saglanmiyor" diye
+      yorumlanip ACIK ARIZA ALARMINI KAPATIR ve harita yesile doner. Yani
+      cihazla baglanti koptugu anda sistem "ariza gecti" der.
+      SCADA doktrini bunun tersidir: veri kaybinda SON BILINEN DURUM korunur.
+
+    KARA LISTE (beyaz liste DEGIL) — bilincli:
+      Taninmayan bir kalite token'i alarm degerlendirmesini ENGELLEMEZ.
+      Beyaz liste olsaydi, gateway ileride yeni bir kalite adi yayinladiginda
+      tum alarm motoru sessizce durabilirdi. Bilinmeyen token'da degerlendirme
+      devam eder — gurultulu hata, sessiz korlukten iyidir.
+    """
+    if quality is None:
+        return False
+    return normalize_quality(str(quality)) in _OFFLINE_QUALITIES
+
+
 # Lithium pil voltaj-yüzde haritası (default; proje ayarlarindan override edilebilir).
 DEFAULT_BATTERY_VOLTAGE_FULL = 3.71
 DEFAULT_BATTERY_VOLTAGE_LOW = 3.40
