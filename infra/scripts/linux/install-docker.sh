@@ -14,11 +14,50 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   exit 0
 fi
 
+# --- apt yardimcisi: alakasiz bozuk depo kurulumu DURDURMASIN ---------------
+# SAHA VAKASI (Dell OEM Ubuntu 24.04): makinede birinin kurdugu Google Chrome
+# deposunun imza anahtari yoktu; `apt-get update` 100 dondu ve `set -e` ile
+# TUM kurulum orada oldu. Oysa ihtiyacimiz olan depolar (archive.ubuntu.com,
+# download.docker.com) saglamdi ve paketler kurulabilirdi.
+#
+# Ubuntu 24.04 eski apt-key/trusted.gpg keyring'ini kullanmadigi icin eski
+# yontemle eklenmis her ucuncu taraf deposu bu hatayi verir.
+#
+# Karar `apt-get install`'da veriliyor: paket gercekten kurulamiyorsa ORADA
+# duruyoruz. Boylece Docker'in KENDI deposu bozuksa yine yakalanir.
+_APT_BROKEN=""
+
+_apt_update_tolerant() {
+  local log
+  log="$(mktemp)"
+  apt-get update -y >"$log" 2>&1 || true
+  _APT_BROKEN="$(grep -E '^(Err|E|W): ' "$log" 2>/dev/null | head -8 || true)"
+  rm -f "$log"
+  if [[ -n "$_APT_BROKEN" ]]; then
+    echo "  ! apt-get update kismen basarisiz — su depolar atlandi:" >&2
+    printf '%s\n' "$_APT_BROKEN" | sed 's/^/        /' >&2
+    echo "    Devam ediliyor; gerekli paketler kurulamazsa asagida durulacak." >&2
+  fi
+}
+
+_apt_install_or_die() {
+  if ! apt-get install -y "$@"; then
+    echo >&2
+    echo "HATA: paketler kurulamadi: $*" >&2
+    if [[ -n "$_APT_BROKEN" ]]; then
+      echo "  Yukaridaki bozuk apt deposu sebep olabilir. Devre disi birakip tekrar deneyin:" >&2
+      echo "    sudo mv /etc/apt/sources.list.d/<depo>.list{,.disabled}" >&2
+      echo "    sudo apt-get update" >&2
+    fi
+    exit 1
+  fi
+}
+
 echo "[1/5] Apt cache guncelleniyor..."
-apt-get update -y
+_apt_update_tolerant
 
 echo "[2/5] On-kosul paketler kuruluyor..."
-apt-get install -y ca-certificates curl gnupg lsb-release
+_apt_install_or_die ca-certificates curl gnupg lsb-release
 
 echo "[3/5] Docker GPG anahtari ve repo ekleniyor..."
 install -m 0755 -d /etc/apt/keyrings
@@ -32,8 +71,11 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
   > /etc/apt/sources.list.d/docker.list
 
 echo "[4/5] Docker Engine + Compose plugin kuruluyor..."
-apt-get update -y
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+# Bu update Docker'in KENDI deposu eklendikten sonra kosuyor. Yine tolere
+# ediyoruz (alakasiz bozuk depolar icin) ama Docker deposu bozuksa asagidaki
+# install adimi paketleri bulamaz ve orada duruyoruz — sessizce gecmiyoruz.
+_apt_update_tolerant
+_apt_install_or_die docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 echo "[5/5] Docker servisi etkinlestiriliyor..."
 systemctl enable --now docker

@@ -76,8 +76,7 @@ if [[ ${#NEEDED[@]} -gt 0 ]]; then
   rm -f "$_APT_LOG"
   if [[ -n "$_APT_BROKEN" ]]; then
     warn "apt-get update kismen basarisiz — su depolar atlandi:"
-    printf '%s
-' "$_APT_BROKEN" | sed 's/^/        /' >&2
+    printf '%s\n' "$_APT_BROKEN" | sed 's/^/        /' >&2
     info "Bu depolar EnerjiOne icin gerekli degil; devam ediliyor."
   fi
   if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${NEEDED[@]}"; then

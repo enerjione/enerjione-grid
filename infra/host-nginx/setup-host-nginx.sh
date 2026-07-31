@@ -34,8 +34,7 @@ if ! command -v nginx >/dev/null 2>&1; then
   rm -f "$_APT_LOG"
   if [[ -n "$_APT_BROKEN" ]]; then
     echo "  ! apt-get update kismen basarisiz — atlanan depolar:" >&2
-    printf '%s
-' "$_APT_BROKEN" | sed 's/^/        /' >&2
+    printf '%s\n' "$_APT_BROKEN" | sed 's/^/        /' >&2
   fi
   if ! apt-get install -y nginx; then
     echo "  ✗ nginx kurulamadi." >&2
