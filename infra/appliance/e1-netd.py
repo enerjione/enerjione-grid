@@ -21,7 +21,29 @@ Kullanim (systemd tarafindan cagrilir):
 
 Guvenlik agi: WiFi AP (EnerjiOne Grid) her zaman ayaktadir ve ethernet
 ayarlarindan etkilenmez. Yanlis statik IP girilse bile cihaza AP uzerinden
-http://e1-grid.local ile geri baglanip duzeltmek mumkundur.
+http://enerjione.local ile geri baglanip duzeltmek mumkundur.
+
+WiFi: uc DURUST katman (schema 3)
+---------------------------------
+Appliance'ta TEK WiFi karti var; tek radyo ayni anda hem erisim noktasi (AP)
+hem client OLAMAZ. Onceki surum bunu GORUNMEZ bir kuralla yonetiyordu
+("client'a bagli degilsek AP acik olmali") ve UI o KURALI olcum gibi
+gosterdigi icin sahada "AP acik" derken AP kapaliydi. Artik uc ayri sey
+raporlanir ve hicbiri digerinin yerine gecmez:
+
+  1. radio      — WiFi karti acik mi (yazilim/DONANIM kilidi ayri ayri).
+                  Fiziksel onkosul; kapaliysa ne AP ne tarama calisir.
+  2. wifi_role  — kartin GOREVI. `mode` = kullanicinin KALICI TERCIHI
+                  (ap|client), `effective` = radyonun SU AN ne yaptigi
+                  (ap|client|off|idle). Ikisi ayrisabilir ve bu bir hata
+                  degil, anlatilacak bir durumdur.
+  3. internet   — internet VAR/YOK + hangi arayuzden. "AP acik" ile
+                  "internet var" BAMBASKA seylerdir.
+
+DEGISMEZ (bozulamaz): cihaz erisilemez kalmaz. Otomatik dongu asla yikici
+davranmaz (calisan bir client baglantisini dusurmez); WiFi'yi kapatmak
+yalnizca IP almis bir ethernet varken kabul edilir; radyo kapaliyken kablo
+da giderse ajan WiFi'yi kendiliginden geri acar.
 """
 from __future__ import annotations
 
@@ -244,6 +266,9 @@ def radio_from_general(general: dict, wifi_device_present: bool) -> dict:
         enabled = bool(wifi_device_present)
     else:
         enabled = sw == "enabled"
+    # DONANIM kilidi yazilim bayragini EZER: NM "WirelessEnabled=true" derken
+    # fiziksel anahtar kapali olabilir; o durumda radyo GERCEKTE kapalidir.
+    enabled = enabled and hardware_enabled
     blocked_by: str | None = None
     if supported and not enabled:
         blocked_by = "hardware" if not hardware_enabled else "software"
@@ -676,49 +701,404 @@ def _connection_ipv4_addrs(ifname: str) -> list[str]:
     return [p.strip() for p in out.replace("|", "\n").splitlines() if p.strip()]
 
 
-def _ensure_ap_when_offline() -> None:
-    """DEGISMEZ KURAL: WiFi client'a bagli DEGILSEK, AP acik olmali.
+# --- Radyo (WiFi karti ac/kapa) --------------------------------------------
+def _general_status() -> dict:
+    """NM'in genel durumu — radyo ve internet icin TEK ucuz cagri.
 
-    Amac: cihazin IP'si bilinmese bile her zaman bir giris yolu bulunsun.
-    Kullanici cihazin AP'sine (musteri adiyla, or. "E1GRID-TPAO")
-    baglanip http://10.42.0.1 ile girer.
+    D-Bus'tan okur, ag trafigi URETMEZ.
+    """
+    try:
+        out = _nmcli(
+            "-t", "-f", "STATE,CONNECTIVITY,WIFI-HW,WIFI", "general", "status",
+            check=False,
+        )
+    except RuntimeError:
+        return {}
+    return parse_general_status(out)
 
-    Tek radyo oldugu icin AP ile client ayni anda calisamaz; bu yuzden kural
-    "client baglantisi YOKSA AP'yi ac" seklinde. Baglanti KURULMA ANINDA
-    (muhafiz aktifken) dokunmayiz, aksi halde denemeyi bogar.
 
-    `report` her turda (30 sn) cagirir; boylece AP elle kapatilsa veya
-    baglanti kopsa bile en gec yarim dakikada geri gelir.
+def _radio_state(devices: list[dict], general: dict | None = None) -> dict:
+    if general is None:
+        general = _general_status()
+    return radio_from_general(general, any(d["type"] == "wifi" for d in devices))
+
+
+def _wired_fallback(devices: list[dict]) -> dict | None:
+    """Kabloda ulasilabilir bir yol var mi (WiFi kapatma onkosulu)."""
+    rows = []
+    for dev in devices:
+        if dev["type"] != "ethernet":
+            continue
+        rows.append({**dev, "addresses": _connection_ipv4_addrs(dev["ifname"])})
+    return pick_wired_fallback(rows)
+
+
+def _any_global_ipv4(devices: list[dict]) -> bool:
+    """Herhangi bir arayuzde gercek bir IPv4 var mi (erisim ihtimali)."""
+    for dev in devices:
+        if dev["type"] in ("loopback", "bridge", "tun", "veth", "ovs-interface"):
+            continue
+        if dev["ifname"].startswith(("docker", "br-", "veth", "virbr")):
+            continue
+        if any(is_global_ipv4(a) for a in _connection_ipv4_addrs(dev["ifname"])):
+            return True
+    return False
+
+
+# --- Gorev tercihi (mode.json) ---------------------------------------------
+def _read_mode() -> dict:
+    """Kalici gorev tercihi + radyo/fallback defterleri. Dosya yoksa 'ap'."""
+    raw = _read_json(MODE_PATH) or {}
+    mode = raw.get("mode")
+    if mode not in ("ap", "client"):
+        mode = DEFAULT_MODE
+    fallback = raw.get("fallback") if isinstance(raw.get("fallback"), dict) else {}
+    probe = raw.get("probe") if isinstance(raw.get("probe"), dict) else {}
+    desired = raw.get("radio_desired")
+    return {
+        "schema": SCHEMA_VERSION,
+        "mode": mode,
+        "set_by": raw.get("set_by"),
+        "set_at": raw.get("set_at"),
+        "radio_desired": desired if desired in ("on", "off") else None,
+        "radio_changed_at": raw.get("radio_changed_at"),
+        "radio_auto_restored_at": raw.get("radio_auto_restored_at"),
+        # Radyo kapali + hicbir IP yok durumunun basladigi an (kurtarma sayaci).
+        "radio_off_since": _as_float(raw.get("radio_off_since")),
+        "fallback": {
+            "active": bool(fallback.get("active")),
+            "since": _as_float(fallback.get("since")),
+            "last_attempt": _as_float(fallback.get("last_attempt")) or 0.0,
+        },
+        "probe": {
+            "at": _as_float(probe.get("at")) or 0.0,
+            "ok": probe.get("ok") if isinstance(probe.get("ok"), bool) else None,
+        },
+    }
+
+
+def _as_float(value) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _write_mode(state: dict) -> None:
+    _write_json(MODE_PATH, {**state, "schema": SCHEMA_VERSION}, mode=0o640)
+
+
+def _sta_profile_exists() -> bool:
+    try:
+        out = _nmcli("-t", "-f", "NAME", "connection", "show", check=False)
+    except RuntimeError:
+        return False
+    return any(
+        _split_terse(line)[0].strip() == STA_CON_NAME
+        for line in out.splitlines()
+        if line.strip()
+    )
+
+
+def _sta_profile_ssid() -> str | None:
+    """Kayitli client profilinin SSID'i (baglanti kopukken de bilinir)."""
+    try:
+        out = _nmcli(
+            "-g", "802-11-wireless.ssid", "connection", "show", STA_CON_NAME,
+            check=False,
+        )
+    except RuntimeError:
+        return None
+    value = out.strip()
+    return value or None
+
+
+def _current_ssid(ifname: str) -> str | None:
+    """Radyonun SU AN bagli oldugu ag adi (profil adindan bagimsiz)."""
+    try:
+        out = _nmcli(
+            "-t", "-f", "IN-USE,SSID,SIGNAL", "device", "wifi", "list",
+            "ifname", ifname, "--rescan", "no",
+        )
+    except RuntimeError:
+        return None
+    for line in out.splitlines():
+        parts = _split_terse(line)
+        if len(parts) >= 2 and parts[0].strip() == "*":
+            return parts[1].strip() or None
+    return None
+
+
+def _apply_mode_profiles(mode: str) -> None:
+    """Tercihi NetworkManager'in KENDI bayragina yaz.
+
+    NEDEN 30 sn'lik dongu yerine autoconnect: dongu yalnizca biz kosarken
+    gecerlidir; NM boot'ta kendi karariyla kayitli aga kacar ve kullanicinin
+    acik tercihi SESSIZCE ezilir ("AP modunu sectim ama gelmiyor").
+
+    AP profiline DOKUNULMAZ: onun autoconnect'i (priority 100) kurtarma
+    yolunun ta kendisi. Client tercihinde STA'ya daha yuksek oncelik verilir
+    ki boot'ta AP'nin onune gecebilsin.
+    """
+    if not _sta_profile_exists():
+        return
+    if mode == "ap":
+        _nmcli(
+            "connection", "modify", STA_CON_NAME, "connection.autoconnect", "no",
+            check=False,
+        )
+        return
+    _nmcli(
+        "connection", "modify", STA_CON_NAME,
+        "connection.autoconnect", "yes",
+        "connection.autoconnect-priority", str(STA_AUTOCONNECT_PRIORITY),
+        check=False,
+    )
+
+
+def _ap_has_clients(ifname: str) -> bool:
+    """AP'ye bagli bir istemci var mi?
+
+    Sahada biri arayuzu kullanirken AP'yi bir dakikaligina dusurup oturumunu
+    kesmeyelim diye yeniden baglanma denemesi ertelenir.
+    """
+    try:
+        proc = subprocess.run(
+            ["iw", "dev", ifname, "station", "dump"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if proc.returncode == 0:
+            return "Station" in proc.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    try:
+        proc = subprocess.run(
+            ["ip", "neigh", "show", "dev", ifname, "nud", "reachable"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if proc.returncode == 0:
+            return bool(proc.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    # Olculemedi: kullanici ACIKCA client modu sectiyse denemeyi sonsuza dek
+    # engellememeliyiz (muhafiz zaten AP'yi geri aciyor).
+    return False
+
+
+def _radio_rescue(devices: list[dict], radio: dict) -> bool:
+    """DEGISMEZ: cihaz erisilemez kalmasin.
+
+    Radyo kapaliyken kablo da giderse hicbir yoldan girilemez ve kimse
+    radyoyu geri acamaz. Bu durum RADIO_RESCUE_SEC boyunca KESINTISIZ
+    surerse WiFi kendiliginden acilir. TEK YONLUDUR: ajan radyoyu asla
+    kendiliginden KAPATMAZ.
+
+    True donerse cagiran taraf cihaz listesini tazelemeli.
+    """
+    state = _read_mode()
+
+    def _clear() -> None:
+        if state.get("radio_off_since"):
+            state["radio_off_since"] = None
+            _write_mode(state)
+
+    if RADIO_RESCUE_SEC <= 0 or not radio["supported"] or radio["enabled"]:
+        _clear()
+        return False
+    if not radio["hardware_enabled"]:
+        return False  # yazilimla acilamaz, sayac tutmanin anlami yok
+    if _any_global_ipv4(devices):
+        _clear()
+        return False
+    now = time.time()
+    since = state.get("radio_off_since")
+    if not since:
+        state["radio_off_since"] = now
+        _write_mode(state)
+        return False
+    if now - since < RADIO_RESCUE_SEC:
+        return False
+
+    _log("Kablolu baglanti yok ve WiFi kapali — erisim kalsin diye WiFi aciliyor.")
+    try:
+        _nmcli("radio", "wifi", "on")
+    except RuntimeError as exc:
+        _log(f"WiFi otomatik acilamadi: {exc}")
+        return False
+    state["radio_off_since"] = None
+    # Kullanicinin tercihi (radio_desired="off") KORUNUR — yalan soylemeyip
+    # "kablolu gidince otomatik actik" diyebilelim.
+    state["radio_auto_restored_at"] = _now_iso()
+    _write_mode(state)
+    return True
+
+
+def _enforce_wifi_mode(devices: list[dict], radio: dict) -> None:
+    """Kullanicinin gorev tercihini uygula — ISTEK yikici olabilir, MUHAFIZ asla.
+
+    DEGISMEZ KURAL KORUNUR: client baglantisi yoksa AP acilir; yani cihaza
+    her zaman bir giris yolu kalir. Onceki surumden farki, kural artik
+    kullanicinin tercihini de tanir:
+
+      mode="ap"     -> AP acik tutulur. Radyoda YABANCI bir client baglantisi
+                       varsa DUSURULMEZ (kurulumcunun oturumunu kesmeyelim);
+                       durum state'e durustce yazilir, kullanici acik dugmeyle
+                       AP'ye gecebilir.
+      mode="client" -> once NM'in kendi yeniden baglanmasina sans verilir
+                       (grace); olmazsa erisim garantisi icin AP acilir
+                       (fallback) ve ag geri geldiginde periyodik olarak
+                       yeniden denenir.
+
+    `report` her turda (30 sn) cagirir.
     """
     if os.path.exists(GUARD_PATH):
         return  # baglanma denemesi suruyor — _guard_check ilgilenecek
-
-    try:
-        devices = _device_rows()
-    except RuntimeError:
-        return
     ifname = _wifi_ifname(devices)
     if ifname is None:
         return  # WiFi karti yok
+    if not radio["enabled"]:
+        # Radyo kapali: ne AP ne client mumkun. Her 30 sn'de bir AP'yi acmaya
+        # calisip hata loglamak ANLAMSIZ — durum state.json'da zaten yaziyor.
+        return
+
+    ap = _ap_info(devices)
+    if not ap.get("exists"):
+        return  # AP profili kurulmamis (SKIP_AP)
+
+    state = _read_mode()
 
     # DIKKAT: burada _sta_is_online KULLANILMAZ. O fonksiyon profil ADINA
     # bakar ve ilk kurulumda kurulumcunun WiFi profilini goremez; sahada
     # tam olarak bu yuzden AP acilip SSH oturumu koptu ve kurulum yarida
     # kaldi. Ayrintili gerekce icin bkz. _wifi_client_online.
-    if _wifi_client_online(ifname, devices):
-        return  # bir aga bagliyiz, AP zaten olamaz (tek radyo)
+    client_online = _wifi_client_online(ifname, devices)
 
-    ap = _ap_info(devices)
-    if not ap.get("exists"):
-        return  # AP profili kurulmamis (SKIP_AP ile kurulmus olabilir)
-    if ap.get("active"):
-        return  # zaten acik
+    if state["mode"] == "ap":
+        if client_online:
+            return  # OTOMATIK YIKMA YOK; state.foreign_client durumu anlatir
+        if ap.get("active"):
+            return
+        _log("WiFi baglantisi yok ve AP kapali — AP aciliyor (erisim garantisi).")
+        try:
+            _nmcli("connection", "up", AP_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+        except RuntimeError as exc:
+            _log(f"AP acilamadi: {exc}")
+        return
 
-    _log("WiFi baglantisi yok ve AP kapali — AP aciliyor (erisim garantisi).")
+    # ---- mode == "client" ----
+    fallback = state["fallback"]
+    if client_online:
+        if fallback["active"] or fallback["since"] is not None:
+            state["fallback"] = {"active": False, "since": None, "last_attempt": 0.0}
+            _write_mode(state)
+        return
+
+    now = time.time()
+    if fallback["since"] is None:
+        fallback["since"] = now
+        _write_mode(state)
+        return
+    if now - fallback["since"] < CLIENT_GRACE_SEC:
+        return  # NM kendi yeniden baglanmasini denesin
+
+    if not ap.get("active"):
+        _log("Kayitli aga ulasilamiyor — erisim garantisi icin AP aciliyor.")
+        try:
+            _nmcli("connection", "up", AP_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+        except RuntimeError as exc:
+            _log(f"AP acilamadi: {exc}")
+            return
+        fallback["active"] = True
+        _write_mode(state)
+        return
+
+    # AP acik ama kullanicinin tercihi hala "internete baglan": periyodik dene.
+    # Tek seferlik fallback, ag bir saat kesilip geri gelirse cihazi sonsuza
+    # dek internetsiz birakirdi.
+    if now - fallback["last_attempt"] < CLIENT_RETRY_SEC:
+        return
+    if not _sta_profile_exists():
+        return
+    if _ap_has_clients(ifname):
+        return  # biri AP uzerinden bagli, oturumunu kesme
+    fallback["last_attempt"] = now
+    _write_mode(state)
+    ssid = _sta_profile_ssid() or ""
+    _log(f"Kayitli aga yeniden baglanmayi deniyor: {ssid or STA_CON_NAME}")
+    # Muhafiz ONCE kurulur: deneme basarisiz olursa AP geri acilir.
+    _guard_arm(ifname, ssid)
     try:
-        _nmcli("connection", "up", AP_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+        _nmcli(
+            "connection", "up", STA_CON_NAME, timeout=NMCLI_RETRY_TIMEOUT_SEC
+        )
     except RuntimeError as exc:
-        _log(f"AP acilamadi: {exc}")
+        _log(f"yeniden baglanma basarisiz: {exc}")
+        _ap_restore("yeniden baglanma denemesi basarisiz")
+        _guard_clear()
+        return
+    if _sta_is_online(ifname):
+        _guard_clear()
+        _log(f"Kayitli aga yeniden baglanildi: {ssid or STA_CON_NAME}")
+
+
+# --- Internet durumu (AP acik olmakla AYNI SEY DEGIL) ----------------------
+def _route_lookup() -> dict:
+    """Varsayilan rota var mi, hangi arayuzden? PAKET GONDERMEZ."""
+    try:
+        proc = subprocess.run(
+            ["ip", "route", "get", ROUTE_PROBE_TARGET],
+            capture_output=True, text=True, timeout=5,
+            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return {"ifname": None, "gateway": None, "src": None}
+    if proc.returncode != 0:
+        # "Network is unreachable" — varsayilan rota yok.
+        return {"ifname": None, "gateway": None, "src": None}
+    return parse_ip_route_get(proc.stdout)
+
+
+def _tcp_probe() -> bool:
+    """Tek TCP baglantisi — yeni bagimlilik yok, HTTP govdesi yok."""
+    try:
+        with socket.create_connection(
+            (NET_PROBE_HOST, NET_PROBE_PORT), timeout=NET_PROBE_TIMEOUT_SEC
+        ):
+            return True
+    except OSError:
+        return False
+
+
+def _internet_state(devices: list[dict], general: dict) -> dict:
+    """Internetin VAR/YOK + hangi arayuzden oldugunu durustce raporla.
+
+    Kullanici guncelleme / uzaktan bakim / saat senkronunun calisip
+    calismayacagini bilmeli; "erisim noktasi acik" bunu SOYLEMEZ.
+    """
+    route = _route_lookup()
+    via = None
+    if route.get("ifname"):
+        dev = next((d for d in devices if d["ifname"] == route["ifname"]), None)
+        via = via_kind(dev["type"] if dev else None)
+    connectivity = general.get("connectivity")
+
+    probe_ok: bool | None = None
+    if route.get("ifname") and connectivity not in ("full", "portal", "limited", "none"):
+        # NM connectivity kontrolu yapilandirilmamis. Kendi kontrolumuzu
+        # SEYREK yapariz; rota yoksa hic yapmayiz (internetsiz sahada SIFIR
+        # trafik).
+        state = _read_mode()
+        now = time.time()
+        if now - state["probe"]["at"] >= NET_PROBE_SEC:
+            probe_ok = _tcp_probe()
+            state["probe"] = {"at": now, "ok": probe_ok}
+            _write_mode(state)
+        else:
+            probe_ok = state["probe"]["ok"]
+
+    result = resolve_internet(connectivity, route, via, probe_ok)
+    result["checked_at"] = _now_iso()
+    return result
 
 
 def _guard_check() -> None:
@@ -830,15 +1210,71 @@ def build_state() -> dict:
             }
         )
     host = _hostname()
+    general = _general_status()
+    radio = _radio_state(devices, general)
+    ap = _ap_info(devices)
     return {
         "schema": SCHEMA_VERSION,
         "updated_at": _now_iso(),
         "hostname": host,
         "mdns_name": f"{host}.local",
-        "ap": _ap_info(devices),
+        "ap": ap,
         "wifi": _wifi_state(devices),
+        # Uc DURUST katman: fiziksel onkosul / gorev / internet.
+        # Hicbiri digerinin yerine gecmez ve OLCMEDIGIMIZ durum gosterilmez.
+        "radio": _radio_block(radio),
+        "wifi_role": _wifi_role_state(devices, radio, ap),
+        "internet": _internet_state(devices, general),
         "interfaces": interfaces,
         "eth_connection": ETH_CON_NAME,
+    }
+
+
+def _radio_block(radio: dict) -> dict:
+    """Olculen radyo durumu + kullanicinin son acik karari."""
+    state = _read_mode()
+    return {
+        **radio,
+        # "desired" = kullanicinin arayuzden verdigi son karar; None = hic
+        # dokunulmamis. Ajan bunu SUREKLI DAYATMAZ (yerel yoneticiyle
+        # kavga etmesin) — tek otomatik degisim _radio_rescue'dur.
+        "desired": state["radio_desired"],
+        "changed_at": state["radio_changed_at"],
+        "auto_restored_at": state["radio_auto_restored_at"],
+    }
+
+
+def _wifi_role_state(devices: list[dict], radio: dict, ap: dict) -> dict:
+    """WiFi kartinin gorevi: TERCIH (mode) ve OLCUM (effective) AYRI alanlarda.
+
+    Ikisini tek rozete baglamak sahadaki celiskiyi uretti: panel "AP acik"
+    yaziyordu ama bu bir olcum degil, "client yoksa AP olmali" kuralinin
+    kendisiydi. Ayrisiyorlarsa (mode=client, effective=ap) bu bir hata
+    degil, ANLATILACAK bir durumdur.
+    """
+    state = _read_mode()
+    ifname = _wifi_ifname(devices)
+    client_online = bool(ifname) and _wifi_client_online(ifname, devices)
+    foreign: str | None = None
+    if client_online and ifname:
+        dev = next((d for d in devices if d["ifname"] == ifname), None)
+        con = (dev.get("connection") or "").strip() if dev else ""
+        if con and con != STA_CON_NAME:
+            # Baskasinin kurdugu baglanti (kurulumcunun kendi profili olabilir).
+            foreign = _current_ssid(ifname) or con
+    fallback = state["fallback"]
+    next_retry = None
+    if state["mode"] == "client" and fallback["active"]:
+        next_retry = (fallback["last_attempt"] or 0.0) + CLIENT_RETRY_SEC
+    return {
+        "mode": state["mode"],
+        "effective": derive_effective(radio["enabled"], bool(ap.get("active")), client_online),
+        "since": state["set_at"],
+        "set_by": state["set_by"],
+        "fallback_active": fallback["active"],
+        "fallback_since": fallback["since"],
+        "next_retry_at": next_retry,
+        "foreign_client": foreign,
     }
 
 
@@ -862,15 +1298,7 @@ def _wifi_state(devices: list[dict]) -> dict:
     if ifname is None:
         return info
 
-    try:
-        out = _nmcli("-t", "-f", "NAME", "connection", "show", check=False)
-        info["saved"] = any(
-            _split_terse(line)[0].strip() == STA_CON_NAME
-            for line in out.splitlines()
-            if line.strip()
-        )
-    except RuntimeError:
-        pass
+    info["saved"] = _sta_profile_exists()
 
     dev = next((d for d in devices if d["ifname"] == ifname), None)
     if dev is not None and dev["connection"] == STA_CON_NAME:
@@ -893,6 +1321,9 @@ def _wifi_state(devices: list[dict]) -> dict:
                     break
         except RuntimeError:
             pass
+    if info["ssid"] is None and info["saved"]:
+        # Baglanti kopuk: hangi agin kayitli oldugunu yine de soyle.
+        info["ssid"] = _sta_profile_ssid()
 
     guard = _read_json(GUARD_PATH)
     if guard:
@@ -903,13 +1334,26 @@ def _wifi_state(devices: list[dict]) -> dict:
     return info
 
 
+def _maintain() -> None:
+    """Her report turunda (30 sn) kosan bakim: muhafiz + radyo kurtarma + gorev.
+
+    Ayri systemd unit'i gerektirmesin diye bilerek report'a baglandi. Radyo
+    BOLUNEMEZ tek bir kaynak; ikinci bir surec ayni karti yonetirse
+    setup-appliance.sh'ta adiyla uyarilan yaris (bir taraf AP'yi bekletirken
+    digeri acar) geri gelir.
+    """
+    _guard_check()
+    devices = _device_rows()
+    radio = _radio_state(devices)
+    if _radio_rescue(devices, radio):
+        devices = _device_rows()
+        radio = _radio_state(devices)
+    _enforce_wifi_mode(devices, radio)
+
+
 def cmd_report() -> int:
-    # AP geri donus muhafizi + "bagli degilse AP acik" kurali. Her report
-    # turunda (30 sn) kontrol edilir; ayri systemd unit'i gerektirmesin diye
-    # bilerek buraya baglandi.
     try:
-        _guard_check()
-        _ensure_ap_when_offline()
+        _maintain()
     except Exception as exc:  # noqa: BLE001
         _log(f"wifi muhafiz kontrolu basarisiz: {exc}")
 
@@ -1136,24 +1580,55 @@ def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> i
     ifname = _wifi_ifname(devices)
     if ifname is None:
         return write_result(False, "WiFi arayuzu bulunamadi (kart takili mi?).")
+    if action in ("wifi_scan", "wifi_connect") and not _radio_state(devices)["enabled"]:
+        # Radyo kapaliyken tarama BOS doner, baglanti kurulamaz. Sahadaki
+        # "gorunur ag bulunamadi" sikayetinin sebebi tam olarak buydu; sessiz
+        # bos sonuc yerine gercek sebebi soyle.
+        # (wifi_forget bu kontrole GIRMEZ: profil silmek radyoya bagli degil.)
+        return write_result(False, "WiFi karti kapali; once WiFi'yi acin.")
 
-    # ---- Tarama: sadece okur, hicbir sey degistirmez ----
+    # ---- Tarama: sadece okur (derin tarama disinda, bkz. asagisi) ----
     if action == "wifi_scan":
+        # DERIN TARAMA: tek radyo AP yayindayken kanal degistiremez; cogu
+        # surucude tarama yalnizca AP kanalini ya da hic bir sey dondurur.
+        # Kullanici ACIKCA isterse AP kisa sureligine indirilir.
+        ap_active = bool(_ap_info(devices).get("active"))
+        deep = bool(raw.get("deep")) and ap_active
+        if deep:
+            _log("Derin tarama: AP gecici olarak indiriliyor.")
+            _nmcli("connection", "down", AP_CON_NAME, check=False)
         try:
             networks = _scan_networks(ifname)
         except RuntimeError as exc:
             return write_result(False, f"Tarama basarisiz: {exc}")
+        finally:
+            # `finally` return'den ONCE kosar: AP her durumda geri gelir.
+            if deep:
+                # Muhafiz KURULMAZ: ajan tarama sirasinda olurse bir sonraki
+                # report turu (_enforce_wifi_mode, mode="ap") AP'yi en gec
+                # 30 sn icinde geri acar.
+                try:
+                    _nmcli("connection", "up", AP_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+                except RuntimeError as exc:
+                    _log(f"derin tarama sonrasi AP geri acilamadi: {exc}")
         _write_json(
             SCAN_PATH,
             {
                 "schema": SCHEMA_VERSION,
                 "updated_at": _now_iso(),
                 "ifname": ifname,
+                "deep": deep,
+                # AP yayindayken tarama sinirli sonuc verebilir — UI bunu
+                # soylesin, "hic ag yok" diye YALAN soylemesin.
+                "ap_was_active": ap_active and not deep,
                 "networks": networks,
             },
         )
-        _log(f"WiFi tarama: {len(networks)} ag bulundu ({ifname})")
-        return write_result(True, None, applied={"action": "wifi_scan", "count": len(networks)})
+        _log(f"WiFi tarama: {len(networks)} ag bulundu ({ifname}, derin={deep})")
+        return write_result(
+            True, None,
+            applied={"action": "wifi_scan", "count": len(networks), "deep": deep},
+        )
 
     # ---- Kayitli agi unut: STA profilini sil, AP'yi geri ac ----
     if action == "wifi_forget":
@@ -1162,6 +1637,7 @@ def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> i
         except RuntimeError as exc:
             _log(f"STA profili silinemedi: {exc}")
         _guard_clear()
+        _set_mode("ap", None)
         _ap_restore("kullanici agi unuttu")
         _log("WiFi baglantisi kaldirildi, AP geri acildi.")
         return write_result(True, None, applied={"action": "wifi_forget"})
@@ -1191,6 +1667,10 @@ def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> i
         _guard_clear()
         return write_result(False, f"'{ssid}' agina baglanilamadi: {exc}")
 
+    # Kullanicinin niyeti acik: bir aga baglandiysa gorev artik "client".
+    # autoconnect da burada acilir, aksi halde reboot'ta AP geri alir.
+    _set_mode("client", str(raw.get("requested_by") or "") or None)
+
     online = _sta_is_online(ifname)
     if online:
         _guard_clear()
@@ -1213,6 +1693,189 @@ def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> i
             "guard_seconds": None if online else WIFI_GUARD_SEC,
         },
     )
+
+
+def _set_mode(mode: str, actor: str | None) -> None:
+    """Kalici gorev tercihini yaz + NM autoconnect bayragini hizala."""
+    state = _read_mode()
+    state["mode"] = mode
+    state["set_at"] = _now_iso()
+    if actor:
+        state["set_by"] = actor
+    state["fallback"] = {"active": False, "since": None, "last_attempt": 0.0}
+    _write_mode(state)
+    try:
+        _apply_mode_profiles(mode)
+    except RuntimeError as exc:
+        _log(f"autoconnect bayragi ayarlanamadi: {exc}")
+
+
+def _handle_wifi_radio(raw: dict, devices: list[dict], write_result) -> int:
+    """WiFi kartini ac/kapa.
+
+    ILKE: ISTEK (kullanici acikca istedi) yikici olabilir, MUHAFIZ (otomatik)
+    asla. Kapatma mesrudur (trafo merkezinde "telsiz yayin yok" politikasi)
+    ama tek radyo kapaninca AP de duser; bu yuzden KOSULLUDUR: cihaza
+    ulasilacak ikinci bir yol (IP almis bagli ethernet) KANITLANMALI.
+    """
+    enabled = raw.get("enabled")
+    if not isinstance(enabled, bool):
+        return write_result(False, "Gecersiz istek: WiFi durumu true/false olmali.")
+
+    radio = _radio_state(devices)
+    if not radio["supported"]:
+        return write_result(False, "Bu cihazda WiFi karti bulunamadi.")
+    if enabled and not radio["hardware_enabled"]:
+        return write_result(
+            False, "WiFi acilamadi: cihaz uzerindeki WiFi anahtari kapali."
+        )
+    if not enabled:
+        wired = _wired_fallback(devices)
+        if wired is None:
+            return write_result(
+                False,
+                "WiFi kapatilirsa cihaza ulasilacak baska yol kalmiyor. "
+                "Once kablolu baglantiyi kurun.",
+            )
+
+    try:
+        _nmcli("radio", "wifi", "on" if enabled else "off")
+    except RuntimeError as exc:
+        return write_result(False, f"WiFi durumu degistirilemedi: {exc}")
+
+    # DOGRULAMA ZORUNLU: `nmcli radio wifi on` DONANIM kilidi varken de
+    # basari (exit 0) doner. Dogrulamazsak UI "actim" der ama hicbir sey
+    # acilmaz — duzeltmeye calistigimiz yalanin aynisini uretmis oluruz.
+    final = radio
+    deadline = time.time() + RADIO_VERIFY_SEC
+    while True:
+        final = _radio_state(_device_rows())
+        if final["enabled"] == enabled or time.time() >= deadline:
+            break
+        time.sleep(1)
+    if final["enabled"] != enabled:
+        if enabled and not final["hardware_enabled"]:
+            return write_result(
+                False,
+                "WiFi acilamadi: cihaz uzerindeki WiFi anahtari kapali. "
+                "Anahtari acip tekrar deneyin.",
+            )
+        return write_result(
+            False, "WiFi durumu degistirilemedi (surucu istegi kabul etmedi)."
+        )
+
+    state = _read_mode()
+    state["radio_desired"] = "on" if enabled else "off"
+    state["radio_changed_at"] = _now_iso()
+    state["radio_off_since"] = None
+    if enabled:
+        state["radio_auto_restored_at"] = None
+    _write_mode(state)
+    _log(f"WiFi karti {'acildi' if enabled else 'kapatildi'}.")
+    # _write_result -> cmd_report -> _enforce_wifi_mode: radyo acildiysa AP
+    # 30 sn beklemeden hemen geri gelir.
+    return write_result(True, None, applied={"action": "wifi_radio", "enabled": enabled})
+
+
+def _handle_wifi_mode(raw: dict, devices: list[dict], write_result) -> int:
+    """WiFi kartinin gorevini sec: kendi agini yayinla (ap) | bir aga katil (client).
+
+    Otomatik dongu bir client baglantisini ASLA dusurmez; ama bu ACIK bir
+    istektir ve kullanici arayuzde uyarilmistir.
+    """
+    mode = str(raw.get("mode") or "").strip().lower()
+    if mode not in ("ap", "client"):
+        return write_result(False, "Gecersiz gorev secimi (ap|client).")
+
+    ifname = _wifi_ifname(devices)
+    if ifname is None:
+        return write_result(False, "WiFi arayuzu bulunamadi (kart takili mi?).")
+    radio = _radio_state(devices)
+    if not radio["enabled"]:
+        return write_result(False, "WiFi karti kapali; once WiFi'yi acin.")
+    if mode == "client" and not _sta_profile_exists():
+        return write_result(
+            False, "Kayitli WiFi agi yok; once listeden bir ag secip baglanin."
+        )
+    if mode == "ap" and not _ap_info(devices).get("exists"):
+        return write_result(False, "Erisim noktasi profili kurulu degil.")
+
+    actor = str(raw.get("requested_by") or "") or None
+    _set_mode(mode, actor)
+
+    if mode == "ap":
+        # SIRA KRITIK: once AP'yi KALDIR, client'i ONDAN SONRA dusur.
+        #
+        # Eskiden tam tersiydi: client dusuruluyor, autoconnect kapatiliyor,
+        # sonra AP DENENIYORDU. `up AP` basarisiz olursa (kart AP modunu
+        # desteklemiyor, kanal yasak, surucu hatasi) cihazin CALISAN TEK
+        # kablosuz yolu kapatilmis, yerine hicbir sey gelmemis oluyordu;
+        # ustelik autoconnect "no" kaldigi icin reboot da kurtarmiyordu.
+        # `_enforce_wifi_mode` her 30 sn ayni basarisiz komutu tekrarlayip
+        # STA'yi asla geri getirmiyordu.
+        #
+        # Tek radyoda AP'yi kaldirmak client'i zaten dusurur; ayrica `down`
+        # cagirmaya gerek yok. AP kalkmazsa client'a DOKUNMAMIS oluruz ve
+        # asagida tercihi geri alip cihazi oldugu gibi birakiriz.
+        _guard_clear()
+        try:
+            _nmcli("connection", "up", AP_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+        except RuntimeError as exc:
+            # GERI ALMA — client dalindaki davranisla SIMETRIK.
+            _set_mode("client", actor)          # autoconnect'i geri ac
+            try:
+                _nmcli("connection", "up", STA_CON_NAME,
+                       timeout=NMCLI_WIFI_TIMEOUT_SEC, check=False)
+            except RuntimeError:
+                pass
+            return write_result(False, f"Erisim noktasi acilamadi: {exc}")
+        # AP ayakta: tek radyoda client zaten dustu, profili de kapat ki
+        # NetworkManager autoconnect ile geri baglanmaya calismasin.
+        _nmcli("connection", "down", STA_CON_NAME, check=False)
+        _log("Gorev: erisim noktasi (kendi agini yayinla).")
+        return write_result(True, None, applied={"action": "wifi_mode", "mode": mode})
+
+    # ---- client ----
+    ssid = _sta_profile_ssid() or ""
+    # Muhafiz ONCE kurulur: baglanti kurulamazsa AP geri acilir, cihaz
+    # erisilemez kalmaz.
+    _guard_arm(ifname, ssid)
+    try:
+        _nmcli("connection", "up", STA_CON_NAME, timeout=NMCLI_WIFI_TIMEOUT_SEC)
+    except RuntimeError as exc:
+        _ap_restore("gorev degisimi basarisiz")
+        _guard_clear()
+        # Tercih "ap"a geri alinir: kullanici yalan bir durum gormesin.
+        _set_mode("ap", actor)
+        return write_result(False, f"Kayitli aga baglanilamadi: {exc}")
+    online = _sta_is_online(ifname)
+    if online:
+        _guard_clear()
+    _log(f"Gorev: internete baglan ({ssid or STA_CON_NAME}), baglandi={online}")
+    return write_result(
+        True, None,
+        applied={
+            "action": "wifi_mode",
+            "mode": mode,
+            "ssid": ssid or None,
+            "online": online,
+            "guard_seconds": None if online else WIFI_GUARD_SEC,
+        },
+    )
+
+
+def _handle_net_check(devices: list[dict], write_result) -> int:
+    """Internet durumunu SIMDI sina (kullanici istegi).
+
+    `report` turunda ASLA calistirilmaz — bu cagri ag trafigi uretir ve
+    bloklar.
+    """
+    try:
+        _nmcli("networking", "connectivity", "check", timeout=10)
+    except RuntimeError as exc:
+        _log(f"internet kontrolu tamamlanamadi: {exc}")
+    result = _internet_state(devices, _general_status())
+    return write_result(True, None, applied={"action": "net_check", **result})
 
 
 def cmd_apply() -> int:
@@ -1290,6 +1953,12 @@ def cmd_apply() -> int:
     action = str(raw.get("action") or "ipv4").strip().lower()
     if action in ("wifi_scan", "wifi_connect", "wifi_forget"):
         return _handle_wifi(raw, action, devices, _write_result)
+    if action == "wifi_radio":
+        return _handle_wifi_radio(raw, devices, _write_result)
+    if action == "wifi_mode":
+        return _handle_wifi_mode(raw, devices, _write_result)
+    if action == "net_check":
+        return _handle_net_check(devices, _write_result)
     if action != "ipv4":
         return _fail(f"Bilinmeyen aksiyon: {action}")
 

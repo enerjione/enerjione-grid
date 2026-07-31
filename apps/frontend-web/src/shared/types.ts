@@ -1066,12 +1066,13 @@ export type AccessPointInfo = {
 };
 
 /** Appliance'in WiFi CLIENT (station) durumu — bir aga baglanma tarafi.
- *  AP (erisim noktasi) ayri: `AccessPointInfo`. AP arayuzden degistirilemez. */
+ *  AP (erisim noktasi) ayri: `AccessPointInfo`. */
 export type WifiState = {
   supported: boolean;
   ifname?: string | null;
   connection?: string | null;
   connected: boolean;
+  /** Bagli degilken bile KAYITLI profilin SSID'i doner (ajan sema 3). */
   ssid?: string | null;
   signal?: number | null;
   addresses: string[];
@@ -1080,6 +1081,48 @@ export type WifiState = {
   /** AP geri donus muhafizi aktif mi + ne zaman dolacak (epoch saniye). */
   guard_active: boolean;
   guard_deadline?: number | null;
+};
+
+/** WiFi KARTININ kendisi — fiziksel onkosul (olcum).
+ *  Kart kapaliyken ne erisim noktasi yayinlanabilir ne de ag taranabilir. */
+export type WifiRadioState = {
+  supported: boolean;
+  enabled: boolean;
+  hardware_enabled: boolean;
+  /** "hardware" -> cihaz uzerindeki anahtar; arayuzden ACILAMAZ. */
+  blocked_by?: "software" | "hardware" | null;
+  /** Kullanicinin arayuzden verdigi son acik karar (null = hic dokunulmamis). */
+  desired?: "on" | "off" | null;
+  changed_at?: string | null;
+  /** Kablo gidince ajanin WiFi'yi kendiliginden actigi an. */
+  auto_restored_at?: string | null;
+};
+
+/** WiFi kartinin GOREVI. `mode` TERCIH, `effective` OLCUM — ayni rozete
+ *  BAGLANMAZ: eski panel kurali olcum gibi gosterip yalan soyluyordu. */
+export type WifiRoleState = {
+  mode: "ap" | "client";
+  effective: "ap" | "client" | "off" | "idle";
+  since?: string | null;
+  set_by?: string | null;
+  /** Tercih client ama aga ulasilamadigi icin AP'ye donuldu mu. */
+  fallback_active: boolean;
+  /** epoch saniye — guard_deadline ile ayni birim. */
+  fallback_since?: number | null;
+  next_retry_at?: number | null;
+  /** Radyoda bizim olmayan bir client baglantisi varsa SSID'i. */
+  foreign_client?: string | null;
+};
+
+/** Internet erisimi — "erisim noktasi acik" ile AYNI SEY DEGIL.
+ *  Guncelleme / uzaktan bakim / saat senkronu buna baglidir. */
+export type InternetState = {
+  state: "full" | "portal" | "limited" | "none" | "unknown";
+  source?: "nm" | "route" | "probe" | null;
+  ifname?: string | null;
+  via?: "ethernet" | "wifi" | "vpn" | "other" | null;
+  gateway?: string | null;
+  checked_at?: string | null;
 };
 
 /** Taramada gorunen tek bir WiFi agi. */
@@ -1098,6 +1141,11 @@ export type WifiScanResult = {
   ifname?: string | null;
   networks: WifiNetwork[];
   age_seconds?: number | null;
+  /** Bu sonuc cihazin kendi agi indirilerek mi alindi (derin tarama)? */
+  deep?: boolean;
+  /** Tarama sirasinda cihazin kendi agi yayindaydi: tek radyo AP modunda
+   *  kanal degistiremez, liste EKSIK olabilir. */
+  ap_was_active?: boolean;
 };
 
 export type NetworkApplyStatus = {
@@ -1117,9 +1165,22 @@ export type NetworkStatus = {
   mdns_name?: string | null;
   updated_at?: string | null;
   state_age_seconds?: number | null;
+  /** Ajanin state.json sema surumu. Uc katmanli gorunum (radio/role/internet)
+   *  YALNIZCA `>= 3` iken ANLAMLIDIR; eski ajan bu bloklari hic yazmaz ve
+   *  varsayilanlari "WiFi karti yok" gibi gorunur. UI eski ajanda bu alanlari
+   *  OKUMAZ, "bilinmiyor" der. */
+  agent_schema?: number | null;
   ap: AccessPointInfo;
   /** WiFi client (station) durumu — bir aga baglanma tarafi. */
-  wifi?: WifiState;
+  /** OLCUM YOK ise null (bkz. radio/role/internet). */
+  wifi?: WifiState | null;
+  /** OLCUM YOK ise null gelir (eski ajan ya da ajan hata state'i yazmis).
+   *  Backend bilerek BOS NESNE URETMEZ: supported=false iceren bir nesne
+   *  arayuzde "Cihazda WiFi karti bulunamadi" gibi OLCULMUS bir donanim
+   *  iddiasina donusuyordu. null = "bilinmiyor". */
+  radio?: WifiRadioState | null;
+  role?: WifiRoleState | null;
+  internet?: InternetState | null;
   interfaces: NetworkInterface[];
   pending: boolean;
   last_apply?: NetworkApplyStatus | null;

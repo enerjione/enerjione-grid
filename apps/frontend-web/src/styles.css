@@ -31415,6 +31415,16 @@ th.event-col-category {
   flex-shrink: 0;
 }
 
+/* Serit DORT ogeye ciktiginda dar ekranda 2+2 sarar; sarma satirinda dikey
+   ayraclar siritir. */
+@media (max-width: 1180px) {
+  .net-access-sep { display: none; }
+}
+
+/* Ajan bir suredir durum bildirmiyorsa yesil/kirmizi noktalar guven
+   VERMEMELI — bayat veri sessizce dogru gorunmesin. */
+.net-access-bar.is-stale { opacity: 0.62; }
+
 .net-access-icon {
   width: 28px;
   height: 28px;
@@ -31498,6 +31508,24 @@ th.event-col-category {
 .net-banner--warn { background: #fffbeb; border-color: #fde68a; color: #b45309; }
 .net-banner--bad { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 
+/* Icinde eylem dugmesi olan serit (or. "Internet durumunu simdi sina"). */
+.net-banner--action { align-items: center; }
+.net-banner--action > span { flex: 1; min-width: 0; line-height: 1.45; }
+.net-banner--action > svg { flex-shrink: 0; }
+.net-banner-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.net-banner-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.65); }
+.net-banner-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* --- Form karti ---
    flex:1 ile kalan dikey alani doldurur; eskiden icerik bitince sayfanin
    alt yarisi bos beyaz kaliyordu. */
@@ -31564,9 +31592,12 @@ th.event-col-category {
    WiFi bolumu (Ag Ayarlari > WifiPanel)
    AP degistirilemez; burasi yalnizca CLIENT baglantisini yonetir.
    ========================================================================= */
+/* Uc katman (kart / gorev / olculen sonuc) + ag listesi bir arada uzun bir
+   panel yapiyor; kart KENDI icinde kaymali, yoksa .net-page'in
+   overflow:hidden'i alt kismi kirpar. Modallar `position: fixed` oldugu icin
+   bu kirpmadan etkilenmez. */
 .wifi-card {
-  flex: 0 0 auto;
-  overflow: visible;
+  gap: 12px;
 }
 .wifi-card .net-card-head {
   align-items: center;
@@ -31686,6 +31717,233 @@ th.event-col-category {
 .wifi-guard div { display: flex; flex-direction: column; gap: 2px; }
 .wifi-guard strong { font-size: 13px; }
 .wifi-guard span { font-size: 12px; color: #b45309; }
+
+/* =========================================================================
+   Uc katman: WiFi karti (onkosul) -> gorev (secim) -> olculen sonuc.
+   Renk TEK BASINA bilgi tasimaz; her durumun yazili karsiligi vardir.
+   "Bilinmiyor" ASLA yesil/kirmizi olmaz — notr gri.
+   ========================================================================= */
+
+/* ---- KATMAN 1: WiFi karti (radyo) ---- */
+.wifi-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.wifi-radio-row.is-on { border-color: #bbf7d0; background: #f0fdf4; }
+.wifi-radio-row.is-on .wifi-current-icon { background: #dcfce7; color: #15803d; }
+.wifi-radio-row.is-off { border-color: #fde68a; background: #fffbeb; }
+.wifi-radio-row.is-off .wifi-current-icon { background: #fef3c7; color: #b45309; }
+.wifi-radio-row.is-unknown .wifi-current-icon { background: #f1f5f9; color: #64748b; }
+
+.wifi-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #e2e8f0;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wifi-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s;
+}
+.wifi-switch[aria-checked="true"] { background: #047857; border-color: #047857; }
+.wifi-switch[aria-checked="true"]::after { transform: translateX(19px); }
+.wifi-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.wifi-switch:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+
+/* ---- KATMAN 2: kartin gorevi (iki satirli .net-segment varyanti) ---- */
+.wifi-role { display: flex; flex-direction: column; gap: 8px; }
+.wifi-role[aria-disabled="true"] { opacity: 0.55; }
+.wifi-role-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475569;
+}
+.net-segment.wifi-role-seg { display: flex; align-self: stretch; }
+.net-segment.wifi-role-seg button {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px;
+  line-height: 1.3;
+}
+.net-segment.wifi-role-seg button svg { color: #94a3b8; }
+.net-segment.wifi-role-seg button.is-active svg { color: #4338ca; }
+.net-segment.wifi-role-seg button small {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+.net-segment.wifi-role-seg button.is-active small { color: #4338ca; }
+
+.wifi-role-hint,
+.wifi-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+.wifi-role-hint.is-muted,
+.wifi-hint.is-muted { color: #94a3b8; }
+
+/* ---- KATMAN 3: olculen sonuc (erisim noktasi) ---- */
+.wifi-ap-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.wifi-ap-state.is-ok { border-color: #bbf7d0; background: #f0fdf4; }
+.wifi-ap-state.is-ok .wifi-current-icon { background: #dcfce7; color: #15803d; }
+.wifi-ap-state.is-bad { border-color: #fecaca; background: #fef2f2; }
+.wifi-ap-state.is-bad .wifi-current-icon { background: #fee2e2; color: #b91c1c; }
+.wifi-ap-state.is-unknown .wifi-current-icon { background: #f1f5f9; color: #64748b; }
+.wifi-reason { font-size: 11.5px; font-weight: 600; color: #64748b; }
+.wifi-ap-state.is-bad .wifi-reason { color: #b91c1c; }
+
+.wifi-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wifi-retry-btn:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; }
+.wifi-retry-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ---- Tarama basligi: yas + elle ekleme ---- */
+.wifi-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wifi-scan-age { font-size: 11.5px; color: #94a3b8; }
+.wifi-manual-btn,
+.wifi-deep-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wifi-manual-btn:hover:not(:disabled),
+.wifi-deep-btn:hover:not(:disabled) { background: #f8fafc; color: #0f172a; }
+.wifi-manual-btn:disabled,
+.wifi-deep-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.wifi-deep-btn { align-self: flex-start; }
+
+/* ---- "Bu islem neyi bozar" listesi (onay + baglanma modali ortak) ---- */
+.wifi-consequences-lead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+.wifi-consequences {
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wifi-consequences li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #334155;
+}
+.wifi-consequences li svg { flex-shrink: 0; margin-top: 1px; }
+.wifi-consequences li.is-bad svg { color: #b91c1c; }
+.wifi-consequences li.is-warn svg { color: #ea580c; }
+.wifi-consequences li.is-ok svg { color: #047857; }
+
+/* ---- Islem gonderildi; oturumumuz kopabilir ---- */
+.wifi-handover {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #b45309;
+}
+.wifi-handover svg { flex-shrink: 0; margin-top: 1px; }
+.wifi-handover div { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.wifi-handover strong { font-size: 13px; color: #9a3412; }
+.wifi-handover span { font-size: 12px; line-height: 1.5; }
+.wifi-handover-close {
+  border: 0;
+  background: transparent;
+  color: #b45309;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.wifi-handover-close:hover { background: #fef3c7; }
+
+/* Panel ici hata satiri — daha once tanimsizdi. */
+.net-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
 
 /* ---- Ag listesi ---- */
 .wifi-list {
@@ -32045,6 +32303,15 @@ th.event-col-category {
   color: #065f46;
   line-height: 1.45;
 }
+
+/* Erisim noktasi yayinda DEGILSE "guvenlik agi" diye bir sey yok; ayni
+   kutu bu kez uyari tonunda cikar. */
+.net-confirm-warn.is-bad {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.net-confirm-warn svg { flex-shrink: 0; margin-top: 1px; }
 
 .net-confirm-actions {
   display: flex;
@@ -34170,11 +34437,15 @@ th.event-col-category {
 }
 
 /* ---------- Header rozeti: "acik unutma" panzehiri ---------- */
+/* Rozet header'da SADECE SIMGE kadar yer kaplar: nabiz atan nokta + kilit.
+   Eskiden metin ve geri sayimla genis bir serit olup arama kutusunu
+   sikistiriyordu. Ayrinti hover/odakta acilan ipucunda. */
 .header-remote-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 11px;
+  gap: 5px;
+  padding: 6px 8px;
   border-radius: 999px;
   border: 1px solid rgba(251, 191, 36, 0.55);
   background: rgba(234, 140, 28, 0.18);
@@ -34207,10 +34478,37 @@ th.event-col-category {
   color: #fff;
 }
 
-/* Dar header: metni gizle, rozet ikon + sure olarak kalsin (uyarinin
-   kendisi kaybolmamali). */
-@media (max-width: 1080px) {
-  .header-remote-text { display: none; }
+/* Hover/odak ipucu — rozetin ALTINDA acilir, header yerlesimini itmez
+   (absolute). Odakta da acilir: klavye kullanicisi da gorebilsin. */
+.header-remote-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  white-space: nowrap;
+  background: #0f172a;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: #fcd34d;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s;
+  pointer-events: none;
+}
+
+.header-remote-badge:hover .header-remote-tip,
+.header-remote-badge:focus-visible .header-remote-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 /* ---------- Dar ekran ---------- */
