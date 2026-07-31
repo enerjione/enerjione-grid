@@ -9,6 +9,7 @@ from app.models.device import Device
 from app.models.enums import CommunicationStatus
 from app.models.telemetry import Telemetry
 from app.schemas.telemetry import TelemetryIn
+from app.services.device_clock_service import assess_device_timestamp
 
 
 def normalize_quality(raw_quality: str) -> str:
@@ -199,6 +200,14 @@ def process_telemetry_reading(
         normalized_quality, dnp3_flags=getattr(reading, "dnp3_flags", None)
     )
 
+    # Cihazin kendi olay damgasi + o damganin guvenilirligi. Kaliteden AYRI
+    # tutulur: saat kaymasi olcumu gecersiz kilmaz, dolayisiyla `quality`ye
+    # karismaz ve alarm akisini ETKILEMEZ (bkz. models/telemetry.py).
+    device_event_at, timestamp_quality = assess_device_timestamp(
+        getattr(reading, "device_event_at", None),
+        reported_quality=getattr(reading, "timestamp_quality", None),
+    )
+
     telemetry = Telemetry(
         device_id=device.id,
         signal_key=reading.signal_key,
@@ -208,6 +217,8 @@ def process_telemetry_reading(
         value_string=reading.value_string,
         quality=normalized_quality,
         source_timestamp=reading.source_timestamp,
+        device_event_at=device_event_at,
+        timestamp_quality=timestamp_quality,
     )
 
     device.communication_status = next_status

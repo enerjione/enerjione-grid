@@ -33997,7 +33997,20 @@ th.event-col-category {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #b07a3f;
+  /* #b07a3f amber zeminde (#fff8ed) yalnizca 3.49 kontrast veriyordu —
+     WCAG AA siniri 4.5. Kahraman geri sayimin NE OLDUGUNU soyleyen tek
+     etiket bu; okunaksiz kalmasi kabul edilemez. Panelin kendi vurgu
+     mureekkebi (--rad-on-ink = #9a4c07) 5.83 veriyor ve paleti bozmuyor. */
+  color: var(--rad-on-ink);
+}
+
+/* "Sureyi uzat" secimi sureyi KISALTIYORSA uyari. Engellemiyoruz; kasitli
+   kisaltma mesru — ama sessizce yapilmamali. */
+.rad-endsat-warn {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a3412;
 }
 
 .rad-revoke-btn { white-space: nowrap; }

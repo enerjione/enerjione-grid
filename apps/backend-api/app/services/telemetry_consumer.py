@@ -310,6 +310,10 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 device.communication_status = map_quality_to_status(nq)
                 if device.communication_status.value == "online":
                     device.last_update_at = datetime.now(timezone.utc)
+                _fb_at, _fb_quality = assess_device_timestamp(
+                    getattr(reading, "device_event_at", None),
+                    reported_quality=getattr(reading, "timestamp_quality", None),
+                )
                 telemetry = Telemetry(
                     device_id=device.id,
                     signal_key=reading.signal_key,
@@ -317,6 +321,10 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                     value_string=reading.value_string,
                     quality=nq,
                     source_timestamp=reading.source_timestamp,
+                    # Fallback yolunda da damgalanir: aksi halde is-mantigi
+                    # hatasi alan mesajlarda saat durumu SESSIZCE kaybolurdu.
+                    device_event_at=_fb_at,
+                    timestamp_quality=_fb_quality,
                 )
 
             db.add(telemetry)
@@ -330,10 +338,13 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             # Cihazin kendi olay zamani (varsa) + makullugu. `source_timestamp`
             # AYNEN kaliyor (PK/partition kolonu); bu ikisi yalnizca analiz
             # icin ayri kolonlarda duruyor. Bkz. device_clock_service.
-            _dev_at, _ts_quality = assess_device_timestamp(
-                getattr(reading, "device_event_at", None),
-                reported_quality=getattr(reading, "timestamp_quality", None),
-            )
+            #
+            # Degerlendirme TEKRAR yapilmaz: canli satiri kuran
+            # `process_telemetry_reading` zaten damgaladi. Ikinci kez cagirmak
+            # 7 gunluk pencerenin tam sinirinda iki satirin FARKLI kalite
+            # almasina yol acabilirdi (araya gecen mikrosaniyeler yuzunden).
+            _dev_at = telemetry.device_event_at
+            _ts_quality = telemetry.timestamp_quality
             historian_rows.append({
                 "device_id": device.id,
                 "signal_key": reading.signal_key,
@@ -346,6 +357,14 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             })
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
             ok_msgs.append(msg)
+            # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
+            # UZERINE YAZIYORUZ. Gateway'in ham bildirimi degil BIZIM
+            # degerlendirmemiz otoriter: gateway hic bir sey demese bile
+            # 2000-01-01 damgasini "invalid" olarak isaretleyen biziz. Aksi
+            # halde canli ekran (WS) ile yenilenmis snapshot (`/signals/live`)
+            # ayni satir icin farkli sey gosterirdi.
+            payload["device_event_at"] = _dev_at.isoformat() if _dev_at else None
+            payload["timestamp_quality"] = _ts_quality
             ok_payloads.append(payload)
 
             # Outbound dispatch payload'u — status commit ONCESI yakalanir

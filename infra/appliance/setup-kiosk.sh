@@ -636,11 +636,18 @@ _sp=1
 <script>
  var U="__E1_URL__",n=0;
  function go(){location.replace(U);}
+ function msg(t){document.getElementById('m').textContent=t;}
+ /* ASLA PES ETME. Eskiden 90 denemeden (3 dk) sonra uygulama ayakta olmasa
+    bile adrese gidiliyordu; Chromium hata sayfasi cikiyor, splash gittigi
+    icin geri donus olmuyordu ve operator ekranda tarayici hatasi
+    goruyordu. Ilk acilista imaj indirme/DB kurulumu 3 dakikayi rahat
+    gecebilir. Artik surekli yokluyoruz ve mesaji kademelendiriyoruz. */
  function probe(){var im=new Image();
    im.onload=go;
    im.onerror=function(){n++;
-     if(n===20)document.getElementById('m').textContent='Uygulama bekleniyor...';
-     if(n>=90)go();
+     if(n===20)msg('Uygulama bekleniyor...');
+     else if(n===90)msg('Ilk kurulum uzun surebilir, bekleniyor...');
+     else if(n===300)msg('Hala baslamadi. Cihazi kapatmayin; sorun surerse teknik destege bildirin.');
      setTimeout(probe,2000);};
    im.src=U.replace(/\/$/,'')+'/favicon.png?t='+Date.now();}
  probe();
@@ -878,11 +885,21 @@ case "$DM" in
     # giris HIC calismiyordu. Kendi oturumumuz her durumda var.
     # `.desktop` uzantili yazilir: eski SDDM (0.13) tam dosya adi ister, yeni
     # surumler ikisini de kabul eder.
+    # SDDM'de `[Autologin]` yalnizca User ile CALISMAZ: Session= yoksa
+    # otomatik giris sessizce hic olmaz ve cihaz greeter'da kalir —
+    # parolasi kilitli hesap giremedigi icin bu, cihazin kullanilamamasi
+    # demektir. Bu yuzden kendi oturumumuz dogrulanamadiysa BOS BIRAKMIYORUZ,
+    # sistemde kurulu ILK oturuma dusuyoruz (masaustu acilir ama autostart
+    # yedegi tarayiciyi yine baslatir; greeter'da kilitli kalmaktan iyidir).
+    _sddm_session="$XSESSION_ID"
+    if [[ "$SESSION_OK" != "1" ]]; then
+      _sddm_session="$(basename "$(ls /usr/share/xsessions/*.desktop 2>/dev/null | head -1)" .desktop 2>/dev/null || true)"
+    fi
     {
       printf '[Autologin]\n'
       printf 'User=%s\n' "$KIOSK_USER"
-      if [[ "$SESSION_OK" == "1" ]]; then
-        printf 'Session=%s.desktop\n' "$XSESSION_ID"
+      if [[ -n "$_sddm_session" ]]; then
+        printf 'Session=%s.desktop\n' "$_sddm_session"
         # Oturum kapanirsa greeter'da kilitli-parola cikmazina dusmeyelim.
         printf 'Relogin=true\n'
       fi
@@ -891,7 +908,13 @@ case "$DM" in
           /etc/sddm.conf.d/50-enerjione-kiosk.conf
     chmod 0644 /etc/sddm.conf.d/50-enerjione-kiosk.conf
     e1_ok "SDDM otomatik girisi: ${KIOSK_USER}"
-    [[ "$SESSION_OK" == "1" ]] || e1_warn "SDDM oturumu ELLE secilmeli (Session=)."
+    if [[ "$SESSION_OK" != "1" ]]; then
+      if [[ -n "$_sddm_session" ]]; then
+        e1_warn "Kendi oturumumuz dogrulanamadi — yedek oturum: ${_sddm_session}"
+      else
+        e1_warn "Hic oturum bulunamadi — SDDM otomatik girisi ELLE ayarlanmali."
+      fi
+    fi
     ;;
   *)
     # Cogu DM /usr/share/xsessions'i zaten tarar; oturum dosyasi yazildi ama

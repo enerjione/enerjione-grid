@@ -1037,9 +1037,17 @@
     }
   },
   "remoteAccess": {
+    "endReason": {
+      "expired": "Time expired",
+      "revoked": "Closed by an authorised user",
+      "clock_skew": "Closed as a precaution because the device clock was inconsistent",
+      "lease_corrupt": "Permission record could not be read, closed for safety",
+      "cli": "Closed on the device"
+    },
     "loading": "Reading status…",
     "state": {
       "loading": "READING",
+      "applying": "APPLYING",
       "on": "ON",
       "off": "OFF",
       "unknown": "UNKNOWN"
@@ -1047,6 +1055,8 @@
     "hero": {
       "loadingTitle": "Reading status…",
       "loadingLead": "Fetching the remote maintenance status of this device.",
+      "applyingTitle": "Applying the change on the device",
+      "applyingLead": "Your request reached the device. The result will appear here in a few seconds.",
       "onTitle": "Remote maintenance is ON",
       "onLead": "The EnerjiOne support team can connect to this device right now. Access closes by itself when the time runs out; if you would rather not wait, close it now.",
       "offTitle": "Remote maintenance is OFF",
@@ -1082,6 +1092,7 @@
       "reasonHint": "This note is written to the log so the support team knows what to look at before connecting.",
       "pickDuration": "Pick a duration first.",
       "endsAtPreview": "Access will close by itself at:",
+      "shortensWarn": "Note: this choice does not extend the current time — it SHORTENS it. Access will close at the time above.",
       "submit": "Allow remote maintenance",
       "submitExtend": "Extend"
     },

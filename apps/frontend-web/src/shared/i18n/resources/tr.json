@@ -1037,9 +1037,17 @@
     }
   },
   "remoteAccess": {
+    "endReason": {
+      "expired": "Süre doldu",
+      "revoked": "Yetkili kullanıcı kapattı",
+      "clock_skew": "Cihaz saati tutarsız olduğu için güvenli tarafta kapatıldı",
+      "lease_corrupt": "İzin kaydı okunamadı, güvenlik gereği kapatıldı",
+      "cli": "Cihaz üzerinden kapatıldı"
+    },
     "loading": "Durum okunuyor…",
     "state": {
       "loading": "OKUNUYOR",
+      "applying": "UYGULANIYOR",
       "on": "AÇIK",
       "off": "KAPALI",
       "unknown": "BİLİNMİYOR"
@@ -1047,6 +1055,8 @@
     "hero": {
       "loadingTitle": "Durum okunuyor…",
       "loadingLead": "Cihazın uzaktan bakım durumu alınıyor.",
+      "applyingTitle": "Değişiklik cihaza uygulanıyor",
+      "applyingLead": "İsteğiniz cihaza iletildi. Sonuç birkaç saniye içinde burada görünecek.",
       "onTitle": "Uzaktan bakım AÇIK",
       "onLead": "EnerjiOne teknik destek ekibi şu anda bu cihaza bağlanabiliyor. Süre dolduğunda erişim kendiliğinden kapanacak; beklemek istemezseniz hemen kapatabilirsiniz.",
       "offTitle": "Uzaktan bakım KAPALI",
@@ -1082,6 +1092,7 @@
       "reasonHint": "Bu not kayıtlara yazılır; destek ekibi neye bakacağını bilerek bağlanır.",
       "pickDuration": "Önce bir süre seçin.",
       "endsAtPreview": "Erişim şu saatte kendiliğinden kapanacak:",
+      "shortensWarn": "Dikkat: bu seçim mevcut süreyi UZATMAZ, KISALTIR. Erişim yukarıdaki saatte kapanır.",
       "submit": "Uzaktan bakıma izin ver",
       "submitExtend": "Süreyi uzat"
     },
