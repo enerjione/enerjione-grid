@@ -149,7 +149,43 @@ def get_current_user(
         from app.core.client_ip import client_ip_from_request
 
         _touch_user_session(db, str(jti), client_ip_from_request(request))
+
+    # ZORUNLU SIFRE DEGISIMI — sunucu tarafinda uygulanir.
+    #
+    # YASANAN ACIK: `must_change_password` yalnizca login YANITINDA donen bir
+    # bayrakti ve hicbir backend kontrolu onu okumuyordu. Yani varsayilan
+    # kurulum parolasiyla yapilan login TAM YETKILI bir JWT veriyordu; SPA'nin
+    # gosterdigi "sifreni degistir" modali tek engeldi ve istemciyi hic
+    # calistirmayan biri (dogrudan HTTP istegi) onu tamamen atlayabiliyordu.
+    # O token ile gateway token'lari okunabiliyor, API anahtari uretilebiliyor,
+    # uzaktan bakim kapisi acilabiliyor ve yedekten geri yukleme yapilabiliyordu.
+    #
+    # Artik bayrak aciksa yalnizca "kendini tanit" ve "sifreni degistir"
+    # uclari gecer; digerleri 403 doner.
+    if user.must_change_password and not _password_change_exempt(request):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="PASSWORD_CHANGE_REQUIRED",
+        )
     return user
+
+
+# Zorunlu sifre degisimi acikken izin verilen uclar.
+#
+# Neden bu ucu: kullanicinin cikabilmesi ve arayuzun kendisini tanitabilmesi
+# icin gerekli asgari kume. Daha genis tutmak (or. tum /auth) `ws-ticket`i de
+# acardi ve canli veri akisi zorunlulugu atlatirdi.
+_PASSWORD_CHANGE_ALLOWED_SUFFIXES = (
+    "/auth/me",               # arayuz kimi oldugunu ve bayragi okuyabilsin
+    "/auth/me/change-password",
+    "/auth/setup-password",
+    "/auth/logout",
+)
+
+
+def _password_change_exempt(request: Request) -> bool:
+    path = (request.url.path or "").rstrip("/")
+    return any(path.endswith(sonek) for sonek in _PASSWORD_CHANGE_ALLOWED_SUFFIXES)
 
 
 def require_role(role: UserRole):
