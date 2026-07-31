@@ -12,10 +12,44 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+---
+
+## [2.27.0] — 2026-07-31
+
+### Düzeltildi
+- **Kurulum, istenen sürümü sessizce yok sayabiliyordu (kritik).** Kurulum
+  aracında bir sürüm seçilse bile cihaz eski sürümde kalıp "başarılı"
+  bitiyordu. İki nedenin çarpımıydı: (1) kurulum betikleri deponun içindeki
+  ajan dosyalarına `chmod` uygulayıp çalışma ağacını **kalıcı olarak** kirli
+  bırakıyordu — yani ilk kurulumdan sonra her cihazda varsayılan durum buydu;
+  (2) bu kirlilik yüzünden atlanan komut `git fetch` idi, oysa fetch çalışma
+  ağacına dokunmaz — korunması gereken `git checkout` idi ve orada hiçbir
+  kontrol yoktu. Artık istenen sürüme geçilemiyorsa kurulum **durur** ve
+  sonunda "istenen sürüm gerçekten kuruldu mu" doğrulaması yapılır.
+- **Canlı değer ekranı NATS koptuğunda kararıyordu.** Yeni fan-out köprüsü
+  bağlantı koptuğunda hâlâ "hazırım" dediği için bellek-içi yedek yol devreye
+  girmiyordu. Ayrıca köprü ilk bağlantı başarısız olursa bir daha hiç
+  denemiyordu. İkisi de giderildi.
+- Uzaktan bakımda "kapat/aç" düğmesi cihazı kalıcı çevrimdışı bırakabiliyordu.
+
 ### Eklendi
-- Cihazdaki hesapların profil resmi EnerjiOne logosu yapılıyor; giriş ekranında
-  varsayılan gri siluet yerine ürün logosu görünüyor. Masaüstü olmayan
-  kurulumlarda zararsız (avatar yazılır, gösteren olmaz).
+- **Telemetri Boru Hattı göstergesi (Sistem Durumu).** Tüketicinin gelen
+  veriye yetişip yetişmediği artık görünür: bekleyen mesaj sayısı, işlem hızı,
+  hatalı mesaj, NATS bağlantı durumu. Eşik aşılırsa uyarı ve olay kaydı
+  üretilir. Bu gösterge önemli çünkü tampon taşarsa en eski ölçümler
+  **sessizce** düşürülüyor — ekranda başka hiçbir belirti çıkmıyor.
+- **Canlı değer yayını NATS üzerinden dağıtılıyor.** Tek başına davranış
+  değiştirmez; sistemin ileride birden fazla sürece bölünebilmesinin ön
+  koşuludur.
+- Cihaz hesaplarının profil resmi EnerjiOne logosu yapılıyor; giriş ekranında
+  gri siluet yerine ürün logosu görünür.
+- WiFi kartı için kalıcı görev tercihi: cihaz kendi ağını mı yayınlasın (AP)
+  yoksa kayıtlı bir ağa mı katılsın (client). Tek radyo ikisini aynı anda
+  yapamaz; tercih artık kalıcı. Mevcut cihazlarda davranış değişmez.
+
+### Değişti
+- Sürekli entegrasyon artık NATS servisiyle çalışıyor: fan-out köprüsünün
+  koruyucu testi eskiden her koşuda sessizce atlanıyordu.
 
 ---
 
