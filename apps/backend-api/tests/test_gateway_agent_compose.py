@@ -48,7 +48,7 @@ def agent():
 
 def _params(**over):
     base = {
-        "image": "ghcr.io/fikretsafak/enerjionegrid-dnp3-gateway:latest",
+        "image": "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
         "token": "abcdefghijklmnop0123456789",
         "backend_url": "http://host.docker.internal/api/v1",
         "nats_url": "nats://gateway:secretpass@10.0.0.5:4222",

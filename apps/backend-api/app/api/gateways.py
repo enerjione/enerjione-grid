@@ -115,7 +115,7 @@ _INITIATING_PORT_BASE_MAX = 60000  # 65535 - 1000 buffer; ustu kabul edilmez
 # DNP3 gateway imaji. Hem "dosya indir" hem "bu cihaza kur" akisi ayni
 # varsayilani kullanmali; aksi halde indirilen compose ile kurulan container
 # farkli surumden olur.
-_DEFAULT_GATEWAY_IMAGE = "ghcr.io/fikretsafak/enerjionegrid-dnp3-gateway:latest"
+_DEFAULT_GATEWAY_IMAGE = "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
 
 
 def _allocate_initiating_port_base(db: Session) -> int:
