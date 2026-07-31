@@ -30,10 +30,11 @@ import psutil
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import settings
-from app.db.session import engine
+from app.db.session import engine, get_db
 from app.models.user import User
 
 
@@ -243,6 +244,46 @@ class ServiceStatus(BaseModel):
 class ServicesReport(BaseModel):
     services: list[ServiceStatus]
     sampled_at: float
+
+
+class HistorianReport(BaseModel):
+    """Historian (`telemetry_history`) yapisal sagligi.
+
+    AYRI BIR UC (ServicesReport icine konmadi) cunku:
+      * `ServiceStatus` semantigi "ayakta mi + kac ms" ile sinirli; buradaki
+        bilgi sayisal (satir/boyut/politika) ve `detail: str` icine
+        sikistirilirsa frontend parse edemez.
+      * `/services` toplam ~1 sn butcesiyle calisiyor (tum probe'lar 1 sn
+        timeout'lu) ve 10 saniyede bir pollenıyor. Historian introspection'i
+        o butceyi asarsa TUM servis raporu gecikirdi.
+    Bu uc daha seyrek (60 sn) pollenmeli; servis katmani zaten 60 sn cache'li.
+    """
+
+    table: str
+    timescaledb: str = Field(
+        ..., description="installed | available_not_installed | unavailable"
+    )
+    is_hypertable: bool
+    retention_days: int | None = None
+    compression_enabled: bool = False
+    continuous_aggregates: list[str] = []
+    row_estimate: int | None = Field(
+        default=None,
+        description="pg_class.reltuples TAHMINI — tam sayim degil (COUNT(*) cok pahali)",
+    )
+    total_bytes: int | None = None
+    oldest_sample_at: str | None = None
+    newest_sample_at: str | None = None
+    retention_last_run_status: str | None = None
+    severity: str = Field(..., description="ok | warning | critical")
+    problems: list[str] = Field(
+        default=[],
+        description=(
+            "Sabit kodlar (frontend i18n anahtari): timescaledb_missing, "
+            "not_hypertable, no_retention, no_compression, retention_failing, "
+            "retention_mismatch"
+        ),
+    )
 
 
 _TCP_PROBE_TIMEOUT_SEC = 1.0
@@ -613,3 +654,34 @@ def get_services_status(
     services.extend(results[key] for key in display_order if key in results)
 
     return ServicesReport(services=services, sampled_at=time.time())
+
+
+@router.get("/historian", response_model=HistorianReport)
+def get_historian_status(
+    refresh: bool = Query(
+        default=False,
+        description="Cache'i atla (kullanici 'yenile'ye bastiginda)",
+    ),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Historian'in yapisal sagligi — retention politikasi gercekten kurulu mu?
+
+    NEDEN BU UC VAR: `telemetry_history` 90 gun retention'li bir TimescaleDB
+    hypertable olarak tasarlandi, ama migration 0007 timescaledb'siz bir
+    ortamda kostuysa tablo DUZ kalir, revision yine damgalanir ve retention
+    HIC kurulmaz. 600 cihazda gunde ~26M satir; belirti disk dolana kadar
+    ortaya cikmaz. Bu uc durumu disk dolmadan gorunur kilar.
+
+    `severity`:
+      ok       — hypertable + retention yerinde
+      warning  — calisir ama eksik (orn. compression yok)
+      critical — retention YOK veya kosmuyor: tablo sinirsiz buyuyor
+
+    Maliyet: servis katmani 60 sn cache'liyor ve `COUNT(*)` kullanmiyor
+    (satir sayisi planlayici tahmini). Duz-tablo durumunda zaman araligi
+    sorgusu ATLANIR — tam tarama olurdu.
+    """
+    from app.services.historian_service import get_historian_status as _status
+
+    return HistorianReport(**_status(db, refresh=refresh).to_dict())
