@@ -177,3 +177,86 @@ def test_bozuk_payload_kopruyu_dusurmez():
         )
     finally:
         a.stop()
+
+
+# --------------------------------------------- REGRESYON: kopuk NATS
+
+
+def test_kopuk_baglantida_is_ready_FALSE_doner(monkeypatch):
+    """NATS kopunca kopru "hazirim" DEMEMELI.
+
+    REGRESYON TESTI. `is_ready` bir zamanlar sadece `_ready` mandalina ve
+    `_nc is not None` kosuluna bakiyordu. Ikisi de yalnizca stop()'ta
+    temizlendigi ve max_reconnect_attempts=-1 yuzunden `_nc` hicbir zaman
+    None olmadigi icin, NATS kopsa bile is_ready True kaliyordu.
+
+    Sonucu su zincirdi:
+        is_ready True -> publish() True doner
+        -> broadcast() erken doner (mesaj NATS'tan geri gelecek sanir)
+        -> ama NATS kopuk, mesaj HIC gelmez
+        -> YEREL YEDEK YOL CALISMAZ
+        -> canli deger ekrani TEK SURECTE BILE kararir.
+
+    Yani kopru, cozmek icin var oldugu sorunu daha kotu bir bicimde
+    yaratiyordu. Bu test o zincirin ilk halkasini kilitler.
+    """
+    b = wsb._WsNatsBridge()
+    b._ready.set()
+
+    class _KopukNc:
+        is_connected = False
+
+    b._nc = _KopukNc()
+    assert b.is_ready is False, (
+        "baglanti kopukken is_ready True donuyor — yerel yedek yol devre disi kalir"
+    )
+
+
+def test_kopuk_baglantida_yayin_YEREL_yola_duser(monkeypatch):
+    """Zincirin sonu: NATS kopukken mesaj yerel abonelere ULASMALI."""
+    teslim: list[dict] = []
+    b = wsb.TelemetryWsBroadcaster()
+    monkeypatch.setattr(b, "_deliver_local", teslim.append)
+
+    kopru = wsb._WsNatsBridge()
+    kopru._ready.set()
+
+    class _KopukNc:
+        is_connected = False
+
+    kopru._nc = _KopukNc()
+    monkeypatch.setattr(wsb, "bridge", kopru)
+
+    b.broadcast({"device_code": "DEV1", "signal_key": "s", "value": 1})
+
+    assert len(teslim) == 1, (
+        "NATS kopukken mesaj yerel abonelere ulasmadi — canli deger ekrani kararir"
+    )
+
+
+def test_publish_hatasi_sayaca_yansir():
+    """`publish_failures` OLU OLMAMALI.
+
+    Hata publish task'inin ICINDE olustugu icin disaridaki except'e dusmuyor;
+    done-callback olmadan sayac sonsuza kadar 0 kalir ve "yayin calisiyor mu"
+    sorusuna yalan soyler.
+    """
+    import asyncio as _a
+
+    b = wsb._WsNatsBridge()
+
+    async def _kos():
+        async def _patla():
+            raise RuntimeError("publish patladi")
+
+        task = _a.ensure_future(_patla())
+        b._inflight.add(task)
+        task.add_done_callback(b._on_publish_done)
+        try:
+            await task
+        except RuntimeError:
+            pass
+        await _a.sleep(0)
+
+    _a.run(_kos())
+    assert b.publish_failures == 1, "publish hatasi sayaca yansimadi (sayac olu)"

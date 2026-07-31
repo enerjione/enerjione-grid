@@ -105,10 +105,36 @@ class _WsNatsBridge:
         self._on_message = None  # Callable[[dict], None]
         self.publish_failures = 0
         self.received_from_nats = 0
+        # Ucusta olan publish task'lari. GUCLU REFERANS sart: aksi halde
+        # asyncio task'i cop toplayiciya yem olabilir ve yayin sessizce
+        # kaybolur (asyncio dokumantasyonunun acikca uyardigi tuzak).
+        self._inflight: set[Any] = set()
 
     @property
     def is_ready(self) -> bool:
-        return self._ready.is_set() and self._nc is not None
+        """Kopru GERCEKTEN yayin yapabilir durumda mi?
+
+        DIKKAT — burada `_ready` bayragina bakmak YETMEZ ve bir zamanlar
+        oyleydi. `_ready` yalnizca ilk abonelikte set edilip `stop()`ta
+        temizlenen TEK YONLU bir mandaldi; `_nc` de `max_reconnect_attempts=-1`
+        yuzunden hicbir zaman None olmuyordu. Sonuc: NATS kopunca kopru
+        "hazirim" demeye devam ediyor, `broadcast()` erken donuyor ve
+        BELLEK-ICI YEDEK YOL HIC CALISMIYORDU — yani NATS'in kopmasi canli
+        deger ekranini TEK SURECTE BILE karartiyordu. Bu, koprunun cozmek
+        icin var oldugu sorundan daha kotu bir durumdu.
+
+        Cozum: baglantinin GERCEK durumunu nats-py'nin kendisine soruyoruz.
+        """
+        nc = self._nc
+        if not self._ready.is_set() or nc is None:
+            return False
+        # nats-py Client.is_connected — anlik baglanti durumu. Reconnect
+        # sirasinda False doner, bagli degilken de False; ikisinde de yerel
+        # yedek yola dusmemiz DOGRU davranistir.
+        try:
+            return bool(nc.is_connected)
+        except Exception:  # noqa: BLE001
+            return False
 
     def start(self, on_message) -> bool:  # noqa: ANN001
         """Koprüyü baslat. `on_message(payload)` NATS'tan gelen her mesaj icin
@@ -184,11 +210,31 @@ class _WsNatsBridge:
         nc = self._nc
         if nc is None:
             return
-        # publish() coroutine; loop icindeyiz, task olarak birak.
+        # publish() bir coroutine; loop icindeyiz, task olarak birakiyoruz.
+        #
+        # IKI TUZAK:
+        #  1. Hata task'in ICINDE olusur ve asagidaki except'e DUSMEZ. Bu
+        #     yuzden `publish_failures` sayaci bir zamanlar OLU idi (sonsuza
+        #     kadar 0) ve "yayin calisiyor mu" sorusuna yalan soyluyordu.
+        #     Cozum: done-callback ile sonucu okuyoruz.
+        #  2. ensure_future'in donusune GUCLU REFERANS tutulmazsa task
+        #     cop toplayiciya yem olabilir ve yayin sessizce kaybolur.
         try:
-            asyncio.ensure_future(nc.publish(settings.ws_fanout_subject, data))
+            task = asyncio.ensure_future(nc.publish(settings.ws_fanout_subject, data))
         except Exception:  # noqa: BLE001
             self.publish_failures += 1
+            return
+        self._inflight.add(task)
+        task.add_done_callback(self._on_publish_done)
+
+    def _on_publish_done(self, task: "asyncio.Task[Any]") -> None:
+        self._inflight.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            self.publish_failures += 1
+            logger.debug("ws_fanout_publish_failed error=%s", exc)
 
     def _run(self) -> None:
         loop = asyncio.new_event_loop()
@@ -209,21 +255,43 @@ class _WsNatsBridge:
             loop.close()
 
     async def _connect_and_subscribe(self) -> None:
-        try:
-            self._nc = await _nats.connect(  # type: ignore[union-attr]
-                servers=[settings.nats_url],
-                connect_timeout=settings.nats_connect_timeout_sec,
-                max_reconnect_attempts=-1,  # surekli yeniden dene
-                reconnect_time_wait=2,
-                name="e1-backend-ws-fanout",
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "ws_fanout_nats_connect_failed error=%s — yayin bellek-ici "
-                "kalacak, kopru yeniden denemeyecek (surec yeniden baslatilinca "
-                "tekrar denenir)",
-                exc,
-            )
+        """NATS'a baglan ve abone ol; basarisizsa GERI CEKILEREK TEKRAR DENE.
+
+        Eskiden ilk deneme basarisiz olunca kopru bir daha HIC denemiyordu
+        (log metni bunu itiraf ediyor, ama `start()` icindeki mesaj tam
+        tersini soyluyordu — celiskili ve yanlisti). Sonucu: backend NATS'tan
+        once acilirsa kopru kalici olarak olu kalir; tek surecte yayin
+        bellek-ici devam ettigi icin kimse fark etmez, ama coklu surece
+        gecildiginde canli deger ekrani SESSIZCE bosalir.
+
+        `nats.connect` bir kez KURULDUKTAN sonra kopmalari kendi icinde
+        yonetir (max_reconnect_attempts=-1). Buradaki dongu yalnizca ILK
+        baglantiyi kurmak icindir.
+        """
+        backoff = 2
+        while not self._stopping.is_set():
+            try:
+                self._nc = await _nats.connect(  # type: ignore[union-attr]
+                    servers=[settings.nats_url],
+                    connect_timeout=settings.nats_connect_timeout_sec,
+                    max_reconnect_attempts=-1,  # kurulduktan sonra surekli dene
+                    reconnect_time_wait=2,
+                    name="e1-backend-ws-fanout",
+                )
+                break
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "ws_fanout_nats_connect_failed error=%s backoff=%ds — yayin "
+                    "simdilik bellek-ici; kopru denemeye DEVAM edecek",
+                    exc,
+                    backoff,
+                )
+                try:
+                    await asyncio.sleep(backoff)
+                except asyncio.CancelledError:
+                    return
+                backoff = min(backoff * 2, 60)
+        if self._nc is None or self._stopping.is_set():
             return
 
         async def _handler(msg) -> None:  # noqa: ANN001

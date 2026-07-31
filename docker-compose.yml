@@ -321,6 +321,12 @@ services:
       # Bos ise BACKUP_DIR olculur (gercek volume mount'u; container'in `/`
       # overlay'i yaniltici olabilir).
       DISK_GUARD_PATH: ${DISK_GUARD_PATH:-}
+      # Canli deger yayini (WebSocket fan-out). Coklu surece gecisin ON
+      # KOSULU: kopru olmadan tuketici ayri container'a alininca WS
+      # istemcilerine hicbir sey ulasmaz ve ariza SESSIZ olur.
+      # false = acil kill switch (yayin bellek-ici yola duser).
+      WS_FANOUT_NATS_ENABLED: ${WS_FANOUT_NATS_ENABLED:-true}
+      WS_FANOUT_SUBJECT: ${WS_FANOUT_SUBJECT:-e1.ws.telemetry}
       # NATS JetStream stream basina DISK tavani (bayt). max_age tek basina
       # bayt siniri vermez; bu tavanlar + discard=old sayesinde tampon dolunca
       # en eski mesajlar duser ve telemetri akisi DURMAZ. Toplam 12 GiB;

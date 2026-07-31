@@ -45,6 +45,15 @@ jobs:
   backend:
     name: Backend — ruff + pytest
     runs-on: ubuntu-latest
+    # NATS servisi — WS fan-out koprusunun testleri GERCEK bir NATS ister.
+    # Olmadan `tests/test_ws_fanout_bridge.py` skipif ile SESSIZCE atlaniyordu:
+    # coklu surece gecisin tek koruyucu testi hicbir CI kosusunda kosmuyordu.
+    # Bu, "test var" sanip korumasiz kalmanin klasik ornegi.
+    services:
+      nats:
+        image: nats:2.10-alpine
+        ports:
+          - 4222:4222
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
