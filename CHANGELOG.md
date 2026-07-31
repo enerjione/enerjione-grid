@@ -12,6 +12,63 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+---
+
+## [2.26.0] — 2026-07-31
+
+### Düzeltildi
+- **Telemetri alımı ~83 gün sonra tamamen duruyordu (kritik).** `telemetry` ve
+  `processed_messages` tablolarının birincil anahtarı `int4` idi. 600 cihaz
+  ölçeğinde günde ~26M satır girdiği için sayaç 2,1 milyar tavanına yaklaşık
+  83 günde dayanıyor; o an `nextval()` hata veriyor, toplu yazım commit'i
+  patlıyor ve **hiçbir NATS mesajı onaylanmadığı için** aynı grup sonsuza
+  kadar yeniden deneniyordu. Sonuç kademeli yavaşlama değil, ani ve tam
+  duruştu. Kolonlar ve arkalarındaki sequence'ler `bigint`e çevrildi
+  (migration 0021). **Not:** retention bu sorunu çözmez — satır silmek
+  sayacı geri almaz.
+- **Boot sırasında sonsuza kadar bekleme.** Açılışta çalışan eski şema
+  bloğunda hiçbir kilit zaman aşımı yoktu; çakışan bir kilit (zamanlanmış
+  yedek, restore, açık bir psql oturumu) varsa açılış süresiz bekliyordu ve
+  yeniden başlatmak bunu çözmüyordu. Artık 5 sn kilit tavanı var ve blok
+  hata verse bile backend açılmaya devam ediyor (önceden sonsuz crash-loop
+  ve tamamen karanlık bir cihaz demekti).
+
+### Eklendi
+- **Disk guard — "disk asla dolmasın" güvencesi.** Toplam kapasitenin %10'u
+  boş kalacak şekilde gerçek boş alanı ölçer (yüzde tabanlı, farklı disk
+  boyutlarına uyarlanır). Kademeli davranır: önce yalnızca uyarır, sonra
+  saklama sürelerini geçici kısaltır, en son yeniden üretilebilir veriyi
+  (harita önbelleği, fazla yedekler) siler. **Denetim kaydına, lisansa,
+  ayarlara, alarm/arıza geçmişine ve telemetri arşivine asla dokunmaz.**
+  Ayarlar: `DISK_GUARD_*`.
+- **Olay kayıtları (denetim) için 2 yıllık saklama.** Önceden hiç
+  temizlenmiyordu. Beklenmedik bir olay fırtınasına karşı adet tavanı da var;
+  bu tavan yalnızca telemetri/outbound gürültüsünü düşürür — güvenlik,
+  lisans ve kimlik kayıtlarına dokunmaz.
+- **Telemetri özet arşivi artık sınırlı ve sıkıştırılıyor.** Dakikalık özet
+  1 yıl, saatlik özet 2 yıl saklanır (migration 0023). Önceden bu iki tablo
+  sınırsız büyüyordu ve dakikalık özet pratikte ham verinin kopyası
+  boyutundaydı — diski asıl dolduran kalem buydu.
+
+### Değişti
+- **NATS tamponu dolduğunda sistem artık DURMUYOR.** Önceden akış tavanına
+  çarpınca yayın reddediliyor ve telemetri tamamen kesiliyordu; artık en eski
+  mesajlar düşürülüp akış sürdürülüyor. Uzun bir kesintide (ham akış için
+  ~19 saat) o dönemin en eski mesajları sessizce kaybolur — bilinçli takas.
+  Ayrıca akış başına disk tavanı eklendi (toplam 12 GiB).
+- **Yedekler artık telemetri arşivini içermiyor.** Yedek dosyası birkaç yüz
+  MB'a düştü (önceden her yedek 90 günlük arşivi taşıyordu). Ayar, alarm,
+  arıza, denetim ve bildirim geçmişi korunur; felaket kurtarma sonrası
+  telemetri geçmişi boş gelir ve yeniden toplanmaya başlar.
+- **İdempotency defteri 7 gün yerine 24 saat tutuluyor.** Gerçek ihtiyaç
+  10 dakika; eski değer tabloyu gereksiz yere ~180M satıra çıkarıyordu.
+- Başarısız yedek kayıtları ve yarım kalmış dosyalar otomatik temizleniyor.
+  Elle alınan yedekler **varsayılan olarak silinmez**
+  (`BACKUP_MANUAL_RETENTION_DAYS=0`); her koşulda en yeni başarılı yedek
+  korunur.
+- Saha cihazı disk standardı **128 GB → 500 GB** olarak güncellendi
+  (`docs/APPLIANCE.md`), kalem kalem disk bütçesi eklendi.
+
 ### Güvenlik
 - **Uzaktan bakım artık varsayılan KAPALI (davranış değişikliği).** Saha cihazı
   tailnet'e kayıtlı kalır ama gelen tüm bağlantılar reddedilir
