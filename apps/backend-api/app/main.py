@@ -119,6 +119,39 @@ app.include_router(ws_live.router, prefix=settings.api_prefix)
 
 @app.on_event("startup")
 def create_tables():
+    """Legacy bootstrap DDL'ini EN-IYI-CABA olarak calistirir.
+
+    NEDEN try/except: asagidaki `_legacy_bootstrap_ddl` ~160 DDL ifadesini
+    TEK transaction'da kosturuyor ve startup event'i icinde cagriliyor.
+    Buradan bir exception cikarsa uvicorn "Application startup failed."
+    diyip process'i sonlandirir; Dockerfile CMD `migrate_db && exec uvicorn`
+    zinciri oldugu icin container cikar ve `restart: unless-stopped` ile
+    SONSUZ CRASH-LOOP'a girer. Yani tek bir kilit cakismasi veya beklenmedik
+    bir satir, appliance'i tamamen KARARTIR — operator arayuze ulasip
+    teshis bile yapamaz.
+
+    Bu blok zaten LEGACY: gercek sema otoritesi Alembic (`scripts/migrate_db`
+    uvicorn'dan ONCE kosuyor ve gercek bir sema sorununda zaten gurultulu
+    sekilde patliyor). Buradaki ALTER'lar idempotent no-op'lardir. Dolayisiyla
+    basarisizligini yutup acilmaya devam etmek, karanlik bir kutudan iyidir.
+
+    Tum blok TEK transaction oldugu icin kismi uygulama riski YOKTUR:
+    ya hepsi uygulanir ya hicbiri.
+    """
+    import logging as _logging
+
+    try:
+        _legacy_bootstrap_ddl()
+    except Exception:  # noqa: BLE001
+        _logging.getLogger(__name__).exception(
+            "legacy_bootstrap_ddl_failed — backend YINE DE aciliyor. "
+            "Sema otoritesi Alembic'tir; bu blok idempotent legacy ALTER'lardir. "
+            "Kalici olarak tekrarliyorsa DB kilitlerini ve pg_stat_activity'yi "
+            "inceleyin."
+        )
+
+
+def _legacy_bootstrap_ddl():
     """LEGACY BOOTSTRAP — production'da Alembic baseline tamamlandi (2026-05-12).
     Bu fonksiyon mevcut sahalardaki eski sema'lari Alembic'e kavusturmadan
     once eksik kolonlari ekleyen idempotent ALTER TABLE listesini calistirir.
@@ -136,11 +169,35 @@ def create_tables():
     Base.metadata.create_all(bind=engine)
     # ALTER TYPE ADD VALUE transaction icinde calistirilamaz; autocommit kullan.
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as ac_conn:
+        # Kilit bekleme tavani — bkz. asagidaki engine.begin() blogundaki
+        # ayrintili gerekce. Autocommit'te transaction yok, `SET LOCAL` islemez;
+        # oturum bazli `SET` kullaniyoruz.
+        ac_conn.execute(text("SET lock_timeout = '5s'"))
         ac_conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'INSTALLER'"))
         # ops_manager rolu — alembic 0002'de de var, mevcut deploylarda da
         # idempotent calisabilsin diye burada da garantili eklenir.
         ac_conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'OPS_MANAGER'"))
     with engine.begin() as connection:
+        # KILIT BEKLEME TAVANI — tek satirlik ama en yuksek getirili koruma.
+        #
+        # Asagidaki ~100 `ALTER TABLE ... IF NOT EXISTS` ifadesi NO-OP olsa
+        # bile ACCESS EXCLUSIVE kilidi alir ve bu kilit transaction sonuna
+        # kadar tutulur (16 tablo, boot boyunca). Cakisan bir kilit varsa
+        # — zamanlanmis bir pg_dump, restore, operator psql'i ya da onceki
+        # container'dan kalmis idle-in-transaction bir baglanti — ALTER
+        # varsayilan olarak SONSUZA KADAR bekler.
+        #
+        # Bu, restart ile COZULMEYEN bir kilitlenmedir: her yeniden deneme
+        # ayni kilide girer. `SET LOCAL` transaction kapsamindadir, yani
+        # buradaki tum DDL'i kapsar. Kilit alinamazsa ifade 5sn'de hata
+        # verir, ustteki try/except yutar ve backend acilmaya devam eder —
+        # sinirsiz bekleme yerine sinirli hasar.
+        #
+        # statement_timeout: tek bir ifadenin (orn. beklenmedik sekilde
+        # buyumus bir tabloda tablo yeniden yazimi) boot'u kilitlemesini
+        # onler.
+        connection.execute(text("SET LOCAL lock_timeout = '5s'"))
+        connection.execute(text("SET LOCAL statement_timeout = '60s'"))
         # FREEZED 2026-05-13. Yeni kolon: alembic_migrations/versions/'a yaz.
         connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number VARCHAR(32)"))
         # Brute-force koruma kolonlari (account lockout)
