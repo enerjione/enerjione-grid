@@ -145,11 +145,46 @@ chmod 600 /etc/enerjione-grid/install.env
 echo "  Anahtarlar yazildi: /etc/enerjione-grid/install.env"
 
 # 2) curl yoksa kur
-command -v curl >/dev/null 2>&1 || {{
+# `apt-get update` cikis kodu OLUMCUL DEGIL.
+#
+# SAHA VAKASI (Dell OEM Ubuntu 24.04): makinede birinin kurdugu Google Chrome
+# deposu duruyordu ama imza anahtari yoktu:
+#     Err:7 https://dl.google.com/linux/chrome/deb stable InRelease
+#       NO_PUBKEY FD533C07C264648F
+#     E: The repository '...' is not signed.
+# apt 100 dondu ve TUM kurulum orada oldu — oysa ihtiyacimiz olan depolarin
+# (archive.ubuntu.com, noble-updates, security, backports) HEPSI basariliydi
+# ve curl pekala kurulabilirdi.
+#
+# Ubuntu 24.04 eski apt-key/trusted.gpg anahtar deposunu kullanmadigi icin eski
+# yontemle eklenmis her ucuncu taraf deposu bu hatayi verir. Musteri
+# makinesinde alakasiz bir deponun kurulumu bloke etmesi kabul edilemez.
+#
+# Karar `apt-get install`'a birakiliyor: paket gercekten kurulamiyorsa ORADA
+# duruyoruz ve operatore bozuk depoyu adiyla soyluyoruz.
+if ! command -v curl >/dev/null 2>&1; then
   echo "  curl kuruluyor..."
-  DEBIAN_FRONTEND=noninteractive apt-get update -q
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl ca-certificates
-}}
+  APT_LOG="$(mktemp)"
+  DEBIAN_FRONTEND=noninteractive apt-get update -q >"$APT_LOG" 2>&1 || true
+  APT_BROKEN="$(grep -E '^(Err|E|W): ' "$APT_LOG" 2>/dev/null | head -8 || true)"
+  rm -f "$APT_LOG"
+  if [[ -n "$APT_BROKEN" ]]; then
+    echo "  ! apt-get update kismen basarisiz — su depolar atlandi:" >&2
+    printf '%s\n' "$APT_BROKEN" | sed 's/^/        /' >&2
+    echo "    Bu depolar EnerjiOne icin gerekli DEGIL; kuruluma devam ediliyor." >&2
+  fi
+  if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl ca-certificates; then
+    echo >&2
+    echo "  curl kurulamadi." >&2
+    if [[ -n "$APT_BROKEN" ]]; then
+      echo "    Yukaridaki bozuk depo(lar) sebep olabilir. Cihazda devre disi birakip" >&2
+      echo "    kurulumu tekrar deneyin:" >&2
+      echo "      sudo mv /etc/apt/sources.list.d/google-chrome.list{{,.disabled}}" >&2
+      echo "      sudo apt-get update" >&2
+    fi
+    exit 1
+  fi
+fi
 
 # 2b) INTERNET — kurulumun tamami buna bagli
 # Cihaz ethernet ile kurulumcunun dizustune bagli olabilir ve o baglantida
