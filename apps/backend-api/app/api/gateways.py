@@ -881,17 +881,20 @@ def get_gateway_config(
     # ANAHTAR HER ZAMAN YAZILIR — bos olsa bile.
     #
     # Ilk tasarimda bos profil ATLANIYORDU ki gateway duz listeye dussun ve
-    # cihaz "karanliga" dusmesin. Bu, tum modeller ayni protokol/aile oldugu
-    # varsayimina dayaniyordu: o zaman duz liste cihazin gercek sinyallerini
-    # de ICEREN bir ust kumeydi. Farkli uretici/protokol modelleri geldiginde
-    # bu varsayim COKUYOR — duz liste artik ust kume degil, YABANCI adresler
-    # toplami olur. O adresleri yoklamak "veri yok"tan daha kotudur: makul
-    # gorunen ama baska bir buyukluge ait degerler yanlis `signal_key` ile
-    # yayinlanir ve esik alarmlari onlarin uzerinden calisir.
+    # cihaz "karanliga" dusmesin. Bu, TEK bir sinyal setinin tum cihazlar icin
+    # ust kume oldugu varsayimina dayaniyordu.
+    #
+    # Varsayim yanlis. Bu gateway yalnizca DNP3 konusur (baska protokoller ayri
+    # gateway ile calisir) ama AYNI PROTOKOL ICINDE de modeller ayrisir: baska
+    # bir DNP3 modelinin (object_group, index) haritasi bu cihaz icin YABANCI
+    # adrestir. Duz liste bir ust kume degil, komsu modellerin adres toplamidir.
+    # Onlari yoklamak "veri yok"tan daha kotudur: makul gorunen ama baska bir
+    # buyukluge ait degerler yanlis `signal_key` ile yayinlanir ve esik
+    # alarmlari onlarin uzerinden calisir.
     #
     # Bu yuzden bos profil de anahtar olarak yazilir. Gateway o cihaz icin
-    # hicbir sey yoklamaz; eksiklik ise operator olay kaydinda GORUNUR olur.
-    # Sessiz yanlis veri yerine gorunur eksik veri.
+    # hicbir sey yoklamaz; eksiklik ise log'da GORUNUR olur. Sessiz yanlis veri
+    # yerine gorunur eksik veri.
     signals_by_profile: dict[str, list[GatewayConfigSignal]] = {}
     empty_profiles: list[str] = []
     for profile_key in sorted({_profile_key_of(d) for d in devices}):

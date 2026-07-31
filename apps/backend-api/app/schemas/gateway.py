@@ -167,19 +167,22 @@ class GatewayConfigResponse(BaseModel):
     devices: list[GatewayConfigDevice]
     # --- ADRES SAHIPLIGI --------------------------------------------------
     #
+    # KAPSAM: bu yanit DNP3 gateway'ine gider ve YALNIZCA DNP3 sinyalleri
+    # tasir. Baska protokoller (or. Modbus konusan Smart Navigator 1.0) AYRI
+    # BIR GATEWAY ile calisir; bu sozlesmeye hic girmezler. Yani buradaki
+    # "profil" ayrimi protokol ayrimi DEGIL, ayni protokol icindeki MODEL
+    # ayrimidir.
+    #
     # HEDEF MIMARI: DNP3 adres haritasi (object_group/index/scale/offset)
     # GATEWAY'DE yasar; backend cihaz basina yalnizca TURU (`signal_profile`)
     # soyler. Gerekce: adres haritasi cihaz firmware'inin ozelligidir, musteri
     # kurulumunun degil — her kurulumda ayni. Protokol surucusu de gateway'de
-    # oldugu icin adresin sahibi orasidir. Farkli protokolde bir model
-    # geldiginde (Modbus, IEC-101, ...) DNP3 sekilli bir katalog satiri o
-    # cihazi ZATEN ifade edemez; o modelin tanimini surucusuyle birlikte
-    # gateway tasir.
+    # oldugu icin adresin sahibi orasidir.
     #
     # Asagidaki iki alan bu hedefe giderken KOPRU gorevi gorur ve KALDIRILMAZ:
     #   * sahadaki 0.4.x/0.5.0 gateway'ler duz `signals` listesine bagimli,
-    #   * gateway'in HENUZ yerlesik profili olmayan bir model icin backend'in
-    #     bildirdigi liste tek kaynaktir (musterinin onceden aldigi cihazlar).
+    #   * gateway'in HENUZ yerlesik profili olmayan bir DNP3 modeli icin
+    #     backend'in bildirdigi liste tek kaynaktir.
     #
     # Gateway onceligi: yerlesik profil > signals_by_profile > signals.
     #

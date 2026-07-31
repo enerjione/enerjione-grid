@@ -16,13 +16,21 @@ Ustelik gateway'in kendi dokumantasyonu bunu ZATEN varsayiyordu:
 "signal_profile ... Backend, gateway'e dondugu signals listesini bu profile
 gore filtreler." Backend bu filtrelemeyi HIC yapmiyordu.
 
+KAPSAM — PROTOKOL DEGIL, MODEL AYRIMI
+-------------------------------------
+Bu sozlesme DNP3 gateway'ine gider ve yalnizca DNP3 sinyalleri tasir. Baska
+protokoller (or. Modbus konusan Smart Navigator 1.0) AYRI BIR GATEWAY ile
+calisir; buraya hic girmezler. Yani buradaki "profil", ayni protokol
+icindeki MODEL ayrimidir — ve ayrim yine sarttir, cunku iki DNP3 modeli ayni
+(object_group, index) cifti icin farkli buyuklukler tanimlar.
+
 ADRES SAHIPLIGI (hedef mimari)
 ------------------------------
 DNP3 adres haritasi gateway'de yasar; backend cihaz basina yalnizca TURU
 soyler. Adres haritasi cihaz firmware'inin ozelligidir, musteri kurulumunun
-degil. Farkli protokolde bir model geldiginde DNP3 sekilli katalog satiri o
-cihazi zaten ifade edemez. Buradaki `signals_by_profile` o hedefe giderken
-kopru: gateway'in henuz yerlesik profili olmayan modeller icin tek kaynak.
+degil — her kurulumda ayni. Buradaki `signals_by_profile` o hedefe giderken
+kopru: gateway'in henuz yerlesik profili olmayan DNP3 modelleri icin tek
+kaynak.
 
 PROFIL ANAHTARI NEDEN `model`
 -----------------------------
@@ -47,7 +55,7 @@ from app.models.device import Device
 from app.models.signal_catalog import SignalCatalog
 
 MODEL_A = "horstmann_sn_2_0"
-MODEL_B = "acme_rtu_9000"
+MODEL_B = "acme_rtu_9000"   # ayni protokol (DNP3), BASKA model
 
 
 def _sinyal(key: str, model: str, group: int, index: int) -> SignalCatalog:
@@ -160,11 +168,14 @@ def test_cihazi_OLMAYAN_modelin_sinyalleri_GONDERILMEZ():
 def test_kataloglu_olmayan_model_BOS_LISTE_alir_ama_ANAHTAR_YAZILIR():
     """Kasitli tasarim karari.
 
-    Bos profili ATLAYIP gateway'i duz listeye dusurmek, farkli modelli bir
-    kurulumda YABANCI adresleri yoklamak demektir: makul gorunen ama baska bir
-    buyukluge ait degerler yanlis anahtarla yayinlanir. Sessiz yanlis veri,
-    gorunur eksik veriden daha kotudur. Bu yuzden anahtar bos liste ile yazilir
-    ve eksiklik operator'a gorunur olur.
+    Bos profili ATLAYIP gateway'i duz listeye dusurmek, KOMSU DNP3
+    modellerinin adreslerini yoklamak demektir. Ayni protokol olmasi
+    yetmez: iki DNP3 modeli ayni (object_group, index) cifti icin farkli
+    buyuklukler tanimlar. Sonuc, makul gorunen ama baska bir buyukluge ait
+    degerlerin yanlis anahtarla yayinlanmasidir.
+
+    Sessiz yanlis veri, gorunur eksik veriden daha kotudur. Bu yuzden anahtar
+    bos liste ile yazilir ve eksiklik log'a dusur.
     """
     signals = [_sinyal("master.current", MODEL_A, 30, 0)]
     profiller = _profilleri_kur([Device(code="D9", model="bilinmeyen_model")], signals)
