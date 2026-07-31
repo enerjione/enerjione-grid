@@ -315,7 +315,12 @@ export type Gateway = {
   batch_interval_sec: number;
   max_devices: number;
   device_code_prefix?: string | null;
-  token: string;
+  /** Token ARTIK LISTEDE DONMUYOR — yalnizca "tanimli mi" bilgisi gelir.
+   *  Liste operator'a da acik ve token telemetri gonderiminin tek kimlik
+   *  unsuru; duz metin dondugu surece operator kendi alani disindaki cihazlar
+   *  icin uydurma telemetri gonderebiliyordu. Gercek degeri INSTALLER
+   *  `fetchGatewayToken()` ile ister (backend denetim kaydina yazar). */
+  has_token?: boolean;
   is_active: boolean;
   last_seen_at?: string | null;
   control_host: string;

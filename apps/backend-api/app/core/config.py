@@ -356,7 +356,19 @@ class Settings(BaseSettings):
     # WhatsApp Web sidecar (Baileys, QR ile giris) — internal_service_token
     # ile ayni auth. Docker network icinde servis adiyla erisilir.
     whatsapp_web_gateway_url: str = "http://whatsapp-web-gateway:8016"
-    service_role: str = "api"
+    # Surec rolu: all | api | worker. Bkz. app/core/service_role.py.
+    #
+    #   all    — HTTP + arka plan isleri (VARSAYILAN, bugunku davranis)
+    #   api    — yalnizca HTTP/WS; arka plan isi YOK (coklu worker guvenli)
+    #   worker — yalnizca arka plan isleri
+    #
+    # VARSAYILAN NEDEN `all`: bu alan eskiden "api" idi ama HICBIR YERDE
+    # okunmuyordu (olu alan) ve hicbir yerde set edilmiyordu. Artik gercekten
+    # davranisi belirledigi icin varsayilanin bugunku tek-container davranisini
+    # KORUMASI sart. "api" birakilsaydi, guncelleme alan her saha kurulumunda
+    # telemetri tuketicisi, retention, alarm mutabakati ve yedekleme SESSIZCE
+    # dururdu — ve hicbir hata gorunmezdi.
+    service_role: str = "all"
     service_name: str = "backend-api"
     worker_health_host: str = "127.0.0.1"
     worker_health_port: int = 0

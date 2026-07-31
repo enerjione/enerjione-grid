@@ -273,6 +273,49 @@ def _pg_restore_env() -> dict[str, str]:
     return env
 
 
+# pg_restore oturumunun application_name'i. Restore sirasinda calisan
+# "worker baglantilarini kes" dongusu `e1_%` ile baslayan adlari KORUR;
+# pg_restore bu ada sahip olmazsa dongu KENDI restore'umuzu oldurur.
+RESTORE_APP_NAME = "e1_restore_session"
+
+
+def _build_restore_env() -> dict[str, str]:
+    """pg_restore'un calisacagi ortam — TAMAMI Popen'dan ONCE hazirlanir.
+
+    YASANAN HATA (bu fonksiyon yazilmadan once CANLIYDI)
+    ----------------------------------------------------
+    `PGAPPNAME` atamasi `subprocess.Popen(env=env)` cagrisindan SONRA
+    yapiliyordu. Popen env sozlugunun bir KOPYASINI cocuga gecirir; sonradan
+    yapilan atama cocuga HIC ULASMAZ. Sonuc zinciri:
+
+        pg_restore baslar -> application_name libpq varsayilani ('pg_restore')
+        -> `e1_%` desenine UYMAZ
+        -> 1.5 sn sonra terminate dongusu ilk turunu atar
+        -> --jobs=4 ile acilmis BES baglantinin hepsini pg_terminate_backend
+        -> pg_restore "server closed the connection unexpectedly" ile duser
+
+    Ve `--single-transaction` KULLANILMIYOR (--jobs ile birlikte kullanilamaz),
+    yani geri alma YOK: veritabani `--clean` asamasinda DROP edilmis tablolarla
+    YARIM kalir. Her deneme ayni yerde patlar; sistem geri yuklenemez ve
+    mevcut veri de gitmistir — yedekten donmenin en cok gerektigi anda.
+
+    IKI KAT KORUMA
+    --------------
+    * PGAPPNAME: libpq'nun varsayilan application_name'i.
+    * PGOPTIONS icindeki `-c application_name=...`: sunucu tarafinda baglanti
+      kurulurken uygulanir. PGAPPNAME bir sekilde tasinmazsa (farkli libpq
+      surumu, sarmalayici script) bu yine de tutar.
+    """
+    env = _pg_restore_env()
+    env["PGAPPNAME"] = RESTORE_APP_NAME
+    env["PGOPTIONS"] = (
+        "-c statement_timeout=600000 "
+        "-c lock_timeout=60000 "
+        f"-c application_name={RESTORE_APP_NAME}"
+    )
+    return env
+
+
 # Yedekten haric tutulan tablolar (sadece schema yedeklenir, veri haric).
 # Telemetri/olay/queue/notification gibi operasyonel veriler hizli buyuyup
 # yedek dosyasini gereksizce sisirir. Geri yuklemede bu tablolar bos
@@ -598,8 +641,7 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
     ]
     # Lock bekleme suresi — DROP/CREATE icin 60sn. Default sonsuz; sinir
     # koyarak kullanici "30 dk takildi" durumunu yasamaz, fail-fast hata gorur.
-    env = _pg_restore_env()
-    env["PGOPTIONS"] = "-c statement_timeout=600000 -c lock_timeout=60000"
+    env = _build_restore_env()
 
     # pg_restore'u Popen ile baslat; stderr'i satir satir oku, tracker'a
     # sub-step mesaji olarak yansit. --verbose ile pg_restore "creating TABLE
@@ -661,21 +703,28 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
             pass
 
     def _terminate_loop() -> None:
-        """pg_restore calistigi sure boyunca her 1.5sn'de worker connection'larini
-        yeniden kill et. Worker'lar (tag-engine/alarm-service/...) auto-reconnect
-        eder; yeni baglantilar DROP TABLE/CONSTRAINT lock'larini bloklar. Loop
-        sayesinde reconnect olur olmaz tekrar kapatilirlar — pg_restore TEMIZ
-        lock alabilir. pg_restore'un kendi connection'i (psql user) hep ayakta,
-        cunku _terminate_other_connections pid != pg_backend_pid() filtresi
-        ile cagiran psql baglantisini korur; pg_restore subprocess'i de baska
-        bir pid'le baglanir, terminate edilir? — Cevap: terminate sorgusu
-        'postgres' DB'sine baglani, hedef DB'deki backend'leri tarar. pg_restore
-        'enerjione' DB'sine baglani, kendi pid'i farkli; ama BIZ filtre olarak
-        sadece 'pg_backend_pid()' (psql'imizin pid'i) hariç tutuyoruz, pg_restore
-        DAHIL kill ediyoruz. Bu YANLIS. Fix: pg_restore'un application_name'ini
-        belirleyip onu da filtre et.
+        """pg_restore surerken worker baglantilarini 1.5sn'de bir yeniden keser.
+
+        Worker'lar (tag-engine/alarm-service/...) otomatik yeniden baglanir ve
+        yeni baglantilar DROP TABLE/CONSTRAINT kilitlerini bloklar. Dongu
+        sayesinde her yeniden baglanma aninda tekrar kesilirler, pg_restore
+        TEMIZ kilit alabilir.
+
+        KIMIN KORUNDUGU: `application_name` degeri `e1_` ile baslayan her
+        baglanti. Bu iki kumeyi kapsar — backend'in kendi havuzu (`e1_backend`)
+        ve pg_restore oturumu (`e1_restore_session`, bkz. _build_restore_env).
+
+        DIKKAT: pg_restore'un o adi almasi ZORUNLU. Almazsa bu dongu restore'un
+        kendisini oldurur ve `--single-transaction` kullanilmadigi icin
+        veritabani yarim DROP edilmis halde kalir. Bu bir varsayim degil,
+        yasanmis bir hatadir; _build_restore_env docstring'inde ayrintili.
         """
-        psql_path = os.getenv("PSQL", "psql")
+        # `os.getenv("PSQL", "psql")` DEGIL: Windows/native kurulumda psql
+        # PATH'te olmayabilir ve dongu sessizce hicbir sey yapmazdi — yani
+        # worker baglantilari kesilmez, pg_restore kilit bekler ve
+        # lock_timeout ile duserdi. resolve_pg_binary PATH'i ve bilinen
+        # kurulum dizinlerini tarar.
+        psql_path = resolve_pg_binary("psql")
         dbname = db["dbname"]
         # Filtre: pg_restore session'i (application_name='e1_restore_session')
         # ve backend kendi connection'lari ('e1_backend') KORUNUR. Sadece
@@ -709,8 +758,8 @@ def run_pg_restore(file_path: Path) -> tuple[bool, str]:
             except Exception:  # noqa: BLE001
                 pass  # gecici hata, bir sonraki tick'te tekrar
 
-    # pg_restore'a unique application_name ver ki terminate loop onu kill etmesin.
-    env["PGAPPNAME"] = "e1_restore_session"
+    # NOT: application_name burada DEGIL, `_build_restore_env` icinde ve
+    # Popen'dan ONCE atanir. Buradaki atama cocuk surece hic ulasmiyordu.
 
     reader_t = _threading.Thread(target=_stderr_reader, daemon=True)
     terminate_t = _threading.Thread(target=_terminate_loop, daemon=True)

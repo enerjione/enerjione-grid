@@ -12,8 +12,20 @@ from app.services.notification_service import create_notification, notify_users
 from app.services.outbox_service import enqueue_outbox_event
 
 
-def list_alarm_events(db: Session) -> list[AlarmEvent]:
-    stmt = select(AlarmEvent).order_by(AlarmEvent.created_at.desc()).limit(500)
+def list_alarm_events(
+    db: Session, visible_device_ids: set[int] | None = None
+) -> list[AlarmEvent]:
+    """Alarm olaylari. `visible_device_ids` verilirse sorgu SQL'de daraltilir.
+
+    `None` = kisitsiz (engineer/installer). Bos KUME = hicbir cihaz gorunmuyor
+    ve dogru cevap BOS listedir — `if not visible` gibi bir kontrol bos kumeyi
+    "kisitsiz" saymak olurdu ve hicbir sorumluluk alanina atanmamis bir
+    operator TUM alarmlari gorurdu.
+    """
+    stmt = select(AlarmEvent)
+    if visible_device_ids is not None:
+        stmt = stmt.where(AlarmEvent.device_id.in_(visible_device_ids))
+    stmt = stmt.order_by(AlarmEvent.created_at.desc()).limit(500)
     return list(db.scalars(stmt).all())
 
 
@@ -295,8 +307,21 @@ def reset_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmEvent:
     return alarm
 
 
-def acknowledge_all_alarms(db: Session, actor_username: str) -> list[AlarmEvent]:
-    alarms = list_alarm_events(db)
+def acknowledge_all_alarms(
+    db: Session,
+    actor_username: str,
+    visible_device_ids: set[int] | None = None,
+) -> list[AlarmEvent]:
+    """Gorunur alarmlari toplu onaylar.
+
+    KAPSAM BURADA UYGULANIR — cagirandaki yanit filtresinde DEGIL.
+    Eskiden mutasyon TUM alarmlara uygulaniyordu ve kapsam yalnizca donen
+    listeye vuruluyordu: hicbir sorumluluk alanina atanmamis bir operator bu
+    ucu cagirinca sistemdeki TUM alarmlar onaylaniyor, resetlenmis olanlar
+    yorumlariyla birlikte KALICI SILINIYORDU — ve yanit bos dondugu icin
+    arayuzde hicbir sey olmamis gibi gorunuyordu.
+    """
+    alarms = list_alarm_events(db, visible_device_ids)
     now = datetime.now(timezone.utc)
     remaining: list[AlarmEvent] = []
     for alarm in alarms:
@@ -321,8 +346,18 @@ def acknowledge_all_alarms(db: Session, actor_username: str) -> list[AlarmEvent]
     return remaining
 
 
-def reset_all_alarms(db: Session, actor_username: str) -> list[AlarmEvent]:
-    alarms = list_alarm_events(db)
+def reset_all_alarms(
+    db: Session,
+    actor_username: str,
+    visible_device_ids: set[int] | None = None,
+) -> list[AlarmEvent]:
+    """Gorunur alarmlari toplu resetler.
+
+    KAPSAM BURADA UYGULANIR. Kapsamsiz haliyle bir operator tum acik
+    alarmlari resetleyebiliyordu; `fault_recompute` sonrasinda haritadaki
+    GERCEK arizalar kayboluyor ve geriye olay kaydinda tek satir kaliyordu.
+    """
+    alarms = list_alarm_events(db, visible_device_ids)
     now = datetime.now(timezone.utc)
     for alarm in alarms:
         alarm.reset = True

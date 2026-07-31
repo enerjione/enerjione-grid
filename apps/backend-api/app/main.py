@@ -12,6 +12,8 @@ from app.core.rate_limit import limiter
 
 from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
+from app.core import service_role
+from app.core.service_role import leader
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.models import alarm, alarm_rule, api_key as api_key_model, backup as backup_model, device, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
@@ -856,6 +858,12 @@ async def start_iec104_servers():
     """
     import logging
 
+    # TEK SURECTE: IEC104 sunuculari TCP portu baglar. `api` rolundeki
+    # surecler (ve coklu uvicorn worker'lari) bunu acmamali; ikinci surec
+    # portu zaten baglayamaz ve her acilista hata log'u uretirdi.
+    if not service_role.wants_background():
+        return
+
     loop = asyncio.get_running_loop()
     db = SessionLocal()
     try:
@@ -978,107 +986,103 @@ def stop_ws_fanout_bridge():
     bridge.stop()
 
 
-@app.on_event("startup")
-def start_telemetry_consumer():
-    telemetry_consumer.start()
+# --------------------------------------------------------------------------
+# ARKA PLAN ISLERI — TEK SURECTE
+#
+# Asagidaki isler daha once her biri ayri bir startup event'i olarak
+# aciliyordu. Tek uvicorn worker varken bu dogruydu; olcek buyudukce (600
+# cihaz) API'yi coklu worker ile calistirmak ve arka plani ayri bir
+# container'a almak gerekiyor. Ikisi de ayni tehlikeyi doguruyor: is birden
+# fazla surecte TEKRAR calisir. Sonuclar sessiz ve pahali — yedek iki kez
+# alinir, toplu bildirim iki kez gider, retention ayni satirlari iki kez
+# silmeye calisir.
+#
+# Artik isler `leader`a kaydediliyor ve yalnizca Postgres advisory lock'u
+# ALAN surecte aciliyor. Rol yapilandirmasi (all/api/worker) niyeti soyler,
+# kilit gercekten tekil OLDUGUNU garanti eder. Bkz. core/service_role.py.
+#
+# Kayit SIRASI onemli: baslatma bu sirada, durdurma TERS sirada yapilir.
+# --------------------------------------------------------------------------
+leader.register("telemetry_consumer", telemetry_consumer.start, telemetry_consumer.stop)
+
+# Outbox flush — telemetri yayinini ingest request yolundan ayirir. Ingest
+# sadece DB'ye yazar; bu worker arka planda RabbitMQ'ya yayinlar. 200 cihaz
+# yukunde gateway 'Read timed out' onlenir.
+leader.register("outbox_flush", outbox_flush_worker.start, outbox_flush_worker.stop)
 
 
-@app.on_event("shutdown")
-def stop_telemetry_consumer():
-    telemetry_consumer.stop()
-
-
-@app.on_event("startup")
-def start_outbox_flush_worker():
-    """Outbox flush worker — telemetri yayinini ingest request yolundan ayirir.
-    Ingest sadece DB'ye yazar; bu worker arka planda RabbitMQ'ya yayinlar.
-    200 cihaz yukunde gateway 'Read timed out' onlenir."""
-    outbox_flush_worker.start()
-
-
-@app.on_event("shutdown")
-def stop_outbox_flush_worker():
-    outbox_flush_worker.stop()
-
-
-@app.on_event("startup")
-def start_outbound_telemetry_batcher():
-    """Telemetry REST webhook batch dispatcher — 5sn pencerede degisik
-    readings'i biriktirir ve aktif REST outbound target'lara tek POST atar."""
+def _start_outbound_batcher() -> None:
+    """REST webhook batch dispatcher — 5sn penceresinde biriktirip tek POST."""
     from app.services import outbound_telemetry_batcher
+
     outbound_telemetry_batcher.start()
 
 
-@app.on_event("shutdown")
-def stop_outbound_telemetry_batcher():
+def _stop_outbound_batcher() -> None:
     from app.services import outbound_telemetry_batcher
+
     outbound_telemetry_batcher.stop()
 
 
-@app.on_event("startup")
-def start_mqtt_publisher():
-    """MQTT outbound publisher — her aktif MQTT target icin persistent client
-    + per-target periyodik flush (publish_interval_sec). Custom topic mapping
-    + template engine icerir."""
+leader.register("outbound_telemetry_batcher", _start_outbound_batcher, _stop_outbound_batcher)
+
+
+def _start_mqtt() -> None:
+    """Her aktif MQTT target icin kalici client + periyodik flush."""
     from app.services import mqtt_publisher_service
+
     mqtt_publisher_service.start()
 
 
-@app.on_event("shutdown")
-def stop_mqtt_publisher():
+def _stop_mqtt() -> None:
     from app.services import mqtt_publisher_service
+
     mqtt_publisher_service.stop()
 
 
-@app.on_event("startup")
-def start_bulk_notification_scheduler():
-    """Zamanlanmis toplu bildirim scheduler — her 30sn'de bir due job'lari isler."""
+leader.register("mqtt_publisher", _start_mqtt, _stop_mqtt)
+
+
+def _start_bulk_notifications() -> None:
+    """Zamanlanmis toplu bildirim — her 30sn'de bir due job'lari isler."""
     from app.services import bulk_notification_scheduler
+
     bulk_notification_scheduler.start()
 
 
-@app.on_event("shutdown")
-def stop_bulk_notification_scheduler():
+def _stop_bulk_notifications() -> None:
     from app.services import bulk_notification_scheduler
+
     bulk_notification_scheduler.stop()
 
 
-@app.on_event("startup")
-def start_telemetry_retention():
-    """Telemetri tablosu kayan pencere — eskileri otomatik temizle.
+leader.register("bulk_notification_scheduler", _start_bulk_notifications, _stop_bulk_notifications)
 
-    Default: son 30 dakikalik kayitlar tutulur, her 5 dakikada bir DELETE.
-    TELEMETRY_RETENTION_MINUTES / TELEMETRY_RETENTION_INTERVAL_SEC ile override.
+# Telemetri kayan penceresi — eskileri otomatik temizler (varsayilan: son 30
+# dakika, 5 dakikada bir DELETE).
+leader.register("telemetry_retention", telemetry_retention.start, telemetry_retention.stop)
+
+# Acik alarmlarin periyodik mutabakati — kosul artik karsilanmiyorsa onaylanmis
+# ise siler, onaylanmamis ise reset=True yapar. alarm-service'in bellek-ici
+# durumundan bagimsiz self-healing saglar.
+leader.register("alarm_reconciliation", alarm_reconciliation.start, alarm_reconciliation.stop)
+
+# Periyodik yedekleme. IKI KEZ CALISMASI ozellikle pahali: her tetikte pg_dump
+# kosar, diski ve CPU'yu iki katina cikarir ve retention sayimini bozar.
+leader.register("backup_scheduler", backup_scheduler.start, backup_scheduler.stop)
+
+
+@app.on_event("startup")
+def start_background_jobs():
+    """Kilidi almayi dener; alirsa kayitli tum arka plan islerini baslatir.
+
+    Kilit baska bir surecte ise burada HICBIR SEY acilmaz ve periyodik olarak
+    yeniden denenir — worker container'i yeniden baslatildiginda devralmayi
+    saglayan sey budur.
     """
-    telemetry_retention.start()
+    leader.try_start()
 
 
 @app.on_event("shutdown")
-def stop_telemetry_retention():
-    telemetry_retention.stop()
-
-
-@app.on_event("startup")
-def start_alarm_reconciliation():
-    """Acik alarmlari periyodik olarak kontrol et — kosul artik karsilanmiyorsa
-    onaylanmis ise sil, onaylanmamis ise reset=True yap. alarm-service in-memory
-    state drift'inden bagimsiz self-healing saglar."""
-    alarm_reconciliation.start()
-
-
-@app.on_event("shutdown")
-def stop_alarm_reconciliation():
-    alarm_reconciliation.stop()
-
-
-@app.on_event("startup")
-def start_backup_scheduler():
-    """Periyodik DB yedek alma worker'i. BackupSchedule tablosuna bakar;
-    enabled=True ise interval_hours kadar surede bir pg_dump yapar ve
-    retention_count'a gore eski yedekleri siler."""
-    backup_scheduler.start()
-
-
-@app.on_event("shutdown")
-def stop_backup_scheduler():
-    backup_scheduler.stop()
+def stop_background_jobs():
+    leader.stop()

@@ -96,13 +96,21 @@ def reset_alarm(alarm_id: int, db: Session = Depends(get_db), current_user: User
 
 @router.post("/events/ack-all", response_model=list[AlarmEventRead])
 def acknowledge_all_alarms(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    rows = acknowledge_all_alarms_service(db, current_user.username)
+    # Kapsam SERVISE gecirilir — yaniti filtrelemek YETMEZ.
+    # Eskiden mutasyon tum alarmlara uygulaniyor, filtre yalnizca donen listeye
+    # vuruluyordu: operator kendi alani disindaki alarmlari da onayliyor ve
+    # resetlenmis olanlari kalici siliyordu; ekranda hicbir sey gorunmuyordu.
+    rows = acknowledge_all_alarms_service(
+        db, current_user.username, get_visible_device_ids(db, current_user)
+    )
     return _scope_filter_alarms(db, current_user, rows)
 
 
 @router.post("/events/reset-all", response_model=list[AlarmEventRead])
 def reset_all_alarms(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    rows = reset_all_alarms_service(db, current_user.username)
+    rows = reset_all_alarms_service(
+        db, current_user.username, get_visible_device_ids(db, current_user)
+    )
     return _scope_filter_alarms(db, current_user, rows)
 
 

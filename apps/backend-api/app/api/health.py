@@ -122,16 +122,27 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
         },
     }
 
-    # Kritik: DB veya NATS down → 503 (trafik almasin).
-    # RabbitMQ down → 200 + degraded (alarm akisi bekler ama persist devam).
+    # Rol + liderlik: arka plan islerini KIMIN calistirdigi gorunur olmali.
+    #
+    # Ayrik kurulumda (api + worker) sessiz bir ariza mumkun: worker
+    # container'i ayaga kalkmazsa HTTP saglikli gorunmeye devam eder ama
+    # telemetri yazilmaz, alarm uretilmez, yedek alinmaz. Bu alan olmadan
+    # bunu ancak veri eksikliginden fark ederdiniz.
+    #
+    # HTTP DURUMUNU ETKILEMEZ: `api` rolundeki bir surec zaten bilerek lider
+    # degildir; 503 dondurmek saglikli bir surece trafigi kestirirdi.
+    from app.core.service_role import leader as _leader
+
+    background = _leader.status()
+
     critical_down = (not db_ok) or (not nats_ok) or (not js_ok)
     if critical_down:
-        body = {"status": "unhealthy", "dependencies": deps}
+        body = {"status": "unhealthy", "dependencies": deps, "background": background}
         return body, status.HTTP_503_SERVICE_UNAVAILABLE
     if not rmq_ok:
-        body = {"status": "degraded", "dependencies": deps}
+        body = {"status": "degraded", "dependencies": deps, "background": background}
         return body, status.HTTP_200_OK
-    body = {"status": "ok", "dependencies": deps}
+    body = {"status": "ok", "dependencies": deps, "background": background}
     return body, status.HTTP_200_OK
 
 

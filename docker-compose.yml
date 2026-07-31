@@ -246,6 +246,20 @@ services:
         condition: service_healthy
     environment:
       APP_ENV: production
+      # --- Olcekleme ---
+      # Surec rolu. VARSAYILAN `all` = bugunku davranis (tek container hem
+      # HTTP hem arka plan isleri). Ayrik kurulum icin:
+      #   .env'e  E1_BACKEND_ROLE=api  yaz ve `--profile scale` ile baslat;
+      #   arka plan isleri backend-worker'a gecer.
+      # Yanlis ayarlansa bile isler IKI KEZ KOSMAZ — lider secimi Postgres
+      # advisory lock ile yapilir (app/core/service_role.py).
+      SERVICE_ROLE: ${E1_BACKEND_ROLE:-all}
+      # Uvicorn worker sayisi. 1 = varsayilan. Coklu worker artik GUVENLI
+      # (arka plan isleri tek surecte, WS yayini NATS uzerinden) ama her
+      # worker ayri bir Python sureci + DB pool'u demek; saha cihazinin
+      # bellegine gore ayarlanmali. Olcum: 40 es zamanli WS abonesi tek
+      # cekirdegin ~%104'unu kullaniyor.
+      UVICORN_WORKERS: ${E1_API_WORKERS:-1}
       # Calisan surum — Lisans ve Sistem Durumu sayfalari bunu gosterir.
       # Ayni degisken imaj etiketi olarak da kullaniliyor; 'latest' gibi
       # semver olmayan bir deger gelirse config.py imajla paketlenen
@@ -427,6 +441,50 @@ services:
       - e1-net
     logging: *default-logging
     <<: *heavy-resources
+
+  # ---------------------------------------------------------------------
+  # Arka plan isleri — OPSIYONEL AYRI SUREC (profil: scale)
+  #
+  # Varsayilan kurulumda YOKTUR: `backend-api` hem HTTP hem arka plan isini
+  # yapar (SERVICE_ROLE=all). Bu, tek cihazli sahalar icin dogru ve en ucuz
+  # secim.
+  #
+  # NE ZAMAN ACILIR: cihaz sayisi buyuyunce (600 cihaz hedefi) telemetri
+  # tuketicisi ile HTTP ayni surecte CPU ve GIL icin yarisir. Ayirinca:
+  #   * ingest yuku HTTP yanit suresini etkilemez,
+  #   * API coklu worker ile buyutulebilir (E1_API_WORKERS).
+  #
+  # NASIL ACILIR (.env):
+  #     E1_BACKEND_ROLE=api
+  #     E1_API_WORKERS=4
+  # ve:  docker compose --profile scale up -d
+  #
+  # `extends` KULLANILIYOR — env listesi KOPYALANMIYOR. Kopya olsaydi iki
+  # liste zamanla ayrisirdi: worker'a eklenmeyen bir ayar (yeni SMTP alani,
+  # yeni NATS parametresi) sessizce yalnizca API'de gecerli olurdu ve fark
+  # ancak sahada anlasilirdi.
+  #
+  # DIKKAT: compose `extends` ile `depends_on` KOPYALANMAZ; asagida acikca
+  # tekrar tanimlanmistir.
+  backend-worker:
+    extends:
+      service: backend-api
+    profiles: ["scale"]
+    container_name: e1-grid-backend-worker
+    # Trafik almaz: port yayinlanmaz, nginx bu servise yonlendirmez.
+    # HTTP saglik ucu yine ayakta (uvicorn calisiyor) ama LB'ye girmez.
+    environment:
+      SERVICE_ROLE: worker
+      # Arka plan sureci TEK worker olmali: is zaten advisory lock ile
+      # tekil, fazladan worker yalnizca bellek yer.
+      UVICORN_WORKERS: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
 
   tag-engine:
     build:
