@@ -54,6 +54,31 @@ PROFILE_PATH = Path(os.environ.get("APPDATA", Path.home())) / "EnerjiOneGrid" / 
 # SGR/CSI dizileri: "\033[1;33m" gibi. Renkleri metne katmadan atiyoruz.
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
 
+# Terminal kontrol dizileri — cikti panelinde YORUMLANIR, silinmez.
+#
+# NEDEN: `docker compose up` PTY gorunce ilerlemeyi YERINDE yeniden cizer:
+# "imleci N satir yukari al" (ESC[NA) + N satiri tekrar bas. Eskiden write()
+# tum ANSI'yi siliyordu, dolayisiyla "yukari git" komutu kayboluyor ve her
+# kare YENI SATIR olarak ekleniyordu. Bir imaj cekilirken saniyede ~10 kare
+# gelir; 700 MB'lik bir imajda cikti binlerce satira sisiyordu.
+#
+# Asagidakileri yorumlayip geri kalan ANSI'yi (renk, imleç gizleme) atiyoruz:
+#   ESC[nA   imleci n satir yukari  -> son n satiri sil (sonraki kare uzerine yazar)
+#   ESC[2K   satiri tamamen temizle -> mevcut satiri sil
+#   ESC[K    satir sonuna kadar sil -> (append modelinde no-op)
+#   \r       satir basina don       -> mevcut satiri sil
+_TERM_TOKEN_RE = re.compile(
+    r"(\x1b\[\d*A)"          # imlec yukari
+    r"|(\x1b\[[02]?K)"       # satir temizleme
+    r"|(\x1b\[[0-9;?]*[a-zA-Z])"  # diger ANSI (renk vb) — atilir
+    r"|(\r\n|\n|\r)"         # satir sonu / satir basi
+)
+
+# Cikti panelinde tutulacak azami satir. Yerinde cizim sayesinde panel normalde
+# sismez, ama uzun kurulumda (git clone, apt, derleme) yine buyur. Tk metin
+# widget'i on binlerce satirda gorunur sekilde yavaslar.
+_MAX_OUTPUT_LINES = 4000
+
 # Surum listesindeki sabit girdiler. Anahtar = ekranda gorunen, deger = ref.
 VERSION_LATEST = "En son yayin (onerilen)"
 VERSION_EDGE = "Gelistirme surumu (main) — test icin"
@@ -325,24 +350,79 @@ class TerminalView(ttk.Frame):
             self.text.tag_configure(tag, foreground=color)
         self.text.configure(state="disabled")
         self._autoscroll = True
+        # Bloklar arasinda bolunmus ANSI dizisi tamponu (bkz. write()).
+        self._pending = ""
 
     def set_autoscroll(self, on: bool) -> None:
         self._autoscroll = on
 
     def write(self, chunk: str) -> None:
-        # ANSI temizligi BURADA yapilir, cagiranda degil: bu widget'a nereden
-        # yazilirsa yazilsin ekranda "[0;32m" gibi cop kalmasin. (Anahtar
-        # maskeleme ayri bir is; o SSH katmaninda yapiliyor.)
-        chunk = ANSI_RE.sub("", chunk)
+        # Terminal kontrol dizileri BURADA yorumlanir, cagiranda degil: bu
+        # widget'a nereden yazilirsa yazilsin ekranda "[0;32m" gibi cop
+        # kalmasin ve ilerleme cizimleri YERINDE guncellensin.
+        # (Anahtar maskeleme ayri bir is; o SSH katmaninda yapiliyor.)
+        #
+        # Parcalanmis dizi korumasi: chan.recv() 8 KB'lik bloklar dondurdugu
+        # icin bir ANSI dizisi iki blok arasinda BOLUNEBILIR. Yarim diziyi
+        # tamponlayip sonraki blogun basina ekliyoruz; aksi halde ekranda
+        # rastgele "[1A" gibi copler cikiyordu.
+        chunk = self._pending + chunk
+        self._pending = ""
+        # SON escape'e bak: ondan itibaren TAM bir dizi var mi? Yoksa yarim
+        # kalmis demektir, sonraki bloga birakiyoruz.
+        #
+        # (Once "metin bir diziyle mi bitiyor" diye bakiyordum; yanlisti —
+        # "ESC[2A ESC[K yeni\n" gibi bir blokta son escape TAMAMDI ama metin
+        # diziyle bitmedigi icin saglam kismi da tamponluyordu ve cikti
+        # kayboluyordu.)
+        esc = chunk.rfind("\x1b")
+        if esc != -1 and not re.match(r"\x1b\[[0-9;?]*[a-zA-Z]", chunk[esc:]):
+            # Guvenlik: yarim dizi kisa olur. Uzunsa bozuk veridir; yutup
+            # ciktiyi kaybetmek yerine oldugu gibi gecir.
+            if len(chunk) - esc <= 12:
+                self._pending = chunk[esc:]
+                chunk = chunk[:esc]
+        if not chunk:
+            return
+
         self.text.configure(state="normal")
-        for part in re.split(r"(\r\n|\r|\n)", chunk):
-            if part in ("\n", "\r\n"):
-                self.text.insert("end", "\n")
-            elif part == "\r":
-                # Imleci satir basina al: sonraki yazim bu satirin uzerine gelsin.
-                self.text.delete("end-1l linestart", "end-1c")
-            elif part:
-                self.text.insert("end", part, self._tag_for(part))
+        pos = 0
+        for m in _TERM_TOKEN_RE.finditer(chunk):
+            plain = chunk[pos:m.start()]
+            if plain:
+                self.text.insert("end", plain, self._tag_for(plain))
+            pos = m.end()
+
+            up, erase, _other, nl = m.groups()
+            if up:
+                # Imleci n satir yukari: docker bu satirlari tekrar basacak,
+                # o yuzden onlari silip yerini bosaltiyoruz. Ilerleme boylece
+                # ayni blokta guncellenir, ekranda birikmez.
+                n = int(up[2:-1] or 1)
+                for _ in range(n):
+                    self.text.delete("end-2l linestart", "end-1c")
+            elif erase:
+                if erase.endswith("2K"):
+                    self.text.delete("end-1l linestart", "end-1c")
+                # ESC[K (satir sonuna kadar sil): append modelinde imlec zaten
+                # satir sonunda, yapacak bir sey yok.
+            elif nl:
+                if nl == "\r":
+                    # Satir basina don: sonraki yazim bu satirin uzerine gelsin.
+                    self.text.delete("end-1l linestart", "end-1c")
+                else:
+                    self.text.insert("end", "\n")
+            # _other (renk vb): atiliyor
+
+        rest = chunk[pos:]
+        if rest:
+            self.text.insert("end", rest, self._tag_for(rest))
+
+        # Panel sinirsiz buyumesin (Tk on binlerce satirda yavaslar).
+        excess = int(self.text.index("end-1c").split(".")[0]) - _MAX_OUTPUT_LINES
+        if excess > 0:
+            self.text.delete("1.0", f"{excess + 1}.0")
+
         if self._autoscroll:
             self.text.see("end")
         self.text.configure(state="disabled")
