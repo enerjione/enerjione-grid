@@ -2410,10 +2410,18 @@ export function App() {
       </div>
     ) : null;
 
+  // Tembel yuklenen sayfa chunk'i inerken icerik alaninda gosterilir.
+  // GlobalLoading BILEREK kullanilmiyor: o `position: fixed; inset: 0` ile
+  // TUM ekrani koyu bir scrim + blur ardina aliyor. Sayfa gecisinde bir kare
+  // boyunca gorunup kayboldugu icin "grimsi flicker" olarak fark ediliyordu.
+  // Burada yalnizca icerik alani, karartma olmadan yer tutar.
+  const pageFallback = (
+    <div className="page-suspense" role="status" aria-live="polite">
+      <span className="panel-loading-spinner" aria-hidden="true" />
+    </div>
+  );
+
   return (
-    // Tembel yuklenen sayfalar Suspense OLMADAN render edilemez.
-    // Tek sarmalayici yeterli: ayni anda yalnizca bir sayfa aciliyor.
-    <Suspense fallback={<GlobalLoading show />}>
     <div className={`layout${licenseGateOpen ? " is-license-locked" : ""}`}>
       {forcePasswordModal}
       {licenseGateModal}
@@ -2470,7 +2478,13 @@ export function App() {
         {!licenseAllowsContent ? (
           licenseGatePhase === "checking" ? <GlobalLoading show /> : null
         ) : (
-        <>
+        // Suspense siniri SAYFA ICERIGINE daraltildi. Onceden tum `layout`u
+        // sariyordu: tembel bir sayfa askiya alindiginda React header'i,
+        // sekmeleri ve yan menuyu de sokup yerine tam ekran overlay
+        // basiyordu — her ilk sayfa acilisinda tum arayuz bir an kararip
+        // geri geliyordu. Artik ust cerceve YERINDE KALIR, yalnizca icerik
+        // alani yer tutar.
+        <Suspense fallback={pageFallback}>
         {pageMode === "device-detail" && activeDeviceDetailId !== null ? (
           <main className="content">
             <DeviceDetailPage
@@ -2821,7 +2835,7 @@ export function App() {
             </div>
           </div>
         )}
-        </>
+        </Suspense>
         )}
       </div>
 
@@ -2953,6 +2967,5 @@ export function App() {
         show={loadingData || alarmsLoading || dashboardAreaLoading}
       />
     </div>
-    </Suspense>
   );
 }

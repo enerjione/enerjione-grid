@@ -536,19 +536,82 @@ Ephemeral düğüm, bir süre **çevrimdışı kalınca tailnet'ten otomatik sil
 Saha cihazı için yanlıştır: elektrik kesilir, cihaz kapalı kalır, geri
 açıldığında tailnet'te **yoktur** — uzaktan bakım kopar.
 
-Sebebi, OAuth client secret'ı ile üretilen anahtarların varsayılan olarak
-ephemeral olmasıydı. `setup-tailscale.sh` artık anahtara `?ephemeral=false`
-ekliyor, **yeni kurulumlar kalıcı katılır**. Hâlihazırda ephemeral katılmış
-bir cihaz için:
+Sebebi, OAuth client secret'ı ile üretilen anahtarların **varsayılan olarak
+ephemeral** olmasıdır (Tailscale dokümanı: *"ephemeral: register as an
+ephemeral node (defaults to `true`)"*). `setup-tailscale.sh` artık anahtara
+`?ephemeral=false&preauthorized=true` ekliyor, **yeni kurulumlar kalıcı
+katılır**.
+
+> ### ⚠ `--force-reauth` bu sorunu ÇÖZMEZ
+>
+> Bu dokümanda önceden `tailscale up ... --force-reauth` tarif ediliyordu.
+> **Çalışmıyor:** Tailscale, kalıcı bir anahtarla yeniden kimlik
+> doğrulandığında düğümün ephemeral bayrağını **temizlemiyor**
+> ([tailscale/tailscale#15198](https://github.com/tailscale/tailscale/issues/15198),
+> Mart 2025'ten beri açık). Komut başarılı görünür, rozet yerinde kalır ve
+> cihaz ilk elektrik kesintisinde yine kaybolur.
+>
+> Ephemeral bayrağı düğüme yapıştığı için tek çözüm **düğümü silip yeniden
+> katılmaktır**. `tailscale logout` ephemeral düğümü **anında** siler.
+
+Ayrıca: cihaz zaten tailnet'e kayıtlıysa `setup-tailscale.sh` erken çıkar
+(idempotent). Yani anahtarı düzeltip `update.sh` çalıştırmak sahadaki bozuk
+cihazda **hiçbir şey yapmaz** — yeniden katılımı açıkça istemek gerekir:
 
 ```bash
-sudo tailscale up --authkey='tskey-client-<secret>?ephemeral=false&preauthorized=true' \
-     --advertise-tags=tag:e1-appliance --force-reauth
+# Cihazda, YEREL konsoldan veya YEREL ağdan (tailnet üzerinden DEĞİL):
+sudo E1_TAILSCALE_REJOIN=1 bash /opt/enerjione-grid/infra/appliance/setup-tailscale.sh
 ```
 
-Rozet bundan sonra da duruyorsa kesin çözüm: cihazı konsoldan **sil**, sonra
-cihazda `sudo bash infra/appliance/setup-tailscale.sh` çalıştır — aynı adla,
-kalıcı olarak yeniden katılır (tailnet IP'si değişir).
+Bu komut sırayla: güvenlik kontrolleri → `tailscale logout` → `?ephemeral=false`
+ile taze katılım. Cihaz aynı adla döner, **tailnet IP'si değişir**.
+
+Kurulum betiği iki güvenlik kontrolü yapar ve biri bile başarısızsa
+`logout` **çalıştırmaz** (cihazı tailnet dışında bırakmamak için):
+
+| Kontrol | Neden |
+|---|---|
+| Anahtar tanımlı mı | Anahtarsız `logout` cihazı kalıcı olarak düşürürdü |
+| Oturum tailnet üzerinden mi | Yeniden katılım kendi SSH oturumunuzu keserdi |
+
+**Kalıcılık nasıl raporlanıyor:** Cihazda "bu düğüm ephemeral mi" diye
+sorulabilecek bir yer **yok** — `tailscale status --json`, `debug prefs` ve
+netmap çıktısının hiçbiri bu bayrağı taşımaz; ephemeral olmak kontrol
+düzleminin tuttuğu bir özelliktir. Bu yüzden kurulum, katılım anında
+kalıcılığı **garanti edip edemediğini** `/var/lib/e1-grid/tailscale-join.json`
+dosyasına yazar ve sonraki her çalıştırmada bunu raporlar:
+
+```bash
+cat /var/lib/e1-grid/tailscale-join.json
+```
+
+| `kaynak` | Anlamı |
+|---|---|
+| `oauth-ephemeral-false` | Kalıcılık **garanti** — `?ephemeral=false` ile katıldı |
+| `duz-auth-key` | Karar konsoldaki anahtar ayarında; doğrulaması sizde |
+| `istege-bagli-ephemeral` | `E1_TAILSCALE_EPHEMERAL=1` ile **bilerek** ephemeral |
+| *(dosya yok)* | Cihaz bu kontrol eklenmeden önce katılmış — **bilinmiyor** |
+
+Düz auth key kullanıyorsanız ve konsolda cihazın kalıcı olduğunu
+doğruladıysanız, uyarıyı susturmak için:
+
+```bash
+sudo E1_TAILSCALE_ASSUME_PERSISTENT=1 bash /opt/enerjione-grid/infra/appliance/setup-tailscale.sh
+```
+
+> **`E1_TAILSCALE_REJOIN` ve `E1_TAILSCALE_ASSUME_PERSISTENT` tek seferlik
+> komut satırı bayraklarıdır** — `.env` veya `/etc/enerjione-grid/install.env`
+> içine **koymayın**. `REJOIN=1` kalıcı bir dosyada dursaydı her güncelleme
+> cihazı tailnet'ten çıkarıp yeniden katar, her seferinde tailnet IP'sini
+> değiştirirdi. `update.sh` bu iki değişkeni install.env'den okumaz (yalnızca
+> `AUTHKEY`, `TAGS`, `SSH`, `ACCEPT_DNS`, `HOSTNAME`, `HOSTNAME_PREFIX`
+> taşınır); bu yüzden `.env.example`'da da bilerek yer almazlar.
+
+> **Dikkat — yanıltıcı eski çıktı:** Kurulum eskiden "Anahtar suresi
+> uygulanmiyor — cihaz tailnet'te kalici" yazıyordu. Bu **yanlıştı**:
+> ephemeral düğümlerde de anahtar süresi uygulanmaz (onlar süreden değil,
+> çevrimdışı kalmaktan silinir). Yani ephemeral bir cihaz "kalıcı" onayı
+> alıyordu. Artık süre ve kalıcılık **ayrı ayrı** raporlanıyor.
 
 ---
 

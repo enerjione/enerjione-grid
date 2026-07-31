@@ -18,6 +18,7 @@ from app.models.enums import UserRole
 from app.models.gateway import Gateway
 from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.signal_catalog import SignalCatalog
+from app.data.device_models import DEFAULT_MODEL
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.gateway_agent import (
@@ -117,6 +118,82 @@ _INITIATING_PORT_BASE_MAX = 60000  # 65535 - 1000 buffer; ustu kabul edilmez
 # varsayilani kullanmali; aksi halde indirilen compose ile kurulan container
 # farkli surumden olur.
 _DEFAULT_GATEWAY_IMAGE = "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
+
+# Cihaz modeli bilinmiyorsa kullanilan profil anahtari.
+#
+# Model kayit defterinden ALINIR, elle yazilmaz: literal kopyalansaydi
+# `DEFAULT_MODEL` degistiginde model'i bos kalmis eski cihaz kayitlari
+# sessizce var olmayan bir profile eslesirdi (yani bos sinyal listesi ->
+# cihaz yoklanmaz). Yeni model eklerken tek dokunulacak yer
+# `app/data/device_models.py` olmali.
+_DEFAULT_PROFILE_KEY = DEFAULT_MODEL
+
+
+def _profile_key_of(device: Device) -> str:
+    """Cihazin sinyal seti anahtari.
+
+    `devices.signal_profile` KOLONU KULLANILMAZ — bkz. schemas/gateway.py
+    `GatewayConfigDevice.signal_profile`. Ozet: o kolon sahada sabit
+    "horstmann_sn2_fixed" degeriyle duruyor, hicbir yer okumuyor ve katalogun
+    model sozlugunde karsiligi yok; anahtar olarak kullanilsaydi hicbir profile
+    eslesmezdi.
+    """
+    return (getattr(device, "model", None) or "").strip() or _DEFAULT_PROFILE_KEY
+
+
+def compute_config_version(
+    *,
+    gateway_name: str,
+    batch_interval_sec: int,
+    max_devices: int,
+    is_active: bool,
+    devices: list[GatewayConfigDevice],
+    signals: list[GatewayConfigSignal],
+    signals_by_profile: dict[str, list[GatewayConfigSignal]] | None = None,
+) -> str:
+    """Gonderilecek payload'in KENDISINDEN turetilen config surumu.
+
+    TEK KAYNAK: hem endpoint hem testler bu fonksiyonu cagirir. Daha once
+    hesap endpoint'te gomuluydu ve test kendi kopyasini tutuyordu; iki kopya
+    sessizce ayrisabilirdi — ki `config_version` hatasinin ilk hali tam olarak
+    "hash gonderilen veriyi temsil etmiyor" idi. Kopya birakmiyoruz.
+    """
+    material = json.dumps(
+        {
+            "gateway_name": gateway_name,
+            "batch_interval_sec": batch_interval_sec,
+            "max_devices": max_devices,
+            "is_active": is_active,
+            "devices": [d.model_dump(mode="json") for d in devices],
+            "signals": [sg.model_dump(mode="json") for sg in signals],
+            "signals_by_profile": {
+                profil: [sg.model_dump(mode="json") for sg in satirlar]
+                for profil, satirlar in (signals_by_profile or {}).items()
+            },
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha1(
+        material.encode("utf-8"), usedforsecurity=False
+    ).hexdigest()[:12]
+
+
+def _to_config_signal(signal: SignalCatalog) -> GatewayConfigSignal:
+    return GatewayConfigSignal(
+        key=signal.key,
+        label=signal.label,
+        unit=signal.unit,
+        source=signal.source,
+        dnp3_class=signal.dnp3_class,
+        data_type=signal.data_type,
+        dnp3_object_group=signal.dnp3_object_group,
+        dnp3_index=signal.dnp3_index,
+        scale=signal.scale,
+        offset=signal.offset,
+        supports_alarm=signal.supports_alarm,
+    )
 
 
 def _allocate_initiating_port_base(db: Session) -> int:
@@ -783,25 +860,81 @@ def get_gateway_config(
                 poll_interval_sec=device.poll_interval_sec,
                 timeout_ms=device.timeout_ms,
                 retry_count=device.retry_count,
-                signal_profile=device.signal_profile,
+                # Profil anahtari = cihaz MODELI. Gerekce schemas/gateway.py'de
+                # `GatewayConfigDevice.signal_profile` uzerinde ayrintili.
+                signal_profile=_profile_key_of(device),
             )
         )
-    config_signals = [
-        GatewayConfigSignal(
-            key=signal.key,
-            label=signal.label,
-            unit=signal.unit,
-            source=signal.source,
-            dnp3_class=signal.dnp3_class,
-            data_type=signal.data_type,
-            dnp3_object_group=signal.dnp3_object_group,
-            dnp3_index=signal.dnp3_index,
-            scale=signal.scale,
-            offset=signal.offset,
-            supports_alarm=signal.supports_alarm,
+
+    # --- B3: profil bazli sinyal katalogu ---------------------------------
+    #
+    # SORUN: `signals` duz bir listeydi ve gateway onu TUM cihazlara ayni
+    # sekilde uyguluyordu (poller tek `state.signals()` kullaniyor). Cihaz
+    # modeli tek oldugu surece bu tesadufen dogru calisir. Ikinci bir model
+    # eklendigi anda ayni (object_group, index) cifti iki farkli buyuklugu
+    # gosterir ve okunan deger YANLIS `signal_key` ile yayinlanir: telemetri
+    # akmaya devam eder, deger makul gorunur, ama esik alarmi baska bir
+    # buyuklugun uzerinden calisir. Hata SESSIZDIR.
+    #
+    # Not: gateway'in kendi dokumantasyonu ("backend, signals listesini bu
+    # profile gore filtreler") bunu zaten VARSAYIYORDU; backend hic yapmiyordu.
+    # ANAHTAR HER ZAMAN YAZILIR — bos olsa bile.
+    #
+    # Ilk tasarimda bos profil ATLANIYORDU ki gateway duz listeye dussun ve
+    # cihaz "karanliga" dusmesin. Bu, TEK bir sinyal setinin tum cihazlar icin
+    # ust kume oldugu varsayimina dayaniyordu.
+    #
+    # Varsayim yanlis. Bu gateway yalnizca DNP3 konusur (baska protokoller ayri
+    # gateway ile calisir) ama AYNI PROTOKOL ICINDE de modeller ayrisir: baska
+    # bir DNP3 modelinin (object_group, index) haritasi bu cihaz icin YABANCI
+    # adrestir. Duz liste bir ust kume degil, komsu modellerin adres toplamidir.
+    # Onlari yoklamak "veri yok"tan daha kotudur: makul gorunen ama baska bir
+    # buyukluge ait degerler yanlis `signal_key` ile yayinlanir ve esik
+    # alarmlari onlarin uzerinden calisir.
+    #
+    # Bu yuzden bos profil de anahtar olarak yazilir. Gateway o cihaz icin
+    # hicbir sey yoklamaz; eksiklik ise log'da GORUNUR olur. Sessiz yanlis veri
+    # yerine gorunur eksik veri.
+    signals_by_profile: dict[str, list[GatewayConfigSignal]] = {}
+    empty_profiles: list[str] = []
+    for profile_key in sorted({_profile_key_of(d) for d in devices}):
+        rows = [s for s in signals_rows if (s.model or "") == profile_key]
+        signals_by_profile[profile_key] = [_to_config_signal(s) for s in rows]
+        if not rows:
+            empty_profiles.append(profile_key)
+
+    if empty_profiles:
+        logger.warning(
+            "gateway-config-profile-empty gateway=%s profiles=%s",
+            gateway_code,
+            ",".join(empty_profiles),
         )
-        for signal in signals_rows
-    ]
+
+    # Duz liste: profillerin BIRLESIMI (tum katalog degil).
+    #
+    # Eskiden bu gateway'de hic bulunmayan modellerin sinyalleri de listeye
+    # giriyordu; gateway onlari da her cihazda yokluyordu. Tek modelli
+    # kurulumda sonuc birebir ayni, cok modellide daha az ve dogru.
+    #
+    # Profil sozlugu BOS kaldiysa (or. katalog modeli cihaz modeliyle hic
+    # eslesmiyor) tum aktif katalog donuyor — eski davranis, cihaz karanliga
+    # dusmesin.
+    if signals_by_profile:
+        _seen_keys: set[str] = set()
+        config_signals = []
+        for _profile_rows in signals_by_profile.values():
+            for _sig in _profile_rows:
+                if _sig.key in _seen_keys:
+                    continue
+                _seen_keys.add(_sig.key)
+                config_signals.append(_sig)
+        # Katalog sırası korunur (display_order, key) — signals_rows zaten o
+        # sirada; birlesim sonrasi tekrar siralamak gateway tarafinda
+        # gereksiz config_version oynamasini onler.
+        _order = {s.key: i for i, s in enumerate(signals_rows)}
+        config_signals.sort(key=lambda s: _order.get(s.key, len(_order)))
+    else:
+        config_signals = [_to_config_signal(s) for s in signals_rows]
 
     # --- config_version: PAYLOAD'IN KENDISINDEN turetilir ------------------
     #
@@ -826,22 +959,22 @@ def get_gateway_config(
     # tekrar gondermiyoruz. Yerel serialize maliyeti dakikada ~12 cagri icin
     # ihmal edilebilir; sessizce yanlis konfigurasyonla calisan bir saha
     # cihazi ise ihmal edilemez.
-    _version_material = json.dumps(
-        {
-            "gateway_name": gateway.name,
-            "batch_interval_sec": gateway.batch_interval_sec,
-            "max_devices": gateway.max_devices,
-            "is_active": gateway.is_active,
-            "devices": [d.model_dump(mode="json") for d in config_devices],
-            "signals": [sg.model_dump(mode="json") for sg in config_signals],
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
+    # `signals_by_profile` de hash'e GIRER (bkz. compute_config_version).
+    # Zorunlu: sinyal `key`leri katalogda global benzersiz oldugu icin bir
+    # sinyali A modelinden B modeline TASIMAK duz listeyi (birlesimi)
+    # DEGISTIRMEZ — ayni anahtarlar, ayni sira. Degisen yalnizca profil
+    # sozlugudur. Hash'e girmeseydi gateway 304 alir ve sinyalin artik baska
+    # bir modele ait oldugunu HIC ogrenmezdi: yukarida anlatilan sessiz
+    # sapmanin birebir aynisi.
+    config_version = compute_config_version(
+        gateway_name=gateway.name,
+        batch_interval_sec=gateway.batch_interval_sec,
+        max_devices=gateway.max_devices,
+        is_active=gateway.is_active,
+        devices=config_devices,
+        signals=config_signals,
+        signals_by_profile=signals_by_profile,
     )
-    config_version = hashlib.sha1(
-        _version_material.encode("utf-8"), usedforsecurity=False
-    ).hexdigest()[:12]
     etag = f'"{config_version}"'
 
     # NOT: refresh_nonce / config_nonce hash'e DAHIL DEGIL — onlar ayri
@@ -863,6 +996,7 @@ def get_gateway_config(
         is_active=gateway.is_active,
         devices=config_devices,
         signals=config_signals,
+        signals_by_profile=signals_by_profile,
         config_version=config_version,
         refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
         config_nonce=int(getattr(gateway, "config_nonce", 0) or 0),
