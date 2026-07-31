@@ -300,6 +300,24 @@ class Settings(BaseSettings):
     # kapali gorunur; "baska cihaza kur" akisi etkilenmez.
     gateway_state_dir: str = "/var/lib/e1-grid/gw"
 
+    # Uzaktan bakim izni ajani (e1-rad) ile paylasilan dizin. Backend buraya
+    # SADECE request.json yazar; state.json/status.json okur. Tailscale'i
+    # CALISTIRMAZ.
+    #
+    # Uzaktan erisim VARSAYILAN KAPALIDIR: musterinin yetkili kullanicisi
+    # (engineer rolu) arayuzden sureli izin verir, sure dolunca erisim
+    # kendiliginden kapanir. Sureyi HOST ajani sayar — backend/DB kapali olsa
+    # bile izin kapanmali, bu yuzden son tarih DB'de DEGIL ajanin lease
+    # dosyasinda (root:root 0700, /var/lib/e1-grid/remote-priv) tutulur.
+    remote_access_state_dir: str = "/var/lib/e1-grid/remote"
+
+    # Site basina ust sinir (dakika). Semadaki ve ajandaki mutlak tavan 1440
+    # (24 saat); bu ayar yalnizca DAHA DUSUGE cekebilir, yukari cikaramaz —
+    # sinirsiz sure "her zaman acik"i geri getirir ve ozelligi iptal ederdi.
+    # docker-compose.yml'e BILEREK konmadi: ayni sayiyi dort dosyada tutmak
+    # tests/test_config_consistency.py'nin kilitledigi hatanin ta kendisi.
+    remote_access_max_minutes: int = 1440
+
     # Cevrimdisi harita karolari. Tum karolar backend uzerinden gecer:
     # once disk, yoksa yukari akis (ve diske yaz). Saha cihazinda internet
     # kesilse bile indirilmis alan calismaya devam eder.

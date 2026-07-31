@@ -1,0 +1,24 @@
+[Unit]
+# Uzaktan bakim izninin SON TARIHINI uygular ve durumu state.json'a yazar.
+#
+# KRITIK: "sure dolunca erisim kendiliginden kapanir" garantisi BU BIRIME
+# baglidir. Backend, DB veya container tamamen coksede calismaya devam eder;
+# son tarih /var/lib/e1-grid/remote-priv/lease.json icinde MUTLAK zaman olarak
+# durur, bu birim her turda karsilastirir ve gecmisse kapatir.
+Description=EnerjiOne Grid uzaktan bakim izni zorlayici
+After=tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=oneshot
+# systemd kabuk ortamini miras almaz; ajan ayarlari (E1_TAILSCALE_SSH,
+# E1_RAD_LOCK_MODE) bu dosyadan gelir. "-" oneki: dosya yoksa varsayilanlar.
+EnvironmentFile=-/etc/enerjione-grid/e1-rad.env
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-rad.py report
+# Hata durumunda unit "failed" kalmasin; sorun state.json'a yazilir ve UI'da
+# gorunur (e1-netd/e1-gwd ile ayni davranis).
+SuccessExitStatus=0 1
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

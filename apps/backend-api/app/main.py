@@ -10,7 +10,7 @@ from sqlalchemy import select as _select, text
 from app.core.license_gate import LicenseGateMiddleware
 from app.core.rate_limit import limiter
 
-from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -45,6 +45,14 @@ app = FastAPI(
         {"name": "outbound-targets", "description": "Outbound hedef (REST/MQTT/IEC104)."},
         {"name": "gateways", "description": "Gateway yönetimi."},
         {"name": "internal", "description": "Servis-token korumalı internal endpoint'ler."},
+        {
+            "name": "remote-access",
+            "description": (
+                "Uzaktan bakim izni (sureli). Erisim VARSAYILAN KAPALI; izni "
+                "yalnizca `engineer` rolu verir ve sure dolunca host ajani "
+                "otomatik kapatir."
+            ),
+        },
     ],
 )
 
@@ -103,6 +111,7 @@ app.include_router(project_settings_api.router, prefix=settings.api_prefix)
 app.include_router(grid_topology.router, prefix=settings.api_prefix)
 app.include_router(system_status.router, prefix=settings.api_prefix)
 app.include_router(network.router, prefix=settings.api_prefix)
+app.include_router(remote_access.router, prefix=settings.api_prefix)
 app.include_router(map_tiles.router, prefix=settings.api_prefix)
 app.include_router(notifications_api.router, prefix=settings.api_prefix)
 app.include_router(sessions_api.router, prefix=settings.api_prefix)
@@ -115,6 +124,27 @@ app.include_router(api_keys.router, prefix=settings.api_prefix)
 app.include_router(public.router, prefix=settings.api_prefix)
 # WebSocket endpoint: api_prefix altinda /ws/live-values
 app.include_router(ws_live.router, prefix=settings.api_prefix)
+
+
+@app.on_event("startup")
+def reconcile_remote_access_audit():
+    """Backend kapaliyken kapanan uzaktan bakim oturumlarini denetime yaz.
+
+    Sure dolunca kapatmayi host ajani (e1-rad) yapar; backend bunu ancak bir
+    durum okumasinda ogrenir. Sayfa hic acilmasa bile guncelleme/restart
+    sonrasi yakalansin diye burada bir kez daha uzlastiriyoruz.
+    """
+    try:
+        from app.services import remote_access_service
+
+        db = SessionLocal()
+        try:
+            remote_access_service.reconcile_audit(db)
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        # Denetim uzlastirmasi backend'i ayaga kalkmaktan ALIKOYMAMALI.
+        print(f"[startup] uzaktan bakim denetim uzlastirmasi atlandi: {exc}")
 
 
 @app.on_event("startup")

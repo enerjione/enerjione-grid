@@ -180,6 +180,17 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         canSee: isInstaller,
       },
       {
+        // Uzaktan bakim izni: uretici destek ekibine SURELI erisim. Durumu
+        // GORME yetkisi genis (ops_manager dahil) — musteri tarafindaki
+        // sorumlu kisi kimin ne zamana kadar izin verdigini gorebilmeli.
+        // Izin VERME yetkisi backend'de yalnizca engineer'dadir ve sayfa
+        // bunu `can_grant` ile kendisi uygular.
+        page: "remote-access",
+        labelKey: "engineering.nav.remoteAccess",
+        descKey: "engineering.navDesc.remoteAccess",
+        canSee: isTeamManager,
+      },
+      {
         // Cevrimdisi harita: sahaya cikmadan ONCE indirilir. Yonetim
         // alaninda olmasi dogru -- indirilmis alanlar harita uzerinde
         // gorunur ve yeni alan buradan secilir.

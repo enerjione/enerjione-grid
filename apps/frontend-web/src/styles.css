@@ -33485,3 +33485,772 @@ th.event-col-category {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ============================================================
+ * UZAKTAN BAKIM IZNI — "SALTER"
+ * ============================================================
+ * Ekranin tek isi bir soruya cevap vermek: kapi acik mi kapali mi?
+ * Bu yuzden iki BELIRGIN hal var ve ust blok hal degistirince gorsel
+ * olarak donusuyor (sakin slate -> dikkat cekici amber). Renk suslemek
+ * icin degil, halin kendisini anlatmak icin kullaniliyor.
+ *
+ * Olculer kardes sayfa .net-* blogundan devraliniyor (beyaz zemin, 1px
+ * kenar, 12px radius, 13.5px govde) — kullanici ayni oturumda Ag
+ * Ayarlari'ni da aciyor, iki sayfa ayni urunden gozukmeli.
+ */
+.rad-page {
+  /* Panel kapsamli degiskenler (.license-panel deseni) — sayfa disina
+     sizmasin diye burada tanimli. */
+  --rad-ink: #172033;
+  --rad-muted: #64748b;
+  --rad-line: #d9e1ec;
+  --rad-accent: #e97800;
+  /* ACIK hali amber. Kirmizi DEGIL: "acik" bir hata degil, dikkat
+     gerektiren normal bir durum. */
+  --rad-on-bg: #fff8ed;
+  --rad-on-line: #f6c98d;
+  --rad-on-ink: #9a4c07;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  color: var(--rad-ink);
+  /* Kaydirma kart icinde olsun; .tab-panel'in overflow:auto'su ile cift
+     kaydirma yapmasin (.net-page ile ayni karar). */
+  overflow: hidden;
+}
+
+/* ---------- SALTER blogu ---------- */
+.rad-switch {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--rad-line);
+  border-left: 4px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.rad-switch.is-on {
+  background: linear-gradient(180deg, var(--rad-on-bg), #fffdf9);
+  border-color: var(--rad-on-line);
+  border-left-color: var(--rad-accent);
+}
+
+.rad-switch.is-unknown,
+.rad-switch.is-loading {
+  background: #fbfcfe;
+  border-left-color: #e2e8f0;
+  border-style: dashed;
+}
+
+/* --- Sebeke salteri grafigi: I (acik) ustte, O (kapali) altta ---
+   Dekoratif; asil bilgi yanindaki metinde. Operatorun zihnindeki fiziksel
+   salterle ayni dil. */
+.rad-breaker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.rad-breaker-marks {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 76px;
+  padding: 3px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.rad-breaker-track {
+  position: relative;
+  width: 44px;
+  height: 76px;
+  border-radius: 10px;
+  background: #e8edf4;
+  border: 1px solid var(--rad-line);
+  box-shadow: inset 0 1px 4px rgba(15, 23, 42, 0.14);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.rad-breaker-knob {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  height: 32px;
+  /* KAPALI: kol asagida. Gecis akilda kalsin diye hafif yayli. */
+  top: 37px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #ffffff, #eef2f7);
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+  transition: top 0.32s cubic-bezier(0.22, 0.9, 0.3, 1.12),
+    background 0.3s ease, border-color 0.3s ease;
+}
+
+.rad-switch.is-on .rad-breaker-track {
+  background: #fde8cb;
+  border-color: var(--rad-on-line);
+}
+
+.rad-switch.is-on .rad-breaker-knob {
+  top: 5px;
+  background: linear-gradient(180deg, #ffffff, #ffeacd);
+  border-color: #edb877;
+}
+
+.rad-switch-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rad-switch-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--rad-muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.rad-switch.is-on .rad-switch-pill {
+  background: #fde8cb;
+  color: var(--rad-on-ink);
+}
+
+.rad-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
+
+.rad-switch.is-on .rad-dot {
+  background: var(--rad-accent);
+  animation: rad-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes rad-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(233, 120, 0, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(233, 120, 0, 0); }
+}
+
+.rad-switch-body h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1.18rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: var(--rad-ink);
+}
+
+.rad-switch.is-on .rad-switch-body h2 { color: var(--rad-on-ink); }
+
+.rad-switch-body > p {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.rad-switch-meta {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.rad-switch-meta li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--rad-on-ink);
+}
+
+.rad-switch-meta li svg { opacity: 0.75; flex-shrink: 0; }
+
+.rad-switch-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-left: 20px;
+  border-left: 1px solid var(--rad-on-line);
+}
+
+/* KAHRAMAN OGE: kalan sure. .net-reboot-countdown ile ayni gorsel agirlik. */
+.rad-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.rad-countdown strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(1.9rem, 3.2vw, 2.6rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--rad-on-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rad-countdown span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b07a3f;
+}
+
+.rad-revoke-btn { white-space: nowrap; }
+
+/* ---------- Iki sutun ---------- */
+.rad-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.rad-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid var(--rad-line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-width: 0;
+}
+
+.rad-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rad-card-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--rad-ink);
+}
+
+.rad-card-head > small {
+  font-size: 11.5px;
+  color: var(--rad-muted);
+}
+
+.rad-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.rad-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+/* --- SURE: bu ozelligin kalbi ---
+   Kullanicinin verdigi asil karar bu; kucuk bir acilir listeye gomulmez.
+   Her secenek kendi basina bir karar kutusu. */
+.rad-durations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.rad-duration {
+  padding: 12px 8px;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.rad-duration strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rad-duration:hover:not(:disabled):not(.is-active) {
+  border-color: #c3cede;
+  background: #fff;
+  color: var(--rad-ink);
+}
+
+.rad-duration.is-active {
+  background: #fff;
+  border-color: var(--rad-accent);
+  color: var(--rad-accent);
+  box-shadow: 0 0 0 2px rgba(233, 120, 0, 0.18);
+}
+
+.rad-duration:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.rad-duration--custom strong { font-weight: 600; }
+
+.rad-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rad-custom-row input {
+  width: 110px;
+  padding: 9px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  color: var(--rad-ink);
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.rad-custom-row input:focus {
+  outline: none;
+  border-color: var(--rad-accent);
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.16);
+}
+
+.rad-custom-unit {
+  font-size: 12.5px;
+  color: var(--rad-muted);
+}
+
+.rad-custom-error {
+  font-size: 11.5px;
+  color: #b91c1c;
+}
+
+.rad-field textarea {
+  padding: 9px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--rad-ink);
+  background: #fff;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.rad-field textarea:focus {
+  outline: none;
+  border-color: var(--rad-accent);
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.16);
+}
+
+.rad-field textarea:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* Secilen sureyi karar anindan ONCE somutlastirir: kullanici "8 saat"i
+   degil, KAPANIS SAATINI anlamali. */
+.rad-endsat {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  /* Kart dibine yapissin: iki sutunun alt hizasi tutsun ve karar satiri
+     her zaman butonun hemen ustunde olsun. */
+  margin-top: auto;
+  padding: 11px 13px;
+  background: var(--rad-on-bg);
+  border: 1px solid var(--rad-on-line);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--rad-on-ink);
+}
+
+.rad-endsat svg { flex-shrink: 0; opacity: 0.8; }
+
+.rad-endsat-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.rad-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rad-grant-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Ozellik kullanilamiyor / rol yetkisiz — sonsuz spinner yerine SEBEP. */
+.rad-blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 18px;
+  text-align: center;
+  border: 1px dashed #d3dbe7;
+  border-radius: 10px;
+  background: #fbfcfe;
+  color: var(--rad-muted);
+}
+
+.rad-blocked svg { color: #94a3b8; }
+.rad-blocked strong { font-size: 13.5px; color: var(--rad-ink); }
+.rad-blocked p { margin: 0; font-size: 12.5px; line-height: 1.5; max-width: 46ch; }
+.rad-blocked small { font-size: 11.5px; color: #94a3b8; max-width: 46ch; line-height: 1.5; }
+
+/* ---------- "Ne veriyorum?" karti ---------- */
+.rad-explain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rad-explain-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.rad-explain-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: #fff3e3;
+  color: var(--rad-accent);
+}
+
+.rad-explain-list li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rad-explain-list strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rad-ink);
+}
+
+.rad-explain-list small {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.rad-device {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 14px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #eef2f7;
+}
+
+.rad-device > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rad-device span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.rad-device strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--rad-ink);
+  overflow-wrap: anywhere;
+}
+
+.rad-device strong.is-ok { color: #15803d; }
+.rad-device strong.is-off { color: #b45309; }
+
+/* ---------- Denetim izi ---------- */
+.rad-log {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rad-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.rad-log-row {
+  display: grid;
+  grid-template-columns: 22px 118px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12.5px;
+}
+
+.rad-log-row:last-child { border-bottom: none; }
+
+.rad-log-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.rad-log-row.is-remote_access_granted .rad-log-icon,
+.rad-log-row.is-remote_access_extended .rad-log-icon { color: var(--rad-accent); }
+.rad-log-row.is-remote_access_revoked .rad-log-icon { color: #15803d; }
+.rad-log-row.is-remote_access_apply_failed .rad-log-icon { color: #b91c1c; }
+
+.rad-log-row time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--rad-muted);
+  white-space: nowrap;
+}
+
+.rad-log-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  color: var(--rad-ink);
+}
+
+.rad-log-text em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--rad-muted);
+  overflow-wrap: anywhere;
+}
+
+.rad-log-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.rad-log-side b {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--rad-muted);
+}
+
+.rad-log-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* ---------- Onay modali ---------- */
+.rad-confirm { width: min(560px, 94vw); gap: 12px; }
+
+.rad-confirm h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1.05rem;
+  color: #9a4c07;
+}
+
+.rad-confirm-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+/* Bu liste bir "Evet/Hayir" uyarisi degil, NE VERILDIGINI madde madde
+   okutan ozet. Onay ekraninin asil isi bu. */
+.rad-confirm-list {
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: #fffaf3;
+  border: 1px solid #f6e0c4;
+  border-radius: 10px;
+}
+
+.rad-confirm-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #4a3a28;
+}
+
+.rad-confirm-list li svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #c2762a;
+}
+
+/* ---------- Header rozeti: "acik unutma" panzehiri ---------- */
+.header-remote-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  background: rgba(234, 140, 28, 0.18);
+  color: #fcd34d;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.header-remote-badge:hover {
+  background: rgba(234, 140, 28, 0.3);
+  border-color: rgba(251, 191, 36, 0.85);
+}
+
+.header-remote-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  flex-shrink: 0;
+  animation: rad-pulse 1.9s ease-in-out infinite;
+}
+
+.header-remote-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+/* Dar header: metni gizle, rozet ikon + sure olarak kalsin (uyarinin
+   kendisi kaybolmamali). */
+@media (max-width: 1080px) {
+  .header-remote-text { display: none; }
+}
+
+/* ---------- Dar ekran ---------- */
+@media (max-width: 1180px) {
+  .rad-page { overflow-y: auto; }
+  .rad-columns { grid-template-columns: minmax(0, 1fr); }
+  .rad-log { flex: 0 0 auto; overflow: visible; }
+  .rad-log-list { overflow-y: visible; }
+}
+
+@media (max-width: 860px) {
+  .rad-switch { flex-wrap: wrap; }
+  .rad-switch-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding-left: 0;
+    padding-top: 12px;
+    border-left: none;
+    border-top: 1px solid var(--rad-on-line);
+  }
+  .rad-log-row {
+    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-areas:
+      "icon text"
+      "time side";
+    row-gap: 4px;
+  }
+  .rad-log-icon { grid-area: icon; }
+  .rad-log-text { grid-area: text; }
+  .rad-log-row time { grid-area: time; }
+  .rad-log-side { grid-area: side; justify-content: flex-end; }
+}
+
+/* Hareket duyarliligi: salter kolu ve nabiz durur, bilgi aynen kalir. */
+@media (prefers-reduced-motion: reduce) {
+  .rad-switch,
+  .rad-breaker-knob,
+  .rad-breaker-track { transition: none; }
+  .rad-switch.is-on .rad-dot,
+  .header-remote-dot { animation: none; }
+}

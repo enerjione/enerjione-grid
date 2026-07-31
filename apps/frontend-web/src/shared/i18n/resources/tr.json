@@ -642,7 +642,12 @@
       "device_command_sent": "Komut gönderildi: {{command}} ({{code}})",
       "device_command_failed": "Komut gönderilemedi: {{command}} ({{code}})",
       "device_command_queued": "Komut kuyruğa alındı: {{command}} ({{code}})",
-      "device_command_result": "Komut sonucu: {{command}} ({{code}})"
+      "device_command_result": "Komut sonucu: {{command}} ({{code}})",
+      "remote_access_granted": "Uzaktan bakıma {{minutes}} dakikalık izin verildi",
+      "remote_access_extended": "Uzaktan bakım süresi {{minutes}} dakika olarak uzatıldı",
+      "remote_access_revoked": "Uzaktan bakım izni kapatıldı",
+      "remote_access_session_ended": "Uzaktan bakım erişimi kapandı ({{reason}})",
+      "remote_access_apply_failed": "Uzaktan bakım isteği uygulanamadı: {{error}}"
     },
     "category": {
       "auth": "Giriş ve oturum",
@@ -924,6 +929,134 @@
       "noAdapter": "Cihazda WiFi kartı bulunamadı. USB WiFi adaptörü takıp kurulumu tekrar çalıştırın."
     }
   },
+  "remoteAccess": {
+    "loading": "Durum okunuyor…",
+    "state": {
+      "loading": "OKUNUYOR",
+      "on": "AÇIK",
+      "off": "KAPALI",
+      "unknown": "BİLİNMİYOR"
+    },
+    "hero": {
+      "loadingTitle": "Durum okunuyor…",
+      "loadingLead": "Cihazın uzaktan bakım durumu alınıyor.",
+      "onTitle": "Uzaktan bakım AÇIK",
+      "onLead": "EnerjiOne teknik destek ekibi şu anda bu cihaza bağlanabiliyor. Süre dolduğunda erişim kendiliğinden kapanacak; beklemek istemezseniz hemen kapatabilirsiniz.",
+      "offTitle": "Uzaktan bakım KAPALI",
+      "offLead": "Şu anda hiç kimse bu cihaza uzaktan bağlanamaz. Cihaz bakım ağında kayıtlı kalır — destek ekibi cihazın ayakta olduğunu görebilir — ancak gelen tüm bağlantılar cihaz tarafından reddedilir.",
+      "unknownTitle": "Uzaktan bakım kullanılamıyor",
+      "unknownLead": "Bu cihazda uzaktan bakım şu anda kullanılamıyor. Nedeni aşağıda yazıyor.",
+      "endsAt": "Otomatik kapanış: {{time}}",
+      "grantedBy": "İzni veren: {{user}} · {{time}}",
+      "grantReason": "Belirtilen neden: {{note}}",
+      "remaining": "kalan süre"
+    },
+    "fmt": {
+      "hm": "{{h}} sa {{m}} dk",
+      "ms": "{{m}} dk {{s}} sn",
+      "s": "{{s}} sn",
+      "durHm": "{{h}} sa {{m}} dk",
+      "durH_one": "{{count}} saat",
+      "durH_other": "{{count}} saat",
+      "durM_one": "{{count}} dakika",
+      "durM_other": "{{count}} dakika"
+    },
+    "grant": {
+      "title": "Uzaktan bakıma izin ver",
+      "titleExtend": "Süreyi uzat",
+      "durationLabel": "İzin süresi",
+      "custom": "Özel süre",
+      "customLabel": "Kaç dakika?",
+      "customUnit": "dakika",
+      "customInvalid": "Lütfen dakika olarak bir sayı yazın.",
+      "customRange": "En az {{min}}, en fazla {{max}}.",
+      "reasonLabel": "Neden (isteğe bağlı)",
+      "reasonPlaceholder": "Örn. 3 numaralı hattın verisi gelmiyor",
+      "reasonHint": "Bu not kayıtlara yazılır; destek ekibi neye bakacağını bilerek bağlanır.",
+      "pickDuration": "Önce bir süre seçin.",
+      "endsAtPreview": "Erişim şu saatte kendiliğinden kapanacak:",
+      "submit": "Uzaktan bakıma izin ver",
+      "submitExtend": "Süreyi uzat"
+    },
+    "confirm": {
+      "title": "Uzaktan bakıma izin vermek üzeresiniz",
+      "titleExtend": "Uzaktan bakım süresini uzatmak üzeresiniz",
+      "lead": "Onayladığınızda aşağıdaki erişim açılır. Süre dolmadan da istediğiniz an tek tıkla kapatabilirsiniz.",
+      "who": "Kim bağlanır: yalnızca EnerjiOne teknik destek ekibi. Cihaz internete açık bir kapı bırakmaz; bağlantı üreticinin kapalı bakım ağı üzerinden kurulur.",
+      "what": "Ne yapabilir: cihazın kendisine ve üzerindeki EnerjiOne servislerine erişir. Kayıtları inceleyebilir, servisleri yeniden başlatabilir, ayarları düzeltebilir. Yetkisi, cihazın başında duran bir teknisyeninkiyle aynıdır.",
+      "howLong": "Ne kadar sürer: {{duration}}. Bu sürenin sonunda erişim, kimsenin bir şey yapmasına gerek kalmadan kapanır.",
+      "earlyClose": "Erken kapatma: bu sayfadan istediğiniz an “Erişimi şimdi kapat” diyebilirsiniz.",
+      "audit": "Kayıt: bu izin, adınız ve saatiyle birlikte Olaylar kaydına yazılır.",
+      "rowDuration": "Süre",
+      "rowEndsAt": "Otomatik kapanış",
+      "rowReason": "Neden",
+      "approve": "Onaylıyorum, izni aç",
+      "working": "Uygulanıyor…"
+    },
+    "revoke": {
+      "button": "Erişimi şimdi kapat",
+      "working": "Kapatılıyor…"
+    },
+    "explain": {
+      "title": "İzin verdiğinizde ne olur?",
+      "whoTitle": "Kim bağlanır",
+      "whoText": "Yalnızca EnerjiOne teknik destek ekibi. Başka hiç kimse bu yoldan cihaza giremez.",
+      "howLongTitle": "Ne kadar sürer",
+      "howLongText": "Yalnızca sizin seçtiğiniz süre kadar; en fazla {{max}}. Bu ekrandan kalıcı olarak açık bırakılamaz.",
+      "afterTitle": "Süre bitince ne olur",
+      "afterText": "Erişim kendiliğinden kapanır. Bunu cihazın kendisi yapar; sunucu, internet ya da bu ekran kapalı olsa bile kapanır."
+    },
+    "device": {
+      "name": "Cihazın bakım ağındaki adı",
+      "address": "Bakım ağı adresi",
+      "link": "Bakım ağı kaydı",
+      "linkRegistered": "Kayıtlı",
+      "linkMissing": "Kayıtlı değil"
+    },
+    "log": {
+      "title": "Son işlemler",
+      "hint": "Kim, ne zaman, ne kadar süreyle",
+      "empty": "Henüz kayıt yok."
+    },
+    "blocked": {
+      "title": "Şu anda izin verilemiyor",
+      "hint": "Uzaktan bakım yalnızca EnerjiOne mini PC (appliance) kurulumlarında çalışır. Sorun sürerse teknik destek ekibiyle görüşün.",
+      "reason": {
+        "state_dir_missing": "Uzaktan bakım yazılımı bu cihaza kurulmamış.",
+        "state_dir_not_writable": "Uzaktan bakım yazılımının dosyalarına erişilemiyor (izin hatası).",
+        "agent_never_reported": "Uzaktan bakım yazılımı henüz hiç durum bildirmemiş. Kurulum tamamlanmamış olabilir.",
+        "state_stale": "Uzaktan bakım yazılımı bir süredir durum bildirmiyor.",
+        "not_registered": "Bu cihaz üreticinin bakım ağına kayıtlı değil. Kayıt kurulum sırasında yapılır.",
+        "key_expired": "Cihazın bakım ağı kaydının süresi dolmuş; yeniden kayıt gerekiyor.",
+        "daemon_not_running": "Cihazdaki bakım ağı servisi çalışmıyor.",
+        "unknown": "Uzaktan bakım yazılımına ulaşılamıyor."
+      }
+    },
+    "readOnly": {
+      "title": "Bu sayfayı görüntülüyorsunuz",
+      "lead": "Durumu ve geçmişi görebilirsiniz; uzaktan bakıma izin verme yetkisi Mühendis ve Kurulumcu rollerindedir."
+    },
+    "warn": {
+      "overdue": "İzin süresi dolduğu hâlde erişim hâlâ açık görünüyor. Cihazdaki zamanlayıcı durmuş olabilir — erişimi elle kapatın ve teknik destek ekibiyle görüşün.",
+      "staleAgent": "Cihaz bir süredir durum bildirmiyor. Gösterilen bilgiler eski olabilir ve açık bir izin kendiliğinden kapanmayabilir.",
+      "applyFailed": "Son işlem cihaza uygulanamadı: {{error}}",
+      "pending": "Önceki istek hâlâ işleniyor…",
+      "expiringSoon": "İzin süresinin dolmasına 15 dakikadan az kaldı. Bakım sürüyorsa süreyi uzatmanız gerekir."
+    },
+    "badge": {
+      "title": "Uzaktan bakım açık — yönetmek için tıklayın",
+      "short": "Uzaktan bakım açık"
+    },
+    "errors": {
+      "load": "Uzaktan bakım durumu alınamadı.",
+      "grant": "Uzaktan bakıma izin verilemedi.",
+      "revoke": "Uzaktan bakım kapatılamadı."
+    },
+    "toasts": {
+      "granted": "Uzaktan bakım açıldı — {{duration}}.",
+      "revoked": "Uzaktan bakım kapatıldı."
+    }
+  },
   "systemStatus": {
     "title": "Sistem Durumu",
     "liveSocket": {
@@ -1091,7 +1224,8 @@
       "systemStatus": "Servislerin ve bağlantıların sağlık durumunu izle.",
       "networkSettings": "Cihazın IP, ağ geçidi ve DNS ayarlarını yapılandır.",
       "activeSessions": "Sisteme kimlerin bağlı olduğunu gör, oturum sonlandır.",
-      "offlineMap": "İnternet olmayan sahalar için harita alanı indir; indirilmiş alanları gör ve yönet."
+      "offlineMap": "İnternet olmayan sahalar için harita alanı indir; indirilmiş alanları gör ve yönet.",
+      "remoteAccess": "Teknik destek ekibine süreli uzaktan erişim izni ver; istediğin an kapat."
     },
     "nav": {
       "devices": "Cihazlar",
@@ -1111,7 +1245,8 @@
       "deviceModels": "Cihaz Modelleri",
       "networkSettings": "Ağ Ayarları",
       "activeSessions": "Aktif Oturumlar",
-      "offlineMap": "Çevrimdışı Harita"
+      "offlineMap": "Çevrimdışı Harita",
+      "remoteAccess": "Uzaktan Bakım"
     },
     "users": {
       "title": "Kullanıcılar",

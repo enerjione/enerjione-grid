@@ -342,6 +342,19 @@ services:
       # Gateway kurulum ajani (e1-gwd) ile paylasilan dizin. Backend buraya
       # "gateway'i bu cihaza kur" istegi yazar; ajan (root) compose'u calistirir.
       GATEWAY_STATE_DIR: /var/lib/e1-grid/gw
+      # Uzaktan bakim izni ajani (e1-rad) ile paylasilan dizin. Backend buraya
+      # "izni ac/kapat" istegi yazar; sureyi ve tailscale komutlarini host'taki
+      # ajan (root) yurutur. Uzaktan erisim VARSAYILAN KAPALIDIR.
+      REMOTE_ACCESS_STATE_DIR: /var/lib/e1-grid/remote
+      # Site tavani: bir iznin en fazla kac dakika surebilecegi. Varsayilan
+      # 1440 (24 saat). Musteri daha kisa bir ust sinir isterse .env'e
+      # REMOTE_ACCESS_MAX_MINUTES=... yazar.
+      #
+      # BU SATIR SART: compose'da `env_file` YOK, yalnizca burada listelenen
+      # degiskenler container'a geciyor. Satir olmadan ayar config.py'de
+      # tanimli olmasina ragmen .env'den okunmuyordu ve tavan sessizce hep
+      # 1440 kaliyordu (olu ayar).
+      REMOTE_ACCESS_MAX_MINUTES: ${REMOTE_ACCESS_MAX_MINUTES:-1440}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -379,6 +392,15 @@ services:
       # yapar ve compose'u kendi kurallariyla yeniden dogrular.
       # infra/appliance/setup-gateway-agent.sh olusturur (root:10001, 0770).
       - /var/lib/e1-grid/gw:/var/lib/e1-grid/gw
+      # Uzaktan bakim izni ajani (e1-rad) ile TEK temas noktasi. Backend
+      # tailscale ikilisini GORMEZ; buraya bir JSON istegi yazar, ajan sureyi
+      # kendi saatinden hesaplar ve kendi ust siniriyla kirpar.
+      # DIKKAT: izin belgesinin (lease) durdugu /var/lib/e1-grid/remote-priv
+      # BILEREK MOUNT EDILMEZ — 0770 bir dizinde yazma izni olan backend,
+      # icindeki root'a ait dosyalari da unlink/rename edebilir; yani kendine
+      # izin uydurabilir ya da bitis tarihini silebilirdi.
+      # infra/appliance/setup-remote-access.sh olusturur (root:10001, 0770).
+      - /var/lib/e1-grid/remote:/var/lib/e1-grid/remote
       # Cevrimdisi harita karolari. Named volume: imaj guncellemesinde
       # SILINMEZ -- sahada tekrar indirmek 4G uzerinden pahali/uzun olur.
       - map-tile-data:/var/lib/e1-map-tiles

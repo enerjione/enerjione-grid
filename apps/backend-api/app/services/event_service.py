@@ -19,6 +19,7 @@ def record_event(
     metadata: dict[str, Any] | None = None,
     i18n_key: str | None = None,
     i18n_params: dict[str, Any] | None = None,
+    occurred_at: datetime | None = None,
 ) -> None:
     """System event yaz.
 
@@ -26,6 +27,11 @@ def record_event(
     dosyalarinda (`events.message.<key>`) cevirip gosterir; backward-compat
     icin `message` (genelde TR) yine yazilir ve frontend i18n_key yoksa
     fallback olarak onu kullanir.
+
+    occurred_at: olay backend DISINDA gerceklestiyse (host ajani, or. uzaktan
+    bakim izninin suresi dolunca kapanmasi) GERCEK zamani yaz. Verilmezse
+    "simdi" kullanilir. Bu olaylar ancak bir sonraki durum okumasinda
+    ogrenildigi icin, "simdi" yazmak denetim zaman cizgisini bozardi.
     """
     md: dict[str, Any] = dict(metadata) if metadata else {}
     if i18n_key:
@@ -38,6 +44,6 @@ def record_event(
         actor_username=actor_username,
         device_code=device_code,
         metadata_json=json.dumps(md, ensure_ascii=False) if md else None,
-        created_at=datetime.now(timezone.utc),
+        created_at=occurred_at or datetime.now(timezone.utc),
     )
     db.add(row)

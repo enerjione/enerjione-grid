@@ -37,6 +37,7 @@ export type EngineeringPage =
   | "license"
   | "system-status"
   | "network-settings"
+  | "remote-access"
   | "offline-map"
   | "active-sessions";
 
@@ -112,6 +113,7 @@ export function tabLabel(
         license: "engineering.nav.license",
         "system-status": "header.systemStatus",
         "network-settings": "engineering.nav.networkSettings",
+        "remote-access": "engineering.nav.remoteAccess",
         "offline-map": "engineering.nav.offlineMap",
         "active-sessions": "engineering.nav.activeSessions",
       };
@@ -155,6 +157,10 @@ const OPS_MANAGER_ENG: EngineeringPage[] = [
   "users",
   "responsibility-areas",
   "bulk-notify",
+  // Uzaktan bakim izni: musteri tarafindaki sorumlu kisi durumu GORMELI
+  // (kim, ne zamana kadar izin vermis). Izin VERME yetkisi backend'de
+  // yalnizca engineer'dadir; sayfa `can_grant` ile kendini kisitlar.
+  "remote-access",
 ];
 const ENGINEER_ENG: EngineeringPage[] = [
   "devices",
@@ -169,6 +175,9 @@ const ENGINEER_ENG: EngineeringPage[] = [
   "license",
   // Cevrimdisi harita: saha oncesi hazirlik isi, engineer da yapabilmeli.
   "offline-map",
+  // Uzaktan bakim iznini VEREN tek rol engineer (bkz. backend
+  // api/remote_access.py: _GRANT_ROLES).
+  "remote-access",
 ];
 // installer: tum engineering sayfalari.
 
