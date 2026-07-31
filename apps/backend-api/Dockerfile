@@ -66,12 +66,30 @@ USER e1
 
 EXPOSE 8000
 
-# Uvicorn workers tek tutuluyor — alarm engine, IEC 104 server'lari ve telemetry
-# consumer thread'leri tek process state'inde paylasilan singleton'lara dayaniyor.
+# Worker sayisi VARSAYILAN 1 — bilincli.
+#
+# Eskiden tek worker ZORUNLUYDU: alarm motoru, IEC 104 sunuculari ve telemetri
+# tuketicisi tek surecte paylasilan singleton'lara dayaniyordu; ikinci bir
+# worker onlari ikinci kez calistirirdi (yedek iki kez, bildirim iki kez, IEC
+# 104 portu cakisir).
+#
+# Bu kisit KALKTI: arka plan isleri artik Postgres advisory lock ile tek
+# surecte kosuyor (app/core/service_role.py) ve WS yayini NATS uzerinden
+# surecler arasi tasiniyor. Yani UVICORN_WORKERS>1 guvenli.
+#
+# Yine de varsayilan 1: coklu worker her worker basina ayri bir Python sureci
+# (~150-250MB) ve ayri DB pool'u demek. Saha cihazlari (mini PC) sinirli
+# bellekle calisiyor; buyutme kararini kurulum vermeli, imaj degil.
+#
 # `--proxy-headers`: X-Forwarded-* parse et.
 # `--forwarded-allow-ips=*`: TRUSTED proxy IP listesi. Default "127.0.0.1"
 # (uvicorn) container icinde frontend-web nginx baska IP'den geldigi icin
 # tanimaz; "*" kabul edilir cunku 8000 portu compose internal network'unde
 # (host'a expose edilmemis), saldirgan zaten direkt erisemez. Production'da
 # sadece nginx container'i 8000'e ulasabilir.
-CMD ["sh", "-c", "python -m scripts.migrate_db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"]
+#
+# NOT: migration YALNIZCA burada, uvicorn baslamadan ONCE ve TEK kez kosar.
+# Coklu worker'da bile uvicorn kendi worker'larini bu komuttan SONRA fork
+# eder, dolayisiyla migration yarisi olusmaz.
+ENV UVICORN_WORKERS=1
+CMD ["sh", "-c", "python -m scripts.migrate_db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --proxy-headers --forwarded-allow-ips=*"]

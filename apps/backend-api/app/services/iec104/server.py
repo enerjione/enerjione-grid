@@ -58,6 +58,28 @@ logger = logging.getLogger(__name__)
 
 MAX_UNACKED_I = 12
 
+# Oturum basina giden ASDU kuyrugu tavani.
+#
+# NEDEN SINIR VAR: burada bir zamanlar her deger degisimi icin
+# `asyncio.create_task(self._send_i(...))` cagriliyordu — sinirsiz, referans
+# tutulmadan. SCADA istemcisi yavasladiginda `drain()` bloklanir ve her yeni
+# degisim BIR GOREV DAHA yaratirdi; 600 cihaz olceginde saniyede binlerce.
+# Gorevler yazma kilidinde kuyruga girip bellegi OOM'a kadar sisirirdi.
+# (Ayrica referanssiz gorevler cop toplayici tarafindan yarida
+# kesilebiliyordu — CPython'un bilinen tuzagi.)
+#
+# 2000 ASDU ~ birkac saniyelik spontane trafik: gecici tikanikliklari yutar,
+# kalici tikanikligi ise dusurerek GORUNUR kilar.
+OUTBOX_MAX = 2000
+
+# Bir target'a ayni anda bagli olabilecek en fazla istemci.
+#
+# NEDEN SINIR VAR: her oturum, her deger degisiminde ek is demektir. Yeniden
+# baglanma dongusune giren bir istemci ya da yanlis yapilandirilmis bir SCADA
+# onlarca oturum acabilir ve sunucuyu kendi kendine bogar. Gercek kurulumda
+# bir target'a birkac master baglanir; 16 fazlasiyla yeterli.
+MAX_SESSIONS = 16
+
 
 @dataclass
 class PointValue:
@@ -77,11 +99,39 @@ class _ClientSession:
         # Runtime istatigi: bu client ne zaman bagli, monotonic saat degil iso ts
         # frontend "X dakika once" hesaplayabilsin diye.
         self.connected_at_iso: str = ""
+        # Giden ASDU kuyrugu — SINIRLI. Bkz. IEC104Server.update_value.
+        self.outbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=OUTBOX_MAX)
+        self.dropped_total = 0
+        self._drain_task: asyncio.Task | None = None
 
     async def send(self, apdu: bytes) -> None:
         async with self._write_lock:
             self.writer.write(apdu)
             await self.writer.drain()
+
+    def enqueue(self, asdu: bytes) -> bool:
+        """ASDU'yu giden kuyruga koyar. Kuyruk doluysa EN ESKIYI atar.
+
+        Neden en eskiyi: IEC 104 spontane bildiriminde son deger gecerlidir.
+        Yeni geleni atmak, guncel degeri atip bayat degeri gondermek olurdu —
+        yani tam tersi. Dusen sayilir ve loglanir; sessiz kayip olmaz.
+        """
+        try:
+            self.outbox.put_nowait(asdu)
+            return True
+        except asyncio.QueueFull:
+            try:
+                self.outbox.get_nowait()
+                self.outbox.task_done()
+                self.dropped_total += 1
+            except asyncio.QueueEmpty:  # pragma: no cover
+                pass
+            try:
+                self.outbox.put_nowait(asdu)
+            except asyncio.QueueFull:  # pragma: no cover
+                self.dropped_total += 1
+                return False
+            return False
 
 
 def _parse_asdu_common_address(asdu: bytes) -> int | None:
@@ -130,6 +180,12 @@ class IEC104Server:
     async def stop(self) -> None:
         logger.info("iec104_server_stopping name=%s", self.name)
         for session in list(self._sessions):
+            # Once yazici gorevi iptal et, sonra soketi kapat. Ters sirada
+            # yapilsaydi gorev kapali sokete yazmaya calisip gurultu uretirdi.
+            task = session._drain_task
+            session._drain_task = None
+            if task is not None:
+                task.cancel()
             try:
                 session.writer.close()
             except Exception:  # noqa: BLE001
@@ -165,8 +221,25 @@ class IEC104Server:
         if asdu is None:
             return
         for session in list(self._sessions):
-            if session.started:
-                asyncio.create_task(self._send_i(session, asdu))
+            if not session.started:
+                continue
+            # Gorev YARATMIYORUZ — kuyruga koyuyoruz. Her oturumun TEK bir
+            # yazici gorevi var (bkz. _drain_outbox). Bu iki seyi ayni anda
+            # cozuyor:
+            #   * sinirsiz gorev birikmesi (yavas istemci -> OOM),
+            #   * ns/nr yaris durumu: sira numarasi artik TEK yerde, gonderim
+            #     aninda atanir, dolayisiyla tel uzerindeki sira ns ile daima
+            #     tutarli. Onceden ns kilit DISINDA artiyordu ve iki eszamanli
+            #     gorev cerceveleri ns sirasindan FARKLI gonderebiliyordu —
+            #     master bunu gorunce baglantiyi dusurur.
+            if not session.enqueue(asdu):
+                logger.warning(
+                    "iec104_outbox_overflow name=%s peer=%s dropped_total=%d — "
+                    "istemci akisa yetisemiyor, en eski bildirimler atiliyor",
+                    self.name,
+                    session.peer,
+                    session.dropped_total,
+                )
 
     def connected_clients(self) -> list[dict]:
         """Backend API runtime endpoint'i icin canli baglanti ozeti."""
@@ -201,9 +274,27 @@ class IEC104Server:
             except Exception:  # noqa: BLE001
                 pass
             return
+        # Oturum tavani: yeniden baglanma dongusune giren ya da yanlis
+        # yapilandirilmis bir istemci onlarca oturum acabilir. Her oturum, HER
+        # deger degisiminde ek is demektir; sinirsiz birakmak sunucunun kendi
+        # kendini bogmasina yol acar.
+        if len(self._sessions) >= MAX_SESSIONS:
+            logger.warning(
+                "iec104_client_rejected_limit name=%s peer=%s active=%d limit=%d",
+                self.name, peer_str, len(self._sessions), MAX_SESSIONS,
+            )
+            try:
+                writer.close()
+            except Exception:  # noqa: BLE001
+                pass
+            return
+
         session = _ClientSession(writer=writer, peer=peer_str)
         session.connected_at_iso = datetime.now(timezone.utc).isoformat()
         self._sessions.add(session)
+        # Oturum basina TEK yazici gorev. Referans session'da tutulur: aksi
+        # halde gorev cop toplayici tarafindan yarida kesilebilir.
+        session._drain_task = asyncio.create_task(self._drain_outbox(session))
         logger.info("iec104_client_connected name=%s peer=%s", self.name, peer_str)
 
         buffer = bytearray()
@@ -237,11 +328,23 @@ class IEC104Server:
             logger.exception("iec104_client_handler_crashed name=%s peer=%s", self.name, peer_str)
         finally:
             self._sessions.discard(session)
+            # Yazici gorevi MUTLAKA iptal edilmeli: `outbox.get()` uzerinde
+            # sonsuza kadar bekler ve oturum kapansa bile yasamaya devam
+            # ederdi — her yeniden baglanmada bir gorev daha sizardi.
+            task = session._drain_task
+            session._drain_task = None
+            if task is not None:
+                task.cancel()
             try:
                 writer.close()
                 await writer.wait_closed()
             except Exception:  # noqa: BLE001
                 pass
+            if session.dropped_total:
+                logger.warning(
+                    "iec104_client_disconnected_with_drops name=%s peer=%s dropped=%d",
+                    self.name, peer_str, session.dropped_total,
+                )
             logger.info("iec104_client_disconnected name=%s peer=%s", self.name, peer_str)
 
     async def _dispatch(self, session: _ClientSession, frame: ParsedAPCI) -> None:
@@ -358,6 +461,14 @@ class IEC104Server:
         return None
 
     async def _send_i(self, session: _ClientSession, asdu: bytes) -> None:
+        """TEK bir ASDU'yu I-frame olarak gonderir.
+
+        Sira numarasi (ns) burada, gonderimin hemen oncesinde atanir ve
+        cagiran taraf serilestirilmis olmalidir: spontane bildirimler tek
+        yazici gorevden (`_drain_outbox`), komut yanitlari ise istemcinin
+        kendi okuma dongusunden gelir. Ikisi de ayni oturumda es zamanli
+        calismaz, dolayisiyla ns tel sirasiyla daima tutarlidir.
+        """
         frame = build_i_frame_asdu(asdu=asdu, ns=session.ns, nr=session.nr)
         session.ns += 1
         session.unacked += 1
@@ -365,6 +476,29 @@ class IEC104Server:
             await session.send(frame)
         except Exception:  # noqa: BLE001
             logger.warning("iec104_send_failed name=%s peer=%s", self.name, session.peer)
+
+    async def _drain_outbox(self, session: _ClientSession) -> None:
+        """Oturumun giden kuyrugunu SIRAYLA bosaltir (oturum basina tek gorev).
+
+        Yavas istemci burada geri basinc yaratir: kuyruk dolar ve en eski
+        bildirimler dusurulur (bkz. _ClientSession.enqueue). Onceden bunun
+        yerine gorev sayisi buyurdu; bellek sinirsiz artiyordu.
+        """
+        try:
+            while True:
+                asdu = await session.outbox.get()
+                try:
+                    await self._send_i(session, asdu)
+                except Exception:  # noqa: BLE001
+                    logger.debug("iec104_drain_send_error", exc_info=True)
+                finally:
+                    session.outbox.task_done()
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "iec104_drain_crashed name=%s peer=%s", self.name, session.peer
+            )
 
 
 class IEC104ServerManager:
