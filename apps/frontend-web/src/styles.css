@@ -14421,6 +14421,46 @@ th.event-col-category {
   font-weight: 500;
 }
 
+/* Cihaz saati uyarisi — ZAMAN hucresinde, kalite rozetinden AYRI durur.
+   Sorun olcumun kendisinde degil damgasinda oldugu icin kaliteyle ayni
+   gorsel dile girmemeli: operator "veri bozuk" ile "damga bozuk"u
+   karistirmamali. */
+.live-clock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.live-clock-chip .material-symbols-outlined {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Senkronsuz: cihaz "saatim ayarli degil" diyor. Veri kullanilabilir,
+   yalnizca SOE siralamasi guvenilmez -> uyari tonu. */
+.live-clock-chip--unsynchronized {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+/* Gecersiz: damga makul pencerenin disinda (RTC pili bitmis) veya cihaz
+   kendi saatini gecersiz bildirdi -> hata tonu. */
+.live-clock-chip--invalid {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
 .live-values-refresh {
   white-space: nowrap;
   font-size: 13px;

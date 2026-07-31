@@ -158,3 +158,122 @@ def test_yeni_kolonlar_NULLABLE():
     kolonlar = TelemetryHistory.__table__.columns
     assert kolonlar["device_event_at"].nullable is True
     assert kolonlar["timestamp_quality"].nullable is True
+
+
+# ------------------------------------------ SAAT DURUMU SINYAL STATUSUNDE
+#
+# 0025 saat durumunu yalnizca ARSIVE (telemetry_history) yaziyordu. Canli
+# deger ekrani ve WS yayini `telemetry` tablosundan okudugu icin saati bozuk
+# bir cihaz EKRANDA NORMAL gorunuyordu; operator bunu ancak SOE analizi bozuk
+# ciktiginda fark ediyordu. 0026 ayni ikiliyi canli tabloya da tasidi.
+
+
+def _cihaz():
+    from app.models.device import Device
+
+    return Device(id=1, code="DEV1", name="Direk-12")
+
+
+def _okuma(**kwargs):
+    from app.schemas.telemetry import TelemetryIn
+
+    varsayilan = {
+        "device_code": "DEV1",
+        "signal_key": "master.current",
+        "value": 12.5,
+        "quality": "good",
+        "source_timestamp": SIMDI,
+    }
+    varsayilan.update(kwargs)
+    return TelemetryIn(**varsayilan)
+
+
+def test_canli_satir_saat_durumunu_TASIR():
+    """Ekranin okudugu tabloya damgalanmazsa uyari hic gorunmez."""
+    from app.services.tag_engine_service import process_telemetry_reading
+
+    olay = SIMDI - timedelta(seconds=20)
+    telemetry, _ = process_telemetry_reading(
+        _cihaz(),
+        _okuma(device_event_at=olay, timestamp_quality="unsynchronized"),
+    )
+    assert telemetry.device_event_at == olay
+    assert telemetry.timestamp_quality == "unsynchronized"
+
+
+def test_canli_satirda_da_bozuk_saat_INVALID_isaretlenir():
+    from app.services.tag_engine_service import process_telemetry_reading
+
+    telemetry, _ = process_telemetry_reading(
+        _cihaz(),
+        _okuma(device_event_at=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+    )
+    assert telemetry.timestamp_quality == TS_INVALID
+    assert telemetry.device_event_at is not None, "ham deger atildi"
+
+
+def test_eski_gateway_canli_satirda_da_BOS_birakir():
+    """None = "bilgi yok". UI bu durumda HICBIR uyari gostermemeli."""
+    from app.services.tag_engine_service import process_telemetry_reading
+
+    telemetry, _ = process_telemetry_reading(_cihaz(), _okuma())
+    assert telemetry.device_event_at is None
+    assert telemetry.timestamp_quality is None
+
+
+def test_bozuk_SAAT_olcum_kalitesini_KIRLETMEZ():
+    """En kritik ayrim.
+
+    Saat kaymasi olcumu gecersiz KILMAZ: 26 yil geride bir RTC, akim degerini
+    bozmaz. Saat durumu `quality` alanina yazilsaydi `quality_blocks_alarm`
+    devreye girer ve saati bozuk bir cihazin TUM alarmlari sessizce bastirilirdi
+    — kullaniciyi koruyan mekanizma, kullaniciyi kor eden mekanizmaya donerdi.
+    """
+    from app.models.enums import CommunicationStatus
+    from app.services.tag_engine_service import (
+        process_telemetry_reading,
+        quality_blocks_alarm,
+    )
+
+    device = _cihaz()
+    telemetry, _ = process_telemetry_reading(
+        device,
+        _okuma(
+            quality="good",
+            device_event_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+            timestamp_quality="invalid",
+        ),
+    )
+    assert telemetry.quality == "good", "saat durumu olcum kalitesine sizmis"
+    assert quality_blocks_alarm(telemetry.quality) is False
+    assert device.communication_status == CommunicationStatus.ONLINE, (
+        "bozuk saat cihazi offline gostermis"
+    )
+
+
+def test_canli_tablo_kolonlari_PK_DISINDA_ve_NULLABLE():
+    """`telemetry`de de saat kolonlari yalnizca goruntu alanidir."""
+    from app.models.telemetry import Telemetry
+
+    kolonlar = Telemetry.__table__.columns
+    assert kolonlar["device_event_at"].nullable is True
+    assert kolonlar["timestamp_quality"].nullable is True
+    pk = {c.name for c in Telemetry.__table__.primary_key.columns}
+    assert pk == {"id"}
+
+
+def test_canli_deger_semasi_saat_alanlarini_ICERIR():
+    """Backend semasi ile frontend `SignalLiveRow` birlikte guncellenmeli."""
+    from app.schemas.signal_catalog import SignalLiveValue
+
+    satir = SignalLiveValue(
+        signal_key="master.current",
+        signal_label="Akim",
+        device_id=1,
+        device_code="DEV1",
+        device_name="Direk-12",
+    )
+    # Varsayilan None: alan eklendi diye eski satirlar uyari gostermeye
+    # baslamamali.
+    assert satir.timestamp_quality is None
+    assert satir.device_event_at is None

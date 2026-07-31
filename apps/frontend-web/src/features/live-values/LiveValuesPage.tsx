@@ -121,6 +121,52 @@ function formatTimestamp(ts: string | null, localeTag: string): string {
   }
 }
 
+/** Saat farki icin birim etiketleri (i18n'den render aninda doldurulur). */
+type ClockUnits = { sec: string; min: string; hour: string; day: string };
+
+/** Cihaz saati ile gateway saati arasindaki farki okunur hale getirir.
+ *  Isaret KORUNUR: "+" cihaz ileride, "-" cihaz geride. */
+function formatClockOffset(
+  deviceIso: string,
+  gatewayIso: string,
+  units: ClockUnits
+): string | null {
+  const dev = new Date(deviceIso).getTime();
+  const gw = new Date(gatewayIso).getTime();
+  if (Number.isNaN(dev) || Number.isNaN(gw)) return null;
+  const totalSec = Math.round((dev - gw) / 1000);
+  const sign = totalSec >= 0 ? "+" : "-";
+  const abs = Math.abs(totalSec);
+  if (abs < 60) return `${sign}${abs} ${units.sec}`;
+  if (abs < 3600) return `${sign}${Math.round(abs / 60)} ${units.min}`;
+  if (abs < 86400) return `${sign}${Math.round(abs / 3600)} ${units.hour}`;
+  return `${sign}${Math.round(abs / 86400)} ${units.day}`;
+}
+
+/**
+ * Sinyal satirinda gosterilecek saat uyarisi.
+ *
+ * SADECE backend'in KANITLADIGI durumlar uyari uretir:
+ *   * "invalid"        -> damga makul pencerenin disinda ya da cihaz kendi
+ *                         saatinin bozuk oldugunu bildirdi
+ *   * "unsynchronized" -> cihaz zaman senkronu yapilmadigini bildirdi
+ *
+ * `null`/undefined ve "synchronized" HICBIR uyari uretmez. Bu ayrim onemli:
+ * eski gateway'ler bu alani hic gondermiyor ve "bilgi yok"u "saat bozuk" gibi
+ * gostermek 175 sinyalin tamamini sahte uyariyla doldururdu.
+ *
+ * Fark hesabi da tek basina uyari SEBEBI DEGIL: 4G kopmasi sonrasi bosalan
+ * event buffer'inda gunlerce eski ama TAMAMEN GECERLI damgalar bulunur.
+ * Negatif farki "saat geri kalmis" saymak, tam da korumak istedigimiz
+ * senaryoda yanlis alarm uretirdi.
+ */
+function clockWarningOf(row: SignalLiveRow): "invalid" | "unsynchronized" | null {
+  const q = (row.timestamp_quality ?? "").toLowerCase();
+  if (q === "invalid") return "invalid";
+  if (q === "unsynchronized") return "unsynchronized";
+  return null;
+}
+
 export function LiveValuesPage({ values, signals, devices, gateways, loading, error, onRefresh }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
@@ -129,6 +175,15 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     t(`engineering.liveValues.dataType.${type}`, { defaultValue: type });
   const binaryActive = t("engineering.liveValues.binaryActive");
   const binaryInactive = t("engineering.liveValues.binaryInactive");
+  const clockUnits = useMemo<ClockUnits>(
+    () => ({
+      sec: t("engineering.liveValues.clock.unitSec"),
+      min: t("engineering.liveValues.clock.unitMin"),
+      hour: t("engineering.liveValues.clock.unitHour"),
+      day: t("engineering.liveValues.clock.unitDay")
+    }),
+    [t]
+  );
   // device_code -> gateway_code mapping (cihazdan gateway'e gitmek icin)
   const deviceGwMap = useMemo(() => {
     const m = new Map<string, string | undefined>();
@@ -469,7 +524,38 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                       );
                     })()}
                   </td>
-                  <td>{formatTimestamp(row.source_timestamp, localeTag)}</td>
+                  <td>
+                    {formatTimestamp(row.source_timestamp, localeTag)}
+                    {(() => {
+                      // Saat uyarisi KALITE ROZETINDEN AYRI, zaman hucresinde
+                      // duruyor: sorun degerin kendisinde degil damgasinda.
+                      const warn = clockWarningOf(row);
+                      if (!warn) return null;
+                      const devAt = row.device_event_at ?? null;
+                      const offset =
+                        devAt && row.source_timestamp
+                          ? formatClockOffset(devAt, row.source_timestamp, clockUnits)
+                          : null;
+                      const tooltip = [
+                        t(`engineering.liveValues.clock.${warn}Hint`),
+                        devAt
+                          ? `${t("engineering.liveValues.clock.deviceTime")}: ${formatTimestamp(devAt, localeTag)}`
+                          : null,
+                        offset ? `${t("engineering.liveValues.clock.offset")}: ${offset}` : null
+                      ]
+                        .filter(Boolean)
+                        .join("\n");
+                      return (
+                        <div className={`live-clock-chip live-clock-chip--${warn}`} title={tooltip}>
+                          <span className="material-symbols-outlined">schedule</span>
+                          <span>
+                            {t(`engineering.liveValues.clock.${warn}`)}
+                            {offset ? ` (${offset})` : ""}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </td>
                 </tr>
               );
             })}

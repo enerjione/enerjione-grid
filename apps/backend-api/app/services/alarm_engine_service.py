@@ -386,6 +386,10 @@ def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
     if existing is not None:
         return
 
+    # ZAMAN OTORITESI: backend'in algiladigi an. `payload` icinde
+    # `source_timestamp` (gateway saati) ve `device_event_at` (cihaz saati)
+    # bulunabilir; ikisi de created_at'e YAZILMAZ. Bkz. api/internal.py'deki
+    # ayrintili gerekce ve tests/test_alarm_time_authority.py.
     alarm = AlarmEvent(
         device_id=device_id,
         level="critical",

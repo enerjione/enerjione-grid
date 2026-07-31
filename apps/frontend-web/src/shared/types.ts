@@ -685,6 +685,16 @@ export type SignalLiveRow = {
   value_string?: string | null;
   quality: string | null;
   source_timestamp: string | null;
+  /** Cihaz saatinin guvenilirligi: "synchronized" | "unsynchronized" |
+   *  "invalid". `null`/undefined = BILGI YOK (eski gateway alani gondermiyor)
+   *  ve bu durumda UI hicbir uyari gostermez — "bilmiyoruz" ile "saat bozuk"
+   *  ayni sey degildir. `quality` ile karistirilmamali: o DNP3 olcum
+   *  kalitesidir, saat kaymasi olcumu gecersiz kilmaz. */
+  timestamp_quality?: string | null;
+  /** Cihazin kendi bildirdigi olay zamani. `source_timestamp` (gateway saati)
+   *  ile yan yana gosterilir; kaymanin yonunu ve buyuklugunu operator boylece
+   *  gorur. */
+  device_event_at?: string | null;
 };
 
 export type ResponsibilityAreaRow = {
