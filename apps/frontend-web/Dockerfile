@@ -19,7 +19,7 @@ RUN npm run build
 # Container escape exploit'lerinde tam non-root acisindan daha guvenli.
 # Port 8080: unprivileged uid 101 ile 80 portuna bind edemez; compose mapping
 # host:80 -> container:8080 yapildi.
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 # nginx default config'i kaldir, kendi reverse-proxy konfigumuzu kopyala.
 # Unprivileged image'da config dosyalari /etc/nginx/conf.d altinda; ayni yer.
