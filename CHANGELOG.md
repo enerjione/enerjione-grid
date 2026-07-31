@@ -14,6 +14,47 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.28.0] — 2026-07-31
+
+### Düzeltildi
+- **Haritalar boş kalıyordu (kritik).** Harita karo istekleri nginx'te statik
+  dosya kuralına takılıyordu: yol `.png` ile bittiği için regex bloğu düz
+  prefix kuralını eziyor ve istek backend'e **hiç ulaşmıyordu**. Tarayıcıda
+  internet olsa bile tüm haritalar boştu. `npm run dev` bu kuralı
+  çalıştırmadığı için sorun yalnızca Docker/nginx kurulumunda görünüyordu.
+- **Yeniden başlatmadan sonraki ilk backlog uyarısı bastırılıyordu (kritik).**
+  Uyarı sınırlayıcısı `time.monotonic()` değerini mutlak olarak
+  karşılaştırıyordu; Linux'ta bu değer makine açılışından beri geçen süre
+  olduğu için açılıştan sonraki ilk 5 dakika boyunca uyarı üretilmiyordu. Oysa
+  telemetri birikimi tam da o pencerede zirvede olur. Telemetri akışı
+  `discard=old` ile çalıştığından tampon taşarsa mesajlar sessizce düşer —
+  operatör hem veri kaybını hem uyarıyı kaçırıyordu.
+- **Bağlantısı kopan cihaz için "arıza geçti" denmesi.** Alarm kapatma yolları
+  ölçüm kalitesine bakmıyordu; `comm_lost` ile gelen 0.0 değeri eşiğin altına
+  düştüğü için açık arıza alarmı kapanıyor ve harita yeşile dönüyordu.
+- **Ayar değişikliği sahaya ulaşmıyordu.** `config_version` gönderilen
+  ayarların tamamını temsil etmiyordu; cihazın TCP portu gibi alanlar
+  değiştiğinde sürüm aynı kalıyor, gateway "değişmedi" yanıtı alıp eski ayarla
+  çalışmaya devam ediyordu.
+
+### Eklendi
+- **Cihaz türüne göre sinyal profili.** Aynı DNP3 adresi farklı cihaz
+  modellerinde farklı büyüklüğü gösterir. Backend artık her cihazın türünü
+  bildiriyor ve gateway o türün sinyal setini kullanıyor; adres haritası
+  gateway'de yerleşik olarak da bulunuyor. İkinci bir cihaz modeli
+  eklendiğinde ölçümlerin yanlış sinyal adıyla kaydedilmesi engellendi.
+- **Cihaz saati göstergesi.** Cihazın kendi olay zamanı ve o zamanın
+  güvenilirliği kaydediliyor; saati kaymış cihaz canlı değerler ekranında
+  işaretleniyor. Alarm saatleri her zaman sunucu saatine göre belirlenir.
+- **Gateway sağlık bildirimi.** NAT arkasındaki gateway'in durumu düzenli
+  olarak raporlanıyor.
+
+### Değişti
+- Gateway, ayarları yalnızca **değiştiğinde** indiriyor. Önceden her
+  yoklamada tüm sinyal listesi tekrar iniyordu.
+
+---
+
 ## [2.27.0] — 2026-07-31
 
 ### Düzeltildi
