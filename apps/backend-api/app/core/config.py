@@ -202,6 +202,19 @@ class Settings(BaseSettings):
     nats_stream_normalized_max_bytes: int = 3_221_225_472  # 3 GiB
     nats_stream_dlq_max_bytes: int = 1_073_741_824         # 1 GiB
 
+    # ----- Telemetri boru hatti gorunurlugu ---------------------------------
+    # Stream `discard=old` ile calisiyor: tampon dolarsa EN ESKI mesajlar
+    # SESSIZCE dusurulur (sistem durmasin diye bilincli tercih). Bu sessizligi
+    # tehlikeli olmaktan cikaran tek sey, tasmaya YAKLASILDIGINI haber veren
+    # bir sinyaldir.
+    #
+    # Esik stream tavaninin cok altinda: raw stream 8 GiB ~ milyonlarca mesaj
+    # alir; 50.000'de uyarmak operatore mudahale icin bol zaman birakir.
+    telemetry_backlog_warn_threshold: int = 50_000
+    # Olay kaydi rate-limit'i — backlog saatlerce yuksek kalsa bile
+    # system_events tablosu dolmasin.
+    telemetry_backlog_warn_interval_sec: int = 300
+
     # ----- Retention / TTL: "disk asla dolmamali" ---------------------------
     # Bu degerler ONCEDEN telemetry_retention.py icinde dogrudan os.getenv ile
     # okunuyordu. config.py'de tanimli olmadiklari icin ne `.env.example`'da ne

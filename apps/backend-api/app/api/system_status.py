@@ -685,3 +685,90 @@ def get_historian_status(
     from app.services.historian_service import get_historian_status as _status
 
     return HistorianReport(**_status(db, refresh=refresh).to_dict())
+
+
+class TelemetryPipelineReport(BaseModel):
+    """Telemetri boru hattinin anlik durumu — "tuketici yetisiyor mu?".
+
+    NEDEN BU UC VAR: telemetri NATS stream'inde tamponlanir ve stream
+    `discard=old` ile calisir. Tuketici gelis hizinin gerisine duserse tampon
+    dolar ve EN ESKI mesajlar SESSIZCE dusurulur — ekranda hata yok, alarm
+    yok, sadece bazi okumalar hic gelmemis olur. Bu sessizlik "sistem
+    durmasin" tercihinin bedeli; onu tehlikeli olmaktan cikaran tek sey
+    tasmaya yaklasildigini gosteren bu olcumdur.
+
+    Ayrica olcek karari bu veriye dayanir: tek uvicorn worker'da tuketici
+    API ile ayni surecte kosuyor. `throughput` ve `backlog` birlikte,
+    "cihaz sayisi arttiginda tavana ne kadar yakiniz" sorusunu cevaplar.
+
+    MALIYET SIFIRA YAKIN: `backlog` degeri JetStream mesaj metadata'sindan
+    (`num_pending`) bedava gelir; ek bir consumer_info cagrisi YOK. Sayaclar
+    surec-ici, DB'ye dokunmaz.
+    """
+
+    running: bool = Field(..., description="Tuketici thread'i ayakta mi")
+    connected: bool = Field(..., description="NATS baglantisi kurulu mu")
+    backlog: int | None = Field(
+        default=None,
+        description=(
+            "Tuketicinin ONUNDE bekleyen mesaj sayisi (JetStream num_pending). "
+            "Surekli 0 civari beklenir; kalici buyume tuketicinin geride "
+            "oldugunu ve tampon tasarsa VERI KAYBI baslayacagini gosterir."
+        ),
+    )
+    throughput_msgs_per_sec: float = Field(
+        ..., description="Son 60 saniyelik kayan ortalama islenmis mesaj/sn"
+    )
+    last_batch_size: int = 0
+    last_batch_duration_sec: float = 0.0
+    last_fetch_at: str | None = None
+    processed_total: int = 0
+    bad_total: int = Field(
+        default=0, description="Parse/dogrulama hatasi alip DLQ'ya giden mesajlar"
+    )
+    reconnects: int = 0
+    last_error: str | None = None
+    backlog_warn_threshold: int = Field(
+        ..., description="Bu degerin uzerinde uyari/olay kaydi uretilir"
+    )
+    severity: str = Field(..., description="ok | warning | critical")
+
+
+@router.get("/telemetry-pipeline", response_model=TelemetryPipelineReport)
+def get_telemetry_pipeline_status(_: User = Depends(get_current_user)):
+    """Telemetri tuketicisi gelis hizina yetisiyor mu?
+
+    `severity`:
+      ok       — baglanti var, backlog esigin altinda
+      warning  — backlog esigi asti: tuketici geride, tampon tasarsa veri kaybi
+      critical — tuketici calismiyor veya NATS baglantisi yok: telemetri
+                 DB'ye HIC yazilmiyor
+    """
+    from app.services import telemetry_consumer
+
+    stats = telemetry_consumer.get_stats()
+    backlog = stats.get("backlog")
+    threshold = settings.telemetry_backlog_warn_threshold
+
+    if not stats.get("running") or not stats.get("connected"):
+        severity = "critical"
+    elif backlog is not None and backlog >= threshold:
+        severity = "warning"
+    else:
+        severity = "ok"
+
+    return TelemetryPipelineReport(
+        running=bool(stats.get("running")),
+        connected=bool(stats.get("connected")),
+        backlog=backlog,
+        throughput_msgs_per_sec=float(stats.get("throughput_msgs_per_sec") or 0.0),
+        last_batch_size=int(stats.get("last_batch_size") or 0),
+        last_batch_duration_sec=float(stats.get("last_batch_duration_sec") or 0.0),
+        last_fetch_at=stats.get("last_fetch_at"),
+        processed_total=int(stats.get("processed_total") or 0),
+        bad_total=int(stats.get("bad_total") or 0),
+        reconnects=int(stats.get("reconnects") or 0),
+        last_error=stats.get("last_error"),
+        backlog_warn_threshold=threshold,
+        severity=severity,
+    )
