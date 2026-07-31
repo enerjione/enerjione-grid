@@ -24,6 +24,7 @@
   RemoteAccessStatus,
   TelemetryHistoryPoint,
   TelemetryAggregatePoint,
+  TelemetryPipelineStatus,
   HistorianStatus,
   NotificationItem,
   ServicesReport,
