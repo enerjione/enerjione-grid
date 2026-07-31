@@ -138,6 +138,10 @@ RETENTION_FIELDS = [
     ("system_events_max_rows", "SYSTEM_EVENTS_MAX_ROWS"),
     ("retention_delete_batch", "RETENTION_DELETE_BATCH"),
     ("retention_max_batches_per_run", "RETENTION_MAX_BATCHES_PER_RUN"),
+    ("disk_guard_reserve_percent", "DISK_GUARD_RESERVE_PERCENT"),
+    ("disk_guard_reserve_min_gb", "DISK_GUARD_RESERVE_MIN_GB"),
+    ("disk_guard_interval_sec", "DISK_GUARD_INTERVAL_SEC"),
+    ("disk_guard_emergency_backup_keep", "DISK_GUARD_EMERGENCY_BACKUP_KEEP"),
 ]
 
 
@@ -234,6 +238,18 @@ def test_nats_stream_caps_stay_under_account_limit():
         f"stream tavanlari toplami ({total}) hesap tavanini ({account_bytes}) "
         "asiyor — hesap tavani once carpar ve publish reddedilir"
     )
+
+
+def test_disk_guard_reserve_is_sane():
+    """Rezerv yuzdesi makul aralikta olmali.
+
+    Cok dusuk (%0-2): guard cok gec devreye girer, mudahale icin alan kalmaz.
+    Cok yuksek (%30+): diskin ucte biri bosa yatirilir.
+    """
+    pct = _settings_default("disk_guard_reserve_percent")
+    assert 5 <= pct <= 25, f"disk_guard_reserve_percent akil disi: %{pct}"
+    floor = _settings_default("disk_guard_reserve_min_gb")
+    assert 1 <= floor <= 50, f"disk_guard_reserve_min_gb akil disi: {floor} GB"
 
 
 def test_retention_batch_settings_are_sane():

@@ -17,9 +17,36 @@ Mini PC acilir acilmaz:
 |---|---|---|
 | CPU | 4 cekirdek x86_64 | Tum stack Docker'da calisir |
 | RAM | 8 GB | Postgres + NATS + RabbitMQ + 6 servis |
-| Disk | 128 GB SSD | Historian (TimescaleDB) buyur |
+| Disk | **500 GB SSD** | Historian + dakikalik ozet arsivi (asagiya bakin) |
 | WiFi | **AP (master) modunu destekleyen** kart | Dahili karti yoksa USB adaptor |
 | Ethernet | 1x | SCADA/kurumsal aga baglanti |
+
+### Disk neden 500 GB?
+
+Eskiden burada 128 GB yaziyordu; 600 cihazlik bir sahada bu YETMIYOR.
+Kabaca kararli durum butcesi:
+
+| Kalem | Yaklasik | Nasil sinirlaniyor |
+|---|---|---|
+| Dakikalik ozet arsivi (1 yil) | en buyuk kalem | TimescaleDB retention + sikistirma (migration 0023) |
+| Ham telemetri (90 gun) | orta | retention + 7 gun sonrasi sikistirma |
+| Saatlik ozet (2 yil) | kucuk | retention + sikistirma |
+| NATS JetStream | 12 GiB | stream basina `max_bytes` + `discard=old` |
+| `processed_messages` (24 saat) | kucuk | retention worker |
+| Yedekler | birkac yuz MB | historian pg_dump'tan haric |
+| Harita karolari | 4 GiB | onbellek tavani |
+
+Bu kalemlerin HEPSI yanlis hesaplanmis olsa bile diskin dolmasini **disk
+guard** engeller: toplam kapasitenin %10'u bos kalacak sekilde gercek bos
+alani olcer, dolmaya yaklasilirsa once uyarir, sonra retention'lari
+kisaltir, en son yeniden uretilebilir veriyi (harita onbellegi, fazla
+yedekler) siler. Denetim kaydina, lisansa ve analiz verisine ASLA dokunmaz.
+Ayarlar: `.env` icinde `DISK_GUARD_*`.
+
+Daha kucuk diskle (orn. 128 GB) kurmak zorundaysaniz sistem yine calisir —
+guard yuzde tabanli oldugu icin otomatik uyarlanir — ama dakikalik ozet
+saklama suresini (`telemetry_history_1m` retention'i, migration 0023)
+dusurmeniz gerekir.
 
 WiFi kartinin AP modunu destekleyip desteklemedigini kontrol:
 

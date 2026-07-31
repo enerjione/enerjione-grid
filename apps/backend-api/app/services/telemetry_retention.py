@@ -172,9 +172,13 @@ class RetentionWorker:
     def _run(self) -> None:
         # (etiket, periyot_getter, fonksiyon, son_calisma_zamani)
         jobs: list[list] = [
-            ["telemetry", lambda: settings.telemetry_retention_interval_sec, self._purge_telemetry, 0.0],
-            ["processed_messages", lambda: settings.processed_messages_interval_sec, self._purge_processed_messages, 0.0],
+            ["telemetry", lambda: settings.telemetry_retention_interval_sec, self.purge_telemetry, 0.0],
+            ["processed_messages", lambda: settings.processed_messages_interval_sec, self.purge_processed_messages, 0.0],
             ["system_events", lambda: settings.system_events_interval_sec, self._purge_system_events, 0.0],
+            # Disk guard: yukaridaki TTL'lerin hepsi dogru calissa BILE diskin
+            # dolmadigini gercek olcumle dogrular; dolmaya yaklasilirsa
+            # yeniden uretilebilir veriden baslayarak alan acar.
+            ["disk_guard", lambda: settings.disk_guard_interval_sec, self._disk_guard_tick, 0.0],
         ]
         first_iteration = True
         while not self._stop.is_set():
@@ -199,9 +203,23 @@ class RetentionWorker:
 
     # ------------------------------------------------------------------ jobs
 
-    def _purge_telemetry(self) -> int:
+    def _disk_guard_tick(self) -> None:
+        """Disk guard turu.
+
+        Lazy import: disk_guard bu modulu (kisaltilmis pencereyle purge
+        cagirmak icin) import ediyor; ust duzeyde import etsek dongu olurdu.
+        """
+        from app.services import disk_guard
+
+        disk_guard.tick()
+
+    def purge_telemetry(self, *, retention_minutes: int | None = None) -> int:
         """Eski telemetri satirlarini siler — AMA her (device_id, signal_key)
         icin EN SON satiri her zaman korur.
+
+        `retention_minutes` verilirse yapilandirilmis degerin YERINE o pencere
+        kullanilir. Disk guard baski altinda pencereyi gecici olarak kisaltmak
+        icin bunu kullanir; kalici ayar DEGISMEZ.
 
         Neden koruma: bir sinyal 30 dakikadir degismiyorsa son satiri da
         silinirse canli degerler tablosunda o hucre BOSALIR. Kullanici
@@ -221,9 +239,12 @@ class RetentionWorker:
         yuk beklenenden yuksekse) tek DELETE 26M satira dayanabilir; turlara
         boluyoruz.
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(
-            minutes=settings.telemetry_retention_minutes
+        minutes = (
+            retention_minutes
+            if retention_minutes is not None
+            else settings.telemetry_retention_minutes
         )
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
         batch = settings.retention_delete_batch
         total = 0
         for _ in range(settings.retention_max_batches_per_run):
@@ -271,8 +292,11 @@ class RetentionWorker:
             )
         return total
 
-    def _purge_processed_messages(self) -> int:
+    def purge_processed_messages(self, *, retention_hours: int | None = None) -> int:
         """Eski idempotency kayitlarini siler.
+
+        `retention_hours` verilirse yapilandirilmis degerin YERINE o pencere
+        kullanilir (disk guard baski altinda kisaltir; kalici ayar degismez).
 
         Gercek redelivery penceresi ack_wait(60s) x max_deliver(10) = 10 dakika
         (bkz. telemetry_consumer.py consumer_cfg). Default 24 saat bunun 144
@@ -280,9 +304,12 @@ class RetentionWorker:
         NOTHING ikinci bir dedup katmani var. Yani bu tabloyu kisa tutmak
         at-least-once garantisini ZAYIFLATMAZ.
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(
-            hours=settings.processed_messages_retention_hours
+        hours = (
+            retention_hours
+            if retention_hours is not None
+            else settings.processed_messages_retention_hours
         )
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         removed = _batch_delete(
             ProcessedMessage,
             ProcessedMessage.processed_at < cutoff,

@@ -95,7 +95,7 @@ def test_processed_messages_purge_removes_only_old(session_factory, monkeypatch)
     monkeypatch.setattr(settings, "retention_max_batches_per_run", 50)
     _seed_processed(session_factory, old=120, fresh=30, cutoff_hours=24)
 
-    removed = telemetry_retention.RetentionWorker()._purge_processed_messages()
+    removed = telemetry_retention.RetentionWorker().purge_processed_messages()
 
     assert removed == 120
     assert _count(session_factory, ProcessedMessage) == 30
@@ -112,7 +112,7 @@ def test_purge_is_batched_and_still_completes(session_factory, monkeypatch):
     monkeypatch.setattr(settings, "retention_max_batches_per_run", 50)
     _seed_processed(session_factory, old=95, fresh=5, cutoff_hours=24)
 
-    removed = telemetry_retention.RetentionWorker()._purge_processed_messages()
+    removed = telemetry_retention.RetentionWorker().purge_processed_messages()
 
     assert removed == 95
     assert _count(session_factory, ProcessedMessage) == 5
@@ -130,7 +130,7 @@ def test_batch_cap_limits_one_run_and_leaves_rest(session_factory, monkeypatch):
     monkeypatch.setattr(settings, "retention_max_batches_per_run", 3)
     _seed_processed(session_factory, old=100, fresh=0, cutoff_hours=24)
 
-    removed = telemetry_retention.RetentionWorker()._purge_processed_messages()
+    removed = telemetry_retention.RetentionWorker().purge_processed_messages()
 
     assert removed == 30  # 3 tur x 10
     assert _count(session_factory, ProcessedMessage) == 70

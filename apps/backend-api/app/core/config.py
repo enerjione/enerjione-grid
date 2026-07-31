@@ -240,6 +240,43 @@ class Settings(BaseSettings):
     # tavan x batch >> periyottaki uretim).
     retention_max_batches_per_run: int = 50
 
+    # ----- DISK GUARD: son emniyet subabi ----------------------------------
+    # Yukaridaki TTL'ler ve NATS/yedek/harita tavanlari "normalde dolmaz"
+    # garantisi verir. Disk guard ise "tavanlardan biri YANLIS hesaplanmis
+    # olsa bile disk DOLMASIN" garantisidir. Hicbir tavana guvenmez, gercek
+    # bos alani olcer.
+    #
+    # Rezerv YUZDE tabanlidir cunku disk boyutu kurulumdan kuruluma degisir
+    # (saha standardi 500 GB, ama 128 GB'lik eski kutular da var). Sabit bir
+    # GB degeri kucuk diskte sistemi bogar, buyuk diskte alani bosa yatirir.
+    #
+    # Cok kucuk disklerde yuzde tek basina yetersiz kalir: PostgreSQL'in
+    # VACUUM / index yeniden kurma / pg_dump icin calisma alani ister. Bu
+    # yuzden taban = max(toplam x yuzde, mutlak_taban).
+    disk_guard_enabled: bool = True
+    disk_guard_reserve_percent: int = 10
+    disk_guard_reserve_min_gb: int = 5
+    disk_guard_interval_sec: int = 300
+    # Olculecek yol. Bos ise BACKUP_DIR kullanilir — o GERCEK bir mount'tur
+    # (docker volume), container'in `/` overlay'inden daha dogru bir
+    # gostergedir. O da yoksa `/` (Windows'ta C:\).
+    disk_guard_path: str = ""
+    # ACIL seviyede kac yedek korunur. En yeni BASARILI yedek her kosulda
+    # korunur; bu deger onun altina inemez.
+    disk_guard_emergency_backup_keep: int = 2
+
+    # Manuel / yuklenen yedekler icin YAS bazli temizlik (gun).
+    # 0 = KAPALI (varsayilan) — bilincli tercih: operator "buyuk degisiklik
+    # oncesi" diye elle aldigi bir yedegi habersiz kaybetmemeli. Zamanlanmis
+    # yedekler zaten `retention_count` ile sinirli.
+    # Disk ACIL seviyeye gelirse disk_guard bu ayardan BAGIMSIZ olarak fazla
+    # yedekleri temizler; yani "disk dolmasin" garantisi bu 0 degeriyle de
+    # korunur. Operator duzenli temizlik isterse 90 gibi bir deger verir.
+    backup_manual_retention_days: int = 0
+    # Basarisiz yedek kayitlari ve yarim kalmis dosyalar KOSULSUZ temizlenir
+    # (bunlar tanim geregi cop; yarim .dump dosyasi geri yuklenemez).
+    backup_failed_retention_days: int = 7
+
     internal_service_token: str = "change-me-internal-token"
     # DB'de saklanan secret'lar (SMTP/SMS/Telegram credentials, outbound auth
     # token) icin Fernet sifreleme anahtari. Bos ise SECRET_KEY'den HKDF ile

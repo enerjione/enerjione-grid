@@ -308,6 +308,19 @@ services:
       # tablo uzun sure kilitlenmesin, autovacuum arayi yakalasin).
       RETENTION_DELETE_BATCH: ${RETENTION_DELETE_BATCH:-20000}
       RETENTION_MAX_BATCHES_PER_RUN: ${RETENTION_MAX_BATCHES_PER_RUN:-50}
+      # Disk guard — SON EMNIYET SUBABI. Yukaridaki TTL'ler ve asagidaki
+      # NATS/yedek tavanlari "normalde dolmaz" der; guard "tavanlardan biri
+      # yanlis hesaplanmis olsa BILE dolmasin" der ve gercek bos alani olcer.
+      # rezerv = max(toplam x YUZDE, MIN_GB). Yuzde tabanli olmasi 128 GB'lik
+      # ve 500 GB'lik kutularda tek kod yolunu dogru kilar.
+      DISK_GUARD_ENABLED: ${DISK_GUARD_ENABLED:-true}
+      DISK_GUARD_RESERVE_PERCENT: ${DISK_GUARD_RESERVE_PERCENT:-10}
+      DISK_GUARD_RESERVE_MIN_GB: ${DISK_GUARD_RESERVE_MIN_GB:-5}
+      DISK_GUARD_INTERVAL_SEC: ${DISK_GUARD_INTERVAL_SEC:-300}
+      DISK_GUARD_EMERGENCY_BACKUP_KEEP: ${DISK_GUARD_EMERGENCY_BACKUP_KEEP:-2}
+      # Bos ise BACKUP_DIR olculur (gercek volume mount'u; container'in `/`
+      # overlay'i yaniltici olabilir).
+      DISK_GUARD_PATH: ${DISK_GUARD_PATH:-}
       # NATS JetStream stream basina DISK tavani (bayt). max_age tek basina
       # bayt siniri vermez; bu tavanlar + discard=old sayesinde tampon dolunca
       # en eski mesajlar duser ve telemetri akisi DURMAZ. Toplam 12 GiB;

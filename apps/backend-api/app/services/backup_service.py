@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
@@ -1031,8 +1031,78 @@ def apply_retention(db: Session, retention_count: int) -> int:
         db.delete(r)
         deleted += 1
     _ = keep_ids
+    deleted += _purge_failed_and_manual(db)
     if deleted > 0:
         db.commit()
+    return deleted
+
+
+def _purge_failed_and_manual(db: Session) -> int:
+    """Basarisiz yedekleri (kosulsuz) ve — acikca acilmissa — eski manuel
+    yedekleri temizler.
+
+    NEDEN AYRI:
+      * BASARISIZ kayitlar tanim geregi coptur: yarim yazilmis bir .dump
+        dosyasi geri yuklenemez ama diskte yer kaplar. Yedek zamanlayicisi
+        surekli patliyorsa (disk dolu, pg_dump timeout) her turda bir satir
+        + yarim dosya birikir. Bunlari temizlemek veri kaybi DEGILDIR.
+      * MANUEL / yuklenen yedekler varsayilan olarak SILINMEZ
+        (`backup_manual_retention_days = 0`). Operator bunlari genelde
+        bilincli olarak alir ("buyuk degisiklik oncesi") ve habersiz
+        kaybetmemeli. Duzenli temizlik isteyen operator ayari acar.
+        Disk ACIL seviyeye gelirse disk_guard zaten devreye girer.
+
+    HER KOSULDA en yeni BASARILI yedek korunur — sistem hicbir zaman
+    "hic yedegi olmayan" duruma dusmez.
+    """
+    now = datetime.now(timezone.utc)
+    deleted = 0
+
+    newest_success = db.scalar(
+        select(BackupJob)
+        .where(BackupJob.status == "success")
+        .order_by(BackupJob.created_at.desc())
+        .limit(1)
+    )
+    protected_id = newest_success.id if newest_success else None
+
+    # 1) Basarisiz kayitlar — kosulsuz.
+    failed_cutoff = now - timedelta(days=max(1, settings.backup_failed_retention_days))
+    failed = list(
+        db.scalars(
+            select(BackupJob)
+            .where(BackupJob.status != "success")
+            .where(BackupJob.created_at < failed_cutoff)
+        ).all()
+    )
+    for row in failed:
+        if row.id == protected_id:
+            continue
+        delete_backup_file(row)
+        db.delete(row)
+        deleted += 1
+
+    # 2) Manuel / yuklenen — yalnizca ayar acikssa.
+    days = settings.backup_manual_retention_days
+    if days > 0:
+        manual_cutoff = now - timedelta(days=days)
+        manual = list(
+            db.scalars(
+                select(BackupJob)
+                .where(BackupJob.job_type != "scheduled")
+                .where(BackupJob.status == "success")
+                .where(BackupJob.created_at < manual_cutoff)
+            ).all()
+        )
+        for row in manual:
+            if row.id == protected_id:
+                continue  # en yeni basarili yedek her kosulda kalir
+            delete_backup_file(row)
+            db.delete(row)
+            deleted += 1
+
+    if deleted:
+        logger.info("backup_failed_manual_purged count=%d", deleted)
     return deleted
 
 
