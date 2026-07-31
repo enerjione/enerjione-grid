@@ -28,13 +28,18 @@ from modbus_outbound.server import (
     handle_pdu,
 )
 
-FAILURES: list[str] = []
-
-
 def check(label: str, condition: bool, extra: str = "") -> None:
-    if not condition:
-        FAILURES.append(label)
+    """Kontrolu dogrular — BASARISIZLIKTA HATA FIRLATIR.
+
+    Eskiden bu fonksiyon yalnizca bir listeye not dusuyordu ve `main()` sonda
+    bakiyordu. Dosya pytest kesfine girince bu sessiz bir tuzaga donustu:
+    hicbir test fonksiyonu ASSERT ETMEDIGI icin `test_codec`, `test_registry`
+    ve `test_pdu` — icindeki kontrollerin hepsi patlasa bile — pytest'te
+    HER ZAMAN YESIL kaliyordu. Yani "3 test geciyor" ciktisi tamamen
+    aldaticiydi; regresyon koruma degeri SIFIRDI.
+    """
     print(f"  [{'OK  ' if condition else 'FAIL'}] {label} {extra}")
+    assert condition, f"{label} {extra}".strip()
 
 
 # --- Ornek plan (backend'in urettigi formatta) ------------------------------
@@ -214,7 +219,19 @@ def _modbus_request(sock: socket.socket, unit: int, pdu: bytes, tid: int = 1) ->
     return header + body
 
 
-async def test_tcp_end_to_end() -> None:
+def test_tcp_end_to_end() -> None:
+    """Dosyadaki EN DEGERLI test — ve pytest altinda HIC KOSMUYORDU.
+
+    `async def` idi; pakette pytest-asyncio olmadigi icin pytest bunu
+    "async def functions are not natively supported" ile BASARISIZ sayiyordu
+    (yani gercek TCP yolu, blok okuma, yazma reddi ve IP allowlist hicbir
+    zaman dogrulanmiyordu). Yeni bir bagimlilik eklemek yerine dongusu
+    burada aciliyor — dosyanin geri kalani zaten stdlib.
+    """
+    asyncio.run(_tcp_end_to_end())
+
+
+async def _tcp_end_to_end() -> None:
     print("\n4) Gercek TCP uzerinden uctan uca")
     reg = build_registry_from_plan(PLAN)
     reg.update("DEV-001", "master.actual_voltage", 230.5)
@@ -291,15 +308,20 @@ async def test_tcp_end_to_end() -> None:
 
 
 def main() -> int:
-    test_codec()
-    test_registry()
-    test_pdu()
-    asyncio.run(test_tcp_end_to_end())
-    print()
-    if FAILURES:
-        print(f"!! {len(FAILURES)} BASARISIZ: {FAILURES}")
+    """pytest'siz calistirma yolu (`python -m tests.test_smoke`).
+
+    `check` artik ilk basarisizlikta hata firlattigi icin burada yakalayip
+    anlamli bir cikis kodu donuyoruz.
+    """
+    try:
+        test_codec()
+        test_registry()
+        test_pdu()
+        test_tcp_end_to_end()
+    except AssertionError as exc:
+        print(f"\n!! BASARISIZ: {exc}")
         return 1
-    print("Tum kontroller basarili.")
+    print("\nTum kontroller basarili.")
     return 0
 
 

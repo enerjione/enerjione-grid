@@ -119,6 +119,31 @@ jobs:
         working-directory: apps/iec104-outbound
         run: pytest -q
 
+  modbus-outbound:
+    # Modbus TCP yayini. Testleri VARDI ama CI'da kosmuyordu ve dahasi:
+    # yardimci `check()` fonksiyonu ASSERT ETMIYORDU (yalnizca bir listeye
+    # not dusuyordu), yani uc "test" icindeki kontrollerin hepsi patlasa
+    # bile pytest'te yesil kaliyordu. Uctan uca TCP testi ise `async def`
+    # oldugu ve pakette pytest-asyncio olmadigi icin HIC kosmuyordu.
+    # Yani "4 test var" ciktisi tamamen aldaticiydi.
+    name: Modbus outbound — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/modbus-outbound/requirements.txt
+      - name: Bagimliliklar
+        working-directory: apps/modbus-outbound
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: pytest
+        working-directory: apps/modbus-outbound
+        run: pytest -q
+
   migrations:
     name: Alembic — tek head kontrolu
     runs-on: ubuntu-latest
