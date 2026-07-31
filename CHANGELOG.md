@@ -12,15 +12,67 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+---
+
+## [2.25.0] — 2026-07-31
+
+### Güvenlik
+- **Canlı telemetri WebSocket'inde operatör kapsamı uygulanmıyordu** — cihaz
+  filtresi tamamen istemciden geliyordu; filtre göndermeyen bir operatör
+  sistemdeki **tüm** cihazların telemetrisini dinleyebiliyordu. Kapsam artık
+  sunucuda hesaplanıyor, istemci filtresi yalnızca daraltabiliyor.
+- **Oturum iptali WebSocket'te işlemiyordu** — "oturumu at" dendikten sonra
+  açık soket akmaya devam ediyordu, logout edilmiş token ile yeni bağlantı
+  açılabiliyordu. Artık bağlantı kurulurken ve her 30 saniyede doğrulanıyor.
+- **Gateway kurulum ajanı** artık container'dan compose dosyası kabul etmiyor;
+  yalnızca doğrulanmış parametrelerden kendi şablonunu üretiyor. Önceki regex
+  kara listesi uzun-form bind, named-volume `driver_opts`, `security_opt`
+  unconfined gibi yollarla aşılabiliyordu (host'ta root'a çıkış).
+- **nginx rate-limit'i gerçek istemci IP'si üzerinden** çalışıyor. Ters vekil
+  arkasında tüm istekler aynı IP görünüyordu; bu, dakikada 5 denemeyle
+  **herkesin girişini** kilitlemeye izin veriyordu.
+- **Güvenlik başlıkları statik dosyalarda kayboluyordu** — nginx'te
+  `add_header` miras alınmadığı için tüm `.js`/`.css` dosyaları CSP, nosniff
+  ve X-Frame-Options olmadan servis ediliyordu.
+- **Oturum ömrü** dört dosyada dört farklı değerdeydi ve compose'daki değer
+  "beni hatırla" süresine eşitti — yani kutucuk işlevsizdi, işaretlemeyen
+  kullanıcı da 30 günlük token alıyordu. Hepsi 24 saate hizalandı.
+
 ### Eklendi
+- **Telemetri Arşivi sağlık kartı** (Sistem Durumu) — arşiv tablosunun saklama
+  süresi politikası gerçekten kurulu mu, hypertable mı, ne kadar disk
+  kullanıyor. Politika kurulmadığında tek belirti diskin dolmasıydı; artık
+  önceden görülüyor. Eksik politikaları onaran migration da eklendi.
 - **Arıza tel mesafesi** — arıza bölgesinin hat başından kaç metre uzakta
-  olduğu artık hesaplanıyor ve gösteriliyor. Kuş uçuşu değil: direk
-  koordinatları üzerinden hat boyunca, cihazların direkler arasındaki
-  konumu da hesaba katılarak. Arıza kartında, arıza detayında ve haritadaki
-  kırmızı arıza çizgisinin üzerinde görünür. Branşman hatlarda mesafe ana
-  hattaki dallanma direğinden itibaren toplanır.
-- **Çevrimdışı harita** artık modal yerine Mühendislik altında ayrı bir
-  sayfa; alan seçimi harita üzerinde sürükleyerek yapılıyor.
+  olduğu hesaplanıyor ve gösteriliyor. Kuş uçuşu değil: direk koordinatları
+  üzerinden hat boyunca, cihazların direkler arasındaki konumu da hesaba
+  katılarak. Branşman hatlarda mesafe ana hattaki dallanma direğinden itibaren
+  toplanır.
+- **Çevrimdışı harita** artık modal yerine Mühendislik altında ayrı bir sayfa;
+  alan seçimi harita üzerinde sürükleyerek yapılıyor.
+- **Klavye erişilebilirliği** — modallar ESC ile kapanıyor ve odak modal içinde
+  kalıyor. Önce yedi modalın yalnızca biri ESC ile kapanıyordu; Tab'a basan
+  kullanıcı modalın arkasındaki forma düşüyordu.
+- Render hatasında beyaz ekran yerine "yeniden yükle" ekranı gösteriliyor.
+
+### Düzeltildi
+- **Bozuk bir üçüncü taraf apt deposu kurulumu tamamen durduruyordu.** Sahada
+  makinede duran ve imza anahtarı eksik bir Google Chrome deposu yüzünden
+  `apt-get update` hata döndü ve kurulum orada öldü — oysa ihtiyaç duyulan
+  Ubuntu depoları sağlamdı. Artık ilgisiz bir deponun bozuk olması kurulumu
+  durdurmuyor; depo adıyla bildiriliyor ve karar paket kurulumunda veriliyor.
+- **Canlı değerler ekranı çok cihazda donuyordu.** Gelen her telemetri mesajı
+  tüm satır listesini baştan sona geziyordu; 600 cihazda tarayıcı sekmesi
+  kilitleniyordu. Mesajlar artık toplu işleniyor (ölçüldü: 699 ms → 24 ms).
+- **Arka planda gereksiz sorgu yükü** — alarm, arıza, olay, topoloji ve cihaz
+  listesi hangi sayfada olduğunuza bakılmaksızın 5 saniyede bir çekiliyordu.
+  Artık yalnızca o veriyi gösteren sayfalarda çekiliyor ve sekme arka plandayken
+  tamamen duruyor.
+- **Harita çok cihazda takılıyordu** — topoloji hesabı cihaz durumu her
+  güncellendiğinde (5 saniyede bir) baştan yapılıyordu; artık yalnızca topoloji
+  veya konum gerçekten değişince yapılıyor.
+- **Hat Arızaları sayfası** her satır için ayrı sorgular atıyordu (200 arızada
+  5 saniyede ~1.200 sorgu). Sorgu sayısı artık arıza sayısından bağımsız.
 
 ---
 
