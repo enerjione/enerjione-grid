@@ -101,7 +101,16 @@ def _stats_record_batch(*, size: int, duration: float, backlog: int | None, bad:
             _throughput_window.pop(0)
 
 
-_last_backlog_warn_at: float = 0.0
+# "Henuz hic uyarilmadi" = None. 0.0 DEGIL — bilincli.
+#
+# `time.monotonic()` sabit bir baslangic noktasi vermez; Linux'ta makine
+# acilisindan beri gecen suredir. Baslangic degeri 0.0 olsaydi acilistan
+# sonraki ILK `telemetry_backlog_warn_interval_sec` saniye boyunca
+# `now - 0.0 < interval` cikar ve ILK uyari bastirilirdi — hem de tam
+# backlog'un en yuksek oldugu an, yeniden baslatmanin hemen ardindan.
+# (Windows'ta uptime buyuk oldugu icin bu davranis gorunmuyordu; hatayi
+# Linux CI ortaya cikardi.)
+_last_backlog_warn_at: float | None = None
 
 
 def _warn_if_backlog_high(backlog: int | None) -> None:
@@ -119,7 +128,13 @@ def _warn_if_backlog_high(backlog: int | None) -> None:
     if backlog is None or backlog < settings.telemetry_backlog_warn_threshold:
         return
     now = _time.monotonic()
-    if now - _last_backlog_warn_at < settings.telemetry_backlog_warn_interval_sec:
+    # ILK uyari her zaman gecer; rate-limit yalnizca IKINCIDEN itibaren isler.
+    # Mutlak degeri karsilastirmak yerine "daha once uyardik mi" sorusunu
+    # sormak, monotonic()'in baslangic noktasindan bagimsiz kilar.
+    if (
+        _last_backlog_warn_at is not None
+        and now - _last_backlog_warn_at < settings.telemetry_backlog_warn_interval_sec
+    ):
         return
     _last_backlog_warn_at = now
     snapshot = get_stats()

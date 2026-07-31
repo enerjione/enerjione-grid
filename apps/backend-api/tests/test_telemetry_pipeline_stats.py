@@ -36,7 +36,12 @@ def _reset_stats():
             last_error=None,
         )
         tc._throughput_window.clear()
-    tc._last_backlog_warn_at = 0.0
+    # None = "henuz hic uyarilmadi". 0.0 yazmak testleri makinenin UPTIME'ina
+    # bagimli kilardi: monotonic() sabit bir baslangic noktasi vermez ve Linux'ta
+    # acilistan beri gecen suredir. Yeni acilmis bir CI konteynerinde
+    # `now - 0.0 < interval` cikip uyari bastiriliyordu — bu testler tam olarak
+    # oyle kirmizi oldu.
+    tc._last_backlog_warn_at = None
     yield
 
 
@@ -185,3 +190,53 @@ def test_severity_critical_when_not_connected(monkeypatch):
 
 def test_severity_critical_when_not_running(monkeypatch):
     assert _report(monkeypatch, running=False).severity == "critical"
+
+
+def test_ILK_uyari_makine_UPTIME_inden_BAGIMSIZ(monkeypatch):
+    """Uretim hatasi + CI kirmizisi ayni kokten geliyordu.
+
+    `time.monotonic()` sabit bir baslangic noktasi VERMEZ; Linux'ta makine
+    acilisindan beri gecen suredir. Rate-limit durumu 0.0 ile baslarsa,
+    acilistan sonraki ilk `interval` saniye boyunca
+    `now - 0.0 < interval` cikar ve ILK uyari bastirilir — hem de tam
+    backlog'un en yuksek oldugu an, yeniden baslatmanin hemen ardindan.
+
+    Windows'ta uptime buyuk oldugu icin bu gorunmuyordu; hatayi yeni ayaga
+    kalkmis bir Linux CI konteyneri ortaya cikardi. Bu test o kosulu
+    (monotonic() = 42 sn) kalici olarak kilitler.
+    """
+    monkeypatch.setattr(settings, "telemetry_backlog_warn_threshold", 1_000)
+    monkeypatch.setattr(settings, "telemetry_backlog_warn_interval_sec", 300)
+    monkeypatch.setattr(tc._time, "monotonic", lambda: 42.0)
+    calls = []
+    monkeypatch.setattr(tc.logger, "warning", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(tc, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("db yok")))
+
+    tc._warn_if_backlog_high(5_000)
+
+    assert len(calls) == 1, (
+        "yeni acilmis makinede ilk backlog uyarisi bastirildi — "
+        "operator tam da en kritik anda uyarilmiyor"
+    )
+
+
+def test_rate_limit_ILK_uyaridan_SONRA_isler(monkeypatch):
+    """Ilk uyariyi serbest birakmak rate-limit'i bozmamali."""
+    monkeypatch.setattr(settings, "telemetry_backlog_warn_threshold", 1_000)
+    monkeypatch.setattr(settings, "telemetry_backlog_warn_interval_sec", 300)
+    saat = {"t": 42.0}
+    monkeypatch.setattr(tc._time, "monotonic", lambda: saat["t"])
+    calls = []
+    monkeypatch.setattr(tc.logger, "warning", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(tc, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("db yok")))
+
+    tc._warn_if_backlog_high(5_000)
+    assert len(calls) == 1
+
+    saat["t"] = 100.0          # 58 sn sonra — pencere icinde
+    tc._warn_if_backlog_high(5_000)
+    assert len(calls) == 1, "rate-limit calismadi"
+
+    saat["t"] = 400.0          # 358 sn sonra — pencere disi
+    tc._warn_if_backlog_high(5_000)
+    assert len(calls) == 2, "pencere dolduktan sonra uyari gelmedi"
