@@ -271,12 +271,15 @@ class _WsNatsBridge:
         backoff = 2
         while not self._stopping.is_set():
             try:
+                from app.core.nats_tls import nats_tls_context
+
                 self._nc = await _nats.connect(  # type: ignore[union-attr]
                     servers=[settings.nats_url],
                     connect_timeout=settings.nats_connect_timeout_sec,
                     max_reconnect_attempts=-1,  # kurulduktan sonra surekli dene
                     reconnect_time_wait=2,
                     name="e1-backend-ws-fanout",
+                    tls=nats_tls_context(),  # None = TLS kapali (varsayilan)
                 )
                 break
             except Exception as exc:  # noqa: BLE001

@@ -223,12 +223,16 @@ class JetStreamBus:
         self._ready.clear()
 
     async def _connect_and_setup(self) -> None:
+        from app.core.nats_tls import nats_tls_context
+
         self._nc = await nats.connect(  # type: ignore[union-attr]
             servers=[self._url],
             connect_timeout=self._connect_timeout,
             max_reconnect_attempts=-1,  # surekli reconnect dene
             reconnect_time_wait=2,
             name="e1-backend-api",
+            # None = TLS kapali (varsayilan). Bkz. core/nats_tls.py.
+            tls=nats_tls_context(),
         )
         self._js = self._nc.jetstream()
         await self._ensure_stream(

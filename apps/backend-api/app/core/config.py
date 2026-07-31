@@ -123,6 +123,16 @@ class Settings(BaseSettings):
     # kullanilir. Stream'ler backend startup'inda OTOMATIK ensure edilir
     # (idempotent: varsa dokunulmaz, yoksa olusturulur).
     nats_url: str = "nats://localhost:4222"
+    # NATS TLS — kendinden imzali CA sertifikasinin yolu.
+    #
+    # BOS = TLS KAPALI (varsayilan, bugunku davranis). Doluysa baglanti
+    # YALNIZCA bu CA'ya guvenir; isletim sisteminin guven deposu kullanilmaz.
+    # Sertifikalar `infra/scripts/linux/nats-tls-setup.sh` ile uretilir ve
+    # `NATS_URL` `tls://` semasina cevrilir.
+    #
+    # Neden gerekli: 4222 tum arayuzlere acik ve gateway'ler parolayla
+    # baglaniyor; TLS'siz hem parola hem telemetri duz metin gider.
+    nats_ca_file: str = ""
     # Bu iki flag DEPRECATED: NATS her zaman aktif. Eski .env'lerin kirilmamasi
     # icin field'lar tutulur ama runtime davranisi etkilemezler.
     nats_dual_publish_enabled: bool = True

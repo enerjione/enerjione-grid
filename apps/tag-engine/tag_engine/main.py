@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import os
+import ssl
 import signal
 import threading
 from datetime import datetime, timezone
@@ -50,6 +51,25 @@ SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.tag-engine")
 MAX_DELIVER = int(os.getenv("NATS_WORKER_MAX_DELIVER", "10"))
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8011"))
+
+
+def _nats_tls_context():
+    """NATS_CA_FILE ayarliysa dogrulayici SSL baglami, degilse None.
+
+    NEDEN: NATS istemci portu tum arayuzlere acik ve baglantilar parolali;
+    TLS'siz hem parola hem telemetri duz metin gider.
+
+    `create_default_context(cafile=...)` YALNIZCA verilen CA'ya guvenir —
+    isletim sisteminin guven deposu kullanilmaz. Bu bilincli: aksi halde
+    herkese acik bir otoriteden alinmis sertifika da kabul edilirdi.
+
+    Dosya okunamazsa HATA yukselir; TLS'siz devam etmek, operatorun "TLS
+    acik" sandigi bir kurulumda parolayi acikta gondermek olurdu.
+    """
+    ca_file = (os.getenv("NATS_CA_FILE") or "").strip()
+    if not ca_file:
+        return None
+    return ssl.create_default_context(cafile=ca_file)
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
@@ -131,6 +151,8 @@ async def _run() -> None:
                 max_reconnect_attempts=-1,
                 reconnect_time_wait=2,
                 name="e1-tag-engine",
+                # None = TLS kapali (varsayilan). Bkz. _nats_tls_context.
+                tls=_nats_tls_context(),
             )
             js = nc.jetstream()
 

@@ -206,6 +206,13 @@ services:
       - "/etc/nats/nats-server.conf"
     volumes:
       - ./infra/nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      # TLS sertifikalari. Dizin TLS kapaliyken BOS olur ve mount zararsizdir;
+      # kosullu mount yazmak compose'da mumkun degil, bos dizin ise NATS'i
+      # etkilemez (config'te tls blogu yoksa hic okunmaz).
+      # DIKKAT: CA'nin OZEL anahtari (ca.key) da bu dizinde duruyor ama
+      # container'in ona ihtiyaci yok; read-only mount ile en azindan
+      # degistirilemez. Uretim betigi ca.key'i 0600 birakir.
+      - ./infra/nats/certs:/etc/nats/certs:ro
       - nats-data:/data
     healthcheck:
       # Auth aktif olunca /healthz auth-suz erisilebilir (NATS default).
@@ -284,6 +291,13 @@ services:
       # stream'leri otomatik ensure eder (TELEMETRY_RAW, TELEMETRY_NORMALIZED).
       # NATS server'da 3 user var (gateway/backend/worker); backend admin tam yetki.
       NATS_URL: ${NATS_URL_BACKEND:-${NATS_URL:-nats://nats:4222}}
+      # TLS CA dosyasi. BOS = TLS kapali (varsayilan, bugunku davranis).
+      # Doluysa baglanti YALNIZCA bu CA'ya guvenir; isletim sisteminin
+      # guven deposu kullanilmaz. Acmak icin once sertifika uretin:
+      #   sudo bash infra/scripts/linux/nats-tls-setup.sh
+      # sonra .env'e NATS_TLS_ENABLED=true + NATS_CA_FILE=/etc/nats/certs/ca.crt
+      # ve NATS_URL'i tls:// semasina cevirin.
+      NATS_CA_FILE: ${NATS_CA_FILE:-}
       # Gateway sifresi backend'in iki yerde lazim:
       # 1) production guard (config.py _validate_production_safeguards) bos
       #    olmasini reddeder
@@ -505,6 +519,13 @@ services:
       # In: TELEMETRY_RAW stream (e1.telemetry.raw.>)
       # Out: e1.telemetry.normalized.<gw> (TELEMETRY_NORMALIZED stream'e gider)
       NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
+      # TLS CA dosyasi. BOS = TLS kapali (varsayilan, bugunku davranis).
+      # Doluysa baglanti YALNIZCA bu CA'ya guvenir; isletim sisteminin
+      # guven deposu kullanilmaz. Acmak icin once sertifika uretin:
+      #   sudo bash infra/scripts/linux/nats-tls-setup.sh
+      # sonra .env'e NATS_TLS_ENABLED=true + NATS_CA_FILE=/etc/nats/certs/ca.crt
+      # ve NATS_URL'i tls:// semasina cevirin.
+      NATS_CA_FILE: ${NATS_CA_FILE:-}
       NATS_SUBJECT_TELEMETRY_RAW: ${NATS_SUBJECT_TELEMETRY_RAW:-e1.telemetry.raw.>}
       NATS_SUBJECT_NORMALIZED_PREFIX: ${NATS_SUBJECT_NORMALIZED_PREFIX:-e1.telemetry.normalized}
       # Backend system-status, tag-engine icin 8011 portunu probe eder.
@@ -532,6 +553,13 @@ services:
     environment:
       # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
       NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
+      # TLS CA dosyasi. BOS = TLS kapali (varsayilan, bugunku davranis).
+      # Doluysa baglanti YALNIZCA bu CA'ya guvenir; isletim sisteminin
+      # guven deposu kullanilmaz. Acmak icin once sertifika uretin:
+      #   sudo bash infra/scripts/linux/nats-tls-setup.sh
+      # sonra .env'e NATS_TLS_ENABLED=true + NATS_CA_FILE=/etc/nats/certs/ca.crt
+      # ve NATS_URL'i tls:// semasina cevirin.
+      NATS_CA_FILE: ${NATS_CA_FILE:-}
       NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
       # Alarm yayini: RabbitMQ (notification-worker buradan tuketiyor).
       # Vhost izolasyonu: kok `/` vhost'a degil dedicated `e1` (veya
@@ -598,6 +626,13 @@ services:
     environment:
       # Telemetri kaynagi: NATS JetStream (tag-engine cikisi).
       NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
+      # TLS CA dosyasi. BOS = TLS kapali (varsayilan, bugunku davranis).
+      # Doluysa baglanti YALNIZCA bu CA'ya guvenir; isletim sisteminin
+      # guven deposu kullanilmaz. Acmak icin once sertifika uretin:
+      #   sudo bash infra/scripts/linux/nats-tls-setup.sh
+      # sonra .env'e NATS_TLS_ENABLED=true + NATS_CA_FILE=/etc/nats/certs/ca.crt
+      # ve NATS_URL'i tls:// semasina cevirin.
+      NATS_CA_FILE: ${NATS_CA_FILE:-}
       NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
@@ -635,6 +670,13 @@ services:
         condition: service_healthy
     environment:
       NATS_URL: ${NATS_URL_WORKER:-${NATS_URL:-nats://nats:4222}}
+      # TLS CA dosyasi. BOS = TLS kapali (varsayilan, bugunku davranis).
+      # Doluysa baglanti YALNIZCA bu CA'ya guvenir; isletim sisteminin
+      # guven deposu kullanilmaz. Acmak icin once sertifika uretin:
+      #   sudo bash infra/scripts/linux/nats-tls-setup.sh
+      # sonra .env'e NATS_TLS_ENABLED=true + NATS_CA_FILE=/etc/nats/certs/ca.crt
+      # ve NATS_URL'i tls:// semasina cevirin.
+      NATS_CA_FILE: ${NATS_CA_FILE:-}
       NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
       BACKEND_API_BASE: http://backend-api:8000/api/v1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}

@@ -485,12 +485,15 @@ def _consume_loop() -> None:
         while not _stop_event.is_set():
             nc = None
             try:
+                from app.core.nats_tls import nats_tls_context
+
                 nc = await _nats.connect(
                     servers=[settings.nats_url],
                     connect_timeout=settings.nats_connect_timeout_sec,
                     max_reconnect_attempts=-1,
                     reconnect_time_wait=2,
                     name="e1-backend-api-consumer",
+                    tls=nats_tls_context(),  # None = TLS kapali (varsayilan)
                 )
                 js = nc.jetstream()
 

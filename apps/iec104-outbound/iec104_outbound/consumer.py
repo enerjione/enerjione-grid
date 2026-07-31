@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import ssl
 from datetime import datetime
 from threading import Event, Thread
 
@@ -27,6 +29,25 @@ logger = logging.getLogger(__name__)
 
 
 _GOOD_QUALITIES = {"good", "ok", ""}
+
+
+def _nats_tls_context():
+    """NATS_CA_FILE ayarliysa dogrulayici SSL baglami, degilse None.
+
+    NEDEN: NATS istemci portu tum arayuzlere acik ve baglantilar parolali;
+    TLS'siz hem parola hem telemetri duz metin gider.
+
+    `create_default_context(cafile=...)` YALNIZCA verilen CA'ya guvenir —
+    isletim sisteminin guven deposu kullanilmaz. Bu bilincli: aksi halde
+    herkese acik bir otoriteden alinmis sertifika da kabul edilirdi.
+
+    Dosya okunamazsa HATA yukselir; TLS'siz devam etmek, operatorun "TLS
+    acik" sandigi bir kurulumda parolayi acikta gondermek olurdu.
+    """
+    ca_file = (os.getenv("NATS_CA_FILE") or "").strip()
+    if not ca_file:
+        return None
+    return ssl.create_default_context(cafile=ca_file)
 
 
 def _is_good(quality: str | None) -> bool:
@@ -101,6 +122,8 @@ class TelemetryConsumer:
                     max_reconnect_attempts=-1,
                     reconnect_time_wait=2,
                     name="e1-iec104-outbound",
+                    # None = TLS kapali (varsayilan). Bkz. _nats_tls_context.
+                    tls=_nats_tls_context(),
                 )
                 js = nc.jetstream()
 

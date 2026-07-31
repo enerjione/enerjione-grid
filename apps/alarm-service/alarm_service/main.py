@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import ssl
 import threading
 import time
 from datetime import datetime, timezone
@@ -46,6 +47,25 @@ RULES_REFRESH_SEC = int(os.getenv("ALARM_RULES_REFRESH_SEC", "10"))
 
 
 # Kural (rule_id, device_code) bazli durum takibi: aktiflik + debounce buffer + ilk gorulen zaman
+def _nats_tls_context():
+    """NATS_CA_FILE ayarliysa dogrulayici SSL baglami, degilse None.
+
+    NEDEN: NATS istemci portu tum arayuzlere acik ve baglantilar parolali;
+    TLS'siz hem parola hem telemetri duz metin gider.
+
+    `create_default_context(cafile=...)` YALNIZCA verilen CA'ya guvenir —
+    isletim sisteminin guven deposu kullanilmaz. Bu bilincli: aksi halde
+    herkese acik bir otoriteden alinmis sertifika da kabul edilirdi.
+
+    Dosya okunamazsa HATA yukselir; TLS'siz devam etmek, operatorun "TLS
+    acik" sandigi bir kurulumda parolayi acikta gondermek olurdu.
+    """
+    ca_file = (os.getenv("NATS_CA_FILE") or "").strip()
+    if not ca_file:
+        return None
+    return ssl.create_default_context(cafile=ca_file)
+
+
 class _RuleState:
     def __init__(self) -> None:
         self._lock = Lock()
@@ -720,6 +740,8 @@ async def _consume_jetstream() -> None:
                 max_reconnect_attempts=-1,
                 reconnect_time_wait=2,
                 name="e1-alarm-service",
+                # None = TLS kapali (varsayilan). Bkz. _nats_tls_context.
+                tls=_nats_tls_context(),
             )
             js = nc.jetstream()
 

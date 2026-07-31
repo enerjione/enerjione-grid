@@ -354,6 +354,40 @@ if [[ $NEED_NATS_RENDER -eq 1 ]]; then
   sed -i "s|{{NATS_GATEWAY_BCRYPT_HASH}}|${HASH_G//&/\\&}|" infra/nats/nats-server.conf
   sed -i "s|{{NATS_BACKEND_BCRYPT_HASH}}|${HASH_B//&/\\&}|" infra/nats/nats-server.conf
   sed -i "s|{{NATS_WORKER_BCRYPT_HASH}}|${HASH_W//&/\\&}|" infra/nats/nats-server.conf
+  # TLS blogu — yalnizca NATS_TLS_ENABLED=true ise gercek `tls { ... }` yazilir.
+  # Sertifikalar ONCE uretilmis olmali (infra/scripts/linux/nats-tls-setup.sh);
+  # aksi halde NATS ayaga kalkmaz. Bu yuzden dosya varligi da kontrol edilir:
+  # bayrak acik ama sertifika yoksa SESSIZCE bozuk baslatmak yerine duruyoruz.
+  if [[ "${NATS_TLS_ENABLED:-false}" == "true" ]]; then
+    if [[ -f infra/nats/certs/server.crt && -f infra/nats/certs/server.key ]]; then
+      python3 - <<'E1_TLS_PY'
+import pathlib
+p = pathlib.Path("infra/nats/nats-server.conf")
+p.write_text(
+    p.read_text(encoding="utf-8").replace(
+        "{{NATS_TLS_BLOCK}}",
+        'tls {
+'
+        '  cert_file: "/etc/nats/certs/server.crt"
+'
+        '  key_file:  "/etc/nats/certs/server.key"
+'
+        '  timeout:   5
+'
+        '}',
+    ),
+    encoding="utf-8",
+)
+E1_TLS_PY
+      e1_ok "NATS TLS etkin."
+    else
+      e1_warn "NATS_TLS_ENABLED=true ama sertifika yok (infra/nats/certs/)."
+      e1_warn "Once calistirin: sudo bash infra/scripts/linux/nats-tls-setup.sh"
+      e1_die "Sertifikasiz TLS ile NATS ayaga kalkmaz."
+    fi
+  else
+    sed -i "s|{{NATS_TLS_BLOCK}}|# TLS kapali (NATS_TLS_ENABLED=true ile acilir)|" infra/nats/nats-server.conf
+  fi
   e1_chown_target infra/nats/nats-server.conf
   e1_ok "NATS auth render edildi."
   # NATS container conf'i yeniden okusun

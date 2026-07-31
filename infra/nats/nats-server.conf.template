@@ -121,13 +121,21 @@ authorization {
     ]
 }
 
-# TLS (opsiyonel, sonraki tur):
-#   tls {
-#     cert_file: "/etc/nats/certs/server.crt"
-#     key_file:  "/etc/nats/certs/server.key"
-#     ca_file:   "/etc/nats/certs/ca.crt"
-#     verify:    true
-#   }
+# TLS — kurulum tarafindan render edilir.
+#
+# `NATS_TLS_ENABLED=true` ise install.sh/update.sh asagidaki isareti gercek bir
+# `tls { ... }` blogu ile degistirir; degilse yorum satiri birakir.
+#
+# NEDEN OPT-IN: TLS acildiginda TUM istemciler (backend, 4 worker ve
+# gateway'ler) `tls://` + CA dosyasi ile baglanmak zorunda. Biri eksik kalirsa
+# telemetri akisi DURUR. Bu yuzden acilis iki bilincli adim: once
+# `infra/scripts/linux/nats-tls-setup.sh` ile sertifika uret, sonra bayragi ac.
+#
+# `verify: true` KULLANILMIYOR — o, istemcinin de sertifika sunmasini (mTLS)
+# zorunlu kilar. Kimlik dogrulama zaten kullanici+parola ile yapiliyor; TLS'in
+# buradaki isi kanali sifrelemek ve sunucuyu dogrulatmak. mTLS'e gecmek her
+# gateway icin ayri sertifika dagitimi/yenilemesi demek olurdu.
+{{NATS_TLS_BLOCK}}
 
 # Limit DoS:
 max_payload: 1MB

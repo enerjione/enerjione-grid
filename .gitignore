@@ -52,6 +52,11 @@ infra/scripts/windows/service_control_panel.config.json
 infra/nats/nats-server.conf
 !infra/nats/nats-server.conf.template
 
+# NATS TLS sertifikalari — kuruluma OZEL uretilir, ASLA commit edilmez.
+# `ca.key` burada duruyor: repoya girerse o CA'ya guvenen HER kurulum icin
+# gecerli sunucu sertifikasi uretilebilirdi, yani TLS tamamen anlamsizlasirdi.
+infra/nats/certs/
+
 # DB yedek dosyalari — ASLA commit edilmemeli (gercek musteri verisi icerir).
 # Ankrasiz `backups/` yazmak cazip ama frontend'in `src/features/backups/`
 # kaynak dizinini de yakalar; o yuzden yedek YAZILAN dizinler tek tek
