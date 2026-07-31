@@ -53,6 +53,7 @@ import {
   blockReason,
   consequencesOf,
   detectAccessPath,
+  networkErrorText,
   radioOf,
   roleOf,
   willDropSession,
@@ -182,7 +183,7 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
       await setWifiRadio(accessToken, true);
       onRefreshStatus();
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : t("common.errorOccurred"));
+      setError(networkErrorText(exc, t));
     } finally {
       setSubmitting(false);
     }
@@ -222,7 +223,7 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
         if (drops) setHandoverAt(Date.now());
         onRefreshStatus();
       } catch (exc) {
-        setError(exc instanceof Error ? exc.message : t("common.errorOccurred"));
+        setError(networkErrorText(exc, t));
       } finally {
         setSubmitting(false);
       }
@@ -272,7 +273,7 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
       }
       onRefreshStatus();
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : t("common.errorOccurred"));
+      setError(networkErrorText(exc, t));
     } finally {
       setScanning(false);
     }

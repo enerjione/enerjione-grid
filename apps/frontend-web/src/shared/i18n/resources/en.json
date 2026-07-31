@@ -834,6 +834,15 @@
     }
   },
   "network": {
+    "errorCode": {
+      "wifi_not_supported": "No WiFi adapter was found on this device.",
+      "radio_off": "Turn the WiFi adapter on first.",
+      "radio_off_would_strand": "WiFi cannot be turned off: there is no other way (cable) to reach the device. Turning it off would make the device unreachable.",
+      "radio_hardware_blocked": "WiFi is switched off by the physical switch on the device. Software cannot turn it on; use the WiFi switch on the device.",
+      "no_saved_network": "There is no saved WiFi network. Pick one from the list and connect first.",
+      "invalid_mode": "Invalid selection.",
+      "request_pending": "The previous request is still being processed. Try again in a few seconds."
+    },
     "title": "Network Settings",
     "access": {
       "deviceAddress": "Device address",
@@ -895,17 +904,17 @@
       "apHint": "If the new address is unreachable, join the {{ssid}} WiFi network and try {{url}}."
     },
     "pending": "A previous network request is still being processed…",
-    "staleAgent": "The host network agent has not reported for a while; the values shown may be stale.",
+    "staleAgent": "The device has not reported its network status for a while; the values here may be out of date.",
     "agentOld": "The device software is out of date: whether the WiFi adapter is on, what it is used for and the internet connection are not reported. These will appear once the device is updated.",
     "lastApplyFailed": "The last network change failed: {{error}}",
     "unavailable": {
       "title": "Appliance mode is not installed",
       "hint": "Refresh this page after installation. This page only applies to mini PC (appliance) deployments; on server/VPS installs the network is managed by the system administrator.",
       "reason": {
-        "state_dir_missing": "The host network agent (e1-netd) is not installed — shared directory missing.",
-        "state_dir_not_writable": "The agent directory is not writable (permission error).",
-        "agent_never_reported": "The network agent has never reported. Was the setup script run?",
-        "unknown": "The network agent is unreachable."
+        "state_dir_missing": "Network settings are not available on this device. They work only on EnerjiOne mini PC installations.",
+        "state_dir_not_writable": "The network status cannot be read (permission problem). Please contact technical support.",
+        "agent_never_reported": "The device has not reported its network status yet. Setup may not be complete.",
+        "unknown": "The device's network status cannot be read."
       }
     },
     "errors": {
@@ -2447,6 +2456,18 @@
       },
       "binaryActive": "ACTIVE (1)",
       "binaryInactive": "INACTIVE (0)",
+      "clock": {
+        "unsynchronized": "Clock unsynchronized",
+        "invalid": "Clock invalid",
+        "unsynchronizedHint": "The device reports that its clock is not time-synchronised. The measured value is valid; only event ordering is unreliable.",
+        "invalidHint": "The device event timestamp is invalid (e.g. a dead RTC battery). The measured value is valid; alarm times are always taken from the server clock.",
+        "deviceTime": "Device clock",
+        "offset": "Offset",
+        "unitSec": "s",
+        "unitMin": "min",
+        "unitHour": "h",
+        "unitDay": "d"
+      },
       "noRows": "No rows match the filter.",
       "noRowsInitial": "No rows to display: at least one device and an active signal catalog are required. Once devices are added, all signal rows are listed here; values populate as telemetry arrives.",
       "itemLabel": "signal"

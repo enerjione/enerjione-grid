@@ -303,3 +303,35 @@ export function apUrl(status: NetworkStatus | null): string {
   const host = status?.ap?.address ?? status?.mdns_name ?? "10.42.0.1";
   return `http://${host}`;
 }
+
+/** Backend'in dondugu MAKINE KODUNU kullaniciya gosterilecek metne cevirir.
+ *
+ *  Backend hata gövdesinde `detail` olarak kod doner ("radio_off_would_strand"
+ *  gibi) — bu bilincli: metin arayuzde, kullanicinin dilinde uretilmeli.
+ *  Ama frontend bu kodu `exc.message` olarak OLDUGU GIBI basiyordu; musteri
+ *  ekraninda "radio_off_would_strand" gorunuyor, ustelik Ingilizce arayuzde
+ *  backend'in Turkce fallback metinleri cikiyordu.
+ *
+ *  Tanimadigimiz bir kod gelirse (backend yeni bir sey ekledi, arayuz eski)
+ *  genel hata metnine duseriz — ham kod ASLA ekrana basilmaz.
+ */
+const NETWORK_ERROR_CODES = new Set([
+  "wifi_not_supported",
+  "radio_off",
+  "radio_off_would_strand",
+  "radio_hardware_blocked",
+  "no_saved_network",
+  "invalid_mode",
+  "request_pending"
+]);
+
+export function networkErrorText(
+  err: unknown,
+  t: (key: string) => string
+): string {
+  const raw = err instanceof Error ? err.message.trim() : "";
+  if (raw && NETWORK_ERROR_CODES.has(raw)) return t(`network.errorCode.${raw}`);
+  // Kod degil ama okunabilir bir cumle ise (eski backend, ag hatasi) gecir.
+  if (raw && /\s/.test(raw)) return raw;
+  return t("common.errorOccurred");
+}

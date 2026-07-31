@@ -834,6 +834,15 @@
     }
   },
   "network": {
+    "errorCode": {
+      "wifi_not_supported": "Bu cihazda WiFi kartı bulunamadı.",
+      "radio_off": "Önce WiFi kartını açın.",
+      "radio_off_would_strand": "WiFi kapatılamaz: cihaza başka bir yoldan (kablo) erişim yok. Kapatılırsa cihaza ulaşılamaz hâle gelir.",
+      "radio_hardware_blocked": "WiFi cihaz üzerindeki fiziksel anahtarla kapatılmış. Yazılımdan açılamaz; cihazın üzerindeki WiFi anahtarını açın.",
+      "no_saved_network": "Kayıtlı bir WiFi ağı yok. Önce listeden bir ağ seçip bağlanın.",
+      "invalid_mode": "Geçersiz seçim.",
+      "request_pending": "Önceki istek hâlâ işleniyor. Birkaç saniye sonra tekrar deneyin."
+    },
     "title": "Ağ Ayarları",
     "access": {
       "deviceAddress": "Cihaz adresi",
@@ -895,17 +904,17 @@
       "apHint": "Yeni adrese ulaşamazsanız {{ssid}} WiFi ağına bağlanıp {{url}} adresini deneyin."
     },
     "pending": "Önceki ağ ayarı isteği hâlâ işleniyor…",
-    "staleAgent": "Host ağ ajanı bir süredir durum bildirmiyor; gösterilen bilgiler eski olabilir.",
+    "staleAgent": "Cihaz bir süredir ağ durumunu bildirmiyor; burada görünen bilgiler eski olabilir.",
     "agentOld": "Cihaz yazılımı eski: WiFi kartının açık/kapalı durumu, kartın görevi ve internet bağlantısı bildirilmiyor. Bu bilgiler cihaz güncellendikten sonra görünecek.",
     "lastApplyFailed": "Son ağ ayarı uygulanamadı: {{error}}",
     "unavailable": {
       "title": "Appliance modu kurulu değil",
       "hint": "Kurulumdan sonra sayfayı yenileyin. Bu sayfa yalnızca mini PC (appliance) kurulumlarında çalışır; sunucu/VPS kurulumlarında ağ ayarı sistem yöneticisi tarafından yapılır.",
       "reason": {
-        "state_dir_missing": "Host ağ ajanı (e1-netd) kurulmamış — paylaşılan dizin yok.",
-        "state_dir_not_writable": "Ağ ajanı dizinine yazılamıyor (izin hatası).",
-        "agent_never_reported": "Ağ ajanı henüz hiç durum bildirmemiş. Kurulum scripti çalıştırıldı mı?",
-        "unknown": "Ağ ajanına ulaşılamıyor."
+        "state_dir_missing": "Bu cihazda ağ ayarları özelliği kurulu değil. Yalnızca EnerjiOne mini PC kurulumlarında çalışır.",
+        "state_dir_not_writable": "Ağ durumu okunamıyor (izin sorunu). Teknik destekle görüşün.",
+        "agent_never_reported": "Cihaz henüz ağ durumunu bildirmedi. Kurulum tamamlanmamış olabilir.",
+        "unknown": "Cihazın ağ durumu okunamıyor."
       }
     },
     "errors": {
@@ -2447,6 +2456,18 @@
       },
       "binaryActive": "AKTİF (1)",
       "binaryInactive": "PASİF (0)",
+      "clock": {
+        "unsynchronized": "Saat senkronsuz",
+        "invalid": "Saat geçersiz",
+        "unsynchronizedHint": "Cihaz kendi saatinin senkronize edilmediğini bildiriyor. Ölçüm değeri geçerlidir; yalnızca olay sıralaması güvenilmez.",
+        "invalidHint": "Cihazın olay zaman damgası geçersiz (örn. RTC pili bitmiş olabilir). Ölçüm değeri geçerlidir; alarm saatleri her zaman sunucu saatine göre belirlenir.",
+        "deviceTime": "Cihaz saati",
+        "offset": "Fark",
+        "unitSec": "sn",
+        "unitMin": "dk",
+        "unitHour": "sa",
+        "unitDay": "gün"
+      },
       "noRows": "Filtreye uygun satır bulunamadı.",
       "noRowsInitial": "Gösterilecek satır yok: en az bir cihaz ve aktif sinyal kataloğu gerekir. Cihaz eklediğinizde tüm sinyal satırları burada listelenir; değerler telemetri geldikçe dolacaktır.",
       "itemLabel": "sinyal"
