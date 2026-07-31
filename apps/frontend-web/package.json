@@ -32,5 +32,24 @@
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.1"
+  },
+  "//overrides": [
+    "Guvenlik yamalari — ikisi de DOLAYLI bagimlilik (vite ve",
+    "@vitejs/plugin-react uzerinden gelir), bu yuzden dogrudan surum",
+    "yukseltilemiyor; `overrides` ile zorlaniyor.",
+    "postcss  <=8.5.17: sourceMappingURL ile keyfi dosya okuma / .map ifsasi",
+    "         (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849) — yama 8.5.18.",
+    "@babel/core <=7.29.0: sourceMappingURL ile keyfi dosya okuma",
+    "         (GHSA-4x5r-pxfx-6jf8) — yama 7.29.6. 7.x'te KALIYORUZ; 8.x major.",
+    "Ikisi de DERLEME ZINCIRI: cok asamali Dockerfile calisma imajina yalnizca",
+    "dist/ kopyaladigi icin saha cihazina GITMEZLER. Yine de derleme aninda",
+    "gecerli bir aciktir.",
+    "ACIK KALAN: vite (<=6.4.2) ve esbuild (<=0.24.2) uyarilari burada",
+    "kapanmaz — vite 5 hattinda yama YOK (5.4.21 son surum), duzeltme icin",
+    "vite 6'ya cikmak gerekiyor. Ayri bir is olarak ele alinacak."
+  ],
+  "overrides": {
+    "postcss": "^8.5.18",
+    "@babel/core": "^7.29.6"
   }
 }
