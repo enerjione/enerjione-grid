@@ -854,6 +854,11 @@ def create_backup(
     return job
 
 
+# Off-site kopyanin KAPALI oldugu bir kez loglansin diye (her yedekte
+# tekrarlanirsa log gurultusu olur, hic loglanmazsa ozellik olu kalir).
+_offsite_disabled_logged = False
+
+
 def _offsite_copy(source: Path, job: BackupJob) -> None:
     """Backup dosyasini BACKUP_OFFSITE_DIR'a kopyala (yapilandirilmissa).
 
@@ -867,9 +872,24 @@ def _offsite_copy(source: Path, job: BackupJob) -> None:
     LAN ortaminda SMB share mount edip o yolu vermek tipik kullanim:
       Windows: `BACKUP_OFFSITE_DIR=\\\\nas\\backups\\enerjione`
       Linux:   `BACKUP_OFFSITE_DIR=/mnt/nas/backups/enerjione`
+
+    GORUNURLUK: env bos oldugunda eskiden SESSIZCE `return` ediliyordu. Docker
+    kurulumlarinda degisken compose'da hic tanimli olmadigi icin bu dal HER
+    ZAMAN aliniyordu — yani `.env`'ine NAS yolunu yazan operator de dahil
+    herkes icin off-site kopya kapaliydi ve hicbir yerde iz birakmiyordu.
+    Artik durum en az bir kez loglanir; "yapilandirdim ama calismiyor" hali
+    felaket aninda degil, log'da gorunur.
     """
+    global _offsite_disabled_logged
+
     raw = os.getenv("BACKUP_OFFSITE_DIR", "").strip()
     if not raw:
+        if not _offsite_disabled_logged:
+            _offsite_disabled_logged = True
+            logger.info(
+                "backup_offsite_disabled reason=BACKUP_OFFSITE_DIR_bos "
+                "note=yedeklerin_TEK_kopyasi_ayni_diskte"
+            )
         return
     import shutil
 

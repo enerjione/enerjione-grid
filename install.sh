@@ -407,6 +407,20 @@ _ensure_env_var "NATS_BACKEND_PASSWORD" "$NB"
 _ensure_env_var "NATS_WORKER_PASSWORD" "$NW"
 _ensure_env_var "NATS_GATEWAY_PASSWORD" "$NG"
 
+# FTP_PASSWORD — .env.example'da BOS geliyor ve yukaridaki listede YOKTU.
+# Sonuc: her temiz kurulumda ftp-server acilir acilmaz "FTP_PASSWORD bos"
+# deyip SystemExit(2) veriyor, `restart: unless-stopped` altinda sonsuza
+# kadar yeniden basliyordu. Horstmann SN2 cihazlari config/firmware
+# yukleyemiyor, sebep hicbir kurulum ciktisinda gorunmuyor ve her update
+# sonunda "1 servis calismiyor" uyarisi kalici hale gelip GERCEK arizalari
+# maskeliyordu.
+#
+# 16 hane (digerleri 24): bu parola sahada cihazin kendi FTP ekranindan ELLE
+# giriliyor. Kurulum ozetinde ("TEKNIK BILGILER") gosteriliyor.
+if e1_env_ensure_secret "FTP_PASSWORD" 16; then
+  e1_info "FTP_PASSWORD uretildi (cihaz FTP ekranina girilecek)."
+fi
+
 # Postgres kimligi TEK kanonik isimdir: enerjione_grid. Eski kurulumlarda
 # .env'de 'enerjione' / 'hsl' / 'horstman' kalmis olabilir; burada kesin
 # olarak hizaliyoruz. Volume zaten eski isimle init edilmisse asagidaki
@@ -468,8 +482,11 @@ else
 fi
 
 # Sanity check: hicbir kritik secret hala placeholder olmasin.
+# FTP_PASSWORD de burada: bos kalirsa kurulum "TAMAMLANDI" derken ftp-server
+# sessiz bir restart dongusunde olur ve cihazlar dosya transferi yapamaz.
 for k in SECRET_KEY INTERNAL_SERVICE_TOKEN POSTGRES_PASSWORD RABBITMQ_PASSWORD \
-         NATS_BACKEND_PASSWORD NATS_WORKER_PASSWORD NATS_GATEWAY_PASSWORD; do
+         NATS_BACKEND_PASSWORD NATS_WORKER_PASSWORD NATS_GATEWAY_PASSWORD \
+         FTP_PASSWORD; do
   v="$(grep -E "^${k}=" .env | cut -d= -f2- || echo '')"
   if [[ -z "$v" ]] || [[ "$v" == please-change-me* ]] || [[ "$v" == change-me* ]] || [[ "$v" == change-this* ]]; then
     e1_die "${k} hala placeholder/bos! .env'i kontrol edin: ${INSTALL_DIR}/.env"
@@ -974,6 +991,13 @@ e1_box "TEKNIK BILGILER"
 e1_kv "Backend API" "http://${VPS_IP}/api/v1"
 e1_kv "NATS" "nats://${VPS_IP}:4222"
 e1_kv "IEC 104" "${VPS_IP}:2404-2406"
+# Cihazin FTP ekranina ELLE girilecek bilgiler. Parola rastgele uretiliyor ve
+# .env disinda hicbir yerde yazmiyor; kurulumcu buradan okumazsa cihazlari
+# yapilandiramaz.
+FTP_PORT_SHOWN="$(e1_env_get FTP_HOST_PORT)"
+FTP_USER_SHOWN="$(e1_env_get FTP_USER)"
+e1_kv "FTP (cihaz transferi)" "${VPS_IP}:${FTP_PORT_SHOWN:-21}"
+e1_kv "FTP kullanici / parola" "${FTP_USER_SHOWN:-device} / ${E1_CYAN}$(e1_env_get FTP_PASSWORD)${E1_RESET}"
 e1_kv "Gateway ekleme" "Muhendislik > Cihazlar > Yeni Gateway"
 if [[ $APPLIANCE_WANTED -eq 1 ]]; then
   e1_kv "Detayli dokuman" "docs/SAHA-KURULUM.md · docs/APPLIANCE.md"

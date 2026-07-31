@@ -170,6 +170,11 @@ jobs:
       # boyle bir sey: hatasiz calisir ama cihazi ilk reboot'ta oldururdu.
       - name: update.sh surum geri alma davranisi
         run: bash infra/scripts/linux/tests/test-update-version-rollback.sh "$PWD"
+      # Update oncesi yedeklerin rotasyonu (denetim A12). Bu dosyalar hicbir
+      # zaman silinmiyordu ve sahada diski dolduran kalemdi; rotasyon sessizce
+      # kirilirsa ariza yalnizca aylar sonra, dolu bir diskte gorunur.
+      - name: Pre-update yedek rotasyonu
+        run: bash infra/scripts/linux/tests/test-pre-update-backup-rotation.sh "$PWD"
       # Root ajanlarin symlink sertlestirmesi (denetim A11/A13). Bu testler
       # `O_NOFOLLOW` gerektirir, yani Windows gelistirici makinesinde ATLANIR;
       # gercek dogrulama YALNIZCA burada olur. Ajanlar zaten Linux appliance

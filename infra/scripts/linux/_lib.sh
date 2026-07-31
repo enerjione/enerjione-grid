@@ -778,6 +778,91 @@ e1_chown_target_recursive() {
   fi
 }
 
+# Bir .env secret'ini YALNIZCA eksik/bos/placeholder ise doldurur.
+#
+# NEDEN VAR: `.env.example` bazi secret'lari BOS birakiyor ve bunlarin
+# uretilmesi install.sh'a bagli. Listede unutulan bir degisken (FTP_PASSWORD
+# boyleydi) sahada su zinciri uretir: container acilista "deger bos" deyip
+# oluyor -> `restart: unless-stopped` onu sonsuza kadar yeniden baslatiyor ->
+# hicbir kurulum ciktisinda gorunmuyor. Bu fonksiyon hem install.sh'ta hem
+# update.sh'ta cagriliyor; ikincisi ZATEN KURULU cihazlari da onarir
+# (update.sh'in baska bir .env onarim adimi yok).
+#
+# DOLU BIR DEGERE ASLA DOKUNMAZ: mevcut kurulumun parolasini degistirmek
+# (or. POSTGRES_PASSWORD) veri kaybina yakin bir hatadir.
+#
+# Placeholder kaliplari install.sh'taki `_ensure_env_var` ile AYNI tutulmali.
+#
+# Kullanim:  e1_env_ensure_secret FTP_PASSWORD 16 [.env yolu]
+# Donus:     0 = yeni deger yazildi, 1 = dokunulmadi/yazilamadi
+e1_env_ensure_secret() {
+  local key="$1"
+  local len="${2:-24}"
+  local env_file="${3:-.env}"
+  local cur="" val=""
+
+  [[ -f "$env_file" ]] || return 1
+
+  if grep -qE "^${key}=" "$env_file"; then
+    cur="$(grep -E "^${key}=" "$env_file" | head -1 | cut -d= -f2-)"
+    case "$cur" in
+      ""|please-change-me*|change-me*|change-this*) ;;
+      *) return 1 ;;  # operator/onceki kurulum doldurmus — KORU
+    esac
+  fi
+
+  # Yalnizca harf+rakam: parola sahada cihazin kendi ekranindan ELLE
+  # giriliyor; `/+=` gibi karakterler hem yazimi zorlastiriyor hem de bazi
+  # gomulu FTP istemcilerinde sorun cikariyor.
+  val="$(openssl rand -base64 48 2>/dev/null | tr -dc 'A-Za-z0-9' | cut -c1-"$len")"
+  [[ ${#val} -eq $len ]] || return 1
+
+  if grep -qE "^${key}=" "$env_file"; then
+    sed -i "s|^${key}=.*|${key}=${val}|" "$env_file"
+  else
+    printf '%s=%s\n' "$key" "$val" >> "$env_file"
+  fi
+  return 0
+}
+
+# Update oncesi otomatik DB yedeklerini en yeni <keep> tanesi kalacak sekilde
+# budar. `auto-pre-update-*` kaliba uyan HER dosya kapsanir; eski surumlerin
+# biraktigi `.sql.gz` yigini da bu sayede temizlenir.
+#
+# NEDEN VAR: bu dosyalar hicbir zaman silinmiyordu. `./backups` compose proje
+# dizinindedir, BACKUP_DIR volume'u DEGIL; ne disk_guard, ne apply_retention,
+# ne de UI onlari gorur. Birkac guncelleme sonra cihazin diski doluyor ve
+# postgres-data ayni dosya sisteminde oldugu icin Postgres yazamaz hale
+# geliyordu.
+#
+# Kullanim: e1_prune_pre_update_backups <keep> [dizin]
+e1_prune_pre_update_backups() {
+  local keep="${1:-3}"
+  local dir="${2:-backups}"
+  local f
+
+  [[ "$keep" =~ ^[0-9]+$ ]] || keep=3
+  [[ -d "$dir" ]] || return 0
+
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    if rm -f -- "$f"; then
+      e1_info "Eski yedek silindi: $(basename -- "$f")"
+    fi
+  done < <(
+    find "$dir" -maxdepth 1 -type f -name 'auto-pre-update-*' \
+         -printf '%T@\t%p\n' 2>/dev/null \
+      | sort -rn | tail -n +$((keep + 1)) | cut -f2-
+  )
+}
+
+# Bir .env degiskeninin degerini okur (yoksa bos doner).
+e1_env_get() {
+  local key="$1" env_file="${2:-.env}"
+  [[ -f "$env_file" ]] || return 0
+  grep -E "^${key}=" "$env_file" 2>/dev/null | head -1 | cut -d= -f2- || true
+}
+
 # VDS IP'sini bul — once `hostname -I` (local interface, instant, offline-safe),
 # yoksa veya invalid ise public IP icin curl ifconfig.me. Bash `||` zincirinde
 # bos string'in exit=0 dondurmesi tuzak; her adimi explicit kontrol et.
