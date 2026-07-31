@@ -47,7 +47,21 @@ class GatewayRead(BaseModel):
     batch_interval_sec: int
     max_devices: int
     device_code_prefix: str | None = None
-    token: str
+    # `token` BILEREK YOK — duz metin donmuyor.
+    #
+    # YASANAN ACIK: bu sema token'i duz metin tasiyordu ve gateway listesi
+    # OPERATOR rolune de aciktir. Token, `POST /telemetry/gateway/{code}` icin
+    # TEK kimlik unsuru; yani operator listeden token'i alip kendi alani
+    # DISINDAKI cihazlar icin uydurma telemetri gonderebiliyordu — sahte
+    # kritik ariza uretmek ya da `fault_indicator`i normal gondererek GERCEK
+    # arizayi maskelemek. Ayni token ile `/gateways/{code}/config` cagrilip
+    # sahadaki tum cihazlarin IP/DNP3 adres listesi de sizabiliyordu.
+    #
+    # Liste operator'a ACIK KALDI (canli deger ekrani gateway'in cevrimici
+    # olup olmadigini buradan okuyor); kapatilan yalnizca token. Token'a
+    # gercekten ihtiyaci olan INSTALLER `GET /gateways/{code}/token` ucunu
+    # kullanir; o cagri denetim kaydina yazilir.
+    has_token: bool = False
     is_active: bool
     last_seen_at: datetime | None = None
     control_host: str = "127.0.0.1"

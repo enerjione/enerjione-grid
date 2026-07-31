@@ -25,6 +25,16 @@ class Gateway(Base):
     # duser. Tum kayitlar hash'lendiginde token kolonu kaldirilabilir.
     token: Mapped[str] = mapped_column(String(255), index=True)
     token_hash: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True)
+
+    @property
+    def has_token(self) -> bool:
+        """Arayuz icin: token TANIMLI MI — degerin KENDISI degil.
+
+        `GatewayRead` token'i artik dondurmuyor (operator telemetri enjekte
+        edebiliyordu). Arayuzun tek ihtiyaci "kurulu mu?" bilgisi.
+        """
+        return bool((self.token or "").strip() or (self.token_hash or "").strip())
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 

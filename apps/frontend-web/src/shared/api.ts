@@ -959,6 +959,27 @@ export async function fetchGateways(token: string): Promise<Gateway[]> {
   return (await response.json()) as Gateway[];
 }
 
+/**
+ * Gateway token'ini duz metin ceker — YALNIZCA INSTALLER.
+ *
+ * Token `GET /gateways` yanitindan cikarildi: o liste operator'a da acik ve
+ * token telemetri gonderiminin TEK kimlik unsuru. Listede kaldigi surece
+ * operator kendi alani disindaki cihazlar icin uydurma telemetri
+ * gonderebiliyordu. Backend bu cagriyi denetim kaydina yazar.
+ */
+export async function fetchGatewayToken(
+  token: string,
+  gatewayCode: string
+): Promise<string> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/gateways/${encodeURIComponent(gatewayCode)}/token`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Gateway token'ı alınamadı.");
+  const data = (await response.json()) as { code: string; token: string };
+  return data.token;
+}
+
 export async function createGateway(
   token: string,
   payload: {

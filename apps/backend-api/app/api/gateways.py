@@ -110,6 +110,42 @@ def list_gateways(
     return list(db.scalars(stmt).all())
 
 
+@router.get("/{gateway_code}/token")
+def get_gateway_token(
+    gateway_code: str,
+    current_user: User = Depends(require_roles([UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    """Gateway token'ini duz metin doner — YALNIZCA INSTALLER.
+
+    NEDEN AYRI UC: token `GET /gateways` yanitindan cikarildi. O liste
+    operator'a da acik ve token telemetri gonderiminin TEK kimlik unsuru;
+    listede durdugu surece operator kendi alani disindaki cihazlar icin
+    uydurma telemetri gonderebiliyordu (sahte ariza uretmek ya da gercek
+    arizayi maskelemek).
+
+    Token'a gercekten ihtiyaci olan tek akis gateway kurulumu/degistirmesidir
+    ve o installer isidir. Her okuma DENETIM KAYDINA yazilir: duz metin bir
+    sirrin kimin ne zaman gordugu iz birakmadan gecmemeli.
+    """
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Gateway bulunamadi"
+        )
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_token_viewed",
+        severity="warning",
+        actor_username=current_user.username,
+        message=f"Gateway token'i goruntulendi: {gateway.code}",
+        metadata={"gateway_code": gateway.code},
+    )
+    db.commit()
+    return {"code": gateway.code, "token": gateway.token}
+
+
 _INITIATING_PORT_BLOCK_SIZE = 1000  # her gateway 1000'lik blok alir
 _INITIATING_PORT_BASE_FIRST = 20100  # ilk gateway buradan baslar
 _INITIATING_PORT_BASE_MAX = 60000  # 65535 - 1000 buffer; ustu kabul edilmez

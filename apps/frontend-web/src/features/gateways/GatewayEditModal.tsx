@@ -17,6 +17,7 @@ import { AlertTriangle, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 
 import {
   fetchGatewayAgentStatus,
+  fetchGatewayToken,
   installGatewayLocally,
   removeGatewayLocally
 } from "../../shared/api";
@@ -36,14 +37,20 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
   // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
   const dialogRef = useModalDialog<HTMLDivElement>(onClose);
   const [name, setName] = useState(gateway.name);
-  const [token, setToken] = useState(gateway.token);
+  // Token listede DONMUYOR (operator'a acik bir uctu ve telemetri
+  // enjeksiyonuna izin veriyordu); modal acilinca installer'a ozel uctan
+  // ayrica cekilir. `orijinalToken` "degisti mi" karsilastirmasi icin.
+  const [token, setToken] = useState("");
+  const [orijinalToken, setOrijinalToken] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const [agent, setAgent] = useState<GatewayAgentStatus | null>(null);
   const [localBusy, setLocalBusy] = useState(false);
 
-  const tokenChanged = token !== gateway.token;
+  // Token henuz cekilmediyse "degisti" sayma; aksi halde modal acilir acilmaz
+  // bos deger yuzunden "token degisti" uyarisi cikardi.
+  const tokenChanged = orijinalToken !== "" && token !== orijinalToken;
 
   const loadAgent = async () => {
     setAgent(await fetchGatewayAgentStatus(accessToken));
@@ -51,6 +58,18 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
 
   useEffect(() => {
     void loadAgent();
+    // Token ayri uctan gelir; basarisiz olursa (yetki yok) kutu bos kalir ve
+    // kaydetme token'a dokunmaz — modalin geri kalani calismaya devam eder.
+    void (async () => {
+      try {
+        const mevcut = await fetchGatewayToken(accessToken, gateway.code);
+        setToken(mevcut);
+        setOrijinalToken(mevcut);
+      } catch {
+        setToken("");
+        setOrijinalToken("");
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, gateway.code]);
 
