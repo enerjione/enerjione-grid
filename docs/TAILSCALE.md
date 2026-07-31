@@ -599,6 +599,14 @@ doğruladıysanız, uyarıyı susturmak için:
 sudo E1_TAILSCALE_ASSUME_PERSISTENT=1 bash /opt/enerjione-grid/infra/appliance/setup-tailscale.sh
 ```
 
+> **`E1_TAILSCALE_REJOIN` ve `E1_TAILSCALE_ASSUME_PERSISTENT` tek seferlik
+> komut satırı bayraklarıdır** — `.env` veya `/etc/enerjione-grid/install.env`
+> içine **koymayın**. `REJOIN=1` kalıcı bir dosyada dursaydı her güncelleme
+> cihazı tailnet'ten çıkarıp yeniden katar, her seferinde tailnet IP'sini
+> değiştirirdi. `update.sh` bu iki değişkeni install.env'den okumaz (yalnızca
+> `AUTHKEY`, `TAGS`, `SSH`, `ACCEPT_DNS`, `HOSTNAME`, `HOSTNAME_PREFIX`
+> taşınır); bu yüzden `.env.example`'da da bilerek yer almazlar.
+
 > **Dikkat — yanıltıcı eski çıktı:** Kurulum eskiden "Anahtar suresi
 > uygulanmiyor — cihaz tailnet'te kalici" yazıyordu. Bu **yanlıştı**:
 > ephemeral düğümlerde de anahtar süresi uygulanmaz (onlar süreden değil,
