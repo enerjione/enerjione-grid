@@ -209,12 +209,30 @@ elif [[ -d "${INSTALL_DIR}/.git" ]]; then
   e1_step "Repo hazirlaniyor: ${INSTALL_DIR}"
   e1_info "Repo zaten mevcut; fetch + checkout..."
   cd "${INSTALL_DIR}"
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    e1_warn "Lokal degisiklik var; guncelleme ATLANDI. Mevcut commit ile devam."
-  else
-    e1_run "Guncellemeler indiriliyor" \
-      e1_git_auth "$E1_TOKEN" git fetch --tags --prune origin
+  # MOD-FARKI TOLERANSI — bunu fetch'ten ONCE yapmak zorundayiz.
+  #
+  # Kurulumun KENDISI repoyu kirletiyordu: setup-gateway-agent.sh ve
+  # setup-remote-access.sh, repo ICINDEKI e1-gwd.py / e1-rad.py dosyalarina
+  # `chmod 755` uyguluyor. Bu dosyalar depoda 100644 kayitliydi ve Linux'ta
+  # core.fileMode varsayilan acik oldugu icin 644->755 GERCEK bir diff.
+  # Sonuc: ilk basarili kurulumdan sonra agac KALICI olarak kirli kaliyordu.
+  #
+  # Depodaki modlar 100755'e cekildi (chmod'lar artik no-op), ama ONCEDEN
+  # kurulmus cihazlarda fark diskte durmaya devam eder. core.fileMode=false
+  # bunu kalici olarak susturur — update.sh zaten ayni seyi yapiyor, burada
+  # da ayni davranisi sagliyoruz.
+  if git diff --summary 2>/dev/null | grep -q '^ mode change '; then
+    git config core.fileMode false
+    e1_info "Dosya izni farklari yok sayiliyor (core.fileMode=false)."
   fi
+  # FETCH KOSULSUZ — calisma agacina DOKUNMAZ, yalnizca .git'e yazar.
+  # Eskiden kirlilikte atlaniyordu; bu yanlisti ve asil arizayi doguruyordu:
+  # fetch atlaninca istenen tag cihaza hic inmiyor, sonra "bulunamadi" deyip
+  # ESKI surumle "basarili" bitiliyordu. Korunmasi gereken komut fetch degil,
+  # asagidaki checkout.
+  e1_run "Guncellemeler indiriliyor" \
+    e1_git_auth "$E1_TOKEN" git fetch --tags --prune --force origin \
+    || e1_die "Uzak repo'ya erisilemedi.\n\n  Internet baglantisini ve kurulum anahtarini kontrol edin\n  (anahtarin suresi dolmus olabilir)."
 else
   if [[ -e "${INSTALL_DIR}" ]]; then
     e1_die "${INSTALL_DIR} mevcut ama ne git repo ne de paket kurulumu.\n  Once silin veya farkli bir INSTALL_DIR verin."
@@ -237,6 +255,18 @@ fi
 # sabitlenmis; checkout edilecek bir sey yok.
 if [[ $E1_PACKAGE_MODE -eq 0 ]]; then
   TARGET_REF="$(e1_target_ref)"
+  # KIRLILIK KONTROLU BURADA — checkout'un onunde. Calisma agacini
+  # degistiren komut budur; fetch degil.
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    e1_die "$(printf '%s' \
+      "Calisma agacinda yerel degisiklik var; '${TARGET_REF}' surumune GECILEMEZ.\n\n" \
+      "  Neyin degistigini gormek icin:\n" \
+      "    cd ${INSTALL_DIR} && sudo git status --short && sudo git diff --stat\n\n" \
+      "  Degisiklikleri ATMAK icin (takip edilen dosyalar geri alinir;\n" \
+      "  .env, lisans ve gateway tanimlari ETKILENMEZ):\n" \
+      "    cd ${INSTALL_DIR} && sudo git checkout -- .\n\n" \
+      "  Sonra kurulumu tekrar calistirin.")"
+  fi
   if git rev-parse --verify --quiet "refs/tags/${TARGET_REF}" >/dev/null; then
     # Tag'e gecince HEAD detached olur — saha cihazinda dogru davranis budur:
     # cihaz bir dalin ucunu degil, TEST EDILMIS bir yayini calistirir.
@@ -246,13 +276,41 @@ if [[ $E1_PACKAGE_MODE -eq 0 ]]; then
     git checkout --quiet -B "${TARGET_REF}" "origin/${TARGET_REF}"
     e1_warn "Yayin tag'i bulunamadi — '${TARGET_REF}' dali kullaniliyor (gelistirme surumu)."
   else
-    e1_warn "'${TARGET_REF}' bulunamadi; mevcut commit ile devam ediliyor."
+    # ESKIDEN BURADA SADECE UYARI VARDI VE AKIS DEVAM EDIYORDU.
+    # Sonucu: operator v2.26.0 secip "kuruldu" saniyor, cihaz eski surumde
+    # kaliyordu. Istenen surume gecemiyorsak bu bir HATADIR — kurulum
+    # buraya kadar Docker'a, .env'e, systemd'ye veya veritabanina HIC
+    # dokunmadigi icin burada durmak guvenlidir.
+    e1_die "$(printf '%s' \
+      "'${TARGET_REF}' bulunamadi — istenen surume GECILEMEDI.\n\n" \
+      "  Mevcut yayin surumleri:\n$(git tag -l 'v[0-9]*' --sort=-v:refname | head -10 | sed 's/^/    /')\n\n" \
+      "  Surum adini kontrol edin veya once 'git fetch --tags' ile listeyi tazeleyin.")"
+  fi
+
+  # DOGRULAMA — istenen surume GERCEKTEN gecildi mi?
+  # Bu blok olmadan yukaridaki her dal sessizce yanlis surumde bitebilir;
+  # bu olayin tekrarlamamasinin tek garantisi bu kontroldur.
+  E1_HEAD_NOW="$(git rev-parse --short HEAD)"
+  E1_REF_SHA="$(git rev-parse --short "${TARGET_REF}^{commit}" 2>/dev/null || echo '')"
+  if [[ -n "$E1_REF_SHA" && "$E1_HEAD_NOW" != "$E1_REF_SHA" ]]; then
+    e1_die "Surum gecisi dogrulanamadi: HEAD=${E1_HEAD_NOW} ama ${TARGET_REF}=${E1_REF_SHA}."
   fi
 fi
 
 # Surum artik biliniyor — bundan sonraki tum adim basliklarinda gorunur.
 E1_VERSION_LABEL="$(e1_version "${INSTALL_DIR}")"
 e1_ok "Kaynak hazir — surum ${E1_VERSION_LABEL}"
+
+# Istenen surum ile kurulan surum TUTUYOR MU? Operator bir surum sectiyse
+# (GUI/E1_REF) ve sonucta baska bir surum kurulduysa bunu SESSIZ birakmayiz.
+# `e1_target_ref` bos donebilir (varsayilan "en son tag") — o durumda
+# karsilastiracak bir sey yoktur.
+if [[ $E1_PACKAGE_MODE -eq 0 && -n "${TARGET_REF:-}" ]]; then
+  if [[ "${TARGET_REF#v}" != "${E1_VERSION_LABEL}" ]]; then
+    e1_warn "Istenen ref '${TARGET_REF}' ile VERSION dosyasi '${E1_VERSION_LABEL}' ayni degil."
+    e1_hint "Bu, ref'in bir dal (tag degil) olmasi durumunda normaldir."
+  fi
+fi
 
 # Lisans makine bagi host'un sabit OS kimligine dayanir. USB, disk, RAM, MAC
 # veya container ID kullanilmaz; bunlar degisince lisans patlamamali.
