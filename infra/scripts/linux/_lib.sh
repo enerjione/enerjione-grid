@@ -268,6 +268,70 @@ e1_run() {
 }
 
 # ---------------------------------------------------------------------------
+# apt paket kurulumu — ALAKASIZ bozuk depolara ragmen
+# ---------------------------------------------------------------------------
+# SAHA VAKASI (Dell OEM Ubuntu 24.04): makinede birinin kurdugu Google Chrome
+# deposu duruyordu ama imza anahtari yoktu:
+#
+#   Err:1 https://dl.google.com/linux/chrome/deb stable InRelease
+#     NO_PUBKEY FD533C07C264648F
+#   E: The repository '...' is not signed.
+#
+# `apt-get update` bu yuzden 100 dondu ve TUM kurulum orada oldu — oysa bizim
+# ihtiyacimiz olan depolarin (archive.ubuntu.com, security.ubuntu.com) HEPSI
+# basariliydi ve istenen paket pekala kurulabilirdi.
+#
+# Ubuntu 24.04 eski `apt-key` / `trusted.gpg` anahtar deposunu artik
+# kullanmadigi icin eski yontemle eklenmis her ucuncu taraf deposu (Chrome,
+# eski PPA'lar, kaldirilmis paketlerin arta kalan depolari) bu hatayi verir.
+# Musteri makinesine kurulum yapan bir urunde bunun kurulumu bloke etmesi
+# kabul edilemez.
+#
+# COZUM: `apt-get update`'in cikis kodu ARTIK OLUMCUL DEGIL. Basarisiz depolar
+# operatore adiyla bildirilir; gercek karar `apt-get install`'da verilir —
+# paket gercekten kurulamiyorsa ORADA duruyoruz. Boylece:
+#   * alakasiz bozuk depo kurulumu durdurmaz,
+#   * gercek bir sorun (ag yok, paket bulunamiyor) yine yakalanir,
+#   * operator makinesinde bozuk bir depo oldugunu ogrenir.
+#
+#   e1_apt_install "Paketler kuruluyor (git curl)" git curl openssl
+e1_apt_install() {
+  local label="$1"; shift
+  local logf broken
+
+  logf="$(mktemp)"
+  # TEK apt-get update. Ciktiyi $logf'e aliyoruz (hangi depo bozuk?) ve
+  # `exit 0` ile cikis kodunu YUTUYORUZ (bkz. yukaridaki aciklama) — boylece
+  # e1_run'in ilerleme gostergesi korunur ama kismi hata kurulumu durdurmaz.
+  e1_run "Paket listesi guncelleniyor" \
+    env DEBIAN_FRONTEND=noninteractive \
+    sh -c "apt-get update -q >'$logf' 2>&1; exit 0"
+
+  broken="$(grep -E '^(Err|E|W): ' "$logf" 2>/dev/null | head -8 || true)"
+  rm -f "$logf"
+
+  if [[ -n "$broken" ]]; then
+    e1_warn "apt-get update kismen basarisiz — su depolar atlandi:"
+    printf '%s\n' "$broken" | sed 's/^/        /' >&2
+    e1_hint "Bu depolar EnerjiOne icin gerekli DEGIL; kuruluma devam ediliyor."
+    e1_hint "Makinede kalici olarak duzeltmek icin bozuk depoyu devre disi birakin:"
+    e1_hint "  sudo mv /etc/apt/sources.list.d/<depo>.list{,.disabled} && sudo apt-get update"
+  fi
+
+  # ASIL KARAR BURADA: paket kurulamiyorsa dur.
+  if ! e1_run "$label" \
+        env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$@"; then
+    e1_err "Gerekli paketler kurulamadi: $*"
+    if [[ -n "$broken" ]]; then
+      e1_err "Yukaridaki bozuk depo(lar) sebep olabilir — once onlari duzeltin."
+    fi
+    e1_err "Kontrol icin:  sudo apt-get update"
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Docker servisi saglikli olana kadar bekle
 # ---------------------------------------------------------------------------
 # `docker compose up -d` bir bagimlilik saglikli degilse geriye tek satirlik

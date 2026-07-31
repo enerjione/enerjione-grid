@@ -177,12 +177,11 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   e1_info "Eksik paketler: ${MISSING[*]} — apt ile kuruluyor..."
   # `-qq` KULLANMIYORUZ: tamamen sessiz kaliyor ve yavas baglantida dakikalarca
   # hicbir cikti olmadigi icin kullanici kurulumun dondugunu saniyor.
-  # e1_run: komut sessiz kalsa bile ekranda gecen sureyi sayar — kullanici
-  # kurulumun dondugunu sanmaz. Hata olursa son 20 satiri gosterir.
-  e1_run "Paket listesi guncelleniyor" \
-    env DEBIAN_FRONTEND=noninteractive apt-get update -q
-  e1_run "Paketler kuruluyor (${MISSING[*]})" \
-    env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${MISSING[@]}" ca-certificates
+  # e1_apt_install: ilerlemeyi gosterir (e1_run), ALAKASIZ bozuk depolar
+  # yuzunden durmaz ama paket gercekten kurulamazsa durur. Sahada Chrome
+  # deposunun eksik GPG anahtari tum kurulumu oldurmustu; bkz. _lib.sh.
+  e1_apt_install "Paketler kuruluyor (${MISSING[*]})" \
+    "${MISSING[@]}" ca-certificates
 else
   e1_ok "Tum pre-req'ler hazir."
 fi
@@ -476,8 +475,8 @@ if [[ ! -f infra/nats/nats-server.conf ]]; then
   e1_info "NATS bcrypt hash'leri uretiliyor (python3 + bcrypt)..."
   if ! python3 -c "import bcrypt" 2>/dev/null; then
     e1_info "python3-bcrypt eksik, apt ile kuruluyor..."
-    DEBIAN_FRONTEND=noninteractive apt-get update -q
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-bcrypt
+    # Bozuk ucuncu taraf depolari kurulumu durdurmasin; bkz. _lib.sh.
+    e1_apt_install "python3-bcrypt kuruluyor" python3-bcrypt
   fi
   set -a; source .env; set +a
   _bcrypt() {

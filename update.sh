@@ -340,8 +340,8 @@ fi
 if [[ $NEED_NATS_RENDER -eq 1 ]]; then
   e1_info "NATS auth conf render ediliyor..."
   if ! python3 -c "import bcrypt" 2>/dev/null; then
-    DEBIAN_FRONTEND=noninteractive apt-get update -q
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-bcrypt
+    # Bozuk ucuncu taraf depolari guncellemeyi durdurmasin; bkz. _lib.sh.
+    e1_apt_install "python3-bcrypt kuruluyor" python3-bcrypt
   fi
   set -a; source .env; set +a
   _bcrypt() {

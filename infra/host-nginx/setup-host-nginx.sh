@@ -26,8 +26,22 @@ echo "=== Host nginx kurulumu ==="
 # 1) nginx kur (idempotent)
 if ! command -v nginx >/dev/null 2>&1; then
   echo "[1/4] nginx kuruluyor..."
-  apt-get update -qq
-  apt-get install -y nginx
+  # `apt-get update` cikis kodu OLUMCUL DEGIL — alakasiz bozuk bir ucuncu taraf
+  # deposu (Chrome, eski PPA) kurulumu durdurmasin. Karar `install`'da.
+  _APT_LOG="$(mktemp)"
+  apt-get update -qq >"$_APT_LOG" 2>&1 || true
+  _APT_BROKEN="$(grep -E '^(Err|E|W): ' "$_APT_LOG" 2>/dev/null | head -8 || true)"
+  rm -f "$_APT_LOG"
+  if [[ -n "$_APT_BROKEN" ]]; then
+    echo "  ! apt-get update kismen basarisiz — atlanan depolar:" >&2
+    printf '%s
+' "$_APT_BROKEN" | sed 's/^/        /' >&2
+  fi
+  if ! apt-get install -y nginx; then
+    echo "  ✗ nginx kurulamadi." >&2
+    [[ -n "$_APT_BROKEN" ]] && echo "    Bozuk depoyu devre disi birakip tekrar deneyin." >&2
+    exit 1
+  fi
 else
   echo "[1/4] nginx zaten kurulu — atlanir"
 fi

@@ -65,8 +65,25 @@ command -v iw >/dev/null 2>&1 || NEEDED+=(iw)
 
 if [[ ${#NEEDED[@]} -gt 0 ]]; then
   info "Kuruluyor: ${NEEDED[*]}"
-  DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${NEEDED[@]}"
+  # `apt-get update` cikis kodu OLUMCUL DEGIL: makinede bizimle ilgisi olmayan
+  # bozuk bir ucuncu taraf deposu (Chrome, eski PPA...) olabilir ve Ubuntu 24.04
+  # eski anahtar deposunu kullanmadigi icin bunlar "NO_PUBKEY / is not signed"
+  # verip apt'i 100 ile dondurur. Sahada bu tum kurulumu oldurmustu.
+  # Karar `install` adiminda veriliyor.
+  _APT_LOG="$(mktemp)"
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq >"$_APT_LOG" 2>&1 || true
+  _APT_BROKEN="$(grep -E '^(Err|E|W): ' "$_APT_LOG" 2>/dev/null | head -8 || true)"
+  rm -f "$_APT_LOG"
+  if [[ -n "$_APT_BROKEN" ]]; then
+    warn "apt-get update kismen basarisiz — su depolar atlandi:"
+    printf '%s
+' "$_APT_BROKEN" | sed 's/^/        /' >&2
+    info "Bu depolar EnerjiOne icin gerekli degil; devam ediliyor."
+  fi
+  if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${NEEDED[@]}"; then
+    [[ -n "$_APT_BROKEN" ]] &&       warn "Yukaridaki bozuk depo(lar) sebep olabilir; devre disi birakip tekrar deneyin."
+    die "Appliance paketleri kurulamadi: ${NEEDED[*]}"
+  fi
   ok "Paketler kuruldu."
 else
   ok "Tum paketler zaten kurulu."
