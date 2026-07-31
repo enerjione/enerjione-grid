@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select as _select, text
 
+from app.core.license_gate import LicenseGateMiddleware
 from app.core.rate_limit import limiter
 
 from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
@@ -53,6 +54,12 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# Lisans kilidi — lisanssiz kurulumda api_prefix altindaki her sey 403.
+# CORS'tan ONCE eklenir ki CORS middleware'i DISTA kalsin: aksi halde 403
+# yanitina CORS basliklari eklenmez ve tarayici hatayi okuyamaz (opak hata
+# "Failed to fetch" olarak gorunur). Beyaz liste icin bkz. license_gate.py.
+app.add_middleware(LicenseGateMiddleware)
 
 _cors_origins = settings.cors_origin_list
 if "*" in _cors_origins:

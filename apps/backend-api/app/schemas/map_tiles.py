@@ -36,6 +36,8 @@ class MapTileSummary(BaseModel):
     max_download_zoom: int
     max_pack_tiles: int
     online_fallback: bool
+    prefer_online: bool = True
+    online: bool = True
     packs: list[MapPack]
 
 

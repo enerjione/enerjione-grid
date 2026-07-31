@@ -119,6 +119,24 @@ def cancel_pack(
     return pack.to_dict() if pack else {}
 
 
+@router.post("/packs/{pack_id}/restart", response_model=MapPack)
+def restart_pack(
+    pack_id: str,
+    _: User = Depends(require_roles(_MANAGE_ROLES)),
+):
+    """Yarim kalmis alani kuyruga geri koy. Diskteki karolar atlanir."""
+    pack = map_tile_service.restart_pack(pack_id)
+    if pack is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "MAP_PACK_NOT_RESUMABLE",
+                "message": "Paket bulunamadi veya zaten kuyrukta",
+            },
+        )
+    return pack.to_dict()
+
+
 @router.delete("/packs/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_pack(
     pack_id: str,

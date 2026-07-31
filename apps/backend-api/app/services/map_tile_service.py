@@ -1,9 +1,15 @@
 """Cevrimdisi harita karolari — disk onbellegi, alan indirme, servis.
 
 MIMARI: TUM karolar backend uzerinden gecer (`/map-tiles/{layer}/{z}/{x}/{y}`).
-Backend once diske bakar; yoksa ve internet varsa yukari akistan ceker, diske
-yazar ve dondurur. Boylece TEK adres hem cevrimici hem cevrimdisi calisir ve
-"alan indirme" aslinda bu onbellegi ONDEN doldurmaktan ibarettir.
+Tek adres hem cevrimici hem cevrimdisi calisir; "alan indirme" bu onbellegi
+ONDEN doldurmaktan ibarettir.
+
+ONCELIK (varsayilan: internet onceligi -- `map_tile_prefer_online`):
+    internet VAR  -> karo internetten gelir (guncel kalir), kopyasi diske yazilir
+    internet YOK  -> indirilmis kopya kullanilir
+Baglanti tek bir istekte patlarsa kisa sure "cevrimdisi" isaretlenir ve o sure
+boyunca dogrudan diskten servis edilir; aksi halde her karo ayri ayri zaman
+asimi bekler ve harita hic acilmaz.
 
 Alternatif (frontend'in dogrudan internete gitmesi + ayri bir offline katman)
 denenmedi cunku Leaflet'te "once yerel, olmazsa uzak" davranisi istemci
@@ -160,19 +166,59 @@ def _packs_file() -> Path:
     return _root() / "packs.json"
 
 
-def cache_size_bytes() -> int:
-    """Onbellegin toplam boyutu. Buyuk agaclarda pahali; sadece ozet/guard."""
+def _walk_cache_size() -> int:
+    """Diski gercekten tarar. PAHALI — sadece ilk olcumde cagrilir.
+
+    SADECE KARO dosyalari sayilir. `packs.json` ayni dizinde yasiyor ama
+    metadata; hem "disk kullanimi" gostergesinde karo verisi beklenir hem de
+    her kayitta boyutu degistigi icin calisan sayac ondan sapardi.
+    """
     total = 0
     root = _root()
     if not root.exists():
         return 0
     for dirpath, _dirnames, filenames in os.walk(root):
         for name in filenames:
+            if not name.endswith(".png"):
+                continue
             try:
                 total += (Path(dirpath) / name).stat().st_size
             except OSError:
                 continue
     return total
+
+
+# Onbellek boyutu CALISAN BIR SAYAC olarak tutulur.
+#
+# Neden: eskiden `cache_size_bytes()` her cagrildiginda tum agaci `os.walk`
+# ediyordu ve bu fonksiyon HER KARO ISTEGINDE (kota guard'i) + her `summary`
+# cagrisinda (arayuz 2 sn'de bir yeniliyor) calisiyordu. On binlerce dosyada
+# bu, harita acilisini dakikalara cikaran asil sebepti. Artik disk yalnizca
+# BIR KEZ taranir; sonrasinda yazma/silme sayaci gunceller.
+_size_lock = threading.Lock()
+_cache_bytes: int | None = None
+
+
+def cache_size_bytes() -> int:
+    global _cache_bytes
+    with _size_lock:
+        if _cache_bytes is None:
+            _cache_bytes = _walk_cache_size()
+        return _cache_bytes
+
+
+def _add_cache_bytes(delta: int) -> None:
+    global _cache_bytes
+    with _size_lock:
+        if _cache_bytes is None:
+            return  # henuz olculmedi; ilk olcum zaten dogru degeri alir
+        _cache_bytes = max(0, _cache_bytes + delta)
+
+
+def _reset_cache_size() -> None:
+    global _cache_bytes
+    with _size_lock:
+        _cache_bytes = None
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +249,38 @@ def _upstream_url(layer: TileLayerDef, z: int, x: int, y: int) -> str:
     return url
 
 
+# --- Baglanti durumu -------------------------------------------------------
+# Her karo icin "internet var mi" diye ayri bir kontrol yapmak pahali olurdu.
+# Bunun yerine SON SONUCU hatirliyoruz: bir istek patlayinca kisa bir sure
+# cevrimdisi sayiyoruz ve o sure boyunca dogrudan diskten servis ediyoruz.
+# Aksi halde internet gittiginde her karo ayri ayri zaman asimini bekler ve
+# harita dakikalarca acilmazdi.
+_conn_lock = threading.Lock()
+_offline_until: float = 0.0
+
+
+def _upstream_ok() -> bool:
+    with _conn_lock:
+        return time.monotonic() >= _offline_until
+
+
+def _mark_offline() -> None:
+    global _offline_until
+    with _conn_lock:
+        _offline_until = time.monotonic() + settings.map_tile_offline_cooldown_sec
+
+
+def _mark_online() -> None:
+    global _offline_until
+    with _conn_lock:
+        _offline_until = 0.0
+
+
+def is_online() -> bool:
+    """Yukari akis su an erisilebilir sayiliyor mu? (arayuz gostergesi)"""
+    return _upstream_ok()
+
+
 def fetch_tile(layer_key: str, z: int, x: int, y: int) -> bytes:
     """Yukari akistan tek karo ceker. Diske YAZMAZ."""
     layer = LAYERS.get(layer_key)
@@ -219,7 +297,10 @@ def store_tile(layer_key: str, z: int, x: int, y: int, data: bytes) -> None:
     # Atomik yazim: yarim dosya okunmasin (paralel indirme + servis birlikte).
     tmp = path.with_suffix(f".{os.getpid()}.tmp")
     tmp.write_bytes(data)
+    existed = path.exists()
+    old_size = path.stat().st_size if existed else 0
     os.replace(tmp, path)
+    _add_cache_bytes(len(data) - old_size)
 
 
 def read_tile(layer_key: str, z: int, x: int, y: int) -> bytes | None:
@@ -237,18 +318,42 @@ def get_tile(layer_key: str, z: int, x: int, y: int) -> tuple[bytes, str]:
     """
     if layer_key not in LAYERS:
         raise MapTileError("MAP_LAYER_UNKNOWN", f"Bilinmeyen katman: {layer_key}")
-    cached = read_tile(layer_key, z, x, y)
-    if cached is not None:
-        return cached, "cache"
-    if not settings.map_tile_online_fallback:
-        raise MapTileError("MAP_TILE_OFFLINE", "Karo onbellekte yok ve cevrimici cekme kapali")
-    data = fetch_tile(layer_key, z, x, y)
-    # Gezinme sirasinda biriken onbellek sinirsiz buyumesin.
-    if cache_size_bytes() < settings.map_tile_max_cache_bytes:
+
+    def _store(data: bytes) -> None:
+        # Gezinme sirasinda biriken onbellek sinirsiz buyumesin.
+        if cache_size_bytes() >= settings.map_tile_max_cache_bytes:
+            return
         try:
             store_tile(layer_key, z, x, y, data)
         except OSError:
             pass  # disk dolu/izin yok — servis etmeye devam
+
+    if settings.map_tile_prefer_online and settings.map_tile_online_fallback and _upstream_ok():
+        # INTERNET ONCELIKLI: baglanti varken guncel karo kullanilir,
+        # indirilmis kopya yalnizca yedektir.
+        try:
+            data = fetch_tile(layer_key, z, x, y)
+            _mark_online()
+            _store(data)
+            return data, "upstream"
+        except Exception:  # noqa: BLE001 - internet gitti / uzak sunucu hatasi
+            # Sonraki karolar bekleyip tek tek zaman asimina UGRAMASIN diye
+            # kisa sureli "cevrimdisi" isaretle; o sure boyunca dogrudan
+            # diskten servis edilir.
+            _mark_offline()
+
+    cached = read_tile(layer_key, z, x, y)
+    if cached is not None:
+        return cached, "cache"
+
+    if not settings.map_tile_online_fallback:
+        raise MapTileError("MAP_TILE_OFFLINE", "Karo onbellekte yok ve cevrimici cekme kapali")
+
+    # Buraya iki yoldan gelinir: (a) internet onceligi kapali, (b) internet
+    # onceliginde yukari akis patladi ve karo onbellekte de yok.
+    data = fetch_tile(layer_key, z, x, y)
+    _mark_online()
+    _store(data)
     return data, "upstream"
 
 
@@ -446,6 +551,42 @@ def _run_pack(pack_id: str) -> None:
         _save_packs()
 
 
+# --- Kuyruk ----------------------------------------------------------------
+# Alanlar TEK TEK degil SIRAYLA indirilir: kullanici birkac kucuk alan secip
+# arka arkaya kuyruga atabilir. Ayni anda yalnizca BIR is calisir; paralel
+# indirme hem yukari akisi zorlar hem ilerleme takibini anlamsizlastirir.
+#
+# Buyuk bir alani tek parca indirmek yerine kucuk parcalara bolmek pratikte
+# daha saglam: bir parca basarisiz olsa digerleri etkilenmez ve biten parca
+# hemen kullanilabilir hale gelir.
+def _next_pending() -> Pack | None:
+    with _packs_lock:
+        pending = [p for p in _packs.values() if p.status == "pending"]
+    if not pending:
+        return None
+    # Eklenme sirasi korunur (FIFO).
+    return sorted(pending, key=lambda p: p.created_at)[0]
+
+
+def _worker_loop() -> None:
+    while True:
+        pack = _next_pending()
+        if pack is None:
+            return
+        _run_pack(pack.id)
+
+
+def _ensure_worker() -> None:
+    global _active_thread
+    with _packs_lock:
+        if _active_thread is not None and _active_thread.is_alive():
+            return  # calisan isci kuyrugun kalanini da alir
+        _active_thread = threading.Thread(
+            target=_worker_loop, daemon=True, name="map-pack-worker"
+        )
+        _active_thread.start()
+
+
 def start_pack(
     *,
     name: str,
@@ -456,12 +597,7 @@ def start_pack(
 ) -> Pack:
     total = _validate_request(bbox, layer, zoom_min, zoom_max)
     _load_packs()
-    global _active_thread
     with _packs_lock:
-        # TEK is: paralel iki indirme hem yukari akisi zorlar hem ilerleme
-        # takibini anlamsizlastirir.
-        if _active_thread is not None and _active_thread.is_alive():
-            raise MapTileError("MAP_DOWNLOAD_BUSY", "Zaten devam eden bir indirme var")
         pack = Pack(
             id=str(uuid.uuid4()),
             name=name.strip() or "Alan",
@@ -474,9 +610,30 @@ def start_pack(
         )
         _packs[pack.id] = pack
     _save_packs()
-    thread = threading.Thread(target=_run_pack, args=(pack.id,), daemon=True, name="map-pack")
-    _active_thread = thread
-    thread.start()
+    _ensure_worker()
+    return pack
+
+
+def restart_pack(pack_id: str) -> Pack | None:
+    """Yarim kalmis (iptal/basarisiz) bir alani kuyruga geri koyar.
+
+    UCUZ: diskteki karolar atlanir (bkz. `_run_pack`), yalnizca eksikler
+    indirilir. Bu yuzden kesintiye ugrayan bir indirmeyi bastan baslatmak
+    yerine "devam ettirmek" dogru davranis.
+    """
+    pack = get_pack(pack_id)
+    if pack is None or pack.status in ("pending", "running"):
+        return None
+    _cancel_flags.discard(pack_id)
+    with _packs_lock:
+        pack.status = "pending"
+        pack.tile_done = 0
+        pack.tile_failed = 0
+        pack.bytes_written = 0
+        pack.error = ""
+        pack.finished_at = ""
+    _save_packs()
+    _ensure_worker()
     return pack
 
 
@@ -501,8 +658,14 @@ def delete_pack(pack_id: str, *, remove_tiles: bool = False) -> bool:
         _cancel_flags.add(pack_id)
     if remove_tiles:
         for z, x, y in _iter_tiles(pack.bbox, pack.zoom_min, pack.zoom_max):
+            path = tile_path(pack.layer, z, x, y)
             try:
-                tile_path(pack.layer, z, x, y).unlink(missing_ok=True)
+                size = path.stat().st_size
+            except OSError:
+                continue
+            try:
+                path.unlink()
+                _add_cache_bytes(-size)
             except OSError:
                 continue
     with _packs_lock:
@@ -518,6 +681,7 @@ def clear_cache() -> None:
         shutil.rmtree(root, ignore_errors=True)
     with _packs_lock:
         _packs.clear()
+    _reset_cache_size()
     _save_packs()
 
 
@@ -540,5 +704,7 @@ def summary() -> dict:
         ),
         "max_pack_tiles": settings.map_tile_max_pack_tiles,
         "online_fallback": settings.map_tile_online_fallback,
+        "prefer_online": settings.map_tile_prefer_online,
+        "online": is_online(),
         "packs": [p.to_dict() for p in packs],
     }

@@ -47,6 +47,26 @@ class LicenseEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class LicenseGate(BaseModel):
+    """Lisans kilidinin MINIMAL gorunumu — her role acik.
+
+    `LicenseStatus` musteri adi / lisans no / cihaz limiti gibi ticari
+    bilgileri tasidigi icin yalnizca engineer+installer okuyabiliyor. Ama
+    operator/ops_manager'in da arayuzde kilitlenmesi gerekiyor; onlara sadece
+    "kilitli mi, neden" bilgisi verilir.
+    """
+
+    locked: bool
+    state: Literal[
+        "valid",
+        "unlicensed",
+        "invalid",
+        "machine_mismatch",
+        "machine_unavailable",
+    ]
+    reason_code: str
+
+
 class LicenseStatus(BaseModel):
     state: Literal[
         "valid",

@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 import sys
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -228,6 +230,9 @@ def import_license(data: bytes) -> LicenseEnvelope:
         _atomic_write(_license_dir() / _LICENSE_FILENAME, normalized)
     except OSError as exc:
         raise RuntimeError("Lisans dosyasi yazilamadi") from exc
+    # Yeni lisans yazildi — API kilidi bir sonraki istekte ACILSIN, TTL'in
+    # dolmasini bekleme (kullanici lisansi yukleyip hemen devam edebilmeli).
+    invalidate_enforcement_cache()
     return envelope
 
 
@@ -249,6 +254,66 @@ def _read_active_license() -> tuple[LicenseEnvelope | None, str, str]:
         return None, "invalid", exc.code
     except ValueError:
         return None, "invalid", "LICENSE_INVALID"
+
+
+# --- API kilidi (enforcement) -------------------------------------------------
+#
+# Lisanssiz kurulumda API'nin TAMAMEN kapatildigi durumlar. Frontend'deki
+# `LICENSE_GATE_STATES` (App.tsx) ile AYNI olmak ZORUNDA — biri degisirse
+# digeri de degismeli, yoksa arayuz ile backend farkli seyler soyler.
+#
+# Neden sadece "unlicensed":
+#   invalid / machine_mismatch -> lisans VAR ama bu makinede gecerli degil.
+#     Sahada calisan bir SCADA'yi tamamen kapatmak izlemeyi de durdurur;
+#     ariza takibi lisans sorunundan daha kritiktir.
+#   machine_unavailable -> bizim tarafta depolama/machine-id arizasi; bir
+#     lisans durumu DEGIL. Gecici dosya izni hatasi sistemi kapatmamali.
+#   kota dolu -> lisans gecerli; sadece yeni cihaz ekleme reddedilir
+#     (bkz. lock_and_assert_device_capacity).
+ENFORCED_STATES: frozenset[str] = frozenset({"unlicensed"})
+
+# Kilit kontrolu HER istekte calisir; lisans dosyasini okuyup Ed25519 imzasini
+# dogrulamak istek basina yapilamayacak kadar pahali. Kisa TTL'li cache +
+# lisans yuklendiginde explicit invalidation kullaniyoruz.
+_GATE_CACHE_TTL_SEC = float(os.getenv("LICENSE_GATE_CACHE_TTL_SEC", "30"))
+_gate_cache: tuple[float, str, str] | None = None
+_gate_lock = threading.Lock()
+
+
+def invalidate_enforcement_cache() -> None:
+    """Lisans dosyasi degistiginde cache'i dusur (import sonrasi cagrilir)."""
+    global _gate_cache
+    with _gate_lock:
+        _gate_cache = None
+
+
+def get_enforcement_state(*, refresh: bool = False) -> tuple[str, str]:
+    """(state, reason_code) — SADECE lisans dosyasini okur, DB'ye gitmez.
+
+    `get_license_status`ten farki: cihaz sayimi yok (DB sorgusu yok) ve sonuc
+    cache'lenir. Middleware bu fonksiyonu kullanir.
+    """
+    global _gate_cache
+    if not refresh:
+        with _gate_lock:
+            cached = _gate_cache
+        if cached is not None and (time.monotonic() - cached[0]) < _GATE_CACHE_TTL_SEC:
+            return cached[1], cached[2]
+    try:
+        _, state, reason_code = _read_active_license()
+    except RuntimeError:
+        # Lisans dizini hazirlanamadi — sunucu tarafi arizasi, lisans durumu
+        # degil. ENFORCED_STATES icinde olmadigi icin API'yi KILITLEMEZ.
+        state, reason_code = "machine_unavailable", "LICENSE_MACHINE_UNAVAILABLE"
+    with _gate_lock:
+        _gate_cache = (time.monotonic(), state, reason_code)
+    return state, reason_code
+
+
+def is_api_locked() -> bool:
+    """Lisanssizlik nedeniyle API kapali mi?"""
+    state, _ = get_enforcement_state()
+    return state in ENFORCED_STATES
 
 
 def get_license_status(db: Session, *, device_count: int | None = None) -> LicenseStatus:

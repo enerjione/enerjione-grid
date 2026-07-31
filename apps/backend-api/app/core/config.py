@@ -246,6 +246,15 @@ class Settings(BaseSettings):
     # Kendi karo sunucunuz varsa bu degerleri yukseltebilirsiniz.
     map_tile_dir: str = "/var/lib/e1-map-tiles"
     map_tile_online_fallback: bool = True     # onbellekte yoksa internetten cek
+    # INTERNET ONCELIKLI: baglanti varken indirilmis kopya KULLANILMAZ, karo
+    # internetten gelir (guncel kalir). Baglanti yoksa indirilen alana duser.
+    # False yaparsaniz once disk okunur (bant genisligi tasarrufu, ama karolar
+    # indirildikleri gunde kalir).
+    map_tile_prefer_online: bool = True
+    # Yukari akis bir kez patlayinca bu sure boyunca "internet yok" sayilir ve
+    # dogrudan diskten servis edilir. Aksi halde baglanti kopunca HER karo ayri
+    # ayri zaman asimi bekler ve harita hic acilmaz.
+    map_tile_offline_cooldown_sec: int = 20
     map_tile_max_download_zoom: int = 17      # z18+ bir ilcede bile milyonlarca karo
     map_tile_max_pack_tiles: int = 60_000     # tek alan indirmesinde ust sinir
     map_tile_max_cache_bytes: int = 4 * 1024**3

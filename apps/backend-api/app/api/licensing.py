@@ -1,10 +1,14 @@
 """Lisans endpoint'leri.
 
+GET  /license/gate     -> arayuz kilidi icin minimal durum (TUM roller)
 GET  /license/status   -> cihaz kotasi ve musteri bilgileri
 GET  /license/request  -> bu kuruluma bagli .licreq indir
 POST /license/import   -> imzali .lic dogrula ve etkinlestir
 
-Yetki: engineer + installer. Lisans cihaz ekleme siniridir; izlemeyi kapatmaz.
+Yetki: /gate disindakiler engineer + installer.
+
+NOT: Bu router lisans kilidinin (bkz. core/license_gate.py) beyaz
+listesindedir — aksi halde lisanssiz sistem kendini asla acamazdi.
 """
 
 import json
@@ -12,18 +16,37 @@ import json
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.license import LicenseStatus
+from app.schemas.license import LicenseGate, LicenseStatus
 from app.services import license_service
 from app.services.event_service import record_event
 
 
 router = APIRouter(prefix="/license", tags=["license"])
 _LICENSE_ROLES = [UserRole.ENGINEER, UserRole.INSTALLER]
+
+
+@router.get("/gate", response_model=LicenseGate)
+def license_gate(
+    _: User = Depends(get_current_user),
+    __: Session = Depends(get_db),
+):
+    """Arayuz kilidi icin minimal durum — TUM rollere acik.
+
+    `/status` ticari bilgi tasidigi icin engineer+installer ile sinirli; ama
+    operator/ops_manager da lisanssiz sistemde kilitlenmeli. Burada yalnizca
+    "kilitli mi" bilgisi doner, lisans detayi DONMEZ.
+    """
+    state, reason_code = license_service.get_enforcement_state()
+    return LicenseGate(
+        locked=state in license_service.ENFORCED_STATES,
+        state=state,
+        reason_code=reason_code,
+    )
 
 
 @router.get("/status", response_model=LicenseStatus)
