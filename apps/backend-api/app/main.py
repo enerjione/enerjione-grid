@@ -952,6 +952,33 @@ def stop_jetstream_bus():
 
 
 @app.on_event("startup")
+def start_ws_fanout_bridge():
+    """Canli deger yayinini surecler arasi tasiyan NATS koprusu.
+
+    TUKETICIDEN ONCE baslatilir: tuketici ilk mesaji yayinladiginda kopru
+    hazir olsun, yoksa o mesajlar bellek-ici yola duser (zararsiz ama
+    gereksiz).
+
+    Kopru kurulamazsa (NATS kopuk / nats-py yok / ayar kapali) yayin
+    bellek-ici calismaya devam eder — TEK surecte davranis aynidir. Coklu
+    surece gecildiginde ise kopru ZORUNLUDUR: olmadan tuketici baska bir
+    surecte oldugu icin WS istemcilerine hicbir sey ulasmaz ve bu ariza
+    SESSIZ olur (soket bagli gorunur, deger akmaz). Bu yuzden
+    `/health` ve ws_broadcaster.stats() icinde `bridge_ready` raporlanir.
+    """
+    from app.services.ws_broadcaster import bridge, broadcaster
+
+    bridge.start(on_message=broadcaster._deliver_local)
+
+
+@app.on_event("shutdown")
+def stop_ws_fanout_bridge():
+    from app.services.ws_broadcaster import bridge
+
+    bridge.stop()
+
+
+@app.on_event("startup")
 def start_telemetry_consumer():
     telemetry_consumer.start()
 
