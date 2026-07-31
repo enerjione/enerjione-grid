@@ -617,7 +617,12 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
           {scan && scan.networks.length > 0 ? (
             <ul className="wifi-list">
               {scan.networks.map((n) => {
-                const isCurrent = Boolean(wifi?.connected) && wifi?.ssid === n.ssid;
+                // Bagli ag listede de ISARETLENIR. Once taramanin KENDI
+                // olcumu (nmcli IN-USE) — en dogrudan kanit; `wifi` blogu
+                // okunamasa ya da SSID yazimi ayrissa bile dogru satiri
+                // isaretler. Ikincil olarak baglanti kunyesiyle eslesme.
+                const isCurrent =
+                  n.in_use || (Boolean(wifi?.connected) && wifi?.ssid === n.ssid);
                 return (
                   <li key={n.ssid} className={isCurrent ? "is-current" : undefined}>
                     <SignalIcon signal={n.signal} />

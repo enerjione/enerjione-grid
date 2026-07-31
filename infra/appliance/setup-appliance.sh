@@ -430,6 +430,14 @@ ap_activation_safe() {   # $1 = AP'nin kurulacagi WiFi arayuzu
   AP_HOLD_REASON=""
   [[ -n "$ifname" ]] || return 0
 
+  # Kullanici WiFi'yi BILEREK kapattiysa AP'yi acmaya CALISMA. Radyo zaten
+  # kapali oldugu icin komut hata verirdi; ama asil sebep su: sifresiz bir
+  # agi, kullanicinin kapatma karari duruyorken geri yayina sokmak yanlis.
+  if [[ "$(_radio_user_wish)" == "off" ]]; then
+    AP_HOLD_REASON="WiFi radyosu kullanici tarafindan kapatilmis"
+    return 1
+  fi
+
   # --- ANA KRITER: bu radyoda SU AN calisan bir WiFi CLIENT baglantisi -----
   # Kontrol ARAYUZ BAZLI: iki radyolu cihazda AP wlan0'a kurulurken client
   # wlan1'deyse yanlis alarm vermez, eski davranis korunur.
@@ -498,7 +506,23 @@ else
       fi
     fi
     # WiFi radyosu acik olmali (rfkill).
-    nmcli radio wifi on >/dev/null 2>&1 || true
+    # WiFi radyosunu ac — AMA KULLANICI BILEREK KAPATTIYSA DOKUNMA.
+    #
+    # Bu script her `update.sh` kosusunda tekrar calisir. Kosulsuz `radio on`
+    # yazmak, kullanicinin arayuzden verdigi "WiFi kapali kalsin" kararini her
+    # guncellemede SESSIZCE geri aliyordu — ve bununla birlikte SIFRESIZ AP
+    # yeniden yayina giriyordu. Musteri kapattigi bir radyonun geri aciladigini
+    # fark etmiyor; bu bir riza ihlali.
+    #
+    # Karar e1-netd'nin mode.json'undaki `radio_desired` alaninda duruyor
+    # ("on" | "off" | null). "off" ise radyoya DOKUNMUYORUZ; kullanici
+    # arayuzden tekrar acabilir.
+    if [[ "$(_radio_user_wish)" == "off" ]]; then
+      warn "WiFi radyosu kullanici tarafindan KAPATILMIS — dokunulmuyor."
+      info "Acmak icin: arayuzde Muhendislik > Ag Ayarlari > WiFi karti."
+    else
+      nmcli radio wifi on >/dev/null 2>&1 || true
+    fi
 
     if nmcli -t -f NAME connection show | grep -qx "$AP_CON_NAME"; then
       info "AP profili mevcut, ayarlar guncelleniyor."

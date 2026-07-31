@@ -34007,7 +34007,13 @@ th.event-col-category {
   display: grid;
   grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
   gap: 12px;
-  flex-shrink: 0;
+  /* Orta satir ARTAN ALANI ALIR: sayfa ekranin altina kadar dolar ve
+     "ne olur" aciklamasi en altta oturur. Onceden flex-shrink:0 ile
+     icerigi kadar yer kapliyor, altta buyuk bir bosluk kaliyordu.
+     min-height:0 grid cocuklarinin tasmasini engeller (son islemler
+     listesi kendi icinde kayar). */
+  flex: 1;
+  min-height: 0;
 }
 
 .rad-card {
@@ -34324,6 +34330,12 @@ th.event-col-category {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Sag sutundaki "Son islemler" karti sutun yuksekligini doldurur; liste
+   uzunsa kendi icinde kayar, sayfayi uzatmaz. */
+.rad-columns > .rad-log {
+  height: 100%;
 }
 
 .rad-log-list {
