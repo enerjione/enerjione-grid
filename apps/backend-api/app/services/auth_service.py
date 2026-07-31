@@ -106,30 +106,40 @@ def create_access_token(subject: str, remember_me: bool = False) -> tuple[str, i
 
 
 # ---- WebSocket ticket store (URL'de JWT yerine kisa-omurlu ticket) ---------
-# In-memory: ticket -> (username, exp_epoch). Multi-replica deploy'da Redis
-# gerek. 30sn TTL; consume sonrasi revoke (tek kullanim).
+# In-memory: ticket -> (username, jti, exp_epoch). Multi-replica deploy'da
+# Redis gerek. 30sn TTL; consume sonrasi revoke (tek kullanim).
+#
+# `jti` NEDEN tasiniyor: WS baglantisi uzun omurlu. Bilet uretilirken oturum
+# gecerliydi ama installer "oturumu at" dedikten sonra da soket akmaya devam
+# ederse iptal islevsiz kalir. Bilet jti'yi tasidigi icin WS endpoint'i hem
+# handshake aninda hem de baglanti boyunca periyodik olarak
+# `UserSession.revoked_at` / `is_jti_revoked` kontrolu yapabiliyor.
 _WS_TICKET_TTL_SEC = 30
-_ws_tickets: dict[str, tuple[str, float]] = {}
+_ws_tickets: dict[str, tuple[str, str | None, float]] = {}
 _ws_tickets_lock = threading.Lock()
 
 
-def issue_ws_ticket(username: str) -> tuple[str, int]:
-    """Yeni WS ticket uret + cache'le. Returns (ticket, ttl_sec)."""
+def issue_ws_ticket(username: str, jti: str | None = None) -> tuple[str, int]:
+    """Yeni WS ticket uret + cache'le. Returns (ticket, ttl_sec).
+
+    `jti` bileti ureten oturumun token kimligi; WS tarafinda iptal kontrolu
+    icin saklanir. None ise (eski cagri sekli) iptal kontrolu yapilamaz.
+    """
     ticket = uuid4().hex
     exp = time.time() + _WS_TICKET_TTL_SEC
     with _ws_tickets_lock:
         # Periyodik cleanup — expired ticket'lari at (cache leak onlemi)
         now = time.time()
         if len(_ws_tickets) > 1000:
-            expired = [t for t, (_, e) in _ws_tickets.items() if e < now]
+            expired = [t for t, (_, _j, e) in _ws_tickets.items() if e < now]
             for t in expired:
                 _ws_tickets.pop(t, None)
-        _ws_tickets[ticket] = (username, exp)
+        _ws_tickets[ticket] = (username, jti, exp)
     return ticket, _WS_TICKET_TTL_SEC
 
 
-def consume_ws_ticket(ticket: str) -> str | None:
-    """Ticket'i pop edip username don. Gecersiz/expired → None.
+def consume_ws_ticket(ticket: str) -> tuple[str, str | None] | None:
+    """Ticket'i pop edip (username, jti) don. Gecersiz/expired → None.
 
     Tek kullanim: pop edildiginde cache'ten silinir; ayni ticket ikinci
     kez kullanilamaz (WS replay attack korumasi).
@@ -141,7 +151,7 @@ def consume_ws_ticket(ticket: str) -> str | None:
         entry = _ws_tickets.pop(ticket, None)
     if entry is None:
         return None
-    username, exp = entry
+    username, jti, exp = entry
     if exp < now:
         return None
-    return username
+    return username, jti

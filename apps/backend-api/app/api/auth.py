@@ -321,19 +321,21 @@ def create_ws_ticket(
 ):
     """WebSocket handshake icin tek-kullanimlik 30sn TTL bilet uretir.
 
-    Bilet `username` ile in-memory cache'te tutulur; WS endpoint'i bileti
-    consume edip revoke eder. Bu sayede:
+    Bilet `username` + `jti` ile in-memory cache'te tutulur; WS endpoint'i
+    bileti consume edip revoke eder. Bu sayede:
       * JWT URL'de gorunmez (Authorization header / cookie auth-suz konum)
       * Ticket WS dosyalanmadan once revoke olur (replay yok)
+      * `jti` tasindigi icin WS baglanti boyunca oturum iptalini gorebilir
       * Multi-replica deploy'da Redis'e tasinmasi gerek (TODO).
 
     Rate-limit 60/dakika — normal client'lar reconnect sirasinda 1-2 bilet
     alir; abusive client (in-memory cache flood) engellenir.
     """
-    _ = request  # slowapi key_func icin gerekli
     from app.services.auth_service import issue_ws_ticket
 
-    ticket, ttl = issue_ws_ticket(current_user.username)
+    # `get_current_user` token'i cozerken jti'yi request.state'e koyuyor.
+    jti = getattr(request.state, "auth_jti", None)
+    ticket, ttl = issue_ws_ticket(current_user.username, jti)
     return WsTicketResponse(ticket=ticket, expires_in_sec=ttl)
 
 

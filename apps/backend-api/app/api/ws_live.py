@@ -9,8 +9,19 @@ mesajini anlik olarak alir. Polling'e gore avantaj:
     SELECT yapardi; WS ile sadece degisen sinyaller iletilir.
 
 Auth:
-  WebSocket connection sirasinda query param `?token=<bearer>` zorunlu.
-  Token gecersizse close(code=1008, reason="invalid_token").
+  WebSocket connection sirasinda query param `?ticket=<bilet>` (onerilen) veya
+  `?token=<bearer>` (legacy) zorunlu. Gecersizse close(code=1008).
+
+Yetki (KAPSAM):
+  Operator rolu YALNIZCA kendi sorumluluk alanindaki cihazlarin telemetrisini
+  alir. Kapsam SUNUCUDA hesaplanir; `?devices=` yalnizca DARALTABILIR, kapsam
+  disina cikaramaz. (Onceden cihaz filtresi tamamen istemciden geliyordu ve
+  filtre gonderilmezse operator TUM cihazlarin telemetrisini aliyordu.)
+
+Oturum iptali:
+  Uzun-omurlu baglanti handshake aninda VE her heartbeat'te (30sn) yeniden
+  dogrulanir. Installer "oturumu at" dediginde soket 1008 ile kapanir; aksi
+  halde iptal edilmis bir oturum akmaya devam ederdi.
 
 Mesaj formati (server -> client):
   {
@@ -37,8 +48,10 @@ from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
+from sqlalchemy import select
 
 from app.core.config import settings
+from app.db.session import SessionLocal
 from app.services.ws_broadcaster import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -51,8 +64,13 @@ router = APIRouter(tags=["websocket"])
 _HEARTBEAT_INTERVAL_SEC = 30
 
 
-def _validate_token(token: str | None) -> str | None:
-    """JWT bearer token validate. Basariliysa username doner; aksi halde None."""
+def _validate_token(token: str | None) -> tuple[str, str | None] | None:
+    """JWT bearer token validate. Basariliysa (username, jti); aksi halde None.
+
+    NOT: burada yalnizca imza/exp dogrulanir. Oturum iptali (revocation)
+    `_is_session_revoked` ile AYRICA kontrol edilir — imza gecerli olsa bile
+    logout edilmis bir token WS acmamali.
+    """
     if not token:
         return None
     try:
@@ -60,9 +78,91 @@ def _validate_token(token: str | None) -> str | None:
         username = payload.get("sub")
         if not username or not isinstance(username, str):
             return None
-        return username
+        jti = payload.get("jti")
+        return username, (str(jti) if jti else None)
     except JWTError:
         return None
+
+
+def _is_session_revoked(jti: str | None) -> bool:
+    """Oturum iptal edilmis mi? (in-memory blacklist + DB `revoked_at`)
+
+    Kisa-omurlu bir session acar ve HEMEN kapatir: WS baglantisi uzun omurlu
+    oldugu icin `Depends(get_db)` ile session tutmak her client basina bir
+    havuz baglantisini sonsuza kadar rezerve ederdi (havuz 30+20).
+
+    jti yoksa (cok eski token) iptal kontrolu yapilamaz — False doner.
+    """
+    if not jti:
+        return False
+    from app.services.auth_service import is_jti_revoked
+
+    if is_jti_revoked(jti):
+        return True
+    db = SessionLocal()
+    try:
+        from app.models.user_session import UserSession
+
+        sess = db.get(UserSession, jti)
+        return sess is not None and sess.revoked_at is not None
+    except Exception:  # noqa: BLE001
+        # DB erisilemiyorsa baglantiyi kesmiyoruz; in-memory blacklist zaten
+        # bakildi. Aksi halde gecici bir DB hatasi tum canli ekranlari dusurur.
+        return False
+    finally:
+        db.close()
+
+
+def _effective_device_filter(
+    allowed: set[str] | None, requested: set[str] | None
+) -> set[str] | None:
+    """Kapsam ile istemci filtresini birlestir — GUVENLIK SINIRI.
+
+    `allowed`   sunucunun hesapladigi kapsam (None = kisit yok)
+    `requested` istemcinin `?devices=` filtresi (None = filtre yok)
+
+    Kural: istemci filtresi yalnizca DARALTIR. Kapsam disi kodlar sessizce
+    dusurulur; bos set "hicbir cihaz" demektir ve broadcaster hicbir mesaj
+    gecirmez. Bu fonksiyon ayri durur ki davranisi dogrudan test edilebilsin.
+    """
+    if allowed is None:
+        return requested
+    if requested is None:
+        return allowed
+    return allowed & requested
+
+
+def _resolve_allowed_device_codes(username: str) -> tuple[bool, set[str] | None]:
+    """Kullanicinin telemetri alabilecegi cihaz kodlarini doner.
+
+    Donus: (kullanici_bulundu, izinli_kodlar)
+      izinli_kodlar None  -> kisit yok (installer/engineer/ops_manager)
+      izinli_kodlar set() -> hicbir cihaz (atanmamis operator)
+
+    Kapsam BAGLANTI ANINDA hesaplanir. Baglanti acikken operatorun alanina
+    yeni cihaz eklenirse o cihaz reconnect'e kadar akista gorunmez; periyodik
+    `/signals/live` snapshot'i degeri yine gosterdigi icin kabul edilebilir.
+    """
+    db = SessionLocal()
+    try:
+        from app.models.device import Device
+        from app.models.user import User
+        from app.services.scope_service import get_visible_device_ids
+
+        user = db.scalar(select(User).where(User.username == username))
+        if user is None:
+            return False, set()
+        visible_ids = get_visible_device_ids(db, user)
+        if visible_ids is None:
+            return True, None  # kisit yok
+        if not visible_ids:
+            return True, set()
+        codes = set(
+            db.scalars(select(Device.code).where(Device.id.in_(visible_ids))).all()
+        )
+        return True, codes
+    finally:
+        db.close()
 
 
 _ALLOWED_WS_ORIGINS_FALLBACK = ("http://localhost", "http://127.0.0.1")
@@ -194,30 +294,54 @@ async def live_values_ws(
         return
 
     username: str | None = None
+    jti: str | None = None
     if ticket:
         # Yeni yol: ticket consume (tek kullanim, 30sn TTL).
         from app.services.auth_service import consume_ws_ticket
 
-        username = consume_ws_ticket(ticket)
+        consumed = consume_ws_ticket(ticket)
+        if consumed is not None:
+            username, jti = consumed
     if username is None and token:
         # Legacy: JWT URL query. Bir sonraki release'te kaldirilacak.
-        username = _validate_token(token)
+        validated = _validate_token(token)
+        if validated is not None:
+            username, jti = validated
     if username is None:
         # WebSocket spec: 1008 = policy violation.
         await websocket.close(code=1008, reason="invalid_credentials")
         return
 
-    # Cihaz filtresi: ?devices=DEV001,DEV002 -> sadece bu kodlar
-    device_codes: set[str] | None = None
+    # Oturum iptali — imza gecerli olsa bile logout/"oturumu at" sonrasi
+    # baglanti acilmamali. DB'ye gittigi icin thread'e aliyoruz (event loop
+    # senkron sorguyla bloklanmasin).
+    if await asyncio.to_thread(_is_session_revoked, jti):
+        logger.warning("ws_live_values_revoked_session user=%s", username)
+        await websocket.close(code=1008, reason="session_revoked")
+        return
+
+    # KAPSAM — sunucu tarafinda hesaplanir. Istemcinin `?devices=` filtresi
+    # yalnizca DARALTIR; kapsam disina cikaramaz.
+    found, allowed_codes = await asyncio.to_thread(_resolve_allowed_device_codes, username)
+    if not found:
+        logger.warning("ws_live_values_user_not_found user=%s", username)
+        await websocket.close(code=1008, reason="invalid_credentials")
+        return
+
+    # Istemci filtresi: ?devices=DEV001,DEV002
+    requested_codes: set[str] | None = None
     if devices:
-        device_codes = {c.strip() for c in devices.split(",") if c.strip()}
-        if not device_codes:
-            device_codes = None
+        requested_codes = {c.strip() for c in devices.split(",") if c.strip()}
+        if not requested_codes:
+            requested_codes = None
+
+    device_codes = _effective_device_filter(allowed_codes, requested_codes)
 
     await websocket.accept()
     logger.info(
-        "ws_live_values_connected user=%s filter_devices=%s",
+        "ws_live_values_connected user=%s scoped=%s filter_devices=%s",
         username,
+        allowed_codes is not None,
         "all" if device_codes is None else len(device_codes),
     )
 
@@ -225,23 +349,37 @@ async def live_values_ws(
     sub = broadcaster.subscribe(loop, device_codes=device_codes)
 
     # Heartbeat task: her 30sn ping gonderir; client disconnect olursa
-    # send'de exception alip cikariz
+    # send'de exception alip cikariz.
+    #
+    # Ayni turda oturum iptali de yeniden kontrol edilir: baglanti saatlerce
+    # acik kalabiliyor, "oturumu at" aksiyonunun etkili olmasi icin tek
+    # handshake kontrolu yeterli degil. Maliyet baglanti basina 30sn'de bir
+    # tek indeksli SELECT.
     async def _heartbeat() -> None:
         try:
             while True:
                 await asyncio.sleep(_HEARTBEAT_INTERVAL_SEC)
+                if await asyncio.to_thread(_is_session_revoked, jti):
+                    logger.info(
+                        "ws_live_values_closing_revoked user=%s", username
+                    )
+                    await websocket.close(code=1008, reason="session_revoked")
+                    return
                 await websocket.send_text('{"type":"ping"}')
         except (WebSocketDisconnect, asyncio.CancelledError, RuntimeError):
             return
 
     heartbeat_task = asyncio.create_task(_heartbeat())
 
-    # Initial hello: client biliyor olsun bagli
+    # Initial hello: client biliyor olsun bagli. `scoped` alani istemciye
+    # filtrenin SUNUCUDA daraltildigini soyler (istedigi cihazlarin bir kismi
+    # kapsam disi kalmis olabilir).
     try:
         await websocket.send_json(
             {
                 "type": "hello",
                 "user": username,
+                "scoped": allowed_codes is not None,
                 "filter": "all" if device_codes is None else sorted(device_codes),
             }
         )

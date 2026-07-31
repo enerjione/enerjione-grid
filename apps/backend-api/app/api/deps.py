@@ -139,6 +139,11 @@ def get_current_user(
     if user is None:
         logger.warning("auth_401_user_not_found source=%s username=%s", source, username)
         raise credentials_exception
+    # Token kimligini request'e bagla: `/auth/ws-ticket` gibi uclar token'i
+    # ikinci kez decode etmek zorunda kalmasin (bilet jti'yi tasiyor ki
+    # uzun-omurlu WS baglantisinda iptal kontrolu yapilabilsin).
+    if jti:
+        request.state.auth_jti = str(jti)
     # Aktif oturum tracking — debounce'lu last_seen_at + ip_address update.
     if jti:
         from app.core.client_ip import client_ip_from_request
