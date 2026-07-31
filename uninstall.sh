@@ -87,12 +87,56 @@ fi
 if [[ $APPLIANCE_PRESENT -eq 1 ]]; then
   e1_step "Appliance host katmani (ag ajani + WiFi AP)..."
   if [[ $ASSUME_YES -eq 1 ]] || e1_confirm "WiFi AP 'EnerjiOne Grid' ve ag ajani da kaldirilsin mi?"; then
-    for unit in e1-netd.path e1-netd-report.timer e1-netd.service e1-netd-report.service; do
+    # ---- UZAKTAN BAKIM KAPISI ONCE KAPATILIR --------------------------------
+    #
+    # YASANAN RISK: temizlik yalnizca `e1-netd*` unit'lerini kaldiriyordu.
+    # `e1-rad*` (uzaktan bakim) ve `e1-gwd*` (gateway ajani) unit'leri sistemde
+    # KALIYORDU. `--purge-dir` ile ajan betigi de silindigi icin, suresi dolan
+    # izni kapatacak HICBIR SEY kalmiyordu.
+    #
+    # Somut senaryo: musteri cihazi sahadan geri cekerken aktif bir uzaktan
+    # bakim izni acik (kalkan inik + Tailscale SSH acik). `uninstall.sh --yes
+    # --purge-dir` kosar. `e1-rad-report.timer` enabled kalir ama betik
+    # silinmistir; birim her 30 sn'de 203/EXEC ile duser ve HICBIR kapanma
+    # yapilmaz. Cihaz tailnet'e kayitli, KALKANI INIK ve root SSH acik halde
+    # musterinin agina bagli kalir — uygulama silindigi icin arayuzden
+    # "geri al" da yapilamaz.
+    #
+    # Sira onemli: once kapiyi kapat, sonra unit'leri kaldir. Ters sirada
+    # kapatmayi yapacak betik/servis artik olmazdi.
+    if [[ -x "$SCRIPT_DIR/infra/appliance/e1-rad.py" ]]; then
+      e1_info "Uzaktan bakim izni kapatiliyor (kalkan kaldiriliyor, SSH kapatiliyor)..."
+      "$SCRIPT_DIR/infra/appliance/e1-rad.py" close --reason uninstall >/dev/null 2>&1 \
+        || python3 "$SCRIPT_DIR/infra/appliance/e1-rad.py" close --reason uninstall >/dev/null 2>&1 \
+        || e1_warn "Uzaktan bakim kapatilamadi — asagidaki tailscale adimini MUTLAKA uygulayin."
+    fi
+
+    # Uc ajan ailesinin TAMAMI kaldirilir. Onceden yalnizca e1-netd
+    # temizleniyordu; digerleri geride kalip 203/EXEC ile donup duruyordu.
+    for unit in \
+      e1-netd.path e1-netd-report.timer e1-netd.service e1-netd-report.service \
+      e1-rad.path  e1-rad-report.timer  e1-rad.service  e1-rad-report.service \
+      e1-gwd.path  e1-gwd-report.timer  e1-gwd.service  e1-gwd-report.service; do
       systemctl stop "$unit" 2>/dev/null || true
       systemctl disable "$unit" 2>/dev/null || true
       rm -f "/etc/systemd/system/${unit}"
     done
     systemctl daemon-reload 2>/dev/null || true
+
+    # ---- Tailnet uyeligi ----------------------------------------------------
+    # Kapi kapansa bile cihaz tailnet'e KAYITLI kalir. Sahadan cekilen bir
+    # cihazin musterinin ozel agina dugum olarak asili kalmasi istenmez.
+    # Karar kullaniciya birakilir: `--yes` ile calistirildiginda otomatik
+    # cikilir (belgelenmis "full nuke" davranisi bunu bekler).
+    if command -v tailscale >/dev/null 2>&1; then
+      if [[ $ASSUME_YES -eq 1 ]] || e1_confirm "Cihaz Tailscale aginizdan (tailnet) da cikarilsin mi?"; then
+        tailscale logout >/dev/null 2>&1 \
+          && e1_ok "Tailnet uyeligi kaldirildi." \
+          || e1_warn "tailscale logout basarisiz — yonetim panelinden dugumu elle silin."
+      else
+        e1_warn "Cihaz tailnet'te KAYITLI kaldi. Gerekirse yonetim panelinden silin."
+      fi
+    fi
     if command -v nmcli >/dev/null 2>&1; then
       nmcli connection down e1-grid-ap 2>/dev/null || true
       nmcli connection delete e1-grid-ap 2>/dev/null || true

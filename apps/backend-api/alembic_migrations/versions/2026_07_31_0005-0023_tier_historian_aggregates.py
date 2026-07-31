@@ -72,8 +72,19 @@ _TIERS = (
 
 
 def _try(label: str, fn) -> bool:
+    """Adimi SAVEPOINT icinde kosturur; hata yutulur ama transaction BOZULMAZ.
+
+    Bu dosyada savepoint OZELLIKLE kritik: kod, "tam form" ALTER'in bazi
+    TimescaleDB surumlerinde reddedilecegini BEKLEYIP `if not ok:` ile "sade
+    form"a dusuyor. Savepoint olmadan ilk hata transaction'i abort ettigi icin
+    yedek yol da, sonraki add_compression_policy/add_retention_policy de,
+    alembic'in `UPDATE alembic_version` ifadesi de patliyordu — yani planlanan
+    geri dusme yolu HIC calisamiyordu ve backend crash-loop'a giriyordu.
+    """
+    bind = op.get_bind()
     try:
-        fn()
+        with bind.begin_nested():
+            fn()
         return True
     except Exception as exc:  # noqa: BLE001
         logger.warning("0023 adim basarisiz (atlaniyor): %s -> %s", label, exc)

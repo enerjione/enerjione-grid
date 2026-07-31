@@ -128,13 +128,35 @@ def _has_job(bind, proc_name: str) -> bool:
 
 
 def _try(label: str, fn) -> bool:
-    """Adimi kosturur; hata firlatirsa YUTAR ve uyari loglar.
+    """Adimi SAVEPOINT icinde kosturur; hata firlatirsa YUTAR ve uyari loglar.
 
     Bkz. dosya basindaki "HATA POLITIKASI": burada raise etmek backend'in
     boot etmemesi demek.
+
+    SAVEPOINT NEDEN SART
+    --------------------
+    Hatayi yutmak TEK BASINA YETMIYORDU. PostgreSQL'de bir ifade patlayinca
+    transaction "aborted" duruma gecer ve o transaction'daki SONRAKI HER ifade
+    `InFailedSqlTransaction` ile duser — alembic'in kendi
+    `UPDATE alembic_version` ifadesi DAHIL. env.py tum migration'lari tek
+    transaction'da kosturdugu icin sonuc sudur:
+
+        CREATE EXTENSION timescaledb patlar (postgres:16'dan devralinmis
+        volume'de shared_preload_libraries yok)
+        -> `_try` hatayi yutar ve "atlandi" der
+        -> ama transaction ARTIK BOZUK
+        -> 0020-0023 ve alembic_version guncellemesi de patlar
+        -> `scripts.migrate_db` exception firlatir
+        -> backend container CMD basarisiz -> SONSUZ CRASH-LOOP
+
+    Yani "en iyi caba" politikasi, tam da onarmak icin yazildigi sahalari
+    tugluyordu. `begin_nested()` bir SAVEPOINT acar; adim patlarsa yalnizca o
+    savepoint'e geri donulur ve dis transaction SAGLAM kalir.
     """
+    bind = op.get_bind()
     try:
-        fn()
+        with bind.begin_nested():
+            fn()
         return True
     except Exception as exc:  # noqa: BLE001
         logger.warning(
