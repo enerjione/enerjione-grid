@@ -463,6 +463,77 @@ def _write_lease(
 
 
 # --- Erisim durumunu uygula -------------------------------------------------
+def _up_restore(shields_up: bool, ssh: bool) -> None:
+    """Inik bir tuneli, MEVCUT TERCIHLERI KORUYARAK geri kaldir.
+
+    BAYRAKSIZ `tailscale up` KULLANILAMAZ: CLI, varsayilan olmayan tum
+    bayraklarin tekrar belirtilmesini zorunlu kilar ("changing settings via
+    'tailscale up' requires mentioning all non-default flags") ve aksi halde
+    HICBIR SEY YAPMADAN hata verir. Bizim dugumde --advertise-tags,
+    --hostname, --accept-dns=false gibi bayraklar ayarli oldugu icin
+    bayraksiz cagri her zaman basarisiz olur.
+
+    `--reset` de KULLANILAMAZ: etiketleri (--advertise-tags) silerdi ve
+    etiketsiz dugumun anahtari 180 gunde dolup cihaz tailnet'ten duserdi.
+
+    Bu yuzden bayraklari mevcut tercihlerden OKUYUP tekrar veriyoruz.
+    """
+    prefs = _run_json("debug", "prefs") or {}
+    args = ["up"]
+
+    host = prefs.get("Hostname")
+    if host:
+        args.append(f"--hostname={host}")
+    tags = [str(t) for t in (prefs.get("AdvertiseTags") or [])]
+    if tags:
+        args.append("--advertise-tags=" + ",".join(tags))
+    # CorpDNS = "tailnet DNS'ini kabul et". Saha cihazinda varsayilan KAPALI
+    # (yerel DNS/AP dnsmasq bozulmasin); mevcut degeri aynen koruyoruz.
+    args.append("--accept-dns=" + ("true" if prefs.get("CorpDNS") else "false"))
+    args.append("--ssh=" + ("true" if ssh else "false"))
+    args.append("--shields-up=" + ("true" if shields_up else "false"))
+
+    _run(*args, timeout=TS_UP_TIMEOUT_SEC)
+
+
+def _drop_established() -> None:
+    """Kurulu WireGuard tunellerini dusur — SURE DOLUNCA OTURUM KOPSUN.
+
+    `--shields-up` yalnizca YENI baglantilari reddeder; o an ACIK olan bir
+    bakim oturumu sure dolsa bile calismaya devam eder. Ozelligin vaadi
+    ("sure bitince erisim kapanir") bunu gerektiriyor.
+
+    NEDEN `tailscale down` DEGIL — SAHA VAKASI (v2.26.0):
+      Once bu is `down` + ardindan bayraksiz `up` ile yapiliyordu. `up`
+      CALISMADI: Tailscale CLI, varsayilan olmayan TUM bayraklarin tekrar
+      belirtilmesini zorunlu kilar ("changing settings via 'tailscale up'
+      requires mentioning all non-default flags"). Bizim dugumde
+      --shields-up, --advertise-tags, --hostname, --accept-dns=false
+      ayarli oldugu icin bayraksiz `up` hata verip cikti; dugum `down`
+      durumunda KALDI. Sonuc: konsolda OFFLINE, SSH imkansiz. Izin verme
+      yolu da ayni bayraksiz `up`i cagirdigi icin durum KENDILIGINDEN
+      DUZELMEDI.
+
+    COZUM: daemon'i yeniden baslat. Tunellerin hepsi kopar (istedigimiz bu),
+    daemon kayitli tercihlerle (shields-up acik) geri gelir. WantRunning'e
+    HIC dokunulmaz, dolayisiyla `up`in bayrak tuzagina da girilmez.
+    """
+    for unit in ("tailscaled", "tailscale"):
+        try:
+            subprocess.run(
+                ["systemctl", "restart", unit],
+                check=True, capture_output=True, timeout=TS_UP_TIMEOUT_SEC,
+            )
+            _log(f"kurulu oturumlar dusuruldu ({unit} yeniden baslatildi).")
+            return
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    # Daemon yeniden baslatilamadi: kalkan yine de acik, YENI baglanti
+    # gelemez. Yalnizca o an acik olan oturum devam edebilir; bunu
+    # sessizce gecmiyoruz.
+    _log("UYARI: daemon yeniden baslatilamadi — kurulu oturumlar kopmamis olabilir.")
+
+
 def _apply_access(open_: bool, allow_ssh: bool, backend_state: str | None) -> None:
     """Istenen erisim durumunu uygula.
 
@@ -475,10 +546,12 @@ def _apply_access(open_: bool, allow_ssh: bool, backend_state: str | None) -> No
         _set_pref("--ssh=true" if (allow_ssh and SSH_ALLOWED) else "--ssh=false",
                   critical=False)
         if backend_state != "Running":
-            # Tunel inik (lock_mode=down ile kapatilmis ya da elle indirilmis).
-            # BAYRAKSIZ `up`: authkey GEREKMEZ, --reset YOK — kayitli dugum
-            # oldugu gibi geri gelir.
-            _run("up", timeout=TS_UP_TIMEOUT_SEC)
+            # Tunel inik: ya biri elle `tailscale down` yapmis, ya da bu
+            # ajanin ESKI surumu (v2.26.0) kapanista `down` calistirip
+            # sonrasinda geri kaldiramamis. Ikinci durumda cihaz konsolda
+            # OFFLINE kalir ve SSH calismaz — izin vermek de duzeltmez.
+            # Burasi o cihazlari KURTARAN yoldur.
+            _up_restore(shields_up=False, ssh=bool(allow_ssh and SSH_ALLOWED))
     else:
         _set_pref("--ssh=false", critical=False)
         _set_pref("--shields-up=true")
@@ -496,10 +569,7 @@ def _apply_access(open_: bool, allow_ssh: bool, backend_state: str | None) -> No
         # gorunmeye devam eder. Bu, "cihaz elektriksiz/internetsiz" ile
         # "musteri izin vermemis" ayrimini korur. Bayraksiz `up` authkey
         # ISTEMEZ; kayitli dugum oldugu gibi geri gelir.
-        if backend_state == "Running":
-            _run("down", timeout=TS_UP_TIMEOUT_SEC)
-            if LOCK_MODE != "down":
-                _run("up", timeout=TS_UP_TIMEOUT_SEC)
+        _drop_established()
 
 
 def _at_target(probe: dict, desired_open: bool, allow_ssh: bool) -> bool:
