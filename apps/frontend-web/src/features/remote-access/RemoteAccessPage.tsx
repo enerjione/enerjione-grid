@@ -623,118 +623,124 @@ export function RemoteAccessPage({ accessToken }: Props) {
           )}
         </section>
 
-        {/* ---- SAG: ne verdigini ac ac anlat (ajan yoksa DA gorunur) ---- */}
-        <section className="rad-card rad-explain">
+        {/* ---- SAG: son islemler ----
+             Kullanici istegi: gecmis sagda dursun, "ne olur" aciklamasi
+             en altta tam genislikte. Denetim satirlari kisa oldugu icin dar
+             sutuna oturuyor; aciklama metinleri genis alanda daha rahat
+             okunuyor ve sag sutundaki buyuk bosluk kapaniyor. */}
+        <section className="rad-card rad-log">
           <header className="rad-card-head">
-            <h3>{t("remoteAccess.explain.title")}</h3>
+            <h3>
+              <History size={16} />
+              {t("remoteAccess.log.title")}
+            </h3>
+            <small>{t("remoteAccess.log.hint")}</small>
           </header>
-          <ul className="rad-explain-list">
-            <li>
-              <span className="rad-explain-icon">
-                <Headset size={17} />
-              </span>
-              <span>
-                <strong>{t("remoteAccess.explain.whoTitle")}</strong>
-                <small>{t("remoteAccess.explain.whoText")}</small>
-              </span>
-            </li>
-            <li>
-              <span className="rad-explain-icon">
-                <Timer size={17} />
-              </span>
-              <span>
-                <strong>{t("remoteAccess.explain.howLongTitle")}</strong>
-                <small>
-                  {t("remoteAccess.explain.howLongText", {
-                    max: formatDurationMinutes(maxMinutes, t)
-                  })}
-                </small>
-              </span>
-            </li>
-            <li>
-              <span className="rad-explain-icon">
-                <Lock size={17} />
-              </span>
-              <span>
-                <strong>{t("remoteAccess.explain.afterTitle")}</strong>
-                <small>{t("remoteAccess.explain.afterText")}</small>
-              </span>
-            </li>
-          </ul>
-
-          {/* Cihazin bakim agindaki kimligi — teknik ama musteri "hangi cihaz"
-              sorusunun cevabini gormeli. */}
-          <div className="rad-device">
-            <div>
-              <span>{t("remoteAccess.device.name")}</span>
-              <strong>{status?.tailscale.hostname ?? "—"}</strong>
-            </div>
-            <div>
-              <span>{t("remoteAccess.device.address")}</span>
-              <strong>{status?.tailscale.ipv4 ?? "—"}</strong>
-            </div>
-            <div>
-              <span>{t("remoteAccess.device.link")}</span>
-              <strong className={registered ? "is-ok" : "is-off"}>
-                {t(
-                  registered
-                    ? "remoteAccess.device.linkRegistered"
-                    : "remoteAccess.device.linkMissing"
-                )}
-              </strong>
-            </div>
-          </div>
+          {audit.length === 0 ? (
+            <p className="net-empty">{t("remoteAccess.log.empty")}</p>
+          ) : (
+            <ul className="rad-log-list">
+              {audit.map((event) => {
+                const meta = parseMetadata(event.metadata_json);
+                const durationMinutes = numberOrNull(meta.duration_minutes);
+                const note = stringOrNull(meta.reason);
+                return (
+                  <li key={event.id} className={`rad-log-row is-${event.event_type}`}>
+                    <span className="rad-log-icon">
+                      {event.event_type === "remote_access_revoked" ? (
+                        <ShieldCheck size={15} />
+                      ) : event.event_type === "remote_access_session_ended" ? (
+                        <Hourglass size={15} />
+                      ) : event.event_type === "remote_access_apply_failed" ? (
+                        <AlertTriangle size={15} />
+                      ) : (
+                        <ShieldAlert size={15} />
+                      )}
+                    </span>
+                    <time>{formatClockFull(event.created_at)}</time>
+                    <span className="rad-log-text">
+                      {formatEventMessage(event)}
+                      {note ? <em>{note}</em> : null}
+                    </span>
+                    <span className="rad-log-side">
+                      {durationMinutes !== null ? (
+                        <span className="rad-log-chip">
+                          {formatDurationMinutes(durationMinutes, t)}
+                        </span>
+                      ) : null}
+                      {event.actor_username ? <b>{event.actor_username}</b> : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </div>
 
-      {/* ================= Denetim izi ================= */}
-      <section className="rad-card rad-log">
+      {/* ================= Izin verdiginizde ne olur? =================
+           EN ALTTA ve TAM GENISLIKTE: musteri burada guvenlik karari
+           veriyor, metinlerin sikismamasi gerekiyor. */}
+      <section className="rad-card rad-explain rad-explain--wide">
         <header className="rad-card-head">
-          <h3>
-            <History size={16} />
-            {t("remoteAccess.log.title")}
-          </h3>
-          <small>{t("remoteAccess.log.hint")}</small>
+          <h3>{t("remoteAccess.explain.title")}</h3>
         </header>
-        {audit.length === 0 ? (
-          <p className="net-empty">{t("remoteAccess.log.empty")}</p>
-        ) : (
-          <ul className="rad-log-list">
-            {audit.map((event) => {
-              const meta = parseMetadata(event.metadata_json);
-              const durationMinutes = numberOrNull(meta.duration_minutes);
-              const note = stringOrNull(meta.reason);
-              return (
-                <li key={event.id} className={`rad-log-row is-${event.event_type}`}>
-                  <span className="rad-log-icon">
-                    {event.event_type === "remote_access_revoked" ? (
-                      <ShieldCheck size={15} />
-                    ) : event.event_type === "remote_access_session_ended" ? (
-                      <Hourglass size={15} />
-                    ) : event.event_type === "remote_access_apply_failed" ? (
-                      <AlertTriangle size={15} />
-                    ) : (
-                      <ShieldAlert size={15} />
-                    )}
-                  </span>
-                  <time>{formatClockFull(event.created_at)}</time>
-                  <span className="rad-log-text">
-                    {formatEventMessage(event)}
-                    {note ? <em>{note}</em> : null}
-                  </span>
-                  <span className="rad-log-side">
-                    {durationMinutes !== null ? (
-                      <span className="rad-log-chip">
-                        {formatDurationMinutes(durationMinutes, t)}
-                      </span>
-                    ) : null}
-                    {event.actor_username ? <b>{event.actor_username}</b> : null}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <ul className="rad-explain-list">
+          <li>
+            <span className="rad-explain-icon">
+              <Headset size={17} />
+            </span>
+            <span>
+              <strong>{t("remoteAccess.explain.whoTitle")}</strong>
+              <small>{t("remoteAccess.explain.whoText")}</small>
+            </span>
+          </li>
+          <li>
+            <span className="rad-explain-icon">
+              <Timer size={17} />
+            </span>
+            <span>
+              <strong>{t("remoteAccess.explain.howLongTitle")}</strong>
+              <small>
+                {t("remoteAccess.explain.howLongText", {
+                  max: formatDurationMinutes(maxMinutes, t)
+                })}
+              </small>
+            </span>
+          </li>
+          <li>
+            <span className="rad-explain-icon">
+              <Lock size={17} />
+            </span>
+            <span>
+              <strong>{t("remoteAccess.explain.afterTitle")}</strong>
+              <small>{t("remoteAccess.explain.afterText")}</small>
+            </span>
+          </li>
+        </ul>
+
+        {/* Cihazin bakim agindaki kimligi — teknik ama musteri "hangi cihaz"
+            sorusunun cevabini gormeli. */}
+        <div className="rad-device">
+          <div>
+            <span>{t("remoteAccess.device.name")}</span>
+            <strong>{status?.tailscale.hostname ?? "—"}</strong>
+          </div>
+          <div>
+            <span>{t("remoteAccess.device.address")}</span>
+            <strong>{status?.tailscale.ipv4 ?? "—"}</strong>
+          </div>
+          <div>
+            <span>{t("remoteAccess.device.link")}</span>
+            <strong className={registered ? "is-ok" : "is-off"}>
+              {t(
+                registered
+                  ? "remoteAccess.device.linkRegistered"
+                  : "remoteAccess.device.linkMissing"
+              )}
+            </strong>
+          </div>
+        </div>
       </section>
 
       {/* ================= Onay modali — TEK surtunme noktasi ================= */}
