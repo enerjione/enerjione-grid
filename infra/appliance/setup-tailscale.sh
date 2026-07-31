@@ -99,13 +99,13 @@ _authkey_kalici() {
 }
 
 # --- Cihaza OZEL tailnet adi -----------------------------------------------
-# SORUN: sistem hostname'i her cihazda ayni (`e1-grid`) — cunku `e1-grid.local`
+# SORUN: sistem hostname'i her cihazda ayni (`enerjione`) — cunku `enerjione.local`
 # sahada standart erisim adresi ve site basina tek cihaz oldugu icin yerel
 # agda cakisma yok. Ama tailnet TEK bir isim alanidir; ayni adla katilan
 # cihazlari Tailscale `e1-grid-1`, `e1-grid-2`... diye numaralandirir ve
 # hangisinin hangi saha oldugu ANLASILMAZ olur.
 #
-# COZUM: sistem hostname'ine DOKUNMUYORUZ (e1-grid.local calismaya devam
+# COZUM: sistem hostname'ine DOKUNMUYORUZ (enerjione.local calismaya devam
 # eder); Tailscale'e ayri, cihaza ozel bir ad veriyoruz. Oncelik sirasi:
 #   1. E1_TAILSCALE_HOSTNAME          -> operator elle sabitlemis
 #   2. saha kimligi (site.env)        -> kurulumda sorulan musteri/saha adi

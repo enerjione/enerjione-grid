@@ -5,7 +5,7 @@
 # Kurulumda BIR KEZ sorulur: bu kutu hangi musteride, hangi sahada?
 #
 # NEDEN GEREKLI:
-#   Sistem hostname'i her cihazda ayni (`e1-grid`) — cunku `e1-grid.local`
+#   Sistem hostname'i her cihazda ayni (`enerjione`) — cunku `enerjione.local`
 #   sahada standart erisim adresidir ve site basina tek cihaz oldugu icin
 #   yerel agda cakisma yok. Ama uzaktan bakim VPN'i (Tailscale) TEK bir isim
 #   alanidir: ayni adla katilan cihazlar `e1-grid-1`, `e1-grid-2`... diye
