@@ -202,6 +202,16 @@ class Settings(BaseSettings):
     nats_stream_normalized_max_bytes: int = 3_221_225_472  # 3 GiB
     nats_stream_dlq_max_bytes: int = 1_073_741_824         # 1 GiB
 
+    # ----- Gateway saglik heartbeat'i --------------------------------------
+    # Saha gateway'i NAT arkasinda; backend onun /health ucuna ULASAMAZ.
+    # Saglik ozeti, gateway'in zaten 1 Hz attigi komut-poll istegine
+    # `X-E1-Gateway-Health` basligiyla biniyor (ek istek maliyeti yok).
+    #
+    # Bu deger gateway'e "kac saniyede bir gonder" der. 1 Hz'de gondermek
+    # gateway basina gunde 86.400 gereksiz DB yazimi demekti.
+    # 0 = saglik toplama kapali.
+    gateway_heartbeat_interval_sec: int = 30
+
     # ----- WebSocket fan-out (coklu surecin ON KOSULU) ----------------------
     # Canli deger yayini bugun SAF BELLEK-ICI: telemetry_consumer dogrudan
     # ayni surecteki WS abonelerine yaziyor. Bu, backend TEK surec oldugu

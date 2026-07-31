@@ -184,3 +184,13 @@ class GatewayPendingResponse(BaseModel):
     config_nonce: int = 0
     # "Tum cihazlara integrity poll at" tetigi (mevcut refresh-all mekanizmasi).
     refresh_nonce: int = 0
+    # Gateway saglik ozetini KAC SANIYEDE BIR gondersin. Bu uc 1 Hz cagriliyor;
+    # sagligi her cagrida gondermek hem bant hem yazma israfi olurdu. Sikligi
+    # BACKEND soyluyor ki filo genelinde tek yerden ayarlanabilsin.
+    # 0 = saglik gonderme (kill switch).
+    #
+    # DIKKAT: bu bir kill switch AMA kesilen kanalin kendisinden donuyor —
+    # yani baslik nginx tavanini asip istek hic ulasmiyorsa bu deger de
+    # gateway'e ULASAMAZ. Gercek koruma gateway tarafinda: baslik yuzunden
+    # istek reddedilirse basliksiz yeniden dene.
+    heartbeat_interval_sec: int = 30

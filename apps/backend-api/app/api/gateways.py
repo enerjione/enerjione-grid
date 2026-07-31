@@ -849,6 +849,7 @@ def get_gateway_pending(
     gateway_code: str,
     db: Session = Depends(get_db),
     x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+    x_gateway_health: str | None = Header(default=None, alias="X-E1-Gateway-Health"),
 ):
     """Hafif komut-poll — gateway 1sn'de bir ceker (komut anlik gelsin).
 
@@ -900,12 +901,41 @@ def get_gateway_pending(
             cmd.sent_at = now
 
     gateway.last_seen_at = datetime.now(timezone.utc)
+
+    # --- Gateway saglik heartbeat'i (opsiyonel) --------------------------
+    # Saha gateway'i NAT arkasinda; backend onun /health ucuna ULASAMAZ.
+    # Bu yuzden saglik ozeti gateway'in ZATEN saniyede bir attigi bu istege
+    # basligla biniyor (ek istek maliyeti YOK).
+    #
+    # KOMUT KANALI KUTSAL: burasi SCADA komut yolu. Bozuk base64, gecersiz
+    # JSON, devasa baslik ya da DB hatasi bu ucu ASLA dusurmemeli — aksi
+    # halde saglik raporlamak icin eklenen ozellik kesici komutlarinin
+    # iletilmesini engeller. Bu yuzden her sey try/except icinde ve
+    # ayristirici hicbir kosulda istisna firlatmiyor.
+    if x_gateway_health:
+        try:
+            from app.services.gateway_health_service import (
+                parse_health_header,
+                record_health,
+            )
+
+            payload = parse_health_header(x_gateway_health)
+            if payload is not None:
+                record_health(db, gateway.code, payload)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "gateway_health_ingest_failed gateway=%s — komut kanali etkilenmedi",
+                gateway_code,
+                exc_info=True,
+            )
+
     resp = GatewayPendingResponse(
         gateway_code=gateway.code,
         is_active=gateway.is_active,
         commands=commands,
         config_nonce=int(getattr(gateway, "config_nonce", 0) or 0),
         refresh_nonce=int(getattr(gateway, "refresh_nonce", 0) or 0),
+        heartbeat_interval_sec=settings.gateway_heartbeat_interval_sec,
     )
     db.commit()
     return _signed_json_response(gateway, resp)
