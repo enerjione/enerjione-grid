@@ -50,6 +50,15 @@
 #                           dugum cevrimdisi kalinca tailnet'ten SILINIR; saha
 #                           cihazi icin ISTENMEZ. Yalnizca gecici/test
 #                           kurulumlari icin acin.
+#   E1_TAILSCALE_REJOIN     1 = dugumu SIL ve kalici olarak yeniden kat.
+#                           Zaten ephemeral katilmis bir cihazi duzeltmenin TEK
+#                           yolu (bkz. asagida _rejoin_hazirla). Tailnet IP'si
+#                           degisir; islem sirasinda cihaza uzaktan ULASILAMAZ.
+#                           Bu yuzden ASLA otomatik degil, elle istenir.
+#   E1_TAILSCALE_ASSUME_PERSISTENT
+#                           1 = "bu dugumun kalici oldugunu konsoldan
+#                           dogruladim" beyani. Yeniden katilim YAPILMAZ,
+#                           yalnizca kalicilik uyarisi susturulur.
 #
 # Idempotent: cihaz zaten tailnet'e bagliysa tekrar login DENENMEZ.
 # ===========================================================================
@@ -258,7 +267,13 @@ elif self_.get("KeyExpiry"):
   fi
 
   if [[ -z "$expiry" ]]; then
-    e1_ok "Anahtar suresi uygulanmiyor — cihaz tailnet'te kalici."
+    # DIKKAT — BU SATIR ESKIDEN "cihaz tailnet'te kalici" DIYORDU VE YANLISTI.
+    # Anahtar suresinin uygulanmamasi, dugumun ephemeral OLMADIGI anlamina
+    # GELMEZ: ephemeral dugumlerde de anahtar suresi yoktur. Onlar sureden
+    # degil, CEVRIMDISI KALMAKTAN silinir. Yani ephemeral bir cihaz burada
+    # "kalici" onayi aliyor, sonra elektrik kesintisinde tailnet'ten
+    # kayboluyordu. Kalicilik ayrica raporlanir: _report_kalicilik.
+    e1_ok "Anahtar suresi uygulanmiyor — cihaz sure dolmasi nedeniyle dusmez."
   elif [[ "$expiry" == "DOLMUS" ]]; then
     e1_warn "Cihazin anahtari DOLMUS — uzaktan erisim su an calismiyor."
     e1_warn "Duzeltme: sudo tailscale up --advertise-tags=${TAGS} --ssh --force-reauth"
@@ -284,6 +299,180 @@ _warn_if_untagged() {
     e1_warn "Duzeltmek icin anahtari '${TAGS}' etiketiyle uretip:"
     e1_warn "  sudo tailscale up --advertise-tags=${TAGS} --ssh --reset"
   fi
+}
+
+# --- KALICILIK (ephemeral) MAKBUZU -----------------------------------------
+# NEDEN OLCMEK YERINE KAYIT TUTUYORUZ: cihazda "bu dugum ephemeral mi" diye
+# sorulabilecek bir yer YOK. `tailscale status --json`, `tailscale debug prefs`
+# ve netmap ciktisinin hicbiri bu bayragi tasimiyor; ephemeral olmak kontrol
+# duzleminin (Tailscale sunucusunun) tuttugu bir ozelliktir ve istemciye
+# bildirilmez. Bu yuzden olcemedigimiz seyi KAYIT ALTINA ALIYORUZ: katilim
+# aninda anahtarin kalici olmasini GARANTI EDEBILDIK MI?
+#
+# Makbuz YOKSA cihaz bu ozellik eklenmeden once katilmistir; kalicilik
+# BILINMIYOR demektir. Sahadaki mevcut cihazlarin tamami bu durumdadir.
+JOIN_RECEIPT="${E1_TAILSCALE_RECEIPT:-/var/lib/e1-grid/tailscale-join.json}"
+
+_node_id() {
+  local json
+  json="$(tailscale status --json 2>/dev/null)" || return 1
+  [[ -n "$json" ]] || return 1
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$json" | python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+print((d.get("Self") or {}).get("ID") or "")' 2>/dev/null
+  else
+    # Self, ciktida ExitNodeStatus/Peer bloklarindan ONCE gelir; dolayisiyla
+    # ilk "ID" alani Self'in kimligidir.
+    printf '%s' "$json" | sed -n 's/.*"ID"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+  fi
+}
+
+# Makbuz her alani AYRI SATIRA yazar; okumasi tek satirlik sed ile guvenli.
+_receipt_get() {  # $1 = alan adi
+  [[ -f "$JOIN_RECEIPT" ]] || return 1
+  sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}[[:space:]]*\$/\1/p" \
+    "$JOIN_RECEIPT" | head -1
+}
+
+_receipt_write() {  # $1 = kalici_garanti (true/false)   $2 = kaynak
+  local nid ts
+  nid="$(_node_id 2>/dev/null || true)"
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+  mkdir -p "$(dirname "$JOIN_RECEIPT")" 2>/dev/null || return 0
+  cat > "$JOIN_RECEIPT" <<EOF
+{
+  "surum": 1,
+  "kalici_garanti": $1,
+  "kaynak": "$2",
+  "dugum_kimligi": "${nid}",
+  "etiketler": "${TAGS}",
+  "katilim_utc": "${ts}"
+}
+EOF
+  # Sir icermez (anahtar YAZILMAZ); teshis amacli okunabilir birakiliyor.
+  chmod 644 "$JOIN_RECEIPT" 2>/dev/null || true
+}
+
+# "kalici" | "bilinmiyor"
+_kalicilik() {
+  local garanti rid nid
+  garanti="$(_receipt_get kalici_garanti || true)"
+  [[ "$garanti" == "true" ]] || { printf 'bilinmiyor'; return 0; }
+  rid="$(_receipt_get dugum_kimligi || true)"
+  nid="$(_node_id 2>/dev/null || true)"
+  # Makbuz BASKA bir dugume aitse (cihaz konsoldan silinip elle yeniden
+  # katilmis olabilir) tasidigi guvence gecersizdir.
+  if [[ -n "$rid" && -n "$nid" && "$rid" != "$nid" ]]; then
+    printf 'bilinmiyor'; return 0
+  fi
+  printf 'kalici'
+}
+
+_report_kalicilik() {
+  local kaynak
+  if [[ "$(_kalicilik)" == "kalici" ]]; then
+    e1_ok "Dugum KALICI katilmis — cevrimdisi kalsa da tailnet'ten silinmez."
+    return 0
+  fi
+  kaynak="$(_receipt_get kaynak || true)"
+  case "$kaynak" in
+    istege-bagli-ephemeral)
+      e1_warn "Dugum BILEREK ephemeral katildi (E1_TAILSCALE_EPHEMERAL=1)."
+      e1_warn "Cevrimdisi kalinca tailnet'ten silinir; saha cihazinda kullanmayin."
+      return 0
+      ;;
+    duz-auth-key)
+      # Duz auth key'de ephemeral/kalici karari anahtar URETILIRKEN konsolda
+      # verilir; sonuna '?...' eklenirse anahtarin KENDISI bozulur. Yani
+      # cihazdan zorlanamaz, yalnizca hatirlatabiliriz.
+      e1_info "Anahtar turu duz auth key — kalicilik konsoldaki ANAHTAR ayarina bagli."
+      e1_hint "Anahtari uretirken 'Ephemeral' secenegi ISARETSIZ olmali."
+      e1_hint "Konsoldan dogruladiysaniz bu notu susturmak icin:"
+      e1_hint "  sudo E1_TAILSCALE_ASSUME_PERSISTENT=1 bash ${SCRIPT_DIR}/setup-tailscale.sh"
+      return 0
+      ;;
+  esac
+  # Makbuz yok (ya da baska bir dugume ait): cihaz bu kontrol eklenmeden once
+  # katilmis demektir. Sahadaki mevcut cihazlarin tamami buraya duser.
+  e1_warn "Dugumun KALICI oldugu dogrulanamadi — ephemeral olabilir."
+  e1_warn "Ephemeral dugum cevrimdisi kalinca 30-60 dakika icinde tailnet'ten"
+  e1_warn "SILINIR: elektrik kesintisinden sonra cihaz listede hic gorunmez."
+  e1_warn "Konsolda cihazin yaninda 'Ephemeral' rozeti var mi kontrol edin."
+  e1_warn ""
+  e1_warn "Kalici hale getirmek (dugum silinir, ayni adla yeniden katilir):"
+  e1_warn "  sudo E1_TAILSCALE_REJOIN=1 bash ${SCRIPT_DIR}/setup-tailscale.sh"
+  e1_warn "Konsoldan kalici oldugunu DOGRULADIYSANIZ uyariyi susturmak icin:"
+  e1_warn "  sudo E1_TAILSCALE_ASSUME_PERSISTENT=1 bash ${SCRIPT_DIR}/setup-tailscale.sh"
+  return 0
+}
+
+# --- Ephemeral tamiri -------------------------------------------------------
+# Ephemeral bir dugumu kalici yapmanin TEK yolu dugumu SILIP yeniden katilmak.
+# `--force-reauth` ISE YARAMAZ: Tailscale yeniden kimlik dogrulamada ephemeral
+# bayragini temizlemiyor (tailscale/tailscale#15198, Mart 2025'ten beri acik).
+# `tailscale logout` ise ephemeral dugumu ANINDA siler; ardindan
+# `?ephemeral=false` ile yapilan taze katilim KALICI bir dugum yaratir.
+#
+# BEDELI: tailnet IP'si degisir ve katilim tamamlanana kadar cihaza uzaktan
+# ULASILAMAZ. Bu yuzden asla otomatik kosmaz; yalnizca E1_TAILSCALE_REJOIN=1.
+_ssh_client_ip() {
+  local ip pid=$$ hops=0 ppid
+  ip="${SSH_CONNECTION%% *}"
+  if [[ -n "$ip" ]]; then printf '%s' "$ip"; return 0; fi
+  # `sudo` env_reset ile SSH_CONNECTION'i dusurebilir; surec agacinda yukari
+  # yuruyup /proc/<pid>/environ icinden okuyoruz (root bunu okuyabilir).
+  while [[ $hops -lt 12 && -r "/proc/${pid}/status" ]]; do
+    if [[ -r "/proc/${pid}/environ" ]]; then
+      ip="$(tr '\0' '\n' < "/proc/${pid}/environ" 2>/dev/null \
+            | sed -n 's/^SSH_CONNECTION=//p' | head -1)"
+      ip="${ip%% *}"
+      if [[ -n "$ip" ]]; then printf '%s' "$ip"; return 0; fi
+    fi
+    ppid="$(awk '/^PPid:/{print $2}' "/proc/${pid}/status" 2>/dev/null || true)"
+    [[ -n "$ppid" && "$ppid" != "0" && "$ppid" != "$pid" ]] || break
+    pid="$ppid"
+    hops=$((hops + 1))
+  done
+  return 1
+}
+
+_is_tailnet_ip() {  # 100.64.0.0/10 -> 100.64.x.x .. 100.127.x.x
+  local o2
+  [[ "$1" =~ ^100\.([0-9]{1,3})\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || return 1
+  o2="${BASH_REMATCH[1]}"
+  (( o2 >= 64 && o2 <= 127 ))
+}
+
+# Basarili olursa `logout` yapilmistir ve cagiran taraf KATILIM yoluna dusmeli.
+_rejoin_hazirla() {
+  local cip
+  if [[ -z "$AUTHKEY" ]]; then
+    e1_warn "E1_TAILSCALE_REJOIN=1 verildi ama anahtar tanimli degil."
+    e1_warn "Anahtarsiz cikis cihazi tailnet'ten KALICI olarak dusururdu — yapilmadi."
+    e1_warn "Anahtari verip tekrar deneyin:"
+    e1_warn "  sudo E1_TAILSCALE_REJOIN=1 E1_TAILSCALE_AUTHKEY=<anahtar> \\"
+    e1_warn "       bash ${SCRIPT_DIR}/setup-tailscale.sh"
+    return 1
+  fi
+  cip="$(_ssh_client_ip || true)"
+  if [[ -n "$cip" ]] && _is_tailnet_ip "$cip"; then
+    e1_warn "Bu oturum tailnet uzerinden acilmis (${cip})."
+    e1_warn "Yeniden katilim once baglantiyi keser, sonra tailnet IP'si degisir;"
+    e1_warn "SSH oturumunuz kopar ve cihaz yarim durumda kalir — yapilmadi."
+    e1_warn "Yerel konsoldan ya da yerel agdaki IP uzerinden calistirin."
+    return 1
+  fi
+  e1_info "Dugum tailnet'ten cikariliyor ve kalici olarak yeniden katiliyor..."
+  if ! tailscale logout >/dev/null 2>&1; then
+    e1_warn "tailscale logout basarisiz — yeniden katilim denenmedi."
+    e1_warn "Cihaz eski haliyle tailnet'te kaldi."
+    return 1
+  fi
+  return 0
 }
 
 if [[ "$(id -u)" -ne 0 ]]; then
@@ -322,15 +511,30 @@ systemctl enable --now tailscaled >/dev/null 2>&1 || {
 # E1_RAD_LOCK_MODE=down) durum "Stopped" olur; "Running" arayan eski kosul
 # buraya takilmaz, asagi duser ve `tailscale up --authkey --reset` ile
 # musterinin kapattigi erisimi GERI ACARDI.
+REJOIN_YAPILDI=0
 if _node_is_registered; then
-  TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
-  e1_ok "Cihaz zaten tailnet'e kayitli${TS_IP:+ (${TS_IP})} — yeniden giris yapilmadi."
-  _warn_if_untagged
-  _report_key_expiry
-  # Sahadaki mevcut cihazlar uzaktan bakim izni ajanini ILK GUNCELLEMEDE
-  # burada alir. Erisim durumuna DOKUNMUYORUZ; karar ajanindir.
-  _install_remote_access 0
-  exit 0
+  # Operator "konsoldan dogruladim, bu dugum kalici" diyorsa olcemedigimiz
+  # seyi onun beyanina dayanarak kaydediyoruz. Yeniden katilim YAPILMAZ.
+  if [[ "${E1_TAILSCALE_ASSUME_PERSISTENT:-0}" == "1" ]]; then
+    _receipt_write true "elle-onay"
+    e1_ok "Kalicilik elle onaylandi — bundan sonra uyari verilmez."
+  fi
+
+  if [[ "${E1_TAILSCALE_REJOIN:-0}" == "1" ]] && _rejoin_hazirla; then
+    # `logout` yapildi: dugum artik KAYITLI DEGIL. Asagidaki katilim yoluna
+    # dusuyoruz; boylece `tailscale up` mantigi tek yerde kalir.
+    REJOIN_YAPILDI=1
+  else
+    TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
+    e1_ok "Cihaz zaten tailnet'e kayitli${TS_IP:+ (${TS_IP})} — yeniden giris yapilmadi."
+    _warn_if_untagged
+    _report_key_expiry
+    _report_kalicilik
+    # Sahadaki mevcut cihazlar uzaktan bakim izni ajanini ILK GUNCELLEMEDE
+    # burada alir. Erisim durumuna DOKUNMUYORUZ; karar ajanindir.
+    _install_remote_access 0
+    exit 0
+  fi
 fi
 
 # Buradan sonrasi tailnet'e KATILMA yolu; anahtar sart.
@@ -340,9 +544,21 @@ if [[ -z "$AUTHKEY" ]]; then
 fi
 
 # --- 3) Tailnet'e katil -----------------------------------------------------
+# Kalicilik guvencesini ANAHTARIN KENDISINDEN turetiyoruz; tahmin yok.
+EFFECTIVE_KEY="$(_authkey_kalici "${AUTHKEY}")"
+if [[ "${E1_TAILSCALE_EPHEMERAL:-0}" == "1" ]]; then
+  KALICI_GARANTI=false; KALICI_KAYNAK="istege-bagli-ephemeral"
+elif [[ "$EFFECTIVE_KEY" == *"ephemeral=false"* ]]; then
+  # OAuth secret'ina parametreyi biz ekledik (ya da operator elle eklemis).
+  KALICI_GARANTI=true;  KALICI_KAYNAK="oauth-ephemeral-false"
+else
+  # Duz auth key: ephemeral karari konsolda, anahtar uretilirken verilmis.
+  KALICI_GARANTI=false; KALICI_KAYNAK="duz-auth-key"
+fi
+
 UP_ARGS=(
   # ?ephemeral=false — dugum cevrimdisi kalinca tailnet'ten silinmesin.
-  --authkey="$(_authkey_kalici "${AUTHKEY}")"
+  --authkey="${EFFECTIVE_KEY}"
   --hostname="${TS_HOSTNAME}"
   # Saha cihazi kalici olmali: yeniden baslatinca ayni dugum olarak donsun.
   --reset
@@ -435,9 +651,13 @@ fi
 
 TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
 e1_ok "Tailnet'e katildi${TS_IP:+ — ${TS_IP}}"
+# Makbuz KATILIMDAN SONRA yazilir: dugum kimligi ancak simdi okunabilir.
+# (Etiketsiz geri donus yolu ayni anahtari kullanir; guvence degismez.)
+_receipt_write "$KALICI_GARANTI" "$KALICI_KAYNAK"
 # Etiketsiz geri donus yolundan katildiysak burada uyari cikar.
 _warn_if_untagged
 _report_key_expiry
+_report_kalicilik
 e1_info "Cihaz Tailscale yonetim konsolunda '${TS_HOSTNAME}' adiyla gorunur."
 e1_warn "UZAKTAN ERISIM VARSAYILAN KAPALI (--shields-up ile katildi)."
 e1_hint "Musterinin yetkili kullanicisi (engineer rolu) arayuzden sureli izin verir:"
@@ -445,7 +665,16 @@ e1_hint "  Muhendislik > Sistem > Uzaktan Bakim  (1 saat / 8 saat / 24 saat)"
 e1_hint "Izin acikken baglanmak icin: ssh root@${TS_HOSTNAME}"
 e1_hint "Baglanti reddedilirse ya izin kapalidir ya da tailnet ACL'inde 'ssh' blogu eksiktir"
 e1_hint "(bkz. docs/TAILSCALE.md). Cihazda durum: sudo ${SCRIPT_DIR}/e1-rad.py report"
-# Taze katilim: kurulumcu ACL/SSH testini bitirebilsin diye kisa sureli
-# kurulum mahsubu yazilir (E1_RAD_GRACE_MIN, varsayilan 60 dk; 0 = yok).
-_install_remote_access 1
+if [[ "$REJOIN_YAPILDI" == "1" ]]; then
+  e1_ok "Dugum KALICI olarak yeniden katildi — tailnet IP'si degismis olabilir."
+  # Yeniden katilim bir BAKIM islemidir; kurulum mahsubu YAZILMAZ. Aksi halde
+  # musterinin kapali tuttugu kapi, bakim yapildi diye 60 dakika acilirdi.
+  _install_remote_access 0
+  e1_hint "Erisimi test etmek icin sureli izin verin:"
+  e1_hint "  Muhendislik > Sistem > Uzaktan Bakim"
+else
+  # Taze katilim: kurulumcu ACL/SSH testini bitirebilsin diye kisa sureli
+  # kurulum mahsubu yazilir (E1_RAD_GRACE_MIN, varsayilan 60 dk; 0 = yok).
+  _install_remote_access 1
+fi
 exit 0
