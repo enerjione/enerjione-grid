@@ -205,6 +205,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
     """
     from app.models.telemetry import Telemetry
     from app.models.telemetry_history import TelemetryHistory
+    from app.services.device_clock_service import assess_device_timestamp
     from app.services.tag_engine_service import (
         map_quality_to_status,
         normalize_quality,
@@ -326,6 +327,13 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             ))
             # Historian row'unu biriktir; dongu SONUNDA tum batch TEK
             # INSERT ... VALUES (...), (...) ile gider (mesaj basina execute yok).
+            # Cihazin kendi olay zamani (varsa) + makullugu. `source_timestamp`
+            # AYNEN kaliyor (PK/partition kolonu); bu ikisi yalnizca analiz
+            # icin ayri kolonlarda duruyor. Bkz. device_clock_service.
+            _dev_at, _ts_quality = assess_device_timestamp(
+                getattr(reading, "device_event_at", None),
+                reported_quality=getattr(reading, "timestamp_quality", None),
+            )
             historian_rows.append({
                 "device_id": device.id,
                 "signal_key": reading.signal_key,
@@ -333,6 +341,8 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 "value_string": reading.value_string,
                 "quality": normalize_quality(reading.quality),
                 "source_timestamp": reading.source_timestamp,
+                "device_event_at": _dev_at,
+                "timestamp_quality": _ts_quality,
             })
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
             ok_msgs.append(msg)

@@ -39,7 +39,41 @@ class TelemetryIn(BaseModel):
     # kaliteyi zaten uretemiyor, dolayisiyla "alani gondermeyi unutma" riski
     # yok. Tek alan hem teshis (ham bayrak) hem surum ayrimi sagliyor.
     dnp3_flags: int | None = None
+    # GATEWAY saati — cihazi okumaya basladigi an. Cihaz basina TEK deger.
+    #
+    # ANLAMI DEGISMEDI ve DEGISMEYECEK. Gateway ekibi "artik cihaz zamani
+    # olsun" onerdi; REDDEDILDI cunku bu alan ayni anda:
+    #   * telemetry_history BIRINCIL ANAHTARININ parcasi
+    #   * TimescaleDB hypertable partition kolonu
+    #   * retention/disk-guard silme kriteri
+    #   * continuous aggregate ekseni
+    # Anlamini degistirmek bunlarin hepsini birden etkiler. Somut felaketler:
+    #   - gecmise damgali satir historian INSERT'ini patlatir -> TUM telemetri
+    #     akisi durur
+    #   - ileriye damgali satir `telemetry` tablosunda OLUMSUZ olur; retention
+    #     ve disk guard onu hic goremez
+    #   - ayni saniyeye dusen "ariza gecti / ariza kalkti" cifti AYNI PK'ya
+    #     duser ve ikincisi SESSIZCE kaybolur — yani B2'nin korumak istedigi
+    #     veri tam da bu yuzden yok olur
+    #   - RTC pili biten cihaz 2000-01-01 damgalar; olcum kabul edilir ve bir
+    #     gun icinde retention tarafindan sessizce SILINIR
     source_timestamp: datetime
+    # CIHAZIN kendi DNP3 olay zamani (varsa). OPSIYONEL, YENI alan.
+    #
+    # Neden ayri alan: yukaridaki hicbir mekanizmaya dokunmuyor. Kotu bir
+    # cihaz saati burada yalnizca ANALIZ verisini bozar; depolamayi,
+    # retention'i, partition'i ve dedup'i ETKILEMEZ. Deploy sirasi bozulsa
+    # (yeni gateway once cikarsa) eski backend alani sessizce yok sayar —
+    # yani "once backend" kuralina bagimli DEGILIZ.
+    #
+    # Kullanim: olay sirasi (SOE) ve ariza suresi analizi. 4G kopmasi sonrasi
+    # outstation event buffer'i bosalinca tum olaylar ayni saniyede gelir ama
+    # her biri KENDI olay zamanini tasir.
+    device_event_at: datetime | None = None
+    # Cihaz saatinin guvenilirligi: "synchronized" | "unsynchronized" |
+    # "invalid". DNP3 zaman senkron bitlerinden gelir. None = gateway
+    # bildirmedi (0.4.x).
+    timestamp_quality: str | None = None
 
 
 class GatewayTelemetryBatch(BaseModel):

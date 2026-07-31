@@ -37,6 +37,20 @@ class TelemetryHistory(Base):
     value_string: Mapped[str | None] = mapped_column(Text, nullable=True)
     quality: Mapped[str] = mapped_column(String(50), default="good")
 
+    # CIHAZIN kendi DNP3 olay zamani (varsa). SOE / ariza suresi analizi icin.
+    #
+    # DIKKAT — bu kolon PK'nin ve partition'in PARCASI DEGILDIR ve olmamalidir.
+    # PK (device_id, signal_key, source_timestamp) ve hypertable partition
+    # `source_timestamp` uzerindedir. Cihaz saati bozuk olsa bile (RTC pili
+    # bitip 2000-01-01'e donse bile) depolama, retention ve dedup ETKILENMEZ;
+    # yalnizca bu kolondaki analiz verisi guvenilmez olur ve bunu
+    # `timestamp_quality` soyler.
+    device_event_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # "synchronized" | "unsynchronized" | "invalid" | None (gateway bildirmedi)
+    timestamp_quality: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # NOT: Burada bir zamanlar `ix_telemetry_history_device_signal_ts` adinda
     # (device_id, signal_key, source_timestamp) index'i vardi. BIREBIR AYNI
     # kolonlari ayni sirada tasiyan PRIMARY KEY zaten mevcut oldugu icin bu
