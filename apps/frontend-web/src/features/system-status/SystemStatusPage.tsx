@@ -46,6 +46,7 @@ import {
 
 import {
   fetchHistorianStatus,
+  fetchTelemetryPipelineStatus,
   fetchHostStatus,
   fetchServicesStatus,
   fetchVersionInfo,
@@ -58,6 +59,7 @@ import type {
   DeviceRow,
   Gateway,
   HistorianStatus,
+  TelemetryPipelineStatus,
   HostStatus,
   ServicesReport,
   ServiceStatus,
@@ -80,6 +82,11 @@ const SERVICES_REFRESH_INTERVAL_SEC = 10;
 /** Historian saglik yenileme araligi (sn). Backend zaten 60 sn cache'liyor ve
  *  bu bilgi (hypertable/retention politikasi) saniyeler icinde degismez. */
 const HISTORIAN_REFRESH_INTERVAL_SEC = 60;
+/** Telemetri boru hatti yenileme araligi (sn). Historian'dan SIK: backlog
+ *  saniyeler icinde degisebilen canli bir buyukluk ve tam da hizli
+ *  buyudugunde gorulmesi gereken sey. Ucun maliyeti sifira yakin (surec-ici
+ *  sayaclar, ek DB/NATS sorgusu yok), bu yuzden 10 sn sorun degil. */
+const PIPELINE_REFRESH_INTERVAL_SEC = 10;
 const HOST_HISTORY_LEN = 24;
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
@@ -281,6 +288,8 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
   const [services, setServices] = useState<ServicesReport | null>(null);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [historian, setHistorian] = useState<HistorianStatus | null>(null);
+  const [pipeline, setPipeline] = useState<TelemetryPipelineStatus | null>(null);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [historianError, setHistorianError] = useState<string | null>(null);
   const servicesInFlightRef = useRef(false);
 
@@ -399,6 +408,27 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
     enabled: true,
     intervalMs: HISTORIAN_REFRESH_INTERVAL_SEC * 1000,
     fn: pollHistorian
+  });
+
+  // --- Telemetri boru hatti: tuketici yetisiyor mu? -----------------------
+  // Stream `discard=old` ile calisiyor: tampon dolarsa en eski mesajlar
+  // SESSIZCE dusurulur. Bu gosterge o sessizligi gorunur kilan tek sey.
+  const pollPipeline = useCallback(async () => {
+    const session = loadSession();
+    if (!session) return;
+    try {
+      setPipeline(await fetchTelemetryPipelineStatus(session.accessToken));
+      setPipelineError(null);
+    } catch (exc) {
+      const msg = exc instanceof Error ? exc.message : t("systemStatus.pipeline.errorFetch");
+      setPipelineError(msg === "session_polling_401" ? null : msg);
+    }
+  }, [t]);
+
+  usePolling({
+    enabled: true,
+    intervalMs: PIPELINE_REFRESH_INTERVAL_SEC * 1000,
+    fn: pollPipeline
   });
 
   // Cihaz ozeti — sadece sayilar, tablo yok.
@@ -1156,6 +1186,135 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
       ) : historianError ? (
         <section className="sys-card">
           <div className="sys-card-body">{historianError}</div>
+        </section>
+      ) : null}
+
+      {/* --- Telemetri boru hatti ------------------------------------------
+          NEDEN AYRI KART: telemetri NATS stream'inde tamponlanir ve stream
+          `discard=old` ile calisir. Tuketici gelis hizinin gerisine duserse
+          tampon dolar ve EN ESKI mesajlar SESSIZCE dusurulur — ekranda hata
+          yok, alarm yok, sadece bazi okumalar hic gelmemis olur. Bu kart o
+          sessizligi gorunur kilar; "backlog" surekli 0 civari beklenir. */}
+      {pipeline ? (
+        <section className="sys-card">
+          <header className="sys-card-head">
+            <div className="sys-card-title-wrap">
+              <span className="sys-card-icon sys-card-icon--svc">
+                <Activity size={17} strokeWidth={2.1} />
+              </span>
+              <h2 className="sys-card-title">{t("systemStatus.pipeline.title")}</h2>
+            </div>
+            <div className="sys-head-meta">
+              <span
+                className={
+                  pipeline.severity === "ok"
+                    ? "sys-version-badge is-current"
+                    : "sys-version-badge is-update"
+                }
+              >
+                {pipeline.severity === "ok" ? (
+                  <CheckCircle2 size={13} strokeWidth={2.4} />
+                ) : (
+                  <BellRing size={13} strokeWidth={2.4} />
+                )}
+                {t(`systemStatus.pipeline.severity.${pipeline.severity}`)}
+              </span>
+            </div>
+          </header>
+          <div className="sys-card-body">
+            {pipeline.severity !== "ok" ? (
+              <ul className="sys-card-list">
+                <li className="sys-svc-row">
+                  <span className="sys-svc-name">
+                    {!pipeline.running || !pipeline.connected
+                      ? t("systemStatus.pipeline.problem.disconnected")
+                      : t("systemStatus.pipeline.problem.backlogHigh")}
+                  </span>
+                </li>
+              </ul>
+            ) : null}
+            <div className="sys-info-tiles">
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <Timer size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.pipeline.backlog")}
+                  </span>
+                  <strong className="sys-info-tile-val">
+                    {pipeline.backlog == null ? "—" : pipeline.backlog.toLocaleString()}
+                  </strong>
+                  <span className="sys-info-tile-sub">
+                    {t("systemStatus.pipeline.backlogHint", {
+                      count: pipeline.backlog_warn_threshold
+                    })}
+                  </span>
+                </div>
+              </div>
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <TrendingUp size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.pipeline.throughput")}
+                  </span>
+                  <strong className="sys-info-tile-val">
+                    {t("systemStatus.pipeline.msgsPerSec", {
+                      count: Math.round(pipeline.throughput_msgs_per_sec)
+                    })}
+                  </strong>
+                  <span className="sys-info-tile-sub">
+                    {t("systemStatus.pipeline.batchSub", {
+                      size: pipeline.last_batch_size,
+                      sec: pipeline.last_batch_duration_sec.toFixed(2)
+                    })}
+                  </span>
+                </div>
+              </div>
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <Database size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.pipeline.processed")}
+                  </span>
+                  <strong className="sys-info-tile-val">
+                    {pipeline.processed_total.toLocaleString()}
+                  </strong>
+                  <span className="sys-info-tile-sub">
+                    {t("systemStatus.pipeline.badSub", { count: pipeline.bad_total })}
+                  </span>
+                </div>
+              </div>
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <Plug size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">
+                    {t("systemStatus.pipeline.connection")}
+                  </span>
+                  <strong className="sys-info-tile-val">
+                    {pipeline.connected
+                      ? t("systemStatus.pipeline.connected")
+                      : t("systemStatus.pipeline.disconnected")}
+                  </strong>
+                  <span className="sys-info-tile-sub">
+                    {t("systemStatus.pipeline.reconnectsSub", {
+                      count: pipeline.reconnects
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : pipelineError ? (
+        <section className="sys-card">
+          <div className="sys-card-body">{pipelineError}</div>
         </section>
       ) : null}
     </section>

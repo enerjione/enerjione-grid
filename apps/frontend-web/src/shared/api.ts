@@ -2319,6 +2319,30 @@ export async function fetchHistorianStatus(
   return (await response.json()) as HistorianStatus;
 }
 
+/** Telemetri boru hatti — tuketici gelis hizina yetisiyor mu?
+ *
+ *  Historian ucundan FARKLI olarak bu ucun maliyeti sifira yakin: sayaclar
+ *  surec-ici, DB'ye veya NATS'a ek sorgu YOK (backlog degeri JetStream mesaj
+ *  metadata'sindan bedava geliyor). Bu yuzden sik pollenebilir.
+ *
+ *  Polling icin session-expired event TETIKLENMEZ (diger sistem-durumu
+ *  uclariyla ayni davranis). */
+export async function fetchTelemetryPipelineStatus(
+  token: string
+): Promise<TelemetryPipelineStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/system-status/telemetry-pipeline`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401
+        ? "session_polling_401"
+        : "Telemetri boru hatti durumu alınamadı."
+    );
+  }
+  return (await response.json()) as TelemetryPipelineStatus;
+}
+
 /* ===== Appliance ag ayarlari (mini PC IP/DNS) ===== */
 
 /** Host'un ag durumu (arayuzler, WiFi AP, son uygulama sonucu).

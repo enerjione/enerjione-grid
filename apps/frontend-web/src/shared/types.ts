@@ -931,6 +931,34 @@ export type HistorianStatus = {
   problems: HistorianProblem[];
 };
 
+/** Telemetri boru hattinin anlik durumu — "tuketici yetisiyor mu?".
+ *
+ *  NEDEN VAR: telemetri NATS stream'inde tamponlanir ve stream `discard=old`
+ *  ile calisir. Tuketici gelis hizinin gerisine duserse tampon dolar ve EN
+ *  ESKI mesajlar SESSIZCE dusurulur — ekranda hata yok, sadece bazi okumalar
+ *  hic gelmemis olur. Bu gosterge o sessizligi gorunur kilar. */
+export type TelemetryPipelineStatus = {
+  running: boolean;
+  connected: boolean;
+  /** Tuketicinin ONUNDE bekleyen mesaj sayisi (JetStream num_pending).
+   *  Surekli 0 civari beklenir; kalici buyume tuketicinin geride oldugunu
+   *  ve tampon tasarsa veri kaybi baslayacagini gosterir. */
+  backlog?: number | null;
+  /** Son 60 saniyelik kayan ortalama islenmis mesaj/sn. */
+  throughput_msgs_per_sec: number;
+  last_batch_size: number;
+  last_batch_duration_sec: number;
+  last_fetch_at?: string | null;
+  processed_total: number;
+  /** Parse/dogrulama hatasi alip DLQ'ya giden mesajlar. */
+  bad_total: number;
+  reconnects: number;
+  last_error?: string | null;
+  backlog_warn_threshold: number;
+  /** ok | warning (backlog yuksek) | critical (tuketici durmus veya NATS yok). */
+  severity: "ok" | "warning" | "critical";
+};
+
 // ---- Modbus TCP outbound adres plani (`/outbound-targets/{id}/modbus-plan`) --
 // Plan backend'de uretilir; modbus-outbound worker'i AYNI plani uygular.
 // Yani buradaki adres, sahada yayinlanan adresin ta kendisidir.

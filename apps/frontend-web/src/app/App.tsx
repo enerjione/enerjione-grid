@@ -2331,9 +2331,19 @@ export function App() {
   //   license          : lisansin yuklendigi sayfa.
   //   network-settings : agi bozuk lisanssiz cihaz once agi duzeltmeli
   //                      (bkz. commit 144539f; 1d8c605'te kaybolmustu).
+  //   remote-access    : lisansi bozuk cihazi UZAKTAN duzeltebilmek icin
+  //                      musterinin bize erisim verebilmesi sart. Bu sayfa
+  //                      da kilitlenirse kilidi acacak yol kapanir.
+  //                      Backend zaten ayni istisnayi yapiyor
+  //                      (license_gate.py: "/remote-access/" izinli
+  //                      prefix'ler arasinda, "/network ile AYNI gerekce").
+  //                      Burada eksik oldugu icin arayuz, backend'in bilerek
+  //                      acik biraktigi kapiyi kapatiyordu.
   const licenseGateExemptPage =
     pageMode === "engineering" &&
-    (engineeringPage === "license" || engineeringPage === "network-settings");
+    (engineeringPage === "license" ||
+      engineeringPage === "network-settings" ||
+      engineeringPage === "remote-access");
   const licenseGateOpen = licenseGateActive && !licenseGateExemptPage;
 
   // Icerigin render edilip edilmeyecegi. Muaf sayfalar kilitliyken de acilir.
