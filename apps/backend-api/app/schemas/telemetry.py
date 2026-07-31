@@ -21,6 +21,24 @@ class TelemetryIn(BaseModel):
     # cozumlemeden yapabilmesi icin kategori bilgisi.
     signal_data_type: str | None = None
     quality: str = "good"
+    # Ham DNP3 kalite bayraklari (Group 1/30/... octet). OPSIYONEL.
+    #
+    # BU ALANIN VARLIGI BIR SURUM ISARETIDIR — tasarimin can alici noktasi:
+    #   dnp3_flags is not None  -> kalite NOKTA seviyesinde (gateway 0.5.0+)
+    #   dnp3_flags is None      -> kalite CIHAZ seviyesinde (0.4.x / legacy)
+    #
+    # NEDEN GEREKLI: `invalid` token'i BUGUN de uretiliyor ama CIHAZ
+    # seviyesinde ("tum cihaz okunamadi" — legacy dnp3_master). Yeni gateway
+    # ayni kelimeyi NOKTA seviyesinde uretiyor ("bu tek olcum gecersiz").
+    # Ayni kelime, iki farkli kapsam. Backend'in `invalid -> cihaz OFFLINE`
+    # esmesi eski anlam icin DOGRU, yeni anlam icin FELAKET olurdu: tek bir
+    # noktanin referans hatasi TUM cihazi offline gosterir, harita kirmizi
+    # olur ve "son veri" sayaci donardi.
+    #
+    # Ayri bir `quality_scope` alani EKLENMEDI: gateway bayragi okumadan yeni
+    # kaliteyi zaten uretemiyor, dolayisiyla "alani gondermeyi unutma" riski
+    # yok. Tek alan hem teshis (ham bayrak) hem surum ayrimi sagliyor.
+    dnp3_flags: int | None = None
     source_timestamp: datetime
 
 

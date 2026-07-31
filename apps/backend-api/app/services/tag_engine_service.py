@@ -31,6 +31,53 @@ def map_quality_to_status(quality: str) -> CommunicationStatus:
     )
 
 
+# NOKTA seviyesinde gelebilen ama CIHAZI offline SAYMAMASI gereken kaliteler.
+#
+# `invalid`  : bu tek olcum gecersiz (ONLINE=0 / OVER_RANGE / REFERENCE_ERR)
+# `restart`  : outstation reboot etti, bu nokta icin baseline bekleniyor
+# `forced`   : operator noktayi elle zorlamis (LOCAL/REMOTE_FORCED)
+#
+# Cihaz seviyesinde ayni token'lar OFFLINE demektir; ayrimi `dnp3_flags`in
+# VARLIGI yapar (bkz. schemas/telemetry.py).
+_POINT_LEVEL_QUALITIES = frozenset({"invalid", "restart", "forced"})
+
+# Alarm degerlendirmesini engelleyen kaliteler — HABERLESME DURUMUNDAN AYRI
+# bir kume. Iki karar farklidir:
+#   * haberlesme durumu : "cihaz ayakta mi?"       -> _OFFLINE_QUALITIES
+#   * alarm degerlendirme: "bu olcume guvenilir mi?" -> burasi
+#
+# `forced` farkin somut ornegi: operator noktayi ELLE zorlamis. Cihaz
+# ayaktadir (ONLINE) ama deger YAPAY bir degerdir — o degerden alarm uretmek
+# ya da acik bir alarmi o degerle kapatmak yanlis olur.
+ALARM_BLOCKING_QUALITIES = frozenset(_OFFLINE_QUALITIES | {"forced"})
+
+
+def map_quality_to_status_scoped(
+    quality: str, *, dnp3_flags: int | None
+) -> CommunicationStatus:
+    """Kaliteyi cihaz haberlesme durumuna cevirir — KAPSAM farkindalikli.
+
+    NEDEN AYRI FONKSIYON:
+      `invalid` / `restart` token'lari iki farkli kapsamda uretiliyor.
+        * Eski gateway (0.4.x, legacy dnp3_master): CIHAZ seviyesi —
+          "tum cihaz okunamadi". OFFLINE dogru karardir.
+        * Yeni gateway (0.5.0+, map_dnp3_quality): NOKTA seviyesi —
+          "bu tek olcum gecersiz". Cihaz pekala ayakta ve diger 192 sinyali
+          saglikli olabilir.
+      Ayrimi yapmadan yeni gateway'in bayragini acmak, tek bir noktanin
+      referans hatasinda TUM CIHAZI offline gosterirdi: harita kirmizi,
+      "son veri" sayaci donar, battery senkronu durur.
+
+    `comm_lost` her iki kapsamda da CIHAZ seviyesidir (DNP3/TCP baglantisi
+    yok) — nokta bazli bayrak tasisa bile OFFLINE kalir.
+    """
+    q = normalize_quality(quality)
+    if dnp3_flags is not None and q in _POINT_LEVEL_QUALITIES:
+        # Nokta bazli sorun: olcum kotu ama CIHAZ ayakta.
+        return CommunicationStatus.ONLINE
+    return map_quality_to_status(q)
+
+
 def quality_blocks_alarm(quality: str | None) -> bool:
     """Bu kalitedeki bir okuma alarm degerlendirmesine GIRMELI Mi?
 
@@ -52,7 +99,7 @@ def quality_blocks_alarm(quality: str | None) -> bool:
     """
     if quality is None:
         return False
-    return normalize_quality(str(quality)) in _OFFLINE_QUALITIES
+    return normalize_quality(str(quality)) in ALARM_BLOCKING_QUALITIES
 
 
 # Lithium pil voltaj-yüzde haritası (default; proje ayarlarindan override edilebilir).
@@ -145,7 +192,12 @@ def process_telemetry_reading(
 ) -> tuple[Telemetry, dict[str, Any]]:
     normalized_quality = normalize_quality(reading.quality)
     previous_status = device.communication_status
-    next_status = map_quality_to_status(normalized_quality)
+    # KAPSAM FARKINDALIKLI: `dnp3_flags` varsa kalite NOKTA seviyesindedir ve
+    # `invalid`/`restart`/`forced` cihazi offline SAYMAZ. Bkz.
+    # map_quality_to_status_scoped ve schemas/telemetry.py'deki gerekce.
+    next_status = map_quality_to_status_scoped(
+        normalized_quality, dnp3_flags=getattr(reading, "dnp3_flags", None)
+    )
 
     telemetry = Telemetry(
         device_id=device.id,

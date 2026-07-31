@@ -297,7 +297,7 @@ def _rules_refresh_loop(stop_event: Event) -> None:
 # kopan cihaz icin bastigi kalite tam olarak `comm_lost`. Eski kume bu ikisini
 # icermiyordu ve fonksiyon zaten HIC CAGRILMIYORDU.
 _ALARM_BLOCKING_QUALITIES = frozenset(
-    {"bad", "offline", "invalid", "comm_lost", "restart"}
+    {"bad", "offline", "invalid", "comm_lost", "restart", "forced"}
 )
 
 

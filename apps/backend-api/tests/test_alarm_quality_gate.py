@@ -89,11 +89,11 @@ def test_alarm_service_kara_listesi_backend_ile_AYNI():
     assert m, "alarm-service icinde _ALARM_BLOCKING_QUALITIES bulunamadi"
     alarm_servisi = {t.strip().strip('"').strip("'") for t in m.group(1).split(",") if t.strip()}
 
-    from app.services.tag_engine_service import _OFFLINE_QUALITIES
+    from app.services.tag_engine_service import ALARM_BLOCKING_QUALITIES
 
-    assert alarm_servisi == set(_OFFLINE_QUALITIES), (
+    assert alarm_servisi == set(ALARM_BLOCKING_QUALITIES), (
         f"kumeler ayrismis: alarm-service={sorted(alarm_servisi)} "
-        f"backend={sorted(_OFFLINE_QUALITIES)}"
+        f"backend={sorted(ALARM_BLOCKING_QUALITIES)}"
     )
 
 
