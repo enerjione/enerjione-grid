@@ -32,114 +32,123 @@ bu dosya **kod seviyesindeki** bulguları takip eder.
 
 ## A. Sahaya çıkmadan önce — ENGELLEYICI (16)
 
+> **Durum: 16/16 kapatıldı (2026-08-01).** Her madde ayrı commit'te; hepsinin
+> arkasında davranış testi var (sözdizimi/typecheck değil). CI 7 job'dan
+> 9'a çıktı: `alarm-service` ve `iec104-outbound` daha önce **hiç**
+> koşmuyordu — A5 ve A7'nin aylarca fark edilmemesinin sebebi tam da buydu.
+>
+> Yerel makinede doğrulanamayan iki alan bilerek CI'a bağlandı:
+> `O_NOFOLLOW` gerektiren symlink testleri (A11/A13) Windows'ta atlanıyor,
+> gerçek doğrulama Linux CI'da yapılıyor.
+
 ### A1. [KRITIK] pg_restore kendi baglantisini oldurtuyor: PGAPPNAME Popen'dan SONRA set ediliyor
 
-- [ ] **Yer:** `apps/backend-api/app/services/backup_service.py:713`
+- [x] **Yer:** `apps/backend-api/app/services/backup_service.py:713`
 - **Nedir:** Restore sirasinda worker baglantilarini temizleyen dongu, pg_restore'un kendi baglantilarini da kill eder cunku onu koruyacak olan PGAPPNAME ortam degiskeni surec baslatildiktan SONRA env sozlugune yaziliyor ve cocuk surece hic gecmiyor.
 - **Risk:** Installer UI'dan bir yedegi geri yukler. pg_restore baslar; application_name'i 'pg_restore' olur (libpq fallback), 'e1_%' pattern'ine UYMAZ. 1.5 saniye sonra _terminate_loop ilk turunu atar ve --jobs=4 ile acilmis 5 pg_restore baglantisinin hepsini pg_terminate_backend ile kapatir. pg_restore 'server closed the connection unexpectedly' ile rc!=0 doner. --single-transaction KULLANILMADIGI icin rollback yoktur: DB, --clean asamasinda DROP edilmis tablolarla YARIM kalir. Restore her denemede ayni yerde patlar; sistem geri yuklenemez ve mevcut veri de gitmistir. docs/PRODUCTION-HAZIRLIK.md A2 'geri yukleme hic denenmedi' diyor — denendiginde bu bug ile karsilasilacak.
 - **Düzeltme:** PGAPPNAME'i Popen'dan ONCE ata (env["PGOPTIONS"] satirinin hemen yanina tasi). Ayrica PGOPTIONS icine '-c application_name=e1_restore_session' eklemek ikinci bir emniyet olur. Bonus: _terminate_loop icindeki psql_path = os.getenv("PSQL", "psql") yerine resolve_pg_binary("psql") kullanilmali; aksi halde Windows/native kurulumda dongu sessizce hic calismaz.
 
 ### A2. [KRITIK] Her cihaz ayni sabit 'installer/ChangeMe123!' hesabiyla sahaya cikiyor ve backend sifre degisimini ZORLAMIYOR
 
-- [ ] **Yer:** `apps/backend-api/scripts/seed_installer.py:29`
+- [x] **Yer:** `apps/backend-api/scripts/seed_installer.py:29`
 - **Nedir:** Her kurulum repo'da acik yazan ayni varsayilan en yetkili hesabi yaratiyor; `must_change_password` yalnizca yanit govdesinde donen bir bayrak, hicbir backend dependency'si onu kontrol etmiyor, dolayisiyla login TAM YETKILI bir JWT + oturum cookie'si veriyor.
 - **Risk:** Kurulum bitti, muhendis daha ilk login'i yapmadi (veya modali kapatip birakti). Ayni ag/internet uzerinden (frontend-web host'un 80 portunda, docker-compose.yml:672) biri `POST /api/v1/auth/login {username:"installer", password:"ChangeMe123!"}` atiyor. 200 + gecerli installer JWT aliyor. SPA modali devre disi kaldi cunku istemci hic calistirilmadi. Bu token ile installer rolunun her seyi yapilabiliyor: gateway token'larini okumak (gateways.py), API key uretmek, uzaktan bakim kapisini acmak, yedekten geri yukleme, kullanici yaratmak. install.sh:590-596 parolayi kuruluma bakan herkesin gordugu ekrana da basiyor.
 - **Düzeltme:** (1) `get_current_user`'a (veya bir `require_password_changed` dependency'sine) `must_change_password` kontrolu ekle: bayrak True iken yalnizca `/auth/me` ve `/auth/change-password` gecsin, digerleri 403 `PASSWORD_CHANGE_REQUIRED` donsun. (2) Sabit parola yerine kuruluma ozel rastgele parola uret (install.sh `openssl rand`), ekrana bir kez bas ve DB'ye hash'ini yaz.
 
 ### A3. [YUKSEK] Operator tum alarmlari toplu onaylayip/resetleyip silebiliyor (kapsam yalnizca YANITTA uygulaniyor)
 
-- [ ] **Yer:** `apps/backend-api/app/api/alarms.py:97`
+- [x] **Yer:** `apps/backend-api/app/api/alarms.py:97`
 - **Nedir:** `/alarms/events/ack-all` ve `/alarms/events/reset-all` mutasyonu TUM alarmlara uygular; `scope_service` filtresi sadece donen listeye uygulandigi icin operator kendi sorumluluk alani disindaki alarmlari da kapatir ve resetlenmis olanlari kalici olarak SILER.
 - **Risk:** Hicbir sorumluluk alanina atanmamis bir `operator` (get_visible_device_ids -> bos set) `POST /api/v1/alarms/events/ack-all` cagirir. Sistemdeki 600 cihazin tum acik alarmi onaylanir, reset=true olanlar yorumlariyla birlikte DB'den silinir; yanit bos liste dondugu icin UI'da hicbir sey olmamis gorunur. Ardindan `reset-all` ile tum acik alarmlar da resetlenir -> `fault_recompute` sonrasi haritadaki gercek arizalar kaybolur ve olay kaydinda yalnizca tek bir 'Tüm alarmlar onaylandı' satiri kalir.
 - **Düzeltme:** Kapsami servise indir: `acknowledge_all_alarms` / `reset_all_alarms` fonksiyonlarina `visible_device_ids: set[int] | None` parametresi ekleyip `list_alarm_events` sorgusunu `AlarmEvent.device_id.in_(visible)` ile daralt. Ayrica toplu silme operator icin tamamen kapatilmali (tek-kayit DELETE zaten ENGINEER/INSTALLER).
 
 ### A4. [YUKSEK] GET /gateways operator'a gateway token'ini duz metin donuyor -> sahte telemetri enjeksiyonu
 
-- [ ] **Yer:** `apps/backend-api/app/api/gateways.py:100`
+- [x] **Yer:** `apps/backend-api/app/api/gateways.py:100`
 - **Nedir:** Gateway listesi `OPERATOR` rolune acik ve `GatewayRead` semasi `token: str` alanini duz metin tasiyor; bu token `POST /telemetry/gateway/{code}` icin tek kimlik dogrulama unsuru oldugundan operator, kendisine acikca yasaklanmis olan telemetri enjeksiyonunu yapabilir.
 - **Risk:** Operator `GET /api/v1/gateways` cagirir, yanittan `token` degerini alir. `POST /api/v1/telemetry/gateway/GW01` + `X-Gateway-Token: <token>` ile kendi alani disindaki cihazlar icin uydurma deger gonderir: alarm-service kural motorunu tetikleyip sahte kritik ariza uretir veya `fault_indicator` degerini normal gondererek gercek arizayi maskeler. Ayni token ile `GET /gateways/{code}/config` cagrilarak sahadaki tum cihazlarin IP/DNP3 adres listesi de sizar. `POST /telemetry` uzerindeki rol kontrolu tamamen atlanmis olur.
 - **Düzeltme:** `GatewayRead`den `token`i cikar (yerine `token_prefix`/`has_token` bool koy) veya en azindan `list_gateways`i ENGINEER/INSTALLER ile sinirla ve token'i yalnizca INSTALLER'a acik `GET /{code}/docker-compose` yanitinda birak.
 
 ### A5. [YUKSEK] alarm-service _SAMPLES buffer'ı 512M container limitini kaçınılmaz olarak aşıyor (OOM restart döngüsü)
 
-- [ ] **Yer:** `apps/alarm-service/alarm_service/main.py:464`
+- [x] **Yer:** `apps/alarm-service/alarm_service/main.py:464`
 - **Nedir:** Her telemetri okuması, composite/agg kuralı olsun olmasın, (sinyal, cihaz) başına 5000 örneklik bir deque'e yazılıyor; is_alarmable() tüm sinyal kataloğuna True döndüğü için filtre yok ve steady-state bellek kodun kendi yorumuna göre GB'larla ifade ediliyor.
 - **Risk:** 200 cihaz x 20 aktif sinyal = 4000 anahtar. Her sinyal ~10 sn'de bir güncellenirse her deque ~14 saatte maxlen=5000'e doyar → 20M örnek tuple, kabaca 1.5-2 GB. Container tavanı 512M olduğu için alarm-service birkaç saat içinde OOM-kill yer. restart: unless-stopped onu geri kaldırır ama _STATE (aktif alarm durumu) bellekte olduğu için sıfırlanır: açık alarmlar yeniden 'yeni alarm' olarak backend'e POST edilir (mükerrer bildirim seli) ve bu her birkaç saatte bir tekrarlanır. TTL temizliği yalnızca 24 saattir veri gelmeyen anahtarları atar; aktif cihazlarda hiçbir şey serbest bırakmaz.
 - **Düzeltme:** _SAMPLES.put'u koşullu yapın: yalnızca en az bir composite/agg kuralının referans verdiği (signal_key) için örnek biriktirin — AlarmRuleCache zaten expression'ları parse ediyor, oradan bir `agg_keys` seti çıkarılabilir. Ek olarak MAX_PER_KEY'i en uzun agg penceresine göre boyutlayın (24 saat/5000 sabiti yerine).
 
 ### A6. [YUKSEK] NATS başlangıçta erişilemezse JetStream bus kalıcı olarak ölü kalıyor, tekrar deneme yok
 
-- [ ] **Yer:** `apps/backend-api/app/services/jetstream_bus.py:474`
+- [x] **Yer:** `apps/backend-api/app/services/jetstream_bus.py:474`
 - **Nedir:** start_bus_if_enabled() tek bir deneme yapıyor; başarısız olursa _bus=None kalıyor ve hiçbir kod yolu onu yeniden başlatmıyor, bu yüzden outbox'taki her telemetri yayını backend elle yeniden başlatılana kadar sonsuza dek RuntimeError alıyor.
 - **Risk:** NATS container'ı çöker/yeniden başlatılır ve tam o sırada backend de yeniden başlar (OOM kill, `update.sh backend`, watchdog). depends_on: service_healthy yalnızca `compose up` sıralaması için geçerlidir, restart'ta uygulanmaz — backend NATS hazır olmadan kalkar, bus.start() False döner ve _bus None'da kilitlenir. Bundan sonra NATS saniyeler içinde sağlıklı hale gelse bile outbox_flush_worker her turda RuntimeError alır: telemetri hiç yayınlanmaz, cihazlar arayüzde 'Kesik' görünür, outbox_events tablosu published=False satırlarla sınırsız büyür (purge_published_outbox bunlara dokunmaz). /health 503 döner ama compose'da autoheal yoktur ve `restart: unless-stopped` healthcheck'e tepki vermez — kimse başında olmadığı için cihaz aylarca veri kaydetmeden ayakta kalır.
 - **Düzeltme:** start_bus_if_enabled()'i idempotent bir yeniden-deneme haline getirin ve outbox_flush_worker döngüsünde (veya ayrı bir küçük supervisor thread'inde) `if get_bus() is None: start_bus_if_enabled()` çağırın; alternatif olarak `_bus`'ı başarısız durumda da saklayıp bus.start()'ı periyodik tekrar deneyin.
 
 ### A7. [YUKSEK] IEC 104 oturumu k-penceresinde kalıcı olarak kilitlenebiliyor — SCADA çıkışı sessizce ölüyor
 
-- [ ] **Yer:** `apps/iec104-outbound/iec104_outbound/server.py:424`
+- [x] **Yer:** `apps/iec104-outbound/iec104_outbound/server.py:424`
 - **Nedir:** session.unacked yalnızca gelen bir S-frame ile sıfırlanıyor; sunucu tarafında t1/t3 zamanlayıcısı, okuma timeout'u veya TEST_ACT keepalive'ı olmadığı için yarı-açık bir bağlantıda sayaç 12'de takılı kalır ve o oturuma giden tüm spontane veri süresiz olarak düşürülür.
 - **Risk:** SCADA master ile arada kalan bir switch/router yeniden başlar veya master process'i donar: TCP bağlantısı yarı-açık kalır, FIN gelmez. Sunucu 12 I-frame gönderdikten sonra S-frame alamaz; unacked 12'de sabitlenir. _send_i artık writer'a hiçbir şey yazmadığı için TCP de kopukluğu fark edemez (SO_KEEPALIVE ayarlı değil, sunucu TEST_ACT göndermiyor). Oturum self._sessions içinde 'started=True' olarak kalır, tüm telemetri değişimleri sessizce düşer — SCADA'da veriler donar, IEC104 çıkışı ölür ve container restart edilene kadar kendiliğinden düzelmez. Ayrıca her düşen frame için rate-limit'siz WARNING basılır; 600 cihazlık yükte log dosyalarını saniyeler içinde döndürüp diğer tüm teşhis loglarını süpürür.
 - **Düzeltme:** Oturum başına bir t3 (idle) zamanlayıcısı ekleyip TEST_ACT gönderin ve cevap gelmezse oturumu kapatıp _sessions'tan düşürün; ayrıca `reader.read` çağrısını asyncio.wait_for ile bir t1 timeout'una bağlayın. k_window_full logunu oturum başına rate-limit'leyin (ws_broadcaster'daki last_warn_at deseni).
 
 ### A8. [YUKSEK] update.sh imajlar dogrulanmadan .env'e yeni E1_VERSION yaziyor — yarida kalan guncelleme cihazi ilk reboot'ta olduruyor
 
-- [ ] **Yer:** `update.sh:265`
+- [x] **Yer:** `update.sh:265`
 - **Nedir:** Yeni surum tag'i checkout edilir edilmez .env'deki E1_VERSION yeni surume cekiliyor; imaj cekme VE yerel derleme ikisi de basarisiz olursa update e1_die ile duruyor ama .env geri alinmiyor, dolayisiyla bir sonraki `docker compose up` var olmayan imaj etiketini ariyor.
 - **Risk:** Trafo merkezindeki cihazda 4G hattinda `sudo bash update.sh` calisir. `docker compose pull` GHCR'a erisemez, fallback `docker compose build` de base imajlari (python:3.11-slim, node:20-alpine) Docker Hub'dan cekemedigi icin basarisiz olur -> e1_die. Eski container'lar calismaya devam ettigi icin operator sorunu fark etmez. Ilk elektrik kesintisinden sonra systemd `docker compose up -d` kosar, .env'deki E1_VERSION=2.26.0 imajlari ne yerelde ne registry'de bulunur, unit failed olur ve cihaz sahada tamamen olu kalir.
 - **Düzeltme:** E1_VERSION'i .env'e yazmayi imajlar hazir olduktan SONRAYA (_e1_prepare_images basarili donduktan sonra) al; ya da eski degeri bir degiskende tut ve e1_die/ERR trap yolunda .env'i eski surume geri yaz (git checkout'u da onceki HEAD'e dondur).
 
 ### A9. [YUKSEK] uninstall.sh --purge-dir uzaktan bakim kapisini KALICI ACIK birakiyor
 
-- [ ] **Yer:** `uninstall.sh:90`
+- [x] **Yer:** `uninstall.sh:90`
 - **Nedir:** Appliance temizligi yalnizca e1-netd unit'lerini kaldiriyor; e1-rad (ve e1-gwd) unit'leri sistemde kaliyor, --purge-dir ile ajan betigi silindigi icin suresi dolan izni kapatacak hicbir sey kalmiyor ve tailnet dugumu kalkani inik halde yayinda kaliyor.
 - **Risk:** Musteri sahadan cihazi geri cekerken aktif bir uzaktan bakim izni acikken (shields-up=false + Tailscale SSH acik) `sudo bash uninstall.sh --yes --purge-dir` (belgelenmis "full nuke") calistirir. e1-rad-report.timer enabled kalir ama /opt/enerjione-grid/infra/appliance/e1-rad.py silinmistir; birim her 30 sn'de status=203/EXEC ile duser, hicbir kapanma yapilmaz. Cihaz tailnet'e kayitli, kalkani inik ve root SSH acik halde musterinin agina bagli kalir; uygulama kaldirilmis oldugu icin arayuzden "geri al" da yapilamaz.
 - **Düzeltme:** uninstall.sh'a e1-rad/e1-gwd temizligi ekle: unit'leri stop+disable+rm et ve dizin silinmeden ONCE `"$SCRIPT_DIR/infra/appliance/e1-rad.py" close || true` calistir (kalkani kaldirir, SSH'i kapatir). Ayrica tailnet'ten dusme/dusurmeme karari kullaniciya sorulup `tailscale logout` opsiyonu sunulmali.
 
 ### A10. [YUKSEK] 0019/0023'te yutulan hata tum migration transaction'ini abort ediyor — backend hic boot etmiyor
 
-- [ ] **Yer:** `apps/backend-api/alembic_migrations/versions/2026_07_31_0001-0019_repair_historian_policies.py:130`
+- [x] **Yer:** `apps/backend-api/alembic_migrations/versions/2026_07_31_0001-0019_repair_historian_policies.py:130`
 - **Nedir:** `_try(...)` PostgreSQL hatasini yakalayip yutuyor ama rollback/SAVEPOINT yapmiyor; env.py tum migration'lari TEK transaction'da kostugu icin ilk hatadan sonra transaction 'aborted' hale gelir ve alembic'in kendi `UPDATE alembic_version` ifadesi dahil sonraki HER ifade patlar.
 - **Risk:** docker-compose.yml:95-100'de belgelenen senaryo: postgres:16'dan devralinmis dolu bir volume'de shared_preload_libraries yoksa `CREATE EXTENSION timescaledb` "could not access file" ile patlar. 0019 bunu `_try` ile yutup return eder, ama transaction artik ABORTED'dir; 0020-0023 ve alembic'in `UPDATE alembic_version SET version_num='0019'` ifadesi InFailedSqlTransaction ile patlar -> `python -m scripts.migrate_db` exception firlatir -> backend container CMD basarisiz -> sonsuz crash-loop. Yani migration tam da onarmak icin yazildigi sahalari tuglalar. Ayni yol 0023'te KESIN olarak tetiklenir: kod "tam form" ALTER'in bazi TimescaleDB surumlerinde reddedilecegini BEKLEYIP `if not ok:` ile "sade form"a dusuyor (0023:145-161) — ama ilk hata transaction'i abort ettigi icin fallback de, sonraki add_compression_policy/add_retention_policy de, alembic'in version update'i de patlar.
 - **Düzeltme:** env.py'de `context.configure(..., transaction_per_migration=True)` ver VE `_try` icini SAVEPOINT'e al: `with op.get_bind().begin_nested(): fn()` (veya except blogunda `op.get_bind().rollback()` yerine nested transaction). Boylece tek adimin patlamasi digerlerini ve alembic_version guncellemesini bozmaz — "en iyi caba" politikasi ancak o zaman gercekten calisir.
 
 ### A11. [YUKSEK] Root ajan, container'in yazabildigi dizinde symlink takibiyle dosya aciyor (yetki sinirini deler)
 
-- [ ] **Yer:** `infra/appliance/e1-rad.py:227`
+- [x] **Yer:** `infra/appliance/e1-rad.py:227`
 - **Nedir:** e1-rad root olarak `state.json.tmp` / `status.json.tmp` dosyalarini O_NOFOLLOW olmadan aciyor; bu tmp yollari backend container'in (uid/gid 10001) yazabildigi paylasilan dizinde, dolayisiyla container onceden symlink birakip root'a istedigi host dosyasini truncate + yazdirabilir.
 - **Risk:** Backend container'da RCE/dosya-yazma alan bir saldirgan (tasarimin kendi tehdit modelinde GUVENILMEYEN taraf; bu yuzden lease.json ayri 0700 dizinde tutuluyor) `ln -s /etc/systemd/system/e1-rad-report.service /var/lib/e1-grid/remote/state.json.tmp` yapar. 30 sn icinde e1-rad-report.timer root olarak cmd_report() kosar, symlink'i takip eder ve unit dosyasini JSON ile ezer. Sonraki daemon-reload/boot'ta sure-dolunca-kapatma zorlayicisi olu olur — yani ozelligin TEK guvenlik garantisi sessizce devre disi kalir. Ayni primitif /etc/shadow, /etc/enerjione-grid/e1-rad.env veya /etc/cron.d altina yonlendirilerek host'u bozmak/kalicilastirmak icin de kullanilabilir. Ek olarak `os.replace` sonrasi symlink kaybolacagi icin iz de birakmaz.
 - **Düzeltme:** tmp dosyasini paylasilan dizinde degil, yalnizca root'un erisebildigi PRIV_DIR icinde uret (ayni dosya sistemi, os.replace calisir): `tmp = os.path.join(PRIV_DIR, os.path.basename(path) + ".tmp")`. Bu mumkun degilse en azindan `os.O_NOFOLLOW | os.O_EXCL` ekleyip acmadan once `_remove(tmp)` cagir. Ayni sozlesmeyi paylasan e1-netd.py / e1-gwd icin de kontrol edin.
 
 ### A12. [YUKSEK] update.sh her guncellemede tam DB dump'i birakiyor; rotasyon yok ve historian haric tutulmuyor
 
-- [ ] **Yer:** `update.sh:146`
+- [x] **Yer:** `update.sh:146`
 - **Nedir:** Guncelleme oncesi alinan `backups/auto-pre-update-*.sql.gz` dosyalari hicbir zaman silinmiyor, hicbir retention'a tabi degil ve backup_service'in yedekten cikardigi historian/telemetry tablolarini tam olarak iceriyor.
 - **Risk:** Cihaz surum 2.25'ten 2.30'a kadar 5 kez guncellenir. Her update.sh calismasinda --exclude-table-data OLMADAN tam bir pg_dump alinir; 90 gunluk historian ile birlikte her dosya birkac GB'tir. Bu dosyalar compose proje dizinindeki ./backups altina yazilir — docker-compose.yml'deki BACKUP_DIR=/var/lib/e1-backups (backup-data volume) ile FARKLI bir yerdir, dolayisiyla ne apply_retention ne reindex_backup_jobs_from_disk ne de UI onlari gorur. Hicbir mekanizma silmez. Birkac guncelleme sonrasi 500 GB'lik diskin buyuk kismi bu dosyalarla dolar; postgres-data ayni dosya sisteminde oldugu icin sonunda Postgres yazamaz hale gelir. Ayrica bu dosyalar plain SQL oldugu icin validate_dump_file'in PGDMP magic kontrolune takilir — UI'dan geri de yuklenemezler, yani sadece yer kaplarlar.
 - **Düzeltme:** Dump'i BACKUP_DIR volume'una (veya en azindan rotasyonlu bir dizine) yaz, `-F c` custom format kullan (UI'dan geri yuklenebilsin), backup_service.EXCLUDED_DATA_TABLES ile ayni --exclude-table-data listesini uygula ve dump sonrasi en yeni N (or. 3) disindaki auto-pre-update-* dosyalarini sil. Ek olarak yazmadan once `df` ile bos alan kontrolu yap.
 
 ### A13. [YUKSEK] e1-netd ve e1-gwd root ajanlari, container'in yazabildigi dizinde symlink takip ederek YAZIYOR (root dosya ustune yazma primitifi)
 
-- [ ] **Yer:** `infra/appliance/e1-netd.py:528`
+- [x] **Yer:** `infra/appliance/e1-netd.py:528`
 - **Nedir:** Her iki ajanin `_write_json`'i `open(tmp, "w")` ile aciyor; tmp yolu backend container'inin (uid 10001) yazabildigi paylasimli dizinde, dolayisiyla container oraya symlink koyarak root'a istedigi dosyayi truncate/uzerine yazdirip chmod 0640 + chown root:10001 yaptirabiliyor.
 - **Risk:** Backend container'i ele geciriliyor (RCE ya da zaten raporlanmis bir yetki asimi). Saldirgan `/var/lib/e1-grid/net/state.json.tmp` -> `/etc/systemd/system/e1-netd.service` symlink'i yaratiyor. 30 saniye sonra e1-netd-report.timer root olarak calisiyor, `open(...,"w")` symlink'i takip edip unit dosyasini truncate ediyor, `os.chmod`/`os.chown` hedefi degistiriyor, `os.replace` symlink'i state.json'a tasiyor. Ayni yontemle `/etc/passwd`, `/etc/sudoers.d/*` veya baska bir systemd unit'i bozulabiliyor/uzerine yazilabiliyor — cap_drop/no-new-privileges/read_only sertlestirmesinin tamami bu tek satirdan asiliyor. Ozellikle yikici hali: her 30 sn'de bir cihazi acilamaz hale getirmek (saha ziyareti).
 - **Düzeltme:** Her iki ajanda `_write_json`'i e1-rad'in otesine tasi: `fd = os.open(tmp, os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW, mode)` kullan (O_EXCL onceden konmus symlink/dosyayi reddeder), `os.fchmod(fd, ...)`/`os.fchown(fd, ...)` ile fd uzerinden izin ver, ve `_read_json`'i da `os.open(..., os.O_RDONLY|os.O_NOFOLLOW)` yap. Alternatif olarak tmp dosyasini ajanin kendi root-only dizininde uret, sadece son `os.replace`'i paylasimli dizine yap.
 
 ### A14. [ORTA] BACKUP_OFFSITE_DIR Docker'da tamamen olu — off-site yedek hic alinmiyor
 
-- [ ] **Yer:** `docker-compose.yml:329`
+- [x] **Yer:** `docker-compose.yml:329`
 - **Nedir:** backup_service off-site kopyayi `os.getenv("BACKUP_OFFSITE_DIR")` ile aciyor, fakat degisken backend-api environment blogunda yok (env_file de yok) ve hedef dizin icin bir volume mount da tanimli degil; yani .env'e deger yazan operator icin bile off-site kopya sessizce hic calismiyor.
 - **Risk:** Operator .env'e `BACKUP_OFFSITE_DIR=/mnt/nas/backups/enerjione-grid` yazar ve NAS'i host'a mount eder. `_offsite_copy` best-effort oldugu ve degisken container'da bos oldugu icin fonksiyon hemen `return` eder — ne hata, ne uyari, ne job.error_message. Aylar sonra saha cihazinin diski bozulur veya kriptolocker'a yakalanir; tek yedek kopyasi ayni diskteki backup-data volume'undadir ve o da gitmistir. Operator var sandigi ikinci kopyanin hic olusmadigini ancak felaket aninda ogrenir.
 - **Düzeltme:** docker-compose.yml backend-api'ye `BACKUP_OFFSITE_DIR: ${BACKUP_OFFSITE_DIR:-}` env'ini ve degisken doluyken host yolunu container'a baglayan bir bind mount ekleyin (orn. `- ${BACKUP_OFFSITE_DIR:-/dev/null}:/var/lib/e1-backups-offsite`, env'i container ici sabit yola cevirerek). Ayrica `_offsite_copy` env bos oldugunda en azindan bir kez INFO/WARN loglasin ki 'yapilandirdim ama calismiyor' durumu gorunur olsun.
 
 ### A15. [ORTA] install.sh FTP_PASSWORD uretmiyor — her temiz kurulumda ftp-server sonsuz restart dongusune giriyor
 
-- [ ] **Yer:** `install.sh:344`
+- [x] **Yer:** `install.sh:344`
 - **Nedir:** Secret uretim ve placeholder dogrulama listelerinde FTP_PASSWORD yok; .env.example'da deger bos oldugu icin ftp-server her acilista SystemExit(2) ile oluyor ve `restart: unless-stopped` altinda sonsuza kadar yeniden baslatiliyor.
 - **Risk:** Sahada `curl ... | sudo bash` ile temiz kurulum yapilir; kurulum "TAMAMLANDI" der. e1-grid-ftp-server container'i acilir acilmaz exit 2 verir ve Docker onu sonsuza kadar yeniden baslatir. Horstmann SN2 cihazlari config/firmware'i yukleyemez (baglanti reddedilir) ve sebep hicbir kurulum ciktisinda gorunmez; ayrica her `update.sh` sonunda "1 servis calismiyor gorunuyor" uyarisi kalici hale gelir ve gercek arizalari maskeler.
 - **Düzeltme:** install.sh'ta diger secret'lar gibi `FP=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24); _ensure_env_var "FTP_PASSWORD" "$FP"` ekle ve FTP_PASSWORD'u placeholder sanity-check dongusune dahil et. Ek olarak compose'da `${FTP_PASSWORD:?FTP_PASSWORD .env'de olmali}` kullanip sessiz crash-loop yerine acik hata verilsin.
 
 ### A16. [ORTA] 0021: processed_messages BIGINT rewrite'i saha cihazini boot edemez duruma dusurebilir
 
-- [ ] **Yer:** `apps/backend-api/alembic_migrations/versions/2026_07_31_0003-0021_widen_hot_table_pk_to_bigint.py:85`
+- [x] **Yer:** `apps/backend-api/alembic_migrations/versions/2026_07_31_0003-0021_widen_hot_table_pk_to_bigint.py:85`
 - **Nedir:** Budama 10M satirla tavanlanmis; kalan ~170M satirlik tabloda `ALTER TABLE ... TYPE BIGINT` tam tablo+index yeniden yazimi yapar, `lock_timeout=30s` ile kilit alamazsa hata firlatir ve bu hata YUTULMADIGI icin backend hic ayaga kalkmaz.
 - **Risk:** Eski 7 gunluk TTL ile ~180M satirlik processed_messages: budama tavani yalnizca 10M satir siler, ~170M satir kalir. (a) Budamanin urettigi olu satirlar autovacuum'u tetikler; autovacuum'un ShareUpdateExclusiveLock'i ALTER'in ACCESS EXCLUSIVE talebiyle catisir -> 30sn'de lock_timeout -> migration exception -> migrate_db patlar -> backend crash-loop; her yeniden baslatmada ayni sey tekrarlanir (autovacuum saatlerce surebilir). (b) Kilit alinsa bile ~170M satirlik tablo+UNIQUE index yeniden yazimi diskte tablonun ~2 kati bos alan ister; bu dalin varlik sebebi zaten diskin dolmasiysa ENOSPC ile patlar ve yine boot engellenir. Her iki durumda da uzaktan erisimin zor oldugu bir saha cihazi acilmaz.
 - **Düzeltme:** Budamayi tavansiz yap (silinecek satir kalmayana kadar dongu; her tur ayri commit zaten var) ki ALTER neredeyse bos tabloda kossun. Ek olarak `_widen`'i lock_timeout hatasina karsi kisa geri-cekilmeli retry'a al ve ALTER oncesi `pg_total_relation_size` vs. `shutil.disk_usage` karsilastirmasi yapip yer yoksa anlamli bir hata ile dur (ya da budamayi tamamlayip bir sonraki boot'a birak) — boot'u kalici bloklama.
