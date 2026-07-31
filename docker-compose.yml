@@ -286,8 +286,35 @@ services:
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-1440}
       # "Beni hatirla" TTL'i (dakika). Yalnizca kutucuk isaretlenirse gecerli.
       REMEMBER_ME_TOKEN_MINUTES: ${REMEMBER_ME_TOKEN_MINUTES:-43200}
+      # --- Retention / TTL: "disk asla dolmamali" -------------------------
+      # Tum degerlerin tek kaynagi app/core/config.py; buradaki default'lar
+      # onunla AYNI olmak zorunda (tests/test_config_consistency.py kilitler).
+      #
+      # telemetry: canli deger tablosu. Her sinyalin SON degeri retention'dan
+      # muaftir, yani sure kisa olsa da canli ekran bosalmaz.
       TELEMETRY_RETENTION_MINUTES: ${TELEMETRY_RETENTION_MINUTES:-30}
       TELEMETRY_RETENTION_INTERVAL_SEC: ${TELEMETRY_RETENTION_INTERVAL_SEC:-300}
+      # processed_messages: idempotency defteri. Gercek redelivery penceresi
+      # ack_wait(60s) x max_deliver(10) = 10 DAKIKA; 24 saat 144 kat marj.
+      # (Onceki 7 GUNluk deger tabloyu ~180M satira cikariyordu.)
+      PROCESSED_MESSAGES_RETENTION_HOURS: ${PROCESSED_MESSAGES_RETENTION_HOURS:-24}
+      PROCESSED_MESSAGES_INTERVAL_SEC: ${PROCESSED_MESSAGES_INTERVAL_SEC:-600}
+      # system_events: denetim/olay kaydi. 2 yil (730 gun) + FIFO adet tavani.
+      # Tavan, olay firtinasinda 2 yil dolmadan da devreye giren emniyet subabi.
+      SYSTEM_EVENTS_RETENTION_DAYS: ${SYSTEM_EVENTS_RETENTION_DAYS:-730}
+      SYSTEM_EVENTS_INTERVAL_SEC: ${SYSTEM_EVENTS_INTERVAL_SEC:-21600}
+      SYSTEM_EVENTS_MAX_ROWS: ${SYSTEM_EVENTS_MAX_ROWS:-5000000}
+      # Retention DELETE'leri LIMIT'li turlar halinde kosar (WAL sismesin,
+      # tablo uzun sure kilitlenmesin, autovacuum arayi yakalasin).
+      RETENTION_DELETE_BATCH: ${RETENTION_DELETE_BATCH:-20000}
+      RETENTION_MAX_BATCHES_PER_RUN: ${RETENTION_MAX_BATCHES_PER_RUN:-50}
+      # NATS JetStream stream basina DISK tavani (bayt). max_age tek basina
+      # bayt siniri vermez; bu tavanlar + discard=old sayesinde tampon dolunca
+      # en eski mesajlar duser ve telemetri akisi DURMAZ. Toplam 12 GiB;
+      # infra/nats/nats-server.conf max_file_store bunun ustunde kalmali.
+      NATS_STREAM_RAW_MAX_BYTES: ${NATS_STREAM_RAW_MAX_BYTES:-8589934592}
+      NATS_STREAM_NORMALIZED_MAX_BYTES: ${NATS_STREAM_NORMALIZED_MAX_BYTES:-3221225472}
+      NATS_STREAM_DLQ_MAX_BYTES: ${NATS_STREAM_DLQ_MAX_BYTES:-1073741824}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
