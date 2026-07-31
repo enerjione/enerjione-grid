@@ -47,6 +47,7 @@ from app.services.gateway_compose import (
     normalize_backend_url_for_container,
     render_compose,
     render_env,
+    validate_render_input,
 )
 from app.services.rabbitmq_admin import (
     RabbitMqAdminClient,
@@ -575,6 +576,11 @@ def install_gateway_locally(
     backend_url = (payload.backend_url or "").strip() or "http://host.docker.internal/api/v1"
     image = (payload.image or "").strip() or _DEFAULT_GATEWAY_IMAGE
 
+    # `_build_render_input` hem parametreleri normalize eder hem dogrular
+    # (kod/token/port araliklari). compose'u BURADA uretmiyoruz: ajan kendi
+    # sablonundan uretecek. Yine de render_input'u kuruyoruz ki gecersiz
+    # parametreler ajana gitmeden 400 ile geri donsun ve "baska cihaza kur"
+    # akisiyla ayni dogrulamadan gecsin.
     try:
         render_input = _build_render_input(
             db,
@@ -585,13 +591,23 @@ def install_gateway_locally(
             image=image,
             app_environment=payload.app_environment,
         )
-        compose_body = render_compose(render_input)
+        validate_render_input(render_input)
     except (ComposeRenderError, TypeError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
         request_id = gateway_agent_service.request_install(
-            gateway.code, gateway.name, compose_body, current_user.username
+            gateway.code,
+            gateway.name,
+            current_user.username,
+            image=render_input.image,
+            token=render_input.token,
+            backend_url=render_input.backend_url,
+            nats_url=render_input.nats_url,
+            host_port=render_input.host_port,
+            app_environment=render_input.app_environment,
+            initiating_port_base=render_input.initiating_port_base,
+            initiating_port_count=render_input.initiating_port_count,
         )
     except GatewayAgentError as exc:
         raise _agent_http_error(exc) from exc

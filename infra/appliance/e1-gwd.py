@@ -12,10 +12,37 @@ sertlestirmesinin tamami anlamsizlasirdi. Onun yerine e1-netd ile ayni desen:
     backend (container)  --yazar-->  /var/lib/e1-grid/gw/request.json
     e1-gwd (host, root)  --okur -->  dogrular -> docker compose up -d
 
-Container'in tek yetkisi bir JSON dosyasi yazmak. Ajan gelen compose'u KENDI
-kurallariyla yeniden dogrular (bkz. FORBIDDEN_PATTERNS): privileged, docker
-soketi, host network/pid gibi kacis vektorleri iceren bir compose reddedilir.
-Yani backend ele gecirilse bile bu ajan uzerinden host'a cikilamaz.
+GUVEN SINIRI — NEDEN COMPOSE GOVDESI KABUL EDILMIYOR
+-----------------------------------------------------
+Bu ajan compose YAML'ini KENDISI uretir. Backend yalnizca kucuk bir SKALER
+PARAMETRE kumesi gonderir (imaj, token, URL'ler, portlar) ve her biri kati
+bir regex'ten gecer. Container'dan gelen serbest metin compose ASLA
+calistirilmaz.
+
+Onceki tasarim compose govdesini aynen alip bir regex KARA LISTESI ile
+suzuyordu (privileged, docker.sock, host mount...). Kara liste YAML'in
+esnekligi karsisinda yetersizdi; su varyantlarin HEPSI suzgecten geciyordu:
+
+    volumes:                      # uzun-form bind — "- /etc" desenine uymaz
+      - type: bind
+        source: /etc
+        target: /host-etc
+      - /run/docker.sock:/var/run/docker.sock   # /var/run DEGIL -> uymaz
+    volumes:                      # named volume ile host koku
+      hostroot:
+        driver: local
+        driver_opts: { type: none, device: /, o: bind }
+    security_opt: ["apparmor:unconfined", "seccomp:unconfined"]
+    cgroup: host
+    build: { context: / }
+    privileged: yes               # YAML 1.1 bool; "true" desenine uymaz
+
+Bunlarin her biri host'ta root'a cikis demekti. Allowlist'te bu sinif hatalar
+yapisal olarak imkansiz: sablon sabittir, yalnizca dogrulanmis skalerler
+yerine konur.
+
+FORBIDDEN_PATTERNS artik bir savunma degil, KENDI cikitimiza karsi son bir
+saglik kontrolu (sablon degisikliginde kazayla tehlikeli bir alan eklenmesin).
 
 Kullanim (systemd tarafindan cagrilir):
     e1-gwd.py report   -> state.json'i tazele (timer, 30 sn)
@@ -54,8 +81,125 @@ SCHEMA_VERSION = 1
 # katı. Path traversal ("../") ve bosluk bu regex ile zaten disarida kalir.
 CODE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$")
 
-# compose metni ust siniri — sisip diski doldurmasin.
+# Uretilen compose metni ust siniri — sablon sabit oldugu icin bu yalnizca
+# bir saglik kontrolu (parametreler sismis olmasin).
 MAX_COMPOSE_BYTES = 64 * 1024
+
+# --- Parametre allowlist'i --------------------------------------------------
+# Her deger cifte tirnakli bir YAML skalerinin ICINE konuyor. Bu yuzden
+# regex'ler tirnak, ters bolu, yeni satir ve `$` gibi kacis/enterpolasyon
+# karakterlerini KESINLIKLE disarida birakmali — aksi halde bir deger
+# skalerden tasip yeni bir YAML alani tanimlayabilirdi.
+#
+# Docker imaj referansi: [registry/]repo[:tag][@sha256:...]
+IMAGE_RE = re.compile(
+    r"^[a-z0-9]([a-z0-9._\-]*[a-z0-9])?"           # ilk bilesen (registry veya repo)
+    r"(:[0-9]+)?"                                   # opsiyonel registry portu
+    r"(/[a-z0-9]([a-z0-9._\-]*[a-z0-9])?)*"         # yol bilesenleri
+    r"(:[A-Za-z0-9._\-]{1,128})?"                   # tag
+    r"(@sha256:[a-f0-9]{64})?$"                     # digest
+)
+# Gateway token: backend uretiyor (secrets.token_urlsafe benzeri).
+TOKEN_RE = re.compile(r"^[A-Za-z0-9._~\-]{16,255}$")
+# http(s) backend URL — kullanici girebilir, bu yuzden kati.
+BACKEND_URL_RE = re.compile(r"^https?://[A-Za-z0-9._\-]{1,253}(:[0-9]{1,5})?(/[A-Za-z0-9._\-/]*)?$")
+# nats://[user[:pass]@]host[:port]
+NATS_URL_RE = re.compile(
+    r"^nats://([A-Za-z0-9._~\-]{1,64}(:[A-Za-z0-9._~\-]{1,128})?@)?"
+    r"[A-Za-z0-9._\-]{1,253}(:[0-9]{1,5})?/?$"
+)
+# Gateway adi UI'dan gelen serbest metin: tirnak/kontrol karakteri YOK.
+NAME_RE = re.compile(r"^[^\"'\\\r\n\t$`]{0,120}$")
+ALLOWED_APP_ENVIRONMENTS = ("development", "staging", "production")
+
+# Isteklerde kabul edilen parametre anahtarlari. Fazlasi REDDEDILIR (bilinmeyen
+# anahtar = protokol uyusmazligi veya kotu niyet; sessizce yutmuyoruz).
+ALLOWED_PARAM_KEYS = frozenset({
+    "image", "token", "backend_url", "nats_url", "host_port",
+    "app_environment", "initiating_port_base", "initiating_port_count",
+})
+
+# Compose sablonu — apps/backend-api/app/services/gateway_compose.py icindeki
+# `_COMPOSE_TEMPLATE` ile BIREBIR AYNI olmali. "Baska cihaza kur" akisinda
+# kullanici backend'in urettigi dosyayi indiriyor; iki taraf ayrisirsa ayni
+# gateway iki farkli sekilde kurulur.
+#
+# Ikisini birbirine baglayan test:
+#   apps/backend-api/tests/test_gateway_agent_compose_parity.py
+# Sablonu burada degistirirsen orayi da degistir; test aksi halde kirmizi olur.
+COMPOSE_TEMPLATE = """\
+# EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
+# Kurulum: docker compose -f e1-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
+
+name: e1-gateway-{{GATEWAY_CODE_LOWER}}
+
+services:
+  gateway:
+    image: {{IMAGE}}
+    container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
+    restart: unless-stopped
+    environment:
+      GATEWAY_CODE: "{{GATEWAY_CODE}}"
+      GATEWAY_TOKEN: "{{GATEWAY_TOKEN}}"
+      GATEWAY_NAME: "{{GATEWAY_NAME}}"
+      APP_ENVIRONMENT: "{{APP_ENVIRONMENT}}"
+      GATEWAY_MODE: "dnp3"
+      BACKEND_API_URL: "{{BACKEND_API_URL}}"
+      BACKEND_API_VERIFY_SSL: "true"
+      # Public IP + HTTP icin gateway production guard'i 'https' bekler.
+      # TLS henuz kurulu degilse (Caddy/Traefik/Cloudflare yok) bu flag ile
+      # bilincli opt-out — gateway boot'ta WARN log atar, calismaya devam eder.
+      # Kullanici TLS terminator kurunca BACKEND_API_URL'i https:// yapip
+      # bu flag'i 'false' yapabilir.
+      GATEWAY_INSECURE_ALLOW_PLAINTEXT: "true"
+      # NATS JetStream — gateway'in telemetri yayin yolu (RabbitMQ kaldirildi).
+      NATS_URL: "{{NATS_URL}}"
+      NATS_SUBJECT_PREFIX: "e1.telemetry.raw"
+      WORKER_HEALTH_HOST: "0.0.0.0"
+      WORKER_HEALTH_PORT: "8020"
+      DEFAULT_POLL_INTERVAL_SEC: "1"
+      MAX_PARALLEL_DEVICES: "100"
+      DNP3_LOCAL_ADDRESS: "1"
+      DNP3_TCP_PORT: "20000"
+      DNP3_RESPONSE_TIMEOUT_SEC: "5"
+      DNP3_READ_STRATEGY: "event_driven"
+      DNP3_EVENT_BASELINE_INTERVAL_SEC: "30"
+      LOG_LEVEL: "INFO"
+      LOG_FORMAT: "json"
+      SHOW_GATEWAY_TOKEN_ON_START: "false"
+    ports:
+      - "127.0.0.1:{{HOST_HEALTH_PORT}}:8020"
+{{INITIATING_PORTS_BLOCK}}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - state:/app/.gateway_state
+    networks:
+      - e1
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8020/health',timeout=3).status==200 else sys.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  state:
+    name: e1-gw-{{GATEWAY_CODE_LOWER}}-state
+
+networks:
+  e1:
+    name: e1
+    external: false
+    enable_ipv6: false
+"""
+
+_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
 # Imaj cekme uzun surebilir (ilk kurulumda ~200 MB).
 PULL_TIMEOUT_SEC = 900
@@ -63,8 +207,10 @@ UP_TIMEOUT_SEC = 300
 DOWN_TIMEOUT_SEC = 120
 DOCKER_QUERY_TIMEOUT_SEC = 30
 
-# Backend'e guvenmeyen ikinci savunma hatti. Bu desenlerden biri compose'da
-# gecerse istek reddedilir — hepsi container'dan host'a cikis vektorudur.
+# KENDI cikitimiza karsi son saglik kontrolu. Artik bir savunma hatti DEGIL
+# (compose'u biz uretiyoruz, disardan metin almiyoruz); amaci sablona kazayla
+# tehlikeli bir alan eklenmesini yakalamak. Bu listede bir sey tetiklenirse
+# hata bizdedir: COMPOSE_TEMPLATE'e bakilmali.
 FORBIDDEN_PATTERNS = [
     (r"(?im)^\s*privileged\s*:\s*true", "privileged"),
     (r"(?i)/var/run/docker\.sock", "docker_socket"),
@@ -234,9 +380,21 @@ def _archive_request(raw: dict, result: dict) -> None:
         os.makedirs(ARCHIVE_DIR, exist_ok=True)
         stamp = _now_iso().replace(":", "").replace("-", "")
         name = f"{stamp}-{str(raw.get('id', 'unknown'))[:12]}.json"
-        # compose govdesi arsivde tutulmaz (token icerir).
+        # Sirlar arsivde tutulmaz: params.token gateway kimligidir, params
+        # icindeki nats_url de parola gomulu gelir. Ikisi de maskelenir;
+        # kalan parametreler teshis icin saklanir.
         redacted = {k: v for k, v in raw.items() if k != "compose"}
-        redacted["compose_bytes"] = len(str(raw.get("compose") or ""))
+        raw_params = raw.get("params")
+        if isinstance(raw_params, dict):
+            safe_params = dict(raw_params)
+            if "token" in safe_params:
+                safe_params["token"] = "***"
+            if "nats_url" in safe_params:
+                # Parolayi at, host'u birak (teshiste ise yarar).
+                safe_params["nats_url"] = re.sub(
+                    r"://[^@/]*@", "://***@", str(safe_params["nats_url"])
+                )
+            redacted["params"] = safe_params
         _write_json(os.path.join(ARCHIVE_DIR, name), {"request": redacted, "result": result})
     except OSError as exc:
         _log(f"arsivleme basarisiz: {exc}")
@@ -244,6 +402,116 @@ def _archive_request(raw: dict, result: dict) -> None:
         os.unlink(REQUEST_PATH)
     except OSError:
         pass
+
+
+def _require_int(params: dict, key: str, low: int, high: int, default: int | None = None) -> int:
+    """params[key]'i tam sayi olarak al ve aralik kontrolu yap.
+
+    bool KASITLA reddedilir: Python'da bool int'in alt sinifidir ve
+    `True` sessizce 1 olarak gecerdi.
+    """
+    raw = params.get(key, default)
+    if raw is None:
+        raise ValueError(f"{key} eksik")
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise ValueError(f"{key} tam sayi olmali")
+    if not (low <= raw <= high):
+        raise ValueError(f"{key} aralik disi ({low}-{high}): {raw}")
+    return raw
+
+
+def _require_str(params: dict, key: str, pattern: "re.Pattern[str]", label: str) -> str:
+    raw = params.get(key)
+    if not isinstance(raw, str):
+        raise ValueError(f"{key} metin olmali")
+    value = raw.strip()
+    if not pattern.match(value):
+        raise ValueError(f"{key} gecersiz ({label})")
+    return value
+
+
+def _validate_params(params: object) -> dict:
+    """Kurulum parametrelerini allowlist ile dogrula. Hata -> ValueError.
+
+    Sadece ALLOWED_PARAM_KEYS kabul edilir; bilinmeyen anahtar hata verir
+    (protokol uyusmazligini sessizce yutmak, ileride eklenen bir alanin
+    dogrulanmadan sablona girmesi riskini yaratirdi).
+    """
+    if not isinstance(params, dict):
+        raise ValueError("params nesnesi eksik")
+    unknown = set(params) - ALLOWED_PARAM_KEYS
+    if unknown:
+        raise ValueError(f"bilinmeyen parametre(ler): {sorted(unknown)}")
+
+    out: dict = {
+        "image": _require_str(params, "image", IMAGE_RE, "docker imaj referansi"),
+        "token": _require_str(params, "token", TOKEN_RE, "16-255 guvenli karakter"),
+        "backend_url": _require_str(params, "backend_url", BACKEND_URL_RE, "http(s) URL"),
+        "nats_url": _require_str(params, "nats_url", NATS_URL_RE, "nats:// URL"),
+        "host_port": _require_int(params, "host_port", 1, 65535, 8020),
+        "initiating_port_base": _require_int(params, "initiating_port_base", 1024, 65000, 20100),
+        "initiating_port_count": _require_int(params, "initiating_port_count", 0, 1000, 0),
+    }
+    env = str(params.get("app_environment") or "production").strip()
+    if env not in ALLOWED_APP_ENVIRONMENTS:
+        raise ValueError(f"app_environment gecersiz: {env!r}")
+    out["app_environment"] = env
+
+    last = out["initiating_port_base"] + out["initiating_port_count"] - 1
+    if out["initiating_port_count"] > 0 and last > 65535:
+        raise ValueError(f"initiating port bloku tasiyor (son port {last})")
+    return out
+
+
+def _initiating_ports_block(base: int, count: int) -> str:
+    """compose `ports:` bloguna eklenecek initiating port satiri.
+
+    gateway_compose.py `_build_initiating_ports_block` ile AYNI mantik.
+    count=0 -> bos satir (sadece health portu publish edilir).
+    """
+    if count <= 0:
+        return ""
+    last = base + count - 1
+    container_last = 20100 + count - 1
+    return f'      - "{base}-{last}:20100-{container_last}"'
+
+
+def render_compose(code: str, name: str, params: dict) -> str:
+    """Dogrulanmis parametrelerden compose YAML'i uret.
+
+    Bu fonksiyon compose'un TEK kaynagidir; disardan YAML kabul edilmez.
+    """
+    values = {
+        "GATEWAY_CODE": code,
+        "GATEWAY_CODE_LOWER": code.lower(),
+        "GATEWAY_TOKEN": params["token"],
+        "GATEWAY_NAME": name,
+        "BACKEND_API_URL": params["backend_url"].rstrip("/"),
+        "NATS_URL": params["nats_url"],
+        "HOST_HEALTH_PORT": str(params["host_port"]),
+        "IMAGE": params["image"],
+        "APP_ENVIRONMENT": params["app_environment"],
+        "INITIATING_PORTS_BLOCK": _initiating_ports_block(
+            params["initiating_port_base"], params["initiating_port_count"]
+        ),
+    }
+
+    def _sub(match: "re.Match[str]") -> str:
+        key = match.group(1)
+        if key not in values:
+            raise ValueError(f"sablonda bilinmeyen yer tutucu: {key}")
+        return values[key]
+
+    body = _PLACEHOLDER_RE.sub(_sub, COMPOSE_TEMPLATE)
+
+    # Kendi cikitimiza karsi saglik kontrolu (bkz. FORBIDDEN_PATTERNS).
+    # Buraya dusmek sablonda bir hata oldugu anlamina gelir.
+    if len(body.encode("utf-8")) > MAX_COMPOSE_BYTES:
+        raise ValueError("uretilen compose beklenmedik sekilde buyuk")
+    for pattern, label in FORBIDDEN_PATTERNS:
+        if re.search(pattern, body):
+            raise ValueError(f"URETILEN compose tehlikeli alan iceriyor: {label} (sablon hatasi)")
+    return body
 
 
 def _validate(request: dict) -> dict:
@@ -256,19 +524,22 @@ def _validate(request: dict) -> dict:
     if not CODE_RE.match(code):
         raise ValueError("gecersiz gateway kodu")
 
-    clean = {"action": action, "code": code, "name": str(request.get("name") or "")[:255]}
+    name = str(request.get("name") or "")[:120]
+    if not NAME_RE.match(name):
+        raise ValueError("gateway adi gecersiz karakter iceriyor")
+
+    clean = {"action": action, "code": code, "name": name}
 
     if action == "install":
-        compose = request.get("compose")
-        if not isinstance(compose, str) or not compose.strip():
-            raise ValueError("compose govdesi bos")
-        if len(compose.encode("utf-8")) > MAX_COMPOSE_BYTES:
-            raise ValueError("compose govdesi cok buyuk")
-        for pattern, label in FORBIDDEN_PATTERNS:
-            if re.search(pattern, compose):
-                # Backend ele gecirilmis olabilir; sadece reddet ve logla.
-                raise ValueError(f"compose reddedildi (yasakli ayar: {label})")
-        clean["compose"] = compose
+        # Serbest metin compose ARTIK KABUL EDILMIYOR. Eski surum bir backend
+        # bu alani gonderiyorsa net hata ver — sessizce parametresiz devam
+        # etmek "kurulum takildi" gibi gorunurdu.
+        if "compose" in request:
+            raise ValueError(
+                "bu ajan compose govdesi kabul etmiyor; backend guncel degil "
+                "(update.sh ile backend + ajan birlikte guncellenmeli)"
+            )
+        clean["params"] = _validate_params(request.get("params"))
 
     return clean
 
@@ -284,11 +555,15 @@ def _do_install(req: dict, compose_cmd: list[str]) -> dict:
     path = _compose_path(code)
     project = _project_name(code)
 
+    # compose'u BIZ uretiyoruz (dogrulanmis parametrelerden); container'dan
+    # gelen bir YAML calistirilmaz.
+    compose_body = render_compose(code, req.get("name") or "", req["params"])
+
     os.makedirs(directory, mode=0o750, exist_ok=True)
     # compose icinde gateway token'i var — sadece root okuyabilsin.
     fd = os.open(f"{path}.tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(req["compose"])
+        fh.write(compose_body)
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(f"{path}.tmp", path)

@@ -244,6 +244,17 @@ def _apply_template(template: str, replacements: dict[str, str]) -> str:
     return _PLACEHOLDER_RE.sub(_sub, template)
 
 
+def validate_render_input(args: ComposeRenderInput) -> None:
+    """Parametreleri dogrula, compose URETMEDEN.
+
+    "Bu cihaza kur" akisi compose'u host ajanina uretiyor (guvenlik: ajan
+    disardan YAML kabul etmiyor, bkz. infra/appliance/e1-gwd.py). Ama
+    kullaniciya HEMEN 400 donebilmek icin ayni dogrulamayi burada da
+    kosturuyoruz — hatanin asenkron status.json'da gorunmesini beklemesin.
+    """
+    _validate(args)
+
+
 def render_compose(args: ComposeRenderInput) -> str:
     _validate(args)
     return _apply_template(_COMPOSE_TEMPLATE, _replacements(args))

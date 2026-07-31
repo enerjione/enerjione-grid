@@ -12,9 +12,18 @@ Mimari (network_service.py ile ayni desen):
 
 Backend Docker daemon'a ERISMEZ. Container'a /var/run/docker.sock vermek
 host'ta root vermekle esdegerdir ve compose'daki cap_drop / read_only /
-no-new-privileges sertlestirmesini anlamsizlastirirdi. Ajan gelen compose'u
-kendi kurallariyla yeniden dogrular (privileged, host mount, docker soketi
-iceren compose reddedilir).
+no-new-privileges sertlestirmesini anlamsizlastirirdi.
+
+PROTOKOL: backend compose GOVDESI GONDERMEZ — yalnizca kucuk bir skaler
+parametre kumesi (imaj, token, URL'ler, portlar) gonderir. compose YAML'ini
+ajan kendi sabit sablonundan uretir ve her parametreyi kati bir regex'ten
+gecirir. Boylece "backend ele gecirilirse ne olur" sorusunun cevabi
+"hicbir sey": ajan calistirilabilir bir metin kabul etmiyor.
+
+(Eskiden compose govdesi gonderiliyor ve ajan bunu bir regex KARA LISTESI ile
+suzuyordu. Kara liste YAML'in uzun-form bind, named-volume driver_opts,
+`security_opt: unconfined`, `build.context` gibi varyantlari karsisinda
+asilabilirdi; bkz. e1-gwd.py basindaki aciklama.)
 
 Ajan kurulu degilse (VPS'te setup-gateway-agent.sh calistirilmamis, veya
 dizin yok) fonksiyonlar hata firlatmaz; `read_status()` available=False +
@@ -165,11 +174,39 @@ def _base_request(action: str, code: str, actor_username: str) -> dict:
     }
 
 
-def request_install(code: str, name: str, compose_body: str, actor_username: str) -> str:
-    """Gateway'i bu cihaza kur. compose govdesi ajana aynen gecer."""
+def request_install(
+    code: str,
+    name: str,
+    actor_username: str,
+    *,
+    image: str,
+    token: str,
+    backend_url: str,
+    nats_url: str,
+    host_port: int,
+    app_environment: str,
+    initiating_port_base: int,
+    initiating_port_count: int,
+) -> str:
+    """Gateway'i bu cihaza kur.
+
+    compose GOVDESI GONDERILMEZ; ajan asagidaki parametrelerden kendi
+    sablonuyla uretir (bkz. infra/appliance/e1-gwd.py `render_compose`).
+    Anahtar isimleri ajanin ALLOWED_PARAM_KEYS listesiyle birebir eslesmeli —
+    ajan bilinmeyen anahtari reddeder.
+    """
     body = _base_request("install", code, actor_username)
     body["name"] = name
-    body["compose"] = compose_body
+    body["params"] = {
+        "image": image,
+        "token": token,
+        "backend_url": backend_url,
+        "nats_url": nats_url,
+        "host_port": host_port,
+        "app_environment": app_environment,
+        "initiating_port_base": initiating_port_base,
+        "initiating_port_count": initiating_port_count,
+    }
     return _write_request(body)
 
 
