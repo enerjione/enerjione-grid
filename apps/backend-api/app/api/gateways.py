@@ -18,6 +18,7 @@ from app.models.enums import UserRole
 from app.models.gateway import Gateway
 from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.signal_catalog import SignalCatalog
+from app.data.device_models import DEFAULT_MODEL
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.gateway_agent import (
@@ -118,10 +119,14 @@ _INITIATING_PORT_BASE_MAX = 60000  # 65535 - 1000 buffer; ustu kabul edilmez
 # farkli surumden olur.
 _DEFAULT_GATEWAY_IMAGE = "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
 
-# Cihaz modeli bilinmiyorsa kullanilan profil anahtari. Katalogun kendi
-# varsayilani ile AYNI olmali (signal_catalog.model default'u), aksi halde
-# model'i bos kalmis eski bir cihaz kayidi hicbir profile eslesmezdi.
-_DEFAULT_PROFILE_KEY = "horstmann_sn_2_0"
+# Cihaz modeli bilinmiyorsa kullanilan profil anahtari.
+#
+# Model kayit defterinden ALINIR, elle yazilmaz: literal kopyalansaydi
+# `DEFAULT_MODEL` degistiginde model'i bos kalmis eski cihaz kayitlari
+# sessizce var olmayan bir profile eslesirdi (yani bos sinyal listesi ->
+# cihaz yoklanmaz). Yeni model eklerken tek dokunulacak yer
+# `app/data/device_models.py` olmali.
+_DEFAULT_PROFILE_KEY = DEFAULT_MODEL
 
 
 def _profile_key_of(device: Device) -> str:

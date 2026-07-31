@@ -92,10 +92,26 @@ def test_model_bos_ise_VARSAYILAN_profil(bos):
     assert _profile_key_of(Device(code="D1", model=bos)) == _DEFAULT_PROFILE_KEY
 
 
-def test_varsayilan_profil_KATALOG_varsayilaniyla_AYNI():
-    """Ikisi ayrisirsa model'siz cihaz sessizce bos profile duserdi."""
+def test_varsayilan_profil_KAYIT_DEFTERINDEN_gelir():
+    """Uc yerin de ayni degeri soylemesi ZORUNLU.
+
+    Ayrisirlarsa model'i bos kalmis eski bir cihaz kaydi var olmayan bir
+    profile eslesir; profil bos liste doner ve cihaz HIC yoklanmaz. Sessiz
+    bir "cihaz karanlikta" arizasi olurdu.
+    """
+    from app.data.device_models import DEFAULT_MODEL
+
+    assert _DEFAULT_PROFILE_KEY == DEFAULT_MODEL
     assert _DEFAULT_PROFILE_KEY == SignalCatalog.__table__.c.model.default.arg
     assert _DEFAULT_PROFILE_KEY == Device.__table__.c.model.default.arg
+
+
+def test_kayitli_MODELLER_gecerli_profil_anahtaridir():
+    """`device_models.MODELS` ile profil anahtari sozlugu ayni dili konusmali."""
+    from app.data.device_models import MODELS
+
+    for kod in MODELS:
+        assert _profile_key_of(Device(code="D", model=kod)) == kod
 
 
 # ------------------------------------------------------ profil ayristirmasi
