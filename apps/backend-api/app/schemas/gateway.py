@@ -79,6 +79,20 @@ class GatewayConfigDevice(BaseModel):
     poll_interval_sec: int
     timeout_ms: int
     retry_count: int
+    # Bu cihazin sinyal seti anahtari — `signals_by_profile` sozlugune girer.
+    #
+    # DEGERI `devices.signal_profile` KOLONU DEGIL, `devices.model` BELIRLER.
+    # Sebep: katalogun gercek ayirici alani `signal_catalog.model` ve backend'in
+    # geri kalani (bkz. api/signals.py `catalog_by_model`) cihazi kataloga
+    # ZATEN model uzerinden bagliyor. Kolon ise sahada sabit
+    # "horstmann_sn2_fixed" degeriyle duruyor: frontend cihaz olustururken onu
+    # sabit yaziyor, hicbir yer okumuyor, katalogun model sozlugunde boyle bir
+    # deger de yok. Yani kolon olu; anahtar olarak kullanilsaydi
+    # `signals_by_profile` sozlugunde KARSILIGI OLMAYAN bir anahtar uretirdi.
+    #
+    # Ikinci bir "profil" kavrami uretmek yerine mevcut ve calisan baginti
+    # kullaniliyor — aksi halde canli deger ekrani bir sinyal setini, gateway
+    # baskasini gorurdu.
     signal_profile: str
 
 
@@ -151,7 +165,51 @@ class GatewayConfigResponse(BaseModel):
     max_devices: int
     is_active: bool
     devices: list[GatewayConfigDevice]
+    # --- ADRES SAHIPLIGI --------------------------------------------------
+    #
+    # HEDEF MIMARI: DNP3 adres haritasi (object_group/index/scale/offset)
+    # GATEWAY'DE yasar; backend cihaz basina yalnizca TURU (`signal_profile`)
+    # soyler. Gerekce: adres haritasi cihaz firmware'inin ozelligidir, musteri
+    # kurulumunun degil — her kurulumda ayni. Protokol surucusu de gateway'de
+    # oldugu icin adresin sahibi orasidir. Farkli protokolde bir model
+    # geldiginde (Modbus, IEC-101, ...) DNP3 sekilli bir katalog satiri o
+    # cihazi ZATEN ifade edemez; o modelin tanimini surucusuyle birlikte
+    # gateway tasir.
+    #
+    # Asagidaki iki alan bu hedefe giderken KOPRU gorevi gorur ve KALDIRILMAZ:
+    #   * sahadaki 0.4.x/0.5.0 gateway'ler duz `signals` listesine bagimli,
+    #   * gateway'in HENUZ yerlesik profili olmayan bir model icin backend'in
+    #     bildirdigi liste tek kaynaktir (musterinin onceden aldigi cihazlar).
+    #
+    # Gateway onceligi: yerlesik profil > signals_by_profile > signals.
+    #
+    # NOT: `signal_catalog` tablosu ORTADAN KALKMAZ — canli deger ekranindaki
+    # etiket/birim, alarm kurallari (`supports_alarm`) ve SCADA cikisi
+    # (iec104_ioa / modbus_address / mqtt_topic) hep oradan besleniyor.
+    # Gateway'e devredilen yalnizca DNP3 ADRESLEMESIDIR.
+
+    # DUZ liste — bu gateway'deki cihazlarin modellerinin BIRLESIMI.
+    #
+    # Eskiden TUM aktif katalog donuyordu: bu gateway'de hic bulunmayan bir
+    # modelin sinyalleri de listeye giriyor ve gateway onlari da yokluyordu.
+    # Artik yalnizca gercekten bagli modellerin sinyalleri var (tek modelli
+    # kurulumda sonuc AYNI, cok modellide daha az ve dogru).
     signals: list[GatewayConfigSignal]
+    # PROFIL BAZLI katalog: {profil_anahtari: [sinyaller]}.
+    #
+    # NEDEN: duz liste tek modelli kurulumda dogru calisir ama ikinci bir cihaz
+    # modeli eklendigi anda BOZULUR. Ayni (object_group, index) cifti iki
+    # modelde FARKLI buyuklugu gosterir; gateway hangi cihaz icin hangi sinyal
+    # setini kullanacagini bilmedigi icin okudugu degeri YANLIS `signal_key`
+    # ile yayinlar. Hata SESSIZDIR: telemetri akar, deger makul gorunur, ama
+    # esik alarmi baska bir buyuklugun uzerinden calisir.
+    #
+    # Anahtar, cihazi olan HER profil icin yazilir — katalogda o modele ait
+    # aktif sinyal yoksa BOS LISTE olarak. Bos liste kasitlidir: gateway o
+    # cihazi yoklamaz ve eksiklik operator'a gorunur olur. Duz listeye
+    # dusurmek, farkli modelli kurulumda YABANCI adresleri yoklamak demektir
+    # ve sessiz yanlis veri uretir — gorunur eksik veriden daha kotudur.
+    signals_by_profile: dict[str, list[GatewayConfigSignal]] = {}
     config_version: str
     # Operator/SCADA tarafindan tetiklenen "tum cihazlara sorgu at" sayaci.
     # Gateway her config refresh'te bu degeri okur; en son gordugu degerden

@@ -24,28 +24,36 @@ liste tutulmadigi icin bir daha sapamaz. Bu testler o ozelligi kilitler.
 
 from __future__ import annotations
 
-import hashlib
-import json
-
+from app.api.gateways import compute_config_version
 from app.schemas.gateway import GatewayConfigDevice, GatewayConfigSignal
 
 
-def _surum(devices, signals, *, gateway_name="GW", batch=5, max_dev=200, aktif=True) -> str:
-    """Endpoint'teki hesabin birebir aynisi (app/api/gateways.py)."""
-    malzeme = json.dumps(
-        {
-            "gateway_name": gateway_name,
-            "batch_interval_sec": batch,
-            "max_devices": max_dev,
-            "is_active": aktif,
-            "devices": [d.model_dump(mode="json") for d in devices],
-            "signals": [s.model_dump(mode="json") for s in signals],
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
+def _surum(
+    devices,
+    signals,
+    *,
+    gateway_name="GW",
+    batch=5,
+    max_dev=200,
+    aktif=True,
+    profiller=None,
+) -> str:
+    """Endpoint'in KULLANDIGI fonksiyonun ta kendisi.
+
+    Burada bir zamanlar hesabin ELLE KOPYASI vardi. Iki kopya sessizce
+    ayrisabilirdi — ki bu dosyanin belgeledigi hatanin ozu tam olarak "hash
+    gonderilen veriyi temsil etmiyor" idi. Kopyayi kaldirdik: endpoint neyi
+    hash'liyorsa test de onu hash'ler.
+    """
+    return compute_config_version(
+        gateway_name=gateway_name,
+        batch_interval_sec=batch,
+        max_devices=max_dev,
+        is_active=aktif,
+        devices=devices,
+        signals=signals,
+        signals_by_profile=profiller,
     )
-    return hashlib.sha1(malzeme.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _cihaz(**over) -> GatewayConfigDevice:
