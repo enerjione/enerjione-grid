@@ -17,7 +17,7 @@
 # servisleri update eder.
 #
 # Appliance (mini PC) modu OTOMATIKTIR: makinede WiFi karti varsa sifresiz
-# "EnerjiOne Grid" AP'si, e1-grid.local mDNS ve UI'dan IP/DNS ayari da ayni
+# musteri adiyla WiFi AP'si (or. "E1GRID-TPAO"), e1-grid.local mDNS ve
 # komutla kurulur. VPS'lerde WiFi karti olmadigi icin devreye girmez.
 #
 # Surum modeli: cihaz bir DALI degil, yayinlanmis bir TAG'i takip eder.
@@ -147,7 +147,8 @@ e1_set_steps 6
 # ister; ikisi de AYNI anahtari kullanir.
 #
 # KURULUM SESSIZDIR — hicbir sey SORULMAZ. Tum girdiler kurulum aracindan
-# (tools/installer-gui) veya ortam degiskeninden gelir. Sebep: saha
+# (EnerjiOne Kurulum Araci — ayri repo) veya ortam degiskeninden gelir.
+# Sebep: saha
 # kurulumunda ekran basinda kimse beklemesin ve kurulum bir soruda
 # takilip kalmasin. Soru sormak eskiden `curl | bash` altinda kurulumu
 # tamamen kilitleyebiliyordu.
@@ -636,7 +637,7 @@ if [[ -f "${INSTALL_DIR}/infra/appliance/setup-gateway-agent.sh" ]]; then
 fi
 
 # ---- Appliance (mini PC) modu -------------------------------------------
-# Sifresiz WiFi AP ("EnerjiOne Grid"), e1-grid.local mDNS ve UI'dan IP/DNS
+# Sifresiz WiFi AP (musteri adiyla, or. "E1GRID-TPAO"), e1-grid.local mDNS ve UI'dan IP/DNS
 # ayari (e1-netd ajani).
 #
 # OTOMATIK KARAR: makinede WiFi karti varsa bu bir saha mini PC'sidir ->
@@ -685,6 +686,16 @@ if [[ $APPLIANCE_WANTED -eq 1 ]]; then
   else
     e1_warn "infra/appliance/setup-appliance.sh bulunamadi (repo eski olabilir)."
   fi
+fi
+
+# ---- Kiosk modu (masaustu olan cihazlar) ---------------------------------
+# Cihaz acilinca arayuz kendiliginden tam ekran gelsin ve operator ayri,
+# YETKISIZ bir hesapla girsin. Ekran yoneticisi yoksa (VPS/sunucu) script
+# hicbir sey yapmadan doner — appliance moduna da bagli DEGIL, cunku
+# masaustlu bir kurulumda WiFi karti olmayabilir.
+if [[ -f "${INSTALL_DIR}/infra/appliance/setup-kiosk.sh" ]]; then
+  bash "${INSTALL_DIR}/infra/appliance/setup-kiosk.sh" \
+    || e1_warn "Kiosk modu tamamlanamadi; kurulum devam ediyor."
 fi
 
 # ---- Uzaktan bakim VPN'i (Tailscale) -------------------------------------
@@ -798,7 +809,11 @@ fi
 
 e1_box "1. ERISIM"
 if [[ $APPLIANCE_WANTED -eq 1 ]]; then
-  e1_kv "WiFi agi" "EnerjiOne Grid  (sifresiz)"
+  # SSID musteri adindan turetiliyor (bkz. setup-appliance.sh); sabit metin
+  # yazmak yerine NetworkManager'daki gercek degeri okuyoruz.
+  _ap_ssid="$(nmcli -g 802-11-wireless.ssid connection show e1-grid-ap 2>/dev/null || true)"
+  e1_kv "WiFi agi" "${_ap_ssid:-EnerjiOne Grid}  (sifresiz)"
+  unset _ap_ssid
   e1_kv "Adres" "http://e1-grid.local   veya   http://10.42.0.1"
   e1_kv "Kablolu" "http://${VPS_IP}/"
 else

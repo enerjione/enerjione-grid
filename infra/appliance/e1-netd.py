@@ -386,7 +386,8 @@ def _ensure_ap_when_offline() -> None:
     """DEGISMEZ KURAL: WiFi client'a bagli DEGILSEK, AP acik olmali.
 
     Amac: cihazin IP'si bilinmese bile her zaman bir giris yolu bulunsun.
-    Kullanici "EnerjiOne Grid" agina baglanip http://10.42.0.1 ile girer.
+    Kullanici cihazin AP'sine (musteri adiyla, or. "E1GRID-TPAO")
+    baglanip http://10.42.0.1 ile girer.
 
     Tek radyo oldugu icin AP ile client ayni anda calisamaz; bu yuzden kural
     "client baglantisi YOKSA AP'yi ac" seklinde. Baglanti KURULMA ANINDA

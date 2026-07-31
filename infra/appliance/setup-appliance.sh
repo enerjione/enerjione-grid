@@ -6,7 +6,7 @@
 #
 #   1. Hostname -> e1-grid  (avahi ile http://e1-grid.local calisir)
 #   2. NetworkManager ag yoneticisi olur (netplan renderer dahil)
-#   3. Sifresiz WiFi AP: "EnerjiOne Grid" — boot'ta otomatik acilir,
+#   3. Sifresiz WiFi AP: musteri adiyla (or. "E1GRID-TPAO") — boot'ta acilir,
 #      istemcilere 10.42.0.0/24 DHCP dagitir, e1-grid.local -> 10.42.0.1
 #   4. avahi-daemon (mDNS) — kablolu agdan da e1-grid.local calisir
 #   5. e1-netd ag ajani + systemd unit'leri (UI'dan IP/DNS ayari)
@@ -17,7 +17,11 @@
 # Idempotent: tekrar calistirmak guvenli.
 #
 # Env override:
-#   AP_SSID        AP adi           (default: "EnerjiOne Grid")
+#   AP_SSID        AP adi. Verilmezse MUSTERI ADINDAN turetilir:
+#                  "TPAO" -> "E1GRID-TPAO". Musteri adi da yoksa
+#                  eski ad korunur: "EnerjiOne Grid".
+#   E1_CUSTOMER    musteri adi (kurulum araci gonderir; site.env'den
+#                  de okunur)
 #   AP_CHANNEL     2.4GHz kanal     (default: 6)
 #   AP_IFNAME      WiFi arayuzu     (default: otomatik tespit)
 #   APPLIANCE_HOSTNAME               (default: e1-grid)
@@ -26,7 +30,50 @@
 # ===========================================================================
 set -euo pipefail
 
-AP_SSID="${AP_SSID:-EnerjiOne Grid}"
+# --- AP adi -----------------------------------------------------------------
+# Kurulum aracinda girilen MUSTERI ADINDAN turetilir: "TPAO" -> `E1GRID-TPAO`.
+# Sebep: sahada birden fazla cihaz veya komsu bir kurulum varsa hangi AP'nin
+# hangi musteriye ait oldugu WiFi listesinden anlasilsin.
+#
+# Musteri adi yoksa eski ad ("EnerjiOne Grid") KORUNUR — sahadaki mevcut
+# cihazlarin SSID'i sebepsiz degismesin.
+_ap_read_var() {  # $1=dosya $2=anahtar
+  [[ -f "$1" ]] || return 1
+  sed -n \
+    -e "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*\$/\1/p" \
+    -e "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*\([^\"#][^#]*\).*\$/\1/p" \
+    "$1" | tail -1 | sed -e 's/[[:space:]]*$//'
+}
+
+# Turkce metin -> SSID'de guvenli parca; TAMAMI BUYUK harf.
+# Turkce harfler once ASCII karsiligina cevrilir (bazi telefonlar ve eski
+# cihazlar Turkce SSID'i bozuk gosterir), sonra tumu buyutulur.
+# NOT: `tr a-z A-Z` ASCII kuralini uygular; 'i' -> 'I' (Turkce 'I' degil).
+_ap_slug() {
+  printf '%s' "$1" \
+    | sed -e 's/Ç/C/g; s/ç/C/g; s/Ğ/G/g; s/ğ/G/g; s/İ/I/g; s/ı/I/g' \
+          -e 's/Ö/O/g; s/ö/O/g; s/Ş/S/g; s/ş/S/g; s/Ü/U/g; s/ü/U/g' \
+    | tr 'a-z' 'A-Z' \
+    | tr -c 'A-Z0-9-' '-' \
+    | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
+}
+
+if [[ -z "${AP_SSID:-}" ]]; then
+  _ap_customer="${E1_CUSTOMER:-}"
+  [[ -z "$_ap_customer" ]] && _ap_customer="$(_ap_read_var "${E1_SITE_ENV:-/etc/enerjione-grid/site.env}" E1_CUSTOMER_NAME || true)"
+  [[ -z "$_ap_customer" ]] && _ap_customer="$(_ap_read_var "${E1_INSTALL_ENV:-/etc/enerjione-grid/install.env}" E1_CUSTOMER || true)"
+  if [[ -n "${_ap_customer// /}" ]]; then
+    _ap_part="$(_ap_slug "$_ap_customer")"
+    # SSID en fazla 32 BAYT olabilir; onek 7 karakter, musteriye 24 birakiyoruz.
+    _ap_part="${_ap_part:0:24}"
+    _ap_part="${_ap_part%-}"
+  fi
+  if [[ -n "${_ap_part:-}" ]]; then
+    AP_SSID="E1GRID-${_ap_part}"
+  else
+    AP_SSID="EnerjiOne Grid"
+  fi
+fi
 AP_CON_NAME="e1-grid-ap"
 AP_CHANNEL="${AP_CHANNEL:-6}"
 APPLIANCE_HOSTNAME="${APPLIANCE_HOSTNAME:-e1-grid}"
@@ -104,8 +151,29 @@ else
   ok "Hostname zaten ${APPLIANCE_HOSTNAME}."
 fi
 
+# mDNS TUM arayuzlerden cevap vermeli: kullanici cihaza kabloyla da,
+# cihazin kendi AP'sinden de, cihazin istemci olarak katildigi WiFi agindan
+# da ayni adresle (e1-grid.local) ulasabilmeli.
+#
+# Avahi'nin varsayilani zaten "tum arayuzler" ama BUNA GUVENMIYORUZ: OEM
+# imajlari (Dell/Lenovo Ubuntu) avahi-daemon.conf'u kisitli gonderebiliyor
+# ve `allow-interfaces=eth0` gibi bir satir tek bir arayuze kilitler. Boyle
+# bir cihazda WiFi'den .local sessizce cozulmez. O yuzden kisitlayan
+# satirlari ACIKCA etkisizlestiriyoruz.
+AVAHI_CONF=/etc/avahi/avahi-daemon.conf
+if [[ -f "$AVAHI_CONF" ]]; then
+  if grep -qE '^\s*(allow|deny)-interfaces\s*=' "$AVAHI_CONF"; then
+    cp -a "$AVAHI_CONF" "${AVAHI_CONF}.e1-yedek" 2>/dev/null || true
+    sed -i -E 's/^(\s*)(allow|deny)-interfaces\s*=/\1#\2-interfaces=/' "$AVAHI_CONF"
+    ok "avahi arayuz kisiti kaldirildi (tum aglardan .local cozulur)."
+  fi
+  # IPv4 kapaliysa Windows/Android istemciler cozemez.
+  sed -i -E 's/^\s*use-ipv4\s*=.*/use-ipv4=yes/' "$AVAHI_CONF"
+fi
+
 systemctl enable --now avahi-daemon >/dev/null 2>&1 || warn "avahi-daemon baslatilamadi."
-ok "mDNS aktif — kablolu agdan http://${APPLIANCE_HOSTNAME}.local"
+systemctl reload avahi-daemon >/dev/null 2>&1 || systemctl restart avahi-daemon >/dev/null 2>&1 || true
+ok "mDNS aktif — kablolu, AP ve WiFi aglarinin hepsinden http://${APPLIANCE_HOSTNAME}.local"
 
 # ---------------------------------------------------------------------------
 step "[3/7] NetworkManager ag yoneticisi yapiliyor"
@@ -119,6 +187,62 @@ if [[ -d /etc/netplan ]]; then
     mkdir -p "$BACKUP_DIR"
     cp -a /etc/netplan/*.yaml "$BACKUP_DIR"/ 2>/dev/null || true
     info "Mevcut netplan yedegi: ${BACKUP_DIR}"
+
+    # ---- Mevcut adresi NM'e TASI --------------------------------------
+    # SAHA VAKASI: burasi eskiden dogrudan `netplan apply` cagiriyordu ve
+    # kurulum bu satirda ASILI KALIYORDU. Iki sebep vardi:
+    #
+    #   1. `netplan apply` ag yonetimini systemd-networkd'den NM'e devreder;
+    #      bu sirada SSH oturumunu tasiyan ethernet arayuzu asagi/yukari
+    #      edilir. Oturum donar, cikti gelmez, kurulumcu sonsuza kadar bekler.
+    #   2. Devir sirasinda MEVCUT ADRES HICBIR YERE TASINMIYORDU. Cihazin
+    #      netplan'dan gelen STATIK IP'si varsa NM devralinca o adres
+    #      kayboluyor (NM DHCP denemesine dusuyor) ve cihaz TAMAMEN
+    #      erisilemez kaliyordu — sahaya tekrar gitmek demek.
+    #
+    # Cozum: devirden ONCE mevcut adresi ayni degerlerle bir NM profiline
+    # yaziyoruz. Adres degismedigi icin TCP oturumu cogu durumda hayatta
+    # kalir; kalmasa bile cihaz ayni IP'den geri gelir.
+    ETH_IF="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
+    if [[ -n "$ETH_IF" ]]; then
+      ETH_CIDR="$(ip -4 -o addr show dev "$ETH_IF" scope global 2>/dev/null | awk '{print $4; exit}')"
+      ETH_GW="$(ip route show default 2>/dev/null | awk '{print $3; exit}')"
+      # "dynamic" bayragi = adres DHCP'den geldi. DHCP ise NM de DHCP yapar
+      # ve ayni MAC ile buyuk olasilikla AYNI adresi geri alir; profil
+      # yazmaya gerek yok. Statikse tasimak ZORUNDAYIZ.
+      if ip -4 -o addr show dev "$ETH_IF" scope global 2>/dev/null | grep -q ' dynamic '; then
+        info "${ETH_IF}: DHCP — NetworkManager ayni adresi yeniden alacak."
+      elif [[ -n "$ETH_CIDR" ]]; then
+        # Profil adi e1-netd ile AYNI (ETH_CON_NAME) — aksi halde ag ajani
+        # kendi profilini ayrica olusturur ve iki profil yarisir.
+        # DNS ayiklama iki tuzak barindiriyor:
+        #   * `sed 's/.*://'` GREEDY: IPv6 DNS (fe80::1) varsa son iki
+        #     noktaya kadar siler ve deger "1" gibi cop olur -> DNS bozulur.
+        #     Bu yuzden yalnizca ILK iki nokta kesiliyor.
+        #   * /etc/resolv.conf systemd-resolved makinelerde 127.0.0.53 (stub)
+        #     gosterir; onu statik DNS diye yazmak anlamsiz. Loopback elenir.
+        # ipv6.method ignore verdigimiz icin sadece IPv4 adresler alinir.
+        ETH_DNS="$(resolvectl dns "$ETH_IF" 2>/dev/null | sed 's/^[^:]*: *//' \
+          | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' \
+          | grep -v '^127\.' | tr '\n' ' ' | sed 's/ $//')"
+        if [[ -z "$ETH_DNS" ]]; then
+          ETH_DNS="$(awk '/^nameserver/{print $2}' /etc/resolv.conf 2>/dev/null \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' \
+            | tr '\n' ' ' | sed 's/ $//')"
+        fi
+        if nmcli connection show e1-grid-eth >/dev/null 2>&1; then
+          ok "e1-grid-eth profili zaten var."
+        else
+          nmcli connection add type ethernet ifname "$ETH_IF" con-name e1-grid-eth \
+            autoconnect yes ipv4.method manual ipv4.addresses "$ETH_CIDR" \
+            ${ETH_GW:+ipv4.gateway "$ETH_GW"} \
+            ${ETH_DNS:+ipv4.dns "$ETH_DNS"} ipv6.method ignore >/dev/null 2>&1 \
+            && ok "Statik adres NM'e tasindi: ${ETH_CIDR} (${ETH_IF})" \
+            || warn "NM ethernet profili olusturulamadi — adres degisebilir."
+        fi
+      fi
+    fi
+
     cat > "$NETPLAN_E1" <<'YAML'
 # EnerjiOne Grid appliance — tum arayuzleri NetworkManager yonetir.
 # IP/DNS ayarlari artik netplan'dan degil, web arayuzundeki
@@ -129,7 +253,38 @@ network:
 YAML
     chmod 600 "$NETPLAN_E1"
     netplan generate >/dev/null 2>&1 || warn "netplan generate uyari verdi."
-    netplan apply >/dev/null 2>&1 || warn "netplan apply uyari verdi (reboot sonrasi gecerli olur)."
+
+    # ---- Geri alma muhafizi -------------------------------------------
+    # Devir yine de agi koparirsa cihaz kendini KURTARSIN. 120 sn sonra
+    # arayuzun IPv4 adresi yoksa netplan yedegi geri yuklenir. Kurulumcu
+    # cihazi kaybetmez; en kotu ihtimalle eski ag ayariyla geri gelir.
+    setsid nohup bash -c "
+      sleep 120
+      # Global IPv4 adresi kalmadiysa ag gitmis demektir (lo 'scope host'tur,
+      # bu listeye zaten girmez).
+      if [ \"\$(ip -4 -o addr show scope global 2>/dev/null | grep -c 'scope global')\" -eq 0 ]; then
+        rm -f '$NETPLAN_E1'
+        cp -a '$BACKUP_DIR'/*.yaml /etc/netplan/ 2>/dev/null || true
+        netplan apply >/dev/null 2>&1 || true
+        logger -t e1-appliance 'ag kayboldu — netplan yedegi geri yuklendi'
+      fi
+    " >/dev/null 2>&1 </dev/null &
+
+    # ---- Devri KOPMAYA DAYANIKLI calistir ------------------------------
+    # setsid + nohup: SSH oturumu duserse gelen SIGHUP `netplan apply`i
+    # OLDURMESIN, yarim kalmis ag yapilandirmasi birakmasin.
+    warn "Ag yoneticisi devrediliyor — baglanti birkac saniye kopabilir."
+    setsid nohup netplan apply >/dev/null 2>&1 </dev/null &
+    NETPLAN_PID=$!
+    # En fazla 60 sn bekle; bitmezse arka planda devam etsin, script asili
+    # kalmasin (eski davranistaki sonsuz bekleme tam olarak buydu).
+    for _i in $(seq 60); do
+      kill -0 "$NETPLAN_PID" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$NETPLAN_PID" 2>/dev/null; then
+      warn "netplan apply hala calisiyor — arka planda birakildi, devam ediliyor."
+    fi
     ok "netplan renderer -> NetworkManager."
   else
     ok "netplan zaten NetworkManager'a yonlendirilmis."

@@ -380,6 +380,15 @@ if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
   fi
 fi
 
+# ---- Kiosk modu ----------------------------------------------------------
+# APPLIANCE_REFRESH'ten BAGIMSIZ: masaustu olan ama WiFi karti olmayan
+# cihazlar da var. Ekran yoneticisi yoksa script sessizce cikar, bu yuzden
+# kosulsuz cagirmak guvenli. Tarayici/oturum betigi her surumde tazelenir.
+if [[ -f infra/appliance/setup-kiosk.sh ]]; then
+  bash infra/appliance/setup-kiosk.sh \
+    || e1_warn "Kiosk modu guncellenemedi; guncelleme devam ediyor."
+fi
+
 # ---- Gateway kurulum ajani (e1-gwd) --------------------------------------
 # APPLIANCE_REFRESH'ten BAGIMSIZ: bu ozellik VPS kurulumlarinda da kullanilir.
 # Ayrica bu ajan sonradan eklendigi icin, sahadaki mevcut cihazlar yalnizca

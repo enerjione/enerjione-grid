@@ -116,7 +116,8 @@ if [[ -f "$INSTALL_ENV" ]]; then
   [[ -n "$CUSTOMER$SITE$SITE_ID" ]] && e1_info "Saha bilgisi ${INSTALL_ENV} dosyasindan okundu."
 fi
 
-# SORU SORULMAZ. Saha bilgisi kurulum aracindan (tools/installer-gui) veya
+# SORU SORULMAZ. Saha bilgisi kurulum aracindan (EnerjiOne Kurulum Araci,
+# ayri repo) veya
 # ortam degiskeni / install.env uzerinden gelir. Hicbiri yoksa bu adim
 # sessizce atlanir: tailnet adi donanimdan turetilir ve kurulum devam eder.
 # Bilgi sonradan tanimlanabilir — bu script tek basina tekrar calistirilabilir.
