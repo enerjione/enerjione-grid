@@ -1,342 +1,157 @@
-# EnerjiOne Grid
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.png">
+    <img src="docs/assets/logo.png" alt="EnerjiOne" width="360">
+  </picture>
+</p>
 
-**Endüstriyel Akıllı Şebeke İzleme Platformu** — Horstmann Smart Navigator 2.0 arıza-geçiş göstergesi cihazları için açık kaynak izleme/yönetim platformu.
+<h1 align="center">Grid</h1>
 
-[![CI](https://github.com/enerjione/enerjione-grid/actions/workflows/ci.yml/badge.svg)](https://github.com/enerjione/enerjione-grid/actions/workflows/ci.yml)
-[![Release](https://github.com/enerjione/enerjione-grid/actions/workflows/release.yml/badge.svg)](https://github.com/enerjione/enerjione-grid/actions/workflows/release.yml)
+<p align="center">
+  Endüstriyel akıllı şebeke izleme platformu.<br>
+  Orta gerilim hatlarındaki arıza-geçiş göstergelerini izler, arızayı<br>
+  <b>hangi iki direk arasında</b> olduğuna kadar daraltır.
+</p>
 
-> 🌐 **Web:** `https://grid.enerjione.com`
-> 📦 **Repo:** [github.com/enerjione/enerjione-grid](https://github.com/enerjione/enerjione-grid)
-> 📅 **Sürüm:** [`VERSION`](VERSION) dosyası — tek kaynak
-
----
-
-> 🔧 **Saha kurulumu (mini PC):** [`docs/SAHA-KURULUM.md`](docs/SAHA-KURULUM.md) —
-> teknik bilgi gerektirmeyen, kopyala-yapıştır adım adım kılavuz.
->
-> 📘 **Kapsamlı kurulum rehberi:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) —
-> nginx + SSL + multi-app + sorun giderme adım adım anlatıldı.
-
-## 🚀 Hızlı Kurulum (Linux VPS)
-
-**Tek komutla sıfırdan ayağa kalkar.** Test edildi: Ubuntu 22.04/24.04, Debian 12.
-
-```bash
-TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" \n  https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh \n  | sudo E1_GHCR_TOKEN=$TOKEN bash
-```
-
-Veya manuel:
-
-```bash
-sudo git clone --branch main \
-  https://github.com/enerjione/enerjione-grid.git /opt/enerjione-grid
-cd /opt/enerjione-grid
-sudo bash install.sh
-```
-
-Kurulum sonrası:
-- 🌐 Web: `http://<VPS-IP>/`
-- 👤 İlk giriş: `installer` / `ChangeMe123!` _(mutlaka değiştir)_
-
-> ℹ️ Kurulum **imajları indirir, cihazda derlemez**. İmajlar release CI'da
-> üretilip `ghcr.io/enerjione/enerjione-grid/*` altına basılır. Depo private
-> olduğu için salt-okunur bir GHCR token'ı gerekir; kurulum sorar. Token
-> verilmezse imajlar cihazda derlenir (çalışır, sadece yavaştır).
-
-## 🔄 Güncelleme ve geri alma
-
-```bash
-cd /opt/enerjione-grid
-sudo bash update.sh                    # en son yayına geç
-sudo bash update.sh backend            # tek servis
-sudo bash update.sh --version 2.24.4   # belirli sürüme dön (rollback)
-sudo bash update.sh --edge             # geliştirme dalı (main)
-```
-
-Saha cihazları bir dalın ucunu değil, **yayınlanmış bir tag**'i takip eder.
-Süreç: [`docs/CI-CD.md`](docs/CI-CD.md)
+<p align="center">
+  <a href="https://github.com/enerjione/enerjione-grid/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/enerjione/enerjione-grid/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="VERSION"><img alt="Sürüm" src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fenerjione%2Fenerjione-grid%2Fmain%2FVERSION&search=(.*)&replace=v%241&label=s%C3%BCr%C3%BCm&color=e97800"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Ubuntu%2022.04%20%2F%2024.04%20%C2%B7%20Debian%2012-0f172a">
+</p>
 
 ---
 
-## 🎛️ Yönetim Komutları
+## Ne yapar
 
-### systemd ile (önerilen)
+Sahadaki **Horstmann Smart Navigator 2.0** arıza-geçiş göstergeleri, üzerlerinden
+geçen arıza akımını görür. EnerjiOne Grid bu cihazları tek merkezden izler ve
+arızanın **hattın neresinde** olduğunu haritada gösterir.
 
-Install script kurulum sonrası "systemd kaydı yapayım mı?" diye sorar. Onaylarsan:
-
-```bash
-sudo systemctl start enerjione-grid      # başlat
-sudo systemctl stop enerjione-grid       # durdur
-sudo systemctl restart enerjione-grid    # yeniden başlat
-sudo systemctl status enerjione-grid     # durum
-sudo systemctl enable enerjione-grid     # boot'ta otomatik başlat
-sudo journalctl -u enerjione-grid -f     # canlı log
-```
-
-Sonradan eklemek:
-```bash
-sudo bash /opt/enerjione-grid/infra/systemd/setup-systemd.sh
-```
-
-### Docker Compose ile (alternatif)
-
-```bash
-cd /opt/enerjione-grid
-
-# Stack yönetimi
-sudo docker compose up -d              # başlat
-sudo docker compose down               # durdur (container'lar silinir, volume korunur)
-sudo docker compose restart            # yeniden başlat
-sudo docker compose ps                 # container durumu
-sudo docker compose logs -f            # canlı log (tüm servisler)
-sudo docker compose logs -f backend-api  # tek servis
-
-# Servis güncelleme
-sudo bash update.sh                    # tüm servisler
-sudo bash update.sh backend            # sadece backend-api
-sudo bash update.sh frontend           # sadece frontend-web
-sudo bash update.sh alarm              # alarm-service
-# diğerleri: tag / notification / iec
-
-# Kaldırma
-sudo bash uninstall.sh                 # interaktif onay
-sudo bash uninstall.sh --yes           # onay atla
-sudo bash uninstall.sh --keep-images   # image'lar korunur
-sudo bash uninstall.sh --purge-dir     # /opt/enerjione-grid'i de sil
-```
-
----
-
-## 🌍 Multi-Domain (Birden Fazla Uygulama)
-
-Aynı VPS'te EnerjiOne Grid + EnerjiOne Solar gibi birden fazla uygulama yan yana çalıştırılabilir.
-
-### 1. DNS ayarları
-`enerjione.com` zone'una her uygulama için A kaydı:
-```
-grid     A  <VPS-IP>        → grid.enerjione.com
-solar    A  <VPS-IP>        → solar.enerjione.com
-```
-
-### 2. Grid'i localhost'a bind et
-```bash
-cd /opt/enerjione-grid
-sed -i 's|^FRONTEND_HTTP_PORT=.*|FRONTEND_HTTP_PORT=127.0.0.1:8080|' .env
-sudo systemctl restart enerjione-grid
-```
-
-### 3. Host nginx kur
-```bash
-sudo bash /opt/enerjione-grid/infra/host-nginx/setup-host-nginx.sh
-```
-
-Bu script:
-- Sistem nginx'i kurar
-- `grid.enerjione.com` → `127.0.0.1:8080` proxy
-- `solar.enerjione.com` → `127.0.0.1:8081` proxy
-- WebSocket upgrade + uzun timeout'lar yapılandırılır
-
-### 4. SSL (Let's Encrypt)
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx \
-  -d grid.enerjione.com \
-  -d solar.enerjione.com
-```
-
-Otomatik yenileme cron'ı certbot kendisi kurar (her 12 saatte bir dener).
-
----
-
-## 🏗️ Mimari
-
-```
-┌──────────────────────────────────────────────────────┐
-│  Frontend (Vite + React + TypeScript)                │
-│  nginx:80 → ports/8080                               │
-└──────────────────────────────┬───────────────────────┘
-                               │ /api/v1/...
-┌──────────────────────────────▼───────────────────────┐
-│  Backend API (FastAPI + SQLAlchemy)                  │
-│  uvicorn:8000                                        │
-└──┬──────────┬─────────────┬────────────┬─────────────┘
-   │          │             │            │
-   ▼          ▼             ▼            ▼
-┌─────┐  ┌────────┐    ┌────────┐   ┌──────────┐
-│ PG  │  │RabbitMQ│    │ NATS   │   │ Workers  │
-│ 16  │  │management│  │JetStream│   │ (4 adet) │
-└─────┘  └────────┘    └────────┘   └──────────┘
-                                     ├─ tag-engine
-                                     ├─ alarm-service
-                                     ├─ notification-worker
-                                     └─ iec104-outbound
-```
-
-### Container namespace
-Tüm container'lar `e1-grid-` prefix ile gelir (örn: `e1-grid-backend-api`).
-Solar yan-yana çalıştırılırsa `e1s-*` namespace kullanır — çakışma yok.
-
-| Element | Değer |
+| | |
 |---|---|
-| Compose project | `enerjione-grid` |
-| Image prefix | `e1-grid/<service>:latest` |
-| Container prefix | `e1-grid-<service>` |
-| Volume prefix | `enerjione-grid_<name>` |
-| Network | `enerjione-grid_e1-net` |
-| DB adı | `enerjione_grid` |
-| Default dizin | `/opt/enerjione-grid` |
+| **Arıza yeri tespiti** | Son "gördüm" diyen cihaz ile ilk "görmedim" diyen cihaz arasındaki hat parçası haritada vurgulanır. Ekip doğrudan oraya gider. |
+| **Çoklu arıza bölgesi** | Aynı hatta birbirinden bağımsız birden fazla arıza varsa hepsi ayrı ayrı gösterilir. |
+| **Canlı izleme** | Cihaz durumu, batarya, haberleşme ve ölçümler WebSocket ile anlık akar. |
+| **Alarm kuralları** | Eşik, değişim hızı (dV/dt) ve AND/OR bileşik mantık. |
+| **Bildirim** | E-posta, SMS, Telegram, WhatsApp ve mobil push. |
+| **Şebeke modeli** | Bölge → Hat → Direk → Cihaz hiyerarşisi, harita üzerinde düzenlenir. |
+| **SCADA çıkışı** | IEC 60870-5-104 ve Modbus TCP ile dış sistemlere yayın. |
+| **Çevrimdışı harita** | İnternetin olmadığı sahalar için harita alanı önceden indirilir. |
 
 ---
 
-## 💻 Geliştirici Modu (Windows / Mac / Linux native)
+## Kurulum
 
-Backend ve frontend ayrı olarak local'de çalıştırılır — IDE ile hızlı iterasyon.
+Saha cihazına kurulum için **Saha Kurulum Aracı**'nı kullanın — Windows'ta
+çalışan, tek dosyalık bir program. Cihaza SSH ile bağlanır, kurulumu baştan
+sona yürütür.
 
-### Backend (Python 3.11+)
+### **[→ Saha Kurulum Aracı'nı indir](https://github.com/enerjione/enerjione-grid-kurulum-araci/releases/latest)**
+
+Araç şunları tek seferde halleder: kurulum, WiFi/IP ayarı, müşteri adıyla
+WiFi ağı, uzaktan bakım VPN'i ve operatör ekranı (kiosk).
+
+Sunucuya elle kurulum yapacaksanız: **[docs/SAHA-KURULUM.md](docs/SAHA-KURULUM.md)**
+(adım adım) veya **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (nginx, SSL,
+çoklu uygulama, sorun giderme).
+
+Güncelleme ve geri alma:
+
 ```bash
+cd /opt/enerjione-grid
+sudo bash update.sh                 # en son yayına geç
+sudo bash update.sh --version 2.24.6   # belirli bir sürüme dön
+```
+
+---
+
+## Mimari
+
+```
+Frontend (React + Vite)  ──►  nginx :80
+                                 │  /api/v1
+                          Backend API (FastAPI)
+                                 │
+        ┌────────────┬───────────┼────────────┬─────────────┐
+    PostgreSQL    RabbitMQ   NATS JetStream   │             │
+                                              │             │
+                                    ┌─────────┴───┐   ┌─────┴──────┐
+                                    │ tag-engine  │   │  alarm     │
+                                    │ notification│   │  service   │
+                                    │ iec104 /    │   └────────────┘
+                                    │ modbus      │
+                                    └─────────────┘
+```
+
+Olay güdümlü mikroservis mimarisi; Docker Compose + systemd ile çalışır.
+Telemetri akışı NATS JetStream üzerinden gider, alarm olayları RabbitMQ ile
+dağıtılır.
+
+**Roller**
+
+| Rol | Kapsam |
+|---|---|
+| `installer` | Süper yönetici — her şey |
+| `engineer` | Mühendis — yedek geri yükleme hariç her şey |
+| `ops_manager` | Kullanıcı/ekip yönetimi, toplu bildirim |
+| `operator` | Saha personeli — alarm ve arıza görüntüleme, yorum |
+
+---
+
+## Saha cihazı
+
+Mini PC olarak kurulduğunda cihaz "açınca çalışan kutu" hâline gelir:
+
+- **Müşteri adıyla WiFi ağı** (`E1GRID-TPAO`) — telefonla bağlanıp arayüze girilir
+- **`e1-grid.local`** — kablolu ağdan sabit isimle erişim
+- **Operatör ekranı** — açılışta otomatik giriş, tam ekran arayüz, yetkisiz hesap
+- **Arayüzden IP/DNS ayarı** — yanlış ayar girilirse cihaz eski ayarına kendiliğinden döner
+- **Uzaktan bakım** — port açmadan, müşteri onayıyla ve süreli
+
+Ayrıntı: [docs/APPLIANCE.md](docs/APPLIANCE.md) · [docs/TAILSCALE.md](docs/TAILSCALE.md)
+
+---
+
+## Geliştirme
+
+```bash
+# Backend (Python 3.11+)
 cd apps/backend-api
-python -m venv .venv
-.venv\Scripts\activate         # Windows
-source .venv/bin/activate      # Linux/Mac
-
-pip install -e .
+python -m venv .venv && .venv/bin/activate
+pip install -r requirements.txt
 cp .env.example .env
-# .env'i düzenle (DATABASE_URL local postgres'e işaret etmeli)
-
 python -m uvicorn app.main:app --reload --port 8000
-```
 
-### Frontend (Node 20+)
-```bash
+# Frontend (Node 20+)
 cd apps/frontend-web
-npm install
-npm run dev
-# Vite dev server :5173, API'yi http://localhost:8000/api/v1'e proxy eder
+npm install && npm run dev          # :5173, API'yi :8000'e proxy eder
 ```
 
-### Test
-```bash
-# Backend testleri
-cd apps/backend-api && pytest
+Testler:
 
-# Frontend type check
+```bash
+cd apps/backend-api && pytest
 cd apps/frontend-web && npx tsc --noEmit
 ```
 
+Yapılandırma **[`.env.example`](.env.example)** dosyasında açıklanmıştır —
+her değişkenin ne işe yaradığı yanında yazar.
+
 ---
 
-## 📋 Özellikler
+## Belgeler
 
-### Mühendislik Modülleri
-- **Cihaz Yönetimi**: DNP3 protokolü, gateway tabanlı topoloji
-- **Sinyal Yönetimi**: Analog/digital sinyal mapping, ölçeklendirme
-- **Alarm Kuralları**: Eşik, dV/dt, AND/OR bileşik mantık
-- **Hat Yönetimi**: Bölge → Hat → Direk → Cihaz hiyerarşisi, harita üzerinde
-- **Webhook & Outbound**: REST/MQTT/IEC104 dış sistem entegrasyonu
-- **API Erişimi**: PAT (Personal Access Token) yönetimi
-- **Bildirim Ayarları**: SMTP, SMS (Twilio/Netgsm), Telegram
-- **Proje Ayarları**: Logo, dil, batarya eşikleri
-- **Yedekler**: Manuel + zamanlanmış DB yedeği, restore
-
-### İzleme & Operasyon
-- **Anasayfa**: Cihaz haritası + sol listede tüm cihazlar (hat atanmamış olanlar ayrı pill ile)
-- **Alarmlar**: Kategori/seviye filtresi, atama, yorum, sıfırlama
-- **Hat Arızaları**: Son kırmızı → ilk yeşil aralığı haritada vurgulama
-- **Olaylar**: Audit log, kategori/öncelik filtresi
-- **Sistem Durumu**: CPU/RAM/disk/uptime + servis sağlık probe'ları
-- **Toplu Bildirim**: Wizard ile çoklu kullanıcı/ekibe duyuru (web push + email + SMS)
-
-### Roller
-| Rol | Yetkiler |
+| | |
 |---|---|
-| `installer` | Süper admin — her şey |
-| `engineer` | Mühendis — installer dışı her şey, yedek geri yükleme YOK |
-| `ops_manager` | Operasyon Yöneticisi — kullanıcı (sadece operator) + ekip yönetimi + toplu bildirim |
-| `operator` | Saha personeli — alarm/arıza görüntüleme, yorum/atama kabul |
+| [SAHA-KURULUM.md](docs/SAHA-KURULUM.md) | Saha kurulumu, adım adım |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Sunucu kurulumu, nginx, SSL, sorun giderme |
+| [APPLIANCE.md](docs/APPLIANCE.md) | Mini PC katmanı: WiFi AP, mDNS, ağ ajanı |
+| [TAILSCALE.md](docs/TAILSCALE.md) | Uzaktan bakım VPN'i ve erişim izni |
+| [MODBUS.md](docs/MODBUS.md) | Modbus TCP adres planı |
+| [CI-CD.md](docs/CI-CD.md) | Sürüm çıkarma ve imaj yayınlama |
 
 ---
 
-## 🔧 Yapılandırma
-
-### .env
-
-Önemli alanlar (kurulum scripti rastgele üretir):
-
-```bash
-# Auth
-SECRET_KEY=<random>                    # JWT secret
-INTERNAL_SERVICE_TOKEN=<random>        # backend ↔ worker token
-
-# Veritabanı
-POSTGRES_DB=enerjione_grid
-POSTGRES_USER=enerjione_grid
-POSTGRES_PASSWORD=<random>
-
-# Mesaj kuyrukları
-RABBITMQ_PASSWORD=<random>
-NATS_BACKEND_PASSWORD=<random>
-NATS_WORKER_PASSWORD=<random>
-NATS_GATEWAY_PASSWORD=<random>
-
-# Frontend bind
-FRONTEND_HTTP_PORT=80                  # multi-app: 127.0.0.1:8080
-
-# CORS
-CORS_ORIGINS=http://localhost,http://127.0.0.1,https://grid.enerjione.com
-
-# SMTP (opsiyonel)
-SMTP_ENABLED=false
-SMTP_HOST=
-SMTP_FROM_EMAIL=noreply@enerjione-grid.local
-
-# Backup retention
-BACKUP_RETENTION_COUNT=30
-```
-
-### FCM (Mobil Push)
-Firebase Console > Project Settings > Service Accounts > Generate new private key
-İndirdiğin JSON'u `/opt/enerjione-grid/fcm-service-account.json` olarak kaydet.
-```bash
-sudo bash update.sh backend
-```
-
----
-
-## 🆘 Sorun Giderme
-
-### Container ayağa kalkmıyor
-```bash
-sudo docker compose logs <service>
-sudo systemctl status enerjione-grid
-sudo journalctl -u enerjione-grid -n 100
-```
-
-### DB bağlantı sorunu
-```bash
-docker exec -it e1-grid-postgres psql -U enerjione_grid -d enerjione_grid -c '\l'
-```
-
-### Disk dolu
-```bash
-docker system df
-docker system prune -af --volumes   # eski/dangling temizliği
-```
-
-### Cihazlar çevrimdışı görünüyor
-1. Gateway'lerin çalıştığını kontrol et (saha cihazları)
-2. Backend log: `sudo docker compose logs -f backend-api`
-3. Alarm/Tag service worker'ları: `sudo docker compose logs -f alarm-service tag-engine`
-
----
-
-## 📞 İletişim
-
-- **Geliştirici:** Fikret Şafak
-- **Şirket:** [Form Elektrik](https://www.formelektrik.com.tr)
-- **Issue tracker:** [GitHub Issues](https://github.com/enerjione/enerjione-grid/issues)
-
----
-
-## 📜 Lisans
-
-Form Elektrik İnş.Müh.A.Ş. mülkiyeti. Tüm hakları saklıdır.
+<p align="center">
+  <sub><b>EnerjiOne Grid</b> · Form Elektrik</sub>
+</p>
