@@ -170,6 +170,18 @@ jobs:
       # boyle bir sey: hatasiz calisir ama cihazi ilk reboot'ta oldururdu.
       - name: update.sh surum geri alma davranisi
         run: bash infra/scripts/linux/tests/test-update-version-rollback.sh "$PWD"
+      # Root ajanlarin symlink sertlestirmesi (denetim A11/A13). Bu testler
+      # `O_NOFOLLOW` gerektirir, yani Windows gelistirici makinesinde ATLANIR;
+      # gercek dogrulama YALNIZCA burada olur. Ajanlar zaten Linux appliance
+      # uzerinde calisiyor.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Appliance ajanlari — symlink sertlestirmesi
+        run: |
+          python -m pip install --upgrade pip -q
+          pip install -q pytest
+          pytest -q infra/appliance/tests
 
   compose:
     name: docker-compose dogrulama

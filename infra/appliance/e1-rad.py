@@ -222,28 +222,73 @@ def _set_pref(flag: str, critical: bool = True) -> None:
 # --- Dosya yazma (e1-netd `_write_json` ile ayni sozlesme) ------------------
 def _write_json(path: str, payload: dict, mode: int = 0o640,
                 group_from: str | None = STATE_DIR) -> None:
-    """Atomik yaz: once .tmp, sonra rename. Backend yarim dosya okumasin."""
+    """Atomik yaz: once .tmp, sonra rename. Backend yarim dosya okumasin.
+
+    SYMLINK TAKIBI KAPALI — bu bir YETKI SINIRI.
+    ---------------------------------------------
+    `.tmp` yolu backend container'inin (uid 10001) YAZABILDIGI paylasilan
+    dizindedir; bu ajan ise ROOT olarak calisir. `O_TRUNC` ile acmak symlink'i
+    TAKIP ediyordu, yani container oraya onceden bir symlink birakip root'a
+    istedigi host dosyasini truncate + uzerine yazdirabiliyordu.
+
+    Somut saldiri: container icinde
+        ln -s /etc/systemd/system/e1-rad-report.service <state_dir>/state.json.tmp
+    30 saniye icinde timer root olarak kosar, symlink'i takip eder ve unit
+    dosyasini JSON ile ezer. Sonraki boot'ta SURE-DOLUNCA-KAPATMA zorlayicisi
+    OLU olur — yani uzaktan bakim ozelliginin TEK guvenlik garantisi sessizce
+    devre disi kalir. Ayni primitif /etc/shadow, /etc/sudoers.d/* ya da
+    /etc/cron.d icin de kullanilabilir. `os.replace` sonrasi symlink kayboldugu
+    icin iz de birakmaz.
+
+    Tehdit modeli geregi container GUVENILMEYEN taraftir — `lease.json` zaten
+    bu yuzden ayri bir 0700 dizinde tutuluyor. O ayrim, tmp dosyasi paylasilan
+    dizinde symlink takip ettigi surece anlamsizdi.
+
+    Koruma uc katmanli:
+      * O_NOFOLLOW : son bilesen symlink ise acmayi REDDEDER
+      * O_EXCL     : dosya zaten varsa reddeder (onceden konmus tuzak)
+      * fchmod/fchown: izinler YOLA degil ACIK FD'ye uygulanir
+    """
     tmp = f"{path}.tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    # Bayat/tuzak .tmp temizligi. Symlink'i unlink etmek hedefe DOKUNMAZ.
+    try:
+        os.unlink(tmp)
+    except (FileNotFoundError, OSError):
+        pass
+    _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, mode)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
         fh.flush()
         os.fsync(fh.fileno())
-    os.chmod(tmp, mode)
-    if group_from:
-        # Grup sahipligi backend container uid'sine ayarlanmis dizinden gelir.
-        # (AttributeError: os.chown Unix-only — testler Windows'ta da kossun.)
+        # Izinler ACIK FD uzerinden — yol uzerinden degil (TOCTOU kapali).
         try:
-            st = os.stat(group_from)
-            os.chown(tmp, 0, st.st_gid)
+            os.fchmod(fh.fileno(), mode)
         except (AttributeError, PermissionError, OSError):
             pass
+        if group_from:
+            # Grup sahipligi backend container uid'sine ayarlanmis dizinden gelir.
+            # (AttributeError: os.fchown Unix-only — testler Windows'ta da kossun.)
+            try:
+                st = os.stat(group_from)
+                os.fchown(fh.fileno(), 0, st.st_gid)
+            except (AttributeError, PermissionError, OSError):
+                pass
     os.replace(tmp, path)
 
 
 def _read_json(path: str) -> dict | None:
+    """Symlink TAKIP ETMEDEN okur.
+
+    Yazma tarafi korundu ama okuma da onemli: container paylasilan dizine
+    `/etc/shadow`a isaret eden bir symlink birakirsa, root ajan onu okuyup
+    icerigini durum/rapor dosyasina (container'in OKUYABILDIGI) yansitabilir
+    — yani dosya SIZDIRMA primitifi olurdu.
+    """
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(path, os.O_RDONLY | _NOFOLLOW)
+        with os.fdopen(fd, "r", encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else None
     except (FileNotFoundError, json.JSONDecodeError, OSError):
