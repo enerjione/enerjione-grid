@@ -165,6 +165,11 @@ jobs:
           # SC1091: source edilen dosyayi CI'da cozemiyor (runtime'da var).
           # Ciddi bulgular (error) kapi; uyarilar rapor.
           git ls-files '*.sh' | xargs shellcheck -e SC1091 -S error
+      # Sozdizimi dogru olan bir betik yanlis DAVRANABILIR. Guncelleme
+      # yarida kalinca `.env` surumunun geri alinmasi (denetim A8) tam da
+      # boyle bir sey: hatasiz calisir ama cihazi ilk reboot'ta oldururdu.
+      - name: update.sh surum geri alma davranisi
+        run: bash infra/scripts/linux/tests/test-update-version-rollback.sh "$PWD"
 
   compose:
     name: docker-compose dogrulama

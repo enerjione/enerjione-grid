@@ -68,6 +68,59 @@ clear 2>/dev/null || true
 e1_banner
 
 PREV_VERSION="$(e1_version "$SCRIPT_DIR")"
+
+# ---- .env surum geri alma emniyeti -----------------------------------------
+#
+# YASANAN RISK: `.env`'deki `E1_VERSION` hedef surume, imajlar HAZIR OLMADAN
+# yaziliyordu. Yazmak zorunlu — `docker compose pull` hangi etiketi cekecegini
+# oradan okuyor — ama guncelleme imaj asamasinda duserse deger yeni surumde
+# KALIYORDU.
+#
+# Somut senaryo: trafo merkezindeki cihazda 4G hattinda `update.sh` kosar.
+# `docker compose pull` GHCR'a erisemez; yedek yol `docker compose build` de
+# temel imajlari (python:3.11-slim, node:20-alpine) cekemeyip duser. Eski
+# container'lar CALISMAYA DEVAM ETTIGI icin operator sorunu FARK ETMEZ.
+# Ilk elektrik kesintisinden sonra systemd `docker compose up -d` kosar,
+# `.env`'deki yeni etiket ne yerelde ne registry'de bulunur, unit `failed`
+# olur ve cihaz sahada TAMAMEN OLU kalir.
+#
+# Cozum: yeni surum yazilmadan once eskisi saklanir; imajlar dogrulanana
+# kadar herhangi bir cikista geri yazilir. Basari yolunda
+# `e1_env_version_commit` cagrilir ve geri alma iptal edilir.
+E1_ENV_VERSION_PENDING=""
+
+e1_env_version_write() {
+  # $1: yazilacak surum. Eski deger saklanir (yoksa "__YOK__").
+  local yeni="$1" eski
+  if grep -qE '^E1_VERSION=' .env; then
+    eski="$(sed -n 's/^E1_VERSION=//p' .env | head -1)"
+    sed -i "s|^E1_VERSION=.*|E1_VERSION=${yeni}|" .env
+  else
+    eski="__YOK__"
+    echo "E1_VERSION=${yeni}" >> .env
+  fi
+  E1_ENV_VERSION_PENDING="$eski"
+}
+
+e1_env_version_commit() {
+  # Imajlar hazir; geri almaya gerek yok.
+  E1_ENV_VERSION_PENDING=""
+}
+
+e1_env_version_rollback() {
+  [[ -z "${E1_ENV_VERSION_PENDING}" ]] && return 0
+  local eski="${E1_ENV_VERSION_PENDING}"
+  E1_ENV_VERSION_PENDING=""
+  if [[ "$eski" == "__YOK__" ]]; then
+    sed -i '/^E1_VERSION=/d' .env 2>/dev/null || true
+  else
+    sed -i "s|^E1_VERSION=.*|E1_VERSION=${eski}|" .env 2>/dev/null || true
+  fi
+  e1_warn "Guncelleme tamamlanmadi — .env surumu ${eski} degerine geri alindi."
+  e1_hint "Calisan container'lar eski surumle ayakta kalir; cihaz reboot'ta olmez."
+}
+trap 'e1_env_version_rollback' EXIT
+
 e1_box "GUNCELLEME"
 e1_kv "Dizin" "${SCRIPT_DIR}"
 e1_kv "Hedef" "$([[ "$TARGET" == "all" ]] && echo "Tum servisler" || echo "$TARGET")"
@@ -215,11 +268,7 @@ if [[ $E1_PACKAGE_MODE -eq 1 ]]; then
   fi
 
   # Imaj etiketini hedefe cek — asil guncelleme bu.
-  if grep -qE '^E1_VERSION=' .env; then
-    sed -i "s|^E1_VERSION=.*|E1_VERSION=${NEW_VERSION}|" .env
-  else
-    echo "E1_VERSION=${NEW_VERSION}" >> .env
-  fi
+  e1_env_version_write "${NEW_VERSION}"
   e1_ok "Hedef imaj surumu: ${NEW_VERSION}"
 else
 
@@ -263,11 +312,7 @@ e1_ok "Yeni HEAD: ${NEW_HEAD}"
 # imajla veya tam tersi calisir.
 NEW_VERSION="$(e1_version "$SCRIPT_DIR")"
 if [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  if grep -qE '^E1_VERSION=' .env; then
-    sed -i "s|^E1_VERSION=.*|E1_VERSION=${NEW_VERSION}|" .env
-  else
-    echo "E1_VERSION=${NEW_VERSION}" >> .env
-  fi
+  e1_env_version_write "${NEW_VERSION}"
 fi
 
 fi   # <- git modu sonu (E1_PACKAGE_MODE)
@@ -546,19 +591,26 @@ fi
 # Imajlar: release CI'da derlendi, cihaz sadece indirir. `--build` verilirse
 # veya indirme basarisiz olursa yerel derlemeye duseriz.
 _e1_prepare_images() {
+  # Her BASARILI cikista `e1_env_version_commit` cagrilir: imajlar artik
+  # yerelde mevcut, dolayisiyla `.env`'deki yeni surum etiketi guvenli.
+  # Bu noktaya ULASILAMAZSA .env eski surume geri doner (EXIT trap) ve cihaz
+  # ilk reboot'ta var olmayan imaj etiketini aramaz.
   local svc="${1:-}"
   if [[ "${E1_BUILD:-0}" == "1" ]]; then
     e1_run "Imajlar derleniyor${svc:+ (${svc})}" docker compose build ${svc:+"$svc"} \
       || e1_die "Imaj derlemesi basarisiz. Detay yukarida."
+    e1_env_version_commit
     return 0
   fi
   e1_ghcr_login .env || true
   if e1_run "Yeni imajlar indiriliyor${svc:+ (${svc})}" docker compose pull ${svc:+"$svc"}; then
+    e1_env_version_commit
     return 0
   fi
   e1_warn "Imajlar indirilemedi — bu cihazda derlemeye geciliyor."
   e1_run "Imajlar derleniyor${svc:+ (${svc})}" docker compose build ${svc:+"$svc"} \
     || e1_die "Ne indirme ne derleme basarili oldu. Detay yukarida."
+  e1_env_version_commit
 }
 
 if [[ -z "$SVC" ]]; then
