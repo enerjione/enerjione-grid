@@ -414,13 +414,47 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
   // alarmlar (gecici/gurultulu) haritada ARIZA GOSTERMEZ; yalniz Alarmlar
   // ekraninda durur. `!== false`: eski/undefined alarmlar true kabul edilir
   // (geriye uyum — backend produces_fault default'u da True).
-  const alarmActiveDeviceIds = useMemo<Set<number>>(() => {
-    const s = new Set<number>();
+  //
+  // KIMLIK KARARLILIGI: `alarms` dizisi 5 saniyede bir yeniden cekiliyor ve
+  // her seferinde YENI bir dizi kimligi geliyor — icerik ayni olsa bile.
+  // Bu Set dogrudan `alarms`'a bagli olsaydi her poll'de yeni bir Set uretir,
+  // o da asagidaki agir `topology` memo'sunu (DFS'li graf kurulumu) 5 saniyede
+  // bir yeniden hesaplatirdi. Once ICERIK IMZASI cikarilip Set ona
+  // baglaniyor: alarm kumesi gercekten degismedikce kimlik sabit kaliyor.
+  const alarmActiveKey = useMemo(() => {
+    const ids: number[] = [];
     for (const a of alarms ?? []) {
-      if (!a.reset && a.produces_fault !== false) s.add(a.device_id);
+      if (!a.reset && a.produces_fault !== false) ids.push(a.device_id);
     }
-    return s;
+    ids.sort((x, y) => x - y);
+    return ids.join(",");
   }, [alarms]);
+
+  const alarmActiveDeviceIds = useMemo<Set<number>>(
+    () => new Set(alarmActiveKey ? alarmActiveKey.split(",").map(Number) : []),
+    [alarmActiveKey]
+  );
+
+  // Cihaz id -> [lat, lon]. Topoloji yalnizca cihazin KONUMUNU okuyor
+  // (haberlesme durumu/batarya degil), o yuzden konum disindaki alanlar
+  // degistiginde graf yeniden kurulmamali.
+  //
+  // Ayrica bu Map, topoloji icindeki `devices.find(...)` taramasinin yerini
+  // aliyordu: segment basina O(cihaz) arama demekti — 600 cihaz x ~6.000
+  // segment = her hesapta milyonlarca karsilastirma.
+  const devicePositionKey = useMemo(
+    () => devices.map((d) => `${d.id}:${d.latitude}:${d.longitude}`).join("|"),
+    [devices]
+  );
+
+  const devicePositions = useMemo<Map<number, [number, number]>>(() => {
+    const m = new Map<number, [number, number]>();
+    for (const d of devices) m.set(d.id, [d.latitude, d.longitude]);
+    return m;
+    // Bilincli olarak `devices` DEGIL imzaya bagli: 5 sn'lik cihaz polling'i
+    // (haberlesme durumu, batarya) konumu degistirmedigi surece kimlik sabit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devicePositionKey]);
 
   // Gizlenen hatlara ait cihaz ve direkler — marker'lari grilestirmek icin.
   // Hat gizleme bir GORSEL sadelestirme; veri filtresi degil, o yuzden
@@ -591,9 +625,10 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     // Pozisyon: deviceLocationOverride'tan; yoksa device.lat/lon'undan.
     for (const seg of gridSnapshot.segments) {
       if (!seg.device_id) continue;
-      const dev = devices.find((d) => d.id === seg.device_id);
-      const pos: [number, number] = deviceLocationOverride.get(seg.device_id)
-        ?? (dev ? [dev.latitude, dev.longitude] : [0, 0]);
+      const pos: [number, number] =
+        deviceLocationOverride.get(seg.device_id)
+        ?? devicePositions.get(seg.device_id)
+        ?? [0, 0];
       nodes.set(deviceNodeId(seg.device_id), {
         id: deviceNodeId(seg.device_id),
         kind: "device",
@@ -1138,7 +1173,9 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     const branchLinks: never[] = [];
 
     return { linePolylines, alarmedSegments, polesWithRole, branchLinks };
-  }, [gridSnapshot, devices, alarmActiveDeviceIds, deviceLocationOverride, lineDistIndex]);
+    // `devices` yerine `devicePositions`: 5 sn'lik cihaz polling'i (haberlesme
+    // durumu / batarya) bu agir grafi yeniden kurmasin. Bkz. devicePositionKey.
+  }, [gridSnapshot, devicePositions, alarmActiveDeviceIds, deviceLocationOverride, lineDistIndex]);
 
   return (
     <section className="map-full">

@@ -387,21 +387,47 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
 
   // WS mesaji -> ilgili seriye nokta ekle (kayan pencere degil; sadece append).
   // seriesKeys[].seriesKey ("master.actual_current") <-> msg.signal_key eslesir.
+  //
+  // Mesajlar hook icinde tamponlanip BATCH gelir. Batch once seriesKey bazinda
+  // gruplanir, sonra seri dizisi TEK gecisde guncellenir: mesaj basina
+  // setSeries + mesaj basina `seriesKeys.find` (O(mesaj x seri)) kalkiyor.
   useEffect(() => {
     if (!live || chartType === "heatmap") return;
-    registerHandler((msg) => {
-      if (msg.device_code !== deviceCode || msg.value == null) return;
-      const ts = msg.source_timestamp ? new Date(msg.source_timestamp).getTime() : Date.now();
-      setSeries((prev) =>
-        prev.map((s) => {
-          const sk = seriesKeys.find((k) => k.id === s.id);
-          if (!sk || sk.seriesKey !== msg.signal_key) return s;
+    // id -> seriesKey haritasi; her batch'te yeniden aramaya gerek yok.
+    const keyById = new Map(seriesKeys.map((k) => [k.id, k.seriesKey]));
+    registerHandler((msgs) => {
+      // seriesKey -> eklenecek noktalar (zaman sirasi korunur).
+      const appends = new Map<string, Point[]>();
+      for (const msg of msgs) {
+        if (msg.device_code !== deviceCode || msg.value == null) continue;
+        const ts = msg.source_timestamp ? new Date(msg.source_timestamp).getTime() : Date.now();
+        const bucket = appends.get(msg.signal_key);
+        const point: Point = [ts, msg.value ?? null];
+        if (bucket) bucket.push(point);
+        else appends.set(msg.signal_key, [point]);
+      }
+      if (appends.size === 0) return;
+      setSeries((prev) => {
+        let changed = false;
+        const out = prev.map((s) => {
+          const seriesKey = keyById.get(s.id);
+          if (!seriesKey) return s;
+          const incoming = appends.get(seriesKey);
+          if (!incoming || incoming.length === 0) return s;
           // Ayni timestamp tekrari gelirse ekleme (dedup son nokta).
-          const last = s.points[s.points.length - 1];
-          if (last && last[0] === ts) return s;
-          return { ...s, points: [...s.points, [ts, msg.value ?? null] as Point] };
-        })
-      );
+          let last = s.points.length > 0 ? s.points[s.points.length - 1] : undefined;
+          const fresh: Point[] = [];
+          for (const p of incoming) {
+            if (last && last[0] === p[0]) continue;
+            fresh.push(p);
+            last = p;
+          }
+          if (fresh.length === 0) return s;
+          changed = true;
+          return { ...s, points: [...s.points, ...fresh] };
+        });
+        return changed ? out : prev;
+      });
     });
   }, [live, chartType, deviceCode, seriesKeys, registerHandler]);
 
