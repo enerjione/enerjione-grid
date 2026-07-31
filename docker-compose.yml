@@ -279,7 +279,13 @@ services:
       #    anonim baglanir, deny-all ile reddedilir, telemetri akmaz.
       NATS_GATEWAY_PASSWORD: ${NATS_GATEWAY_PASSWORD:?NATS_GATEWAY_PASSWORD .env'de olmali}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN .env'de olmali}
-      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-43200}
+      # Oturum omru (dakika). Varsayilan config.py ile AYNI: 1440 = 24 saat.
+      # Buradaki default 43200 (30 gun) idi; "beni hatirla" isaretlenmemis
+      # kullanicilara da 30 gunluk token veriyor ve backend'deki ayri
+      # REMEMBER_ME_TOKEN_MINUTES akisini islevsiz birakiyordu.
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-1440}
+      # "Beni hatirla" TTL'i (dakika). Yalnizca kutucuk isaretlenirse gecerli.
+      REMEMBER_ME_TOKEN_MINUTES: ${REMEMBER_ME_TOKEN_MINUTES:-43200}
       TELEMETRY_RETENTION_MINUTES: ${TELEMETRY_RETENTION_MINUTES:-30}
       TELEMETRY_RETENTION_INTERVAL_SEC: ${TELEMETRY_RETENTION_INTERVAL_SEC:-300}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
