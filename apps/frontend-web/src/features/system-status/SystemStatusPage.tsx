@@ -644,8 +644,11 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
 
       {/* 2 kolon: Sunucu Kaynaklari · Servisler (Gateway karti kaldirildi) */}
       <div className="sys-duo-grid">
-        {/* ------ KART 1: SUNUCU KAYNAKLARI ------ */}
-        <section className="sys-card">
+        {/* ------ KART 1: SUNUCU KAYNAKLARI ------
+            `--resources`: bu kart sayfa kayarken YERINDE SABIT kalir
+            (position: sticky). Servis listesi bundan uzun oldugu icin
+            kaynak olcumleri gozden kaybolmadan liste taranabilir. */}
+        <section className="sys-card sys-card--resources">
           <header className="sys-card-head">
             <div className="sys-card-title-wrap">
               <span className="sys-card-icon sys-card-icon--cpu">
@@ -850,8 +853,11 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
           ) : null}
         </section>
 
-        {/* ------ KART 2: SERVIS DURUMLARI ------ */}
-        <section className="sys-card">
+        {/* ------ KART 2: SERVIS DURUMLARI ------
+            Liste KIRPILMAZ / ic scroll YOK: tum servisler alt alta listelenir,
+            sayfa kayar. Yanindaki kaynak karti sabit durdugu icin uzun liste
+            baglami kaybettirmez. */}
+        <section className="sys-card sys-card--services">
           <header className="sys-card-head">
             <div className="sys-card-title-wrap">
               <span className="sys-card-icon sys-card-icon--svc">

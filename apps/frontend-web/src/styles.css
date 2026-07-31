@@ -5489,13 +5489,33 @@ main.content.engineering-content:has(.bulk-notify-panel) {
      artik icerige gore buyuyor; onceki surumde satir shell'in sabit
      yuksekligine sikistiriliyor, SWAP/ag paneli ve son servis satiri kart
      disina tasip kirpiliyordu. */
-  align-items: stretch;
+  /* `start` — `stretch` DEGIL: kolonlar dogal yuksekliklerini alir. Stretch
+     iken sol kart satirin tamamina uzatiliyordu; `position: sticky` de bu
+     durumda islemez (oge zaten satir boyu uzun oldugu icin yapisacak pay
+     kalmaz). Esit-yukseklik gorunumunden bilerek vazgectik: servis listesi
+     kaynak kartindan cok daha uzun ve onu esitlemek sol tarafta buyuk bir
+     bosluk yaratiyordu. */
+  align-items: start;
   flex: 0 0 auto;
+}
+
+/* Kaynak karti sayfa kayarken YERINDE KALIR; servis listesi yanindan akar.
+   Yapisma referansi `.system-status-shell` (overflow-y: auto olan kap).
+   Ust sinir grid satiridir: kart, servis listesi bitene kadar yapisik kalir,
+   sonra normal akisa doner. */
+.sys-duo-grid > .sys-card--resources {
+  position: sticky;
+  top: 8px;
 }
 
 @media (max-width: 1100px) {
   .sys-duo-grid {
     grid-template-columns: 1fr;
+  }
+  /* Tek kolonda yapiskanlik anlamsiz: kart genisligin tamamini kaplar ve
+     altindaki servis listesini surekli orterdi. */
+  .sys-duo-grid > .sys-card--resources {
+    position: static;
   }
 }
 
@@ -5513,6 +5533,17 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   /* Dogal yukseklik — sabit yukseklik dayatmiyoruz, aksi halde uzun
      icerik (SWAP + ag paneli / uzun servis listesi) kart disina tasiyor. */
   min-height: 0;
+  /* `flex-shrink: 0` ZORUNLU — sus degil.
+     Ust kap `.system-status-shell` bir FLEX SUTUNDUR. Varsayilan
+     `flex-shrink: 1` ile yukaridaki `min-height: 0` birleşince kart, dogal
+     yuksekliginin ALTINA ezilebiliyordu; ezilen kartin icerigi disari tasip
+     bir sonraki kartin uzerine biniyordu. Sahada "Telemetri Arsivi" ile
+     "Telemetri Boru Hatti" kartlari tam olarak boyle ust uste geldi.
+     `.sys-card--strip` ve `.sys-duo-grid` bu korumayi zaten aliyordu;
+     dogrudan `.sys-card` olanlar (Historian, Boru Hatti) ALMIYORDU.
+     Duo-grid icinde kart bir GRID ogesidir ve `flex` orada yok sayilir —
+     dolayisiyla bu satirin oradaki yerlesime etkisi yoktur. */
+  flex: 0 0 auto;
 }
 
 .sys-card:hover {
@@ -16737,6 +16768,34 @@ th.event-col-category {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Tembel yuklenen sayfa chunk'i inerken ICERIK ALANINDA yer tutar.
+   Yukaridaki tam ekran scrim BILEREK kullanilmiyor: sayfa gecisinde tek kare
+   gorunup kayboldugu icin arayuz kararip aciliyormus gibi hissettiriyordu. */
+.page-suspense {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 240px;
+}
+
+/* Gecikmeli belirme: chunk tarayici onbelleginden geliyorsa (gecislerin
+   cogu) spinner HIC gorunmez; yalnizca gercekten bekleten yuklemede ortaya
+   cikar. Boylece hizli gecislerde ekranda hicbir sey kipirdamaz. */
+.page-suspense .panel-loading-spinner {
+  animation: panel-spin 0.7s linear infinite, page-suspense-in 0.2s ease-out 0.18s both;
+}
+
+@keyframes page-suspense-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ==========================================================
