@@ -1164,6 +1164,30 @@
         "retention_failing": "A retention policy exists but is not running (last run failed) — old rows are not being deleted.",
         "retention_mismatch": "Retention differs from the expected value (expected 90 days)."
       }
+    },
+    "pipeline": {
+      "title": "Telemetry Pipeline",
+      "errorFetch": "Could not fetch telemetry pipeline status.",
+      "severity": {
+        "ok": "Keeping up",
+        "warning": "Falling behind",
+        "critical": "No flow"
+      },
+      "problem": {
+        "disconnected": "Telemetry consumer is not running or NATS is unreachable — telemetry is not being written to the database.",
+        "backlogHigh": "The consumer cannot keep up with incoming data. If the buffer overflows, the oldest readings are dropped silently."
+      },
+      "backlog": "Pending messages",
+      "backlogHint": "Warning threshold: {{count}}",
+      "throughput": "Throughput",
+      "msgsPerSec": "{{count}} msg/s",
+      "batchSub": "Last batch: {{size}} msgs / {{sec}}s",
+      "processed": "Processed total",
+      "badSub": "Invalid: {{count}}",
+      "connection": "NATS connection",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "reconnectsSub": "Reconnects: {{count}}"
     }
   },
   "engineering": {

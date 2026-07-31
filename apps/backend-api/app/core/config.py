@@ -202,6 +202,42 @@ class Settings(BaseSettings):
     nats_stream_normalized_max_bytes: int = 3_221_225_472  # 3 GiB
     nats_stream_dlq_max_bytes: int = 1_073_741_824         # 1 GiB
 
+    # ----- WebSocket fan-out (coklu surecin ON KOSULU) ----------------------
+    # Canli deger yayini bugun SAF BELLEK-ICI: telemetry_consumer dogrudan
+    # ayni surecteki WS abonelerine yaziyor. Bu, backend TEK surec oldugu
+    # surece calisir.
+    #
+    # Coklu surece gecince (API worker'lari + ayri tuketici container'i)
+    # bellek-ici yayin KIRILIR: tuketici artik baska bir surecte, dolayisiyla
+    # API surecindeki WS abonelerine hicbir sey ulasmaz. Bu ariza SESSIZDIR —
+    # ekran "bagli" gorunur, sadece deger akmaz.
+    #
+    # Cozum: yayin NATS uzerinden yapilir, HER surec abone olur ve kendi yerel
+    # WS istemcilerine dagitir.
+    #
+    # CORE NATS (JetStream DEGIL) — bilincli: canli deger EFEMERDIR. Kalicilik,
+    # ack ve disk maliyeti odemenin anlami yok; kacan bir mesaj zaten bir
+    # sonraki okumayla veya `/signals/live` anlik goruntusuyle telafi ediliyor.
+    #
+    # DIKKAT — QUEUE GROUP KULLANILMAZ: queue group mesajlari abone surecler
+    # ARASINDA PAYLASTIRIR; her surec 1/N gorurdu ve bu tam da kacinmaya
+    # calistigimiz hata. Fan-out icin duz subscribe sart.
+    ws_fanout_nats_enabled: bool = True
+    ws_fanout_subject: str = "e1.ws.telemetry"
+
+    # ----- Telemetri boru hatti gorunurlugu ---------------------------------
+    # Stream `discard=old` ile calisiyor: tampon dolarsa EN ESKI mesajlar
+    # SESSIZCE dusurulur (sistem durmasin diye bilincli tercih). Bu sessizligi
+    # tehlikeli olmaktan cikaran tek sey, tasmaya YAKLASILDIGINI haber veren
+    # bir sinyaldir.
+    #
+    # Esik stream tavaninin cok altinda: raw stream 8 GiB ~ milyonlarca mesaj
+    # alir; 50.000'de uyarmak operatore mudahale icin bol zaman birakir.
+    telemetry_backlog_warn_threshold: int = 50_000
+    # Olay kaydi rate-limit'i — backlog saatlerce yuksek kalsa bile
+    # system_events tablosu dolmasin.
+    telemetry_backlog_warn_interval_sec: int = 300
+
     # ----- Retention / TTL: "disk asla dolmamali" ---------------------------
     # Bu degerler ONCEDEN telemetry_retention.py icinde dogrudan os.getenv ile
     # okunuyordu. config.py'de tanimli olmadiklari icin ne `.env.example`'da ne

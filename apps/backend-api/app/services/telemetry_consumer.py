@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import threading
+import time as _time
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -42,6 +43,140 @@ CONSUMER_NAME = "backend-api.telemetry-persister"
 
 _stop_event = threading.Event()
 _thread: threading.Thread | None = None
+
+
+# --------------------------------------------------------------------------
+# ISLEM TELEMETRISI — "tuketici yetisiyor mu?"
+#
+# NEDEN GEREKLI: telemetri akisi NATS stream'inde tamponlanir ve stream
+# `discard=old` ile calisir. Yani tuketici gelis hizinin GERISINE duserse
+# tampon dolar ve EN ESKI mesajlar SESSIZCE dusurulur. Ekranda hata yok,
+# alarm yok; sadece bazi okumalar hic gelmemis olur.
+#
+# Bu sessizlik bilincli bir takas (sistem durmasin diye) ama gorunurluk
+# olmadan tehlikeli. Asagidaki sayaclar "yetisiyor muyuz" sorusunun tek
+# cevabidir.
+#
+# BACKLOG BEDAVA OLCULUR: JetStream her mesajin metadata'sinda `num_pending`
+# tasir — tuketicinin ONUNDE bekleyen mesaj sayisi. Ayrica bir consumer_info
+# cagrisi yapmaya gerek yok.
+# --------------------------------------------------------------------------
+
+_stats_lock = threading.Lock()
+_stats: dict[str, Any] = {
+    "running": False,
+    "connected": False,
+    "last_fetch_at": None,        # ISO string
+    "last_batch_size": 0,
+    "last_batch_duration_sec": 0.0,
+    "backlog": None,              # num_pending — tuketicinin onunde bekleyen
+    "processed_total": 0,
+    "bad_total": 0,
+    "reconnects": 0,
+    "last_error": None,
+}
+# Throughput icin kayan pencere: (zaman, islenen_adet) ciftleri.
+_throughput_window: list[tuple[float, int]] = []
+_THROUGHPUT_WINDOW_SEC = 60.0
+
+
+def _stats_update(**kwargs: Any) -> None:
+    with _stats_lock:
+        _stats.update(kwargs)
+
+
+def _stats_record_batch(*, size: int, duration: float, backlog: int | None, bad: int) -> None:
+    now = _time.monotonic()
+    with _stats_lock:
+        _stats["last_fetch_at"] = datetime.now(timezone.utc).isoformat()
+        _stats["last_batch_size"] = size
+        _stats["last_batch_duration_sec"] = round(duration, 4)
+        _stats["processed_total"] += size
+        _stats["bad_total"] += bad
+        if backlog is not None:
+            _stats["backlog"] = backlog
+        _throughput_window.append((now, size))
+        cutoff = now - _THROUGHPUT_WINDOW_SEC
+        while _throughput_window and _throughput_window[0][0] < cutoff:
+            _throughput_window.pop(0)
+
+
+_last_backlog_warn_at: float = 0.0
+
+
+def _warn_if_backlog_high(backlog: int | None) -> None:
+    """Backlog esigi asilirsa loglar ve denetim kaydina yazar.
+
+    Bu, `discard=old` tercihinin karsiligidir: tampon tasarsa mesajlar
+    SESSIZCE dusuruluyor, dolayisiyla tasmaya YAKLASILDIGINI haber verecek
+    bir sinyal sart. Esik, stream tavaninin cok altinda tutulur ki operatorun
+    mudahale etmesi icin zaman kalsin.
+
+    Olay kaydi rate-limit'lidir; backlog saatlerce yuksek kalsa bile
+    `system_events` tablosunu doldurmaz.
+    """
+    global _last_backlog_warn_at
+    if backlog is None or backlog < settings.telemetry_backlog_warn_threshold:
+        return
+    now = _time.monotonic()
+    if now - _last_backlog_warn_at < settings.telemetry_backlog_warn_interval_sec:
+        return
+    _last_backlog_warn_at = now
+    snapshot = get_stats()
+    logger.warning(
+        "telemetry_backlog_high backlog=%d threshold=%d throughput=%.1f msg/s "
+        "(tuketici gelis hizinin gerisinde — tampon tasarsa VERI KAYBI baslar)",
+        backlog,
+        settings.telemetry_backlog_warn_threshold,
+        snapshot.get("throughput_msgs_per_sec", 0.0),
+    )
+    try:
+        from app.services.event_service import record_event
+
+        db = SessionLocal()
+        try:
+            record_event(
+                db,
+                category="telemetry",
+                event_type="telemetry_backlog_high",
+                severity="warning",
+                message=(
+                    f"Telemetri tuketicisi geride: {backlog} mesaj bekliyor "
+                    f"({snapshot.get('throughput_msgs_per_sec', 0.0)} msg/sn isleniyor)"
+                ),
+                metadata={
+                    "backlog": backlog,
+                    "threshold": settings.telemetry_backlog_warn_threshold,
+                    "throughput_msgs_per_sec": snapshot.get("throughput_msgs_per_sec"),
+                    "last_batch_duration_sec": snapshot.get("last_batch_duration_sec"),
+                },
+            )
+            db.commit()
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        logger.debug("backlog_event_record_failed", exc_info=True)
+
+
+def get_stats() -> dict[str, Any]:
+    """Tuketicinin anlik durumu. Sistem Durumu sayfasi bunu okur.
+
+    `throughput_msgs_per_sec` son 60 saniyelik kayan ortalamadir; anlik
+    dalgalanmalari yumusatir. `backlog` en son fetch anindaki num_pending —
+    surekli 0 civarinda olmasi beklenir; kalici olarak buyuyorsa tuketici
+    gelis hizinin gerisindedir ve tampon tasarsa VERI KAYBI baslar.
+    """
+    with _stats_lock:
+        snapshot = dict(_stats)
+        if _throughput_window:
+            span = max(1e-6, _throughput_window[-1][0] - _throughput_window[0][0])
+            total = sum(n for _t, n in _throughput_window)
+            # Tek ornek varsa span ~0 olur; bolmeyi anlamli tutmak icin
+            # en az 1 saniye kabul ediyoruz.
+            snapshot["throughput_msgs_per_sec"] = round(total / max(1.0, span), 2)
+        else:
+            snapshot["throughput_msgs_per_sec"] = 0.0
+    return snapshot
 
 
 def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
@@ -398,15 +533,22 @@ def _consume_loop() -> None:
                 # ack'ler. fetch timeout'unda mesaj yoksa TimeoutError normal.
                 # Batch-commit sayesinde throughput gelis hizini gecer ->
                 # backlog erir, slow-consumer/ack_pending tikanmasi olmaz.
+                _stats_update(connected=True, last_error=None)
                 while not _stop_event.is_set():
                     try:
                         msgs = await psub.fetch(
                             batch=settings.nats_pull_batch_size, timeout=5
                         )
                     except (asyncio.TimeoutError, _NatsTimeoutError):
-                        continue  # bu pencerede yeni mesaj yok — normal
-                    if not msgs:
+                        # Bu pencerede yeni mesaj yok — NORMAL ve ayni zamanda
+                        # "backlog bos" demektir; olcume yansitiyoruz ki
+                        # ekranda bayat bir backlog degeri asili kalmasin.
+                        _stats_update(backlog=0)
                         continue
+                    if not msgs:
+                        _stats_update(backlog=0)
+                        continue
+                    _batch_started = _time.monotonic()
                     # DB isi ayri thread'de (senkron SQLAlchemy event loop'u
                     # bloke etmesin). _persist_batch TEK commit yapar.
                     ok_msgs, bad_msgs, ok_payloads, outbound_payloads = (
@@ -431,6 +573,27 @@ def _consume_loop() -> None:
                     # Parse/validation hatali mesajlar: DLQ/nak.
                     for m in bad_msgs:
                         await _handle_bad(m)
+
+                    # --- Olcum: yetisiyor muyuz? --------------------------
+                    # Backlog'u BEDAVA aliyoruz: JetStream her mesajin
+                    # metadata'sinda `num_pending` tasir (bu mesajdan SONRA
+                    # tuketicinin onunde bekleyen adet). Ayrica consumer_info
+                    # cagrisi yapmaya gerek yok. Son mesaji baz aliyoruz;
+                    # batch'in en guncel noktasi orasi.
+                    backlog: int | None = None
+                    try:
+                        meta = getattr(msgs[-1], "metadata", None)
+                        if meta is not None and getattr(meta, "num_pending", None) is not None:
+                            backlog = int(meta.num_pending)
+                    except Exception:  # noqa: BLE001
+                        backlog = None
+                    _stats_record_batch(
+                        size=len(ok_msgs),
+                        duration=_time.monotonic() - _batch_started,
+                        backlog=backlog,
+                        bad=len(bad_msgs),
+                    )
+                    _warn_if_backlog_high(backlog)
             except Exception as exc:  # noqa: BLE001
                 if _stop_event.is_set():
                     break
@@ -440,6 +603,10 @@ def _consume_loop() -> None:
                     backoff,
                     settings.nats_url,
                 )
+                with _stats_lock:
+                    _stats["connected"] = False
+                    _stats["last_error"] = str(exc)[:300]
+                    _stats["reconnects"] += 1
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60)
             finally:
@@ -462,6 +629,7 @@ def start() -> None:
     if _thread is not None and _thread.is_alive():
         return
     _stop_event.clear()
+    _stats_update(running=True, connected=False, last_error=None)
     _thread = threading.Thread(
         target=_consume_loop, name="telemetry-consumer-jetstream", daemon=True
     )

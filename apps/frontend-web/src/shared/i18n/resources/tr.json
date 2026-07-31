@@ -1164,6 +1164,30 @@
         "retention_failing": "Saklama politikasi tanimli ama calismiyor (son calistirma basarisiz) — eski kayitlar silinmiyor.",
         "retention_mismatch": "Saklama suresi beklenen degerden farkli (beklenen 90 gun)."
       }
+    },
+    "pipeline": {
+      "title": "Telemetri Boru Hattı",
+      "errorFetch": "Telemetri boru hattı durumu alınamadı.",
+      "severity": {
+        "ok": "Yetişiyor",
+        "warning": "Geride",
+        "critical": "Akış yok"
+      },
+      "problem": {
+        "disconnected": "Telemetri tüketicisi çalışmıyor veya NATS bağlantısı yok — telemetri veritabanına yazılmıyor.",
+        "backlogHigh": "Tüketici gelen veriye yetişemiyor. Tampon taşarsa en eski ölçümler sessizce düşürülür."
+      },
+      "backlog": "Bekleyen mesaj",
+      "backlogHint": "Uyarı eşiği: {{count}}",
+      "throughput": "İşlem hızı",
+      "msgsPerSec": "{{count}} mesaj/sn",
+      "batchSub": "Son grup: {{size}} mesaj / {{sec}} sn",
+      "processed": "İşlenen toplam",
+      "badSub": "Hatalı: {{count}}",
+      "connection": "NATS bağlantısı",
+      "connected": "Bağlı",
+      "disconnected": "Kopuk",
+      "reconnectsSub": "Yeniden bağlanma: {{count}}"
     }
   },
   "engineering": {

@@ -23,11 +23,25 @@ Frontend kullanim:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 from typing import Any
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
+
+# nats-py opsiyonel: paket yoksa modul yine import edilebilmeli (testler ve
+# NATS'siz dev kurulumlari icin). Kopru o durumda kapali kalir, yayin
+# bellek-ici yola duser.
+try:  # pragma: no cover - opsiyonel bagimlilik
+    import nats as _nats  # type: ignore[import-not-found]
+
+    _NATS_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _nats = None  # type: ignore[assignment]
+    _NATS_AVAILABLE = False
 
 
 # Bir client'in queue'sunda bekleyebilecek max mesaj. Asilirsa client drop
@@ -57,6 +71,188 @@ class _Subscriber:
         # Son uyari log epoch — saniyede bir uyari (logging flood koruma).
         self.last_warn_at: float = 0.0
         self.alive: bool = True
+
+
+class _WsNatsBridge:
+    """Canli deger yayinini surecler arasi tasiyan NATS koprusu.
+
+    NE ISE YARAR
+      Bellek-ici yayin yalnizca TEK surecte calisir. Coklu surece gecince
+      (API worker'lari + ayri tuketici container'i) tuketici baska bir
+      surecte olur ve API surecindeki WS istemcilerine hicbir sey ulasmaz.
+      Ariza SESSIZDIR: soket bagli gorunur, sadece deger akmaz. Bu kopru
+      yayini NATS'a taşiyip HER surecin abone olmasini saglar.
+
+    TASARIM KARARLARI
+      * CORE NATS (JetStream degil): canli deger efemer; kalicilik/ack/disk
+        maliyeti odemenin karsiligi yok.
+      * QUEUE GROUP YOK: `subscribe(subject)` duz cagrilir. Queue group
+        mesajlari abone surecler ARASINDA paylastirirdi ve her surec 1/N
+        gorurdu — tam da kacinmak istedigimiz hata.
+      * KENDI MESAJINI DA ALIR: yayinlayan surec de abone oldugu icin mesaj
+        NATS uzerinden kendisine geri doner ve tek sefer dagitilir. Yerel
+        kopya + uzak kopya ayrimi yapmadigimiz icin cift teslim riski yok.
+      * Kendi asyncio loop'u ayri bir thread'de kosar (jetstream_bus ile ayni
+        desen); publish herhangi bir thread'den cagrilabilir.
+    """
+
+    def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+        self._nc: Any = None
+        self._ready = threading.Event()
+        self._stopping = threading.Event()
+        self._on_message = None  # Callable[[dict], None]
+        self.publish_failures = 0
+        self.received_from_nats = 0
+
+    @property
+    def is_ready(self) -> bool:
+        return self._ready.is_set() and self._nc is not None
+
+    def start(self, on_message) -> bool:  # noqa: ANN001
+        """Koprüyü baslat. `on_message(payload)` NATS'tan gelen her mesaj icin
+        cagirilir (kopru loop'unda). Basarisizsa False doner ve yayin
+        bellek-ici yola duser."""
+        if not settings.ws_fanout_nats_enabled:
+            logger.info("ws_fanout_nats_disabled — yayin bellek-ici kalacak")
+            return False
+        if not _NATS_AVAILABLE:
+            logger.warning(
+                "ws_fanout_nats_unavailable reason=nats_py_missing — yayin "
+                "bellek-ici kalacak. TEK surecte sorun degil; coklu surece "
+                "gecilirse canli deger ekrani SESSIZCE bosalir."
+            )
+            return False
+        if self._thread is not None and self._thread.is_alive():
+            return self.is_ready
+
+        self._on_message = on_message
+        self._stopping.clear()
+        self._ready.clear()
+        self._thread = threading.Thread(
+            target=self._run, name="ws-nats-bridge", daemon=True
+        )
+        self._thread.start()
+        # Baglanti icin kisa bir pencere bekle; kurulamazsa yayin yine calisir
+        # (bellek-ici), sadece surecler arasi dagitim olmaz.
+        ok = self._ready.wait(timeout=float(settings.nats_connect_timeout_sec) + 2.0)
+        if not ok:
+            logger.warning(
+                "ws_fanout_nats_connect_timeout — yayin simdilik bellek-ici; "
+                "kopru arka planda yeniden baglanmayi surdurecek"
+            )
+        return ok
+
+    def stop(self) -> None:
+        self._stopping.set()
+        loop = self._loop
+        if loop is not None:
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:
+                pass
+        if self._thread is not None:
+            self._thread.join(timeout=3)
+        self._thread = None
+        self._loop = None
+        self._nc = None
+        self._ready.clear()
+
+    def publish(self, payload: dict[str, Any]) -> bool:
+        """Mesaji NATS'a birak. Basarili ise True.
+
+        False donerse caller BELLEK-ICI dagitima duser — boylece NATS kopukken
+        tek surecli kurulum calismaya devam eder.
+        """
+        if not self.is_ready or self._loop is None:
+            return False
+        try:
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        except (TypeError, ValueError):
+            logger.debug("ws_fanout_serialize_failed", exc_info=True)
+            return False
+        try:
+            # Fire-and-forget: cagiran thread (tuketici) NATS'i beklemesin.
+            self._loop.call_soon_threadsafe(self._publish_soon, data)
+            return True
+        except RuntimeError:
+            self.publish_failures += 1
+            return False
+
+    def _publish_soon(self, data: bytes) -> None:
+        nc = self._nc
+        if nc is None:
+            return
+        # publish() coroutine; loop icindeyiz, task olarak birak.
+        try:
+            asyncio.ensure_future(nc.publish(settings.ws_fanout_subject, data))
+        except Exception:  # noqa: BLE001
+            self.publish_failures += 1
+
+    def _run(self) -> None:
+        loop = asyncio.new_event_loop()
+        self._loop = loop
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._connect_and_subscribe())
+            if not self._stopping.is_set():
+                loop.run_forever()
+        except Exception:  # noqa: BLE001
+            logger.exception("ws_fanout_bridge_crashed")
+        finally:
+            try:
+                if self._nc is not None:
+                    loop.run_until_complete(self._nc.drain())
+            except Exception:  # noqa: BLE001
+                logger.debug("ws_fanout_drain_error", exc_info=True)
+            loop.close()
+
+    async def _connect_and_subscribe(self) -> None:
+        try:
+            self._nc = await _nats.connect(  # type: ignore[union-attr]
+                servers=[settings.nats_url],
+                connect_timeout=settings.nats_connect_timeout_sec,
+                max_reconnect_attempts=-1,  # surekli yeniden dene
+                reconnect_time_wait=2,
+                name="e1-backend-ws-fanout",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "ws_fanout_nats_connect_failed error=%s — yayin bellek-ici "
+                "kalacak, kopru yeniden denemeyecek (surec yeniden baslatilinca "
+                "tekrar denenir)",
+                exc,
+            )
+            return
+
+        async def _handler(msg) -> None:  # noqa: ANN001
+            self.received_from_nats += 1
+            cb = self._on_message
+            if cb is None:
+                return
+            try:
+                payload = json.loads(msg.data.decode("utf-8"))
+            except Exception:  # noqa: BLE001
+                logger.debug("ws_fanout_decode_failed", exc_info=True)
+                return
+            try:
+                cb(payload)
+            except Exception:  # noqa: BLE001
+                logger.debug("ws_fanout_dispatch_failed", exc_info=True)
+
+        # DUZ SUBSCRIBE — queue group VERILMEZ. Verilseydi mesajlar abone
+        # surecler arasinda paylastirilir ve her surec 1/N gorurdu.
+        await self._nc.subscribe(settings.ws_fanout_subject, cb=_handler)
+        self._ready.set()
+        logger.info(
+            "ws_fanout_bridge_ready subject=%s url=%s",
+            settings.ws_fanout_subject,
+            settings.nats_url,
+        )
+
+
+bridge = _WsNatsBridge()
 
 
 class TelemetryWsBroadcaster:
@@ -93,11 +289,32 @@ class TelemetryWsBroadcaster:
         logger.info("ws_subscriber_removed remaining=%d", len(self._subscribers))
 
     def broadcast(self, payload: dict[str, Any]) -> None:
-        """Bagli tum WS subscriber'lara payload push eder.
+        """Yayin girisi — telemetry_consumer buradan cagirir.
 
-        Thread-safe: telemetry_consumer'in sync thread'inden cagirilir;
-        her subscriber'in async loop'una `call_soon_threadsafe` ile enqueue
-        eder. Slow consumer'lar drop edilir (queue dolu).
+        AKIS:
+          NATS koprusu hazirsa mesaj oraya birakilir ve HER backend sureci
+          (bu surec dahil) abone oldugu icin mesaji alip kendi yerel WS
+          istemcilerine dagitir. Yayinlayan surec mesaji NATS uzerinden geri
+          aldigi icin BURADA yerel dagitim YAPILMAZ — aksi halde cift teslim
+          olurdu.
+
+          Kopru hazir DEGILSE (NATS kopuk, nats-py yok, ya da ayar kapali)
+          dogrudan yerel dagitima duseriz. Boylece tek surecli kurulum
+          NATS olmadan da calisir.
+        """
+        if bridge.publish(payload):
+            return
+        self._deliver_local(payload)
+
+    def _deliver_local(self, payload: dict[str, Any]) -> None:
+        """Bu SURECTEKI bagli WS subscriber'lara payload push eder.
+
+        Iki yerden cagirilir: NATS koprusunden gelen mesajlar icin (normal
+        yol) ve kopru yokken dogrudan `broadcast`ten (yedek yol).
+
+        Thread-safe: cagiran thread ne olursa olsun her subscriber'in kendi
+        async loop'una `call_soon_threadsafe` ile enqueue eder. Slow
+        consumer'lar drop edilir (queue dolu).
         """
         with self._lock:
             subscribers = list(self._subscribers)
@@ -181,6 +398,12 @@ class TelemetryWsBroadcaster:
             ),
             # Per-subscriber summary (top 5 by drop count) — operator hangi
             # client'in slow oldugunu görsün.
+            # Fan-out koprusu: coklu surecte canli deger akisinin saglik
+            # gostergesi. `bridge_ready=False` iken birden fazla surec varsa
+            # WS istemcileri veri ALAMAZ (sessiz ariza).
+            "bridge_ready": bridge.is_ready,
+            "bridge_publish_failures": bridge.publish_failures,
+            "bridge_received_from_nats": bridge.received_from_nats,
             "top_droppers": [
                 {
                     "dropped": s.dropped_messages,
