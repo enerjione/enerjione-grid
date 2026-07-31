@@ -14,6 +14,47 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.29.0] — 2026-07-31
+
+### Düzeltildi
+- **Yedekten geri yükleme veritabanını yarım bırakıyordu (kritik).** Geri
+  yükleme sırasında eski bağlantıları temizleyen döngü, `pg_restore`'un kendi
+  bağlantılarını da kesiyordu. Sonuç: geri yükleme her denemede aynı yerde
+  duruyor, üstelik silinmiş tablolar geri gelmediği için mevcut veri de
+  kaybediliyordu — tam da yedeğe en çok ihtiyaç duyulan anda.
+- **SCADA çıkışı kendini boğuyordu (kritik).** IEC 104 sunucusu her değer
+  değişiminde sınırsız iş kuyruğa alıyordu; SCADA tarafı yavaşladığında bellek
+  dolana kadar büyüyordu. Ayrıca sıra numarası yarışı yüzünden SCADA bağlantısı
+  kendiliğinden kopabiliyordu. Artık bağlantı başına sınırlı kuyruk var ve
+  yetişemeyen istemcide en eski bildirimler düşürülüp kayıt altına alınıyor.
+- **Alarm servisi birkaç saatte bir yeniden başlıyordu (kritik).** Hiçbir
+  kuralın kullanmadığı ölçüm geçmişi biriktiriliyor ve bellek sınırı
+  aşılıyordu. Her yeniden başlangıçta açık alarmlar "yeni alarm" sayılıp
+  bildirimler tekrar gönderiliyordu.
+- **NATS erişilemezken açılan sistem bir daha telemetri yayınlamıyordu
+  (kritik).** Bağlantı yalnızca bir kez deneniyordu; NATS saniyeler sonra
+  düzelse bile veri akmıyor, cihazlar arayüzde "Kesik" görünüyordu. Artık
+  bağlantı kurulana kadar yeniden denenir.
+- **Operatör yetkisi dışına taşabiliyordu.** "Tümünü onayla/resetle"
+  işlemleri sorumluluk alanı dışındaki alarmlara da uygulanıyor, ekranda ise
+  hiçbir şey olmamış gibi görünüyordu. Ayrıca gateway listesi telemetri
+  şifresini düz metin döndürüyordu; bu şifreyle sahte arıza üretmek veya
+  gerçek arızayı gizlemek mümkündü.
+- **Zorunlu şifre değişimi atlanabiliyordu.** Uyarı yalnızca arayüzdeydi;
+  doğrudan istek atan biri tam yetkiyle işlem yapabiliyordu. Artık şifre
+  değiştirilene kadar diğer işlemler sunucu tarafında reddedilir.
+
+### Eklendi
+- **NATS için TLS desteği (isteğe bağlı).** Açıldığında gateway şifresi ve
+  telemetri şifreli kanaldan gider. Kurulum: `nats-tls-setup.sh` ile sertifika
+  üretilir, ardından `.env` içinde etkinleştirilir. Varsayılan kapalıdır.
+- **Ayrı arka plan servisi (isteğe bağlı).** Yoğun kurulumlar için arayüz ve
+  arka plan işleri ayrı süreçlere alınabilir; arayüz çok çekirdekli
+  çalıştırılabilir. Arka plan işlerinin tek yerde çalışması garanti altına
+  alındı — yedekleme veya bildirim iki kez tetiklenmez.
+
+---
+
 ## [2.28.0] — 2026-07-31
 
 ### Düzeltildi
