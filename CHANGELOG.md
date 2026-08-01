@@ -14,6 +14,97 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.30.0] — 2026-08-01
+
+600 cihaz ölçeği için yapılan ikinci denetimin **Faz 1 ve Faz 2'sinin tamamı**
+(16 madde) ve önceki denetimden kalan engelleyiciler kapatıldı.
+
+### Güvenlik
+- **WiFi erişim noktasından SCADA ve mesajlaşma portları açıktı.** Appliance'ın
+  şifresiz WiFi ağına bağlanan biri, kimlik doğrulaması olmadan Modbus (502) ve
+  IEC 104 (2404-2406) üzerinden tüm sahanın arıza/konum/ölçüm durumunu
+  okuyabiliyor; NATS ve RabbitMQ'yu da brute-force için bulabiliyordu. Artık
+  AP arayüzünde yalnızca web arayüzü (80/443) erişilebilir.
+- **İstemci IP'si uydurulabiliyordu.** `X-Forwarded-For` başlığı zincire
+  olduğu gibi giriyor ve backend en soldaki — yani istemcinin yazdığı —
+  değeri okuyordu. Bu IP üç yerde güvenlik kararıydı: API anahtarı IP
+  kısıtlaması **tek bir başlıkla atlanıyordu**, hız sınırı aşılabiliyordu ve
+  denetim kayıtlarına yanlış IP yazılıyordu.
+- **Gateway token'ı değiştirildiğinde eski token çalışmaya devam ediyordu.**
+  Yeni token 401 alıyor, eskisi geçerli kalıyordu; yani "sızdı, değiştirelim"
+  amacıyla yapılan işlem tam tersini yapıyordu.
+- **Zorunlu şifre değişimi WebSocket'te uygulanmıyordu.** Varsayılan kurulum
+  parolasıyla giren biri arayüzden engelleniyor ama canlı telemetri akışına
+  erişebiliyordu.
+- **Kilitlenen hesabın açılma yolu yoktu.** Şifre sıfırlama kilide
+  dokunmuyordu; tek installer hesabı kilitlenince gateway ekleme, ağ ayarı,
+  yedek ve uzaktan bakım birlikte kilitleniyor, çözüm saha ziyareti oluyordu.
+- **Root ajanlar symlink takip ediyordu.** Koruma yalnızca dosya adını
+  kapsıyordu; dizin bileşenleri açıktı ve bu yolla cihaz kalıcı olarak
+  açılamaz hale getirilebiliyordu.
+
+### Düzeltildi
+- **Açık arızalar listeden ve haritadan kaybolabiliyordu.** Alarm listesi 500
+  kayıtla sınırlıydı ve sınır, sorumluluk alanı süzgecinden önce
+  uygulanıyordu. Eski ama hâlâ açık bir arıza pencerenin dışına düşünce
+  haritadaki işaret yeşile dönüyordu. Artık açık alarmlar hiç kırpılmıyor ve
+  süzgeç sorguya iniyor.
+- **Sinyal ayarları her yeniden başlatmada fabrika değerine dönüyordu.**
+  Arayüzden yapılan IOA/ölçek/etiket düzenlemeleri kaydediliyor, denetim
+  kaydı tutuluyor, sonra ilk açılışta sessizce geri alınıyordu. Kullanıcının
+  değiştirdiği alanlar artık korunuyor; fabrikaya dönüş ayrı ve bilinçli bir
+  işlem olarak duruyor.
+- **Tek bozuk mesaj tüm telemetri akışını durduruyordu.** Beklenenden uzun bir
+  sinyal adı toplu yazmayı patlatıyor, hiçbir ölçüm onaylanmıyor ve aynı
+  paketteki sağlam ölçümler de tekrar tekrar düşüyordu. Ekranda "bağlantı
+  koptu" görünüyordu; sebep tek bir metindi.
+- **SCADA genel sorgusu 12. nesneden sonra kesiliyordu.** Sorgu bitiş bildirimi
+  hiç gitmiyordu.
+- **Tüm cihazlar SCADA'da tek cihaz gibi görünüyordu.** Cihazlara ayrı adres
+  atanmadıkça hepsi aynı adrese biniyor, hangi fiderin arızalandığı
+  anlaşılamıyordu. Adresler artık otomatik atanıyor (elle verilmişlere
+  dokunulmuyor).
+- **Arıza bildirimi webhook'a hiç gitmeyebiliyordu.** Gönderim başarısız olsa
+  bile değer "gönderildi" sayıldığı için, bağlantı döndüğünde arıza bir daha
+  yollanmıyordu — arıza kalkana kadar.
+- **E-posta gönderimi sonsuza kadar bekleyebiliyordu** ve bu bekleme arıza
+  kaydının yazılmasını da askıya alıyordu.
+- **Yedek yükleme arayüzden çalışmıyordu.** Zincirdeki en düşük boyut sınırı
+  (10 MB) yüzünden felaket kurtarmanın tek arayüz adımı kullanılamıyordu.
+- **Yedek dosyaları diski dolduruyordu.** Güncelleme öncesi alınan yedekler
+  hiç silinmiyor, geçmiş telemetri arşivinin tamamını içeriyor ve arayüzden
+  geri de yüklenemiyordu. Aynı hata müşteriye verilen elle yedek komutunda da
+  vardı.
+- **Off-site yedekleme hiç çalışmıyordu.** Ayar girilse bile kopya
+  alınmıyordu ve bu ancak felaket anında anlaşılırdı.
+- **Özet tabloları sınırsız büyüyordu** ve Sistem Durumu bu sırada "sorun yok"
+  gösteriyordu.
+- **Yarıda kalan güncelleme cihazı açılamaz bırakabiliyordu**; dosyalar da
+  artık eski sürüme geri alınıyor.
+- **Belgelenen ölçekleme ayarı veritabanı bağlantı sınırını aşıyordu** — yani
+  performans için yapılan değişiklik hataya yol açıyordu.
+
+### Değişti
+- **Canlı değerler artık ayrı bir tablodan okunuyor.** Anasayfa her açılışta
+  geçmiş telemetrinin tamamını tarıyordu; bu, eşzamanlı birkaç kullanıcıda
+  arka ucu belleğe boğuyordu.
+- **IEC 104 kapsamı sabitlendi:** yalnızca izleme sinyalleri yayınlanır;
+  metin sinyalleri ve analog çıkış kapsam dışıdır. Desteklenmeyen bir komut
+  artık sessizce yutulmak yerine açıkça reddedilir.
+- **Geçmiş verisi daha küçük parçalara bölünüyor** (600 cihaz ölçeğinde yazma
+  ve sorgu başarımı için). Mevcut veri etkilenmez.
+- Kurulumda FTP parolası otomatik üretiliyor; eskiden boş kaldığı için dosya
+  transferi sunucusu sürekli yeniden başlıyor ve gerçek arızaları
+  maskeliyordu.
+
+### Test ve doğrulama
+- Backend testleri 265 → **884**; IEC 104 servisi 15 → **40**.
+- CI 7 → **12 iş**: Modbus ve IEC 104 servisleri, nginx yapılandırması,
+  güvenlik duvarı kuralları ve appliance ajanları artık gerçekten koşuluyor.
+- 201 API ucunun yetki sınırı otomatik doğrulanıyor.
+
+---
+
 ## [2.29.0] — 2026-07-31
 
 ### Düzeltildi
