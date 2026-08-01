@@ -4,6 +4,12 @@
 #
 # Runtime bagimliligi eklerken kural degismedi:
 #   requirements.in duzenle -> pip-compile --generate-hashes -> requirements.txt
-pytest==8.3.4
-pytest-asyncio==0.25.2
+# pytest 9.0.3: `tmpdir` islemesindeki guvenlik acigi (GHSA) bu surumde
+# kapandi. Yalnizca gelistirme/CI zincirinde; uretim imajina girmiyor.
+pytest==9.0.3
+# pytest 9 ile BIRLIKTE yukseltilmesi ZORUNLU: 0.25.2 `pytest<9` istiyor,
+# yalnizca pytest'i yukseltmek CI'i bagimlilik catismasiyla dusururdu.
+# 1.x'te strict mod varsayilan; testler zaten `@pytest.mark.asyncio`
+# kullaniyor, davranis degismiyor.
+pytest-asyncio==1.4.0
 ruff==0.9.4

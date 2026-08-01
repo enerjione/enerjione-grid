@@ -16,6 +16,7 @@ OLCUM (saha test cihazi, 15 cihaz): 375 okuma/sn ve hepsi arsive giriyordu.
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
 
 from app.services import historian_policy as hp
 
@@ -288,3 +289,140 @@ def test_migration_GERI_ALINABILIR():
     govde = kod[kod.index("def downgrade"):]
     assert "historize_deadband = 0" in govde
     assert "historize = true" in govde
+
+
+# ---------------------------------------------------------------------------
+# Kalan olu bantlar (migration 0035) — BIRIM BAZINDA YAPILAMAZ
+#
+# 0033 akim/gerilim/sicakligi birim bazinda ayarladi. Kalanlarda ayni yol
+# YANLIS olurdu: `°` altinda hem GPS KONUMU (sabit) hem ACI OLCUMU (dinamik)
+# var. Tek bir esik ya konumu gereksiz sik kaydeder ya acidaki anlamli
+# degisimi kacirirdi.
+# ---------------------------------------------------------------------------
+
+_M0035 = (
+    Path(__file__).resolve().parents[1] / "alembic_migrations" / "versions"
+    / "2026_08_01_0009-0035_remaining_deadbands.py"
+)
+
+
+def _m0035():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("m0035", _M0035)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_m0035_zinciri():
+    m = _m0035()
+    assert m.revision == "0035" and m.down_revision == "0034"
+
+
+def test_AYNI_birimde_FARKLI_esik_veriliyor():
+    """`°` altindaki konum ile aci ayni esigi ALMAMALI — yoksa biri
+    gereksiz kaydedilir, digerinde anlamli degisim kacirilir."""
+    d = _m0035()._DEADBANDS
+    assert d["latitude_degrees"] != d["pitch_angle"], (
+        "GPS konumu ile aci olcumu ayni esikte — birim bazinda yapilmis"
+    )
+    assert d["latitude_degrees"] < d["pitch_angle"]
+
+
+def test_GPS_arsivden_CIKARILMIYOR():
+    """Cihaz yerinden oynarsa (hirsizlik, direk hasari) "ne zaman oynadi"
+    sorusu degerli. Esik hareket buyuklugunde; sabit durdugu surece tek
+    satir yazilir."""
+    d = _m0035()._DEADBANDS
+    for ad in ("latitude_degrees", "longitude_degrees"):
+        assert d[ad] > 0, f"{ad} icin esik yok"
+        assert d[ad] < 0.001, (
+            f"{ad} esigi cok buyuk — gercek yer degistirme kacirilir"
+        )
+
+
+def test_fault_duration_SIFIR_kaliyor():
+    """OLAY VERISI: her deger ayri bir arizanin suresi. Olu bant koymak
+    ardisik benzer sureli arizalardan birini SILMEK olurdu."""
+    assert "fault_duration" not in _m0035()._DEADBANDS, (
+        "fault_duration'a olu bant verilmis — benzer sureli ariza kaybolur"
+    )
+
+
+def test_ANLAMI_belirsiz_sinyale_tahmin_yapilmiyor():
+    assert "test_point_level" not in _m0035()._DEADBANDS
+
+
+def test_statik_metadataya_olu_bant_VERILMIYOR():
+    """0034 onlari zaten `historize=false` yapti; olu bant anlamsiz olurdu."""
+    d = _m0035()._DEADBANDS
+    for ad in ("serial_number", "firmware_version", "hardware_revision"):
+        assert ad not in d
+
+
+def test_m0035_ZATEN_AYARLI_olani_ezmiyor():
+    """Operator elle bir esik verdiyse migration onu geri almamali.
+
+    Kontrol UPGRADE govdesine daraltildi: ilk yazimda tum dosyada
+    `historize_deadband = 0` ariyordum ve kosulu WHERE'den kaldiran mutasyon
+    GECTI, cunku ayni metin DOWNGRADE'de (`SET historize_deadband = 0`)
+    duruyordu. Mutasyon testi yakaladi.
+    """
+    import ast
+    import re
+
+    ham = _M0035.read_text(encoding="utf-8")
+    agac = ast.parse(ham)
+    fn = next(
+        d for d in agac.body
+        if isinstance(d, ast.FunctionDef) and d.name == "upgrade"
+    )
+    govde = ast.get_source_segment(ham, fn) or ""
+    govde = re.sub(r"^\s*#.*$", "", govde, flags=re.MULTILINE)
+    assert "AND historize_deadband = 0" in govde, (
+        "migration mevcut esikleri ezebilir — WHERE kosulunda "
+        "`historize_deadband = 0` yok, yani elle verilmis esikler de "
+        "ustune yazilir"
+    )
+
+
+def test_m0035_yalnizca_ARSIVLENENLERE():
+    import re
+
+    kod = re.sub(r'""".*?"""', "", _M0035.read_text(encoding="utf-8"), flags=re.DOTALL)
+    assert "historize IS TRUE" in kod
+
+
+def test_TUM_analoglar_artik_ele_alindi():
+    """Yeni bir analog sinyal eklenirse burada gorulur — sessizce esiksiz
+    kalmasin."""
+    import json
+
+    katalog = (
+        Path(__file__).resolve().parents[1] / "app" / "data" / "horstmann_sn2_signals.json"
+    )
+    sig = json.loads(katalog.read_text(encoding="utf-8"))
+    sig = sig if isinstance(sig, list) else sig["signals"]
+
+    m33_birimler = {"A", "V", "\u00b0C"}
+    m35 = set(_m0035()._DEADBANDS)
+    # Bilerek esiksiz birakilanlar.
+    bilinen_sifir = {"fault_duration", "test_point_level"}
+    # 0034 arsivden cikardi.
+    arsivsiz = {"serial_number", "firmware_version", "hardware_revision"}
+
+    ele_alinmayan = set()
+    for s in sig:
+        if s.get("data_type") != "analog":
+            continue
+        sonek = s["key"].split(".", 1)[1]
+        if s.get("unit") in m33_birimler:
+            continue
+        if sonek in m35 or sonek in bilinen_sifir or sonek in arsivsiz:
+            continue
+        ele_alinmayan.add(sonek)
+
+    assert not ele_alinmayan, (
+        f"su analog sinyaller hicbir karara baglanmadi: {sorted(ele_alinmayan)}"
+    )
