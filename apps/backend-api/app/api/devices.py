@@ -89,6 +89,12 @@ def create_device(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Device code already exists")
     try:
         _require_gateway(db, payload.gateway_code)
+        _require_unique_endpoint(
+            db,
+            gateway_code=payload.gateway_code,
+            ip_address=getattr(payload, "ip_address", None),
+            port=getattr(payload, "dnp3_outstation_port", None),
+        )
         license_service.lock_and_assert_device_capacity(db)
         device = repository.create(payload)
     except license_service.LicenseCapacityError as exc:
@@ -112,6 +118,58 @@ def create_device(
     _bump_gateway_config_nonce(db, device.gateway_code)
     db.commit()
     return device
+
+
+def _require_unique_endpoint(
+    db: Session,
+    *,
+    gateway_code: str | None,
+    ip_address: str | None,
+    port: int | None,
+    exclude_device_id: int | None = None,
+) -> None:
+    """Ayni gateway'de ayni (IP, port) ikinci bir cihaza verilmesin.
+
+    YASANAN (2026-08-01, saha test cihazi):
+      Iki cihaz yanlislikla ayni uc noktaya (192.168.211.1:20001) ayarlanmisti.
+      Horstmann outstation'i `CloseExisting` modunda calisiyor — yeni bir
+      istemci baglaninca MEVCUT baglantiyi kapatiyor. Sonuc karsilikli
+      tahliye dongusu oldu:
+
+          d baglanir -> d15 baglanir -> outstation d'yi atar
+          -> d yeniden baglanir -> d15'i atar -> ...
+
+      Gateway gunlugunde 2.172 `link_close` birikti (iki cihaz icin 1.198 ve
+      1.196 — neredeyse esit, cunku sirayla birbirlerini atiyorlardi).
+      Cihazlar surekli "bayat" olup toparlandi, telemetri kesintili geldi.
+
+      BELIRTI KAYNAGINA HIC BENZEMIYORDU: gorunen sey "ag kararsiz"di, oysa
+      tek bir yanlis port alaniydi. Sistem buna sessizce izin veriyordu.
+
+    Kapsam GATEWAY BAZINDA: farkli gateway'ler farkli ag segmentlerinde
+    olabilir ve ayni IP'yi mesru sekilde gorebilirler. Ayni gateway icinde
+    ise ayni (IP, port) her zaman hatadir.
+    """
+    if not gateway_code or not ip_address or not port:
+        return
+    stmt = select(Device.code).where(
+        Device.gateway_code == gateway_code,
+        Device.ip_address == ip_address,
+        Device.dnp3_outstation_port == port,
+    )
+    if exclude_device_id is not None:
+        stmt = stmt.where(Device.id != exclude_device_id)
+    cakisan = db.scalar(stmt)
+    if cakisan is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"'{cakisan}' cihazi ayni gateway'de ayni adresi kullaniyor "
+                f"({ip_address}:{port}). Ayni uc noktaya iki cihaz baglanirsa "
+                "outstation surekli birini digeri icin kapatir ve haberlesme "
+                "kopuk gorunur."
+            ),
+        )
 
 
 def _require_gateway(db: Session, gateway_code: str | None) -> None:
@@ -174,6 +232,18 @@ def update_device(
     old_gateway_code = device.gateway_code
     if "gateway_code" in changes:
         _require_gateway(db, payload.gateway_code)
+    # Uc nokta cakismasi — ASIL HATA BURADA YAPILMISTI: mevcut bir cihazin
+    # portu duzenlenirken baska bir cihazinkiyle ayni yapilmisti. Yeni
+    # degerleri (verilmisse) mevcutlarla harmanlayip kontrol ediyoruz;
+    # yalnizca `changes` icindekilere bakmak, IP degisip port ayni kaldiginda
+    # cakismayi kacirirdi.
+    _require_unique_endpoint(
+        db,
+        gateway_code=changes.get("gateway_code", device.gateway_code),
+        ip_address=changes.get("ip_address", device.ip_address),
+        port=changes.get("dnp3_outstation_port", device.dnp3_outstation_port),
+        exclude_device_id=device.id,
+    )
     updated = repository.update(device, payload)
     record_event(
         db,
