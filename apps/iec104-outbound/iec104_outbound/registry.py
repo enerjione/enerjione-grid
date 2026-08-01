@@ -41,6 +41,38 @@ BROADCAST_COMMON_ADDRESS = 0xFFFF
 #   * BINARY OUTPUT — izleme noktasi olarak yayinlanmaz.
 SUPPORTED_MONITORING_TYPES = frozenset({1, 13, 15})
 
+# KONTROL YONU — kapsam KASITLI olarak dar.
+#
+# Urun karari: IEC 104 uzerinden kabul edilen TEK kontrol komutu ariza
+# gostergesi RESET'idir. Analog cikis / setpoint (C_SE_NA/NB/NC) ve diger
+# kontrol tipleri kapsam disidir.
+#
+# NEDEN AYRICA SLUG ALLOWLIST'I VAR: tip filtresi tek basina yetmez.
+# `PATCH /signals/{key}` `iec104_type_id` alanini duzenlenebilir yapiyor;
+# biri `firmware_update` ya da `config_update` gibi bir binary_output'a 45
+# verirse, SADECE tipe bakan bir kontrol o komutu SCADA'ya acardi. Yani
+# yanlis bir katalog duzenlemesi, uzaktan firmware tetiklemeye donusurdu.
+# Slug allowlist'i bu yolu kapatiyor: tip 45 olsa bile listede olmayan
+# komut registry'ye GIRMEZ.
+SUPPORTED_COMMAND_TYPES = frozenset({45})
+ALLOWED_COMMAND_SLUGS = frozenset({"reset_all_fcis"})
+
+
+@dataclass(frozen=True)
+class CommandAddress:
+    """Bir kontrol noktasi: hangi (CA, IOA) hangi cihazin hangi komutu.
+
+    `signal_key` katalogdaki tam anahtar ("master.reset_all_fcis"),
+    `command_slug` ise backend'in bekledigi kisa ad ("reset_all_fcis").
+    """
+
+    device_code: str
+    signal_key: str
+    command_slug: str
+    type_id: int
+    common_address: int
+    ioa: int
+
 
 @dataclass(frozen=True)
 class PointAddress:
@@ -70,6 +102,27 @@ class PointRegistry:
     target_id: int
     default_common_address: int
     points: tuple[PointAddress, ...]
+    #: Kontrol noktalari. Izleme noktalarindan AYRI tutuluyor: ikisi ayni
+    #: (CA, IOA) uzayini paylassa da anlamlari zit yonde ve karistirilmasi
+    #: bir izleme noktasini yazilabilir gostermek demek olurdu.
+    commands: tuple[CommandAddress, ...] = ()
+
+    def command_by_address(self) -> dict[tuple[int, int], CommandAddress]:
+        """(common_address, ioa) -> CommandAddress.
+
+        Carpisma UYARI degil HATA seviyesinde: yanlis cihaza reset gonderir.
+        """
+        result: dict[tuple[int, int], CommandAddress] = {}
+        for c in self.commands:
+            key = (c.common_address, c.ioa)
+            if key in result:
+                logger.error(
+                    "iec104_komut_adres_carpismasi ca=%d ioa=%d prev=%s new=%s — "
+                    "ayni adres iki cihaza bakiyor, reset YANLIS cihaza gidebilir",
+                    c.common_address, c.ioa, result[key].device_code, c.device_code,
+                )
+            result[key] = c
+        return result
 
     def by_key(self) -> dict[tuple[str, str], PointAddress]:
         return {(p.device_code, p.signal_key): p for p in self.points}
@@ -91,6 +144,16 @@ class PointRegistry:
 
     def unique_common_addresses(self) -> tuple[int, ...]:
         return tuple(sorted({p.common_address for p in self.points}))
+
+
+def signal_key_slug(key: str) -> str:
+    """Katalog anahtarindan komut slug'i: "master.reset_all_fcis" -> "reset_all_fcis".
+
+    Backend'in komut ucu kaynak onekini beklemiyor; ayrica yalnizca `master.`
+    onekli binary_output'lar komut olabiliyor (uydularin kendi kontrol
+    noktasi yok).
+    """
+    return key.split(".", 1)[1] if "." in key else key
 
 
 def _resolve_signal_ioa(signal: Mapping) -> int | None:
@@ -144,7 +207,9 @@ def build_point_registry(
         key=lambda d: str(d.get("code") or ""),
     )
     mapped_signals: list[tuple[Mapping, int, int, bool]] = []
+    komut_adaylari: list[tuple[Mapping, int, int, str]] = []
     desteklenmeyen: list[str] = []
+    reddedilen_komut: list[str] = []
     for s in signals:
         if not s.get("is_active", True):
             continue
@@ -176,6 +241,15 @@ def build_point_registry(
         # `_encode_single_value` onu tanimayip None doner ve bildirim HER
         # SEFERINDE SESSIZCE duser. Yani yanlis yapilandirma calisir gorunur.
         # Politikayi burada, tek yerde sabitliyoruz.
+        if type_id in SUPPORTED_COMMAND_TYPES:
+            # KONTROL YONU. Izleme noktasi degil; ayri listeye alinir ve
+            # slug allowlist'inden gecmesi gerekir (bkz. ALLOWED_COMMAND_SLUGS).
+            slug = signal_key_slug(str(s.get("key") or ""))
+            if slug in ALLOWED_COMMAND_SLUGS:
+                komut_adaylari.append((s, type_id, ioa, slug))
+            else:
+                reddedilen_komut.append(f"{s.get('key')}(type={type_id})")
+            continue
         if type_id not in SUPPORTED_MONITORING_TYPES:
             desteklenmeyen.append(f"{s.get('key')}(type={type_id})")
             continue
@@ -199,7 +273,22 @@ def build_point_registry(
             ",".join(sorted(desteklenmeyen)[:10]),
         )
 
+    if reddedilen_komut:
+        # Katalogda kontrol tipi verilmis ama allowlist'te olmayan bir komut.
+        # Sessiz kalmak TEHLIKELI olurdu: operator SCADA'dan komut
+        # gonderebilecegini sanir, komut hicbir zaman islenmez ve sebebi
+        # hicbir yerde gorunmez. ERROR, cunku bu genelde yanlis bir katalog
+        # duzenlemesidir (or. firmware_update'e tip 45 verilmesi).
+        logger.error(
+            "iec104_izinsiz_komut target=%s adet=%d ornekler=%s — IEC 104 ile "
+            "yalnizca %s komutlari kabul edilir",
+            target_id, len(reddedilen_komut),
+            ",".join(sorted(reddedilen_komut)[:10]),
+            ",".join(sorted(ALLOWED_COMMAND_SLUGS)),
+        )
+
     points: list[PointAddress] = []
+    commands: list[CommandAddress] = []
     # Adresi olmayan cihazlar — hepsi varsayilan CA'ya duser ve BIRBIRININ
     # UZERINE yazar. Sessiz kalmamali (bkz. asagidaki uyari).
     adressiz: list[str] = []
@@ -222,6 +311,20 @@ def build_point_registry(
                     common_address=ca,
                     ioa=ioa,
                     with_timestamp=with_ts,
+                )
+            )
+        for signal, type_id, ioa, slug in komut_adaylari:
+            signal_key = str(signal.get("key") or "")
+            if not signal_key:
+                continue
+            commands.append(
+                CommandAddress(
+                    device_code=device_code,
+                    signal_key=signal_key,
+                    command_slug=slug,
+                    type_id=type_id,
+                    common_address=ca,
+                    ioa=ioa,
                 )
             )
 
@@ -255,4 +358,5 @@ def build_point_registry(
         target_id=target_id,
         default_common_address=default_common_address,
         points=tuple(points),
+        commands=tuple(commands),
     )

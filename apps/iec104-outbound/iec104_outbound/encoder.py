@@ -36,6 +36,7 @@ TYPE_M_ME_NC_1 = 13
 TYPE_M_IT_NA_1 = 15
 TYPE_M_SP_TB_1 = 30   # single-point + CP56Time2a
 TYPE_M_ME_TF_1 = 36   # short float + CP56Time2a
+TYPE_C_SC_NA_1 = 45    # tek noktali komut (single command)
 TYPE_C_IC_NA_1 = 100
 TYPE_C_CS_NA_1 = 103
 
@@ -283,3 +284,76 @@ def encode_interrogation_confirm(
         negative=negative,
     )
     return dui + _encode_ioa(0) + bytes((qoi & 0xFF,))
+
+
+# ---------------------------------------------------------------------------
+# C_SC_NA_1 (tip 45) — tek noktali komut
+#
+# KAPSAM (urun karari): IEC 104 uzerinden kabul edilen TEK kontrol komutu
+# ariza gostergesi RESET'idir. Analog cikis / setpoint (C_SE_NA/NB/NC) ve
+# diger kontrol tipleri kapsam DISIDIR; server onlara negatif onay doner.
+# ---------------------------------------------------------------------------
+
+#: SCO bayti icindeki S/E (select/execute) biti. 1 = SELECT, 0 = EXECUTE.
+SCO_SELECT_BIT = 0x80
+#: SCO bayti icindeki SCS (komut durumu) biti. Reset icin 1 (ON) beklenir.
+SCO_ON_BIT = 0x01
+
+
+@dataclass(frozen=True)
+class SingleCommand:
+    """Cozulmus C_SC_NA_1 nesnesi."""
+
+    common_address: int
+    ioa: int
+    #: True = SELECT asamasi (henuz uygulanmaz), False = EXECUTE.
+    select: bool
+    #: SCS biti — komutun ON/OFF yonu.
+    on: bool
+    #: Ham SCO bayti; onay cercevesinde AYNEN geri yansitilir.
+    sco: int
+
+
+def parse_single_command(asdu: bytes) -> SingleCommand | None:
+    """C_SC_NA_1 ASDU'sunu cozer. Bicim bozuksa None.
+
+    Bicim: [tip][vsq][cot][oa][ca:2][ioa:3][sco:1] = 10 bayt.
+    Yalnizca TEK nesne (num_ix=1, sq=0) desteklenir — reset komutu icin
+    coklu nesne anlamli degil ve kabul etmek kapsami sessizce genisletirdi.
+    """
+    if len(asdu) < 10 or asdu[0] != TYPE_C_SC_NA_1:
+        return None
+    vsq = asdu[1]
+    if vsq & 0x80:            # SQ=1 (ardisik adresleme) desteklenmiyor
+        return None
+    if (vsq & 0x7F) != 1:     # tek nesne disi kabul edilmiyor
+        return None
+    common_address = asdu[4] | (asdu[5] << 8)
+    ioa = asdu[6] | (asdu[7] << 8) | (asdu[8] << 16)
+    sco = asdu[9]
+    return SingleCommand(
+        common_address=common_address,
+        ioa=ioa,
+        select=bool(sco & SCO_SELECT_BIT),
+        on=bool(sco & SCO_ON_BIT),
+        sco=sco,
+    )
+
+
+def encode_single_command_reply(
+    *, common_address: int, ioa: int, sco: int, cause: int,
+    originator: int = 0, negative: bool = False,
+) -> bytes:
+    """C_SC_NA_1 icin onay/sonlandirma cercevesi.
+
+    IEC 60870-5-101 §7.3.2: onay, ALINAN komut nesnesini aynen yansitir;
+    yalnizca COT degisir (ACT_CON=7, ACT_TERM=10) ve reddedilmisse P/N biti
+    (0x40) kurulur. Master komutu bu yansimayla eslestirir; IOA veya SCO
+    degistirilirse eslestiremez ve komut TIMEOUT'a duser.
+    """
+    dui = _encode_dui(
+        type_id=TYPE_C_SC_NA_1, num_ix=1, sq=False,
+        cause=cause, originator=originator, common_address=common_address,
+        negative=negative,
+    )
+    return dui + _encode_ioa(ioa) + bytes((sco & 0xFF,))

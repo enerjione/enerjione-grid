@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 
 from iec104_outbound import __version__
 from iec104_outbound.catalog import CatalogClient, CatalogSyncer
+from iec104_outbound.command_client import CommandClient
 from iec104_outbound.config import SETTINGS
 from iec104_outbound.consumer import TelemetryConsumer
 from iec104_outbound.health import start_health_server
@@ -44,6 +45,15 @@ async def _async_main() -> None:
     catalog = CatalogClient(
         base_url=settings.backend_api_base,
         service_token=settings.internal_service_token,
+    )
+    # Kontrol komutlari (yalnizca ariza gostergesi reset'i) backend uzerinden
+    # kuyruga alinir: bu servisin DB baglantisi yok ve komut, arayuzden gelenle
+    # AYNI allowlist/gateway kontrolu/audit yolundan gecmeli.
+    iec104_manager.bind_command_client(
+        CommandClient(
+            base_url=settings.backend_api_base,
+            service_token=settings.internal_service_token,
+        )
     )
     syncer = CatalogSyncer(
         catalog=catalog,
