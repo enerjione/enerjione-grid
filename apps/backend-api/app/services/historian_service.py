@@ -58,6 +58,8 @@ PROBLEM_NO_RETENTION = "no_retention"
 PROBLEM_NO_COMPRESSION = "no_compression"
 PROBLEM_RETENTION_FAILING = "retention_failing"
 PROBLEM_RETENTION_MISMATCH = "retention_mismatch"
+# Ozet katmanlarindan (continuous aggregate) en az birinde retention YOK.
+PROBLEM_CAGG_NO_RETENTION = "cagg_no_retention"
 
 
 @dataclass
@@ -77,6 +79,15 @@ class HistorianStatus:
     retention_days: int | None = None
     compression_enabled: bool = False
     continuous_aggregates: list[str] = field(default_factory=list)
+    # Retention politikasi OLMAYAN ozet katmanlari.
+    #
+    # NEDEN AYRI ALAN: bu kontrol hic yoktu. `_collect` politikalari yalnizca
+    # `telemetry_history` icin sorguluyor, CAGG'ler icin SADECE ISIM
+    # donduruyordu. Yani ozet tablolari sinirsiz buyurken Sistem Durumu
+    # kartinda historian "ok" gorunuyordu — ve `telemetry_history_1m` bir ozet
+    # degil pratikte ham verinin KOPYASI (~2,3 GB/gun, politikasiz ~4 ayda
+    # 280 GB). Diski asil dolduran kalem buydu ve hicbir yerde gorunmuyordu.
+    cagg_without_retention: list[str] = field(default_factory=list)
     # Tahmin (reltuples) — tam sayim DEGIL. Bilincli: COUNT(*) cok pahali.
     row_estimate: int | None = None
     total_bytes: int | None = None
@@ -94,6 +105,10 @@ class HistorianStatus:
             "retention_days": self.retention_days,
             "compression_enabled": self.compression_enabled,
             "continuous_aggregates": self.continuous_aggregates,
+            # Arayuz hangi ozet katmaninin korumasiz oldugunu gostersin;
+            # yalnizca "sorun var" demek operatoru neyi duzeltecegi konusunda
+            # yalniz birakir.
+            "cagg_without_retention": self.cagg_without_retention,
             "row_estimate": self.row_estimate,
             "total_bytes": self.total_bytes,
             "oldest_sample_at": self.oldest_sample_at,
@@ -246,6 +261,28 @@ def _collect(db: Session) -> HistorianStatus:
             {"p": f"{TABLE}%"},
         ).all()
         st.continuous_aggregates = [r[0] for r in rows]
+
+        # OZET KATMANLARININ RETENTION'I — bu kontrol hic yoktu.
+        #
+        # DIKKAT: CAGG'lerde `jobs.hypertable_name` view adini DEGIL
+        # materialization hypertable'ini (`_materialized_hypertable_N`)
+        # gosterir. `telemetry_history` icin kullanilan sorgu bu yuzden
+        # CAGG'lerde HICBIR SEY bulmaz; eslestirme continuous_aggregates
+        # uzerinden yapilmali.
+        korumasiz = db.execute(
+            text(
+                "SELECT c.view_name"
+                "  FROM timescaledb_information.continuous_aggregates c"
+                " WHERE c.view_name LIKE :p"
+                "   AND NOT EXISTS ("
+                "        SELECT 1 FROM timescaledb_information.jobs j"
+                "         WHERE j.proc_name = 'policy_retention'"
+                "           AND j.hypertable_name = c.materialization_hypertable_name)"
+                " ORDER BY c.view_name"
+            ),
+            {"p": f"{TABLE}%"},
+        ).all()
+        st.cagg_without_retention = [r[0] for r in korumasiz]
     except Exception:  # noqa: BLE001
         try:
             db.rollback()
@@ -276,6 +313,21 @@ def _collect(db: Session) -> HistorianStatus:
         st.problems.append(PROBLEM_NO_COMPRESSION)
         if st.severity == "ok":
             st.severity = "warning"
+
+    # OZET KATMANLARI — ham tablo kadar kritik.
+    #
+    # `telemetry_history_1m` bir ozet DEGIL, pratikte ham verinin KOPYASI:
+    # 1 dakikalik kova = GROUP BY (device_id, signal_key, dakika) ve cihaz
+    # basina dakikada ~30 farkli sinyal degistigi icin hemen her okuma KENDI
+    # kovasina duser. 600 cihazda ~17,28M satir/gun (~2,3 GB/gun); politikasiz
+    # ~4 ayda 280 GB. Ham tablo 90 gunde budanirken yanindaki bu kopya
+    # sinirsiz buyuyordu.
+    #
+    # Bu kontrol OLMADIGI icin durum kartinda historian "ok" gorunuyordu —
+    # yani diski dolduran kalem tam da izleme ekraninin gormedigi yerdeydi.
+    if st.cagg_without_retention:
+        st.problems.append(PROBLEM_CAGG_NO_RETENTION)
+        st.severity = "critical"
 
     if not st.problems:
         st.severity = "ok"

@@ -832,6 +832,39 @@ stmts = [
     "SELECT add_continuous_aggregate_policy('telemetry_history_1h',"
     " start_offset => INTERVAL '3 days', end_offset => INTERVAL '1 hour',"
     " schedule_interval => INTERVAL '1 hour', if_not_exists => TRUE)",
+
+    # --- OZET KATMANLARININ RETENTION/SIKISTIRMASI --------------------------
+    #
+    # BU SATIRLAR EKSIKTI ve sonucu agirdi: blok iki continuous aggregate'i
+    # olusturup REFRESH politikalarini kuruyor, ama RETENTION ve SIKISTIRMA
+    # politikalarini HIC kurmuyordu. Yani ozet tablolari SINIRSIZ buyuyordu.
+    #
+    # `telemetry_history_1m` bir "ozet" degil pratikte ham verinin KOPYASIDIR:
+    # 1 dakikalik kova = GROUP BY (device_id, signal_key, dakika) ve cihaz
+    # basina dakikada ~30 farkli sinyal degistigi icin hemen her okuma KENDI
+    # kovasina duser. 600 cihazda 12.000 seri x 1440 dakika = ~17,28M satir/gun
+    # (~2,3 GB/gun). Politikasiz kalirsa ~4 ayda 280 GB.
+    #
+    # Migration 0023 bunlari kuruyor AMA `_try` ile sarilmis: hata yutulup
+    # alembic yine damgalaniyor ve migration BIR DAHA KOSMUYOR. Ustelik
+    # buradaki eksiklik icin istisna bile gerekmiyordu — her update'te
+    # tekrarlaniyordu.
+    #
+    # Degerler 0023 ile AYNI tutulmali (katmanli tasarim: yakin gecmiste
+    # dakika cozunurlugu, uzak gecmiste saatlik egri).
+    "ALTER MATERIALIZED VIEW telemetry_history_1m SET ("
+    " timescaledb.compress = true)",
+    "SELECT add_compression_policy('telemetry_history_1m',"
+    " compress_after => INTERVAL '7 days', if_not_exists => TRUE)",
+    "SELECT add_retention_policy('telemetry_history_1m',"
+    " drop_after => INTERVAL '365 days', if_not_exists => TRUE)",
+
+    "ALTER MATERIALIZED VIEW telemetry_history_1h SET ("
+    " timescaledb.compress = true)",
+    "SELECT add_compression_policy('telemetry_history_1h',"
+    " compress_after => INTERVAL '30 days', if_not_exists => TRUE)",
+    "SELECT add_retention_policy('telemetry_history_1h',"
+    " drop_after => INTERVAL '730 days', if_not_exists => TRUE)",
 ]
 with engine.connect() as conn:
     for s in stmts:

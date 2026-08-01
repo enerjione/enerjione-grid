@@ -25,9 +25,18 @@ class FakeSession:
     calistirildigini test edebilmek icin).
     """
 
-    def __init__(self, answers: dict[str, object], rows: list | None = None) -> None:
+    def __init__(
+        self,
+        answers: dict[str, object],
+        rows: list | None = None,
+        rows_by_needle: dict[str, list] | None = None,
+    ) -> None:
         self.answers = answers
         self.rows = rows or []
+        # `.all()` donduren BIRDEN FAZLA sorgu var (CAGG listesi + retention'i
+        # olmayan CAGG'ler). Tek bir `rows` ikisine de ayni yaniti verirdi ve
+        # saglikli senaryo yanlislikla "korumasiz CAGG var" gorunurdu.
+        self.rows_by_needle = rows_by_needle or {}
         self.asked: list[str] = []
 
     def execute(self, stmt, params=None):  # noqa: ANN001
@@ -43,6 +52,9 @@ class FakeSession:
                 return None
 
             def all(self):
+                for needle, value in session.rows_by_needle.items():
+                    if needle in sql:
+                        return value
                 return session.rows
 
         return _Result()
@@ -76,7 +88,12 @@ def _clear_cache():
 
 # --- Saglikli durum ---------------------------------------------------------
 def test_healthy_historian_reports_ok():
-    db = FakeSession(_healthy_answers(), rows=[("telemetry_history_1m",), ("telemetry_history_1h",)])
+    db = FakeSession(
+        _healthy_answers(),
+        rows=[("telemetry_history_1m",), ("telemetry_history_1h",)],
+        # Saglikli senaryoda korumasiz ozet katmani YOK.
+        rows_by_needle={"NOT EXISTS": []},
+    )
     st = hs._collect(db)
     assert st.severity == "ok"
     assert st.problems == []
@@ -254,3 +271,55 @@ def test_to_dict_has_all_report_fields():
     report = HistorianReport(**hs._collect(db).to_dict())
     assert report.severity == "ok"
     assert report.table == "telemetry_history"
+
+
+# --- Ozet katmanlarinin retention'i (Faz 2-9) -------------------------------
+#
+# Bu kontrol HIC YOKTU: `_collect` politikalari yalnizca `telemetry_history`
+# icin sorguluyor, CAGG'ler icin SADECE ISIM donduruyordu. Yani
+# `telemetry_history_1m` (ki bir ozet degil, pratikte ham verinin KOPYASI —
+# 600 cihazda ~2,3 GB/gun) sinirsiz buyurken kart "ok" gosteriyordu.
+def test_korumasiz_ozet_katmani_CRITICAL_uretiyor():
+    db = FakeSession(
+        _healthy_answers(),
+        rows=[("telemetry_history_1m",), ("telemetry_history_1h",)],
+        rows_by_needle={"NOT EXISTS": [("telemetry_history_1m",)]},
+    )
+    st = hs._collect(db)
+
+    assert hs.PROBLEM_CAGG_NO_RETENTION in st.problems, (
+        "retention'i olmayan ozet katmani raporlanmadi — diski dolduran kalem "
+        "izleme ekraninda gorunmuyor"
+    )
+    assert st.severity == "critical"
+    assert st.cagg_without_retention == ["telemetry_history_1m"]
+
+
+def test_korumasiz_ozet_katmani_YANITTA_isimlendiriliyor():
+    """Yalnizca "sorun var" demek operatoru neyi duzeltecegi konusunda
+    yalniz birakir."""
+    db = FakeSession(
+        _healthy_answers(),
+        rows=[("telemetry_history_1m",), ("telemetry_history_1h",)],
+        rows_by_needle={"NOT EXISTS": [("telemetry_history_1h",)]},
+    )
+    st = hs._collect(db)
+    assert st.to_dict()["cagg_without_retention"] == ["telemetry_history_1h"]
+
+
+def test_CAGG_sorgusu_materialization_uzerinden_ESLESIYOR():
+    """CAGG'lerde `jobs.hypertable_name` view adini DEGIL materialization
+    hypertable'ini gosterir.
+
+    View adiyla arayan bir sorgu HICBIR ZAMAN eslesmez; kontrol sessizce
+    etkisiz kalir ve testler yine yesil gorunur.
+    """
+    db = FakeSession(
+        _healthy_answers(),
+        rows=[("telemetry_history_1m",)],
+        rows_by_needle={"NOT EXISTS": []},
+    )
+    hs._collect(db)
+    cagg_sorgulari = [s for s in db.asked if "continuous_aggregates" in s and "NOT EXISTS" in s]
+    assert cagg_sorgulari, "korumasiz CAGG sorgusu hic calistirilmadi"
+    assert "materialization_hypertable_name" in cagg_sorgulari[0]
