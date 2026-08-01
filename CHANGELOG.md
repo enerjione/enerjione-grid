@@ -14,6 +14,43 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.33.0] — 2026-08-01
+
+Sahada görülen bir "ağ kararsız" şikâyetinin kökü bulundu ve kaynağı kapatıldı.
+
+### Düzeltildi
+- **Aynı gateway'de iki cihaza aynı IP:port verilebiliyordu.** Horstmann
+  cihazı yeni bir bağlantı geldiğinde mevcut olanı kapatır; aynı adrese iki
+  cihaz bağlanınca sırayla birbirlerini atarlar. Gateway günlüğünde **2.172
+  bağlantı kapanması** birikmişti ve belirti "ağ kararsız, cihazlar kopuyor"
+  gibi görünüyordu — oysa tek bir yanlış port alanıydı. Adres düzeltildikten
+  sonra 15 dakikada sıfır kopma oldu. Artık hem cihaz eklerken hem
+  **düzenlerken** engelleniyor ve hata mesajı sonucu açıklıyor.
+
+- **Akım sinyalleri iki farklı birimde tutuluyordu.** `actual_current`
+  ampere çevriliyor, diğer altı akım sinyali (trip level, min/maks/ortalama/
+  arıza/son bilinen akım) miliamper olarak bırakılıyordu. Aynı cihazda aynı
+  büyüklük 1000 kat farklı görünüyor, bu sinyallere kurulan alarm eşikleri
+  diğerleriyle kıyaslanamıyor ve IEC 104 / Modbus çıkışlarına tutarsız
+  ölçekle gidiyordu. Hepsi ampere çevrildi.
+
+  **Dikkat:** eski arşiv kayıtları eski ölçekte kalıyor; bu altı sinyalin
+  grafiğinde güncelleme anına denk gelen bir basamak görünür.
+
+### Eklendi
+- **Gateway susarsa cihazlar artık yeşil kalmıyor.** Cihaz durumu yalnızca
+  telemetri geldiğinde güncelleniyordu; gateway tamamen sustuğunda tüm
+  cihazlar son durumlarında donuyor ve harita sağlıklı görünmeye devam
+  ediyordu. Gateway üç dakikadır görülmediyse cihazların durumu artık
+  **"bilinmiyor"** olarak işaretleniyor — "çevrimdışı" değil, çünkü cihazlar
+  çalışıyor olabilir ve yalnızca haber ulaşamıyordur.
+
+  Cihaz bazlı "veri gelmiyor" kontrolü **bilerek yapılmıyor**: gateway
+  yalnızca değişen değerleri yayınladığı için durağan bir fiderde yanlış
+  alarm üretirdi.
+
+---
+
 ## [2.32.0] — 2026-08-01
 
 Saha test cihazında **15 cihazla canlı yük altında** yapılan ölçümlerden doğdu.
