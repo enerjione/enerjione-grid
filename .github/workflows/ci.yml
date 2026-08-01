@@ -268,17 +268,22 @@ jobs:
       - name: Kurallar uygulaniyor ve dogrulaniyor
         run: |
           set -euo pipefail
-          # Privileged container: kendi net namespace'inde gercek iptables.
-          docker run --rm --privileged --network none \
+          # Privileged container KENDI net namespace'inde calisir (varsayilan
+          # bridge agi); icerideki iptables host'u ETKILEMEZ.
+          #
+          # `--network none` KULLANILMIYOR: paket kurulumu icin ag gerekiyor
+          # (ilk denemede apk depoya ulasamayip job kirmiziya dondu). Izolasyon
+          # zaten ayri namespace'ten geliyor.
+          #
+          # Test arayuzu olarak `eth0`: dummy arayuz yaratmak iproute2 + kernel
+          # `dummy` modulu isterdi, ikisi de runner'da garanti degil. eth0
+          # bridge agiyla her zaman var.
+          docker run --rm --privileged \
             -v "$PWD/infra/appliance:/w:ro" -w /w \
             alpine:3.20 sh -eux -c '
               apk add --no-cache bash iptables >/dev/null
-              # Test arayuzu (AP yerine dummy) — betik arayuz varligini kontrol eder.
-              ip link add e1test type dummy
-              ip addr add 10.42.0.1/24 dev e1test
-              ip link set e1test up
 
-              bash e1-ap-firewall.sh e1test 10.42.0.1
+              bash e1-ap-firewall.sh eth0 10.42.0.1
 
               echo "=== INPUT ==="; iptables -S INPUT
               echo "=== E1-AP-IN ==="; iptables -S E1-AP-IN
@@ -286,7 +291,7 @@ jobs:
               echo "=== DOCKER-USER ==="; iptables -S DOCKER-USER
 
               # 1) Zincirler INPUT ve DOCKER-USER a bagli mi?
-              iptables -S INPUT       | grep -q -- "-i e1test -j E1-AP-IN"
+              iptables -S INPUT       | grep -q -- "-i eth0 -j E1-AP-IN"
               iptables -S DOCKER-USER | grep -q -- "-j E1-AP-FWD"
 
               # 2) Izin verilen portlar RETURN, geri kalan DROP.
@@ -310,12 +315,12 @@ jobs:
 
               # 5) IDEMPOTENT: ikinci kosuda kural yigilmamali.
               once=$(iptables -S INPUT | grep -c -- "-j E1-AP-IN")
-              bash e1-ap-firewall.sh e1test 10.42.0.1
+              bash e1-ap-firewall.sh eth0 10.42.0.1
               sonra=$(iptables -S INPUT | grep -c -- "-j E1-AP-IN")
               [ "$once" = "$sonra" ] || { echo "HATA: kural yigildi ($once -> $sonra)"; exit 1; }
 
               # 6) Ozellestirme calisiyor mu (or. SSH gerekirse acilabilmeli).
-              E1_AP_ALLOWED_TCP="80 443 22" bash e1-ap-firewall.sh e1test 10.42.0.1
+              E1_AP_ALLOWED_TCP="80 443 22" bash e1-ap-firewall.sh eth0 10.42.0.1
               iptables -S E1-AP-IN | grep -q -- "--dport 22 -j RETURN"
 
               echo "AP PORT FILTRESI DOGRULANDI"
