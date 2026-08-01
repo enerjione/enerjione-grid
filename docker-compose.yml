@@ -32,6 +32,18 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
+# NATS TLS sertifika dizini — NATS'a BAGLANAN her servise de baglanmali.
+#
+# NEDEN BURADA: `NATS_CA_FILE` istemci tarafinda okunur. Dizin yalnizca `nats`
+# servisine baglandiginda, .env'e `NATS_CA_FILE=/etc/nats/certs/ca.crt` yazan
+# operator (compose yorumlarinin ONERDIGI deger budur) istemci container'inda
+# OLMAYAN bir yolu gostermis olur. TLS el sikismasi CA dogrulamasinda duser,
+# `/health` NATS'i saglksiz gorur ve frontend-web `depends_on: service_healthy`
+# yuzunden HIC BASLAMAZ — yani arayuz acilmaz. TLS kapaliyken dizin bos olsa
+# bile bu mount zararsizdir (kimse okumaz).
+x-nats-certs: &nats-certs
+  - ./infra/nats/certs:/etc/nats/certs:ro
+
 # Worker resource limits — alarm-service, tag-engine, notification-worker,
 # iec104-outbound icin makul cap. Bir worker memory leak ederse host'u
 # kilitlemez (OOM kill kendisini hedefler).
@@ -264,14 +276,20 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
-        # Alarm akisi (alarm.created) RabbitMQ uzerinden gectigi icin
-        # rabbitmq saglikli olmali; telemetri akisi NATS'tan gelir.
-        condition: service_healthy
+        # `service_started` — `service_healthy` DEGIL. Gerekcesi acilis suresi:
+        # RabbitMQ'nun healthcheck'i `start_period: 90s` (Erlang VM + Mnesia,
+        # 2 cekirdekli saha mini PC'sinde gercekten bu kadar suruyor) ve
+        # backend bunu SERI olarak bekliyordu. Oysa backend RabbitMQ olmadan
+        # da ayaga kalkar: kendi yayinlari zaten yeniden deneme dongusunde ve
+        # /health rabbitmq'yu `degraded` sayar (kritik degil). Bu tek satir
+        # acilistan ~90 saniye kesiyor ve hicbir garantiyi zayiflatmiyor.
+        condition: service_started
       nats:
-        # Telemetri akisinin tek yolu; backend startup'inda stream'leri ensure
-        # eder. NATS gelmeden persister consumer baslayamaz (yine de backend
-        # ayagi kalir, NATS gelince consumer reconnect dongusunde baglanir).
-        condition: service_healthy
+        # Ayni gerekce. Backend startup'ta stream'leri ensure eder; NATS o an
+        # yoksa jetstream_bus yeniden deneme dongusune girer (A6 duzeltmesi)
+        # ve NATS gelir gelmez baglanir. `service_healthy` beklemek acilisi
+        # uzatmaktan baska bir sey yapmiyordu.
+        condition: service_started
     environment:
       APP_ENV: production
       # --- Olcekleme ---
@@ -473,6 +491,10 @@ services:
       # diskte kalir. Ayrica dizin uid 10001 (backend) tarafindan yazilabilir
       # olmali.
       - ${BACKUP_OFFSITE_DIR:-./backups}:/var/lib/e1-backups-offsite
+      # NATS TLS CA'si — bkz. x-nats-certs anchor'i. Anchor bir LISTE oldugu
+      # icin buraya merge edilemez; ayni yol elle tekrarlanir. Degistirirken
+      # anchor ile birlikte degistirin (test_config_consistency bunu kilitler).
+      - ./infra/nats/certs:/etc/nats/certs:ro
       - license-data:/var/lib/e1-license
       # Host OS kimligi sabit; USB/disk/RAM/ag karti degisimi bunu etkilemez.
       # Container recreate sonrasi lisans ayni makinede gecerli kalir.
@@ -561,6 +583,7 @@ services:
     image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/tag-engine:${E1_VERSION:-latest}
     container_name: e1-grid-tag-engine
     restart: unless-stopped
+    volumes: *nats-certs
     depends_on:
       nats:
         condition: service_healthy
@@ -597,6 +620,7 @@ services:
     image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/alarm-service:${E1_VERSION:-latest}
     container_name: e1-grid-alarm-service
     restart: unless-stopped
+    volumes: *nats-certs
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -672,6 +696,7 @@ services:
     image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/iec104-outbound:${E1_VERSION:-latest}
     container_name: e1-grid-iec104-outbound
     restart: unless-stopped
+    volumes: *nats-certs
     depends_on:
       backend-api:
         condition: service_healthy
@@ -717,6 +742,7 @@ services:
     image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/modbus-outbound:${E1_VERSION:-latest}
     container_name: e1-grid-modbus-outbound
     restart: unless-stopped
+    volumes: *nats-certs
     depends_on:
       backend-api:
         condition: service_healthy
@@ -827,6 +853,12 @@ services:
       # Healthy bekle: backend yukselemeden frontend baslarsa nginx /api/*
       # icin 502 doner, kullanici bos beyaz ekran gorur. start_period 30sn
       # backend-api healthcheck'inde tanimli.
+      #
+      # BU BEKLEME ARTIK KISA: /health yalnizca Postgres'i kritik sayiyor
+      # (app/api/health.py). Eskiden NATS/JetStream de kritikti ve kuyruktaki
+      # tek bir yanlis yapilandirma backend'i KALICI unhealthy birakip bu
+      # satir yuzunden arayuzun HIC acilmamasina yol aciyordu. Kalan tek
+      # blokaj Postgres'tir; o da gercekten dustuyse uygulama zaten calisamaz.
       backend-api:
         condition: service_healthy
     ports:

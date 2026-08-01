@@ -1,11 +1,14 @@
 """Health endpoint'i — gercek bagimliliklari probe eder.
 
 Endpoint'ler:
-  * GET /health         : Backwards-compatible (default). Gercek probe;
-                           DB/NATS/RabbitMQ saglikli ise 200; degilse 503.
-                           Operator / docker-compose healthcheck buradan
-                           bilgi alir. Yanit body'sinde her bagimlilik
-                           detayli durumu raporlar.
+  * GET /health         : Backwards-compatible (default). Gercek probe.
+                           Postgres saglikli degilse 503; NATS/JetStream/
+                           RabbitMQ dustuyse 200 + `status="degraded"` +
+                           `degraded_reasons`. Operator / docker-compose
+                           healthcheck buradan bilgi alir. Yanit body'sinde
+                           her bagimlilik detayli durumu raporlar.
+                           (Kuyruk arizasi arayuzu kapatmaz — bkz.
+                           `_build_health_body` docstring'i.)
   * GET /health/live    : Liveness probe (k8s). Sadece process up mu —
                            dependency check YOK. 200 doner.
   * GET /health/ready   : Readiness probe. /health ile esdeger; dependency
@@ -90,10 +93,25 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
     """Tum probe'lari calistir; en kotu durumu HTTP status'a yansit.
 
     Probe stratejisi:
-      * DB fail → 503 (critical; persist edilemez)
-      * NATS fail → 503 (telemetri akisi durur)
-      * RabbitMQ fail → 200 + degraded (alarm akisi etkilenir ama
-        telemetri persist + WS yine calisir; LB instance'i atmasin)
+      * DB fail → 503 (critical; hicbir istek anlamli sonuc uretemez)
+      * NATS / JetStream fail → 200 + degraded
+      * RabbitMQ fail → 200 + degraded
+
+    NEDEN NATS ARTIK KRITIK DEGIL:
+    Kuyruk cokerse TELEMETRI AKISI durur; ama arayuz, giris, yetkilendirme,
+    ayarlar, gecmis veri, alarm/ariza listesi, yedekleme ve uzaktan bakim
+    calismaya devam eder. Buna ragmen 503 dondurmek compose zincirini
+    kilitliyordu: `frontend-web` -> `depends_on: backend-api: service_healthy`
+    (docker-compose.yml) oldugu icin backend saglikli sayilmadan ARAYUZ HIC
+    BASLAMIYOR, yani 80 portunda hicbir sey olmuyordu. Sonuc: NATS'taki tek
+    bir yanlis yapilandirma (or. yarim uygulanmis TLS) tum cihazi karartiyor
+    ve kimsenin basinda olmadigi bir sahada teshis edilemez hale geliyordu.
+
+    Kuyruk arizasi cihazi karartmamali. Durum GIZLENMIYOR: HTTP 200 doner
+    ama govde `status="degraded"` ve `degraded_reasons` ile hangi bagimliligin
+    dustugunu acikca soyler; Sistem Durumu ekrani ve uzaktan izleme bunu
+    okur. Restart da dogru karar degildi zaten — backend'i yeniden baslatmak
+    NATS'i duzeltmez.
     """
     db_ok, db_err, db_ms = _probe_db(db)
     js_ok, js_err = _probe_jetstream()
@@ -135,14 +153,35 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
 
     background = _leader.status()
 
-    critical_down = (not db_ok) or (not nats_ok) or (not js_ok)
-    if critical_down:
-        body = {"status": "unhealthy", "dependencies": deps, "background": background}
+    # Kritiklik siniri YALNIZCA Postgres. Gerekcesi docstring'te.
+    if not db_ok:
+        body = {
+            "status": "unhealthy",
+            "dependencies": deps,
+            "background": background,
+            "degraded_reasons": ["database"],
+        }
         return body, status.HTTP_503_SERVICE_UNAVAILABLE
-    if not rmq_ok:
-        body = {"status": "degraded", "dependencies": deps, "background": background}
+
+    degraded_reasons = [
+        name
+        for name, ok in (("nats_tcp", nats_ok), ("jetstream_bus", js_ok), ("rabbitmq_tcp", rmq_ok))
+        if not ok
+    ]
+    if degraded_reasons:
+        # Sessizce degraded kalmak da bir ariza modudur: kimse /health'e
+        # bakmiyorsa telemetri gunlerce akmayabilir. Log'a yaz ki journalctl
+        # ve saha teshisi bunu gorsun.
+        logger.warning("health_degraded reasons=%s", ",".join(degraded_reasons))
+        body = {
+            "status": "degraded",
+            "dependencies": deps,
+            "background": background,
+            "degraded_reasons": degraded_reasons,
+        }
         return body, status.HTTP_200_OK
-    body = {"status": "ok", "dependencies": deps, "background": background}
+
+    body = {"status": "ok", "dependencies": deps, "background": background, "degraded_reasons": []}
     return body, status.HTTP_200_OK
 
 

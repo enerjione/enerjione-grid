@@ -262,3 +262,76 @@ def test_retention_batch_settings_are_sane():
     cap = _settings_default("retention_max_batches_per_run")
     assert 1_000 <= batch <= 100_000, f"retention_delete_batch akil disi: {batch}"
     assert 1 <= cap <= 1_000, f"retention_max_batches_per_run akil disi: {cap}"
+
+
+# ---------------------------------------------------------------------------
+# NATS TLS — CA dizini, NATS'a BAGLANAN her servise mount edilmeli
+#
+# `NATS_CA_FILE` ISTEMCI tarafinda okunur. Dizin yalnizca `nats` servisine
+# baglanirsa, .env'e `NATS_CA_FILE=/etc/nats/certs/ca.crt` yazan operator
+# (compose yorumlarinin ONERDIGI deger budur) istemci container'inda OLMAYAN
+# bir yolu gostermis olur; TLS el sikismasi CA dogrulamasinda duser.
+#
+# Bu kontrol once kabuk testinde satir satir yapiliyordu ve KIRILGANDI: compose
+# CRLF satir sonlari kullandigi icin awk blok siniri kaciriyor, mount tamamen
+# silindigi halde test GECIYORDU (mutasyon testi yakaladi). Burada gercek YAML
+# ayristiricisi kullaniliyor — anchor'lar (`*nats-certs`) da kendiliginden
+# cozuluyor, yani "anchor mi acik yol mu" ayrimi ortadan kalkiyor.
+# ---------------------------------------------------------------------------
+
+NATS_CERT_DIZINI = "./infra/nats/certs"
+
+# NATS'a baglanan servisler. `nats`in kendisi haric: sunucu sertifikayi
+# kendi mount'undan okur.
+NATS_ISTEMCILERI = [
+    "backend-api",
+    "tag-engine",
+    "alarm-service",
+    "iec104-outbound",
+    "modbus-outbound",
+]
+
+
+def _compose() -> dict:
+    import yaml
+
+    yol = REPO / "docker-compose.yml"
+    return yaml.safe_load(yol.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("servis", NATS_ISTEMCILERI)
+def test_nats_istemcilerine_ca_dizini_mount_edilmis(servis: str):
+    compose = _compose()
+    tanim = compose["services"].get(servis)
+    assert tanim is not None, f"{servis} compose'da yok"
+
+    volumes = tanim.get("volumes") or []
+    kaynaklar = [str(v).split(":", 1)[0] for v in volumes if isinstance(v, str)]
+
+    assert NATS_CERT_DIZINI in kaynaklar, (
+        f"{servis}: NATS CA dizini mount edilmemis. NATS_CA_FILE container "
+        f"icinde bulunamaz, TLS el sikismasi CA dogrulamasinda duser. "
+        f"Mevcut mount kaynaklari: {kaynaklar}"
+    )
+
+
+@pytest.mark.parametrize("servis", NATS_ISTEMCILERI)
+def test_ca_mount_SALT_OKUNUR(servis: str):
+    """Istemcinin CA'yi degistirmesi icin bir sebep yok; yazilabilir mount
+    gereksiz bir saldiri yuzeyi."""
+    compose = _compose()
+    volumes = compose["services"][servis].get("volumes") or []
+    for v in volumes:
+        if isinstance(v, str) and v.split(":", 1)[0] == NATS_CERT_DIZINI:
+            assert v.rstrip().endswith(":ro"), f"{servis}: CA mount'u salt okunur degil ({v})"
+            return
+    pytest.fail(f"{servis}: CA mount'u bulunamadi")
+
+
+def test_nats_sunucusu_da_sertifikayi_goruyor():
+    compose = _compose()
+    volumes = compose["services"]["nats"].get("volumes") or []
+    kaynaklar = [str(v).split(":", 1)[0] for v in volumes if isinstance(v, str)]
+    assert NATS_CERT_DIZINI in kaynaklar, (
+        "nats sunucusu sertifika dizinini gormuyor — TLS acildiginda ayaga kalkmaz"
+    )
