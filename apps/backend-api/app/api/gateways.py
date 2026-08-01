@@ -323,6 +323,28 @@ def update_gateway(
     changes = payload.model_dump(exclude_none=True)
     for key, value in changes.items():
         setattr(row, key, value)
+
+    # TOKEN ROTASYONU — hash'i de guncelle.
+    #
+    # YASANAN ARIZA: bu uc `setattr` ile TUM alanlari yaziyordu ama
+    # `token_hash` DOKUNULMUYORDU. Create yolunda hash hesaplaniyor
+    # (`hash_gateway_token`), update yolunda hesaplanmiyordu.
+    #
+    # `validate_gateway_token` `token_hash` DOLUYSA yalnizca ona bakar
+    # (plaintext karsilastirma sadece hash bosken devreye giren legacy yol).
+    # Sonuc iki yonlu bozuktu:
+    #
+    #   * YENI token 401 alir  -> operator "gateway baglanmiyor" der,
+    #   * ESKI token CALISMAYA DEVAM EDER -> rotasyon iptal ETMEZ.
+    #
+    # Yani token sizdigi icin degistirildiginde sizan token hala gecerli
+    # kalir; rotasyonun tek amaci tam da bunu engellemekti.
+    if "token" in changes:
+        from app.services.ingest_service import hash_gateway_token
+
+        yeni_token = changes.get("token") or ""
+        row.token_hash = hash_gateway_token(yeni_token) if yeni_token else None
+
     # Config degisti -> nonce++ (gateway 1sn komut-poll'de gorup hemen ceker).
     row.config_nonce = int(getattr(row, "config_nonce", 0) or 0) + 1
     record_event(

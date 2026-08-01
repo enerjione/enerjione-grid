@@ -103,12 +103,38 @@ _SENTINEL = object()
 
 
 def _drain_buffer() -> list[dict[str, Any]]:
-    """Buffer'i bosalt + son gonderim haritasini guncelle. Lock altinda."""
+    """Buffer'i bosalt. Lock altinda.
+
+    `_last_sent` BURADA GUNCELLENMEZ — bkz. `_mark_sent`.
+
+    YASANAN ARIZA: dedup haritasi gonderimden ONCE guncelleniyordu. POST
+    patlasa bile deger "gonderildi" isaretleniyor ve cihaz ayni degeri
+    tekrarladigi surece bir daha ASLA buffer'a girmiyordu:
+
+      > 4G uc dakika kopar. `master.permanent_fault` 0 -> 1 olur. Deger drain
+      > edilir, `_last_sent=1` yazilir, POST timeout'a duser. 4G geri gelir.
+      > Cihaz hala 1 yayinlar; `submit()` `last_val == new_val` gorup buffer'a
+      > KOYMAZ. Musterinin webhook'u arizayi HIC gormez — ta ki ariza kalkip
+      > deger 0'a donene kadar.
+
+    Yani tam da bildirilmesi gereken olay sessizce yutuluyordu.
+    """
     with _lock:
         if not _buffer:
             return []
         readings = list(_buffer.values())
-        # last_sent: gonderilen her reading icin yeni value'yu kaydet.
+        _buffer.clear()
+        return readings
+
+
+def _mark_sent(readings: list[dict[str, Any]]) -> None:
+    """Basariyla teslim edilen degerleri dedup haritasina yazar.
+
+    YALNIZCA gonderim basarili olduysa cagrilir. Basarisiz kalan deger
+    isaretlenmedigi icin cihaz onu bir sonraki telemetride tekrar yayinladigi
+    anda yeniden buffer'a girer — yani kendiliginden yeniden denenir.
+    """
+    with _lock:
         for r in readings:
             dc = r.get("device_code")
             sk = r.get("signal_key")
@@ -118,8 +144,6 @@ def _drain_buffer() -> list[dict[str, Any]]:
             if v is None:
                 v = r.get("value_string")
             _last_sent[(str(dc), str(sk))] = v
-        _buffer.clear()
-        return readings
 
 
 def _send_rest_batch(target: OutboundTarget, payload: dict) -> None:
@@ -176,6 +200,10 @@ def _flush_once() -> None:
             and t.event_filter in ("all", "telemetry")
         ]
         if not eligible:
+            # Gonderilecek hedef YOK — bu bir basarisizlik degil. Isaretlemezsek
+            # ayni degerler her turda bosuna yeniden tamponlanir. (Basarisiz
+            # GONDERIM ile karistirilmamali: orada isaretlememek SART.)
+            _mark_sent(readings)
             return
 
         # Cihaz-bazli flat payload: {device_name, timestamp, <signal>: <value>, ...}
@@ -201,6 +229,13 @@ def _flush_once() -> None:
                     per_device_ts[device_code] = ts
 
         from app.services.outbound_dispatch_service import _record_delivery
+
+        # Dedup haritasi ancak TUM uygun hedefler basarili olursa guncellenir.
+        # Bir hedef duserse deger isaretlenmez ve cihaz onu tekrarladiginda
+        # yeniden buffer'a girer; digerleri mukerrer alir. Webhook'a ayni
+        # degeri iki kez gondermek kabul edilebilir (at-least-once), bir
+        # ariza gecisini HIC gondermemek degil.
+        tum_hedefler_basarili = True
         for target in eligible:
             # MQTT batcher mqtt_publisher_service tarafindan ele aliniyor;
             # telemetry batcher SADECE REST webhook'lara mesaj atar.
@@ -221,6 +256,8 @@ def _flush_once() -> None:
                 except Exception as exc:  # noqa: BLE001
                     fail_count += 1
                     last_err = str(exc)
+            if fail_count:
+                tum_hedefler_basarili = False
             try:
                 if ok_count:
                     logger.info(
@@ -254,6 +291,19 @@ def _flush_once() -> None:
                     db.commit()
                 except Exception:  # noqa: BLE001
                     db.rollback()
+
+        # Dedup haritasi EN SONDA, yalnizca her sey gittiyse guncellenir.
+        # Basarisizlikta isaretlemedigimiz icin cihaz ayni degeri tekrar
+        # yayinladiginda deger yeniden buffer'a girer ve kendiliginden
+        # yeniden denenir.
+        if tum_hedefler_basarili:
+            _mark_sent(readings)
+        else:
+            logger.warning(
+                "outbound_batch_dedup_atlandi readings=%d — teslim edilemeyen "
+                "degerler yeniden denenecek",
+                len(readings),
+            )
     finally:
         db.close()
 
