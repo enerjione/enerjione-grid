@@ -2240,18 +2240,33 @@ export async function deleteSignal(token: string, signalKey: string): Promise<vo
 
 /** Canli sinyal degerleri (cihaz x sinyal).
  *
- *  `deviceCodes` verilirse yanit yalnizca o cihazlarla sinirlanir. Yanit
- *  cihaz x sinyal kartezyen carpimi oldugu (Horstmann SN2 = 193 sinyal/cihaz)
- *  ve 600 cihazda ~115.800 satira ulastigi icin, tek cihaz gosteren ekranlar
- *  bu filtreyi KULLANMALI. */
+ *  Yanit cihaz x sinyal KARTEZYEN carpimidir (Horstmann SN2 = 193 sinyal) ve
+ *  600 cihazda ~115.800 satira ulasir. Bu yuzden her ekran YALNIZCA
+ *  GORDUGU kadarini istemeli:
+ *
+ *    `deviceCodes` — tek cihaz gosteren ekranlar (cihaz detayi, harita
+ *                    secimi) bunu vermeli.
+ *    `signalKeys`  — anasayfa gibi birkac sinyal okuyan ekranlar bunu
+ *                    vermeli.
+ *
+ *  Ikisi de bos ise TUM kartezyen doner — yalnizca muhendislik "Canli
+ *  Degerler" sayfasi icin dogru olan budur. */
 export async function fetchSignalLiveValues(
   token: string,
-  deviceCodes?: readonly string[]
+  deviceCodes?: readonly string[],
+  signalKeys?: readonly string[]
 ): Promise<SignalLiveRow[]> {
-  const query =
-    deviceCodes && deviceCodes.length > 0
-      ? `?${new URLSearchParams({ device_codes: deviceCodes.join(",") }).toString()}`
-      : "";
+  const params = new URLSearchParams();
+  if (deviceCodes && deviceCodes.length > 0) {
+    params.set("device_codes", deviceCodes.join(","));
+  }
+  // Sinyal daraltmasi: anasayfa 193 sinyalden yalnizca DORDUNU okuyor
+  // (uc batarya gerilimi + modem RSSI). Hepsini istemek 600 cihazda
+  // 115.800 satirlik bir yanit demekti.
+  if (signalKeys && signalKeys.length > 0) {
+    params.set("signal_keys", signalKeys.join(","));
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(`${API_BASE_URL}/signals/live${query}`, {
     headers: authHeaders(token)
   });

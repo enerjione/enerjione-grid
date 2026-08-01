@@ -254,6 +254,65 @@ function setLicenseActivatedFlag(activated: boolean): void {
   }
 }
 
+/** Anasayfanin GERCEKTEN okudugu sinyaller.
+ *
+ *  Harita sidebar'i uc batarya gerilimi + modem RSSI gosteriyor; baska bir
+ *  sey okumuyor. Katalog 193 sinyal oldugu icin daraltma yaniti ~48 KAT
+ *  kucultuyor.
+ *
+ *  DIKKAT: harita DETAY MODALI cok daha fazla sinyal okur (26 sonek x 3
+ *  kaynak). Onun icin listeyi buyutmuyoruz — modal yalnizca SECILI cihaz
+ *  icin acildigindan, o cihazin TAMAMI ayrica cekiliyor (bkz.
+ *  `fetchLiveValuesForScope`). Boylece burasi kisa kalir ve modal yeni bir
+ *  sinyal okumaya basladiginda burayi guncellemeyi unutma riski OLMAZ. */
+const DASHBOARD_SIGNAL_KEYS = [
+  "master.battery_voltage_satellite",
+  "sat01.battery_voltage_satellite",
+  "sat02.battery_voltage_satellite",
+  "master.modem_rssi"
+] as const;
+
+type LiveValuesScope =
+  | { kind: "none" }
+  | { kind: "dashboard"; selectedDeviceCode?: string }
+  | { kind: "device"; deviceCode: string }
+  | { kind: "all" };
+
+/** Kapsama gore canli degerleri ceker.
+ *
+ *  Anasayfada IKI istek yapilir ve birlestirilir:
+ *    1) tum cihazlar x dar sinyal seti  (harita/sidebar)
+ *    2) secili cihaz  x tum sinyaller   (detay modali)
+ *  Ikinci istek yalnizca bir cihaz secili ise yapilir ve 193 satir doner —
+ *  yani 115.800 yerine ~2.600 satir.
+ */
+async function fetchLiveValuesForScope(
+  token: string,
+  scope: LiveValuesScope
+): Promise<SignalLiveRow[]> {
+  if (scope.kind === "none") return [];
+  if (scope.kind === "all") return fetchSignalLiveValues(token);
+  if (scope.kind === "device") {
+    return fetchSignalLiveValues(token, [scope.deviceCode]);
+  }
+
+  const dar = await fetchSignalLiveValues(token, undefined, DASHBOARD_SIGNAL_KEYS);
+  if (!scope.selectedDeviceCode) return dar;
+
+  let seciliTam: SignalLiveRow[] = [];
+  try {
+    seciliTam = await fetchSignalLiveValues(token, [scope.selectedDeviceCode]);
+  } catch {
+    // Secili cihazin ayrintisi alinamadi — harita yine de calismali.
+    return dar;
+  }
+
+  // Birlestir: secili cihazin satirlari KAZANIR (daha genis kume).
+  const anahtar = (r: SignalLiveRow) => `${r.device_code} ${r.signal_key}`;
+  const secilenler = new Set(seciliTam.map(anahtar));
+  return [...dar.filter((r) => !secilenler.has(anahtar(r))), ...seciliTam];
+}
+
 export function App() {
   const projectSettings = useProjectSettings();
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
@@ -451,6 +510,50 @@ export function App() {
   const [alarmRulesError, setAlarmRulesError] = useState("");
 
   const signalLiveFetchIdRef = useRef(0);
+
+  // --- CANLI DEGER KAPSAMI ---------------------------------------------
+  //
+  // Eskiden HER sayfa icin TUM kartezyen cekiliyordu: 600 cihaz x 193 sinyal
+  // = 115.800 satir. Anasayfa bunu `device_codes` VERMEDEN istiyor ve WS
+  // koptugunda periyot 30 sn'den 5 sn'ye dusuyordu — yani baglanti
+  // bozuldugunda yuk 6 KATLANIYORDU.
+  //
+  // Artik yalnizca ACIK OLAN SAYFANIN gordugu kadari cekilir:
+  //
+  //   anasayfa      -> tum cihazlar x DORT sinyal (harita sidebar'i)
+  //                    + secili cihazin TAMAMI (detay modali onu okur)
+  //   cihaz detayi  -> yalnizca o cihaz, tum sinyalleri
+  //   canli degerler-> tam kartezyen (sayfanin isi bu)
+  //   digerleri     -> hic cekilmez
+  // Cihaz KODLARI ayri memo'larda tutuluyor — `liveScope` dogrudan `devices`
+  // dizisine baglansaydi, cihaz listesi her yenilendiginde (kendi polling'i
+  // var) yeni bir dizi kimligi olusur, kapsam nesnesi degisir ve canli deger
+  // cekimi GEREKSIZ YERE tetiklenirdi. Kodlar STRING oldugu icin deger ayni
+  // kaldigi surece kimlik de sabit kalir.
+  const selectedDeviceCode = useMemo(
+    () => devices.find((d) => d.id === selectedDeviceId)?.code,
+    [devices, selectedDeviceId]
+  );
+  const detailDeviceCode = useMemo(
+    () =>
+      activeDeviceDetailId === null
+        ? undefined
+        : devices.find((d) => d.id === activeDeviceDetailId)?.code,
+    [devices, activeDeviceDetailId]
+  );
+
+  const liveScope = useMemo<LiveValuesScope>(() => {
+    if (pageMode === "home") {
+      return { kind: "dashboard", selectedDeviceCode };
+    }
+    if (pageMode === "device-detail") {
+      return detailDeviceCode ? { kind: "device", deviceCode: detailDeviceCode } : { kind: "none" };
+    }
+    if (pageMode === "engineering" && engineeringPage === "live-values") {
+      return { kind: "all" };
+    }
+    return { kind: "none" };
+  }, [pageMode, engineeringPage, selectedDeviceCode, detailDeviceCode]);
 
   // Canli degerleri GERCEKTEN tuketen sayfalar. Baska bir sekmede (Alarmlar,
   // Olaylar, Ayarlar, ...) WS'i acik tutmak bedavaya cihaz x sinyal akisini
@@ -1045,7 +1148,7 @@ export function App() {
     setSignalLiveLoading(true);
     setSignalLiveError("");
     try {
-      const rows = await fetchSignalLiveValues(session.accessToken);
+      const rows = await fetchLiveValuesForScope(session.accessToken, liveScope);
       if (id !== signalLiveFetchIdRef.current) {
         return;
       }
@@ -1063,19 +1166,30 @@ export function App() {
         setSignalLiveLoading(false);
       }
     }
-  }, [session]);
+  }, [session, liveScope]);
 
   useEffect(() => {
     if (!session) {
       return;
     }
-    if (pageMode === "engineering" && engineeringPage === "live-values") {
-      if (session.role !== "engineer" && session.role !== "installer") {
-        return;
-      }
-      void handleRefreshSignalLive();
+    if (liveScope.kind === "none") {
+      return;
     }
-  }, [session, pageMode, engineeringPage, handleRefreshSignalLive]);
+    // Tam kartezyen yalnizca muhendislik "Canli Degerler" sayfasinda ve
+    // yalnizca yetkili rollerde cekilir.
+    if (
+      liveScope.kind === "all" &&
+      session.role !== "engineer" &&
+      session.role !== "installer"
+    ) {
+      return;
+    }
+    void handleRefreshSignalLive();
+    // KAPSAM DEGISIMINDE de tetiklenmeli: `usePolling` yalnizca `enabled`
+    // degisince aninda ceker. Haritada baska bir cihaz secmek `enabled`i
+    // degistirmedigi icin, bu efekt olmadan kullanici bir sonraki periyoda
+    // (30 sn'ye) kadar eksik deger gorurdu.
+  }, [session, liveScope, handleRefreshSignalLive]);
 
   // Anasayfada — harita ve tablo ikisi de canli degerlere ihtiyac duyar:
   //   - Tablo: liste hucreleri
@@ -1086,10 +1200,19 @@ export function App() {
   // polling yeterli — backend'e gereksiz yuk vermiyor, frontend hala canli.
   // WS bagli degilken (WS unsupported / nginx config eksik): polling 5sn
   // (degerler "yeterince" canli gozuksun).
+  // Polling YALNIZCA canli deger gosteren sayfalarda kosar. Eskiden sadece
+  // `pageMode === "home"` kosulu vardi; cihaz detayi acikken hicbir sey
+  // yenilenmiyor, anasayfa kapaliyken de gereksiz istek atilmiyordu ama
+  // anasayfada TUM kartezyen cekiliyordu. Artik kapsam ne ise o cekilir.
   usePolling({
-    enabled: Boolean(session) && pageMode === "home",
+    enabled:
+      Boolean(session) &&
+      (liveScope.kind === "dashboard" || liveScope.kind === "device"),
     intervalMs: liveSocket.connectionState === "open" ? 30000 : 5000,
-    fn: handleRefreshSignalLive
+    fn: handleRefreshSignalLive,
+    // Ilk cekimi yukaridaki kapsam efekti yapiyor; `immediate` acik kalsaydi
+    // sayfaya her giriste IKI istek atilirdi.
+    immediate: false
   });
 
   const reloadAlarmRules = async () => {
