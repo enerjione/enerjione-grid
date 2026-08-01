@@ -251,6 +251,76 @@ jobs:
               nginx:1.27-alpine nginx -t
           done
 
+  ap-firewall:
+    # AP port filtresi GERCEK iptables ile sinaniyor.
+    #
+    # NEDEN AYRI JOB: bu kurallar yanlissa iki yonde de agir sonuc var —
+    # ya SCADA/NATS portlari sifresiz WiFi'ye acik kalir, ya da AP'nin
+    # KENDISI calismaz (DHCP/DNS kapanirsa istemci IP bile alamaz) ve AP
+    # tam da kablolu ag bozulunca kullanilan KURTARMA YOLUDUR.
+    #
+    # Gelistirici makinesinde dogrulanamiyor: Windows'ta iptables yok, WSL
+    # Ubuntu'da da kurulu degil. Yani tek gercek dogrulama yeri burasi.
+    name: AP port filtresi — iptables
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kurallar uygulaniyor ve dogrulaniyor
+        run: |
+          set -euo pipefail
+          # Privileged container: kendi net namespace'inde gercek iptables.
+          docker run --rm --privileged --network none \
+            -v "$PWD/infra/appliance:/w:ro" -w /w \
+            alpine:3.20 sh -eux -c '
+              apk add --no-cache bash iptables >/dev/null
+              # Test arayuzu (AP yerine dummy) — betik arayuz varligini kontrol eder.
+              ip link add e1test type dummy
+              ip addr add 10.42.0.1/24 dev e1test
+              ip link set e1test up
+
+              bash e1-ap-firewall.sh e1test 10.42.0.1
+
+              echo "=== INPUT ==="; iptables -S INPUT
+              echo "=== E1-AP-IN ==="; iptables -S E1-AP-IN
+              echo "=== E1-AP-FWD ==="; iptables -S E1-AP-FWD
+              echo "=== DOCKER-USER ==="; iptables -S DOCKER-USER
+
+              # 1) Zincirler INPUT ve DOCKER-USER a bagli mi?
+              iptables -S INPUT       | grep -q -- "-i e1test -j E1-AP-IN"
+              iptables -S DOCKER-USER | grep -q -- "-j E1-AP-FWD"
+
+              # 2) Izin verilen portlar RETURN, geri kalan DROP.
+              iptables -S E1-AP-IN | grep -q -- "--dport 80 -j RETURN"
+              iptables -S E1-AP-IN | tail -1 | grep -q -- "-j DROP"
+              iptables -S E1-AP-FWD | tail -1 | grep -q -- "-j DROP"
+
+              # 3) AP CALISSIN: DHCP/DNS/mDNS/ICMP kapanmamali. Biri kapanirsa
+              #    istemci IP alamaz ve kurtarma yolu yok olur.
+              iptables -S E1-AP-IN | grep -q -- "--dport 67 -j RETURN"
+              iptables -S E1-AP-IN | grep -q -- "--dport 53 -j RETURN"
+              iptables -S E1-AP-IN | grep -q -- "--dport 5353 -j RETURN"
+              iptables -S E1-AP-IN | grep -q -- "-p icmp -j RETURN"
+
+              # 4) SCADA/mesajlasma portlari ACIKCA izinli OLMAMALI.
+              for p in 502 2404 4222 5672 21; do
+                if iptables -S E1-AP-IN | grep -q -- "--dport $p -j RETURN"; then
+                  echo "HATA: $p portu AP istemcisine acik kalmis"; exit 1
+                fi
+              done
+
+              # 5) IDEMPOTENT: ikinci kosuda kural yigilmamali.
+              once=$(iptables -S INPUT | grep -c -- "-j E1-AP-IN")
+              bash e1-ap-firewall.sh e1test 10.42.0.1
+              sonra=$(iptables -S INPUT | grep -c -- "-j E1-AP-IN")
+              [ "$once" = "$sonra" ] || { echo "HATA: kural yigildi ($once -> $sonra)"; exit 1; }
+
+              # 6) Ozellestirme calisiyor mu (or. SSH gerekirse acilabilmeli).
+              E1_AP_ALLOWED_TCP="80 443 22" bash e1-ap-firewall.sh e1test 10.42.0.1
+              iptables -S E1-AP-IN | grep -q -- "--dport 22 -j RETURN"
+
+              echo "AP PORT FILTRESI DOGRULANDI"
+            '
+
   compose:
     name: docker-compose dogrulama
     runs-on: ubuntu-latest

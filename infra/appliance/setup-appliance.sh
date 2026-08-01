@@ -90,6 +90,44 @@ STATE_DIR="/var/lib/e1-grid/net"
 INSTALL_DIR="${INSTALL_DIR:-/opt/enerjione-grid}"
 AGENT_SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# --- AP port filtresi ------------------------------------------------------
+# Kurallari uygular ve KALICI kilar.
+#
+# NEDEN DISPATCHER: iptables kurallari reboot'ta kaybolur ve NetworkManager
+# onlari geri getirmez. AP her `up` oldugunda dispatcher tetiklenir, boylece
+# hem boot'ta hem AP yeniden kurulunca filtre geri gelir. Betik idempotent.
+_ap_firewall_kur() {
+  local iface="$1"
+  local src="${AGENT_SRC_DIR}/e1-ap-firewall.sh"
+
+  if [[ ! -f "$src" ]]; then
+    warn "e1-ap-firewall.sh bulunamadi — AP port filtresi UYGULANMADI."
+    warn "AP istemcisi 502/2404/4222/5672 gibi portlara erisebilir."
+    return 0
+  fi
+
+  install -m 755 "$src" /usr/local/sbin/e1-ap-firewall.sh
+
+  # NetworkManager dispatcher: arayuz up oldugunda filtreyi uygula.
+  mkdir -p /etc/NetworkManager/dispatcher.d
+  cat > /etc/NetworkManager/dispatcher.d/90-e1-ap-firewall <<DISPATCH
+#!/bin/sh
+# EnerjiOne Grid — AP port filtresi (setup-appliance.sh tarafindan kuruldu).
+# NM her arayuz olayinda bu betigi cagirir: \$1=arayuz \$2=olay
+[ "\$2" = "up" ] || exit 0
+[ "\$1" = "${iface}" ] || exit 0
+exec /usr/local/sbin/e1-ap-firewall.sh "${iface}" "${AP_ADDRESS}"
+DISPATCH
+  chmod 755 /etc/NetworkManager/dispatcher.d/90-e1-ap-firewall
+
+  # Simdi de uygula (AP zaten yayindaysa dispatcher tetiklenmeyecek).
+  if /usr/local/sbin/e1-ap-firewall.sh "$iface" "$AP_ADDRESS"; then
+    ok "AP port filtresi: yalnizca 80/443 (SCADA/NATS/RabbitMQ/FTP kapali)."
+  else
+    warn "AP port filtresi uygulanamadi — AP istemcisi tum portlara erisebilir."
+  fi
+}
+
 # AP'nin dagittigi alt ag — NetworkManager 'shared' modunun varsayilani.
 AP_ADDRESS="10.42.0.1"
 
@@ -555,6 +593,17 @@ else
     nmcli connection modify "$AP_CON_NAME" \
       802-11-wireless-security.key-mgmt "" >/dev/null 2>&1 || true
     ok "AP profili ayarlandi (sifresiz, kanal ${AP_CHANNEL})."
+
+    # --- AP PORT FILTRESI --------------------------------------------------
+    # Ag sifresiz oldugu icin (operator karari) menzildeki herkes baglanabilir.
+    # docker-compose'daki TUM `ports:` girisleri 0.0.0.0'a bind oldugundan AP
+    # istemcisine 21/502/2404-2406/4222/5672/5020-5021/30000-30009 de aciktir;
+    # bunlarin bir kismi KIMLIK DOGRULAMASIZ (Modbus, IEC 104). Yani sokaktan
+    # baglanan biri tum sahanin ariza/konum/olcum durumunu okuyabiliyordu.
+    #
+    # Filtre yalnizca 80/443'e izin verir. WPA2 EKLENMEZ — ag acik kalir ve
+    # giris ekrani duz HTTP uzerinden erisilebilir olmayi surdurur.
+    _ap_firewall_kur "$WIFI_IF"
 
     # AP istemcileri icin e1-grid.local -> 10.42.0.1. mDNS'e guvenmiyoruz:
     # Android tarayicilar ve bazi Windows surumleri .local'i cozemez; AP'nin
