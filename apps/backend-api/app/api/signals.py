@@ -8,7 +8,7 @@ from app.data.device_models import is_valid_model
 from app.models.device import Device
 from app.models.enums import UserRole
 from app.models.signal_catalog import SignalCatalog
-from app.models.telemetry import Telemetry
+from app.models.telemetry_latest import TelemetryLatest
 from app.models.user import User
 from app.schemas.signal_catalog import (
     SignalCatalogCreate,
@@ -187,6 +187,15 @@ def list_live_values(
             "doner. Bos = kullanicinin gordugu tum cihazlar."
         ),
     ),
+    signal_keys: str | None = Query(
+        default=None,
+        description=(
+            "Virgulle ayrilmis sinyal anahtarlari; yalnizca bu sinyallerin "
+            "satirlari doner. Bos = tum aktif katalog. Anasayfa gibi birkac "
+            "sinyal okuyan ekranlar bunu KULLANMALI — aksi halde yanit "
+            "cihaz x 193 sinyal kartezyeni olur."
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -222,17 +231,30 @@ def list_live_values(
     device_rows: list[Device] = list(db.scalars(device_stmt).all())
     if not device_rows:
         return []
+    # Sinyal daraltmasi da SQL'e iner: anasayfa 193 sinyalden yalnizca birkac
+    # tanesini okuyor, hepsini uretip aga koymanin anlami yok.
+    requested_signal_keys = {
+        s.strip() for s in (signal_keys or "").split(",") if s.strip()
+    }
+    catalog_stmt = select(SignalCatalog).where(SignalCatalog.is_active.is_(True))
+    if requested_signal_keys:
+        catalog_stmt = catalog_stmt.where(SignalCatalog.key.in_(requested_signal_keys))
     catalog_rows: list[SignalCatalog] = list(
         db.scalars(
-            select(SignalCatalog)
-            .where(SignalCatalog.is_active.is_(True))
-            .order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
+            catalog_stmt.order_by(
+                SignalCatalog.display_order.asc(), SignalCatalog.key.asc()
+            )
         ).all()
     )
 
     # Cihaz varken katalog hic doldurulmadiysa (ilk kurulum, seed atlanmis vb.) self-heal.
     # `device_rows` bos olma durumu yukarida ele alindi; buraya cihaz VARSA gelinir.
-    if not catalog_rows:
+    #
+    # DIKKAT: yalnizca DARALTMA YOKKEN. `signal_keys` verildiginde bos sonuc
+    # MESRUDUR (istenen anahtar katalogda olmayabilir ya da pasiflestirilmis
+    # olabilir) — burada seed tetiklemek her istekte tum katalogu yeniden
+    # senkronlamak olurdu.
+    if not catalog_rows and not requested_signal_keys:
         defaults = load_default_signals()
         if defaults:
             seed_default_signals(db, strict=False)
@@ -247,42 +269,34 @@ def list_live_values(
     if not catalog_rows:
         return []
 
-    # Her (device_id, signal_key) icin son telemetry kaydini DISTINCT ON ile
-    # cek — PostgreSQL'in idx_telemetry_device_signal_ts composite index'i
-    # uzerinde index-only scan calisir, GROUP BY+JOIN yerine ~10x hizli.
-    # Eski GROUP BY+JOIN her cagride tablo full scan tetikledigi icin polling
-    # yuku artiyordu (600 cihaz x 193 sinyal x 30dk telemetri = milyonlarca
-    # satir). DISTINCT ON ile sorgu <50ms.
+    # Son degerler `telemetry_latest` tablosundan gelir (migration 0028).
     #
-    # ORM entity DEGIL kolon tuple'i: `select(Telemetry)` her cift icin bir
-    # Telemetry nesnesi hidrate ediyordu (identity map + attribute state).
-    # 115.800 ciftte bu tek basina sorgudan daha pahaliydi. Ihtiyacimiz olan
-    # dort kolonu tuple olarak cekiyoruz.
+    # ONCEDEN: `telemetry` uzerinde `DISTINCT ON (device_id, signal_key)`.
+    # Yorumda "index-only scan, <50 ms" yaziyordu ve 200 cihazda dogruydu; 600
+    # cihazda DEGIL. `DISTINCT ON` PostgreSQL'de skip-scan DEGILDIR: 30
+    # dakikalik pencerenin TAMAMI (~2,16M satir) okunup 12.000 satira
+    # indirgeniyordu. Ustelik anasayfa bu ucu `device_codes` VERMEDEN cagiriyor
+    # ve WS koptugunda periyot 30 sn -> 5 sn'ye dusuyor, yani yuk 6 katlaniyor.
+    # Istek basina ~311 MB bellek tepesi olusuyor, container tavani 2 GB ve
+    # uc-bes esizamanli anasayfa backend-api'yi OOM'a goturuyordu.
     #
-    # Cihaz filtresi de SQL'e iner: kapsam/istemci daraltmasi sonrasi yalnizca
-    # gorunen cihazlarin telemetrisi taranir.
+    # Yeni tabloda her cift icin TEK satir var; okuma PK uzerinden gider ve
+    # telemetri penceresinin buyuklugunden BAGIMSIZDIR.
+    #
+    # ORM entity DEGIL kolon tuple'i: `select(TelemetryLatest)` her cift icin
+    # bir nesne hidrate ederdi (identity map + attribute state); 115.800
+    # ciftte bu tek basina sorgudan pahaliydi.
     device_ids = [d.id for d in device_rows]
-    latest_telemetry_stmt = (
-        select(
-            Telemetry.device_id,
-            Telemetry.signal_key,
-            Telemetry.value,
-            Telemetry.value_string,
-            Telemetry.quality,
-            Telemetry.source_timestamp,
-            # Cihaz saati durumu (0026). Ayri sorgu DEGIL ayni satirdan iki
-            # kolon: DISTINCT ON zaten dogru satiri seciyor, ek maliyet yok.
-            Telemetry.timestamp_quality,
-            Telemetry.device_event_at,
-        )
-        .where(Telemetry.device_id.in_(device_ids))
-        .distinct(Telemetry.device_id, Telemetry.signal_key)
-        .order_by(
-            Telemetry.device_id,
-            Telemetry.signal_key,
-            Telemetry.id.desc(),
-        )
-    )
+    latest_telemetry_stmt = select(
+        TelemetryLatest.device_id,
+        TelemetryLatest.signal_key,
+        TelemetryLatest.value,
+        TelemetryLatest.value_string,
+        TelemetryLatest.quality,
+        TelemetryLatest.source_timestamp,
+        TelemetryLatest.timestamp_quality,
+        TelemetryLatest.device_event_at,
+    ).where(TelemetryLatest.device_id.in_(device_ids))
     # (device_id, signal_key) -> (value, value_string, quality, source_timestamp,
     #                             timestamp_quality, device_event_at)
     latest_by_pair: dict[tuple[int, str], tuple] = {}

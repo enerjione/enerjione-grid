@@ -220,6 +220,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
     """
     from app.models.telemetry import Telemetry
     from app.models.telemetry_history import TelemetryHistory
+    from app.models.telemetry_latest import TelemetryLatest
     from app.services.device_clock_service import assess_device_timestamp
     from app.services.tag_engine_service import (
         map_quality_to_status,
@@ -272,6 +273,10 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
         ).all()
         device_cache: dict[str, Device] = {device.code: device for device in devices}
         historian_rows: list[dict[str, Any]] = []
+        # (device_id, signal_key) -> son deger satiri. Sozluk cunku ayni batch'te
+        # ayni cift birden fazla gelebilir ve tek INSERT icinde ON CONFLICT ayni
+        # satiri iki kez guncelleyemez ("cannot affect row a second time").
+        latest_rows: dict[tuple[int, str], dict[str, Any]] = {}
 
         for msg, payload, message_id in parsed:
             if message_id in seen:
@@ -370,6 +375,25 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 "device_event_at": _dev_at,
                 "timestamp_quality": _ts_quality,
             })
+            # `telemetry_latest` — canli ekranin okudugu SON deger tablosu.
+            # Ayni batch'te ayni (cihaz, sinyal) birden fazla kez gelebilir;
+            # ON CONFLICT tek bir INSERT icinde ayni satiri iki kez
+            # guncelleyemez ("cannot affect row a second time"), o yuzden
+            # burada sozlukte tekillestirip EN YENISINI birakiyoruz.
+            _latest_key = (device.id, reading.signal_key)
+            _onceki = latest_rows.get(_latest_key)
+            if _onceki is None or reading.source_timestamp >= _onceki["source_timestamp"]:
+                latest_rows[_latest_key] = {
+                    "device_id": device.id,
+                    "signal_key": reading.signal_key,
+                    "value": reading.value,
+                    "value_string": reading.value_string,
+                    "quality": normalize_quality(reading.quality),
+                    "source_timestamp": reading.source_timestamp,
+                    "device_event_at": _dev_at,
+                    "timestamp_quality": _ts_quality,
+                    "updated_at": datetime.now(timezone.utc),
+                }
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
             ok_msgs.append(msg)
             # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
@@ -415,6 +439,36 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 .values(historian_rows)
                 .on_conflict_do_nothing(
                     index_elements=["device_id", "signal_key", "source_timestamp"]
+                )
+            )
+
+        # `telemetry_latest`: canli ekranin okudugu SON deger tablosu.
+        # Tum batch TEK upsert.
+        #
+        # ESKI DEGER YENIYI EZMEZ — `WHERE` kosulu bunun icin.
+        # NATS en-az-bir-kez teslim eder ve mesajlar sira DISINDA gelebilir
+        # (redelivery, paralel tuketici, gateway yeniden baglanmasi). Kosulsuz
+        # bir `DO UPDATE` bayat bir okumayi "son deger" yapardi ve bu tablo
+        # canli ekranin + WS yayininin kaynagi oldugu icin sonuc dogrudan
+        # operatore yansirdi: deger geri sicrar, ariza gecisi yanlis gorunur.
+        if latest_rows:
+            _stmt = _pg_insert(TelemetryLatest).values(list(latest_rows.values()))
+            db.execute(
+                _stmt.on_conflict_do_update(
+                    index_elements=["device_id", "signal_key"],
+                    set_={
+                        "value": _stmt.excluded.value,
+                        "value_string": _stmt.excluded.value_string,
+                        "quality": _stmt.excluded.quality,
+                        "source_timestamp": _stmt.excluded.source_timestamp,
+                        "timestamp_quality": _stmt.excluded.timestamp_quality,
+                        "device_event_at": _stmt.excluded.device_event_at,
+                        "updated_at": _stmt.excluded.updated_at,
+                    },
+                    where=(
+                        _stmt.excluded.source_timestamp
+                        >= TelemetryLatest.source_timestamp
+                    ),
                 )
             )
 
