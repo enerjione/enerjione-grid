@@ -53,6 +53,7 @@ adresleme duzeni sonradan degismesin.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -61,6 +62,8 @@ from sqlalchemy.orm import Session
 from app.models.device import Device
 from app.models.outbound_target import OutboundModbusSlot, OutboundTarget
 from app.models.signal_catalog import SignalCatalog
+
+logger = logging.getLogger(__name__)
 
 # Modbus fonksiyon kodlari (veri alani secimi)
 FC_COIL = 1
@@ -313,6 +316,19 @@ class CapacityInfo:
     # Cihaz basina register blogu tek Modbus okumasina sigiyor mu?
     single_read_per_device: bool
     limit_reason: str
+    # Kapasiteye SIGMAYAN cihazlar.
+    #
+    # NEDEN AYRI ALAN: plan kurulurken tavanı asan cihazlar `continue` ile
+    # SESSIZCE atlaniyordu. `remaining` de 0 gorundugu icin arayuz durumu
+    # "tam" diye okuyor, "273 cihaz plana ALINMADI" bilgisi hicbir yerde
+    # gorunmuyordu. float32 modunda tavan 327 cihaz; 600 cihazlik bir hedefte
+    # 273 cihaz SCADA'ya hic yayinlanmiyor ve bunu kimse fark etmiyor.
+    #
+    # Operator yuku birden fazla hedefe bolerek bu tavani asabilir (her hedef
+    # kendi adres alanina sahiptir); ama bunu YAPMASI GEREKTIGINI once
+    # gormesi lazim.
+    dropped_device_count: int = 0
+    dropped_device_codes: tuple[str, ...] = ()
 
 
 def _capacity(mode: str, stride: int, device_count: int, layout: SignalLayout) -> CapacityInfo:
@@ -350,8 +366,16 @@ def ensure_slots(
 
     Yeni cihaz eklendiginde en kucuk BOS slot verilir — silinen cihazlarin
     yeri boylece geri kazanilir ama mevcut cihazlarin adresi asla degismez.
-    Kapasite dolduysa fazla cihazlar plan disinda kalir (sessizce yanlis
-    adrese yazmaktansa yayinlamamak dogrudur); UI kapasiteyi gosterir.
+    Kapasite dolduysa fazla cihazlar plan disinda kalir — sessizce yanlis
+    adrese yazmaktansa yayinlamamak dogrudur. Ama BU DURUM GORUNUR OLMALI:
+    eskiden yalnizca `continue` vardi, `remaining` de 0 gorundugu icin arayuz
+    durumu "tam" diye okuyordu ve "N cihaz plana ALINMADI" bilgisi hicbir
+    yerde yoktu. Artik `CapacityInfo.dropped_device_count/_codes` doluyor ve
+    tasma ERROR seviyesinde loglaniyor.
+
+    Cozum tavani buyutmek degil: her Modbus hedefi kendi adres alanina
+    sahiptir, yani yuk ikinci bir hedefe bolunerek tasinir. Operatorun bunu
+    yapmasi gerektigini gormesi icin bu gorunurluk sart.
     """
     mode = str(target.modbus_mode or "block")
     mode = mode if mode in MODES else "block"
@@ -377,6 +401,7 @@ def ensure_slots(
     capacity = _capacity(mode, stride, len(devices), layout)
 
     plans: list[DeviceSlotPlan] = []
+    dusen: list[str] = []   # kapasiteye sigmayan cihaz kodlari
     next_free = 0
     # Deterministik sira: cihaz kodu. Yeni cihazlar bu sirayla slot alir.
     for device in sorted(devices, key=lambda d: d.code):
@@ -385,7 +410,10 @@ def ensure_slots(
             while next_free in used_slots:
                 next_free += 1
             if next_free >= capacity.max_devices:
-                # Kapasite doldu — bu cihaz plana alinmaz.
+                # Kapasite doldu — bu cihaz plana alinmaz. SESSIZ GECME:
+                # sayilir, loglanir ve API yanitinda dondurulur (bkz.
+                # CapacityInfo.dropped_device_codes).
+                dusen.append(device.code)
                 continue
             slot_index = next_free
             used_slots.add(slot_index)
@@ -423,6 +451,23 @@ def ensure_slots(
     plans.sort(key=lambda p: p.slot_index)
     capacity.device_count = len(plans)
     capacity.remaining = max(0, capacity.max_devices - len(plans))
+    capacity.dropped_device_count = len(dusen)
+    # Tamamini tasimak 273 kodluk bir yanit demek olabilir; ilk 20 teshis icin
+    # yeter, sayi zaten tam.
+    capacity.dropped_device_codes = tuple(sorted(dusen)[:20])
+    if dusen:
+        logger.error(
+            "modbus_plan_kapasite_asildi target=%s mode=%s stride=%d "
+            "tavan=%d plana_alinan=%d DUSEN=%d ornekler=%s — bu cihazlar "
+            "SCADA'ya hic yayinlanmiyor; yuku ikinci bir hedefe bolun",
+            _tget(target, "name", "?"),
+            mode,
+            stride,
+            capacity.max_devices,
+            len(plans),
+            len(dusen),
+            ",".join(sorted(dusen)[:10]),
+        )
     return plans, capacity
 
 
@@ -540,6 +585,11 @@ def serialize_plan(db: Session, target: OutboundTarget, *, commit: bool = True) 
             "remaining": capacity.remaining,
             "single_read_per_device": capacity.single_read_per_device,
             "limit_reason": capacity.limit_reason,
+            # Kapasiteye sigmayan cihazlar. `remaining: 0` tek basina "tam"
+            # gibi okunuyordu; plana ALINMAYAN cihaz oldugunu soyleyen tek
+            # alan bu. Arayuz bunu uyari olarak gostermeli.
+            "dropped_device_count": capacity.dropped_device_count,
+            "dropped_device_codes": list(capacity.dropped_device_codes),
         },
         "devices": [
             {
