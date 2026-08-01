@@ -17,7 +17,8 @@ bosaltinca kisa uyur. Tek worker => tek RabbitMQ publisher => lock cekismesi yok
 Konfigurasyon (env):
   OUTBOX_FLUSH_INTERVAL_SEC          default 0.3   (bos iken bekleme)
   OUTBOX_FLUSH_BATCH                 default 200   (bir turda yayin siniri)
-  OUTBOX_PUBLISHED_RETENTION_HOURS   default 1     (published=True saklama)
+  OUTBOX_PUBLISHED_RETENTION_MINUTES default 15    (published=True saklama)
+                                     (eski ..._HOURS geriye uyumlu okunur)
   OUTBOX_PURGE_INTERVAL_SEC          default 10    (cleanup periyodu)
   OUTBOX_PURGE_BATCH                 default 10000 (tek cleanup delete siniri)
 """
@@ -50,35 +51,64 @@ def _batch() -> int:
         return 200
 
 
-def _retention_hours() -> int:
-    """Yayinlanmis outbox satirlarinin saklama suresi (saat).
+#: NATS yeniden teslim penceresi: ack_wait(60sn) x nats_worker_max_deliver(10).
+#: Saklama sureleri bunun ALTINA inemez — inerse ayni mesaj yeniden teslim
+#: edildiginde dedup kaydi silinmis olur.
+REDELIVERY_WINDOW_SEC = 600
 
-    VARSAYILAN 24 -> 1 (2026-08-01, saha test cihazi olcumu).
 
-    Bu satirlar broker'a ZATEN teslim edilmis; saklamanin tek karsiligi adli
-    inceleme. Maliyeti ise dogrudan hacimle carpiliyor:
+def _retention_sec() -> float:
+    """Yayinlanmis outbox satirlarinin saklama suresi (saniye).
 
-        olculen oran            90,6 satir/sn  (8 cihaz, yuk testi)
-        satir basina            ~875 bayt      (indeksler dahil)
-        24 saatte               7,8 milyon satir  ~6,5 GB
-        1 saatte                  326 bin satir    ~272 MB
+    VARSAYILAN 15 DAKIKA — gerekcesi TAHMIN DEGIL, olculen pencereden turetildi.
 
-    Test cihazinda 8,9 GB bos disk vardi; 24 saatlik varsayilan sureklu yuk
-    altinda diski ~1,5 gunde dolduruyordu. 600 cihaz hedefinde ayni hesap
-    ~490 GB veriyor, yani varsayilan olcekle birlikte patliyordu.
+    BU PENCERE NEYI KORUYOR
+    -----------------------
+    `dedup_key` UNIQUE ve ekleme `ON CONFLICT DO NOTHING` yapiyor; satir
+    durdugu surece ayni `message_id` tekrar kuyruga girmez. Yani pencere =
+    tekrar-yayin koruma penceresi.
 
-    1 saat, gateway yeniden gonderim penceresi icin fazlasiyla yeterli
-    (retry'lar saniyeler mertebesinde). Ayrica tuketici tarafinda BAGIMSIZ
-    bir idempotency defteri var (`processed_messages`, kendi saklama
-    suresiyle) — dedup'in tek dayanagi bu tablo DEGIL.
+    AMA TEK KORUMA BU DEGIL. Tuketici tarafinda bagimsiz bir defter var
+    (`processed_messages`, kendi saklama suresiyle) ve kayit yazilmadan once
+    ORASI kontrol ediliyor. Dolayisiyla bu pencereyi kisaltmanin bedeli CIFT
+    KAYIT DEGIL, bosa giden bir yayin.
 
-    Adli inceleme icin uzun sure isteyen kurulum `OUTBOX_PUBLISHED_RETENTION_HOURS`
-    ile yukseltebilir; disk butcesini de birlikte hesaplamali.
+    `published=false` satirlar saklama suresinden BAGIMSIZ olarak hic
+    silinmiyor — teslim edilmemis bir olay, sure ne olursa olsun kaybolmaz.
+
+    NEDEN 15 DAKIKA
+    ---------------
+    Gercek yeniden teslim penceresi 10 dakika (REDELIVERY_WINDOW_SEC); 15
+    dakika ona %50 pay birakir. Olculen 296 satir/sn oraninda:
+
+        1 saat   -> ~1,07 milyon satir
+        15 dakika->   ~266 bin satir
+
+    NOT: saklama suresi tablonun BOYUTUNU sinirlar, YAZMA HIZINI degil. Her
+    okuma yine INSERT + UPDATE + DELETE olarak uc kez yaziliyor; CPU ve WAL
+    yuku oradan geliyor ve bu ayar ona dokunmuyor.
     """
-    try:
-        return max(1, int(os.getenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "1")))
-    except ValueError:
-        return 1
+    # Yeni ayar dakika biriminde. Eski `..._HOURS` degiskeni GERIYE UYUMLU
+    # okunuyor: sahada .env'ine onu yazmis kurulumlar bozulmasin.
+    ham = os.getenv("OUTBOX_PUBLISHED_RETENTION_MINUTES")
+    if ham is not None and ham.strip():
+        try:
+            dk = float(ham)
+        except ValueError:
+            dk = 15.0
+    else:
+        eski = os.getenv("OUTBOX_PUBLISHED_RETENTION_HOURS")
+        if eski is not None and eski.strip():
+            try:
+                dk = float(eski) * 60.0
+            except ValueError:
+                dk = 15.0
+        else:
+            dk = 15.0
+    # Yeniden teslim penceresinin ALTINA inilmesine izin verilmiyor: o
+    # noktada dedup korumasi mesaj hala yeniden teslim edilebilirken
+    # kalkar ve bosa giden yayinlar duplicate riskine donusur.
+    return max(float(REDELIVERY_WINDOW_SEC), dk * 60.0)
 
 
 def _purge_interval_sec() -> float:
@@ -145,7 +175,7 @@ class OutboxFlushWorker:
                         removed = purge_published_outbox(
                             purge_db,
                             before=datetime.now(timezone.utc) - timedelta(
-                                hours=_retention_hours()
+                                seconds=_retention_sec()
                             ),
                             limit=_purge_batch(),
                         )

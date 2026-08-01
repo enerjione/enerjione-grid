@@ -209,19 +209,22 @@ def _dispatch_iec104(db: Session, *, target: OutboundTarget, event_kind: str, pa
         value=value,
         good=good,
     )
-    # Deliver olayini kuru kuruya loglamak yerine cok kisa bir bilgi birakiyoruz
-    # ki olay akisi bos kalmasin.
-    record_event(
-        db,
-        category="outbound",
-        event_type="iec104_point_updated",
-        severity="debug",
-        message=f"{target.name} -> {device_code}.{signal_key}",
-        metadata={
-            "target": target.name,
-            "protocol": "iec104",
-            "device_code": device_code,
-            "signal_key": signal_key,
-            "quality": quality,
-        },
-    )
+    # NOKTA BASINA DENETIM KAYDI YOK — bilerek.
+    #
+    # Burada eskiden her telemetri okumasi icin `record_event(...)` cagriliyordu
+    # ("olay akisi bos kalmasin" gerekcesiyle). Iki ayri sorun vardi:
+    #
+    # 1. KAYIT HIC OLUSMUYORDU. Cagiran taraf (`telemetry_consumer._dispatch_outbound`)
+    #    session'i COMMIT ETMEDEN kapatiyor; dolayisiyla saniyede yuzlerce ORM
+    #    nesnesi kuruluyor, session'da birikiyor ve cope atiliyordu. Sahada
+    #    olculdu: IEC 104 hedefi aktifken `system_events` icinde TEK BIR
+    #    `iec104_point_updated` satiri yoktu.
+    #
+    # 2. COMMIT EDILSEYDI DAHA KOTU OLURDU. `system_events` denetim kaydi ve
+    #    2 YIL saklaniyor. 15 cihazlik test kurulumunda bile 375 okuma/sn
+    #    demek gunde 32 milyon denetim satiri demekti; tablo denetim amacini
+    #    tamamen kaybederdi (gercek operator olaylari bu gurultunun icinde
+    #    kaybolurdu).
+    #
+    # Nokta guncellemesi zaten IZLENEBILIR: IEC 104 server'in kendi sayaclari
+    # ve `/health` ciktisi var. Denetim kaydi OPERATOR EYLEMLERI icin.

@@ -222,6 +222,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
     from app.models.telemetry_history import TelemetryHistory
     from app.models.telemetry_latest import TelemetryLatest
     from app.services.device_clock_service import assess_device_timestamp
+    from app.services import historian_policy
     from app.services.tag_engine_service import (
         map_quality_to_status,
         normalize_quality,
@@ -371,16 +372,29 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             # almasina yol acabilirdi (araya gecen mikrosaniyeler yuzunden).
             _dev_at = telemetry.device_event_at
             _ts_quality = telemetry.timestamp_quality
-            historian_rows.append({
-                "device_id": device.id,
-                "signal_key": reading.signal_key,
-                "value": reading.value,
-                "value_string": reading.value_string,
-                "quality": normalize_quality(reading.quality),
-                "source_timestamp": reading.source_timestamp,
-                "device_event_at": _dev_at,
-                "timestamp_quality": _ts_quality,
-            })
+            # ARSIV POLITIKASI — her okuma arsive yazilmaz.
+            #
+            # Gercek SCADA pratigi: anlik deger her zaman guncel tutulur
+            # (`telemetry_latest`, hemen asagida) ama arsive yalnizca
+            # isaretlenen tag'ler, olu bant suzgecinden gecerek yazilir.
+            # Alarm dogrulugu ETKILENMEZ: alarm-service akis tabanli
+            # calisiyor, gecmis sorgusu yapmiyor.
+            if historian_policy.should_archive(
+                db,
+                device_id=device.id,
+                signal_key=reading.signal_key,
+                value=reading.value,
+            ):
+                historian_rows.append({
+                    "device_id": device.id,
+                    "signal_key": reading.signal_key,
+                    "value": reading.value,
+                    "value_string": reading.value_string,
+                    "quality": normalize_quality(reading.quality),
+                    "source_timestamp": reading.source_timestamp,
+                    "device_event_at": _dev_at,
+                    "timestamp_quality": _ts_quality,
+                })
             # `telemetry_latest` — canli ekranin okudugu SON deger tablosu.
             # Ayni batch'te ayni (cihaz, sinyal) birden fazla kez gelebilir;
             # ON CONFLICT tek bir INSERT icinde ayni satiri iki kez

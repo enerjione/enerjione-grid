@@ -469,8 +469,10 @@ services:
       # dogru kaynak kod, compose ikinci bir varsayilan tanimlamaz.
       OUTBOX_FLUSH_INTERVAL_SEC: ${OUTBOX_FLUSH_INTERVAL_SEC:-}
       OUTBOX_FLUSH_BATCH: ${OUTBOX_FLUSH_BATCH:-}
-      # Yayinlanmis satirlarin saklama suresi. Kod varsayilani 1 saat; olcum
-      # ve gerekce icin bkz. outbox_flush_worker._retention_hours.
+      # Yayinlanmis satirlarin saklama suresi. Kod varsayilani 15 DAKIKA;
+      # olcum ve gerekce icin bkz. outbox_flush_worker._retention_sec.
+      # Eski `..._HOURS` geriye uyumlu okunuyor.
+      OUTBOX_PUBLISHED_RETENTION_MINUTES: ${OUTBOX_PUBLISHED_RETENTION_MINUTES:-}
       OUTBOX_PUBLISHED_RETENTION_HOURS: ${OUTBOX_PUBLISHED_RETENTION_HOURS:-}
       OUTBOX_PURGE_INTERVAL_SEC: ${OUTBOX_PURGE_INTERVAL_SEC:-}
       OUTBOX_PURGE_BATCH: ${OUTBOX_PURGE_BATCH:-}

@@ -436,8 +436,24 @@ class IEC104Server:
                     total = 2 + parsed.length
                     del buffer[:total]
                     await self._dispatch(session, parsed)
-        except (asyncio.IncompleteReadError, ConnectionResetError):
-            pass
+        except (
+            asyncio.IncompleteReadError,
+            ConnectionResetError,
+            BrokenPipeError,
+            ConnectionAbortedError,
+        ):
+            # ISTEMCI KOPMASI HATA DEGIL, NORMAL SONLANMA.
+            #
+            # `BrokenPipeError` eksikti ve yakalanmayan dala dusuyordu: SCADA
+            # master'i her kapandiginda ERROR seviyesinde tam traceback
+            # basiliyordu. Iki zarari vardi — operator "crashed" gorup gercek
+            # bir ariza sandi, ve gunlukte GERCEK hatalar bu gurultunun icinde
+            # kayboldu. Yaziciya (`_drain_outbox`) yazarken kopan soket tam
+            # olarak bu hatayi uretir, yani her oturum sonunda gorulur.
+            logger.info(
+                "iec104_client_disconnected_mid_write name=%s peer=%s",
+                self.name, peer_str,
+            )
         except Exception:
             logger.exception("iec104_client_handler_crashed name=%s peer=%s", self.name, peer_str)
         finally:

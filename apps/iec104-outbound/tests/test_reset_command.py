@@ -317,3 +317,73 @@ def test_istemci_YAPILANDIRILMAMISSA_negatif_onay():
     """Sessizce kuyruga alinmis gibi davranmak en kotu sonuc olurdu."""
     cerceveler = asyncio.run(_senaryo(None))
     assert cerceveler and _negatif(cerceveler[0])
+
+
+# ---------------------------------------------------------------------------
+# Istemci kopmasi HATA DEGIL
+#
+# SAHADA GORULDU: SCADA master'i her kapandiginda gunluge ERROR seviyesinde
+# "iec104_client_handler_crashed" + tam traceback basiliyordu. Sebep
+# `BrokenPipeError`in yakalanan kopma tiplerinden BIRI OLMAMASIYDI —
+# yaziciya (`_drain_outbox`) yazarken kopan soket tam olarak bunu uretir,
+# yani her oturum sonunda goruluyordu.
+#
+# Iki zarari vardi: operator "crashed" gorup gercek bir ariza sandi, ve
+# gunlukte GERCEK hatalar bu gurultunun icinde kayboldu.
+# ---------------------------------------------------------------------------
+
+def _handler_kaynak() -> str:
+    import inspect
+    import re
+
+    from iec104_outbound.server import IEC104Server
+
+    kaynak = inspect.getsource(IEC104Server._handle_client)
+    kaynak = re.sub(r'""".*?"""', "", kaynak, flags=re.DOTALL)
+    return re.sub(r"^\s*#.*$", "", kaynak, flags=re.MULTILINE)
+
+
+@pytest.mark.parametrize(
+    "hata",
+    ["BrokenPipeError", "ConnectionResetError", "ConnectionAbortedError",
+     "asyncio.IncompleteReadError"],
+)
+def test_kopma_tipi_HATA_olarak_loglanmiyor(hata: str):
+    kod = _handler_kaynak()
+    # Sinir, fonksiyonun ILK `except Exception`i DEGIL — iceride daha erken
+    # bir tane var (TEST_ACT gonderimi) ve ona gore dilimlemek slice'i ters
+    # cevirip testi bos bir metin uzerinde calistiriyordu.
+    i_yakala = kod.find("except (")
+    i_genel = kod.find("iec104_client_handler_crashed")
+    assert i_yakala != -1, "kopma dali yok"
+    assert i_genel != -1 and i_genel > i_yakala, "genel hata dali kopma dalindan once"
+    kopma_blogu = kod[i_yakala:i_genel]
+    assert hata in kopma_blogu, (
+        f"{hata} kopma dalinda yakalanmiyor — genel dala duser ve her "
+        "oturum sonunda ERROR + traceback basar"
+    )
+
+
+def test_gercek_hatalar_HALA_loglaniyor():
+    """Kopma dalini genisletirken genel dali kaldirmak ya da SEVIYESINI
+    dusurmek, gercek bir cokusu sessizce yutmak olurdu.
+
+    Ilk yazimda yalnizca mesaj metnini ariyordum; `logger.exception` ->
+    `logger.debug` yapan mutasyon KACTI. Seviye de kilitleniyor: `exception`
+    hem ERROR seviyesi hem de traceback demek."""
+    kod = _handler_kaynak()
+    assert "except Exception:" in kod
+    assert 'logger.exception("iec104_client_handler_crashed' in kod, (
+        "gercek cokus ERROR + traceback ile loglanmiyor"
+    )
+
+
+def test_oturum_temizligi_HER_DURUMDA_calisiyor():
+    """Kopma dali `pass` yerine log basiyor; `finally` blogunun atlanmadigini
+    dogruluyoruz — atlanirsa yazici gorevi sizar."""
+    kod = _handler_kaynak()
+    i_finally = kod.find("finally:")
+    assert i_finally != -1, "finally blogu yok — kopan oturum gorev sizdirir"
+    finally_blok = kod[i_finally:]
+    assert "_sessions.discard(session)" in finally_blok
+    assert "_drain_task" in finally_blok

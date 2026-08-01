@@ -47,6 +47,32 @@ class SignalCatalog(Base):
     scale: Mapped[float] = mapped_column(Float, default=1.0)
     offset: Mapped[float] = mapped_column(Float, default=0.0)
 
+    # --- Historian (arsiv) politikasi -----------------------------------
+    #
+    # GERCEK SCADA PRATIGI: her tag arsive yazilmaz. Anlik deger (RTDB) her
+    # zaman guncel tutulur — alarmlar, ekranlar ve kontrol oradan okur — ama
+    # arsive yalnizca ISARETLENEN tag'ler, ustelik olu bant suzgecinden
+    # gecerek yazilir.
+    #
+    # Bu sistemde alarm motoru zaten akis tabanli (alarm-service JetStream'i
+    # dinliyor) ve canli deger `telemetry_latest` tablosunda; yani arsivi
+    # kismak alarm dogrulugunu ETKILEMIYOR.
+    #
+    # `historize=False` ornekleri: seri numarasi, firmware surumu, SIM CCID
+    # gibi statik metadata ve `firmware_update` gibi komut noktalari. Bunlarin
+    # zaman serisi hicbir soruya cevap vermiyor.
+    historize: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Olu bant (deadband) — MUTLAK, sinyalin kendi biriminde.
+    #
+    # Analog deger son ARSIVLENEN degerden bu kadar farklilasmadikca yeni
+    # satir yazilmaz. 0 = suzgec KAPALI (her okuma arsivlenir).
+    #
+    # DIKKAT: bu ayar veri COZUNURLUGUNU kalici olarak dusurur. Cok buyuk bir
+    # deger, gecmise donuk incelemede arizanin oncesindeki egriyi silikleştirir.
+    # Bu yuzden varsayilan 0 — operator kendi sahasina gore acar.
+    historize_deadband: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
     supports_alarm: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)

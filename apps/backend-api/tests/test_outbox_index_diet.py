@@ -148,14 +148,46 @@ def test_CONCURRENTLY_kullanilmiyor():
 # Saklama suresi
 # ---------------------------------------------------------------------------
 
-def test_varsayilan_saklama_1_SAAT(monkeypatch: pytest.MonkeyPatch):
-    """24 saat, olculen 90,6 satir/sn oraninda 7,8 milyon satir / ~6,5 GB
-    demekti; cihazda 8,9 GB bos disk vardi."""
+def _temiz_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for ad in ("OUTBOX_PUBLISHED_RETENTION_MINUTES", "OUTBOX_PUBLISHED_RETENTION_HOURS"):
+        monkeypatch.delenv(ad, raising=False)
+
+
+def test_varsayilan_saklama_15_DAKIKA(monkeypatch: pytest.MonkeyPatch):
+    """24 saat, olculen oranda milyonlarca satir / GB'larca disk demekti.
+
+    15 dakika, gercek yeniden teslim penceresine (10 dk) %50 pay birakir.
+    """
     from app.services import outbox_flush_worker as w
 
-    monkeypatch.delenv("OUTBOX_PUBLISHED_RETENTION_HOURS", raising=False)
-    assert w._retention_hours() == 1, (
-        "varsayilan saklama suresi geri buyumus — disk butcesi bununla carpiliyor"
+    _temiz_env(monkeypatch)
+    assert w._retention_sec() == 15 * 60, (
+        "varsayilan saklama suresi degismis — disk butcesi bununla carpiliyor"
+    )
+
+
+def test_saklama_YENIDEN_TESLIM_penceresinin_altina_INEMEZ(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Gercek pencere ack_wait(60sn) x max_deliver(10) = 10 dakika.
+
+    Altina inilirse dedup korumasi mesaj HALA yeniden teslim edilebilirken
+    kalkar; bosa giden yayinlar duplicate riskine doner.
+    """
+    from app.services import outbox_flush_worker as w
+
+    _temiz_env(monkeypatch)
+    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "1")
+    assert w._retention_sec() == w.REDELIVERY_WINDOW_SEC
+
+
+def test_yeniden_teslim_penceresi_AYARLARLA_tutarli():
+    """Sabit, config'teki gercek degerlerden turetilmis olmali."""
+    from app.core.config import settings
+    from app.services import outbox_flush_worker as w
+
+    assert w.REDELIVERY_WINDOW_SEC == 60 * settings.nats_worker_max_deliver, (
+        "yeniden teslim penceresi ayarlardan ayrismis"
     )
 
 
@@ -163,15 +195,35 @@ def test_saklama_suresi_env_ile_YUKSELTILEBILIR(monkeypatch: pytest.MonkeyPatch)
     """Adli inceleme isteyen kurulum kendi disk butcesiyle karar versin."""
     from app.services import outbox_flush_worker as w
 
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "12")
-    assert w._retention_hours() == 12
+    _temiz_env(monkeypatch)
+    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "45")
+    assert w._retention_sec() == 45 * 60
+
+
+def test_ESKI_saat_degiskeni_GERIYE_UYUMLU(monkeypatch: pytest.MonkeyPatch):
+    """Sahada .env'ine `..._HOURS` yazmis kurulumlar bozulmasin."""
+    from app.services import outbox_flush_worker as w
+
+    _temiz_env(monkeypatch)
+    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "2")
+    assert w._retention_sec() == 2 * 3600
+
+
+def test_YENI_degisken_eskisini_EZIYOR(monkeypatch: pytest.MonkeyPatch):
+    from app.services import outbox_flush_worker as w
+
+    _temiz_env(monkeypatch)
+    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "24")
+    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "20")
+    assert w._retention_sec() == 20 * 60
 
 
 def test_bozuk_env_degeri_COKERTMEZ(monkeypatch: pytest.MonkeyPatch):
     from app.services import outbox_flush_worker as w
 
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "yirmidort")
-    assert w._retention_hours() == 1
+    _temiz_env(monkeypatch)
+    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "onbes")
+    assert w._retention_sec() == 15 * 60
 
 
 def test_purge_YAYINLANMAMISLARA_dokunmuyor():
@@ -270,6 +322,7 @@ def test_migration_DDL_i_model_ile_AYNI():
 OUTBOX_ENV = [
     "OUTBOX_FLUSH_INTERVAL_SEC",
     "OUTBOX_FLUSH_BATCH",
+    "OUTBOX_PUBLISHED_RETENTION_MINUTES",
     "OUTBOX_PUBLISHED_RETENTION_HOURS",
     "OUTBOX_PURGE_INTERVAL_SEC",
     "OUTBOX_PURGE_BATCH",
@@ -306,7 +359,8 @@ def test_BOS_env_degeri_kod_varsayilanina_duser(ad: str, monkeypatch: pytest.Mon
     okuyucu = {
         "OUTBOX_FLUSH_INTERVAL_SEC": (w._interval_sec, 0.3),
         "OUTBOX_FLUSH_BATCH": (w._batch, 200),
-        "OUTBOX_PUBLISHED_RETENTION_HOURS": (w._retention_hours, 1),
+        "OUTBOX_PUBLISHED_RETENTION_MINUTES": (w._retention_sec, 15 * 60),
+        "OUTBOX_PUBLISHED_RETENTION_HOURS": (w._retention_sec, 15 * 60),
         "OUTBOX_PURGE_INTERVAL_SEC": (w._purge_interval_sec, 10.0),
         "OUTBOX_PURGE_BATCH": (w._purge_batch, 10_000),
     }[ad]
