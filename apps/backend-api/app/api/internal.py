@@ -1,7 +1,7 @@
 import hmac
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,17 +10,24 @@ from app.db.session import get_db
 from app.models.alarm import AlarmEvent
 from app.models.alarm_rule import AlarmRule
 from app.models.device import Device
+from app.models.device_command import DeviceCommand
 from app.models.gateway import Gateway
 from app.models.outbound_target import OutboundTarget
 from app.models.signal_catalog import SignalCatalog
 from app.schemas.alarm_rule import AlarmRuleRead
 from app.schemas.device import DeviceRead
 from app.schemas.gateway import GatewayRead
-from app.schemas.internal import InternalAlarmClear, InternalAlarmIngest
+from app.schemas.internal import (
+    InternalAlarmClear,
+    InternalAlarmIngest,
+    InternalCommandQueued,
+    InternalCommandRequest,
+    InternalCommandStatus,
+)
 from app.schemas.modbus import ModbusPlanRead
 from app.schemas.outbound import OutboundTargetRead
 from app.schemas.signal_catalog import SignalCatalogRead
-from app.services import modbus_plan_service
+from app.services import device_command_service, modbus_plan_service
 from app.services.event_service import record_event
 from app.services.notification_service import create_notification
 
@@ -705,3 +712,76 @@ def disable_gateway_internal(
     db.commit()
     db.refresh(row)
     return row
+
+
+# ---------------------------------------------------------------------------
+# Dis protokol -> cihaz komutu
+#
+# IEC 104 master'i bir kontrol komutu gonderdiginde iec104-outbound bu ucu
+# cagirir. Servis kendi DB baglantisina sahip DEGIL; komutun ayni allowlist,
+# ayni gateway kontrolu ve ayni audit kaydindan gecmesi icin backend'e
+# devrediliyor.
+#
+# KAPSAM: `device_command_service.PROTOCOL_ALLOWED_SLUGS` — yalnizca ariza
+# gostergesi reset'i. Bu, arayuzden gonderilebilen komut kumesinden KASITLI
+# olarak daha dar; gerekcesi o modulun docstring'inde.
+# ---------------------------------------------------------------------------
+
+@router.post("/device-commands", response_model=InternalCommandQueued)
+def queue_protocol_command_internal(
+    payload: InternalCommandRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Dis protokol adina cihaz komutu kuyruga alir (IEC 104 reset).
+
+    Yanit ANLIK SONUC DEGIL: komut gateway'e config-poll ile iletilir.
+    `{id, status:'pending'}` doner; gercek sonuc `GET /internal/device-commands/{id}`
+    ile takip edilir (IEC 104 tarafinda ACT_TERM bunun uzerine gonderilir).
+    """
+    _require_service_token(x_service_token, _extract_service_name(request))
+    try:
+        queued = device_command_service.queue_protocol_command(
+            db,
+            device_code=payload.device_code,
+            slug=payload.command,
+            origin=payload.origin,
+            peer=payload.peer,
+        )
+    except device_command_service.CommandRejected as exc:
+        # 400 + makine okunabilir `reason`: cagiran taraf bunu IEC 104 negatif
+        # onayina cevirir. Sessiz 500 yerine acik red, master'in komutu
+        # timeout'a birakmasini onler.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": exc.reason, "message": exc.detail},
+        ) from exc
+    db.commit()
+    return InternalCommandQueued(
+        id=queued.id, status=queued.status, command=queued.command,
+        device_code=queued.device_code,
+    )
+
+
+@router.get("/device-commands/{command_id}", response_model=InternalCommandStatus)
+def get_protocol_command_status(
+    command_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Kuyruga alinmis komutun son durumu.
+
+    IEC 104 tarafi ACT_TERM'i (ve olumsuzsa P/N bitini) buna gore gonderir:
+    komut cihazda gerceklesmeden ACT_TERM gondermek, SCADA operatorune
+    "reset yapildi" demek olurdu — oysa yalnizca kuyruga alinmistir.
+    """
+    _require_service_token(x_service_token, _extract_service_name(request))
+    cmd = db.get(DeviceCommand, command_id)
+    if cmd is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Komut bulunamadi")
+    return InternalCommandStatus(
+        id=cmd.id, status=cmd.status, result_status=cmd.result_status,
+        result_error=cmd.result_error,
+    )

@@ -3098,8 +3098,10 @@
     "title": "Device Detail",
     "notFound": "Device not found.",
     "status": {
+      "active": "Active",
+      "noData": "No data",
       "normal": "Normal",
-      "active": "Active"
+      "untrusted": "Unreliable"
     },
     "online": "Online",
     "offline": "Offline",
@@ -3416,5 +3418,20 @@
         "cancelled": "Stopped"
       }
     }
+  },
+  "ws": {
+    "live": "Live",
+    "liveTitle": "Telemetry is flowing",
+    "waiting": "Awaiting data",
+    "waitingTitle": "Connected, no telemetry received yet",
+    "stale": "No data",
+    "staleTitle": "Since last telemetry",
+    "connecting": "Connecting",
+    "connectingTitle": "Establishing connection",
+    "error": "Error",
+    "errorTitle": "Live data connection error",
+    "offline": "Disconnected",
+    "offlineTitle": "Live data connection is down",
+    "statusLabel": "Live data status"
   }
 }

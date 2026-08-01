@@ -52,6 +52,7 @@ import {
   fetchVersionInfo,
   loadSession
 } from "../../shared/api";
+import { WsStatusBadge } from "../../components/WsStatusBadge";
 import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
 import { usePolling } from "../../shared/usePolling";
 import type {
@@ -74,6 +75,8 @@ type Props = {
   onRefresh?: () => void | Promise<void>;
   /** Live telemetry WebSocket baglantisi durumu — header'dan tasindi. */
   wsState?: WsConnectionState;
+  /** Son TELEMETRI mesajinin zamani (ms) — bkz. components/WsStatusBadge.tsx. */
+  wsLastDataAt?: number | null;
 };
 
 /** Sunucu kaynak / servis durumu yenileme aralığı (sn). */
@@ -258,7 +261,15 @@ const SERVICE_GROUPS: { key: "core" | "workers" | "integrations"; roles: Service
   { key: "integrations", roles: ["gateway", "ftp"] }
 ];
 
-export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh }: Props) {
+export function SystemStatusPage({
+  devices,
+  gateways,
+  alarms,
+  loading,
+  onRefresh,
+  wsState,
+  wsLastDataAt,
+}: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const isTr = i18n.language?.startsWith("tr");
@@ -491,6 +502,14 @@ export function SystemStatusPage({ devices, gateways, alarms, loading, onRefresh
       <header className="sys-page-head">
         <div className="sys-page-head-text">
           <h2>{t("systemStatus.title")}</h2>
+          {/* Canli veri durumu. `wsState` eskiden bu sayfaya geciliyor ama
+              HIC OKUNMUYORDU — "Sistem Durumu" sayfasi telemetrinin akip
+              akmadigini gostermiyordu. */}
+          {wsState ? (
+            <div className="sys-page-head-meta">
+              <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt} />
+            </div>
+          ) : null}
           {host ? (
             <div className="sys-page-head-meta">
               <span>

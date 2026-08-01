@@ -30108,6 +30108,11 @@ th.event-col-category {
 .device-status-badge .material-symbols-outlined { font-size: 16px; }
 .device-status-badge.is-normal { color: #16a34a; }
 .device-status-badge.is-active { color: #d97706; }
+/* Veri yok / guvenilmez olcum — NOTR renk.
+   'Yesil yalan'in kapatildigi yer: value===null ve comm_lost kaliteli
+   0.0 degeri eskiden yesil 'Normal' gorunuyordu. Gri, operatore
+   'bilmiyoruz' der; yesil 'sorun yok' der. Ikisi ayni sey degil. */
+.device-status-badge.is-unknown { color: #94a3b8; }
 
 /* Ariza yonu — tek akis diyagrami */
 .device-flow { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 12px 0; }
@@ -30484,6 +30489,7 @@ th.event-col-category {
 .device-set-badge .material-symbols-outlined { font-size: 14px; }
 .device-set-badge.is-normal { color: #16a34a; }
 .device-set-badge.is-active { color: #d97706; }
+.device-set-badge.is-unknown { color: #94a3b8; }
 
 /* Analog olcumler (2 kolon) */
 .device-set-measures {
@@ -30977,6 +30983,11 @@ th.event-col-category {
 .device-status-badge .material-symbols-outlined { font-size: 15px; }
 .device-status-badge.is-normal { color: #16a34a; }
 .device-status-badge.is-active { color: #d97706; }
+/* Veri yok / guvenilmez olcum — NOTR renk.
+   'Yesil yalan'in kapatildigi yer: value===null ve comm_lost kaliteli
+   0.0 degeri eskiden yesil 'Normal' gorunuyordu. Gri, operatore
+   'bilmiyoruz' der; yesil 'sorun yok' der. Ikisi ayni sey degil. */
+.device-status-badge.is-unknown { color: #94a3b8; }
 .device-status-itemval {
   font-size: 13px;
   font-weight: 800;

@@ -144,3 +144,159 @@ def test_gecici_hatada_mevcut_liste_KORUNUYOR():
         "hata durumunda ariza listesi bosaltiliyor — operator arizanin "
         "cozuldugunu saniyor"
     )
+
+
+# ---------------------------------------------------------------------------
+# Binary rozetler: "veri yok" ve "guvenilmez" YESIL gosterilmemeli
+#
+# Eskiden yalnizca `value === 1` bakiliyordu ve UC AYRI durum ayni yesil
+# "Normal" rozetini uretiyordu:
+#
+#   value === null -> HIC VERI YOK                     -> "Normal" (yanlis)
+#   value === 0    -> gercekten normal                 -> "Normal" (dogru)
+#   value === 0 ama kalite `comm_lost`                 -> "Normal" (TEHLIKELI)
+#
+# Ucuncusu en agiri: haberlesmesi kopan cihaz icin gateway `comm_lost`
+# kalitesiyle 0.0 basiyor. Backend bu okumayi alarm degerlendirmesine
+# SOKMUYOR (`ALARM_BLOCKING_QUALITIES`) — yani sunucu dogru davraniyor.
+# Arayuz ise ayni degeri "taze" sanip yesil gosterip sunucunun kararini
+# GECERSIZ KILIYORDU.
+# ---------------------------------------------------------------------------
+
+QUALITY_TS = FE / "shared" / "signalQuality.ts"
+ALL_SIGNALS_TAB = FE / "features" / "device-detail" / "DeviceAllSignalsTab.tsx"
+DETAIL_PAGE = FE / "features" / "device-detail" / "DeviceDetailPage.tsx"
+
+
+def test_kalite_yardimcisi_VAR():
+    assert QUALITY_TS.is_file(), "shared/signalQuality.ts yok"
+
+
+def test_engelleyen_kaliteler_BACKEND_ILE_ayni():
+    """Ayrisirsa arayuz ile alarm motoru ayni okuma icin FARKLI sey soyler."""
+    from app.services.tag_engine_service import ALARM_BLOCKING_QUALITIES
+
+    kod = _kod(QUALITY_TS)
+    m = re.search(r"BLOCKING_QUALITIES[^=]*=\s*new Set\(\[(.*?)\]\)", kod, re.DOTALL)
+    assert m, "signalQuality.ts icinde BLOCKING_QUALITIES bulunamadi"
+    frontend = {s.strip().strip('"').strip("'") for s in m.group(1).split(",") if s.strip()}
+
+    assert frontend == set(ALARM_BLOCKING_QUALITIES), (
+        f"frontend {sorted(frontend)} != backend {sorted(ALARM_BLOCKING_QUALITIES)} — "
+        "arayuz, backend'in guvenilmez saydigi bir olcumu 'Normal' gosterebilir"
+    )
+
+
+@pytest.mark.parametrize("yol", [DETAIL_PAGE, ALL_SIGNALS_TAB], ids=lambda p: p.name)
+def test_binary_rozet_GUVENILIRLIGI_kontrol_ediyor(yol: Path):
+    kod = _kod(yol)
+    assert "signalTrust(" in kod, (
+        f"{yol.name}: binary rozet yalnizca degere bakiyor — 'veri yok' ve "
+        "'comm_lost kaliteli 0.0' yesil 'Normal' gorunur"
+    )
+    assert "is-unknown" in kod, f"{yol.name}: notr rozet sinifi kullanilmiyor"
+
+
+@pytest.mark.parametrize("yol", [DETAIL_PAGE, ALL_SIGNALS_TAB], ids=lambda p: p.name)
+def test_guvenilirlik_kontrolu_ROZETTEN_once(yol: Path):
+    """Sira onemli: kontrol sonra gelirse akis yine yesil rozete duser."""
+    kod = _kod(yol)
+    i_trust = kod.find("signalTrust(")
+    i_normal = kod.find('t("deviceDetail.status.normal")')
+    assert i_trust != -1 and i_normal != -1
+    assert i_trust < i_normal, (
+        f"{yol.name}: guvenilirlik kontrolu 'Normal' rozetinden SONRA geliyor"
+    )
+
+
+@pytest.mark.parametrize("dil", ["tr", "en"])
+def test_notr_rozet_cevirileri_VAR(dil: str):
+    yol = FE / "shared" / "i18n" / "resources" / f"{dil}.json"
+    d = json.loads(yol.read_text(encoding="utf-8"))
+    for anahtar in ("noData", "untrusted"):
+        assert d["deviceDetail"]["status"].get(anahtar), f"{dil}: {anahtar} yok"
+
+
+# ---------------------------------------------------------------------------
+# Canli veri rozeti: OLU KOD olmasin + soket durumunu "veri akiyor" sanmasin
+#
+# Denetim bu rozeti "yesil 'Canli' veri tazeligini degil soket durumunu
+# gosteriyor" diye isaretlemisti. Kaynaga bakinca daha kotusu cikti: rozet
+# HICBIR YERDE render EDILMIYORDU. `wsState` prop'u hem `Header`a hem
+# `SystemStatusPage`e geciliyor ama IKISINDE DE okunmuyordu — yani soket
+# olse bile ekranda hicbir isaret cikmiyor, bayat degerler sessizce duruyordu.
+#
+# Sunucu 30 sn'de bir `ping` attigi icin soket, gateway tamamen sussa bile
+# "open" kalir; rozet yalnizca soket durumuna baksaydi yine yaniltirdi.
+# Karar mantigi bu yuzden `shared/wsDataStatus.ts` icinde ve GERCEK testleri
+# `apps/frontend-web/tests/index.test.ts` altinda calisiyor (node:test).
+# Buradaki kontroller yalnizca "tekrar olu koda donmesin" bekcisi.
+# ---------------------------------------------------------------------------
+
+BADGE = FE / "components" / "WsStatusBadge.tsx"
+WS_STATUS_TS = FE / "shared" / "wsDataStatus.ts"
+HEADER = FE / "components" / "Header.tsx"
+SYS_STATUS = FE / "features" / "system-status" / "SystemStatusPage.tsx"
+FE_TESTS = FE.parent / "tests" / "index.test.ts"
+
+
+@pytest.mark.parametrize("yol", [HEADER, SYS_STATUS], ids=lambda p: p.name)
+def test_rozet_RENDER_ediliyor(yol: Path):
+    """Prop'u alip kullanmamak, gecirmemekten daha kotudur: cagiran taraf
+    durumu gosterdigini SANIR. Ikisi de `wsState` aliyor, ikisi de gostermeli.
+
+    Aranan sey JSX ACILIS ETIKETI (`<WsStatusBadge`), adin kendisi
+    DEGIL: ilk yazimda `"WsStatusBadge" in kod` diye bakiyordum ve bu
+    YETERSIZDI — JSX'i tamamen silsem bile `import` satiri adi icerdigi icin
+    test geciyordu. Mutasyon testi yakaladi.
+    """
+    kod = _kod(yol)
+    assert "wsState?: WsConnectionState" in kod, f"{yol.name}: prop tanimi yok"
+    assert "<WsStatusBadge" in kod, (
+        f"{yol.name}: WsStatusBadge render EDILMIYOR — soket kopsa bile "
+        "operator bunu ekranda goremez"
+    )
+    assert re.search(r"<WsStatusBadge[^>]*state=\{wsState\}", kod, re.DOTALL), (
+        f"{yol.name}: rozete gercek soket durumu gecilmiyor"
+    )
+    assert re.search(r"<WsStatusBadge[^>]*lastDataAt=", kod, re.DOTALL), (
+        f"{yol.name}: rozete son veri zamani gecilmiyor — rozet yine yalnizca "
+        "soket durumunu gosterir"
+    )
+
+
+def test_tazelik_karari_SOKET_durumundan_ayri():
+    kod = _kod(WS_STATUS_TS)
+    assert "lastDataAt" in kod, "tazelik karari son veri zamanina bakmiyor"
+    # Soket "open" iken hemen "live" donen bir kisayol olmamali.
+    assert 'return "live"' in kod
+    i_open = kod.find('state !== "open"')
+    i_live = kod.find('return "live"')
+    assert i_open != -1 and i_open < i_live, (
+        "soket durumu kontrolu veri kontrolunden sonra geliyor"
+    )
+
+
+def test_ping_TAZELIK_sayilmiyor():
+    """Sunucu 30sn'de bir ping atiyor; ping'i veri saymak rozeti kalici
+    yesil yapardi — kapatmaya calistigimiz yanilmanin ta kendisi."""
+    kod = _kod(FE / "shared" / "useLiveValuesSocket.ts")
+    m = re.search(r"const flush = \(\) => \{(.*?)\n    \};", kod, re.DOTALL)
+    assert m, "flush fonksiyonu bulunamadi"
+    assert "setLastDataAt" in m.group(1), (
+        "son veri zamani flush icinde isaretlenmiyor"
+    )
+    # `onmessage` icinde telemetry disindaki mesajlar zamani guncellememeli.
+    m2 = re.search(r"ws\.onmessage = \(event\) => \{(.*?)\n      \};", kod, re.DOTALL)
+    assert m2, "onmessage bulunamadi"
+    assert "setLastDataAt" not in m2.group(1), (
+        "son veri zamani onmessage icinde guncelleniyor — ping/hello de "
+        "tazelik sayilir ve rozet gateway sussa bile yesil kalir"
+    )
+
+
+def test_frontend_testleri_CI_da_kosuyor():
+    """Kosulmayan test, test degildir."""
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "npm test" in ci, "frontend testleri CI'da kosulmuyor"
+    assert FE_TESTS.is_file(), "frontend test dosyasi yok"

@@ -19,8 +19,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { asyncConfirm } from "../../components/ConfirmDialog";
-import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
-import { MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
+import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import { MAP_LAYERS } from "../../shared/mapTiles";
+import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 
@@ -908,18 +909,18 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 >
                   <LayersControl position="topright">
                     <LayersControl.BaseLayer checked name="Sokak (OSM)">
-                      <TileLayer url={tileUrl("osm")} attribution={MAP_LAYERS[0].attribution} />
+                      <ResilientTileLayer layer="osm" attribution={MAP_LAYERS[0].attribution} />
                     </LayersControl.BaseLayer>
                     <LayersControl.BaseLayer name="Uydu (Esri)">
-                      <TileLayer
-                        url={tileUrl("satellite")}
+                      <ResilientTileLayer
+                        layer="satellite"
                         attribution={MAP_LAYERS[1].attribution}
                         maxZoom={MAP_LAYERS[1].maxZoom}
                       />
                     </LayersControl.BaseLayer>
                     <LayersControl.BaseLayer name="Topografya">
-                      <TileLayer
-                        url={tileUrl("topo")}
+                      <ResilientTileLayer
+                        layer="topo"
                         attribution={MAP_LAYERS[2].attribution}
                         maxZoom={MAP_LAYERS[2].maxZoom}
                       />

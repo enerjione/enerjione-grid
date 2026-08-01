@@ -26,6 +26,7 @@ from app.schemas.device import (
 )
 from app.schemas.telemetry import TelemetryAggregatePoint, TelemetryHistoryPoint
 from app.services import license_service
+from app.services import device_command_service
 from app.services.event_service import record_event
 from app.services.scope_service import get_visible_device_ids
 
@@ -259,21 +260,10 @@ def queue_device_command(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
     _ensure_device_visible(db, current_user, device)
 
-    if not device.gateway_code:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cihaz bir gateway'e bagli degil; komut gonderilemez.",
-        )
-    gateway = db.scalar(select(Gateway).where(Gateway.code == device.gateway_code))
-    if gateway is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Gateway bulunamadi: {device.gateway_code}",
-        )
-
     # Config-turu komutlar installer-only. Genel + alarm reset komutlari
     # engineer+installer'da (endpoint seviyesi). Slug config grubundaysa
-    # engineer 403 alir.
+    # engineer 403 alir. Bu kontrol ARAYUZE OZGU: rol kavrami yalnizca burada
+    # var, dolayisiyla servise degil router'a ait.
     slug = payload.command.strip()
     if slug in _CONFIG_COMMAND_SLUGS and current_user.role != UserRole.INSTALLER:
         raise HTTPException(
@@ -281,54 +271,28 @@ def queue_device_command(
             detail="Config komutlari yalnizca installer tarafindan gonderilebilir",
         )
 
-    # Allowlist: komut slug'i SignalCatalog'da aktif bir binary_output olmali.
-    # Ham index kabul edilmez; adres DB'den (dnp3_index) yonetilir.
-    signal = db.scalar(
-        select(SignalCatalog).where(
-            SignalCatalog.key == f"master.{slug}",
-            SignalCatalog.data_type == "binary_output",
-            SignalCatalog.is_active.is_(True),
+    # Gateway kontrolu, SignalCatalog allowlist'i, satir yazimi ve audit
+    # ORTAK serviste. IEC 104 yolu da ayni fonksiyonu cagiriyor; dogrulamayi
+    # burada tekrarlamak iki kapinin zamanla ayrismasi demekti.
+    try:
+        queued = device_command_service.queue_command(
+            db,
+            device=device,
+            slug=slug,
+            actor=current_user.username,
+            origin="ui",
+            count=payload.count,
+            on_time_ms=payload.on_time_ms,
+            off_time_ms=payload.off_time_ms,
         )
-    )
-    if signal is None:
+    except device_command_service.CommandRejected as exc:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Gecersiz veya pasif komut: {slug}",
-        )
-    index = int(signal.dnp3_index)
-
-    cmd = DeviceCommand(
-        gateway_code=gateway.code,
-        device_code=device.code,
-        command=slug,
-        dnp3_index=index,
-        # Horstmann SN2 Device Profile PULSE DESTEKLEMEZ (yalniz LATCH_ON/OFF).
-        # op_type ACIKCA latch_on — model default'una guvenme (eski satirlar/
-        # deploy gecikmesi pulse_on birakabilir; cihaz NOT_SUPPORTED doner).
-        op_type="latch_on",
-        count=payload.count,
-        on_time_ms=payload.on_time_ms,
-        off_time_ms=payload.off_time_ms,
-        status="pending",
-        actor_username=current_user.username,
-    )
-    db.add(cmd)
-    db.flush()  # id icin
-    record_event(
-        db,
-        category="device",
-        event_type="device_command_queued",
-        severity="info",
-        actor_username=current_user.username,
-        device_code=device.code,
-        message=f"Komut kuyruga alindi: {signal.label} ({device.code}) #{cmd.id}",
-        metadata={"command": slug, "index": index, "command_id": cmd.id},
-        i18n_key="device_command_queued",
-        i18n_params={"command": signal.label, "code": device.code},
-    )
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.detail
+        ) from exc
     db.commit()
     return DeviceCommandQueued(
-        id=cmd.id, status=cmd.status, command=slug, dnp3_index=index
+        id=queued.id, status=queued.status,
+        command=queued.command, dnp3_index=queued.dnp3_index,
     )
 
 

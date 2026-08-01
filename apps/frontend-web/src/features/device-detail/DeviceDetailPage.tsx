@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useTranslation } from "react-i18next";
 
 import { fetchAlarmEvents } from "../../shared/api";
+import { signalTrust } from "../../shared/signalQuality";
 import type { AlarmEvent } from "../../shared/types";
 
 import type {
@@ -638,8 +639,34 @@ function StatusItem({
   const isBinary = dt === "binary" || dt === "binary_output";
 
   if (isBinary) {
-    const active = row.value === 1;
     const icon = STATUS_ICONS[suffix] ?? "toggle_on";
+
+    // UC DURUM — eskiden yalnizca `value === 1` bakiliyordu ve "veri yok" ile
+    // "gercekten normal" AYNI yesil rozeti uretiyordu.
+    //
+    // En tehlikelisi ucuncu hal: haberlesmesi kopan cihaz icin gateway
+    // `comm_lost` kalitesiyle 0.0 basiyor. Backend bu okumayi alarm
+    // degerlendirmesine SOKMUYOR; arayuz ise onu "taze" sanip yesil
+    // gosterip sunucunun kararini gecersiz kiliyordu.
+    const trust = signalTrust(row.value, row.effQuality, true);
+    if (trust !== "trusted") {
+      return (
+        <div className="device-status-item">
+          <span className="device-status-name" title={row.signal_key}>
+            <span className="material-symbols-outlined">{icon}</span>
+            {label}
+          </span>
+          <span className="device-status-badge is-unknown">
+            <span className="material-symbols-outlined">help</span>
+            {trust === "missing"
+              ? t("deviceDetail.status.noData")
+              : t("deviceDetail.status.untrusted")}
+          </span>
+        </div>
+      );
+    }
+
+    const active = row.value === 1;
     return (
       <div className="device-status-item">
         <span className="device-status-name" title={row.signal_key}>

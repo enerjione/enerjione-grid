@@ -25,6 +25,14 @@ import time as _time
 from dataclasses import dataclass
 from datetime import datetime
 
+from iec104_outbound.command_client import (
+    COMMAND_RESULT_POLL_SEC,
+    COMMAND_RESULT_TIMEOUT_SEC,
+    TERMINAL_FAIL,
+    TERMINAL_OK,
+    CommandClient,
+    CommandRejected,
+)
 from iec104_outbound.encoder import (
     APCI_U_START_ACT,
     APCI_U_START_CONFIRM,
@@ -39,6 +47,7 @@ from iec104_outbound.encoder import (
     START_BYTE,
     TYPE_C_CS_NA_1,
     TYPE_C_IC_NA_1,
+    TYPE_C_SC_NA_1,
     TYPE_M_IT_NA_1,
     TYPE_M_ME_NC_1,
     TYPE_M_SP_NA_1,
@@ -52,7 +61,9 @@ from iec104_outbound.encoder import (
     encode_asdu_single_point,
     encode_asdu_single_point_t,
     encode_interrogation_confirm,
+    encode_single_command_reply,
     parse_apci,
+    parse_single_command,
 )
 from iec104_outbound.registry import (
     BROADCAST_COMMON_ADDRESS,
@@ -204,6 +215,7 @@ class IEC104Server:
         port: int,
         registry: PointRegistry,
         allowed_peers: tuple[str, ...] = (),
+        command_client: CommandClient | None = None,
     ) -> None:
         self.name = name
         self.host = host
@@ -211,6 +223,11 @@ class IEC104Server:
         self.registry = registry
         self.allowed_peers = allowed_peers
         self._by_key: dict[tuple[str, str], PointAddress] = registry.by_key()
+        # Kontrol noktalari. `command_client` None ise komut kabul EDILMEZ
+        # (negatif onay) — yapilandirilmamis bir kurulumda sessizce
+        # kuyruga alinmis gibi davranmak en kotu sonuc olurdu.
+        self.command_client = command_client
+        self._commands_by_address = registry.command_by_address()
         self._values: dict[tuple[str, str], PointValue] = {}
         self._sessions: set[_ClientSession] = set()
         self._server: asyncio.base_events.Server | None = None
@@ -493,6 +510,9 @@ class IEC104Server:
             )
             await self._send_i(session, confirm)
             return
+        if type_id == TYPE_C_SC_NA_1:
+            await self._handle_single_command(session, frame.asdu)
+            return
         # DESTEKLENMEYEN KOMUT — SESSIZCE YUTMA.
         #
         # KAPSAM (urun karari): IEC 104 uzerinden kabul edilen komutlar
@@ -525,6 +545,167 @@ class IEC104Server:
             logger.debug("iec104_negatif_onay_uretilemedi", exc_info=True)
             return
         await self._send_i(session, red)
+
+
+    async def _handle_single_command(
+        self, session: _ClientSession, asdu: bytes,
+    ) -> None:
+        """C_SC_NA_1 (tip 45) — ariza gostergesi RESET komutu.
+
+        KAPSAM: IEC 104 uzerinden kabul edilen TEK kontrol komutu budur.
+        Adres kayitli degilse ya da izin verilen slug'a bakmiyorsa NEGATIF
+        onay doner (bkz. registry.ALLOWED_COMMAND_SLUGS).
+
+        ONAY ile SONLANDIRMA AYRI:
+          ACT_CON  -> komut KABUL EDILDI (backend kuyruga aldi)
+          ACT_TERM -> komut TAMAMLANDI  (cihaz sonucu bildirdi)
+        Cihaz NAT arkasindaki gateway'in ardinda ve komut ona config-poll ile
+        gidiyor (~30 sn); ikisini birlestirmek operatore "reset yapildi"
+        demek olurdu, oysa yalnizca kuyruga alinmistir.
+        """
+        cmd = parse_single_command(asdu)
+        if cmd is None:
+            logger.warning(
+                "iec104_komut_cozulemedi name=%s peer=%s — bicim bozuk ya da "
+                "coklu nesne; tek nesneli C_SC_NA_1 bekleniyor",
+                self.name, session.peer,
+            )
+            return
+
+        hedef = self._commands_by_address.get((cmd.common_address, cmd.ioa))
+        if hedef is None:
+            logger.warning(
+                "iec104_komut_adresi_taninmadi name=%s peer=%s ca=%d ioa=%d — "
+                "negatif onay",
+                self.name, session.peer, cmd.common_address, cmd.ioa,
+            )
+            await self._command_reply(session, cmd, COT_ACTIVATION_CON, negative=True)
+            return
+
+        # SELECT/EXECUTE: Horstmann reset'i tek asamali. SELECT gelirse
+        # olumlu onaylayip BEKLERIZ; komut yalnizca EXECUTE'ta uygulanir.
+        # SELECT'i uygulamak, operatorun "sec ve dogrula" adimini reset'e
+        # cevirirdi.
+        if cmd.select:
+            logger.info(
+                "iec104_komut_select name=%s peer=%s device=%s — onaylandi, "
+                "EXECUTE bekleniyor",
+                self.name, session.peer, hedef.device_code,
+            )
+            await self._command_reply(session, cmd, COT_ACTIVATION_CON)
+            return
+
+        if not cmd.on:
+            # SCS=OFF bir reset icin anlamsiz; sessizce yok saymak yerine
+            # reddediyoruz ki master yanlis kullandigini ogrensin.
+            logger.warning(
+                "iec104_komut_scs_off name=%s peer=%s device=%s — reset icin "
+                "SCS=ON bekleniyor, negatif onay",
+                self.name, session.peer, hedef.device_code,
+            )
+            await self._command_reply(session, cmd, COT_ACTIVATION_CON, negative=True)
+            return
+
+        if self.command_client is None:
+            logger.error(
+                "iec104_komut_istemcisi_yok name=%s peer=%s device=%s — komut "
+                "REDDEDILDI (backend baglantisi yapilandirilmamis)",
+                self.name, session.peer, hedef.device_code,
+            )
+            await self._command_reply(session, cmd, COT_ACTIVATION_CON, negative=True)
+            return
+
+        # Backend cagrisi SENKRON `requests` kullaniyor; olay dongusunu
+        # bloklamamak icin thread'e aliniyor. Bloklasaydi bu sure boyunca
+        # HICBIR oturum okunamaz, S-frame'ler islenmez ve k-penceresi
+        # dolardi (ayni tuzaga genel sorguda dusulmustu).
+        try:
+            kabul = await asyncio.to_thread(
+                self.command_client.queue,
+                device_code=hedef.device_code,
+                command=hedef.command_slug,
+                peer=session.peer,
+            )
+        except CommandRejected as exc:
+            logger.warning(
+                "iec104_komut_reddedildi name=%s peer=%s device=%s reason=%s: %s",
+                self.name, session.peer, hedef.device_code, exc.reason, exc.detail,
+            )
+            await self._command_reply(session, cmd, COT_ACTIVATION_CON, negative=True)
+            return
+
+        logger.info(
+            "iec104_komut_kuyruga_alindi name=%s peer=%s device=%s slug=%s id=%d",
+            self.name, session.peer, hedef.device_code, hedef.command_slug, kabul.id,
+        )
+        await self._command_reply(session, cmd, COT_ACTIVATION_CON)
+
+        # Sonucu AYRI gorevde bekle: okuma dongusu calismaya devam etsin.
+        asyncio.create_task(
+            self._await_command_result(session, cmd, kabul.id, hedef.device_code)
+        )
+
+    async def _await_command_result(
+        self, session: _ClientSession, cmd, command_id: int, device_code: str,
+    ) -> None:
+        """Komut sonucunu yoklar ve ACT_TERM gonderir.
+
+        Zaman asiminda NEGATIF ACT_TERM gider. Sessiz kalmak master'i
+        suresiz bekletirdi ve operator reset'in olup olmadigini bilemezdi.
+        """
+        # Zamanlama istemciden okunuyor (bkz. CommandClient.__init__).
+        ust_sinir = getattr(
+            self.command_client, "result_timeout_sec", COMMAND_RESULT_TIMEOUT_SEC
+        )
+        adim = getattr(self.command_client, "result_poll_sec", COMMAND_RESULT_POLL_SEC)
+        gecen = 0.0
+        while gecen < ust_sinir:
+            await asyncio.sleep(adim)
+            gecen += adim
+            if session.writer.is_closing():
+                return  # master gitti; ACT_TERM'in alicisi yok
+            durum, sonuc = await asyncio.to_thread(
+                self.command_client.result, command_id
+            )
+            if durum in TERMINAL_OK or (sonuc or "") in TERMINAL_OK:
+                logger.info(
+                    "iec104_komut_tamamlandi name=%s device=%s id=%d",
+                    self.name, device_code, command_id,
+                )
+                await self._command_reply(session, cmd, COT_ACTIVATION_TERM)
+                return
+            if durum in TERMINAL_FAIL or (sonuc or "") in TERMINAL_FAIL:
+                logger.warning(
+                    "iec104_komut_basarisiz name=%s device=%s id=%d durum=%s sonuc=%s",
+                    self.name, device_code, command_id, durum, sonuc,
+                )
+                await self._command_reply(
+                    session, cmd, COT_ACTIVATION_TERM, negative=True
+                )
+                return
+        logger.warning(
+            "iec104_komut_zaman_asimi name=%s device=%s id=%d sure=%.0fs — "
+            "negatif ACT_TERM",
+            self.name, device_code, command_id, ust_sinir,
+        )
+        await self._command_reply(session, cmd, COT_ACTIVATION_TERM, negative=True)
+
+    async def _command_reply(
+        self, session: _ClientSession, cmd, cause: int, *, negative: bool = False,
+    ) -> None:
+        """Komutu AYNEN yansitan onay/sonlandirma cercevesi gonderir."""
+        try:
+            frame = encode_single_command_reply(
+                common_address=cmd.common_address,
+                ioa=cmd.ioa,
+                sco=cmd.sco,
+                cause=cause,
+                negative=negative,
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("iec104_komut_yaniti_uretilemedi", exc_info=True)
+            return
+        await self._send_i(session, frame)
 
     def _start_interrogation(self, session: _ClientSession, *, requested_ca: int) -> None:
         """Genel sorguyu AYRI GOREVDE baslatir.
@@ -810,6 +991,13 @@ class IEC104ServerManager:
     def __init__(self) -> None:
         self._servers: dict[int, IEC104Server] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
+        # Kontrol komutlarini backend'e ileten istemci. `main` set eder.
+        # None kalirsa server komutlari REDDEDER (negatif onay) — sessizce
+        # kabul edilmis gibi davranmaktan iyidir.
+        self.command_client: CommandClient | None = None
+
+    def bind_command_client(self, client: CommandClient | None) -> None:
+        self.command_client = client
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -830,6 +1018,7 @@ class IEC104ServerManager:
         server = IEC104Server(
             name=name, host=host, port=port, registry=registry,
             allowed_peers=allowed_peers,
+            command_client=self.command_client,
         )
         await server.start()
         self._servers[target_id] = server

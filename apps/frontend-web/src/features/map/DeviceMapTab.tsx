@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
-import { DEFAULT_MAP_LAYER, MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
+import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
+import { DEFAULT_MAP_LAYER, MAP_LAYERS } from "../../shared/mapTiles";
+import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
@@ -1188,8 +1189,8 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                 checked={layer.key === DEFAULT_MAP_LAYER}
                 name={t(layer.labelKey)}
               >
-                <TileLayer
-                  url={tileUrl(layer.key)}
+                <ResilientTileLayer
+                  layer={layer.key}
                   attribution={layer.attribution}
                   maxZoom={layer.maxZoom}
                 />

@@ -2574,6 +2574,7 @@ export function App() {
         role={session.role}
         accessToken={session.accessToken}
         wsState={liveSocket.connectionState}
+        wsLastDataAt={liveSocket.lastDataAt}
         activePage={pageMode === "device-detail" ? "home" : pageMode}
         onChangePage={handleChangePage}
         isEngineeringView={pageMode === "engineering"}
@@ -2855,6 +2856,7 @@ export function App() {
                 loading={loadingData}
                 onRefresh={handleRefreshSystemStatus}
                 wsState={liveSocket.connectionState}
+                wsLastDataAt={liveSocket.lastDataAt}
               />
             ) : null}
             {engineeringPage === "network-settings" && session.role === "installer" ? (

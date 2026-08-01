@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MapContainer, Rectangle, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Rectangle, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngBoundsExpression, LeafletMouseEvent, Map as LeafletMap } from "leaflet";
 import {
   Download,
@@ -25,7 +25,8 @@ import {
   restartMapPack,
   startMapPack
 } from "../../shared/api";
-import { MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
+import { MAP_LAYERS } from "../../shared/mapTiles";
+import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import type { MapLayerKey } from "../../shared/mapTiles";
 import type { MapAreaRequest, MapPack, MapTileSummary } from "../../shared/types";
 
@@ -360,9 +361,8 @@ export function OfflineMapPage({ accessToken, initialCenter }: Props) {
           <MapContainer center={center} zoom={6} scrollWheelZoom className="offline-page-leaflet">
             {/* Secilen katman haritada ANINDA gorunur: "Uydu" secip sokak
                 haritasi izlemek kafa karistiriciydi. */}
-            <TileLayer
-              key={layer}
-              url={tileUrl(layer as MapLayerKey)}
+            <ResilientTileLayer
+              layer={layer as MapLayerKey}
               attribution={
                 MAP_LAYERS.find((item) => item.key === layer)?.attribution ??
                 MAP_LAYERS[0].attribution

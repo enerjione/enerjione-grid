@@ -7,8 +7,8 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { MapContainer, Marker, TileLayer, Tooltip } from "react-leaflet";
-import { tileUrl } from "../../shared/mapTiles";
+import { MapContainer, Marker, Tooltip } from "react-leaflet";
+import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
@@ -253,7 +253,7 @@ export function DeviceSidebar({
               attributionControl={false}
               style={{ height: "100%", width: "100%" }}
             >
-              <TileLayer url={tileUrl("osm")} />
+              <ResilientTileLayer layer="osm" />
               <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN}>
                 <Tooltip permanent direction="top" offset={[0, -10]} className="device-map-label">
                   {device.code}

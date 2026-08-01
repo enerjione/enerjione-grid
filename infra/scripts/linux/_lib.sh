@@ -918,3 +918,147 @@ e1_detect_ip() {
   fi
   echo "<vds-ip>"
 }
+
+# ---------------------------------------------------------------------------
+# NATS TLS — acik/kapali her iki durumda da TUTARLI bir yapilandirma uretir.
+#
+# NEDEN BU FONKSIYON VAR: TLS'in calismasi UC seyin AYNI ANDA dogru olmasina
+# bagli —
+#   (1) infra/nats/certs/ altinda sunucu sertifikasi + CA,
+#   (2) istemcilerin okudugu NATS_CA_FILE,
+#   (3) NATS_URL* semasinin `tls://` olmasi.
+# Ucunden biri eksik kalirsa ariza SESSIZ olur: NATS'in kendi healthcheck'i
+# TLS'siz izleme portunu (8222) prob ettigi icin container "healthy" gorunur,
+# ama backend el sikisamaz. Eskiden bu /health'i 503'e dusurup frontend-web'in
+# `depends_on: service_healthy` zincirini kilitliyordu — yani ARAYUZ HIC
+# ACILMIYORDU. /health artik NATS'i kritik saymiyor, ama yine de yarim
+# yapilandirmaya hic izin vermemek gerekiyor: bu fonksiyon ya tam tutarli bir
+# durum birakir ya da acik bir hata ile durur.
+#
+# Kullanim:
+#   e1_nats_tls_prepare [.env yolu]        # $E1_NATS_TLS_BLOCK'u doldurur
+#   e1_nats_conf_render_tls <conf yolu>    # {{NATS_TLS_BLOCK}} isaretini yazar
+# ---------------------------------------------------------------------------
+
+E1_NATS_TLS_BLOCK=""
+# `prepare` gercekten kostu mu? Fonksiyon bir boru hattinda cagrilirsa
+# (`e1_nats_tls_prepare | tee ...`) subshell'de calisir ve global degisken
+# CAGIRANA DONMEZ; o durumda blok bos kalir ve render sessizce TLS'SIZ bir
+# conf uretir. Sessiz yanlis yapilandirma tam da bu dosyanin onlemeye
+# calistigi sey — bu yuzden render bayragi kontrol eder ve bos blokla devam
+# etmez. Bayrak ayni subshell mantigiyla kaybolur, yani koruma dogru tarafta
+# hata verir.
+E1_NATS_TLS_PREPARED=""
+
+# TLS acilinca/kapaninca semasi degismesi gereken .env anahtarlari.
+# docker-compose.yml sirasiyla NATS_URL_BACKEND / NATS_URL_WORKER'i, yoksa
+# NATS_URL'i kullanir; uc anahtar da hizada tutulmali.
+e1_nats_url_keys() { printf '%s\n' "NATS_URL" "NATS_URL_BACKEND" "NATS_URL_WORKER"; }
+
+# .env'deki bir NATS URL'inin semasini degistirir (deger yoksa dokunmaz).
+# Parolayi ICERDIGI icin deger asla log'a basilmaz; yalnizca anahtar adi.
+_e1_nats_url_scheme() {
+  local key="$1" want="$2" env_file="$3" cur=""
+  cur="$(e1_env_get "$key" "$env_file")"
+  [[ -n "$cur" ]] || return 0
+  case "$want" in
+    tls) [[ "$cur" == nats://* ]] || return 0
+         sed -i "s|^${key}=nats://|${key}=tls://|" "$env_file"
+         e1_info "${key} semasi 'tls://' olarak hizalandi." ;;
+    plain) [[ "$cur" == tls://* ]] || return 0
+         sed -i "s|^${key}=tls://|${key}=nats://|" "$env_file"
+         e1_warn "${key} 'tls://' idi; TLS kapali oldugu icin 'nats://' yapildi." ;;
+  esac
+}
+
+e1_nats_tls_prepare() {
+  local env_file="${1:-.env}"
+  local enabled="" ca="" key=""
+  enabled="$(e1_env_get NATS_TLS_ENABLED "$env_file")"
+  enabled="$(printf '%s' "$enabled" | tr '[:upper:]' '[:lower:]')"
+
+  if [[ "$enabled" != "true" ]]; then
+    # KAPALI. Onceki bir denemeden kalan `tls://` semalari sistemi ayaga
+    # kaldirmaz; sessizce birakmak yerine geri aliyoruz ki "TLS'i kapattim
+    # ama hala calismiyor" durumu olusmasin.
+    for key in $(e1_nats_url_keys); do
+      _e1_nats_url_scheme "$key" plain "$env_file"
+    done
+    E1_NATS_TLS_BLOCK="# TLS kapali (NATS_TLS_ENABLED=true ile acilir)"
+    E1_NATS_TLS_PREPARED=1
+    return 0
+  fi
+
+  # ACIK. Sertifika yoksa devam etmek NATS'i hic ayaga kaldirmaz.
+  if [[ ! -f infra/nats/certs/server.crt || ! -f infra/nats/certs/server.key ]]; then
+    e1_warn "NATS_TLS_ENABLED=true ama sunucu sertifikasi yok (infra/nats/certs/)."
+    e1_warn "Once calistirin: sudo bash infra/scripts/linux/nats-tls-setup.sh"
+    e1_warn "TLS'e ihtiyaciniz yoksa .env'de NATS_TLS_ENABLED=false yapin."
+    e1_die "Sertifikasiz TLS ile NATS ayaga kalkmaz."
+  fi
+
+  # CA: istemciler bu dosyayi CONTAINER ICINDEN okur. Dizin compose'da
+  # `./infra/nats/certs:/etc/nats/certs:ro` olarak NATS'a BAGLANAN her
+  # servise mount edilir (x-nats-certs anchor'i).
+  if [[ ! -f infra/nats/certs/ca.crt ]]; then
+    e1_warn "infra/nats/certs/ca.crt yok — istemciler sunucuyu dogrulayamaz."
+    e1_die "nats-tls-setup.sh'i calistirip CA uretin."
+  fi
+  ca="$(e1_env_get NATS_CA_FILE "$env_file")"
+  if [[ -z "$ca" ]]; then
+    if grep -qE '^NATS_CA_FILE=' "$env_file" 2>/dev/null; then
+      sed -i "s|^NATS_CA_FILE=.*|NATS_CA_FILE=/etc/nats/certs/ca.crt|" "$env_file"
+    else
+      printf 'NATS_CA_FILE=%s\n' "/etc/nats/certs/ca.crt" >> "$env_file"
+    fi
+    e1_info "NATS_CA_FILE bos idi; /etc/nats/certs/ca.crt olarak dolduruldu."
+  elif [[ "$ca" != /etc/nats/certs/* ]]; then
+    # Container icindeki mount noktasi disinda bir yol = istemcide bulunamaz.
+    e1_warn "NATS_CA_FILE='${ca}' container icinde bulunmayabilir."
+    e1_warn "Beklenen yol: /etc/nats/certs/ca.crt (compose bu dizini mount eder)."
+  fi
+
+  # URL semalari: `nats://` ile TLS dinleyen bir sunucuya baglanilmaz.
+  for key in $(e1_nats_url_keys); do
+    _e1_nats_url_scheme "$key" tls "$env_file"
+  done
+
+  E1_NATS_TLS_BLOCK='tls {
+  cert_file: "/etc/nats/certs/server.crt"
+  key_file:  "/etc/nats/certs/server.key"
+  timeout:   5
+}'
+  E1_NATS_TLS_PREPARED=1
+  e1_ok "NATS TLS etkin (sertifika + CA + URL semalari hizali)."
+  return 0
+}
+
+# {{NATS_TLS_BLOCK}} yer tutucusunu $E1_NATS_TLS_BLOCK ile degistirir.
+#
+# NEDEN sed DEGIL: blok cok satirli ve `/` iceriyor.
+# NEDEN python DEGIL: bash'in `${var//ara/koy}` genislemesi tam bu isi yapar
+# ve degistirilen metin LITERAL'dir (regex yok), yani `/`, `&`, `\` ve satir
+# sonlari ozel anlam tasimaz. Kurulum betigine ayri bir python3 bagimliligi
+# eklemenin gerekcesi kalmiyordu; ustelik python3 her ortamda PATH'te degil.
+e1_nats_conf_render_tls() {
+  local conf="${1:-infra/nats/nats-server.conf}"
+  if [[ -z "$E1_NATS_TLS_PREPARED" ]]; then
+    e1_die "e1_nats_conf_render_tls: once e1_nats_tls_prepare cagrilmali (boru hattinda mi cagrildi?)."
+  fi
+  [[ -f "$conf" ]] || e1_die "e1_nats_conf_render_tls: dosya yok: $conf"
+
+  local icerik
+  icerik="$(<"$conf")"
+  printf '%s\n' "${icerik//\{\{NATS_TLS_BLOCK\}\}/$E1_NATS_TLS_BLOCK}" > "$conf"
+
+  # SONUCU DOGRULA. 2026-08-01 arizasinin cekirdegi tam buydu: render adimi
+  # patladi, `{{NATS_TLS_BLOCK}}` yer tutucusu dosyada HAM kaldi ve NATS o
+  # dosyayi ayristiramayip crash-loop'a girdi. Hata render sirasinda degil
+  # saatler sonra "arayuz acilmiyor" olarak goruldu. Artik yer tutucu
+  # kaldiysa burada, sebebi belliyken duruyoruz.
+  if grep -q '{{NATS_TLS_BLOCK}}' "$conf" 2>/dev/null; then
+    e1_warn "NATS conf render edilemedi: '{{NATS_TLS_BLOCK}}' yer tutucusu duruyor."
+    e1_warn "python3 calisiyor mu? (bcrypt adimi da ayni yorumlayiciyi kullanir)"
+    e1_die "Yer tutuculu bir nats-server.conf ile NATS ayaga kalkmaz."
+  fi
+}

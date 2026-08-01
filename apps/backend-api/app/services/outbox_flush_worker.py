@@ -17,7 +17,7 @@ bosaltinca kisa uyur. Tek worker => tek RabbitMQ publisher => lock cekismesi yok
 Konfigurasyon (env):
   OUTBOX_FLUSH_INTERVAL_SEC          default 0.3   (bos iken bekleme)
   OUTBOX_FLUSH_BATCH                 default 200   (bir turda yayin siniri)
-  OUTBOX_PUBLISHED_RETENTION_HOURS   default 24    (published=True saklama)
+  OUTBOX_PUBLISHED_RETENTION_HOURS   default 1     (published=True saklama)
   OUTBOX_PURGE_INTERVAL_SEC          default 10    (cleanup periyodu)
   OUTBOX_PURGE_BATCH                 default 10000 (tek cleanup delete siniri)
 """
@@ -51,10 +51,34 @@ def _batch() -> int:
 
 
 def _retention_hours() -> int:
+    """Yayinlanmis outbox satirlarinin saklama suresi (saat).
+
+    VARSAYILAN 24 -> 1 (2026-08-01, saha test cihazi olcumu).
+
+    Bu satirlar broker'a ZATEN teslim edilmis; saklamanin tek karsiligi adli
+    inceleme. Maliyeti ise dogrudan hacimle carpiliyor:
+
+        olculen oran            90,6 satir/sn  (8 cihaz, yuk testi)
+        satir basina            ~875 bayt      (indeksler dahil)
+        24 saatte               7,8 milyon satir  ~6,5 GB
+        1 saatte                  326 bin satir    ~272 MB
+
+    Test cihazinda 8,9 GB bos disk vardi; 24 saatlik varsayilan sureklu yuk
+    altinda diski ~1,5 gunde dolduruyordu. 600 cihaz hedefinde ayni hesap
+    ~490 GB veriyor, yani varsayilan olcekle birlikte patliyordu.
+
+    1 saat, gateway yeniden gonderim penceresi icin fazlasiyla yeterli
+    (retry'lar saniyeler mertebesinde). Ayrica tuketici tarafinda BAGIMSIZ
+    bir idempotency defteri var (`processed_messages`, kendi saklama
+    suresiyle) — dedup'in tek dayanagi bu tablo DEGIL.
+
+    Adli inceleme icin uzun sure isteyen kurulum `OUTBOX_PUBLISHED_RETENTION_HOURS`
+    ile yukseltebilir; disk butcesini de birlikte hesaplamali.
+    """
     try:
-        return max(1, int(os.getenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "24")))
+        return max(1, int(os.getenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "1")))
     except ValueError:
-        return 24
+        return 1
 
 
 def _purge_interval_sec() -> float:
@@ -108,9 +132,10 @@ class OutboxFlushWorker:
                     db.close()
                 consecutive_errors = 0
 
-                # published=True outbox satirlari sinirsiz buyumesin: 24 saatten
-                # eskiyi 10K batch sil. Sahada 1.7M published row UNIQUE/index
-                # sorgularini yavaslatiyordu. published=False ASLA silinmez.
+                # published=True outbox satirlari sinirsiz buyumesin: saklama
+                # suresinden eskiyi 10K batch sil (bkz. _retention_hours).
+                # Sahada 1.7M published row UNIQUE/index sorgularini
+                # yavaslatiyordu. published=False ASLA silinmez.
                 # Backlog surekli dolu olsa bile interval geldiginde purge calisir;
                 # aksi halde `continue` retention'i sonsuza dek acliktan birakir.
                 now_mono = time.monotonic()
