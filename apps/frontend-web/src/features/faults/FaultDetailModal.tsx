@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayersControl, MapContainer, Marker, Polyline, TileLayer, Tooltip } from "react-leaflet";
-import { MAP_LAYERS, tileUrl } from "../../shared/mapTiles";
+import { LayersControl, MapContainer, Marker, Polyline, Tooltip } from "react-leaflet";
+import { MAP_LAYERS } from "../../shared/mapTiles";
+import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 
@@ -543,11 +544,11 @@ export function FaultDetailModal({
                   >
                     <LayersControl position="topright">
                       <LayersControl.BaseLayer checked name="Sokak">
-                        <TileLayer url={tileUrl("osm")} attribution={MAP_LAYERS[0].attribution} />
+                        <ResilientTileLayer layer="osm" attribution={MAP_LAYERS[0].attribution} />
                       </LayersControl.BaseLayer>
                       <LayersControl.BaseLayer name="Uydu">
-                        <TileLayer
-                          url={tileUrl("satellite")}
+                        <ResilientTileLayer
+                          layer="satellite"
                           attribution={MAP_LAYERS[1].attribution}
                           maxZoom={MAP_LAYERS[1].maxZoom}
                         />
