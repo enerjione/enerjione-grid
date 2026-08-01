@@ -226,6 +226,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
         map_quality_to_status,
         normalize_quality,
         process_telemetry_reading,
+        should_write_last_update,
     )
     from sqlalchemy.dialects.postgresql import insert as _pg_insert
 
@@ -329,7 +330,12 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 nq = normalize_quality(reading.quality)
                 device.communication_status = map_quality_to_status(nq)
                 if device.communication_status.value == "online":
-                    device.last_update_at = datetime.now(timezone.utc)
+                    # Karar ana yolla AYNI fonksiyondan geliyor; kosulu
+                    # kopyalamak, birinin sessizce eski davranisa donmesi
+                    # demekti.
+                    _simdi = datetime.now(timezone.utc)
+                    if should_write_last_update(device.last_update_at, _simdi):
+                        device.last_update_at = _simdi
                 _fb_at, _fb_quality = assess_device_timestamp(
                     getattr(reading, "device_event_at", None),
                     reported_quality=getattr(reading, "timestamp_quality", None),

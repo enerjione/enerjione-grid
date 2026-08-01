@@ -52,6 +52,42 @@ _POINT_LEVEL_QUALITIES = frozenset({"invalid", "restart", "forced"})
 # ya da acik bir alarmi o degerle kapatmak yanlis olur.
 ALARM_BLOCKING_QUALITIES = frozenset(_OFFLINE_QUALITIES | {"forced"})
 
+#: `device.last_update_at` en fazla bu sıklıkta yazılır (saniye).
+#:
+#: OLCUM (saha test cihazi, 12 cihaz): alan her okumada yazildiginda
+#: `devices` tablosuna saniyede ~36 UPDATE gidiyordu. Tablo 12 SATIR ve
+#: 6 indeksli; her UPDATE yeni satir surumu + 6 indeks girdisi + WAL uretiyor,
+#: autovacuum surekli o tabloda calisiyor ve `devices` neredeyse her sorguda
+#: okundugu icin kirlenen sayfalar onbellegi de bozuyor.
+#:
+#: Alanin tek tuketicisi arayuzdeki "Son veri: X once" gostergesi; birkac
+#: saniyelik gecikme orada GORUNMEZ. Karar veren bir esikte kullanilmiyor —
+#: cihazin cevrimici olup olmadigi `communication_status` ile belirleniyor ve
+#: O ALAN KISILMIYOR, durum degisimi aninda yazilir.
+LAST_UPDATE_WRITE_THROTTLE_SEC = 5.0
+
+
+def should_write_last_update(
+    previous: datetime | None, now: datetime | None = None
+) -> bool:
+    """`device.last_update_at` SIMDI yazilmali mi?
+
+    Karar TEK YERDE: hem ana yol hem hata yolu bunu cagirir. Kosulu iki yere
+    kopyalamak, birinin sessizce eski (kisilmamis) davranisa donmesi demekti.
+
+    `previous is None` -> HEMEN yaz. Cihaz hic gorulmemisse gecikme kabul
+    edilemez; arayuzde "hic veri gelmedi" gorunurdu.
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if previous is None:
+        return True
+    if previous.tzinfo is None:
+        # Eski kayitlarda naive deger olabilir; cikarma islemi TypeError
+        # atarsa telemetri alimi TAMAMEN durur.
+        previous = previous.replace(tzinfo=timezone.utc)
+    return (now - previous).total_seconds() >= LAST_UPDATE_WRITE_THROTTLE_SEC
+
 
 def map_quality_to_status_scoped(
     quality: str, *, dnp3_flags: int | None
@@ -227,7 +263,20 @@ def process_telemetry_reading(
     # bilgisini bozmamali — frontend "Son veri: 5 dk once" sayacinin dogru
     # calismasi icin bu kritik.
     if next_status == CommunicationStatus.ONLINE:
-        device.last_update_at = datetime.now(timezone.utc)
+        # YAZMA KISMA — bkz. LAST_UPDATE_WRITE_THROTTLE_SEC.
+        #
+        # Bu alan HER okumada yazilirsa 12 cihazlik test kurulumunda bile
+        # `devices` tablosuna saniyede ~36 UPDATE gidiyordu (olculdu). Tablo
+        # 12 SATIR ve 6 indeksli; her UPDATE yeni bir satir surumu + 6 indeks
+        # girdisi + WAL uretiyor ve autovacuum surekli bu tabloda calisiyor.
+        # `devices` neredeyse her sorguda okundugu icin surekli kirlenen
+        # sayfalar onbellegi de bozuyor.
+        #
+        # Alanin tek tuketicisi arayuzdeki "Son veri: 5 dk once" sayaci;
+        # saniyede uc kez yazmanin kullaniciya hicbir karsiligi yok.
+        simdi = datetime.now(timezone.utc)
+        if should_write_last_update(device.last_update_at, simdi):
+            device.last_update_at = simdi
         # Batarya sinyali ise cihaz row'undaki battery_percent'i de senkronize et.
         # Sadece gercek (online) okumada — comm_lost/restart sirasinda son iyi
         # deger korunur.
