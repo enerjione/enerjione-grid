@@ -81,6 +81,34 @@ T3_IDLE_SEC = 20.0
 # kayitlar supuruluyordu.
 KWINDOW_WARN_INTERVAL_SEC = 30.0
 
+# Oturum basina giden ASDU kuyrugu tavani.
+#
+# NEDEN SINIR VAR: burada her deger degisimi icin
+# `asyncio.create_task(self._send_i(...))` cagriliyordu — sinirsiz ve referans
+# tutulmadan. SCADA istemcisi yavasladiginda `drain()` bloklanir ve her yeni
+# degisim BIR GOREV DAHA yaratirdi; 600 cihaz olceginde saniyede binlerce.
+# Gorevler yazma kilidinde kuyruga girip bellegi OOM'a kadar sisirirdi.
+# Ayrica referanssiz gorevler cop toplayici tarafindan yarida kesilebiliyordu
+# (CPython'un bilinen tuzagi) ve `ns` sira numarasi gorevler arasinda YARISA
+# giriyordu — tel sirasi bozulunca master tum oturumu reddedebiliyordu.
+#
+# NOT: Bu sertlestirme once yalnizca backend icindeki IEC104 kopyasina
+# uygulanmisti. SCADA'nin gercekten baglandigi servis BU DOSYADIR
+# (docker-compose 2404-2406 portlarini bu container'da yayinliyor), yani
+# koruma calismayan tarafa konmustu.
+#
+# 2000 ASDU ~ birkac saniyelik spontane trafik: gecici tikanikliklari yutar,
+# kalici tikanikligi ise dusurerek GORUNUR kilar.
+OUTBOX_MAX = 2000
+
+# Bir target'a ayni anda bagli olabilecek en fazla istemci.
+#
+# NEDEN SINIR VAR: her oturum, her deger degisiminde ek is demektir. Yeniden
+# baglanma dongusune giren bir istemci ya da yanlis yapilandirilmis bir SCADA
+# onlarca oturum acabilir ve sunucuyu kendi kendine bogar. Gercek kurulumda
+# bir target'a birkac master baglanir; 16 fazlasiyla yeterli.
+MAX_SESSIONS = 16
+
 
 @dataclass
 class PointValue:
@@ -112,11 +140,41 @@ class _ClientSession:
         # cihaz yukunde bu, log dosyalarini saniyeler icinde dondurup DIGER
         # tum teshis kayitlarini supuruyordu.
         self.last_kwindow_warn_at: float = 0.0
+        # Giden ASDU kuyrugu — SINIRLI. Bkz. OUTBOX_MAX.
+        self.outbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=OUTBOX_MAX)
+        self.dropped_total = 0
+        self._drain_task: "asyncio.Task | None" = None
 
     async def send(self, apdu: bytes) -> None:
         async with self._write_lock:
             self.writer.write(apdu)
             await self.writer.drain()
+
+    def enqueue(self, asdu: bytes) -> bool:
+        """ASDU'yu giden kuyruga koyar. Kuyruk doluysa EN ESKIYI atar.
+
+        Neden en eskiyi: IEC 104 spontane bildiriminde SON deger gecerlidir.
+        Yeni geleni atmak, guncel degeri atip bayat degeri gondermek olurdu —
+        yani tam tersi. Dusen sayilir ve loglanir; sessiz kayip olmaz.
+
+        Donus: True = yer vardi, False = bir ASDU dusuruldu.
+        """
+        try:
+            self.outbox.put_nowait(asdu)
+            return True
+        except asyncio.QueueFull:
+            try:
+                self.outbox.get_nowait()
+                self.outbox.task_done()
+                self.dropped_total += 1
+            except asyncio.QueueEmpty:  # pragma: no cover
+                pass
+            try:
+                self.outbox.put_nowait(asdu)
+            except asyncio.QueueFull:  # pragma: no cover
+                self.dropped_total += 1
+                return False
+            return False
 
 
 def _parse_asdu_common_address(asdu: bytes) -> int | None:
@@ -176,6 +234,11 @@ class IEC104Server:
     async def stop(self) -> None:
         logger.info("iec104_server_stopping name=%s", self.name)
         for session in list(self._sessions):
+            # Yazici gorevi de iptal et; aksi halde target durdurulup yeniden
+            # kurulduginda (cihaz ekleme/pasiflestirme bunu tetikliyor) her
+            # turda bir gorev daha geride kalirdi.
+            if session._drain_task is not None:
+                session._drain_task.cancel()
             try:
                 session.writer.close()
             except Exception:
@@ -233,8 +296,20 @@ class IEC104Server:
         if asdu is None:
             return
         for session in list(self._sessions):
-            if session.started:
-                asyncio.create_task(self._send_i(session, asdu))
+            if not session.started:
+                continue
+            # Sinirsiz `create_task` YERINE sinirli kuyruk: oturum basina tek
+            # yazici gorev bosaltir (bkz. _drain_outbox). Yavas istemci burada
+            # geri basinc yaratir, bellek buyumesi degil.
+            if not session.enqueue(asdu):
+                simdi = _time.monotonic()
+                if simdi - session.last_kwindow_warn_at >= KWINDOW_WARN_INTERVAL_SEC:
+                    session.last_kwindow_warn_at = simdi
+                    logger.warning(
+                        "iec104_outbox_dolu name=%s peer=%s dusen_toplam=%d "
+                        "(istemci yavas veya yaniti kesilmis)",
+                        self.name, session.peer, session.dropped_total,
+                    )
 
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -252,9 +327,26 @@ class IEC104Server:
             except Exception:
                 pass
             return
+        # OTURUM TAVANI: yeniden baglanma dongusune giren ya da yanlis
+        # yapilandirilmis bir master onlarca oturum acabilir; her oturum her
+        # deger degisiminde ek is demektir ve sunucu kendi kendini bogar.
+        if len(self._sessions) >= MAX_SESSIONS:
+            logger.warning(
+                "iec104_client_rejected_session_limit name=%s peer=%s aktif=%d tavan=%d",
+                self.name, peer_str, len(self._sessions), MAX_SESSIONS,
+            )
+            try:
+                writer.close()
+            except Exception:
+                pass
+            return
+
         session = _ClientSession(writer=writer, peer=peer_str)
         session.connected_at_iso = datetime.now(timezone.utc).isoformat()
         self._sessions.add(session)
+        # Oturum basina TEK yazici gorev: spontane bildirimler yalnizca buradan
+        # gider, dolayisiyla `ns` sira numarasi tel sirasiyla tutarli kalir.
+        session._drain_task = asyncio.create_task(self._drain_outbox(session))
         logger.info("iec104_client_connected name=%s peer=%s", self.name, peer_str)
 
         buffer = bytearray()
@@ -320,11 +412,21 @@ class IEC104Server:
             logger.exception("iec104_client_handler_crashed name=%s peer=%s", self.name, peer_str)
         finally:
             self._sessions.discard(session)
+            # Yazici gorevi MUTLAKA iptal et: aksi halde kopan her oturum
+            # arkasinda `outbox.get()` uzerinde sonsuza kadar bekleyen bir
+            # gorev birakir — tam da onlemek istedigimiz sinirsiz buyume.
+            if session._drain_task is not None:
+                session._drain_task.cancel()
             try:
                 writer.close()
                 await writer.wait_closed()
             except Exception:
                 pass
+            if session.dropped_total:
+                logger.warning(
+                    "iec104_client_disconnected name=%s peer=%s dusen_asdu=%d",
+                    self.name, peer_str, session.dropped_total,
+                )
             logger.info("iec104_client_disconnected name=%s peer=%s", self.name, peer_str)
 
     async def _dispatch(self, session: _ClientSession, frame: ParsedAPCI) -> None:
@@ -538,6 +640,36 @@ class IEC104Server:
                     session.writer.close()
             except Exception:  # noqa: BLE001
                 pass
+
+    async def _drain_outbox(self, session: _ClientSession) -> None:
+        """Oturumun giden kuyrugunu SIRAYLA bosaltir (oturum basina tek gorev).
+
+        NEDEN TEK GOREV: onceden her deger degisimi kendi `create_task`'ini
+        aciyordu. Bunun iki bedeli vardi:
+          1. Yavas istemcide gorev sayisi sinirsiz buyuyor, bellek OOM'a
+             gidiyordu (600 cihazda saniyede binlerce gorev).
+          2. `ns` sira numarasi gorevler arasinda YARISA giriyordu; tel
+             sirasi bozulunca master oturumu tamamen reddedebiliyordu.
+
+        Tek yazici gorev ikisini de kokten cozer: geri basinc kuyrukta
+        olusur (en eski ASDU dusurulur, bkz. `enqueue`) ve `ns` daima
+        gonderim sirasinda atanir.
+        """
+        try:
+            while True:
+                asdu = await session.outbox.get()
+                try:
+                    await self._send_i(session, asdu)
+                except Exception:  # noqa: BLE001
+                    logger.debug("iec104_drain_send_error", exc_info=True)
+                finally:
+                    session.outbox.task_done()
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "iec104_drain_crashed name=%s peer=%s", self.name, session.peer
+            )
 
 
 class IEC104ServerManager:
