@@ -14,6 +14,64 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.32.0] — 2026-08-01
+
+Saha test cihazında **15 cihazla canlı yük altında** yapılan ölçümlerden doğdu.
+Okuma başına ~6,4 satır işlemi yapılıyordu; bu sürüm bunun büyük kısmını
+kaldırıyor.
+
+### Değişti
+- **Historian artık seçici.** Gerçek SCADA pratiğinde her tag arşive
+  yazılmaz: anlık değer her zaman güncel tutulur, arşive yalnızca
+  işaretlenen tag'ler ölü bant süzgecinden geçerek yazılır. Bu sistemde iki
+  ön koşul da zaten sağlanıyordu — alarm motoru akış tabanlı çalışıyor
+  (geçmiş sorgusu yapmıyor) ve canlı değer ayrı bir tabloda — dolayısıyla
+  **alarm doğruluğu etkilenmiyor**.
+
+  Arşivden çıkarılanlar: seri numarası, firmware sürümü, donanım revizyonu,
+  SIM CCID, GPS gibi ömür boyu sabit metadata (30 sinyal) ve
+  `config_update` / `firmware_update` / `trigger_*` gibi komut noktaları
+  (18 sinyal). Bunların zaman serisi hiçbir soruya cevap vermiyordu.
+
+  Ölü bant varsayılanları: akım 0.5 A, gerilim 1 V, sıcaklık 0.5 °C.
+  Miliamper birimli akım sinyalleri bilerek kapsam dışı bırakıldı (ayrıca
+  belirlenecek). Her sinyal için ayrı ayrı ya da toplu kapatılabilir.
+
+- **Alarm kendiliğinden temizlendiğinde ayrıca olay kaydı düşülmüyor**
+  (varsayılan). Dalgalanan bir sinyal dakikalar içinde binlerce
+  tetiklen/temizlen çifti üretiyor ve gerçek operatör olayları — yetki
+  kullanımı, komut gönderimi, ayar değişikliği — bu yığının içinde
+  kayboluyordu. Bilgi kaybı yok: temizlenme zaten alarm kaydının kendisinde
+  duruyor ve alarm geçmişi oradan okunuyor. **Onaylanmış** bir alarm
+  temizlendiğinde kayıt her zaman yazılmaya devam ediyor, çünkü orada alarm
+  satırı siliniyor ve olay kaydı geriye kalan tek iz.
+
+### Düzeltildi
+- **IEC 104 açıkken her telemetri okuması için boşa iş yapılıyordu.** Nokta
+  güncellemesi başına bir denetim kaydı oluşturuluyor ama hiçbir zaman
+  kaydedilmiyordu (çağıran taraf oturumu kaydetmeden kapatıyor). Saniyede
+  yüzlerce nesne kurulup atılıyordu. Kaydedilseydi daha kötü olurdu: denetim
+  kaydı 2 yıl saklanıyor ve 15 cihazlık test kurulumunda bile günde 32
+  milyon satır demekti.
+
+- **SCADA istemcisi bağlantıyı kapattığında hata günlüğüne "çöktü" yazılıyordu.**
+  Normal bağlantı sonlanması yakalanan kopma tiplerinden biri değildi;
+  her oturum sonunda tam bir hata izi basılıyor, gerçek arızalar bu
+  gürültünün içinde kayboluyordu.
+
+- **Cihaz "son veri" zamanı her okumada yazılıyordu.** 15 cihazlık kurulumda
+  saniyede ~55 güncelleme demekti; alanın tek tüketicisi arayüzdeki
+  "Son veri: X önce" göstergesi. Birkaç saniyelik eşikle yazma yükü ~%95
+  düştü, ekranda hiçbir fark yok. Cihazın çevrimiçi olup olmadığı bilgisi
+  **kısılmadı** — o anında yazılmaya devam ediyor.
+
+- **Yayınlanmış outbox kayıtları 15 dakika saklanıyor** (önceden 1 saat,
+  ondan önce 24 saat). Süre tahminle değil ölçülen yeniden teslim
+  penceresinden türetildi ve kod artık o eşiğin altına inilmesine izin
+  vermiyor.
+
+---
+
 ## [2.31.0] — 2026-08-01
 
 Saha test cihazında yapılan **ölçümlerden** doğan sürüm. Önceki sürümde
