@@ -240,28 +240,55 @@ SYS_STATUS = FE / "features" / "system-status" / "SystemStatusPage.tsx"
 FE_TESTS = FE.parent / "tests" / "index.test.ts"
 
 
-@pytest.mark.parametrize("yol", [HEADER, SYS_STATUS], ids=lambda p: p.name)
-def test_rozet_RENDER_ediliyor(yol: Path):
-    """Prop'u alip kullanmamak, gecirmemekten daha kotudur: cagiran taraf
-    durumu gosterdigini SANIR. Ikisi de `wsState` aliyor, ikisi de gostermeli.
+def test_rozet_EN_AZ_BIR_YERDE_render_ediliyor():
+    """Rozet gorunur olmali — ama HANGI sayfada oldugu urun karari.
 
-    Aranan sey JSX ACILIS ETIKETI (`<WsStatusBadge`), adin kendisi
-    DEGIL: ilk yazimda `"WsStatusBadge" in kod` diye bakiyordum ve bu
-    YETERSIZDI — JSX'i tamamen silsem bile `import` satiri adi icerdigi icin
-    test geciyordu. Mutasyon testi yakaladi.
+    Ilk yazimda hem Header hem Sistem Durumu sayfasi ZORUNLU tutuluyordu.
+    Operator, surekli gorunen "canli/kopuk" isaretinin gunluk kullanimda
+    gurultu yarattigini soyleyip Header'dan kaldirdi ve Sistem Durumu
+    sayfasinda birakti. Bu mesru bir yerlesim karari; testin onu
+    engellememesi gerekir.
+
+    Korunmasi gereken sey yerlesim DEGIL, sudur: soket kopsa bile
+    operatorun bunu gorebilecegi BIR yer olmali. Rozet hicbir yerde
+    render edilmezse (eski hali oyleydi) burasi duser.
     """
-    kod = _kod(yol)
-    assert "wsState?: WsConnectionState" in kod, f"{yol.name}: prop tanimi yok"
-    assert "<WsStatusBadge" in kod, (
-        f"{yol.name}: WsStatusBadge render EDILMIYOR — soket kopsa bile "
+    render_edenler = [y for y in (HEADER, SYS_STATUS) if "<WsStatusBadge" in _kod(y)]
+    assert render_edenler, (
+        "WsStatusBadge hicbir yerde render EDILMIYOR — soket kopsa bile "
         "operator bunu ekranda goremez"
     )
+
+
+@pytest.mark.parametrize("yol", [HEADER, SYS_STATUS], ids=lambda p: p.name)
+def test_rozet_render_ediliyorsa_GERCEK_veriyle(yol: Path):
+    """Rozeti gosteren sayfa ona DOGRU girdileri vermeli.
+
+    Sabit bir deger ya da eksik `lastDataAt` ile rozet yine soket durumunu
+    gosterirdi — kapatilan hatanin ta kendisi.
+    """
+    kod = _kod(yol)
+    if "<WsStatusBadge" not in kod:
+        pytest.skip(f"{yol.name} rozeti gostermiyor (urun karari)")
     assert re.search(r"<WsStatusBadge[^>]*state=\{wsState\}", kod, re.DOTALL), (
         f"{yol.name}: rozete gercek soket durumu gecilmiyor"
     )
     assert re.search(r"<WsStatusBadge[^>]*lastDataAt=", kod, re.DOTALL), (
         f"{yol.name}: rozete son veri zamani gecilmiyor — rozet yine yalnizca "
         "soket durumunu gosterir"
+    )
+
+
+@pytest.mark.parametrize("yol", [HEADER, SYS_STATUS], ids=lambda p: p.name)
+def test_OLU_prop_birakilmadi(yol: Path):
+    """Prop'u alip kullanmamak, gecirmemekten daha kotudur: cagiran taraf
+    durumu gosterdigini SANIR. Bu depoda tam olarak bu yasandi."""
+    kod = _kod(yol)
+    if "wsState?: WsConnectionState" not in kod:
+        return  # prop hic tanimli degil — temiz
+    assert "<WsStatusBadge" in kod, (
+        f"{yol.name}: `wsState` prop'u tanimli ama rozet render edilmiyor — "
+        "olu prop, cagiran taraf durumu gosterdigini sanir"
     )
 
 

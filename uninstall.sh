@@ -69,6 +69,7 @@ echo
 echo "  ${E1_DIM}Dizin       :${E1_RESET} ${SCRIPT_DIR}"
 echo "  ${E1_DIM}Image'lar   :${E1_RESET} $([[ $KEEP_IMAGES -eq 1 ]] && echo 'KORUNACAK (--keep-images)' || echo 'SILINECEK')"
 echo "  ${E1_DIM}Dizini sil  :${E1_RESET} $([[ $PURGE_DIR -eq 1 ]] && echo 'EVET (--purge-dir)' || echo 'hayir')"
+echo "  ${E1_DIM}Tam temizlik:${E1_RESET} $([[ $PURGE_ALL -eq 1 ]] && echo 'EVET (--purge-all: sirlar + kiosk kullanicisi + mDNS)' || echo 'hayir')"
 echo "  ${E1_DIM}Onay        :${E1_RESET} $([[ $ASSUME_YES -eq 1 ]] && echo 'OTOMATIK (--yes)' || echo 'interaktif')"
 echo
 
@@ -252,6 +253,79 @@ fi
 
 # Dangling image temizligi
 docker image prune -f >/dev/null 2>&1 || true
+
+# ---- 4.5/5: Sistemde kalan her sey (--purge-all) --------------------------
+# Buraya kadar olan adimlar container/volume/image ve host ajanlarini temizler.
+# Ama kurulum sisteme BUNLARIN DISINDA da dokunmustur ve o izler kaliyordu.
+# En onemlisi /etc/enerjione-grid: cihaz elden cikarilsa bile CANLI Tailscale
+# anahtari ve GHCR token'i diskte duruyordu.
+if [[ $PURGE_ALL -eq 1 ]]; then
+  e1_step "Sistemde kalan izler (--purge-all)..."
+
+  # --- Kiosk kullanicisi -----------------------------------------------------
+  # Ad kuruluma gore degisir (musteri adindan turer: "tpao", "e1-kiosk"...).
+  # Bu yuzden ADI TAHMIN ETMIYORUZ: GECOS alanindaki imzadan buluyoruz.
+  # Boylece operator hangi adi sectiginden bagimsiz calisir.
+  mapfile -t _kiosk_users < <(
+    getent passwd | awk -F: '$5 ~ /EnerjiOne Grid/ {print $1}' 2>/dev/null || true
+  )
+  if [[ ${#_kiosk_users[@]} -gt 0 ]]; then
+    for _ku in "${_kiosk_users[@]}"; do
+      [[ -n "$_ku" && "$_ku" != "root" ]] || continue
+      e1_info "Kiosk kullanicisi kaldiriliyor: ${_ku}"
+      pkill -KILL -u "$_ku" 2>/dev/null || true
+      # --remove: ev dizini + mail spool. Avatar (~/.face) da boylece gider.
+      userdel --remove "$_ku" 2>/dev/null \
+        || deluser --remove-home "$_ku" >/dev/null 2>&1 \
+        || e1_warn "Kullanici silinemedi: ${_ku} (oturumu acik olabilir)"
+      rm -f "/var/lib/AccountsService/users/${_ku}" 2>/dev/null || true
+      rm -f "/var/lib/AccountsService/icons/${_ku}" 2>/dev/null || true
+    done
+  else
+    e1_info "Kiosk kullanicisi bulunamadi (kurulmamis olabilir)."
+  fi
+
+  # Otomatik giris ayari — hangi goruntu yoneticisi kuruluysa o dosyada.
+  # Satiri komple silmiyoruz; yalnizca bizim yazdigimiz autologin satirlarini.
+  for _dm in /etc/gdm3/daemon.conf /etc/gdm3/custom.conf /etc/gdm/custom.conf \
+             /etc/lightdm/lightdm.conf /etc/sddm.conf; do
+    [[ -f "$_dm" ]] || continue
+    sed -i -E '/^[[:space:]]*(AutomaticLogin(Enable)?|autologin-user|User)[[:space:]]*=/d' "$_dm" 2>/dev/null || true
+  done
+  rm -f /usr/share/xsessions/enerjione-kiosk.desktop 2>/dev/null || true
+  rm -f /etc/sddm.conf.d/e1-kiosk.conf /etc/lightdm/lightdm.conf.d/e1-kiosk.conf 2>/dev/null || true
+
+  # --- mDNS takma adi --------------------------------------------------------
+  # Hostname'in KENDISI korunur (yukarida gerekcesi yazili); yalnizca bizim
+  # yayinladigimiz eski ad (e1-grid.local) servisini kaldiriyoruz.
+  systemctl stop e1-grid-mdns-alias.service 2>/dev/null || true
+  systemctl disable e1-grid-mdns-alias.service 2>/dev/null || true
+  rm -f /etc/systemd/system/e1-grid-mdns-alias.service 2>/dev/null || true
+  rm -f /etc/avahi/services/e1-grid*.service 2>/dev/null || true
+  systemctl daemon-reload 2>/dev/null || true
+
+  # --- Tailscale paketi (yalnizca acikca istenirse) --------------------------
+  # Cihazda baska bir is icin de kullaniliyor olabilir; varsayilan KALDIRMAMAK.
+  # Tailnet uyeligi zaten yukarida (logout ile) sonlandirildi.
+  if [[ $PURGE_TAILSCALE -eq 1 ]] && command -v tailscale >/dev/null 2>&1; then
+    e1_info "Tailscale paketi kaldiriliyor..."
+    systemctl stop tailscaled 2>/dev/null || true
+    systemctl disable tailscaled 2>/dev/null || true
+    apt-get remove -y --purge tailscale >/dev/null 2>&1 \
+      || e1_warn "Tailscale paketi kaldirilamadi; elle: sudo apt-get purge tailscale"
+    rm -rf /var/lib/tailscale 2>/dev/null || true
+  fi
+
+  # --- SIRLAR — EN SONA BIRAKILDI -------------------------------------------
+  # Yukaridaki adimlar (ozellikle tailscale logout) bu dosyalari okuyabilir;
+  # once silseydik geri donusu olmayan bir yarim temizlik olurdu.
+  if [[ -d /etc/enerjione-grid ]]; then
+    e1_info "Kurulum sirlari siliniyor: /etc/enerjione-grid"
+    rm -rf /etc/enerjione-grid
+    e1_ok "Tailscale anahtari, GHCR token'i ve saha kimligi silindi."
+  fi
+  e1_ok "Sistemde iz birakilmadi."
+fi
 
 # ---- 5/5: Install dizinini sil (opsiyonel) -------------------------------
 e1_step "Install dizini..."
