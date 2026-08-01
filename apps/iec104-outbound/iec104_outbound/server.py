@@ -493,7 +493,38 @@ class IEC104Server:
             )
             await self._send_i(session, confirm)
             return
-        logger.debug("iec104_unsupported_command name=%s type=%d", self.name, type_id)
+        # DESTEKLENMEYEN KOMUT — SESSIZCE YUTMA.
+        #
+        # KAPSAM (urun karari): IEC 104 uzerinden kabul edilen komutlar
+        # yalnizca genel sorgu (C_IC_NA_1), saat esitleme (C_CS_NA_1) ve
+        # ileride RESET'tir. ANALOG CIKIS / setpoint (C_SE_NA/NB/NC) ve diger
+        # kontrol tipleri KAPSAM DISIDIR.
+        #
+        # Eskiden bu dal yalnizca `logger.debug` yaziyordu. SCADA operatoru
+        # komutu gonderiyor, hicbir yanit almiyor ve komutun kabul edilip
+        # edilmedigini ANLAYAMIYORDU; varsayilan log seviyesinde iz de yoktu.
+        # IEC 60870-5-104'te dogru davranis NEGATIF onaydir (COT'un P/N biti):
+        # master komutun REDDEDILDIGINI ogrenir.
+        ca = _parse_asdu_common_address(frame.asdu) or self.registry.default_common_address
+        logger.warning(
+            "iec104_desteklenmeyen_komut name=%s peer=%s type=%d — negatif onay "
+            "gonderiliyor (kapsam: yalnizca genel sorgu, saat esitleme, reset)",
+            self.name, session.peer, type_id,
+        )
+        try:
+            # `negative=True` COT'un P/N bitini (0x40) kurar. Bayragi `cause`
+            # icine OR'lamak ISE YARAMAZDI: `_encode_dui` cause'u `& 0x3F` ile
+            # maskeliyor, yani bit sessizce dusurdu.
+            red = encode_interrogation_confirm(
+                common_address=ca,
+                cause=COT_ACTIVATION_CON,
+                qoi=0,
+                negative=True,
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("iec104_negatif_onay_uretilemedi", exc_info=True)
+            return
+        await self._send_i(session, red)
 
     def _start_interrogation(self, session: _ClientSession, *, requested_ca: int) -> None:
         """Genel sorguyu AYRI GOREVDE baslatir.

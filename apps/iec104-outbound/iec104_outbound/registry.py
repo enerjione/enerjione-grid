@@ -25,6 +25,22 @@ logger = logging.getLogger(__name__)
 # atanmasi onerilmez.
 BROADCAST_COMMON_ADDRESS = 0xFFFF
 
+# IEC 104 ile yayinlanan IZLEME tipleri — URUN KAPSAMI.
+#
+#   1  M_SP_NA_1  tek nokta (binary)      -> ariza/durum bitleri
+#   13 M_ME_NC_1  kisa kayan nokta        -> olcumler
+#   15 M_IT_NA_1  sayac
+#
+# Zaman etiketli karsiliklari (30 M_SP_TB_1, 36 M_ME_TF_1) sunucu tarafinda
+# `with_timestamp` bayragina gore TUREETILIR; katalogda temel tip durur.
+#
+# KAPSAM DISI (bilincli urun karari):
+#   * STRING (DNP3 Group 110 / octet string) — IEC 104 ile GONDERILMEZ.
+#     Bu sinyaller REST/MQTT kanallarindan alinir.
+#   * ANALOG CIKIS / setpoint (C_SE_*) — yayinlanmaz.
+#   * BINARY OUTPUT — izleme noktasi olarak yayinlanmaz.
+SUPPORTED_MONITORING_TYPES = frozenset({1, 13, 15})
+
 
 @dataclass(frozen=True)
 class PointAddress:
@@ -128,6 +144,7 @@ def build_point_registry(
         key=lambda d: str(d.get("code") or ""),
     )
     mapped_signals: list[tuple[Mapping, int, int, bool]] = []
+    desteklenmeyen: list[str] = []
     for s in signals:
         if not s.get("is_active", True):
             continue
@@ -141,12 +158,46 @@ def build_point_registry(
             type_id = int(type_id_raw)
         except (TypeError, ValueError):
             continue
+
+        # KAPSAM: IEC 104 ile YALNIZCA izleme tipleri yayinlanir.
+        #
+        #   1  M_SP_NA_1  tek nokta (binary)
+        #   13 M_ME_NC_1  kisa kayan nokta (analog)
+        #   15 M_IT_NA_1  sayac
+        #
+        # STRING YOK: DNP3 Group 110 (octet string) sinyalleri IEC 104 ile
+        # gonderilmiyor (urun karari). ANALOG CIKIS YOK: setpoint/analog
+        # output tipleri kapsam disi.
+        #
+        # Bu filtre NEDEN GEREKLI: katalogda string ve binary_output sinyalleri
+        # `iec104_type_id = NULL` ile geliyor, yani veri zaten uygun. Ama
+        # `PATCH /signals/{key}` bu alani DUZENLENEBILIR yapiyor; biri string
+        # bir sinyale type id verirse nokta registry'ye girer, sonra
+        # `_encode_single_value` onu tanimayip None doner ve bildirim HER
+        # SEFERINDE SESSIZCE duser. Yani yanlis yapilandirma calisir gorunur.
+        # Politikayi burada, tek yerde sabitliyoruz.
+        if type_id not in SUPPORTED_MONITORING_TYPES:
+            desteklenmeyen.append(f"{s.get('key')}(type={type_id})")
+            continue
         # Zaman etiketi flag'i: backend SignalCatalog.iec104_with_timestamp.
         # default: dijital (binary) sinyallerde True, analog (float/counter)'de
         # False. Backend default'lari katalog seed'inde set ediyor; eski
         # kayitlarda da is_digital fallback ile dolduruluyor.
         with_ts = bool(s.get("iec104_with_timestamp", False))
         mapped_signals.append((s, type_id, ioa, with_ts))
+
+    if desteklenmeyen:
+        # Operator bir sinyale kapsam disi bir tip vermis. Sessiz kalirsak
+        # nokta yayinlanmaz ve sebebi hicbir yerde gorunmez; SCADA tarafinda
+        # "adres listesinde var ama veri gelmiyor" olarak yasanir.
+        logger.warning(
+            "iec104_kapsamdisi_tip target=%s adet=%d ornekler=%s — IEC 104 ile "
+            "yalnizca izleme tipleri (1/13/15) yayinlanir; string ve analog "
+            "cikis kapsam disidir",
+            target_id,
+            len(desteklenmeyen),
+            ",".join(sorted(desteklenmeyen)[:10]),
+        )
 
     points: list[PointAddress] = []
     # Adresi olmayan cihazlar — hepsi varsayilan CA'ya duser ve BIRBIRININ

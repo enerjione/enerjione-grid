@@ -268,6 +268,27 @@ jobs:
       - name: Kurallar uygulaniyor ve dogrulaniyor
         run: |
           set -euo pipefail
+
+          # DIS AGA BAGIMLI ADIM — yeniden dene.
+          # Bu job iki kez altyapi yuzunden kirmizi oldu: bir kez Alpine
+          # deposu ("temporary error"), bir kez Docker Hub
+          # (registry-1.docker.io timeout). Ikisi de kodla ilgisiz. Kalici
+          # kirmizi bir job zamanla "yine o job" diye gozardi edilmeye baslar
+          # ve GERCEK bir kirilma da fark edilmez — asil risk budur.
+          _dene() {
+            local n=0
+            until "$@"; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::3 denemede basarisiz: $*"
+                return 1
+              fi
+              echo "Deneme $n basarisiz, $((n * 15)) sn sonra tekrar..."
+              sleep $((n * 15))
+            done
+          }
+          # Imaji ONCE cek: cekme hatasi ile KURAL hatasi birbirine karismasin.
+          _dene docker pull -q alpine:3.20
           # Privileged container KENDI net namespace'inde calisir (varsayilan
           # bridge agi); icerideki iptables host'u ETKILEMEZ.
           #
@@ -281,7 +302,13 @@ jobs:
           docker run --rm --privileged \
             -v "$PWD/infra/appliance:/w:ro" -w /w \
             alpine:3.20 sh -eux -c '
-              apk add --no-cache bash iptables >/dev/null
+              # apk de dis aga bagli — burada da yeniden dene.
+              n=0
+              until apk add --no-cache bash iptables >/dev/null 2>&1; do
+                n=$((n + 1))
+                [ "$n" -ge 3 ] && { echo "apk 3 denemede basarisiz"; exit 1; }
+                sleep $((n * 10))
+              done
 
               bash e1-ap-firewall.sh eth0 10.42.0.1
 
