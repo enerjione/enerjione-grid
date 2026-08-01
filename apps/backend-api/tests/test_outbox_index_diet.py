@@ -252,3 +252,77 @@ def test_migration_DDL_i_model_ile_AYNI():
         "migration'daki CREATE INDEX ifadesi model ile ayni yuklemi "
         f"kullanmiyor. Model: {model_ddl!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Env ayarlari container'a GERCEKTEN ulasiyor mu
+#
+# compose'da `env_file` YOK: yalnizca `environment:` altinda listelenen
+# degiskenler container'a geciyor. Listelenmeyen bir ayar, kodda okunsa ve
+# belgelense bile SESSIZCE kod varsayilaninda kalir — operator .env'e yazar,
+# hicbir sey degismez.
+#
+# Bu tuzaga bu depoda UC KEZ dusuldu: BACKUP_OFFSITE_DIR, ACCESS_TOKEN_MINUTES
+# ve simdi OUTBOX_* ailesinin BESI BIRDEN (hepsi `outbox_flush_worker`
+# docstring'inde "Konfigurasyon (env)" basligi altinda belgeliydi).
+# ---------------------------------------------------------------------------
+
+OUTBOX_ENV = [
+    "OUTBOX_FLUSH_INTERVAL_SEC",
+    "OUTBOX_FLUSH_BATCH",
+    "OUTBOX_PUBLISHED_RETENTION_HOURS",
+    "OUTBOX_PURGE_INTERVAL_SEC",
+    "OUTBOX_PURGE_BATCH",
+]
+
+
+def _compose_backend_env() -> dict:
+    import yaml
+
+    kok = Path(__file__).resolve().parents[3]
+    compose = yaml.safe_load((kok / "docker-compose.yml").read_text(encoding="utf-8"))
+    env = compose["services"]["backend-api"].get("environment") or {}
+    if isinstance(env, list):
+        return {e.split("=", 1)[0]: e.split("=", 1)[-1] for e in env}
+    return env
+
+
+@pytest.mark.parametrize("ad", OUTBOX_ENV)
+def test_outbox_ayari_COMPOSE_uzerinden_geciyor(ad: str):
+    assert ad in _compose_backend_env(), (
+        f"{ad} compose'da listelenmemis — kodda okunuyor ve belgeleniyor ama "
+        "container'a HIC ULASMIYOR; operator .env'e yazsa da olu ayar kalir"
+    )
+
+
+@pytest.mark.parametrize("ad", OUTBOX_ENV)
+def test_BOS_env_degeri_kod_varsayilanina_duser(ad: str, monkeypatch: pytest.MonkeyPatch):
+    """compose `${VAR:-}` yaziyor, yani ayarlanmamis degisken container'a BOS
+    STRING olarak gecer. `os.getenv(ad, "N")` bu durumda "N" DEGIL "" doner —
+    kod bunu kendi varsayilanina cevirebilmeli, yoksa compose satirini
+    eklemek ayari duzeltmek yerine BOZAR."""
+    from app.services import outbox_flush_worker as w
+
+    okuyucu = {
+        "OUTBOX_FLUSH_INTERVAL_SEC": (w._interval_sec, 0.3),
+        "OUTBOX_FLUSH_BATCH": (w._batch, 200),
+        "OUTBOX_PUBLISHED_RETENTION_HOURS": (w._retention_hours, 1),
+        "OUTBOX_PURGE_INTERVAL_SEC": (w._purge_interval_sec, 10.0),
+        "OUTBOX_PURGE_BATCH": (w._purge_batch, 10_000),
+    }[ad]
+    fn, beklenen = okuyucu
+
+    monkeypatch.setenv(ad, "")
+    assert fn() == beklenen, f"{ad} bos degerde varsayilanina dusmuyor"
+
+
+def test_compose_OUTBOX_icin_ikinci_varsayilan_tanimlamiyor():
+    """Tek dogru kaynak kod olmali. compose `${VAR:-24}` yazarsa iki ayri
+    varsayilan olur ve biri degisince digeri unutulur — bu depoda
+    ACCESS_TOKEN_MINUTES tam boyle dort farkli degere ayrismisti."""
+    env = _compose_backend_env()
+    for ad in OUTBOX_ENV:
+        deger = str(env.get(ad, ""))
+        assert deger.endswith(":-}") or deger == "", (
+            f"{ad} compose'da ikinci bir varsayilan tanimliyor: {deger!r}"
+        )

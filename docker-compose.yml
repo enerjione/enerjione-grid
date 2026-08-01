@@ -456,6 +456,24 @@ services:
       # tanimli olmasina ragmen .env'den okunmuyordu ve tavan sessizce hep
       # 1440 kaliyordu (olu ayar).
       REMOTE_ACCESS_MAX_MINUTES: ${REMOTE_ACCESS_MAX_MINUTES:-1440}
+
+      # --- Outbox ayarlari -------------------------------------------------
+      # AYNI TUZAK UCUNCU KEZ: bu bes degisken `outbox_flush_worker` docstring'inde
+      # "Konfigurasyon (env)" diye BELGELENMISTI ama compose'da listelenmedigi
+      # icin container'a HIC ULASMIYORDU. Operator .env'e yazar, hicbir sey
+      # degismezdi. (Ayni sey daha once BACKUP_OFFSITE_DIR ve
+      # ACCESS_TOKEN_MINUTES'ta yasandi; yukaridaki notlara bakin.)
+      #
+      # Varsayilan BILEREK bos birakiliyor: kod tarafi `os.getenv(..., "N")`
+      # + try/except ile bos degeri kendi varsayilanina cevirir. Boylece tek
+      # dogru kaynak kod, compose ikinci bir varsayilan tanimlamaz.
+      OUTBOX_FLUSH_INTERVAL_SEC: ${OUTBOX_FLUSH_INTERVAL_SEC:-}
+      OUTBOX_FLUSH_BATCH: ${OUTBOX_FLUSH_BATCH:-}
+      # Yayinlanmis satirlarin saklama suresi. Kod varsayilani 1 saat; olcum
+      # ve gerekce icin bkz. outbox_flush_worker._retention_hours.
+      OUTBOX_PUBLISHED_RETENTION_HOURS: ${OUTBOX_PUBLISHED_RETENTION_HOURS:-}
+      OUTBOX_PURGE_INTERVAL_SEC: ${OUTBOX_PURGE_INTERVAL_SEC:-}
+      OUTBOX_PURGE_BATCH: ${OUTBOX_PURGE_BATCH:-}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
