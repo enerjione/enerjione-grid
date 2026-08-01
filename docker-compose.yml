@@ -383,9 +383,12 @@ services:
       # ne hata ne uyari uretiyordu. Yani ozellik tamamen OLUYDU ve bu ancak
       # felaket aninda — tek kopya da gittiginde — fark edilirdi.
       #
-      # Host yolu ile container yolu BILEREK AYNI: job kayitlarindaki ve
-      # loglardaki yol host'ta birebir ayni yeri gosterir, karisiklik olmaz.
-      BACKUP_OFFSITE_DIR: ${BACKUP_OFFSITE_DIR:-}
+      # `.env`'deki BACKUP_OFFSITE_DIR bir HOST yoludur; container icinde her
+      # zaman sabit /var/lib/e1-backups-offsite olarak gorunur (asagidaki
+      # mount). `:+` sayesinde degisken bos/tanimsizsa bu env de BOS kalir ve
+      # _offsite_copy hicbir sey yapmaz — yani ozellik tek degiskenle acilip
+      # kapanir.
+      BACKUP_OFFSITE_DIR: ${BACKUP_OFFSITE_DIR:+/var/lib/e1-backups-offsite}
       # FCM push bildirim icin Firebase service account JSON yolu.
       # Host'ta /opt/enerjione-grid/fcm-service-account.json varsa volume mount edilir.
       # Dosya yoksa FCM sessizce devre disi kalir (fcm.py lazy load), email/SMS
@@ -433,19 +436,22 @@ services:
       - backup-data:/var/lib/e1-backups
       # Off-site yedek hedefi. Env'i eklemek TEK BASINA yetmez — host'taki
       # NAS/ikinci disk yolu container'a baglanmazsa kopyalama "dizin yok"
-      # ile duser. Host ve container yolu ayni tutuluyor (bkz. yukaridaki
-      # BACKUP_OFFSITE_DIR yorumu).
+      # ile duser.
       #
-      # Degisken bos/tanimsizsa `/dev/null:/dev/null` baglanir: gecerli ve
-      # tamamen etkisiz bir mount. Boylece off-site kapaliyken compose dosyasi
-      # da, container da degismis olmaz.
+      # Degisken bos/tanimsizsa proje icindeki ./backups baglanir. Bu YALNIZCA
+      # compose'un gecerli kalmasi icin; yukaridaki env `:+` ile bos oldugu
+      # icin backend bu yola HICBIR SEY yazmaz. (Etkisiz bir yer tutucu olarak
+      # `/dev/null` daha zarif gorunuyordu ama bir aygit dosyasini bind
+      # etmenin calistigini bu makinede DOGRULAYAMADIM; yanlissa off-site
+      # kapali olan HER kurulumda backend ayaga kalkmazdi. Sirasi gelmisken
+      # alinacak risk degil — dizin bind'i sirandan ve kesin.)
       #
       # DIKKAT: hedef bir ag paylasimi ise container BASLAMADAN ONCE host'ta
       # mount edilmis olmali. Aksi halde Docker bind mount icin bos bir dizin
       # yaratir ve yedekler YEREL diske yazilir — off-site sanilan kopya ayni
       # diskte kalir. Ayrica dizin uid 10001 (backend) tarafindan yazilabilir
       # olmali.
-      - ${BACKUP_OFFSITE_DIR:-/dev/null}:${BACKUP_OFFSITE_DIR:-/dev/null}
+      - ${BACKUP_OFFSITE_DIR:-./backups}:/var/lib/e1-backups-offsite
       - license-data:/var/lib/e1-license
       # Host OS kimligi sabit; USB/disk/RAM/ag karti degisimi bunu etkilemez.
       # Container recreate sonrasi lisans ayni makinede gecerli kalir.
