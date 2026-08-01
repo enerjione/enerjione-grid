@@ -671,6 +671,13 @@ export type SignalCatalogRow = {
   modbus_address?: number | null;
   // MQTT outbound topic suffix'i.
   mqtt_topic?: string | null;
+  /** Operatorun elle degistirdigi alanlarin adlari.
+   *
+   *  Backend her acilista fabrika katalogunu senkronlar; bu listedeki
+   *  alanlara DOKUNMAZ. Onceden isaret yoktu ve kaydedilen duzenlemeler
+   *  (IOA, scale, label...) ilk yeniden baslatmada sessizce geri aliniyordu.
+   *  Arayuz bu alanlari "fabrika degerinden farkli" olarak isaretleyebilir. */
+  user_overrides?: string[] | null;
 };
 
 export type SignalLiveRow = {

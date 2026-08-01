@@ -101,12 +101,14 @@ def _load_all_default_items() -> tuple[list[dict], set[str]]:
     return items, seen_models
 
 
-def seed_default_signals(db: Session, *, strict: bool = True) -> dict:
+def seed_default_signals(
+    db: Session, *, strict: bool = True, respect_user_overrides: bool = True
+) -> dict:
     """Tum modellerin standart sinyal kataloglarini senkronize eder.
 
-    Dönüş: {"inserted": N, "updated": M, "removed": R, "total": T}
+    Dönüş: {"inserted": N, "updated": M, "removed": R, "total": T, "kept": K}
 
-    `strict=True` (varsayılan):
+    `strict=True`:
       - Aynı `key` varsa alanları günceller.
       - Yeni `key`'ler eklenir.
       - Seed dosyalarinda olmayan VE bu calistirmada islenen modellere ait
@@ -117,6 +119,18 @@ def seed_default_signals(db: Session, *, strict: bool = True) -> dict:
     `strict=False`:
       - Yalnızca upsert yapılır; listede olmayan kayıtlar dokunulmaz
         (kurulumcunun custom eklediği sinyaller korunur).
+
+    `respect_user_overrides=True` (varsayilan):
+      - `SignalCatalog.user_overrides` icinde adi gecen alanlar GUNCELLENMEZ.
+
+      NEDEN: bu fonksiyon her backend acilisinda kosuyor ve `_MUTABLE_FIELDS`
+      tam da kurulumcunun arayuzden degistirdigi alanlari iceriyor. Sistem
+      "kaydedildi" deyip denetim kaydi tutuyor, sonra ilk yeniden baslatmada
+      sessizce geri aliyordu — SCADA yanlis IOA'dan okuyor, olcek 10 kat
+      sapiyor ve hicbir hata logu olusmuyordu.
+
+      `False` yalnizca "fabrika ayarlarina don" ucu icin: orada geri donmek
+      operatorun BILINCLI tercihidir.
     """
     items, seeded_models = _load_all_default_items()
     if not items:
@@ -127,6 +141,7 @@ def seed_default_signals(db: Session, *, strict: bool = True) -> dict:
     inserted = 0
     updated = 0
     removed = 0
+    kept = 0  # kullanici degisikligi korundugu icin ezilmeyen alan sayisi
 
     for data in items:
         key = data.get("key")
@@ -137,8 +152,19 @@ def seed_default_signals(db: Session, *, strict: bool = True) -> dict:
             db.add(SignalCatalog(**data))
             inserted += 1
             continue
+
+        korunan = set()
+        if respect_user_overrides:
+            ham = getattr(current, "user_overrides", None)
+            if isinstance(ham, list):
+                korunan = {str(f) for f in ham}
+
         changed = False
         for field in _MUTABLE_FIELDS:
+            if field in korunan:
+                # Operator bu alani elle degistirmis — fabrika degeri EZMEZ.
+                kept += 1
+                continue
             new_value = data.get(field, getattr(current, field))
             if getattr(current, field) != new_value:
                 setattr(current, field, new_value)
@@ -161,6 +187,22 @@ def seed_default_signals(db: Session, *, strict: bool = True) -> dict:
         "inserted": inserted,
         "updated": updated,
         "removed": removed,
+        "kept": kept,
         "total": inserted + updated,
         "skipped": False,
     }
+
+
+def clear_user_overrides(db: Session) -> int:
+    """Tum sinyallerdeki kullanici degisiklik isaretlerini temizler.
+
+    Yalnizca "fabrika ayarlarina don" ucu icin. Isaretler kalirsa o eylem
+    yarim kalir: kullanicinin degistirdigi alanlar fabrika degerine DONMEZ
+    ve operator "dondurdum" sanir.
+    """
+    temizlenen = 0
+    for row in db.scalars(select(SignalCatalog)).all():
+        if getattr(row, "user_overrides", None):
+            row.user_overrides = None
+            temizlenen += 1
+    return temizlenen

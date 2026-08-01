@@ -84,6 +84,10 @@ class SignalCatalogUpdate(BaseModel):
 
 class SignalCatalogRead(SignalCatalogBase):
     id: int
+    # Operatorun elle degistirdigi alanlarin adlari. Arayuz bu alanlari
+    # "fabrika degerinden farkli" olarak isaretleyebilir; ayrica acilistaki
+    # seed'in neden o alanlari guncellemedigini aciklar.
+    user_overrides: list[str] | None = None
 
     class Config:
         from_attributes = True

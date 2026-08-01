@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Float, Integer, String
+from sqlalchemy import JSON, Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -87,3 +87,26 @@ class SignalCatalog(Base):
     # MQTT outbound topic suffix'i. Tam topic: "<base_topic>/<device_code>/<mqtt_topic>"
     # Ornek: "telemetry/voltage/phase_a"
     mqtt_topic: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # OPERATORUN ELLE DEGISTIRDIGI ALANLARIN ADLARI.
+    #
+    # NEDEN VAR: backend her acilista `seed_default_signals(strict=True)`
+    # kosuyordu ve `_MUTABLE_FIELDS` listesi tam da kurulumcunun arayuzden
+    # degistirdigi alanlari iceriyor: label, unit, scale, offset, dnp3_index,
+    # iec104_type_id, iec104_ioa, iec104_ioa_offset. Yani sistem "kaydedildi"
+    # diyor, denetim kaydi tutuyor, sonra ILK YENIDEN BASLATMADA sessizce
+    # geri aliyordu.
+    #
+    #   > Devreye alma muhendisi SCADA icin 20 sinyalin IOA'sini duzenler ve
+    #   > akim trafosu icin scale=0.1 yapar. Gece elektrik kesintisi olur.
+    #   > Sabah SCADA YANLIS IOA'dan okur, akim degerleri 10 KAT yanlis
+    #   > gorunur. Hicbir hata logu, hicbir alarm yok.
+    #
+    # Seed JSON'unda alan NULL ise durum daha da kotu: `iec104_ioa` NULL'a
+    # cekilen sinyal IEC 104 yayinindan TAMAMEN duser.
+    #
+    # Burada yalnizca DEGISTIRILEN alanlarin adlari tutulur; seed diger
+    # alanlari guncellemeye devam eder (fabrika duzeltmeleri yine gelir).
+    # "Fabrika ayarlarina don" ucu bu listeyi temizler — o eylem operatorun
+    # BILINCLI tercihidir, acilistaki otomatik senkron degil.
+    user_overrides: Mapped[list | None] = mapped_column(JSON, nullable=True)

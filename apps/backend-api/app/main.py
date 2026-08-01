@@ -815,17 +815,31 @@ def _legacy_bootstrap_ddl():
             )
     db = SessionLocal()
     try:
-        # strict=True: JSON listesi disindaki tum sinyalleri siler.
-        # Bu sayede baslangicta sadece Horstmann SN2 fabrika katalogu kalir.
-        result = seed_default_signals(db, strict=True)
+        # strict=False: ACILISTA SILME YOK.
+        #
+        # Eskiden `strict=True` idi ve JSON listesinde olmayan HER sinyali
+        # siliyordu — ama `POST /signals` kurulumcuya sinyal YARATMA izni
+        # veriyor. Yani operatorun ekledigi sinyaller ilk yeniden baslatmada
+        # sessizce yok oluyordu. Fabrikaya donmek isteyen icin zaten ayri ve
+        # BILINCLI bir uc var: `POST /signals/reset-to-defaults`.
+        #
+        # `respect_user_overrides` (varsayilan True) ise elle degistirilmis
+        # ALANLARI korur: `_MUTABLE_FIELDS` tam da arayuzden duzenlenen
+        # alanlari (label, scale, offset, iec104_ioa, dnp3_index...) icerdigi
+        # icin her acilis, kaydedilmis ve denetim kaydi tutulmus degisiklikleri
+        # sessizce geri aliyordu. Fabrika duzeltmeleri DOKUNULMAMIS alanlara
+        # gelmeye devam eder.
+        result = seed_default_signals(db, strict=False)
         if not result.get("skipped"):
             import logging
 
             logging.getLogger(__name__).info(
-                "signal_catalog seed sync -> inserted=%d updated=%d removed=%d",
+                "signal_catalog seed sync -> inserted=%d updated=%d removed=%d "
+                "korunan_alan=%d",
                 result.get("inserted", 0),
                 result.get("updated", 0),
                 result.get("removed", 0),
+                result.get("kept", 0),
             )
         flush_outbox(db)
     finally:

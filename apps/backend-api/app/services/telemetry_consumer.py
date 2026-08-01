@@ -28,7 +28,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -428,6 +428,29 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             # Commit patladi: hicbir sey ack'leme, hepsi redeliver olsun.
             # (IN pre-check duplicate'leri eledigi icin bu neredeyse hic tetiklenmez.)
             return [], bad_msgs, [], []
+        except DataError as exc:
+            # VERI BOZUK — redeliver ETMEK ISE YARAMAZ.
+            #
+            # `DataError` IntegrityError'in KARDESIDIR (ikisi de
+            # DatabaseError'dan turer), yani yukaridaki yakalayici onu hic
+            # gormuyordu. Istisna disari cikiyor ve cagirandaki genel
+            # `except Exception` bunu BAGLANTI HATASI sanip
+            # `telemetry_consumer_reconnect` logluyordu — operator sebebi
+            # agda ariyordu.
+            #
+            # Tipik sebep kolon genisligini asan bir deger. Artik `TelemetryIn`
+            # uzunluklari dogruladigi icin bu yola normalde HIC girilmez; buraya
+            # dusuluyorsa dogrulanmayan yeni bir alan var demektir. Redeliver
+            # ayni hatayi 10 kez tekrarlar ve batch'teki SAGLAM olcumleri de
+            # goturur; bu yuzden batch bad_msgs'e alinip karantinaya gonderilir.
+            db.rollback()
+            logger.error(
+                "telemetry_batch_data_error mesaj=%d — batch karantinaya alindi "
+                "(redeliver ayni hatayi tekrarlardi). Sebep: %s",
+                len(ok_msgs),
+                str(exc)[:500],
+            )
+            return [], bad_msgs + ok_msgs, [], []
     finally:
         db.close()
 

@@ -6,12 +6,46 @@ from pydantic import BaseModel
 from pydantic import Field
 
 
+# Kolon genislikleri — `models/telemetry.py` + `models/telemetry_history.py`
+# ile AYNI olmali. Burada dogrulanmayan bir deger INSERT sirasinda
+# `DataError` olarak patlar ve TUM BATCH'i goturur (bkz. asagidaki aciklama).
+_MAX_DEVICE_CODE = 50    # Device.code
+_MAX_SIGNAL_KEY = 120    # Telemetry.signal_key / TelemetryHistory.signal_key
+_MAX_QUALITY = 50        # Telemetry.quality
+
+
 class TelemetryIn(BaseModel):
+    """Gateway'den gelen tek telemetri okumasi.
+
+    UZUNLUK SINIRLARI NEDEN SART
+    -----------------------------
+    `signal_key` ve `quality` alanlarinda hicbir sinir yoktu ve zincirin
+    hicbir yerinde kirpma da yok. Hedef kolonlar `String(120)` ve
+    `String(50)`; uzun bir deger pydantic'i geciyor, batch'e giriyor ve ancak
+    TOPLU INSERT sirasinda `DataError` olarak patliyordu.
+
+    Kritik nokta: `_persist_batch`'teki tek yakalayici `except IntegrityError`
+    idi ve `DataError` onun KARDESI (ikisi de DatabaseError'dan turer), yani
+    yakalanmiyordu. Istisna disari cikip genel `except Exception` tarafindan
+    BAGLANTI HATASI saniliyor ve `telemetry_consumer_reconnect` loglaniyordu.
+
+    Zincir: bir gateway firmware'i 130 karakterlik bir `signal_key` uretir ->
+    batch commit patlar -> hicbir mesaj ack EDILMEZ -> ack_wait(60sn) x
+    max_deliver(10) ile ayni zehirli mesaj 10 kez yeniden dagitilir ve her
+    turda ayni batch'teki SAGLAM OLCUMLER de birlikte duser -> 10. denemeden
+    sonra NATS hepsini sessizce atar. Operator ekranda "NATS baglantisi
+    koptu" gorur ve sebebi agda arar; gercek sebep TEK BIR UZUN STRING'dir.
+
+    Sinir burada oldugunda mesaj parse asamasinda reddedilir ve `bad_msgs`
+    uzerinden DLQ'ya gider — yani yalnizca BOZUK mesaj karantinaya alinir,
+    batch'in geri kalani islenmeye devam eder.
+    """
+
     message_id: str = Field(default_factory=lambda: str(uuid4()))
     correlation_id: str | None = None
     source_gateway: str | None = None
-    device_code: str
-    signal_key: str
+    device_code: str = Field(max_length=_MAX_DEVICE_CODE)
+    signal_key: str = Field(max_length=_MAX_SIGNAL_KEY)
     # DNP3 Group 110 (Octet String) sinyallerinde gateway numeric value yerine
     # value_string yollar; value None olur. Eski numeric sinyaller icin field
     # zorunluluk kaybolmaz cunku consumer None'i 0.0'a duser.
@@ -20,7 +54,7 @@ class TelemetryIn(BaseModel):
     # Numeric vs string ayrimini consumer'in gateway payload'unu yeniden
     # cozumlemeden yapabilmesi icin kategori bilgisi.
     signal_data_type: str | None = None
-    quality: str = "good"
+    quality: str = Field(default="good", max_length=_MAX_QUALITY)
     # Ham DNP3 kalite bayraklari (Group 1/30/... octet). OPSIYONEL.
     #
     # BU ALANIN VARLIGI BIR SURUM ISARETIDIR — tasarimin can alici noktasi:

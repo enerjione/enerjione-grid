@@ -17,7 +17,12 @@ from app.schemas.signal_catalog import (
     SignalLiveValue,
 )
 from app.services.event_service import record_event
-from app.services.signal_catalog_seed import load_default_signals, seed_default_signals
+from app.services.signal_catalog_seed import (
+    _MUTABLE_FIELDS as _SEED_MUTABLE_FIELDS,
+    clear_user_overrides,
+    load_default_signals,
+    seed_default_signals,
+)
 
 router = APIRouter(prefix="/signals", tags=["signals"])
 
@@ -80,6 +85,18 @@ def update_signal(
     changes = payload.model_dump(exclude_none=True)
     for key, value in changes.items():
         setattr(row, key, value)
+
+    # DEGISTIRILEN ALANLARI ISARETLE — yoksa acilistaki seed geri alir.
+    #
+    # `seed_default_signals` her backend acilisinda kosuyor ve guncelledigi
+    # `_MUTABLE_FIELDS` listesi tam da burada duzenlenebilen alanlari
+    # iceriyor. Isaret olmadan sistem "kaydedildi" der, denetim kaydi tutar,
+    # sonra ilk yeniden baslatmada sessizce fabrika degerine doner.
+    mevcut = set(row.user_overrides or [])
+    mevcut.update(k for k in changes if k in _SEED_MUTABLE_FIELDS)
+    # JSON kolonu: yeni liste ata (yerinde degistirme SQLAlchemy'ye "degisti"
+    # sinyali vermez).
+    row.user_overrides = sorted(mevcut)
     record_event(
         db,
         category="signal",
@@ -131,7 +148,13 @@ def reset_signals_to_defaults(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Horstmann SN2 seed dosyasi bulunamadi.",
         )
-    stats = seed_default_signals(db, strict=True)
+    # Fabrikaya donmek OPERATORUN BILINCLI tercihidir: burada hem silme
+    # (strict) hem de kullanici degisikliklerini ezme ACIKTIR. Isaretleri
+    # once temizliyoruz; kalirsa seed o alanlari atlar ve "dondurdum" denen
+    # islem yarim kalirdi.
+    cleared = clear_user_overrides(db)
+    stats = seed_default_signals(db, strict=True, respect_user_overrides=False)
+    stats["cleared_overrides"] = cleared
     record_event(
         db,
         category="signal",
