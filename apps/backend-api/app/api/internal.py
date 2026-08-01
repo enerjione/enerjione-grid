@@ -575,22 +575,30 @@ def clear_alarm(
     # Onaylanmamis aktif alarm normale dondu → reset=True (alt panele duser)
     existing.reset = True
     existing.reset_at = datetime.now(timezone.utc)
-    record_event(
-        db,
-        category="alarm",
-        event_type="alarm_auto_cleared",
-        severity="info",
-        device_code=payload.device_code,
-        message=f"Alarm cleared on site: {alarm_title}",
-        metadata={
-            "alarm_id": alarm_id,
-            "rule_id": payload.rule_id,
-            "signal_key": payload.signal_key,
-            "source_gateway": payload.source_gateway,
-        },
-        i18n_key="alarm_auto_cleared",
-        i18n_params={"title": alarm_title},
-    )
+    # Olay kaydi OPSIYONEL (varsayilan kapali): bilgi zaten yukaridaki iki
+    # satirda — `reset` + `reset_at`. Dalgalanan bir sinyal dakikalar icinde
+    # binlerce tetiklen/temizlen cifti uretebiliyor ve gercek operator
+    # olaylari o yiginin icinde kayboluyor.
+    #
+    # Yukaridaki ONAYLANMIS dalinda ayni bayrak YOK ve olmamali: orada alarm
+    # satiri siliniyor, dolayisiyla olay kaydi geriye kalan TEK iz.
+    if settings.alarm_auto_clear_events:
+        record_event(
+            db,
+            category="alarm",
+            event_type="alarm_auto_cleared",
+            severity="info",
+            device_code=payload.device_code,
+            message=f"Alarm cleared on site: {alarm_title}",
+            metadata={
+                "alarm_id": alarm_id,
+                "rule_id": payload.rule_id,
+                "signal_key": payload.signal_key,
+                "source_gateway": payload.source_gateway,
+            },
+            i18n_key="alarm_auto_cleared",
+            i18n_params={"title": alarm_title},
+        )
     try:
         from app.services.fault_recompute_service import recompute_faults_debounced
         recompute_faults_debounced(db)

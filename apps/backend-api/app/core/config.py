@@ -304,6 +304,24 @@ class Settings(BaseSettings):
     processed_messages_interval_sec: int = 600
     # `system_events` — denetim/olay kaydi. Onceden HIC retention yoktu.
     # 2 yil: operator karari (yasal/operasyonel geriye donuk inceleme ufku).
+    # Alarm KENDILIGINDEN normale dondugunde `system_events`e ayrica kayit
+    # dusulsun mu?
+    #
+    # VARSAYILAN KAPALI. Bilgi ZATEN alarm satirinda: `AlarmEvent.reset` ve
+    # `reset_at`. Yani bu olay kaydi tekrar; alarm gecmisi arayuzu de
+    # `alarm_events` tablosundan okuyor.
+    #
+    # Kapali olmasinin asil gerekcesi gurultu: dalgalanan bir sinyal (saha
+    # kaynakli ya da yuk testi sirasinda) dakikalar icinde binlerce
+    # tetiklen/temizlen cifti uretiyor ve GERCEK operator olaylari
+    # (yetki kullanimi, komut gonderimi, ayar degisikligi) bu yiginin
+    # icinde kayboluyor. Denetim kaydinin degeri okunabilirliginde.
+    #
+    # DIKKAT: bu ayar YALNIZCA onaylanmamis alarmin temizlenmesini etkiler.
+    # ONAYLANMIS alarm temizlendiginde satir SILINIYOR ve olay kaydi geriye
+    # kalan TEK iz — o her zaman yazilir, bu bayrak onu kapatmaz.
+    alarm_auto_clear_events: bool = False
+
     system_events_retention_days: int = 730
     system_events_interval_sec: int = 21_600  # 6 saat
     # FIFO tavani: beklenmedik bir olay firtinasinda 2 yil DOLMADAN da sinir

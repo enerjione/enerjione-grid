@@ -211,3 +211,80 @@ def test_CANLI_deger_politikadan_ETKILENMIYOR():
         "canli deger yazimi arsiv kosulunun ICINDE — arsiv kisilinca ekran "
         "ve alarm da son degeri kaybeder"
     )
+
+
+# ---------------------------------------------------------------------------
+# Olu bant varsayilanlari (migration 0033)
+#
+# Operator onayi: A -> 0.5, V -> 1.0, °C -> 0.5.
+# mA BILEREK 0 kaldi: onay "0.5 A" idi, bu birime ceviri 500 mA eder ve o,
+# ariza analizinin merkezindeki akim sinyalleri icin cok buyuk olabilir.
+# Yanlis olu bant ariza oncesindeki egriyi KALICI olarak siler.
+# ---------------------------------------------------------------------------
+
+_MIGRATION_0033 = (
+    __import__("pathlib").Path(__file__).resolve().parents[1]
+    / "alembic_migrations" / "versions"
+    / "2026_08_01_0007-0033_historian_deadbands.py"
+)
+
+
+def _m0033():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("m0033", _MIGRATION_0033)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_migration_0033_zinciri():
+    m = _m0033()
+    assert m.revision == "0033"
+    assert m.down_revision == "0032"
+
+
+def test_onaylanan_birimler_ve_degerler():
+    """Onay disinda bir birim eklenirse ya da deger degisirse burada durur."""
+    m = _m0033()
+    assert m._DEADBANDS == {"A": 0.5, "V": 1.0, "°C": 0.5}
+
+
+def test_mA_BILEREK_disarida():
+    """0.5 A = 500 mA; bu grup icin cok buyuk bir esik olabilir ve ariza
+    analizinin merkezinde."""
+    m = _m0033()
+    assert "mA" not in m._DEADBANDS, (
+        "mA'ya olu bant verilmis — onay 'A' icindi, 500 mA ariza oncesi akim "
+        "egrisini silebilir"
+    )
+
+
+def test_statik_analoglar_ARSIVDEN_cikariliyor():
+    """`serial_number` / `firmware_version` / `hardware_revision` katalogda
+    `analog` tiplenmis; 0032 yalnizca string ve binary_output'u kapatmisti."""
+    m = _m0033()
+    assert set(m._STATIK_ANALOG_SONEKLERI) == {
+        "serial_number", "firmware_version", "hardware_revision",
+    }
+
+
+def test_olu_bant_yalnizca_HISTORIZE_edilenlere():
+    """Arsivlenmeyen sinyale olu bant vermek anlamsiz ve kafa karistirici."""
+    import re
+
+    kaynak = _MIGRATION_0033.read_text(encoding="utf-8")
+    kod = re.sub(r'""".*?"""', "", kaynak, flags=re.DOTALL)
+    assert "historize IS TRUE" in kod, (
+        "olu bant guncellemesi arsivlenmeyen sinyalleri de kapsiyor"
+    )
+
+
+def test_migration_GERI_ALINABILIR():
+    import re
+
+    kaynak = _MIGRATION_0033.read_text(encoding="utf-8")
+    kod = re.sub(r'""".*?"""', "", kaynak, flags=re.DOTALL)
+    govde = kod[kod.index("def downgrade"):]
+    assert "historize_deadband = 0" in govde
+    assert "historize = true" in govde
