@@ -198,8 +198,28 @@ class Settings(BaseSettings):
     #
     # Artik her stream kendi bayt tavanini tasiyor ve discard=OLD ile tavana
     # carpinca EN ESKI mesajlar dusuruluyor; akis DEVAM EDER. Bu bilincli bir
-    # takas: uzun bir kesintide (raw icin ~19 saat) en eski mesajlar sessizce
-    # kaybolur, ama sistem asla durmaz.
+    # takas: tavana carpinca en eski mesajlar sessizce kaybolur, ama sistem
+    # asla durmaz.
+    #
+    # TAMPON SURESI — HEDEF OLCEKTE HESAPLANMIS DEGER
+    # -----------------------------------------------
+    # Buradaki yorumlar bir zamanlar "raw icin ~19 saat" diyordu. O rakam
+    # 25,9M satir/gun (200 cihaz) varsayimina dayaniyordu; HEDEF yuk ise
+    # 600 cihaz x 20 aktif sinyal / 10 sn = ~1.200 deger/sn = 103,68M
+    # satir/gun, yani DORT KAT fazla. Gercek tampon sureleri:
+    #
+    #   raw         8 GiB  -> ~3,5 saat
+    #   normalized  3 GiB  -> ~1,3 saat
+    #
+    # Bu, tavanlarin YANLIS oldugu anlamina gelmez — 8 GiB disk butcesi
+    # icinde makul bir paydir. Ama "19 saatlik kesintiyi tolere ederiz"
+    # varsayimiyla planlama yapmak YANLISTIR: 4 saati asan bir backend
+    # kesintisinde en eski telemetri KAYBOLUR.
+    #
+    # Degerleri buyutmeden once diske bakin: toplam 12 GiB ve saha cihazinin
+    # butcesi `docs/` altinda tanimli. Tampon suresi tavan/hiz oranidir;
+    # tek carpan disk degil, olcek de degistiginde bu yorum GUNCELLENMELI.
+    # `tests/test_capacity_assumptions.py` hesabi kaynaktan dogruluyor.
     #
     # Toplam: 8 + 3 + 1 = 12 GiB. nats-server.conf `max_file_store` bunun
     # UZERINDE kalmali (aksi halde hesap tavani once dolar ve sert red geri
@@ -208,8 +228,10 @@ class Settings(BaseSettings):
     # tests/test_config_consistency.py bunlari kaynaktan okuyup .env.example /
     # docker-compose.yml ile karsilastirabilsin, hem de operator neye baktigini
     # tereddutsuz gorsun.
-    nats_stream_raw_max_bytes: int = 8_589_934_592         # 8 GiB (~19 saat tampon)
-    nats_stream_normalized_max_bytes: int = 3_221_225_472  # 3 GiB
+    # 8 GiB — hedef olcekte (~1.200 deger/sn) yaklasik 3,5 SAAT tampon.
+    nats_stream_raw_max_bytes: int = 8_589_934_592
+    # 3 GiB — hedef olcekte yaklasik 1,3 saat.
+    nats_stream_normalized_max_bytes: int = 3_221_225_472
     nats_stream_dlq_max_bytes: int = 1_073_741_824         # 1 GiB
 
     # ----- Gateway saglik heartbeat'i --------------------------------------

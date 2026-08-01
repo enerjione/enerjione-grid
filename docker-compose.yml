@@ -119,6 +119,27 @@ services:
       - "postgres"
       - "-c"
       - "shared_preload_libraries=timescaledb"
+      # BAGLANTI TAVANI — belgelenen olcekleme recetesi varsayilani ASIYORDU.
+      #
+      # Hesap (docker-compose.yml'deki "NASIL ACILIR" bloguna gore):
+      #   backend-api, E1_API_WORKERS=4 -> her uvicorn worker'i KENDI engine'ini
+      #     kurar: 4 x (db_pool_size 30 + db_max_overflow 20) = 200
+      #   backend-worker (scale profili, tek surec)            =  50
+      #                                                    TOPLAM = 250
+      #
+      # PostgreSQL varsayilani 100. Yani receteyi uygulayan operator, yuk
+      # arttiginda "remaining connection slots are reserved" hatalarina
+      # giriyordu — ve bu tam da olceklemek icin yapilan degisiklikten SONRA
+      # olacagi icin sebep-sonuc iliskisi yaniltici.
+      #
+      # 300: 250 + superuser rezervi + bakim/psql payi. Bagli olmayan bir slot
+      # yalnizca birkac yuz KB tutar; asil bellek maliyeti CALISAN sorgu basina
+      # `work_mem` (16MB) — tavani buyutmek onu degistirmez.
+      #
+      # `tests/test_connection_capacity.py` bu hesabi kaynaktan okuyup
+      # dogruluyor: havuz boyutu ya da worker sayisi degisirse CI yakalar.
+      - "-c"
+      - "max_connections=300"
       - "-c"
       - "shared_buffers=768MB"
       - "-c"
