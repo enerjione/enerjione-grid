@@ -60,6 +60,18 @@ PROBLEM_RETENTION_FAILING = "retention_failing"
 PROBLEM_RETENTION_MISMATCH = "retention_mismatch"
 # Ozet katmanlarindan (continuous aggregate) en az birinde retention YOK.
 PROBLEM_CAGG_NO_RETENTION = "cagg_no_retention"
+# Sicak (sikistirilmamis) chunk'lar shared_buffers'a gore cok buyuk.
+PROBLEM_CHUNK_TOO_LARGE = "chunk_too_large"
+
+# Chunk boyutu shared_buffers'in bu katini asarsa uyar.
+#
+# TimescaleDB'nin boyutlandirma kurali, YAZILAN chunk'larin bellege
+# sigmasidir: sigmadiginda her ekleme ve her sorgu diske iner ve index
+# sayfalari surekli tahliye edilir. Kural "chunk ~ bellegin %25'i" seklinde
+# ifade edilir; burada ters cevirip "shared_buffers'in 2 katini asmasin"
+# diyoruz (biraz musamahali, cunku tek bir buyuk chunk hemen felaket degil —
+# egilim onemli).
+CHUNK_SIZE_WARN_RATIO = 2.0
 
 
 @dataclass
@@ -88,6 +100,15 @@ class HistorianStatus:
     # degil pratikte ham verinin KOPYASI (~2,3 GB/gun, politikasiz ~4 ayda
     # 280 GB). Diski asil dolduran kalem buydu ve hicbir yerde gorunmuyordu.
     cagg_without_retention: list[str] = field(default_factory=list)
+    # En buyuk SICAK (sikistirilmamis) chunk ve karsilastirma tabani.
+    #
+    # NEDEN OLCULUYOR: chunk araligi 0007'de 1 gun secilmisti ve 600 cihaz
+    # olceginde tek chunk ~17 GB ediyordu — shared_buffers'in (768 MB) ~22
+    # kati. Migration 0030 araligi 1 saate cekti, ama olcek yeniden
+    # buyudugunde ayni sorun sessizce geri gelebilir. Olcup raporlamak,
+    # sabit bir sayiya guvenmekten daha dayaniklidir.
+    largest_chunk_bytes: int | None = None
+    shared_buffers_bytes: int | None = None
     # Tahmin (reltuples) — tam sayim DEGIL. Bilincli: COUNT(*) cok pahali.
     row_estimate: int | None = None
     total_bytes: int | None = None
@@ -109,6 +130,10 @@ class HistorianStatus:
             # yalnizca "sorun var" demek operatoru neyi duzeltecegi konusunda
             # yalniz birakir.
             "cagg_without_retention": self.cagg_without_retention,
+            # Operator "chunk buyuk" uyarisini gorunce oranı kendisi
+            # degerlendirebilsin; ciplak bir bayrak yeterince bilgi vermez.
+            "largest_chunk_bytes": self.largest_chunk_bytes,
+            "shared_buffers_bytes": self.shared_buffers_bytes,
             "row_estimate": self.row_estimate,
             "total_bytes": self.total_bytes,
             "oldest_sample_at": self.oldest_sample_at,
@@ -251,6 +276,25 @@ def _collect(db: Session) -> HistorianStatus:
         )
     )
 
+    # --- Chunk boyutu -------------------------------------------------------
+    # YALNIZCA sikistirilmamis (sicak) chunk'lar olculur: sikistirilmis
+    # olanlar zaten kucuk ve uzerlerine yazilmiyor, dolayisiyla bellege
+    # sigma kaygisi onlar icin gecerli degil.
+    st.largest_chunk_bytes = _scalar(
+        db,
+        "SELECT max(total_bytes)::bigint FROM chunks_detailed_size(:t::regclass) d"
+        " JOIN timescaledb_information.chunks c"
+        "   ON c.chunk_name = d.chunk_name AND c.chunk_schema = d.chunk_schema"
+        " WHERE c.is_compressed = false",
+        {"t": TABLE},
+    )
+    # `shared_buffers` blok cinsinden; `block_size` ile bayta cevir.
+    st.shared_buffers_bytes = _scalar(
+        db,
+        "SELECT (SELECT setting::bigint FROM pg_settings WHERE name='shared_buffers')"
+        " * (SELECT setting::bigint FROM pg_settings WHERE name='block_size')",
+    )
+
     # --- Continuous aggregate'ler ------------------------------------------
     try:
         rows = db.execute(
@@ -328,6 +372,21 @@ def _collect(db: Session) -> HistorianStatus:
     if st.cagg_without_retention:
         st.problems.append(PROBLEM_CAGG_NO_RETENTION)
         st.severity = "critical"
+
+    # SICAK CHUNK BOYUTU — uyari, kritik degil.
+    #
+    # Buyuk chunk veri KAYBETTIRMEZ; yazma ve sorgu performansini dusurur
+    # (chunk bellege sigmayinca her ekleme ve her sorgu diske iner). Bu yuzden
+    # severity "warning": operatorun bilmesi gereken ama gece uyandirmayacak
+    # bir durum.
+    if (
+        st.largest_chunk_bytes
+        and st.shared_buffers_bytes
+        and st.largest_chunk_bytes > st.shared_buffers_bytes * CHUNK_SIZE_WARN_RATIO
+    ):
+        st.problems.append(PROBLEM_CHUNK_TOO_LARGE)
+        if st.severity == "ok":
+            st.severity = "warning"
 
     if not st.problems:
         st.severity = "ok"

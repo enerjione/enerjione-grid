@@ -802,8 +802,15 @@ from app.core.config import settings
 engine = create_engine(settings.database_url, pool_pre_ping=True, isolation_level="AUTOCOMMIT")
 stmts = [
     "CREATE EXTENSION IF NOT EXISTS timescaledb",
+    # Chunk araligi 1 SAAT (bkz. migration 0030). 600 cihazda 1 gunluk chunk
+    # ~17 GB ederdi; Postgres container'i 3 GB ve shared_buffers 768 MB, yani
+    # TEK chunk bellegin ~22 kati olurdu. 1 saat ~700 MB.
     "SELECT create_hypertable('telemetry_history','source_timestamp',"
-    " chunk_time_interval => INTERVAL '1 day', migrate_data => TRUE, if_not_exists => TRUE)",
+    " chunk_time_interval => INTERVAL '1 hour', migrate_data => TRUE, if_not_exists => TRUE)",
+    # `create_hypertable` YALNIZCA olusturmada etkili; mevcut hypertable'da
+    # `if_not_exists` yuzunden no-op olur. Araligi her durumda hizalamak icin
+    # ayrica set ediyoruz (yalnizca YENI chunk'lari etkiler, veri tasimaz).
+    "SELECT set_chunk_time_interval('telemetry_history', INTERVAL '1 hour')",
     "SELECT add_retention_policy('telemetry_history', INTERVAL '90 days', if_not_exists => TRUE)",
     "ALTER TABLE telemetry_history SET ("
     " timescaledb.compress,"
