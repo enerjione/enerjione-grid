@@ -55,6 +55,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.alarm import AlarmEvent
 from app.models.device import Device
 from app.models.fault import FaultEvent
@@ -625,6 +626,29 @@ def recompute_faults(db: Session) -> None:
         except Exception:  # noqa: BLE001
             logger.exception("fault_flush_failed_before_dispatch")
             return
+
+        # SATIR ICI DISPATCH AYNI BAYRAGA BAGLI — alarm yolundaki gibi.
+        #
+        # YASANAN TUTARSIZLIK: alarm bildirimleri
+        # `notification_inline_dispatch_enabled` ile korunuyordu (varsayilan
+        # False; dispatch sorumlulugu notification-worker'da). ARIZA
+        # bildirimleri ise bu bayragin DISINDA, kosulsuz calisiyordu. Yani
+        # "dispatch'i worker'a aldik" korumasi ariza yolunda hic gecerli
+        # degildi.
+        #
+        # Neden onemli: bu cagri SMTP/HTTP yapiyor ve ariza yeniden hesaplama
+        # akisinin ICINDE. Yanit vermeyen bir relay ariza motorunu tutuyor ve
+        # ariza kaydi COMMIT EDILMEDEN asili kaliyordu — yani bildirim
+        # gecikmesi degil, ARIZANIN KENDISININ kaydedilmemesi.
+        # (SMTP timeout'u ayrica eklendi; bu bayrak ikinci savunma katmani.)
+        if not settings.notification_inline_dispatch_enabled:
+            logger.debug(
+                "fault_inline_dispatch_atlandi count=%d — notification-worker "
+                "sorumlu (notification_inline_dispatch_enabled=false)",
+                len(new_faults_for_dispatch),
+            )
+            return
+
         try:
             from app.services.notification_dispatch_service import dispatch_fault_notifications
         except Exception:  # noqa: BLE001

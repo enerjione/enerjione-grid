@@ -9,6 +9,22 @@ from email.message import EmailMessage
 
 from app.models.notification_settings import NotificationSettings
 
+# SMTP soket zaman asimi (saniye).
+#
+# NEDEN SART: `smtplib.SMTP(...)` ve `SMTP_SSL(...)` timeout verilmezse
+# `socket._GLOBAL_DEFAULT_TIMEOUT` (yani None) kullanir — SONSUZ BLOK.
+# Bu dosyadaki DIGER tum ag cagrilari zaten timeout'lu (Telegram 12 sn,
+# FCM 8/15 sn); eksik olan tek yol SMTP idi.
+#
+# Somut sonuc: paket filtreleyen bir guvenlik duvari ya da yanit vermeyen bir
+# SMTP relay'i, cagiran is parcacigini kalici olarak tutar. Ariza bildirim
+# yolu bu cagriyi ariza motorunun KILIDI ICINDE yaptigi icin ariza kaydi
+# commit edilmeden asili kalir.
+#
+# 20 sn: yavas bir relay'e (greylisting, TLS el sikismasi) yer birakir ama
+# operatoru dakikalarca bekletmez.
+SMTP_TIMEOUT_SEC = 20
+
 
 def send_smtp_test(
     settings_row: NotificationSettings,
@@ -73,13 +89,20 @@ def send_smtp_test(
     smtp_password = decrypt_notification_credentials(settings_row).smtp_password or ""
 
     if settings_row.smtp_port == 465:
-        with smtplib.SMTP_SSL(settings_row.smtp_host, settings_row.smtp_port, context=ssl.create_default_context()) as server:
+        with smtplib.SMTP_SSL(
+            settings_row.smtp_host,
+            settings_row.smtp_port,
+            context=ssl.create_default_context(),
+            timeout=SMTP_TIMEOUT_SEC,
+        ) as server:
             if settings_row.smtp_username:
                 server.login(settings_row.smtp_username, smtp_password)
             server.send_message(mail)
         return
 
-    with smtplib.SMTP(settings_row.smtp_host, settings_row.smtp_port) as server:
+    with smtplib.SMTP(
+        settings_row.smtp_host, settings_row.smtp_port, timeout=SMTP_TIMEOUT_SEC
+    ) as server:
         server.ehlo()
         if settings_row.smtp_username:
             server.starttls(context=ssl.create_default_context())

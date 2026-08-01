@@ -213,6 +213,44 @@ jobs:
           pip install -q pytest
           pytest -q infra/appliance/tests
 
+  nginx:
+    # nginx yapilandirmasi GERCEK nginx ile sinaniyor.
+    #
+    # NEDEN AYRI JOB: bu dosyalardaki bir sozdizimi hatasi arayuzun TAMAMINI
+    # dusurur (container baslamaz) ve gelistirici makinesinde dogrulamak icin
+    # nginx kurulu olmasi gerekiyor — Windows'ta yok, Docker daemon her zaman
+    # ayakta degil. Yani yerelde "gozle kontrol" disinda bir imkan yoktu.
+    #
+    # Ozellikle yedek yukleme yolu (client_max_body_size + buffering) bu
+    # dosyalarda ayarlaniyor; zincirdeki en dusuk deger kazandigi icin sessizce
+    # yanlis olmasi kolay.
+    name: nginx yapilandirmasi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # frontend-web/nginx.conf bir conf.d PARCASIDIR (http baglaminda kosar),
+      # tam bir config degil. Bu yuzden gercek imajin icine, gercek yerine
+      # kopyalayip test ediyoruz.
+      #
+      # --add-host: `proxy_pass http://backend-api:8000` icin nginx isim
+      # cozumlemesini KONFIG TESTINDE de yapar; CI'da o isim yok.
+      - name: frontend-web nginx.conf
+        run: |
+          set -euo pipefail
+          docker run --rm --add-host=backend-api:127.0.0.1 \
+            -v "$PWD/apps/frontend-web/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/apps/frontend-web/security-headers.conf:/etc/nginx/security-headers.conf:ro" \
+            nginx:1.27-alpine nginx -t
+      - name: host-nginx configleri
+        run: |
+          set -euo pipefail
+          for f in infra/host-nginx/*.conf; do
+            echo "--- $f"
+            docker run --rm \
+              -v "$PWD/$f:/etc/nginx/conf.d/default.conf:ro" \
+              nginx:1.27-alpine nginx -t
+          done
+
   compose:
     name: docker-compose dogrulama
     runs-on: ubuntu-latest

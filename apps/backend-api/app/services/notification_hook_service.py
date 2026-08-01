@@ -11,6 +11,7 @@ from app.db.session import SessionLocal
 from app.models.notification_settings import NotificationSettings
 from app.models.user import User
 from app.services.event_service import record_event
+from app.services.notification_test_service import SMTP_TIMEOUT_SEC
 
 
 def handle_alarm_created(payload: dict[str, Any]) -> None:
@@ -68,13 +69,23 @@ def _send_email_notifications(settings_row: NotificationSettings, users: list[Us
     mail["Subject"] = "Horstman Alarm Bildirimi"
     mail.set_content(body)
 
+    # timeout ZORUNLU — bkz. notification_test_service.SMTP_TIMEOUT_SEC.
+    # Verilmezse smtplib sonsuza kadar bloklar ve bu cagri ariza bildirim
+    # yolunda, ariza motorunun kilidi icinde yapiliyor.
     if settings_row.smtp_port == 465:
-        with smtplib.SMTP_SSL(settings_row.smtp_host, settings_row.smtp_port, context=ssl.create_default_context()) as server:
+        with smtplib.SMTP_SSL(
+            settings_row.smtp_host,
+            settings_row.smtp_port,
+            context=ssl.create_default_context(),
+            timeout=SMTP_TIMEOUT_SEC,
+        ) as server:
             if settings_row.smtp_username:
                 server.login(settings_row.smtp_username, smtp_password)
             server.send_message(mail)
     else:
-        with smtplib.SMTP(settings_row.smtp_host, settings_row.smtp_port) as server:
+        with smtplib.SMTP(
+            settings_row.smtp_host, settings_row.smtp_port, timeout=SMTP_TIMEOUT_SEC
+        ) as server:
             server.ehlo()
             if settings_row.smtp_username:
                 server.starttls(context=ssl.create_default_context())
