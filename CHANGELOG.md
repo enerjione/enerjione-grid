@@ -14,6 +14,27 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.34.0] — 2026-08-01
+
+### Eklendi
+- **Gateway sürüm kontrolü ve güncelleme butonu.** Mühendislik > Gateway'ler
+  ekranında her gateway için sürüm durumu görünüyor: *Yeni sürüm var*,
+  *Güncel* ya da *Sürüm bilinmiyor*. Güncelleme tek tıkla yapılıyor; yeni
+  imaj indirilemezse çalışan sürüme dokunulmuyor.
+
+  Buton onay soruyor: gateway yeniden başlarken ona bağlı cihazlardan kısa
+  süre telemetri gelmez.
+
+  **"Sürüm bilinmiyor" ayrı bir durumdur.** Kayıt defterine ulaşılamadığında
+  "güncel" göstermiyoruz — bu, sormadan verilmiş bir iddia olur ve operatör
+  eski sürümde kaldığını fark etmezdi.
+
+- **Yeni gateway sürümü çıktığında tüm kullanıcılara bildirim.** Bildirim
+  sürüm başına **bir kez** gönderiliyor; aksi halde operatör güncelleyene
+  kadar sürekli tekrarlar ve gerçek uyarılar bu yığının içinde kaybolurdu.
+
+---
+
 ## [2.33.0] — 2026-08-01
 
 Sahada görülen bir "ağ kararsız" şikâyetinin kökü bulundu ve kaynağı kapatıldı.
