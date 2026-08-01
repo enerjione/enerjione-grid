@@ -26,7 +26,7 @@ jobs:
     name: Frontend — typecheck + build + test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -61,7 +61,7 @@ jobs:
         ports:
           - 4222:4222
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -87,7 +87,7 @@ jobs:
     name: Alarm service — pytest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -110,7 +110,7 @@ jobs:
     name: IEC 104 outbound — pytest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -135,7 +135,7 @@ jobs:
     name: Modbus outbound — pytest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -154,7 +154,7 @@ jobs:
     name: Alembic — tek head kontrolu
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -179,7 +179,7 @@ jobs:
     name: Kurulum scriptleri — syntax + shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Saha kurulumu bu scriptlere bagli; bir syntax hatasi mini PC'de
       # kurulumu yarida birakir. Once ucuz kontrol (bash -n), sonra shellcheck.
       - name: bash -n
@@ -239,7 +239,7 @@ jobs:
     name: nginx yapilandirmasi
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # frontend-web/nginx.conf bir conf.d PARCASIDIR (http baglaminda kosar),
       # tam bir config degil. Bu yuzden gercek imajin icine, gercek yerine
       # kopyalayip test ediyoruz.
@@ -276,7 +276,7 @@ jobs:
     name: AP port filtresi — iptables
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Kurallar uygulaniyor ve dogrulaniyor
         run: |
           set -euo pipefail
@@ -369,7 +369,7 @@ jobs:
     name: docker-compose dogrulama
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # `compose config` YAML + interpolasyon + anchor'lari cozer. .env.example
       # ile kosuyoruz: zorunlu degiskenlerden biri (?: ile isaretli) orada
       # eksikse burada patlar, sahada degil.
@@ -385,7 +385,7 @@ jobs:
     name: Debian paketi
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: lintian kur
         run: sudo apt-get update -qq && sudo apt-get install -y -qq lintian
       # Paketi HER PR'da uretiyoruz: bozuk bir paket ancak yayin gunu fark
@@ -438,7 +438,7 @@ jobs:
     name: Surum tutarliligi
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # VERSION tek kaynak. package.json ondan sapmissa release tag'i hangi
       # surumu temsil ediyor belirsizlesir.
       - name: VERSION == package.json
