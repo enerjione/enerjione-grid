@@ -364,7 +364,7 @@ services:
       # processed_messages: idempotency defteri. Gercek redelivery penceresi
       # ack_wait(60s) x max_deliver(10) = 10 DAKIKA; 24 saat 144 kat marj.
       # (Onceki 7 GUNluk deger tabloyu ~180M satira cikariyordu.)
-      PROCESSED_MESSAGES_RETENTION_HOURS: ${PROCESSED_MESSAGES_RETENTION_HOURS:-24}
+      PROCESSED_MESSAGES_RETENTION_HOURS: ${PROCESSED_MESSAGES_RETENTION_HOURS:-2}
       PROCESSED_MESSAGES_INTERVAL_SEC: ${PROCESSED_MESSAGES_INTERVAL_SEC:-600}
       # system_events: denetim/olay kaydi. 2 yil (730 gun) + FIFO adet tavani.
       # Tavan, olay firtinasinda 2 yil dolmadan da devreye giren emniyet subabi.
@@ -401,6 +401,16 @@ services:
       NATS_STREAM_RAW_MAX_BYTES: ${NATS_STREAM_RAW_MAX_BYTES:-8589934592}
       NATS_STREAM_NORMALIZED_MAX_BYTES: ${NATS_STREAM_NORMALIZED_MAX_BYTES:-3221225472}
       NATS_STREAM_DLQ_MAX_BYTES: ${NATS_STREAM_DLQ_MAX_BYTES:-1073741824}
+      # Stream YAS siniri (gun). BU SATIRLAR EKSIKTI: config.py'de tanimliydi
+      # ama compose gecirmedigi icin hic ayarlanamiyordu — 29 GB'lik bir
+      # cihazda 12 GiB tavan + 7/30 gunluk yas siniriyle JetStream deposu
+      # 5,9 GB'a cikti ve diski dolduran en buyuk kalem oldu.
+      #
+      # Bos degil KONKRE varsayilan geciliyor: bu ayarlar pydantic `int`,
+      # bos string dogrulamada patlar ve backend HIC baslamaz.
+      NATS_STREAM_RAW_MAX_AGE_DAYS: ${NATS_STREAM_RAW_MAX_AGE_DAYS:-7}
+      NATS_STREAM_NORMALIZED_MAX_AGE_DAYS: ${NATS_STREAM_NORMALIZED_MAX_AGE_DAYS:-30}
+      NATS_STREAM_DLQ_MAX_AGE_DAYS: ${NATS_STREAM_DLQ_MAX_AGE_DAYS:-30}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

@@ -173,3 +173,78 @@ def record_health(db: Session, gateway_code: str, payload: dict[str, Any]) -> bo
         # cunku ayni transaction'da komut durum gecisi de var.
         logger.warning("gateway_health_record_failed gateway=%s", gateway_code, exc_info=True)
         return False
+
+
+# ---------------------------------------------------------------------------
+# Cihaz bazinda link durumu
+# ---------------------------------------------------------------------------
+#
+# NEDEN GEREKLI
+#   Backend `communication_status`i yalnizca TELEMETRI GELDIGINDE
+#   guncelleyebiliyor. Ariza bekleyen bir gosterge saatlerce sessiz kalabilir
+#   — deger degismezse gateway hicbir sey yayinlamaz — ve o sure boyunca
+#   cihazin canli mi olu mu oldugunu BILEMIYORUZ.
+#
+#   "Veri gelmiyor" ile "haberlesme yok" ayni sey degil. Bu ayrimi yapabilecek
+#   tek katman gateway: DNP3 baglantisi onda ve link durumunu zaten takip
+#   ediyor (`state=lost`, `recovering`, `recovered`).
+#
+# NEDEN AKTIF YOKLAMA DEGIL
+#   Backend'den cihazin IP:port'una TCP baglanmak ZARARLI olurdu: Horstmann
+#   outstation'i `CloseExisting` modunda calisiyor, yeni baglanti gelince
+#   mevcut olani kapatiyor. Yani "kontrol edeyim" diye atilan her yoklama
+#   gateway'in oturumunu dusururdu — sahada 2.172 baglanti kopmasina yol acan
+#   dongunun ta kendisi.
+#
+# BEKLENEN BICIM (gateway tarafi henuz gondermiyor)
+#   payload["devices"]["states"] = {"d6": "lost", "d11": "connected", ...}
+#
+#   Ayri bir kolon ACILMADI: uretici taraf hazir olmadan sema degistirmek
+#   erken. Durum zaten `raw_json` icinde saklaniyor ve tek satir okunuyor.
+
+#: Gateway'in bildirdigi durum -> bizim haberlesme durumumuz.
+#: `recovering` BILEREK ESLENMEDI: gecis durumu, iki katman arasinda
+#: cihazin gidip gelmesine (flapping) yol acardi.
+_LINK_STATE_MAP = {
+    "connected": "online",
+    "online": "online",
+    "up": "online",
+    "lost": "offline",
+    "down": "offline",
+    "disconnected": "offline",
+}
+
+
+def device_link_states(raw_json: str | None) -> dict[str, str]:
+    """`raw_json` icinden cihaz bazinda haberlesme durumu cikarir.
+
+    Donen sozluk: {device_code: "online"|"offline"}. Taninmayan durum ve
+    `recovering` DISARIDA birakilir — emin olmadigimiz bir seyi yazmak,
+    hicbir sey yazmamaktan kotudur.
+
+    Ayristirma tamamen savunmaci: bu veri gateway'den geliyor ve bozuk bir
+    govde cihaz durumlarini bozmamali.
+    """
+    if not raw_json:
+        return {}
+    try:
+        payload = json.loads(raw_json)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    devices = payload.get("devices")
+    if not isinstance(devices, dict):
+        return {}
+    states = devices.get("states")
+    if not isinstance(states, dict):
+        return {}
+
+    sonuc: dict[str, str] = {}
+    for kod, durum in states.items():
+        if not isinstance(kod, str) or not kod:
+            continue
+        esleme = _LINK_STATE_MAP.get(str(durum).strip().lower())
+        if esleme is not None:
+            sonuc[kod[:50]] = esleme
+    return sonuc

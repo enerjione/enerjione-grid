@@ -293,14 +293,27 @@ class Settings(BaseSettings):
     telemetry_retention_minutes: int = 30
     telemetry_retention_interval_sec: int = 300
     # `processed_messages` — idempotency defteri (ayni mesaj iki kez islenmesin).
+    #
     # GERCEK redelivery penceresi ack_wait(60s) x max_deliver(10) = 10 DAKIKA.
     # Ustelik ikinci bir dedup katmani daha var: telemetry_history dogal
     # anahtarinda (device_id, signal_key, source_timestamp) ON CONFLICT DO
-    # NOTHING. Onceki 7 gunluk deger gercek ihtiyacin ~1000 katiydi ve tabloyu
-    # ~180M satira cikariyordu. 24 saat hala 144 kat marj birakir.
+    # NOTHING.
+    #
+    # DEGER TARIHCESI: 7 gun -> 24 saat -> 2 saat.
+    #   7 gun  gercek ihtiyacin ~1000 katiydi, tabloyu ~180M satira cikariyordu.
+    #   24 saat hala 144 kat marj birakiyordu ve SAHADA OLCULDU: 15 cihazlik
+    #     test kurulumunda tablo 184 MB'a ciktiktan sonra hala buyuyordu
+    #     (376 islem/sn). 600 cihazda ayni oran 24 saatte on milyonlarca satir.
+    #   2 saat  redelivery penceresinin 12 KATI — bir mesajin yeniden teslim
+    #     edilebilecegi en uzun sureden hala cok uzun, ama tablo 12 kat kucuk.
+    #
+    # ALT SINIR KODDA ZORLANIYOR (telemetry_retention): redelivery penceresinin
+    # altina inilirse dedup kaydi mesaj HALA yeniden teslim edilebilirken
+    # silinir ve DUPLICATE telemetri yazilir.
+    #
     # NOT: birim GUN'den SAAT'e cevrildi; eski PROCESSED_MESSAGES_RETENTION_DAYS
     # artik okunmuyor — telemetry_retention.py set edilmisse uyari loglar.
-    processed_messages_retention_hours: int = 24
+    processed_messages_retention_hours: int = 2
     processed_messages_interval_sec: int = 600
     # `system_events` — denetim/olay kaydi. Onceden HIC retention yoktu.
     # 2 yil: operator karari (yasal/operasyonel geriye donuk inceleme ufku).

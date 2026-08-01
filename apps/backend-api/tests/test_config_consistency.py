@@ -190,6 +190,50 @@ def test_processed_messages_window_exceeds_redelivery_window():
     )
 
 
+#: Stream YAS sinirlari. `MAX_BYTES` gecirilirken bunlar UNUTULMUSTU:
+#: config.py'de tanimliydilar ama compose gecirmedigi icin hic
+#: ayarlanamiyorlardi. Sahada JetStream deposu 5,9 GB'a cikti ve diski
+#: dolduran en buyuk kalem oldu.
+NATS_AGE_FIELDS = [
+    ("nats_stream_raw_max_age_days", "NATS_STREAM_RAW_MAX_AGE_DAYS"),
+    ("nats_stream_normalized_max_age_days", "NATS_STREAM_NORMALIZED_MAX_AGE_DAYS"),
+    ("nats_stream_dlq_max_age_days", "NATS_STREAM_DLQ_MAX_AGE_DAYS"),
+]
+
+
+@pytest.mark.parametrize("field,env", NATS_AGE_FIELDS)
+def test_nats_stream_yas_sinirlari_COMPOSE_dan_geciyor(field: str, env: str):
+    """Gecirilmezse ayar OLU: kodda tanimli ama operator degistiremiyor."""
+    compose = (REPO / "docker-compose.yml").read_text(encoding="utf-8")
+    assert f"{env}:" in compose, (
+        f"{env} compose'da yok — config.py'de tanimli ama container'a "
+        "ULASMIYOR, yani ayarlanamaz"
+    )
+
+
+@pytest.mark.parametrize("field,env", NATS_AGE_FIELDS)
+def test_nats_yas_varsayilanlari_TUTUYOR(field: str, env: str):
+    """Iki ayri varsayilan sessizce ayrisirsa hangisinin gecerli oldugu
+    belirsizlesir."""
+    compose = (REPO / "docker-compose.yml").read_text(encoding="utf-8")
+    m = re.search(rf"{env}:\s*\$\{{{env}:-(\d+)\}}", compose)
+    assert m, f"{env} compose'da beklenen bicimde degil"
+    assert int(m.group(1)) == _settings_default(field), (
+        f"{env} compose varsayilani ({m.group(1)}) config.py ile ayristi"
+    )
+
+
+@pytest.mark.parametrize("field,env", NATS_AGE_FIELDS)
+def test_nats_yas_varsayilani_BOS_gecilmiyor(field: str, env: str):
+    """Bu ayarlar pydantic `int`; bos string dogrulamada patlar ve backend
+    HIC baslamaz. OUTBOX_* ailesinde bos gecmek guvenliydi cunku onlar
+    `os.getenv` + try/except ile okunuyor — burada DEGIL."""
+    compose = (REPO / "docker-compose.yml").read_text(encoding="utf-8")
+    assert f"{env}:-}}" not in compose.replace(" ", ""), (
+        f"{env} bos varsayilanla geciliyor — pydantic int dogrulamasi patlar"
+    )
+
+
 NATS_BYTE_FIELDS = [
     ("nats_stream_raw_max_bytes", "NATS_STREAM_RAW_MAX_BYTES"),
     ("nats_stream_normalized_max_bytes", "NATS_STREAM_NORMALIZED_MAX_BYTES"),
@@ -335,3 +379,53 @@ def test_nats_sunucusu_da_sertifikayi_goruyor():
     assert NATS_CERT_DIZINI in kaynaklar, (
         "nats sunucusu sertifika dizinini gormuyor — TLS acildiginda ayaga kalkmaz"
     )
+
+
+# ---------------------------------------------------------------------------
+# `processed_messages` saklama suresi — ALT SINIR bir GUVENLIK KILIDI
+#
+# SAHADA OLCULDU (2026-08-01, 15 cihaz): tablo 184 MB'a ciktiktan sonra hala
+# buyuyordu (376 islem/sn). 24 saatlik saklama 600 cihazda on milyonlarca
+# satir demekti. 2 saate cekildi — yeniden teslim penceresinin 12 kati.
+#
+# Ama asil onemli olan ALT SINIR: env'e 0 yazan bir operator (ya da "diski
+# bosaltayim" diye agresif ayar yapan disk_guard) dedup defterini mesaj HALA
+# yeniden teslim edilebilirken silerdi ve DUPLICATE telemetri yazilirdi.
+# ---------------------------------------------------------------------------
+
+def test_yeniden_teslim_penceresi_AYARLARDAN_turetiliyor():
+    from app.services import telemetry_retention as t
+
+    assert t.REDELIVERY_WINDOW_SEC == 60 * _settings_default("nats_worker_max_deliver"), (
+        "yeniden teslim penceresi ayarlardan ayrismis"
+    )
+
+
+def test_saklama_ALT_SINIRIN_altina_inemiyor():
+    """Kritik: 0 saat verilse bile taban uygulanmali."""
+    from app.services import telemetry_retention as t
+
+    taban = t.REDELIVERY_WINDOW_SEC * t._REDELIVERY_SAFETY_FACTOR
+    kaynak = __import__("inspect").getsource(t)
+    assert "REDELIVERY_WINDOW_SEC) * _REDELIVERY_SAFETY_FACTOR" in kaynak, (
+        "alt sinir uygulanmiyor — 0 saat dedup defterini aninda siler"
+    )
+    assert taban > t.REDELIVERY_WINDOW_SEC, "emniyet payi yok"
+
+
+def test_varsayilan_ALT_SINIRIN_ustunde():
+    """Varsayilan tabana carparsa ayar anlamsizlasir."""
+    from app.services import telemetry_retention as t
+
+    varsayilan_sn = _settings_default("processed_messages_retention_hours") * 3600
+    assert varsayilan_sn > t.REDELIVERY_WINDOW_SEC * t._REDELIVERY_SAFETY_FACTOR
+
+
+def test_saklama_ISLENEN_saniyeye_ceviriliyor():
+    """Saat granularitesi tabani gizlemesin: hesap saniye uzerinden."""
+    import inspect
+
+    from app.services import telemetry_retention as t
+
+    kaynak = inspect.getsource(t)
+    assert "timedelta(seconds=saniye)" in kaynak

@@ -81,6 +81,55 @@ def stale_after_sec() -> float:
         return DEFAULT_STALE_AFTER_SEC
 
 
+def apply_link_states(db) -> int:
+    """Gateway'in bildirdiği CIHAZ BAZINDA link durumunu uygular.
+
+    Bu, veri akışından BAĞIMSIZ tek doğru kaynak: bir arıza göstergesi
+    saatlerce sessiz kalabilir (değer değişmezse gateway hiçbir şey
+    yayınlamaz) ama linki ayaktadır. Telemetri yaşına bakan hiçbir kontrol
+    bu ikisini ayırt edemez; gateway ayırt eder.
+
+    Gateway henüz göndermiyorsa bu fonksiyon hiçbir şey yapmaz — ileriye
+    dönük uyumlu.
+    """
+    from app.models.gateway_health import GatewayHealth
+    from app.services.gateway_health_service import device_link_states
+
+    saglik = db.scalars(select(GatewayHealth)).all()
+    if not saglik:
+        return 0
+
+    degisen = 0
+    for satir in saglik:
+        durumlar = device_link_states(getattr(satir, "raw_json", None))
+        if not durumlar:
+            continue
+        for kod, durum in durumlar.items():
+            hedef = (
+                CommunicationStatus.ONLINE if durum == "online"
+                else CommunicationStatus.OFFLINE
+            )
+            sonuc = db.execute(
+                update(Device)
+                .where(
+                    Device.code == kod,
+                    Device.gateway_code == satir.gateway_code,
+                    Device.communication_status != hedef,
+                )
+                .values(communication_status=hedef)
+            )
+            n = int(getattr(sonuc, "rowcount", 0) or 0)
+            if n:
+                degisen += n
+                logger.info(
+                    "cihaz_link_durumu device=%s gateway=%s -> %s",
+                    kod, satir.gateway_code, hedef.value,
+                )
+    if degisen:
+        db.commit()
+    return degisen
+
+
 def sweep_once(db) -> int:
     """Susmuş gateway'lerin cihazlarını UNKNOWN yapar; cihaz sayısını döner."""
     simdi = datetime.now(timezone.utc)
@@ -175,6 +224,11 @@ class GatewayStalenessWatchdog:
             try:
                 db = SessionLocal()
                 try:
+                    # ONCE kesin bilgi (gateway'in bildirdigi link durumu),
+                    # SONRA bayatlik tahmini. Ters sirada olsaydi bayatlik
+                    # kontrolu, gateway'in az once dogruladigi bir cihazi
+                    # UNKNOWN yapabilirdi.
+                    apply_link_states(db)
                     sweep_once(db)
                 finally:
                     db.close()

@@ -51,6 +51,12 @@ from sqlalchemy import and_, delete, select, text
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.processed_message import ProcessedMessage
+
+#: NATS yeniden teslim penceresi: ack_wait(60sn) x nats_worker_max_deliver.
+REDELIVERY_WINDOW_SEC = 60 * settings.nats_worker_max_deliver
+#: Pencerenin kac kati emniyet payi birakilacagi. 3 kat: gecikmis bir
+#: yeniden teslim turu bile dedup kaydini kacirmasin.
+_REDELIVERY_SAFETY_FACTOR = 3.0
 from app.models.system_event import SystemEvent
 from app.models.telemetry import Telemetry
 
@@ -309,7 +315,18 @@ class RetentionWorker:
             if retention_hours is not None
             else settings.processed_messages_retention_hours
         )
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        # ALT SINIR — ayar degil, GUVENLIK KILIDI.
+        #
+        # Gercek yeniden teslim penceresi ack_wait(60sn) x max_deliver =
+        # 10 dakika. Bunun ALTINA inilirse dedup kaydi, mesaj HALA yeniden
+        # teslim edilebilirken silinir ve DUPLICATE telemetri yazilir.
+        # Env'e 0 yazan bir operator (ya da "diski bosaltayim" diye agresif
+        # ayar yapan disk_guard) sessizce veri butunlugunu bozardi.
+        saniye = max(
+            float(REDELIVERY_WINDOW_SEC) * _REDELIVERY_SAFETY_FACTOR,
+            float(hours) * 3600.0,
+        )
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=saniye)
         removed = _batch_delete(
             ProcessedMessage,
             ProcessedMessage.processed_at < cutoff,

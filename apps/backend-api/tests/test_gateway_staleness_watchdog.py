@@ -237,3 +237,80 @@ def test_worker_MODUL_DUZEYINDE_kayitli():
         "gateway_staleness worker'i modul duzeyinde kayitli degil — bir "
         "kosulun icine alinmis olabilir ve hic calismaz"
     )
+
+
+# ---------------------------------------------------------------------------
+# Cihaz bazinda link durumu — veri akisindan BAGIMSIZ tek dogru kaynak
+#
+# Ariza bekleyen bir gosterge saatlerce sessiz kalabilir: deger degismezse
+# gateway hicbir sey yayinlamaz. Telemetri yasina bakan HICBIR kontrol
+# "sessiz" ile "olu"yu ayirt edemez; gateway ayirt eder cunku DNP3 baglantisi
+# onda.
+#
+# Aktif yoklama (backend'den cihaza TCP) BILEREK yapilmiyor: outstation
+# `CloseExisting` modunda, yeni baglanti gelince mevcut olani kapatiyor —
+# yoklama gateway'in oturumunu dusururdu. Sahada 2.172 baglanti kopmasina yol
+# acan dongu tam olarak buydu.
+# ---------------------------------------------------------------------------
+
+def test_link_durumu_ayristirma():
+    import json as _json
+
+    from app.services.gateway_health_service import device_link_states
+
+    ham = _json.dumps({"devices": {"states": {
+        "d6": "lost", "d11": "connected", "d3": "recovering", "d9": "uydurma",
+    }}})
+    sonuc = device_link_states(ham)
+    assert sonuc == {"d6": "offline", "d11": "online"}
+
+
+def test_RECOVERING_disarida_birakiliyor():
+    """Gecis durumu. Eslersek cihaz iki katman arasinda gidip gelir."""
+    import json as _json
+
+    from app.services.gateway_health_service import device_link_states
+
+    assert device_link_states(_json.dumps({"devices": {"states": {"d1": "recovering"}}})) == {}
+
+
+def test_BOZUK_govde_cokertmiyor():
+    """Veri gateway'den geliyor; bozuk govde cihaz durumlarini bozmamali."""
+    from app.services.gateway_health_service import device_link_states
+
+    for ham in (None, "", "{bozuk", "[]", '{"devices": "metin"}', '{"devices":{"states":5}}'):
+        assert device_link_states(ham) == {}
+
+
+def test_gateway_GONDERMIYORSA_hicbir_sey_yapilmiyor():
+    """Ileriye donuk uyumluluk: uretici taraf hazir olana kadar sessiz."""
+    import json as _json
+
+    from app.services.gateway_health_service import device_link_states
+
+    # Bugun gateway'in gonderdigi bicim — `states` yok.
+    ham = _json.dumps({"devices": {"total": 18, "online": 16, "lost": 2}})
+    assert device_link_states(ham) == {}
+
+
+def test_KESIN_bilgi_bayatlik_tahmininden_ONCE_uygulaniyor():
+    """Ters sirada olsaydi bayatlik kontrolu, gateway'in az once
+    dogruladigi bir cihazi UNKNOWN yapabilirdi."""
+    kod = _kod(inspect.getsource(wd.GatewayStalenessWatchdog._run))
+    i_link = kod.find("apply_link_states(")
+    i_sweep = kod.find("sweep_once(")
+    assert i_link != -1 and i_sweep != -1
+    assert i_link < i_sweep, "bayatlik tahmini kesin bilgiden ONCE calisiyor"
+
+
+def test_link_durumu_GATEWAY_ile_eslestiriliyor():
+    """Yalnizca kod eslesmesi yapilsaydi, farkli gateway'lerdeki ayni kodlu
+    cihazlar birbirinin durumunu ezerdi."""
+    kod = _kod(inspect.getsource(wd.apply_link_states))
+    assert "Device.gateway_code == satir.gateway_code" in kod
+
+
+def test_link_durumu_DEGISMEYENI_yazmiyor():
+    """Her turda ayni degeri yazmak, 600 cihazda gereksiz UPDATE yagmuru."""
+    kod = _kod(inspect.getsource(wd.apply_link_states))
+    assert "Device.communication_status != hedef" in kod
