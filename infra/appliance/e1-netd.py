@@ -1143,8 +1143,64 @@ def _guard_check() -> None:
 
 
 # --- Dosya yazma ------------------------------------------------------------
-def _write_json(path: str, payload: dict, mode: int = 0o640) -> None:
+def _open_dir_nofollow(path: str, mode: int = 0o750) -> int:
+    """Dizini symlink TAKIP ETMEDEN olustur/dogrula; izinleri fd uzerinden ver.
+
+    NEDEN AYRI BIR FONKSIYON — `_write_json`'in korumasi YETMIYORDU
+    ----------------------------------------------------------------
+    `_write_json` yalnizca yolun SON bilesenini (dosya adini) koruyor. Yol
+    uzerindeki DIZIN bilesenleri korumasizdi ve `_archive_request` tam da
+    orada iki tehlikeli sey yapiyordu:
+
+        os.makedirs(ARCHIVE_DIR, exist_ok=True)
+        os.chmod(ARCHIVE_DIR, 0o750)        # <- symlink'i TAKIP EDER
+
+    ARCHIVE_DIR = <STATE_DIR>/archive, yani backend container'inin (uid 10001)
+    yazabildigi paylasilan 0770 dizinin ICINDE. Container o dizini yeniden
+    adlandirip yerine symlink birakabiliyor:
+
+        mv .../archive .../.a && ln -s /usr/bin .../archive
+
+    `makedirs(exist_ok=True)` symlink'i "zaten dizin" sayip sessizce geciyor,
+    ardindan `os.chmod` ROOT olarak /usr/bin'i 0750 yapiyor. Root olmayan
+    hicbir surec bir daha binary calistiramiyor: kiosk, SSH yonetim hesabi,
+    NetworkManager yardimcilari. KENDI KENDINE DUZELMEZ, saha ziyareti
+    gerektirir — ve ayni imaj tum filoda oldugu icin tek bir backend acigi
+    butun cihazlari ayni anda tuglalayabilir.
+
+    Koruma:
+      * os.mkdir  : O_EXCL gibi davranir; varsa FileExistsError
+      * O_NOFOLLOW: bilesen symlink ise ELOOP ile REDDEDER
+      * O_DIRECTORY: dizin degilse ENOTDIR
+      * fchmod    : izin YOLA degil ACIK FD'ye uygulanir (TOCTOU kapali)
+
+    Donen fd, icine yazilacak dosyalar icin `dir_fd` olarak kullanilmali;
+    boylece dogrulama ile yazma arasinda dizinin degistirilmesi de imkansiz
+    olur. Cagiran taraf fd'yi KAPATMAKLA yukumludur.
+    """
+    try:
+        os.mkdir(path, mode)
+    except FileExistsError:
+        pass
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_DIRECTORY", 0)
+    fd = os.open(path, flags)
+    try:
+        # Var olan bir dizinin izinleri de duzeltilsin (eski kurulumlar).
+        os.fchmod(fd, mode)
+    except (AttributeError, PermissionError, OSError):
+        pass  # izin duzeltilemedi; dizin yine de dogrulanmis durumda
+    return fd
+
+
+def _write_json(
+    path: str, payload: dict, mode: int = 0o640, dir_fd: int | None = None
+) -> None:
     """Atomik yaz: once .tmp, sonra rename. Backend yarim dosya okumasin.
+
+    `dir_fd` verilirse `path` bir DOSYA ADIDIR (yol degil) ve tum islemler o
+    dizin tanimlayicisina gore yapilir. Bu, yol uzerindeki dizinlerin
+    yazma ani ile dogrulama ani arasinda degistirilmesini imkansiz kilar
+    (bkz. `_open_dir_nofollow`).
 
     SYMLINK TAKIBI KAPALI — bu bir YETKI SINIRI.
     ---------------------------------------------
@@ -1173,12 +1229,19 @@ def _write_json(path: str, payload: dict, mode: int = 0o640) -> None:
     tmp = f"{path}.tmp"
     # Bayat/tuzak .tmp temizligi. Symlink'i unlink etmek yalnizca link'i siler.
     try:
-        os.unlink(tmp)
+        if dir_fd is None:
+            os.unlink(tmp)
+        else:
+            os.unlink(tmp, dir_fd=dir_fd)
     except (FileNotFoundError, OSError):
         pass
     # O_NOFOLLOW Windows'ta yok; gelistirici makinesinde de import edilebilsin.
     _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, mode)
+    open_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW
+    if dir_fd is None:
+        fd = os.open(tmp, open_flags, mode)
+    else:
+        fd = os.open(tmp, open_flags, mode, dir_fd=dir_fd)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
         fh.flush()
@@ -1186,11 +1249,16 @@ def _write_json(path: str, payload: dict, mode: int = 0o640) -> None:
         # Izinler ACIK FD uzerinden — yol uzerinden degil (TOCTOU kapali).
         try:
             os.fchmod(fh.fileno(), mode)
-            st = os.stat(STATE_DIR)
-            os.fchown(fh.fileno(), 0, st.st_gid)
+            # Grup, hedef dizinin grubundan alinir; dizin fd'si varsa onu
+            # kullan (yolu tekrar cozmek yeni bir yaris penceresi acardi).
+            gid = os.fstat(dir_fd).st_gid if dir_fd is not None else os.stat(STATE_DIR).st_gid
+            os.fchown(fh.fileno(), 0, gid)
         except (AttributeError, PermissionError, OSError):
             pass
-    os.replace(tmp, path)
+    if dir_fd is None:
+        os.replace(tmp, path)
+    else:
+        os.replace(tmp, path, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
 
 
 def _read_json(path: str) -> dict | None:
@@ -1595,16 +1663,27 @@ def _apply_ipv4(con_name: str, req: dict) -> None:
 
 
 def _archive_request(raw: dict, result: dict) -> None:
+    """Islenmis istegi arsive yaz.
+
+    ARCHIVE_DIR paylasilan (container'in yazabildigi) dizinin icinde oldugu
+    icin dizin symlink TAKIP ETMEDEN aciliyor ve dosya o fd'ye GORE
+    yaziliyor — bkz. `_open_dir_nofollow`. Eski hali `os.chmod(ARCHIVE_DIR)`
+    ile root olarak istenen host dizininin iznini degistirebiliyordu.
+    """
+    dir_fd = None
     try:
-        os.makedirs(ARCHIVE_DIR, exist_ok=True)
-        os.chmod(ARCHIVE_DIR, 0o750)
+        dir_fd = _open_dir_nofollow(ARCHIVE_DIR, 0o750)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         _write_json(
-            os.path.join(ARCHIVE_DIR, f"{stamp}-{raw.get('id', 'req')}.json"),
+            f"{stamp}-{raw.get('id', 'req')}.json",
             {"request": raw, "result": result},
+            dir_fd=dir_fd,
         )
     except OSError as exc:
         _log(f"arsivleme atlandi: {exc}")
+    finally:
+        if dir_fd is not None:
+            os.close(dir_fd)
 
 
 SSID_MAX_LEN = 32

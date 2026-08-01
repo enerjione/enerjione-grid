@@ -43,15 +43,24 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+# Ajanlarin state dizini icin okudugu GERCEK env degiskenleri.
+# DIKKAT: bunlar bir kez yanlis yazilmisti (`E1_NETD_...` / `E1_GWD_...`) ve
+# testler izolasyonsuz kosuyordu — modul yine de yukleniyor, `_write_json`
+# acik yol aldigi icin testler geciyordu. Yani "izole" gorunen ama olmayan bir
+# kurulumdu. Arsiv dizini STATE_DIR'den TURETILDIGI icin asagidaki dizin
+# testleri gercek izolasyon olmadan calismaz.
+_STATE_ENV = {
+    "e1-rad": "E1_RAD_STATE_DIR",
+    "e1-netd": "E1_NET_STATE_DIR",
+    "e1-gwd": "E1_GW_STATE_DIR",
+}
+
+
 def _yukle(ad: str, state_dir: Path):
     """Ajani izole bir state dizini ile yukle."""
+    os.environ[_STATE_ENV[ad]] = str(state_dir)
     if ad == "e1-rad":
-        os.environ["E1_RAD_STATE_DIR"] = str(state_dir)
         os.environ["E1_RAD_PRIV_DIR"] = str(state_dir / "priv")
-    elif ad == "e1-netd":
-        os.environ["E1_NETD_STATE_DIR"] = str(state_dir)
-    else:
-        os.environ["E1_GWD_STATE_DIR"] = str(state_dir)
     yol = APPLIANCE / f"{ad}.py"
     spec = importlib.util.spec_from_file_location(ad.replace("-", "_"), yol)
     mod = importlib.util.module_from_spec(spec)
@@ -136,3 +145,117 @@ def test_okuma_da_symlink_TAKIP_ETMIYOR(ajan, tmp_path):
     assert mod._read_json(str(link)) is None, (
         f"{ajan}: root ajan symlink'i takip edip disaridaki dosyayi OKUDU"
     )
+
+
+# ---------------------------------------------------------------------------
+# DIZIN seviyesi — ilk duzeltmenin ATLADIGI kisim
+#
+# `_write_json`'in O_NOFOLLOW'u yalnizca yolun SON bilesenini korur. Ama
+# `_archive_request` once ARCHIVE_DIR'i olusturuyor ve (e1-netd'de) chmod
+# ediyordu. ARCHIVE_DIR = <STATE_DIR>/archive, yani container'in yazabildigi
+# paylasilan dizinin ICINDE — container onu symlink ile degistirebilir:
+#
+#     mv .../archive .../.a && ln -s /usr/bin .../archive
+#
+# `makedirs(exist_ok=True)` symlink'i "zaten dizin" sayip gecer. Sonrasi:
+#   e1-netd: os.chmod(ARCHIVE_DIR, 0o750) -> ROOT olarak /usr/bin 0750 olur.
+#            Root olmayan hicbir surec binary calistiramaz; kiosk, SSH yonetim
+#            hesabi, NetworkManager yardimcilari duser. KENDI KENDINE DUZELMEZ.
+#   e1-gwd : root arsiv dosyasini saldirganin sectigi dizine yazar.
+#
+# Ayni imaj tum filoda oldugu icin tek bir backend acigi 600 cihazi ayni anda
+# tuglalayabilirdi.
+# ---------------------------------------------------------------------------
+
+DIZIN_AJANLARI = ("e1-netd", "e1-gwd")
+
+
+def _arsivle(mod) -> None:
+    """Ajanin arsivleme yolunu tetikler (ikisinde de ayni imza)."""
+    mod._archive_request({"id": "test-1", "action": "noop"}, {"ok": True})
+
+
+@pytest.mark.parametrize("ajan", DIZIN_AJANLARI)
+def test_arsiv_dizini_symlink_ise_HEDEFE_yazmiyor(ajan, tmp_path):
+    """Tuzak dizin kurulmusken root, hedef dizine dosya BIRAKMAMALI."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    mod = _yukle(ajan, state_dir)
+
+    kurban_dizin = tmp_path / "kurban_dizin"
+    kurban_dizin.mkdir()
+    # Container'in kurdugu tuzak: archive -> kurban_dizin
+    os.symlink(kurban_dizin, Path(mod.ARCHIVE_DIR))
+
+    try:
+        _arsivle(mod)
+    except OSError:
+        pass  # reddedilmesi de kabul; onemli olan hedefin bozulmamasi
+
+    assert list(kurban_dizin.iterdir()) == [], (
+        f"{ajan}: root ajan symlink'lenmis dizini takip edip HEDEFE yazdi "
+        f"({[p.name for p in kurban_dizin.iterdir()]})"
+    )
+
+
+def test_netd_arsiv_dizini_symlink_ise_IZIN_DEGISTIRMIYOR(tmp_path):
+    """En agiri: `os.chmod(ARCHIVE_DIR, 0o750)` symlink'i takip ediyordu.
+
+    Gercek saldiri hedefi /usr/bin idi; burada 0o777'lik bir kurban dizin
+    kullaniyoruz. Izin degisirse cihaz sahada tuglalanmis demektir.
+    """
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    mod = _yukle("e1-netd", state_dir)
+
+    kurban_dizin = tmp_path / "usr_bin_taklidi"
+    kurban_dizin.mkdir()
+    os.chmod(kurban_dizin, 0o777)
+    onceki = os.stat(kurban_dizin).st_mode & 0o777
+
+    os.symlink(kurban_dizin, Path(mod.ARCHIVE_DIR))
+    try:
+        _arsivle(mod)
+    except OSError:
+        pass
+
+    sonraki = os.stat(kurban_dizin).st_mode & 0o777
+    assert sonraki == onceki, (
+        "e1-netd: root ajan symlink'i takip edip hedef dizinin iznini "
+        f"{oct(onceki)} -> {oct(sonraki)} olarak degistirdi (saha ziyareti gerektirir)"
+    )
+
+
+@pytest.mark.parametrize("ajan", DIZIN_AJANLARI)
+def test_arsivleme_normal_akista_CALISIYOR(ajan, tmp_path):
+    """Sertlestirme arsivlemeyi bozmamali — yoksa denetim izi kaybolur."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    mod = _yukle(ajan, state_dir)
+
+    _arsivle(mod)
+
+    arsiv = Path(mod.ARCHIVE_DIR)
+    assert arsiv.is_dir(), f"{ajan}: arsiv dizini olusmadi"
+    dosyalar = list(arsiv.glob("*.json"))
+    assert len(dosyalar) == 1, f"{ajan}: arsiv dosyasi yazilmadi ({dosyalar})"
+    icerik = json.loads(dosyalar[0].read_text(encoding="utf-8"))
+    assert icerik["request"]["id"] == "test-1"
+
+
+@pytest.mark.parametrize("ajan", DIZIN_AJANLARI)
+def test_arsiv_dizini_dosya_ise_SESSIZCE_gecmiyor(ajan, tmp_path):
+    """`archive` yerine DOSYA konursa yazma reddedilmeli, sessizce gecmemeli."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    mod = _yukle(ajan, state_dir)
+
+    Path(mod.ARCHIVE_DIR).write_text("dizin degil", encoding="utf-8")
+
+    try:
+        _arsivle(mod)
+    except OSError:
+        pass
+
+    # Dosya oldugu gibi kalmali; icine bir sey yazilmis olmamali.
+    assert Path(mod.ARCHIVE_DIR).read_text(encoding="utf-8") == "dizin degil"

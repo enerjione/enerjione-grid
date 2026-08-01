@@ -236,8 +236,46 @@ def _log(msg: str) -> None:
 
 
 # --- Dosya yazma ------------------------------------------------------------
-def _write_json(path: str, payload: dict, mode: int = 0o640) -> None:
+def _open_dir_nofollow(path: str, mode: int = 0o750) -> int:
+    """Dizini symlink TAKIP ETMEDEN olustur/dogrula; izinleri fd uzerinden ver.
+
+    NEDEN: `_write_json` yalnizca yolun SON bilesenini koruyor. ARCHIVE_DIR
+    (= <STATE_DIR>/archive) backend container'inin yazabildigi paylasilan
+    dizinin ICINDE; container onu yeniden adlandirip yerine symlink
+    birakabiliyor:
+
+        mv .../archive .../.a && ln -s /etc .../archive
+
+    `os.makedirs(exist_ok=True)` symlink'i "zaten dizin" sayip sessizce
+    geciyor ve ardindan root, arsiv dosyasini SALDIRGANIN sectigi dizine
+    yaziyor. Ayni desenin e1-netd'deki hali (`os.chmod(ARCHIVE_DIR, ...)`)
+    daha da agirdi: root olarak istenen host dizininin iznini degistiriyordu.
+
+    Koruma: os.mkdir (varsa EEXIST) + O_NOFOLLOW (symlink ise ELOOP) +
+    O_DIRECTORY (dizin degilse ENOTDIR) + fchmod (yola degil fd'ye).
+    Donen fd `dir_fd` olarak kullanilmali; cagiran taraf KAPATIR.
+    """
+    try:
+        os.mkdir(path, mode)
+    except FileExistsError:
+        pass
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_DIRECTORY", 0)
+    fd = os.open(path, flags)
+    try:
+        os.fchmod(fd, mode)
+    except (AttributeError, PermissionError, OSError):
+        pass
+    return fd
+
+
+def _write_json(
+    path: str, payload: dict, mode: int = 0o640, dir_fd: int | None = None
+) -> None:
     """Atomik yaz: once .tmp, sonra rename. Backend yarim dosya okumasin.
+
+    `dir_fd` verilirse `path` bir DOSYA ADIDIR ve tum islemler o dizin
+    tanimlayicisina gore yapilir; boylece yol uzerindeki dizinler dogrulama
+    ile yazma arasinda degistirilemez (bkz. `_open_dir_nofollow`).
 
     SYMLINK TAKIBI KAPALI — bu bir YETKI SINIRI.
     ---------------------------------------------
@@ -266,23 +304,35 @@ def _write_json(path: str, payload: dict, mode: int = 0o640) -> None:
     tmp = f"{path}.tmp"
     # Bayat/tuzak .tmp temizligi. Symlink'i unlink etmek yalnizca link'i siler.
     try:
-        os.unlink(tmp)
+        if dir_fd is None:
+            os.unlink(tmp)
+        else:
+            os.unlink(tmp, dir_fd=dir_fd)
     except (FileNotFoundError, OSError):
         pass
     # O_NOFOLLOW Windows'ta yok; gelistirici makinesinde de import edilebilsin.
     _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, mode)
+    open_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW
+    if dir_fd is None:
+        fd = os.open(tmp, open_flags, mode)
+    else:
+        fd = os.open(tmp, open_flags, mode, dir_fd=dir_fd)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
         fh.flush()
         os.fsync(fh.fileno())
         try:
             os.fchmod(fh.fileno(), mode)
-            st = os.stat(STATE_DIR)
-            os.fchown(fh.fileno(), 0, st.st_gid)
+            # Grup hedef dizinden alinir; dizin fd'si varsa yolu tekrar
+            # cozmek yerine onu kullan (yeni yaris penceresi acmayalim).
+            gid = os.fstat(dir_fd).st_gid if dir_fd is not None else os.stat(STATE_DIR).st_gid
+            os.fchown(fh.fileno(), 0, gid)
         except (AttributeError, PermissionError, OSError):
             pass
-    os.replace(tmp, path)
+    if dir_fd is None:
+        os.replace(tmp, path)
+    else:
+        os.replace(tmp, path, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
 
 
 def _read_json(path: str) -> dict | None:
@@ -417,8 +467,11 @@ def cmd_report() -> int:
 # --- apply: request.json'i isle --------------------------------------------
 def _archive_request(raw: dict, result: dict) -> None:
     """Islenmis istegi arsive tasi; request.json'i sil."""
+    dir_fd = None
     try:
-        os.makedirs(ARCHIVE_DIR, exist_ok=True)
+        # Symlink takip ETMEDEN ac: ARCHIVE_DIR container'in yazabildigi
+        # paylasilan dizinin icinde (bkz. _open_dir_nofollow).
+        dir_fd = _open_dir_nofollow(ARCHIVE_DIR, 0o750)
         stamp = _now_iso().replace(":", "").replace("-", "")
         name = f"{stamp}-{str(raw.get('id', 'unknown'))[:12]}.json"
         # Sirlar arsivde tutulmaz: params.token gateway kimligidir, params
@@ -436,9 +489,12 @@ def _archive_request(raw: dict, result: dict) -> None:
                     r"://[^@/]*@", "://***@", str(safe_params["nats_url"])
                 )
             redacted["params"] = safe_params
-        _write_json(os.path.join(ARCHIVE_DIR, name), {"request": redacted, "result": result})
+        _write_json(name, {"request": redacted, "result": result}, dir_fd=dir_fd)
     except OSError as exc:
         _log(f"arsivleme basarisiz: {exc}")
+    finally:
+        if dir_fd is not None:
+            os.close(dir_fd)
     try:
         os.unlink(REQUEST_PATH)
     except OSError:
