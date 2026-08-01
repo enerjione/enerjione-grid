@@ -10,6 +10,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
+import { signalTrust } from "../../shared/signalQuality";
 import type { DeviceRow, SignalLiveRow, SignalSource } from "../../shared/types";
 
 type Props = {
@@ -161,7 +162,30 @@ export function DeviceAllSignalsTab({ device, values, gwOnline, sourceCounts }: 
                   <span className="device-set-block-title">{t("deviceDetail.set.faultStatus")}</span>
                   <ul className="device-set-status-list">
                     {STATUS_DEFS.map((d) => {
-                      const active = get(d.suffix)?.value === 1;
+                      const row = get(d.suffix);
+                      // UC DURUM — bkz. shared/signalQuality.ts.
+                      // Eskiden yalnizca `value === 1` bakiliyordu: "veri yok"
+                      // ve haberlesmesi kopmus cihazin `comm_lost` kaliteli
+                      // 0.0 degeri, gercekten normal olan bir olcumle AYNI
+                      // yesil rozeti uretiyordu.
+                      const trust = signalTrust(row?.value, row?.quality, gwOnline);
+                      if (trust !== "trusted") {
+                        return (
+                          <li key={d.suffix} className="device-set-status-row">
+                            <span className="device-set-status-name">
+                              <span className="material-symbols-outlined">{d.icon}</span>
+                              {t(`deviceDetail.set.signal.${d.labelKey}`)}
+                            </span>
+                            <span className="device-set-badge is-unknown">
+                              <span className="material-symbols-outlined">help</span>
+                              {trust === "missing"
+                                ? t("deviceDetail.status.noData")
+                                : t("deviceDetail.status.untrusted")}
+                            </span>
+                          </li>
+                        );
+                      }
+                      const active = row?.value === 1;
                       return (
                         <li key={d.suffix} className="device-set-status-row">
                           <span className="device-set-status-name">

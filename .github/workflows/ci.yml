@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   frontend:
-    name: Frontend — typecheck + build
+    name: Frontend — typecheck + build + test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +41,12 @@ jobs:
       - name: Build (tsc -b + vite build)
         working-directory: apps/frontend-web
         run: npm run build
+      # Saf mantik testleri (esbuild + node:test). Yeni bagimlilik YOK; bkz.
+      # apps/frontend-web/tests/run.mjs. Denetimdeki "Frontend: sifir test"
+      # maddesinin ilk kapanan parcasi.
+      - name: Test (node:test)
+        working-directory: apps/frontend-web
+        run: npm test
 
   backend:
     name: Backend — ruff + pytest

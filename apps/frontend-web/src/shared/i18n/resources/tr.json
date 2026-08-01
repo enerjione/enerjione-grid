@@ -3098,8 +3098,10 @@
     "title": "Cihaz Detayı",
     "notFound": "Cihaz bulunamadı.",
     "status": {
+      "active": "Aktif",
+      "noData": "Veri yok",
       "normal": "Normal",
-      "active": "Aktif"
+      "untrusted": "Güvenilmez"
     },
     "online": "Çevrimiçi",
     "offline": "Çevrimdışı",
@@ -3416,5 +3418,20 @@
         "cancelled": "Durduruldu"
       }
     }
+  },
+  "ws": {
+    "live": "Canlı",
+    "liveTitle": "Telemetri akıyor",
+    "waiting": "Veri bekleniyor",
+    "waitingTitle": "Bağlantı kuruldu, henüz telemetri gelmedi",
+    "stale": "Veri yok",
+    "staleTitle": "Son telemetriden bu yana",
+    "connecting": "Bağlanıyor",
+    "connectingTitle": "Bağlantı kuruluyor",
+    "error": "Hata",
+    "errorTitle": "Canlı veri bağlantısında hata",
+    "offline": "Kopuk",
+    "offlineTitle": "Canlı veri bağlantısı kopuk",
+    "statusLabel": "Canlı veri durumu"
   }
 }
