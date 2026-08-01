@@ -14,6 +14,76 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.31.0] — 2026-08-01
+
+Saha test cihazında yapılan **ölçümlerden** doğan sürüm. Önceki sürümde
+kapatılamayan "yeşil yalan" sınıfı bitirildi, IEC 104 reset komutu eklendi ve
+diski dolduran bir tablo bulundu.
+
+### Düzeltildi
+- **Kuyruk arızası cihazı tamamen karartıyordu.** `/health` NATS'ı kritik
+  sayıp 503 dönüyor, `frontend-web` compose'da `service_healthy` beklediği
+  için **arayüz hiç başlamıyordu**. Yani NATS'taki tek bir yanlış
+  yapılandırma (ör. yarım uygulanmış TLS) 80 portunda hiçbir şey
+  bırakmıyordu. Oysa kuyruk çökse bile giriş, yetkilendirme, ayarlar, geçmiş
+  veri, arıza listesi, yedekleme ve uzaktan bakım çalışmaya devam eder.
+  Artık kritiklik sınırı yalnızca Postgres; NATS/RabbitMQ düşüşü
+  `status="degraded"` + `degraded_reasons` ile **açıkça** raporlanır.
+
+- **`outbox_events` tablosu diski dolduruyordu.** Ölçüm: saatte 326.027 satır
+  / 272 MB — veritabanının en büyük tablosu, telemetrinin kendisinden (65 MB)
+  dört kat büyük. 24 saatlik saklama süresi ölçülen oranda **7,8 milyon satır
+  / ~6,5 GB** demekti; cihazda 8,9 GB boş disk vardı, yani sürekli yük
+  altında ~1,5 günde doluyordu. Saklama 1 saate çekildi, hiç taranmayan iki
+  indeks kaldırıldı ve `published` indeksi kısmi indekse çevrildi (aynı sorgu
+  93 buffer → 1 buffer).
+
+- **Bilinmeyen durum yeşil "Normal" görünüyordu.** Cihaz detay ekranlarındaki
+  arıza rozetleri "veri yok", "gerçekten normal" ve "haberleşmesi kopuk
+  cihazdan gelen 0.0" için **aynı yeşil rozeti** üretiyordu. Üçüncüsü en
+  ağırıydı: sunucu o okumayı alarm değerlendirmesine zaten sokmuyor, arayüz
+  onun kararını geçersiz kılıyordu. Artık güvenilmeyen ölçüm nötr "Veri yok"
+  / "Güvenilmez" rozeti alıyor.
+
+- **Canlı veri rozeti hiç görünmüyordu.** Soket durumu iki sayfaya
+  geçiriliyor ama ikisinde de okunmuyordu; soket ölse bile ekranda hiçbir
+  işaret çıkmıyor, bayat değerler sessizce duruyordu. Rozet artık görünür ve
+  soket durumunu değil **veri akışını** gösteriyor — sunucu 30 sn'de bir ping
+  attığı için soket, gateway tamamen sussa bile açık kalıyordu.
+
+- **Proxy bozulunca harita tamamen kararıyordu.** Karolar çevrimdışı önbellek
+  için backend üzerinden geçiyor; nginx yönlendirmesi ya da backend
+  bozulduğunda tarayıcıda internet olsa bile harita boş kalıyordu. Artık
+  proxy'den karo gelmeyince doğrudan yukarı akışa düşülür.
+
+- **NATS TLS yarım kalabiliyordu.** TLS'in çalışması üç şeyin aynı anda doğru
+  olmasına bağlı; biri eksik kalırsa arıza **sessiz** oluyordu, çünkü NATS'ın
+  kendi healthcheck'i TLS'siz izleme portunu prob ediyor ve container
+  "healthy" görünüyordu. Ayrıca sertifika dizini yalnızca sunucuya mount
+  ediliyordu; istemciler CA dosyasını bulamıyordu.
+
+- **`OUTBOX_*` ayarları hiç uygulanmıyordu.** Beş ayar belgeliydi ama
+  compose'da listelenmediği için container'a ulaşmıyordu; operatör `.env`'e
+  yazsa da hiçbir şey değişmiyordu.
+
+### Eklendi
+- **IEC 104 üzerinden arıza göstergesi reset komutu** (`C_SC_NA_1`). Kapsam
+  bilinçli olarak dar: kabul edilen tek kontrol komutu budur. Komut, arayüzden
+  gelenle aynı yetki/allowlist/denetim yolundan geçer ve "kabul edildi"
+  (ACT_CON) ile "cihazda gerçekleşti" (ACT_TERM) ayrı raporlanır — komut NAT
+  arkasındaki gateway'e config-poll ile gittiği için arada dakikalar olabilir.
+
+- **Frontend'in ilk otomatik testleri.** Yeni bağımlılık eklenmeden
+  (esbuild + Node'un yerleşik test koşucusu) ve CI'da çalışıyor.
+
+### Güvenlik
+- IEC 104 komut kapsamı **iki katmanlı** doğrulanıyor. Tip filtresi tek başına
+  yetmezdi: sinyal kataloğu düzenlenebilir olduğu için `firmware_update` gibi
+  bir noktaya komut tipi verilmesi, tek katmanlı bir tasarımda uzaktan
+  firmware tetiklemeye dönüşürdü.
+
+---
+
 ## [2.30.0] — 2026-08-01
 
 600 cihaz ölçeği için yapılan ikinci denetimin **Faz 1 ve Faz 2'sinin tamamı**
