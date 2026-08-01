@@ -203,6 +203,25 @@ fi
 # `LoggedOut` uzerinden okuyoruz — `logout` calistirilmadikca false kalir.
 _node_is_registered() {
   local prefs state
+  # ONCE KONTROL DUZLEMI: dugum tailnet'ten SILINDIYSE yerel bayraklar
+  # yaniltir. `LoggedOut` istemcinin KENDI niyetini tutar; biz `logout`
+  # calistirmadigimiz icin dugum konsoldan silinse (ya da ephemeral temizligine
+  # takilsa) bile `false` kalir.
+  #
+  # SAHA VAKASI — "tailscale tekrar kurulamiyor": dugum ephemeral oldugu icin
+  # cevrimdisi kalinca tailnet'ten silindi. Cihazda `LoggedOut:false` durdugu
+  # icin bu fonksiyon "kayitli" dedi, script "yeniden giris yapilmadi" deyip
+  # ciktı ve cihaz bir daha ASLA katilamadi. Anahtar dogru, internet var,
+  # komut basarili gorunuyor — ama hicbir sey olmuyordu.
+  #
+  # Kontrol duzlemi bizi tanimiyorsa tailscaled "NeedsLogin" bildirir; bu
+  # durumda yeniden katilim SARTTIR.
+  state="$(tailscale status --json 2>/dev/null \
+    | sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  if [[ "$state" == "NeedsLogin" || "$state" == "NoState" ]]; then
+    return 1
+  fi
+
   prefs="$(tailscale debug prefs 2>/dev/null || true)"
   if printf '%s' "$prefs" | grep -q '"LoggedOut"'; then
     # `set -e` tuzagi: basarisiz grep'i kosul disinda birakma.

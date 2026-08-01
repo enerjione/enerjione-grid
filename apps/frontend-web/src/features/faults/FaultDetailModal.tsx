@@ -544,7 +544,13 @@ export function FaultDetailModal({
                   >
                     <LayersControl position="topright">
                       <LayersControl.BaseLayer checked name="Sokak">
-                        <ResilientTileLayer layer="osm" attribution={MAP_LAYERS[0].attribution} />
+                        {/* maxZoom: verilmezse Leaflet 18'e duser ve sokak
+                            gorunumu uydudan (19) bir kademe geride kalir. */}
+                        <ResilientTileLayer
+                          layer="osm"
+                          attribution={MAP_LAYERS[0].attribution}
+                          maxZoom={MAP_LAYERS[0].maxZoom}
+                        />
                       </LayersControl.BaseLayer>
                       <LayersControl.BaseLayer name="Uydu">
                         <ResilientTileLayer

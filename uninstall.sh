@@ -12,7 +12,20 @@
 #   sudo bash uninstall.sh --yes          # tum onaylari atla
 #   sudo bash uninstall.sh --keep-images  # image'lari koru (sadece data sil)
 #   sudo bash uninstall.sh --purge-dir    # /opt/enerjione-grid dizinini de sil
-#   sudo bash uninstall.sh --yes --purge-dir   # full nuke
+#   sudo bash uninstall.sh --yes --purge-dir   # stack + dizin
+#   sudo bash uninstall.sh --yes --purge-all   # HICBIR IZ BIRAKMA (asagiya bak)
+#
+# --purge-all: --purge-dir'in yaptiklarina EK olarak, kurulumun sistemde
+# biraktigi geri kalan her seyi siler:
+#   * /etc/enerjione-grid/    -> install.env (TAILSCALE ANAHTARI + GHCR TOKEN),
+#                                site.env, e1-rad.env. EN ONEMLISI BU: --purge-dir
+#                                bu dizine DOKUNMUYORDU; cihaz elden cikarilsa
+#                                bile canli anahtarlar diskte kaliyordu.
+#   * kiosk kullanicisi       -> hesap + ev dizini + otomatik giris ayari +
+#                                /usr/share/xsessions/*.desktop + avatar
+#   * mDNS takma adi          -> e1-grid.local yayini (avahi)
+#   * tailscale paketi        -> yalnizca --purge-tailscale ile (baska bir is
+#                                icin kullaniliyor olabilir)
 # ===========================================================================
 
 set -euo pipefail
@@ -27,11 +40,16 @@ e1_require_root "$@"
 ASSUME_YES=0
 KEEP_IMAGES=0
 PURGE_DIR=0
+PURGE_ALL=0
+PURGE_TAILSCALE=0
 for arg in "$@"; do
   case "$arg" in
     --yes|-y)        ASSUME_YES=1 ;;
     --keep-images)   KEEP_IMAGES=1 ;;
     --purge-dir)     PURGE_DIR=1 ;;
+    # --purge-all dizin silmeyi de KAPSAR; ayrica yazmak gerekmesin.
+    --purge-all)     PURGE_ALL=1; PURGE_DIR=1 ;;
+    --purge-tailscale) PURGE_TAILSCALE=1 ;;
     --help|-h)
       grep '^#' "$0" | sed 's/^#\s*//' | head -30
       exit 0

@@ -2573,8 +2573,6 @@ export function App() {
         fullName={currentUser?.full_name ?? session.username}
         role={session.role}
         accessToken={session.accessToken}
-        wsState={liveSocket.connectionState}
-        wsLastDataAt={liveSocket.lastDataAt}
         activePage={pageMode === "device-detail" ? "home" : pageMode}
         onChangePage={handleChangePage}
         isEngineeringView={pageMode === "engineering"}

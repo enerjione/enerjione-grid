@@ -1,0 +1,199 @@
+"""Gateway bayatlık bekçisi — gateway susarsa cihazları YEŞİL bırakma.
+
+NEDEN VAR
+---------
+`communication_status` yalnızca bir telemetri okuması geldiğinde
+güncelleniyor. Gateway tamamen susarsa (çökme, ağ kopması, yanlış
+yapılandırma) hiç okuma gelmez ve tüm cihazları **son durumlarında donar** —
+genellikle ONLINE. Harita yeşil kalır, operatör sahayı sağlıklı sanır.
+
+NE **YAPMIYOR** — VE BU AYRIM KRİTİK
+------------------------------------
+Cihaz bazlı "veri gelmiyor" kontrolü YAPMIYOR. İlk tasarımda tam da o vardı
+ve YANLIŞTI:
+
+    Gateway yalnızca DEĞİŞEN değerleri yayınlıyor. Durağan bir fiderde
+    değerler değişmezse hiçbir şey yayınlanmaz — ama cihaz gayet ayaktadır.
+    Veri yaşına bakan bir bekçi onu OFFLINE işaretler ve **yanlış alarm**
+    üretir.
+
+Sahada tam bu görüldü: bir cihaz 1 saat 48 dakika veri göndermemişti; sebep
+kopma değil, değerlerinin değişmemesiydi.
+
+"Veri gelmiyor" ile "haberleşme yok" AYNI ŞEY DEĞİL. Bu ayrımı yapabilecek
+tek katman gateway'dir, çünkü DNP3 bağlantısı onda:
+
+  * link ölürse gateway `comm_lost` yayınlar → cihaz zaten OFFLINE olur,
+  * link açık ama veri eskiyse gateway bunu ayrıca raporlar
+    ("link acik gozukuyor ama veri eskidi").
+
+Yani cihaz seviyesi ZATEN doğru çalışıyor. Kapanmayan tek delik gateway'in
+KENDİSİNİN susması — bu bekçi yalnızca onu kapatıyor.
+
+NEDEN `UNKNOWN`, `OFFLINE` DEĞİL
+--------------------------------
+Gateway sustuğunda cihazların gerçekte ne durumda olduğunu **bilmiyoruz**.
+"Çevrimdışı" demek, veriye dayanmayan bir iddia olurdu; cihazlar pekâlâ
+çalışıyor olabilir ve yalnızca haberi bize ulaşamıyordur. `UNKNOWN` dürüst
+olanı söyler.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import threading
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select, update
+
+from app.db.session import SessionLocal
+from app.models.device import Device
+from app.models.enums import CommunicationStatus
+from app.models.gateway import Gateway
+from app.services.event_service import record_event
+
+logger = logging.getLogger(__name__)
+
+#: Tarama periyodu (saniye).
+DEFAULT_INTERVAL_SEC = 60.0
+
+#: Gateway bu süredir görülmediyse cihazları `UNKNOWN` sayılır.
+#:
+#: Gateway config-poll'u ~30 saniye; 5 katı pay bırakıyoruz ki tek bir
+#: gecikmiş poll turu tüm sahayı bilinmez göstermesin.
+DEFAULT_STALE_AFTER_SEC = 180.0
+
+
+def _interval_sec() -> float:
+    try:
+        return max(10.0, float(os.getenv("GATEWAY_STALE_CHECK_INTERVAL_SEC", "60")))
+    except ValueError:
+        return DEFAULT_INTERVAL_SEC
+
+
+def stale_after_sec() -> float:
+    try:
+        # Alt sınır 90 sn: config-poll'un ~3 katı. Altına inmek, tek bir
+        # gecikmiş poll turunda sahayı bilinmez göstermek demekti.
+        return max(90.0, float(os.getenv("GATEWAY_STALE_AFTER_SEC", "180")))
+    except ValueError:
+        return DEFAULT_STALE_AFTER_SEC
+
+
+def sweep_once(db) -> int:
+    """Susmuş gateway'lerin cihazlarını UNKNOWN yapar; cihaz sayısını döner."""
+    simdi = datetime.now(timezone.utc)
+    sinir = simdi - timedelta(seconds=stale_after_sec())
+
+    bayat = db.scalars(
+        select(Gateway).where(
+            Gateway.is_active.is_(True),
+            Gateway.last_seen_at.is_not(None),
+            Gateway.last_seen_at < sinir,
+        )
+    ).all()
+    if not bayat:
+        return 0
+
+    toplam = 0
+    for gateway in bayat:
+        son = gateway.last_seen_at
+        if son is not None and son.tzinfo is None:
+            son = son.replace(tzinfo=timezone.utc)
+        gecen = (simdi - son).total_seconds() if son else 0.0
+
+        # Yalnizca ONLINE olanlar degistiriliyor. Zaten OFFLINE olan bir
+        # cihazi UNKNOWN yapmak bilgi KAYBI olurdu: "kopuk oldugunu
+        # biliyoruz" demekten "bilmiyoruz" demeye gerilerdik.
+        sonuc = db.execute(
+            update(Device)
+            .where(
+                Device.gateway_code == gateway.code,
+                Device.communication_status == CommunicationStatus.ONLINE,
+            )
+            .values(communication_status=CommunicationStatus.UNKNOWN)
+        )
+        n = int(getattr(sonuc, "rowcount", 0) or 0)
+        if n == 0:
+            continue
+        toplam += n
+        logger.warning(
+            "gateway_bayat code=%s gecen=%.0fs — %d cihaz UNKNOWN isaretlendi",
+            gateway.code, gecen, n,
+        )
+        record_event(
+            db,
+            category="gateway",
+            event_type="gateway_stale_devices_unknown",
+            severity="warning",
+            message=(
+                f"{gateway.code} {int(gecen)} saniyedir gorulmedi; "
+                f"{n} cihazin durumu bilinmiyor"
+            ),
+            metadata={
+                "gateway_code": gateway.code,
+                "elapsed_sec": int(gecen),
+                "affected_devices": n,
+            },
+            i18n_key="gateway_stale_devices_unknown",
+            i18n_params={"code": gateway.code, "count": n},
+        )
+
+    if toplam:
+        db.commit()
+    return toplam
+
+
+class GatewayStalenessWatchdog:
+    def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._run, name="gateway-staleness", daemon=True
+        )
+        self._thread.start()
+        logger.info(
+            "gateway_staleness_watchdog_started interval=%.0fs stale_after=%.0fs",
+            _interval_sec(), stale_after_sec(),
+        )
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+            self._thread = None
+
+    def _run(self) -> None:
+        ardisik_hata = 0
+        while not self._stop.is_set():
+            try:
+                db = SessionLocal()
+                try:
+                    sweep_once(db)
+                finally:
+                    db.close()
+                ardisik_hata = 0
+            except Exception:  # noqa: BLE001
+                ardisik_hata += 1
+                if ardisik_hata in (1, 10) or ardisik_hata % 60 == 0:
+                    logger.exception(
+                        "gateway_staleness_sweep_failed ardisik=%d", ardisik_hata
+                    )
+            self._stop.wait(_interval_sec())
+
+
+_watchdog = GatewayStalenessWatchdog()
+
+
+def start() -> None:
+    _watchdog.start()
+
+
+def stop() -> None:
+    _watchdog.stop()

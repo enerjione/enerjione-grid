@@ -20,7 +20,7 @@ from app.models import alarm, alarm_rule, api_key as api_key_model, backup as ba
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
-from app.services import alarm_reconciliation, backup_scheduler, outbox_flush_worker, telemetry_consumer, telemetry_retention
+from app.services import alarm_reconciliation, backup_scheduler, gateway_staleness_watchdog, outbox_flush_worker, telemetry_consumer, telemetry_retention
 
 app = FastAPI(
     title=settings.app_name,
@@ -1080,6 +1080,17 @@ leader.register("telemetry_retention", telemetry_retention.start, telemetry_rete
 # ise siler, onaylanmamis ise reset=True yapar. alarm-service'in bellek-ici
 # durumundan bagimsiz self-healing saglar.
 leader.register("alarm_reconciliation", alarm_reconciliation.start, alarm_reconciliation.stop)
+
+# Gateway susarsa cihazlari yesil birakma. `communication_status` yalnizca
+# telemetri okumasi geldiginde guncelleniyor; gateway tamamen sustugunda hic
+# okuma gelmez ve tum cihazlar son durumlarinda (genellikle ONLINE) donar.
+# Bkz. gateway_staleness_watchdog — CIHAZ bazli veri-yasi kontrolu BILEREK
+# yapilmiyor, o yanlis alarm uretiyordu.
+leader.register(
+    "gateway_staleness",
+    gateway_staleness_watchdog.start,
+    gateway_staleness_watchdog.stop,
+)
 
 # Periyodik yedekleme. IKI KEZ CALISMASI ozellikle pahali: her tetikte pg_dump
 # kosar, diski ve CPU'yu iki katina cikarir ve retention sayimini bozar.

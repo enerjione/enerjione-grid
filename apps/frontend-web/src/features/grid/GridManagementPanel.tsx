@@ -909,7 +909,18 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 >
                   <LayersControl position="topright">
                     <LayersControl.BaseLayer checked name="Sokak (OSM)">
-                      <ResilientTileLayer layer="osm" attribution={MAP_LAYERS[0].attribution} />
+                      {/* maxZoom GECILMELI. Leaflet, haritanin ust zoom
+                          sinirini AKTIF taban katmandan turetir; prop
+                          verilmezse TileLayer varsayilani 18'e duser ve
+                          sokak gorunumunde son yakinlastirma kademesi
+                          kapanir. Uydu katmani 19 aldigi icin ayni ekranda
+                          katman degisince zoom siniri da degisiyordu —
+                          "bazen yakinlasiyor, bazen yakinlasmiyor". */}
+                      <ResilientTileLayer
+                        layer="osm"
+                        attribution={MAP_LAYERS[0].attribution}
+                        maxZoom={MAP_LAYERS[0].maxZoom}
+                      />
                     </LayersControl.BaseLayer>
                     <LayersControl.BaseLayer name="Uydu (Esri)">
                       <ResilientTileLayer

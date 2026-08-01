@@ -9,6 +9,7 @@
 import { useTranslation } from "react-i18next";
 import { MapContainer, Marker, Tooltip } from "react-leaflet";
 import { ResilientTileLayer } from "../../components/ResilientTileLayer";
+import { MAP_LAYERS } from "../../shared/mapTiles";
 import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
@@ -253,7 +254,7 @@ export function DeviceSidebar({
               attributionControl={false}
               style={{ height: "100%", width: "100%" }}
             >
-              <ResilientTileLayer layer="osm" />
+              <ResilientTileLayer layer="osm" maxZoom={MAP_LAYERS[0].maxZoom} />
               <Marker position={[lat as number, lon as number]} icon={DEVICE_PIN}>
                 <Tooltip permanent direction="top" offset={[0, -10]} className="device-map-label">
                   {device.code}

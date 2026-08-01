@@ -6,8 +6,6 @@ import { NotificationBell } from "./NotificationBell";
 import { HeaderSearch } from "./HeaderSearch";
 import { useProjectSettings } from "./ProjectSettingsProvider";
 import type { DeviceRow, Line, Region, UserRole } from "../shared/types";
-import type { WsConnectionState } from "../shared/useLiveValuesSocket";
-import { WsStatusBadge } from "./WsStatusBadge";
 
 type NavPage = "home" | "alarms" | "faults" | "events" | "engineering";
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
@@ -17,11 +15,6 @@ type Props = {
   role?: UserRole;
   /** Bildirim merkezi icin oturum token'i; varsa zil header'da gozukur. */
   accessToken?: string;
-  /** Canli veri WS baglantisinin durumu — header'da rozet olarak gosterilir. */
-  wsState?: WsConnectionState;
-  /** Son TELEMETRI mesajinin zamani (ms). Rozet YESILI buna gore verir —
-   *  soket durumuna gore DEGIL; bkz. components/WsStatusBadge.tsx. */
-  wsLastDataAt?: number | null;
   onLogout?: () => void;
   onSettings?: () => void;
   isEngineeringView?: boolean;
@@ -63,8 +56,6 @@ export function Header({
   isEngineeringView,
   onToggleEngineering,
   onOpenSystemStatus,
-  wsState,
-  wsLastDataAt,
   remoteAccessActive,
   remoteAccessLabel,
   onOpenRemoteAccess,
@@ -156,10 +147,11 @@ export function Header({
       </div>
 
       <div className="header-right">
-        {/* Canli veri durumu. Prop'lar eskiden Header'a geciliyor ama HIC
-            OKUNMUYORDU: soket olse bile ekranda hicbir isaret cikmiyor,
-            bayat degerler sessizce duruyordu. */}
-        {wsState ? <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt} /> : null}
+        {/* Canli veri rozeti header'dan KALDIRILDI (kullanici karari): surekli
+            gorunen bir "canli/kopuk" isareti gunluk kullanimda gurultu
+            yaratiyordu. Ayni rozet Sistem Durumu sayfasinda duruyor
+            (features/system-status/SystemStatusPage.tsx) — bilgi kaybi yok,
+            yalnizca dogru yere tasindi. */}
         {/* Uzaktan bakim izni ACIK uyarisi. Kapatilamaz ve sureli degil:
             erisim 8 saat surebilir, kaybolan bir bildirim bunu garanti
             edemez. Tiklaninca izin sayfasina goturur. */}
