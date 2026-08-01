@@ -767,6 +767,7 @@
       "openTooltip": "Detay görüntüle — {{at}}"
     },
     "empty": {
+      "errorTitle": "Arıza listesi alınamadı",
       "loading": "Yükleniyor…",
       "noActive": "Aktif arıza yok",
       "noClosed": "Kapatılmış arıza kaydı yok.",

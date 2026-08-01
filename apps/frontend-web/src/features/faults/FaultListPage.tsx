@@ -45,6 +45,18 @@ type Props = {
   currentUsername: string;
   canAssign: boolean; // engineer/installer
   loading?: boolean;
+  /** Son cekim basarisiz olduysa mesaj.
+   *
+   *  NEDEN VAR: bu sayfa hata durumunu HIC bilmiyordu. `pollFaults` hatayi
+   *  `catch { }` ile yutuyor, `loading` ise sabit `false` geciliyordu.
+   *  Sonuc: istemci veriyi HIC alamamis olsa bile ekranda yesil tik ve
+   *  "Aktif ariza yok — Sistem temiz" yaziyordu.
+   *
+   *  Nobetci operator telefonla "X hattinda ariza var mi?" sorusunu alir,
+   *  sekmeyi acar, yesil tik gorur ve "yok" der. Bir ariza izleme urununde
+   *  en agir hata sinifi budur: sistem BILMEDIGINI "sorun yok" diye
+   *  gosteriyor. */
+  error?: string;
   gridSnapshot?: GridSnapshot | null;
   devices?: DeviceRow[];
   alarms?: AlarmEvent[];
@@ -78,6 +90,7 @@ export function FaultListPage({
   currentUsername,
   canAssign,
   loading,
+  error,
   gridSnapshot,
   devices,
   alarms,
@@ -225,6 +238,18 @@ export function FaultListPage({
           <div className="fx-empty">
             <RefreshCw size={40} strokeWidth={1.6} className="fx-spin" />
             <p>{t("faults.empty.loading")}</p>
+          </div>
+        ) : error && activeFaults.length === 0 ? (
+          // HATA DALI — "yesil yalan"in kapatildigi yer.
+          //
+          // Veri alinamadiginda BILMIYORUZ demek zorundayiz. Onceden bu dal
+          // yoktu ve akis dogrudan asagidaki yesil "Sistem temiz" ekranina
+          // dusuyordu; yani istemci veriyi hic alamamis olsa bile operator
+          // "ariza yok" goruyordu.
+          <div className="fx-empty fx-empty--error">
+            <TriangleAlert size={48} strokeWidth={1.6} />
+            <h4>{t("faults.empty.errorTitle")}</h4>
+            <p>{error}</p>
           </div>
         ) : activeFaults.length === 0 ? (
           <div className="fx-empty fx-empty--ok">

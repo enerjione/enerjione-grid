@@ -322,6 +322,10 @@ export function App() {
   // Toast icin gorulmus (aktif) alarm ID seti. null = ilk yukleme yapilmadi.
   const seenAlarmIdsRef = useRef<Set<number> | null>(null);
   const [faults, setFaults] = useState<FaultEvent[]>([]);
+  // Ilk cekim tamamlanana kadar `true` — aksi halde sayfa acilir acilmaz
+  // (henuz veri yokken) yesil "Sistem temiz" gorunurdu.
+  const [faultsLoading, setFaultsLoading] = useState(true);
+  const [faultsError, setFaultsError] = useState("");
   const [faultStats, setFaultStats] = useState<FaultStats | null>(null);
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [gateways, setGateways] = useState<Gateway[]>([]);
@@ -962,6 +966,7 @@ export function App() {
   // anlami yok. Sayfa acilinca usePolling hemen bir kez ceker (immediate).
   const pollFaults = useCallback(async () => {
     if (!session) return;
+    setFaultsLoading(true);
     try {
       // "all": Hat Arizalari sayfasi hem "Aktif Ariza" hem "Gecmis
       // Arizalar" sekmesini tek istekten besliyor. Backend olgunlasmamis
@@ -969,8 +974,24 @@ export function App() {
       // closed her durumda gelir.
       const rows = await fetchFaults(session.accessToken, "all");
       setFaults(rows);
-    } catch {
-      // ignore
+      setFaultsError("");
+    } catch (err) {
+      // HATA ARTIK YUTULMUYOR.
+      //
+      // Onceden `catch { // ignore }` idi ve sayfaya `loading={false}`
+      // geciliyordu. Sonuc: istemci veriyi HIC alamamis olsa bile ekranda
+      // yesil tik ve "Aktif ariza yok — Sistem temiz" yaziyordu. Nobetci
+      // operator "X hattinda ariza var mi?" sorusuna bakip "yok" diyordu.
+      //
+      // Mevcut liste KORUNUYOR (silmiyoruz): gecici bir ag hatasinda daha
+      // once alinmis arizalari ekrandan kaldirmak, "ariza kayboldu" izlenimi
+      // vererek ayni yaniltmayi ters yonden yapardi. Kullaniciya bunun
+      // yerine "guncellenemedi" deniyor.
+      setFaultsError(
+        err instanceof Error ? err.message : "Arıza listesi güncellenemedi."
+      );
+    } finally {
+      setFaultsLoading(false);
     }
   }, [session]);
 
@@ -2885,7 +2906,8 @@ export function App() {
                 users={users}
                 currentUsername={session.username}
                 canAssign={session.role === "engineer" || session.role === "installer"}
-                loading={false}
+                loading={faultsLoading}
+                error={faultsError}
                 gridSnapshot={gridSnapshot}
                 devices={devices}
                 alarms={alarms}

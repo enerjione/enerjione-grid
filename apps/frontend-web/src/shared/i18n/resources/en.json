@@ -767,6 +767,7 @@
       "openTooltip": "Open detail — {{at}}"
     },
     "empty": {
+      "errorTitle": "Could not load faults",
       "loading": "Loading…",
       "noActive": "No active faults",
       "noClosed": "No closed fault records.",
