@@ -13,10 +13,11 @@
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 
 import {
   fetchGatewayAgentStatus,
+  updateGatewayLocally,
   fetchGatewayToken,
   installGatewayLocally,
   removeGatewayLocally
@@ -72,6 +73,23 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, gateway.code]);
+
+  const handleLocalUpdate = async () => {
+    // KESINTIYI SOR. Gateway yeniden baslarken ona bagli cihazlardan
+    // telemetri gelmez; operatorun bunu bilmeden tetiklememesi gerekir.
+    if (!window.confirm(t("engineering.gateways.editForm.updateConfirm"))) return;
+    setLocalBusy(true);
+    setError("");
+    try {
+      await updateGatewayLocally(accessToken, gateway.code);
+      // Ajan istegi ASENKRON isliyor; durumu birkac saniye sonra tazele.
+      window.setTimeout(() => void loadAgent(), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLocalBusy(false);
+    }
+  };
 
   const local: LocalGateway | null =
     agent?.gateways.find((g) => g.code === gateway.code) ?? null;
@@ -187,6 +205,42 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                   )}
                   {t("engineering.gateways.editForm.localRemove")}
                 </button>
+              </div>
+              {/* SURUM DURUMU — uc durumlu.
+                  `update_available` null/undefined ise BILINMIYOR (kayit
+                  defterine ulasilamadi). Bunu "guncel" gostermek, sormadan
+                  verilmis bir iddia olurdu ve operator eski surumde
+                  kaldigini fark etmezdi. */}
+              <div className="gw-local-version">
+                {local.update_available === true ? (
+                  <>
+                    <span className="gw-ver-badge is-new">
+                      <ArrowUpCircle size={13} strokeWidth={2.2} />
+                      {t("engineering.gateways.editForm.updateAvailable")}
+                    </span>
+                    <button
+                      type="button"
+                      className="primary-btn gw-update-btn"
+                      onClick={() => void handleLocalUpdate()}
+                      disabled={localBusy || busy}
+                    >
+                      {localBusy ? (
+                        <Loader2 size={14} strokeWidth={2.2} className="net-spin" />
+                      ) : (
+                        <ArrowUpCircle size={14} strokeWidth={2.2} />
+                      )}
+                      {t("engineering.gateways.editForm.updateNow")}
+                    </button>
+                  </>
+                ) : local.update_available === false ? (
+                  <span className="gw-ver-badge is-current">
+                    {t("engineering.gateways.editForm.upToDate")}
+                  </span>
+                ) : (
+                  <span className="gw-ver-badge is-unknown" title={t("engineering.gateways.editForm.versionUnknownHint")}>
+                    {t("engineering.gateways.editForm.versionUnknown")}
+                  </span>
+                )}
               </div>
               <small className="gw-local-hint">{t("engineering.gateways.editForm.localHint")}</small>
             </div>

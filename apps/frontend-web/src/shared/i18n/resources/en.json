@@ -1661,7 +1661,13 @@
         "tokenWarnRemote": "The token will change. If the gateway runs on another device, download the compose file again and update it there, otherwise it will lose connection.",
         "localTitle": "Installed on this device",
         "localRemove": "Remove",
-        "localHint": "Only the container on this machine is removed; the gateway record and its devices are kept."
+        "localHint": "Only the container on this machine is removed; the gateway record and its devices are kept.",
+        "updateAvailable": "Update available",
+        "updateNow": "Update",
+        "upToDate": "Up to date",
+        "versionUnknown": "Version unknown",
+        "versionUnknownHint": "Could not reach the registry; unable to verify whether it is up to date.",
+        "updateConfirm": "The gateway will be updated and restarted. Telemetry from devices on this gateway will pause briefly. Continue?"
       }
     },
     "devicesPanel": {

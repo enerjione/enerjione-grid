@@ -1661,7 +1661,13 @@
         "tokenWarnRemote": "Token degisecek. Gateway baska bir cihazda calisiyorsa compose dosyasini yeniden indirip orada guncellemeniz gerekir; aksi halde baglanti kesilir.",
         "localTitle": "Bu cihazda kurulu",
         "localRemove": "Kaldir",
-        "localHint": "Yalnizca bu makinedeki container kaldirilir; gateway kaydi ve cihazlari silinmez."
+        "localHint": "Yalnizca bu makinedeki container kaldirilir; gateway kaydi ve cihazlari silinmez.",
+        "updateAvailable": "Yeni sürüm var",
+        "updateNow": "Güncelle",
+        "upToDate": "Güncel",
+        "versionUnknown": "Sürüm bilinmiyor",
+        "versionUnknownHint": "Kayıt defterine ulaşılamadı; güncel olup olmadığı doğrulanamadı.",
+        "updateConfirm": "Gateway güncellenecek ve yeniden başlatılacak. Bu sırada bu gateway'e bağlı cihazlardan kısa süre telemetri gelmez. Devam edilsin mi?"
       }
     },
     "devicesPanel": {

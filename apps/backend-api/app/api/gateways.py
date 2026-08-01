@@ -797,6 +797,61 @@ def remove_gateway_locally(
     return LocalInstallResponse(request_id=request_id, code=gateway.code)
 
 
+@router.post(
+    "/{gateway_code}/local-update",
+    response_model=LocalInstallResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def update_gateway_locally(
+    gateway_code: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Gateway'i bu cihazdaki EN GUNCEL imaja yukselt (host ajani uzerinden).
+
+    Yeni imaj cekilir ve container yeniden olusturulur. Cekme basarisiz
+    olursa ajan container'a DOKUNMAZ — yarim bir guncelleme yerine calisan
+    eski surumde kalinir.
+
+    KESINTI: gateway yeniden baslarken o gateway'e bagli cihazlardan
+    telemetri gelmez (tipik olarak birkac saniye). Bu yuzden INSTALLER'a
+    ozel ve denetim kaydi birakiyor — panelden tetiklenen her yeniden
+    baslatma sahada gorunur bir kesintidir.
+
+    Yanit ANLIK SONUC DEGIL: `{request_id}` doner, ajan istegi asenkron
+    isler. Sonuc `GET /gateways/local-agent` icindeki `last_apply` ile
+    takip edilir.
+    """
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    if not gateway_agent_service.is_installed_locally(gateway.code):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Gateway bu cihazda kurulu degil; once kurulum yapin.",
+        )
+    try:
+        request_id = gateway_agent_service.request_update(
+            gateway.code, current_user.username
+        )
+    except GatewayAgentError as exc:
+        raise _agent_http_error(exc) from exc
+
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_local_update_requested",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"{gateway.name} ({gateway.code}) — guncelleme istegi",
+        metadata={"gateway_code": gateway.code, "request_id": request_id},
+        i18n_key="gateway_local_update_requested",
+        i18n_params={"name": gateway.name, "code": gateway.code},
+    )
+    db.commit()
+    return LocalInstallResponse(request_id=request_id, code=gateway.code)
+
+
 @router.get("/{gateway_code}/config", response_model=GatewayConfigResponse)
 def get_gateway_config(
     gateway_code: str,

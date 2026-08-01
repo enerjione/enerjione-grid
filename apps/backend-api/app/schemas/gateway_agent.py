@@ -25,6 +25,20 @@ class LocalGateway(BaseModel):
     ports: str | None = None
     installed_at: str | None = None
 
+    # --- Guncelleme durumu -------------------------------------------------
+    #
+    # Digest KARSILASTIRMASI ile: gateway imaji `:latest` etiketiyle sabit,
+    # yani surum numarasi yok. Etiketin isaret ettigi manifest digest'i
+    # degistiyse yeni bir imaj yayinlanmis demektir.
+    #: Calisan imajin kayit defteri digest'i.
+    image_digest: str | None = None
+    #: Kayit defterindeki etiketin su anki digest'i.
+    remote_digest: str | None = None
+    #: UC DURUMLU. `None` = BILINMIYOR (kayit defterine ulasilamadi).
+    #: `False` ile ayni sayilmamali: "guncel" demek, sormadan verilmis bir
+    #: iddia olurdu ve arayuzde yanlis bir guven yaratirdi.
+    update_available: bool | None = None
+
 
 class GatewayApplyStatus(BaseModel):
     """Ajanin isledigi son istegin sonucu."""

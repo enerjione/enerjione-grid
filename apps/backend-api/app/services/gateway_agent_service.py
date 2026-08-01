@@ -217,3 +217,13 @@ def request_remove(code: str, actor_username: str) -> str:
 
 def request_restart(code: str, actor_username: str) -> str:
     return _write_request(_base_request("restart", code, actor_username))
+
+
+def request_update(code: str, actor_username: str) -> str:
+    """Yeni imaji cekip container'i yeniden olustur.
+
+    `restart`ten FARKI: restart AYNI imajla yeniden baslatir, bu once `pull`
+    yapar. Ajan cekme basarisiz olursa container'a DOKUNMAZ — yarim bir
+    guncelleme yerine calisan eski surumde kalir.
+    """
+    return _write_request(_base_request("update", code, actor_username))

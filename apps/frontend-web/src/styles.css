@@ -34703,3 +34703,12 @@ th.event-col-category {
   .rad-switch.is-on .rad-dot,
   .header-remote-dot { animation: none; }
 }
+
+/* Gateway surum durumu — uc durumlu rozet. `is-unknown` BILEREK notr:
+   kayit defterine ulasilamadiginda "guncel" gostermek yanlis guven verir. */
+.gw-local-version { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; flex-wrap: wrap; }
+.gw-ver-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+.gw-ver-badge.is-new { color: #92400e; background: rgba(245, 158, 11, 0.14); }
+.gw-ver-badge.is-current { color: #065f46; background: rgba(16, 185, 129, 0.12); }
+.gw-ver-badge.is-unknown { color: #64748b; background: rgba(100, 116, 139, 0.12); }
+.gw-update-btn { padding: 4px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }

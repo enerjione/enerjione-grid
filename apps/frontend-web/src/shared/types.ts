@@ -347,6 +347,16 @@ export type LocalGateway = {
   image?: string | null;
   ports?: string | null;
   installed_at?: string | null;
+  /** Calisan imajin kayit defteri digest'i. */
+  image_digest?: string | null;
+  /** Etiketin kayit defterindeki su anki digest'i. */
+  remote_digest?: string | null;
+  /**
+   * UC DURUMLU. `null`/`undefined` = BILINMIYOR (kayit defterine
+   * ulasilamadi). `false` ile ayni sayma: "guncel" demek, sormadan
+   * verilmis bir iddia olur ve arayuzde yanlis guven yaratir.
+   */
+  update_available?: boolean | null;
 };
 
 /** Host ajaninin isledigi son kurulum/kaldirma istegi. */

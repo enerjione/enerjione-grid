@@ -1234,6 +1234,22 @@ export async function removeGatewayLocally(token: string, gatewayCode: string): 
   if (!response.ok) throw await buildApiError(response, "Gateway bu cihazdan kaldırılamadı.");
 }
 
+/** Gateway'i bu cihazda EN GUNCEL imaja yukselt. 202 doner; islem asenkron.
+ *
+ *  KESINTI: gateway yeniden baslarken ona bagli cihazlardan telemetri
+ *  gelmez. Cagiran taraf kullaniciya bunu SORMALI. */
+export async function updateGatewayLocally(
+  token: string,
+  gatewayCode: string
+): Promise<{ request_id: string; code: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/local-update`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Gateway güncellenemedi.");
+  return (await response.json()) as { request_id: string; code: string };
+}
+
 export async function fetchOutboundTargets(token: string): Promise<OutboundTarget[]> {
   const response = await apiFetch(`${API_BASE_URL}/outbound-targets`, {
     headers: authHeaders(token)

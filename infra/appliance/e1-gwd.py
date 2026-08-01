@@ -60,6 +60,7 @@ import json
 import os
 import re
 import shutil
+import time
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -206,6 +207,9 @@ PULL_TIMEOUT_SEC = 900
 UP_TIMEOUT_SEC = 300
 DOWN_TIMEOUT_SEC = 120
 DOCKER_QUERY_TIMEOUT_SEC = 30
+# Kayit defteri sorgusu AG uzerinden; yerel docker sorgusundan uzun tutuluyor
+# ama rapor turunu kilitlemeyecek kadar kisa.
+REMOTE_DIGEST_TIMEOUT_SEC = 25
 
 # KENDI cikitimiza karsi son saglik kontrolu. Artik bir savunma hatti DEGIL
 # (compose'u biz uretiyoruz, disardan metin almiyoruz); amaci sablona kazayla
@@ -409,6 +413,65 @@ def _installed_codes() -> list[str]:
     ]
 
 
+# Uzak digest sorgusu AGDAN gecer; her rapor turunda sormamak icin
+# onbelleklenir. `report` dakikada birkac kez kosabiliyor ve kayit defterine
+# o siklikta gitmenin karsiligi yok — yeni imaj dakikalar icinde degil,
+# gunler icinde cikiyor.
+_REMOTE_DIGEST_TTL_SEC = 900.0
+_remote_digest_cache: dict = {}
+
+
+def _local_digest(image: str) -> str:
+    """Calisan imajin kayit defteri digest'i. Bulunamazsa bos string.
+
+    `RepoDigests[0]` "repo@sha256:..." bicimindedir; yalnizca sha kismi
+    dondurulur ki uzak digest ile dogrudan karsilastirilabilsin.
+    """
+    docker = shutil.which("docker")
+    if not docker or not image:
+        return ""
+    rc, out = _run(
+        [docker, "image", "inspect", image, "--format", "{{index .RepoDigests 0}}"],
+        DOCKER_QUERY_TIMEOUT_SEC,
+    )
+    if rc != 0:
+        return ""
+    ham = out.strip()
+    return ham.split("@", 1)[1] if "@" in ham else ""
+
+
+def _remote_digest(image: str) -> str:
+    """Kayit defterindeki etiketin MANIFEST LISTESI digest'i.
+
+    NEDEN `buildx imagetools`, `manifest inspect` DEGIL:
+      `docker manifest inspect -v` cok mimarili bir imajda ALT platform
+      digest'lerini dondurur (linux/amd64 + attestation). Onu yerel
+      `RepoDigests` ile karsilastirmak FARKLI SEVIYELERI karsilastirmak
+      olur ve HER ZAMAN farkli cikar — yani sistem surekli "guncelleme var"
+      derdi ve tum kullanicilara bos bildirim yagardi.
+      `buildx imagetools inspect --format '{{.Manifest.Digest}}'` ust
+      seviye liste digest'ini verir ve `RepoDigests` ile BIREBIR eslesir
+      (cihazda dogrulandi).
+    """
+    docker = shutil.which("docker")
+    if not docker or not image:
+        return ""
+    simdi = time.monotonic()
+    onbellek = _remote_digest_cache.get(image)
+    if onbellek and (simdi - onbellek[1]) < _REMOTE_DIGEST_TTL_SEC:
+        return onbellek[0]
+    rc, out = _run(
+        [docker, "buildx", "imagetools", "inspect", image,
+         "--format", "{{.Manifest.Digest}}"],
+        REMOTE_DIGEST_TIMEOUT_SEC,
+    )
+    deger = out.strip() if rc == 0 and out.strip().startswith("sha256:") else ""
+    # Basarisiz sorgu da onbelleklenir: ag yoksa her turda 30 saniye
+    # beklemeyelim. Bos deger "bilinmiyor" demek, "guncel" demek DEGIL.
+    _remote_digest_cache[image] = (deger, simdi)
+    return deger
+
+
 def _container_info(code: str) -> dict:
     """Gateway container'inin calisma durumu (docker ps ciktisindan)."""
     docker = shutil.which("docker")
@@ -446,6 +509,16 @@ def build_state() -> dict:
     for code in _installed_codes():
         meta = _read_json(os.path.join(GATEWAY_ROOT, code, "meta.json")) or {}
         info = _container_info(code)
+        # Guncelleme kontrolu. `update_available` UCUNCU BIR DURUM tasir:
+        # None = BILINMIYOR (kayit defterine ulasilamadi). False ile ayni
+        # sayilmamali — "guncel" demek, sormadan verilmis bir iddia olurdu.
+        yerel = _local_digest(info.get("image") or "")
+        uzak = _remote_digest(info.get("image") or "")
+        info["image_digest"] = yerel
+        info["remote_digest"] = uzak
+        info["update_available"] = (
+            None if (not yerel or not uzak) else (yerel != uzak)
+        )
         info["code"] = code
         info["name"] = meta.get("name")
         info["installed_at"] = meta.get("installed_at")
@@ -614,7 +687,7 @@ def render_compose(code: str, name: str, params: dict) -> str:
 def _validate(request: dict) -> dict:
     """Istegi ajanin kendi kurallariyla dogrula. Hata -> ValueError."""
     action = str(request.get("action") or "").strip()
-    if action not in ("install", "remove", "restart"):
+    if action not in ("install", "remove", "restart", "update"):
         raise ValueError(f"desteklenmeyen aksiyon: {action or '(bos)'}")
 
     code = str(request.get("code") or "").strip()
@@ -732,6 +805,35 @@ def _do_restart(req: dict, compose_cmd: list[str]) -> dict:
     return {"ok": True, "stage": "done", "message": "yeniden baslatildi", "detail": out}
 
 
+def _do_update(req: dict, compose_cmd: list[str]) -> dict:
+    """Yeni imaji cek ve container'i yeniden olustur.
+
+    `restart`ten FARKI: restart ayni imajla yeniden baslatir, bu once
+    `pull` yapar. Compose dosyasi DEGISMEZ — imaj etiketi ayni, degisen
+    sey etiketin isaret ettigi digest.
+
+    Cekme BASARISIZ olursa container'a DOKUNULMAZ: yarim bir guncelleme
+    yerine calisan eski surumde kalmak dogru davranis.
+    """
+    code = req["code"]
+    path = _compose_path(code)
+    if not os.path.isfile(path):
+        return {"ok": False, "stage": "update", "message": "gateway bu cihazda kurulu degil", "detail": ""}
+    project = _project_name(code)
+
+    rc, out = _run(compose_cmd + ["-p", project, "-f", path, "pull"], UP_TIMEOUT_SEC)
+    if rc != 0:
+        return {"ok": False, "stage": "pull", "message": "yeni imaj indirilemedi", "detail": out}
+
+    rc, out = _run(compose_cmd + ["-p", project, "-f", path, "up", "-d"], UP_TIMEOUT_SEC)
+    if rc != 0:
+        return {"ok": False, "stage": "up", "message": "guncel imajla baslatilamadi", "detail": out}
+
+    # Onbellegi dusur: guncelleme sonrasi rapor ESKI sonucu gostermesin.
+    _remote_digest_cache.clear()
+    return {"ok": True, "stage": "done", "message": "guncellendi", "detail": out}
+
+
 def cmd_apply() -> int:
     raw = _read_json(REQUEST_PATH)
     if raw is None:
@@ -766,6 +868,8 @@ def cmd_apply() -> int:
             result = _do_install(req, compose_cmd)
         elif req["action"] == "remove":
             result = _do_remove(req, compose_cmd)
+        elif req["action"] == "update":
+            result = _do_update(req, compose_cmd)
         else:
             result = _do_restart(req, compose_cmd)
     except OSError as exc:

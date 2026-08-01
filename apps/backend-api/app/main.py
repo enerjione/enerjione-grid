@@ -20,7 +20,7 @@ from app.models import alarm, alarm_rule, api_key as api_key_model, backup as ba
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
-from app.services import alarm_reconciliation, backup_scheduler, gateway_staleness_watchdog, outbox_flush_worker, telemetry_consumer, telemetry_retention
+from app.services import alarm_reconciliation, backup_scheduler, gateway_staleness_watchdog, gateway_update_notifier, outbox_flush_worker, telemetry_consumer, telemetry_retention
 
 app = FastAPI(
     title=settings.app_name,
@@ -1090,6 +1090,15 @@ leader.register(
     "gateway_staleness",
     gateway_staleness_watchdog.start,
     gateway_staleness_watchdog.stop,
+)
+
+# Gateway icin yeni imaj yayinlandiginda TUM kullanicilara bir kez bildirim.
+# "Bir kez" onemli: kontrol periyodik, her turda bildirim gondermek bildirim
+# merkezini kullanilamaz hale getirirdi (bkz. gateway_update_notifier).
+leader.register(
+    "gateway_update_notifier",
+    gateway_update_notifier.start,
+    gateway_update_notifier.stop,
 )
 
 # Periyodik yedekleme. IKI KEZ CALISMASI ozellikle pahali: her tetikte pg_dump
