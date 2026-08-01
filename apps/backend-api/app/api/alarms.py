@@ -41,8 +41,19 @@ def _ensure_can_access_alarm(db: Session, user: User, alarm) -> None:
 
 @router.get("/events", response_model=list[AlarmEventRead])
 def list_alarm_events(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    rows = list_alarm_events_service(db)
-    return _scope_filter_alarms(db, current_user, rows)
+    """Alarm olaylari — kapsam SQL'de, LIMIT'ten ONCE uygulanir.
+
+    Eskiden `list_alarm_events_service(db)` kapsamsiz cagriliyor, daraltma
+    donen 500 satir uzerinde Python'da yapiliyordu. Servis
+    `visible_device_ids` parametresini DESTEKLIYORDU; A3 duzeltmesi
+    ack-all/reset-all yollarina uygulanmis, LISTE yoluna uygulanmamisti.
+
+    Sonucu: 20 cihazdan sorumlu bir operator, 600 cihazin en yeni 500 kaydi
+    icinden yalnizca kendine denk gelenleri goruyordu — yani kendi
+    alarmlarinin cogunu hic goremiyordu.
+    """
+    visible = get_visible_device_ids(db, current_user)
+    return list_alarm_events_service(db, visible)
 
 
 def _load_alarm_or_404(db: Session, alarm_id: int):

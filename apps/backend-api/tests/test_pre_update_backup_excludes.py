@@ -39,13 +39,19 @@ from app.services.backup_service import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 UPDATE_SH = REPO_ROOT / "update.sh"
+LIB_SH = REPO_ROOT / "infra" / "scripts" / "linux" / "_lib.sh"
+CLI = REPO_ROOT / "packaging" / "bin" / "enerjione-grid"
 
 
 def _update_sh_exclude_list() -> list[str]:
-    """update.sh icindeki `E1_DUMP_EXCLUDE=( ... )` dizisini okur."""
-    kaynak = UPDATE_SH.read_text(encoding="utf-8")
+    """`_lib.sh` icindeki `E1_DUMP_EXCLUDE=( ... )` dizisini okur.
+
+    Liste once `update.sh` icindeydi; `enerjione-grid backup` ayni koruma
+    olmadan yazilinca (ve GB'larca dump uretince) tek yere tasindi.
+    """
+    kaynak = LIB_SH.read_text(encoding="utf-8")
     m = re.search(r"^E1_DUMP_EXCLUDE=\((.*?)^\)", kaynak, re.MULTILINE | re.DOTALL)
-    assert m, "update.sh icinde E1_DUMP_EXCLUDE dizisi bulunamadi"
+    assert m, "_lib.sh icinde E1_DUMP_EXCLUDE dizisi bulunamadi"
     govde = m.group(1)
     ogeler: list[str] = []
     for satir in govde.splitlines():
@@ -56,9 +62,37 @@ def _update_sh_exclude_list() -> list[str]:
     return ogeler
 
 
-def test_update_sh_BULUNDU():
+def test_kaynak_dosyalar_BULUNDU():
     """Yol yanlissa asagidaki testler sessizce yesil kalirdi."""
     assert UPDATE_SH.is_file(), f"update.sh bulunamadi: {UPDATE_SH}"
+    assert LIB_SH.is_file(), f"_lib.sh bulunamadi: {LIB_SH}"
+    assert CLI.is_file(), f"enerjione-grid bulunamadi: {CLI}"
+
+
+def test_elle_yedek_komutu_AYNI_listeyi_kullaniyor():
+    """`enerjione-grid backup` de exclude uygulamali.
+
+    Bu komut musteriye verilen TEK elle-yedek yoludur ve uzun sure
+    `--exclude-table-data` OLMADAN calisiyordu: 90 gunluk historian'in tamami
+    her yedege giriyor, dosya GB'lara cikiyordu. update.sh duzeltilirken bu
+    yol atlanmisti; ayni hatanin ikinci kez olusmamasi icin liste tek yerde.
+    """
+    kaynak = CLI.read_text(encoding="utf-8")
+    assert "e1_dump_exclude_into" in kaynak, (
+        "elle yedek komutu ortak exclude listesini kullanmiyor"
+    )
+    assert "-F c" in kaynak, (
+        "elle yedek duz SQL uretiyor — UI'dan geri YUKLENEMEZ "
+        "(validate_dump_file PGDMP imzasi arar)"
+    )
+    # Cikti YOLU kontrol ediliyor, kaynakta gecen herhangi bir metin degil:
+    # once ".sql.gz" arayan bir kontrol yazdim ve bu dosyanin KENDI aciklama
+    # satirina takildi. Aciklamalar davranis kaniti degildir.
+    cikti = re.findall(r'^\s*out="([^"]+)"', kaynak, re.MULTILINE)
+    assert cikti, "elle yedegin cikti yolu bulunamadi"
+    assert all(y.endswith(".dump") for y in cikti), (
+        f"elle yedek hala duz-SQL uzantisi yaziyor: {cikti}"
+    )
 
 
 def test_exclude_listesi_backend_ile_AYNI():

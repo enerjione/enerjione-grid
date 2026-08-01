@@ -825,6 +825,44 @@ e1_env_ensure_secret() {
   return 0
 }
 
+# Yedege VERISI alinmayacak tablolar (schema yine dump'a girer).
+#
+# Backend'deki `backup_service.EXCLUDED_DATA_TABLES` + `_EXCLUDED_DATA_PATTERNS`
+# ile AYNI olmali; senkron kalmasini `test_pre_update_backup_excludes.py`
+# dogruluyor. Liste burada ELLE duruyor cunku paket (.deb) kurulumunda cihazda
+# backend KAYNAGI YOK — uygulama kodu imajlarin icinde.
+#
+# TEK KAYNAK: hem `update.sh` (guncelleme oncesi otomatik yedek) hem
+# `enerjione-grid backup` (elle yedek) bunu kullanir. Ayri ayri tanimlandiginda
+# ikincisi tam olarak bu listeden yoksundu ve 90 gunluk historian'in TAMAMINI
+# dump ediyordu.
+#
+# Hypertable satirlari asil tabloda DEGIL `_timescaledb_internal` chunk'larinda
+# durur; tablo adiyla haric tutmak YETMEZ — son iki kalip onun icin.
+E1_DUMP_EXCLUDE=(
+  telemetry
+  outbox_events
+  processed_messages
+  gateway_ingest_batches
+  backup_jobs
+  backup_schedule
+  telemetry_history
+  telemetry_history_1m
+  telemetry_history_1h
+  '_timescaledb_internal._hyper_*'
+  '_timescaledb_internal._materialized_hypertable_*'
+)
+
+# Yukaridaki listeyi pg_dump argumanlarina cevirip verilen dizi degiskenine
+# ekler.  Kullanim:  e1_dump_exclude_into DUMP_ARGS
+e1_dump_exclude_into() {
+  local -n _hedef="$1"
+  local _t
+  for _t in "${E1_DUMP_EXCLUDE[@]}"; do
+    _hedef+=(--exclude-table-data "$_t")
+  done
+}
+
 # Update oncesi otomatik DB yedeklerini en yeni <keep> tanesi kalacak sekilde
 # budar. `auto-pre-update-*` kaliba uyan HER dosya kapsanir; eski surumlerin
 # biraktigi `.sql.gz` yigini da bu sayede temizlenir.

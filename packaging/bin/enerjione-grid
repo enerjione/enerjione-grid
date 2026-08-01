@@ -115,16 +115,60 @@ case "$cmd" in
     ;;
 
   backup)
+    # BU KOMUT DISKI DOLDURUYORDU
+    # ---------------------------
+    # Eskiden `pg_dump | gzip > manual-*.sql.gz` idi: `--exclude-table-data`
+    # YOK, yani 90 gunluk historian arsivinin TAMAMI her yedege giriyordu
+    # (dosya basina birkac GB). Ustelik duz SQL oldugu icin UI'daki geri
+    # yukleme `validate_dump_file`in PGDMP imza kontrolune takiliyordu — yani
+    # dosyalar yalnizca yer kapliyordu.
+    #
+    # update.sh'taki ayni hata duzeltildi ama BU YOL atlanmisti; musteriye
+    # verilen tek elle-yedek komutu buydu.
     _need_root backup
     _need_install
     cd "$APP_DIR"
     ts="$(date +%Y%m%d-%H%M%S)"
     mkdir -p backups
+
+    # Bos alan kontrolu: yedek "iyi olsun diye" alinir, CALISAN sistemi
+    # doldurmasi kabul edilemez.
+    free_mb="$(df -Pm . 2>/dev/null | awk 'NR==2 {print $4}')"
+    if [[ -n "${free_mb:-}" ]] && [[ "$free_mb" -lt 2048 ]]; then
+      e1_die "Diskte yalnizca ${free_mb} MB bos alan var; yedek alinmadi.\n    Yer acin: sudo docker system prune -af"
+    fi
+
     pg_user="$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n1)"
     pg_db="$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n1)"
-    out="backups/manual-${ts}.sql.gz"
-    if _compose exec -T postgres pg_dump -U "${pg_user:-enerjione_grid}" -d "${pg_db:-enerjione_grid}" | gzip > "$out"; then
+    out="backups/manual-${ts}.dump"
+
+    # -F c: custom format — UI'dan "Yedek Yukle" ile geri yuklenebilir.
+    dump_args=(-U "${pg_user:-enerjione_grid}" -d "${pg_db:-enerjione_grid}"
+               -F c --no-owner --no-acl)
+    if declare -F e1_dump_exclude_into >/dev/null 2>&1; then
+      e1_dump_exclude_into dump_args
+    else
+      # _lib.sh yoksa (beklenmez; pakette geliyor) en azindan en buyuk
+      # kalemleri disarida birak — yoksa dosya GB'lara cikar.
+      for _t in telemetry telemetry_history telemetry_history_1m \
+                telemetry_history_1h processed_messages outbox_events \
+                '_timescaledb_internal._hyper_*' \
+                '_timescaledb_internal._materialized_hypertable_*'; do
+        dump_args+=(--exclude-table-data "$_t")
+      done
+    fi
+
+    if _compose exec -T postgres pg_dump "${dump_args[@]}" > "$out"; then
       e1_ok "Yedek alindi: ${APP_DIR}/${out} ($(du -h "$out" | cut -f1))"
+      e1_info "Geri yukleme: Muhendislik > Sistem > Yedekler > Yedek Yukle"
+      # Elle yedekler OTOMATIK SILINMEZ: operator bunlari genelde bilincli
+      # alir ("buyuk degisiklik oncesi") ve habersiz kaybetmemeli — backend'in
+      # `backup_manual_retention_days` varsayilani da 0'dir. Ama birikirse
+      # haber ver.
+      adet="$(find backups -maxdepth 1 -type f -name 'manual-*' 2>/dev/null | wc -l)"
+      if [[ "${adet:-0}" -gt 5 ]]; then
+        e1_warn "${adet} elle yedek birikmis (${APP_DIR}/backups). Gerekmeyenleri silin."
+      fi
     else
       rm -f "$out"
       e1_die "Yedek alinamadi. Postgres ayakta mi?  enerjione-grid status"

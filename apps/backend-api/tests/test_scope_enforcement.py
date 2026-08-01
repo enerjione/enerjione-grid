@@ -87,20 +87,27 @@ def test_BOS_kume_KISITSIZ_sayilmaz():
     finally:
         svc.select = orijinal
 
-    assert kayit == ["where"], (
+    assert _kapsam_kosulu_var(kayit), (
         "BOS kume icin sorgu daraltilmadi — yetkisiz kullanici tum alarmlara "
-        "erisir"
+        f"erisir (uygulanan kosullar: {kayit})"
     )
 
 
 class _SahteSorgu:
-    """`select(...).where(...).order_by(...).limit(...)` zincirini kaydeder."""
+    """`select(...).where(...).order_by(...).limit(...)` zincirini kaydeder.
+
+    Kosul METNI kaydediliyor, yalnizca "where cagrildi" bilgisi degil.
+    Onceden `where` sayisi sayiliyordu; `list_alarm_events` aktif ve cozulmus
+    alarmlar icin AYRI sorgu kurmaya baslayinca sayi degisti ve test, davranis
+    dogru oldugu halde kirmizi oldu. Sayi kirilgan bir olcu — asil soru
+    "kapsam kosulu uygulandi mi".
+    """
 
     def __init__(self, kayit: list[str]) -> None:
         self._kayit = kayit
 
     def where(self, *a, **k):
-        self._kayit.append("where")
+        self._kayit.append(str(a[0]) if a else "where")
         return self
 
     def order_by(self, *a, **k):
@@ -108,6 +115,11 @@ class _SahteSorgu:
 
     def limit(self, *a, **k):
         return self
+
+
+def _kapsam_kosulu_var(kayit: list[str]) -> bool:
+    """Kayitlarda cihaz kapsamina dair bir kosul var mi?"""
+    return any("device_id" in k for k in kayit)
 
 
 def test_kapsam_verilince_WHERE_uygulanir(monkeypatch):
@@ -126,11 +138,15 @@ def test_kapsam_verilince_WHERE_uygulanir(monkeypatch):
             return _R()
 
     alarm_engine_service.list_alarm_events(_SahteDB(), {1, 2})
-    assert kayit == ["where"], "kapsam verildi ama sorgu daraltilmadi"
+    assert _kapsam_kosulu_var(kayit), (
+        f"kapsam verildi ama sorgu daraltilmadi (kosullar: {kayit})"
+    )
 
     kayit.clear()
     alarm_engine_service.list_alarm_events(_SahteDB(), None)
-    assert kayit == [], "kisitsiz cagride gereksiz where eklendi"
+    assert not _kapsam_kosulu_var(kayit), (
+        f"kisitsiz cagride cihaz kapsami eklendi (kosullar: {kayit})"
+    )
 
 
 # ------------------------------------------------------------------ A4

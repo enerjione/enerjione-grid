@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -11,22 +12,86 @@ from app.services.event_service import record_event
 from app.services.notification_service import create_notification, notify_users
 from app.services.outbox_service import enqueue_outbox_event
 
+logger = logging.getLogger(__name__)
+
+
+# Cozulmus (reset=True) alarmlar icin tavan. Bunlar zamanla sinirsiz buyur;
+# arayuzde "gecmis" islevi gorurler ve kirpilmalari zararsizdir.
+RESOLVED_ALARM_LIMIT = 500
+
+# AKTIF alarmlar icin emniyet supabi. Aktif alarm sayisi dogasi geregi
+# sinirlidir (cihaz sayisi x birkac kural), yani bu tavana dayanmak "cok
+# alarm var" degil "bir sey ters gidiyor" demektir; o yuzden loglanir.
+ACTIVE_ALARM_HARD_CAP = 5000
+
 
 def list_alarm_events(
     db: Session, visible_device_ids: set[int] | None = None
 ) -> list[AlarmEvent]:
-    """Alarm olaylari. `visible_device_ids` verilirse sorgu SQL'de daraltilir.
+    """Alarm olaylari: AKTIF olanlarin TAMAMI + en yeni cozulmusler.
 
-    `None` = kisitsiz (engineer/installer). Bos KUME = hicbir cihaz gorunmuyor
-    ve dogru cevap BOS listedir — `if not visible` gibi bir kontrol bos kumeyi
-    "kisitsiz" saymak olurdu ve hicbir sorumluluk alanina atanmamis bir
-    operator TUM alarmlari gorurdu.
+    `visible_device_ids` verilirse daraltma SQL'de yapilir. `None` = kisitsiz
+    (engineer/installer). Bos KUME = hicbir cihaz gorunmuyor ve dogru cevap BOS
+    listedir — `if not visible` gibi bir kontrol bos kumeyi "kisitsiz" saymak
+    olurdu ve hicbir sorumluluk alanina atanmamis bir operator TUM alarmlari
+    gorurdu.
+
+    NEDEN AKTIF/COZULMUS AYRIMI VAR
+    --------------------------------
+    Eskiden sorgu tek parcaydi: `order_by(created_at DESC).limit(500)`. Bunun
+    600 cihaz olceginde iki agir sonucu vardi:
+
+      1. `alarm_events` tablosunun retention'i YOK ve tek bir haberlesme
+         kesintisi 600 satir uretebiliyor. 500'luk pencerenin disina dusen
+         ACIK bir alarm API'den HIC donmuyordu.
+      2. `DeviceMapTab` marker rengini bu listeden hesapliyor. Yani acik bir
+         ariza listeden dusunce HARITADAKI MARKER YESILE DONUYORDU.
+
+         > Cuma aksami bir cihazda kalici hat arizasi olusur. Pazartesi sabahi
+         > operator haritaya bakar: marker yesil, "Aktif Alarmlar" sekmesinde
+         > de yok. Ariza uc gundur aciktir.
+
+    Bir ariza izleme urununde bu, "yavaslama" degil SESSIZ YANLIS VERIDIR;
+    urunden beklenen tek seyin tam tersi. Bu yuzden tavan yalnizca cozulmus
+    kayitlara uygulanir — acik alarm asla kirpilmaz.
+
+    KIRPMA KAPSAMDAN SONRA OLMALI
+    -----------------------------
+    Ayrica LIMIT eskiden kapsam filtresinden ONCE calisiyordu (kapsam Python'da,
+    donusten sonra uygulaniyordu). 20 cihazdan sorumlu bir operator, 600 cihazin
+    en yeni 500 kaydi icinden kendine denk gelenleri goruyordu. Artik daraltma
+    SQL'de, LIMIT'ten once.
     """
-    stmt = select(AlarmEvent)
+    base = select(AlarmEvent)
     if visible_device_ids is not None:
-        stmt = stmt.where(AlarmEvent.device_id.in_(visible_device_ids))
-    stmt = stmt.order_by(AlarmEvent.created_at.desc()).limit(500)
-    return list(db.scalars(stmt).all())
+        base = base.where(AlarmEvent.device_id.in_(visible_device_ids))
+
+    aktif = list(
+        db.scalars(
+            base.where(AlarmEvent.reset.is_(False))
+            .order_by(AlarmEvent.created_at.desc())
+            .limit(ACTIVE_ALARM_HARD_CAP)
+        ).all()
+    )
+    if len(aktif) >= ACTIVE_ALARM_HARD_CAP:
+        # Buraya gelinmesi beklenmez; gelinirse alarm kurallari bir seyi
+        # tekrar tekrar tetikliyor demektir ve bu GORUNUR olmali.
+        logger.error(
+            "alarm_aktif_tavan_asildi count=%d cap=%d — kirpilan acik alarmlar var",
+            len(aktif),
+            ACTIVE_ALARM_HARD_CAP,
+        )
+
+    cozulmus = list(
+        db.scalars(
+            base.where(AlarmEvent.reset.is_(True))
+            .order_by(AlarmEvent.created_at.desc())
+            .limit(RESOLVED_ALARM_LIMIT)
+        ).all()
+    )
+
+    # Arayuz tek bir "en yeni ustte" listesi bekliyor.
+    return sorted(aktif + cozulmus, key=lambda a: a.created_at, reverse=True)
 
 
 def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_username: str) -> AlarmEvent:

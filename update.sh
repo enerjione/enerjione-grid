@@ -105,6 +105,44 @@ e1_env_version_write() {
 e1_env_version_commit() {
   # Imajlar hazir; geri almaya gerek yok.
   E1_ENV_VERSION_PENDING=""
+  E1_GIT_ROLLBACK_TO=""
+}
+
+# --- CALISMA AGACI GERI ALMA -----------------------------------------------
+#
+# `.env` surumunu geri almak TEK BASINA YETMIYORDU. Guncelleme once
+# `git checkout <yeni tag>` yapiyor, sonra imajlari hazirliyor. Imaj adiminda
+# duserse:
+#
+#     .env  -> ESKI surume geri alinir (yukaridaki mekanizma)
+#     dosyalar -> YENI surumde KALIR   <- eksik olan buydu
+#
+# Yani cihazda yeni `docker-compose.yml` ile eski imaj etiketi kaliyor. Yeni
+# compose genelde yeni bir zorunlu env ya da yeni bir servis bekler; sonuc
+# `docker compose up` sirasinda hata ya da eksik servis olur. Ilk reboot'ta
+# systemd unit'i ayaga kalkamaz ve cihaz sahada OLU kalir — tam da A8'in
+# onlemeye calistigi senaryo, sadece bir katman yukarida.
+E1_GIT_ROLLBACK_TO=""
+
+e1_git_checkpoint() {
+  # Checkout ONCESI HEAD'i sakla. Paket modunda git yok; sessizce atlanir.
+  E1_GIT_ROLLBACK_TO="$(git rev-parse HEAD 2>/dev/null || echo '')"
+}
+
+e1_git_rollback() {
+  [[ -z "${E1_GIT_ROLLBACK_TO}" ]] && return 0
+  local hedef="${E1_GIT_ROLLBACK_TO}"
+  E1_GIT_ROLLBACK_TO=""
+  local simdiki
+  simdiki="$(git rev-parse HEAD 2>/dev/null || echo '')"
+  [[ "$simdiki" == "$hedef" ]] && return 0
+  if git checkout --quiet --detach "$hedef" 2>/dev/null; then
+    e1_warn "Calisma agaci ${hedef:0:9} (guncelleme oncesi) surumune geri alindi."
+  else
+    # Geri alinamadiysa SESSIZ KALMA: operator elle mudahale edebilmeli.
+    e1_err "Calisma agaci geri ALINAMADI. Elle:"
+    e1_err "    cd ${SCRIPT_DIR} && sudo git checkout --detach ${hedef}"
+  fi
 }
 
 e1_env_version_rollback() {
@@ -119,7 +157,14 @@ e1_env_version_rollback() {
   e1_warn "Guncelleme tamamlanmadi — .env surumu ${eski} degerine geri alindi."
   e1_hint "Calisan container'lar eski surumle ayakta kalir; cihaz reboot'ta olmez."
 }
-trap 'e1_env_version_rollback' EXIT
+
+# Cikista ONCE dosyalar, SONRA .env geri alinir. Sira onemli degil ama ikisi
+# de calismali: yalnizca biri geri alinirsa compose ile imaj etiketi uyusmaz.
+e1_update_rollback() {
+  e1_git_rollback
+  e1_env_version_rollback
+}
+trap 'e1_update_rollback' EXIT
 
 e1_box "GUNCELLEME"
 e1_kv "Dizin" "${SCRIPT_DIR}"
@@ -241,28 +286,8 @@ e1_step "Update oncesi DB yedek aliniyor..."
 E1_PRE_UPDATE_KEEP="${E1_PRE_UPDATE_KEEP:-3}"
 [[ "$E1_PRE_UPDATE_KEEP" =~ ^[0-9]+$ ]] && [[ "$E1_PRE_UPDATE_KEEP" -ge 1 ]] || E1_PRE_UPDATE_KEEP=3
 
-# Yedek disi birakilan tablolar — apps/backend-api/app/services/backup_service.py
-# icindeki EXCLUDED_DATA_TABLES + _EXCLUDED_DATA_PATTERNS ile AYNI olmali.
-# (Senkron kalmasini `apps/backend-api/tests/test_pre_update_backup_excludes.py`
-# dogruluyor; liste burada elle duruyor cunku paket kurulumunda backend
-# kaynagi diskte YOK.)
-#
-# Schema yine dump'ta kalir, yalnizca satir verisi atlanir. Hypertable
-# satirlari asil tabloda degil `_timescaledb_internal` chunk'larinda durdugu
-# icin tablo adiyla haric tutmak YETMEZ; pattern'ler onun icin.
-E1_DUMP_EXCLUDE=(
-  telemetry
-  outbox_events
-  processed_messages
-  gateway_ingest_batches
-  backup_jobs
-  backup_schedule
-  telemetry_history
-  telemetry_history_1m
-  telemetry_history_1h
-  '_timescaledb_internal._hyper_*'
-  '_timescaledb_internal._materialized_hypertable_*'
-)
+# Yedek disi birakilan tablolar `_lib.sh` icindeki `E1_DUMP_EXCLUDE` dizisinde
+# TEK yerde tanimli — `enerjione-grid backup` de ayni listeyi kullanir.
 
 if docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; then
   mkdir -p backups
@@ -288,9 +313,7 @@ if docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; 
     PG_DB="${PG_DB:-enerjione_grid}"
 
     DUMP_ARGS=(-U "${PG_USER}" -d "${PG_DB}" -F c --no-owner --no-acl)
-    for _tbl in "${E1_DUMP_EXCLUDE[@]}"; do
-      DUMP_ARGS+=(--exclude-table-data "$_tbl")
-    done
+    e1_dump_exclude_into DUMP_ARGS
 
     # pg_dump postgres container'inin ICINDEN kosuyor: istemci ve sunucu
     # surumu tanim geregi ayni, surum uyusmazligi olamaz.
@@ -401,6 +424,8 @@ e1_run "Surum listesi guncelleniyor" \
   || e1_die "Uzak repo'ya erisilemedi.\n\n  Internet baglantisini ve .env icindeki GHCR_TOKEN degerini kontrol edin\n  (anahtarin suresi dolmus olabilir)."
 
 TARGET_REF="$(e1_target_ref)"
+# Checkout ONCESI HEAD'i sakla: imaj adimi duserse dosyalar da geri alinsin.
+e1_git_checkpoint
 if git rev-parse --verify --quiet "refs/tags/${TARGET_REF}" >/dev/null; then
   git checkout --quiet --detach "refs/tags/${TARGET_REF}"
   e1_ok "Yayin surumu: ${TARGET_REF}"

@@ -349,6 +349,24 @@ def reset_password(
     _assert_ops_manager_only_operator(current_user, target=target, new_role=None)
 
     target.hashed_password = get_password_hash(payload.new_password)
+    # Yoneticinin belirledigi parola GECICIDIR: kullanici ilk girisinde
+    # degistirmek zorunda. Bayrak set edilmedigi surece hesap, yoneticinin
+    # bildigi (ve muhtemelen telefonla ilettigi) bir parolayla sinirsiz
+    # kullanilabiliyordu.
+    target.must_change_password = True
+
+    # HESAP KILIDINI DE AC — baska bir acma yolu YOK.
+    #
+    # Kilit `locked_until` ile konuluyor ve parola dogrulamasindan ONCE
+    # kontrol ediliyor; `failed_login_count` da kilit suresi dolunca
+    # sifirlanmiyor. Bu uc `locked_until`'a hic dokunmadigi icin kilitlenen
+    # bir hesabin API uzerinden acilma yolu yoktu. INSTALLER hesabina yalnizca
+    # INSTALLER mudahale edebildiginden, tek installer hesabi kilitlenince
+    # gateway ekleme, ag ayari, yedek/geri yukleme ve uzaktan bakim izni
+    # hep birlikte kilitleniyor ve cozum SAHA ZIYARETI oluyordu.
+    target.locked_until = None
+    target.failed_login_count = 0
+
     record_event(
         db,
         category="user",

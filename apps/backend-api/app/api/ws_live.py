@@ -132,12 +132,17 @@ def _effective_device_filter(
     return allowed & requested
 
 
-def _resolve_allowed_device_codes(username: str) -> tuple[bool, set[str] | None]:
+def _resolve_allowed_device_codes(
+    username: str,
+) -> tuple[bool, set[str] | None, bool]:
     """Kullanicinin telemetri alabilecegi cihaz kodlarini doner.
 
-    Donus: (kullanici_bulundu, izinli_kodlar)
+    Donus: (kullanici_bulundu, izinli_kodlar, sifre_degisimi_zorunlu)
       izinli_kodlar None  -> kisit yok (installer/engineer/ops_manager)
       izinli_kodlar set() -> hicbir cihaz (atanmamis operator)
+
+    `sifre_degisimi_zorunlu` HTTP tarafindaki kapinin (deps.get_current_user)
+    WebSocket karsiligi icin doner — bkz. cagri yerindeki aciklama.
 
     Kapsam BAGLANTI ANINDA hesaplanir. Baglanti acikken operatorun alanina
     yeni cihaz eklenirse o cihaz reconnect'e kadar akista gorunmez; periyodik
@@ -151,16 +156,17 @@ def _resolve_allowed_device_codes(username: str) -> tuple[bool, set[str] | None]
 
         user = db.scalar(select(User).where(User.username == username))
         if user is None:
-            return False, set()
+            return False, set(), False
+        must_change = bool(getattr(user, "must_change_password", False))
         visible_ids = get_visible_device_ids(db, user)
         if visible_ids is None:
-            return True, None  # kisit yok
+            return True, None, must_change  # kisit yok
         if not visible_ids:
-            return True, set()
+            return True, set(), must_change
         codes = set(
             db.scalars(select(Device.code).where(Device.id.in_(visible_ids))).all()
         )
-        return True, codes
+        return True, codes, must_change
     finally:
         db.close()
 
@@ -322,10 +328,31 @@ async def live_values_ws(
 
     # KAPSAM — sunucu tarafinda hesaplanir. Istemcinin `?devices=` filtresi
     # yalnizca DARALTIR; kapsam disina cikaramaz.
-    found, allowed_codes = await asyncio.to_thread(_resolve_allowed_device_codes, username)
+    found, allowed_codes, must_change_password = await asyncio.to_thread(
+        _resolve_allowed_device_codes, username
+    )
     if not found:
         logger.warning("ws_live_values_user_not_found user=%s", username)
         await websocket.close(code=1008, reason="invalid_credentials")
+        return
+
+    # ZORUNLU SIFRE DEGISIMI — HTTP kapisinin WebSocket karsiligi.
+    #
+    # A2 duzeltmesi bu kapiyi `deps.get_current_user` icine koydu, ama WS
+    # BURADAN GECMIYOR: kendi kimlik dogrulamasini yapiyor. Bilet yolu
+    # kapaliydi (`/auth/ws-ticket` muaf uclar listesinde degil), ancak LEGACY
+    # `?token=<JWT>` yolu bileti tamamen atliyor — ve o JWT parola
+    # degistirilmeden ONCE, login aninda uretiliyor.
+    #
+    # Sonuc: varsayilan kurulum parolasiyla giren biri HTTP'de 403 aliyor ama
+    # WebSocket'ten TUM SAHANIN canli telemetrisini okuyabiliyordu. Cihaz
+    # konumlari, ariza durumlari ve olcumler — yani urunun tasidigi verinin
+    # tamami.
+    if must_change_password:
+        logger.warning(
+            "ws_live_values_password_change_required user=%s", username
+        )
+        await websocket.close(code=1008, reason="password_change_required")
         return
 
     # Istemci filtresi: ?devices=DEV001,DEV002
