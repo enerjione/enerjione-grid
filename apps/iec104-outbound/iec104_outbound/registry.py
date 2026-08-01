@@ -149,10 +149,15 @@ def build_point_registry(
         mapped_signals.append((s, type_id, ioa, with_ts))
 
     points: list[PointAddress] = []
+    # Adresi olmayan cihazlar — hepsi varsayilan CA'ya duser ve BIRBIRININ
+    # UZERINE yazar. Sessiz kalmamali (bkz. asagidaki uyari).
+    adressiz: list[str] = []
     for device in active_devices:
         device_code = str(device.get("code") or "")
         if not device_code:
             continue
+        if device.get("iec104_common_address") is None:
+            adressiz.append(device_code)
         ca = _resolve_device_ca(device, default=default_common_address)
         for signal, type_id, ioa, with_ts in mapped_signals:
             signal_key = str(signal.get("key") or "")
@@ -168,6 +173,32 @@ def build_point_registry(
                     with_timestamp=with_ts,
                 )
             )
+
+    # CARPISMA UYARISI — eskiden HIC basilmiyordu.
+    #
+    # `iec104_common_address` cihazda NULL ise varsayilan CA'ya duselir; IOA
+    # ise sinyalden gelir ve tum cihazlarda AYNIDIR. Yani adressiz iki cihaz
+    # ayni (CA, IOA) ciftine biner ve SCADA'da TEK cihaza coker: hangi fiderin
+    # arizalandigi anlasilmaz, son yazan deger digerini ezer.
+    #
+    # Backend artik cihaz olustururken adres atiyor ve migration 0029 mevcut
+    # kayitlari dolduruyor; buraya dusulmesi eski bir kayit ya da elle
+    # NULL'a cekilmis bir cihaz demektir. Bu yuzden ERROR seviyesinde.
+    if len(adressiz) > 1:
+        logger.error(
+            "iec104_ca_carpismasi target=%s adressiz_cihaz=%d ornekler=%s — "
+            "hepsi ayni (CA=%d, IOA) ciftine biniyor ve SCADA'da TEK cihaza "
+            "cokuyor. Cihazlara ayri Common Address atayin.",
+            target_id,
+            len(adressiz),
+            ",".join(sorted(adressiz)[:10]),
+            default_common_address,
+        )
+    elif adressiz:
+        logger.warning(
+            "iec104_ca_yok target=%s cihaz=%s — varsayilan CA=%d kullaniliyor",
+            target_id, adressiz[0], default_common_address,
+        )
 
     return PointRegistry(
         target_id=target_id,

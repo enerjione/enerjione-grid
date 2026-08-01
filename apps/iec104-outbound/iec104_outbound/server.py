@@ -109,6 +109,11 @@ OUTBOX_MAX = 2000
 # bir target'a birkac master baglanir; 16 fazlasiyla yeterli.
 MAX_SESSIONS = 16
 
+# k-penceresi dolduysa yazici gorev bu kadar bekler; acilmazsa oturum OLU
+# sayilir. Master S-frame ile ack atmayi tamamen birakmissa daha fazla
+# beklemenin anlami yok.
+K_WINDOW_WAIT_SEC = 30.0
+
 
 @dataclass
 class PointValue:
@@ -144,6 +149,12 @@ class _ClientSession:
         self.outbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=OUTBOX_MAX)
         self.dropped_total = 0
         self._drain_task: "asyncio.Task | None" = None
+        # Genel sorgu (GI) AYRI gorevde kosar; bkz. _start_interrogation.
+        self._gi_task: "asyncio.Task | None" = None
+        # k-penceresinde yer acildiginda set edilir (S-frame geldiginde).
+        # Baslangicta acik.
+        self.window_event: asyncio.Event = asyncio.Event()
+        self.window_event.set()
 
     async def send(self, apdu: bytes) -> None:
         async with self._write_lock:
@@ -239,6 +250,8 @@ class IEC104Server:
             # turda bir gorev daha geride kalirdi.
             if session._drain_task is not None:
                 session._drain_task.cancel()
+            if session._gi_task is not None:
+                session._gi_task.cancel()
             try:
                 session.writer.close()
             except Exception:
@@ -417,6 +430,10 @@ class IEC104Server:
             # gorev birakir — tam da onlemek istedigimiz sinirsiz buyume.
             if session._drain_task is not None:
                 session._drain_task.cancel()
+            # GI gorevi de iptal edilmeli: kuyruk doluyken `put` uzerinde
+            # bekliyor olabilir ve yazici gorev gittigi icin ASLA uyanmaz.
+            if session._gi_task is not None:
+                session._gi_task.cancel()
             try:
                 writer.close()
                 await writer.wait_closed()
@@ -435,6 +452,8 @@ class IEC104Server:
             return
         if frame.kind == "S":
             session.unacked = 0
+            # k-penceresinde yer acildi — bekleyen yazici gorevi uyandir.
+            session.window_event.set()
             return
         if frame.kind == "I":
             session.nr += 1
@@ -464,7 +483,7 @@ class IEC104Server:
         type_id = frame.asdu[0]
         if type_id == TYPE_C_IC_NA_1:
             requested_ca = _parse_asdu_common_address(frame.asdu) or 0
-            await self._handle_interrogation(session, requested_ca=requested_ca)
+            self._start_interrogation(session, requested_ca=requested_ca)
             return
         if type_id == TYPE_C_CS_NA_1:
             # Clock sync — cevap CA'sini gelen CA ile ayni tut.
@@ -476,6 +495,40 @@ class IEC104Server:
             return
         logger.debug("iec104_unsupported_command name=%s type=%d", self.name, type_id)
 
+    def _start_interrogation(self, session: _ClientSession, *, requested_ca: int) -> None:
+        """Genel sorguyu AYRI GOREVDE baslatir.
+
+        NEDEN AYRI GOREV — GI 12. NESNEDE KESILIYORDU
+        ----------------------------------------------
+        `_handle_interrogation` okuma dongusunun ICINDEN cagriliyordu. GI
+        suresince `reader.read()` HIC calismiyor, dolayisiyla master'in
+        S-frame'leri islenmiyordu. `session.unacked` yalnizca S-frame gelince
+        sifirlandigi ve `_send_i` `unacked >= 12` olunca frame'i sessizce
+        dusurdugu icin sonuc suydu:
+
+            ACT_CON + 11 nesne gider, GERI KALANI VE ACT_TERM HIC GITMEZ.
+
+        SCADA GI'nin bittigini gosteren ACT_TERM'i hic almaz; 600 cihazlik bir
+        sahada ilk genel sorguda 12 nesne disinda HICBIR SEY ulasmaz. Bu, A7
+        (yari-acik TCP) ile ILGISIZ ve ondan BAGIMSIZ bir yol: baglanti tamamen
+        saglikliyken de her GI'da tetikleniyor.
+
+        Ayri gorevde kostugunda okuma dongusu calismaya devam eder, S-frame'ler
+        islenir, `unacked` sifirlanir ve yazici gorev kaldigi yerden devam eder.
+        """
+        if session._gi_task is not None and not session._gi_task.done():
+            # Ust uste GI: oncekini bozmadan yenisini yok say. Master genelde
+            # ACT_TERM gelmedigi icin tekrar sorar; eskisini iptal etmek
+            # yarim kalmis bir GI daha uretirdi.
+            logger.warning(
+                "iec104_gi_zaten_calisiyor name=%s peer=%s — yeni istek yok sayildi",
+                self.name, session.peer,
+            )
+            return
+        session._gi_task = asyncio.create_task(
+            self._handle_interrogation(session, requested_ca=requested_ca)
+        )
+
     async def _handle_interrogation(
         self, session: _ClientSession, *, requested_ca: int,
     ) -> None:
@@ -483,6 +536,12 @@ class IEC104Server:
 
         SCADA `requested_ca=0xFFFF` (broadcast) gonderirse tum CA'lara ait
         noktalar yayinlanir; aksi halde yalnizca o CA.
+
+        Cerceveler kuyruga BLOKLAYAN `put` ile konur (spontane bildirimlerin
+        `enqueue` ile en-eskiyi-dusuren yolu DEGIL): GI yaniti eksiksiz olmak
+        zorundadir. 600 cihazlik bir sahada nesne sayisi kuyruk tavanini rahat
+        asar; `enqueue` kullanilsaydi GI'nin ilk yarisi sessizce dusurulurdu.
+        Kuyruk dolunca bu gorev bekler, yazici gorev bosaltmaya devam eder.
         """
         is_broadcast = requested_ca == BROADCAST_COMMON_ADDRESS
         # ACT_CON gelen CA ile gonderilir (broadcast'te de).
@@ -490,7 +549,7 @@ class IEC104Server:
             common_address=requested_ca or self.registry.default_common_address,
             cause=COT_ACTIVATION_CON, qoi=20,
         )
-        await self._send_i(session, confirm)
+        await session.outbox.put(confirm)
 
         for point in self.registry.points:
             if not is_broadcast and point.common_address != requested_ca:
@@ -511,13 +570,17 @@ class IEC104Server:
                     cause=COT_INTERROGATION, timestamp=current.timestamp,
                 )
             if asdu is not None:
-                await self._send_i(session, asdu)
+                await session.outbox.put(asdu)
 
         terminate = encode_interrogation_confirm(
             common_address=requested_ca or self.registry.default_common_address,
             cause=COT_ACTIVATION_TERM, qoi=20,
         )
-        await self._send_i(session, terminate)
+        await session.outbox.put(terminate)
+        logger.info(
+            "iec104_gi_kuyruklandi name=%s peer=%s ca=%s",
+            self.name, session.peer, "broadcast" if is_broadcast else requested_ca,
+        )
 
     def _encode_single_value(
         self,
@@ -641,6 +704,28 @@ class IEC104Server:
             except Exception:  # noqa: BLE001
                 pass
 
+    async def _wait_window(self, session: _ClientSession) -> bool:
+        """k-penceresinde yer acilana kadar bekler.
+
+        IEC 60870-5-104: gonderen taraf `k` (burada 12) onaylanmamis I-frame'i
+        astiginda DURMALIDIR. Onceki kod durmak yerine frame'i DUSURUYORDU;
+        akis kontrolu "veri kaybi" olarak uygulanmis oluyordu.
+
+        Donus: True = pencere acik, False = zaman asimi (oturum olu).
+        """
+        while session.unacked >= MAX_UNACKED_I:
+            session.window_event.clear()
+            # clear() ile bekleme arasinda S-frame gelmis olabilir.
+            if session.unacked < MAX_UNACKED_I:
+                break
+            try:
+                await asyncio.wait_for(
+                    session.window_event.wait(), timeout=K_WINDOW_WAIT_SEC
+                )
+            except asyncio.TimeoutError:
+                return False
+        return True
+
     async def _drain_outbox(self, session: _ClientSession) -> None:
         """Oturumun giden kuyrugunu SIRAYLA bosaltir (oturum basina tek gorev).
 
@@ -659,6 +744,22 @@ class IEC104Server:
             while True:
                 asdu = await session.outbox.get()
                 try:
+                    # k-penceresi dolduysa BEKLE, dusurme. `_send_i` tek basina
+                    # `unacked >= 12` gorunce frame'i atiyordu; GI'de bu, sorgu
+                    # yanitinin 12. nesneden sonrasinin sessizce kaybolmasi
+                    # demekti. Okuma dongusu paralel calistigi icin S-frame
+                    # gelince pencere acilir ve buradan devam edilir.
+                    if not await self._wait_window(session):
+                        logger.warning(
+                            "iec104_k_window_timeout name=%s peer=%s — master "
+                            "%.0f sn ack atmadi, oturum kapatiliyor",
+                            self.name, session.peer, K_WINDOW_WAIT_SEC,
+                        )
+                        try:
+                            session.writer.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+                        return
                     await self._send_i(session, asdu)
                 except Exception:  # noqa: BLE001
                     logger.debug("iec104_drain_send_error", exc_info=True)

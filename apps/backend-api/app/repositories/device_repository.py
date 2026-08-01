@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.alarm import AlarmComment, AlarmEvent
@@ -8,6 +8,9 @@ from app.models.device_command import DeviceCommand
 from app.models.telemetry import Telemetry
 from app.models.telemetry_history import TelemetryHistory
 from app.schemas.device import DeviceCreate, DeviceUpdate
+
+# IEC 60870-5-104: 65535 yayin (broadcast) adresidir, cihaza atanamaz.
+BROADCAST_COMMON_ADDRESS = 0xFFFF
 
 
 class DeviceRepository:
@@ -28,10 +31,41 @@ class DeviceRepository:
 
     def create(self, payload: DeviceCreate) -> Device:
         device = Device(**payload.model_dump())
+        if device.iec104_common_address is None:
+            device.iec104_common_address = self.next_free_iec104_ca()
         self.db.add(device)
         self.db.flush()
         self.db.refresh(device)
         return device
+
+    def next_free_iec104_ca(self) -> int:
+        """Bir sonraki BOS IEC 104 Common Address'i doner.
+
+        NEDEN OTOMATIK ATANIYOR
+        -----------------------
+        `iec104_common_address` nullable ve varsayilansizdi. IEC104 kayit
+        defteri (`registry._resolve_device_ca`) deger yoksa target'in
+        varsayilan CA'sina duser; IOA ise SINYALDEN gelir ve tum cihazlarda
+        AYNIDIR. Yani her cihaza elle ayri CA atanmadikca:
+
+            600 cihazin TAMAMI ayni (CA, IOA) ciftlerine biner.
+
+        SCADA tarafinda 600 cihaz TEK sanal cihaza cokuyor; hangi fiderin
+        arizalandigi anlasilamiyor ve son yazan deger digerlerini eziyor.
+        Ustelik bu sessiz: hicbir yerde carpisma uyarisi basilmiyordu.
+
+        CA 16 bit (1..65534; 65535 broadcast). 600 cihaz rahat sigar.
+        """
+        mevcut = self.db.scalar(select(func.max(Device.iec104_common_address)))
+        # 1'den baslar; 0 bazi master'larda "tanimsiz" anlamina gelir.
+        sonraki = int(mevcut or 0) + 1
+        if sonraki >= BROADCAST_COMMON_ADDRESS:
+            # Pratikte ulasilmaz (65534 cihaz); yine de sessiz sarmalama olmasin.
+            raise ValueError(
+                "IEC 104 Common Address alani doldu (65534). Kullanilmayan "
+                "cihazlari silin ya da adresleri elle yeniden duzenleyin."
+            )
+        return sonraki
 
     def update(self, device: Device, payload: DeviceUpdate) -> Device:
         for key, value in payload.model_dump(exclude_unset=True).items():
