@@ -39,7 +39,10 @@ def list_signals(
     """
     stmt = select(SignalCatalog)
     if model:
-        if not is_valid_model(model):
+        # `db` gecmek SART: katalogta sinyali olan bir modeli
+        # "bilinmiyor" diye reddetmek, kullanicinin kendi girdigi
+        # veriyi listeleyememesi demekti.
+        if not is_valid_model(model, db):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown device model")
         stmt = stmt.where(SignalCatalog.model == model)
     stmt = stmt.order_by(SignalCatalog.display_order.asc(), SignalCatalog.key.asc())
