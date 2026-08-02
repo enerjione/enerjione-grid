@@ -1681,7 +1681,9 @@
           "done": "Finishing…",
           "bitti": "Completed",
           "zaman_asimi": "Result could not be confirmed — check status on the Gateways screen"
-        }
+        },
+        "updateAvailableTo": "Version {{version}} available",
+        "currentVersion": "Running version"
       }
     },
     "devicesPanel": {

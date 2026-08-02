@@ -419,6 +419,7 @@ def _installed_codes() -> list[str]:
 # gunler icinde cikiyor.
 _REMOTE_DIGEST_TTL_SEC = 900.0
 _remote_digest_cache: dict = {}
+_remote_version_cache: dict = {}
 
 
 def _local_digest(image: str) -> str:
@@ -472,6 +473,64 @@ def _remote_digest(image: str) -> str:
     return deger
 
 
+#: OCI standart surum etiketi. CI'daki `docker/metadata-action` bunu imaja
+#: kendiliginden basiyor — Dockerfile'da ayrica tanimlamaya gerek yok.
+_SURUM_ETIKETI = "org.opencontainers.image.version"
+
+
+def _local_version(image: str) -> str:
+    """Calisan imajin surumu (OCI etiketinden). Bulunamazsa bos string.
+
+    NEDEN DIGEST YETMIYOR: digest karsilastirmasi "guncelleme var mi"
+    sorusunu cevapliyor ama "HANGI surum" sorusunu cevaplamiyor.
+    `sha256:4a993d21...` operatore hicbir sey soylemiyor; `0.6.0` soyluyor.
+    """
+    docker = shutil.which("docker")
+    if not docker or not image:
+        return ""
+    rc, out = _run(
+        [docker, "image", "inspect", image,
+         "--format", "{{index .Config.Labels \"" + _SURUM_ETIKETI + "\"}}"],
+        DOCKER_QUERY_TIMEOUT_SEC,
+    )
+    if rc != 0:
+        return ""
+    deger = out.strip()
+    # Etiket yoksa docker "<no value>" yazar; onu surum diye gostermeyelim.
+    return "" if deger in ("", "<no value>") else deger[:40]
+
+
+def _remote_version(image: str) -> str:
+    """Kayit defterindeki etiketin isaret ettigi imajin surumu.
+
+    Imaji INDIRMEDEN okunur (`buildx imagetools`, cihazda dogrulandi).
+    Digest ile ayni onbellegi paylasmaz ama ayni TTL'i kullanir.
+
+    Deger her zaman semver OLMAYABILIR: CI dal push'unda metadata-action
+    surum etiketine dal adini ("main") yazar. Bu da bilgidir; oldugu gibi
+    gosterilir, semver gibi ayristirilmaya CALISILMAZ.
+    """
+    docker = shutil.which("docker")
+    if not docker or not image:
+        return ""
+    simdi = time.monotonic()
+    onbellek = _remote_version_cache.get(image)
+    if onbellek and (simdi - onbellek[1]) < _REMOTE_DIGEST_TTL_SEC:
+        return onbellek[0]
+    rc, out = _run(
+        [docker, "buildx", "imagetools", "inspect", image,
+         "--format", "{{index .Image.Config.Labels \"" + _SURUM_ETIKETI + "\"}}"],
+        REMOTE_DIGEST_TIMEOUT_SEC,
+    )
+    deger = out.strip() if rc == 0 else ""
+    if deger in ("<no value>", "<nil>"):
+        deger = ""
+    # Basarisiz sorgu da onbelleklenir (bkz. _remote_digest): ag yoksa her
+    # turda beklemeyelim. Bos deger "bilinmiyor" demek.
+    _remote_version_cache[image] = (deger[:40], simdi)
+    return deger[:40]
+
+
 def _container_info(code: str) -> dict:
     """Gateway container'inin calisma durumu (docker ps ciktisindan)."""
     docker = shutil.which("docker")
@@ -518,6 +577,17 @@ def build_state() -> dict:
         info["remote_digest"] = uzak
         info["update_available"] = (
             None if (not yerel or not uzak) else (yerel != uzak)
+        )
+        # OKUNABILIR SURUM. Digest "guncelleme var mi" sorusunu cevapliyor
+        # ama "HANGI surum" sorusunu cevaplamiyor; operator ekranda
+        # `sha256:4a993d21...` gorup hicbir sey anlamiyordu.
+        #
+        # Karar HALA digest'e dayali (yukarisi degismedi): surum etiketi
+        # yalnizca GOSTERIM icin. Etiket eksik ya da okunamazsa alan bos
+        # kalir, guncelleme mantigi bundan etkilenmez.
+        info["local_version"] = _local_version(info.get("image") or "")
+        info["remote_version"] = (
+            _remote_version(info.get("image") or "") if uzak else ""
         )
         info["code"] = code
         info["name"] = meta.get("name")
@@ -843,6 +913,7 @@ def _do_update(req: dict, compose_cmd: list[str]) -> dict:
 
     # Onbellegi dusur: guncelleme sonrasi rapor ESKI sonucu gostermesin.
     _remote_digest_cache.clear()
+    _remote_version_cache.clear()
     return {"ok": True, "stage": "done", "message": "guncellendi", "detail": out}
 
 

@@ -33920,6 +33920,22 @@ th.event-col-category {
    Butona basildigi andan bitene kadar gorunur. Sessiz kalmak en kotu
    secenekti: operator basip basmadigini bilemiyor, tekrar basiyor ve ikinci
    istek reddediliyordu. */
+/* Calisan surum — notr, sayisal, sessiz. Durum rozetleriyle (guncel /
+   yeni surum var) yarismasin diye renksiz. */
+.gw-ver-now {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
 .gw-islem {
   display: flex;
   align-items: flex-start;

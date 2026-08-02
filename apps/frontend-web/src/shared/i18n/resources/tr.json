@@ -1681,7 +1681,9 @@
           "done": "Tamamlanıyor…",
           "bitti": "Tamamlandı",
           "zaman_asimi": "Sonuç doğrulanamadı — Gateway'ler ekranından durumu kontrol edin"
-        }
+        },
+        "updateAvailableTo": "{{version}} sürümü hazır",
+        "currentVersion": "Çalışan sürüm"
       }
     },
     "devicesPanel": {

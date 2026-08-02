@@ -357,6 +357,11 @@ export type LocalGateway = {
    * verilmis bir iddia olur ve arayuzde yanlis guven yaratir.
    */
   update_available?: boolean | null;
+  /** Calisan imajin okunabilir surumu (OCI etiketi). Yalnizca GOSTERIM;
+   *  guncelleme karari `update_available` ile verilir. */
+  local_version?: string | null;
+  /** Kayit defterindeki imajin okunabilir surumu. */
+  remote_version?: string | null;
 };
 
 /** Host ajaninin isledigi son kurulum/kaldirma istegi. */

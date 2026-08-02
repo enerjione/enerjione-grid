@@ -39,6 +39,23 @@ class LocalGateway(BaseModel):
     #: iddia olurdu ve arayuzde yanlis bir guven yaratirdi.
     update_available: bool | None = None
 
+    # --- Okunabilir surum (yalnizca GOSTERIM) ------------------------------
+    #
+    # Karar hala digest'e dayali; bu iki alan operatorun ekranda ne
+    # gorecegini belirler. `sha256:4a993d21...` hicbir sey soylemiyordu,
+    # `0.6.0 -> 0.7.0` soyluyor.
+    #
+    # OCI `org.opencontainers.image.version` etiketinden okunur. Etiket
+    # eksikse ya da kayit defterine ulasilamazsa bos kalir — guncelleme
+    # mantigi bundan ETKILENMEZ.
+    #
+    # Semver OLMAYABILIR: CI dal push'unda etiket dal adini ("main")
+    # tasiyabilir. Oldugu gibi gosterilir, ayristirilmaya calisilmaz.
+    #: Calisan imajin surumu.
+    local_version: str | None = None
+    #: Kayit defterindeki imajin surumu.
+    remote_version: str | None = None
+
 
 class GatewayApplyStatus(BaseModel):
     """Ajanin isledigi son istegin sonucu."""

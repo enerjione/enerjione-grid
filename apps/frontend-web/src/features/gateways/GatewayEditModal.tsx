@@ -298,11 +298,26 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                   verilmis bir iddia olurdu ve operator eski surumde
                   kaldigini fark etmezdi. */}
               <div className="gw-local-version">
+                {/* Calisan surum HER DURUMDA gosterilir (biliniyorsa):
+                    "guncel" derken bile operator hangi surumde oldugunu
+                    gormeli. */}
+                {local.local_version ? (
+                  <span className="gw-ver-now" title={t("engineering.gateways.editForm.currentVersion")}>
+                    {local.local_version}
+                  </span>
+                ) : null}
                 {local.update_available === true ? (
                   <>
                     <span className="gw-ver-badge is-new">
                       <ArrowUpCircle size={13} strokeWidth={2.2} />
-                      {t("engineering.gateways.editForm.updateAvailable")}
+                      {/* Hedef surum BILINIYORSA yaz: "0.6.0 -> 0.7.0".
+                          Bilinmiyorsa (etiket yok / kayit defteri okunamadi)
+                          eski genel ifadeye dusulur — uydurma yapilmaz. */}
+                      {local.remote_version && local.remote_version !== local.local_version
+                        ? t("engineering.gateways.editForm.updateAvailableTo", {
+                            version: local.remote_version
+                          })
+                        : t("engineering.gateways.editForm.updateAvailable")}
                     </span>
                     <button
                       type="button"
