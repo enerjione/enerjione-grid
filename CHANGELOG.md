@@ -14,6 +14,59 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.35.0] — 2026-08-02
+
+### Eklendi
+- **Cihaz haberleşme durumu artık gateway'in bildirdiği link durumundan da
+  belirleniyor.** Önceden bir cihazın "canlı" sayılması yalnızca telemetri
+  gelmesine bağlıydı. Arıza bekleyen bir gösterge saatlerce hiçbir şey
+  yayınlamayabilir — değer değişmiyorsa gateway veri göndermez. Bu süre
+  boyunca cihazın canlı mı kopuk mu olduğu **bilinmiyordu**.
+
+  "Veri gelmiyor" ile "haberleşme koptu" aynı şey değil. Bu ayrımı yapabilen
+  tek yer gateway; DNP3 link durumu orada tutuluyor. Gateway bu bilgiyi
+  saniyede bir zaten attığı istekle gönderiyor, ek yük yok.
+
+  > Çalışması için gateway'in de güncel olması gerekir (gateway ≥ bu sürümle
+  > birlikte yayınlanan imaj). Eski gateway'de davranış aynen eskisi gibi.
+
+- **Arşiv ölü bantları GPS, sinyal seviyesi ve açı ölçümlerine genişletildi.**
+  Konum bileşenlerinde eşik hareket büyüklüğünde (~11-18 m): cihaz direkte
+  sabit durduğu sürece tek satır yazılır, gerçekten oynarsa kaydedilir —
+  "ne zaman oynadı" sorusu (hırsızlık, direk hasarı, yanlış montaj) cevapsız
+  kalmasın diye arşivden çıkarılmadı. Telsiz sinyal seviyesinde 2 dBm, açı
+  ölçümlerinde 1° gürültü bandı.
+
+  `fault_duration` bilerek eşiksiz bırakıldı: her değer ayrı bir arızanın
+  süresidir, ölü bant ardışık benzer süreli arızalardan birini silerdi.
+
+### Düzeltildi
+- **TLS'siz saha cihazında harita hiç açılmıyordu.** Oturum çerezi `Secure`
+  işaretleniyordu; cihaz `http://enerjione.local` üzerinden kullanıldığı için
+  tarayıcı o çerezi göndermiyordu. Normal API çağrıları kurtuluyordu (ayrıca
+  Bearer başlığı gidiyor), ama harita karoları `<img>` ile isteniyor ve `<img>`
+  başlık gönderemez — her karo 401 alıyordu, indirilmiş çevrimdışı önbellek
+  dahil. Artık bayrak isteğin şemasına bağlı.
+
+- **Askıda kalan servisler kendini toparlıyor.** `restart: unless-stopped`
+  yalnızca çıkış yapan süreci geri kaldırır; ana döngüsü kilitlenen bir worker
+  "çalışıyor" görünür — container ayakta, süreç ayakta, ama telemetri sessizce
+  akmayı bırakmıştır. Başında kimse olmayan bir saha cihazında fark edilmesi
+  en zor arıza buydu.
+
+- **Disk dolması.** Yeniden teslim defteri (`processed_messages`) 24 saat
+  yerine 2 saat tutuluyor — gerçek yeniden teslim penceresi 10 dakika, 24 saat
+  onun 144 katıydı. Alt sınır artık kodda kilitli: defteri mesaj hâlâ yeniden
+  teslim edilebilirken silmek yinelenen telemetri yazdırırdı.
+
+- **NATS akış yaş sınırları artık ayarlanabiliyor.** Üç ayar kodda tanımlıydı
+  ama compose'dan geçirilmiyordu; operatör değiştiremiyordu.
+
+### Güvenlik
+- Vite 6 ve pytest 9 yükseltmeleri.
+
+---
+
 ## [2.34.0] — 2026-08-01
 
 ### Eklendi
