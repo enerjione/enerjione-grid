@@ -66,6 +66,12 @@ services:
       DNP3_LOCAL_ADDRESS: "1"
       DNP3_TCP_PORT: "20000"
       DNP3_RESPONSE_TIMEOUT_SEC: "5"
+      # DNP3 kalite bayraklarini yayinla (invalid / restart / forced).
+      # Gateway ayarlarindan acilir. KAPALIYKEN her okuma "good" gider —
+      # outstation CT referansini kaybedip 0 A raporlasa bile SCADA bunu
+      # gecerli olcum sanar. Backend bu kaliteleri v2.28.0'dan beri taniyor;
+      # kademeli acilis icin gateway BAZINDA ayarlanabilir tutuldu.
+      GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       DNP3_READ_STRATEGY: "event_driven"
       DNP3_EVENT_BASELINE_INTERVAL_SEC: "30"
       LOG_LEVEL: "INFO"
@@ -136,6 +142,7 @@ MAX_PARALLEL_DEVICES=100
 DNP3_LOCAL_ADDRESS=1
 DNP3_TCP_PORT=20000
 DNP3_RESPONSE_TIMEOUT_SEC=5
+GATEWAY_PUBLISH_DNP3_QUALITY={{PUBLISH_DNP3_QUALITY}}
 DNP3_READ_STRATEGY=event_driven
 DNP3_EVENT_BASELINE_INTERVAL_SEC=30
 
@@ -167,6 +174,10 @@ class ComposeRenderInput:
     # (sadece listening cihazlar; default kurulumun bu olmasi beklenir cunku
     # gateway cihaza TCP client olarak baglanir, dinleme portu gerekmez).
     initiating_port_count: int = 0
+    # DNP3 kalite bayraklarini yayinla mi (bkz. sablondaki yorum). Varsayilan
+    # KAPALI: acmak saha davranisini degistirir (kotu olcumler alarm
+    # degerlendirmesinden bloke olmaya baslar), operator karari olmali.
+    publish_dnp3_quality: bool = False
 
 
 class ComposeRenderError(ValueError):
@@ -231,6 +242,7 @@ def _replacements(args: ComposeRenderInput) -> dict[str, str]:
         "IMAGE": args.image,
         "APP_ENVIRONMENT": args.app_environment,
         "INITIATING_PORTS_BLOCK": _build_initiating_ports_block(args),
+        "PUBLISH_DNP3_QUALITY": "true" if args.publish_dnp3_quality else "false",
     }
 
 

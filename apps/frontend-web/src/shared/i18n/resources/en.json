@@ -1683,7 +1683,9 @@
           "zaman_asimi": "Result could not be confirmed — check status on the Gateways screen"
         },
         "updateAvailableTo": "Version {{version}} available",
-        "currentVersion": "Running version"
+        "currentVersion": "Running version",
+        "qualityFlags": "Publish DNP3 quality flags",
+        "qualityFlagsHint": "While off, every reading is sent as \"good\" even if the device reports it invalid. When on, invalid readings are excluded from alarm evaluation. Saving reinstalls the gateway; telemetry pauses briefly."
       }
     },
     "devicesPanel": {

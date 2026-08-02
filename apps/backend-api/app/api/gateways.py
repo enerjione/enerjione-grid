@@ -569,6 +569,9 @@ def _build_render_input(
         app_environment=app_environment,
         initiating_port_base=port_base,
         initiating_port_count=port_count,
+        # Indirilen compose ile "bu cihaza kur" akisi AYNI degeri tasimali;
+        # aksi halde ayni gateway iki farkli davranisla kurulurdu.
+        publish_dnp3_quality=bool(getattr(gateway, "publish_dnp3_quality", False)),
     )
 
 
@@ -772,6 +775,7 @@ def install_gateway_locally(
             app_environment=render_input.app_environment,
             initiating_port_base=render_input.initiating_port_base,
             initiating_port_count=render_input.initiating_port_count,
+            publish_dnp3_quality=render_input.publish_dnp3_quality,
         )
     except GatewayAgentError as exc:
         raise _agent_http_error(exc) from exc

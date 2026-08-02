@@ -321,6 +321,10 @@ export type Gateway = {
    *  icin uydurma telemetri gonderebiliyordu. Gercek degeri INSTALLER
    *  `fetchGatewayToken()` ile ister (backend denetim kaydina yazar). */
   has_token?: boolean;
+  /** DNP3 kalite bayraklarini yayinla mi (invalid / restart / forced).
+   *  Acmak saha davranisini degistirir: kotu olcumler alarm
+   *  degerlendirmesinden bloke olur. Gateway bazinda ayarlanir. */
+  publish_dnp3_quality?: boolean;
   is_active: boolean;
   last_seen_at?: string | null;
   control_host: string;

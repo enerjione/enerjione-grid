@@ -1673,7 +1673,13 @@ export function App() {
 
   const handleUpdateGateway = async (
     gatewayCode: string,
-    payload: { name?: string; host?: string; listen_port?: number; token?: string }
+    payload: {
+      name?: string;
+      host?: string;
+      listen_port?: number;
+      token?: string;
+      publish_dnp3_quality?: boolean;
+    }
   ) => {
     if (!session) return;
     await updateGateway(session.accessToken, gatewayCode, payload);

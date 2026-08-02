@@ -97,7 +97,13 @@ type Props = {
   }) => Promise<void>;
   onUpdateGateway: (
     gatewayCode: string,
-    payload: { name?: string; host?: string; listen_port?: number; token?: string }
+    payload: {
+      name?: string;
+      host?: string;
+      listen_port?: number;
+      token?: string;
+      publish_dnp3_quality?: boolean;
+    }
   ) => Promise<void>;
   onDeleteGateway: (gatewayCode: string) => Promise<void>;
   /** Gateway'e "tum cihazlara sorgu at" tetigi. */
@@ -556,12 +562,20 @@ export function DeviceManagementPanel({
   /** Host/listen_port GONDERILMEZ: gateway DNP3 master rolunde, bu iki alan
    *  create akisindaki placeholder'lardi ("auto"/0) ve duzenlenebilir birer
    *  ayar degil. Yalnizca gercekten degistirilebilen alanlar PATCH edilir. */
-  const handleUpdateGateway = async (payload: { name: string; token: string }) => {
+  const handleUpdateGateway = async (payload: {
+    name: string;
+    token: string;
+    publish_dnp3_quality: boolean;
+  }) => {
     const targetCode = editingGatewayCode;
     if (!targetCode) return;
     setError("");
     try {
-      await onUpdateGateway(targetCode, { name: payload.name, token: payload.token });
+      await onUpdateGateway(targetCode, {
+        name: payload.name,
+        token: payload.token,
+        publish_dnp3_quality: payload.publish_dnp3_quality
+      });
       if (selectedGatewayCode === targetCode) {
         await onSelectGateway(targetCode);
       }

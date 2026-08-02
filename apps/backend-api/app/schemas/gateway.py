@@ -13,6 +13,10 @@ class GatewayCreate(BaseModel):
     max_devices: int = 200
     device_code_prefix: str | None = None
     token: str
+    # DNP3 kalite bayraklarini yayinla mi (invalid / restart / forced).
+    # Gateway BAZINDA: acmak saha davranisini degistirir (kotu olcumler alarm
+    # degerlendirmesinden bloke olur), once tek gateway'de denenebilsin diye.
+    publish_dnp3_quality: bool = False
     is_active: bool = True
     control_host: str = "127.0.0.1"
     control_port: int = 0
@@ -31,6 +35,7 @@ class GatewayUpdate(BaseModel):
     max_devices: int | None = None
     device_code_prefix: str | None = None
     token: str | None = None
+    publish_dnp3_quality: bool | None = None
     is_active: bool | None = None
     control_host: str | None = None
     control_port: int | None = None
@@ -62,6 +67,10 @@ class GatewayRead(BaseModel):
     # gercekten ihtiyaci olan INSTALLER `GET /gateways/{code}/token` ucunu
     # kullanir; o cagri denetim kaydina yazilir.
     has_token: bool = False
+    # DNP3 kalite bayraklarini yayinla mi (invalid / restart / forced).
+    # Gateway BAZINDA: acmak saha davranisini degistirir (kotu olcumler alarm
+    # degerlendirmesinden bloke olur), once tek gateway'de denenebilsin diye.
+    publish_dnp3_quality: bool = False
     is_active: bool
     last_seen_at: datetime | None = None
     control_host: str = "127.0.0.1"

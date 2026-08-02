@@ -187,6 +187,7 @@ def request_install(
     app_environment: str,
     initiating_port_base: int,
     initiating_port_count: int,
+    publish_dnp3_quality: bool = False,
 ) -> str:
     """Gateway'i bu cihaza kur.
 
@@ -206,6 +207,7 @@ def request_install(
         "app_environment": app_environment,
         "initiating_port_base": initiating_port_base,
         "initiating_port_count": initiating_port_count,
+        "publish_dnp3_quality": bool(publish_dnp3_quality),
     }
     return _write_request(body)
 

@@ -35,6 +35,16 @@ class Gateway(Base):
         """
         return bool((self.token or "").strip() or (self.token_hash or "").strip())
 
+    # DNP3 kalite bayraklarini yayinla mi (invalid / restart / forced).
+    #
+    # GATEWAY BAZINDA: acmak saha davranisini degistirir — kotu olcumler
+    # alarm degerlendirmesinden bloke olmaya baslar. Once tek bir gateway'de
+    # denenip yayilabilsin diye filo geneli tek anahtar YAPILMADI.
+    #
+    # Varsayilan KAPALI: mevcut kurulumlarin davranisi degismesin.
+    publish_dnp3_quality: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 

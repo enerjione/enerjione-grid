@@ -1018,6 +1018,7 @@ export async function updateGateway(
     max_devices?: number;
     device_code_prefix?: string | null;
     token?: string;
+    publish_dnp3_quality?: boolean;
     is_active?: boolean;
     control_host?: string;
     control_port?: number;

@@ -118,6 +118,7 @@ ALLOWED_APP_ENVIRONMENTS = ("development", "staging", "production")
 ALLOWED_PARAM_KEYS = frozenset({
     "image", "token", "backend_url", "nats_url", "host_port",
     "app_environment", "initiating_port_base", "initiating_port_count",
+    "publish_dnp3_quality",
 })
 
 # Compose sablonu — apps/backend-api/app/services/gateway_compose.py icindeki
@@ -163,6 +164,12 @@ services:
       DNP3_LOCAL_ADDRESS: "1"
       DNP3_TCP_PORT: "20000"
       DNP3_RESPONSE_TIMEOUT_SEC: "5"
+      # DNP3 kalite bayraklarini yayinla (invalid / restart / forced).
+      # Gateway ayarlarindan acilir. KAPALIYKEN her okuma "good" gider —
+      # outstation CT referansini kaybedip 0 A raporlasa bile SCADA bunu
+      # gecerli olcum sanar. Backend bu kaliteleri v2.28.0'dan beri taniyor;
+      # kademeli acilis icin gateway BAZINDA ayarlanabilir tutuldu.
+      GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       DNP3_READ_STRATEGY: "event_driven"
       DNP3_EVENT_BASELINE_INTERVAL_SEC: "30"
       LOG_LEVEL: "INFO"
@@ -692,6 +699,16 @@ def _validate_params(params: object) -> dict:
         "initiating_port_base": _require_int(params, "initiating_port_base", 1024, 65000, 20100),
         "initiating_port_count": _require_int(params, "initiating_port_count", 0, 1000, 0),
     }
+    # KATI bool okuma. Deger sablonda cifte tirnakli bir YAML skalerine
+    # giriyor; serbest metni oldugu gibi gecirmek YAML enjeksiyonu riskiydi.
+    # Yalnizca acikca "true" olan aciyor; her sey KAPALI sayiliyor —
+    # yanlis okunan bir ayar SESSIZCE ozellik ACMAMALI.
+    ham_kalite = params.get("publish_dnp3_quality", False)
+    if isinstance(ham_kalite, bool):
+        out["publish_dnp3_quality"] = ham_kalite
+    else:
+        out["publish_dnp3_quality"] = str(ham_kalite).strip().lower() == "true"
+
     env = str(params.get("app_environment") or "production").strip()
     if env not in ALLOWED_APP_ENVIRONMENTS:
         raise ValueError(f"app_environment gecersiz: {env!r}")
@@ -734,6 +751,7 @@ def render_compose(code: str, name: str, params: dict) -> str:
         "INITIATING_PORTS_BLOCK": _initiating_ports_block(
             params["initiating_port_base"], params["initiating_port_count"]
         ),
+        "PUBLISH_DNP3_QUALITY": "true" if params.get("publish_dnp3_quality") else "false",
     }
 
     def _sub(match: "re.Match[str]") -> str:

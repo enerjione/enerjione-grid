@@ -1683,7 +1683,9 @@
           "zaman_asimi": "Sonuç doğrulanamadı — Gateway'ler ekranından durumu kontrol edin"
         },
         "updateAvailableTo": "{{version}} sürümü hazır",
-        "currentVersion": "Çalışan sürüm"
+        "currentVersion": "Çalışan sürüm",
+        "qualityFlags": "DNP3 kalite bayraklarını yayınla",
+        "qualityFlagsHint": "Kapalıyken her ölçüm \"iyi\" olarak gönderilir; cihaz geçersiz değer bildirse bile fark edilmez. Açıldığında geçersiz ölçümler alarm değerlendirmesine girmez. Kaydedince gateway yeniden kurulur, kısa süre telemetri gelmez."
       }
     },
     "devicesPanel": {

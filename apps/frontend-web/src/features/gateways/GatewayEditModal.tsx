@@ -37,7 +37,11 @@ import { useModalDialog } from "../../shared/useModalDialog";
 type Props = {
   accessToken: string;
   gateway: Gateway;
-  onSave: (payload: { name: string; token: string }) => Promise<void>;
+  onSave: (payload: {
+    name: string;
+    token: string;
+    publish_dnp3_quality: boolean;
+  }) => Promise<void>;
   onClose: () => void;
 };
 
@@ -68,6 +72,9 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
   // ayrica cekilir. `orijinalToken` "degisti mi" karsilastirmasi icin.
   const [token, setToken] = useState("");
   const [orijinalToken, setOrijinalToken] = useState("");
+  const [kaliteYayini, setKaliteYayini] = useState<boolean>(
+    gateway.publish_dnp3_quality ?? false
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -184,11 +191,19 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
     setError("");
     setBusy(true);
     try {
-      await onSave({ name: name.trim(), token });
+      const kaliteDegisti = kaliteYayini !== (gateway.publish_dnp3_quality ?? false);
+      await onSave({
+        name: name.trim(),
+        token,
+        publish_dnp3_quality: kaliteYayini
+      });
       // Token degistiyse ve gateway BU cihazda kuruluysa compose'daki eski
       // token gecersiz kaldi — kurulumu yeni token ile tazele. Aksi halde
       // kullanici "kaydettim ama gateway offline oldu" ile bas basa kalir.
-      if (tokenChanged && local) {
+      // Token VEYA kalite bayragi degistiyse compose'daki deger eskidi —
+      // kurulumu tazele. Aksi halde ayar kaydedilmis gorunur ama gateway
+      // hala eski davranisla calisir (sessiz yalan).
+      if ((tokenChanged || kaliteDegisti) && local) {
         await installGatewayLocally(accessToken, gateway.code);
       }
       onClose();
@@ -265,6 +280,25 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
               </p>
             ) : null}
           </div>
+
+          {/* DNP3 KALITE BAYRAKLARI — gateway bazinda anahtar.
+              Kapaliyken her okuma "good" gider: outstation CT referansini
+              kaybedip 0 A raporlasa bile SCADA bunu gecerli olcum sanar.
+              Acmak saha davranisini degistirdigi icin (kotu olcumler alarm
+              degerlendirmesinden bloke olur) filo geneli tek anahtar
+              YAPILMADI; tek tek gateway'de denenebilsin. */}
+          <label className="gw-switch-row">
+            <input
+              type="checkbox"
+              checked={kaliteYayini}
+              onChange={(e) => setKaliteYayini(e.target.checked)}
+              disabled={busy || localBusy}
+            />
+            <span className="gw-switch-body">
+              <strong>{t("engineering.gateways.editForm.qualityFlags")}</strong>
+              <small>{t("engineering.gateways.editForm.qualityFlagsHint")}</small>
+            </span>
+          </label>
 
           {/* Bu cihazdaki kurulum — yalnizca host ajani gateway'i goruyorsa. */}
           {local ? (
