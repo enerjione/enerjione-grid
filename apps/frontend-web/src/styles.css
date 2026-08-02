@@ -5313,62 +5313,122 @@ main.content.engineering-content:has(.bulk-notify-panel) {
    uzerine biniyordu; KPI grid'ine de `padding-right: 130px` hack'i
    gerekiyordu (son kart daraliyor, sagda bosluk kaliyordu). Artik normal
    akista bir toolbar satiri. */
-.sys-page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 0 4px;
-}
-
-.sys-page-head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.sys-page-head-text h2 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  color: #0f172a;
-}
-
-.sys-page-head-meta {
+/* ===== UST SERIT — tek parca gosterge cubugu =====
+   Sayfa basligi kaldirildi (sekme zaten soyluyor). Serit uc kumeye degil
+   TEK bir yuzeye oturuyor; okuma sirasi operatorun sordugu sirayla:
+   "veri akiyor mu" -> "hangi makine / ne zamandir ayakta / son ornek"
+   -> "hangi surum" -> eylem. */
+.sys-bar {
   display: flex;
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  /* Ust kenarda ince bir isik: serit "cam panel" gibi otursun, duz beyaz
+     bir dikdortgen gibi degil. */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.sys-bar-live {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sys-bar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
   font-size: 12.5px;
   color: #64748b;
 }
 
-.sys-page-head-meta > span {
+.sys-bar-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  min-width: 0;
   white-space: nowrap;
-}
-
-.sys-page-head-meta svg {
-  color: #94a3b8;
-}
-
-.sys-page-head-live {
-  padding: 2px 9px 2px 7px;
-  border-radius: 999px;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  color: #047857 !important;
-  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-/* ----- Surum + guncelleme ibaresi (Sistem Durumu ust seridi) -----
-   Sadece BILGI: guncelleme baslatan bir kontrol bilerek yok. */
+.sys-bar-chip svg { color: #94a3b8; flex-shrink: 0; }
+
+/* Host adi uzun olabilir (container id'leri 12+ karakter); seridi
+   tasirmasin diye kisaltiliyor, tam degeri title'da. */
+.sys-bar-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22ch;
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+/* Nokta/bullet yerine ince ayirac: sayisal metinlerin arasinda daha sakin. */
+.sys-bar-sep {
+  width: 1px;
+  height: 14px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
+
+.sys-bar-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Eylemler saga yaslanir; serit daralinca alt satira duser. */
+.sys-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.sys-bar-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sys-ver-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sys-ver-chip svg { color: #94a3b8; }
+
 .sys-version-box {
   display: flex;
   align-items: center;
@@ -5461,6 +5521,15 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .sys-refresh-btn:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+/* Dar ekranda yenile butonu ikona iner; serit sarmaladiginda metin
+   yer kaplamasin. */
+.sys-refresh-label { white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .sys-refresh-label { display: none; }
+  .sys-bar-chip-text { max-width: 14ch; }
 }
 
 .sys-refresh-btn svg {
@@ -6766,70 +6835,79 @@ main.content.engineering-content:has(.bulk-notify-panel) {
    (eski `padding-right: 130px` hack'i kaldirildi). */
 .sys-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  /* 200px: "HABERLESMEYEN" gibi uzun etiketler iki satira kirilmadan sigsin. */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
   flex: 0 0 auto;
 }
 
 .sys-kpi {
+  --kpi-accent: #94a3b8;
+  --kpi-tint: #f1f5f9;
+  --kpi-ink: #475569;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 16px 18px;
+  border-radius: 16px;
+  padding: 15px 16px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-  transition: transform 0.15s, box-shadow 0.15s;
+  gap: 13px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
   position: relative;
   overflow: hidden;
 }
 
+/* Renk artik SOL KENARDAKI sert 4px cubuk degil.
+   Kartin ust kenarina oturan ince bir aksan + saga dogru sonen cok hafif bir
+   renk yikamasi: durum bilgisini kaybetmeden sayfa daha sakin duruyor.
+   (Alti kart yan yana dururken alti kalin dikey cubuk gorsel gurultu
+   yaratiyordu.) */
 .sys-kpi::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: #94a3b8;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--kpi-accent);
+}
+
+.sys-kpi::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, var(--kpi-tint) 0%, transparent 62%);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .sys-kpi:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.09);
 }
 
-.sys-kpi--total::before { background: linear-gradient(180deg, #6366f1, #4338ca); }
-.sys-kpi--ok::before { background: linear-gradient(180deg, #34d399, #10b981); }
-.sys-kpi--warn::before { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
-.sys-kpi--bad::before { background: linear-gradient(180deg, #f87171, #dc2626); }
-.sys-kpi--accent::before { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
-.sys-kpi--alarm::before { background: linear-gradient(180deg, #fb923c, #ea580c); }
-.sys-kpi--gw::before { background: linear-gradient(180deg, #38bdf8, #0284c7); }
+/* Durum aileleri — tek degiskenden hem aksan hem yikama hem ikon rengi. */
+.sys-kpi--total  { --kpi-accent: linear-gradient(90deg, #6366f1, #4338ca); --kpi-tint: #e0e7ff; --kpi-ink: #4338ca; }
+.sys-kpi--ok     { --kpi-accent: linear-gradient(90deg, #34d399, #10b981); --kpi-tint: #d1fae5; --kpi-ink: #047857; }
+.sys-kpi--warn   { --kpi-accent: linear-gradient(90deg, #fbbf24, #f59e0b); --kpi-tint: #fef3c7; --kpi-ink: #b45309; }
+.sys-kpi--bad    { --kpi-accent: linear-gradient(90deg, #f87171, #dc2626); --kpi-tint: #fee2e2; --kpi-ink: #b91c1c; }
+.sys-kpi--accent { --kpi-accent: linear-gradient(90deg, #a78bfa, #7c3aed); --kpi-tint: #ede9fe; --kpi-ink: #6d28d9; }
+.sys-kpi--alarm  { --kpi-accent: linear-gradient(90deg, #fb923c, #ea580c); --kpi-tint: #ffedd5; --kpi-ink: #c2410c; }
+.sys-kpi--gw     { --kpi-accent: linear-gradient(90deg, #38bdf8, #0284c7); --kpi-tint: #e0f2fe; --kpi-ink: #0369a1; }
 
 .sys-kpi-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  background: #f1f5f9;
-  color: #64748b;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: var(--kpi-tint);
+  color: var(--kpi-ink);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.sys-kpi--ok .sys-kpi-icon { background: #d1fae5; color: #047857; }
-.sys-kpi--warn .sys-kpi-icon { background: #fef3c7; color: #b45309; }
-.sys-kpi--bad .sys-kpi-icon { background: #fee2e2; color: #b91c1c; }
-.sys-kpi--accent .sys-kpi-icon { background: #ede9fe; color: #6d28d9; }
-.sys-kpi--alarm .sys-kpi-icon { background: #ffedd5; color: #c2410c; }
-.sys-kpi--gw .sys-kpi-icon { background: #e0f2fe; color: #0369a1; }
-.sys-kpi--total .sys-kpi-icon { background: #e0e7ff; color: #4338ca; }
-
-.sys-kpi-value {
-  font-variant-numeric: tabular-nums;
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
 }
 
 .sys-kpi-body {
@@ -6837,42 +6915,46 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  /* ::after renk yikamasinin USTUNDE kalsin. */
+  position: relative;
+  z-index: 1;
 }
 
 .sys-kpi-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #64748b;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
 }
 
 .sys-kpi-value {
-  font-size: 1.6rem;
+  font-size: 1.75rem;
   font-weight: 800;
-  color: #0f172a;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  /* Rengi aile degiskeninden alir — eskiden her aile icin ayri bir kural
+     vardi ve yeni bir aile eklendiginde unutulmasi kolaydi. */
+  color: var(--kpi-ink);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  /* Sayilar tazelendikce genislik oynamasin (12 -> 9 gecisinde ziplama). */
+  font-variant-numeric: tabular-nums;
 }
 
-.sys-kpi--ok .sys-kpi-value { color: #047857; }
-.sys-kpi--warn .sys-kpi-value { color: #b45309; }
-.sys-kpi--bad .sys-kpi-value { color: #b91c1c; }
-.sys-kpi--accent .sys-kpi-value { color: #6d28d9; }
-.sys-kpi--alarm .sys-kpi-value { color: #c2410c; }
-.sys-kpi--gw .sys-kpi-value { color: #0369a1; }
-.sys-kpi--total .sys-kpi-value { color: #4338ca; }
-
 .sys-kpi-frac {
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #94a3b8;
+  letter-spacing: 0;
 }
 
 .sys-kpi-sub {
   font-size: 11.5px;
   color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 
 /* ----- Section wrapper (Sunucu kaynaklari + alt panellerde kullanilir) -- */
 .sys-section {

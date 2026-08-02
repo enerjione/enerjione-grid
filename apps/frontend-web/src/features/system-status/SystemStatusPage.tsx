@@ -496,88 +496,90 @@ export function SystemStatusPage({
 
   return (
     <section className="system-status-shell">
-      {/* Ust serit — Yenile artik KPI'larin uzerine binen floating buton degil,
-          basligin yanindaki normal bir toolbar ogesi. Yaninda canli ornekleme
-          saati ve host adi var; boylece butonun neyi yeniledigi belli. */}
-      <header className="sys-page-head">
-        <div className="sys-page-head-text">
-          <h2>{t("systemStatus.title")}</h2>
-          {/* Canli veri durumu. `wsState` eskiden bu sayfaya geciliyor ama
-              HIC OKUNMUYORDU — "Sistem Durumu" sayfasi telemetrinin akip
-              akmadigini gostermiyordu. */}
-          {wsState ? (
-            <div className="sys-page-head-meta">
-              <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt} />
-            </div>
-          ) : null}
-          {host ? (
-            <div className="sys-page-head-meta">
-              <span>
-                <Server size={14} strokeWidth={2} />
-                {host.info.hostname}
-              </span>
-              <span>
-                <Timer size={14} strokeWidth={2} />
-                {formatDuration(host.info.uptime_seconds, durationUnits)}
-              </span>
-              <span
-                className="sys-page-head-live"
-                title={t("systemStatus.host.liveHint")}
-              >
-                <span className="sys-live-dot" />
-                {new Date(host.sampled_at * 1000).toLocaleTimeString(localeTag)}
-              </span>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Surum + guncelleme ibaresi.
-            BILEREK sadece BILGI: buradan guncelleme baslatilamaz. Guncelleme
-            `update.sh` ile operator kontrolunde yapilir; calisan bir SCADA
-            sisteminin arayuzden tetiklenen bir islemle yeniden baslamasi
-            istenmiyor. */}
-        {versionInfo ? (
-          <div className="sys-version-box">
-            <span className="sys-version-current">
-              <Package size={14} strokeWidth={2} />
-              <span>
-                <small>{t("systemStatus.version.label")}</small>
-                <strong>v{versionInfo.current}</strong>
-              </span>
-            </span>
-            {versionInfo.update_available && versionInfo.latest ? (
-              <span
-                className="sys-version-badge is-update"
-                title={t("systemStatus.version.updateHint")}
-              >
-                <ArrowUpCircle size={13} strokeWidth={2.2} />
-                {t("systemStatus.version.updateAvailable", {
-                  version: versionInfo.latest
-                })}
-              </span>
-            ) : versionInfo.check_enabled && !versionInfo.error ? (
-              <span className="sys-version-badge is-current">
-                <CheckCircle2 size={13} strokeWidth={2.2} />
-                {t("systemStatus.version.upToDate")}
-              </span>
-            ) : null}
+      {/* UST SERIT — tek parca gosterge cubugu.
+          Sayfa BASLIGI YOK: sekme zaten "Sistem Durumu" diyor, ikinci kez
+          yazmak dikey alan harciyor ve asil bilgiyi (canli veri akiyor mu,
+          hangi makine, hangi surum) asagi itiyordu.
+          Onceki hal uc ayri kume gibi duruyordu (baslik bloku / surum kutusu /
+          Yenile). Hepsi tek bir seride toplandi: soldan saga "veri akiyor mu"
+          -> "hangi makine, ne zamandir ayakta, son ornek" -> "hangi surum" ->
+          eylem. Okuma sirasi operatorun sordugu sirayla ayni. */}
+      <header className="sys-bar">
+        {/* EN SOLDA CANLI VERI DURUMU: bu sayfanin cevapladigi ilk soru
+            "veri akiyor mu". Eskiden basligin altinda kucuk bir rozetti. */}
+        {wsState ? (
+          <div className="sys-bar-live">
+            <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt} />
           </div>
         ) : null}
-        {onRefresh ? (
-          <button
-            type="button"
-            className="sys-refresh-btn"
-            disabled={showSpinner}
-            onClick={() => void onRefresh()}
-          >
-            <RefreshCw
-              size={16}
-              strokeWidth={2.2}
-              className={showSpinner ? "sys-spin" : undefined}
-            />
-            {showSpinner ? t("common.refreshing") : t("common.refresh")}
-          </button>
+
+        {host ? (
+          <div className="sys-bar-meta">
+            <span className="sys-bar-chip" title={host.info.hostname}>
+              <Server size={14} strokeWidth={2} />
+              <span className="sys-bar-chip-text">{host.info.hostname}</span>
+            </span>
+            <span className="sys-bar-sep" aria-hidden="true" />
+            <span className="sys-bar-chip">
+              <Timer size={14} strokeWidth={2} />
+              {formatDuration(host.info.uptime_seconds, durationUnits)}
+            </span>
+            <span className="sys-bar-sep" aria-hidden="true" />
+            <span className="sys-bar-clock" title={t("systemStatus.host.liveHint")}>
+              <span className="sys-live-dot" />
+              {new Date(host.sampled_at * 1000).toLocaleTimeString(localeTag)}
+            </span>
+          </div>
         ) : null}
+
+        <div className="sys-bar-actions">
+          {/* Surum + guncelleme ibaresi.
+              BILEREK sadece BILGI: buradan guncelleme baslatilamaz. Guncelleme
+              `update.sh` ile operator kontrolunde yapilir; calisan bir SCADA
+              sisteminin arayuzden tetiklenen bir islemle yeniden baslamasi
+              istenmiyor. */}
+          {versionInfo ? (
+            <div className="sys-bar-version">
+              <span className="sys-ver-chip" title={t("systemStatus.version.label")}>
+                <Package size={13} strokeWidth={2} />
+                <span>v{versionInfo.current}</span>
+              </span>
+              {versionInfo.update_available && versionInfo.latest ? (
+                <span
+                  className="sys-version-badge is-update"
+                  title={t("systemStatus.version.updateHint")}
+                >
+                  <ArrowUpCircle size={13} strokeWidth={2.2} />
+                  {t("systemStatus.version.updateAvailable", {
+                    version: versionInfo.latest
+                  })}
+                </span>
+              ) : versionInfo.check_enabled && !versionInfo.error ? (
+                <span className="sys-version-badge is-current">
+                  <CheckCircle2 size={13} strokeWidth={2.2} />
+                  {t("systemStatus.version.upToDate")}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {onRefresh ? (
+            <button
+              type="button"
+              className="sys-refresh-btn"
+              disabled={showSpinner}
+              onClick={() => void onRefresh()}
+            >
+              <RefreshCw
+                size={16}
+                strokeWidth={2.2}
+                className={showSpinner ? "sys-spin" : undefined}
+              />
+              <span className="sys-refresh-label">
+                {showSpinner ? t("common.refreshing") : t("common.refresh")}
+              </span>
+            </button>
+          ) : null}
+        </div>
       </header>
 
       {/* KPI: 6 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm / Gateway / Servis */}
