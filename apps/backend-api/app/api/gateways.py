@@ -665,11 +665,39 @@ _AGENT_ERROR_STATUS = {
     "request_pending": status.HTTP_409_CONFLICT,
 }
 
+# Ham kod yerine operatorun ANLAYACAGI mesaj.
+#
+# Oncesinde `message` alanina ham kodun kendisi yaziliyordu ve arayuz onu
+# oldugu gibi kirmizi metin olarak basiyordu: ekranda "request_pending"
+# goruyordunuz. Ne oldugunu, ne yapilmasi gerektigini soylemiyor.
+#
+# `code` alani DURUYOR — arayuz makine tarafinda hala ona bakabilir.
+# (Ayni desen network.py'de zaten var.)
+_AGENT_ERROR_MESSAGE = {
+    "request_pending": (
+        "Onceki istek hala uygulaniyor. Birkac saniye bekleyip tekrar deneyin."
+    ),
+    "state_dir_missing": (
+        "Bu cihazda gateway ajani kurulu degil; kurulum/guncelleme buradan yapilamaz."
+    ),
+    "state_dir_not_writable": (
+        "Gateway ajaninin calisma dizinine yazilamiyor; kurulumu kontrol edin."
+    ),
+    "agent_never_reported": (
+        "Gateway ajani henuz durum bildirmedi. Ajan servisinin calistigini kontrol edin."
+    ),
+    "unavailable": "Gateway ajanina ulasilamiyor.",
+}
+
 
 def _agent_http_error(exc: GatewayAgentError) -> HTTPException:
     reason = str(exc)
     code = _AGENT_ERROR_STATUS.get(reason, status.HTTP_503_SERVICE_UNAVAILABLE)
-    return HTTPException(status_code=code, detail={"code": reason, "message": reason})
+    mesaj = _AGENT_ERROR_MESSAGE.get(reason)
+    if mesaj is None:
+        # Taninmayan kod: ham hali kalsin — sessizce yutmak teshisi zorlastirir.
+        mesaj = reason
+    return HTTPException(status_code=code, detail={"code": reason, "message": mesaj})
 
 
 @router.get("/local-agent", response_model=GatewayAgentStatus)

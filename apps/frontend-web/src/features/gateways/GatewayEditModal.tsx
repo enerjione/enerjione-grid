@@ -11,9 +11,17 @@
  * Yeniden uretmek CALISAN gateway'i keser (compose icindeki eski token
  * gecersizlesir), bu yuzden sonucu acikca yaziyoruz.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ArrowUpCircle, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpCircle,
+  CheckCircle2,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  X
+} from "lucide-react";
 
 import {
   fetchGatewayAgentStatus,
@@ -33,6 +41,23 @@ type Props = {
   onClose: () => void;
 };
 
+/** Ajan durumunu yoklama araligi. Guncelleme saniyeler surer; 1.5 sn hem
+ *  akici gorunur hem backend'i gereksiz yormaz. */
+const IZLEME_ARALIK_MS = 1500;
+
+/** Yoklama tavani. Asilirsa "bilmiyorum" denir — "basarili" DENMEZ.
+ *  Saha kosullarinda (4G) imaj cekme dakikalar surebilir, bu yuzden cömert. */
+const IZLEME_TAVANI_MS = 5 * 60 * 1000;
+
+/** Ekranda gosterilen guncelleme ilerlemesi. */
+type IslemDurumu = {
+  /** gonderiliyor | uygulaniyor | validate | pull | up | done | bitti | zaman_asimi */
+  asama: string;
+  basarili?: boolean;
+  mesaj?: string;
+  detay?: string;
+};
+
 export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Props) {
   const { t } = useTranslation();
   // ESC ile kapanma + odak tuzagi (modal disina Tab ile cikilamasin).
@@ -48,6 +73,10 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
 
   const [agent, setAgent] = useState<GatewayAgentStatus | null>(null);
   const [localBusy, setLocalBusy] = useState(false);
+  const [islem, setIslem] = useState<IslemDurumu | null>(null);
+  // Modal kapandiktan sonra yoklama SURMEMELI: aksi halde sokulmus bilesene
+  // yazilir ve 5 dakika boyunca bosuna istek atilir.
+  const canli = useRef(true);
 
   // Token henuz cekilmediyse "degisti" sayma; aksi halde modal acilir acilmaz
   // bos deger yuzunden "token degisti" uyarisi cikardi.
@@ -56,6 +85,13 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
   const loadAgent = async () => {
     setAgent(await fetchGatewayAgentStatus(accessToken));
   };
+
+  useEffect(() => {
+    canli.current = true;
+    return () => {
+      canli.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     void loadAgent();
@@ -80,15 +116,65 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
     if (!window.confirm(t("engineering.gateways.editForm.updateConfirm"))) return;
     setLocalBusy(true);
     setError("");
+    setIslem({ asama: "gonderiliyor" });
     try {
       await updateGatewayLocally(accessToken, gateway.code);
-      // Ajan istegi ASENKRON isliyor; durumu birkac saniye sonra tazele.
-      window.setTimeout(() => void loadAgent(), 3000);
+      // ESKIDEN: tek bir `setTimeout(..., 3000)` vardi ve is orada bitiyordu.
+      // Guncelleme imaj cekmeyi iceriyor; olculen sure 12 sn, sahada (4G)
+      // dakikalar surebilir. Sonuc: operator butona basiyor, ekranda hicbir
+      // sey degismiyor, "basti mi basmadi mi" belli olmuyordu.
+      //
+      // Artik ajan bitene kadar YOKLANIYOR ve her asama (indiriliyor ->
+      // baslatiliyor -> bitti) ekranda gorunuyor.
+      setIslem({ asama: "uygulaniyor" });
+      void izleIslem();
     } catch (err) {
+      setIslem(null);
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
       setLocalBusy(false);
     }
+  };
+
+  /** Ajan istegi bitene kadar durumu yoklar. */
+  const izleIslem = async () => {
+    const basla = Date.now();
+    while (canli.current && Date.now() - basla < IZLEME_TAVANI_MS) {
+      await new Promise((r) => window.setTimeout(r, IZLEME_ARALIK_MS));
+      if (!canli.current) return;
+      let durum: GatewayAgentStatus | null = null;
+      try {
+        durum = await fetchGatewayAgentStatus(accessToken);
+      } catch {
+        // Guncelleme sirasinda backend'e erisim kisa sure kesilebilir;
+        // tek bir basarisiz yoklama izlemeyi BITIRMEZ.
+        continue;
+      }
+      setAgent(durum);
+
+      const sonuc = durum?.last_apply ?? null;
+      const bizim = sonuc?.code === gateway.code && sonuc?.action === "update";
+
+      // Ajan hala calisiyorsa asamayi yansit (pull / up ...).
+      if (durum?.pending || sonuc?.running) {
+        if (bizim && sonuc?.stage) setIslem({ asama: sonuc.stage });
+        continue;
+      }
+      // Istek kuyrukta yok ve son sonuc bize ait: is bitti.
+      if (bizim) {
+        setIslem({
+          asama: "bitti",
+          basarili: sonuc?.ok === true,
+          mesaj: sonuc?.message ?? undefined,
+          detay: sonuc?.ok === false ? (sonuc?.detail ?? undefined) : undefined
+        });
+        setLocalBusy(false);
+        return;
+      }
+    }
+    if (!canli.current) return;
+    // Tavana carpildi: "bilmiyorum" de, "basarili" DEME.
+    setIslem({ asama: "zaman_asimi" });
+    setLocalBusy(false);
   };
 
   const local: LocalGateway | null =
@@ -242,6 +328,49 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                   </span>
                 )}
               </div>
+              {/* ILERLEME — butona basildigi andan bitene kadar gorunur.
+                  Sessiz kalmak en kotu secenekti: operator basip basmadigini
+                  bilemiyordu ve tekrar basiyordu (ikinci istek reddediliyor). */}
+              {islem ? (
+                <div
+                  className={`gw-islem ${
+                    islem.asama === "bitti"
+                      ? islem.basarili
+                        ? "is-ok"
+                        : "is-fail"
+                      : islem.asama === "zaman_asimi"
+                        ? "is-unknown"
+                        : "is-busy"
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="gw-islem-ikon">
+                    {islem.asama === "bitti" ? (
+                      islem.basarili ? (
+                        <CheckCircle2 size={15} strokeWidth={2.2} />
+                      ) : (
+                        <AlertTriangle size={15} strokeWidth={2.2} />
+                      )
+                    ) : islem.asama === "zaman_asimi" ? (
+                      <AlertTriangle size={15} strokeWidth={2.2} />
+                    ) : (
+                      <Loader2 size={15} strokeWidth={2.2} className="net-spin" />
+                    )}
+                  </span>
+                  <div className="gw-islem-govde">
+                    <strong>
+                      {t(`engineering.gateways.editForm.progress.${islem.asama}`, {
+                        defaultValue: t("engineering.gateways.editForm.progress.uygulaniyor")
+                      })}
+                    </strong>
+                    {islem.mesaj ? <small>{islem.mesaj}</small> : null}
+                    {/* Docker ciktisinin son satirlari — SADECE hatada.
+                        Basarida gostermek gurultu olurdu. */}
+                    {islem.detay ? <pre className="gw-islem-detay">{islem.detay}</pre> : null}
+                  </div>
+                </div>
+              ) : null}
               <small className="gw-local-hint">{t("engineering.gateways.editForm.localHint")}</small>
             </div>
           ) : null}

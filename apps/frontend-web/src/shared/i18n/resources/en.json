@@ -1667,7 +1667,21 @@
         "upToDate": "Up to date",
         "versionUnknown": "Version unknown",
         "versionUnknownHint": "Could not reach the registry; unable to verify whether it is up to date.",
-        "updateConfirm": "The gateway will be updated and restarted. Telemetry from devices on this gateway will pause briefly. Continue?"
+        "updateConfirm": "The gateway will be updated and restarted. Telemetry from devices on this gateway will pause briefly. Continue?",
+        "progress": {
+          "gonderiliyor": "Sending request…",
+          "uygulaniyor": "Applying on device…",
+          "validate": "Validating configuration…",
+          "pull": "Pulling new image…",
+          "up": "Starting with the new image…",
+          "down": "Stopping…",
+          "restart": "Restarting…",
+          "cleanup": "Cleaning up…",
+          "docker": "Preparing Docker…",
+          "done": "Finishing…",
+          "bitti": "Completed",
+          "zaman_asimi": "Result could not be confirmed — check status on the Gateways screen"
+        }
       }
     },
     "devicesPanel": {

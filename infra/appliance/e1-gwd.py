@@ -821,10 +821,22 @@ def _do_update(req: dict, compose_cmd: list[str]) -> dict:
         return {"ok": False, "stage": "update", "message": "gateway bu cihazda kurulu degil", "detail": ""}
     project = _project_name(code)
 
+    # ASAMALAR BILDIRILIYOR (install akisindaki gibi). Onceden `update`
+    # yalnizca EN SONDA tek bir sonuc yaziyordu: arayuz istegi gonderdikten
+    # sonra is bitene kadar hicbir sey goremiyor, operator "basti mi,
+    # basmadi mi" diye bakiyordu.
+    #
+    # Sure onemsiz degil: imaj cekme saha kosullarinda (4G) dakikalar
+    # surebilir. En uzun ve en sik hata veren adim `pull` oldugu icin ayri
+    # bildirilmesi teshis acisindan da degerli.
+    _write_status({"id": req["id"], "action": "update", "code": code,
+                   "stage": "pull", "running": True})
     rc, out = _run(compose_cmd + ["-p", project, "-f", path, "pull"], UP_TIMEOUT_SEC)
     if rc != 0:
         return {"ok": False, "stage": "pull", "message": "yeni imaj indirilemedi", "detail": out}
 
+    _write_status({"id": req["id"], "action": "update", "code": code,
+                   "stage": "up", "running": True})
     rc, out = _run(compose_cmd + ["-p", project, "-f", path, "up", "-d"], UP_TIMEOUT_SEC)
     if rc != 0:
         return {"ok": False, "stage": "up", "message": "guncel imajla baslatilamadi", "detail": out}

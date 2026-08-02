@@ -33916,6 +33916,55 @@ th.event-col-category {
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
 }
 
+/* ----- Gateway kurulum/guncelleme ilerlemesi -----
+   Butona basildigi andan bitene kadar gorunur. Sessiz kalmak en kotu
+   secenekti: operator basip basmadigini bilemiyor, tekrar basiyor ve ikinci
+   istek reddediliyordu. */
+.gw-islem {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 12.5px;
+}
+
+.gw-islem.is-busy { background: #eff6ff; border-color: #bfdbfe; }
+.gw-islem.is-ok { background: #ecfdf5; border-color: #a7f3d0; }
+.gw-islem.is-fail { background: #fef2f2; border-color: #fecaca; }
+/* Sonuc dogrulanamadi — "basarili" ile AYNI renkte olmamali. */
+.gw-islem.is-unknown { background: #fffbeb; border-color: #fde68a; }
+
+.gw-islem-ikon { display: flex; flex-shrink: 0; padding-top: 1px; }
+.gw-islem.is-busy .gw-islem-ikon { color: #2563eb; }
+.gw-islem.is-ok .gw-islem-ikon { color: #059669; }
+.gw-islem.is-fail .gw-islem-ikon { color: #dc2626; }
+.gw-islem.is-unknown .gw-islem-ikon { color: #d97706; }
+
+.gw-islem-govde { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gw-islem-govde strong { font-weight: 650; color: #0f172a; }
+.gw-islem-govde small { color: #64748b; }
+
+/* Docker ciktisi — yalnizca hatada. Uzun olabilir, kendi icinde kaydirilir. */
+.gw-islem-detay {
+  margin: 4px 0 0;
+  padding: 7px 9px;
+  max-height: 120px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #7f1d1d;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .gw-local-hint {
   font-size: 0.74rem;
   color: #64748b;
