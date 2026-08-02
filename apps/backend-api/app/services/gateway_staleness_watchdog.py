@@ -230,6 +230,21 @@ class GatewayStalenessWatchdog:
                     # UNKNOWN yapabilirdi.
                     apply_link_states(db)
                     sweep_once(db)
+                    # Filo seviyesi uyari AYNI THREAD'de: saha kutusu 2
+                    # cekirdekli, ayri bir thread + ayri DB oturumu acmanin
+                    # karsiligi yok — bu dongu zaten 60 saniyede bir kosuyor
+                    # ve `gateway_health` satirlarini okuyor.
+                    #
+                    # AYRI try/except: uyari kurali CIHAZ DURUMUNU asla
+                    # etkilememeli. Buradaki bir hata yukaridaki iki cagriyi
+                    # da atlatirdi (ayni tur icinde), yani bir bildirim hatasi
+                    # yuzunden cihazlar yesil kalirdi.
+                    try:
+                        from app.services import gateway_fleet_alarm
+
+                        gateway_fleet_alarm.check_once(db)
+                    except Exception:  # noqa: BLE001
+                        logger.warning("gateway_fleet_alarm_failed", exc_info=True)
                 finally:
                     db.close()
                 ardisik_hata = 0

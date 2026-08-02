@@ -375,6 +375,25 @@ services:
       # tablo uzun sure kilitlenmesin, autovacuum arayi yakalasin).
       RETENTION_DELETE_BATCH: ${RETENTION_DELETE_BATCH:-20000}
       RETENTION_MAX_BATCHES_PER_RUN: ${RETENTION_MAX_BATCHES_PER_RUN:-50}
+      # --- Gateway izleme -------------------------------------------------
+      # BU SATIRLAR SART: bu ayarlar kodda `os.getenv` ile okunuyor, compose
+      # gecirmezse operator DEGISTIREMEZ — ayar var gibi gorunur ama yoktur.
+      # (Ayni sinif daha once BACKUP_OFFSITE_DIR, ACCESS_TOKEN_MINUTES,
+      # OUTBOX_* ve NATS_STREAM_*_MAX_AGE_DAYS'te gorulda.)
+      #
+      # Gateway susarsa cihazlar yesil kalmasin: tarama periyodu ve gateway'in
+      # "bayat" sayilma esigi.
+      GATEWAY_STALE_CHECK_INTERVAL_SEC: ${GATEWAY_STALE_CHECK_INTERVAL_SEC:-60}
+      GATEWAY_STALE_AFTER_SEC: ${GATEWAY_STALE_AFTER_SEC:-180}
+      # Gateway imaji icin yeni surum kontrolu (ajanin uzak digest onbellegi
+      # 15 dakika; daha sik sormanin karsiligi yok).
+      GATEWAY_UPDATE_CHECK_INTERVAL_SEC: ${GATEWAY_UPDATE_CHECK_INTERVAL_SEC:-900}
+      # Filo seviyesi kopma uyarisi: cihazlarin bu orandan FAZLASI bu sure
+      # boyunca kesintisiz kopuksa muhendis/kurulumcu uyarilir. Oran tek tek
+      # cihaz kopmalarini elemek, sure ise gateway yeniden baslatmalarinda
+      # yanlis alarm uretmemek icin.
+      GATEWAY_FLEET_LOST_RATIO: ${GATEWAY_FLEET_LOST_RATIO:-0.5}
+      GATEWAY_FLEET_SUSTAIN_SEC: ${GATEWAY_FLEET_SUSTAIN_SEC:-300}
       # Disk guard — SON EMNIYET SUBABI. Yukaridaki TTL'ler ve asagidaki
       # NATS/yedek tavanlari "normalde dolmaz" der; guard "tavanlardan biri
       # yanlis hesaplanmis olsa BILE dolmasin" der ve gercek bos alani olcer.
