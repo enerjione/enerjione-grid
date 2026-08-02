@@ -14,6 +14,51 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.36.0] — 2026-08-02
+
+### Eklendi
+- **DNP3 kalite bayrakları artık gateway ayarlarından açılabiliyor.** Gateway
+  bugüne kadar her ölçümü "iyi" olarak yayınlıyordu. Bir gösterge akım
+  ölçümünü *geçersiz* diye raporladığında (örneğin CT referansını kaybettiğinde
+  0 A bildirdiğinde) bu bilgi kayboluyor, SCADA değeri geçerli sanıyordu —
+  "hat enerjisiz" yorumu ve buna dayalı yanlış manevra kararı mümkündü.
+
+  Açıldığında geçersiz ölçümler **alarm değerlendirmesine girmez**: alarm
+  durumu donar, o ölçümle ne yeni alarm açılır ne açık alarm kapanır.
+
+  > Anahtar **gateway başına**. Açmak saha davranışını değiştirdiği için önce
+  > tek bir gateway'de denenip yaygınlaştırılabilsin diye filo geneli tek
+  > anahtar yapılmadı. Varsayılan kapalı; mevcut kurulumların davranışı
+  > değişmiyor. Kaydedince gateway kurulumu tazelenir ve kısa süre telemetri
+  > gelmez.
+
+- **Yeni cihaz modeli sürüm çıkarmadan eklenebiliyor.** Model listesi artık
+  sinyal kataloğundan da besleniyor: yeni bir modelin sinyallerini tanımlamak
+  onu cihaz formunda seçilebilir kılmaya yetiyor. Önceden sinyalleri
+  girebiliyor ama modeli hiçbir cihaza atayamıyordunuz.
+
+- **Gateway güncellemesinde ilerleme görünüyor.** Butona basınca "İstek
+  gönderiliyor → Yeni imaj indiriliyor → Güncel imajla başlatılıyor →
+  Tamamlandı" akışı ekranda takip ediliyor. Önceden ekran sessiz kalıyor,
+  işin başlayıp başlamadığı anlaşılmıyordu. Hata olursa nedeni gösteriliyor.
+
+- **Hangi sürümün geldiği yazıyor.** Çalışan sürüm her durumda görünüyor;
+  güncelleme varsa hedef sürüm adıyla belirtiliyor.
+
+### Değişti
+- **Sistem Durumu sayfasının üst kısmı yenilendi.** Sayfa başlığı kaldırıldı
+  (sekme zaten söylüyor) ve dağınık duran üç grup tek bir gösterge şeridinde
+  toplandı: canlı veri durumu → makine/çalışma süresi/son örnek → sürüm →
+  yenile. Sayaç kartları sadeleştirildi.
+
+### Düzeltildi
+- **Gateway kurulu saha cihazlarında güncelleme durmuyor.** (2.35.1'de
+  düzeltilmişti; bu sürümde de geçerli.)
+- Gateway ajanı hataları artık ham kod yerine anlaşılır mesaj döndürüyor
+  ("request_pending" yerine "Önceki istek hâlâ uygulanıyor").
+
+---
+
 ## [2.35.1] — 2026-08-02
 
 ### Düzeltildi
