@@ -90,3 +90,15 @@ infra/appliance/provision.env
 tokenler.txt
 *token*.txt
 *anahtar*.txt
+
+# Saha cihazinda gateway ajaninin urettigi calisma-zamani dizini
+# (setup-gateway-agent.sh: /opt/enerjione-grid/gateways, root:root 0750).
+#
+# BURADA OLMAK ZORUNDA — iki ayri sebeple:
+#  1. update.sh calisma agacinin temiz olmasini sart kosuyor. Ignore
+#     edilmezse gateway kurulu HER saha cihazinda update "commit edilmemis
+#     lokal degisiklik var" diyerek DURUYOR; operatorun elle mudahalesi
+#     gerekiyor ve bu her guncellemede tekrarliyor.
+#  2. Icindeki per-gateway compose dosyalari GATEWAY_TOKEN tasiyor.
+#     Yanlislikla commit'lenmesi secret sizintisi olurdu.
+gateways/
