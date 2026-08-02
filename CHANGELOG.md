@@ -14,6 +14,24 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.35.1] — 2026-08-02
+
+### Düzeltildi
+- **Gateway kurulu saha cihazlarında güncelleme başlamıyordu.** Gateway
+  ajanı kurulumu, repo dizininin içine `gateways/` adında bir çalışma-zamanı
+  dizini açıyor. `update.sh` ise güncellemeden önce çalışma ağacının temiz
+  olmasını şart koşuyor ve bu dizin `.gitignore` kapsamında olmadığı için
+  güncelleme *"Repo'da commit edilmemiş lokal değişiklik var: `?? gateways/`"*
+  diyerek duruyordu.
+
+  Tek bir cihazda elle temizlenip geçilecek bir sorun değildi: dizin her
+  kurulumda yeniden oluşuyor, dolayısıyla **her güncellemede** tekrarlıyordu.
+
+  Aynı dizindeki dosyalar gateway erişim anahtarı taşıdığı için yok
+  sayılması ayrıca güvenlik gereği.
+
+---
+
 ## [2.35.0] — 2026-08-02
 
 ### Eklendi
