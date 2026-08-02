@@ -36,6 +36,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from notification_service import watchdog
+
 # `.env` zorunlu — guest:guest default'u prod'da yanlislikla bag kurmasin.
 RABBIT_URL = os.getenv("RABBITMQ_URL", "")
 EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "e1.events")
@@ -86,12 +88,17 @@ def _build_http_session() -> requests.Session:
 class _HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
-            self.send_response(200)
+            # ONCEDEN SABIT 200'DU. Saglik sunucusu ayri iplikte oldugu icin
+            # pika ioloop'u kilitlense de "ok" doner, healthcheck arizayi hic
+            # gormezdi. Artik kalp atisinin tazeligine bakiyor.
+            canli = watchdog.saglikli()
+            self.send_response(200 if canli else 503)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             body = {
-                "status": "ok",
+                "status": "ok" if canli else "stalled",
                 "service": "notification-worker",
+                "atissiz_sn": round(watchdog.gecen_sn(), 1),
                 **_state,
             }
             self.wfile.write(json.dumps(body).encode("utf-8"))
@@ -171,6 +178,10 @@ def main() -> None:
         format="%(asctime)s %(levelname)-5s %(name)s %(message)s",
     )
     _validate_required_secrets()
+    # Esik 60 sn: pika ioloop'u 5 sn'de bir atiyor (12 kacirilmis atis).
+    # Yeniden baglanma beklemesinde de elle atiliyor; RabbitMQ ayakta
+    # degilken servis SAGLIKLI bekliyor demektir, oldurmek durumu duzeltmez.
+    watchdog.baslat(60.0, servis="notification-worker")
     _start_health_server()
     logger.info(
         "notification-worker-starting backend=%s prefetch=%d",
@@ -257,6 +268,22 @@ def main() -> None:
             logger.info("notification-worker-running queue=%s topic=%s", QUEUE_NAME, INCOMING_TOPIC)
             # Saglikli reconnect — basarili connect ile backoff sifirla
             backoff = RECONNECT_BASE_SEC
+
+            # Kalp atisi: `start_consuming()` blokladigi icin disaridan
+            # atamayiz; pika'nin KENDI ioloop'una periyodik geri cagri
+            # koyuyoruz. Boylece atis "bildirim gonderdim"e degil "pika
+            # ioloop'um hala calisiyor"a baglanir — bildirim gelmeyen sakin
+            # bir gece saglikli servisi oldurmez.
+            def _kalp() -> None:
+                watchdog.kalp_at()
+                try:
+                    connection.call_later(5.0, _kalp)
+                except Exception:  # noqa: BLE001
+                    # Baglanti kapaniyorsa yeniden zamanlamak anlamsiz; dis
+                    # dongu zaten yeniden baglanacak ve yeni atis kuracak.
+                    pass
+
+            connection.call_later(5.0, _kalp)
             channel.start_consuming()
         except KeyboardInterrupt:
             logger.info("notification-worker-stopping (keyboard interrupt)")
@@ -268,7 +295,12 @@ def main() -> None:
                 ex,
                 backoff,
             )
+            # Yeniden baglanma beklemesi sirasinda da atiyoruz: RabbitMQ
+            # ayakta degilse servis SAGLIKLI sekilde bekliyor demektir,
+            # bekcinin onu oldurmesi durumu duzeltmez.
+            watchdog.kalp_at()
             time.sleep(backoff)
+            watchdog.kalp_at()
             backoff = min(RECONNECT_MAX_SEC, backoff * 1.5)
         finally:
             if connection is not None:

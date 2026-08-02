@@ -13,6 +13,7 @@ import nats
 import pika
 import requests
 
+from alarm_service import watchdog
 from alarm_service.rules import AlarmRuleCache, evaluate_composite, evaluate_rule
 
 # ----- Telemetri kaynagi: NATS JetStream (gateway -> tag-engine -> JetStream) -
@@ -298,13 +299,18 @@ _CACHE = AlarmRuleCache(
 class _HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
+            # Kural onbellegi hazir OLSA BILE ana dongu kilitlenmis olabilir;
+            # onceden bu uc o durumda da 200 donuyordu ve healthcheck arizayi
+            # hic gormuyordu. Artik kalp atisi da sart.
+            canli = watchdog.saglikli()
             body = {
-                "status": "ok" if _CACHE.is_ready() else "starting",
+                "status": ("ok" if _CACHE.is_ready() else "starting") if canli else "stalled",
                 "service": "alarm-service",
                 "rules_ready": _CACHE.is_ready(),
+                "atissiz_sn": round(watchdog.gecen_sn(), 1),
             }
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
+            self.send_response(200 if canli else 503)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
@@ -725,12 +731,24 @@ def _publish_alarm_to_rabbitmq(alarm_payload: dict) -> None:
 _stop_event = threading.Event()
 
 
+async def _kalp_dongusu() -> None:
+    """Olay dongusu yasadigi surece atar (bkz. watchdog.py).
+
+    ALARMA DEGIL olay dongusune bagli: alarm uretmeyen sakin bir gece
+    saglikli servisi oldurmemeli.
+    """
+    while True:
+        await asyncio.sleep(5)
+        watchdog.kalp_at()
+
+
 async def _consume_jetstream() -> None:
     """Telemetry.normalized JetStream'i dinler, kural motoruna besler.
 
     Reconnect: NATS gelmediyse / dustuyse expo backoff. Durable consumer ile
     process restart'inda kaldigi yerden devam.
     """
+    asyncio.create_task(_kalp_dongusu())
     backoff = 2
     while not _stop_event.is_set():
         nc = None
@@ -882,6 +900,9 @@ def _validate_required_secrets() -> None:
 
 def main() -> None:
     _validate_required_secrets()
+    # Esik 60 sn: atis 5 sn'de bir (12 kacirilmis atis). NATS yeniden
+    # baglanma backoff'u sirasinda da olay dongusu calistigi icin atis surer.
+    watchdog.baslat(60.0, servis="alarm-service")
     _start_health_server()
     stop_event = Event()
     refresh_thread = Thread(target=_rules_refresh_loop, args=(stop_event,), daemon=True)

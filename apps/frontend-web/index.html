@@ -9,19 +9,21 @@
     <!-- Material Symbols artik npm paketi (material-symbols) ile self-host
          ediliyor; main.tsx icinde import edilir. CDN bagimligi kaldirildi
          (4G sahada DNS/proxy bloku UI'yi kirmaz; ayrica CSP daha siki). -->
-    <!-- Rybbit Analytics (self-hosted) — ziyaretci takibi.
-         `async`, `defer` DEGIL: saha cihazi cogu zaman internetsizdir ve bu
-         istek ERR_CONNECTION_TIMED_OUT'a kadar (~30 sn) asili kalir.
-         `defer` ile tarayici DOMContentLoaded'i BEKLETIYORDU — arayuz saha
-         kurulumlarinda gec aciliyordu. `async` ile istek arka planda kalir,
-         zaman asimina ugrasa da uygulamanin acilmasini geciktirmez.
-         Internetsiz cihazda konsolda tek bir basarisiz istek gorunur;
-         analitigi tamamen kapatmak icin bu blogu silmek yeterli. -->
-    <script
-      src="https://analytics.enerjione.com/api/script.js"
-      data-site-id="0eff3baa66db"
-      async
-    ></script>
+    <!-- ZIYARETCI ANALITIGI KALDIRILDI (analytics.enerjione.com).
+         Urun izole musteri aglarinda, cogunlukla INTERNETSIZ calisiyor:
+           * istek her acilista basarisiz oluyor, konsolu kirletiyordu,
+           * musteri agindan disari cikma girisimi guvenlik denetiminde
+             aciklanmasi gereken bir madde haline geliyordu,
+           * internetsiz cihazda hicbir veri toplanmadigi icin zaten
+             karsiliginda bir sey vermiyordu.
+         CSP'deki script-src/connect-src izinleri de bu yuzden daraltildi
+         (bkz. security-headers.conf). Geri istenirse ikisi birlikte
+         geri alinmali. -->
+
+    <!-- Analitik geri eklenirse `async` SART, `defer` DEGIL: internetsiz
+         cihazda istek ~30 sn asili kalir ve `defer` DOMContentLoaded'i
+         bekletip arayuzu gec aciyordu. -->
+
   </head>
   <body>
     <div id="root"></div>

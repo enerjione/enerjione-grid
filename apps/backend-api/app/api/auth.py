@@ -16,9 +16,32 @@ from app.schemas.user import LanguageUpdateRequest, SelfPasswordChangeRequest, S
 
 
 # Auth cookie ismi — frontend Authorization header yerine bu cookie ile
-# gelirse `get_current_user` cookie'den okur. HttpOnly + Secure (production)
-# + SameSite=Strict: XSS sonrasi token cikartilamaz + CSRF zorlasir.
+# gelirse `get_current_user` cookie'den okur. HttpOnly + SameSite=Lax: XSS
+# sonrasi token cikartilamaz + CSRF zorlasir. `Secure` ISTEGIN SEMASINA gore
+# konur (bkz. _istek_https_mi); "production" oldugu icin degil.
 _AUTH_COOKIE_NAME = "e1_session"
+
+
+def _istek_https_mi(request: Request) -> bool:
+    """Istek GERCEKTEN HTTPS uzerinden mi geldi?
+
+    TLS cogu kurulumda DISARIDA (host nginx / Caddy) sonlandirilir; istek
+    backend'e duz HTTP olarak ulasir ve tek kanit `X-Forwarded-Proto`
+    basligidir. Baslik yoksa istegin kendi semasina bakilir.
+
+    Basligin ILK degeri alinir: zincirde birden fazla proxy varsa
+    "https, http" gibi virgullu bir liste gelebilir ve istemciye en yakin
+    olan bastakidir.
+
+    GUVEN SINIRI: backend host'a port acmiyor; yalnizca compose agindan,
+    frontend nginx'i uzerinden erisilebilir. Yani bu basligi disaridan bir
+    istemci uyduramaz — ureten taraf bizim nginx'imizdir.
+    """
+    ham = (request.headers.get("x-forwarded-proto") or "").split(",")[0]
+    ham = ham.strip().lower()
+    if ham:
+        return ham == "https"
+    return request.url.scheme == "https"
 
 # Account lockout esikleri. SlowAPI IP-bazli 5/dk limitin UZERINE eklenen
 # hesap-bazli savunma — saldirgan farkli IP'lerden veya X-Forwarded-For
@@ -192,7 +215,27 @@ def login(
     # HttpOnly cookie — XSS sonrasi token exfiltrate olmaz. Cookie max_age
     # token'in gercek TTL'i ile ayni (remember_me=true ise 7 gun, aksi
     # halde 8 saat).
-    is_prod = settings.app_env.strip().lower() in ("production", "prod")
+    # `Secure` bayragi ORTAMA degil ISTEGIN SEMASINA baglanir.
+    #
+    # YASANAN ARIZA: burada `app_env == production` kullaniliyordu. Saha
+    # cihazi APP_ENV=production ile calisiyor ama TLS'i YOK — arayuze
+    # http://enerjione.local ile eriliyor. `Secure` cerezi tarayici duz
+    # HTTP'de GONDERMEZ. Sonuc:
+    #   * normal API cagrilari kurtuluyordu (frontend ayrica Bearer basligi
+    #     yolluyor), bu yuzden ariza uzun sure fark edilmedi;
+    #   * ama harita karolari <img> ile isteniyor ve <img> baslik GONDEREMEZ,
+    #     yalnizca cerez gonderir. Cerez gitmeyince her karo 401 aliyordu ve
+    #     sahada harita HIC acilmiyordu — indirilmis cevrimdisi karo onbellegi
+    #     dahil, cunku ona ulasan yol da ayni uctan geciyor.
+    #   * localhost'ta gorunmuyordu: tarayicilar localhost'u guvenli sayip
+    #     `Secure` cerezi kabul eder. `enerjione.local` icin etmez.
+    #
+    # Semayi X-Forwarded-Proto'dan okuyoruz: TLS disarida (host nginx/Caddy)
+    # sonlandirildiginda istek backend'e duz HTTP gelir ama bu baslik "https"
+    # tasir. Boylece HTTPS kurulumda `Secure` KORUNUR, TLS'siz LAN cihazinda
+    # cerez calisir. Basligi frontend nginx'i uretiyor; ust katmanin degerini
+    # ezmemesi icin oradaki `$e1_forwarded_proto` map'i eklendi.
+    https_uzerinden = _istek_https_mi(request)
     # samesite: "strict" cok kati — interval/polling/iframe gibi
     # subresource fetch'lerinde tarayici bazen cookie'yi gondermiyor
     # (Chrome/Firefox guvenlik politikalari). "lax" cookie standart
@@ -203,7 +246,7 @@ def login(
         value=access_token,
         max_age=ttl_sec,
         httponly=True,
-        secure=is_prod,
+        secure=https_uzerinden,
         samesite="lax",
         path="/",
     )

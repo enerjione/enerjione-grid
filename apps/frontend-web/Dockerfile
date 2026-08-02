@@ -38,4 +38,19 @@ USER nginx
 
 EXPOSE 8080
 
+# Saglik kontrolu — tum servisler icinde HEALTHCHECK'i olmayan TEK servis
+# burasiydi. Kullanicinin gordugu tek yuz bu: nginx ayakta ama SPA servis
+# edilmiyorsa (bozuk config, eksik dist, izin hatasi) disaridan "container
+# calisiyor" gorunur ve arizanin nerede oldugu anlasilmaz.
+#
+# `--spider` govdeyi indirmez, yalnizca durum kodunu alir. BusyBox wget
+# alpine imajinda hazir gelir; ek paket kurulmuyor.
+#
+# DURUST SINIR: Docker unhealthy bir container'i YENIDEN BASLATMAZ, yalnizca
+# isaretler. Buradaki deger gorunurluk: `docker ps` ve kurulum betiginin
+# saglik beklemesi arizayi gorur. nginx cokerse zaten surec biter ve
+# `restart: unless-stopped` devreye girer.
+HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q --spider http://127.0.0.1:8080/ || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]

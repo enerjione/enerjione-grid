@@ -26,6 +26,8 @@ from uuid import uuid4
 
 import nats
 
+from . import watchdog
+
 # Yapilandirilabilir logging — eski `print()` cagrilari structured log'a
 # tasindi. LOG_LEVEL env ile kontrol (INFO/WARNING/ERROR/DEBUG).
 logging.basicConfig(
@@ -75,10 +77,18 @@ def _nats_tls_context():
 class _HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
-            self.send_response(200)
+            # ONCEDEN SABIT 200 DONUYORDU. Saglik sunucusu AYRI bir iplikte
+            # oldugu icin ana dongu kilitlense de 200 doner ve container
+            # "saglikli" gorunurdu — yani tam da yakalamasi gereken arizayi
+            # yakalamiyordu. Artik son kalp atisina bakiyor.
+            iyi = watchdog.saglikli()
+            self.send_response(200 if iyi else 503)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
-            self.wfile.write(b'{"status":"ok","service":"tag-engine"}')
+            self.wfile.write(
+                b'{"status":"ok","service":"tag-engine"}' if iyi
+                else b'{"status":"stalled","service":"tag-engine"}'
+            )
             return
         self.send_response(404)
         self.end_headers()
@@ -142,6 +152,9 @@ def _install_signal_handlers() -> None:
 
 
 async def _run() -> None:
+    # Kalp atisi gorevi: olay dongusu yasadigi surece atar. Bekci bunun
+    # gecikmesine bakip asili kalan sureci sonlandirir.
+    asyncio.create_task(_kalp_dongusu())
     backoff = 2
     while not _stop_event.is_set():
         nc = None
@@ -275,7 +288,25 @@ async def _run() -> None:
                     pass
 
 
+async def _kalp_dongusu() -> None:
+    """Olay dongusu yasadigi surece atis yapar.
+
+    ATIS NEYE BAGLI: "mesaj isledim"e DEGIL, "olay dongum hala planlaniyor"a.
+    Mesaja baglasaydik, telemetri gelmeyen sakin bir gecede saglikli servis
+    oldurulurdu. Bu haliyle yakalanan sey gercek kilitlenme: olay dongusunu
+    bloke eden senkron bir cagri (donmeyen bir DB/soket islemi gibi) atisi da
+    durdurur ve bekci devreye girer.
+    """
+    while True:
+        await asyncio.sleep(5)
+        watchdog.kalp_at()
+
+
 def main() -> None:
+    # Esik 60 sn: atis 5 sn'de bir, yani 12 kacirilmis atis. Yeniden baglanma
+    # backoff'u (en fazla 60 sn) sirasinda bile olay dongusu calistigi icin
+    # atis surer; esik o yola gore genis tutuldu.
+    watchdog.baslat(60.0, servis="tag-engine")
     _start_health_server()
     _install_signal_handlers()
     logger.info("tag-engine-starting")
