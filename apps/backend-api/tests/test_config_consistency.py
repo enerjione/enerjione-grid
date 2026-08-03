@@ -138,6 +138,10 @@ RETENTION_FIELDS = [
     ("system_events_max_rows", "SYSTEM_EVENTS_MAX_ROWS"),
     ("retention_delete_batch", "RETENTION_DELETE_BATCH"),
     ("retention_max_batches_per_run", "RETENTION_MAX_BATCHES_PER_RUN"),
+    ("outbox_published_retention_minutes", "OUTBOX_PUBLISHED_RETENTION_MINUTES"),
+    ("outbox_purge_interval_sec", "OUTBOX_PURGE_INTERVAL_SEC"),
+    ("outbox_dead_letter_retain_days", "OUTBOX_DEAD_LETTER_RETAIN_DAYS"),
+    ("outbox_max_publish_attempts", "OUTBOX_MAX_PUBLISH_ATTEMPTS"),
     ("disk_guard_reserve_percent", "DISK_GUARD_RESERVE_PERCENT"),
     ("disk_guard_reserve_min_gb", "DISK_GUARD_RESERVE_MIN_GB"),
     ("disk_guard_interval_sec", "DISK_GUARD_INTERVAL_SEC"),
@@ -187,6 +191,46 @@ def test_processed_messages_window_exceeds_redelivery_window():
     assert window_sec > 60 * max_deliver, (
         f"processed_messages penceresi ({window_sec}sn) redelivery penceresinden "
         f"({60 * max_deliver}sn) kisa — duplicate riski."
+    )
+
+
+def test_outbox_dead_letter_daha_UZUN_tutuluyor():
+    """Dead-letter satir, yayinlanmis satirla AYNI KEFEYE konmamali.
+
+    Yayinlanmis satirin penceresi (15 dk) yalnizca tekrar-yayin korumasidir.
+    Dead-letter satir ise hata ayiklama KANITIDIR: "SCADA'ya su olay neden
+    gitmedi" sorusunun tek cevabi `last_error` sutunudur. Ayni pencereye
+    baglanirsa kanit, operator sorunu fark etmeden 15 dakikada silinir.
+    """
+    yayinlanmis_dk = _settings_default("outbox_published_retention_minutes")
+    dead_letter_dk = _settings_default("outbox_dead_letter_retain_days") * 24 * 60
+    assert dead_letter_dk > yayinlanmis_dk, (
+        f"dead-letter penceresi ({dead_letter_dk} dk) yayinlanmis satir "
+        f"penceresinden ({yayinlanmis_dk} dk) uzun DEGIL — teshis kaniti kayboluyor"
+    )
+
+
+def test_outbox_purge_KAPASITESI_uretim_hizinin_USTUNDE():
+    """Sahada patlayan kusur BUYDU: silme hizi < uretim hizi.
+
+    Olcum (2026-08-03, 100 cihaz): outbox uretimi ~1.074 satir/sn. Eski tavan
+    OUTBOX_PURGE_BATCH(10.000) / OUTBOX_PURGE_INTERVAL_SEC(10sn) = 1.000
+    satir/sn idi — uretimin ALTINDA. Sonuc: 15 dakikalik pencere ayarli
+    oldugu halde en eski satir 36 dakikalik ve tablo monoton buyuyor.
+
+    Yeni tavan = batch x tur_tavani / periyot. Olculen uretimin en az 5 kati
+    olmali ki yuk dalgalanmasi kuyrugu kalici birikmeye cevirmesin.
+    """
+    olculen_uretim_satir_sn = 1074
+    tavan = (
+        _settings_default("retention_delete_batch")
+        * _settings_default("retention_max_batches_per_run")
+        / _settings_default("outbox_purge_interval_sec")
+    )
+    assert tavan >= olculen_uretim_satir_sn * 5, (
+        f"outbox purge tavani {tavan:.0f} satir/sn — olculen uretimin "
+        f"({olculen_uretim_satir_sn} satir/sn) 5 katinin altinda; tablo "
+        "kararli duruma gelmez"
     )
 
 

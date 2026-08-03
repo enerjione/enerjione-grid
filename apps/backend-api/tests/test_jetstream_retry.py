@@ -16,7 +16,8 @@ icinde saglikli hale gelse bile telemetri BIR DAHA HIC yayinlanmaz:
   * outbox_flush_worker her turda RuntimeError alir,
   * cihazlar arayuzde "Kesik" gorunur,
   * `outbox_events` published=False satirlarla SINIRSIZ buyur
-    (purge_published_outbox yalnizca yayinlanmislari siler).
+    (retention yalnizca yayinlanmislari ve dead-letter'i siler; dead-letter
+    damgasi da SISTEMIK arizada vurulmaz — kesinti veri kaybina cevrilmez).
 
 /health 503 doner ama compose'da autoheal yok ve `restart: unless-stopped`
 healthcheck'e TEPKI VERMEZ. Basinda kimse olmayan bir saha cihazi aylarca veri

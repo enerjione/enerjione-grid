@@ -145,10 +145,26 @@ class Settings(BaseSettings):
     # Konkre: e1.telemetry.raw.GW-001, e1.telemetry.normalized.GW-001
     nats_subject_telemetry_raw: str = "e1.telemetry.raw.>"
     nats_subject_telemetry_normalized: str = "e1.telemetry.normalized.>"
-    # Stream retention (gun) — JetStream WAL'in disk'te kalma suresi. 7 gun raw,
-    # 30 gun normalized: backfill/replay icin yeterli, disk dolusunu sinirlar.
-    nats_stream_raw_max_age_days: int = 7
-    nats_stream_normalized_max_age_days: int = 30
+    # Stream retention (gun) — JetStream WAL'in disk'te kalma suresi.
+    #
+    # HANGI SINIR NE ZAMAN ISLER (ikisi de gerekli, biri digerinin yerine
+    # gecmez):
+    #   * YUKLU sahada `max_bytes` baskindir. Olcum (100 cihaz, 1.135 msg/sn,
+    #     ~600 bayt/mesaj): ~2,45 GB/saat. Yani raw tavani saatler icinde
+    #     dolar, `max_age` gunlere HIC ULASILMAZ.
+    #   * KUCUK sahada (5-10 cihaz) tam tersi: hiz o kadar dusuk ki bayt
+    #     tavani asla carpmaz ve stream, ACK'lenmis mesajlari da tutmaya
+    #     devam eder — cunku retention=LIMITS (bkz. jetstream_bus.py).
+    #     Yani raw stream bir ingest TAMPONU degil ARSIV gibi davranir.
+    #     Kalicilik zaten telemetry_history'de; JetStream'de ikinci bir kopya
+    #     tutmanin degeri yok, maliyeti disk.
+    #
+    # 7 -> 2 gun (raw) ve 30 -> 7 gun (normalized) BU IKINCI DURUM icindir ve
+    # yuklu sahada TEK BIR MESAJ dusurmez (bayt tavani saatler icinde zaten
+    # carpiyor). Kaybedilen sey yalnizca sudur: tuketicisi 2 gunden uzun sure
+    # ayakta olmayan KUCUK bir sahada replay penceresi kisalir.
+    nats_stream_raw_max_age_days: int = 2
+    nats_stream_normalized_max_age_days: int = 7
     # DLQ (dead-letter queue): worker max_deliver'a takilan "poison" mesajlari
     # buraya tasinir. Sessizce kaybolmaz; operator JetStream UI'dan veya `nats
     # stream view TELEMETRY_DLQ` ile inceler, root-cause sonra replay eder.
@@ -156,6 +172,10 @@ class Settings(BaseSettings):
     # publish eden worker'in hangisi oldugunu gosterir.
     nats_stream_telemetry_dlq: str = "TELEMETRY_DLQ"
     nats_subject_telemetry_dlq: str = "e1.dlq.>"
+    # DLQ yas siniri BILEREK 30 gunde birakildi. Bu stream bir veri akisi
+    # degil KANIT deposudur ve normal sartlarda neredeyse bostur; kisaltmanin
+    # disk kazanci sifira yakin, maliyeti ise "SCADA'ya su olay neden gitmedi"
+    # sorusunun cevabini operator sormadan silmek olurdu.
     nats_stream_dlq_max_age_days: int = 30
     # Worker max_deliver — bir mesaj kac kez nack'lendikten sonra DLQ'ya
     # tasinir. 10 makul: gecici DB hatasi/lock contention 10 retry'da gecer;
@@ -208,28 +228,50 @@ class Settings(BaseSettings):
     # 600 cihaz x 20 aktif sinyal / 10 sn = ~1.200 deger/sn = 103,68M
     # satir/gun, yani DORT KAT fazla. Gercek tampon sureleri:
     #
-    #   raw         8 GiB  -> ~3,5 saat
+    #   raw         6 GiB  -> ~2,5 saat
     #   normalized  3 GiB  -> ~1,3 saat
     #
-    # Bu, tavanlarin YANLIS oldugu anlamina gelmez — 8 GiB disk butcesi
+    # Bu, tavanlarin YANLIS oldugu anlamina gelmez — 6 GiB disk butcesi
     # icinde makul bir paydir. Ama "19 saatlik kesintiyi tolere ederiz"
-    # varsayimiyla planlama yapmak YANLISTIR: 4 saati asan bir backend
+    # varsayimiyla planlama yapmak YANLISTIR: 3 saati asan bir backend
     # kesintisinde en eski telemetri KAYBOLUR.
     #
-    # Degerleri buyutmeden once diske bakin: toplam 12 GiB ve saha cihazinin
-    # butcesi `docs/` altinda tanimli. Tampon suresi tavan/hiz oranidir;
-    # tek carpan disk degil, olcek de degistiginde bu yorum GUNCELLENMELI.
-    # `tests/test_capacity_assumptions.py` hesabi kaynaktan dogruluyor.
+    # BU TAVANLARI DUSURMEK NEDEN TEHLIKELI (okumadan degistirmeyin)
+    # -------------------------------------------------------------
+    # discard=OLD ile tavan bir "budama esigi"dir ve budama TUKETICININ
+    # NEREDE OLDUGUNA BAKMAZ: stream'in kuyrugundan siler, ack durumundan
+    # bagimsiz. Yani tavan, tuketicinin GERI KALABILECEGI mesafedir.
     #
-    # Toplam: 8 + 3 + 1 = 12 GiB. nats-server.conf `max_file_store` bunun
+    # Olcum (100 cihaz): gateway 1.135 msg/sn basiyor, backend 480 msg/sn
+    # isliyor -> saniyede 655 mesaj (~393 KB/sn, ~1,4 GB/saat) BIRIKIYOR.
+    # Olcum aninda JetStream deposu 5,6 GB idi ve bunun bir kismi HENUZ
+    # ISLENMEMIS telemetridir. Tavani 5,6 GB'in ALTINA cekmek, backend'in
+    # ilk yeniden baslamasinda (jetstream_bus drift yolu update_stream
+    # cagirir) o mesajlari SESSIZCE siler.
+    #
+    # Bu yuzden:
+    #   * raw 8 -> 6 GiB: 6 GiB (6,44 GB) olculen TUM deponun (5,6 GB)
+    #     USTUNDE. Yani bu degisiklik uygulandiginda tek bir mesaj bile
+    #     dusmez; sadece EN KOTU DURUM ayak izi 8 -> 6 GiB'a iner.
+    #   * normalized (3 GiB) ve dlq (1 GiB) BILEREK DEGISTIRILMEDI. Bu iki
+    #     stream'in o andaki AYRI AYRI boyutu olculmedi; yalnizca toplam
+    #     biliniyor. Olculmemis bir tavani dusurmek, "belki zaten altindadir"
+    #     bahsine veri kaybi karsiliginda girmektir.
+    #
+    # Tavanlari daha da dusurmek icin ON KOSUL: tuketici HTTP surecinden
+    # ayrilip birikimin eridigi DOGRULANMALI (bkz. system_status pipeline
+    # ucu). Birikim varken tavan dusurmek, hizli olmayan sistemi hizli
+    # gostermek icin veriyi atmaktir.
+    #
+    # Toplam: 6 + 3 + 1 = 10 GiB. nats-server.conf `max_file_store` bunun
     # UZERINDE kalmali (aksi halde hesap tavani once dolar ve sert red geri
     # gelir).
     # Degerler BAYT cinsinden ve LITERAL yazilir (ifade degil): hem
     # tests/test_config_consistency.py bunlari kaynaktan okuyup .env.example /
     # docker-compose.yml ile karsilastirabilsin, hem de operator neye baktigini
     # tereddutsuz gorsun.
-    # 8 GiB — hedef olcekte (~1.200 deger/sn) yaklasik 3,5 SAAT tampon.
-    nats_stream_raw_max_bytes: int = 8_589_934_592
+    # 6 GiB — hedef olcekte (~1.200 deger/sn) yaklasik 2,5 SAAT tampon.
+    nats_stream_raw_max_bytes: int = 6_442_450_944
     # 3 GiB — hedef olcekte yaklasik 1,3 saat.
     nats_stream_normalized_max_bytes: int = 3_221_225_472
     nats_stream_dlq_max_bytes: int = 1_073_741_824         # 1 GiB
@@ -349,6 +391,43 @@ class Settings(BaseSettings):
     # tavan x batch >> periyottaki uretim).
     retention_max_batches_per_run: int = 50
 
+    # `outbox_events` — broker'a yayin kuyrugu. SAHADA OLCULDU (2026-08-03,
+    # 100 cihaz / 176 sinyal): tablo 1.7 GB / 2.32M satirdi ve EN ESKI SATIR
+    # 36 DAKIKALIKTI — ayarli pencere 15 dakika oldugu halde.
+    #
+    # SEBEP ARITMETIK: purge tavani OUTBOX_PURGE_BATCH(10.000) /
+    # OUTBOX_PURGE_INTERVAL_SEC(10sn) = 1.000 satir/sn idi; uretim ise ~1.074
+    # satir/sn. Silme hizi uretimin ALTINDA kalinca tablo hicbir zaman kararli
+    # duruma gelmez, monoton buyur. Artik purge RetentionWorker'da kosuyor ve
+    # tavani retention_delete_batch x retention_max_batches_per_run =
+    # 1.000.000 satir/tur; 60sn periyotla ~16.600 satir/sn, uretimin ~15 kati.
+    #
+    # NEDEN 15 DAKIKA (deger olculmus, tahmin degil): `dedup_key` UNIQUE +
+    # ON CONFLICT DO NOTHING oldugu icin satir durdugu surece ayni message_id
+    # tekrar kuyruga girmez; yani pencere = tekrar-yayin koruma penceresi.
+    # Gercek yeniden teslim penceresi ack_wait(60sn) x max_deliver = 10 dakika,
+    # 15 dakika ona %50 pay birakir. Tek koruma bu da degil: tuketici tarafinda
+    # bagimsiz `processed_messages` defteri var. Yani pencereyi kisaltmanin
+    # bedeli CIFT KAYIT DEGIL, bosa giden bir yayin.
+    #
+    # ALT SINIR KODDA ZORLANIYOR (telemetry_retention.purge_outbox_events):
+    # redelivery penceresinin altina inilemez.
+    #
+    # published=False satira ASLA dokunulmaz — teslim edilmemis olay, sure ne
+    # olursa olsun kaybolmaz.
+    outbox_published_retention_minutes: int = 15
+    outbox_purge_interval_sec: int = 60
+    # DEAD-LETTER: yayini kalici olarak basarisiz olan satirlar. Bunlar
+    # yayinlanmis satirlarla AYNI KEFEYE KONMAZ — 15 dakikalik pencere onlari
+    # hata ayiklama sansi dogmadan siler. 14 gun: operatorun "SCADA'ya su olay
+    # neden gitmedi" sorusunu geriye donuk cevaplayabilecegi ufuk.
+    outbox_dead_letter_retain_days: int = 14
+    # Kac basarisiz denemeden sonra satir dead-letter'a dusurulur. Dead-letter
+    # olmadan TEK zehirli satir tum kuyrugu kalici olarak tikiyordu
+    # (head-of-line block) ve published=False hic silinmedigi icin tablo
+    # sinirsiz buyuyordu.
+    outbox_max_publish_attempts: int = 5
+
     # ----- DISK GUARD: son emniyet subabi ----------------------------------
     # Yukaridaki TTL'ler ve NATS/yedek/harita tavanlari "normalde dolmaz"
     # garantisi verir. Disk guard ise "tavanlardan biri YANLIS hesaplanmis
@@ -432,6 +511,18 @@ class Settings(BaseSettings):
     # telemetri tuketicisi, retention, alarm mutabakati ve yedekleme SESSIZCE
     # dururdu — ve hicbir hata gorunmezdi.
     service_role: str = "all"
+    # Arka plan surecinin IC ag adresi. Yalnizca `api` rolunde kullanilir.
+    #
+    # NEDEN GEREKLI: telemetri tuketicisinin sayaclari (islenmis mesaj/sn,
+    # backlog) SUREC ICIDIR. Tuketici ayri container'a alindiginda
+    # `/system-status/telemetry-pipeline` API surecinde kalici olarak
+    # "critical" ve backlog=None gosterirdi — yani ayirmanin bedeli,
+    # ayirmanin ise yarayip yaramadigini olcen TEK gostergeyi kaybetmek
+    # olurdu. API bu adresten gercek sayaclari sorar.
+    #
+    # `all` rolunde (tek container) HIC KULLANILMAZ; sayaclar zaten yerelde.
+    backend_worker_host: str = "backend-worker"
+    backend_worker_port: int = 8000
     service_name: str = "backend-api"
     worker_health_host: str = "127.0.0.1"
     worker_health_port: int = 0

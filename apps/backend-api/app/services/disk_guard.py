@@ -66,6 +66,10 @@ LEVEL_EMERGENCY = "emergency"
 # Normal degerlerin yerine gecmez; yalnizca o tetikte uygulanir.
 _AGGRESSIVE_PROCESSED_HOURS = 6
 _AGGRESSIVE_TELEMETRY_MINUTES = 10
+# Outbox'ta zaten kisa (15 dk) olan pencereyi daha da kisaltmanin anlami yok:
+# taban REDELIVERY_WINDOW_SEC (10 dk) ve altina inilemiyor. Buradaki kazanc
+# sureyi kisaltmaktan degil, periyodu (60sn) BEKLEMEDEN kosturmaktan geliyor.
+_AGGRESSIVE_OUTBOX_MINUTES = 15
 
 
 @dataclass
@@ -183,22 +187,16 @@ def _relieve_aggressive() -> list[str]:
     except Exception:  # noqa: BLE001
         logger.exception("disk_guard_telemetry_purge_failed")
 
-    # Yayinlanmis outbox satirlari — tamamen yeniden uretilemez degil, zaten
-    # yayinlanmis kayitlar; published=False'a ASLA dokunulmaz.
+    # Yayinlanmis outbox satirlari — zaten teslim edilmis kayitlar;
+    # published=False'a ASLA dokunulmaz.
+    #
+    # DEAD-LETTER'A DA DOKUNULMAZ: `dead_letter_days` GECILMIYOR, yani o
+    # satirlar kendi 14 gunluk penceresinde kalir. Onlar hata ayiklama
+    # KANITIDIR ("SCADA'ya su olay neden gitmedi"); disk baskisi bir kaniti
+    # yok etme gerekcesi olamaz (bkz. "NELERE ASLA DOKUNULMAZ").
     try:
-        from datetime import datetime, timedelta, timezone
-
-        from app.db.session import SessionLocal
-        from app.services.outbox_service import purge_published_outbox
-
-        db = SessionLocal()
-        try:
-            n = purge_published_outbox(
-                db, before=datetime.now(timezone.utc) - timedelta(hours=1), limit=50_000
-            )
-            done.append(f"outbox_published: {n}")
-        finally:
-            db.close()
+        n = worker.purge_outbox_events(retention_minutes=_AGGRESSIVE_OUTBOX_MINUTES)
+        done.append(f"outbox_published<-{_AGGRESSIVE_OUTBOX_MINUTES}dk: {n}")
     except Exception:  # noqa: BLE001
         logger.exception("disk_guard_outbox_purge_failed")
 

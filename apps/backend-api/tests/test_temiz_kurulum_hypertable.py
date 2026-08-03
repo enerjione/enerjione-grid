@@ -177,19 +177,68 @@ def test_hypertable_kurulamazsa_politika_denenmez() -> None:
     assert "add_retention_policy" not in bind._yazilanlar()
 
 
-def test_kurulum_akisi_depolama_kurulumunu_cagirir() -> None:
+def test_kurulum_akisi_depolama_kurulumunu_cagirir(monkeypatch) -> None:
     """`migrate_db` bu adimi GERCEKTEN cagirmali.
 
     Modul dogru olsa bile kurulum akisi onu cagirmiyorsa sahada hicbir sey
     degismez — arizanin tam olarak bu bicimi yasandi.
+
+    KAYNAK METNI DEGIL DAVRANIS olculuyor. Bu test eskiden
+    `inspect.getsource(migrate)` icinde string ariyordu; govde bir yardimci
+    fonksiyona tasinir tasinmaz davranis DOGRUYKEN kirmizi oldu — ve cagri
+    gercekten silinseydi de ayni sekilde kirmizi olacakti. Yani iki durumu
+    birbirinden ayirt edemiyordu. Artik `migrate()` gercekten kosturuluyor.
     """
-    import inspect as _inspect
+    from app.db import timescale_setup
+    from scripts import migrate_db as md
 
-    from scripts import migrate_db
+    sira: list[str] = []
 
-    kaynak = _inspect.getsource(migrate_db.migrate)
-    assert "ensure_historian_storage" in kaynak, (
-        "migrate_db depolama kurulumunu cagirmiyor"
+    class _SahteDialect:
+        # Advisory lock yolunun disinda kal: burada olculen sey kilit degil,
+        # depolama kurulumunun CAGRILMASI.
+        name = "sqlite"
+
+    class _SahteBind:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    class _SahteEngine:
+        dialect = _SahteDialect()
+
+        def begin(self):
+            return _SahteBind()
+
+    class _SahteInspector:
+        def has_table(self, _ad):
+            return False  # TEMIZ KURULUM dali
+
+    class _SahteCommand:
+        @staticmethod
+        def stamp(*_a, **_kw):
+            sira.append("stamp")
+
+        @staticmethod
+        def upgrade(*_a, **_kw):  # pragma: no cover — temiz kurulumda cagrilmaz
+            sira.append("upgrade")
+
+    monkeypatch.setattr(md, "engine", _SahteEngine())
+    monkeypatch.setattr(md, "inspect", lambda _e: _SahteInspector())
+    monkeypatch.setattr(md, "command", _SahteCommand)
+    monkeypatch.setattr(
+        md.Base.metadata, "create_all", lambda **_kw: sira.append("create_all")
     )
+    monkeypatch.setattr(
+        timescale_setup,
+        "ensure_historian_storage",
+        lambda _bind: (sira.append("historian"), {"actions": [], "skipped": None})[1],
+    )
+
+    md.migrate()
+
+    assert "historian" in sira, "migrate_db depolama kurulumunu cagirmiyor"
     # Sema kurulduktan SONRA cagrilmali; once cagrilirsa tablo henuz yok.
-    assert kaynak.index("create_all") < kaynak.index("ensure_historian_storage")
+    assert sira.index("create_all") < sira.index("historian")

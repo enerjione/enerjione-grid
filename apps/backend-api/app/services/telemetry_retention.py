@@ -1,12 +1,15 @@
 """Retention worker — sinirsiz buyuyen tablolarin zaman/adet bazli temizligi.
 
-Uc tablonun sorumlulugu burada:
+Dort tablonun sorumlulugu burada:
 
   1. `telemetry`          — canli deger, kisa kayan pencere (default 30 dk).
                             Her (cihaz, sinyal) ikilisinin SON degeri MUAF;
                             sure ne olursa olsun canli ekran bosalmaz.
-  2. `processed_messages` — idempotency defteri (default 24 saat).
+  2. `processed_messages` — idempotency defteri (default 2 saat).
   3. `system_events`      — denetim/olay kaydi (default 2 yil + FIFO tavani).
+  4. `outbox_events`      — yayin kuyrugu. Yayinlanmislar 15 dk, DEAD-LETTER
+                            satirlar 14 GUN. `published=False` + damgasiz
+                            satira ASLA dokunulmaz (at-least-once).
 
 NEDEN KRITIK
 ------------
@@ -18,6 +21,15 @@ mesaj basina bir satir tuttugu icin AYNI hizda buyur. Retention olmazsa:
 
 `system_events` daha yavas buyur ama HIC temizlenmiyordu — sonsuza kadar
 birikiyordu. Artik 2 yillik pencere + adet tavani var.
+
+`outbox_events` temizligi ONCEDEN `outbox_flush_worker` icinde, YAYIN
+THREAD'inin kendisinde kosuyordu ve TAVANI URETIMIN ALTINDAYDI:
+OUTBOX_PURGE_BATCH(10.000) / OUTBOX_PURGE_INTERVAL_SEC(10sn) = 1.000 satir/sn,
+uretim ise ~1.074 satir/sn (saha olcumu 2026-08-03). Silme uretime
+yetismedigi icin tablo kararli duruma HIC gelmiyordu: 15 dakikalik pencere
+ayarli oldugu halde en eski satir 36 dakikalikti ve tablo 1.7 GB'a cikmisti.
+Buraya tasindi cunku (a) buradaki tur tavani uretimin ~15 kati kapasite
+verir, (b) yayin thread'i artik yalnizca yayin yapar.
 
 BATCH'LI SILME — NEDEN SART
 ---------------------------
@@ -50,6 +62,7 @@ from sqlalchemy import and_, delete, select, text
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.models.outbox_event import OutboxEvent
 from app.models.processed_message import ProcessedMessage
 
 #: NATS yeniden teslim penceresi: ack_wait(60sn) x nats_worker_max_deliver.
@@ -66,6 +79,15 @@ logger = logging.getLogger(__name__)
 # dusuk (hicbir ornek dosyada yer almiyordu) ama sessizce yok saymak yerine
 # operatoru uyariyoruz.
 _LEGACY_ENV = "PROCESSED_MESSAGES_RETENTION_DAYS"
+
+# Outbox purge `outbox_flush_worker`dan buraya tasinirken settings'e gecti.
+# Bu iki degisken artik OKUNMUYOR; sahada .env'ine yazmis kurulum ayari
+# degistirdigini sanmasin diye acikca uyariyoruz. (Ayni tuzaga
+# PROCESSED_MESSAGES_RETENTION_DAYS ile bir kez dusuldu.)
+_LEGACY_OUTBOX_ENV = {
+    "OUTBOX_PURGE_BATCH": "RETENTION_DELETE_BATCH",
+    "OUTBOX_PUBLISHED_RETENTION_HOURS": "OUTBOX_PUBLISHED_RETENTION_MINUTES",
+}
 
 # FIFO adet tavani YALNIZCA asagidaki gurultu satirlarini dusurebilir.
 #
@@ -92,6 +114,14 @@ def _warn_legacy_env() -> None:
             _LEGACY_ENV,
             settings.processed_messages_retention_hours,
         )
+    for eski, yeni in _LEGACY_OUTBOX_ENV.items():
+        if os.getenv(eski, "").strip():
+            logger.warning(
+                "%s artik KULLANILMIYOR (outbox temizligi retention worker'a "
+                "tasindi). Yerine %s kullanin.",
+                eski,
+                yeni,
+            )
 
 
 def _batch_delete(model, where, *, label: str) -> int:
@@ -158,7 +188,8 @@ class RetentionWorker:
         logger.info(
             "retention_started telemetry_keep_min=%d/%ds "
             "processed_messages_keep_h=%d/%ds "
-            "system_events_keep_d=%d/%ds max_rows=%d batch=%d",
+            "system_events_keep_d=%d/%ds max_rows=%d "
+            "outbox_keep_min=%d/%ds outbox_dead_letter_keep_d=%d batch=%d",
             settings.telemetry_retention_minutes,
             settings.telemetry_retention_interval_sec,
             settings.processed_messages_retention_hours,
@@ -166,6 +197,9 @@ class RetentionWorker:
             settings.system_events_retention_days,
             settings.system_events_interval_sec,
             settings.system_events_max_rows,
+            settings.outbox_published_retention_minutes,
+            settings.outbox_purge_interval_sec,
+            settings.outbox_dead_letter_retain_days,
             settings.retention_delete_batch,
         )
 
@@ -175,17 +209,25 @@ class RetentionWorker:
             self._thread.join(timeout=5)
             self._thread = None
 
-    def _run(self) -> None:
-        # (etiket, periyot_getter, fonksiyon, son_calisma_zamani)
-        jobs: list[list] = [
+    def _jobs(self) -> list[list]:
+        """(etiket, periyot_getter, fonksiyon, son_calisma_zamani).
+
+        Ayri metot: kayitli olmayan bir purge SESSIZCE hic kosmaz ve bu ancak
+        disk dolunca fark edilir. Test bu listeyi dogrudan gorebilsin.
+        """
+        return [
             ["telemetry", lambda: settings.telemetry_retention_interval_sec, self.purge_telemetry, 0.0],
             ["processed_messages", lambda: settings.processed_messages_interval_sec, self.purge_processed_messages, 0.0],
             ["system_events", lambda: settings.system_events_interval_sec, self._purge_system_events, 0.0],
+            ["outbox_events", lambda: settings.outbox_purge_interval_sec, self.purge_outbox_events, 0.0],
             # Disk guard: yukaridaki TTL'lerin hepsi dogru calissa BILE diskin
             # dolmadigini gercek olcumle dogrular; dolmaya yaklasilirsa
             # yeniden uretilebilir veriden baslayarak alan acar.
             ["disk_guard", lambda: settings.disk_guard_interval_sec, self._disk_guard_tick, 0.0],
         ]
+
+    def _run(self) -> None:
+        jobs = self._jobs()
         first_iteration = True
         while not self._stop.is_set():
             now_mono = _monotonic()
@@ -339,6 +381,83 @@ class RetentionWorker:
                 cutoff.isoformat(),
             )
         return removed
+
+    def purge_outbox_events(
+        self,
+        *,
+        retention_minutes: int | None = None,
+        dead_letter_days: int | None = None,
+    ) -> int:
+        """Outbox temizligi: YAYINLANMISLAR kisa, DEAD-LETTER uzun pencerede.
+
+        NELERE DOKUNULMAZ — `published=False` VE `dead_letter_at IS NULL`
+        satirlar. Bunlar hala teslim edilmeyi bekleyen olaylardir; silinmeleri
+        KALICI VERI KAYBI olur (at-least-once garantisi buna dayaniyor).
+
+        IKI AYRI PENCERE, BILINCLI
+        --------------------------
+        Yayinlanmis satir yalnizca tekrar-yayin korumasidir; 15 dakika sonra
+        degeri kalmaz. Dead-letter satir ise HATA AYIKLAMA KANITIDIR —
+        "SCADA'ya su olay neden gitmedi" sorusunun tek cevabi `last_error`
+        sutunudur. Ayni kefeye konsalardi kanit, operator sorunu fark etmeden
+        15 dakika icinde silinirdi.
+
+        `retention_minutes` verilirse yapilandirilmis pencerenin YERINE o
+        kullanilir (disk guard baski altinda kisaltir; kalici ayar degismez).
+        Dead-letter penceresini disk guard KISALTMAZ.
+
+        KAPASITE: `_batch_delete` tur basina retention_delete_batch x
+        retention_max_batches_per_run = 1.000.000 satir siler. 60sn periyotla
+        ~16.600 satir/sn tavan; olculen ~1.074 satir/sn uretime karsi ~15 kat
+        pay. Eski tavan 1.000 satir/sn idi, yani uretimin ALTINDA.
+        """
+        minutes = (
+            retention_minutes
+            if retention_minutes is not None
+            else settings.outbox_published_retention_minutes
+        )
+        # ALT SINIR — ayar degil, GUVENLIK KILIDI. Satir durdugu surece
+        # `dedup_key` UNIQUE + ON CONFLICT DO NOTHING ayni message_id'nin
+        # tekrar kuyruga girmesini engelliyor. Yeniden teslim penceresinin
+        # (ack_wait x max_deliver) altina inilirse bu koruma, mesaj HALA
+        # yeniden teslim edilebilirken kalkar.
+        saniye = max(float(REDELIVERY_WINDOW_SEC), float(minutes) * 60.0)
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=saniye)
+        removed = _batch_delete(
+            OutboxEvent,
+            and_(
+                OutboxEvent.published.is_(True),
+                OutboxEvent.published_at.is_not(None),
+                OutboxEvent.published_at < cutoff,
+            ),
+            label="outbox_published",
+        )
+
+        gun = (
+            dead_letter_days
+            if dead_letter_days is not None
+            else settings.outbox_dead_letter_retain_days
+        )
+        dl_cutoff = datetime.now(timezone.utc) - timedelta(days=gun)
+        dl_removed = _batch_delete(
+            OutboxEvent,
+            and_(
+                OutboxEvent.dead_letter_at.is_not(None),
+                OutboxEvent.dead_letter_at < dl_cutoff,
+            ),
+            label="outbox_dead_letter",
+        )
+
+        if removed or dl_removed:
+            logger.info(
+                "outbox_retention_purged published=%d cutoff=%s "
+                "dead_letter=%d dl_cutoff=%s",
+                removed,
+                cutoff.isoformat(),
+                dl_removed,
+                dl_cutoff.isoformat(),
+            )
+        return removed + dl_removed
 
     def _purge_system_events(self) -> int:
         """Denetim/olay kaydi temizligi: once SURE, sonra ADET tavani (FIFO).

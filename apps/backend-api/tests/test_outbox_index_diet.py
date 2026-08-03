@@ -148,95 +148,33 @@ def test_CONCURRENTLY_kullanilmiyor():
 # Saklama suresi
 # ---------------------------------------------------------------------------
 
-def _temiz_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for ad in ("OUTBOX_PUBLISHED_RETENTION_MINUTES", "OUTBOX_PUBLISHED_RETENTION_HOURS"):
-        monkeypatch.delenv(ad, raising=False)
-
-
-def test_varsayilan_saklama_15_DAKIKA(monkeypatch: pytest.MonkeyPatch):
+def test_varsayilan_saklama_15_DAKIKA():
     """24 saat, olculen oranda milyonlarca satir / GB'larca disk demekti.
 
     15 dakika, gercek yeniden teslim penceresine (10 dk) %50 pay birakir.
+    NOT: ayar 2026-08-03'te `os.getenv`den `settings`e tasindi (purge da
+    retention worker'a gecti); deger ayni kaldi.
     """
-    from app.services import outbox_flush_worker as w
+    from app.core.config import settings
 
-    _temiz_env(monkeypatch)
-    assert w._retention_sec() == 15 * 60, (
+    assert settings.outbox_published_retention_minutes == 15, (
         "varsayilan saklama suresi degismis — disk butcesi bununla carpiliyor"
     )
-
-
-def test_saklama_YENIDEN_TESLIM_penceresinin_altina_INEMEZ(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """Gercek pencere ack_wait(60sn) x max_deliver(10) = 10 dakika.
-
-    Altina inilirse dedup korumasi mesaj HALA yeniden teslim edilebilirken
-    kalkar; bosa giden yayinlar duplicate riskine doner.
-    """
-    from app.services import outbox_flush_worker as w
-
-    _temiz_env(monkeypatch)
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "1")
-    assert w._retention_sec() == w.REDELIVERY_WINDOW_SEC
 
 
 def test_yeniden_teslim_penceresi_AYARLARLA_tutarli():
     """Sabit, config'teki gercek degerlerden turetilmis olmali."""
     from app.core.config import settings
-    from app.services import outbox_flush_worker as w
+    from app.services import telemetry_retention as t
 
-    assert w.REDELIVERY_WINDOW_SEC == 60 * settings.nats_worker_max_deliver, (
+    assert t.REDELIVERY_WINDOW_SEC == 60 * settings.nats_worker_max_deliver, (
         "yeniden teslim penceresi ayarlardan ayrismis"
     )
 
 
-def test_saklama_suresi_env_ile_YUKSELTILEBILIR(monkeypatch: pytest.MonkeyPatch):
-    """Adli inceleme isteyen kurulum kendi disk butcesiyle karar versin."""
-    from app.services import outbox_flush_worker as w
-
-    _temiz_env(monkeypatch)
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "45")
-    assert w._retention_sec() == 45 * 60
-
-
-def test_ESKI_saat_degiskeni_GERIYE_UYUMLU(monkeypatch: pytest.MonkeyPatch):
-    """Sahada .env'ine `..._HOURS` yazmis kurulumlar bozulmasin."""
-    from app.services import outbox_flush_worker as w
-
-    _temiz_env(monkeypatch)
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "2")
-    assert w._retention_sec() == 2 * 3600
-
-
-def test_YENI_degisken_eskisini_EZIYOR(monkeypatch: pytest.MonkeyPatch):
-    from app.services import outbox_flush_worker as w
-
-    _temiz_env(monkeypatch)
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_HOURS", "24")
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "20")
-    assert w._retention_sec() == 20 * 60
-
-
-def test_bozuk_env_degeri_COKERTMEZ(monkeypatch: pytest.MonkeyPatch):
-    from app.services import outbox_flush_worker as w
-
-    _temiz_env(monkeypatch)
-    monkeypatch.setenv("OUTBOX_PUBLISHED_RETENTION_MINUTES", "onbes")
-    assert w._retention_sec() == 15 * 60
-
-
-def test_purge_YAYINLANMAMISLARA_dokunmuyor():
-    """At-least-once'in dayanagi: published=False satir ASLA silinmemeli."""
-    import inspect
-
-    from app.services.outbox_service import purge_published_outbox
-
-    kaynak = inspect.getsource(purge_published_outbox)
-    assert "published.is_(True)" in kaynak, (
-        "purge yalnizca yayinlanmislari hedeflemiyor — teslim edilmemis olay "
-        "silinebilir ve KALICI VERI KAYBI olur"
-    )
+# NOT: "purge yayinlanmamislara dokunmuyor" kontrolu artik KAYNAK GREP'i degil,
+# gercek bir davranis testi:
+# tests/test_retention_worker.py::test_outbox_YAYINLANMAMIS_satira_ASLA_dokunulmuyor
 
 
 # ---------------------------------------------------------------------------
@@ -275,15 +213,21 @@ def test_model_yuklemi_IS_bicimini_kullaniyor():
 
 
 def test_flush_sorgusu_AYNI_bicimi_kullaniyor():
-    """Sorgu tarafi `== False`e cevrilirse indeks yine devre disi kalir."""
-    import inspect
+    """Sorgu tarafi `== False`e cevrilirse indeks yine devre disi kalir.
 
-    from app.services.outbox_service import flush_outbox
+    KAYNAK GREP'i DEGIL, URETILEN SQL: eskiden bu test flush_outbox'in kaynak
+    metninde `published.is_(False)` ariyordu — sorgu baska bir fonksiyona
+    tasindiginda ya da yuklem calisma zamaninda kurulduğunda sessizce yesil
+    kalirdi. Artik PostgreSQL icin derlenen gercek ifadeye bakiyor.
+    """
+    from sqlalchemy.dialects import postgresql
 
-    kaynak = inspect.getsource(flush_outbox)
-    assert "published.is_(False)" in kaynak, (
-        "flush sorgusu `published.is_(False)` kullanmiyor — kismi indeksin "
-        "yuklemiyle eslesmezse indeks kullanilmaz"
+    from app.services.outbox_service import pending_outbox_stmt
+
+    sql = str(pending_outbox_stmt(200).compile(dialect=postgresql.dialect())).lower()
+    assert "published is false" in sql, (
+        f"flush sorgusu `published IS false` bicimini uretmiyor: {sql!r} — kismi "
+        "indeksin yuklemiyle eslesmezse indeks kullanilmaz"
     )
 
 
@@ -319,12 +263,20 @@ def test_migration_DDL_i_model_ile_AYNI():
 # docstring'inde "Konfigurasyon (env)" basligi altinda belgeliydi).
 # ---------------------------------------------------------------------------
 
+# `os.getenv` + try/except ile okunan, dolayisiyla compose'da BOS
+# gecilebilen ayarlar. Saklama/temizlik ailesi 2026-08-03'te `settings`e
+# (pydantic int) tasindi ve artik bos gecilemez — onlarin senkronu
+# test_config_consistency.RETENTION_FIELDS tarafindan kilitleniyor.
 OUTBOX_ENV = [
     "OUTBOX_FLUSH_INTERVAL_SEC",
     "OUTBOX_FLUSH_BATCH",
-    "OUTBOX_PUBLISHED_RETENTION_MINUTES",
+]
+
+#: settings'e tasinan ama compose'dan HALA gecirilen eski degiskenler.
+#: Gecirilmelerinin TEK sebebi acilisidaki uyari logu: sahada .env'ine
+#: bunlari yazmis operator, ayari degistirdigini sanmasin.
+OUTBOX_LEGACY_ENV = [
     "OUTBOX_PUBLISHED_RETENTION_HOURS",
-    "OUTBOX_PURGE_INTERVAL_SEC",
     "OUTBOX_PURGE_BATCH",
 ]
 
@@ -356,15 +308,10 @@ def test_BOS_env_degeri_kod_varsayilanina_duser(ad: str, monkeypatch: pytest.Mon
     eklemek ayari duzeltmek yerine BOZAR."""
     from app.services import outbox_flush_worker as w
 
-    okuyucu = {
+    fn, beklenen = {
         "OUTBOX_FLUSH_INTERVAL_SEC": (w._interval_sec, 0.3),
         "OUTBOX_FLUSH_BATCH": (w._batch, 200),
-        "OUTBOX_PUBLISHED_RETENTION_MINUTES": (w._retention_sec, 15 * 60),
-        "OUTBOX_PUBLISHED_RETENTION_HOURS": (w._retention_sec, 15 * 60),
-        "OUTBOX_PURGE_INTERVAL_SEC": (w._purge_interval_sec, 10.0),
-        "OUTBOX_PURGE_BATCH": (w._purge_batch, 10_000),
     }[ad]
-    fn, beklenen = okuyucu
 
     monkeypatch.setenv(ad, "")
     assert fn() == beklenen, f"{ad} bos degerde varsayilanina dusmuyor"
@@ -373,10 +320,40 @@ def test_BOS_env_degeri_kod_varsayilanina_duser(ad: str, monkeypatch: pytest.Mon
 def test_compose_OUTBOX_icin_ikinci_varsayilan_tanimlamiyor():
     """Tek dogru kaynak kod olmali. compose `${VAR:-24}` yazarsa iki ayri
     varsayilan olur ve biri degisince digeri unutulur — bu depoda
-    ACCESS_TOKEN_MINUTES tam boyle dort farkli degere ayrismisti."""
+    ACCESS_TOKEN_MINUTES tam boyle dort farkli degere ayrismisti.
+
+    Bu kural YALNIZCA `os.getenv` ile okunan ayarlar icin gecerli. `settings`e
+    tasinan ailede compose'un GERCEK varsayilan tasimasi ZORUNLU: bos string
+    pydantic `int` dogrulamasinda patlar ve backend HIC baslamaz.
+    """
     env = _compose_backend_env()
-    for ad in OUTBOX_ENV:
+    for ad in OUTBOX_ENV + OUTBOX_LEGACY_ENV:
         deger = str(env.get(ad, ""))
         assert deger.endswith(":-}") or deger == "", (
             f"{ad} compose'da ikinci bir varsayilan tanimliyor: {deger!r}"
         )
+
+
+@pytest.mark.parametrize("ad", OUTBOX_LEGACY_ENV)
+def test_ARTIK_OKUNMAYAN_ayar_compose_dan_gecmeye_devam_ediyor(ad: str):
+    """Sessiz etkisizlik, bu depoda tekrarlanan bir tuzak.
+
+    Bu iki degisken artik OKUNMUYOR. Sahada .env'ine yazmis bir kurulum
+    ayari degistirdigini sanmasin diye backend acilista uyari logluyor
+    (telemetry_retention._warn_legacy_env) — ama uyari ancak degisken
+    container'a ULASIRSA calisir.
+    """
+    assert ad in _compose_backend_env(), (
+        f"{ad} compose'dan cikarilmis — sahadaki eski .env sessizce yok "
+        "sayilir, operator uyari GORMEZ"
+    )
+
+
+@pytest.mark.parametrize("ad", OUTBOX_LEGACY_ENV)
+def test_ARTIK_OKUNMAYAN_ayar_icin_UYARI_var(ad: str):
+    """Uyarinin kendisi de gercekten kayitli olmali."""
+    from app.services import telemetry_retention as t
+
+    assert ad in t._LEGACY_OUTBOX_ENV, (
+        f"{ad} icin eski-ayar uyarisi tanimli degil"
+    )

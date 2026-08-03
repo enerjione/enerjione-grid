@@ -26,6 +26,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.db.base import Base
+from app.models.outbox_event import OutboxEvent
 from app.models.processed_message import ProcessedMessage
 from app.models.system_event import SystemEvent
 from app.services import telemetry_retention
@@ -49,7 +50,11 @@ def session_factory(monkeypatch):
     )
     Base.metadata.create_all(
         engine,
-        tables=[ProcessedMessage.__table__, SystemEvent.__table__],
+        tables=[
+            ProcessedMessage.__table__,
+            SystemEvent.__table__,
+            OutboxEvent.__table__,
+        ],
     )
     factory = sessionmaker(bind=engine, autoflush=False, future=True)
     monkeypatch.setattr(telemetry_retention, "SessionLocal", factory)
@@ -288,6 +293,224 @@ def test_fifo_cap_disabled_when_zero(session_factory, monkeypatch):
 
     assert removed == 0
     assert _count(session_factory, SystemEvent) == 50
+
+
+# ---------------------------------------------------------------------------
+# outbox_events — SAHADA PATLAYAN KUSUR
+#
+# Olcum (2026-08-03, 100 cihaz): tablo 1.7 GB / 2.32M satir, EN ESKI SATIR 36
+# DAKIKALIK — ayarli pencere 15 dakika oldugu halde. Silme hizi (1.000 satir/sn)
+# uretimin (~1.074 satir/sn) ALTINDAYDI.
+#
+# Buradaki testler UC ayri davranisi ayirir; ucu de yanlis yapilirsa sonuc
+# ya veri kaybi ya sinirsiz buyume olur.
+# ---------------------------------------------------------------------------
+
+def test_outbox_purge_ZAMANLAYICIYA_KAYITLI():
+    """Kayitli olmayan purge SESSIZCE hic kosmaz.
+
+    Sahadaki kusur tam da "temizlik var ama yetismiyor" idi; temizligin
+    baska bir thread'e tasinmasi sirasinda kayit unutulursa sonuc daha
+    kotusu olur: hic kosmaz ve bu ancak disk dolunca fark edilir.
+    """
+    jobs = telemetry_retention.RetentionWorker()._jobs()
+    kayit = {j[0]: j for j in jobs}
+    assert "outbox_events" in kayit, "outbox purge retention worker'a kayitli degil"
+
+    _label, periyot_fn, fn, _last = kayit["outbox_events"]
+    assert fn.__name__ == "purge_outbox_events"
+    assert periyot_fn() == settings.outbox_purge_interval_sec, (
+        "outbox purge periyodu ayardan okunmuyor"
+    )
+
+
+def _seed_outbox(
+    factory,
+    count: int,
+    *,
+    prefix: str,
+    published: bool = True,
+    published_age_min: float = 0.0,
+    dead_letter_age_days: float | None = None,
+) -> None:
+    now = datetime.now(timezone.utc)
+    db = factory()
+    try:
+        for i in range(count):
+            db.add(
+                OutboxEvent(
+                    topic="telemetry.raw_received",
+                    dedup_key=f"{prefix}-{i}",
+                    payload_json="{}",
+                    published=published,
+                    created_at=now,
+                    published_at=(
+                        now - timedelta(minutes=published_age_min) if published else None
+                    ),
+                    dead_letter_at=(
+                        None
+                        if dead_letter_age_days is None
+                        else now - timedelta(days=dead_letter_age_days)
+                    ),
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_outbox_yayinlanmis_ESKI_satirlar_siliniyor(session_factory, monkeypatch):
+    monkeypatch.setattr(settings, "outbox_published_retention_minutes", 15)
+    monkeypatch.setattr(settings, "retention_delete_batch", 1000)
+    monkeypatch.setattr(settings, "retention_max_batches_per_run", 50)
+    _seed_outbox(session_factory, 40, prefix="old", published_age_min=60)
+    _seed_outbox(session_factory, 10, prefix="new", published_age_min=1)
+
+    removed = telemetry_retention.RetentionWorker().purge_outbox_events()
+
+    assert removed == 40
+    assert _count(session_factory, OutboxEvent) == 10
+
+
+def test_outbox_YAYINLANMAMIS_satira_ASLA_dokunulmuyor(session_factory, monkeypatch):
+    """At-least-once'in tek dayanagi.
+
+    Bu satirlar teslim edilmeyi BEKLIYOR. Yaslari ne olursa olsun silinmeleri
+    KALICI VERI KAYBIDIR: SCADA'ya hic gitmemis bir ariza olayi geri gelmez.
+    """
+    monkeypatch.setattr(settings, "outbox_published_retention_minutes", 15)
+    monkeypatch.setattr(settings, "retention_delete_batch", 1000)
+    monkeypatch.setattr(settings, "retention_max_batches_per_run", 50)
+    _seed_outbox(session_factory, 25, prefix="pending", published=False)
+
+    removed = telemetry_retention.RetentionWorker().purge_outbox_events()
+
+    assert removed == 0
+    assert _count(session_factory, OutboxEvent) == 25, (
+        "yayinlanmamis outbox satiri silinmis — teslim edilmemis olay kayboldu"
+    )
+
+
+def test_outbox_DEAD_LETTER_kisa_pencereye_TAKILMIYOR(session_factory, monkeypatch):
+    """Dead-letter satir 15 DAKIKADA degil, kendi (14 gun) penceresinde duser.
+
+    Gerekce: `last_error` sutunu "SCADA'ya su olay neden gitmedi" sorusunun
+    TEK cevabi. Yayinlanmislarla ayni kefeye konursa kanit, operator sorunu
+    fark etmeden silinir.
+    """
+    monkeypatch.setattr(settings, "outbox_published_retention_minutes", 15)
+    monkeypatch.setattr(settings, "outbox_dead_letter_retain_days", 14)
+    monkeypatch.setattr(settings, "retention_delete_batch", 1000)
+    monkeypatch.setattr(settings, "retention_max_batches_per_run", 50)
+    # 1 saat once damgalanmis: yayinlanmis penceresi (15 dk) coktan gecti.
+    _seed_outbox(
+        session_factory, 12, prefix="dl-taze", published=False,
+        dead_letter_age_days=1.0 / 24.0,
+    )
+
+    removed = telemetry_retention.RetentionWorker().purge_outbox_events()
+
+    assert removed == 0
+    assert _count(session_factory, OutboxEvent) == 12, (
+        "dead-letter satir kisa pencereye takilmis — teshis kaniti kayboldu"
+    )
+
+
+def test_outbox_DEAD_LETTER_kendi_penceresi_dolunca_siliniyor(
+    session_factory, monkeypatch
+):
+    """Uzun tutmak = sonsuza kadar tutmak DEGIL; aksi halde bir hata
+    firtinasi tabloyu kalici sisirir."""
+    monkeypatch.setattr(settings, "outbox_published_retention_minutes", 15)
+    monkeypatch.setattr(settings, "outbox_dead_letter_retain_days", 14)
+    monkeypatch.setattr(settings, "retention_delete_batch", 1000)
+    monkeypatch.setattr(settings, "retention_max_batches_per_run", 50)
+    _seed_outbox(
+        session_factory, 7, prefix="dl-eski", published=False, dead_letter_age_days=20
+    )
+    _seed_outbox(
+        session_factory, 5, prefix="dl-yeni", published=False, dead_letter_age_days=2
+    )
+
+    removed = telemetry_retention.RetentionWorker().purge_outbox_events()
+
+    assert removed == 7
+    assert _count(session_factory, OutboxEvent) == 5
+
+
+def test_outbox_silme_PARTI_PARTI_ve_tur_TAVANLI(session_factory, monkeypatch):
+    """Tek DELETE ile milyonlarca satir silmek WAL'i patlatir, tabloyu kilitler.
+
+    batch=10, tavan=3 -> bir tetikte en fazla 30 satir. Kalanlar sonraki
+    tetige kalmali; tavan sessizce "hepsini sildim" yalanini soylememeli.
+    """
+    monkeypatch.setattr(settings, "outbox_published_retention_minutes", 15)
+    monkeypatch.setattr(settings, "retention_delete_batch", 10)
+    monkeypatch.setattr(settings, "retention_max_batches_per_run", 3)
+    _seed_outbox(session_factory, 100, prefix="old", published_age_min=60)
+
+    removed = telemetry_retention.RetentionWorker().purge_outbox_events()
+
+    assert removed == 30
+    assert _count(session_factory, OutboxEvent) == 70
+
+
+def test_outbox_penceresi_YENIDEN_TESLIM_tabani_altina_INEMEZ(
+    session_factory, monkeypatch
+):
+    """Env'e 0 yazan operator (ya da agresif disk_guard) dedup korumasini
+    mesaj HALA yeniden teslim edilebilirken kaldirmamali."""
+    monkeypatch.setattr(settings, "outbox_published_retention_minutes", 0)
+    monkeypatch.setattr(settings, "retention_delete_batch", 1000)
+    monkeypatch.setattr(settings, "retention_max_batches_per_run", 50)
+    taban_dk = telemetry_retention.REDELIVERY_WINDOW_SEC / 60.0
+    # Taban penceresinin ICINDE (yani korunmasi gereken) satirlar.
+    _seed_outbox(
+        session_factory, 9, prefix="taze", published_age_min=taban_dk / 2.0
+    )
+
+    removed = telemetry_retention.RetentionWorker().purge_outbox_events()
+
+    assert removed == 0, (
+        "0 dakika verilince taban uygulanmadi — dedup korumasi mesaj hala "
+        "yeniden teslim edilebilirken kalkti"
+    )
+    assert _count(session_factory, OutboxEvent) == 9
+
+
+def test_disk_guard_DEAD_LETTER_a_dokunmuyor(monkeypatch):
+    """Disk baskisi, hata ayiklama kanitini yok etme gerekcesi olamaz.
+
+    Disk guard outbox purge'unu KISALTILMIS bir `retention_minutes` ile
+    cagirabilir; ama `dead_letter_days` gecerse damgali satirlar da o
+    kisaltilmis pencereye takilir ve `last_error` kaniti disk baskisiyla
+    silinir. Dosyanin "NELERE ASLA DOKUNULMAZ" ilkesi buna izin vermez.
+    """
+    from app.services import disk_guard
+
+    cagrilar: list[dict] = []
+
+    class _Casus:
+        def purge_processed_messages(self, **kw):
+            return 0
+
+        def purge_telemetry(self, **kw):
+            return 0
+
+        def purge_outbox_events(self, **kw):
+            cagrilar.append(kw)
+            return 0
+
+    monkeypatch.setattr(telemetry_retention, "RetentionWorker", _Casus)
+
+    disk_guard._relieve_aggressive()
+
+    assert cagrilar, "disk guard outbox purge'unu hic cagirmadi"
+    assert "retention_minutes" in cagrilar[0]
+    assert "dead_letter_days" not in cagrilar[0], (
+        "disk guard dead-letter penceresini kisaltiyor — teshis kaniti "
+        "disk baskisiyla siliniyor"
+    )
 
 
 def test_processed_messages_window_covers_redelivery_by_wide_margin():

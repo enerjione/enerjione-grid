@@ -21,11 +21,19 @@ guncelleniyordu; saniyede ~90 ekleme oldugu icin bu bedava degil.
 false ORDER BY id LIMIT n`) tam da AZINLIKTAKI satirlari ariyor. Kismi
 indekse cevrildi -> indeks yalnizca yayinlanmamis satirlari tutar, yani
 normalde birkac KB kalir ve flush maliyeti tablo boyutundan BAGIMSIZ olur.
+
+DEAD-LETTER (2026-08-03)
+------------------------
+Kismi indeksin yuklemine `dead_letter_at IS NULL` de eklendi. Gerekce:
+dead-letter satirlar hala `published=False` oldugu icin eski yuklemle
+indekste KALIRLARDI ve flush sorgusu (`ORDER BY id ASC`) her turda once
+onlari gorurdu — yani tikanma, dead-letter damgasina RAGMEN surerdi.
+Yeni yuklemle damgalanan satir indeksten de sorgudan da duser.
 """
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, String, Text
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, and_
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -48,14 +56,35 @@ class OutboxEvent(Base):
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    # Kac kez yayinlanmaya calisildi. Tavan (outbox_max_publish_attempts)
+    # asilinca satir dead-letter'a dusurulur.
+    attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Dolu ise satir KALICI basarisiz sayilir: flush sorgusundan ve kismi
+    # indeksten duser, kendi (daha uzun) saklama penceresiyle temizlenir.
+    dead_letter_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Son hata metni — dead-letter satirin TEK teshis kaniti.
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        # Flush sorgusunun tek dayanagi. KISMI: yalnizca yayinlanmamis satirlar.
-        # `id` de indekste, cunku sorgu `ORDER BY id ASC LIMIT n` yapiyor —
-        # boylece siralama icin ayrica heap'e gidilmez.
+        # Flush sorgusunun tek dayanagi. KISMI: yalnizca yayinlanmamis VE
+        # dead-letter'a dusmemis satirlar. `id` de indekste, cunku sorgu
+        # `ORDER BY id ASC LIMIT n` yapiyor — boylece siralama icin ayrica
+        # heap'e gidilmez.
         Index(
             "ix_outbox_events_unpublished",
             "id",
-            postgresql_where=published.is_(False),
+            postgresql_where=and_(published.is_(False), dead_letter_at.is_(None)),
+        ),
+        # Dead-letter purge'unun dayanagi (published_at indeksinin karsiligi).
+        # KISMI: damgali satirlar azinliktir, tam indeks her INSERT'te bedel
+        # cikarirdi.
+        Index(
+            "ix_outbox_events_dead_letter",
+            "dead_letter_at",
+            postgresql_where=dead_letter_at.is_not(None),
         ),
     )

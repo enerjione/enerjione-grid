@@ -51,6 +51,15 @@ except ImportError:  # pragma: no cover - optional dependency
 
 EventHandler = Callable[[dict[str, Any]], None]
 
+#: Tek bir publish icin PubAck bekleme penceresi. Sync caller'i (outbox flush
+#: thread'i) bloklamamak icin kisa tutuluyor; asilan yayin outbox'ta
+#: published=False kalir ve bir sonraki turda yeniden denenir.
+_PUBLISH_TIMEOUT_SEC = 2.0
+#: Toplu yayinda mesaj basina eklenen pay. Ack'ler PARALEL beklendigi icin bu
+#: RTT degil, yalnizca serilestirme/soket yazma maliyetinin payidir; 200'luk
+#: partide pencere 4 sn olur (mesaj basina 2 sn olsaydi 400 sn).
+_PUBLISH_TIMEOUT_PER_MSG_SEC = 0.01
+
 
 def topic_to_subject(topic: str, *, gateway_code: str | None = None) -> str:
     """RabbitMQ routing key'i JetStream subject'ine cevirir.
@@ -402,7 +411,7 @@ class JetStreamBus:
             future = asyncio.run_coroutine_threadsafe(_do_publish(), self._loop)
             # Sync caller'i bloklamamak icin kisa timeout — broker yavasladiginda
             # RabbitMQ tarafini geciktirmemek kritik. Timeout fail = best-effort drop.
-            future.result(timeout=2)
+            future.result(timeout=_PUBLISH_TIMEOUT_SEC)
         except Exception as exc:  # noqa: BLE001
             self._publish_failures += 1
             if self._publish_failures in (1, 10, 100, 1000) or self._publish_failures % 10000 == 0:
@@ -415,6 +424,86 @@ class JetStreamBus:
                     self._publish_failures,
                 )
             raise
+
+    def publish_events(
+        self, items: list[tuple[str, dict[str, Any], str]]
+    ) -> list[Exception | None]:
+        """Bir partiyi TEK loop gecisinde yayinlar; ack'ler PARALEL beklenir.
+
+        NEDEN VAR — OLCULEN TAVAN BURADAYDI
+        -----------------------------------
+        `publish_event` mesaj basina (a) flush thread'inden asyncio loop
+        thread'ine bir gecis, (b) PubAck donene kadar SENKRON bekleme yapar.
+        200 mesajlik parti = 200 ARDISIK gidis-donus; yayin hizi parti
+        buyuklugunden BAGIMSIZ olarak ~1/RTT'de kilitlenir (sahada ~480 msj/sn,
+        gateway uretimi 1135 msj/sn -> dakikada ~39 bin satir birikme).
+
+        Burada gather ile hepsi ayni anda ucuyor: 1 thread gecisi + ~1 RTT.
+
+        Donen liste girdiyle AYNI SIRADA: basari icin None, aksi halde o
+        mesajin hatasi. Tek zehirli mesaj partiyi dusurmez (`flush_outbox`
+        dead-letter sayacini satir bazli isletir). Loop'a hic gecilemezse
+        (bus hazir degil / timeout) exception YAYILIR — ariza sistemiktir.
+        """
+        if not self._ready.is_set() or self._loop is None or self._js is None:
+            raise RuntimeError("jetstream bus not ready")
+        if not items:
+            return []
+
+        hazir: list[tuple[str, bytes, dict[str, str] | None]] = []
+        for topic, payload, message_id in items:
+            gateway_code = str(payload.get("source_gateway") or "unknown")
+            subject = topic_to_subject(topic, gateway_code=gateway_code)
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            msg_id = message_id or str(payload.get("message_id") or "")
+            # Nats-Msg-Id: JetStream dedup penceresi (default 2 dk). Toplu
+            # yayinda da mesaj basina korunuyor — cift yayin yutulur.
+            hazir.append((subject, body, {"Nats-Msg-Id": msg_id} if msg_id else None))
+
+        async def _hepsini_yayinla() -> list[Any]:
+            # return_exceptions=True: ilk hatada digerlerini yarim birakip
+            # "asili task" uretmeyelim; hepsi bitsin, hatalar sonuc listesinde
+            # satirina dagitilsin.
+            return await asyncio.gather(
+                *(self._js.publish(s, b, headers=h) for s, b, h in hazir),
+                return_exceptions=True,
+            )
+
+        # Zaman asimi parti ile buyur: ack'ler paralel beklendigi icin tavan
+        # tek mesajin penceresine (2 sn) yakin kalir, mesaj basina degil.
+        zaman_asimi = _PUBLISH_TIMEOUT_SEC + _PUBLISH_TIMEOUT_PER_MSG_SEC * len(hazir)
+        try:
+            future = asyncio.run_coroutine_threadsafe(_hepsini_yayinla(), self._loop)
+            ham = future.result(timeout=zaman_asimi)
+        except Exception as exc:  # noqa: BLE001
+            self._publish_failures += 1
+            if self._publish_failures in (1, 10, 100, 1000) or self._publish_failures % 10000 == 0:
+                logger.warning(
+                    "jetstream_batch_publish_failed n=%d error=%s consecutive=%s "
+                    "(outbox retry edecek)",
+                    len(hazir),
+                    exc,
+                    self._publish_failures,
+                )
+            raise
+
+        sonuc: list[Exception | None] = [
+            r if isinstance(r, Exception) else None for r in ham
+        ]
+        basarisiz = sum(1 for r in sonuc if r is not None)
+        if basarisiz:
+            self._publish_failures += 1
+            if self._publish_failures in (1, 10, 100, 1000) or self._publish_failures % 10000 == 0:
+                ilk = next(r for r in sonuc if r is not None)
+                logger.warning(
+                    "jetstream_batch_partial_failure failed=%d/%d first_error=%s "
+                    "consecutive=%s (outbox retry edecek)",
+                    basarisiz,
+                    len(hazir),
+                    ilk,
+                    self._publish_failures,
+                )
+        return sonuc
 
     @property
     def is_ready(self) -> bool:
@@ -447,7 +536,8 @@ def get_bus() -> JetStreamBus | None:
 # NATS saniyeler icinde saglikli hale gelse bile telemetri BIR DAHA HIC
 # yayinlanmaz: outbox_flush_worker her turda RuntimeError alir, cihazlar
 # arayuzde "Kesik" gorunur, `outbox_events` published=False satirlarla
-# sinirsiz buyur (purge_published_outbox bunlara dokunmaz).
+# sinirsiz buyur (retention yalnizca yayinlanmislari ve dead-letter'i siler;
+# dead-letter damgasi da SISTEMIK arizada vurulmaz, bkz. flush_outbox).
 #
 # /health 503 doner ama compose'da autoheal yok ve `restart: unless-stopped`
 # healthcheck'e TEPKI VERMEZ — basinda kimse olmayan bir saha cihazi aylarca

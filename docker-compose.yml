@@ -70,17 +70,32 @@ x-heavy-resources: &heavy-resources
 # geciyor ve shared_buffers + work_mem + maintenance_work_mem toplami 2G'ye
 # sikisik kaliyordu (bkz. postgres servisindeki hesap).
 #
-# NOT: 'limits' TAVAN, rezervasyon degil. Bos duran bellegi tutmaz. Saha
-# donanimi 16 GB; tum servislerin tavan toplami ~13 GB, gercek rezervasyon
-# 3 GB. RAM 8 GB'in altina inerse burasi ve postgres ayarlari dusurulmeli.
+# 3G -> 6G ARTISININ OLCUMU (100 cihaz / 176 sinyal, test sunucusu):
+#   Postgres 3 GiB tavanin 2,33 GiB'ini kullaniyordu — yani %78 dolu ve
+#   headroom yok. Ayni anda 6,1 GB'lik bir veri hacmi (outbox_events 1,7 GB,
+#   processed_messages 1,0 GB, telemetry_history 0,94 GB) 768 MB'lik
+#   shared_buffers ile taraniyordu; cache hit orani dusukse her sorgu diske
+#   iniyor ve zaten dar olan I/O butcesini yiyor.
+#
+# NOT: 'limits' TAVAN, rezervasyon degil. Bos duran bellegi tutmaz. Olcum
+# sirasinda host'ta 10 GiB BOS RAM duruyordu; tavani buyutmek bos bellegi
+# rezerve etmez, sadece Postgres'in ihtiyaci oldugunda kullanmasina izin verir.
+# Bu artisla tum servislerin TAVAN toplami 16 GB'lik saha donaniminin uzerine
+# cikar; normalde sorun degil (tavanlar es zamanli dolmaz) ama es zamanli tepe
+# yukte OOM killer devreye girebilir — gercek rezervasyon toplami ~3,8 GB.
+#
+# RAM 8 GB'in altindaki cihazlarda BURASI VE asagidaki postgres ayarlari
+# (shared_buffers, effective_cache_size) BIRLIKTE dusurulmeli — yalnizca
+# birini dusurmek ise yaramaz, cunku Postgres kendi tampon boyutunu cgroup
+# tavanindan DEGIL postgresql.conf'tan okur.
 x-postgres-resources: &postgres-resources
   deploy:
     resources:
       limits:
-        cpus: "2.0"
-        memory: 3G
+        cpus: "4.0"
+        memory: 6G
       reservations:
-        memory: 768M
+        memory: 1536M
 
 # Container hardening — stateless worker'lar icin defense-in-depth.
 # `no-new-privileges`: setuid binary'leri ile yetki yukseltme blok.
@@ -111,22 +126,35 @@ services:
     # volume'de bu ayar yok, o yuzden burada explicit veriyoruz. Aksi halde
     # `CREATE EXTENSION timescaledb` "could not access file" ile basarisiz olur.
     #
-    # Bellek ayarlari — saha donanimi en az 16 GB RAM, container tavani 3 GB.
+    # Bellek ayarlari — saha donanimi en az 16 GB RAM, container tavani 6 GB.
     # Varsayilanlarla (shared_buffers=128MB, work_mem=4MB) calisiliyordu; bu
     # telemetri yuku icin cok dusuk: 21M satirlik tabloda pencere/sort
     # islemleri 4 MB'a sigmayip DISKE tasiyordu.
     #
-    # Hesap (3 GB tavan icin):
-    #   shared_buffers      768M  ~ tavanin %25'i (PostgreSQL onerisi)
-    #   work_mem             16M  x en fazla 50 baglanti (pool 30+20) = 800M
-    #                             en kotu durumda; hepsi ayni anda siralamaz
-    #   maintenance_work_mem 256M  VACUUM / index olusturma
-    #   effective_cache_size  2G   PLANLAYICI IPUCU — bellek AYIRMAZ, sadece
+    # DIKKAT: cgroup tavanini (yukaridaki x-postgres-resources) buyutmek TEK
+    # BASINA HICBIR SEY YAPMAZ — sadece OOM-kill'i geciktirir. Postgres kendi
+    # tampon boyutunu postgresql.conf'tan okur; asagidaki degerler tavanla
+    # BIRLIKTE buyutulmezse Postgres yine 768 MB tamponla calisir.
+    #
+    # Hesap (6 GB tavan icin):
+    #   shared_buffers     1536M  ~ tavanin %25'i (PostgreSQL onerisi)
+    #   work_mem             16M  DEGISMEDI. Bu deger BAGLANTI BASINA DEGIL,
+    #                             sorgudaki her sort/hash dugumu basinadir;
+    #                             max_connections=300 x 16M = 4,8 G en kotu
+    #                             durum. Buyutmek 6 G tavani tek bir sorgu
+    #                             firtinasinda patlatir.
+    #   maintenance_work_mem 512M  VACUUM / index olusturma. Autovacuum'un
+    #                             outbox_events churn'une yetismesi icin
+    #                             (bkz. asagidaki autovacuum ayarlari) 256M
+    #                             dardi: her VACUUM turu olu tuple listesini
+    #                             bellege sigdiramayip tabloyu birden cok kez
+    #                             tariyordu.
+    #   effective_cache_size  4G   PLANLAYICI IPUCU — bellek AYIRMAZ, sadece
     #                              "OS cache'inde ne kadar veri bulurum"
     #                              tahmini; index taramasini tercih ettirir
-    #   768M + 800M + 256M = ~1.8G  < 3G tavan
+    #   1536M + 512M + tipik es zamanli sorgular = ~2,5-3 G  < 6G tavan
     #
-    # RAM 8 GB'in altina inerse bu degerler ve asagidaki limit DUSURULMELI.
+    # RAM 8 GB'in altina inerse bu degerler ve yukaridaki limit DUSURULMELI.
     command:
       - "postgres"
       - "-c"
@@ -153,20 +181,65 @@ services:
       - "-c"
       - "max_connections=300"
       - "-c"
-      - "shared_buffers=768MB"
+      - "shared_buffers=1536MB"
       - "-c"
       - "work_mem=16MB"
       - "-c"
-      - "maintenance_work_mem=256MB"
+      - "maintenance_work_mem=512MB"
       - "-c"
-      - "effective_cache_size=2GB"
-      # Telemetri yazma yogun: WAL checkpoint'lerini seyrelt, I/O tepe
-      # noktalarini yay. Varsayilan 1GB/5dk saniyede binlerce satir yazan
-      # bir sistemde surekli checkpoint tetikliyor.
+      - "effective_cache_size=4GB"
+      # ---- WAL / checkpoint ----------------------------------------------
+      # OLCUM: pg_wal dizini 2,0 GB — yani TAM `max_wal_size` kadar. Bu,
+      # checkpoint'lerin ZAMAN degil BOYUT tetikledigi anlamina gelir.
+      #
+      # Bu yuzden max_wal_size BUYUTULMEDI: buyutmek sadece diskteki pg_wal
+      # ayak izini buyutur (gecici olarak ~2 x max_wal_size'a cikabilir) ve
+      # zaten dolmakta olan diski hizlandirir. Cozum WAL URETIMINI dusurmek:
+      #
+      #   wal_compression=on   Checkpoint sonrasi her sayfanin ilk
+      #                        degisiminde tam sayfa imaji (FPI) WAL'a
+      #                        yazilir; FPI'lar WAL hacminin buyuk kismidir.
+      #                        Sikistirma bunlari kucultur -> 2 GB tavana
+      #                        daha gec carpilir -> checkpoint seyrelir ->
+      #                        daha az FPI. Pozitif geri besleme.
+      #                        Maliyet: checkpoint sirasinda CPU (pglz). Bu
+      #                        yuzden yukarida cpus 2 -> 4 yapildi.
+      #                        `on` secildi, `lz4`/`zstd` DEGIL: bunlar imaj
+      #                        derleme secenegine baglidir ve desteklenmiyorsa
+      #                        Postgres HIC BASLAMAZ.
+      #   checkpoint_timeout   15dk. Boyut tetiklemesi baskin oldugu surece
+      #                        etkisizdir; wal_compression hacmi dusurup
+      #                        tetiklemeyi zamana cevirdiginde devreye girer.
+      #   min_wal_size         1GB. Varsayilan 80MB'de sunucu her checkpoint
+      #                        sonrasi segment dosyalarini siliyor, ardindan
+      #                        yeniden yaratiyordu; 1GB'lik havuz bu
+      #                        yarat/sil churn'unu geri donusume cevirir.
       - "-c"
       - "max_wal_size=2GB"
       - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "checkpoint_timeout=15min"
+      - "-c"
       - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_compression=on"
+      # ---- Autovacuum ------------------------------------------------------
+      # OLCUM: outbox_events 2,32M satir / 1,7 GB = satir basina ~730 bayt.
+      # Satirin kendisi bunun cok altinda; aradaki fark OLU TUPLE (bloat).
+      # En eski satir 36 dakikalik oldugu halde tablo 1,7 GB — yani silme
+      # calisiyor ama autovacuum silinen tuple'lari geri kazanmaya
+      # YETISEMIYOR. Varsayilan cost_limit=200 bu churn icin cok dusuk.
+      #
+      # naptime=10s: tur arasi bekleme 60sn -> 10sn. Bu tablolar dakikada
+      # yuz binlerce satir dondurdugu icin 1 dakikalik uyku, tur baslarken
+      # tablonun coktan yeniden sismis olmasi demek.
+      - "-c"
+      - "autovacuum_max_workers=5"
+      - "-c"
+      - "autovacuum_naptime=10s"
+      - "-c"
+      - "autovacuum_vacuum_cost_limit=2000"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-enerjione_grid}
       POSTGRES_USER: ${POSTGRES_USER:-enerjione_grid}
@@ -300,6 +373,13 @@ services:
       # Yanlis ayarlansa bile isler IKI KEZ KOSMAZ — lider secimi Postgres
       # advisory lock ile yapilir (app/core/service_role.py).
       SERVICE_ROLE: ${E1_BACKEND_ROLE:-all}
+      # Arka plan surecinin ic adresi — YALNIZCA rol `api` iken okunur.
+      # Telemetri boru hatti olcumu (backlog, mesaj/sn) surec-ici sayaclardan
+      # gelir; ayirdiktan sonra API bu adrese sorar, yoksa Sistem Durumu
+      # sayfasi kalici sahte "critical" gosterirdi.
+      # `backend-worker` bu env'i `extends` ile devralir ama HIC kullanmaz
+      # (kendi sayaclari zaten yerelde).
+      BACKEND_WORKER_HOST: ${E1_BACKEND_WORKER_HOST:-backend-worker}
       # Uvicorn worker sayisi. 1 = varsayilan. Coklu worker artik GUVENLI
       # (arka plan isleri tek surecte, WS yayini NATS uzerinden) ama her
       # worker ayri bir Python sureci + DB pool'u demek; saha cihazinin
@@ -415,9 +495,14 @@ services:
       WS_FANOUT_SUBJECT: ${WS_FANOUT_SUBJECT:-e1.ws.telemetry}
       # NATS JetStream stream basina DISK tavani (bayt). max_age tek basina
       # bayt siniri vermez; bu tavanlar + discard=old sayesinde tampon dolunca
-      # en eski mesajlar duser ve telemetri akisi DURMAZ. Toplam 12 GiB;
+      # en eski mesajlar duser ve telemetri akisi DURMAZ. Toplam 10 GiB;
       # infra/nats/nats-server.conf max_file_store bunun ustunde kalmali.
-      NATS_STREAM_RAW_MAX_BYTES: ${NATS_STREAM_RAW_MAX_BYTES:-8589934592}
+      #
+      # DUSURMEDEN ONCE config.py'deki gerekceyi okuyun: budama tuketicinin
+      # nerede oldugunu UMURSAMAZ, tavan = tuketicinin geri kalabilecegi
+      # mesafedir. Olculen depodan (5,6 GB) kucuk bir tavan, henuz ISLENMEMIS
+      # telemetriyi ilk yeniden baslatmada siler.
+      NATS_STREAM_RAW_MAX_BYTES: ${NATS_STREAM_RAW_MAX_BYTES:-6442450944}
       NATS_STREAM_NORMALIZED_MAX_BYTES: ${NATS_STREAM_NORMALIZED_MAX_BYTES:-3221225472}
       NATS_STREAM_DLQ_MAX_BYTES: ${NATS_STREAM_DLQ_MAX_BYTES:-1073741824}
       # Stream YAS siniri (gun). BU SATIRLAR EKSIKTI: config.py'de tanimliydi
@@ -427,8 +512,12 @@ services:
       #
       # Bos degil KONKRE varsayilan geciliyor: bu ayarlar pydantic `int`,
       # bos string dogrulamada patlar ve backend HIC baslamaz.
-      NATS_STREAM_RAW_MAX_AGE_DAYS: ${NATS_STREAM_RAW_MAX_AGE_DAYS:-7}
-      NATS_STREAM_NORMALIZED_MAX_AGE_DAYS: ${NATS_STREAM_NORMALIZED_MAX_AGE_DAYS:-30}
+      #
+      # Yas sinirlari YUKLU sahada hic ISLEMEZ (bayt tavani saatler icinde
+      # zaten carpar); asil isleri KUCUK sahada, stream'in ack'lenmis
+      # mesajlari arsivlemesini engellemektir. Kalicilik telemetry_history'de.
+      NATS_STREAM_RAW_MAX_AGE_DAYS: ${NATS_STREAM_RAW_MAX_AGE_DAYS:-2}
+      NATS_STREAM_NORMALIZED_MAX_AGE_DAYS: ${NATS_STREAM_NORMALIZED_MAX_AGE_DAYS:-7}
       NATS_STREAM_DLQ_MAX_AGE_DAYS: ${NATS_STREAM_DLQ_MAX_AGE_DAYS:-30}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -493,17 +582,22 @@ services:
       # degismezdi. (Ayni sey daha once BACKUP_OFFSITE_DIR ve
       # ACCESS_TOKEN_MINUTES'ta yasandi; yukaridaki notlara bakin.)
       #
-      # Varsayilan BILEREK bos birakiliyor: kod tarafi `os.getenv(..., "N")`
-      # + try/except ile bos degeri kendi varsayilanina cevirir. Boylece tek
-      # dogru kaynak kod, compose ikinci bir varsayilan tanimlamaz.
+      # FLUSH ayarlari `os.getenv(..., "N")` + try/except ile okunuyor; bos
+      # deger kod varsayilanina duser, o yuzden varsayilan BILEREK bos.
       OUTBOX_FLUSH_INTERVAL_SEC: ${OUTBOX_FLUSH_INTERVAL_SEC:-}
       OUTBOX_FLUSH_BATCH: ${OUTBOX_FLUSH_BATCH:-}
-      # Yayinlanmis satirlarin saklama suresi. Kod varsayilani 15 DAKIKA;
-      # olcum ve gerekce icin bkz. outbox_flush_worker._retention_sec.
-      # Eski `..._HOURS` geriye uyumlu okunuyor.
-      OUTBOX_PUBLISHED_RETENTION_MINUTES: ${OUTBOX_PUBLISHED_RETENTION_MINUTES:-}
+      # SAKLAMA/TEMIZLIK ayarlari 2026-08-03'te `settings`e (pydantic int)
+      # tasindi. BOS DEGER ARTIK GECILEMEZ: pydantic dogrulamasi patlar ve
+      # backend HIC baslamaz. Bu yuzden gercek varsayilanlar burada; config.py
+      # ile senkronu tests/test_config_consistency.py kilitler.
+      OUTBOX_PUBLISHED_RETENTION_MINUTES: ${OUTBOX_PUBLISHED_RETENTION_MINUTES:-15}
+      OUTBOX_PURGE_INTERVAL_SEC: ${OUTBOX_PURGE_INTERVAL_SEC:-60}
+      OUTBOX_DEAD_LETTER_RETAIN_DAYS: ${OUTBOX_DEAD_LETTER_RETAIN_DAYS:-14}
+      OUTBOX_MAX_PUBLISH_ATTEMPTS: ${OUTBOX_MAX_PUBLISH_ATTEMPTS:-5}
+      # ARTIK OKUNMUYOR, bilerek geciriliyor: sahada .env'ine bunlari yazmis
+      # kurulum ayari degistirdigini SANMASIN diye backend acilista uyari
+      # logluyor (telemetry_retention._warn_legacy_env).
       OUTBOX_PUBLISHED_RETENTION_HOURS: ${OUTBOX_PUBLISHED_RETENTION_HOURS:-}
-      OUTBOX_PURGE_INTERVAL_SEC: ${OUTBOX_PURGE_INTERVAL_SEC:-}
       OUTBOX_PURGE_BATCH: ${OUTBOX_PURGE_BATCH:-}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
@@ -593,10 +687,28 @@ services:
   #   * ingest yuku HTTP yanit suresini etkilemez,
   #   * API coklu worker ile buyutulebilir (E1_API_WORKERS).
   #
-  # NASIL ACILIR (.env):
+  # NASIL ACILIR — UCU DE `.env` dosyasina yazilir:
+  #     COMPOSE_PROFILES=scale
   #     E1_BACKEND_ROLE=api
   #     E1_API_WORKERS=4
-  # ve:  docker compose --profile scale up -d
+  #
+  # `--profile scale` KOMUT BAYRAGI TEK BASINA YETMEZ: sahada compose'u elle
+  # cagiran yok. `install.sh`, `update.sh` ve systemd unit'i duz
+  # `docker compose up -d` kosar; bayrak hicbirinde yoktur ve olmamalidir da
+  # (o zaman profil ZORLA acilirdi). Compose `COMPOSE_PROFILES`i proje
+  # dizinindeki `.env`den okur ve systemd `WorkingDirectory` zaten orayi
+  # gosterir — yani ayar tek yerde, kalici ve guncellemeye dayanikli.
+  #
+  # E1_BACKEND_ROLE=api YAZMAYI UNUTMAYIN: profil tek basina acilirsa
+  # backend-api rol `all` kalir ve worker ile LIDER OLMAK ICIN YARISIR.
+  # Advisory lock cift kosmayi engeller ama lideri kimin kazanacagi belirsizdir;
+  # tuketici yine API surecinde kalabilir ve ayirma islevsiz olur.
+  # KABUL KRITERI: `/api/v1/health` govdesinde backend-api icin
+  # `background.is_leader == false`, backend-worker icin `true`.
+  #
+  # DB BAGLANTI BUTCESI: E1_API_WORKERS keyfi buyutulmemeli; max_connections
+  # hesabi yukarida (postgres servisi) 4 worker + 1 arka plan surecine gore
+  # yapildi.
   #
   # `extends` KULLANILIYOR — env listesi KOPYALANMIYOR. Kopya olsaydi iki
   # liste zamanla ayrisirdi: worker'a eklenmeyen bir ayar (yeni SMTP alani,

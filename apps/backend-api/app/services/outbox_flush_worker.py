@@ -14,13 +14,26 @@ restart'a dayaniklidir.
 Backlog varsa (bir turda limit kadar satir yayinlandiysa) hemen devam eder;
 bosaltinca kisa uyur. Tek worker => tek RabbitMQ publisher => lock cekismesi yok.
 
+TEMIZLIK ARTIK BURADA DEGIL (2026-08-03)
+----------------------------------------
+Eskiden bu thread yayin YANINDA `purge_published_outbox` da cagiriyordu. Iki
+sorun vardi:
+  * Tavan uretimin ALTINDAYDI: 10.000 satir / 10sn = 1.000 satir/sn, uretim
+    ~1.074 satir/sn. Tablo kararli duruma hic gelmiyordu (saha: 1.7 GB,
+    en eski satir 36 dakikalik, ayar 15 dakika).
+  * Backlog doluyken (`continue` dalinda) purge, RabbitMQ'ya yayin yapmasi
+    gereken TEK thread'den zaman caliyordu.
+Purge `telemetry_retention.purge_outbox_events`e tasindi (tur tavanli, her
+tur ayri commit, leader kilidi arkasinda). Bu thread artik SADECE yayin yapar.
+
 Konfigurasyon (env):
-  OUTBOX_FLUSH_INTERVAL_SEC          default 0.3   (bos iken bekleme)
-  OUTBOX_FLUSH_BATCH                 default 200   (bir turda yayin siniri)
-  OUTBOX_PUBLISHED_RETENTION_MINUTES default 15    (published=True saklama)
-                                     (eski ..._HOURS geriye uyumlu okunur)
-  OUTBOX_PURGE_INTERVAL_SEC          default 10    (cleanup periyodu)
-  OUTBOX_PURGE_BATCH                 default 10000 (tek cleanup delete siniri)
+  OUTBOX_FLUSH_INTERVAL_SEC default 0.3   (bos iken bekleme)
+  OUTBOX_FLUSH_BATCH        default 200   (bir turda yayin siniri)
+
+Saklama/temizlik ayarlari `settings` uzerinden:
+  OUTBOX_PUBLISHED_RETENTION_MINUTES / OUTBOX_PURGE_INTERVAL_SEC /
+  OUTBOX_DEAD_LETTER_RETAIN_DAYS / OUTBOX_MAX_PUBLISH_ATTEMPTS
+  (bkz. app/core/config.py — olculmus gerekceler orada).
 """
 
 from __future__ import annotations
@@ -28,11 +41,9 @@ from __future__ import annotations
 import logging
 import os
 import threading
-import time
-from datetime import datetime, timedelta, timezone
 
 from app.db.session import SessionLocal
-from app.services.outbox_service import flush_outbox, purge_published_outbox
+from app.services.outbox_service import flush_outbox
 
 logger = logging.getLogger(__name__)
 
@@ -49,80 +60,6 @@ def _batch() -> int:
         return max(1, int(os.getenv("OUTBOX_FLUSH_BATCH", "200")))
     except ValueError:
         return 200
-
-
-#: NATS yeniden teslim penceresi: ack_wait(60sn) x nats_worker_max_deliver(10).
-#: Saklama sureleri bunun ALTINA inemez — inerse ayni mesaj yeniden teslim
-#: edildiginde dedup kaydi silinmis olur.
-REDELIVERY_WINDOW_SEC = 600
-
-
-def _retention_sec() -> float:
-    """Yayinlanmis outbox satirlarinin saklama suresi (saniye).
-
-    VARSAYILAN 15 DAKIKA — gerekcesi TAHMIN DEGIL, olculen pencereden turetildi.
-
-    BU PENCERE NEYI KORUYOR
-    -----------------------
-    `dedup_key` UNIQUE ve ekleme `ON CONFLICT DO NOTHING` yapiyor; satir
-    durdugu surece ayni `message_id` tekrar kuyruga girmez. Yani pencere =
-    tekrar-yayin koruma penceresi.
-
-    AMA TEK KORUMA BU DEGIL. Tuketici tarafinda bagimsiz bir defter var
-    (`processed_messages`, kendi saklama suresiyle) ve kayit yazilmadan once
-    ORASI kontrol ediliyor. Dolayisiyla bu pencereyi kisaltmanin bedeli CIFT
-    KAYIT DEGIL, bosa giden bir yayin.
-
-    `published=false` satirlar saklama suresinden BAGIMSIZ olarak hic
-    silinmiyor — teslim edilmemis bir olay, sure ne olursa olsun kaybolmaz.
-
-    NEDEN 15 DAKIKA
-    ---------------
-    Gercek yeniden teslim penceresi 10 dakika (REDELIVERY_WINDOW_SEC); 15
-    dakika ona %50 pay birakir. Olculen 296 satir/sn oraninda:
-
-        1 saat   -> ~1,07 milyon satir
-        15 dakika->   ~266 bin satir
-
-    NOT: saklama suresi tablonun BOYUTUNU sinirlar, YAZMA HIZINI degil. Her
-    okuma yine INSERT + UPDATE + DELETE olarak uc kez yaziliyor; CPU ve WAL
-    yuku oradan geliyor ve bu ayar ona dokunmuyor.
-    """
-    # Yeni ayar dakika biriminde. Eski `..._HOURS` degiskeni GERIYE UYUMLU
-    # okunuyor: sahada .env'ine onu yazmis kurulumlar bozulmasin.
-    ham = os.getenv("OUTBOX_PUBLISHED_RETENTION_MINUTES")
-    if ham is not None and ham.strip():
-        try:
-            dk = float(ham)
-        except ValueError:
-            dk = 15.0
-    else:
-        eski = os.getenv("OUTBOX_PUBLISHED_RETENTION_HOURS")
-        if eski is not None and eski.strip():
-            try:
-                dk = float(eski) * 60.0
-            except ValueError:
-                dk = 15.0
-        else:
-            dk = 15.0
-    # Yeniden teslim penceresinin ALTINA inilmesine izin verilmiyor: o
-    # noktada dedup korumasi mesaj hala yeniden teslim edilebilirken
-    # kalkar ve bosa giden yayinlar duplicate riskine donusur.
-    return max(float(REDELIVERY_WINDOW_SEC), dk * 60.0)
-
-
-def _purge_interval_sec() -> float:
-    try:
-        return max(1.0, float(os.getenv("OUTBOX_PURGE_INTERVAL_SEC", "10")))
-    except ValueError:
-        return 10.0
-
-
-def _purge_batch() -> int:
-    try:
-        return max(100, int(os.getenv("OUTBOX_PURGE_BATCH", "10000")))
-    except ValueError:
-        return 10_000
 
 
 class OutboxFlushWorker:
@@ -152,7 +89,6 @@ class OutboxFlushWorker:
     def _run(self) -> None:
         batch = _batch()
         consecutive_errors = 0
-        last_purge = 0.0
         while not self._stop.is_set():
             try:
                 db = SessionLocal()
@@ -162,30 +98,9 @@ class OutboxFlushWorker:
                     db.close()
                 consecutive_errors = 0
 
-                # published=True outbox satirlari sinirsiz buyumesin: saklama
-                # suresinden eskiyi 10K batch sil (bkz. _retention_hours).
-                # Sahada 1.7M published row UNIQUE/index sorgularini
-                # yavaslatiyordu. published=False ASLA silinmez.
-                # Backlog surekli dolu olsa bile interval geldiginde purge calisir;
-                # aksi halde `continue` retention'i sonsuza dek acliktan birakir.
-                now_mono = time.monotonic()
-                if now_mono - last_purge >= _purge_interval_sec():
-                    purge_db = SessionLocal()
-                    try:
-                        removed = purge_published_outbox(
-                            purge_db,
-                            before=datetime.now(timezone.utc) - timedelta(
-                                seconds=_retention_sec()
-                            ),
-                            limit=_purge_batch(),
-                        )
-                    finally:
-                        purge_db.close()
-                    last_purge = now_mono
-                    if removed:
-                        logger.info("outbox_published_purged count=%d", removed)
-                # Flush batch tamamen doluysa publish backlog var; retention
-                # kontrolu yapildi, simdi uyumadan sonraki publish batch'e gec.
+                # Flush batch tamamen doluysa publish backlog var; uyumadan
+                # sonraki batch'e gec. Temizlik ARTIK BURADA DEGIL (bkz. modul
+                # docstring'i) — bu dal onu artik acliktan birakamaz.
                 if published >= batch:
                     continue
             except Exception:  # noqa: BLE001
