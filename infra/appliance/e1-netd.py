@@ -552,9 +552,39 @@ def _wifi_ifname(devices: list[dict]) -> str | None:
     return None
 
 
+def _kendi_ap_ssid() -> str | None:
+    """Cihazin KENDI yayinladigi AP'nin SSID'si (yoksa None).
+
+    `_ap_info` cihaz listesi istiyor; tarama yolunda o liste elimizde yok ve
+    yalnizca SSID gerekiyor, o yuzden dogrudan profilden okuyoruz.
+    """
+    try:
+        out = _nmcli(
+            "-g", "802-11-wireless.ssid", "connection", "show", AP_CON_NAME,
+        )
+    except RuntimeError:
+        return None
+    ssid = (out or "").strip()
+    return ssid or None
+
+
 def _scan_networks(ifname: str) -> list[dict]:
     """Gorunur aglari tara. AP aktifken de calisir (nmcli AP modunda da
-    tarama yapabilir, sonuc sinirli olabilir)."""
+    tarama yapabilir, sonuc sinirli olabilir).
+
+    CIHAZIN KENDI AP'si LISTEDEN CIKARILIR.
+
+    YASANAN DONGU: cihaz AP modundayken `nmcli device wifi list` kendi
+    yayinini da donduruyordu ve kurulum aracinda "1 ag bulundu: E1GRID-TPAO"
+    olarak gorunuyordu. Operator — baska ag gormedigi icin — onu secip "Bu aga
+    bagla" diyordu. Cihaz kendi AP'sine baglanmaya calisiyor, tek WiFi karti
+    oldugu icin AP dusuyor, operatorun BAGLI OLDUGU ag kopuyor ve cihaz
+    3 dakika sonra AP'yi geri aciyordu. Disaridan bakinca "sistem garip bir
+    loopa giriyor" gorunumu tam olarak buydu.
+
+    Kendi AP'sine baglanmak hicbir kosulda anlamli degil; listeden cikarmak
+    dogrusu.
+    """
     out = _nmcli(
         "-t",
         "-f",
@@ -568,6 +598,7 @@ def _scan_networks(ifname: str) -> list[dict]:
         "yes",
         timeout=NMCLI_WIFI_TIMEOUT_SEC,
     )
+    kendi_ap = _kendi_ap_ssid()
     best: dict[str, dict] = {}
     for line in out.splitlines():
         if not line.strip():
@@ -578,6 +609,8 @@ def _scan_networks(ifname: str) -> list[dict]:
         ssid = parts[0].strip()
         if not ssid:
             continue  # gizli ag — SSID'siz satiri gosterme
+        if kendi_ap and ssid == kendi_ap:
+            continue  # cihazin KENDI yayini — kendine baglanamaz
         try:
             signal = int(parts[1] or 0)
         except ValueError:

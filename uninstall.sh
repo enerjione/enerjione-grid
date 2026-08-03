@@ -93,10 +93,14 @@ fi
 APPLIANCE_PRESENT=0
 if e1_appliance_installed; then
   APPLIANCE_PRESENT=1
-  e1_set_steps 7
+  _ADIM=7
 else
-  e1_set_steps 6
+  _ADIM=6
 fi
+# `--purge-all` kendi adimini ekler. Sabit 7 birakildiginda sayac "[8/7]"
+# gosteriyordu; kullanici icin "toplamdan fazla adim" kafa karistirici.
+[[ $PURGE_ALL -eq 1 ]] && _ADIM=$((_ADIM + 1))
+e1_set_steps "$_ADIM"
 
 # ---- Appliance host katmani (varsa) --------------------------------------
 # Ag ajani + WiFi AP + mDNS host'ta kalir; uygulama silinince bunlarin da
@@ -325,6 +329,24 @@ if [[ $PURGE_ALL -eq 1 ]]; then
     e1_ok "Tailscale anahtari, GHCR token'i ve saha kimligi silindi."
   fi
   e1_ok "Sistemde iz birakilmadi."
+
+  # BILEREK DOKUNULMAYANLAR — acikca yazilir.
+  #
+  # NEDEN: "her seyi sil" dedikten sonra sistemde bir seyler kalmasi
+  # operatore "islem yarim kaldi" hissi veriyor ve neyin kasitli, neyin
+  # ariza oldugu anlasilmiyor. Asagidakiler kasitli: hepsi ya sistem
+  # genelinde baska seyleri etkiler ya da cihaza erisimi keser.
+  echo
+  e1_info "Bilerek KALDIRILMAYANLAR (silinmesi cihaza erisimi kesebilir):"
+  e1_info "  · Docker Engine — baska is icin de kullaniliyor olabilir"
+  e1_info "  · 'enerjione' yonetim hesabi — silinirse SSH erisimi kalmaz"
+  e1_info "  · Hostname (${HOSTNAME:-enerjione}) ve netplan renderer degisikligi"
+  e1_info "      geri al: sudo hostnamectl set-hostname <eski-ad>"
+  e1_info "      geri al: sudo rm /etc/netplan/99-e1-grid-nm.yaml && sudo netplan apply"
+  e1_info "  · /var/backups/e1-grid-netplan-* (ag ayari yedekleri)"
+  if [[ $PURGE_TAILSCALE -ne 1 ]]; then
+    e1_info "  · Tailscale paketi — kaldirmak icin: --purge-tailscale"
+  fi
 fi
 
 # ---- 5/5: Install dizinini sil (opsiyonel) -------------------------------
@@ -339,7 +361,13 @@ if [[ $PURGE_DIR -eq 1 ]]; then
   echo
   echo "${E1_GREEN}${E1_BOLD}EnerjiOne Grid tamamen kaldirildi.${E1_RESET}"
   echo "Yeniden kurmak icin:"
-  echo "  TOKEN=ANAHTAR; curl -fsSL -H "Authorization: token $TOKEN" https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo E1_GHCR_TOKEN=$TOKEN bash"
+  # TEK TIRNAK ZORUNLU. Bu satir cift tirnakliydi ve icinde yine cift tirnak
+  # gectigi icin bash stringi ucе bolup `$TOKEN`'i GENISLETIYORDU; `set -u`
+  # altinda tanimsiz degisken hatasi verip script CIKIS KODU 1 ile oluyordu.
+  # Sonuc: kaldirma islemi sonuna kadar BASARIYLA tamamlaniyor, ama kurulum
+  # araci "Islem basarisiz" gosteriyordu ve operator bir seylerin silinmeden
+  # kaldigini saniyordu.
+  echo '  TOKEN=<github-token>; curl -fsSL -H "Authorization: token $TOKEN" https://raw.githubusercontent.com/enerjione/enerjione-grid/main/install.sh | sudo E1_GHCR_TOKEN=$TOKEN bash'
 else
   e1_info "Install dizini korundu: ${SCRIPT_DIR}"
   e1_info "Tamamen silmek icin: sudo rm -rf ${SCRIPT_DIR}"

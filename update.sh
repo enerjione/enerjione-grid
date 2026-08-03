@@ -195,6 +195,48 @@ if [[ $APPLIANCE_REFRESH -eq 1 ]]; then
 fi
 e1_set_steps "$STEP_COUNT"
 
+# ---- Internet kontrolu (EN BASTA) -----------------------------------------
+# NEDEN BURADA: guncelleme yeni surumu ve imajlari DISARIDAN indirir. Internet
+# yoksa bunlarin hicbiri olmaz — ama eski akista bu, DB yedegi alindiktan ve
+# birkac adim gecildikten SONRA, `git fetch` ya da `docker compose pull`
+# katmaninda anlasilmasi zor bir hatayla ortaya cikiyordu. Operator "guncelleme
+# neden bozuldu" diye imaj/registry tarafinda ariyordu.
+#
+# SAHADAKI TIPIK DURUM: cihaz AP modunda (kendi agini yayinliyor) ve yukari
+# akis baglantisi YOK. Operator cihazin AP'sine baglanip guncelleme deniyor;
+# cihazin interneti olmadigi icin calismiyor. Mesaj bunu acikca soyluyor.
+_e1_internet_var_mi() {
+  # Once DNS+TCP, sonra duz TCP: yalnizca ping kullanmak yanlis negatif verir
+  # (bircok agda ICMP kapalidir ama HTTPS calisir).
+  curl -fsS --max-time 6 -o /dev/null https://ghcr.io/v2/ 2>/dev/null && return 0
+  curl -fsS --max-time 6 -o /dev/null https://github.com 2>/dev/null && return 0
+  return 1
+}
+
+if ! _e1_internet_var_mi; then
+  echo
+  e1_warn "Cihazin internet baglantisi YOK — guncelleme yapilamaz."
+  e1_warn "Guncelleme yeni surumu ve imajlari disaridan indirir; yerel kopya yetmez."
+  echo
+  # AP modundaysa sebebi buyuk ihtimalle budur; acikca soyle.
+  if nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx "e1-grid-ap"; then
+    e1_warn "Cihaz su an KENDI WiFi agini yayinliyor (AP modu) ve bir aga bagli degil."
+    e1_warn "Tek WiFi karti oldugu icin ayni anda hem yayin yapip hem baglanamaz."
+    echo
+    e1_hint "Yapilacak: cihazi internete cikan bir aga baglayin —"
+    e1_hint "  * Kurulum araci > Ag sekmesi > 'Cihazdaki aglari tara' > aga baglan, ya da"
+    e1_hint "  * kablo takin (ethernet AP'den bagimsiz calisir), ya da"
+    e1_hint "  * cihazda: sudo nmcli device wifi connect <SSID> password <parola>"
+    e1_hint "Baglanti kurulunca AP kendiliginden kapanir; sonra guncellemeyi tekrarlayin."
+  else
+    e1_hint "Ag ayarlarini kontrol edin: ip a  /  nmcli device status"
+    e1_hint "Kablolu baglanti varsa kablo ve DHCP/DNS ayarlarini dogrulayin."
+  fi
+  echo
+  e1_warn "Hicbir sey degistirilmedi; sistem calismaya devam ediyor."
+  exit 1
+fi
+
 # ---- 1/5: Lokal degisiklik kontrolu --------------------------------------
 e1_step "Lokal degisiklik kontrolu..."
 # NOT: Sunucuda dosya IZIN biti (chmod +x) degisimi de "degisiklik" sayilir ve
