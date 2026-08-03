@@ -56,6 +56,24 @@ import {
 } from "./networkAccess";
 
 const REFRESH_INTERVAL_SEC = 10;
+/**
+ * Bir islem SURERKEN yoklama araligi (ms).
+ *
+ * NEDEN: "AP yayinini acip kapatmak cok uzun suruyor" diye bildirildi.
+ * Olculdugunde surenin buyuk kismi isin KENDISI degil, HABERIN GECIKMESI
+ * cikti: 10 saniyelik yoklama yuzunden 2 saniyede biten bir gorev degisimi
+ * ekranda 10 saniyeye kadar "suruyor" gorunuyordu.
+ *
+ * Yalnizca islem suresince hizlanip normale donuyoruz; surekli 1.5 sn'de bir
+ * yoklamak cihazi bosuna yorardi (ajan her istekte nmcli kosuyor).
+ */
+const BUSY_REFRESH_MS = 1500;
+/**
+ * Istegi gonderdikten sonra ajanin `pending` bayragini kaldirmasi bir tur
+ * surebilir. O aralikta hizli moddan cikarsak kullanici yine 10 saniye
+ * beklerdi; bu pencere boyunca hizli kaliyoruz.
+ */
+const BUSY_GRACE_MS = 30_000;
 /** Reboot sonrasi tahmini acilis suresi — geri sayim bunun uzerinden isler. */
 const REBOOT_COUNTDOWN_SEC = 75;
 
@@ -196,7 +214,25 @@ export function NetworkSettingsPage({ accessToken }: Props) {
     }
   }, [accessToken, fillFromInterface, t]);
 
-  usePolling({ enabled: true, intervalMs: REFRESH_INTERVAL_SEC * 1000, fn: load });
+  // Kullanici bir islem tetikledi mi? `onRefreshStatus` zaten her islemden
+  // SONRA cagriliyor; ayri bir prop eklemeden o ani isaretliyoruz.
+  const [sonIslemAt, setSonIslemAt] = useState(0);
+  const refreshStatus = useCallback(() => {
+    setSonIslemAt(Date.now());
+    void load();
+  }, [load]);
+
+  // Islem suruyorsa sik, aksi halde normal yoklama. `status.pending` ajanin
+  // olctugu gercek durum; grace penceresi yalnizca bayrak henuz kalkmadiysa
+  // devreye girer.
+  const islemSuruyor =
+    Boolean(status?.pending) || (sonIslemAt > 0 && Date.now() - sonIslemAt < BUSY_GRACE_MS);
+
+  usePolling({
+    enabled: true,
+    intervalMs: islemSuruyor ? BUSY_REFRESH_MS : REFRESH_INTERVAL_SEC * 1000,
+    fn: load,
+  });
 
   // Yeniden baslatma geri sayimi.
   useEffect(() => {
@@ -683,7 +719,7 @@ export function NetworkSettingsPage({ accessToken }: Props) {
         <WifiPanel
           accessToken={accessToken}
           status={status}
-          onRefreshStatus={() => void load()}
+          onRefreshStatus={refreshStatus}
         />
       </div>
 
