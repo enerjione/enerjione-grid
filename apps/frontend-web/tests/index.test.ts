@@ -178,10 +178,26 @@ test("gomulu font CSS'lerinde format() degeri standart olmali", async () => {
   }
 });
 
-test("govde fontu Manrope ile baslamali (yedekler yalnizca yedek)", async () => {
+test("govde font zincirinde COZULMEYEN ad bulunmamali", async () => {
+  // YASANAN ARIZA: zincirde "Helvetica Neue" vardi. Ubuntu'da (saha cihazi)
+  // bu ad karsiliksizdir ve URW/Nimbus paketleri yoksa fontconfig onu SERIF
+  // bir yuze eslestirebiliyor. Sonuc: ayni sayfada bazi basliklar serif,
+  // govde sans -- "header'in yazi tipi farkli, iceriklerin farkli".
+  //
+  // Kural: yedek zincirinde YALNIZCA hedef sistemde karsiligi olan adlar.
+  // macOS/Windows'a ozgu adlar Ubuntu'da sessizce atlanir; tehlikeli olan,
+  // atlanmayip YANLIS esleseni birakmaktir.
   const { readFileSync } = await import("node:fs");
   const stil = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
   const m = stil.match(/:root\s*\{[\s\S]*?font-family:\s*([^;]+);/);
   assert.ok(m, ":root icinde font-family bulunamadi");
-  assert.match(m![1].trim(), /^"Manrope"/, "govde fontu artik Manrope ile baslamiyor");
+
+  const zincir = m![1].replace(/\s+/g, " ").trim();
+  assert.ok(
+    !/Helvetica Neue/i.test(zincir),
+    `govde zincirinde "Helvetica Neue" var -- Ubuntu'da serif'e duser: ${zincir}`,
+  );
+  // Zincir her zaman jenerik bir aile ile BITMELI; aksi halde hicbiri
+  // bulunamazsa tarayicinin varsayilani (cogu yerde serif) devreye girer.
+  assert.match(zincir, /sans-serif\s*$/, `zincir sans-serif ile bitmiyor: ${zincir}`);
 });

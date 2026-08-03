@@ -692,10 +692,17 @@ e1_ok "Oturum betigi: ${SESSION_BIN}"
 # Yazilamazsa OLUMCUL DEGIL: oturum betigi splash dosyasi yoksa dogrudan
 # uygulama adresini acar (eski davranis).
 install -d -m 0755 "$SHARE_DIR" 2>/dev/null || true
-if [[ -f "${SCRIPT_DIR}/assets/e1-avatar.png" ]]; then
-  install -m 0644 "${SCRIPT_DIR}/assets/e1-avatar.png" "${SHARE_DIR}/kiosk-logo.png" \
-    2>/dev/null || true
-fi
+# Logo: acik (light) surum tercih edilir — splash koyu zeminli (#0b1220),
+# koyu logo orada okunmuyordu. Eski varlik yedek olarak kaliyor ki logo
+# dosyasi bulunmayan bir kurulumda ekran logosuz kalmasin.
+for _logo in e1-logo-light.png e1-avatar.png; do
+  if [[ -f "${SCRIPT_DIR}/assets/${_logo}" ]]; then
+    install -m 0644 "${SCRIPT_DIR}/assets/${_logo}" "${SHARE_DIR}/kiosk-logo.png" \
+      2>/dev/null || true
+    break
+  fi
+done
+unset _logo
 _sp=1
 { cat > "${SPLASH_FILE}.tmp" <<'E1_SPLASH_EOF'
 <!doctype html><html lang="tr"><head><meta charset="utf-8">
@@ -710,7 +717,7 @@ _sp=1
  @keyframes s{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
 </style></head><body><div style="text-align:center">
  <img src="kiosk-logo.png" alt=""><h1>EnerjiOne Grid</h1>
- <p id="m">Sistem baslatiliyor...</p><div class="b"><i></i></div></div>
+ <p id="m">Sistem başlatılıyor…</p><div class="b"><i></i></div></div>
 <script>
  /* Adres oncelikle FRAGMENT'ten okunur (#http://localhost:8080/). Oturum
     betigi her acilista guncel adresi oraya yazar; dosyaya gomulu deger
@@ -730,9 +737,9 @@ _sp=1
  function probe(){var im=new Image();
    im.onload=go;
    im.onerror=function(){n++;
-     if(n===20)msg('Uygulama bekleniyor...');
-     else if(n===90)msg('Ilk kurulum uzun surebilir, bekleniyor...');
-     else if(n===300)msg('Hala baslamadi. Cihazi kapatmayin; sorun surerse teknik destege bildirin.');
+     if(n===20)msg('Uygulama bekleniyor…');
+     else if(n===90)msg('İlk kurulum uzun sürebilir, bekleniyor…');
+     else if(n===300)msg('Henüz başlamadı. Cihazı kapatmayın; sorun sürerse teknik destek ile iletişime geçin.');
      setTimeout(probe,2000);};
    im.src=U.replace(/\/$/,'')+'/favicon.png?t='+Date.now();}
  probe();

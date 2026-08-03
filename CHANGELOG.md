@@ -14,6 +14,23 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.8] — 2026-08-03
+
+### Değişti
+
+- **Arayüz yazı tipi 2.30'daki haline döndürüldü.** Gövde fontu yeniden Arial
+  (Ubuntu'da Liberation Sans) tabanlı.
+- **Kiosk açılış ekranı** artık açık renkli E1 logosunu kullanıyor ve metinler
+  düzgün Türkçe karakterlerle yazılıyor ("Sistem başlatılıyor…").
+
+### Düzeltildi
+
+- **Aynı sayfada karışık yazı tipi.** Yedek zincirinde `Helvetica Neue` vardı;
+  bu ad Ubuntu'da karşılıksızdır ve URW/Nimbus paketleri kurulu değilse
+  fontconfig onu serif bir yüze eşleştirebiliyor. Belirtisi, bazı başlıkların
+  serif, gövdenin sans görünmesiydi. Zincirde artık yalnızca hedef sistemde
+  karşılığı olan adlar var.
+
 ## [2.38.7] — 2026-08-03
 
 ### Düzeltildi

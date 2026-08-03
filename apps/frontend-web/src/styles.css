@@ -112,11 +112,26 @@
 }
 
 ﻿:root {
-  /* Manrope pakete gomulu (bkz. assets/fonts/manrope.css) — saha cihazi
-     internetsizken de dogru gorunsun. Yedekler yalnizca font inene kadar
-     ya da tarayici woff2 desteklemiyorsa devreye girer. */
-  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Govde yazi tipi 2.30'daki haline DONDURULDU (kullanici karari).
+     Ubuntu'da `Arial` fontconfig ile Liberation Sans'a eslenir; sahadaki
+     goruntu budur ve tercih edilen budur.
+
+     "HELVETICA NEUE" NEDEN LISTEDE YOK
+     ----------------------------------
+     Onceki zincir suydu:
+         "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI",
+         Roboto, "Helvetica Neue", Arial, sans-serif
+     Ubuntu'da bastaki dort ad KARSILIKSIZ (macOS/Windows fontlari).
+     Sirada "Helvetica Neue" kaliyor ve Ubuntu'da URW/Nimbus paketleri
+     kurulu degilse fontconfig bu adi SERIF bir yuze eslestirebiliyor.
+     Sahadaki belirti buydu: ayni sayfada bazi basliklar serif, govde
+     sans cikiyor; kullanici "header'in yazi tipi farkli, iceriklerin
+     farkli" diye bildirdi. Ad karsiliksiz kaldiginda sonuc TAHMIN
+     EDILEMEZ oldugu icin listede ismi cozulmeyen font BIRAKMIYORUZ.
+
+     Manrope dosyalari pakette duruyor (assets/fonts/manrope.css); geri
+     donmek istenirse yalnizca bu satir degistirilir. */
+  font-family: Arial, "Liberation Sans", Helvetica, sans-serif;
   color: #111827;
   background-color: #f3f4f6;
 }
