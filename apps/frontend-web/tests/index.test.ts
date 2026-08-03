@@ -201,3 +201,69 @@ test("govde font zincirinde COZULMEYEN ad bulunmamali", async () => {
   // bulunamazsa tarayicinin varsayilani (cogu yerde serif) devreye girer.
   assert.match(zincir, /sans-serif\s*$/, `zincir sans-serif ile bitmiyor: ${zincir}`);
 });
+
+// ---------------------------------------------------------------------------
+// Govde yazi tipi kurali DERLENMIS CIKTIDA da CANLI olmali
+// ---------------------------------------------------------------------------
+// YASANAN ARIZA — kaynakta dogru, tarayicida olu
+// ----------------------------------------------
+// `styles.css` UTF-8 BOM (U+FEFF) ile basliyordu ve `:root` dosyanin ILK
+// kuraliydi. BOM dosya BASINDA oldugu surece her ayristirici onu siler; kural
+// sorunsuz calisir.
+//
+// Sonra dosyanin USTUNE ~113 satir CSS eklendi. BOM boylece dosyanin ORTASINA,
+// `:root`un hemen onune dustu. Satir ortasindaki U+FEFF ARTIK BOM DEGILDIR;
+// ayristirici onu bir tanimlayici sayar ve selektor sessizce suna donusur:
+//
+//     \feff:root { font-family: Arial, sans-serif; color: #111827; ... }
+//
+// Yani "U+FEFF adli element" tip selektoru. Boyle bir element olmadigi icin
+// kural HICBIR ZAMAN eslesmez. Govde yazi tipini veren tek kural o oldugundan
+// tum uygulama tarayici varsayilanina duser — Chrome/Windows'ta Times New
+// Roman, yani SERIF.
+//
+// BU HATA SINIFI NEDEN BU KADAR SINSI
+// -----------------------------------
+//   * Kaynak dosyada kural DOGRU gorunur; goz denetimi bir sey bulamaz.
+//   * DevTools'un Styles panelinde kural GORUNUR (kullanici da oyle gordu),
+//     ama Computed'a hic girmez.
+//   * Derleme, lint ve tip kontrolu gecer; hicbir uyari cikmaz.
+//   * U+FEFF ekranda GORUNMEZ genislikte bir karakterdir.
+//
+// Bu yuzden test kaynakta desen aramiyor: dosyayi projenin kendi bundler'i
+// (esbuild — Vite'in CSS yolu) ile DERLIYOR ve kuralin ciktida canli kaldigini
+// dogruluyor. Kural hangi yolla olurse olsun olurse test duser.
+test("govde yazi tipi kurali derlenmis CSS'te canli kalmali", async () => {
+  const { readFileSync } = await import("node:fs");
+  // Mutlak yol run.mjs tarafindan veriliyor (bundle gecici dizinde kosuyor).
+  const { transformSync } = await import(process.env.E1_ESBUILD!);
+
+  const kaynak = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
+
+  // 1) Gorunmez karakter hic bulunmamali. Dosya BASINDA zararsizdir ama orada
+  //    birakmak tuzagi yeniden kurar: biri dosyanin ustune CSS ekledigi anda
+  //    ayni ariza geri gelir. Bu yuzden hic olmasin.
+  const feff = kaynak.split("\uFEFF").length - 1;
+  assert.equal(
+    feff,
+    0,
+    `styles.css icinde ${feff} adet U+FEFF var. Satir ortasindaki U+FEFF ` +
+      "selektore yapisir ve kurali sessizce olduren bir tip selektorune cevirir.",
+  );
+
+  // 2) ASIL KONTROL: derlenmis ciktida kural gercekten var mi?
+  const { code } = transformSync(kaynak, { loader: "css" });
+  const m = code.match(/(^|[\s}])(:root\s*\{[^}]*\})/);
+  assert.ok(m, "derlenmis CSS'te :root kurali bulunamadi");
+  assert.match(
+    m![2],
+    /font-family:\s*Arial/,
+    `:root derlendi ama govde fontu vermiyor: ${m![2].slice(0, 120)}`,
+  );
+
+  // 3) Selektorun onune yapismis bir sey kalmadigini ayrica dogrula.
+  assert.ok(
+    !/\feff\s*:root/.test(code),
+    "selektor hala kacisli bir karakterle basliyor — kural olu",
+  );
+});

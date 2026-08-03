@@ -19,7 +19,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const buradan = (p) => fileURLToPath(new URL(p, import.meta.url));
 
@@ -35,11 +35,25 @@ try {
     platform: "node",
     target: "node20",
     // node: yerlesikleri bundle'a girmesin.
-    external: ["node:*"],
+    // `esbuild` de disarida kalmali: kendi icinde `require("fs")` yapiyor ve
+    // bundle'a gomulunce ESM ciktisinda "Dynamic require of fs is not
+    // supported" ile duser. Testler onu CSS'i derleyip DAVRANISI sinamak icin
+    // kullaniyor (bkz. govde yazi tipi testi).
+    external: ["node:*", "esbuild"],
     logLevel: "warning",
   });
 
-  const sonuc = spawnSync(process.execPath, ["--test", cikti], { stdio: "inherit" });
+  // Bundle GECICI dizine yaziliyor; oradan `import("esbuild")` cozulemez
+  // (ERR_MODULE_NOT_FOUND). Projenin kendi esbuild'inin MUTLAK yolunu ortam
+  // degiskeniyle geciyoruz — CSS'i derleyip davranisi sinayan test onu
+  // kullaniyor.
+  const esbuildUrl = pathToFileURL(
+    join(process.cwd(), "node_modules", "esbuild", "lib", "main.js"),
+  ).href;
+  const sonuc = spawnSync(process.execPath, ["--test", cikti], {
+    stdio: "inherit",
+    env: { ...process.env, E1_ESBUILD: esbuildUrl },
+  });
   process.exit(sonuc.status ?? 1);
 } finally {
   rmSync(gecici, { recursive: true, force: true });

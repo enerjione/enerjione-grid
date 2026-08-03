@@ -14,6 +14,24 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.13] — 2026-08-03
+
+### Düzeltildi
+
+- **Arayüzün gövde yazı tipi kuralı hiç uygulanmıyordu — asıl sebep bulundu.**
+  `styles.css` bir BOM (görünmez U+FEFF karakteri) ile başlıyordu ve `:root`
+  dosyanın ilk kuralıydı; BOM dosya başındayken zararsızdır. Sonradan dosyanın
+  üstüne CSS eklenince bu karakter dosyanın ortasına, `:root`un hemen önüne
+  düştü. Satır ortasındaki U+FEFF artık BOM sayılmaz; selektöre yapışıp kuralı
+  hiçbir elemana uymayan bir tip selektörüne çevirir. Sonuç: gövde yazı tipi,
+  metin rengi ve arka plan rengi birlikte düşüyor ve tarayıcı varsayılanına
+  (Chrome/Windows'ta Times New Roman — serif) geçiliyordu. Üst sekme çubuğu
+  dahil tüm metinlerin yazı tipi bu yüzden değişmişti.
+- Bu hata sınıfı için davranış testi eklendi: `styles.css` projenin kendi
+  paketleyicisiyle derlenip `:root` kuralının çıktıda gerçekten canlı kaldığı
+  doğrulanıyor. Kaynakta desen aramıyor — bu arıza tam olarak "kaynak doğru
+  görünüyor ama tarayıcıda ölü" biçiminde ortaya çıktı.
+
 ## [2.38.12] — 2026-08-03
 
 ### Değişti
