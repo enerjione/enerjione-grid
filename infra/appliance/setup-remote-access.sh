@@ -29,7 +29,10 @@
 #   BACKEND_UID         backend container uid'si (varsayilan 10001)
 #   E1_RAD_GRACE_MIN    mahsup suresi dk (varsayilan 60; 0 = mahsup yok)
 #   E1_RAD_FRESH_JOIN   1 ise taze tailnet katilimi (setup-tailscale.sh set eder)
-#   E1_RAD_LOCK_MODE    shields (varsayilan) | down  — ajana aktarilir
+#   E1_RAD_LOCK_MODE    down (varsayilan) | shields  — ajana aktarilir
+#                       down    : izin yokken cihaz tailnet'ten CIKAR
+#                       shields : agda kalir, tum gelen baglantilari reddeder
+#                                 (canlilik sinyali korunur; eski davranis)
 #
 # Idempotent: her calistirmada guvenle tekrarlanabilir.
 set -euo pipefail
@@ -84,7 +87,9 @@ _ra_env_get() {  # $1=anahtar
 RA_SSH="${E1_TAILSCALE_SSH:-$(_ra_env_get E1_TAILSCALE_SSH || true)}"
 RA_SSH="${RA_SSH:-1}"
 RA_LOCK="${E1_RAD_LOCK_MODE:-$(_ra_env_get E1_RAD_LOCK_MODE || true)}"
-RA_LOCK="${RA_LOCK:-shields}"
+# Varsayilan `down`: musteri "kapaliyken agda degiliz" garantisini kendi
+# guvenlik duvarinda DOGRULAYABILSIN. Bkz. e1-rad.py LOCK_MODE gerekcesi.
+RA_LOCK="${RA_LOCK:-down}"
 cat > "$RA_ENV_FILE" <<EOF
 # e1-rad (uzaktan bakim izni ajani) ayarlari — setup-remote-access.sh uretir.
 # E1_TAILSCALE_SSH : izin VERILDIGINDE Tailscale SSH de acilsin mi (1|0)

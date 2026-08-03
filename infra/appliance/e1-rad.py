@@ -69,10 +69,21 @@ Neden `tailscale down` varsayilan degil:
     acardi. (O script bu surumde ayrica duzeltildi, ama varsayilanin bu
     tuzagi hic kurmamasi daha saglamdir.)
 
-Tam kapatma isteyen kurulum icin `E1_RAD_LOCK_MODE=down` var: o modda
-kapanista `tailscale down` da calisir (musteri kendi guvenlik duvarinda
-"hic trafik yok" diye dogrulayabilsin). Kayitlilik her iki modda da korunur:
-`logout` HICBIR ZAMAN calistirilmaz, authkey ajanda YOKTUR.
+VARSAYILAN ARTIK `down`. Yukaridaki uc madde hala DOGRU ve bedeli olusturur;
+ancak musteri acisindan "cihaz sizin aginizda surekli duruyor ama girmiyoruz"
+demek, guveni SOZE dayandirmak demektir. `down` modunda cihaz agda degildir ve
+musteri bunu kendi guvenlik duvarinda dogrulayabilir. Olculebilir garanti,
+canlilik kolayligindan degerli bulundu.
+
+Canlilik sinyalinin sart oldugu kurulumlar `E1_RAD_LOCK_MODE=shields` ile eski
+davranisa donebilir. Kayitlilik her iki modda da korunur: `logout` HICBIR ZAMAN
+calistirilmaz, authkey ajanda YOKTUR.
+
+ACMA YOLU (3. madde) `down` modunda kritik hale gelir: acmak kontrol duzlemine
+gitmeyi gerektirir ve basarisiz olabilir. Bu durum SESSIZ GECISTIRILMEZ —
+ajan `mismatch: "open_failed"` yazar ve arayuz bunu "izin verildi ama cihaz
+tunele baglanamadi" olarak GOSTERIR. Izin verip hicbir sey olmamasi, en kotu
+sonuc olurdu.
 
 SURE DOLUNCA KAPANMA
 --------------------
@@ -141,9 +152,31 @@ MAX_MINUTES = 1440  # 24 saat
 CLOCK_SKEW_TOLERANCE_SEC = 60
 
 # shields | down  (bkz. dosya basi — varsayilan bilincli olarak `shields`)
-LOCK_MODE = (os.environ.get("E1_RAD_LOCK_MODE") or "shields").strip().lower()
+# VARSAYILAN `down`: izin yokken cihaz tailnet'ten TAMAMEN cikar.
+#
+# NEDEN: "surekli bagli ama kalkanli" modelinde erisimi engelleyen sey bizim
+# yazilimimizin kendi kararidir. Musteri acisindan cihaz her an bizim agimizda
+# durur ve "girmiyoruz" sozune guvenmek zorundadir. `down` modunda cihaz agda
+# DEGILDIR; musteri kendi guvenlik duvarinda "hic trafik yok" diye
+# DOGRULAYABILIR. Guven, soze degil olcume dayanir.
+#
+# Kayitlilik korunur: `logout` HICBIR ZAMAN calistirilmaz, authkey ajanda
+# yoktur. Izin verilince ajan tuneli kendisi geri kaldirir (bkz.
+# `_apply_access` -> `_up_restore`).
+#
+# BEDELI (bilerek kabul edildi): kapaliyken dugum konsolda OFFLINE gorunur;
+# "elektrik yok", "internet yok", "cihaz bozuk" ve "izin verilmemis" ayirt
+# edilemez. Bu kayip, musteriye verilen "kapaliyken agda degiliz" garantisinin
+# bedelidir ve garanti daha degerli bulundu.
+#
+# `shields` modu duruyor: canlilik sinyalinin operasyonel olarak sart oldugu
+# kurulumlarda `E1_RAD_LOCK_MODE=shields` ile secilebilir.
+LOCK_MODE = (os.environ.get("E1_RAD_LOCK_MODE") or "down").strip().lower()
 if LOCK_MODE not in ("shields", "down"):
-    LOCK_MODE = "shields"
+    # Yazim hatasi GUVENLI tarafa dusmeli. Eskiden burasi `shields` idi ve
+    # "sheilds" gibi bir yazim hatasi cihazi sessizce SUREKLI AGDA birakirdi
+    # — hicbir hata vermeden, kimse fark etmeden.
+    LOCK_MODE = "down"
 
 # E1_TAILSCALE_SSH'in ANLAMI BU SURUMDE DEGISTI: artik "SSH surekli acik"
 # degil, "izin verildiginde Tailscale SSH de acilsin mi". 0 ise izin acikken

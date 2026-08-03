@@ -1,3 +1,22 @@
+/* Uzaktan erisim: izin ile OLCULEN durum ayristi.
+   `down` modunda acmak kontrol duzlemine gitmeyi gerektirir ve basarisiz
+   olabilir; bunu sessiz gecmek "izin verdim, hicbir sey olmadi" demektir. */
+.rad-mismatch {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  text-align: left;
+}
+.rad-mismatch > svg { color: #c2410c; flex-shrink: 0; margin-top: 1px; }
+.rad-mismatch > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rad-mismatch strong { font-size: 13px; font-weight: 650; color: #7c2d12; }
+.rad-mismatch span { font-size: 12px; color: #9a3412; line-height: 1.55; }
+
 /* ---- WiFi ozet seridi (panelde kalan tek satirlik durum) ----
    Uc katman popup'a tasindi; panelde yalnizca "tek bakista durum" kaldi.
    Bagli ag burada cunku "hangi agdayim" en sik sorulan soru. */

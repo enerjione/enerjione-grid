@@ -14,6 +14,41 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.37.0] — 2026-08-03
+
+### Değişti
+- **Ağ Ayarları sayfasındaki WiFi bölümü sadeleşti.** Kart aç/kapat, kartın
+  görevi ve ölçülen durum ayrı bir **WiFi ayarları** penceresine taşındı.
+  Panelde tek satırlık bir özet kaldı: WiFi kartı, kartın görevi ve **bağlı
+  ağ** (ad + sinyal). Ağ listesi artık ekranın dışına düşmüyor.
+
+  Bağlı ağ ölçüme dayanır: kayıtlı ama bağlı olmayan bir profil "bağlı"
+  gösterilmez, *"(bağlı değil)"* yazar.
+
+  Geçici uyarılar (ağ değişimi sırasında bağlantı kopma bildirimi, cihazın
+  kendi ağını geri açtığı durum, hata satırı) pencere kapalıyken de görünsün
+  diye panelde bırakıldı.
+
+### Düzeltildi
+- **"Cihazdaki her şeyi sil" başarıyla bitiyor ama "işlem başarısız"
+  diyordu.** Kaldırma sonuna kadar tamamlanıyor, yalnızca son bilgi satırı
+  hatalı biçimlendiği için betik hata koduyla çıkıyordu. Operatör bir
+  şeylerin silinmeden kaldığını sanıyordu.
+
+- **Kaldırma sonrası sistemde bilerek ne bırakıldığı artık yazılıyor**
+  (Docker Engine, yönetim hesabı, ağ ayarı yedekleri...). Önceden neyin
+  kasıtlı neyin arıza olduğu anlaşılmıyordu.
+
+- **Kurulum aracında cihazın kendi WiFi ağı listelenmiyor.** Erişim noktası
+  modunda başka ağ görünmediğinde tek seçenek cihazın kendi ağı oluyordu;
+  seçildiğinde cihaz kendine bağlanmaya çalışıp erişim noktasını düşürüyor
+  ve kurulum kilitleniyordu.
+
+- Adım sayacı `--purge-all` ile fazladan adım eklendiğinde "[8/7]" gibi
+  tutarsız görünüyordu.
+
+---
+
 ## [2.36.0] — 2026-08-02
 
 ### Eklendi

@@ -282,6 +282,14 @@ export function RemoteAccessPage({ accessToken }: Props) {
   // bir izin KENDILIGINDEN KAPANMAYABILIR.
   const staleAgent = status?.reason === "state_stale";
   const overdue = status?.access.overdue === true;
+  // AJANIN OLCUMU ile IZNIN NIYETI ayristi mi?
+  //
+  // `down` modunda (varsayilan) acmak `tailscale up` demek, yani kontrol
+  // duzlemine gitmek — ve bu BASARISIZ OLABILIR. Ajan bunu
+  // `mismatch: "open_failed"` olarak yaziyordu ama arayuz alani HIC
+  // OKUMUYORDU: musteri "Izin ver"e basiyor, hicbir sey olmuyor ve ekranda
+  // bunu soyleyen tek bir satir bulunmuyordu.
+  const mismatch = status?.access.mismatch ?? null;
   const applyFailed = status?.last_apply?.status === "failed";
 
   // Acik ise ACIK. Kapali ve her sey yerindeyse KAPALI (guvenli hal). Ajan
@@ -405,6 +413,21 @@ export function RemoteAccessPage({ accessToken }: Props) {
             {t(HERO_TEXT[mode].title)}
           </h2>
           <p>{t(HERO_TEXT[mode].lead)}</p>
+
+          {/* Izin verildi ama cihaz hedefe getirilemedi — SESSIZ GECILMEZ. */}
+          {mismatch ? (
+            <div className="rad-mismatch" role="alert">
+              <AlertTriangle size={16} strokeWidth={2.2} />
+              <div>
+                <strong>{t(`remoteAccess.mismatch.${mismatch}.title`, {
+                  defaultValue: t("remoteAccess.mismatch.generic.title")
+                })}</strong>
+                <span>{t(`remoteAccess.mismatch.${mismatch}.hint`, {
+                  defaultValue: t("remoteAccess.mismatch.generic.hint")
+                })}</span>
+              </div>
+            </div>
+          ) : null}
 
           {mode === "on" ? (
             <ul className="rad-switch-meta">

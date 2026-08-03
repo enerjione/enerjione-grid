@@ -1188,6 +1188,24 @@
     "toasts": {
       "granted": "Remote maintenance opened — {{duration}}.",
       "revoked": "Remote maintenance closed."
+    },
+    "mismatch": {
+      "open_failed": {
+        "title": "Access granted but the device could not join the remote access network",
+        "hint": "The device received permission but the tunnel could not be established, usually because it has no internet access. Check connectivity and look again in a few minutes."
+      },
+      "close_failed": {
+        "title": "Access could not be closed",
+        "hint": "The lease expired or was revoked but the device could not be locked down. Access may still be open; restarting the device resolves it."
+      },
+      "prefs_unreadable": {
+        "title": "Device access state cannot be read",
+        "hint": "The remote access software state could not be read, so open/closed cannot be confirmed. Updating the device fixes this."
+      },
+      "generic": {
+        "title": "Access state did not reach the target",
+        "hint": "The state reported by the device does not match the granted permission. Check again in a few minutes."
+      }
     }
   },
   "systemStatus": {

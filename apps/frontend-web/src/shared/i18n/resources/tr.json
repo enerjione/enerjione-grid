@@ -1188,6 +1188,24 @@
     "toasts": {
       "granted": "Uzaktan bakım açıldı — {{duration}}.",
       "revoked": "Uzaktan bakım kapatıldı."
+    },
+    "mismatch": {
+      "open_failed": {
+        "title": "İzin verildi ama cihaz uzaktan erişim ağına bağlanamadı",
+        "hint": "Cihaz izni aldı fakat tünel kurulamadı. En sık sebebi cihazın internet erişiminin olmaması. İnternet bağlantısını kontrol edip birkaç dakika içinde tekrar bakın; erişim kendiliğinden açılabilir."
+      },
+      "close_failed": {
+        "title": "Erişim kapatılamadı",
+        "hint": "Süre doldu ya da iptal edildi, ancak cihaz kapalı duruma getirilemedi. Erişim hâlâ açık olabilir; cihazı yeniden başlatmak durumu düzeltir."
+      },
+      "prefs_unreadable": {
+        "title": "Cihazın erişim durumu okunamıyor",
+        "hint": "Uzaktan erişim yazılımının durumu okunamadı, bu yüzden açık mı kapalı mı olduğu doğrulanamıyor. Cihaz güncellendikten sonra düzelir."
+      },
+      "generic": {
+        "title": "Erişim durumu hedefe getirilemedi",
+        "hint": "Cihazın bildirdiği durum ile verilen izin uyuşmuyor. Birkaç dakika içinde tekrar bakın."
+      }
     }
   },
   "systemStatus": {
