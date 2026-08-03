@@ -14,6 +14,18 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.12] — 2026-08-03
+
+### Değişti
+
+- **Ana sayfadaki cihaz listesi artık sayfa başına 20 cihaz gösteriyor** (önceki
+  varsayılan 50). Sayfa boyutu seçenekleri: 20 / 50 / 100 / 200.
+- **Sayfalama kontrolü yenilendi.** Düğmeler ayrı kutular yerine bitişik tek bir
+  grup halinde; aktif sayfa marka rengiyle (turuncu) işaretleniyor — önceki mor
+  vurgu arayüzün geri kalanıyla uyumsuzdu. Sayfa boyutu seçici de özel ok
+  simgesiyle sadeleştirildi. Sayılar tablo rakamlarıyla dizildiği için sayfa
+  değiştikçe genişlik oynamıyor.
+
 ## [2.38.11] — 2026-08-03
 
 ### Değişti

@@ -37,8 +37,8 @@ const DEFAULT_BATTERY_VOLTAGE_LOW = 3.4;
 // 500 cihazlik kurulumda tum satirlari DOM'a basmak sayfayi kilitliyordu.
 // Duz liste artik sayfalanir; agac gorunumu ise hatlari kapali baslatarak
 // ayni sorunu bastan onler.
-const DEFAULT_PAGE_SIZE = 50;
-const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
 
 type ViewMode = "list" | "tree";
 const VIEW_STORAGE_KEY = "e1.dashboard.sidebar-view";
