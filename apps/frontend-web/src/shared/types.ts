@@ -1131,7 +1131,9 @@ export type WifiRadioState = {
   enabled: boolean;
   hardware_enabled: boolean;
   /** "hardware" -> cihaz uzerindeki anahtar; arayuzden ACILAMAZ. */
-  blocked_by?: "software" | "hardware" | null;
+  blocked_by?: "software" | "hardware" | "unmanaged" | null;
+  /** Kart cekirdekte var ama NetworkManager yonetmiyor. */
+  unmanaged?: boolean;
   /** Kullanicinin arayuzden verdigi son acik karar (null = hic dokunulmamis). */
   desired?: "on" | "off" | null;
   changed_at?: string | null;

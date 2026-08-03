@@ -87,7 +87,13 @@ class WifiRadioState(BaseModel):
     supported: bool = False
     enabled: bool = False
     hardware_enabled: bool = True
-    blocked_by: Literal["software", "hardware"] | None = None
+    #   "unmanaged" -> kart VAR (cekirdek goruyor) ama NetworkManager onu
+    #                  yonetmiyor. "Kart yok" ile ayni sey DEGIL: bu
+    #                  duzeltilebilir bir durumdur ve oyle soylenmeli.
+    blocked_by: Literal["software", "hardware", "unmanaged"] | None = None
+    #: Kart cekirdekte var ama NM yonetmiyor. Arayuz "kart yok" yerine
+    #: duzeltilebilir sebep gostersin diye ayri alan.
+    unmanaged: bool = False
     # Kullanicinin arayuzden verdigi son ACIK karar (None = hic dokunulmamis).
     # Ajan bunu surekli DAYATMAZ; yerel yoneticiyle kavga etmemek icin.
     desired: Literal["on", "off"] | None = None

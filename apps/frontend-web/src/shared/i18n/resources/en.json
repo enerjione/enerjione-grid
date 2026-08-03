@@ -1050,7 +1050,8 @@
       "settingsTitle": "WiFi settings",
       "connectedLabel": "Connected network",
       "noConnection": "Not connected",
-      "savedNotConnected": "{{ssid}} (not connected)"
+      "savedNotConnected": "{{ssid}} (not connected)",
+      "radioUnmanagedHint": "A WiFi card was found but NetworkManager is not managing it, so it cannot be controlled from here. If the card was just plugged in, restarting the device usually resolves it."
     }
   },
   "remoteAccess": {

@@ -750,10 +750,54 @@ def _general_status() -> dict:
     return parse_general_status(out)
 
 
+def wifi_ifaces_from_sysfs(kok: str = "/sys/class/net") -> list[str]:
+    """Cekirdegin bildigi KABLOSUZ arayuzler.
+
+    NEDEN NMCLI YETMIYOR: `nmcli device status` yalnizca NetworkManager'in
+    YONETTIGI cihazlari listeler. Kart takili ve calisir durumda olsa bile
+    NM onu yonetmiyorsa (unmanaged birakilmis, baska bir servise devredilmis
+    ya da NM henuz gormemis) listede HIC gorunmez. O durumda sistem "cihazda
+    WiFi karti yok" diyordu — oysa kart oradaydi.
+
+    Sonuc sahada su sekilde goruluyordu: AP profili arayuz adini biliyor
+    (`wlx502b73ac016f`) ama radyo "desteklenmiyor" raporlaniyor ve arayuzde
+    gorev secimi KILITLI kaliyordu. "Kart yok" ile "karti NM yonetmiyor"
+    ayni sey degil; ikincisi duzeltilebilir bir durumdur.
+
+    Kablosuz arayuzun cekirdekteki isareti `wireless/` (ya da `phy80211/`)
+    alt dizinidir; ad kalibina (wlan0 / wlp2s0 / wlx<MAC>) BAKMIYORUZ — USB
+    adaptorlerde ad MAC'ten turedigi icin kalip tutmaz.
+    """
+    try:
+        girdiler = sorted(os.listdir(kok))
+    except OSError:
+        return []
+    bulunan: list[str] = []
+    for ad in girdiler:
+        taban = os.path.join(kok, ad)
+        if os.path.isdir(os.path.join(taban, "wireless")) or os.path.isdir(
+            os.path.join(taban, "phy80211")
+        ):
+            bulunan.append(ad)
+    return bulunan
+
+
 def _radio_state(devices: list[dict], general: dict | None = None) -> dict:
     if general is None:
         general = _general_status()
-    return radio_from_general(general, any(d["type"] == "wifi" for d in devices))
+    # NM'in gordugu VEYA cekirdegin bildigi bir kablosuz arayuz varsa kart
+    # VARDIR. Tek kaynaga (nmcli) guvenmek, NM'in yonetmedigi karti yok
+    # saymak demekti.
+    nm_gordu = any(d["type"] == "wifi" for d in devices)
+    cekirdek_gordu = bool(wifi_ifaces_from_sysfs())
+    radio = radio_from_general(general, nm_gordu or cekirdek_gordu)
+    # Kart var ama NM yonetmiyorsa bunu SOYLE: arayuz "kart yok" yerine
+    # duzeltilebilir bir sebep gosterebilsin.
+    if cekirdek_gordu and not nm_gordu:
+        radio["unmanaged"] = True
+        if not radio.get("blocked_by"):
+            radio["blocked_by"] = "unmanaged"
+    return radio
 
 
 def _wired_fallback(devices: list[dict]) -> dict | None:

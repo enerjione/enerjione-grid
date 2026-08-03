@@ -132,6 +132,9 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   const role = roleOf(status);
   const radioOn: boolean | null = radio ? radio.enabled : null;
   const hardBlocked = radio ? !radio.hardware_enabled || radio.blocked_by === "hardware" : false;
+  // Kart VAR ama NetworkManager yonetmiyor. "Kart yok" demekten farkli:
+  // duzeltilebilir bir durum, o yuzden ayri bir aciklama gosteriyoruz.
+  const unmanaged = radio?.unmanaged === true || radio?.blocked_by === "unmanaged";
   const roleMode: "ap" | "client" | null = role ? role.mode : null;
   const apActive: boolean | null = status?.ap ? status.ap.active : null;
   const apSsid = status?.ap?.ssid ?? "EnerjiOne Grid";
@@ -487,7 +490,9 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
 
           {radioOn !== true ? (
             <p className="wifi-hint">
-              {hardBlocked
+              {unmanaged
+                ? t("network.wifi.radioUnmanagedHint")
+                : hardBlocked
                 ? t("network.wifi.radioHardBlockedHint")
                 : radioOn === false
                   ? t("network.wifi.radioOffHint")

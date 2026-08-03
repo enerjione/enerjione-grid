@@ -1050,7 +1050,8 @@
       "settingsTitle": "WiFi ayarları",
       "connectedLabel": "Bağlı ağ",
       "noConnection": "Bağlı değil",
-      "savedNotConnected": "{{ssid}} (bağlı değil)"
+      "savedNotConnected": "{{ssid}} (bağlı değil)",
+      "radioUnmanagedHint": "Cihazda WiFi kartı bulundu ama ağ yöneticisi (NetworkManager) onu yönetmiyor; bu yüzden buradan açılıp kapatılamıyor. Kart yeni takıldıysa cihazı yeniden başlatmak genellikle yeterlidir."
     }
   },
   "remoteAccess": {
