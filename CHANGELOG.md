@@ -14,6 +14,14 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.11] — 2026-08-03
+
+### Değişti
+
+- **Sistem Durumu KPI kartlarının tipografisi v2.25.0 değerlerine döndürüldü**
+  (etiket 11px/0.06em, değer 1.6rem/-0.02em, kesir 1.05rem). Arayüzün tamamı
+  artık v2.25.0 ile aynı yazı tipi ölçülerine sahip.
+
 ## [2.38.10] — 2026-08-03
 
 ### Değişti
