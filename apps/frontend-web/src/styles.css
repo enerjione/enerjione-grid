@@ -34049,17 +34049,32 @@ th.event-col-category {
 }
 
 /* Gateway ayarlarindaki acik/kapali satiri (kalite bayraklari vb.) */
+/* OZGULLUK NOTU — `.settings-modal` on eki SART.
+   `.settings-modal label { display: grid }` kurali (0,1,1) yalin
+   `.gw-switch-row` (0,1,0) kuralindan daha spesifik ve `display:flex`i
+   eziyordu: checkbox metnin YANINA degil USTUNE diziliyordu. */
+.settings-modal .gw-switch-row,
 .gw-switch-row {
   display: flex;
+  /* BASLIK SATIRIYLA hizali. `center` olsaydi kutu, uc satirlik aciklamanin
+     ORTASINA denk gelir ve basliktan kopuk dururdu. */
   align-items: flex-start;
-  gap: 10px;
+  gap: 11px;
   padding: 12px 14px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #f8fafc;
   cursor: pointer;
 }
-.gw-switch-row input { margin-top: 2px; flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
+.gw-switch-row input {
+  /* Basligin optik ortasina denk gelsin (13px metnin cap height'i). */
+  margin-top: 1px;
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: #e97800;
+}
 .gw-switch-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .gw-switch-body strong { font-size: 13px; font-weight: 650; color: #0f172a; }
 .gw-switch-body small { font-size: 11.5px; color: #64748b; line-height: 1.5; }
