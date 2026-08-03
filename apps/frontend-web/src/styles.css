@@ -1,3 +1,8 @@
+/* Serit icindeki "ulasilamiyor" isareti. Ayri bir satir DEGIL: altindaki
+   kartlarin yeri degismesin diye seridin kendi icinde duruyor. */
+.net-access-item.is-bad .net-access-icon { color: #dc2626; }
+.net-access-item.is-bad .net-access-value { color: #b91c1c; }
+
 /* Uzaktan erisim: izin ile OLCULEN durum ayristi.
    `down` modunda acmak kontrol duzlemine gitmeyi gerektirir ve basarisiz
    olabilir; bunu sessiz gecmek "izin verdim, hicbir sey olmadi" demektir. */

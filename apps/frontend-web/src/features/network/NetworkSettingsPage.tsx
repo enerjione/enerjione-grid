@@ -44,6 +44,7 @@ type Props = {
 };
 
 import { WifiPanel } from "./WifiPanel";
+import { useToast } from "../../components/ToastProvider";
 import { usePolling } from "../../shared/usePolling";
 import {
   hasLayers,
@@ -123,6 +124,7 @@ function splitCidr(cidr: string | undefined): { ip: string; prefix: string } {
 
 export function NetworkSettingsPage({ accessToken }: Props) {
   const { t } = useTranslation();
+  const toast = useToast();
 
   const [status, setStatus] = useState<NetworkStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -135,7 +137,6 @@ export function NetworkSettingsPage({ accessToken }: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState<NetworkConfigAccepted | null>(null);
   const [countdown, setCountdown] = useState(REBOOT_COUNTDOWN_SEC);
   const [copied, setCopied] = useState<string | null>(null);
@@ -181,7 +182,14 @@ export function NetworkSettingsPage({ accessToken }: Props) {
       }
     } catch (exc) {
       const msg = exc instanceof Error ? exc.message : t("network.errors.load");
-      if (msg !== "session_polling_401") setLoadError(msg);
+      if (msg !== "session_polling_401") {
+        // Yalnizca DURUM DEGISTIGINDE toast: yoklama periyodik, her turda
+        // toast atmak ekrani doldurur ve gercek uyarilari gomerdi.
+        setLoadError((onceki) => {
+          if (onceki !== msg) toast.error(msg);
+          return msg;
+        });
+      }
     } finally {
       inFlightRef.current = false;
       setLoading(false);
@@ -250,13 +258,11 @@ export function NetworkSettingsPage({ accessToken }: Props) {
       setFormError(error);
       return;
     }
-    setSubmitError(null);
     setConfirmOpen(true);
   };
 
   const submit = async () => {
     setSubmitting(true);
-    setSubmitError(null);
     try {
       const result = await updateNetworkConfig(accessToken, {
         ifname: form.ifname,
@@ -273,7 +279,10 @@ export function NetworkSettingsPage({ accessToken }: Props) {
       setConfirmOpen(false);
       setAccepted(result);
     } catch (exc) {
-      setSubmitError(exc instanceof Error ? exc.message : t("network.errors.apply"));
+      // EYLEM hatasi toast'a. `formError` BILEREK satir ici kaldi:
+      // dogrulama mesaji, kullanici alani duzeltene kadar gorunmeli;
+      // kaybolan bir dogrulama uyarisi kullaniciyi kor birakir.
+      toast.error(exc instanceof Error ? exc.message : t("network.errors.apply"));
     } finally {
       setSubmitting(false);
     }
@@ -370,6 +379,29 @@ export function NetworkSettingsPage({ accessToken }: Props) {
       <div className={`net-access-bar ${staleBar ? "is-stale" : ""}`}
         title={staleBar ? t("network.staleAgent") : undefined}
       >
+        {/* BAGLANTI YOK isareti — seridin ICINDE, ayri bir satirda DEGIL.
+            Eskiden seridin altina bir <p> ekleniyordu ve altindaki iki kart
+            asagi kayiyordu. Burada yalnizca serit genisler, dikey akis
+            bozulmaz.
+
+            Toast olayi duyurur ama KAYBOLUR; bu isaret durum surdugu surece
+            kalir. Aksi halde "neden her sey Bilinmiyor" sorusu cevapsiz
+            kalirdi. */}
+        {loadError ? (
+          <>
+            <div className="net-access-item is-bad" title={loadError}>
+              <span className="net-access-icon">
+                <AlertTriangle size={16} />
+              </span>
+              <span className="net-access-body">
+                <span className="net-access-label">{t("network.access.linkLabel")}</span>
+                <strong className="net-access-value">{t("network.access.linkDown")}</strong>
+              </span>
+            </div>
+            <span className="net-access-sep" aria-hidden="true" />
+          </>
+        ) : null}
+
         <div className="net-access-item">
           <span className="net-access-icon">
             <Globe size={16} />
@@ -448,7 +480,6 @@ export function NetworkSettingsPage({ accessToken }: Props) {
         </div>
       </div>
 
-      {loadError ? <p className="error-text">{loadError}</p> : null}
 
       {/* Internet kotu/bilinmiyorken NE ETKILENIR — serit icine sigmaz,
           tooltip dokunmatikte calismaz. Internet varken banner cikmaz. */}
@@ -631,7 +662,6 @@ export function NetworkSettingsPage({ accessToken }: Props) {
             ) : null}
 
             {formError ? <p className="error-text">{formError}</p> : null}
-            {submitError ? <p className="error-text">{submitError}</p> : null}
 
             <div className="net-form-actions">
               <button

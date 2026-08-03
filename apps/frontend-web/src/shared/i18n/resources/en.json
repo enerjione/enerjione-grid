@@ -853,7 +853,9 @@
       "wifiOpen": "Open network",
       "internet": "Internet",
       "wired": "Wired connection",
-      "noAddress": "No address"
+      "noAddress": "No address",
+      "linkLabel": "Device link",
+      "linkDown": "Unreachable"
     },
     "internet": {
       "yesWired": "Yes — over the wired network",

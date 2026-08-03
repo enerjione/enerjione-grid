@@ -160,7 +160,6 @@ export function RemoteAccessPage({ accessToken }: Props) {
   const [reason, setReason] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
 
   const load = useCallback(async () => {
@@ -332,7 +331,6 @@ export function RemoteAccessPage({ accessToken }: Props) {
   const submitGrant = async () => {
     if (effectiveMinutes === null) return;
     setSubmitting(true);
-    setSubmitError(null);
     try {
       await grantRemoteAccess(accessToken, {
         duration_minutes: effectiveMinutes,
@@ -353,7 +351,9 @@ export function RemoteAccessPage({ accessToken }: Props) {
       await load();
       await loadAudit();
     } catch (exc) {
-      setSubmitError(exc instanceof Error ? exc.message : t("remoteAccess.errors.grant"));
+      // EYLEM hatasi toast'a: modal icinde satir ici gosterilince
+      // dugmeler asagi kayiyor ve kullanici tikladigi yeri kaybediyordu.
+      toast.error(exc instanceof Error ? exc.message : t("remoteAccess.errors.grant"));
     } finally {
       setSubmitting(false);
     }
@@ -638,7 +638,6 @@ export function RemoteAccessPage({ accessToken }: Props) {
                 <small className="helper-text">{t("remoteAccess.grant.reasonHint")}</small>
               </label>
 
-              {submitError ? <p className="error-text">{submitError}</p> : null}
 
               {/* Karar anindan ONCE somut sonuc: kullanici "8 saat"i degil,
                   "ne zaman kapanacagini" gormeli. */}
@@ -663,7 +662,6 @@ export function RemoteAccessPage({ accessToken }: Props) {
                   className="primary-btn rad-grant-btn"
                   disabled={formDisabled || effectiveMinutes === null}
                   onClick={() => {
-                    setSubmitError(null);
                     setConfirmOpen(true);
                   }}
                 >
@@ -865,7 +863,6 @@ export function RemoteAccessPage({ accessToken }: Props) {
               ) : null}
             </ul>
 
-            {submitError ? <p className="error-text">{submitError}</p> : null}
 
             <div className="net-confirm-actions">
               <button

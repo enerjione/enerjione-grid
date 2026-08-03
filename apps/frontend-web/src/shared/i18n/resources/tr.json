@@ -853,7 +853,9 @@
       "wifiOpen": "Şifresiz",
       "internet": "İnternet",
       "wired": "Kablolu bağlantı",
-      "noAddress": "Adres yok"
+      "noAddress": "Adres yok",
+      "linkLabel": "Cihaz bağlantısı",
+      "linkDown": "Ulaşılamıyor"
     },
     "internet": {
       "yesWired": "Var — kablolu ağdan",
