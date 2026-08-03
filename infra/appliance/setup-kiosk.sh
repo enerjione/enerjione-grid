@@ -554,6 +554,36 @@ if [ ! -x "$E1_BROWSER" ]; then
   while true; do sleep 60; done
 fi
 
+# SPLASH KULLANICININ EVINE KOPYALANIR.
+#
+# YASANAN ARIZA: ekranda Firefox'un "File not found —
+# /usr/local/share/enerjione-grid/kiosk-splash.html" hata sayfasi cikti.
+# Dosya DISKTE VARDI; asagidaki `[ -f ]` de dogru donuyordu (donmeseydi zaten
+# dogrudan uygulama adresine gidilirdi). Sorun okuma IZNI degil, PAKETLEME:
+# Ubuntu'da Firefox bir **snap**tir ve snap sandbox'i `/usr/local` altini HIC
+# gormez; `home` arayuzu yalnizca $HOME'un GIZLI OLMAYAN kismina izin verir.
+# Ayni sey Flatpak tarayicilar icin de gecerli.
+#
+# `[ -f ]` bu durumu ASLA yakalayamaz: test kabukta, yani sandbox DISINDA
+# kosuyor. Bu yuzden varligi sinamak yerine dosyayi tarayicinin kesin
+# okuyabilecegi yere tasiyoruz.
+#
+# Dizin adi GIZLI DEGIL (`.e1-kiosk` degil): snap'in `home` arayuzu $HOME
+# altindaki nokta ile baslayan yollari engeller — gizli dizine koymak hatayi
+# aynen tekrarlardi.
+E1_SPLASH_LOCAL=""
+if [ -f "$E1_SPLASH" ] && [ -n "${HOME:-}" ]; then
+  _sp_dir="${HOME}/enerjione-grid"
+  if mkdir -p "$_sp_dir" 2>/dev/null \
+     && cp -f "$E1_SPLASH" "${_sp_dir}/kiosk-splash.html" 2>/dev/null; then
+    # Logo <img src="kiosk-logo.png"> ile GORECELI isteniyor; yaninda olmali.
+    cp -f "$(dirname "$E1_SPLASH")/kiosk-logo.png" "$_sp_dir/" 2>/dev/null || true
+    E1_SPLASH_LOCAL="${_sp_dir}/kiosk-splash.html"
+  else
+    _log "splash eve kopyalanamadi: $_sp_dir"
+  fi
+fi
+
 # Hedef: uygulama ayakta ise dogrudan adres, degilse YEREL splash sayfasi.
 # Splash uygulamayi kendisi yoklar ve hazir olunca yonlenir; boylece ekran ILK
 # SANIYEDEN itibaren doludur. (Eskiden burada 3 dakikaya kadar suren bir
@@ -562,7 +592,10 @@ _hedef() {
   if command -v curl >/dev/null 2>&1 \
      && curl -fsS --max-time 2 -o /dev/null "$URL" 2>/dev/null; then
     printf '%s' "$URL"
+  elif [ -n "$E1_SPLASH_LOCAL" ] && [ -f "$E1_SPLASH_LOCAL" ]; then
+    printf 'file://%s' "$E1_SPLASH_LOCAL"
   elif [ -f "$E1_SPLASH" ]; then
+    # Snap/flatpak OLMAYAN tarayicilar (deb chromium) burayi okuyabiliyor.
     printf 'file://%s' "$E1_SPLASH"
   else
     printf '%s' "$URL"

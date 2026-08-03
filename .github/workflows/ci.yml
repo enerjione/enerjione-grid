@@ -220,6 +220,11 @@ jobs:
       # yayin isi tam olarak boyle dustu (imajlar yayinlanmisti).
       - name: pipefail + head tuzagi
         run: bash infra/scripts/linux/tests/test-pipefail-head.sh "$PWD"
+      # Kiosk splash'i snap tarayicinin OKUYABILECEGI yerde olmali. Sahada
+      # ekranda "File not found" cikti; dosya diskte duruyordu ama Firefox
+      # snap oldugu icin /usr/local altini goremiyordu.
+      - name: Kiosk gecis ekrani erisilebilirligi
+        run: bash infra/appliance/tests/test-kiosk-splash.sh "$PWD"
       # Root ajanlarin symlink sertlestirmesi (denetim A11/A13). Bu testler
       # `O_NOFOLLOW` gerektirir, yani Windows gelistirici makinesinde ATLANIR;
       # gercek dogrulama YALNIZCA burada olur. Ajanlar zaten Linux appliance

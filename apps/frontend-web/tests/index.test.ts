@@ -126,3 +126,62 @@ test("sureMetni birim secimi", () => {
   assert.equal(sureMetni(180_000), "3 dk");
   assert.equal(sureMetni(3 * 3_600_000), "3 sa");
 });
+
+// ---------------------------------------------------------------------------
+// Gomulu fontlar: `@font-face` KURALI GECERLI OLMALI
+// ---------------------------------------------------------------------------
+// YASANAN ARIZA
+// -------------
+// Manrope pakete gomuldu, dosyalar dogru emitlendi, CSP de engellemiyordu —
+// ama arayuz sistem fontuyla aciliyordu. Sebep tek kelimeydi:
+//
+//     src: url(...) format("woff2-variations");
+//
+// `woff2-variations` CSS Fonts 4'un ERKEN TASLAGINDAN kalma, standarttan
+// CIKARILMIS bir degerdir. Tarayici taniMADIGI formatta kaynagi ATLAR; font
+// hic indirilmez ve sessizce yedek yaziya dusulur.
+//
+// BU HATA SINIFI NEDEN SESSIZ
+// ---------------------------
+// Gecersiz `@font-face` ayristirma sirasinda dusuruldugu icin konsolda hata
+// YOK, ag sekmesinde basarisiz istek YOK, derleme de gecer. Belirti yalnizca
+// "yazi tipi bir tuhaf" seklinde goze carpar — sahada iki sürüm boyunca fark
+// edilmedi.
+//
+// Ayni dizindeki Material Symbols duz `format("woff2")` kullaniyordu ve
+// CALISIYORDU; fark tam olarak bu ekti.
+const GECERLI_FORMATLAR = new Set([
+  "collection", "embedded-opentype", "opentype", "svg", "truetype", "woff", "woff2",
+]);
+
+test("gomulu font CSS'lerinde format() degeri standart olmali", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const dizin = `${process.cwd()}/src/assets/fonts`;
+  const cssler = readdirSync(dizin).filter((a) => a.endsWith(".css"));
+
+  assert.ok(cssler.length > 0, "font CSS'i bulunamadi — dizin tasindi mi?");
+
+  for (const dosya of cssler) {
+    const metin = readFileSync(`${dizin}/${dosya}`, "utf8");
+    // Yorum bloklarini cikar: aciklama metninde gecen ornekler sayilmasin.
+    const kod = metin.replace(/\/\*[\s\S]*?\*\//g, "");
+    const bulunan = [...kod.matchAll(/format\(\s*["']([^"']+)["']\s*\)/g)].map((m) => m[1]);
+
+    assert.ok(bulunan.length > 0, `${dosya}: hic format() yok`);
+    for (const f of bulunan) {
+      assert.ok(
+        GECERLI_FORMATLAR.has(f),
+        `${dosya}: gecersiz format(${JSON.stringify(f)}). Tarayici bu kaynagi ` +
+          `ATLAR ve font hic yuklenmez. Degisken fontlar icin de duz "woff2" kullanin.`,
+      );
+    }
+  }
+});
+
+test("govde fontu Manrope ile baslamali (yedekler yalnizca yedek)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const stil = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
+  const m = stil.match(/:root\s*\{[\s\S]*?font-family:\s*([^;]+);/);
+  assert.ok(m, ":root icinde font-family bulunamadi");
+  assert.match(m![1].trim(), /^"Manrope"/, "govde fontu artik Manrope ile baslamiyor");
+});

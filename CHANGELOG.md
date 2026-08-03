@@ -14,6 +14,23 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.5] — 2026-08-03
+
+### Düzeltildi
+
+- **Arayüz yazı tipi sistem fontuna düşüyordu.** Manrope pakete gömülüydü ve
+  dosyalar doğru yayınlanıyordu, ancak `@font-face` kuralında standart dışı bir
+  format değeri (`woff2-variations`) kullanılmıştı. Tarayıcı tanımadığı formatta
+  kaynağı atlar, font hiç indirilmez ve sessizce yedek yazı tipine düşülür —
+  konsolda hata, ağ sekmesinde başarısız istek görünmez. Arayüz artık her
+  sayfada Manrope ile açılıyor.
+- **Kiosk açılış ekranı "File not found" veriyordu.** Geçiş ekranı
+  `/usr/local/share` altında tutuluyordu; Ubuntu'da Firefox bir snap paketi
+  olduğu için sandbox bu dizini göremiyor. Dosya diskte duruyor olmasına rağmen
+  operatör ekranında tarayıcı hata sayfası çıkıyordu. Açılış ekranı artık
+  oturum başında kullanıcının ev dizinine kopyalanıp oradan açılıyor; snap
+  olmayan tarayıcılarda eski konum yedek olarak korunuyor.
+
 ## [2.38.4] — 2026-08-03
 
 ### Düzeltildi
