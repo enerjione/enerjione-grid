@@ -212,6 +212,10 @@ jobs:
       # icin container "healthy" gorunur ama backend el sikisamaz.
       - name: NATS TLS hazirlama davranisi
         run: bash infra/scripts/linux/tests/test-nats-tls-prepare.sh "$PWD"
+      # Yarim kalan kurulumun geri alinmasi. Asil risk TERS YONDE: temizlik
+      # fazla agresif olursa mevcut kurulumun MUSTERI VERISINI siler.
+      - name: Kurulum geri alma davranisi
+        run: bash infra/scripts/linux/tests/test-install-rollback.sh "$PWD"
       # Root ajanlarin symlink sertlestirmesi (denetim A11/A13). Bu testler
       # `O_NOFOLLOW` gerektirir, yani Windows gelistirici makinesinde ATLANIR;
       # gercek dogrulama YALNIZCA burada olur. Ajanlar zaten Linux appliance

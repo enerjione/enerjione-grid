@@ -451,6 +451,36 @@ e1_repair_service() {
 # Kurulumcudan ekrandaki loglari kopyalamasini beklemek gercekci degil.
 # Basarisizlikta her seyi tek dosyaya yazip yolunu ekrana veririz.
 # Stdout'a SADECE dosya yolunu basar (cagiran $(...) ile yakalar).
+# ---------------------------------------------------------------------------
+# Basarisiz servislerin loglarini EKRANDA goster
+# ---------------------------------------------------------------------------
+# Eskiden hata aninda yalnizca "loglara bakin: docker compose logs" deniyordu.
+# Kurulumcu ekranda hicbir SEBEP gormeden komut kopyalamak zorunda kaliyordu;
+# sahada telefonla destek isterken de "ne yaziyor?" sorusunun cevabi yoktu.
+#
+# Yalnizca SORUNLU servisler basilir (unhealthy / exited / created). Tum
+# stack'in logunu dokmek ekrani doldurup asil satiri yine gizlerdi.
+e1_show_failing_logs() {
+  local kuyruk="${1:-40}"
+  local isim durum bulundu=0
+
+  while read -r isim; do
+    [[ -z "$isim" ]] && continue
+    durum="$(docker inspect --format '{{.State.Status}}{{if .State.Health}}/{{.State.Health.Status}}{{end}}' "$isim" 2>/dev/null || echo '')"
+    case "$durum" in
+      running|running/healthy|"") continue ;;
+    esac
+    bulundu=1
+    e1_err "--- ${isim} (${durum}) son ${kuyruk} satir ---"
+    docker logs --tail "$kuyruk" "$isim" 2>&1 | sed 's/^/      /' >&2 || true
+  done < <(docker compose ps -a --format '{{.Name}}' 2>/dev/null || true)
+
+  if [[ "$bulundu" -eq 0 ]]; then
+    e1_err "--- tum servislerin son ${kuyruk} satiri ---"
+    docker compose logs --tail "$kuyruk" 2>&1 | sed 's/^/      /' >&2 || true
+  fi
+}
+
 e1_write_diag_report() {
   local dir="${1:-.}" failed="${2:-}" f svc
   f="${dir}/kurulum-hata-raporu.txt"
@@ -506,10 +536,86 @@ e1_die() {
 
 # `set -e` altinda beklenmeyen bir komut patlarsa sessizce kapanmak yerine
 # nerede kirildigini soyler. install.sh/update.sh basinda etkinlestirilir.
+# ---------------------------------------------------------------------------
+# GERI ALMA (rollback) — yarim kalan kurulum iz birakmasin
+# ---------------------------------------------------------------------------
+# Kurulum bir adimda duserse cihazda yarim bir kurulum kalir: container'lar,
+# volume'ler, systemd unit'leri, uretilmis `.env`. Kullanici tekrar denedigi
+# hangi parcanin eski hangisinin yeni oldugunu bilemez; en kotusu, YARIM bir
+# kurulum ilk reboot'ta ayaga kalkmaya calisir.
+#
+# TEMEL KURAL: YALNIZCA BU KOSUMUN OLUSTURDUKLARI geri alinir.
+#
+# Bu kural pazarlik konusu degil. Var olan bir kurulumun uzerine yapilan
+# denemede korlemesine temizlik, MUSTERI VERISINI (telemetri, olaylar,
+# yedekler) silerdi. Her adim once "bu zaten var miydi?" diye sorar; varsa
+# geri alma listesine HIC girmez.
+E1_ROLLBACK_ACTIONS=()
+E1_ROLLBACK_ARMED=0
+
+e1_rollback_arm()    { E1_ROLLBACK_ARMED=1; }
+e1_rollback_disarm() { E1_ROLLBACK_ARMED=0; E1_ROLLBACK_ACTIONS=(); }
+
+# Geri alma adimi kaydet. Sirayla degil TERS sirayla calistirilir: en son
+# olusturulan once kaldirilir (volume'den once container gibi).
+e1_rollback_add() {
+  E1_ROLLBACK_ACTIONS+=("$1")
+}
+
+e1_rollback_run() {
+  [[ "$E1_ROLLBACK_ARMED" != "1" ]] && return 0
+  local sayi="${#E1_ROLLBACK_ACTIONS[@]}"
+  [[ "$sayi" -eq 0 ]] && return 0
+  E1_ROLLBACK_ARMED=0   # geri alma sirasinda tekrar tetiklenmesin
+
+  echo >&2
+  e1_warn "Kurulum tamamlanmadi — bu kosumda yapilanlar geri aliniyor (${sayi} adim)."
+  e1_hint "Onceden var olan veriler ve ayarlar KORUNUYOR."
+
+  local i
+  for (( i=sayi-1; i>=0; i-- )); do
+    # Geri alma adiminin kendisi patlarsa DIGERLERI YINE CALISSIN: yarim
+    # geri alma, hic geri almamaktan iyidir ama sessiz olmamali.
+    if ! eval "${E1_ROLLBACK_ACTIONS[$i]}" >/dev/null 2>&1; then
+      e1_warn "  geri alinamadi: ${E1_ROLLBACK_ACTIONS[$i]}"
+    fi
+  done
+  E1_ROLLBACK_ACTIONS=()
+  e1_ok "Geri alma tamamlandi. Cihaz kurulum oncesi haline yakin."
+}
+
+# Compose yigini icin geri alma kaydi — VERI KORUMASI BURADA.
+#
+# Mevcut bir kurulumun uzerine tekrar kurulum denendiginde volume'lerde
+# MUSTERI VERISI vardir (telemetri, olaylar, yedekler). Yarim kalan kurulumu
+# temizlerken onlari silmek, cozmeye calistigi sorundan kat kat pahali bir
+# hataya donusur.
+#
+# Karar tek yerde ve TEST EDILEBILIR: onceden bir sey var miydi?
+#   vardi  -> `down`      (container'lar iner, VERI DURUR)
+#   yoktu  -> `down -v`   (bu kosumda olustu, iz birakmadan gider)
+e1_rollback_register_compose() {
+  local dizin="$1"
+  if e1_compose_has_existing_state; then
+    e1_rollback_add "cd '${dizin}' && docker compose down --remove-orphans"
+  else
+    e1_rollback_add "cd '${dizin}' && docker compose down -v --remove-orphans"
+  fi
+}
+
+# "Bu projeye ait volume ya da container ZATEN var mi?"
+# Ayri fonksiyon: testte taklit edilebilsin diye.
+e1_compose_has_existing_state() {
+  docker compose ps -aq 2>/dev/null | grep -q . && return 0
+  docker volume ls -q 2>/dev/null | grep -q "^enerjione" && return 0
+  return 1
+}
+
 e1__on_error() {
   local code="$1" line="$2" cmd="$3"
   [[ "$E1_DYING" == "1" ]] && return 0
   e1_step_done
+  e1_rollback_run
   echo >&2
   e1_rule "═" >&2
   printf '  %s%sBEKLENMEYEN HATA%s\n' "${E1_RED}" "${E1_BOLD}" "${E1_RESET}" >&2

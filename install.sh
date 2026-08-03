@@ -248,6 +248,11 @@ else
     e1_git_auth "$E1_TOKEN" git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}" \
     || e1_die "Kaynak kod indirilemedi.\n\n  En sik sebep: kurulum anahtari yanlis veya suresi dolmus.\n  Yeniden denemek icin:\n    sudo E1_GHCR_TOKEN=<anahtar> bash install.sh"
   cd "${INSTALL_DIR}"
+  # DIZINI BU KOSUM OLUSTURDU. Buraya ancak dizin YOKKEN gelinir (yukarida
+  # mevcutsa e1_die ediliyor), dolayisiyla var olan bir kurulum bu yolla
+  # ASLA silinmez. Kurulum yarida kalirsa yarim bir kaynak agaci birakmayalim.
+  e1_rollback_arm
+  e1_rollback_add "rm -rf '${INSTALL_DIR}'"
   e1_git_auth "$E1_TOKEN" git fetch --tags --quiet origin || true
 fi
 
@@ -363,6 +368,9 @@ fi
 # Helper: bir key yoksa ekler, varsa placeholder ise gercek deger ile doldurur.
 # Placeholder kaliplari: bos, please-change-me*, change-me*, change-this*.
 # `sed` replacement icin `|` ayraci kullaniyoruz; degerde `&` varsa escape.
+# Uretilen/tamamlanan secret sayaci — bkz. `_ensure_env_var`.
+E1_SECRET_URETILEN=0
+
 _ensure_env_var() {
   local key="$1"
   local value="$2"
@@ -370,11 +378,16 @@ _ensure_env_var() {
   if grep -qE "^${key}=" .env; then
     if grep -qE "^${key}=$|^${key}=please-change-me|^${key}=change-me|^${key}=change-this" .env; then
       sed -i "s|^${key}=.*|${key}=${escaped_value}|" .env
-      e1_info "${key} guncellendi (placeholder -> rastgele)."
+      # KULLANICIYA TEK TEK BILDIRILMEZ. Hangi anahtarin uretildigi
+      # kurulumcu icin bir bilgi degil; ekrani doldurup ONEMLI satirlari
+      # (IP tespiti, FCM uyarisi, hata) gorunmez kiliyordu. Sayilir, sonda
+      # tek satirda ozetlenir. Deger ZATEN basilmiyordu; degisen yalnizca
+      # gurultu.
+      E1_SECRET_URETILEN=$((E1_SECRET_URETILEN + 1))
     fi
   else
     echo "${key}=${value}" >> .env
-    e1_info "${key} eklendi (.env'de yoktu)."
+    E1_SECRET_URETILEN=$((E1_SECRET_URETILEN + 1))
   fi
 }
 
@@ -618,6 +631,19 @@ fi
 # sadece dogrular. Mevcut kuruluma tekrar install.sh calistirilirsa volume
 # eski isimle init edilmis olabilir; preflight rename ile hizalar. Bu adim
 # olmadan backend 'role does not exist' ile ayaga kalkmaz.
+# GERI ALMA KAYDI — container'lar ve (yalnizca BIZ olusturduysak) volume'ler.
+#
+# EN KRITIK KARAR BURADA: mevcut bir kurulumun uzerine tekrar kurulum
+# denendiginde volume'lerde MUSTERI VERISI vardir (telemetri, olaylar,
+# yedekler). Yarim kalan bir kurulumu temizlerken onlari silmek, sorunu
+# cozmek yerine veri kaybina cevirirdi.
+#
+# Bu yuzden once soruyoruz: bu projeye ait volume ZATEN var miydi?
+#   vardi  -> yalnizca `down` (container'lar iner, VERI DURUR)
+#   yoktu  -> `down -v` (bu kosumda olustu, iz birakmadan gider)
+e1_rollback_register_compose "${INSTALL_DIR}"
+e1_rollback_arm
+
 e1_info "Postgres baslatiliyor + kimlik on-kontrolu..."
 docker compose up -d postgres
 bash infra/scripts/linux/db-preflight.sh \
@@ -888,6 +914,7 @@ if [[ -f "${INSTALL_DIR}/infra/appliance/setup-remote-access.sh" ]]; then
 fi
 
 # ---- Final rehber ---------------------------------------------------------
+e1_rollback_disarm
 e1_step_done
 VPS_IP="$(e1_detect_ip)"
 
