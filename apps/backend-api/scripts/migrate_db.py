@@ -1,5 +1,6 @@
 """DB semasini legacy kurulumlardan Alembic head'e guvenle tasir."""
 
+import logging
 from pathlib import Path
 
 from alembic import command
@@ -40,6 +41,8 @@ from app.models import (  # noqa: F401
     user_session,
 )
 
+log = logging.getLogger(__name__)
+
 
 def migrate() -> None:
     root = Path(__file__).resolve().parents[1]
@@ -67,6 +70,39 @@ def migrate() -> None:
     else:
         # MEVCUT kurulum: gercek gecmisi oynat.
         command.upgrade(config, "head")
+
+    # ---- Historian depolamasi: hypertable + saklama politikalari ----------
+    #
+    # SEMADAN AYRI BIR ADIM, cunku bunlar SQLAlchemy modelinde tarif
+    # EDILEMEZ. Yukaridaki temiz-kurulum dali semayi `create_all` ile
+    # modellerden kuruyor; `create_all` ise YALNIZCA DUZ TABLOLARI yaratir.
+    # Hypertable'a cevirme ve 90 gunluk saklama politikasi migration
+    # govdesinde yasadigi icin, hicbir migration kosmayan temiz kurulumda
+    # sessizce ATLANIYORDU:
+    #
+    #     "Arsiv tablosu hypertable'a cevrilmemis — saklama suresi politikasi
+    #      calismiyor, tablo sinirsiz buyuyor."
+    #
+    # Belirti disk dolana kadar ortaya cikmaz (600 cihazda gunde ~26M satir).
+    #
+    # HER ACILISTA kosuyor, yalnizca temiz kurulumda degil: extension ilk
+    # boot'ta hazir olmayabilir ve sonradan dogru hale gelebilir. Adim
+    # idempotent; zaten kuruluysa birkac katalog sorgusu maliyeti var.
+    #
+    # Hata YUTULUR: burada patlamak backend'in hic ayaga kalkmamasi demek.
+    # Tespit garantisi ayri bir yerde — Sistem Durumu sayfasi eksikligi
+    # raporluyor (`app/services/historian_service.py`).
+    try:
+        from app.db.timescale_setup import ensure_historian_storage
+
+        with engine.begin() as bind:
+            rapor = ensure_historian_storage(bind)
+        if rapor.get("actions"):
+            log.info("historian depolama kurulumu: %s", ", ".join(rapor["actions"]))
+        elif rapor.get("skipped"):
+            log.info("historian depolama kurulumu atlandi: %s", rapor["skipped"])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("historian depolama kurulumu basarisiz (atlaniyor): %s", exc)
 
 
 if __name__ == "__main__":

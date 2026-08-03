@@ -14,6 +14,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.7] — 2026-08-03
+
+### Düzeltildi
+
+- **Temiz kurulumda arşiv tablosu hypertable'a çevrilmiyor, saklama süresi
+  politikası kurulmuyordu.** 2.38.4'te temiz kurulum şemayı modellerden tek
+  adımda kuracak şekilde değiştirilmişti; bu, kurulumu çökerten sorunu çözdü
+  ancak `create_all` yalnızca düz tabloları oluşturur. Hypertable'a çevirme,
+  90 günlük saklama, sıkıştırma ve özet katmanları yalnızca migration
+  gövdesinde yaşadığı için sessizce atlanıyordu — Sistem Durumu sayfasındaki
+  "tablo sınırsız büyüyor" uyarısı bunun belirtisiydi. Depolama kurulumu artık
+  şemadan ayrı, idempotent bir adım olarak **her açılışta** çalışıyor; eksik
+  olanı tamamlıyor, kurulu olana dokunmuyor. Mevcut kurulumlarda da kendini
+  onarır; elle müdahale gerekmez.
+
 ## [2.38.6] — 2026-08-03
 
 ### Düzeltildi
