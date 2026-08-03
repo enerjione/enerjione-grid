@@ -12,7 +12,6 @@ import "leaflet/dist/leaflet.css";
 // 4G sahada DNS/proxy bloku ikonlari kirsa bile uygulama calismaya devam eder.
 // Paketin tamami (3.83 MB / ~3600 ikon) degil, kullandigimiz ~210 ikonluk
 // subset (151 kB) yukleniyor — bkz. scripts/subset-icons.py.
-import "./assets/fonts/manrope.css";
 import "./assets/fonts/material-symbols-subset.css";
 import "./styles.css";
 

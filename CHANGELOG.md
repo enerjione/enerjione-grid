@@ -14,6 +14,15 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.10] — 2026-08-03
+
+### Değişti
+
+- **Arayüz tipografisi v2.30.0 ile birebir aynı hale getirildi.** Eski sürüm
+  incelendi: o sürümde gövde için tek bir tanım vardı (`Arial, sans-serif`),
+  gömülü bir yazı tipi ya da dış font bağlantısı yoktu. `:root` bloğu artık
+  v2.30.0 ile karakter karakter aynı; Manrope paketten çıkarıldı.
+
 ## [2.38.9] — 2026-08-03
 
 ### Eklendi
