@@ -16,6 +16,30 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [2.37.0] — 2026-08-03
 
+### Güvenlik
+- **Uzaktan erişim izni yokken cihaz artık uzaktan erişim ağına bağlı
+  kalmıyor.** Önceden cihaz ağda duruyor, yalnızca gelen bağlantıları
+  reddediyordu. Teknik olarak güvenliydi ama erişimi engelleyen tek şey
+  yazılımın kendi kararıydı; müşteri "girilmiyor" sözüne güvenmek zorundaydı.
+
+  Artık izin verilmediği sürece cihaz **ağdan çıkıyor**. Müşteri bunu kendi
+  güvenlik duvarında "hiç trafik yok" diye doğrulayabilir.
+
+  İzin verildiğinde cihaz ağa yeniden bağlanır, ağdaki diğer cihazlardan
+  erişilebilir olur ve (seçilmişse) SSH açılır. Süre dolduğunda bağlantı
+  düşer ve açık oturumlar kopar. Cihazın ağ kaydı hiçbir zaman silinmez;
+  izin verilince sahaya gitmeden geri gelir.
+
+  > Bunun bir bedeli var: erişim kapalıyken cihaz konsolda çevrimdışı görünür
+  > ve "elektrik yok", "internet yok", "cihaz arızalı", "izin verilmemiş"
+  > birbirinden ayırt edilemez. Canlılık bilgisinin şart olduğu kurulumlar
+  > eski davranışa dönebilir.
+
+- **İzin verildiği hâlde bağlanılamadığında ekran artık bunu söylüyor.**
+  Cihaz izni alıp da tünele bağlanamazsa (en sık sebebi internet erişiminin
+  olmaması) sayfa nedeni açıklıyor. Önceden bu durum sessizce geçiliyordu:
+  "İzin ver"e basılıyor, hiçbir şey olmuyordu.
+
 ### Değişti
 - **Ağ Ayarları sayfasındaki WiFi bölümü sadeleşti.** Kart aç/kapat, kartın
   görevi ve ölçülen durum ayrı bir **WiFi ayarları** penceresine taşındı.
