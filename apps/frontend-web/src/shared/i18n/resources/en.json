@@ -1043,7 +1043,12 @@
         "mayDrop": "This page may stop responding within a few seconds; that is expected.",
         "backVia": "To get back: join \"{{ssid}}\" and open {{url}}.",
         "backWired": "To get back: open {{url}} over the wired network."
-      }
+      },
+      "settingsOpen": "Settings",
+      "settingsTitle": "WiFi settings",
+      "connectedLabel": "Connected network",
+      "noConnection": "Not connected",
+      "savedNotConnected": "{{ssid}} (not connected)"
     }
   },
   "remoteAccess": {

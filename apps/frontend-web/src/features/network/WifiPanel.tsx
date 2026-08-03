@@ -32,6 +32,7 @@ import {
   RadioTower,
   RefreshCw,
   RotateCw,
+  Settings2,
   ShieldAlert,
   Wifi,
   WifiOff,
@@ -117,6 +118,9 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   // Istek gonderildi ve oturumumuz kopabilir: polling "basarisiz" oldugunda
   // kullanici hata sanmasin diye ne olacagini onceden yaziyoruz.
   const [handoverAt, setHandoverAt] = useState<number | null>(null);
+  // Ac/kapa, gorev secimi ve olculen durum artik ayri bir popup'ta; panelde
+  // yer kalmiyordu ve ag listesi ekranin disina dusuyordu.
+  const [ayarlarAcik, setAyarlarAcik] = useState(false);
 
   // ---- OLCULEN degerler. Varsayim YOK: alan yoksa null = "bilinmiyor". ----
   const wifi = status?.wifi;
@@ -312,6 +316,17 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
       <header className="net-card-head">
         <Wifi size={18} strokeWidth={2} />
         <h3>{t("network.wifi.title")}</h3>
+        {/* Iki eylem tek grup: baslik `space-between` oldugu icin ayri
+            birakilsalar ekranin iki ucuna dagilirlardi. */}
+        <div className="wifi-head-actions">
+        <button
+          type="button"
+          className="wifi-settings-btn"
+          onClick={() => setAyarlarAcik(true)}
+        >
+          <Settings2 size={15} strokeWidth={2.2} />
+          {t("network.wifi.settingsOpen")}
+        </button>
         <button
           type="button"
           className="wifi-scan-btn"
@@ -325,209 +340,322 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
           )}
           {scanning ? t("network.wifi.scanning") : t("network.wifi.scan")}
         </button>
+        </div>
       </header>
 
-      {/* ================= KATMAN 1: WiFi karti (fiziksel onkosul) ========= */}
-      <div
-        className={`wifi-radio-row ${
-          radioOn === true ? "is-on" : radioOn === false ? "is-off" : "is-unknown"
-        }`}
-      >
-        <span className="wifi-current-icon">
+      {/* ---- Ozet serit: durum TEK BAKISTA, detay popup'ta ----
+           Bagli ag burada GORUNUR: "hangi agdayim" sorusu bu sayfanin en sik
+           sorulan sorusu ve eskiden uc katmanin altina gomuluydu. */}
+      <div className="wifi-summary">
+        <div className={`wifi-sum-item ${radioOn === true ? "is-on" : radioOn === false ? "is-off" : ""}`}>
           {radioOn === true ? (
-            <Wifi size={18} strokeWidth={2.2} />
+            <Wifi size={15} strokeWidth={2.2} />
           ) : radioOn === false ? (
-            <WifiOff size={18} strokeWidth={2.2} />
+            <WifiOff size={15} strokeWidth={2.2} />
           ) : (
-            <CircleHelp size={18} strokeWidth={2.2} />
+            <CircleHelp size={15} strokeWidth={2.2} />
           )}
-        </span>
-        <div className="wifi-current-body">
-          <small>{t("network.wifi.radioLabel")}</small>
-          <strong aria-live="polite">
-            {radioOn === true
-              ? t("network.wifi.radioOn")
-              : radioOn === false
-                ? hardBlocked
-                  ? t("network.wifi.radioHardBlocked")
-                  : t("network.wifi.radioOff")
-                : t("network.wifi.radioUnknown")}
-          </strong>
+          <span>
+            <small>{t("network.wifi.radioLabel")}</small>
+            <strong>
+              {radioOn === true
+                ? t("network.wifi.radioOn")
+                : radioOn === false
+                  ? t("network.wifi.radioOff")
+                  : t("network.wifi.radioUnknown")}
+            </strong>
+          </span>
         </div>
-        {/* Durum bilinmiyorken ac/kapa GOSTERILMEZ: kapali konumdaki bir
-            anahtar "kapali" demektir, oysa biz bilmiyoruz. */}
-        {radioOn !== null ? (
-          <button
-            type="button"
-            role="switch"
-            className="wifi-switch"
-            aria-checked={radioOn}
-            aria-label={radioOn ? t("network.wifi.radioTurnOff") : t("network.wifi.radioTurnOn")}
-            title={radioOn ? t("network.wifi.radioTurnOff") : t("network.wifi.radioTurnOn")}
-            disabled={busy || hardBlocked || (radioOn && radioOffBlocked)}
-            onClick={() => {
-              if (radioOn) request({ kind: "radio_off" }, "network.wifi.confirm.radioOff");
-              else void turnRadioOn();
-            }}
-          />
-        ) : null}
-      </div>
 
-      {radioOn !== true ? (
-        <p className="wifi-hint">
-          {hardBlocked
-            ? t("network.wifi.radioHardBlockedHint")
-            : radioOn === false
-              ? t("network.wifi.radioOffHint")
-              : t("network.wifi.radioUnknownHint")}
-        </p>
-      ) : null}
-
-      {radio?.auto_restored_at ? (
-        <p className="wifi-hint">{t("network.wifi.radioAutoRestored")}</p>
-      ) : null}
-
-      {/* Engelleme: cihaza giden tum yollari kapatacak islem YAPILMAZ. */}
-      {radioOn === true && radioOffBlocked ? (
-        <p className="wifi-hint is-muted">{t("network.wifi.confirm.blockedNoPath")}</p>
-      ) : null}
-
-      {/* ================= KATMAN 2: kartin gorevi ========================= */}
-      <div className="wifi-role" aria-disabled={radioOn !== true}>
-        <span className="wifi-role-label">{t("network.wifi.roleLabel")}</span>
-        <div className="net-segment wifi-role-seg" role="radiogroup" aria-label={t("network.wifi.roleLabel")}>
-          <button
-            type="button"
-            aria-pressed={roleMode === "ap"}
-            className={roleMode === "ap" ? "is-active" : ""}
-            disabled={busy || radioOn !== true}
-            // Zaten secili gorevi tekrar istemek anlamsiz bir onay diyalogu
-            // acardi; AP'yi yeniden zorlamak icin ayri "Yeniden dene" var.
-            onClick={() => {
-              if (roleMode !== "ap") {
-                request({ kind: "role", mode: "ap" }, "network.wifi.confirm.toAp");
-              }
-            }}
-          >
+        <div className="wifi-sum-item">
+          {roleMode === "ap" ? (
             <RadioTower size={15} strokeWidth={2.2} />
-            <span>{t("network.wifi.roleAp")}</span>
-            <small>{t("network.wifi.roleApSub")}</small>
-          </button>
-          <button
-            type="button"
-            aria-pressed={roleMode === "client"}
-            className={roleMode === "client" ? "is-active" : ""}
-            disabled={busy || radioOn !== true}
-            onClick={() => {
-              if (roleMode !== "client") {
-                request({ kind: "role", mode: "client" }, "network.wifi.confirm.toClient");
-              }
-            }}
-          >
+          ) : (
             <Globe size={15} strokeWidth={2.2} />
-            <span>{t("network.wifi.roleClient")}</span>
-            <small>{t("network.wifi.roleClientSub")}</small>
-          </button>
+          )}
+          <span>
+            <small>{t("network.wifi.roleLabel")}</small>
+            <strong>
+              {roleMode === "ap"
+                ? t("network.wifi.roleAp")
+                : roleMode === "client"
+                  ? t("network.wifi.roleClient")
+                  : t("network.wifi.roleUnknown")}
+            </strong>
+          </span>
         </div>
-        <p className="wifi-role-hint">
-          {roleMode === "ap"
-            ? t("network.wifi.roleApHint")
-            : roleMode === "client"
-              ? t("network.wifi.roleClientHint", { ssid: apSsid })
-              : t("network.wifi.roleUnknown")}
-        </p>
-        <p className="wifi-role-hint is-muted">{t("network.wifi.roleOneCardHint")}</p>
-        {status?.pending ? (
-          <p className="wifi-role-hint" aria-live="polite">
-            {t("network.wifi.roleSwitching")}
-          </p>
-        ) : null}
-      </div>
 
-      {/* ============ KATMAN 3: secilen gorevin OLCULEN sonucu ============= */}
-      {/* Erisim noktasi — YALNIZCA olculen ap.active'e dayanir. */}
-      <div
-        className={`wifi-ap-state ${
-          apActive === true
-            ? "is-ok"
-            : apActive === false
-              ? roleMode === "client"
-                ? "is-unknown"
-                : "is-bad"
-              : "is-unknown"
-        }`}
-      >
-        <span className="wifi-current-icon">
-          <RadioTower size={18} strokeWidth={2.2} />
-        </span>
-        <div className="wifi-current-body">
-          <small>{t("network.wifi.apStateLabel")}</small>
-          <strong aria-live="polite">
-            {apActive === true
-              ? t("network.wifi.apOn")
-              : apActive === false
-                ? t("network.wifi.apOff")
-                : t("network.wifi.apUnknown")}
-          </strong>
-          {apActive === true ? <code>{apUrl(status)}</code> : null}
-          {apActive === false ? (
-            <span className="wifi-reason">{t(`network.wifi.apOffReason.${offReason}`)}</span>
+        {/* BAGLI AG — olculen `wifi.connected`e dayanir; kayitli ama bagli
+            olmayan profil "bagli" gosterilmez. */}
+        <div className={`wifi-sum-item is-wide ${wifi?.connected ? "is-on" : ""}`}>
+          <Globe size={15} strokeWidth={2.2} />
+          <span>
+            <small>{t("network.wifi.connectedLabel")}</small>
+            <strong>
+              {wifi?.connected && wifi.ssid
+                ? wifi.ssid
+                : wifi?.ssid
+                  ? t("network.wifi.savedNotConnected", { ssid: wifi.ssid })
+                  : t("network.wifi.noConnection")}
+            </strong>
+          </span>
+          {wifi?.connected && typeof wifi.signal === "number" ? (
+            <SignalIcon signal={wifi.signal} />
           ) : null}
         </div>
-        {apActive === false && radioOn === true && roleMode === "ap" ? (
-          <button
-            type="button"
-            className="wifi-retry-btn"
-            disabled={busy}
-            onClick={() => void run({ kind: "role", mode: "ap" })}
-          >
-            <RotateCw size={14} strokeWidth={2.2} />
-            {t("network.wifi.apRetry")}
-          </button>
-        ) : null}
       </div>
 
-      {apActive === true ? (
-        <p className="wifi-hint">
-          {t("network.wifi.apJoinHint", { ssid: apSsid, url: apUrl(status) })}
-        </p>
-      ) : (
-        <p className="wifi-hint">{t(`network.wifi.apOffHelp.${offReason}`)}</p>
-      )}
 
-      {/* Bagli ag kunyesi — olculen wifi.connected. */}
-      {wifi && (wifi.connected || wifi.saved || roleMode === "client") ? (
-        <div className={`wifi-current ${wifi.connected ? "is-connected" : ""}`}>
-          <span className="wifi-current-icon">
-            {wifi.connected ? (
-              <Wifi size={18} strokeWidth={2.2} />
-            ) : (
-              <WifiOff size={18} strokeWidth={2.2} />
-            )}
-          </span>
-          <div className="wifi-current-body">
-            <small>
-              {wifi.connected ? t("network.wifi.connectedTo") : t("network.wifi.savedNetwork")}
-            </small>
-            <strong>{wifi.ssid ?? t("network.wifi.noSavedNetwork")}</strong>
-            {wifi.connected && wifi.addresses.length > 0 ? (
-              <code>{wifi.addresses.join(", ")}</code>
-            ) : !wifi.connected && wifi.saved ? (
-              <span className="wifi-reason">{t("network.wifi.clientNotConnected")}</span>
+      {/* ================= AYARLAR POPUP'I ================================
+          Uc katman (kart -> gorev -> olculen sonuc) buraya tasindi. Panelde
+          yer kalmiyordu: ac/kapa anahtari, gorev secimi, AP durumu ve bagli
+          ag kunyesi ust uste yiginca ag listesi ekranin disina dusuyordu.
+
+          MANTIK TASINMADI, yalnizca nerede CIZILDIGI degisti — onay
+          diyaloglari, engelleme kurallari ve "iyimser UI yok" davranisi
+          aynen calisiyor. */}
+      {ayarlarAcik ? (
+        <div className="settings-modal-backdrop" onClick={() => setAyarlarAcik(false)}>
+          <div
+            className="settings-modal wifi-settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("network.wifi.settingsTitle")}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h3>
+                <Wifi size={17} strokeWidth={2.2} />
+                {t("network.wifi.settingsTitle")}
+              </h3>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setAyarlarAcik(false)}
+                aria-label={t("common.close")}
+              >
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="wifi-settings-body">
+          {/* ================= KATMAN 1: WiFi karti (fiziksel onkosul) ========= */}
+          <div
+            className={`wifi-radio-row ${
+              radioOn === true ? "is-on" : radioOn === false ? "is-off" : "is-unknown"
+            }`}
+          >
+            <span className="wifi-current-icon">
+              {radioOn === true ? (
+                <Wifi size={18} strokeWidth={2.2} />
+              ) : radioOn === false ? (
+                <WifiOff size={18} strokeWidth={2.2} />
+              ) : (
+                <CircleHelp size={18} strokeWidth={2.2} />
+              )}
+            </span>
+            <div className="wifi-current-body">
+              <small>{t("network.wifi.radioLabel")}</small>
+              <strong aria-live="polite">
+                {radioOn === true
+                  ? t("network.wifi.radioOn")
+                  : radioOn === false
+                    ? hardBlocked
+                      ? t("network.wifi.radioHardBlocked")
+                      : t("network.wifi.radioOff")
+                    : t("network.wifi.radioUnknown")}
+              </strong>
+            </div>
+            {/* Durum bilinmiyorken ac/kapa GOSTERILMEZ: kapali konumdaki bir
+                anahtar "kapali" demektir, oysa biz bilmiyoruz. */}
+            {radioOn !== null ? (
+              <button
+                type="button"
+                role="switch"
+                className="wifi-switch"
+                aria-checked={radioOn}
+                aria-label={radioOn ? t("network.wifi.radioTurnOff") : t("network.wifi.radioTurnOn")}
+                title={radioOn ? t("network.wifi.radioTurnOff") : t("network.wifi.radioTurnOn")}
+                disabled={busy || hardBlocked || (radioOn && radioOffBlocked)}
+                onClick={() => {
+                  if (radioOn) request({ kind: "radio_off" }, "network.wifi.confirm.radioOff");
+                  else void turnRadioOn();
+                }}
+              />
             ) : null}
           </div>
-          {wifi.saved ? (
-            <button
-              type="button"
-              className="wifi-forget-btn"
-              disabled={busy}
-              onClick={() => request({ kind: "forget" }, "network.wifi.confirm.forget")}
-            >
-              {t("network.wifi.forget")}
-            </button>
+
+          {radioOn !== true ? (
+            <p className="wifi-hint">
+              {hardBlocked
+                ? t("network.wifi.radioHardBlockedHint")
+                : radioOn === false
+                  ? t("network.wifi.radioOffHint")
+                  : t("network.wifi.radioUnknownHint")}
+            </p>
           ) : null}
+
+          {radio?.auto_restored_at ? (
+            <p className="wifi-hint">{t("network.wifi.radioAutoRestored")}</p>
+          ) : null}
+
+          {/* Engelleme: cihaza giden tum yollari kapatacak islem YAPILMAZ. */}
+          {radioOn === true && radioOffBlocked ? (
+            <p className="wifi-hint is-muted">{t("network.wifi.confirm.blockedNoPath")}</p>
+          ) : null}
+
+          {/* ================= KATMAN 2: kartin gorevi ========================= */}
+          <div className="wifi-role" aria-disabled={radioOn !== true}>
+            <span className="wifi-role-label">{t("network.wifi.roleLabel")}</span>
+            <div className="net-segment wifi-role-seg" role="radiogroup" aria-label={t("network.wifi.roleLabel")}>
+              <button
+                type="button"
+                aria-pressed={roleMode === "ap"}
+                className={roleMode === "ap" ? "is-active" : ""}
+                disabled={busy || radioOn !== true}
+                // Zaten secili gorevi tekrar istemek anlamsiz bir onay diyalogu
+                // acardi; AP'yi yeniden zorlamak icin ayri "Yeniden dene" var.
+                onClick={() => {
+                  if (roleMode !== "ap") {
+                    request({ kind: "role", mode: "ap" }, "network.wifi.confirm.toAp");
+                  }
+                }}
+              >
+                <RadioTower size={15} strokeWidth={2.2} />
+                <span>{t("network.wifi.roleAp")}</span>
+                <small>{t("network.wifi.roleApSub")}</small>
+              </button>
+              <button
+                type="button"
+                aria-pressed={roleMode === "client"}
+                className={roleMode === "client" ? "is-active" : ""}
+                disabled={busy || radioOn !== true}
+                onClick={() => {
+                  if (roleMode !== "client") {
+                    request({ kind: "role", mode: "client" }, "network.wifi.confirm.toClient");
+                  }
+                }}
+              >
+                <Globe size={15} strokeWidth={2.2} />
+                <span>{t("network.wifi.roleClient")}</span>
+                <small>{t("network.wifi.roleClientSub")}</small>
+              </button>
+            </div>
+            <p className="wifi-role-hint">
+              {roleMode === "ap"
+                ? t("network.wifi.roleApHint")
+                : roleMode === "client"
+                  ? t("network.wifi.roleClientHint", { ssid: apSsid })
+                  : t("network.wifi.roleUnknown")}
+            </p>
+            <p className="wifi-role-hint is-muted">{t("network.wifi.roleOneCardHint")}</p>
+            {status?.pending ? (
+              <p className="wifi-role-hint" aria-live="polite">
+                {t("network.wifi.roleSwitching")}
+              </p>
+            ) : null}
+          </div>
+
+          {/* ============ KATMAN 3: secilen gorevin OLCULEN sonucu ============= */}
+          {/* Erisim noktasi — YALNIZCA olculen ap.active'e dayanir. */}
+          <div
+            className={`wifi-ap-state ${
+              apActive === true
+                ? "is-ok"
+                : apActive === false
+                  ? roleMode === "client"
+                    ? "is-unknown"
+                    : "is-bad"
+                  : "is-unknown"
+            }`}
+          >
+            <span className="wifi-current-icon">
+              <RadioTower size={18} strokeWidth={2.2} />
+            </span>
+            <div className="wifi-current-body">
+              <small>{t("network.wifi.apStateLabel")}</small>
+              <strong aria-live="polite">
+                {apActive === true
+                  ? t("network.wifi.apOn")
+                  : apActive === false
+                    ? t("network.wifi.apOff")
+                    : t("network.wifi.apUnknown")}
+              </strong>
+              {apActive === true ? <code>{apUrl(status)}</code> : null}
+              {apActive === false ? (
+                <span className="wifi-reason">{t(`network.wifi.apOffReason.${offReason}`)}</span>
+              ) : null}
+            </div>
+            {apActive === false && radioOn === true && roleMode === "ap" ? (
+              <button
+                type="button"
+                className="wifi-retry-btn"
+                disabled={busy}
+                onClick={() => void run({ kind: "role", mode: "ap" })}
+              >
+                <RotateCw size={14} strokeWidth={2.2} />
+                {t("network.wifi.apRetry")}
+              </button>
+            ) : null}
+          </div>
+
+          {apActive === true ? (
+            <p className="wifi-hint">
+              {t("network.wifi.apJoinHint", { ssid: apSsid, url: apUrl(status) })}
+            </p>
+          ) : (
+            <p className="wifi-hint">{t(`network.wifi.apOffHelp.${offReason}`)}</p>
+          )}
+
+          {/* Bagli ag kunyesi — olculen wifi.connected. */}
+          {wifi && (wifi.connected || wifi.saved || roleMode === "client") ? (
+            <div className={`wifi-current ${wifi.connected ? "is-connected" : ""}`}>
+              <span className="wifi-current-icon">
+                {wifi.connected ? (
+                  <Wifi size={18} strokeWidth={2.2} />
+                ) : (
+                  <WifiOff size={18} strokeWidth={2.2} />
+                )}
+              </span>
+              <div className="wifi-current-body">
+                <small>
+                  {wifi.connected ? t("network.wifi.connectedTo") : t("network.wifi.savedNetwork")}
+                </small>
+                <strong>{wifi.ssid ?? t("network.wifi.noSavedNetwork")}</strong>
+                {wifi.connected && wifi.addresses.length > 0 ? (
+                  <code>{wifi.addresses.join(", ")}</code>
+                ) : !wifi.connected && wifi.saved ? (
+                  <span className="wifi-reason">{t("network.wifi.clientNotConnected")}</span>
+                ) : null}
+              </div>
+              {wifi.saved ? (
+                <button
+                  type="button"
+                  className="wifi-forget-btn"
+                  disabled={busy}
+                  onClick={() => request({ kind: "forget" }, "network.wifi.confirm.forget")}
+                >
+                  {t("network.wifi.forget")}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setAyarlarAcik(false)}
+              >
+                {t("common.close")}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
+
 
       {/* Muhafiz geri sayimi — baglanma denemesi surerken */}
       {guardLeft !== null ? (

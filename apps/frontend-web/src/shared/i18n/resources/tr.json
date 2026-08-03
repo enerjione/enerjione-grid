@@ -1043,7 +1043,12 @@
         "mayDrop": "Bu sayfa birkaç saniye içinde yanıt vermeyi bırakabilir; bu beklenen bir durumdur.",
         "backVia": "Geri dönmek için: \"{{ssid}}\" ağına bağlanıp {{url}} adresini açın.",
         "backWired": "Geri dönmek için: kablolu ağdan {{url}} adresini açın."
-      }
+      },
+      "settingsOpen": "Ayarlar",
+      "settingsTitle": "WiFi ayarları",
+      "connectedLabel": "Bağlı ağ",
+      "noConnection": "Bağlı değil",
+      "savedNotConnected": "{{ssid}} (bağlı değil)"
     }
   },
   "remoteAccess": {
