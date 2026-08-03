@@ -46,11 +46,27 @@ def migrate() -> None:
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic_migrations"))
     if not inspect(engine).has_table("alembic_version"):
-        # Legacy/temiz kurulum: mevcut modeller eksik tablolari kurar. Ilk alti
-        # revision eski bootstrap semasini temsil eder; 0007+ gercek upgrade'dir.
+        # TEMIZ KURULUM: `create_all` semayi GUNCEL MODELLERDEN kurar, yani
+        # sonuc dogrudan HEAD semasidir. Damga da head olmali.
+        #
+        # ESKIDEN "0006" DAMGALANIYORDU ve kurulum bu yuzden COKUYORDU:
+        # sema zaten eksiksizken alembic 0007..head arasini bastan
+        # oynatiyor, ilk kolon ekleyen migration var olan kolona carpip
+        # patliyordu:
+        #
+        #     psycopg2.errors.DuplicateColumn: column "device_event_at"
+        #     of relation "telemetry_history" already exists
+        #
+        # Backend acilamiyor -> healthcheck dusuyor -> kurulum
+        # "backend-api is unhealthy" ile duruyor. HER TEMIZ KURULUMDA olur;
+        # 0025 yalnizca sirada ILK carpandi (0007, 0020, 0024, 0026, 0027,
+        # 0028, 0032, 0036 da ayni riski tasiyordu). Tek tek yamalamak
+        # kostebek oyunu olurdu — kaynak burasi.
         Base.metadata.create_all(bind=engine)
-        command.stamp(config, "0006")
-    command.upgrade(config, "head")
+        command.stamp(config, "head")
+    else:
+        # MEVCUT kurulum: gercek gecmisi oynat.
+        command.upgrade(config, "head")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,25 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.4] — 2026-08-03
+
+### Düzeltildi
+- **Temiz kurulum tamamlanamıyordu — asıl sebep bulundu.** Backend, boş bir
+  veritabanında şemayı güncel hâliyle bir kerede kuruyor; ancak ardından
+  geçmiş şema adımlarını da baştan uygulamaya çalışıyordu. Şema zaten
+  eksiksiz olduğu için ilk alan ekleyen adım çakışıp hata veriyor, backend
+  açılamıyor ve kurulum *"backend-api is unhealthy"* diyerek duruyordu.
+
+  2.38.3'te bu adımlardan biri düzeltilmişti; ancak aynı riski taşıyan
+  sekiz adım daha vardı, yani sorun bir sonraki adımda tekrarlayacaktı.
+  Bu sürümde kaynak düzeltildi: boş veritabanında geçmiş adımlar artık
+  hiç tekrarlanmıyor.
+
+  Mevcut kurulumlar etkilenmez; onlarda şema adımları eskisi gibi
+  sırayla uygulanmaya devam eder.
+
+---
+
 ## [2.38.3] — 2026-08-03
 
 ### Düzeltildi
