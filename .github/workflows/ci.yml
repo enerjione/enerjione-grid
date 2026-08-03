@@ -216,6 +216,10 @@ jobs:
       # fazla agresif olursa mevcut kurulumun MUSTERI VERISINI siler.
       - name: Kurulum geri alma davranisi
         run: bash infra/scripts/linux/tests/test-install-rollback.sh "$PWD"
+      # `pipefail` + `| head` zamanlamaya bagli cikis kodu 2 uretir; v2.38.0
+      # yayin isi tam olarak boyle dustu (imajlar yayinlanmisti).
+      - name: pipefail + head tuzagi
+        run: bash infra/scripts/linux/tests/test-pipefail-head.sh "$PWD"
       # Root ajanlarin symlink sertlestirmesi (denetim A11/A13). Bu testler
       # `O_NOFOLLOW` gerektirir, yani Windows gelistirici makinesinde ATLANIR;
       # gercek dogrulama YALNIZCA burada olur. Ajanlar zaten Linux appliance

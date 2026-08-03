@@ -51,7 +51,10 @@ for arg in "$@"; do
     --purge-all)     PURGE_ALL=1; PURGE_DIR=1 ;;
     --purge-tailscale) PURGE_TAILSCALE=1 ;;
     --help|-h)
-      grep '^#' "$0" | sed 's/^#\s*//' | head -30
+      # `head` boruyu erken kapatirsa onundeki `grep` SIGPIPE alir ve
+      # `set -o pipefail` altinda --help CIKIS KODU 2 ile biter. Kirpma
+      # `sed` icinde yapiliyor: boru hatti erken kapanmaz.
+      sed -n 's/^#\s*//p; 30q' "$0"
       exit 0
       ;;
     *) e1_die "Bilinmeyen parametre: $arg (--help icin --help)" ;;

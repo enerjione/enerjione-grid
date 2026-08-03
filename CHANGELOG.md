@@ -14,6 +14,25 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.1] — 2026-08-03
+
+### Düzeltildi
+- **Sürüm yayınlama akışı tamamlanamıyordu.** 2.38.0'da servis imajlarının
+  tümü başarıyla yayınlandı, ancak kurulum paketini üreten adım hata verdiği
+  için sürüm kaydı oluşmadı.
+
+  Sebep, paket içeriğini özetleyen bir satırdı: liste ilk 25 kalemden sonra
+  kesiliyor, kesilen tarafta kalan komut yazamayıp hata döndürüyor ve bu
+  tüm adımı düşürüyordu. Hata **zamanlamaya bağlı** olduğu için bazen
+  görünüyor bazen görünmüyordu; bu yüzden geliştirme makinesinde tekrar
+  edilemiyordu.
+
+  Aynı tuzağın bulunduğu iki yer daha düzeltildi: kaldırma betiğinin yardım
+  ekranı ve kurulum sırasında geçersiz sürüm adı girildiğinde gösterilen
+  sürüm listesi (ikincisi, hata anında ikinci bir hata üretiyordu).
+
+---
+
 ## [2.38.0] — 2026-08-03
 
 ### Eklendi

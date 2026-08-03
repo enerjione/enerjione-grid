@@ -288,7 +288,7 @@ if [[ $E1_PACKAGE_MODE -eq 0 ]]; then
     # dokunmadigi icin burada durmak guvenlidir.
     e1_die "$(printf '%s' \
       "'${TARGET_REF}' bulunamadi — istenen surume GECILEMEDI.\n\n" \
-      "  Mevcut yayin surumleri:\n$(git tag -l 'v[0-9]*' --sort=-v:refname | head -10 | sed 's/^/    /')\n\n" \
+      "  Mevcut yayin surumleri:\n$(git tag -l 'v[0-9]*' --sort=-v:refname | awk 'NR<=10 { print "    " $0 }')\n\n" \
       "  Surum adini kontrol edin veya once 'git fetch --tags' ile listeyi tazeleyin.")"
   fi
 

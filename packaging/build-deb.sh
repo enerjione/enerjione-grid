@@ -111,7 +111,17 @@ dpkg-deb --build --root-owner-group "$STAGE" "$DEB" >/dev/null
 echo "==> Dogrulama"
 dpkg-deb --info "$DEB" | sed 's/^/    /'
 echo "    --- icerik ozeti ---"
-dpkg-deb --contents "$DEB" | awk '{print $6}' | grep -E '^\./(opt|usr|lib)' | head -25 | sed 's/^/    /'
+# `head -25` boru hattini ERKEN KAPATIR; onundeki `grep` yazamayip
+# "write error: Broken pipe" ile 2 doner. `set -o pipefail` altinda bu TUM
+# SCRIPTI dusurur — paket zaten uretilmis olsa bile.
+#
+# Ariza ZAMANLAMAYA BAGLI: grep 25. satiri yazmadan once bitirirse hic
+# olusmaz. Bu yuzden CI bazen yesil bazen kirmizi oluyordu ve yerelde
+# tekrarlanamiyordu. v2.38.0'in yayin isi tam olarak burada dustu (imajlar
+# yayinlanmisti, yalnizca GitHub Release adimi kaldi).
+#
+# Cozum: kirpmayi `awk` icinde yap — boru hatti erken kapanmaz.
+dpkg-deb --contents "$DEB"   | awk '$6 ~ /^\.\/(opt|usr|lib)/ { print "    " $6; if (++n == 25) exit }'
 
 # Kaynak kod sizintisi kontrolu — paketin varlik sebebi bu.
 if dpkg-deb --contents "$DEB" | grep -qE '/(apps|node_modules)/'; then
