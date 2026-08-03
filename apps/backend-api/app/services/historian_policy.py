@@ -23,11 +23,26 @@ bir kolon daha eklemek demekti.
 sinyal) çifti için okuma ARŞİVLENİR. Yani yeniden başlatmada ya da birden
 fazla tüketici örneğinde en kötü ihtimalle biraz FAZLA yazılır; veri
 kaybolmaz.
+
+OLU BANDIN IKI SINIRI — PAZARLIK EDILEMEZ
+------------------------------------------
+Bu bir ariza-gecis gostergesi sistemi; bir gecisi KACIRMAK kabul edilemez.
+Olu bant bu yuzden iki yerde kilitli:
+
+  1. YALNIZCA ANALOG. Ikili (binary), sayac ve metin sinyalinde "yakin
+     deger" diye bir sey yoktur: 0 -> 1 bir OLAYDIR. Bu tiplerde esik ne
+     olursa olsun suzgec DEVREYE GIRMEZ (bkz. `_OLU_BANT_TIPLERI`).
+  2. KALITE DEGISIMI ESIGI ASAR. "Ayni deger + farkli kalite" gercek bir
+     olaydir (good -> invalid / comm_lost / restart / forced). Karar
+     yalnizca sayiya bakarsa, olu bandin icinde donmus bir olcumde
+     haberlesmenin kopmasi arsive HIC girmez; ham kopya `telemetry`
+     tablosunda ~30 dk sonra retention ile silindigi icin kayip KALICI olur.
 """
 
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from dataclasses import dataclass
 
@@ -46,19 +61,26 @@ _CATALOG_TTL_SEC = 60.0
 #: 115.800 giriş; sınır onun üstünde ama sınırsız da değil (sızıntı olmasın).
 _LAST_CACHE_MAX = 200_000
 
+#: Olu bandin uygulanabildigi TEK sinyal tipi. `binary`, `binary_output`,
+#: `counter` ve `string` DISARIDA: bu tiplerde "yakin deger" yoktur, her
+#: degisim bir olaydir. Bilinmeyen/bos tip de disarida kalir (guvenli yon).
+_OLU_BANT_TIPLERI = frozenset({"analog"})
+
 
 @dataclass(frozen=True)
 class SignalPolicy:
     historize: bool
     deadband: float
+    data_type: str
 
 
 #: signal_key -> SignalPolicy
 _catalog_cache: dict[str, SignalPolicy] | None = None
 _catalog_cached_at: float = 0.0
 
-#: (device_id, signal_key) -> son ARŞİVLENEN sayısal değer
-_last_archived: dict[tuple[int, str], float] = {}
+#: (device_id, signal_key) -> son ARSIVLENEN (sayisal deger, kalite)
+#: Kalite de tutulur; yoksa "ayni deger + degisen kalite" okumasi yutulurdu.
+_last_archived: dict[tuple[int, str], tuple[float, str]] = {}
 
 
 def reset_caches() -> None:
@@ -80,6 +102,7 @@ def _load_catalog(db: Session) -> dict[str, SignalPolicy]:
                 SignalCatalog.key,
                 SignalCatalog.historize,
                 SignalCatalog.historize_deadband,
+                SignalCatalog.data_type,
             )
         ).all()
     except Exception:  # noqa: BLE001
@@ -95,8 +118,9 @@ def _load_catalog(db: Session) -> dict[str, SignalPolicy]:
         str(key): SignalPolicy(
             historize=bool(historize),
             deadband=float(deadband or 0.0),
+            data_type=str(data_type or ""),
         )
-        for key, historize, deadband in rows
+        for key, historize, deadband, data_type in rows
     }
     _catalog_cached_at = now
     return _catalog_cache
@@ -108,11 +132,16 @@ def should_archive(
     device_id: int,
     signal_key: str,
     value: float | None,
+    quality: str = "good",
 ) -> bool:
     """Bu okuma `telemetry_history`'ye yazılmalı mı?
 
     Bilinmeyen sinyal -> True. Katalogda olmayan bir anahtarı sessizce
     atmak, yeni eklenen bir sinyalin arşivinin hiç oluşmamasına yol açardı.
+
+    `quality` normalize edilmis kalite (`normalize_quality` ciktisi). Olu
+    bant YALNIZCA deger de kalite de ayni kaldiginda eler; kalite
+    degistiyse okuma her zaman arsivlenir.
     """
     politika = _load_catalog(db).get(signal_key)
     if politika is None:
@@ -121,21 +150,32 @@ def should_archive(
         return False
 
     deadband = politika.deadband
-    if deadband <= 0.0 or value is None:
-        # Ölü bant kapalı ya da sayısal olmayan değer (string/binary):
-        # her okuma arşivlenir.
+    if (
+        deadband <= 0.0
+        or value is None
+        or politika.data_type not in _OLU_BANT_TIPLERI
+    ):
+        # Olu bant kapali, sayisal olmayan deger, ya da analog OLMAYAN bir
+        # sinyal (ikili/sayac/metin): her okuma arsivlenir. Ikili sinyalde
+        # esik uygulamak ariza bayraginin gecisini YUTARDI.
         return True
 
     anahtar = (device_id, signal_key)
     onceki = _last_archived.get(anahtar)
-    if onceki is not None and abs(value - onceki) < deadband:
+    if (
+        onceki is not None
+        and onceki[1] == quality
+        and abs(value - onceki[0]) < deadband
+    ):
         return False
 
     if onceki is None and len(_last_archived) >= _LAST_CACHE_MAX:
         # Sinir asildi: en eski girisleri atmak yerine yeni kayit ACMIYORUZ.
         # Sonuc "bu sinyal her zaman arsivlenir" — yani GUVENLI yon.
         return True
-    _last_archived[anahtar] = value
+    # `intern`: 200.000 girislik onbellekte ayni kalite metninin (normalize
+    # her cagrida YENI bir str uretir) kopyalanmamasi icin.
+    _last_archived[anahtar] = (value, sys.intern(quality))
     return True
 
 

@@ -372,6 +372,11 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             # almasina yol acabilirdi (araya gecen mikrosaniyeler yuzunden).
             _dev_at = telemetry.device_event_at
             _ts_quality = telemetry.timestamp_quality
+            # Kalite BIR KEZ normalize edilir ve hem arsiv KARARINA hem
+            # yazilan satirlara ayni deger gider. Karara gecirilmesi sart:
+            # olu bant yalnizca sayiya bakarsa, esik icinde donmus bir
+            # olcumde good->invalid/comm_lost gecisi arsive HIC girmez.
+            _kalite = normalize_quality(reading.quality)
             # ARSIV POLITIKASI — her okuma arsive yazilmaz.
             #
             # Gercek SCADA pratigi: anlik deger her zaman guncel tutulur
@@ -384,13 +389,14 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 device_id=device.id,
                 signal_key=reading.signal_key,
                 value=reading.value,
+                quality=_kalite,
             ):
                 historian_rows.append({
                     "device_id": device.id,
                     "signal_key": reading.signal_key,
                     "value": reading.value,
                     "value_string": reading.value_string,
-                    "quality": normalize_quality(reading.quality),
+                    "quality": _kalite,
                     "source_timestamp": reading.source_timestamp,
                     "device_event_at": _dev_at,
                     "timestamp_quality": _ts_quality,
@@ -408,7 +414,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                     "signal_key": reading.signal_key,
                     "value": reading.value,
                     "value_string": reading.value_string,
-                    "quality": normalize_quality(reading.quality),
+                    "quality": _kalite,
                     "source_timestamp": reading.source_timestamp,
                     "device_event_at": _dev_at,
                     "timestamp_quality": _ts_quality,

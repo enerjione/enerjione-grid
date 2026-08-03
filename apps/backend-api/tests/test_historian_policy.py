@@ -47,7 +47,12 @@ def _temiz():
 
 
 def _db(*satirlar):
-    return _SahteDB(list(satirlar))
+    """Satir: (key, historize, deadband) veya (key, historize, deadband, data_type).
+
+    Tip verilmezse `analog` — mevcut testlerin tamami olu bant testi ve olu
+    bant YALNIZCA analogda calisir.
+    """
+    return _SahteDB([s if len(s) == 4 else (*s, "analog") for s in satirlar])
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +136,72 @@ def test_SAYISAL_OLMAYAN_deger_olu_banta_takilmiyor():
     assert hp.should_archive(db, device_id=1, signal_key="master.s", value=None)
 
 
+def test_AYNI_okuma_iki_kez_gelirse_BIR_kez_dusuyor():
+    """Olu bandin varlik sebebi: degismeyen olcum arsivi sismesin."""
+    db = _db(("master.actual_current", True, 0.5))
+    okuma = dict(device_id=1, signal_key="master.actual_current", value=12.0,
+                 quality="good")
+    dusen = [k for k in range(2) if hp.should_archive(db, **okuma)]
+    assert dusen == [0], "ayni okuma iki kez arsivlendi"
+
+
+# ---------------------------------------------------------------------------
+# ARIZA-GECIS SINAVI — olu bant bir gecisi KACIRAMAZ
+#
+# Bu sistem ariza-gecis gostergesi izliyor. Yazim azaltan her mekanizma su
+# iki sinavdan gecmek zorunda; gecmezse mekanizma degil, VERI KAYBI olur.
+# ---------------------------------------------------------------------------
+
+def test_AYNI_deger_KALITE_degismisse_arsivleniyor():
+    """`good -> invalid` GERCEK BIR OLAY; deger degismedi diye yutulamaz.
+
+    Sinsi senaryo: 0 A'da donmus bir akim ya da sabit bir RSSI. Deger olu
+    bandin icinde kaldigi surece haberlesmenin kopmasi (comm_lost), cihazin
+    reboot etmesi (restart), noktanin elle zorlanmasi (forced) ve olcumun
+    gecersizlesmesi (invalid) arsive HIC girmezdi. Ham kopya `telemetry`
+    tablosunda ~30 dk sonra retention ile silindigi icin kayip KALICI olurdu.
+    """
+    db = _db(("sat01.actual_current", True, 0.5))
+    dusen = [
+        kalite
+        for kalite in ("good", "good", "invalid", "invalid", "comm_lost", "good")
+        if hp.should_archive(
+            db, device_id=1, signal_key="sat01.actual_current",
+            value=0.0, quality=kalite,
+        )
+    ]
+    assert dusen == ["good", "invalid", "comm_lost", "good"], (
+        "kalite gecisi yutuldu — olu bant yalnizca sayiya bakiyor"
+    )
+
+
+def test_IKILI_sinyal_HER_degisimde_arsivleniyor():
+    """Ariza bayraginda "yakin deger" yoktur: 0 -> 1 bir OLAYDIR.
+
+    Esik ne verilirse verilsin (elle SQL, ileride acilacak bir ayar ekrani)
+    ikili sinyalde suzgec DEVREYE GIRMEMELI. Bu koruma olmasa deadband=2.0
+    ile asagidaki 6 gecisin 5'i yutuluyordu (olculdu: 1/6 arsivlendi).
+    """
+    for tip in ("binary", "binary_output", "counter", "string"):
+        hp.reset_caches()
+        db = _db(("sat01.overcurrent_tripped", True, 2.0, tip))
+        dusen = sum(
+            1
+            for v in (0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+            if hp.should_archive(
+                db, device_id=1, signal_key="sat01.overcurrent_tripped", value=v,
+            )
+        )
+        assert dusen == 6, f"{tip} tipinde ariza bayragi gecisi yutuldu ({dusen}/6)"
+
+
+def test_BILINMEYEN_tipe_olu_bant_UYGULANMIYOR():
+    """Tip bos/taninmiyorsa suzgec devre disi — guvenli yon fazla yazmaktir."""
+    db = _db(("master.x", True, 5.0, ""))
+    assert hp.should_archive(db, device_id=1, signal_key="master.x", value=1.0)
+    assert hp.should_archive(db, device_id=1, signal_key="master.x", value=1.0)
+
+
 # ---------------------------------------------------------------------------
 # Onbellek
 # ---------------------------------------------------------------------------
@@ -195,6 +266,37 @@ def test_arsiv_satiri_politikanin_ICINDE_ekleniyor():
         assert kacamak not in kosul.replace("should_archive", ""), (
             f"kosul baska bir ifadeyle zayiflatilmis ({kacamak!r}): {kosul!r}"
         )
+
+
+def _should_archive_cagrisi(kod: str) -> str:
+    i = kod.find("historian_policy.should_archive(")
+    assert i != -1, "arsiv politikasi tuketicide cagrilmiyor"
+    return kod[i:kod.index("):", i)]
+
+
+def test_tuketici_KALITEYI_GECIRIYOR():
+    """Politika kaliteyi hesaba katsa da tuketici gecirmezse varsayilan
+    ("good") kullanilir ve `good -> invalid` gecisi YINE yutulur."""
+    cagri = _should_archive_cagrisi(_tuketici_kodu())
+    assert "quality=" in cagri, (
+        "kalite arsiv kararina gecirilmiyor — olu bant icinde donmus bir "
+        "olcumde good->invalid gecisi arsive HIC girmez"
+    )
+
+
+def test_karara_giden_kalite_YAZILANLA_AYNI():
+    """Karar ham kaliteye, yazilan satir normalize edilmise bakarsa
+    ("GOOD" vs "good") her okuma sahte bir "kalite degisimi" olur ve olu
+    bant tamamen etkisizlesirdi."""
+    kod = _tuketici_kodu()
+    cagri = _should_archive_cagrisi(kod)
+    ifade = cagri.split("quality=", 1)[1].split(",")[0].strip()
+    assert ifade, "quality argumani bos"
+    i_ekle = kod.find("historian_rows.append(")
+    govde = kod[i_ekle:kod.index("})", i_ekle)]
+    assert f'"quality": {ifade}' in govde, (
+        f"karara giden kalite ({ifade!r}) arsiv satirina yazilandan FARKLI: {govde!r}"
+    )
 
 
 def test_CANLI_deger_politikadan_ETKILENMIYOR():
