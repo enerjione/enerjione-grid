@@ -502,13 +502,6 @@ export function RemoteAccessPage({ accessToken }: Props) {
         </p>
       ) : null}
 
-      {pending ? (
-        <p className="net-banner net-banner--info">
-          <Loader2 size={16} className="net-spin" />
-          {t("remoteAccess.warn.pending")}
-        </p>
-      ) : null}
-
       {open && remaining !== null && remaining > 0 && remaining < EXPIRING_SOON_SEC ? (
         <p className="net-banner net-banner--warn">
           <Hourglass size={16} />

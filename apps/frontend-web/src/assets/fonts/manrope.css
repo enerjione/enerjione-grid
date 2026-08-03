@@ -1,0 +1,55 @@
+/*
+ * Manrope — arayuzun govde/baslik fontu. YEREL, degisken agirlikli.
+ *
+ * NEDEN PAKETE GOMULU (CDN DEGIL)
+ * -------------------------------
+ * Saha cihazi internetsiz calisabilir: AP modunda operator dogrudan cihaza
+ * baglanir ve disariya cikis YOKTUR. Google Fonts'tan cekilen bir font o
+ * durumda hic inmez ve arayuz sistem fontuna duser — yani tam da sahada,
+ * en cok ihtiyac duyulan yerde tasarim bozulur.
+ *
+ * Ayni gerekceyle Material Symbols de pakete gomulu
+ * (bkz. material-symbols-subset.css).
+ *
+ * NEDEN DEGISKEN (VARIABLE) FONT
+ * ------------------------------
+ * Tek dosya 200..800 arasi TUM agirliklari veriyor (25 kB). Ayri ayri
+ * agirlik dosyalari 4-5 istek ve ~80 kB ederdi; 4G kurulumda ilk acilis
+ * suresi bunun dogrudan bedeli.
+ *
+ * NEDEN IKI ALT KUME
+ * ------------------
+ * Turkce harflerin bir kismi `latin`te DEGIL:
+ *     ı  U+0131  -> latin
+ *     ş  U+015F  -> latin-ext
+ *     ğ  U+011F  -> latin-ext
+ * Yalnizca `latin` alinsaydi "ş" ve "ğ" sistem fontuna duser, metin icinde
+ * KARISIK yazi tipi gorunurdu. `unicode-range` sayesinde latin-ext yalnizca
+ * gercekten o harfler gectiginde indirilir.
+ *
+ * `font-display: swap`: metin, font inene kadar sistem fontuyla OKUNUR
+ * kalir. Ikon fontundan farki bu — orada `block` kasitli, cunku ligature
+ * cozulmezse ikon yerine adi yazilir.
+ */
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("./manrope-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("./manrope-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

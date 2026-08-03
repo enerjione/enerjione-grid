@@ -107,7 +107,11 @@
 }
 
 ﻿:root {
-  font-family: Arial, sans-serif;
+  /* Manrope pakete gomulu (bkz. assets/fonts/manrope.css) — saha cihazi
+     internetsizken de dogru gorunsun. Yedekler yalnizca font inene kadar
+     ya da tarayici woff2 desteklemiyorsa devreye girer. */
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   color: #111827;
   background-color: #f3f4f6;
 }
@@ -34175,21 +34179,31 @@ th.event-col-category {
 .rad-switch {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 22px;
   flex-shrink: 0;
-  padding: 18px 20px;
+  padding: 20px 22px;
   border: 1px solid var(--rad-line);
-  border-left: 4px solid #cbd5e1;
-  border-radius: 12px;
-  background: #f8fafc;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  transition: background 0.3s ease, border-color 0.3s ease;
+  /* Sol kenar seridi KALDIRILDI: sayfadaki tek ana blok oldugu icin
+     "hangi kategori" demeye gerek yok; renk zaten durumu soyluyordu ve
+     dort piksellik sert cubuk bloku bir uyari kutusu gibi gosteriyordu. */
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
+/* ACIK: sicak bir hale. Renk zaten amber (kirmizi degil — "acik" bir hata
+   degil, dikkat gerektiren normal bir durum); hale onu bagirmadan one
+   cikariyor. */
 .rad-switch.is-on {
   background: linear-gradient(180deg, var(--rad-on-bg), #fffdf9);
   border-color: var(--rad-on-line);
-  border-left-color: var(--rad-accent);
+  box-shadow:
+    0 1px 2px rgba(154, 76, 7, 0.06),
+    0 0 0 4px rgba(233, 120, 0, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .rad-switch.is-unknown,
@@ -34305,6 +34319,7 @@ th.event-col-category {
 }
 
 .rad-switch-body h2 {
+  letter-spacing: -0.02em;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -34471,14 +34486,24 @@ th.event-col-category {
 }
 
 .rad-duration {
-  padding: 12px 8px;
-  border: 1px solid #dbe3ee;
-  border-radius: 10px;
-  background: #f8fafc;
+  padding: 13px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
   color: #475569;
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
+  /* Sayilar hizali dursun: 30 / 2 / 8 / 24 farkli genislikte oldugu icin
+     kutular optik olarak kayiyordu. */
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s, background 0.15s, color 0.15s,
+    box-shadow 0.15s, transform 0.15s;
+}
+
+.rad-duration:hover:not(.is-active):not(:disabled) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  transform: translateY(-1px);
 }
 
 .rad-duration strong {
@@ -34495,11 +34520,16 @@ th.event-col-category {
 }
 
 .rad-duration.is-active {
-  background: #fff;
+  /* Secili kutu hafif renkli bir yuzeye otursun: yalnizca cerceve ile
+     isaretlemek dokunmatikte zor secilebiliyordu. */
+  background: linear-gradient(180deg, #fff8ed, #fffdf9);
   border-color: var(--rad-accent);
-  color: var(--rad-accent);
-  box-shadow: 0 0 0 2px rgba(233, 120, 0, 0.18);
+  color: var(--rad-on-ink);
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.13);
+  transform: none;
 }
+
+.rad-duration.is-active strong { color: var(--rad-accent); }
 
 .rad-duration:disabled { opacity: 0.5; cursor: not-allowed; }
 
