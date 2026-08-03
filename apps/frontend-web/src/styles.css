@@ -21493,10 +21493,13 @@ th.event-col-category {
    Tamamen yeniden tasarlandi — modern, ferah, butonlar net.
    ========================================================================= */
 
-/* Popup wrapper genisligini biraz buyut, max yukseklik koy */
+/* Popup wrapper genisligini biraz buyut, max yukseklik koy.
+   --seg-menu-max-h: kartin acildigi noktanin altinda kalan bosluk (JS verir).
+   Boylece kucuk ekranda ekran disina tasmaz, buyuk ekranda ise 80vh'ye kadar
+   buyuyup daha cok cihaz gosterir. Fallback: 80vh. */
 .grid-segment-menu {
   width: 420px !important;
-  max-height: 80vh !important;
+  max-height: var(--seg-menu-max-h, 80vh) !important;
 }
 
 /* Inner scroll container — eski yapiyla uyumlu */
@@ -21606,7 +21609,10 @@ th.event-col-category {
 }
 
 /* ------- Empty state ------- */
+/* flex-shrink: 0 -> kart kisildiginda daralma yukunu hep scroll eden liste
+   tasir; sabit ogeler (bos durum, arama, butonlar) ezilmez. */
 .seg-menu-empty {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -21633,14 +21639,40 @@ th.event-col-category {
   color: #64748b;
 }
 
-/* ------- Cihaz listesi (atanmis cihazlar) ------- */
+/* ------- Cihaz listesi (atanmis cihazlar) -------
+   Segmentte 20-30 cihaz olabilir. Kart harita uzerinde acilan bir panel
+   oldugu icin buyumesin: baslik + "Cihaz Ekle" butonu sabit kalir (flex-shrink: 0),
+   sadece liste ic scroll yapar. Sabit bir max-height yok; min-height: 0 sayesinde
+   kart kisildiginda tum daralmayi bu liste emer. Yani liste, kartin o an sahip
+   oldugu bosluk kadar uzar (buyuk ekranda daha cok satir gorunur).
+   padding/margin cifti: scrollbar icin sagda oluk acar ama negatif margin ile
+   telafi eder -> satirlarin sag kenari ustteki butonla ayni hizada kalir ve
+   hover golgesi kirpilmaz. Oluk (8px) scrollbar genisligiyle ayni. */
 .seg-menu-devices {
   list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 8px 2px 2px;
+  margin: -2px -8px -2px -2px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.seg-menu-devices::-webkit-scrollbar {
+  width: 8px;
+}
+.seg-menu-devices::-webkit-scrollbar-track {
+  background: transparent;
+}
+.seg-menu-devices::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.seg-menu-devices::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 .seg-menu-device-item {
   display: flex;
@@ -21789,8 +21821,9 @@ th.event-col-category {
   color: #991b1b;
 }
 
-/* ------- Cihaz ekle butonu (ana liste sonu) ------- */
+/* ------- Cihaz ekle butonu (basligin hemen altinda, listenin ustunde) ------- */
 .seg-menu-add-btn {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -21804,7 +21837,6 @@ th.event-col-category {
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s;
-  margin-top: 4px;
 }
 .seg-menu-add-btn:hover:not(:disabled) {
   background: #4338ca;
@@ -21825,6 +21857,7 @@ th.event-col-category {
 
 /* ------- Arama input ------- */
 .seg-menu-search {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -21862,14 +21895,34 @@ th.event-col-category {
   flex-shrink: 0;
 }
 
-/* ------- Pickable list (cihaz ekle / hedef segment sec) ------- */
+/* ------- Pickable list (cihaz ekle / hedef segment sec) -------
+   Ana listeyle ayni kural: arama kutusu ve "Geri" butonu sabit kalsin, uzun
+   aday listesi kendi icinde scroll etsin. */
 .seg-menu-pickable {
   list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 8px 2px 2px;
+  margin: -2px -8px -2px -2px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.seg-menu-pickable::-webkit-scrollbar {
+  width: 8px;
+}
+.seg-menu-pickable::-webkit-scrollbar-track {
+  background: transparent;
+}
+.seg-menu-pickable::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.seg-menu-pickable::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 .seg-menu-pickable-item {
   display: flex;
@@ -21916,6 +21969,7 @@ th.event-col-category {
 
 /* ------- Move info banner ------- */
 .seg-menu-move-info {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -21941,6 +21995,7 @@ th.event-col-category {
 
 /* ------- Geri don butonu ------- */
 .seg-menu-back-btn {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;

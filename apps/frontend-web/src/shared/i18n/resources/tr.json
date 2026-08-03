@@ -2334,7 +2334,7 @@
       "clickMoveOrRemove": "Tıkla: taşı / kaldır",
       "assignDevicePlaceholder": "Cihaz ata...",
       "noDeviceTitle": "Atanmış cihaz yok",
-      "noDeviceHint": "Bu segmente cihaz eklemek için aşağıdaki butonu kullanın.",
+      "noDeviceHint": "Bu segmente cihaz eklemek için yukarıdaki butonu kullanın.",
       "addDevice": "Cihaz Ekle",
       "addDeviceTitle": "Bu segmente cihaz ekle",
       "noAssignableDevice": "Atanabilir cihaz yok",

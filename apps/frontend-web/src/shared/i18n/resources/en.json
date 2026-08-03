@@ -2334,7 +2334,7 @@
       "clickMoveOrRemove": "Click: move / remove",
       "assignDevicePlaceholder": "Assign device...",
       "noDeviceTitle": "No device assigned",
-      "noDeviceHint": "Use the button below to add a device to this segment.",
+      "noDeviceHint": "Use the button above to add a device to this segment.",
       "addDevice": "Add Device",
       "addDeviceTitle": "Add a device to this segment",
       "noAssignableDevice": "No assignable device",

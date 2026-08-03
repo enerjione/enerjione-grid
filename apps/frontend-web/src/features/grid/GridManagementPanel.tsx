@@ -16,7 +16,7 @@
  *   - Direkler: sequence_no sırasıyla, drag-to-reorder, "Tersine çevir" butonu
  *   - Her direk satırının altında o direkten sonraki segment + atanmış cihaz
  */
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap, useMapEvents } from "react-leaflet";
@@ -1251,7 +1251,20 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                 {segmentMenu ? (
                   <div
                     className="grid-segment-menu"
-                    style={{ left: segmentMenu.x, top: segmentMenu.y }}
+                    style={((): CSSProperties => {
+                      // Kart position:fixed ve tiklama noktasindan ASAGI dogru acilir.
+                      // Ekranin altina tasmasin diye: (1) ust nokta gerekirse yukari
+                      // cekilir, (2) kalan bosluk kadar max yukseklik verilir. Icerideki
+                      // cihaz listesi bu yuksekligi asarsa kendi icinde scroll eder.
+                      const vh = window.innerHeight;
+                      const top = Math.min(segmentMenu.y, Math.max(16, vh - 380));
+                      const maxH = Math.min(vh * 0.8, vh - top - 16);
+                      return {
+                        left: segmentMenu.x,
+                        top,
+                        "--seg-menu-max-h": `${Math.round(maxH)}px`
+                      } as CSSProperties;
+                    })()}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {(() => {
@@ -1982,6 +1995,27 @@ function SegmentContextMenu({
       {view === "list" ? (
         // ===== MEVCUT CIHAZLAR + CIHAZ EKLE =====
         <div className="seg-menu-body">
+          <button
+            type="button"
+            className="seg-menu-add-btn"
+            disabled={availableDevices.length === 0}
+            onClick={() => {
+              setView("add");
+              setSearch("");
+            }}
+            title={
+              availableDevices.length === 0
+                ? t("engineering.grid.noAssignableDevice")
+                : t("engineering.grid.addDeviceTitle")
+            }
+          >
+            <span className="material-symbols-outlined">add</span>
+            <span>{t("engineering.grid.addDevice")}</span>
+            {availableDevices.length > 0 ? (
+              <span className="seg-menu-add-count">{t("engineering.grid.candidateCount", { count: availableDevices.length })}</span>
+            ) : null}
+          </button>
+
           {segsWithDevice.length === 0 ? (
             <div className="seg-menu-empty">
               <span className="material-symbols-outlined">cable</span>
@@ -2046,27 +2080,6 @@ function SegmentContextMenu({
               })}
             </ul>
           )}
-
-          <button
-            type="button"
-            className="seg-menu-add-btn"
-            disabled={availableDevices.length === 0}
-            onClick={() => {
-              setView("add");
-              setSearch("");
-            }}
-            title={
-              availableDevices.length === 0
-                ? t("engineering.grid.noAssignableDevice")
-                : t("engineering.grid.addDeviceTitle")
-            }
-          >
-            <span className="material-symbols-outlined">add</span>
-            <span>{t("engineering.grid.addDevice")}</span>
-            {availableDevices.length > 0 ? (
-              <span className="seg-menu-add-count">{t("engineering.grid.candidateCount", { count: availableDevices.length })}</span>
-            ) : null}
-          </button>
         </div>
       ) : view === "add" ? (
         // ===== CIHAZ EKLE (arama + secim) =====
