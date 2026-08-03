@@ -173,6 +173,10 @@ body {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   overflow: auto;
+  /* Icindeki `.sr-only` position:absolute. Konumlanmis ata YOKSA containing
+     block viewport olur; eleman bu panelin overflow kirpmasindan KACAR ve
+     belge scroll'u uretir. Cihazlar sayfasindaki ayni hatanin ikizi. */
+  position: relative;
 }
 
 .license-panel .sr-only {
@@ -2594,6 +2598,10 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Icindeki `.device-status-sr-only` position:absolute. Konumlanmis ata
+     YOKSA containing block ilk containing block (viewport) olur; eleman o
+     zaman sutunun overflow kirpmasindan kacip BELGE scroll'u uretir. */
+  position: relative;
 }
 
 .device-name-with-status {
