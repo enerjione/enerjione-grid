@@ -111,17 +111,24 @@ dpkg-deb --build --root-owner-group "$STAGE" "$DEB" >/dev/null
 echo "==> Dogrulama"
 dpkg-deb --info "$DEB" | sed 's/^/    /'
 echo "    --- icerik ozeti ---"
-# `head -25` boru hattini ERKEN KAPATIR; onundeki `grep` yazamayip
-# "write error: Broken pipe" ile 2 doner. `set -o pipefail` altinda bu TUM
-# SCRIPTI dusurur — paket zaten uretilmis olsa bile.
+# BORU HATTI ERKEN KAPANMAMALI.
 #
-# Ariza ZAMANLAMAYA BAGLI: grep 25. satiri yazmadan once bitirirse hic
-# olusmaz. Bu yuzden CI bazen yesil bazen kirmizi oluyordu ve yerelde
-# tekrarlanamiyordu. v2.38.0'in yayin isi tam olarak burada dustu (imajlar
-# yayinlanmisti, yalnizca GitHub Release adimi kaldi).
+# `head -N` (ya da `awk ... exit`) boru hattini N. satirda kapatir;
+# onundeki komut hala yaziyorsa SIGPIPE alir ve `set -o pipefail`
+# altinda TUM SCRIPT duser.
 #
-# Cozum: kirpmayi `awk` icinde yap — boru hatti erken kapanmaz.
-dpkg-deb --contents "$DEB"   | awk '$6 ~ /^\.\/(opt|usr|lib)/ { print "    " $6; if (++n == 25) exit }'
+# BU HATA IKI KEZ YAPILDI:
+#   1. `... | grep | head -25`  -> `grep: write error: Broken pipe`
+#      (v2.38.0'in yayin isi burada dustu; imajlar yayinlanmisti)
+#   2. `... | awk '{...; if (++n == 25) exit}'` -> ayni tuzak, bir adim
+#      geride: bu kez uretici `dpkg-deb`in tar alt sureci SIGPIPE aldi
+#      (`dpkg-deb: error: tar subprocess returned error exit status 2`)
+#
+# Kirpmayi ERKEN CIKISLA yapmak cozüm degil; sorun `head` degil, BORUYU
+# KAPATMAK. Dogru cozum: uretici bitene kadar OKUMAYA DEVAM ET, yalnizca
+# yazdirmayi sinirla. Ozet birkac yuz satirlik bir listede kosuyor,
+# tamamini okumanin maliyeti yok.
+dpkg-deb --contents "$DEB" | awk '$6 ~ /^\.\/(opt|usr|lib)/ && ++n <= 25 { print "    " $6 }'
 
 # Kaynak kod sizintisi kontrolu — paketin varlik sebebi bu.
 if dpkg-deb --contents "$DEB" | grep -qE '/(apps|node_modules)/'; then

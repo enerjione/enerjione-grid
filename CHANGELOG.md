@@ -14,6 +14,19 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.2] — 2026-08-03
+
+### Düzeltildi
+- **Sürüm yayınlama akışı tamamlandı.** 2.38.1'deki düzeltme yetersizdi:
+  kesme işlemi başka bir komuta taşınmıştı ama liste yine erken
+  kapatılıyordu, bu kez paketi okuyan araç hata veriyordu. Artık liste
+  sonuna kadar okunuyor, yalnızca gösterim sınırlanıyor.
+
+  Servis imajları 2.38.0'dan beri zaten doğru yayınlanıyordu; eksik olan
+  kurulum paketi ve sürüm kaydıydı.
+
+---
+
 ## [2.38.1] — 2026-08-03
 
 ### Düzeltildi
