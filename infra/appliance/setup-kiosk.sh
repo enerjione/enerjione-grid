@@ -429,6 +429,9 @@ fi
   # Adres kurulumda ACIKCA verildi mi? Verildiyse oturum betigi `.env`den
   # port cikarimi YAPMAZ; operatorun sectigi adres baglayicidir.
   printf 'E1_URL_EXPLICIT=%q\n' "${E1_KIOSK_URL:+1}"
+  # Splash'ta gosterilecek musteri adi (kurulum araci girdisi).
+  printf 'E1_CUSTOMER_NAME=%q
+' "$CUSTOMER_SAFE"
   printf 'E1_BROWSER=%q\n'     "$BROWSER"
   printf 'E1_SPLASH=%q\n'      "$SPLASH_FILE"
   printf 'E1_WM=%q\n'          "$WM_CMD"
@@ -521,6 +524,17 @@ else
   unset _p _envf
 fi
 _log "kiosk adresi: $URL"
+
+# Surum: guncelleme ile degistigi icin provizyona GOMULMEZ, her oturumda
+# okunur. Bulunamazsa splash surum satirini HIC gostermez (uydurmak yerine).
+E1_APP_VERSION=""
+for _envf in ${E1_ENV_CANDIDATES:-/opt/enerjione-grid/.env /etc/enerjione-grid/install.env}; do
+  [ -f "$_envf" ] || continue
+  E1_APP_VERSION="$(sed -n 's/^[[:space:]]*E1_VERSION[[:space:]]*=[[:space:]]*\([^#]*\).*//p'     "$_envf" 2>/dev/null | tail -1 | tr -d '"'"'"' 	
+')"
+  [ -n "$E1_APP_VERSION" ] && break
+done
+unset _envf
 
 # Ekran hic sonmesin / kilitlenmesin — pano 7/24 acik kalir. Asil ayar kurulum
 # aninda offline dconf'a yazildi; burasi ikinci savunma hatti.
@@ -625,6 +639,56 @@ if [ -f "$E1_SPLASH" ] && [ -n "${HOME:-}" ]; then
   fi
 fi
 
+# Splash'a gecirilen degerler. Dosyaya GOMMEK yerine fragment kullaniyoruz:
+# gomulu deger surum/musteri degisince bayatlar, fragment her oturumda o anki
+# degeri tasir ve dosyayi yeniden yazmayi gerektirmez. Fragment sunucuya
+# gitmez, zaten file:// aciyoruz.
+#
+# Kacis: deger URL fragment'ine giriyor; bosluk ve ayirici karakterler
+# kodlanmali yoksa parametreler birbirine karisir.
+_url_kacis() {
+  printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/&/%26/g'                          -e 's/#/%23/g' -e 's/+/%2B/g'
+}
+
+_splash_frag() {
+  printf 'u=%s&c=%s&v=%s'     "$(_url_kacis "$URL")"     "$(_url_kacis "${E1_CUSTOMER_NAME:-}")"     "$(_url_kacis "${E1_APP_VERSION:-}")"
+}
+
+# --- Musteri logosu: uygulama ayaktayken diske onbelleklenir ---------------
+# Logo uygulamanin veritabaninda data URL olarak durur; splash ise uygulama
+# HENUZ AYAGA KALKMADAN gosterilir, yani o an veritabanina ulasilamaz.
+# Cozum: uygulama ayaga kalktiktan sonra arka planda cekip diske yaziyoruz.
+# Ilk acilista logo YOK (splash onsuz gosterilir), sonraki her acilista VAR.
+# Uc public (login ekrani da ayni yerden okuyor), kimlik gerekmiyor.
+_logo_onbellek() {
+  [ -n "${E1_SPLASH_LOCAL:-}" ] || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  command -v base64 >/dev/null 2>&1 || return 0
+  _dizin="$(dirname "$E1_SPLASH_LOCAL")"
+
+  # Uygulama ayaga kalkana kadar bekle (en fazla ~10 dk).
+  _bek=0
+  while [ "$_bek" -lt 300 ]; do
+    if curl -fsS --max-time 3 -o /dev/null "$URL" 2>/dev/null; then break; fi
+    _bek=$((_bek + 1)); sleep 2
+  done
+  [ "$_bek" -lt 300 ] || return 0
+
+  _json="$(curl -fsS --max-time 10 "${URL%/}/api/v1/project-settings" 2>/dev/null)" || return 0
+  # data URL'in base64 govdesini cikar. `grep -o` ile tek alan aliyoruz;
+  # jq bu cihazlarda kurulu olmayabilir ve yalnizca bunun icin bagimlilik
+  # eklemek istemiyoruz.
+  _b64="$(printf '%s' "$_json"     | grep -o '"customer_logo":"data:image/[^"]*"'     | head -1 | sed -e 's/.*base64,//' -e 's/"$//')"
+  [ -n "$_b64" ] || return 0
+
+  if printf '%s' "$_b64" | base64 -d > "${_dizin}/customer-logo.png.tmp" 2>/dev/null      && [ -s "${_dizin}/customer-logo.png.tmp" ]; then
+    mv -f "${_dizin}/customer-logo.png.tmp" "${_dizin}/customer-logo.png"
+    _log "musteri logosu onbelleklendi"
+  else
+    rm -f "${_dizin}/customer-logo.png.tmp" 2>/dev/null || true
+  fi
+}
+
 # Hedef: uygulama ayakta ise dogrudan adres, degilse YEREL splash sayfasi.
 # Splash uygulamayi kendisi yoklar ve hazir olunca yonlenir; boylece ekran ILK
 # SANIYEDEN itibaren doludur. (Eskiden burada 3 dakikaya kadar suren bir
@@ -638,14 +702,18 @@ _hedef() {
     # gomulen adres port degisince bayatlar, fragment ise HER OTURUMDA
     # yukarida cozulen guncel degeri tasir. Fragment sunucuya gitmez ve
     # dosyayi yeniden yazmayi gerektirmez.
-    printf 'file://%s#%s' "$E1_SPLASH_LOCAL" "$URL"
+    printf 'file://%s#%s' "$E1_SPLASH_LOCAL" "$(_splash_frag)"
   elif [ -f "$E1_SPLASH" ]; then
     # Snap/flatpak OLMAYAN tarayicilar (deb chromium) burayi okuyabiliyor.
-    printf 'file://%s#%s' "$E1_SPLASH" "$URL"
+    printf 'file://%s#%s' "$E1_SPLASH" "$(_splash_frag)"
   else
     printf '%s' "$URL"
   fi
 }
+
+# Musteri logosunu arka planda onbellege al (ilk acilista yok, sonrakilerde
+# splash'ta gorunur). Tarayici dongusunu BEKLETMEZ.
+_logo_onbellek &
 
 # Tarayici cokerse/kapatilirsa ekran BOS KALMASIN: yeniden baslat. Bu dongu
 # ASLA bitmemeli (yukaridaki greeter aciklamasi).
@@ -707,41 +775,96 @@ _sp=1
 { cat > "${SPLASH_FILE}.tmp" <<'E1_SPLASH_EOF'
 <!doctype html><html lang="tr"><head><meta charset="utf-8">
 <title>EnerjiOne Grid</title><style>
- html,body{height:100%;margin:0;background:#0b1220;color:#e6edf6;cursor:none;
-   font:16px/1.5 system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
- img{width:96px;height:96px;border-radius:24px}
- h1{font-size:20px;font-weight:600;margin:16px 0 4px}
- p{margin:0;color:#93a4bd}
- .b{margin:24px auto 0;width:220px;height:4px;background:#1e2a3d;border-radius:2px;overflow:hidden}
- .b i{display:block;width:40%;height:100%;background:#f28b30;animation:s 1.2s ease-in-out infinite}
- @keyframes s{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
-</style></head><body><div style="text-align:center">
- <img src="kiosk-logo.png" alt=""><h1>EnerjiOne Grid</h1>
- <p id="m">Sistem başlatılıyor…</p><div class="b"><i></i></div></div>
+ :root{--ink:#e6edf6;--sub:#8fa3bf;--accent:#f59e0b}
+ *{box-sizing:border-box}
+ html,body{height:100%;margin:0;background:#0b1220;color:var(--ink);cursor:none;
+   font:16px/1.55 Arial,"Liberation Sans",Helvetica,sans-serif;overflow:hidden}
+ /* Zemin: duz siyah yerine hafif isik huzmesi -- 7/24 acik bir panoda
+    duz zemin "cihaz kilitlendi" izlenimi veriyor. */
+ body::before{content:"";position:fixed;inset:0;
+   background:radial-gradient(60% 50% at 50% 35%,rgba(245,158,11,.10),transparent 70%)}
+ .wrap{position:relative;height:100%;display:flex;flex-direction:column;
+   align-items:center;justify-content:center;gap:26px;padding:40px}
+ /* Musteri logosu: yalnizca onbellekte VARSA gorunur (bkz. _logo_onbellek).
+    Yoksa `onerror` ile gizlenir ve ekran musteri adiyla devam eder --
+    kirik gorsel simgesi gostermek en kotusu olurdu. */
+ #clogo{max-width:340px;max-height:150px;object-fit:contain;display:none}
+ #cname{font-size:23px;font-weight:700;letter-spacing:.2px;text-align:center}
+ #cname:empty{display:none}
+ .status{text-align:center}
+ .status p{margin:0;color:var(--sub);font-size:15px}
+ .b{margin:18px auto 0;width:240px;height:3px;background:rgba(255,255,255,.09);
+   border-radius:2px;overflow:hidden}
+ .b i{display:block;width:38%;height:100%;background:var(--accent);
+   animation:s 1.4s cubic-bezier(.45,.05,.55,.95) infinite}
+ @keyframes s{from{transform:translateX(-110%)}to{transform:translateX(280%)}}
+ /* Alt serit: solda urun kimligi (login ekranindaki gibi), sagda kurulum
+    bilgisi. Bos alanlar kendiliginden kaybolur. */
+ .foot{position:fixed;left:0;right:0;bottom:0;padding:20px 28px;
+   display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+ .brand{display:flex;align-items:center;gap:10px;opacity:.92}
+ .brand img{width:30px;height:30px;border-radius:7px}
+ .brand span{font-size:15px;font-weight:700;letter-spacing:.2px}
+ .meta{text-align:right;color:var(--sub);font-size:12.5px;line-height:1.7}
+ .meta div:empty{display:none}
+ .meta b{color:#c4d2e6;font-weight:600}
+</style></head><body>
+<div class="wrap">
+ <img id="clogo" alt="">
+ <div id="cname"></div>
+ <div class="status">
+  <p id="m">Sistem başlatılıyor…</p>
+  <div class="b"><i></i></div>
+ </div>
+</div>
+<div class="foot">
+ <div class="brand"><img src="kiosk-logo.png" alt=""><span>EnerjiOne Grid</span></div>
+ <div class="meta">
+  <div id="mcust"></div>
+  <div id="mver"></div>
+ </div>
+</div>
 <script>
- /* Adres oncelikle FRAGMENT'ten okunur (#http://localhost:8080/). Oturum
-    betigi her acilista guncel adresi oraya yazar; dosyaya gomulu deger
-    yalnizca YEDEK -- port `.env` ile degistiginde gomulu deger bayatlar ve
-    yoklama hicbir zaman tutmaz, splash de sonsuza kadar beklerdi. */
- var U=(location.hash||"").slice(1);
- try{U=decodeURIComponent(U);}catch(e){}
- if(!/^https?:\/\//.test(U))U="__E1_URL__";
+ /* Degerler FRAGMENT'ten okunur: u=<adres>&c=<musteri>&v=<surum>.
+    Dosyaya gomulen deger port/surum/musteri degisince bayatlar; fragment
+    her oturumda oturum betiginin cozdugu guncel degeri tasir. */
+ function frag(){var o={},h=(location.hash||"").slice(1);
+   h.split("&").forEach(function(p){var i=p.indexOf("=");if(i<0)return;
+     try{o[p.slice(0,i)]=decodeURIComponent(p.slice(i+1));}catch(e){}});
+   return o;}
+ var F=frag();
+ var U=F.u||"";
+ if(!/^https?:\/\//.test(U))U="__E1_URL__";   /* yedek: provizyon degeri */
+
+ var cus=(F.c||"").trim(), ver=(F.v||"").trim();
+ if(cus){document.getElementById("cname").textContent=cus;
+         document.getElementById("mcust").innerHTML="<b>"+
+           cus.replace(/[<&]/g,function(c){return c==="<"?"&lt;":"&amp;";})+"</b>";}
+ if(ver){document.getElementById("mver").textContent="Surum "+
+           ver.replace(/[<&]/g,"");}
+
+ /* Musteri logosu varsa adin YERINE gecer; ikisini birden gostermek
+    tekrar olurdu. */
+ var cl=document.getElementById("clogo");
+ cl.onload=function(){cl.style.display="block";
+   document.getElementById("cname").textContent="";};
+ cl.onerror=function(){};
+ cl.src="customer-logo.png?t="+Date.now();
+
  var n=0;
  function go(){location.replace(U);}
- function msg(t){document.getElementById('m').textContent=t;}
+ function msg(t){document.getElementById("m").textContent=t;}
  /* ASLA PES ETME. Eskiden 90 denemeden (3 dk) sonra uygulama ayakta olmasa
-    bile adrese gidiliyordu; Chromium hata sayfasi cikiyor, splash gittigi
+    bile adrese gidiliyordu; tarayici hata sayfasi cikiyor, splash gittigi
     icin geri donus olmuyordu ve operator ekranda tarayici hatasi
-    goruyordu. Ilk acilista imaj indirme/DB kurulumu 3 dakikayi rahat
-    gecebilir. Artik surekli yokluyoruz ve mesaji kademelendiriyoruz. */
+    goruyordu. Artik surekli yokluyoruz. */
  function probe(){var im=new Image();
    im.onload=go;
    im.onerror=function(){n++;
-     if(n===20)msg('Uygulama bekleniyor…');
-     else if(n===90)msg('İlk kurulum uzun sürebilir, bekleniyor…');
-     else if(n===300)msg('Henüz başlamadı. Cihazı kapatmayın; sorun sürerse teknik destek ile iletişime geçin.');
+     if(n===20)msg("Uygulama bekleniyor…");
+     else if(n===300)msg("Henüz başlamadı. Cihazı kapatmayın; sorun sürerse teknik destek ile iletişime geçin.");
      setTimeout(probe,2000);};
-   im.src=U.replace(/\/$/,'')+'/favicon.png?t='+Date.now();}
+   im.src=U.replace(/\/$/,"")+"/favicon.png?t="+Date.now();}
  probe();
 </script></body></html>
 E1_SPLASH_EOF

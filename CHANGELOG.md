@@ -14,6 +14,22 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.9] — 2026-08-03
+
+### Eklendi
+
+- **Kiosk açılış ekranı artık dinamik.** Müşteri logosu (varsa) ve müşteri adı
+  ortada, EnerjiOne Grid kimliği sol altta (giriş ekranıyla aynı dil), müşteri
+  ve sürüm bilgisi sağ altta gösteriliyor. Değerler her açılışta çözülür;
+  dosyaya gömülmediği için sürüm/port değişince bayatlamaz.
+- Müşteri logosu uygulama ayağa kalktıktan sonra arka planda diske
+  önbelleklenir; ilk açılışta henüz yoktur, sonraki her açılışta görünür.
+  (Logo veritabanında tutulduğu için açılış ekranı anında erişemez.)
+
+### Değişti
+
+- "İlk kurulum uzun sürebilir" ara mesajı kaldırıldı.
+
 ## [2.38.8] — 2026-08-03
 
 ### Değişti

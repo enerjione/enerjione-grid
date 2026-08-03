@@ -129,8 +129,39 @@ _kontrol "uygulama kapaliyken splash EV dizininden acilmali" "$_s" "ev"
 # gomulu deger bayatlar: yoklama hicbir zaman tutmaz ve ekran sonsuza kadar
 # acilis ekraninda kalir ("surekli splash ekranda bekliyor"). Fragment her
 # oturumda o anki adresi tasir.
-_kontrol "splash hedefi adresi fragment ile tasimali" \
-  "${SONUC#*#}" "http://localhost/"
+_kontrol "splash hedefi adresi fragment ile tasimali"   "${SONUC#*#}" "u=http://localhost/&c=&v="
+
+# --- 2c. Musteri adi ve surum de fragment ile gecmeli -----------------------
+# Splash uygulama AYAGA KALKMADAN once gosterilir; o an veritabanina
+# ulasilamaz. Bu yuzden ekranda gosterilecek musteri adi ve surum, oturum
+# betiginin cozdugu degerlerden fragment ile tasinir.
+#
+# Kacis onemli: musteri adi bosluk icerebilir ("Turkiye Petrolleri").
+# Kacisilmazsa fragment parametreleri birbirine karisir ve surum alani bozulur.
+FRAG="$(
+  set +u
+  E1_SPLASH=""
+  URL="http://localhost:8080/"
+  E1_CUSTOMER_NAME="Turkiye Petrolleri A&B"
+  E1_APP_VERSION="2.38.9"
+  # shellcheck source=/dev/null
+  . "$PARCA"
+  _splash_frag
+)"
+_kontrol "musteri adi ve surum fragment'e kodlanmali"   "$FRAG" "u=http://localhost:8080/&c=Turkiye%20Petrolleri%20A%26B&v=2.38.9"
+
+# Deger yoksa alan BOS kalmali — uydurulmamali.
+FRAG2="$(
+  set +u
+  E1_SPLASH=""
+  URL="http://localhost/"
+  E1_CUSTOMER_NAME=""
+  E1_APP_VERSION=""
+  # shellcheck source=/dev/null
+  . "$PARCA"
+  _splash_frag
+)"
+_kontrol "deger yoksa alan bos kalmali" "$FRAG2" "u=http://localhost/&c=&v="
 
 # --- 3. Hedef dizin GIZLI OLMAMALI ------------------------------------------
 # snap'in `home` arayuzu $HOME altindaki nokta ile baslayan yollari engeller;
