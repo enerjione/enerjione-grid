@@ -14,6 +14,54 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.0] — 2026-08-03
+
+### Eklendi
+- **Kurulum yarıda kalırsa yaptıklarını geri alıyor.** Önceden bir adımda
+  düşünce cihazda yarım bir kurulum kalıyordu: container'lar ayakta, ayar
+  dosyası üretilmiş, ama sistem çalışmıyor. Tekrar denendiğinde hangi
+  parçanın eski hangisinin yeni olduğu belli olmuyordu.
+
+  > **Mevcut veriler korunur.** Var olan bir kurulumun üzerine yapılan
+  > denemede telemetri, olay kayıtları ve yedekler **silinmez**; yalnızca o
+  > koşumun oluşturdukları geri alınır.
+
+- **Kurulum hata verdiğinde sebebi ekranda görünüyor.** Önceden yalnızca
+  "logları inceleyin" deniyor ve komut veriliyordu; artık sorunlu servisin
+  son satırları doğrudan basılıyor.
+
+### Değişti
+- **Arayüz yazı tipi (Manrope) uygulamaya gömüldü.** Önceden internetten
+  indiriliyor sanılıyordu; aslında hiç yüklenmiyor ve sistem yazı tipine
+  düşülüyordu. Artık cihazın internet erişimi olmasa da — erişim noktası
+  modunda doğrudan cihaza bağlanıldığında da — arayüz doğru görünür.
+
+- **Ağ Ayarları ve Uzaktan Bakım sayfalarında bildirimler artık ekranın
+  köşesinde beliriyor.** Önceden sayfanın ortasına satır olarak ekleniyor,
+  her göründüğünde alttaki kartlar aşağı kayıyordu.
+
+  Kalıcı durumlar (örneğin cihaza ulaşılamaması) kaybolmuyor: üst şeritte
+  görünmeye devam ediyor, çünkü geçici bir bildirim kaybolduktan sonra
+  sayfa "her şey yolunda" gibi görünürdü.
+
+- **Uzaktan Bakım sayfası sadeleştirildi.** İşlem sürerken aynı bilgiyi iki
+  yerde birden yazan mükerrer satır kaldırıldı; süre seçimi ve durum
+  gösterimi yenilendi.
+
+### Düzeltildi
+- **WiFi kartı, sistemde ne varsa ona göre algılanıyor.** Bazı cihazlarda
+  kart takılı olduğu hâlde "WiFi kartı yok" deniyor ve erişim noktası /
+  ağa bağlanma seçimi kilitli kalıyordu. Özellikle USB WiFi adaptörlerinde
+  görülüyordu.
+
+  Kart bulunup da ağ yöneticisi tarafından tanınmadığı durum artık ayrıca
+  belirtiliyor ve ne yapılacağı yazıyor — "kart yok" demek yerine.
+
+- Gateway ayarlarında DNP3 kalite bayrağı seçeneğinin kutusu başlığın
+  üstünde tek başına duruyordu; artık başlığın solunda.
+
+---
+
 ## [2.37.0] — 2026-08-03
 
 ### Güvenlik
