@@ -62,6 +62,7 @@ import {
   type WifiAction
 } from "./networkAccess";
 import { WifiActionConfirm, WifiConsequences } from "./WifiActionConfirm";
+import { useToast } from "../../components/ToastProvider";
 
 type Props = {
   accessToken: string;
@@ -97,10 +98,13 @@ function SignalIcon({ signal }: { signal: number }) {
 
 export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   const { t } = useTranslation();
+  // EYLEM hatalari toast'a: bunlar bir tiklamanin sonucu ve GECICI. Satir
+  // ici gosterilince kart yuksekligi degisiyor, altindaki her sey kayiyordu.
+  // (Kalici durumlar toast'a TASINMADI — kaybolan bir uyari, olmayan uyaridir.)
+  const toast = useToast();
 
   const [scan, setScan] = useState<WifiScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -182,12 +186,11 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   /** WiFi kartini ac — hicbir seyi bozmaz, onay sorulmaz. */
   const turnRadioOn = useCallback(async () => {
     setSubmitting(true);
-    setError(null);
     try {
       await setWifiRadio(accessToken, true);
       onRefreshStatus();
     } catch (exc) {
-      setError(networkErrorText(exc, t));
+      toast.error(networkErrorText(exc, t));
     } finally {
       setSubmitting(false);
     }
@@ -199,7 +202,6 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   const run = useCallback(
     async (action: WifiAction, secret?: string | null) => {
       setSubmitting(true);
-      setError(null);
       const drops = willDropSession(action, status, path);
       try {
         switch (action.kind) {
@@ -227,7 +229,7 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
         if (drops) setHandoverAt(Date.now());
         onRefreshStatus();
       } catch (exc) {
-        setError(networkErrorText(exc, t));
+        toast.error(networkErrorText(exc, t));
       } finally {
         setSubmitting(false);
       }
@@ -241,9 +243,8 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   /** Onay gerekiyorsa sor, gerekmiyorsa dogrudan uygula. */
   const request = useCallback(
     (action: WifiAction, titleKey: string) => {
-      setError(null);
       if (blockReason(action, status)) {
-        setError(t("network.wifi.confirm.blockedNoPath"));
+        toast.error(t("network.wifi.confirm.blockedNoPath"));
         return;
       }
       if (consequencesOf(action, status, path).length === 0) {
@@ -260,7 +261,6 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
    *  Derin taramada AP ~15 sn indirildigi icin bekleme suresi uzun. */
   async function runScan(deep: boolean) {
     setScanning(true);
-    setError(null);
     const previous = scan?.updated_at ?? null;
     try {
       await triggerWifiScan(accessToken, deep);
@@ -277,7 +277,7 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
       }
       onRefreshStatus();
     } catch (exc) {
-      setError(networkErrorText(exc, t));
+      toast.error(networkErrorText(exc, t));
     } finally {
       setScanning(false);
     }
@@ -717,7 +717,6 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
         </div>
       ) : null}
 
-      {error ? <p className="net-error">{error}</p> : null}
 
       {/* ---- Ag listesi ---- */}
       {canScan ? (
@@ -776,7 +775,6 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
                         onClick={() => {
                           setTarget(n);
                           setPsk("");
-                          setError(null);
                         }}
                       >
                         {t("network.wifi.connect")}
