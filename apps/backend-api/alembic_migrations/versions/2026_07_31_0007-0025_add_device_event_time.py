@@ -72,14 +72,39 @@ def upgrade() -> None:
     # Kilit bekleme tavani: hypertable'a ADD COLUMN kisa sureli ACCESS
     # EXCLUSIVE alir; cakisan bir islem varsa sonsuza kadar beklemesin.
     op.execute("SET lock_timeout = '30s'")
-    op.add_column(
-        "telemetry_history",
-        sa.Column("device_event_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.add_column(
-        "telemetry_history",
-        sa.Column("timestamp_quality", sa.String(length=20), nullable=True),
-    )
+    # KOLON ZATEN VARSA ATLA — kurulum bu yuzden kilitleniyordu.
+    #
+    # Backend acilista once `Base.metadata.create_all()` cagiriyor: tablolar
+    # GUNCEL modellerden olusuyor ve bu kolonlar zaten iceride. Ardindan
+    # alembic gecmisi bastan oynatiliyor ve 0025 var olan kolonu eklemeye
+    # calisip `DuplicateColumn` ile oluyor:
+    #
+    #     psycopg2.errors.DuplicateColumn: column "device_event_at"
+    #     of relation "telemetry_history" already exists
+    #
+    # Backend acilamiyor, healthcheck dusuyor, kurulum "backend-api is
+    # unhealthy" diyerek duruyor. Cihaz KALICI olarak kilitleniyor: her
+    # yeniden deneme ayni noktada patliyor.
+    #
+    # Temiz bir veritabaninda gorulmez (create_all ile alembic ayni sirayi
+    # uretir); yalnizca onceki bir denemeden veri hacmi kalmis cihazlarda
+    # cikar. "Bir sunucuda oluyor digerinde olmuyor"un sebebi tam olarak bu.
+    #
+    # Migration'in gorevi SONUCU garanti etmek: kolon varsa is zaten yapilmis.
+    mevcut = {
+        s["name"]
+        for s in sa.inspect(op.get_bind()).get_columns("telemetry_history")
+    }
+    if "device_event_at" not in mevcut:
+        op.add_column(
+            "telemetry_history",
+            sa.Column("device_event_at", sa.DateTime(timezone=True), nullable=True),
+        )
+    if "timestamp_quality" not in mevcut:
+        op.add_column(
+            "telemetry_history",
+            sa.Column("timestamp_quality", sa.String(length=20), nullable=True),
+        )
     # INDEX EKLENMEDI — bilincli. 0022 tam da gereksiz index'leri dusurmustu;
     # gunde ~26M satir alan bir tabloya "belki lazim olur" index'i eklemek
     # yazma amplifikasyonunu geri getirir. SOE sorgulari zaten
@@ -88,5 +113,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("telemetry_history", "timestamp_quality")
-    op.drop_column("telemetry_history", "device_event_at")
+    # Geri alma da dayanikli: kolon yoksa hata vermek yerine atla.
+    mevcut = {
+        s["name"]
+        for s in sa.inspect(op.get_bind()).get_columns("telemetry_history")
+    }
+    if "timestamp_quality" in mevcut:
+        op.drop_column("telemetry_history", "timestamp_quality")
+    if "device_event_at" in mevcut:
+        op.drop_column("telemetry_history", "device_event_at")

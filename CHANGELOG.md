@@ -14,6 +14,23 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.3] — 2026-08-03
+
+### Düzeltildi
+- **Önceki bir kurulum denemesinden veri kalmış cihazlarda kurulum
+  tamamlanamıyordu.** Backend açılışta veritabanı şemasını güncelliyor,
+  ardından geçmiş şema adımlarını sırayla uyguluyor. Bir adım, zaten var
+  olan bir alanı yeniden eklemeye çalışıp hata veriyor; backend açılamıyor
+  ve kurulum *"backend-api is unhealthy"* diyerek duruyordu.
+
+  Cihaz kalıcı olarak kilitleniyordu: her yeniden deneme aynı noktada
+  patlıyordu. Temiz veritabanında görülmediği için "bir sunucuda oluyor,
+  diğerinde olmuyor" şeklinde ortaya çıkıyordu.
+
+  İlgili adım artık alanın zaten var olduğunu görünce atlıyor.
+
+---
+
 ## [2.38.2] — 2026-08-03
 
 ### Düzeltildi
