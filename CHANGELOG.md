@@ -14,6 +14,19 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.38.6] — 2026-08-03
+
+### Düzeltildi
+
+- **Kiosk açılış ekranından uygulamaya geçilmiyordu.** Açılış ekranı uygulamayı
+  yoklayıp hazır olunca kendiliğinden yönleniyor; ancak yoklanan adres
+  `http://localhost/` olarak sabitti. Arayüzün yayınlandığı port `.env`
+  içindeki `FRONTEND_HTTP_PORT` ile değişebiliyor (host'un 80 portu
+  host-nginx'teyse kurulum bunu 8080 yapar) ve o durumda yoklama hiçbir zaman
+  başarılı olmuyor, operatör açılış ekranında süresiz bekliyordu. Adres artık
+  her oturumda yapılandırmadan okunuyor; kurulumda adres açıkça verildiyse ona
+  dokunulmuyor.
+
 ## [2.38.5] — 2026-08-03
 
 ### Düzeltildi

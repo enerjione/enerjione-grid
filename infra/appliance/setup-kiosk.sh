@@ -426,6 +426,9 @@ fi
   printf '%s\n' '# EnerjiOne Grid kiosk oturumu - setup-kiosk.sh tarafindan uretildi.'
   printf '%s\n' '# ELLE DUZENLEMEYIN; setup-kiosk.sh tekrar calisinca uzerine yazilir.'
   printf 'E1_URL_DEFAULT=%q\n' "$KIOSK_URL"
+  # Adres kurulumda ACIKCA verildi mi? Verildiyse oturum betigi `.env`den
+  # port cikarimi YAPMAZ; operatorun sectigi adres baglayicidir.
+  printf 'E1_URL_EXPLICIT=%q\n' "${E1_KIOSK_URL:+1}"
   printf 'E1_BROWSER=%q\n'     "$BROWSER"
   printf 'E1_SPLASH=%q\n'      "$SPLASH_FILE"
   printf 'E1_WM=%q\n'          "$WM_CMD"
@@ -479,7 +482,45 @@ if command -v flock >/dev/null 2>&1 \
   fi
 fi
 
-URL="${E1_KIOSK_URL:-$E1_URL_DEFAULT}"
+# --- Acilacak adres: PORT CALISMA ANINDA COZULUR ---------------------------
+# Arayuzun yayinlandigi port `.env` icindeki FRONTEND_HTTP_PORT ile degisir
+# (host'un 80'i host-nginx'te ise kurulum bunu 8080 yapar). Adres
+# `http://localhost/` olarak SABIT gomuluydu; port 80 DEGILSE:
+#   - splash'in yoklamasi hicbir zaman basarili olmaz,
+#   - yonlendirme hic tetiklenmez,
+#   - operator acilis ekraninda SONSUZA KADAR bekler.
+# Sahada "surekli splash ekranda bekliyor" sikayeti tam olarak budur.
+#
+# Provizyon aninda cozmek YETMEZ: port sonraki bir guncellemede degisebilir
+# ve kiosk yeniden kurulmadan bozulurdu. Bu yuzden her oturumda okuyoruz.
+_port_cikar() {
+  # Deger "8080" olabilir, "127.0.0.1:8080" de (bind adresiyle). Bizi
+  # yalnizca port ilgilendiriyor; kiosk zaten ayni makinede.
+  printf '%s' "${1##*:}" | tr -cd '0-9'
+}
+
+if [ -n "${E1_KIOSK_URL:-}" ]; then
+  URL="$E1_KIOSK_URL"                      # ortamdan acikca verilmis
+elif [ "${E1_URL_EXPLICIT:-}" = "1" ]; then
+  URL="$E1_URL_DEFAULT"                    # kurulumda acikca verilmis
+else
+  _p=""
+  # Liste degisken uzerinden: varsayilan gercek yollar, test bunu saptirir.
+  # Sabit yollara bakan bir dongu yalnizca cihazda sinanabilirdi — yani hic.
+  for _envf in ${E1_ENV_CANDIDATES:-/opt/enerjione-grid/.env /etc/enerjione-grid/install.env}; do
+    [ -f "$_envf" ] || continue
+    _p="$(sed -n 's/^[[:space:]]*FRONTEND_HTTP_PORT[[:space:]]*=[[:space:]]*\([^#]*\).*/\1/p' \
+          "$_envf" 2>/dev/null | tail -1 | tr -d '"'"'"' \t\r')"
+    _p="$(_port_cikar "$_p")"
+    [ -n "$_p" ] && break
+  done
+  case "$_p" in
+    "" | 80) URL="$E1_URL_DEFAULT" ;;
+    *)       URL="http://localhost:${_p}/" ;;
+  esac
+  unset _p _envf
+fi
+_log "kiosk adresi: $URL"
 
 # Ekran hic sonmesin / kilitlenmesin — pano 7/24 acik kalir. Asil ayar kurulum
 # aninda offline dconf'a yazildi; burasi ikinci savunma hatti.
@@ -593,10 +634,14 @@ _hedef() {
      && curl -fsS --max-time 2 -o /dev/null "$URL" 2>/dev/null; then
     printf '%s' "$URL"
   elif [ -n "$E1_SPLASH_LOCAL" ] && [ -f "$E1_SPLASH_LOCAL" ]; then
-    printf 'file://%s' "$E1_SPLASH_LOCAL"
+    # Hedef adres FRAGMENT ile veriliyor: splash dosyasina provizyon aninda
+    # gomulen adres port degisince bayatlar, fragment ise HER OTURUMDA
+    # yukarida cozulen guncel degeri tasir. Fragment sunucuya gitmez ve
+    # dosyayi yeniden yazmayi gerektirmez.
+    printf 'file://%s#%s' "$E1_SPLASH_LOCAL" "$URL"
   elif [ -f "$E1_SPLASH" ]; then
     # Snap/flatpak OLMAYAN tarayicilar (deb chromium) burayi okuyabiliyor.
-    printf 'file://%s' "$E1_SPLASH"
+    printf 'file://%s#%s' "$E1_SPLASH" "$URL"
   else
     printf '%s' "$URL"
   fi
@@ -667,7 +712,14 @@ _sp=1
  <img src="kiosk-logo.png" alt=""><h1>EnerjiOne Grid</h1>
  <p id="m">Sistem baslatiliyor...</p><div class="b"><i></i></div></div>
 <script>
- var U="__E1_URL__",n=0;
+ /* Adres oncelikle FRAGMENT'ten okunur (#http://localhost:8080/). Oturum
+    betigi her acilista guncel adresi oraya yazar; dosyaya gomulu deger
+    yalnizca YEDEK -- port `.env` ile degistiginde gomulu deger bayatlar ve
+    yoklama hicbir zaman tutmaz, splash de sonsuza kadar beklerdi. */
+ var U=(location.hash||"").slice(1);
+ try{U=decodeURIComponent(U);}catch(e){}
+ if(!/^https?:\/\//.test(U))U="__E1_URL__";
+ var n=0;
  function go(){location.replace(U);}
  function msg(t){document.getElementById('m').textContent=t;}
  /* ASLA PES ETME. Eskiden 90 denemeden (3 dk) sonra uygulama ayakta olmasa

@@ -118,16 +118,25 @@ _kontrol "uygulama ayaktayken dogrudan adrese gidilmeli" \
 # `/usr/local` gosterirse snap tarayici acamaz; sahada gorulen hata budur.
 SONUC="$(_calistir 1 0 1)"
 case "$SONUC" in
-  file://*/enerjione-grid/kiosk-splash.html) _s=ev ;;
-  *usr/local*)                               _s=usr-local ;;
-  *)                                         _s="$SONUC" ;;
+  file://*/enerjione-grid/kiosk-splash.html#*) _s=ev ;;
+  *usr-local-share*)                           _s=usr-local ;;
+  *)                                           _s="$SONUC" ;;
 esac
 _kontrol "uygulama kapaliyken splash EV dizininden acilmali" "$_s" "ev"
+
+# --- 2b. Hedef adres FRAGMENT ile tasinmali ---------------------------------
+# Splash dosyaya GOMULU adresle acilirsa, port `.env` uzerinden degistiginde
+# gomulu deger bayatlar: yoklama hicbir zaman tutmaz ve ekran sonsuza kadar
+# acilis ekraninda kalir ("surekli splash ekranda bekliyor"). Fragment her
+# oturumda o anki adresi tasir.
+_kontrol "splash hedefi adresi fragment ile tasimali" \
+  "${SONUC#*#}" "http://localhost/"
 
 # --- 3. Hedef dizin GIZLI OLMAMALI ------------------------------------------
 # snap'in `home` arayuzu $HOME altindaki nokta ile baslayan yollari engeller;
 # `.e1-kiosk` gibi bir dizine koymak ayni hatayi aynen tekrarlardi.
-case "${SONUC#file://}" in
+_YOL="${SONUC#file://}"; _YOL="${_YOL%%#*}"
+case "$_YOL" in
   */.*) _g=gizli ;;
   *)    _g=acik ;;
 esac
@@ -136,7 +145,7 @@ _kontrol "splash gizli dizine konmamali (snap home arayuzu engeller)" "$_g" "aci
 # --- 4. Logo da yaninda olmali ----------------------------------------------
 # Sayfa <img src="kiosk-logo.png"> ile GORECELI istiyor; yalniz html
 # kopyalanirsa ekranda kirik gorsel cikar.
-EV_DIZIN="$(dirname "${SONUC#file://}")"
+EV_DIZIN="$(dirname "$_YOL")"
 if [[ -f "${EV_DIZIN}/kiosk-logo.png" ]]; then _l=var; else _l=yok; fi
 _kontrol "logo splash'in yanina kopyalanmali" "$_l" "var"
 
@@ -151,10 +160,68 @@ _kontrol "splash yokken dogrudan adrese dusmeli" \
 # yaptigimiz degisiklik o cihazlarda splash'i KAYBETTIRMEMELI.
 SONUC6="$(_calistir 1 0 0)"
 case "$SONUC6" in
-  file://*usr-local-share/kiosk-splash.html) _y=paylasim ;;
-  *)                                         _y="$SONUC6" ;;
+  file://*usr-local-share/kiosk-splash.html#*) _y=paylasim ;;
+  *)                                           _y="$SONUC6" ;;
 esac
 _kontrol "ev yazilamazsa paylasim dizini yedek olmali" "$_y" "paylasim"
+
+# ===========================================================================
+# ADRES COZUMU — arayuz 80'de OLMAYABILIR
+# ===========================================================================
+# YASANAN ARIZA: kiosk adresi `http://localhost/` olarak gomuluydu. Host'un
+# 80 portu host-nginx'te oldugunda kurulum arayuzu FRONTEND_HTTP_PORT=8080'e
+# alir; splash'in yoklamasi o zaman HICBIR ZAMAN tutmaz, yonlendirme
+# tetiklenmez ve operator acilis ekraninda sonsuza kadar bekler.
+#
+# Provizyon aninda cozmek yetmezdi: port sonraki bir guncellemede degisirse
+# kiosk yeniden kurulmadan bozulurdu. Bu yuzden her oturumda okunuyor.
+COZ="${TMP}/coz.sh"
+awk '
+  /^_port_cikar\(\) \{$/ { icerde=1 }
+  icerde { print }
+  /^_log "kiosk adresi: \$URL"$/ { if (icerde) exit }
+' "$KURULUM" > "$COZ"
+grep -q 'FRONTEND_HTTP_PORT' "$COZ" || {
+  echo "  X adres cozum blogu cikarilamadi" >&2; exit 1; }
+
+_adres() {  # $1=.env icerigi ("" ise dosya hic yok)  $2=E1_URL_EXPLICIT
+  (
+    set +e
+    D="$(mktemp -d "${TMP}/env-XXXXXX")"
+    [[ -n "$1" ]] && printf '%s\n' "$1" > "${D}/.env"
+    E1_ENV_CANDIDATES="${D}/.env"
+    E1_URL_DEFAULT="http://localhost/"
+    E1_URL_EXPLICIT="$2"
+    _log() { :; }
+    # shellcheck source=/dev/null
+    . "$COZ"
+    printf '%s' "$URL"
+  )
+}
+
+# Varsayilan (80) — adres degismemeli.
+_kontrol "port 80 iken adres sade kalmali" \
+  "$(_adres 'FRONTEND_HTTP_PORT=80' '')" "http://localhost/"
+
+# ASIL VAKA: host'un 80'i host-nginx'te, arayuz 8080'de.
+_kontrol "port 8080 ise adres o porta gitmeli" \
+  "$(_adres 'FRONTEND_HTTP_PORT=8080' '')" "http://localhost:8080/"
+
+# Bind adresli bicim: "127.0.0.1:8080". Port dogru cikarilmali.
+_kontrol "bind adresli degerden port cikarilmali" \
+  "$(_adres 'FRONTEND_HTTP_PORT=127.0.0.1:8080' '')" "http://localhost:8080/"
+
+# `.env` yoksa (kiosk uygulamadan once kuruluyor) varsayilana dusulmeli.
+_kontrol ".env yoksa varsayilan adres kullanilmali" \
+  "$(_adres '' '')" "http://localhost/"
+
+# Operator kurulumda adresi ACIKCA verdiyse `.env` onu EZMEMELI.
+_kontrol "acik verilen adres .env ile ezilmemeli" \
+  "$(_adres 'FRONTEND_HTTP_PORT=8080' '1')" "http://localhost/"
+
+# Bozuk/yorumlu satir sayisal olmayan bir sey uretmemeli.
+_kontrol "bozuk deger varsayilana dusmeli" \
+  "$(_adres 'FRONTEND_HTTP_PORT=   # elle bozulmus' '')" "http://localhost/"
 
 echo "test-kiosk-splash: ${gecti} gecti, ${basarisiz} basarisiz"
 [[ "$basarisiz" -eq 0 ]]
