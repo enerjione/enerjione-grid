@@ -14,6 +14,25 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.40.0] — 2026-08-04
+
+### Değişti
+
+- **Gateway telemetrisi için NATS-direkt rota artık standart.** Paneldeki
+  "Güncelle" düğmesi gateway compose'unu güncel NATS adresiyle yeniden üretir;
+  NATS öncesi kurulan (veya anonim NATS adresli) gateway'ler HTTP yedek
+  yolundan çıkıp telemetriyi doğrudan JetStream'e basar. Kurulumda seçilen
+  imaj/port/adres değerleri korunur; imaj çekilemezse çalışan kuruluma
+  dokunulmaz.
+
+### Eklendi
+
+- Telemetriyi HTTP yedek yolundan basmaya devam eden gateway için 10 dakikada
+  bir uyarı loglanır — standart dışı çalışma (ve backend'e binen gereksiz yük)
+  görünmez kalmaz.
+
+---
+
 ## [2.39.0] — 2026-08-04
 
 ### Eklendi
