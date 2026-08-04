@@ -196,7 +196,6 @@ def test_arka_plan_isleri_LIDERE_kayitli():
         encoding="utf-8"
     )
     for is_adi in (
-        "telemetry_consumer",
         "outbox_flush",
         "outbound_telemetry_batcher",
         "mqtt_publisher",
@@ -206,6 +205,13 @@ def test_arka_plan_isleri_LIDERE_kayitli():
         "backup_scheduler",
     ):
         assert f'leader.register("{is_adi}"' in kaynak, f"{is_adi} lidere kayitli degil"
+    # telemetry_consumer BILEREK liderde DEGIL (2026-08-04): JetStream
+    # durable'i paralel uyeler arasinda mesaj paylasir ve persist kodu buna
+    # dayanikli; kilit altinda UVICORN_WORKERS=4 acmak 3 sureci bosta
+    # birakiyordu. Surec basina calisir — geri kaydedilirse olcek kaybolur.
+    assert 'leader.register("telemetry_consumer"' not in kaynak, (
+        "telemetry_consumer lidere geri kaydedilmis — coklu worker olcegi kaybolur"
+    )
 
 
 def test_arka_plan_isi_DOGRUDAN_startup_event_i_ile_acilmiyor():
@@ -220,8 +226,9 @@ def test_arka_plan_isi_DOGRUDAN_startup_event_i_ile_acilmiyor():
     kaynak = (Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(
         encoding="utf-8"
     )
+    # telemetry_consumer bu listede DEGIL: o artik tekil bir is degil,
+    # BILEREK her arka plan surecinde calisir (paralel tuketici tasarimi).
     tekil_isler = (
-        "telemetry_consumer",
         "outbox_flush_worker",
         "telemetry_retention",
         "alarm_reconciliation",

@@ -90,10 +90,31 @@ def test_katalog_OKUNAMAZSA_her_sey_arsivleniyor():
 # Olu bant
 # ---------------------------------------------------------------------------
 
-def test_olu_bant_KAPALIYKEN_her_okuma_arsivleniyor():
+def test_olu_bant_KAPALIYKEN_her_DEGISIM_arsivleniyor():
+    """Olu bant kapali: her DEGISIM yazilir; BIREBIR tekrar yazilmaz.
+
+    2026-08-04 davranis degisikligi: 400 cihaz yuk testinde oncelikli hattin
+    arsiv hacminin buyuk kismi ayni degerin saniyelik tekrarlariydi. Kural
+    seti korunur — degisim ve kalite gecisi HER ZAMAN arsivde."""
     db = _db(("master.v", True, 0.0))
-    for deger in (10.0, 10.0, 10.001, 10.002):
-        assert hp.should_archive(db, device_id=1, signal_key="master.v", value=deger)
+    assert hp.should_archive(db, device_id=1, signal_key="master.v", value=10.0)
+    assert not hp.should_archive(db, device_id=1, signal_key="master.v", value=10.0)
+    assert hp.should_archive(db, device_id=1, signal_key="master.v", value=10.001)
+    assert hp.should_archive(db, device_id=1, signal_key="master.v", value=10.002)
+
+
+def test_birebir_tekrar_KALITE_degisince_yazilir():
+    """'Deger ayni, kalite degisti' bir okuma YUTULMAZ — pazarliga kapali."""
+    db = _db(("master.flag", True, 0.0))
+    assert hp.should_archive(
+        db, device_id=1, signal_key="master.flag", value=1.0, quality="good"
+    )
+    assert not hp.should_archive(
+        db, device_id=1, signal_key="master.flag", value=1.0, quality="good"
+    )
+    assert hp.should_archive(
+        db, device_id=1, signal_key="master.flag", value=1.0, quality="invalid"
+    )
 
 
 def test_olu_bant_KUCUK_degisimi_eliyor():
@@ -196,10 +217,14 @@ def test_IKILI_sinyal_HER_degisimde_arsivleniyor():
 
 
 def test_BILINMEYEN_tipe_olu_bant_UYGULANMIYOR():
-    """Tip bos/taninmiyorsa suzgec devre disi — guvenli yon fazla yazmaktir."""
+    """Tip bos/taninmiyorsa ESIK uygulanmaz — esik altindaki degisim bile
+    yazilir (guvenli yon). Birebir tekrar ise tip fark etmeksizin yazilmaz."""
     db = _db(("master.x", True, 5.0, ""))
     assert hp.should_archive(db, device_id=1, signal_key="master.x", value=1.0)
-    assert hp.should_archive(db, device_id=1, signal_key="master.x", value=1.0)
+    assert not hp.should_archive(db, device_id=1, signal_key="master.x", value=1.0)
+    # 1.0 -> 2.0 fark (1.0), 5.0'lik esigin ALTINDA — yine de arsivlenir,
+    # cunku bilinmeyen tipe olu bant esigi uygulanmaz.
+    assert hp.should_archive(db, device_id=1, signal_key="master.x", value=2.0)
 
 
 # ---------------------------------------------------------------------------

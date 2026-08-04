@@ -953,14 +953,18 @@ def test_arka_plan_sureci_ROLU_ACIKCA_worker():
     )
 
 
-def test_arka_plan_sureci_TEK_uvicorn_worker():
-    """Coklu uvicorn worker burada yalnizca bellek yer.
+def test_arka_plan_sureci_COKLU_uvicorn_worker():
+    """Worker surec sayisi persist kapasitesini DOGRUDAN carpar (2026-08-04).
 
-    Isler zaten advisory lock ile tekil; ikinci surec kilidi alamayip
-    standby'da bekler ve her biri ayri bir DB havuzu acar (baglanti butcesi
-    4 API + 1 arka plan surecine gore hesaplandi).
+    Telemetri tuketicisi artik leader'siz, surec basina calisir; JetStream
+    durable'i mesajlari uyeler arasinda paylasir. Tek surec 400 cihazda
+    ~2.4k msj/sn tavanindaydi. Varsayilan 4; E1_WORKER_PROCESSES ile
+    ayarlanir. Leader-kilitli isler (retention vb.) yine tekil kalir.
     """
-    assert str(_servis("backend-worker")["environment"]["UVICORN_WORKERS"]) == "1"
+    deger = str(_servis("backend-worker")["environment"]["UVICORN_WORKERS"])
+    assert "E1_WORKER_PROCESSES" in deger and ":-4" in deger, (
+        f"UVICORN_WORKERS '{deger}' — env ile ayarlanabilir (varsayilan 4) olmali"
+    )
 
 
 def test_arka_plan_sureci_TRAFIK_ALMIYOR():

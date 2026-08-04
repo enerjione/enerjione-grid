@@ -804,9 +804,8 @@ async def _hatlari_kur(js, cb):  # noqa: ANN001
       bulk    analog. TERK EDILMEZ — analog esik kurallari ve composite
               `agg` terimleri buradan beslenir; terk edilseydi analog
               tabanli her alarm SESSIZCE susardi. Yalnizca sirasi dusuk.
-      legacy  SINIFSIZ 4 token'li eski konu. Guncelleme sirasinda henuz
-              yenilenmemis bir tag-engine hala oraya basiyor olabilir;
-              abone olunmazsa alarm degerlendirmesi sessizce dururdu.
+      legacy  KALDIRILDI (2026-08-04): 4 token'li sinifsiz konuya artik
+              hicbir uretici basmiyor; durable startup'ta silinir (asagida).
 
     ESKI TEK HAT DURABLE'I ONCE BOSALTILIR: icinde HENUZ DEGERLENDIRILMEMIS
     olcumler olabilir ve ayrima gecmek onu terk etmek demektir. Bosalana
@@ -837,11 +836,22 @@ async def _hatlari_kur(js, cb):  # noqa: ANN001
         )
         return [await _abone(NATS_SUBJECT_NORMALIZED, NATS_DURABLE, 10000)], ["karma"]
 
+    # LEGACY HAT KALDIRILDI (2026-08-04): 4 token'li sinifsiz eski konuya
+    # artik HICBIR uretici basmiyor (tag-engine 1.1+ her zaman sinif token'i
+    # ekler; persist hatlari da yalnizca 5 token dinler — 4 token'li akis
+    # platform genelinde zaten olu). Sahada legacy durable 7.9M "kacirilmis"
+    # sayaciyla stream'in first_seq'ini geride tutup disk baskisi yaratti.
+    # Durable asagida silinir; abonelik ACILMAZ.
+    try:
+        await js.delete_consumer(NATS_STREAM_NORMALIZED, NATS_DURABLE_LEGACY)
+        print(f"alarm-service-legacy-durable-silindi durable={NATS_DURABLE_LEGACY}")
+    except Exception:  # noqa: BLE001  (yoksa NotFoundError — normal)
+        pass
+
     subs = []
     adlar = []
     for sinif, subject, durable, ack_pending in (
         ("prio", NATS_SUBJECT_PRIO, NATS_DURABLE_PRIO, ACK_PENDING_PRIO),
-        ("legacy", NATS_SUBJECT_LEGACY, NATS_DURABLE_LEGACY, ACK_PENDING_PRIO),
         ("bulk", NATS_SUBJECT_BULK, NATS_DURABLE_BULK, ACK_PENDING_BULK),
     ):
         subs.append(await _abone(subject, durable, ack_pending))

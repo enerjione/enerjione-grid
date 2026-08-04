@@ -14,6 +14,28 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.45.0] — 2026-08-04
+
+### Değişti — 400-500 cihaz ölçek paketi
+
+- **Kalıcılaştırma artık çok süreçli**: telemetri tüketicisi leader
+  kilidinden ayrıldı, worker container'ı varsayılan 4 süreçle çalışır
+  (E1_WORKER_PROCESSES) — persist kapasitesi süreç sayısıyla çarpılır.
+- **tag-engine yatay ölçeklenir**: queue-group'lu durable'a kayıpsız geçiş
+  + ikinci replika (tag-engine-b). İki kopya mesajları bölüşür.
+- **Kaynak bütçesi yeniden dağıtıldı** (ölçüme göre): NATS 4 CPU/3G,
+  backend 4 CPU, alarm 2 CPU, Postgres 6G→4G (ayarları birlikte indirildi).
+- **Arşivde birebir tekrar bastırma**: ikili/sayaç sinyallerde değer VE
+  kalite aynı olan tekrarlar yazılmaz; her değişim ve her kalite geçişi
+  aynen arşivlenir (kurallar korunur).
+
+### Kaldırıldı
+
+- alarm-service'in artık işlevsiz legacy hattı (4-token eski konu); durable
+  startup'ta silinir — 7,9M'lık hayalet birikim stream diskini baskılıyordu.
+
+---
+
 ## [2.44.2] — 2026-08-04
 
 ### Düzeltildi

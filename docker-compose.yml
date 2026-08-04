@@ -88,14 +88,59 @@ x-heavy-resources: &heavy-resources
 # (shared_buffers, effective_cache_size) BIRLIKTE dusurulmeli — yalnizca
 # birini dusurmek ise yaramaz, cunku Postgres kendi tampon boyutunu cgroup
 # tavanindan DEGIL postgresql.conf'tan okur.
+#
+# 2026-08-04 EK OLCUMU (400 cihaz): 6G tavanin yalnizca 1,85 GiB'i
+# kullaniliyordu; tavan 4G'ye cekildi, bosalan pay NATS'a verildi (asagida).
 x-postgres-resources: &postgres-resources
   deploy:
     resources:
       limits:
         cpus: "4.0"
-        memory: 6G
+        memory: 4G
       reservations:
         memory: 1536M
+
+# 400-500 cihaz olcek butcesi (2026-08-04 yuk testi, host 15 GiB):
+# postgres 4G + nats 3G + backend api 2G + worker 2G + tag-engine 2x768M +
+# alarm 768M + gateway ~2G ~= 13 GiB, ~2 GiB pay kalir.
+# CPU: asil kazanc worker'in 4 SURECLE calismasi (UVICORN_WORKERS) ve NATS'a
+# 4 cekirdek (%121 olculdu). Tek asyncio surecine 3 cekirdek vermek ise
+# yaramaz — tag-engine bunun yerine 2 REPLIKA ile olceklenir (queue-group).
+x-backend-resources: &backend-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "4.0"
+        memory: 2G
+      reservations:
+        memory: 512M
+
+x-nats-resources: &nats-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "4.0"
+        memory: 3G
+      reservations:
+        memory: 512M
+
+x-tag-engine-resources: &tag-engine-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "1.5"
+        memory: 768M
+      reservations:
+        memory: 128M
+
+x-alarm-resources: &alarm-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "2.0"
+        memory: 768M
+      reservations:
+        memory: 128M
 
 # Container hardening — stateless worker'lar icin defense-in-depth.
 # `no-new-privileges`: setuid binary'leri ile yetki yukseltme blok.
@@ -136,12 +181,13 @@ services:
     # tampon boyutunu postgresql.conf'tan okur; asagidaki degerler tavanla
     # BIRLIKTE buyutulmezse Postgres yine 768 MB tamponla calisir.
     #
-    # Hesap (6 GB tavan icin):
-    #   shared_buffers     1536M  ~ tavanin %25'i (PostgreSQL onerisi)
-    #   work_mem             16M  DEGISMEDI. Bu deger BAGLANTI BASINA DEGIL,
+    # Hesap (4 GB tavan icin — 2026-08-04: 6G'nin 1,85 GiB'i kullaniliyordu,
+    # tavan 4G'ye cekildi, ayarlar BIRLIKTE indirildi):
+    #   shared_buffers     1024M  ~ tavanin %25'i (PostgreSQL onerisi)
+    #   work_mem             12M  Tavanla birlikte indirildi. Bu deger BAGLANTI BASINA DEGIL,
     #                             sorgudaki her sort/hash dugumu basinadir;
-    #                             max_connections=300 x 16M = 4,8 G en kotu
-    #                             durum. Buyutmek 6 G tavani tek bir sorgu
+    #                             max_connections=300 x 12M = 3,6 G en kotu
+    #                             durum. Buyutmek 4 G tavani tek bir sorgu
     #                             firtinasinda patlatir.
     #   maintenance_work_mem 512M  VACUUM / index olusturma. Autovacuum'un
     #                             outbox_events churn'une yetismesi icin
@@ -149,10 +195,10 @@ services:
     #                             dardi: her VACUUM turu olu tuple listesini
     #                             bellege sigdiramayip tabloyu birden cok kez
     #                             tariyordu.
-    #   effective_cache_size  4G   PLANLAYICI IPUCU — bellek AYIRMAZ, sadece
+    #   effective_cache_size  3G   PLANLAYICI IPUCU — bellek AYIRMAZ, sadece
     #                              "OS cache'inde ne kadar veri bulurum"
     #                              tahmini; index taramasini tercih ettirir
-    #   1536M + 512M + tipik es zamanli sorgular = ~2,5-3 G  < 6G tavan
+    #   1024M + 512M + tipik es zamanli sorgular = ~2-2,5 G  < 4G tavan
     #
     # RAM 8 GB'in altina inerse bu degerler ve yukaridaki limit DUSURULMELI.
     command:
@@ -181,13 +227,13 @@ services:
       - "-c"
       - "max_connections=300"
       - "-c"
-      - "shared_buffers=1536MB"
+      - "shared_buffers=1024MB"
       - "-c"
-      - "work_mem=16MB"
+      - "work_mem=12MB"
       - "-c"
       - "maintenance_work_mem=512MB"
       - "-c"
-      - "effective_cache_size=4GB"
+      - "effective_cache_size=3GB"
       # ---- WAL / checkpoint ----------------------------------------------
       # OLCUM: pg_wal dizini 2,0 GB — yani TAM `max_wal_size` kadar. Bu,
       # checkpoint'lerin ZAMAN degil BOYUT tetikledigi anlamina gelir.
@@ -336,7 +382,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *heavy-resources
+    <<: *nats-resources
 
   backend-api:
     build:
@@ -714,7 +760,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: *heavy-resources
+    <<: *backend-resources
 
   # ---------------------------------------------------------------------
   # Arka plan isleri — AYRI SUREC (VARSAYILAN OLARAK ACIK)
@@ -785,9 +831,10 @@ services:
     # HTTP saglik ucu yine ayakta (uvicorn calisiyor) ama LB'ye girmez.
     environment:
       SERVICE_ROLE: worker
-      # Arka plan sureci TEK worker olmali: is zaten advisory lock ile
-      # tekil, fazladan worker yalnizca bellek yer.
-      UVICORN_WORKERS: 1
+      # Telemetri tuketicisi artik LEADER'SIZ, surec basina calisir
+      # (bkz. main.py) — surec sayisi persist kapasitesini DOGRUDAN
+      # carpar. Leader-kilitli isler (retention vb.) yine tekil kalir.
+      UVICORN_WORKERS: ${E1_WORKER_PROCESSES:-4}
     depends_on:
       postgres:
         condition: service_healthy
@@ -839,7 +886,24 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: [*worker-resources, *hardened-worker]
+    <<: [*tag-engine-resources, *hardened-worker]
+
+  # tag-engine REPLIKASI — queue-group ile ayni durable'i paylasir, mesajlari
+  # BOLUSUR (yatay olcek). Tek asyncio sureci ~1 cekirdegi asamaz; 400+
+  # cihazda normalize tavani boyle ikiye katlanir. `extends` depends_on'u
+  # TASIMAZ (compose spec) — yeniden bildirilir.
+  tag-engine-b:
+    extends:
+      service: tag-engine
+    container_name: e1-grid-tag-engine-b
+    depends_on:
+      nats:
+        condition: service_healthy
+      backend-api:
+        condition: service_healthy
+      # Ilk kopya durable devrini yapsin, replika hazir duruma baglansin.
+      tag-engine:
+        condition: service_started
 
   alarm-service:
     build:
@@ -890,7 +954,7 @@ services:
     networks:
       - e1-net
     logging: *default-logging
-    <<: [*worker-resources, *hardened-worker]
+    <<: [*alarm-resources, *hardened-worker]
 
   notification-worker:
     build:

@@ -12,6 +12,7 @@ from app.core.rate_limit import limiter
 
 from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
+from app.core import service_role
 from app.core.service_role import leader
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -1104,7 +1105,18 @@ def stop_ws_fanout_bridge():
 #
 # Kayit SIRASI onemli: baslatma bu sirada, durdurma TERS sirada yapilir.
 # --------------------------------------------------------------------------
-leader.register("telemetry_consumer", telemetry_consumer.start, telemetry_consumer.stop)
+# TELEMETRI TUKETICISI BILEREK LEADER'DA DEGIL — surec basina calisir.
+#
+# Leader kilidi "kumede TEK KOPYA calismali" isler icindir (retention,
+# zamanlanmis isler...). Tuketici tam tersi: JetStream durable'lari paralel
+# uyeler arasinda mesaj PAYLASIR ve persist kodu paralel tuketiciye
+# dayaniklidir (dedup IN on-kontrolu, ON CONFLICT, source_timestamp
+# korumasi, savepoint karantinasi). Kilit altindayken UVICORN_WORKERS=4
+# acmak 3 sureci bosta biraktiriyordu; 400 cihazda tek surec ~2.4k msj/sn
+# tavanindaydi. Artik arka plan rolu tasiyan HER surec tuketir —
+# UVICORN_WORKERS dogrudan persist kapasitesini carpar.
+# Baslatma/durdurma startup/shutdown kancalarinda (bkz. asagida
+# _telemetri_tuketici_baslat/_durdur).
 
 # Outbox flush — telemetri yayinini ingest request yolundan ayirir. Ingest
 # sadece DB'ye yazar; bu worker arka planda RabbitMQ'ya yayinlar. 200 cihaz
@@ -1204,6 +1216,21 @@ def start_background_jobs():
     leader.try_start()
 
 
+@app.on_event("startup")
+def _telemetri_tuketici_baslat():
+    """Telemetri tuketicisi LEADER'SIZ, surec basina calisir.
+
+    JetStream durable'i mesajlari paralel uyeler arasinda paylasir; persist
+    kodu paralel tuketiciye dayanikli (dedup, ON CONFLICT, damga korumasi).
+    UVICORN_WORKERS=N ile worker container'i N tuketici surec calistirir —
+    persist kapasitesi dogrudan carpilir. API rolunde ACILMAZ.
+    """
+    if service_role.wants_background():
+        telemetry_consumer.start()
+
+
 @app.on_event("shutdown")
 def stop_background_jobs():
+    if service_role.wants_background():
+        telemetry_consumer.stop()
     leader.stop()

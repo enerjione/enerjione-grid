@@ -68,6 +68,13 @@ SUBJECT_NORMALIZED_PREFIX = os.getenv(
     "NATS_SUBJECT_NORMALIZED_PREFIX", "e1.telemetry.normalized"
 )
 DURABLE_NAME = os.getenv("NATS_TAG_ENGINE_DURABLE", "tag-engine-normalize")
+# Queue-group'lu YENI durable — birden fazla tag-engine kopyasi ayni
+# durable'i paylasip mesajlari BOLUSUR (yatay olcek). Eski tekil durable
+# queue-group'suz yaratildigi icin ikinci uye kabul etmez; gecis
+# `_kuyruk_grubuna_gec` ile kayipsiz yapilir (eski ack_floor'dan baslanir).
+DURABLE_Q = os.getenv("NATS_TAG_ENGINE_DURABLE_Q", "tag-engine-normalize-q1")
+QUEUE_GROUP = os.getenv("NATS_TAG_ENGINE_QUEUE", "tag-engine")
+STREAM_RAW = os.getenv("NATS_STREAM_TELEMETRY_RAW", "TELEMETRY_RAW")
 # DLQ subject prefix — max_deliver'a takilan mesajlar buraya gider.
 # Subject: e1.dlq.tag-engine.<original-subject>
 SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.tag-engine")
@@ -340,20 +347,71 @@ async def _run() -> None:
             # history replay'i engeller.
             from nats.js.api import ConsumerConfig, DeliverPolicy
 
-            consumer_cfg = ConsumerConfig(
-                durable_name=DURABLE_NAME,
-                deliver_policy=DeliverPolicy.NEW,
-                ack_wait=60,
-                max_ack_pending=10000,
-                max_deliver=10,
-            )
-            sub = await js.subscribe(
-                subject=SUBJECT_RAW,
-                durable=DURABLE_NAME,
-                cb=_on_message,
-                manual_ack=True,
-                config=consumer_cfg,
-            )
+            # --- Queue-group gecisi: eski tekil durable'dan KAYIPSIZ devir --
+            # Eski durable varsa kaldigi yer (ack_floor) okunur, yeni
+            # queue-group'lu durable oradan baslatilir, eski silinir. Iki
+            # replika ayni anda kalkarsa: ilk gelen devri yapar; ikincisi
+            # eski durable'i bulamaz ve dogrudan mevcut yeni durable'a
+            # baglanir (bind'da config catisirsa asagidaki fallback devrede).
+            baslangic_seq = 0
+            try:
+                eski = await js.consumer_info(STREAM_RAW, DURABLE_NAME)
+                ack_floor = getattr(getattr(eski, "ack_floor", None), "stream_seq", 0)
+                baslangic_seq = int(ack_floor or 0) + 1
+                await js.delete_consumer(STREAM_RAW, DURABLE_NAME)
+                logger.info(
+                    "tag-engine-durable-devri eski=%s yeni=%s baslangic_seq=%d",
+                    DURABLE_NAME, DURABLE_Q, baslangic_seq,
+                )
+            except Exception:  # noqa: BLE001 — eski yok (yeni kurulum / devir bitti)
+                pass
+
+            if baslangic_seq > 1:
+                consumer_cfg = ConsumerConfig(
+                    durable_name=DURABLE_Q,
+                    deliver_policy=DeliverPolicy.BY_START_SEQUENCE,
+                    opt_start_seq=baslangic_seq,
+                    deliver_group=QUEUE_GROUP,
+                    ack_wait=60,
+                    max_ack_pending=10000,
+                    max_deliver=10,
+                )
+            else:
+                consumer_cfg = ConsumerConfig(
+                    durable_name=DURABLE_Q,
+                    deliver_policy=DeliverPolicy.NEW,
+                    deliver_group=QUEUE_GROUP,
+                    ack_wait=60,
+                    max_ack_pending=10000,
+                    max_deliver=10,
+                )
+            try:
+                sub = await js.subscribe(
+                    subject=SUBJECT_RAW,
+                    queue=QUEUE_GROUP,
+                    durable=DURABLE_Q,
+                    cb=_on_message,
+                    manual_ack=True,
+                    config=consumer_cfg,
+                )
+            except Exception:  # noqa: BLE001
+                # Durable ZATEN var ve config'imiz (orn. start_seq) sunucudaki
+                # ile catisiyor — ikinci replika tipik olarak buraya duser.
+                # Mevcut durable'a minimal config ile baglan.
+                sub = await js.subscribe(
+                    subject=SUBJECT_RAW,
+                    queue=QUEUE_GROUP,
+                    durable=DURABLE_Q,
+                    cb=_on_message,
+                    manual_ack=True,
+                    config=ConsumerConfig(
+                        durable_name=DURABLE_Q,
+                        deliver_group=QUEUE_GROUP,
+                        ack_wait=60,
+                        max_ack_pending=10000,
+                        max_deliver=10,
+                    ),
+                )
             logger.info(
                 "tag-engine-running url=%s in=%s out=%s.<gw>.{prio|bulk} durable=%s "
                 "katalog_yuklendi=%s sinyal=%d",

@@ -156,25 +156,34 @@ def should_archive(
     if not politika.historize:
         return False
 
-    deadband = politika.deadband
-    if (
-        deadband <= 0.0
-        or value is None
-        or politika.data_type not in _OLU_BANT_TIPLERI
-    ):
-        # Olu bant kapali, sayisal olmayan deger, ya da analog OLMAYAN bir
-        # sinyal (ikili/sayac/metin): her okuma arsivlenir. Ikili sinyalde
-        # esik uygulamak ariza bayraginin gecisini YUTARDI.
+    if value is None:
+        # Sayisal olmayan govde (metin sinyali): karsilastirilacak deger yok,
+        # her okuma arsivlenir. value_string bu katmana gelmiyor — metinde
+        # tekrar bastirmaya kalkmak yanlis pozitif uretirdi.
         return True
 
+    deadband = politika.deadband
+    analog = politika.data_type in _OLU_BANT_TIPLERI
     anahtar = (device_id, signal_key)
     onceki = _last_archived.get(anahtar)
-    if (
-        onceki is not None
-        and onceki[1] == quality
-        and abs(value - onceki[0]) < deadband
-    ):
-        return False
+
+    if analog and deadband > 0.0:
+        # Olu bant YALNIZCA analogda (esik uygulamak ikili sinyalde ariza
+        # bayraginin gecisini yutardi). Kalite degistiyse esik BAKILMAZ.
+        if (
+            onceki is not None
+            and onceki[1] == quality
+            and abs(value - onceki[0]) < deadband
+        ):
+            return False
+    else:
+        # Ikili/sayac (ve olu bantsiz analog): her DEGISIM arsivlenir; ama
+        # BIREBIR TEKRAR (deger VE kalite ayni) yazilmaz. 400 cihaz yuk
+        # testinde oncelikli hattin arsiv hacminin buyuk kismi ayni degerin
+        # saniyelik tekrarlariydi. Kurallar korunur: deger degisimi VE
+        # "deger ayni, kalite degisti" her zaman arsive girer.
+        if onceki is not None and onceki[1] == quality and onceki[0] == value:
+            return False
 
     if onceki is None and len(_last_archived) >= _LAST_CACHE_MAX:
         # Sinir asildi: en eski girisleri atmak yerine yeni kayit ACMIYORUZ.
