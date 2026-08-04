@@ -14,6 +14,20 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.44.1] — 2026-08-04
+
+### Düzeltildi
+
+- **`gateway_health` tablosunun migration'ı hiç üretilmemişti**: gateway
+  sağlık başlığı gönderince `/pending` (SCADA komut kanalı) 500 veriyor,
+  gateway başlığı 10 dakika bırakıyordu — gateway sağlığı ve cihaz-link
+  durumu panele hiç ulaşmıyordu. Migration eklendi (0039).
+- **Sağlık yazımı artık kendi transaction'ında**: yazım hatası komut
+  kanalının transaction'ını zehirleyemez — asıl kusur buydu; tablo olsa
+  bile herhangi bir DB hatası aynı şekilde 500 üretirdi.
+
+---
+
 ## [2.44.0] — 2026-08-04
 
 ### Eklendi

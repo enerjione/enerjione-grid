@@ -244,7 +244,9 @@ def test_migration_zinciri_TEK_head():
         revizyonlar[_sabit(agac, "revision")] = _sabit(agac, "down_revision")
     assert revizyonlar.get("0038") == "0037", "0038 zincire baglanmamis"
     ustler = set(revizyonlar) - {d for d in revizyonlar.values() if d}
-    assert ustler == {"0038"}, f"tek head olmali, bulunan: {sorted(ustler)}"
+    # Head SABITLENMEZ: "0038 olmali" demek her yeni migration'da bu testi
+    # kirardi (0039'da yasandi). Korunan garanti TEK head olmasi.
+    assert len(ustler) == 1, f"tek head olmali, bulunan: {sorted(ustler)}"
 
 
 def test_add_column_KOSULA_bagli():

@@ -165,3 +165,28 @@ def test_farkli_gatewayler_birbirini_engellemez():
     assert ghs.record_health(db, "GW-A", GECERLI) is True
     assert ghs.record_health(db, "GW-B", GECERLI) is True
     assert len(yazimlar) == 2
+
+
+def test_pending_saglik_yazimini_KENDI_sessioninda_yapar():
+    """Sahada yasandi (GW-001): saglik INSERT'i request session'inda
+    patlayinca istisna yakalansa da paylasilan transaction "aborted"
+    kaliyor, /pending'in kendi commit'i (komut durumu + last_seen) 500
+    veriyor ve gateway basligi 10 dakika birakiyordu. Saglik yazimi KENDI
+    session'inda olmali ki hicbir hatasi komut kanalina dokunamasin."""
+    import inspect
+    import re
+
+    from app.api import gateways
+
+    src = inspect.getsource(gateways.get_gateway_pending)
+    src = re.sub(r'""".*?"""', "", src, flags=re.DOTALL)
+    src = re.sub(r"^\s*#.*$", "", src, flags=re.MULTILINE)
+    i = src.find("record_health(")
+    assert i != -1, "saglik kaydi /pending'den kaldirilmis"
+    assert "SessionLocal()" in src[:i], (
+        "saglik yazimi request session'ini kullaniyor — hata transaction'i "
+        "zehirler ve komut kanali 500 verir"
+    )
+    assert "record_health(db," not in src, (
+        "record_health request db'si ile cagriliyor"
+    )

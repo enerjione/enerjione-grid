@@ -1383,10 +1383,17 @@ def get_gateway_pending(
     # KOMUT KANALI KUTSAL: burasi SCADA komut yolu. Bozuk base64, gecersiz
     # JSON, devasa baslik ya da DB hatasi bu ucu ASLA dusurmemeli — aksi
     # halde saglik raporlamak icin eklenen ozellik kesici komutlarinin
-    # iletilmesini engeller. Bu yuzden her sey try/except icinde ve
-    # ayristirici hicbir kosulda istisna firlatmiyor.
+    # iletilmesini engeller.
+    #
+    # KENDI SESSION'INDA — try/except TEK BASINA YETMIYORDU (sahada
+    # yasandi): saglik INSERT'i request session'inda patlayinca istisna
+    # yakalaniyordu ama paylasilan transaction "aborted" kaliyordu; asagidaki
+    # `db.commit()` (komut durumu + last_seen) o yuzden 500 veriyordu ve
+    # gateway basligi 10 dakika birakiyordu. Ayri session ile saglik
+    # yazimindaki HICBIR hata komut kanalinin transaction'ina dokunamaz.
     if x_gateway_health:
         try:
+            from app.db.session import SessionLocal
             from app.services.gateway_health_service import (
                 parse_health_header,
                 record_health,
@@ -1394,7 +1401,12 @@ def get_gateway_pending(
 
             payload = parse_health_header(x_gateway_health)
             if payload is not None:
-                record_health(db, gateway.code, payload)
+                saglik_db = SessionLocal()
+                try:
+                    if record_health(saglik_db, gateway.code, payload):
+                        saglik_db.commit()
+                finally:
+                    saglik_db.close()
         except Exception:  # noqa: BLE001
             logger.warning(
                 "gateway_health_ingest_failed gateway=%s — komut kanali etkilenmedi",
