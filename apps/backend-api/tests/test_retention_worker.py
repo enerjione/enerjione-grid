@@ -491,6 +491,11 @@ def test_disk_guard_DEAD_LETTER_a_dokunmuyor(monkeypatch):
     cagrilar: list[dict] = []
 
     class _Casus:
+        # Gercek imza `RetentionWorker(*, paced=...)`; taklit onu kabul
+        # etmezse test, kodun degil taklidin eksikligiyle patlar.
+        def __init__(self, **_kw):
+            pass
+
         def purge_processed_messages(self, **kw):
             return 0
 

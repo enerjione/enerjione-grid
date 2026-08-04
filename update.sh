@@ -750,20 +750,27 @@ _e1_prepare_images() {
   # yerelde mevcut, dolayisiyla `.env`'deki yeni surum etiketi guvenli.
   # Bu noktaya ULASILAMAZSA .env eski surume geri doner (EXIT trap) ve cihaz
   # ilk reboot'ta var olmayan imaj etiketini aramaz.
-  local svc="${1:-}"
+  # BIRDEN COK SERVIS alabilir: tek servis guncellemesinde bile birlikte
+  # gitmesi ZORUNLU olan imajlar var (bkz. backend-api <-> tag-engine).
+  # `${dizi[@]+...}` bos dizide `set -u` altinda patlamaz.
+  local svcs=("$@")
+  local etiket=""
+  # `&&` kisayoli DEGIL: bos argumanla cagrildiginda (tum servisler) liste 1
+  # doner ve `set -e` altinda okuyani tereddutte birakir.
+  if [[ $# -gt 0 ]]; then etiket=" ($*)"; fi
   if [[ "${E1_BUILD:-0}" == "1" ]]; then
-    e1_run "Imajlar derleniyor${svc:+ (${svc})}" docker compose build ${svc:+"$svc"} \
+    e1_run "Imajlar derleniyor${etiket}" docker compose build ${svcs[@]+"${svcs[@]}"} \
       || e1_die "Imaj derlemesi basarisiz. Detay yukarida."
     e1_env_version_commit
     return 0
   fi
   e1_ghcr_login .env || true
-  if e1_run "Yeni imajlar indiriliyor${svc:+ (${svc})}" docker compose pull ${svc:+"$svc"}; then
+  if e1_run "Yeni imajlar indiriliyor${etiket}" docker compose pull ${svcs[@]+"${svcs[@]}"}; then
     e1_env_version_commit
     return 0
   fi
   e1_warn "Imajlar indirilemedi — bu cihazda derlemeye geciliyor."
-  e1_run "Imajlar derleniyor${svc:+ (${svc})}" docker compose build ${svc:+"$svc"} \
+  e1_run "Imajlar derleniyor${etiket}" docker compose build ${svcs[@]+"${svcs[@]}"} \
     || e1_die "Ne indirme ne derleme basarili oldu. Detay yukarida."
   e1_env_version_commit
 }
@@ -789,21 +796,53 @@ if [[ -z "$SVC" ]]; then
   docker compose up -d
 else
   e1_step "Servis '$SVC' guncelleniyor + force-recreate..."
-  _e1_prepare_images "$SVC"
   RECREATE=("$SVC")
-  # AYRIK KURULUM (COMPOSE_PROFILES=scale): `backend-worker` backend-api ile
-  # AYNI imaji kullanir. Yalnizca backend-api'yi yeniden yaratmak arka plan
-  # surecini ESKI KODLA birakirdi — ve o surec telemetri tuketicisini,
-  # outbox yayincisini, retention'i, yedeklemeyi calistiran surectir. Yeni
-  # migration eski worker koduyla eslesmezse belirti sessizdir: HTTP tamamen
-  # saglikli gorunur, arka planda veri islenmez.
+  # TAG-ENGINE BACKEND ILE BIRLIKTE GIDER — tercih degil, ZORUNLULUK.
   #
-  # `config --services` COMPOSE_PROFILES'i dikkate alir; profil kapaliysa
-  # backend-worker listede YOKTUR ve tek-container kurulumda hicbir sey degismez.
+  # Kalicilastirma artik tag-engine CIKISINDAN (`e1.telemetry.normalized.>`)
+  # besleniyor. Yani arsive yazilan satirin icerigi tag-engine'in surumune
+  # BAGLI. Eski tag-engine normalize ederken `dnp3_flags`, `device_event_at`
+  # ve `timestamp_quality` alanlarini DUSURUYOR.
+  #
+  # Yalnizca backend guncellenseydi belirti sessiz ve yanlis olurdu:
+  #   * `dnp3_flags` dustugu icin kalite CIHAZ seviyesi sanilir — tek bir
+  #     noktanin `invalid`/`restart` bayragi TUM CIHAZI offline gosterir,
+  #     harita kirmizi olur ve "son veri" sayaci donar,
+  #   * SOE / ariza-suresi kolonlari sessizce NULL kalir.
+  # Ve bu, biri `update.sh tag` kosana kadar KALICI olurdu.
   if [[ "$SVC" == "backend-api" ]] \
-     && docker compose config --services 2>/dev/null | grep -qx "backend-worker"; then
+     && docker compose config --services 2>/dev/null | grep -qx "tag-engine"; then
+    RECREATE+=("tag-engine")
+    e1_step "Tag-engine de guncelleniyor (kalicilastirma onun cikisindan besleniyor)."
+  fi
+  _e1_prepare_images "${RECREATE[@]}"
+  # `backend-worker` backend-api ile AYNI imaji kullanir ve VARSAYILAN OLARAK
+  # ayaktadir (arka plan isleri orada kosar). Yalnizca backend-api'yi yeniden
+  # yaratmak arka plan surecini ESKI KODLA birakirdi — ve o surec telemetri
+  # tuketicisini, outbox yayincisini, retention'i, yedeklemeyi calistiran
+  # surectir. Yeni migration eski worker koduyla eslesmezse belirti sessizdir:
+  # HTTP tamamen saglikli gorunur, arka planda veri islenmez.
+  #
+  # OPERATOR TERCIHI KORUNUR: `E1_BACKEND_ROLE=all` yazip backend-worker'i
+  # kaldiran (dar bellekli) saha, guncellemede onu GERI ISTEMEZ. Bu yuzden
+  # servisin compose'da TANIMLI olmasi yetmez — rol `all` iken yalnizca
+  # halihazirda bir container'i varsa yeniden yaratilir.
+  _e1_worker_geri_yaratilsin() {
+    docker compose config --services 2>/dev/null | grep -qx "backend-worker" || return 1
+    # Rol `.env`den OKUNUR, kabuk ortamindan degil: compose'un gordugu deger
+    # budur ve update.sh `.env`i her kosuda source ETMEZ.
+    local rol
+    rol="$(sed -n 's/^[[:space:]]*E1_BACKEND_ROLE=[[:space:]]*\([^#[:space:]]*\).*/\1/p' .env 2>/dev/null | tail -1)"
+    rol="${rol//\"/}"; rol="${rol//\'/}"; rol="${rol%$'\r'}"
+    # Rol acikca `all` yapilmadiysa worker ZORUNLUDUR: arka plan isleri
+    # yalnizca orada kosar, eksik kalirsa telemetri HIC islenmez.
+    [[ "${rol:-api}" != "all" ]] && return 0
+    # Rol `all`: worker istege bagli. Sadece zaten varsa surumu hizala.
+    [[ -n "$(docker compose ps -q backend-worker 2>/dev/null)" ]]
+  }
+  if [[ "$SVC" == "backend-api" ]] && _e1_worker_geri_yaratilsin; then
     RECREATE+=("backend-worker")
-    e1_step "Ayrik kurulum: backend-worker de yeniden yaratiliyor (surum kaymasini onler)."
+    e1_step "Arka plan sureci (backend-worker) de yeniden yaratiliyor (surum kaymasini onler)."
   fi
   docker compose up -d --force-recreate "${RECREATE[@]}"
 fi

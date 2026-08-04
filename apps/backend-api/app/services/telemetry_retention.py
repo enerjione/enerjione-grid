@@ -43,6 +43,37 @@ Tur tavani (`retention_max_batches_per_run`) tek bir tetigin saatlerce
 surmesini onler; artan satirlar bir sonraki tetikte silinir. Birikme olmaz
 cunku tavan x batch, periyot boyunca uretilenden cok daha buyuktur.
 
+TEMIZLIK VERI YOLUNU YAVASLATMAMALI — YUK DAGITILIR
+---------------------------------------------------
+Tur tavani bir TAVANDIR, hedef degil. Kararli durumda gercek is uretimle
+sinirlidir (olculen ~1.074 satir/sn -> 60 sn'de ~64.000 satir = 4 parti,
+tavanin %8'i). AMA iki durumda tavan gercekten dolar ve o an temizlik
+veri yolunun yanindaki en agir DB tuketicisi olur:
+
+  1. TAZE DEPLOY. Surec, onceki surumden devralinan yigini (olculen: 2,32M
+     satirlik `outbox_events`) bulur. Eski `_run` "ilk turda HER isi kostur"
+     diyordu: tuketici HENUZ SOGUK, NATS birikimini eritiyor ve tam o
+     saniyelerde 1.000.000 satirlik DELETE + ~770 MB WAL ayni Postgres'e
+     biniyordu. Sahada olculen Postgres CPU sicramasinin (%31 -> %123)
+     olcum penceresi tam da bu gecise denk geliyordu.
+  2. Uzun bir duraksama sonrasi yakalama turu.
+
+Iki karsi onlem:
+  * ACILIS DAGITIMI — purge isleri artik acilista ayni anda ve hemen
+    kosmaz; her biri kaydirilmis bir bekleme sonrasi ilk turunu yapar
+    (bkz. `_ILK_TUR_BEKLEME_SEC` / `_ILK_TUR_KAYDIRMA_SEC`). Disk guard
+    MUAF: o bir emniyet subabi, olcum ucuz ve gecikmesi tehlikeli.
+  * PARTILER ARASI NEFES — tavana dogru giden bir turda her DOLU partiden
+    sonra, partinin kendi suresine oranli kisa bir bekleme yapilir
+    (`_TEMIZLIK_ZAMAN_PAYI`). Yuk periyoda YAYILIR: ayni satir sayisi
+    silinir ama anlik WAL/IO tepe noktasi duser ve bekleme boyunca GIL
+    birakildigi icin ayni surecteki tuketici nefes alir.
+    KISMI parti (yani "silinecek bir sey kalmadi") sonrasi BEKLENMEZ —
+    kararli durumdaki hafif turlar hicbir ek gecikme gormez.
+
+Ikisi de saklama penceresini, tur tavanini ve dead-letter yolunu AYNEN
+birakir: tablo boyutu kontrolu kaybolmaz, yalnizca ayni is zamana yayilir.
+
 KONFIGURASYON
 -------------
 Tum degerler `app.core.config.settings` uzerinden gelir (env ile override
@@ -57,6 +88,7 @@ import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 from sqlalchemy import and_, delete, select, text
 
@@ -104,6 +136,54 @@ _LEGACY_OUTBOX_ENV = {
 _FIFO_EXPENDABLE_CATEGORIES = ("telemetry", "outbound", "outbound_target")
 _FIFO_EXPENDABLE_SEVERITIES = ("debug", "info")
 
+# --------------------------------------------------------------------------
+# YUK DAGITIMI SABITLERI (gerekce icin modul docstring'ine bakin)
+# --------------------------------------------------------------------------
+
+#: Yakalama turunda temizligin kendine ayirdigi ZAMAN PAYI (duty cycle).
+#: 0,25 = "sil bir parti, uc partilik sure bekle".
+#:
+#: NEDEN AYAR DEGIL SABIT: bu bir kapasite ayari degil, bir ORAN. Kapasite
+#: zaten `retention_delete_batch` x `retention_max_batches_per_run` ile
+#: ayarlaniyor; ikinci bir kadran operatoru "hangisini buyutmeliyim"
+#: sorusuyla bas basa birakirdi.
+#:
+#: SECIM ARITMETIGI (olculen parti maliyeti: 20.000 satir / ~330 ms):
+#:   pay yok  -> 20.000 / 0,33 sn = ~60.000 satir/sn (anlik tepe, WAL suru)
+#:   pay 0,25 -> 20.000 / 1,32 sn = ~15.000 satir/sn
+#: Olculen uretim ~1.074 satir/sn oldugu icin 15.000 hala uretimin ~14 KATI:
+#: yakalama turu yavaslar ama tablo yine de kararli duruma gelir. Bu sinir
+#: `tests/test_retention_yuk_dagitimi.py` icinde kilitli.
+_TEMIZLIK_ZAMAN_PAYI = 0.25
+
+#: Bekleme carpani = (1 - pay) / pay. Partinin KENDI suresiyle carpilir, yani
+#: yavas bir veritabaninda bekleme de kendiliginden uzar (sabit uyku, hizli
+#: diskte gereksiz yavaslatir, yavas diskte yetersiz kalirdi).
+_PARTI_ARASI_KATSAYI = (1.0 - _TEMIZLIK_ZAMAN_PAYI) / _TEMIZLIK_ZAMAN_PAYI
+
+#: Tek bir beklemenin ust siniri (saniye). Patolojik yavas bir parti
+#: (kilit bekleyen bir DELETE gibi) temizligi dakikalarca durdurmasin.
+_PARTI_ARASI_MAX_SEC = 5.0
+
+#: Acilista purge islerinin ILK turu icin taban bekleme (saniye).
+#:
+#: NEDEN VAR: eski `_run` "ilk turda hepsini kostur" diyordu. Taze deployda
+#: bu, tuketici SOGUKKEN ve NATS birikimi eritilirken ayni Postgres'e
+#: 1.000.000 satirlik DELETE bindirmek demekti. Bekleme bu iki isi ayni
+#: saniyelerden cikarir; maliyeti, penceresi dolmus satirlarin bir tur daha
+#: (~1.074 satir/sn x gecikme) beklemesidir — bir sonraki tur birkac partide
+#: eritir.
+_ILK_TUR_BEKLEME_SEC = 60.0
+
+#: Purge isleri arasi kaydirma (saniye) — ilk turlar da birbirinin uzerine
+#: binmesin. `_jobs()` sirasina gore uygulanir.
+_ILK_TUR_KAYDIRMA_SEC = 30.0
+
+#: Acilis beklemesinden MUAF isler. Disk guard bir emniyet subabidir: olcumu
+#: ucuzdur (statvfs) ve disk gercekten dolmak uzereyken bir dakika beklemek
+#: tam da onlemeye calistigi seyi davet eder.
+_ACILISTA_BEKLEMEYEN = frozenset({"disk_guard"})
+
 
 def _warn_legacy_env() -> None:
     if os.getenv(_LEGACY_ENV):
@@ -124,7 +204,13 @@ def _warn_legacy_env() -> None:
             )
 
 
-def _batch_delete(model, where, *, label: str) -> int:
+def _batch_delete(
+    model,
+    where,
+    *,
+    label: str,
+    pause: Callable[[float], bool] | None = None,
+) -> int:
     """`where` kosuluna uyan satirlari LIMIT'li turlarla siler.
 
     Her tur AYRI transaction: kisa islemler -> WAL tepe noktasi dusuk, lock
@@ -132,10 +218,16 @@ def _batch_delete(model, where, *, label: str) -> int:
     (removed < batch) silinecek satir kalmamistir, erken cikilir.
 
     `model` PK'si `id` olan bir ORM sinifi olmali (subquery LIMIT icin gerekir).
+
+    `pause` — iki DOLU parti ARASINDA cagrilir (bkz. `RetentionWorker._pause`).
+    Argumani beklenecek saniyedir; True donerse kapanis istenmistir ve dongu
+    birakilir. Kismi partiden sonra CAGRILMAZ: silinecek satir kalmamissa
+    beklemenin kimseye faydasi yok, yalnizca kapanisi geciktirirdi.
     """
     batch = settings.retention_delete_batch
     total = 0
     for _ in range(settings.retention_max_batches_per_run):
+        basladi = _monotonic()
         db = SessionLocal()
         try:
             ids = (
@@ -155,6 +247,11 @@ def _batch_delete(model, where, *, label: str) -> int:
         total += removed
         if removed < batch:
             break
+        # PARTILER ARASI NEFES — parti DOLU dondu, yani onumuzde daha is var
+        # ve bu bir YAKALAMA turu. Beklemeden devam etmek ayni veritabanina
+        # kesintisiz DELETE akitmak demek; bekleme yuku periyoda yayar.
+        if pause is not None and pause((_monotonic() - basladi) * _PARTI_ARASI_KATSAYI):
+            break  # kapanis istendi
     else:
         # Tur tavanina dayandik: bu tetikte hepsini bitiremedik. Normal degil,
         # operator gorsun (retention periyodu cok uzun ya da yuk beklenenden
@@ -172,9 +269,18 @@ def _batch_delete(model, where, *, label: str) -> int:
 class RetentionWorker:
     """Arka plan thread'i; her tablo icin ayri periyotla purge tetikler."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, paced: bool = True) -> None:
+        """`paced=False` — partiler arasi beklemeyi KAPATIR.
+
+        Tek kullanicisi disk guard'dir (bkz. `disk_guard._relieve_aggressive`).
+        Orada oncelik tersine doner: disk dolmak uzereyken amac veri yoluna
+        yer birakmak degil, alani HEMEN acmaktir. Periyodik yolda ise
+        bekleme acik — normal calismada temizlik, ingest'in yanindan
+        gecerken onu itmemeli.
+        """
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._paced = paced
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -209,6 +315,18 @@ class RetentionWorker:
             self._thread.join(timeout=5)
             self._thread = None
 
+    def _pause(self, seconds: float) -> bool:
+        """Iki silme partisi ARASINDA nefes. True donerse KAPANIS istendi.
+
+        `time.sleep` DEGIL `Event.wait`: kapanis sirasinda bekleme aninda
+        kesilir. Duz uyku olsaydi `stop()`un 5 saniyelik join'i yakalama
+        turunun ortasinda zaman asimina ugrar ve container kapanisi
+        SIGKILL'e kalirdi.
+        """
+        if not self._paced or seconds <= 0.0:
+            return self._stop.is_set()
+        return self._stop.wait(min(seconds, _PARTI_ARASI_MAX_SEC))
+
     def _jobs(self) -> list[list]:
         """(etiket, periyot_getter, fonksiyon, son_calisma_zamani).
 
@@ -226,14 +344,37 @@ class RetentionWorker:
             ["disk_guard", lambda: settings.disk_guard_interval_sec, self._disk_guard_tick, 0.0],
         ]
 
+    def _seed_schedule(self, jobs: list[list], now_mono: float) -> None:
+        """Acilis takvimini kur — ILK turlar kaydirilir.
+
+        ONCEDEN NE VARDI: `first_iteration` bayragi. Ilk dongude periyot
+        kontrolu ATLANIYOR ve BES purge'un HEPSI ayni anda, tam tavanla
+        kosuyordu. Taze deployda bu, en kotu ani secmek demekti: tuketici
+        henuz soguk, NATS birikimi eritiliyor ve ayni saniyelerde
+        1.000.000 satirlik DELETE + ~770 MB WAL Postgres'e biniyor.
+
+        `last_run`i GELECEGE kaydirarak ilk tur ertelenir; periyot mantigi
+        aynen korunur (dolayisiyla uzun bir duraksamadan sonra hala
+        gecikmeden yakalama yapar). Disk guard MUAF: `_ACILISTA_BEKLEMEYEN`.
+        """
+        for sira, job in enumerate(jobs):
+            gecikme = (
+                0.0
+                if job[0] in _ACILISTA_BEKLEMEYEN
+                else _ILK_TUR_BEKLEME_SEC + sira * _ILK_TUR_KAYDIRMA_SEC
+            )
+            # `now + gecikme - periyot`: is, tam `gecikme` saniye sonra
+            # periyodunu doldurmus sayilir.
+            job[3] = now_mono + gecikme - float(job[1]())
+
     def _run(self) -> None:
         jobs = self._jobs()
-        first_iteration = True
+        self._seed_schedule(jobs, _monotonic())
         while not self._stop.is_set():
             now_mono = _monotonic()
             for job in jobs:
                 label, interval_fn, fn, last_run = job[0], job[1], job[2], job[3]
-                if not (first_iteration or now_mono - last_run >= interval_fn()):
+                if now_mono - last_run < interval_fn():
                     continue
                 try:
                     fn()
@@ -243,7 +384,6 @@ class RetentionWorker:
                     logger.exception("retention_purge_failed label=%s", label)
                 job[3] = now_mono
 
-            first_iteration = False
             # En kisa periyodun yarisi kadar uyu (en az 30sn) — tetik anlarini
             # kacirmadan bosuna donmeyi de onler.
             sleep_s = min(interval_fn() for _l, interval_fn, _f, _t in jobs)
@@ -296,6 +436,7 @@ class RetentionWorker:
         batch = settings.retention_delete_batch
         total = 0
         for _ in range(settings.retention_max_batches_per_run):
+            basladi = _monotonic()
             db = SessionLocal()
             try:
                 result = db.execute(
@@ -330,6 +471,12 @@ class RetentionWorker:
                 db.close()
             total += removed
             if removed < batch:
+                break
+            # Partiler arasi nefes — bkz. `_batch_delete`. Telemetri purge'u
+            # kendi SQL'ini kullandigi icin dongu burada tekrarlaniyor;
+            # dagitim kurali AYNI olmali, aksi halde en agir tablo tek basina
+            # eski davranisa doner.
+            if self._pause((_monotonic() - basladi) * _PARTI_ARASI_KATSAYI):
                 break
         if total:
             logger.info(
@@ -373,6 +520,7 @@ class RetentionWorker:
             ProcessedMessage,
             ProcessedMessage.processed_at < cutoff,
             label="processed_messages",
+            pause=self._pause,
         )
         if removed:
             logger.info(
@@ -431,6 +579,7 @@ class RetentionWorker:
                 OutboxEvent.published_at < cutoff,
             ),
             label="outbox_published",
+            pause=self._pause,
         )
 
         gun = (
@@ -446,6 +595,7 @@ class RetentionWorker:
                 OutboxEvent.dead_letter_at < dl_cutoff,
             ),
             label="outbox_dead_letter",
+            pause=self._pause,
         )
 
         if removed or dl_removed:
@@ -477,6 +627,7 @@ class RetentionWorker:
             SystemEvent,
             SystemEvent.created_at < cutoff,
             label="system_events_age",
+            pause=self._pause,
         )
 
         # 2) FIFO tavani. En yeni N. satirin id'sini bulup altindakileri sil —
@@ -504,6 +655,7 @@ class RetentionWorker:
                         SystemEvent.severity.in_(_FIFO_EXPENDABLE_SEVERITIES),
                     ),
                     label="system_events_fifo",
+                    pause=self._pause,
                 )
                 if over:
                     logger.warning(

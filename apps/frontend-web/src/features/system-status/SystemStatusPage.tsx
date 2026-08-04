@@ -1277,6 +1277,19 @@ export function SystemStatusPage({
                       count: pipeline.backlog_warn_threshold
                     })}
                   </span>
+                  {/* Kalicilastirma hangi akistan besleniyor. "raw" gecis
+                      oncesi drenaj fazidir; birikim erimeden NORMALIZED'e
+                      gecilmez. Bu satir olmadan gecisin tamamlanip
+                      tamamlanmadigi ancak NATS CLI ile anlasilirdi. */}
+                  {pipeline.source ? (
+                    <span className="sys-info-tile-sub">
+                      {t(
+                        pipeline.source === "normalized"
+                          ? "systemStatus.pipeline.sourceNormalized"
+                          : "systemStatus.pipeline.sourceRaw"
+                      )}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="sys-info-tile">

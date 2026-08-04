@@ -20,7 +20,7 @@ portu ikinci kez baglayamaz.
 IKI KATMANLI KORUMA
 -------------------
 1. ROL (yapilandirma): surecin NE YAPMASI gerektigini soyler.
-     all    — hepsi (VARSAYILAN; bugunku davranis, tek container kurulumlar)
+     all    — hepsi (tek container kurulum; KOD ICI varsayilan, bkz. asagisi)
      api    — yalnizca HTTP/WS; arka plan isi YOK
      worker — yalnizca arka plan isi
 
@@ -29,13 +29,22 @@ IKI KATMANLI KORUMA
    yarar: iki container da `all` kalirsa is iki kez kosardi. Postgres
    session-level advisory lock bunu YAPISAL olarak imkansiz kilar.
 
-NEDEN VARSAYILAN `all`
-----------------------
-Sahadaki kurulumlar tek container calisiyor ve `update.sh` ile guncelleniyor.
-Varsayilan `api` olsaydi guncelleme sonrasi TUM arka plan isi sessizce
-dururdu: telemetri DB'ye yazilmaz, alarm uretilmez, yedek alinmaz — ve
-hicbir hata gorunmezdi. Yeni davranis yalnizca compose'da acikca rol
-verildiginde devreye girer.
+KOD ICI VARSAYILAN NEDEN HALA `all`
+-----------------------------------
+Bu, compose'un gonderdigi degerle KARISTIRILMAMALI. Compose artik
+`backend-api`ye acikca `api`, `backend-worker`a `worker` veriyor; yani
+uretimde bu varsayilana HIC dusulmez.
+
+Varsayilanin `all` kalmasi, env'i HIC gelmeyen yollar icindir: yerel
+gelistirme, pytest ve compose disi (elle uvicorn) kosum. Oralarda `api`
+varsayilsaydi hicbir arka plan isi acilmaz ve bu SESSIZ olurdu — telemetri
+DB'ye yazilmaz, alarm uretilmez, yedek alinmaz, hata gorunmezdi. Guvenli
+taraf "isi yapan" taraftir; cift kosma ihtimalini zaten advisory lock
+kapatiyor.
+
+DIKKAT: bu yuzden `docker-compose.yml`de `SERVICE_ROLE` satirini silmek
+YETMEZ — silinirse backend-api yeniden `all` olur ve backend-worker ile
+liderlik icin YARISIR (is iki kez kosmaz ama ayirmanin kazanci kaybolur).
 
 LIDERLIK NEDEN YENIDEN DENENIR
 ------------------------------

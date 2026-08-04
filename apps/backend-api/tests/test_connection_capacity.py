@@ -96,7 +96,12 @@ def test_recete_compose_ta_HALA_belgeli():
         "compose'daki olcekleme recetesi degismis — baglanti hesabi da "
         "guncellenmeli"
     )
-    assert "--profile scale" in metin
+
+
+# NOT: compose'daki ayirma varsayilanlarini (profil yok, roller, tek uvicorn
+# worker) dogrulayan testler `test_arka_plan_ayrik_surec.py` icinde toplandi.
+# Burada yalnizca BAGLANTI BUTCESI olculur; iki dosyada ayni seyi iki farkli
+# bicimde iddia etmek, biri degisince digerini sessizce yanlislastiriyordu.
 
 
 @pytest.mark.parametrize("alan", ["db_pool_size", "db_max_overflow"])

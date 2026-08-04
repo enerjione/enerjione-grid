@@ -815,6 +815,15 @@ class TelemetryPipelineReport(BaseModel):
 
     running: bool = Field(..., description="Tuketici thread'i ayakta mi")
     connected: bool = Field(..., description="NATS baglantisi kurulu mu")
+    source: str | None = Field(
+        default=None,
+        description=(
+            "Kalicilastirmanin BESLENDIGI akis: 'normalized' hedef mimaridir "
+            "(tag-engine cikisi), 'raw' ise gecis oncesi drenaj fazidir. "
+            "Bu alan olmadan gecisin tamamlanip tamamlanmadigi ancak NATS "
+            "CLI ile anlasilabilirdi."
+        ),
+    )
     backlog: int | None = Field(
         default=None,
         description=(
@@ -892,6 +901,7 @@ def get_telemetry_pipeline_status(
     return TelemetryPipelineReport(
         running=bool(stats.get("running")),
         connected=bool(stats.get("connected")),
+        source=stats.get("source"),
         backlog=backlog,
         throughput_msgs_per_sec=float(stats.get("throughput_msgs_per_sec") or 0.0),
         last_batch_size=int(stats.get("last_batch_size") or 0),

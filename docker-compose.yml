@@ -366,13 +366,29 @@ services:
     environment:
       APP_ENV: production
       # --- Olcekleme ---
-      # Surec rolu. VARSAYILAN `all` = bugunku davranis (tek container hem
-      # HTTP hem arka plan isleri). Ayrik kurulum icin:
-      #   .env'e  E1_BACKEND_ROLE=api  yaz ve `--profile scale` ile baslat;
-      #   arka plan isleri backend-worker'a gecer.
+      # Surec rolu. VARSAYILAN `api` = arka plan isleri BU SURECTE KOSMAZ;
+      # asagidaki `backend-worker` container'inda kosar.
+      #
+      # NEDEN VARSAYILAN DEGISTI (2026-08-04, olculdu)
+      # ----------------------------------------------
+      # Ayirma yetenegi v2.29.0'da eklendi ama `scale` profiline ve elle
+      # yazilacak uc `.env` satirina bagliydi. Sahada kimse yazmadi:
+      # `docker compose config --services` varsayilan ortamda backend-worker'i
+      # HIC listelemiyordu ve `SERVICE_ROLE` `all` olarak render ediliyordu.
+      # Yani 12 arka plan isi (telemetri tuketicisi, outbox yayini, retention,
+      # historian, yedekleme...) HTTP ile AYNI Python surecinde, AYNI GIL
+      # altinda kosmaya devam etti; olcumde backend-api %105 CPU'da
+      # (= tek cekirdek dolu) iken cgroup tavani 2.0 CPU idi — ayrilan
+      # islemcinin yarisi tek surec oldugu icin KULLANILAMIYORDU.
+      #
+      # `all` ile geri donulur: `.env`e `E1_BACKEND_ROLE=all` yazip
+      # backend-worker'i durdurmak eski tek-container davranisini verir.
+      #
       # Yanlis ayarlansa bile isler IKI KEZ KOSMAZ — lider secimi Postgres
-      # advisory lock ile yapilir (app/core/service_role.py).
-      SERVICE_ROLE: ${E1_BACKEND_ROLE:-all}
+      # advisory lock ile yapilir (app/core/service_role.py). `api` rolunde
+      # ise bu surec kilidi HIC TALEP ETMEZ (wants_background() False), yani
+      # tek yayinci garantisi yarisa bile girmeden saglanir.
+      SERVICE_ROLE: ${E1_BACKEND_ROLE:-api}
       # Arka plan surecinin ic adresi — YALNIZCA rol `api` iken okunur.
       # Telemetri boru hatti olcumu (backlog, mesaj/sn) surec-ici sayaclardan
       # gelir; ayirdiktan sonra API bu adrese sorar, yoksa Sistem Durumu
@@ -519,6 +535,21 @@ services:
       NATS_STREAM_RAW_MAX_AGE_DAYS: ${NATS_STREAM_RAW_MAX_AGE_DAYS:-2}
       NATS_STREAM_NORMALIZED_MAX_AGE_DAYS: ${NATS_STREAM_NORMALIZED_MAX_AGE_DAYS:-7}
       NATS_STREAM_DLQ_MAX_AGE_DAYS: ${NATS_STREAM_DLQ_MAX_AGE_DAYS:-30}
+      # --- Kalicilastirma kaynagi: RAW -> NORMALIZED gecisi ---------------
+      # Kalicilastirma artik tag-engine CIKISINDAN beslenir; boylece arsiv,
+      # alarm-service, iec104-outbound ve modbus-outbound AYNI normalize
+      # edilmis degeri gorur. `auto` once eski RAW durable'ini BOSALTIR
+      # (birikmis olcumler kaybolmasin), bosalinca kendiliginden gecer —
+      # operator adimi YOKTUR. Elle mudahale gerekirse:
+      #   raw        -> gecisi ertele (eski davranis)
+      #   normalized -> drenaji atla (YALNIZCA temiz kurulum)
+      TELEMETRY_PERSIST_SOURCE: ${TELEMETRY_PERSIST_SOURCE:-auto}
+      # Gecis aninda NORMALIZED akisinda geri sarilan pencere (saniye).
+      # Tag-engine'in kendi gecikmesi kadarlik boslugu kapatir. Tekrar gelen
+      # olcumleri `processed_messages` defteri eler, bu yuzden deger o
+      # defterin omrunu (PROCESSED_MESSAGES_RETENTION_HOURS) ASAMAZ — kod
+      # tavani zorlar ve asilirsa kirpip loglar.
+      TELEMETRY_PERSIST_CUTOVER_OVERLAP_SEC: ${TELEMETRY_PERSIST_CUTOVER_OVERLAP_SEC:-900}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -676,51 +707,69 @@ services:
     <<: *heavy-resources
 
   # ---------------------------------------------------------------------
-  # Arka plan isleri — OPSIYONEL AYRI SUREC (profil: scale)
+  # Arka plan isleri — AYRI SUREC (VARSAYILAN OLARAK ACIK)
   #
-  # Varsayilan kurulumda YOKTUR: `backend-api` hem HTTP hem arka plan isini
-  # yapar (SERVICE_ROLE=all). Bu, tek cihazli sahalar icin dogru ve en ucuz
-  # secim.
+  # NE YAPAR: telemetri tuketicisi, outbox yayini, retention/purge, historian,
+  # MQTT/webhook cikisi, IEC 104 sunuculari, toplu bildirim, yedekleme — yani
+  # `leader.register(...)` ile kayitli TUM isler burada kosar. `backend-api`
+  # yalnizca HTTP/WS servis eder.
   #
-  # NE ZAMAN ACILIR: cihaz sayisi buyuyunce (600 cihaz hedefi) telemetri
-  # tuketicisi ile HTTP ayni surecte CPU ve GIL icin yarisir. Ayirinca:
-  #   * ingest yuku HTTP yanit suresini etkilemez,
-  #   * API coklu worker ile buyutulebilir (E1_API_WORKERS).
+  # NEDEN AYRI SUREC (olcum, 100 cihaz / 176 sinyal test sunucusu)
+  # --------------------------------------------------------------
+  # Isler HTTP ile ayni surecte iken backend-api %105 CPU'da olculdu. CPython
+  # tek GIL tuttugu icin bu pratikte TAVAN: container'in cgroup tavani 2.0 CPU
+  # olmasina ragmen tek surec bir cekirdegin otesine gecemez. Ingest (HTTP,
+  # ucuz) ile isleme (tuketici + outbox + retention, pahali) ayni GIL icin
+  # yarisiyordu; gateway 1135 msg/sn basarken backend ~480 msg/sn isliyor ve
+  # kuyruk sessizce birikiyordu.
   #
-  # NASIL ACILIR — UCU DE `.env` dosyasina yazilir:
-  #     COMPOSE_PROFILES=scale
-  #     E1_BACKEND_ROLE=api
-  #     E1_API_WORKERS=4
+  # BU BLOK ONCEDEN `profiles: ["scale"]` ILE KAPALIYDI ve acilmasi `.env`e
+  # elle yazilacak uc satira bagliydi. Sahada hicbiri yazilmadi — yani
+  # ayirmanin KAZANCI HIC DEVREYE GIRMEDI, yalnizca kodu tasindi. Bir
+  # optimizasyonun varsayilani kapaliysa o optimizasyon yoktur.
   #
-  # `--profile scale` KOMUT BAYRAGI TEK BASINA YETMEZ: sahada compose'u elle
-  # cagiran yok. `install.sh`, `update.sh` ve systemd unit'i duz
-  # `docker compose up -d` kosar; bayrak hicbirinde yoktur ve olmamalidir da
-  # (o zaman profil ZORLA acilirdi). Compose `COMPOSE_PROFILES`i proje
-  # dizinindeki `.env`den okur ve systemd `WorkingDirectory` zaten orayi
-  # gosterir — yani ayar tek yerde, kalici ve guncellemeye dayanikli.
+  # TEK YAYINCI GARANTISI — IKI KATMAN
+  # ----------------------------------
+  # 1. ROL: `backend-api` varsayilan `api` rolunde. `wants_background()` False
+  #    doner, yani o surec advisory lock'u TALEP BILE ETMEZ. Ayni outbox'i iki
+  #    yerden yayinlama ihtimali yarisa girmeden ortadan kalkar.
+  # 2. ADVISORY LOCK: yine de yerinde duruyor (app/core/service_role.py).
+  #    Gerekli, cunku backend-worker'in yeniden baslatilmasi sirasinda eski ve
+  #    yeni surec kisa sure UST USTE binebilir; ayrica biri `.env`e
+  #    `E1_BACKEND_ROLE=all` yazarsa iki aday olusur.
+  # Ucuncu bir kemer daha var: `flush_outbox` satirlari
+  # `FOR UPDATE SKIP LOCKED` ile alir ve `dedup_key` UNIQUE'tir.
   #
-  # E1_BACKEND_ROLE=api YAZMAYI UNUTMAYIN: profil tek basina acilirsa
-  # backend-api rol `all` kalir ve worker ile LIDER OLMAK ICIN YARISIR.
-  # Advisory lock cift kosmayi engeller ama lideri kimin kazanacagi belirsizdir;
-  # tuketici yine API surecinde kalabilir ve ayirma islevsiz olur.
-  # KABUL KRITERI: `/api/v1/health` govdesinde backend-api icin
-  # `background.is_leader == false`, backend-worker icin `true`.
+  # TEK CONTAINER'A GERI DONUS (kucuk saha / dar bellek):
+  #     .env:  E1_BACKEND_ROLE=all
+  #     sudo docker compose stop backend-worker && docker compose rm -f backend-worker
+  # Bu, backend-api'yi eski `all` davranisina dondurur; kod yolu degismedi.
+  #
+  # KABUL KRITERI: `/api/v1/health` govdesinde
+  #     backend-api    -> background.is_leader == false, role == "api"
+  #     backend-worker -> background.is_leader == true,  role == "worker"
+  # ve Sistem Durumu > telemetri boru hattinda `backlog` ERIMELI.
   #
   # DB BAGLANTI BUTCESI: E1_API_WORKERS keyfi buyutulmemeli; max_connections
-  # hesabi yukarida (postgres servisi) 4 worker + 1 arka plan surecine gore
-  # yapildi.
+  # hesabi yukarida (postgres servisi) 4 API worker + 1 arka plan surecine
+  # gore yapildi. Varsayilan (1 + 1 surec) 100 baglanti ister.
+  #
+  # BELLEK: bu ikinci container ~175 MiB ek RSS demek (olculen backend-api
+  # ayak izi). Tavan `heavy-resources` ile 2G; 8 GB altindaki cihazlarda
+  # `E1_BACKEND_ROLE=all` ile geri donun.
   #
   # `extends` KULLANILIYOR — env listesi KOPYALANMIYOR. Kopya olsaydi iki
   # liste zamanla ayrisirdi: worker'a eklenmeyen bir ayar (yeni SMTP alani,
   # yeni NATS parametresi) sessizce yalnizca API'de gecerli olurdu ve fark
-  # ancak sahada anlasilirdi.
+  # ancak sahada anlasilirdi. Imaj da AYNI; farkli olan yalnizca
+  # `SERVICE_ROLE` env'i — komut (`migrate_db && uvicorn`) ortak ve es zamanli
+  # migration `pg_advisory_lock` ile seri kosuyor (scripts/migrate_db.py).
   #
   # DIKKAT: compose `extends` ile `depends_on` KOPYALANMAZ; asagida acikca
   # tekrar tanimlanmistir.
   backend-worker:
     extends:
       service: backend-api
-    profiles: ["scale"]
     container_name: e1-grid-backend-worker
     # Trafik almaz: port yayinlanmaz, nginx bu servise yonlendirmez.
     # HTTP saglik ucu yine ayakta (uvicorn calisiyor) ama LB'ye girmez.

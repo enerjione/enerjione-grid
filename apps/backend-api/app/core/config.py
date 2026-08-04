@@ -200,6 +200,45 @@ class Settings(BaseSettings):
     # Yeni isim DeliverPolicy.NEW ile guncele baslar; stream verisi silinmez.
     # Batch-commit throughput sayesinde v2 tekrar geride kalmaz.
     nats_consumer_telemetry_persist: str = "backend-api-telemetry-persist-v2"
+    # ----- Kalicilastirma kaynagi: RAW -> NORMALIZED gecisi ------------------
+    # HEDEF MIMARI: backend yalnizca HTTP alir ve akisa YAYINLAR; ham akisi
+    # tag-engine isler, kalicilastirma tag-engine CIKISINDAN beslenir.
+    # Boylece arsivdeki deger ile alarm/IEC104/Modbus'un gordugu deger AYNI
+    # normalizasyondan gecer (eskiden persist RAW'i, digerleri NORMALIZED'i
+    # okuyordu — iki farkli karar zinciri).
+    #
+    # Yeni durable AYRI bir stream'de (TELEMETRY_NORMALIZED) yasar, bu yuzden
+    # ayri bir isim gerekir. Eski RAW durable'i (yukaridaki v2) SILINMEZ;
+    # once BOSALTILIR (bkz. telemetry_consumer._cutover_*), cunku icinde
+    # HENUZ YAZILMAMIS olcumler durur.
+    nats_consumer_telemetry_persist_normalized: str = "telemetry-persist-normalized-v3"
+    # auto | raw | normalized
+    #   auto       — VARSAYILAN. Once eski RAW durable'i bosaltir (birikmis
+    #                mesajlar kaybolmasin), bosalinca NORMALIZED'e gecer.
+    #                Sahadaki kurulum guncellenince kendiliginden dogru olan
+    #                tek deger budur.
+    #   raw        — gecisi ERTELE, gecis yapilmissa GERI AL (eski davranis;
+    #                tag-engine olmadan da persist calisir). Tesis/teshis icin.
+    #                GERI ALIRKEN ortada kalan NORMALIZED durable'i SILINIR:
+    #                birakilsaydi kimse tuketmedigi icin birikir ve `auto`ya
+    #                donuldugunde (ki `auto` compose varsayilanidir) o birikim
+    #                bastan islenip ayni olcumu IKINCI KEZ yazardi. RAW
+    #                durable'i da simetrik olarak geri sarilarak yaratilir ki
+    #                surecin kapali oldugu pencere kaybolmasin.
+    #   normalized — drenaji ATLA ve dogrudan NORMALIZED'e bagla. YALNIZCA
+    #                temiz kurulumda guvenli; birikmis RAW varsa O MESAJLAR
+    #                HIC YAZILMAZ.
+    telemetry_persist_source: str = "auto"
+    # Gecis aninda NORMALIZED akisinda ne kadar GERI SARILIR (saniye).
+    #
+    # NEDEN GERI SARILIYOR: RAW drenaji bittigi an ile yeni durable'in
+    # olusturuldugu an arasinda tag-engine'in kendi gecikmesi kadar bir
+    # pencere vardir. Geri sarmazsak o penceredeki olcumler HIC yazilmaz.
+    # Geri sarilan aralik ZATEN yazilmis olcumleri tekrar getirir; onlari
+    # `processed_messages` defteri eler — dolayisiyla bu deger defterin
+    # OMRUNU (processed_messages_retention_hours) ASAMAZ, yoksa dedup kaydi
+    # silinmis mesajlar IKINCI KEZ yazilirdi. Kod bu tavani zorlar.
+    telemetry_persist_cutover_overlap_sec: int = 900
     # Gateway compose dosyasi indirilirken gateway user/password URL'e gomuluyor.
     # `infra/nats/nats-server.conf`'taki `gateway` user'inin cleartext sifresi.
     # bootstrap.sh urettiginde .env'e yazar; backend bu degeri okuyup compose

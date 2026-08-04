@@ -994,6 +994,9 @@ export type HistorianStatus = {
 export type TelemetryPipelineStatus = {
   running: boolean;
   connected: boolean;
+  /** Kalicilastirmanin BESLENDIGI akis. "normalized" hedef mimaridir
+   *  (tag-engine cikisi); "raw" gecis oncesi drenaj fazidir. */
+  source?: "raw" | "normalized" | null;
   /** Tuketicinin ONUNDE bekleyen mesaj sayisi (JetStream num_pending).
    *  Surekli 0 civari beklenir; kalici buyume tuketicinin geride oldugunu
    *  ve tampon tasarsa veri kaybi baslayacagini gosterir. */

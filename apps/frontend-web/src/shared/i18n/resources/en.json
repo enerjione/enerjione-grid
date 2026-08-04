@@ -1333,6 +1333,8 @@
       },
       "backlog": "Pending messages",
       "backlogHint": "Warning threshold: {{count}}",
+      "sourceRaw": "Source: raw stream (migration in progress)",
+      "sourceNormalized": "Source: tag-engine output",
       "throughput": "Throughput",
       "msgsPerSec": "{{count}} msg/s",
       "batchSub": "Last batch: {{size}} msgs / {{sec}}s",

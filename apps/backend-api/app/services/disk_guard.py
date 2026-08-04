@@ -169,7 +169,12 @@ def _relieve_aggressive() -> list[str]:
     from app.services import telemetry_retention
 
     done: list[str] = []
-    worker = telemetry_retention.RetentionWorker()
+    # `paced=False` — partiler arasi nefes KAPALI. Periyodik yolda o bekleme
+    # dogru: temizlik, veri yolunun yanindan gecerken onu itmemeli. Burada
+    # oncelik TERSINE doner; disk dolmak uzereyken alani yavas ama kibar
+    # acmak, tam da onlemeye calistigimiz seyi (Postgres'in yazamaz hale
+    # gelmesi) davet ederdi.
+    worker = telemetry_retention.RetentionWorker(paced=False)
 
     # Idempotency defteri: gercek redelivery penceresi 10 DAKIKA oldugu icin
     # 6 saat hala fazlasiyla guvenli.

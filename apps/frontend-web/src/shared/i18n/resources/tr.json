@@ -1333,6 +1333,8 @@
       },
       "backlog": "Bekleyen mesaj",
       "backlogHint": "Uyarı eşiği: {{count}}",
+      "sourceRaw": "Kaynak: ham akış (geçiş sürüyor)",
+      "sourceNormalized": "Kaynak: tag-engine çıkışı",
       "throughput": "İşlem hızı",
       "msgsPerSec": "{{count}} mesaj/sn",
       "batchSub": "Son grup: {{size}} mesaj / {{sec}} sn",

@@ -108,9 +108,34 @@ def _normalize_quality(quality: str) -> str:
     return (quality or "good").strip().lower()
 
 
+# CIHAZ seviyesinde "haberlesme yok" demek olan kaliteler.
+_OFFLINE_QUALITIES = frozenset({"bad", "offline", "invalid", "comm_lost", "restart"})
+# NOKTA seviyesinde gelebilen ama CIHAZI offline SAYMAMASI gereken kaliteler.
+# Ayrimi `dnp3_flags`in VARLIGI yapar: alan doluysa gateway 0.5.0+ demektir ve
+# kalite tek bir NOKTA icindir ("bu olcum gecersiz"), cihaz pekala ayaktadir.
+# Alan yoksa (0.4.x legacy) ayni kelime CIHAZ seviyesindedir ve OFFLINE dogru
+# karardir. Backend `map_quality_to_status_scoped` ile AYNI mantik — ikisi
+# ayrisirsa arsivdeki durum ile ekrandaki durum celisir.
+_POINT_LEVEL_QUALITIES = frozenset({"invalid", "restart", "forced"})
+
+
+def _durum(quality: str, dnp3_flags) -> str:  # noqa: ANN001
+    if dnp3_flags is not None and quality in _POINT_LEVEL_QUALITIES:
+        return "online"
+    return "offline" if quality in _OFFLINE_QUALITIES else "online"
+
+
 def _build_processed_payload(payload: dict) -> dict:
     quality = _normalize_quality(str(payload.get("quality", "good")))
     now_iso = datetime.now(timezone.utc).isoformat()
+    # KALICILASTIRMA BU AKISTAN BESLENIYOR — asagidaki uc alan DUSURULEMEZ.
+    # Dusurulurse belirti sessizdir:
+    #   dnp3_flags       -> kapsam bilgisi kaybolur, tek bir noktanin
+    #                       referans hatasi TUM CIHAZI offline gosterir
+    #   device_event_at  -> telemetry/telemetry_history/telemetry_latest
+    #   timestamp_quality   kolonlari sessizce NULL kalir; SOE ve ariza-suresi
+    #                       analizi kaybolur
+    dnp3_flags = payload.get("dnp3_flags")
     return {
         "message_id": payload.get("message_id") or str(uuid4()),
         "correlation_id": payload.get("correlation_id") or payload.get("message_id") or str(uuid4()),
@@ -124,17 +149,22 @@ def _build_processed_payload(payload: dict) -> dict:
         # bu alani persist edebilmesi icin field'i drop etmeden geciriyoruz.
         "value_string": payload.get("value_string"),
         "quality": quality,
+        # Ham DNP3 kalite bayraklari. VARLIGI bir surum isaretidir (bkz.
+        # _durum ve backend schemas/telemetry.py) — degeri kadar var/yok
+        # olmasi da anlamlidir, o yuzden None ise de alan GECER.
+        "dnp3_flags": dnp3_flags,
         # Gateway dnp3 adapter'leri "comm_lost" (TCP/link kopuk) ve "restart"
         # (cihaz reboot etti, baseline bekleniyor) kalitelerini de yayinlar.
         # Frontend'de cihazin "offline" gozukmesi icin bu kaliteler de
         # offline olarak isaretlenmelidir; aksi halde gateway'in son iyi
         # degeri tekrar yayinlanmadigi durumda cihaz hala "online" gorunur.
-        "status": (
-            "offline"
-            if quality in {"bad", "offline", "invalid", "comm_lost", "restart"}
-            else "online"
-        ),
+        "status": _durum(quality, dnp3_flags),
         "source_timestamp": payload.get("source_timestamp") or now_iso,
+        # Cihazin KENDI olay zamani + o damganin guvenilirligi. Backend bunu
+        # ayri kolonlarda saklar; `source_timestamp` (PK/partition kolonu)
+        # ile karistirilmamali.
+        "device_event_at": payload.get("device_event_at"),
+        "timestamp_quality": payload.get("timestamp_quality"),
         "processed_at": now_iso,
     }
 

@@ -865,3 +865,122 @@ def test_sqlite_gibi_backendde_migration_KILITSIZ_kosar(monkeypatch):
     md.migrate()
 
     assert kosuldu == [1], "kilitsiz backend'de migration hic kosmadi"
+
+
+# ==========================================================================
+# 4) COMPOSE VARSAYILANLARI: ayirma SAHADA da acik mi
+#
+# Buradaki testler yukaridakilerden farkli bir sey olcer ve tam da bu yuzden
+# gerekli: yukaridakiler ayirmanin DOGRU CALISTIGINI kanitliyordu, ama sahada
+# HIC DEVREYE GIRMEMISTI. `backend-worker` `profiles: ["scale"]` arkasindaydi
+# ve acilmasi `.env`e elle yazilacak `COMPOSE_PROFILES=scale` satirina
+# bagliydi. Kimse yazmadi; `docker compose config --services` varsayilan
+# ortamda backend-worker'i listelemiyor, `SERVICE_ROLE` `all` render
+# ediliyordu. Yani 2.39.0'in en buyuk kazanimi olu koddu ve butun yeni yuk
+# ayni GIL'e biniyordu (olcum: backend-api %105 CPU = tek cekirdek dolu).
+#
+# Varsayilani kapali olan bir optimizasyon YOKTUR. Bu testler varsayilani
+# kilitler.
+#
+# YAML AYRISTIRICISI kullaniliyor, metin aramasi degil: bu depoda daha once
+# CRLF yuzunden blok siniri kaciran ve mount tamamen silindigi halde YESIL
+# kalan bir kabuk testi yasandi (bkz. test_config_consistency.py).
+# ==========================================================================
+
+from pathlib import Path  # noqa: E402
+
+REPO = Path(__file__).resolve().parents[3]
+COMPOSE = REPO / "docker-compose.yml"
+
+
+def _compose() -> dict:
+    import yaml
+
+    return yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+
+
+def _servis(ad: str) -> dict:
+    tanim = _compose()["services"].get(ad)
+    assert tanim is not None, f"{ad} compose'da TANIMLI DEGIL"
+    return tanim
+
+
+def test_compose_ARKA_PLAN_SURECINI_tanimliyor():
+    """Servis hic yoksa geri kalan her sey anlamsiz."""
+    tanim = _servis("backend-worker")
+    assert tanim.get("container_name") == "e1-grid-backend-worker"
+
+
+def test_arka_plan_sureci_VARSAYILAN_OLARAK_ACIK():
+    """Profil arkasindaki servis, sahada var olmayan servistir.
+
+    `--profile scale` komut bayragi da cozum degildi: `install.sh`,
+    `update.sh` ve systemd unit'i duz `docker compose up -d` kosar.
+    """
+    assert "profiles" not in _servis("backend-worker"), (
+        "backend-worker yine bir compose profiline baglanmis — profil `.env`e "
+        "elle yazilmadikca servis HIC baslamaz ve ayirma islevsiz kalir"
+    )
+
+
+def test_HTTP_sureci_arka_plan_ISI_ACMAZ():
+    """backend-api varsayilan rolu `api` olmali — TEK YAYINCI GARANTISI.
+
+    Yalnizca worker container'ini eklemek YETMEZ: rol `all` kalirsa iki
+    container liderlik icin YARISIR. Advisory lock cift kosmayi engeller ama
+    lideri kimin kazandigini belirlemez; tuketici yine API surecinde kalabilir
+    ve ayirma islevsiz olur. `api` rolunde `wants_background()` False doner,
+    yani API sureci kilidi TALEP BILE ETMEZ (bkz. test_API_rolu_claim_ETMEZ).
+    """
+    assert _servis("backend-api")["environment"]["SERVICE_ROLE"] == (
+        "${E1_BACKEND_ROLE:-api}"
+    ), (
+        "backend-api varsayilan rolu `api` degil — arka plan isleri ayri "
+        "container'a TASINMAZ, yalnizca ikinci bir aday eklenmis olur"
+    )
+
+
+def test_arka_plan_sureci_ROLU_ACIKCA_worker():
+    """`extends` env'i DEVRALIR; rol ezilmezse worker da `api` olur.
+
+    Bu, ariza modlarinin en sessizi olurdu: iki container ayakta, ikisi de
+    saglikli, `/health` iki tarafta da 200 — ve HICBIRI telemetri islemiyor.
+    Kilit tutulmadigi icin bir uyari bile cikmaz.
+    """
+    assert _servis("backend-worker")["environment"]["SERVICE_ROLE"] == "worker", (
+        "backend-worker rolu acikca `worker` degil — backend-api'den `api` "
+        "rolunu devralir ve arka plan isleri HICBIR surecte kosmaz"
+    )
+
+
+def test_arka_plan_sureci_TEK_uvicorn_worker():
+    """Coklu uvicorn worker burada yalnizca bellek yer.
+
+    Isler zaten advisory lock ile tekil; ikinci surec kilidi alamayip
+    standby'da bekler ve her biri ayri bir DB havuzu acar (baglanti butcesi
+    4 API + 1 arka plan surecine gore hesaplandi).
+    """
+    assert str(_servis("backend-worker")["environment"]["UVICORN_WORKERS"]) == "1"
+
+
+def test_arka_plan_sureci_TRAFIK_ALMIYOR():
+    """Port yayinlarsa hem nginx'in arkasindaki tek giris varsayimi bozulur
+    hem de backend-api ile ayni host portunu baglamaya calisip acilisi
+    komple dusurur."""
+    assert not _servis("backend-worker").get("ports"), (
+        "backend-worker host portu yayinliyor — trafik almamali"
+    )
+
+
+def test_arka_plan_sureci_ALTYAPIYI_BEKLIYOR():
+    """compose `extends` ile `depends_on` KOPYALANMAZ.
+
+    Kopyalandigini varsayip yazmamak, worker'in Postgres/NATS hazir olmadan
+    acilip acilista patlamasina yol acar; restart dongusunde telemetri
+    islenmeden dakikalar gecer.
+    """
+    bagimliliklar = _servis("backend-worker").get("depends_on") or {}
+    for altyapi in ("postgres", "rabbitmq", "nats"):
+        assert altyapi in bagimliliklar, (
+            f"backend-worker {altyapi} bagimliligini bildirmiyor"
+        )
