@@ -870,6 +870,26 @@ else
     e1_step "Arka plan sureci (backend-worker) de yeniden yaratiliyor (surum kaymasini onler)."
   fi
   docker compose up -d --force-recreate "${RECREATE[@]}"
+
+  # FRONTEND'IN NGINX'I DE TAZELENMELI — YASANAN ARIZA
+  # ---------------------------------------------------
+  # nginx upstream adresini YALNIZCA BASLANGICTA cozer ve saklar. Backend
+  # container'i yeniden YARATILINCA yeni bir IP alir; frontend ayakta kaldigi
+  # icin olu adrese gitmeye devam eder ve arayuz `502 Bad Gateway` doner.
+  # Kullanici tarafindan gorunusu: "guncelleme sonrasi sisteme giremiyorum".
+  # Backend saglikli, veritabani saglikli, hicbir log'da hata yok — bu yuzden
+  # teshisi zor.
+  #
+  # Imaji degismedigi icin `compose up -d` frontend'e DOKUNMAZ; bu yuzden
+  # acikca yeniden baslatiyoruz. Restart ~1 saniye surer ve nginx adresi
+  # yeniden cozer.
+  #
+  # Kosul: yalnizca backend yeniden yaratildiysa gerekli.
+  if printf '%s
+' "${RECREATE[@]}" | grep -qx "backend-api"      && [[ -n "$(docker compose ps -q frontend-web 2>/dev/null)" ]]; then
+    e1_step "Frontend nginx'i tazeleniyor (backend adresi degisti)."
+    docker compose restart frontend-web >/dev/null 2>&1 ||       e1_warn "frontend-web yeniden baslatilamadi — arayuz 502 verirse elle restart edin."
+  fi
 fi
 
 # ---- 5/5: Alembic migration (backend/all) ---------------------------------

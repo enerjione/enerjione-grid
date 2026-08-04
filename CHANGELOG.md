@@ -14,6 +14,36 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.46.0] — 2026-08-05
+
+### Düzeltildi
+
+- **NATS akış tavanları yükseltildi — veri kaybı yaşanıyordu.** 500 cihazlık yük
+  testinde `TELEMETRY_NORMALIZED` akışı 3 GiB tavanına dayandı (600 bayt kalmıştı)
+  ve `discard: old` politikası gereği en eski ölçümleri sessizce atmaya başladı.
+  Dolu bir akışa yazmak kat kat pahalı olduğu için zincirin tamamı kilitlendi:
+  tag-engine yayınlayamadığı için aldığı mesajları onaylayamıyor, yenisini
+  çekemiyor ve ham akış 2,1 milyona şişiyordu. Tavanlar RAW 6→24 GiB,
+  NORMALIZED 3→12 GiB, DLQ 1→2 GiB, hesap 12→48 GiB yapıldı; birikim 90 saniyede
+  3,09M'den 1,56M'e düştü.
+- **Güncelleme sonrası arayüze girilemiyordu (502).** Backend yeniden
+  yaratıldığında yeni bir IP alıyor, ancak frontend'in nginx'i adresi yalnızca
+  başlangıçta çözdüğü için ölü adrese gitmeye devam ediyordu. Her şey sağlıklı
+  görünürken yalnızca arayüz 502 veriyordu. Güncelleme artık backend yeniden
+  yaratıldığında frontend'i de tazeliyor.
+
+### Değişti
+
+- **Historian varsayılanı açık listeye çevrildi.** Artık bir sinyalin arşive
+  girmesi bilinçli karar gerektiriyor; katalog büyüdükçe yeni sinyaller sessizce
+  arşive sızmıyor. Liste hat analizi ihtiyacından türetildi: yük akımı, arıza
+  akımı ve süresi, gerilim, iletken ve cihaz sıcaklığı, batarya, sinyal gücü,
+  konum, faz ve eğim açısı — artı sayaçlar. Ayar parametreleri (nominal gerilim,
+  açma eşiği, alarm eşiği), statik metadata (seri no, firmware, donanım sürümü),
+  ikili sinyaller ve durum metinleri arşiv dışında.
+  Sahada ölçüldü: 193 → 60 arşivlenen sinyal, disk büyümesi ~14 GB/saat
+  seviyesinden ~3 GB/saat'e indi. Mevcut kurulumların ayarı değişmez.
+
 ## [2.45.5] — 2026-08-04
 
 ### Düzeltildi — performans: alarm "drift clear" seli kökten kaldırıldı

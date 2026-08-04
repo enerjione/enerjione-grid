@@ -225,6 +225,10 @@ jobs:
       # snap oldugu icin /usr/local altini goremiyordu.
       - name: Kiosk gecis ekrani erisilebilirligi
         run: bash infra/appliance/tests/test-kiosk-splash.sh "$PWD"
+      # Backend yeniden yaratilinca nginx eski IP'ye gider ve arayuz 502
+      # verir; sahada "guncelleme sonrasi giris yapamiyorum" olarak doner.
+      - name: Guncellemede frontend nginx tazeleniyor mu
+        run: bash infra/scripts/linux/tests/test-update-frontend-tazele.sh "$PWD"
       # Root ajanlarin symlink sertlestirmesi (denetim A11/A13). Bu testler
       # `O_NOFOLLOW` gerektirir, yani Windows gelistirici makinesinde ATLANIR;
       # gercek dogrulama YALNIZCA burada olur. Ajanlar zaten Linux appliance
