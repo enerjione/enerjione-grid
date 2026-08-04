@@ -14,6 +14,41 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.39.0] — 2026-08-04
+
+### Eklendi
+
+- **Toast bildirimleri artık ayarlanabilir** (Proje Ayarları, kurulum geneli):
+  konum seçimi ve kendiliğinden gelen bildirimleri susturma. Kullanıcının kendi
+  işleminin sonucu (kaydedildi, hata, yetki, oturum) susturma açıkken de
+  görünür — o mesajların başka kanalı yok.
+- **Outbox dead-letter**: tekrar tekrar başarısız olan kayıt işaretlenip
+  sıradan çıkıyor. Önceden tek bir "zehirli" kayıt tüm kuyruğu kilitliyordu.
+- Arka plan işleri (telemetri tüketicisi, outbox yayıncısı) API sürecinden
+  ayrıldı; API artık güvenle çoğaltılabilir.
+
+### Düzeltildi
+
+- **Veri kaybı: ölü bant, kalite ve arıza bayrağı geçişlerini yutuyordu.**
+  Değer ölü bandın içinde kalırken `good → invalid / comm_lost / forced`
+  geçişleri arşive hiç girmiyordu; ham kopyanın penceresi 30 dakika olduğu
+  için kayıp kalıcı hale geliyordu. Ayrıca ölü bant ikili sinyallere de
+  uygulanabiliyordu. Ölü bant artık yalnızca analog ölçümlerde ve karşılaştırma
+  değer + kalite ikilisi üzerinden. Normal akışta ek yazım maliyeti sıfır.
+- **Outbox temizliği üretimin gerisinde kalıyordu** (silme 1.000/sn, üretim
+  1.074/sn) — tablo hiçbir zaman kararlı duruma gelmiyordu. Yeni kapasite
+  üretimin ~15 katı.
+- Sayfa kaydırma çubuğu: konumlanmamış ata yüzünden ekran okuyucu etiketleri
+  sütun kırpmasından kaçıp belge yüksekliğini büyütüyordu.
+- Hat segment kartı: "Cihaz Ekle" listenin üstüne alındı, liste kendi içinde
+  kayıyor, kart açıldığı noktaya göre sınırlanıyor.
+
+### Bilinen durum
+
+- Telemetri boru hattındaki birikmenin kök nedeni **henüz bulunamadı**. Backend
+  saniyede ~2.145 mesaj işliyor; sorun kendisine gelen mesaj sayısının beklenenin
+  çok üzerinde olması. İnceleme sürüyor.
+
 ## [2.38.13] — 2026-08-03
 
 ### Düzeltildi
