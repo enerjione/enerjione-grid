@@ -60,7 +60,7 @@ def test_raw_tampon_suresi_YORUMLA_uyusuyor():
     saat = _tampon_saat(settings.nats_stream_raw_max_bytes)
     kaynak = inspect.getsource(cfg)
 
-    m = re.search(r"raw\s+6 GiB\s+->\s+~([\d,]+)\s+saat", kaynak)
+    m = re.search(r"raw\s+24 GiB\s+->\s+~([\d,]+)\s+saat", kaynak)
     assert m, "config.py'de raw tampon suresi belgelenmemis"
     belgelenen = float(m.group(1).replace(",", "."))
 
@@ -73,7 +73,7 @@ def test_raw_tampon_suresi_YORUMLA_uyusuyor():
 def test_normalized_tampon_suresi_YORUMLA_uyusuyor():
     saat = _tampon_saat(settings.nats_stream_normalized_max_bytes)
     kaynak = inspect.getsource(cfg)
-    m = re.search(r"normalized\s+3 GiB\s+->\s+~([\d,]+)\s+saat", kaynak)
+    m = re.search(r"normalized\s+12 GiB\s+->\s+~([\d,]+)\s+saat", kaynak)
     assert m, "config.py'de normalized tampon suresi belgelenmemis"
     belgelenen = float(m.group(1).replace(",", "."))
     assert abs(belgelenen - saat) < 1.0, (
@@ -128,14 +128,19 @@ def test_stream_tavanlari_SINIRLI(alan: str):
 
 
 def test_toplam_tavan_disk_butcesine_SIGIYOR():
-    """Uc stream toplami 10 GiB; nats-server.conf max_file_store bunun
-    UZERINDE kalmali (aksi halde hesap tavani once dolar ve sert red gelir)."""
+    """Uc stream toplami 38 GiB; nats-server.conf max_file_store bunun
+    UZERINDE kalmali (48 GiB) — aksi halde hesap tavani once dolar ve akis
+    basina tavan hic devreye girmeden SERT RED geri gelir.
+
+    2026-08-04: 10 -> 38 GiB. 500 cihazlik testte 3 GiB'lik NORMALIZED
+    tavani doldu, akis en eski mesajlari atmaya basladi (VERI KAYBI) ve
+    dolu akisa yazmanin maliyeti tum zinciri kilitledi."""
     toplam = (
         settings.nats_stream_raw_max_bytes
         + settings.nats_stream_normalized_max_bytes
         + settings.nats_stream_dlq_max_bytes
     )
-    assert toplam == 10 * 1024**3, f"toplam {toplam / 1024**3:.1f} GiB"
+    assert toplam == 38 * 1024**3, f"toplam {toplam / 1024**3:.1f} GiB"
 
 
 #: Saha olcumu (test sunucusu, 100 cihaz / 176 sinyal): JetStream deposu
@@ -190,9 +195,25 @@ def test_yas_sinirlari_YUKLU_sahada_hic_ISLEMEZ():
 
 
 def test_kesinti_toleransi_GERCEKCI_belgelenmis():
-    """Operatorun bilmesi gereken sey: kac saatlik kesinti veri kaybettirir."""
+    """Operatorun bilmesi gereken sey: kac saatlik kesinti veri kaybettirir.
+
+    UST SINIR NEDEN VAR: cok uzun bir tampon, "tuketici yavas ama sorun yok,
+    kuyruk tutuyor" yanilgisini besler. Tampon bir COZUM degil, ariza aninda
+    veri kaybini onleyen bir yastiktir; tuketim uretimin altinda kaldigi
+    surece her tavan er ya da gec dolar.
+
+    SINIR 8 -> 12 SAAT (2026-08-04, saha olcumuyle): 500 cihazlik testte
+    3 GiB'lik NORMALIZED tavani DOLDU ve akis en eski mesajlari sessizce
+    atmaya basladi — yani sinir fazla yuksek degil, fazla ALCAKTI. Ustelik
+    dolu akisa yazmanin maliyeti tum zinciri kilitledi (tag-engine %13
+    CPU'da bekliyordu, RAW 2,1 milyona sismisti).
+
+    Yeni tavan bir gecelik (~10 saat) backend kesintisini veri kaybi
+    olmadan tasir. Bu, sahada mudahalenin ertesi sabah gelebilecegi bir
+    urun icin makul bir hedef.
+    """
     saat = _tampon_saat(settings.nats_stream_raw_max_bytes)
-    assert saat < 8, (
+    assert saat < 12, (
         f"hesaplanan tampon {saat:.1f} saat — bu kadar uzunsa yorum ve "
         "planlama varsayimlari gozden gecirilmeli"
     )

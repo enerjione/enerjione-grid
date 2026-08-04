@@ -307,13 +307,13 @@ class Settings(BaseSettings):
     # 600 cihaz x 20 aktif sinyal / 10 sn = ~1.200 deger/sn = 103,68M
     # satir/gun, yani DORT KAT fazla. Gercek tampon sureleri:
     #
-    #   raw         6 GiB  -> ~2,5 saat
-    #   normalized  3 GiB  -> ~1,3 saat
+    #   raw         24 GiB  -> ~9,9 saat
+    #   normalized  12 GiB  -> ~5,0 saat
     #
-    # Bu, tavanlarin YANLIS oldugu anlamina gelmez — 6 GiB disk butcesi
-    # icinde makul bir paydir. Ama "19 saatlik kesintiyi tolere ederiz"
-    # varsayimiyla planlama yapmak YANLISTIR: 3 saati asan bir backend
-    # kesintisinde en eski telemetri KAYBOLUR.
+    # 2026-08-04'te tavanlar yukseltildi (bkz. asagidaki saha olcumu):
+    # 3 GiB'lik NORMALIZED tavani 500 cihazlik testte DOLDU ve akis
+    # sessizce en eski mesajlari atmaya basladi. Yeni tavanlarla ~10
+    # saatlik bir backend kesintisi veri kaybi olmadan tolere edilir.
     #
     # BU TAVANLARI DUSURMEK NEDEN TEHLIKELI (okumadan degistirmeyin)
     # -------------------------------------------------------------
@@ -328,32 +328,48 @@ class Settings(BaseSettings):
     # ilk yeniden baslamasinda (jetstream_bus drift yolu update_stream
     # cagirir) o mesajlari SESSIZCE siler.
     #
-    # Bu yuzden:
-    #   * raw 8 -> 6 GiB: 6 GiB (6,44 GB) olculen TUM deponun (5,6 GB)
-    #     USTUNDE. Yani bu degisiklik uygulandiginda tek bir mesaj bile
-    #     dusmez; sadece EN KOTU DURUM ayak izi 8 -> 6 GiB'a iner.
-    #   * normalized (3 GiB) ve dlq (1 GiB) BILEREK DEGISTIRILMEDI. Bu iki
-    #     stream'in o andaki AYRI AYRI boyutu olculmedi; yalnizca toplam
-    #     biliniyor. Olculmemis bir tavani dusurmek, "belki zaten altindadir"
-    #     bahsine veri kaybi karsiliginda girmektir.
+    # 2026-08-04 SAHA OLCUMU — TAVANLAR YUKSELTILDI
+    # 500 cihazlik yuk testinde (~15.000 sinyal/sn) TELEMETRY_NORMALIZED
+    # 3 GiB tavanina DAYANDI: `bytes` = 3.221.224.872 / `max_bytes` =
+    # 3.221.225.472 — 600 bayt kalmisti. `discard: old` oldugu icin akis
+    # SESSIZCE en eski mesajlari atmaya baslamisti, yani VERI KAYBI
+    # yasaniyordu.
     #
-    # Tavanlari daha da dusurmek icin ON KOSUL: tuketici HTTP surecinden
-    # ayrilip birikimin eridigi DOGRULANMALI (bkz. system_status pipeline
-    # ucu). Birikim varken tavan dusurmek, hizli olmayan sistemi hizli
-    # gostermek icin veriyi atmaktir.
+    # Daha kotusu: dolu bir akisa yazmak, bos bir akisa yazmaktan kat kat
+    # pahalidir. Her yayin once yer acmak icin eski mesajlari silmeyi ve
+    # dosya indekslerini yeniden yazmayi gerektirir. NATS %124 CPU'da tam
+    # bunu yapiyordu (87 GB okuma / 85 GB yazma / 145M yazma syscall).
+    # Zincir soyle kilitlenmisti:
+    #   NORMALIZED dolu -> tag-engine yayinlayamiyor -> aldigi 10.000
+    #   mesaji ONAYLAYAMIYOR -> yenisini cekemiyor -> RAW 2,1 milyona
+    #   sisiyor -> persist/alarm/iec104/modbus AC bekliyor (hepsinin
+    #   bekleyeni 0).
+    # tag-engine %13 CPU'daydi: yavas degil, ONUNDEKI KAPI KAPALIYDI.
     #
-    # Toplam: 6 + 3 + 1 = 10 GiB. nats-server.conf `max_file_store` bunun
-    # UZERINDE kalmali (aksi halde hesap tavani once dolar ve sert red geri
-    # gelir).
+    # Tavanlar yukseltilince (RAW 8->24, NORMALIZED 3->12, hesap 12->48 GiB)
+    # birikim 90 saniyede 3,09M -> 1,56M'a dustu. Kapi acildi.
+    #
+    # NEDEN BU DEGERLER: tipik saha cihazinda 456 GB disk var ve olcumde
+    # 351 GB bostu. 38 GiB toplam tavan, diskin ~%8'i — telemetri arsivi
+    # (Postgres) ile yarismayacak kadar kucuk, ama saatler suren bir
+    # kesintiyi tasiyacak kadar buyuk.
+    #
+    # TAVAN YUKSELTMEK COZUM DEGIL, ZAMAN KAZANDIRIR. Tuketim uretimin
+    # altinda kaldigi surece daha buyuk bir tavan da dolar; sadece daha
+    # gec. Asil is tuketimi hizlandirmak (toplu yazim, yatay olcek).
+    #
+    # Toplam: 24 + 12 + 2 = 38 GiB. nats-server.conf `max_file_store`
+    # bunun UZERINDE kalmali (48 GiB) — aksi halde hesap tavani once dolar
+    # ve akis basina tavan hic devreye girmeden SERT RED geri gelir.
     # Degerler BAYT cinsinden ve LITERAL yazilir (ifade degil): hem
     # tests/test_config_consistency.py bunlari kaynaktan okuyup .env.example /
     # docker-compose.yml ile karsilastirabilsin, hem de operator neye baktigini
     # tereddutsuz gorsun.
-    # 6 GiB — hedef olcekte (~1.200 deger/sn) yaklasik 2,5 SAAT tampon.
-    nats_stream_raw_max_bytes: int = 6_442_450_944
-    # 3 GiB — hedef olcekte yaklasik 1,3 saat.
-    nats_stream_normalized_max_bytes: int = 3_221_225_472
-    nats_stream_dlq_max_bytes: int = 1_073_741_824         # 1 GiB
+    # 24 GiB — hedef olcekte (~1.200 deger/sn) yaklasik 9,9 SAAT tampon.
+    nats_stream_raw_max_bytes: int = 25_769_803_776
+    # 12 GiB — hedef olcekte yaklasik 5,3 saat.
+    nats_stream_normalized_max_bytes: int = 12_884_901_888
+    nats_stream_dlq_max_bytes: int = 2_147_483_648         # 2 GiB
 
     # ----- Gateway saglik heartbeat'i --------------------------------------
     # Saha gateway'i NAT arkasinda; backend onun /health ucuna ULASAMAZ.

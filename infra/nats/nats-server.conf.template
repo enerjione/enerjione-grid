@@ -47,7 +47,7 @@ jetstream {
     #
     # NOT: NATS'ta 'GB' = 10^9 (GiB degil). tests/test_config_consistency.py
     # karsilastirmayi bu birimle yapiyor.
-    max_file_store: 12GB
+    max_file_store: 48GB
     max_memory_store: 1GB
 }
 

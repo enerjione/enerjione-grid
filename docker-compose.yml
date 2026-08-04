@@ -567,9 +567,9 @@ services:
       # nerede oldugunu UMURSAMAZ, tavan = tuketicinin geri kalabilecegi
       # mesafedir. Olculen depodan (5,6 GB) kucuk bir tavan, henuz ISLENMEMIS
       # telemetriyi ilk yeniden baslatmada siler.
-      NATS_STREAM_RAW_MAX_BYTES: ${NATS_STREAM_RAW_MAX_BYTES:-6442450944}
-      NATS_STREAM_NORMALIZED_MAX_BYTES: ${NATS_STREAM_NORMALIZED_MAX_BYTES:-3221225472}
-      NATS_STREAM_DLQ_MAX_BYTES: ${NATS_STREAM_DLQ_MAX_BYTES:-1073741824}
+      NATS_STREAM_RAW_MAX_BYTES: ${NATS_STREAM_RAW_MAX_BYTES:-25769803776}
+      NATS_STREAM_NORMALIZED_MAX_BYTES: ${NATS_STREAM_NORMALIZED_MAX_BYTES:-12884901888}
+      NATS_STREAM_DLQ_MAX_BYTES: ${NATS_STREAM_DLQ_MAX_BYTES:-2147483648}
       # Stream YAS siniri (gun). BU SATIRLAR EKSIKTI: config.py'de tanimliydi
       # ama compose gecirmedigi icin hic ayarlanamiyordu — 29 GB'lik bir
       # cihazda 12 GiB tavan + 7/30 gunluk yas siniriyle JetStream deposu

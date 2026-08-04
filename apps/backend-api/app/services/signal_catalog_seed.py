@@ -101,6 +101,96 @@ def _load_all_default_items() -> tuple[list[dict], set[str]]:
     return items, seen_models
 
 
+# ILK KURULUMDA ARSIVLENEN OLCUMLER — ACIK LISTE.
+#
+# NEDEN KARA LISTE DEGIL DE ACIK LISTE
+# ------------------------------------
+# Katalogda 193 sinyal var ve cogu zaman serisi olarak hicbir soruya cevap
+# vermiyor: cihaz ayar parametreleri (nominal gerilim, acma esigi, sicaklik
+# alarm esigi), statik metadata (seri no, firmware, donanim surumu), komut
+# noktalari ve durum metinleri. "Sunlari haric tut" demek, katalog
+# buyudukce her yeni sinyalin sessizce arsive girmesi demekti. Acik liste,
+# yeni bir sinyalin arsive girmesi icin BILINCLI bir karar gerektirir.
+#
+# LISTE NEYE GORE SECILDI
+# -----------------------
+# Orta gerilim dagitim hattinda gercekten yapilan analizler:
+#   yuk profili ve tepe talep      -> akim olcumleri
+#   ariza yeri tespiti ve buyuklugu -> ariza akimi ve suresi
+#   gerilim profili / regulasyon    -> gerilim olcumleri
+#   ekipman omru ve bakim planlama  -> iletken/cihaz sicakligi, batarya
+#   haberlesme kalitesi             -> sinyal gucu
+#   varlik yonetimi                 -> konum, direk egimi
+#   guc akisi yonu                  -> faz acisi
+#
+# DISARIDA BIRAKILANLAR ve NEDENI
+#   nominal_voltage, trip_level, conductor_temperature_alarm_threshold:
+#     bunlar OLCUM degil AYAR. Degistiklerinde onemli olan "kim ne zaman
+#     degistirdi" sorusudur; onu olay kaydi tutar, zaman serisi degil.
+#   serial_number, firmware_version, hardware_revision: cihaz omru boyunca
+#     sabit. Zaman serisi ayni degeri milyonlarca kez tekrarlar.
+#   test_point_level: katalogda anlami belirsiz; bilmedigimiz bir sinyali
+#     arsivlemek yerine kapali basliyoruz, gerekirse acilir.
+#   binary / binary_output / string: ikili gecisler alarm kaydinda,
+#     komut noktalari ve durum metinleri zaten zaman serisi degil.
+#
+# SAYACLAR ACIK: kumulatif olduklari icin YALNIZCA arttiklarinda satir
+# yazarlar (maliyet ~sifir) ve hat bazinda ariza sikligi raporlamasinin
+# dogrudan kaynagidir.
+_ARSIVLENEN_OLCUMLER = frozenset({
+    # Yuk akimi
+    "actual_current", "minimum_current", "maximum_current",
+    "average_current", "last_good_known_current",
+    # Ariza
+    "fault_current", "fault_duration",
+    # Gerilim (nominal_voltage AYAR oldugu icin YOK)
+    "actual_voltage", "minimum_voltage", "maximum_voltage",
+    # Sicaklik (alarm esigi AYAR oldugu icin YOK)
+    "conductor_temperature", "device_temperature",
+    # Batarya
+    "battery_voltage_satellite",
+    # Haberlesme
+    "modem_rssi", "rssi_satellite",
+    # Konum
+    "latitude_degrees", "latitude_minutes", "latitude_seconds",
+    "longitude_degrees", "longitude_minutes", "longitude_seconds",
+    # Aci
+    "phase_angle", "pitch_angle",
+})
+
+#: Sayacin zaman serisi maliyeti yok, degeri yuksek — tipi ile aciyoruz.
+_ARSIVLENEN_TIPLER = frozenset({"counter"})
+
+
+def _olcum_adi(key: str) -> str:
+    """`master.actual_current` -> `actual_current`.
+
+    Ayni olcum uc kaynakta (master + iki faz uydusu) tekrarlanir; karar
+    kaynaktan BAGIMSIZ verilir.
+    """
+    return key.split(".", 1)[1] if "." in key else key
+
+
+def _arsiv_varsayilani(data: dict) -> dict:
+    """ILK KURULUMDA yalnizca ACIK LISTEDEKI olcumler arsivlenir.
+
+    SADECE VARSAYILAN: kullanici Sinyaller sayfasindan istedigini acabilir.
+    Burada yalnizca ILK kurulumun baslangic noktasi belirleniyor; mevcut
+    kurulumlarin ayari DEGISTIRILMIYOR (cagiran taraf bunu yalnizca satir
+    HIC yokken kosturuyor).
+
+    Katalogda `historize` ACIKCA verilmisse ona DOKUNULMAZ — aksi halde
+    "bu sinyal arsivde kalsin" diyen bir karar sessizce ezilirdi.
+    """
+    if data.get("historize") is not None:
+        return data
+    acik = (
+        data.get("data_type") in _ARSIVLENEN_TIPLER
+        or _olcum_adi(str(data.get("key", ""))) in _ARSIVLENEN_OLCUMLER
+    )
+    return {**data, "historize": acik}
+
+
 def seed_default_signals(
     db: Session, *, strict: bool = True, respect_user_overrides: bool = True
 ) -> dict:
@@ -149,7 +239,7 @@ def seed_default_signals(
             continue
         current = existing.get(key)
         if current is None:
-            db.add(SignalCatalog(**data))
+            db.add(SignalCatalog(**_arsiv_varsayilani(data)))
             inserted += 1
             continue
 
