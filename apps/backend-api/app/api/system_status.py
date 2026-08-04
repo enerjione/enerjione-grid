@@ -920,8 +920,17 @@ def parse_stage_queues(jsz: dict) -> PipelineStageQueues:
             for c in stream.get("consumer_detail") or []:
                 if c.get("name"):
                     consumers[c["name"]] = int(c.get("num_pending") or 0)
+    # tag-engine 2.45.x'te queue-group'lu durable'a gecti (…-q1); gecis
+    # aninda ikisi de bulunabilir — toplanir. Yalnizca eski ada bakmak
+    # panelde ham kuyrugu "—" gosteriyordu (sahada yasandi).
+    tag_eski = consumers.get("tag-engine-normalize")
+    tag_yeni = consumers.get("tag-engine-normalize-q1")
+    raw_bekleyen = (
+        None if tag_eski is None and tag_yeni is None
+        else (tag_eski or 0) + (tag_yeni or 0)
+    )
     return PipelineStageQueues(
-        raw_pending=consumers.get("tag-engine-normalize"),
+        raw_pending=raw_bekleyen,
         normalized_prio_pending=consumers.get("telemetry-persist-prio-v1"),
         normalized_bulk_pending=consumers.get("telemetry-persist-bulk-v1"),
         normalized_legacy_pending=consumers.get("telemetry-persist-normalized-v3"),

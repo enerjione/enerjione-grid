@@ -14,6 +14,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.45.2] — 2026-08-04
+
+### Düzeltildi
+
+- **Boru hattı panelinde ham kuyruk "—" gösteriyordu**: aşama görünümü
+  eski durable adını arıyordu; queue-group'lu yeni ad (…-q1) da okunur,
+  geçiş anında ikisi toplanır.
+
+### Eklendi
+
+- tag-engine ayar düğmeleri env'den: TAG_PUBLISH_PARALLEL ve
+  TAG_MAX_ACK_PENDING (büyük replay'lerde hız ayarı).
+
+---
+
 ## [2.45.1] — 2026-08-04
 
 ### Düzeltildi

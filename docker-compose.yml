@@ -880,6 +880,9 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       SIGNAL_CATALOG_REFRESH_SEC: ${SIGNAL_CATALOG_REFRESH_SEC:-60}
       SIGNAL_CATALOG_TIMEOUT_SEC: ${SIGNAL_CATALOG_TIMEOUT_SEC:-5}
+      # Paralel yayin penceresi + teslim tavani — buyuk replay'de buyutulur.
+      TAG_PUBLISH_PARALLEL: ${TAG_PUBLISH_PARALLEL:-512}
+      TAG_MAX_ACK_PENDING: ${TAG_MAX_ACK_PENDING:-10000}
       # Backend system-status, tag-engine icin 8011 portunu probe eder.
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8011

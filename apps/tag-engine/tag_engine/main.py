@@ -86,6 +86,9 @@ SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.tag-engine")
 # davranis (~1k msj/sn tavan). Pencere buyudukce RTT amortize olur; 512,
 # max_ack_pending (10k) tavaninin guvenli altinda olculmus varsayilan.
 PUBLISH_PARALLEL = max(1, int(os.getenv("TAG_PUBLISH_PARALLEL", "512")))
+# Consumer'in ayni anda teslim edilmis-ack'siz mesaj tavani (durable
+# seviyesinde — replikalarin TOPLAMI). Buyuk replay'de buyutulebilir.
+MAX_ACK_PENDING = max(1000, int(os.getenv("TAG_MAX_ACK_PENDING", "10000")))
 MAX_DELIVER = int(os.getenv("NATS_WORKER_MAX_DELIVER", "10"))
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8011"))
@@ -345,7 +348,7 @@ async def _run() -> None:
                 gorev.add_done_callback(lambda _g: paralel.release())
 
             # Consumer parametreleri uretim icin sertlestirilmis (bkz.
-            # telemetry_consumer.py'daki ayni konfig). max_ack_pending=10000
+            # telemetry_consumer.py'daki ayni konfig). max_ack_pending=MAX_ACK_PENDING
             # 600 cihaz x 10 msg/s yukunde suspend onler; max_deliver=10 poison
             # mesaji discard eder; DeliverPolicy.NEW restart sonrasi 7gunluk
             # history replay'i engeller.
@@ -377,7 +380,7 @@ async def _run() -> None:
                     opt_start_seq=baslangic_seq,
                     deliver_group=DURABLE_Q,
                     ack_wait=60,
-                    max_ack_pending=10000,
+                    max_ack_pending=MAX_ACK_PENDING,
                     max_deliver=10,
                 )
             else:
@@ -390,7 +393,7 @@ async def _run() -> None:
                     deliver_policy=DeliverPolicy.ALL,
                     deliver_group=DURABLE_Q,
                     ack_wait=60,
-                    max_ack_pending=10000,
+                    max_ack_pending=MAX_ACK_PENDING,
                     max_deliver=10,
                 )
             try:
@@ -416,7 +419,7 @@ async def _run() -> None:
                         durable_name=DURABLE_Q,
                         deliver_group=DURABLE_Q,
                         ack_wait=60,
-                        max_ack_pending=10000,
+                        max_ack_pending=MAX_ACK_PENDING,
                         max_deliver=10,
                     ),
                 )
