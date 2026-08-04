@@ -1897,6 +1897,9 @@
       "historian": {
         "title": "Arşiv (Historian)",
         "manage": "Arşiv yönetimi",
+        "manageSub": "Hangi sinyallerin arşive yazılacağını ve analog ölü bantlarını buradan yönetin.",
+        "sectionFilter": "Görünüm filtresi",
+        "sectionBulk": "Toplu işlem",
         "colArchive": "Arşiv",
         "colDeadband": "Ölü Bant",
         "on": "Açık",

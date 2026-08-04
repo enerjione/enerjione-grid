@@ -1897,6 +1897,9 @@
       "historian": {
         "title": "Archive (Historian)",
         "manage": "Archive management",
+        "manageSub": "Control which signals are written to the archive and manage analog deadbands.",
+        "sectionFilter": "View filter",
+        "sectionBulk": "Bulk actions",
         "colArchive": "Archive",
         "colDeadband": "Deadband",
         "on": "On",

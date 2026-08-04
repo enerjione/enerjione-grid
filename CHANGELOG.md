@@ -14,6 +14,16 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.43.1] — 2026-08-04
+
+### Değişti
+
+- Arşiv yönetimi penceresi yeniden tasarlandı: büyük arşiv sayısı +
+  yazma yükü ölçüm çubuğu, etiketli bölümler (görünüm filtresi / toplu
+  işlem), birleşik ölü bant girdi grubu ve açıklayıcı alt başlık.
+
+---
+
 ## [2.43.0] — 2026-08-04
 
 ### Değişti

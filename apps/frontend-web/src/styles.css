@@ -2347,26 +2347,239 @@ body {
 }
 
 .signals-arsiv-modal {
-  max-width: 720px;
-  width: min(720px, calc(100vw - 48px));
+  max-width: 560px;
+  width: min(560px, calc(100vw - 48px));
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+  padding: 22px 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(30, 41, 59, 0.1);
+  box-shadow:
+    0 1px 2px rgba(30, 41, 59, 0.08),
+    0 24px 64px rgba(30, 41, 59, 0.22);
+  animation: arsiv-modal-giris 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
 
-.signals-arsiv-modal-head {
+@keyframes arsiv-modal-giris {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.arsiv-modal-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: 12px;
 }
 
-.signals-arsiv-modal-head h3 {
-  margin: 0;
+.arsiv-modal-ikon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(233, 120, 0, 0.16), rgba(233, 120, 0, 0.06));
+  color: #e97800;
+  font-size: 22px;
 }
 
-.signals-arsiv-modal .shb-bulk {
+.arsiv-modal-baslik {
+  flex: 1;
+  min-width: 0;
+}
+
+.arsiv-modal-baslik h3 {
+  margin: 0 0 2px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.arsiv-modal-baslik p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(30, 41, 59, 0.62);
+}
+
+/* Istatistik blogu: buyuk sayi + yazma yuku metresi */
+.arsiv-stat {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.045), rgba(30, 41, 59, 0.02));
+  border: 1px solid rgba(30, 41, 59, 0.07);
+}
+
+.arsiv-stat-sayi {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.arsiv-stat-sayi strong {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #e97800;
+  font-variant-numeric: tabular-nums;
+}
+
+.arsiv-stat-sayi span {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(30, 41, 59, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+
+.arsiv-stat-govde {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.arsiv-stat-etiket {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.arsiv-stat-yuk {
+  flex: none;
+  font-size: 11.5px;
+  color: rgba(30, 41, 59, 0.55);
+}
+
+.arsiv-metre {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.09);
+  overflow: hidden;
+}
+
+.arsiv-metre-dolgu {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fbbf24, #e97800);
+  transition: width 0.4s ease;
+}
+
+.arsiv-stat-alt {
+  font-size: 11.5px;
+  color: rgba(30, 41, 59, 0.55);
+}
+
+/* Bolumler: etiket + icerik */
+.arsiv-bolum {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arsiv-bolum-baslik {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(30, 41, 59, 0.5);
+}
+
+.arsiv-bolum-kapsam {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(30, 41, 59, 0.6);
+}
+
+.arsiv-filtreler {
+  display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Toplu islem karti */
+.arsiv-toplu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arsiv-toplu-butonlar {
+  display: flex;
+  gap: 8px;
+}
+
+.arsiv-toplu-butonlar .shb-bulk-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Olu bant: girdi + uygula tek grup halinde */
+.arsiv-deadband-grup {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid rgba(30, 41, 59, 0.14);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.arsiv-deadband-grup .shb-deadband-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+
+.arsiv-deadband-grup .shb-deadband-input:focus {
+  box-shadow: inset 0 0 0 2px rgba(233, 120, 0, 0.35);
+}
+
+.arsiv-deadband-grup .shb-bulk-btn {
+  border: none;
+  border-left: 1px solid rgba(30, 41, 59, 0.14);
+  border-radius: 0;
+  white-space: nowrap;
+}
+
+.arsiv-ipucu {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(30, 41, 59, 0.08);
+  font-size: 12px;
+  color: rgba(30, 41, 59, 0.55);
+}
+
+.arsiv-ipucu .material-symbols-outlined {
+  font-size: 16px;
+  color: rgba(233, 120, 0, 0.8);
 }
 
 .gateway-status {
