@@ -14,6 +14,35 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.42.0] — 2026-08-04
+
+### Değişti
+
+- **Arşiv yazımı toplulaştı (COPY)**: kalıcılaştırma ölçüm başına ayrı
+  gidiş-dönüş yerine partiyi tek geçişte dört tabloya yazar (COPY +
+  tek-ifade upsert). Bozuk satır partiyi düşürmez; ikiye bölünerek yalnızca
+  gerçekten bozuk satır karantinaya alınır.
+- **Dijital/analog hat ayrımı**: arıza/durum sinyalleri ve kalite geçişleri
+  öncelikli hattan işlenir — analog ölçüm seli durum değişimlerini
+  geciktirmez. Arıza/ikili sinyaller her değişimde arşivlenir; ölü bant
+  yalnızca analog tipte uygulanır.
+
+### Eklendi
+
+- **Sinyaller sayfasında arşiv/ölü bant yönetimi**: hangi sinyalin
+  arşivleneceği ve ölü bant eşiği panelden yönetilir.
+- **Gateway başlat/durdur/yeniden başlat** (panelden, onaylı): durdurma
+  onayı sonucu açıkça söyler (veri akışı duracak) ve olay kaydına yazılır.
+
+### Düzeltildi
+
+- Arka plan lider kilidinin bağlantısı süresiz "idle in transaction"
+  bekliyordu; bu, tüm veritabanının VACUUM ufkunu sabitleyip yüksek devirli
+  tabloları (canlı değerler, dedup defteri) şişiriyordu. Kilit artık
+  transaction açık bırakmadan tutulur.
+
+---
+
 ## [2.41.0] — 2026-08-04
 
 ### Değişti
