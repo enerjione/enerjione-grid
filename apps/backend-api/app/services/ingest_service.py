@@ -1,5 +1,8 @@
 import hashlib
 import hmac
+import logging
+import threading
+import time as _time
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -14,6 +17,36 @@ from app.models.telemetry import Telemetry
 from app.schemas.telemetry import GatewayTelemetryBatch, TelemetryIn
 from app.services.outbox_service import enqueue_outbox_event
 from app.services.event_service import record_event
+
+logger = logging.getLogger(__name__)
+
+# STANDART telemetri rotasi gateway -> NATS JetStream'dir; bu HTTP endpoint'i
+# YEDEK yoldur. Bir gateway telemetriyi surekli HTTP'den basiyorsa ya NATS'a
+# erisemiyordur ya da NATS oncesi compose ile kuruludur (NATS_URL yok/anonim).
+# Bu gorunmez kalmamali: HTTP yolu her olcumu outbox'a yazdirip backend'e
+# gereksiz yuk bindirir (bkz. outbox_flush_worker). Uyari gateway basina
+# rate-limit'lidir; cozum icin gateway "Guncelle" akisi compose'u guncel
+# NATS URL'i ile yeniden uretir.
+_HTTP_FALLBACK_WARN_INTERVAL_SEC = 600.0
+_http_fallback_lock = threading.Lock()
+_http_fallback_last_warn: dict[str, float] = {}
+
+
+def _warn_http_fallback(gateway_code: str, reading_count: int) -> None:
+    now = _time.monotonic()
+    with _http_fallback_lock:
+        last = _http_fallback_last_warn.get(gateway_code)
+        if last is not None and now - last < _HTTP_FALLBACK_WARN_INTERVAL_SEC:
+            return
+        _http_fallback_last_warn[gateway_code] = now
+    logger.warning(
+        "gateway_http_fallback_ingest gateway=%s batch=%d — telemetri HTTP "
+        "yedek yolundan geliyor; standart rota NATS JetStream. Gateway "
+        "compose'unda NATS_URL eksik/anonim olabilir; panelden 'Guncelle' "
+        "compose'u guncel NATS URL'i ile yeniden uretir.",
+        gateway_code,
+        reading_count,
+    )
 
 
 def hash_gateway_token(token: str) -> str:
@@ -106,6 +139,7 @@ def ingest_gateway_batch(db: Session, payload: GatewayTelemetryBatch, x_gateway_
         return 0
 
     accepted = _persist_readings(db=db, readings=payload.readings)
+    _warn_http_fallback(payload.gateway_code, accepted)
     gateway.last_seen_at = datetime.now(timezone.utc)
     record_event(
         db,
@@ -127,6 +161,7 @@ def ingest_gateway_legacy(
 ) -> int:
     gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
     accepted = _persist_readings(db=db, readings=readings)
+    _warn_http_fallback(gateway_code, accepted)
     gateway.last_seen_at = datetime.now(timezone.utc)
     db.commit()
     return accepted
@@ -151,5 +186,4 @@ def _persist_readings(db: Session, readings: list[TelemetryIn]) -> int:
     # main.py _run_outbox_flush_worker). Boylece 200 cihaz yukunde ingest
     # response'u senkron broker publish'i beklemez -> gateway "Read timed out"
     # gitti. At-least-once korunur: satir DB'de published=False durur.
-    return accepted
     return accepted

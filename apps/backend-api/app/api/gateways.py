@@ -853,6 +853,14 @@ def update_gateway_locally(
     Yanit ANLIK SONUC DEGIL: `{request_id}` doner, ajan istegi asenkron
     isler. Sonuc `GET /gateways/local-agent` icindeki `last_apply` ile
     takip edilir.
+
+    STANDART NATS ROTASI: guncelleme istegiyle birlikte guncel NATS URL'i
+    de gonderilir; ajan compose'u yeniden uretip gateway'i NATS-direkt
+    telemetriye gecirir. NATS oncesi kurulan gateway'ler boylece HTTP
+    fallback'inde takili kalmaz (telemetri backend'e ugramadan JetStream'e
+    akar). NATS_GATEWAY_PASSWORD bos ise (dev/test) URL gonderilmez —
+    anonim URL NATS deny-all'a takilir, gateway'i calisir halden cikarmak
+    yerine mevcut compose korunur.
     """
     gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
     if gateway is None:
@@ -862,9 +870,18 @@ def update_gateway_locally(
             status_code=status.HTTP_409_CONFLICT,
             detail="Gateway bu cihazda kurulu degil; once kurulum yapin.",
         )
+    standart_nats_url: str | None = None
+    if settings.nats_gateway_password.strip():
+        # Lokal kurulumda gateway backend ile ayni host'ta: install akisindaki
+        # varsayilanla ayni sekilde host.docker.internal uzerinden turetilir
+        # (compose 4222'yi host'a publish ediyor).
+        standart_nats_url = derive_nats_url(
+            "http://host.docker.internal/api/v1",
+            gateway_password=settings.nats_gateway_password,
+        )
     try:
         request_id = gateway_agent_service.request_update(
-            gateway.code, current_user.username
+            gateway.code, current_user.username, nats_url=standart_nats_url
         )
     except GatewayAgentError as exc:
         raise _agent_http_error(exc) from exc

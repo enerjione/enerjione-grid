@@ -121,6 +121,13 @@ ALLOWED_PARAM_KEYS = frozenset({
     "publish_dnp3_quality",
 })
 
+# `update` aksiyonunda kabul edilen OPSIYONEL parametreler. Kurulumdan farkli:
+# update, mevcut compose'daki degerleri korur ve yalnizca buradaki anahtarlari
+# uzerine yazar. Su an tek amac NATS-direkt telemetriyi STANDART kilmak —
+# eski (NATS_URL'siz / anonim URL'li) kurulumlar guncellemede kendiliginden
+# NATS'a gecer, gateway HTTP fallback'inde takili kalmaz.
+UPDATE_PARAM_KEYS = frozenset({"nats_url"})
+
 # Compose sablonu — apps/backend-api/app/services/gateway_compose.py icindeki
 # `_COMPOSE_TEMPLATE` ile BIREBIR AYNI olmali. "Baska cihaza kur" akisinda
 # kullanici backend'in urettigi dosyayi indiriyor; iki taraf ayrisirsa ayni
@@ -720,6 +727,83 @@ def _validate_params(params: object) -> dict:
     return out
 
 
+def _validate_update_params(params: object) -> dict:
+    """`update` icin OPSIYONEL parametreleri dogrula. Hata -> ValueError.
+
+    Kurulumdan farkli olarak alanlar zorunlu degil; yalnizca UPDATE_PARAM_KEYS
+    icindekiler kabul edilir ve verilenler install ile AYNI kurallardan gecer.
+    """
+    if not isinstance(params, dict):
+        raise ValueError("params sozluk olmali")
+    unknown = set(params) - UPDATE_PARAM_KEYS
+    if unknown:
+        raise ValueError(f"update'te desteklenmeyen parametre(ler): {sorted(unknown)}")
+    out: dict = {}
+    if "nats_url" in params:
+        out["nats_url"] = _require_str(params, "nats_url", NATS_URL_RE, "nats:// URL")
+    return out
+
+
+# Mevcut compose'dan geri kazanilan env degerleri. Sablonu BIZ urettigimiz
+# icin bicim deterministik: `      KEY: "deger"`. Disaridan gelen YAML'i
+# yorumlamiyoruz — kendi ciktimizi geri okuyoruz.
+_COMPOSE_ENV_RE = re.compile(r'^\s+([A-Z0-9_]+):\s+"([^"]*)"\s*$', re.MULTILINE)
+_COMPOSE_IMAGE_RE = re.compile(r"^\s+image:\s+(\S+)\s*$", re.MULTILINE)
+_COMPOSE_HEALTH_PORT_RE = re.compile(r'"127\.0\.0\.1:([0-9]{1,5}):8020"')
+_COMPOSE_INITIATING_RE = re.compile(r'"([0-9]{4,5})-([0-9]{4,5}):20100-[0-9]{4,5}"')
+
+
+def _params_from_compose(path: str) -> tuple[dict, str]:
+    """Kurulu compose dosyasindan install parametrelerini geri kazan.
+
+    Donus: (params, gateway_name). `update` compose'u yeniden uretirken
+    backend'in GONDERMEDIGI alanlar buradan gelir — kullanicinin kurulumda
+    sectigi imaj/port/URL degerleri sessizce varsayilana donmesin.
+
+    NATS_URL eski kurulumlarda hic olmayabilir (NATS oncesi sablon); bos
+    birakilir ve caller'in overlay'i doldurmasi beklenir. Kalan zorunlu
+    alanlardan biri okunamiyorsa compose elle degistirilmis demektir —
+    ValueError ile net mesaj verilir (dogru yol: kaldirip yeniden kurmak).
+    """
+    with open(path, "r", encoding="utf-8") as fh:
+        body = fh.read()
+
+    env = {m.group(1): m.group(2) for m in _COMPOSE_ENV_RE.finditer(body)}
+    image_m = _COMPOSE_IMAGE_RE.search(body)
+    port_m = _COMPOSE_HEALTH_PORT_RE.search(body)
+    eksik = [
+        ad for ad, var in (
+            ("image", image_m), ("GATEWAY_TOKEN", env.get("GATEWAY_TOKEN")),
+            ("BACKEND_API_URL", env.get("BACKEND_API_URL")), ("health portu", port_m),
+        ) if not var
+    ]
+    if eksik:
+        raise ValueError(
+            "mevcut compose'dan deger okunamadi: " + ", ".join(eksik)
+            + " (dosya elle mi degistirildi? kaldirip yeniden kurun)"
+        )
+
+    init_m = _COMPOSE_INITIATING_RE.search(body)
+    if init_m:
+        base = int(init_m.group(1))
+        count = int(init_m.group(2)) - base + 1
+    else:
+        base, count = 20100, 0
+
+    params = {
+        "image": image_m.group(1),
+        "token": env["GATEWAY_TOKEN"],
+        "backend_url": env["BACKEND_API_URL"],
+        "nats_url": env.get("NATS_URL", ""),
+        "host_port": int(port_m.group(1)),
+        "app_environment": env.get("APP_ENVIRONMENT", "production"),
+        "initiating_port_base": base,
+        "initiating_port_count": count,
+        "publish_dnp3_quality": env.get("GATEWAY_PUBLISH_DNP3_QUALITY", "false"),
+    }
+    return params, env.get("GATEWAY_NAME", "")
+
+
 def _initiating_ports_block(base: int, count: int) -> str:
     """compose `ports:` bloguna eklenecek initiating port satiri.
 
@@ -798,6 +882,12 @@ def _validate(request: dict) -> dict:
                 "(update.sh ile backend + ajan birlikte guncellenmeli)"
             )
         clean["params"] = _validate_params(request.get("params"))
+
+    if action == "update" and request.get("params") is not None:
+        # Opsiyonel: backend guncel degerleri gonderirse compose yeniden
+        # uretilir (bkz. UPDATE_PARAM_KEYS). Eski backend params gondermez;
+        # o durumda update yalnizca imaj ceker (eski davranis).
+        clean["params"] = _validate_update_params(request.get("params"))
 
     return clean
 
@@ -897,17 +987,51 @@ def _do_update(req: dict, compose_cmd: list[str]) -> dict:
     """Yeni imaji cek ve container'i yeniden olustur.
 
     `restart`ten FARKI: restart ayni imajla yeniden baslatir, bu once
-    `pull` yapar. Compose dosyasi DEGISMEZ — imaj etiketi ayni, degisen
-    sey etiketin isaret ettigi digest.
+    `pull` yapar.
 
-    Cekme BASARISIZ olursa container'a DOKUNULMAZ: yarim bir guncelleme
-    yerine calisan eski surumde kalmak dogru davranis.
+    Istekte `params` varsa compose YENIDEN URETILIR: mevcut compose'daki
+    degerler geri kazanilir, backend'in gonderdikleri (bkz. UPDATE_PARAM_KEYS)
+    uzerine yazilir. Amac NATS-direkt telemetrinin STANDART olmasi — NATS
+    oncesi kurulan gateway'ler guncellemede HTTP fallback'ten NATS'a gecer.
+    Params yoksa compose degismez (eski davranis; imaj etiketi ayni, degisen
+    sey etiketin isaret ettigi digest).
+
+    Cekme BASARISIZ olursa container'a ve compose'a DOKUNULMAZ: yeni govde
+    once `.new` dosyasina yazilir, pull sonrasi yerine gecer. Yarim bir
+    guncelleme yerine calisan eski surumde kalmak dogru davranis.
     """
     code = req["code"]
     path = _compose_path(code)
     if not os.path.isfile(path):
         return {"ok": False, "stage": "update", "message": "gateway bu cihazda kurulu degil", "detail": ""}
     project = _project_name(code)
+
+    yeni_compose_path: str | None = None
+    if req.get("params"):
+        _write_status({"id": req["id"], "action": "update", "code": code,
+                       "stage": "render", "running": True})
+        try:
+            mevcut, mevcut_ad = _params_from_compose(path)
+            mevcut.update(req["params"])
+            compose_body = render_compose(
+                code, req.get("name") or mevcut_ad, _validate_params(mevcut)
+            )
+        except (OSError, ValueError) as exc:
+            return {"ok": False, "stage": "render",
+                    "message": f"compose yeniden uretilemedi: {exc}", "detail": ""}
+        yeni_compose_path = f"{path}.new"
+        fd = os.open(yeni_compose_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(compose_body)
+            fh.flush()
+            os.fsync(fh.fileno())
+        rc, out = _run(
+            compose_cmd + ["-p", project, "-f", yeni_compose_path, "config", "-q"],
+            DOCKER_QUERY_TIMEOUT_SEC,
+        )
+        if rc != 0:
+            os.unlink(yeni_compose_path)
+            return {"ok": False, "stage": "render", "message": "yeni compose dogrulanamadi", "detail": out}
 
     # ASAMALAR BILDIRILIYOR (install akisindaki gibi). Onceden `update`
     # yalnizca EN SONDA tek bir sonuc yaziyordu: arayuz istegi gonderdikten
@@ -919,9 +1043,17 @@ def _do_update(req: dict, compose_cmd: list[str]) -> dict:
     # bildirilmesi teshis acisindan da degerli.
     _write_status({"id": req["id"], "action": "update", "code": code,
                    "stage": "pull", "running": True})
-    rc, out = _run(compose_cmd + ["-p", project, "-f", path, "pull"], UP_TIMEOUT_SEC)
+    pull_path = yeni_compose_path or path
+    rc, out = _run(compose_cmd + ["-p", project, "-f", pull_path, "pull"], UP_TIMEOUT_SEC)
     if rc != 0:
+        if yeni_compose_path:
+            os.unlink(yeni_compose_path)
         return {"ok": False, "stage": "pull", "message": "yeni imaj indirilemedi", "detail": out}
+
+    if yeni_compose_path:
+        # Pull basarili — yeni compose bu noktada yururluge girer. `up -d`
+        # env degisikligini gorup container'i yeniden olusturur.
+        os.replace(yeni_compose_path, path)
 
     _write_status({"id": req["id"], "action": "update", "code": code,
                    "stage": "up", "running": True})

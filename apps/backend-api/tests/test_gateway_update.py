@@ -165,6 +165,96 @@ def test_kurulu_DEGILSE_reddediliyor():
 
 
 # ---------------------------------------------------------------------------
+# NATS-direkt standart: guncelleme compose'u guncel NATS URL'i ile tazeler.
+# Telemetrinin standart rotasi gateway -> NATS JetStream; HTTP ingest yedek
+# yoldur. NATS oncesi kurulan gateway'ler guncellemede NATS'a gecmeli, HTTP
+# fallback'inde takili kalmamali (her olcum outbox uzerinden backend'e yuk
+# bindirir). Ajan tarafinin davranis testleri:
+#   infra/appliance/tests/test_update_nats_standart.py
+# ---------------------------------------------------------------------------
+
+def test_ajan_update_params_taniyor():
+    kod = _ajan()
+    assert "UPDATE_PARAM_KEYS" in kod, "ajan update'te params kabul etmiyor"
+    assert "_params_from_compose" in kod, (
+        "ajan mevcut compose degerlerini geri kazanmiyor — update kurulum "
+        "seceneklerini sessizce varsayilana dondururdu"
+    )
+
+
+def test_update_istegi_nats_url_tasiyor(monkeypatch):
+    from app.services import gateway_agent_service as s
+
+    yakalanan: dict = {}
+
+    def _yakala(body: dict) -> str:
+        yakalanan.update(body)
+        return body["id"]
+
+    monkeypatch.setattr(s, "_write_request", _yakala)
+    s.request_update("GW-001", "installer", nats_url="nats://gateway:pw@h:4222")
+    assert yakalanan["params"] == {"nats_url": "nats://gateway:pw@h:4222"}
+
+
+def test_update_istegi_nats_url_yoksa_params_gondermiyor(monkeypatch):
+    """Eski davranis korunur: URL turetilemediyse (parola bos) compose'a
+    dokunulmaz, yalnizca imaj cekilir."""
+    from app.services import gateway_agent_service as s
+
+    yakalanan: dict = {}
+
+    def _yakala(body: dict) -> str:
+        yakalanan.update(body)
+        return body["id"]
+
+    monkeypatch.setattr(s, "_write_request", _yakala)
+    s.request_update("GW-001", "installer")
+    assert "params" not in yakalanan
+    yakalanan.clear()
+    s.request_update("GW-001", "installer", nats_url="   ")
+    assert "params" not in yakalanan
+
+
+def test_endpoint_standart_nats_url_turetiyor():
+    from app.api import gateways
+
+    ham = _kod(inspect.getsource(gateways.update_gateway_locally))
+    assert "derive_nats_url" in ham, (
+        "local-update standart NATS URL'i gondermiyor — eski kurulumlar "
+        "HTTP fallback'inde kalir"
+    )
+    # Anonim URL NATS deny-all'a takilir; parola bos ise (dev/test) calisan
+    # gateway'i bozmak yerine compose korunmali.
+    assert "nats_gateway_password.strip()" in ham
+
+
+def test_http_ingest_fallback_uyariyor():
+    """HTTP'den telemetri basan gateway gorunmez kalmamali — standart disi
+    calistiginin tek isareti bu uyari."""
+    from app.services import ingest_service
+
+    assert "_warn_http_fallback" in _kod(inspect.getsource(ingest_service.ingest_gateway_batch))
+    assert "_warn_http_fallback" in _kod(inspect.getsource(ingest_service.ingest_gateway_legacy))
+
+
+def test_http_fallback_uyarisi_rate_limitli(caplog):
+    """Gateway saniyede birkac batch basar; her batch'te WARNING log'u
+    dosyayi doldururdu."""
+    import logging
+
+    from app.services import ingest_service as i
+
+    with caplog.at_level(logging.WARNING, logger="app.services.ingest_service"):
+        i._warn_http_fallback("GW-TEST-RL", 10)
+        i._warn_http_fallback("GW-TEST-RL", 10)
+    kayitlar = [
+        r for r in caplog.records
+        if "gateway_http_fallback_ingest" in r.getMessage() and "GW-TEST-RL" in r.getMessage()
+    ]
+    assert len(kayitlar) == 1
+
+
+# ---------------------------------------------------------------------------
 # Bildirim
 # ---------------------------------------------------------------------------
 

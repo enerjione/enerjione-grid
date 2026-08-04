@@ -221,11 +221,20 @@ def request_restart(code: str, actor_username: str) -> str:
     return _write_request(_base_request("restart", code, actor_username))
 
 
-def request_update(code: str, actor_username: str) -> str:
+def request_update(code: str, actor_username: str, *, nats_url: str | None = None) -> str:
     """Yeni imaji cekip container'i yeniden olustur.
 
     `restart`ten FARKI: restart AYNI imajla yeniden baslatir, bu once `pull`
     yapar. Ajan cekme basarisiz olursa container'a DOKUNMAZ — yarim bir
     guncelleme yerine calisan eski surumde kalir.
+
+    `nats_url` verilirse ajan compose'u yeniden uretir: mevcut degerleri
+    korur, yalnizca NATS_URL'i gunceller. Amac NATS-direkt telemetrinin
+    STANDART olmasi — NATS oncesi kurulan (veya anonim URL'li) gateway'ler
+    guncellemede HTTP fallback'ten NATS'a gecer. Eski ajan `params`i
+    gormezden gelir; davranis geriye uyumludur.
     """
-    return _write_request(_base_request("update", code, actor_username))
+    body = _base_request("update", code, actor_username)
+    if nats_url and nats_url.strip():
+        body["params"] = {"nats_url": nats_url.strip()}
+    return _write_request(body)
