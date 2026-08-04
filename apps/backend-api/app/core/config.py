@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Imajla birlikte paketlenen surum. Kok dizindeki VERSION dosyasi ve
 # apps/frontend-web/package.json ile AYNI olmali; release CI ucunu de
 # birbirine karsi dogrular.
-_FALLBACK_APP_VERSION = "2.42.0"
+_FALLBACK_APP_VERSION = "2.42.1"
 
 
 # Production'da reddedilen placeholder secret prefix'leri. Settings constructor
@@ -270,6 +270,11 @@ class Settings(BaseSettings):
     # OMRUNU (processed_messages_retention_hours) ASAMAZ, yoksa dedup kaydi
     # silinmis mesajlar IKINCI KEZ yazilirdi. Kod bu tavani zorlar.
     telemetry_persist_cutover_overlap_sec: int = 900
+    # Toplu yazimda tek COPY / execute_values dilimindeki azami satir sayisi.
+    # execute_values ifade basina 65535 parametre tavanina tabidir (9 kolonlu
+    # `telemetry_latest` icin ~7280 satir); 5000 bu tavanin guvenli altinda
+    # kalir ve parti boyutu ayarla buyutulse bile ifade tavani asilamaz.
+    telemetry_write_chunk_size: int = 5000
     # Gateway compose dosyasi indirilirken gateway user/password URL'e gomuluyor.
     # `infra/nats/nats-server.conf`'taki `gateway` user'inin cleartext sifresi.
     # bootstrap.sh urettiginde .env'e yazar; backend bu degeri okuyup compose

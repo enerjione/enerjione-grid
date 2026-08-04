@@ -14,6 +14,18 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.42.1] — 2026-08-04
+
+### Düzeltildi
+
+- **2.42.0'da kalıcılaştırma işçisi ilk dolu partide çöküyordu** (yarım
+  kalmış eski kod bloğu tanımsız isim kullanıyordu; canlı ekran akmaya devam
+  ettiği için sorun panelde "Akış yok" uyarısıyla görünüyordu, veri NATS'ta
+  birikip bekliyordu — kayıp yok). COPY toplu yazım entegrasyonu tamamlandı;
+  arşiv/canlı/dedup satırları artık gerçekten tek geçişte yazılıyor.
+
+---
+
 ## [2.42.0] — 2026-08-04
 
 ### Değişti

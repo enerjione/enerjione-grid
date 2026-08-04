@@ -93,33 +93,21 @@ def test_signals_live_ARTIK_telemetry_taramiyor():
 
 
 def test_consumer_upsert_BAYAT_degeri_reddediyor():
-    """`WHERE excluded.source_timestamp >= ...` kosulu SART.
+    """`WHERE EXCLUDED.source_timestamp >= ...` kosulu SART.
 
     Kosul dusesse bayat bir redelivery son degeri geri sicratir; canli ekran
-    ve WS yayini bunu dogrudan operatore gosterir.
+    ve WS yayini bunu dogrudan operatore gosterir. Upsert artik ORM degil
+    sabit SQL (`_CANLI_SQL`, toplu yazim) — kosul o metinde aranir.
     """
     from app.services import telemetry_consumer as tc
 
-    fn_src = inspect.getsource(tc._persist_batch)
-    agac = ast.parse(fn_src.lstrip())
-
-    upsert = [
-        n
-        for n in ast.walk(agac)
-        if isinstance(n, ast.Call)
-        and getattr(n.func, "attr", None) == "on_conflict_do_update"
-    ]
-    assert upsert, "telemetry_latest icin upsert yok"
-
-    for c in upsert:
-        kosul = next((k for k in c.keywords if k.arg == "where"), None)
-        assert kosul is not None, (
-            "upsert KOSULSUZ — bayat bir okuma son degeri ezer"
-        )
-        metin = ast.dump(kosul.value)
-        assert "source_timestamp" in metin, (
-            "kosul source_timestamp karsilastirmiyor"
-        )
+    assert "ON CONFLICT (device_id, signal_key) DO UPDATE" in tc._CANLI_SQL, (
+        "telemetry_latest icin upsert yok"
+    )
+    assert (
+        "WHERE EXCLUDED.source_timestamp >= telemetry_latest.source_timestamp"
+        in tc._CANLI_SQL
+    ), "upsert KOSULSUZ — bayat bir okuma son degeri ezer"
 
 
 def test_batch_ici_tekillestirme_VAR():
@@ -127,23 +115,29 @@ def test_batch_ici_tekillestirme_VAR():
 
     PostgreSQL: "ON CONFLICT DO UPDATE command cannot affect row a second
     time". Sozluk ile tekillestirme olmazsa TUM BATCH patlar ve saglam
-    olcumler de redeliver dongusune girer.
+    olcumler de redeliver dongusune girer. Tekillestirme artik yazim
+    fonksiyonunda (`_tek_gecis_yaz`): dilimlere bolunmus yeniden denemede
+    de dogru kalsin diye TEK yerde.
     """
     from app.services import telemetry_consumer as tc
 
-    fn_src = inspect.getsource(tc._persist_batch)
+    fn_src = inspect.getsource(tc._tek_gecis_yaz)
     agac = ast.parse(fn_src.lstrip())
 
-    # `latest_rows` bir dict olarak baslatilmali (liste degil)
+    # `canli_satirlar` bir dict olarak baslatilmali (liste degil)
     atamalar = [
         n
         for n in ast.walk(agac)
         if isinstance(n, ast.AnnAssign)
-        and getattr(n.target, "id", None) == "latest_rows"
+        and getattr(n.target, "id", None) == "canli_satirlar"
     ]
-    assert atamalar, "latest_rows tanimlanmamis"
+    assert atamalar, "canli_satirlar tanimlanmamis"
     assert isinstance(atamalar[0].value, ast.Dict), (
-        "latest_rows liste — ayni batch'te tekrar eden cift tum INSERT'i patlatir"
+        "canli_satirlar liste — ayni batch'te tekrar eden cift tum INSERT'i patlatir"
+    )
+    # En yenisi kalmali: source_timestamp (indeks 5) karsilastirmasi.
+    assert "s.canli[5] >=" in fn_src, (
+        "tekillestirme en yeni satiri secmiyor — bayat deger kalabilir"
     )
 
 
@@ -151,22 +145,10 @@ def test_batch_ici_tekillestirme_VAR():
                                   "timestamp_quality", "device_event_at", "updated_at"])
 def test_upsert_TUM_alanlari_guncelliyor(alan: str):
     """Eksik bir alan "yari guncellenmis" satir birakir: yeni deger ama eski
-    kalite gibi — teshiste en yaniltici hal."""
+    kalite gibi — teshiste en yaniltici hal. Upsert sabit SQL'de
+    (`_CANLI_SQL`); her alan `alan = EXCLUDED.alan` olarak gecmeli."""
     from app.services import telemetry_consumer as tc
 
-    fn_src = inspect.getsource(tc._persist_batch)
-    agac = ast.parse(fn_src.lstrip())
-    for c in ast.walk(agac):
-        if not (
-            isinstance(c, ast.Call)
-            and getattr(c.func, "attr", None) == "on_conflict_do_update"
-        ):
-            continue
-        set_ = next((k for k in c.keywords if k.arg == "set_"), None)
-        assert set_ is not None
-        anahtarlar = {
-            k.value for k in set_.value.keys if isinstance(k, ast.Constant)
-        }
-        assert alan in anahtarlar, f"upsert `{alan}` alanini guncellemiyor"
-        return
-    pytest.fail("upsert bulunamadi")
+    assert f"{alan} = EXCLUDED.{alan}" in tc._CANLI_SQL, (
+        f"upsert `{alan}` alanini guncellemiyor"
+    )

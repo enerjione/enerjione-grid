@@ -247,10 +247,14 @@ def test_tuketici_politikayi_UYGULUYOR():
 
 
 def test_arsiv_satiri_politikanin_ICINDE_ekleniyor():
-    """Kosul disinda kalirsa politika hicbir sey yapmaz."""
+    """Kosul disinda kalirsa politika hicbir sey yapmaz.
+
+    Toplu yazimda arsiv satiri `arsiv_satiri = (...)` tuple atamasi; atama
+    YALNIZCA `should_archive` kosulunun govdesinde olmali (kosul disinda
+    `arsiv_satiri = None`)."""
     kod = _tuketici_kodu()
     i_cagri = kod.find("historian_policy.should_archive(")
-    i_ekle = kod.find("historian_rows.append(")
+    i_ekle = kod.find("arsiv_satiri = (")
     assert i_cagri != -1 and i_ekle != -1
     assert i_cagri < i_ekle, "arsiv satiri kosuldan ONCE ekleniyor"
 
@@ -287,33 +291,49 @@ def test_tuketici_KALITEYI_GECIRIYOR():
 def test_karara_giden_kalite_YAZILANLA_AYNI():
     """Karar ham kaliteye, yazilan satir normalize edilmise bakarsa
     ("GOOD" vs "good") her okuma sahte bir "kalite degisimi" olur ve olu
-    bant tamamen etkisizlesirdi."""
+    bant tamamen etkisizlesirdi. Arsiv satiri artik `_ARSIV_KOLONLARI`
+    sirasinda bir tuple; kalite ifadesi o tuple'da AYNEN gecmeli."""
     kod = _tuketici_kodu()
     cagri = _should_archive_cagrisi(kod)
     ifade = cagri.split("quality=", 1)[1].split(",")[0].strip()
     assert ifade, "quality argumani bos"
-    i_ekle = kod.find("historian_rows.append(")
-    govde = kod[i_ekle:kod.index("})", i_ekle)]
-    assert f'"quality": {ifade}' in govde, (
+    i_ekle = kod.find("arsiv_satiri = (")
+    assert i_ekle != -1, "arsiv satiri bulunamadi"
+    govde = kod[i_ekle:kod.index(")", kod.index("_ts_quality", i_ekle))]
+    assert f" {ifade}," in govde, (
         f"karara giden kalite ({ifade!r}) arsiv satirina yazilandan FARKLI: {govde!r}"
     )
 
 
 def test_CANLI_deger_politikadan_ETKILENMIYOR():
     """RTDB her zaman guncel kalmali — arsiv kisilsa bile ekran ve alarm
-    son degeri gormeye devam etmeli. Bu, SCADA modelinin temeli."""
-    kod = _tuketici_kodu()
-    i_kosul = kod.find("historian_policy.should_archive(")
-    i_latest = kod.find("latest_rows[_latest_key]")
-    assert i_latest != -1, "telemetry_latest yazimi bulunamadi"
-    assert i_latest > i_kosul, "beklenmeyen sira"
-    # `latest_rows` atamasi arsiv kosulunun govdesinde OLMAMALI: govde
-    # `historian_rows.append(` ile bitiyor.
-    i_ekle_son = kod.find("})", kod.find("historian_rows.append("))
-    assert i_latest > i_ekle_son, (
-        "canli deger yazimi arsiv kosulunun ICINDE — arsiv kisilinca ekran "
-        "ve alarm da son degeri kaybeder"
-    )
+    son degeri gormeye devam etmeli. Bu, SCADA modelinin temeli.
+
+    AST ile bakiliyor: `canli_satiri` atamasi, testinde `should_archive`
+    gecen HICBIR `if` govdesinin icinde olmamali."""
+    import ast as _ast
+    import inspect as _inspect
+
+    from app.services import telemetry_consumer as tc
+
+    agac = _ast.parse(_inspect.getsource(tc._persist_batch).lstrip())
+    canli_atamalari = [
+        n for n in _ast.walk(agac)
+        if isinstance(n, _ast.Assign)
+        and any(getattr(t, "id", None) == "canli_satiri" for t in n.targets)
+    ]
+    assert canli_atamalari, "telemetry_latest satiri (canli_satiri) bulunamadi"
+    for if_dugumu in _ast.walk(agac):
+        if not isinstance(if_dugumu, _ast.If):
+            continue
+        if "should_archive" not in _ast.dump(if_dugumu.test):
+            continue
+        govdedekiler = {id(n) for g in if_dugumu.body for n in _ast.walk(g)}
+        for atama in canli_atamalari:
+            assert id(atama) not in govdedekiler, (
+                "canli deger yazimi arsiv kosulunun ICINDE — arsiv kisilinca "
+                "ekran ve alarm da son degeri kaybeder"
+            )
 
 
 # ---------------------------------------------------------------------------

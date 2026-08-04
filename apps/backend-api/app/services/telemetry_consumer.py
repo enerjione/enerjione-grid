@@ -79,6 +79,7 @@ sayesinde process restart'inda kaldigi yerden devam eder.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import threading
@@ -846,11 +847,12 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             select(Device).where(Device.code.in_(device_codes))
         ).all()
         device_cache: dict[str, Device] = {device.code: device for device in devices}
-        historian_rows: list[dict[str, Any]] = []
-        # (device_id, signal_key) -> son deger satiri. Sozluk cunku ayni batch'te
-        # ayni cift birden fazla gelebilir ve tek INSERT icinde ON CONFLICT ayni
-        # satiri iki kez guncelleyemez ("cannot affect row a second time").
-        latest_rows: dict[tuple[int, str], dict[str, Any]] = {}
+        # Her olcumun DB'ye gidecek TUM satirlari bir arada biriktirilir ve
+        # dongu SONUNDA `_satirlari_yaz` ile COPY + tek-ifade upsert olarak
+        # gider (bkz. modul basindaki TOPLU YAZIM olcumu). ack/ws/outbound
+        # kararlari da yazim SONUCUNA baglanir: dusen satirin mesaji ack
+        # EDILMEZ, WS/outbound yayini yapilmaz.
+        satirlar: list[_Satir] = []
 
         for msg, payload, message_id in parsed:
             if message_id in seen:
@@ -926,14 +928,12 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                     timestamp_quality=_fb_quality,
                 )
 
-            db.add(telemetry)
-            db.add(ProcessedMessage(
-                consumer_name=CONSUMER_NAME,
-                message_id=message_id,
-                processed_at=datetime.now(timezone.utc),
-            ))
-            # Historian row'unu biriktir; dongu SONUNDA tum batch TEK
-            # INSERT ... VALUES (...), (...) ile gider (mesaj basina execute yok).
+            # `telemetry` ORM'e EKLENMEZ: satiri COPY yazar (bkz.
+            # `_tek_gecis_yaz`). ORM nesnesi yalnizca deger tasiyicisi —
+            # process_telemetry_reading'in damgaladigi alanlar tuple'a
+            # buradan okunur. `processed_messages` dedup satiri da ayni
+            # COPY gecisinde gider.
+            #
             # Cihazin kendi olay zamani (varsa) + makullugu. `source_timestamp`
             # AYNEN kaliyor (PK/partition kolonu); bu ikisi yalnizca analiz
             # icin ayri kolonlarda duruyor. Bkz. device_clock_service.
@@ -956,6 +956,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             # isaretlenen tag'ler, olu bant suzgecinden gecerek yazilir.
             # Alarm dogrulugu ETKILENMEZ: alarm-service akis tabanli
             # calisiyor, gecmis sorgusu yapmiyor.
+            arsiv_satiri = None
             if historian_policy.should_archive(
                 db,
                 device_id=device.id,
@@ -963,37 +964,20 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 value=reading.value,
                 quality=_kalite,
             ):
-                historian_rows.append({
-                    "device_id": device.id,
-                    "signal_key": reading.signal_key,
-                    "value": reading.value,
-                    "value_string": reading.value_string,
-                    "quality": _kalite,
-                    "source_timestamp": reading.source_timestamp,
-                    "device_event_at": _dev_at,
-                    "timestamp_quality": _ts_quality,
-                })
-            # `telemetry_latest` — canli ekranin okudugu SON deger tablosu.
-            # Ayni batch'te ayni (cihaz, sinyal) birden fazla kez gelebilir;
-            # ON CONFLICT tek bir INSERT icinde ayni satiri iki kez
-            # guncelleyemez ("cannot affect row a second time"), o yuzden
-            # burada sozlukte tekillestirip EN YENISINI birakiyoruz.
-            _latest_key = (device.id, reading.signal_key)
-            _onceki = latest_rows.get(_latest_key)
-            if _onceki is None or reading.source_timestamp >= _onceki["source_timestamp"]:
-                latest_rows[_latest_key] = {
-                    "device_id": device.id,
-                    "signal_key": reading.signal_key,
-                    "value": reading.value,
-                    "value_string": reading.value_string,
-                    "quality": _kalite,
-                    "source_timestamp": reading.source_timestamp,
-                    "device_event_at": _dev_at,
-                    "timestamp_quality": _ts_quality,
-                    "updated_at": datetime.now(timezone.utc),
-                }
+                arsiv_satiri = (
+                    device.id, reading.signal_key, reading.value,
+                    reading.value_string, _kalite, reading.source_timestamp,
+                    _dev_at, _ts_quality,
+                )
+            # `telemetry_latest` satiri — batch-ici tekillestirme burada DEGIL,
+            # `_tek_gecis_yaz` icinde yapilir (dilimlere bolunmus yeniden
+            # denemede de dogru kalsin diye tek yerde).
+            canli_satiri = (
+                device.id, reading.signal_key, reading.value,
+                reading.value_string, _kalite, reading.source_timestamp,
+                _dev_at, _ts_quality, datetime.now(timezone.utc),
+            )
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
-            ok_msgs.append(msg)
             # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
             # UZERINE YAZIYORUZ. Gateway'in ham bildirimi degil BIZIM
             # degerlendirmemiz otoriter: gateway hic bir sey demese bile
@@ -1002,7 +986,6 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             # ayni satir icin farkli sey gosterirdi.
             payload["device_event_at"] = _dev_at.isoformat() if _dev_at else None
             payload["timestamp_quality"] = _ts_quality
-            ok_payloads.append(payload)
 
             # Outbound dispatch payload'u — status commit ONCESI yakalanir
             # (commit sonrasi device expire olabilir). Dispatch commit SONRASI.
@@ -1014,7 +997,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             sig_source = None
             if reading.signal_key and "." in reading.signal_key:
                 sig_source = reading.signal_key.split(".", 1)[0].lower()
-            outbound_payloads.append({
+            outbound_satiri = {
                 "message_id": message_id,
                 "correlation_id": reading.correlation_id or message_id,
                 "event_kind": "telemetry",
@@ -1028,47 +1011,37 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 "status": status_val,
                 "source_timestamp": reading.source_timestamp.isoformat() if reading.source_timestamp else None,
                 "processed_at": datetime.now(timezone.utc).isoformat(),
-            })
+            }
+            satirlar.append(_Satir(
+                msg=msg,
+                message_id=message_id,
+                # `telemetry` tablosu ORM nesnesinin damgaladigi alanlardan
+                # yazilir (process_telemetry_reading value/quality'yi
+                # donusturmus olabilir); kolon sirasi _TELEMETRI_KOLONLARI.
+                telemetri=(
+                    device.id, telemetry.signal_key, telemetry.value,
+                    telemetry.value_string, telemetry.quality,
+                    telemetry.source_timestamp, telemetry.device_event_at,
+                    telemetry.timestamp_quality,
+                ),
+                arsiv=arsiv_satiri,
+                canli=canli_satiri,
+                ws=payload,
+                outbound=outbound_satiri,
+            ))
 
-        # Historian: tum batch TEK statement, idempotent ON CONFLICT.
-        if historian_rows:
-            db.execute(
-                _pg_insert(TelemetryHistory)
-                .values(historian_rows)
-                .on_conflict_do_nothing(
-                    index_elements=["device_id", "signal_key", "source_timestamp"]
-                )
-            )
-
-        # `telemetry_latest`: canli ekranin okudugu SON deger tablosu.
-        # Tum batch TEK upsert.
-        #
-        # ESKI DEGER YENIYI EZMEZ — `WHERE` kosulu bunun icin.
-        # NATS en-az-bir-kez teslim eder ve mesajlar sira DISINDA gelebilir
-        # (redelivery, paralel tuketici, gateway yeniden baglanmasi). Kosulsuz
-        # bir `DO UPDATE` bayat bir okumayi "son deger" yapardi ve bu tablo
-        # canli ekranin + WS yayininin kaynagi oldugu icin sonuc dogrudan
-        # operatore yansirdi: deger geri sicrar, ariza gecisi yanlis gorunur.
-        if latest_rows:
-            _stmt = _pg_insert(TelemetryLatest).values(list(latest_rows.values()))
-            db.execute(
-                _stmt.on_conflict_do_update(
-                    index_elements=["device_id", "signal_key"],
-                    set_={
-                        "value": _stmt.excluded.value,
-                        "value_string": _stmt.excluded.value_string,
-                        "quality": _stmt.excluded.quality,
-                        "source_timestamp": _stmt.excluded.source_timestamp,
-                        "timestamp_quality": _stmt.excluded.timestamp_quality,
-                        "device_event_at": _stmt.excluded.device_event_at,
-                        "updated_at": _stmt.excluded.updated_at,
-                    },
-                    where=(
-                        _stmt.excluded.source_timestamp
-                        >= TelemetryLatest.source_timestamp
-                    ),
-                )
-            )
+        # TOPLU YAZIM: dort tablo tek geciste (COPY + tek-ifade upsert).
+        # Bozuk satir partiyi dusurmez — `_satirlari_yaz` ikiye bolerek
+        # yalnizca gercekten bozuk satiri karantinaya alir. ack/ws/outbound
+        # YALNIZCA yazilan satirlar icin yapilir; dusen satirin mesaji
+        # DLQ/nak yoluna gider (veri kaybi sessiz olmaz).
+        yazilan, dusen = _satirlari_yaz(db, satirlar, datetime.now(timezone.utc))
+        for s in yazilan:
+            ok_msgs.append(s.msg)
+            ok_payloads.append(s.ws)
+            outbound_payloads.append(s.outbound)
+        for s in dusen:
+            bad_msgs.append(s.msg)
 
         # 3) TEK commit. Basarisizsa (nadir: paralel consumer carpismasi) tum
         # batch redeliver edilir (ack YAPILMADI) -> at-least-once korunur.
