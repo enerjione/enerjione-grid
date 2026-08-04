@@ -14,6 +14,19 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.43.0] — 2026-08-04
+
+### Değişti
+
+- **Gateway güç işlemleri popup menüye taşındı**: başlat/durdur/yeniden
+  başlat düğmeleri satırda değil, tek "güç" düğmesinin açtığı menüde
+  (kazara tıklamaya uzak; yalnızca installer görür).
+- **Sinyaller sayfasında arşiv yönetimi popup'a taşındı**: özet, filtreler
+  ve toplu işlemler "Arşiv yönetimi" düğmesinin açtığı pencerede; sayfada
+  kompakt özet kalır.
+
+---
+
 ## [2.42.1] — 2026-08-04
 
 ### Düzeltildi

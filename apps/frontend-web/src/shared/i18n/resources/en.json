@@ -1624,6 +1624,7 @@
     },
     "gateways": {
       "lifecycle": {
+        "menu": "Power actions",
         "start": "Start",
         "stop": "Stop",
         "restart": "Restart",
@@ -1895,6 +1896,7 @@
       },
       "historian": {
         "title": "Archive (Historian)",
+        "manage": "Archive management",
         "colArchive": "Archive",
         "colDeadband": "Deadband",
         "on": "On",

@@ -2265,6 +2265,110 @@ body {
   gap: 4px;
 }
 
+/* Guc islemleri popup'i — baslat/durdur/yeniden baslat satirda degil,
+   tek dugmenin actigi menude durur (kazara tiklamaya uzak). */
+.gateway-power-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.gateway-power-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid rgba(30, 41, 59, 0.14);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(30, 41, 59, 0.14);
+}
+
+.gateway-power-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.gateway-power-menu-item:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.06);
+}
+
+.gateway-power-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gateway-power-menu-item.gateway-stop-btn:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+}
+
+/* Sinyaller: arsiv yonetimi tetik satiri + popup. Kontroller popup'ta durur,
+   sayfada yalnizca kompakt ozet + dugme kalir. */
+.signals-arsiv-trigger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 2px;
+}
+
+.signals-arsiv-trigger-row .shb-summary-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.signals-arsiv-filtre-rozeti {
+  font-size: 11px;
+}
+
+.signals-arsiv-ac-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.signals-arsiv-modal {
+  max-width: 720px;
+  width: min(720px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.signals-arsiv-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.signals-arsiv-modal-head h3 {
+  margin: 0;
+}
+
+.signals-arsiv-modal .shb-bulk {
+  flex-wrap: wrap;
+}
+
 .gateway-status {
   display: inline-flex;
   align-items: center;

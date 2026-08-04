@@ -238,6 +238,27 @@ export function DeviceManagementPanel({
   // container durumu gerekiyor; bu bilgi DB'de degil, ajanin state.json'inda.
   const [agent, setAgent] = useState<GatewayAgentStatus | null>(null);
   const [gwIslem, setGwIslem] = useState<GatewayIslem | null>(null);
+  // Guc islemleri (baslat/durdur/yeniden baslat) satirda degil, tek bir
+  // dugmenin actigi popup menude durur: kazara tiklamaya uzak, goz onunde
+  // degil. Ayni anda tek menu acik olur (gateway kodu tutulur).
+  const [gucMenuKodu, setGucMenuKodu] = useState<string | null>(null);
+  useEffect(() => {
+    if (!gucMenuKodu) return;
+    const disariTiklama = (e: MouseEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(".gateway-power-wrap")) {
+        setGucMenuKodu(null);
+      }
+    };
+    const escIleKapat = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setGucMenuKodu(null);
+    };
+    document.addEventListener("mousedown", disariTiklama);
+    document.addEventListener("keydown", escIleKapat);
+    return () => {
+      document.removeEventListener("mousedown", disariTiklama);
+      document.removeEventListener("keydown", escIleKapat);
+    };
+  }, [gucMenuKodu]);
   // Bilesen sokulduktan sonra yoklama SURMEMELI.
   const canli = useRef(true);
 
@@ -920,17 +941,23 @@ export function DeviceManagementPanel({
                         </button>
                       ) : null}
                       {/* YASAM DONGUSU — yalnizca bu cihazda kurulu gateway'de.
-                          Durmussa "Baslat", calisiyorsa "Durdur" + "Yeniden
-                          baslat" gosterilir; ikisini ayni anda gostermek
-                          "hangisi gecerli" sorusunu operatore birakirdi. */}
+                          Dugmeler satirda DEGIL, tek "guc" dugmesinin actigi
+                          popup menude: kazara tiklamaya uzak. Durmussa
+                          "Baslat", calisiyorsa "Durdur" + "Yeniden baslat"
+                          gosterilir; ikisini ayni anda gostermek "hangisi
+                          gecerli" sorusunu operatore birakirdi. */}
                       {local ? (
-                        gState === "stopped" ? (
+                        <div className="gateway-power-wrap">
                           <button
                             type="button"
-                            className={`secondary-btn action-btn gateway-start-btn ${buIslemSuruyor ? "is-busy" : ""}`}
-                            onClick={() => void handleGatewayLifecycle(gateway, "start")}
-                            title={t("engineering.gateways.lifecycle.start")}
-                            aria-label={t("engineering.gateways.lifecycle.start")}
+                            className={`secondary-btn action-btn gateway-power-btn ${buIslemSuruyor ? "is-busy" : ""}`}
+                            onClick={() =>
+                              setGucMenuKodu(gucMenuKodu === gateway.code ? null : gateway.code)
+                            }
+                            title={t("engineering.gateways.lifecycle.menu")}
+                            aria-label={t("engineering.gateways.lifecycle.menu")}
+                            aria-haspopup="menu"
+                            aria-expanded={gucMenuKodu === gateway.code}
                             aria-busy={buIslemSuruyor || undefined}
                             disabled={dugmeKapali}
                           >
@@ -938,53 +965,73 @@ export function DeviceManagementPanel({
                               <span className="btn-spinner" aria-hidden="true" />
                             ) : (
                               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                                <path fill="currentColor" d="M8 5v14l11-7z" />
+                                <path
+                                  fill="currentColor"
+                                  d="M13 3h-2v10h2V3zm4.83 2.17-1.42 1.42A6.92 6.92 0 0 1 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.05.88-3.9 2.58-5.41L6.17 5.17A8.93 8.93 0 0 0 3 12a9 9 0 0 0 18 0c0-2.74-1.23-5.18-3.17-6.83z"
+                                />
                               </svg>
                             )}
                           </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className={`secondary-btn action-btn gateway-stop-btn ${buIslemSuruyor && islem?.action === "stop" ? "is-busy" : ""}`}
-                              onClick={() => void handleGatewayLifecycle(gateway, "stop")}
-                              title={t("engineering.gateways.lifecycle.stop")}
-                              aria-label={t("engineering.gateways.lifecycle.stop")}
-                              aria-busy={(buIslemSuruyor && islem?.action === "stop") || undefined}
-                              disabled={dugmeKapali}
-                            >
-                              {buIslemSuruyor && islem?.action === "stop" ? (
-                                <span className="btn-spinner" aria-hidden="true" />
+                          {gucMenuKodu === gateway.code ? (
+                            <div className="gateway-power-menu" role="menu">
+                              {gState === "stopped" ? (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="gateway-power-menu-item gateway-start-btn"
+                                  onClick={() => {
+                                    setGucMenuKodu(null);
+                                    void handleGatewayLifecycle(gateway, "start");
+                                  }}
+                                  disabled={dugmeKapali}
+                                >
+                                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                                    <path fill="currentColor" d="M8 5v14l11-7z" />
+                                  </svg>
+                                  {t("engineering.gateways.lifecycle.start")}
+                                </button>
                               ) : (
-                                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                                  <path fill="currentColor" d="M6 6h12v12H6z" />
-                                </svg>
+                                <>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="gateway-power-menu-item gateway-stop-btn"
+                                    onClick={() => {
+                                      setGucMenuKodu(null);
+                                      void handleGatewayLifecycle(gateway, "stop");
+                                    }}
+                                    disabled={dugmeKapali}
+                                  >
+                                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                                      <path fill="currentColor" d="M6 6h12v12H6z" />
+                                    </svg>
+                                    {t("engineering.gateways.lifecycle.stop")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="gateway-power-menu-item gateway-restart-btn"
+                                    onClick={() => {
+                                      setGucMenuKodu(null);
+                                      void handleGatewayLifecycle(gateway, "restart");
+                                    }}
+                                    disabled={dugmeKapali}
+                                  >
+                                    {/* Inline SVG — "yenile" okuyla karismasin diye
+                                        restart_alt kalibi secildi. */}
+                                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                                      <path
+                                        fill="currentColor"
+                                        d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 2.97-2.17 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93 0-4.42-3.58-8-8-8zm-6 8c0-1.65.67-3.15 1.76-4.24L6.34 7.34A7.94 7.94 0 0 0 4 13c0 4.08 3.05 7.44 7 7.93v-2.02c-2.83-.48-5-2.94-5-5.91z"
+                                      />
+                                    </svg>
+                                    {t("engineering.gateways.lifecycle.restart")}
+                                  </button>
+                                </>
                               )}
-                            </button>
-                            <button
-                              type="button"
-                              className={`secondary-btn action-btn gateway-restart-btn ${buIslemSuruyor && islem?.action === "restart" ? "is-busy" : ""}`}
-                              onClick={() => void handleGatewayLifecycle(gateway, "restart")}
-                              title={t("engineering.gateways.lifecycle.restart")}
-                              aria-label={t("engineering.gateways.lifecycle.restart")}
-                              aria-busy={(buIslemSuruyor && islem?.action === "restart") || undefined}
-                              disabled={dugmeKapali}
-                            >
-                              {buIslemSuruyor && islem?.action === "restart" ? (
-                                <span className="btn-spinner" aria-hidden="true" />
-                              ) : (
-                                /* Inline SVG — "yenile" okuyla karismasin diye
-                                   restart_alt kalibi secildi. */
-                                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                                  <path
-                                    fill="currentColor"
-                                    d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 2.97-2.17 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93 0-4.42-3.58-8-8-8zm-6 8c0-1.65.67-3.15 1.76-4.24L6.34 7.34A7.94 7.94 0 0 0 4 13c0 4.08 3.05 7.44 7 7.93v-2.02c-2.83-.48-5-2.94-5-5.91z"
-                                  />
-                                </svg>
-                              )}
-                            </button>
-                          </>
-                        )
+                            </div>
+                          ) : null}
+                        </div>
                       ) : null}
                       <button
                         type="button"

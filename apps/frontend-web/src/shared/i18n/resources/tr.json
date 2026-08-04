@@ -1624,6 +1624,7 @@
     },
     "gateways": {
       "lifecycle": {
+        "menu": "Güç işlemleri",
         "start": "Başlat",
         "stop": "Durdur",
         "restart": "Yeniden başlat",
@@ -1895,6 +1896,7 @@
       },
       "historian": {
         "title": "Arşiv (Historian)",
+        "manage": "Arşiv yönetimi",
         "colArchive": "Arşiv",
         "colDeadband": "Ölü Bant",
         "on": "Açık",

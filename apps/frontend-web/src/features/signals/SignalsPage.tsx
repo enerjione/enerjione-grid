@@ -65,6 +65,9 @@ export function SignalsPage({
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
+  // Arsiv yonetimi ayri bir popup'ta: ozet + filtre + toplu islemler orada.
+  // Sayfa duz kalir; kontroller goz onunde durmaz.
+  const [arsivPanelAcik, setArsivPanelAcik] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editModalSignal, setEditModalSignal] = useState<SignalCatalogRow | null>(null);
   const [iec104Expanded, setIec104Expanded] = useState(false);
@@ -396,106 +399,160 @@ export function SignalsPage({
         </div>
       </div>
 
-      {/* 3. satir: ARSIV. Solda "ne yaziliyor" ozeti, ortada arsiv filtresi,
-          sagda filtredeki sinyallere toplu islem. */}
-      <div className="signals-historian-bar">
-        <div className="shb-summary">
+      {/* 3. satir: ARSIV — kontroller sayfada degil, dugmenin actigi popup'ta.
+          Satirda yalnizca kompakt ozet + "Arsiv yonetimi" dugmesi durur. */}
+      <div className="signals-arsiv-trigger-row">
+        <span className="shb-summary-main">
           <span className="material-symbols-outlined shb-icon" aria-hidden="true">database</span>
-          <span className="shb-summary-main">
-            {t("engineering.signals.historian.summary", {
-              total: totalCount,
-              archived: historianOzet.archived
-            })}
-          </span>
-          <span className="shb-summary-meter" aria-hidden="true">
-            <span className="shb-summary-meter-fill" style={{ width: `${historianOzet.pct}%` }} />
-          </span>
-          <span className="shb-summary-sub">
-            {t("engineering.signals.historian.writeLoad", { pct: historianOzet.pct })}
-            {historianOzet.withDeadband > 0
-              ? ` · ${t("engineering.signals.historian.summaryDeadband", {
-                  count: historianOzet.withDeadband
-                })}`
-              : ""}
-          </span>
-        </div>
-
-        <div className="shb-filters">
-          {(["all", "on", "off", "deadband"] as ArchiveFilter[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              className={`chip shb-chip-${key} ${archiveFilter === key ? "chip-active" : ""}`}
-              onClick={() => setArchiveFilter(key)}
-            >
+          {t("engineering.signals.historian.summary", {
+            total: totalCount,
+            archived: historianOzet.archived
+          })}
+          {archiveFilter !== "all" ? (
+            <span className="chip chip-active signals-arsiv-filtre-rozeti">
               {t(
-                key === "all"
-                  ? "engineering.signals.historian.filterAll"
-                  : key === "on"
-                    ? "engineering.signals.historian.filterArchived"
-                    : key === "off"
-                      ? "engineering.signals.historian.filterNotArchived"
-                      : "engineering.signals.historian.filterDeadband"
+                archiveFilter === "on"
+                  ? "engineering.signals.historian.filterArchived"
+                  : archiveFilter === "off"
+                    ? "engineering.signals.historian.filterNotArchived"
+                    : "engineering.signals.historian.filterDeadband"
               )}
-            </button>
-          ))}
-        </div>
-
-        {canEdit ? (
-          <div className="shb-bulk">
-            <span className="shb-bulk-scope">
-              {t("engineering.signals.historian.bulkScope", { count: visibleCount })}
             </span>
-            <button
-              type="button"
-              className="secondary-btn shb-bulk-btn"
-              disabled={busy || visibleCount === 0}
-              onClick={() => topluArsiv(true)}
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">save</span>
-              {t("engineering.signals.historian.bulkOn")}
-            </button>
-            <button
-              type="button"
-              className="secondary-btn shb-bulk-btn shb-bulk-btn--off"
-              disabled={busy || visibleCount === 0}
-              onClick={() => topluArsiv(false)}
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">block</span>
-              {t("engineering.signals.historian.bulkOff")}
-            </button>
-            <span className="shb-bulk-deadband">
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                className="shb-deadband-input"
-                value={bulkDeadband}
-                onChange={(event) => setBulkDeadband(event.target.value)}
-                placeholder={t("engineering.signals.historian.bulkDeadbandPlaceholder")}
-                disabled={busy || filteredAnalogCount === 0}
-                title={
-                  filteredAnalogCount === 0
-                    ? t("engineering.signals.historian.noAnalogInFilter")
-                    : t("engineering.signals.historian.bulkAnalogOnly", { count: filteredAnalogCount })
-                }
-              />
-              <button
-                type="button"
-                className="secondary-btn shb-bulk-btn"
-                disabled={busy || filteredAnalogCount === 0 || bulkDeadband.trim() === ""}
-                onClick={topluOluBant}
-              >
-                {t("engineering.signals.historian.bulkDeadbandApply")}
-              </button>
-            </span>
-          </div>
-        ) : null}
+          ) : null}
+        </span>
+        <button
+          type="button"
+          className="secondary-btn signals-arsiv-ac-btn"
+          onClick={() => setArsivPanelAcik(true)}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+          {t("engineering.signals.historian.manage")}
+        </button>
       </div>
 
       {notice ? <p className="helper-text shb-notice">{notice}</p> : null}
-      {canEdit ? (
-        <p className="helper-text shb-delay-hint">{t("engineering.signals.historian.effectDelay")}</p>
+
+      {arsivPanelAcik ? (
+        <div className="settings-modal-backdrop" onClick={() => setArsivPanelAcik(false)}>
+          <div
+            className="settings-modal signals-arsiv-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="signals-arsiv-modal-head">
+              <h3>{t("engineering.signals.historian.manage")}</h3>
+              <button
+                type="button"
+                className="gw-wizard-close"
+                onClick={() => setArsivPanelAcik(false)}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="shb-summary">
+              <span className="material-symbols-outlined shb-icon" aria-hidden="true">database</span>
+              <span className="shb-summary-main">
+                {t("engineering.signals.historian.summary", {
+                  total: totalCount,
+                  archived: historianOzet.archived
+                })}
+              </span>
+              <span className="shb-summary-meter" aria-hidden="true">
+                <span className="shb-summary-meter-fill" style={{ width: `${historianOzet.pct}%` }} />
+              </span>
+              <span className="shb-summary-sub">
+                {t("engineering.signals.historian.writeLoad", { pct: historianOzet.pct })}
+                {historianOzet.withDeadband > 0
+                  ? ` · ${t("engineering.signals.historian.summaryDeadband", {
+                      count: historianOzet.withDeadband
+                    })}`
+                  : ""}
+              </span>
+            </div>
+
+            <div className="shb-filters">
+              {(["all", "on", "off", "deadband"] as ArchiveFilter[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`chip shb-chip-${key} ${archiveFilter === key ? "chip-active" : ""}`}
+                  onClick={() => setArchiveFilter(key)}
+                >
+                  {t(
+                    key === "all"
+                      ? "engineering.signals.historian.filterAll"
+                      : key === "on"
+                        ? "engineering.signals.historian.filterArchived"
+                        : key === "off"
+                          ? "engineering.signals.historian.filterNotArchived"
+                          : "engineering.signals.historian.filterDeadband"
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {canEdit ? (
+              <div className="shb-bulk">
+                <span className="shb-bulk-scope">
+                  {t("engineering.signals.historian.bulkScope", { count: visibleCount })}
+                </span>
+                <button
+                  type="button"
+                  className="secondary-btn shb-bulk-btn"
+                  disabled={busy || visibleCount === 0}
+                  onClick={() => topluArsiv(true)}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">save</span>
+                  {t("engineering.signals.historian.bulkOn")}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn shb-bulk-btn shb-bulk-btn--off"
+                  disabled={busy || visibleCount === 0}
+                  onClick={() => topluArsiv(false)}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">block</span>
+                  {t("engineering.signals.historian.bulkOff")}
+                </button>
+                <span className="shb-bulk-deadband">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="shb-deadband-input"
+                    value={bulkDeadband}
+                    onChange={(event) => setBulkDeadband(event.target.value)}
+                    placeholder={t("engineering.signals.historian.bulkDeadbandPlaceholder")}
+                    disabled={busy || filteredAnalogCount === 0}
+                    title={
+                      filteredAnalogCount === 0
+                        ? t("engineering.signals.historian.noAnalogInFilter")
+                        : t("engineering.signals.historian.bulkAnalogOnly", { count: filteredAnalogCount })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="secondary-btn shb-bulk-btn"
+                    disabled={busy || filteredAnalogCount === 0 || bulkDeadband.trim() === ""}
+                    onClick={topluOluBant}
+                  >
+                    {t("engineering.signals.historian.bulkDeadbandApply")}
+                  </button>
+                </span>
+              </div>
+            ) : null}
+
+            {notice ? <p className="helper-text shb-notice">{notice}</p> : null}
+            {canEdit ? (
+              <p className="helper-text shb-delay-hint">
+                {t("engineering.signals.historian.effectDelay")}
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       <div className="signals-main-layout">
