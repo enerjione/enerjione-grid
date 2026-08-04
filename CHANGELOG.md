@@ -14,6 +14,24 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.45.4] — 2026-08-04
+
+### Düzeltildi — alarm değerlendirme hattı artık backend'i beklemiyor
+
+- **Alarm prio kuyruğu birikiyordu** (401 cihaz testinde ~1.166 mesaj/sn):
+  backend'e giden senkron HTTP çağrıları (alarm kaldırma + temizleme)
+  mesaj işleme döngüsünün içinde bloklayarak koşuyordu. Gönderim ayrı bir
+  thread'e ve sınırlı kuyruğa taşındı; kural değerlendirmesi artık yalnızca
+  bellek içi çalışıyor. ("Önce backend POST → alarm_id → RabbitMQ" sırası
+  korunur; sağlık ucunda `notify_bekleyen` alanıyla izlenir.)
+- **Drift temizlik seli**: alarm hiç aktif olmamış (kural × cihaz)
+  anahtarları için 60 sn'de bir atılan idempotent clear POST'ları Postgres'i
+  no-op sorgularla boğuyordu. Aralık 600 sn'ye çıkarıldı ve
+  `ALARM_DRIFT_CLEAR_INTERVAL_SEC` ile ayarlanabilir; gerçek alarm geçişleri
+  bu aralıktan bağımsız anında gönderilir.
+
+---
+
 ## [2.45.3] — 2026-08-04
 
 ### Düzeltildi — haberleşme durumu telemetri kuyruğundan bağımsızlaştı

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import queue
 import ssl
 import threading
 import time
@@ -73,6 +74,16 @@ BACKEND_INTERNAL_CLEAR_URL = os.getenv(
 )
 BACKEND_API_BASE = os.getenv("BACKEND_API_BASE", "http://127.0.0.1:8000/api/v1")
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "change-me-internal-token")
+
+# Drift-recovery clear POST araligi (sn), (kural x cihaz) anahtari basina.
+# Eski 60 sn'lik aralik 401 cihazlik yuk testinde saniyede onlarca no-op
+# POST uretti (backend'de her biri DB sorgusu -> Postgres %173). Gercek
+# gecis clear'lari (was_active=True) bu araliktan MUAFTIR, aninda gider;
+# bu aralik yalnizca restart/drift telafisinin temposunu belirler.
+DRIFT_CLEAR_INTERVAL_SEC = max(60.0, float(os.getenv("ALARM_DRIFT_CLEAR_INTERVAL_SEC", "600")))
+# Backend gonderim kuyrugu tavani — bellek guvenligi icin sinirli (bkz.
+# _SamplesCache OOM gecmisi). Dolarsa clear isleri dusurulur ve sayilir.
+NOTIFY_QUEUE_MAX = int(os.getenv("ALARM_NOTIFY_QUEUE_MAX", "10000"))
 RULES_REFRESH_SEC = int(os.getenv("ALARM_RULES_REFRESH_SEC", "10"))
 
 
@@ -337,6 +348,9 @@ class _HealthHandler(BaseHTTPRequestHandler):
                 "service": "alarm-service",
                 "rules_ready": _CACHE.is_ready(),
                 "atissiz_sn": round(watchdog.gecen_sn(), 1),
+                # Backend gonderim kuyrugu derinligi — surekli buyuyorsa
+                # backend yanit vermiyor demektir (mesaj dongusu etkilenmez).
+                "notify_bekleyen": _NOTIFIER.bekleyen(),
             }
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
             self.send_response(200 if canli else 503)
@@ -484,14 +498,17 @@ def _build_quality_alarm(payload: dict) -> dict:
     }
 
 
-def _notify_backend(payload: dict) -> int | None:
+def _notify_backend(payload: dict, http=None) -> int | None:
     """Backend `/internal/alarms` POST eder; alarm row olusur veya
     deduplicate edilir. Donus: backend'in atadigi `alarm_id` (notification-
     worker bunu kullanarak dispatch tetikler) veya None (dedup/error).
+
+    `http`: baglanti havuzlu `requests.Session` (gonderim thread'i verir);
+    None ise duz `requests` kullanilir (testler icin).
     """
     headers = { "X-Service-Token": INTERNAL_SERVICE_TOKEN, "X-Service-Name": "alarm-service" }
     body = {k: v for k, v in payload.items() if k != "rule_id"}
-    response = requests.post(BACKEND_INTERNAL_URL, json=body, headers=headers, timeout=8)
+    response = (http or requests).post(BACKEND_INTERNAL_URL, json=body, headers=headers, timeout=8)
     response.raise_for_status()
     try:
         data = response.json()
@@ -510,6 +527,7 @@ def _notify_backend_clear(
     device_code: str | None,
     source_gateway: str | None,
     signal_key: str | None = None,
+    http=None,
 ) -> None:
     """Alarm sahada normale dondu - backend'deki acik kaydi reset=True yap.
 
@@ -529,8 +547,136 @@ def _notify_backend_clear(
         "signal_key": signal_key,
         "source_timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    response = requests.post(BACKEND_INTERNAL_CLEAR_URL, json=body, headers=headers, timeout=8)
+    response = (http or requests).post(BACKEND_INTERNAL_CLEAR_URL, json=body, headers=headers, timeout=8)
     response.raise_for_status()
+
+
+class _BackendNotifier:
+    """Backend HTTP + RabbitMQ yayinini event loop DISINA tasiyan gonderim hatti.
+
+    YASANAN SORUN: `_notify_backend*` cagrilari senkron `requests.post`
+    (timeout 8 sn) ile dogrudan asyncio mesaj callback'inin icinde
+    kosuyordu. 401 cihazlik yuk testinde drift-recovery clear'lari
+    ((kural x cihaz) basina 60 sn'de bir) saniyede onlarca BLOKLU HTTP'ye
+    donustu; her POST backend'de bir DB sorgusu demek. Sonuc: alarm-service
+    CPU %25'te bosta beklerken prio kuyrugu ~1.166 mesaj/sn birikiyordu —
+    tag-engine'in seri PubAck darbogaziyla ayni hastalik sinifi.
+
+    COZUM: tek daemon thread + sinirli kuyruk + baglanti havuzlu Session.
+    Mesaj dongusu artik yalnizca bellek ici is yapar (cache/state); HTTP ve
+    RabbitMQ yayini burada kosar. Siralama korunur: raise isinde ONCE
+    backend POST (alarm_id doner) SONRA RabbitMQ publish — notification-
+    worker'in alarm_id'ye ihtiyaci var (bkz. eski "SIRA ONEMLI" notu).
+
+    TESLIM GARANTISI DEGISMEDI: eski kod da HTTP hatasini yutup ack'liyordu
+    (print + devam). Kuyruk dolarsa clear isleri dusurulur — idempotent ve
+    periyodik olduklari icin bir sonraki aralik telafi eder; raise dususu
+    ise yuksek sesle loglanir (10k'lik kuyrugun dolmasi backend'in uzun
+    suredir yanitsiz oldugu anlamina gelir).
+    """
+
+    def __init__(self, maxsize: int = NOTIFY_QUEUE_MAX) -> None:
+        self._q: queue.Queue = queue.Queue(maxsize=maxsize)
+        self._thread: Thread | None = None
+        self._lock = Lock()
+        self._dusen_clear = 0
+
+    def start(self) -> None:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._thread = Thread(target=self._run, name="alarm-notify", daemon=True)
+            self._thread.start()
+
+    def stop(self) -> None:
+        try:
+            self._q.put_nowait(None)
+        except queue.Full:
+            pass
+        t = self._thread
+        if t is not None:
+            t.join(timeout=5)
+
+    def bekleyen(self) -> int:
+        return self._q.qsize()
+
+    def submit_raise(self, alarm_payload: dict, *, rule_id: int) -> None:
+        self.start()
+        try:
+            self._q.put_nowait(("raise", alarm_payload, rule_id))
+        except queue.Full:
+            print(f"alarm-service-notify-kuyruk-dolu RAISE dustu rule_id={rule_id}")
+
+    def submit_clear(
+        self,
+        *,
+        rule_id: int,
+        rule_title: str,
+        device_code: str | None,
+        source_gateway: str | None,
+        signal_key: str | None,
+        was_active: bool,
+    ) -> None:
+        self.start()
+        alan = {
+            "rule_id": rule_id,
+            "rule_title": rule_title,
+            "device_code": device_code,
+            "source_gateway": source_gateway,
+            "signal_key": signal_key,
+        }
+        try:
+            self._q.put_nowait(("clear", alan, was_active))
+        except queue.Full:
+            self._dusen_clear += 1
+            if self._dusen_clear % 100 == 1:
+                print(
+                    "alarm-service-notify-kuyruk-dolu clear dustu "
+                    f"toplam={self._dusen_clear} (idempotent, sonraki periyot telafi eder)"
+                )
+
+    def _run(self) -> None:
+        http = requests.Session()
+        while True:
+            job = self._q.get()
+            if job is None:
+                return
+            try:
+                self._isle(http, job)
+            except Exception as exc:  # noqa: BLE001
+                print(f"alarm-service-notify-hata is={job[0]} error={exc}")
+
+    def _isle(self, http, job) -> None:
+        tur = job[0]
+        if tur == "raise":
+            _, alarm_payload, rule_id = job
+            alarm_id: int | None = None
+            try:
+                alarm_id = _notify_backend(alarm_payload, http=http)
+            except Exception as exc:  # noqa: BLE001
+                print(f"alarm-service-backend-error rule_id={rule_id} error={exc}")
+            if alarm_id is not None:
+                alarm_payload["alarm_id"] = alarm_id
+            try:
+                _publish_alarm_to_rabbitmq(alarm_payload)
+            except Exception as exc:  # noqa: BLE001
+                print(f"alarm-service-publish-error rule_id={rule_id} error={exc}")
+        elif tur == "clear":
+            _, alan, was_active = job
+            try:
+                _notify_backend_clear(http=http, **alan)
+                if was_active:
+                    print(
+                        "alarm-service-cleared "
+                        f"rule_id={alan['rule_id']} signal={alan.get('signal_key')} "
+                        f"dev={alan.get('device_code')}"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                if was_active:
+                    print(f"alarm-service-clear-error rule_id={alan['rule_id']} error={exc}")
+
+
+_NOTIFIER = _BackendNotifier()
 
 
 def _publish_alarm(channel, alarm_payload: dict) -> None:
@@ -633,26 +779,11 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 operator=rule.comparator,
                 produces_fault=rule.produces_fault,
             )
-            # NOT: `channel` artik gercek RabbitMQ kanali degil (JetStream'den
-            # consume ediyoruz). Alarm yayini icin thread-safe singleton
-            # publisher kullaniyoruz.
-            #
-            # SIRA ONEMLI: once backend'e POST et — yanitta alarm_id geri gelir;
-            # bunu RabbitMQ event'i icine koy. notification-worker RabbitMQ'dan
-            # alarm.created'i tukettiginde alarm_id ile backend dispatch'i
-            # cagirabilsin. Eski sira (publish once, backend sonra) alarm_id
-            # eksikligi yarattigi icin notification-worker isi yapamiyordu.
-            alarm_id: int | None = None
-            try:
-                alarm_id = _notify_backend(alarm_payload)
-            except Exception as exc:  # noqa: BLE001
-                print(f"alarm-service-backend-error rule_id={rule.id} error={exc}")
-            if alarm_id is not None:
-                alarm_payload["alarm_id"] = alarm_id
-            try:
-                _publish_alarm_to_rabbitmq(alarm_payload)
-            except Exception as exc:  # noqa: BLE001
-                print(f"alarm-service-publish-error rule_id={rule.id} error={exc}")
+            # Backend POST + RabbitMQ publish _BackendNotifier thread'inde
+            # kosar — bu dongu asyncio event loop'unun icinde ve BLOKLANMAMALI
+            # (senkron HTTP burada kosarken 401 cihazda prio kuyrugu birikti).
+            # "Once backend POST, sonra RabbitMQ" sirasi worker icinde korunur.
+            _NOTIFIER.submit_raise(alarm_payload, rule_id=rule.id)
             print(
                 "alarm-service-raised "
                 f"rule_id={rule.id} signal={rule.signal_key} dev={device_code} value={value}"
@@ -661,32 +792,30 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
             # prev_active=True ise (transition kosulu) clear hemen gonderilir.
             # prev_active=False ama should_be_active=False senaryosunda da
             # periyodik clear gondeririz: alarm-service restart veya state
-            # drift'inde DB'de hala acik alarm kalmis olabilir; min 60sn
-            # araliklarla idempotent clear cagrisi atariz (backend zaten
-            # eslesen acik alarm yoksa no_match doner).
+            # drift'inde DB'de hala acik alarm kalmis olabilir; idempotent
+            # clear cagrisi atariz (backend eslesen acik alarm yoksa
+            # no_match doner). Aralik DRIFT_CLEAR_INTERVAL_SEC (varsayilan
+            # 600 sn) — eski 60 sn, 400+ cihazda backend'i no-op POST'larla
+            # bogup Postgres'i %173'e cikariyordu.
             was_active = prev_active
             if was_active:
                 _STATE.set_active(key, False)
             _STATE.clear_pending(key)
-            # Drift recovery: prev_active False olsa bile 60sn'de bir
-            # clear deneriz; transition durumda hemen, drift durumunda
-            # rate-limited.
-            should_send = was_active or _STATE.should_send_clear(key, now, 60.0)
+            # Transition durumda hemen, drift durumunda rate-limited.
+            # Gonderim _BackendNotifier thread'inde — event loop bloklanmaz.
+            should_send = was_active or _STATE.should_send_clear(
+                key, now, DRIFT_CLEAR_INTERVAL_SEC
+            )
             if should_send:
                 _STATE.mark_clear_sent(key, now)
-                try:
-                    _notify_backend_clear(
-                        rule_id=rule.id,
-                        rule_title=rule.name,
-                        device_code=str(device_code) if device_code else None,
-                        source_gateway=payload.get("source_gateway"),
-                        signal_key=rule.signal_key,
-                    )
-                    if was_active:
-                        print(f"alarm-service-cleared rule_id={rule.id} signal={rule.signal_key} dev={device_code}")
-                except Exception as exc:  # noqa: BLE001
-                    if was_active:
-                        print(f"alarm-service-clear-error rule_id={rule.id} error={exc}")
+                _NOTIFIER.submit_clear(
+                    rule_id=rule.id,
+                    rule_title=rule.name,
+                    device_code=str(device_code) if device_code else None,
+                    source_gateway=payload.get("source_gateway"),
+                    signal_key=rule.signal_key,
+                    was_active=was_active,
+                )
 
 
 class _RabbitAlarmPublisher:
@@ -1024,6 +1153,7 @@ def main() -> None:
     # baglanma backoff'u sirasinda da olay dongusu calistigi icin atis surer.
     watchdog.baslat(60.0, servis="alarm-service")
     _start_health_server()
+    _NOTIFIER.start()
     stop_event = Event()
     refresh_thread = Thread(target=_rules_refresh_loop, args=(stop_event,), daemon=True)
     refresh_thread.start()
@@ -1049,6 +1179,9 @@ def main() -> None:
     try:
         asyncio.run(_consume_jetstream())
     finally:
+        # Once gonderim kuyrugu bosaltilir (bekleyen raise/clear'lar gitsin),
+        # sonra RabbitMQ baglantisi kapanir.
+        _NOTIFIER.stop()
         if _ALARM_PUBLISHER is not None:
             _ALARM_PUBLISHER.close()
         print("alarm-service-stopped")
