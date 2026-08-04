@@ -14,6 +14,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.41.0] — 2026-08-04
+
+### Değişti
+
+- **Kalıcılaştırma backend API'den ayrıldı**: backend-api artık telemetri
+  tüketmiyor; kalıcılaştırma ayrı worker sürecinde ve tag-engine çıkışından
+  (NORMALIZED) besleniyor. Arşivdeki değer ile alarm/IEC104/Modbus'un gördüğü
+  değer aynı normalizasyondan geçer; API süreci telemetri yükünden etkilenmez.
+- **Gateway şablonları tek gateway'de 500 cihaza göre güncellendi**
+  (`MAX_PARALLEL_DEVICES=500`; gateway imajı 1.2.0 ile birlikte). Panel
+  "Güncelle" akışı mevcut kurulumların compose'unu yeniden üretince yeni
+  değer sahaya iner.
+
+---
+
 ## [2.40.0] — 2026-08-04
 
 ### Değişti
