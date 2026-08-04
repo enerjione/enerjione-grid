@@ -1,8 +1,24 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+# Toast bildiriminin ekrandaki kosesi. Sira/degerler frontend ile SOZLESMEDIR:
+# `shared/types.ts` ToastPosition ve `styles.css` .toast-container--<deger>
+# sinifi birebir ayni metni kullanir.
+ToastPosition = Literal["bottom-right", "bottom-left", "top-right", "top-left"]
 
 
 class ProjectSettingsRead(BaseModel):
-    """Login ekrani + header tarafindan auth-siz okunabilir; private alan yok."""
+    """Login ekrani + header tarafindan auth-siz okunabilir; private alan yok.
+
+    `toast_position` / `toast_muted` de bilincli olarak buradadir: kimlik
+    dogrulamasiz bir cagirana yalnizca "bu kurulumda toast'lar su kosede ve
+    susturulmus" bilgisini verirler. PII yok, altyapi/ag bilgisi yok, guvenlik
+    kontrolu degil — alarm uretimi, e-posta/SMS/Telegram/push yollari bu
+    ayarlardan ETKILENMEZ; yalnizca tarayicidaki gecici baloncuk etkilenir.
+    Yazma yolu (PUT) public DEGIL, dolayisiyla anonim biri operatoru
+    susturamaz.
+    """
 
     project_name: str | None = None
     customer_name: str | None = None
@@ -13,6 +29,10 @@ class ProjectSettingsRead(BaseModel):
     site_title: str | None = None
     favicon: str | None = None
     login_image: str | None = None
+    # NULL = "bottom-right" (mevcut davranis).
+    toast_position: ToastPosition | None = None
+    # NULL/False = bildirimler gorunur (mevcut davranis).
+    toast_muted: bool | None = None
 
     class Config:
         from_attributes = True
@@ -31,3 +51,9 @@ class ProjectSettingsUpdate(BaseModel):
     # Favicon kucuk olur (genelde <50KB), buyuk login_image icin 3MB yeterli marj.
     favicon: str | None = Field(default=None, max_length=300_000)
     login_image: str | None = Field(default=None, max_length=3_000_000)
+    # Serbest metin DEGIL: gecersiz bir deger CSS'te karsiligi olmayan bir
+    # sinif uretir ve toast ekranin disinda kalabilir. Literal ile kapiyoruz.
+    toast_position: ToastPosition | None = Field(default=None)
+    # Yalnizca KENDILIGINDEN gelen bildirimleri susturur; kullanici eyleminin
+    # sonucu olan toast'lar her zaman gosterilir (bkz. model yorumu).
+    toast_muted: bool | None = Field(default=None)

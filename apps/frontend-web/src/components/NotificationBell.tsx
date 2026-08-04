@@ -8,6 +8,7 @@ import {
 } from "../shared/api";
 import type { NotificationItem } from "../shared/types";
 import { usePolling } from "../shared/usePolling";
+import { useProjectSettings } from "./ProjectSettingsProvider";
 
 type Props = {
   token: string;
@@ -124,6 +125,12 @@ function parseMetadata(raw: string | null | undefined): AlarmMetadata | null {
 export function NotificationBell({ token, onNavigate }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
+  // Susturma KURULUM GENELI ve proje ayarlarindan aciliyor; ayari acan kisi
+  // ile ekrani izleyen operator ayni kisi olmayabilir. Hicbir iz birakmazsak
+  // operator "bugun hic alarm gelmedi" sanar. Zil her sayfada header'da ve
+  // susturulan alarmlarin dustugu kanal zaten burasi — gostergenin yeri.
+  const { settings } = useProjectSettings();
+  const susturulmus = settings.toast_muted === true;
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -256,10 +263,12 @@ export function NotificationBell({ token, onNavigate }: Props) {
         type="button"
         className={`notif-bell-btn ${unread > 0 ? "notif-bell-btn--active" : ""}`}
         onClick={handleToggle}
-        title={t("notifications.title")}
-        aria-label={t("notifications.title")}
+        title={susturulmus ? t("notifications.mutedTitle") : t("notifications.title")}
+        aria-label={susturulmus ? t("notifications.mutedTitle") : t("notifications.title")}
       >
-        <span className="material-symbols-outlined">notifications</span>
+        <span className="material-symbols-outlined">
+          {susturulmus ? "notifications_off" : "notifications"}
+        </span>
         {unread > 0 ? (
           <span className="notif-bell-badge">{unread > 99 ? "99+" : unread}</span>
         ) : null}
@@ -275,6 +284,18 @@ export function NotificationBell({ token, onNavigate }: Props) {
               </button>
             ) : null}
           </header>
+
+          {/* Susturma acikken listeyi acan kisi NEDEN baloncuk gormedigini ve
+              nereden geri alacagini burada ogrenir; aksi halde ayar
+              kesfedilemez kalir (proje ayarlari yalnizca installer'da). */}
+          {susturulmus ? (
+            <div className="notif-muted-note">
+              <span className="material-symbols-outlined" aria-hidden="true">
+                notifications_off
+              </span>
+              <span>{t("notifications.mutedNote")}</span>
+            </div>
+          ) : null}
 
           {loading ? <div className="notif-empty">{t("notifications.loading")}</div> : null}
           {error && !loading ? <div className="notif-error">{error}</div> : null}

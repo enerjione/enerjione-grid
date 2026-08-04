@@ -27,12 +27,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
 import psutil
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core import service_role
 from app.core.config import settings
 from app.db.session import engine, get_db
 from app.models.user import User
@@ -319,6 +320,87 @@ def _http_probe(url: str) -> tuple[bool, float, str | None]:
     except Exception as exc:  # noqa: BLE001
         elapsed = (time.perf_counter() - started) * 1000.0
         return False, round(elapsed, 1), f"{type(exc).__name__}: {str(exc)[:120]}"
+
+
+#: Ic proxy isaretcisi. Arka plan surecine giden istek bu basligi tasir;
+#: karsi taraf onu gorurse BIR DAHA proxy'lemez. Yanlis yapilandirmada
+#: (BACKEND_WORKER_HOST kendini gosterirse) sonsuz zincir olusmasin diye.
+_INTERNAL_PROBE_HEADER = "x-e1-internal-probe"
+
+
+def _is_internal_probe(request: Request | None) -> bool:
+    """Istek baska bir backend surecinin ic sorgusu mu?
+
+    Zincir kirici: `BACKEND_WORKER_HOST` yanlislikla surecin KENDISINI
+    gosterirse proxy kendi kendini cagirir ve her istek yenilerini dogururdu.
+    Bu bayrak ikinci sicramayi engeller — en kotu ihtimalle bir kez proxy'lenip
+    yerel (dogru olmayan ama zararsiz) sayaclar doner.
+    """
+    if request is None:
+        return False
+    return bool(request.headers.get(_INTERNAL_PROBE_HEADER))
+
+
+def _forwarded_credentials(request: Request | None) -> dict[str, str]:
+    """Cagiranin kimlik basliklarini AYNEN iletilecek sekilde toplar.
+
+    HEM `Cookie` HEM `Authorization`. Yalnizca `Authorization` iletmek
+    YETMEZ ve sessizce yanlis sonuc verirdi: bu depoda oturum HttpOnly
+    cookie ile tasiniyor (`deps.get_current_user` oncelik sirasi
+    cookie > header), yani tarayicidan gelen isteklerin cogunda
+    Authorization basligi HIC YOKTUR. O durumda worker 401 doner, uc
+    "arka plan surecine ulasilamiyor / critical" gosterir — gercek bir
+    arizadan ayirt EDILEMEYEN kalici bir yanlis-pozitif.
+
+    Yeni bir yetki yuzeyi ACILMAZ: worker ayni SECRET_KEY ile ayni JWT'yi
+    ayni `get_current_user` ile dogrular.
+    """
+    if request is None:
+        return {}
+    iletilecek: dict[str, str] = {}
+    for baslik in ("cookie", "authorization"):
+        deger = request.headers.get(baslik)
+        if deger:
+            iletilecek[baslik] = deger
+    return iletilecek
+
+
+def _fetch_worker_pipeline(credentials: dict[str, str]) -> tuple[dict | None, str | None]:
+    """Telemetri boru hatti sayaclarini ARKA PLAN surecinden ceker.
+
+    Donus: (rapor, hata). Ikisinden biri her zaman None'dir.
+
+    HATA METNI NEDEN AYRINTILI: "ulasilamiyor" ile "kimlik reddedildi"
+    tamamen farkli iki ariza. Ilki worker gercekten kapali demek, ikincisi
+    yalnizca yapilandirma hatasi (SECRET_KEY ayrismasi) — ama ikisi de
+    ekranda ayni kirmizi olarak gorunurse operator yanlis yeri arar.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    hedef = f"{settings.backend_worker_host}:{settings.backend_worker_port}"
+    url = f"http://{hedef}{settings.api_prefix}/system-status/telemetry-pipeline"
+    headers = {"User-Agent": "e1-system-status", _INTERNAL_PROBE_HEADER: "1"}
+    headers.update({k.title(): v for k, v in credentials.items()})
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=_TCP_PROBE_TIMEOUT_SEC) as resp:
+            if 200 <= resp.status < 300:
+                return _json.loads(resp.read()), None
+            return None, f"Arka plan sureci HTTP {resp.status} dondurdu ({hedef})"
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return None, (
+                f"Arka plan sureci kimligi reddetti (HTTP {exc.code}). "
+                "backend-api ve backend-worker AYNI SECRET_KEY'i paylasmali."
+            )
+        return None, f"Arka plan sureci HTTP {exc.code} dondurdu ({hedef})"
+    except Exception as exc:  # noqa: BLE001
+        return None, (
+            f"Arka plan surecine ulasilamiyor ({hedef}): {type(exc).__name__}. "
+            "backend-worker kapali olabilir."
+        )
 
 
 def _check_database() -> ServiceStatus:
@@ -617,6 +699,30 @@ def get_services_status(
         ),
     ]
 
+    # Arka plan sureci — YALNIZCA ayrik kurulumda (`SERVICE_ROLE=api`) beklenir.
+    #
+    # Rol `all` ise arka plan zaten bu surecte kosuyor, ayri bir container YOK;
+    # listeye kosulsuz eklemek her tek-container kurulumunda kalici kirmizi bir
+    # satir gosterir ve gercek arizayi golgeler. Ayrik kurulumda ise tam tersi
+    # sart: worker olurse telemetri islenmez ama Sistem Durumu bugun her seyi
+    # YESIL gosterir — sessiz ariza.
+    if service_role.current_role() == service_role.ROLE_API:
+        probe_jobs.append(
+            (
+                "backend_worker",
+                lambda: _check_worker(
+                    "Arka Plan Sureci",
+                    env_prefix="BACKEND_WORKER",
+                    default_hosts=(
+                        settings.backend_worker_host,
+                        "backend-worker",
+                        "e1-grid-backend-worker",
+                    ),
+                    default_port=settings.backend_worker_port,
+                ),
+            )
+        )
+
     probe_jobs = [(key, fn) for key, fn in probe_jobs if key not in skip]
 
     results: dict[str, ServiceStatus] = {}
@@ -641,6 +747,7 @@ def get_services_status(
         "database",
         "rabbitmq",
         "nats",
+        "backend_worker",
         "frontend_web",
         "tag_engine",
         "alarm_service",
@@ -735,7 +842,10 @@ class TelemetryPipelineReport(BaseModel):
 
 
 @router.get("/telemetry-pipeline", response_model=TelemetryPipelineReport)
-def get_telemetry_pipeline_status(_: User = Depends(get_current_user)):
+def get_telemetry_pipeline_status(
+    request: Request = None,
+    _: User = Depends(get_current_user),
+):
     """Telemetri tuketicisi gelis hizina yetisiyor mu?
 
     `severity`:
@@ -743,8 +853,30 @@ def get_telemetry_pipeline_status(_: User = Depends(get_current_user)):
       warning  — backlog esigi asti: tuketici geride, tampon tasarsa veri kaybi
       critical — tuketici calismiyor veya NATS baglantisi yok: telemetri
                  DB'ye HIC yazilmiyor
+
+    AYRIK KURULUM (`SERVICE_ROLE=api`): sayaclar SUREC ICIDIR ve tuketici bu
+    surecte HIC acilmaz. Yerel `get_stats()` her zaman running=False doner,
+    yani uc kalici ve SAHTE bir "critical" gosterirdi; backlog ise tamamen
+    kaybolurdu. Bu yuzden gercegi tutan surece soruluyor.
     """
     from app.services import telemetry_consumer
+
+    if not service_role.wants_background() and not _is_internal_probe(request):
+        rapor, hata = _fetch_worker_pipeline(_forwarded_credentials(request))
+        if rapor is not None:
+            return TelemetryPipelineReport(**rapor)
+        # Worker'a ULASILAMIYORSA "critical" DOGRUDUR: arka plan sureci
+        # gercekten kapali olabilir ve o durumda telemetri islenmiyordur.
+        # Sahte yesil gostermek bu urunde en agir hata sinifi.
+        return TelemetryPipelineReport(
+            running=False,
+            connected=False,
+            backlog=None,
+            throughput_msgs_per_sec=0.0,
+            last_error=hata,
+            backlog_warn_threshold=settings.telemetry_backlog_warn_threshold,
+            severity="critical",
+        )
 
     stats = telemetry_consumer.get_stats()
     backlog = stats.get("backlog")

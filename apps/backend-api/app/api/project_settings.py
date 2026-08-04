@@ -154,12 +154,20 @@ def update_project_settings(
             _validate_image_data_url(field, updates[field])
     for key, value in updates.items():
         setattr(row, key, value)
+    # Toast ayarlari TUM kurulumu etkiler (susturma herkesin alarm baloncugunu
+    # kapatir); denetim kaydinda yalnizca alan adi degil DEGERI de dursun.
+    _VALUE_FIELDS = {"toast_position", "toast_muted"}
     summary_fields = []
     for k in updates.keys():
         if k in _BLOB_FIELDS:
             summary_fields.append(f"{k}({'set' if updates[k] else 'cleared'})")
+        elif k in _VALUE_FIELDS:
+            summary_fields.append(f"{k}={updates[k]}")
         else:
             summary_fields.append(k)
+    audit_metadata: dict = {"fields": list(updates.keys())}
+    for k in _VALUE_FIELDS & updates.keys():
+        audit_metadata[k] = updates[k]
     record_event(
         db,
         category="project-settings",
@@ -167,7 +175,7 @@ def update_project_settings(
         severity="info",
         actor_username=current_user.username,
         message=f"Project settings updated: {', '.join(summary_fields)}",
-        metadata={"fields": list(updates.keys())},
+        metadata=audit_metadata,
         i18n_key="project_settings_updated",
     )
     db.commit()

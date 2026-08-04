@@ -7,10 +7,10 @@ yazilmisti. HEDEF yuk ise 600 cihaz x 20 aktif sinyal / 10 sn =
 ~1.200 deger/sn = 103,68M satir/gun — yani DORT KAT fazla.
 
 Somut sonuc: `nats_stream_raw_max_bytes` yorumunda "~19 saat tampon"
-yaziyordu; gercekte hedef olcekte ~3,5 saat. Bu, tavanin yanlis oldugu
-anlamina gelmez (8 GiB disk butcesi icinde makul bir pay), ama
+yaziyordu; gercekte hedef olcekte ~2,5 saat. Bu, tavanin yanlis oldugu
+anlamina gelmez (6 GiB disk butcesi icinde makul bir pay), ama
 "19 saatlik kesintiyi tolere ederiz" varsayimiyla planlama yapmak
-YANLISTIR: 4 saati asan bir backend kesintisinde en eski telemetri KAYBOLUR.
+YANLISTIR: 3 saati asan bir backend kesintisinde en eski telemetri KAYBOLUR.
 
 Bu testler sayilari degil VARSAYIMLARI kilitler: olcek ya da tavan
 degistiginde yorumun da guncellenmesi gerektigini PR aninda gosterir.
@@ -54,13 +54,13 @@ def test_hedef_hiz_gunluk_satir_sayisiyla_TUTARLI():
 def test_raw_tampon_suresi_YORUMLA_uyusuyor():
     """Yorumda yazan sure gercek hesapla ayni mertebede olmali.
 
-    Eski yorum "~19 saat" diyordu ve gercek ~3,5 saatti; operator dort kat
+    Eski yorum "~19 saat" diyordu ve gercek ~2,5 saatti; operator yedi kat
     yanlis bir varsayimla planlama yapiyordu.
     """
     saat = _tampon_saat(settings.nats_stream_raw_max_bytes)
     kaynak = inspect.getsource(cfg)
 
-    m = re.search(r"raw\s+8 GiB\s+->\s+~([\d,]+)\s+saat", kaynak)
+    m = re.search(r"raw\s+6 GiB\s+->\s+~([\d,]+)\s+saat", kaynak)
     assert m, "config.py'de raw tampon suresi belgelenmemis"
     belgelenen = float(m.group(1).replace(",", "."))
 
@@ -128,14 +128,65 @@ def test_stream_tavanlari_SINIRLI(alan: str):
 
 
 def test_toplam_tavan_disk_butcesine_SIGIYOR():
-    """Uc stream toplami 12 GiB; nats-server.conf max_file_store bunun
+    """Uc stream toplami 10 GiB; nats-server.conf max_file_store bunun
     UZERINDE kalmali (aksi halde hesap tavani once dolar ve sert red gelir)."""
     toplam = (
         settings.nats_stream_raw_max_bytes
         + settings.nats_stream_normalized_max_bytes
         + settings.nats_stream_dlq_max_bytes
     )
-    assert toplam == 12 * 1024**3, f"toplam {toplam / 1024**3:.1f} GiB"
+    assert toplam == 10 * 1024**3, f"toplam {toplam / 1024**3:.1f} GiB"
+
+
+#: Saha olcumu (test sunucusu, 100 cihaz / 176 sinyal): JetStream deposu
+#: 5,6 GB. Ayni anda gateway 1.135 msg/sn basiyor, backend 480 msg/sn
+#: isliyordu — yani saniyede 655 mesaj BIRIKIYOR ve deponun bir kismi HENUZ
+#: ISLENMEMIS telemetridir.
+OLCULEN_JETSTREAM_DEPO_BAYT = 5_600_000_000
+
+
+def test_stream_tavani_OLCULEN_DEPONUN_USTUNDE_kaliyor():
+    """Tavani dusurmek "disk temizligi" degil VERI SILME islemidir.
+
+    `discard=OLD` budamasi tuketicinin NEREDE OLDUGUNA BAKMAZ: stream'in
+    kuyrugundan siler, ack durumundan bagimsiz. Yani `max_bytes`, tuketicinin
+    geri kalabilecegi MESAFEDIR.
+
+    Backend her boot'ta drift kontrolu yapip `update_stream` cagiriyor
+    (jetstream_bus). Bu yuzden tavani olculen depo boyutunun ALTINA cekmek,
+    degisiklik sahaya gittigi anda — sessizce, hicbir uyari uretmeden — o
+    farki siler. Birikim varken tavan dusurmek, yavas sistemi hizli
+    gostermek icin veriyi atmaktir.
+
+    Tavanlari gercekten dusurmek icin ON KOSUL: tuketici HTTP surecinden
+    ayrilip birikimin eridigi DOGRULANMALI.
+    """
+    assert settings.nats_stream_raw_max_bytes > OLCULEN_JETSTREAM_DEPO_BAYT, (
+        f"raw tavani {settings.nats_stream_raw_max_bytes:,} bayt, olculen "
+        f"JetStream deposu {OLCULEN_JETSTREAM_DEPO_BAYT:,} bayt — bu tavan "
+        "sahaya gittiginde ilk yeniden baslatmada ISLENMEMIS telemetri silinir"
+    )
+
+
+def test_yas_sinirlari_YUKLU_sahada_hic_ISLEMEZ():
+    """Yas sinirini kisaltmak yuklu sahada veri kaybettirmemeli.
+
+    Bunun kaniti su: hedef olcekte bayt tavani SAATLER icinde carpar, yas
+    siniri ise GUNLER cinsindendir. Yani budamayi her zaman bayt tavani
+    yapar; yas siniri yalnizca hizin cok dusuk oldugu kucuk sahalarda —
+    stream'in ack'lenmis mesajlari arsivlemesini engellemek icin — devreye
+    girer.
+
+    Bu iliski bozulursa (yas siniri tampon suresinin altina inerse) yas
+    siniri yuklu sahada da budamaya baslar ve o zaman ISLENMEMIS mesajlar
+    dusebilir.
+    """
+    tampon_saat = _tampon_saat(settings.nats_stream_raw_max_bytes)
+    yas_saat = settings.nats_stream_raw_max_age_days * 24
+    assert yas_saat > tampon_saat * 4, (
+        f"raw yas siniri {yas_saat} saat, bayt tavani {tampon_saat:.1f} saatlik "
+        "tampon veriyor — yas siniri artik yuklu sahada da budama yapiyor"
+    )
 
 
 def test_kesinti_toleransi_GERCEKCI_belgelenmis():

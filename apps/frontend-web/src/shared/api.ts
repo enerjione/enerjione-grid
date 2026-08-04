@@ -2055,6 +2055,9 @@ export async function importLicense(token: string, file: File): Promise<LicenseS
 // ----- Project Settings -----
 // GET auth-siz kullanilabilsin; bazi yerlerde token vermeden de cagiriyoruz
 // (login ekrani, header initial fetch). Backend GET /project-settings public.
+// Govde `ProjectSettings` tipiyle oldugu gibi tasinir (alan secimi YOK), bu
+// yuzden semaya yeni alan girince (or. toast_position/toast_muted) burada
+// degisiklik gerekmez — `shared/types.ts` guncellenmesi yeter.
 export async function fetchProjectSettings(): Promise<import("./types").ProjectSettings> {
   const response = await apiFetch(`${API_BASE_URL}/project-settings`);
   if (!response.ok) throw await buildApiError(response, "Proje ayarları alınamadı.");

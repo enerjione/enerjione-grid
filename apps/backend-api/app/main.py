@@ -12,13 +12,11 @@ from app.core.rate_limit import limiter
 
 from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
-from app.core import service_role
 from app.core.service_role import leader
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.models import alarm, alarm_rule, api_key as api_key_model, backup as backup_model, device, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
-from app.services.outbox_service import flush_outbox
 from app.services.signal_catalog_seed import seed_default_signals
 from app.services import alarm_reconciliation, backup_scheduler, gateway_staleness_watchdog, gateway_update_notifier, outbox_flush_worker, telemetry_consumer, telemetry_retention
 
@@ -841,7 +839,12 @@ def _legacy_bootstrap_ddl():
                 result.get("removed", 0),
                 result.get("kept", 0),
             )
-        flush_outbox(db)
+        # NOT: Burada bir `flush_outbox(db)` cagrisi vardi ve KALDIRILDI
+        # (2026-08-03). `leader`/`service_role` korumasi YOKTU: bu yol her
+        # surecte kosuyor, yani `--workers N`e gecildiginde N surec acilista
+        # ayni satirlari yayinlamaya kalkiyordu. Yayin artik TEK yerden,
+        # `leader.register("outbox_flush", ...)` arkasindaki worker'dan yapilir
+        # ve o en gec OUTBOX_FLUSH_INTERVAL_SEC (0.3 sn) icinde ayni isi yapar.
     finally:
         db.close()
 
@@ -860,6 +863,82 @@ async def reapply_gateway_rabbitmq_permissions():
     pass
 
 
+#: `start_iec104_servers`ta yakalanan FastAPI event loop'u. IEC 104
+#: sunuculari bu loop uzerinde yasar; liderlik SONRADAN devralinirsa deploy
+#: bu loop'a gonderilir (bkz. `_start_iec104_on_leadership`).
+_iec104_loop: "asyncio.AbstractEventLoop | None" = None
+
+#: Sunucular bu surecte acildi mi. Iki giris yolu var (acilis hizli yolu ve
+#: liderligi devralma yolu); bayrak olmasa ikisi ust uste gelip
+#: `manager.deploy` once undeploy yaptigi icin bagli SCADA oturumunu bosuna
+#: koparirdi.
+_iec104_deployed = False
+
+
+async def _deploy_iec104_once() -> None:
+    """Aktif IEC 104 hedeflerini bu surecte BIR KEZ ayaga kaldirir."""
+    global _iec104_deployed
+    import logging
+
+    if _iec104_deployed:
+        return
+    _iec104_deployed = True
+    db = SessionLocal()
+    try:
+        deployed = await deploy_all_active_targets(db, loop=asyncio.get_running_loop())
+        if deployed:
+            logging.getLogger(__name__).info("iec104_servers_deployed count=%d", deployed)
+    except Exception:  # noqa: BLE001
+        # Bayragi geri al: sonraki bir liderlik denemesi tekrar deneyebilsin.
+        _iec104_deployed = False
+        logging.getLogger(__name__).exception("iec104_startup_failed")
+    finally:
+        db.close()
+
+
+def _start_iec104_on_leadership() -> None:
+    """LIDERLIK ALINDIGINDA IEC 104 sunucularini ac — DEVRALMA yolu.
+
+    NEDEN KAYITLI BIR IS
+    --------------------
+    `start_iec104_servers` kilidi acilista bir kez dener. Kilit o an baska bir
+    oturumdaysa eskiden sessizce vazgeciliyordu ve BIR DAHA denenmiyordu —
+    oysa `try_start` 15 sn'de bir yeniden dener ve bu surec pekala LIDER
+    olabilir:
+
+      * `update.sh` sonrasi eski container SIGKILL edilmisse Postgres onun
+        advisory lock oturumunu TCP keepalive suresi boyunca (varsayilan
+        saatler) acik tutar; yeni surec acilirken kilidi ALAMAZ, saniyeler
+        sonra alir.
+      * `--workers N` ile IEC 104'u acan worker olur ve baska bir worker
+        liderligi devralir.
+
+    Her iki durumda da surec LIDER olur, telemetri/outbox/retention calisir,
+    `/health` "is_leader: true" der — ama 2404 HIC baglanmaz. SCADA'ya giden
+    butun ariza-gecis ve kalite bildirimleri sessizce kaybolurdu.
+
+    SONUC BEKLENMEZ: Starlette senkron startup handler'ini (bkz.
+    `start_background_jobs`) dogrudan event loop THREAD'INDE kosturur;
+    `future.result()` orada kilitlenirdi. Hata `_deploy_iec104_once` icinde
+    zaten loglaniyor.
+    """
+    import logging
+
+    loop = _iec104_loop
+    if loop is None or _iec104_deployed:
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(_deploy_iec104_once(), loop)
+    except RuntimeError:  # loop kapanmis
+        logging.getLogger(__name__).exception("iec104_devralma_planlanamadi")
+
+
+# Kayit SIRASI baslatma sirasidir; IEC 104 en basa gelsin ki telemetri
+# tuketicisi deger basmaya basladiginda sunucular ayakta olsun. Durdurma
+# `stop_iec104_servers` shutdown event'inde yapiliyor, burada no-op.
+leader.register("iec104_servers", _start_iec104_on_leadership, lambda: None)
+
+
 @app.on_event("startup")
 async def start_iec104_servers():
     """Aktif IEC 104 outbound target'lari icin TCP server'lari baslat.
@@ -870,24 +949,32 @@ async def start_iec104_servers():
     `outbound_dispatch_service._dispatch_iec104` `call_soon_threadsafe` ile
     degerleri guvenli iletir.
     """
-    import logging
+    global _iec104_loop
 
-    # TEK SURECTE: IEC104 sunuculari TCP portu baglar. `api` rolundeki
-    # surecler (ve coklu uvicorn worker'lari) bunu acmamali; ikinci surec
-    # portu zaten baglayamaz ve her acilista hata log'u uretirdi.
-    if not service_role.wants_background():
+    # Loop LIDERLIK KONTROLUNDEN ONCE yakalanir: kilit su an baskasinda olsa
+    # bile bu surec sonradan lider olabilir ve o zaman deploy'un gonderilecegi
+    # bir loop gerekir. Yalnizca async startup event'inde elde edilebilir.
+    _iec104_loop = asyncio.get_running_loop()
+
+    # TEK SURECTE: IEC104 sunuculari TCP portu baglar.
+    #
+    # Burada eskiden `service_role.wants_background()` vardi ve YETMIYORDU:
+    # o bayrak rol `all` iken HER uvicorn worker'inda True'dur. `--workers 4`
+    # ile dort surec de `deploy_all_active_targets` cagirip ayni netns icinde
+    # 2404'e bind denerdi; ucu EADDRINUSE alip sessizce (try/except) duserdi.
+    # Kazanan surec rastgeledir ve o surec LIDER DEGILSE bagli SCADA istemcisi
+    # acik ama SESSIZ bir sunucuya baglanirdi — tam bir sessiz ariza.
+    #
+    # `leader.claim()` advisory lock'u ALIR, yani kumede tek surecte True
+    # doner. Isleri baslatmaz; onu asagidaki `start_background_jobs` yapar ve
+    # ayni kilidi tekrar almaya calismaz.
+    if not leader.claim():
+        # Kilit su an BASKASINDA. Vazgecmek YETMEZ: liderlik 15 sn'de bir
+        # yeniden denenir ve bu surec devralabilir. O yol `_start_jobs`ten
+        # gecer; IEC 104 kayitli bir is oldugu icin orada acilir.
         return
 
-    loop = asyncio.get_running_loop()
-    db = SessionLocal()
-    try:
-        deployed = await deploy_all_active_targets(db, loop=loop)
-        if deployed:
-            logging.getLogger(__name__).info("iec104_servers_deployed count=%d", deployed)
-    except Exception:  # noqa: BLE001
-        logging.getLogger(__name__).exception("iec104_startup_failed")
-    finally:
-        db.close()
+    await _deploy_iec104_once()
 
 
 @app.on_event("shutdown")

@@ -25,8 +25,14 @@ class ConsumerConfig:
     dead_letter_routing_key: str = ""
 
 
+#: `publish_events` girdisi: (topic, payload, message_id)
+BatchItem = tuple[str, dict[str, Any], str]
+
+
 class EventBus(Protocol):
     def publish_event(self, topic: str, payload: dict[str, Any], *, message_id: str = "") -> None: ...
+
+    def publish_events(self, items: list[BatchItem]) -> list[Exception | None]: ...
 
     def consume_event(self, topic: str, handler: EventHandler, *, config: ConsumerConfig | None = None) -> None: ...
 
@@ -39,6 +45,17 @@ class InProcessEventBus:
         _ = message_id
         for handler in self._subscribers.get(topic, []):
             handler(payload)
+
+    def publish_events(self, items: list[BatchItem]) -> list[Exception | None]:
+        sonuc: list[Exception | None] = []
+        for topic, payload, message_id in items:
+            try:
+                self.publish_event(topic, payload, message_id=message_id)
+            except Exception as exc:  # noqa: BLE001
+                sonuc.append(exc)
+            else:
+                sonuc.append(None)
+        return sonuc
 
     def consume_event(self, topic: str, handler: EventHandler, *, config: ConsumerConfig | None = None) -> None:
         _ = config
@@ -76,6 +93,53 @@ class RabbitMqEventBus:
         # taklit modu icin gerekli).
         for handler in self._subscribers.get(topic, []):
             handler(payload)
+
+    def publish_events(self, items: list[BatchItem]) -> list[Exception | None]:
+        """Bir partiyi TEK cagriyla yayinlar; SONUC HER MESAJ ICIN AYRI doner.
+
+        Donen liste girdiyle ayni sirada: basari icin None, aksi halde o
+        mesajin hatasi. Boylece `flush_outbox` satir bazli hata yalitimini
+        (dead-letter sayaci) toplu yayinda da surdurebiliyor.
+
+        Yonlendirme `publish_event` ile AYNI: telemetry.* -> JetStream (toplu,
+        paralel ack), digerleri -> RabbitMQ. Alarm vb. dusuk hacimli oldugu
+        icin tek tek gonderilir; caller topic-broker eslemesini bilmez.
+        """
+        sonuc: list[Exception | None] = [None] * len(items)
+
+        tel_idx = [i for i, (topic, _p, _m) in enumerate(items) if topic.startswith("telemetry.")]
+        if tel_idx:
+            from app.services.jetstream_bus import get_bus
+
+            bus = get_bus()
+            try:
+                if bus is None:
+                    raise RuntimeError("jetstream bus unavailable (toplu yayin)")
+                hatalar = bus.publish_events([items[i] for i in tel_idx])
+            except Exception as exc:  # noqa: BLE001
+                # Bus yok / loop'a hic gecilemedi: ariza SISTEMIK, partinin
+                # tamami basarisiz. flush_outbox bunu (hicbiri gecmedi)
+                # gorup sayac artirmadan caller'a yayar.
+                for i in tel_idx:
+                    sonuc[i] = exc
+            else:
+                for i, hata in zip(tel_idx, hatalar, strict=True):
+                    sonuc[i] = hata
+
+        for i, (topic, payload, message_id) in enumerate(items):
+            if topic.startswith("telemetry."):
+                continue
+            try:
+                self._publish_to_rabbitmq(topic, payload, message_id=message_id)
+            except Exception as exc:  # noqa: BLE001
+                sonuc[i] = exc
+
+        # In-process subscriber'lar — yalnizca gercekten yayinlanan mesajlar icin.
+        for i, (topic, payload, _m) in enumerate(items):
+            if sonuc[i] is None:
+                for handler in self._subscribers.get(topic, []):
+                    handler(payload)
+        return sonuc
 
     def _ensure_channel(self) -> "Any":
         """Persistent RabbitMQ channel. Connection dustugunde otomatik reconnect.

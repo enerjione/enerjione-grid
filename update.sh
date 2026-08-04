@@ -552,6 +552,12 @@ elif ! grep -q '$JS.API.STREAM.NAMES' infra/nats/nats-server.conf; then
   # Eski conf — worker stream listeleme izni yok. Yeniden render gerek.
   e1_info "NATS auth conf eski (worker $JS.API.STREAM.NAMES izni yok), yeniden render ediliyor..."
   NEED_NATS_RENDER=1
+elif grep -q 'max_file_store: 50GB' infra/nats/nats-server.conf; then
+  # Canli conf template'ten BIR KEZ uretiliyor; template'i degistirmek
+  # sahadaki dosyayi kendiliginden guncellemez. Eski 50GB hesap tavani cihazin
+  # bos diskinin ustunde oldugu icin emniyet subabi olarak hic calismiyordu.
+  e1_info "NATS conf eski hesap tavanini (50GB) tasiyor, yeniden render ediliyor..."
+  NEED_NATS_RENDER=1
 fi
 
 if [[ $NEED_NATS_RENDER -eq 1 ]]; then
@@ -784,7 +790,22 @@ if [[ -z "$SVC" ]]; then
 else
   e1_step "Servis '$SVC' guncelleniyor + force-recreate..."
   _e1_prepare_images "$SVC"
-  docker compose up -d --force-recreate "$SVC"
+  RECREATE=("$SVC")
+  # AYRIK KURULUM (COMPOSE_PROFILES=scale): `backend-worker` backend-api ile
+  # AYNI imaji kullanir. Yalnizca backend-api'yi yeniden yaratmak arka plan
+  # surecini ESKI KODLA birakirdi — ve o surec telemetri tuketicisini,
+  # outbox yayincisini, retention'i, yedeklemeyi calistiran surectir. Yeni
+  # migration eski worker koduyla eslesmezse belirti sessizdir: HTTP tamamen
+  # saglikli gorunur, arka planda veri islenmez.
+  #
+  # `config --services` COMPOSE_PROFILES'i dikkate alir; profil kapaliysa
+  # backend-worker listede YOKTUR ve tek-container kurulumda hicbir sey degismez.
+  if [[ "$SVC" == "backend-api" ]] \
+     && docker compose config --services 2>/dev/null | grep -qx "backend-worker"; then
+    RECREATE+=("backend-worker")
+    e1_step "Ayrik kurulum: backend-worker de yeniden yaratiliyor (surum kaymasini onler)."
+  fi
+  docker compose up -d --force-recreate "${RECREATE[@]}"
 fi
 
 # ---- 5/5: Alembic migration (backend/all) ---------------------------------
@@ -910,6 +931,60 @@ PY
     e1_warn "Historian ensure calisti ama dogrulama beklenenden farkli — loglari kontrol edin."
   fi
 fi
+
+# ---- Eski Docker imajlarini temizle ---------------------------------------
+# update.sh her surumde yeni bir ETIKETLI imaj birakiyor ve hicbirini
+# silmiyordu. `docker image prune -f` yalnizca update.ps1 (Windows) ve
+# uninstall.sh'de vardi; ustelik o da SADECE dangling (`<none>`) imajlari alir,
+# `.../backend-api:2.37.4` gibi etiketli eski surumleri ASLA geri kazanmaz.
+# 100 cihazlik test sunucusunda birikim 15,8 GB'a, atilabilir kismi 9,8 GB'a
+# cikti. Kritik olan su: imajlar postgres-data ve nats-data ile AYNI dosya
+# sisteminde; dolan disk once telemetri yazimini durdurur.
+#
+# `e1_step` KULLANILMIYOR — adim sayaci (STEP_COUNT) bilerek bozulmuyor.
+#
+# Bu blok bilincli olarak `docker compose up -d`den SONRA: calisan
+# container'lar imajlarini referansladigi icin aktif surum silinemez.
+#
+# >>> E1_IMAGE_PRUNE_BEGIN (tests/test_update_image_prune.py bu blogu ayiklayip
+# >>> sahte bir `docker` ile CALISTIRIYOR — imza/degisken adlarini degistirirsen
+# >>> testi de guncelle.)
+e1_prune_old_images() {
+  # $1 hedef surum, $2 onceki surum, $3 registry oneki.
+  #
+  # BIR ONCEKI SURUM KORUNUR: `sudo bash update.sh --version <eski>` ile geri
+  # donus internet olmadan da calissin. Iki surum geriye donmek isteyen
+  # operator imaji yeniden indirmek zorunda kalir — bilincli takas.
+  local keep_new="${1//./\\.}" keep_prev="${2//./\\.}" reg="${3//./\\.}"
+  local silinecek
+  # `docker rmi` (`-f` DEGIL): kullanimda olan bir imaj yanlislikla silinemez.
+  # Solar ayni host'ta yan yana kosabiliyor; onun namespace'ine DOKUNULMAZ
+  # (ayni kural uninstall.sh'de de belgeli).
+  silinecek=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+    | grep -E "^(${reg}/|e1-grid/|e1/)" \
+    | grep -vE '(^|/)enerjione-solar/|^e1-solar/' \
+    | grep -vE ":(${keep_new}|${keep_prev}|latest)$" \
+    | grep -v ':<none>$' || true)
+  if [[ -n "$silinecek" ]]; then
+    echo "$silinecek" | while read -r _img; do
+      [[ -n "$_img" ]] && docker rmi "$_img" >/dev/null 2>&1 || true
+    done
+  fi
+  # Dangling layer'lar (yeni imaj cekildiginde eskisinin etiketi dusenler).
+  docker image prune -f >/dev/null 2>&1 || true
+}
+# <<< E1_IMAGE_PRUNE_END
+
+e1_info "Eski Docker imajlari temizleniyor..."
+# Registry .env'den okunur: operator ozel bir registry kullaniyorsa imajlarin
+# repository oneki de odur. Betik icindeki degiskene guvenilmez — .env'i
+# `source` eden kod yolu kosullu (NATS render blogu).
+_REG="$(e1_env_get E1_REGISTRY .env)"
+e1_prune_old_images \
+  "$(e1_version "$SCRIPT_DIR")" \
+  "${PREV_VERSION}" \
+  "${_REG:-$E1_REGISTRY_DEFAULT}"
+e1_ok "Imaj temizligi tamam."
 
 e1_step_done
 

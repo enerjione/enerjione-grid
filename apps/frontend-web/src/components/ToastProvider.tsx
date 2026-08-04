@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import type { ToastPosition } from "../shared/types";
+import { useProjectSettings } from "./ProjectSettingsProvider";
+
 export type ToastKind = "success" | "error" | "info" | "warning";
 
 type ToastItem = {
@@ -13,13 +16,21 @@ type ToastItem = {
   actionLabel?: string;
 };
 
-type ShowOptions = {
+export type ShowOptions = {
   title?: string;
   durationMs?: number;
   /** Verilirse toast tiklanabilir olur; tiklaninca calisir ve toast kapanir. */
   onAction?: () => void;
   /** Tiklanabilir toast'un alt satirinda gorunen CTA metni. */
   actionLabel?: string;
+  /** KENDILIGINDEN gelen bildirim (kullanicinin bir eylemine cevap DEGIL),
+   *  or. "2 yeni alarm olustu". Yalnizca bunlar proje ayarindan
+   *  susturulabilir.
+   *
+   *  Bayrak YOKSA toast HER ZAMAN gosterilir — kasitli olarak guvenli taraf:
+   *  bir cagriyi isaretlemeyi unutmak "sessizce kayboldu" degil
+   *  "susturulamadi" ile sonuclanir. */
+  spontaneous?: boolean;
 };
 
 type ToastApi = {
@@ -52,9 +63,53 @@ const KIND_ICON: Record<ToastKind, string> = {
 
 let toastIdCounter = 1;
 
+/** Ayar bos/bozuk gelirse mevcut davranis: sag-alt. */
+export const DEFAULT_TOAST_POSITION: ToastPosition = "bottom-right";
+
+/** Uretilebilecek TUM konumlar. Her deger icin `styles.css`'te
+ *  `.toast-container--<deger>` kurali BULUNMAK ZORUNDA (testle dogrulanir). */
+export const TOAST_POSITIONS: readonly ToastPosition[] = [
+  "bottom-right",
+  "bottom-left",
+  "top-right",
+  "top-left"
+];
+
+/** Proje ayarindan gelen konumu guvenli bir degere indirger.
+ *  Taninmayan deger CSS'te karsiligi olmayan bir sinif uretir ve toast
+ *  ekranin disinda kalabilirdi; bu yuzden bilinmeyen -> varsayilan. */
+export function toastPosition(value: string | null | undefined): ToastPosition {
+  return (TOAST_POSITIONS as readonly string[]).includes(value ?? "")
+    ? (value as ToastPosition)
+    : DEFAULT_TOAST_POSITION;
+}
+
+/** Susturma YALNIZCA kendiliginden gelen bildirimlere uygulanir.
+ *
+ * Kullanicinin kendi eyleminin sonucu olan toast (kaydedildi / kaydedilemedi /
+ * yetki hatasi / dogrulama hatasi) susturulamaz: susturulsaydi operator
+ * "Kaydet"e basip hata aldigini HIC ogrenemezdi ve bu sessiz veri kaybi gibi
+ * davranirdi. Kendiliginden gelen alarm bildirimi susturulunca bilgi
+ * kaybolmaz — alarm bildirim caninda, Alarmlar sayfasinda ve
+ * e-posta/SMS/Telegram/push kanallarinda durmaya devam eder. */
+export function toastMuted(options: ShowOptions | undefined, muted: boolean): boolean {
+  return muted && options?.spontaneous === true;
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const timersRef = useRef<Map<number, number>>(new Map());
+  // Kurulum geneli ayar (kullanici basina tercih DEGIL): bir INSTALLER
+  // degistirince herkes icin degisir. Yayilim ProjectSettingsProvider'in
+  // fetch'ine bagli — degistiren kisi aninda, digerleri bir sonraki sayfa
+  // yuklemesinde gorur.
+  const { settings } = useProjectSettings();
+  const position = toastPosition(settings.toast_position);
+  // Ref: `show`in kimligi susturma degisince degismesin. `show` -> `api`
+  // -> App.tsx'teki poll callback'lerinin bagimliligi; kimlik degisimi
+  // gereksiz yere abonelikleri yeniden kurardi.
+  const mutedRef = useRef(false);
+  mutedRef.current = settings.toast_muted === true;
 
   const dismiss = useCallback((id: number) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -68,6 +123,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback(
     (kind: ToastKind, message: string, options?: ShowOptions) => {
       if (!message) return;
+      // Susturma: timer bile kurulmadan cikilir. Yalnizca kendiliginden
+      // gelenler icin — kullanici eyleminin sonucu her zaman gosterilir.
+      if (toastMuted(options, mutedRef.current)) return;
       const base = options?.durationMs ?? DEFAULT_DURATIONS[kind];
       const duration = options?.onAction ? Math.max(base, ACTION_MIN_DURATION_MS) : base;
       const id = toastIdCounter++;
@@ -119,7 +177,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="toast-container" role="status" aria-live="polite">
+      <div
+        className={`toast-container toast-container--${position}`}
+        role="status"
+        aria-live="polite"
+      >
         {items.map((item) => {
           const actionable = Boolean(item.onAction);
           // Aksiyonlu toast tum kart uzerinden tiklanir (buyuk hedef alani);

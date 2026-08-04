@@ -10,6 +10,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+// Toast susturma/konum davranis testleri (kendi dosyasinda; kosucu tek giris
+// noktasi derledigi icin buradan iceri aliniyor).
+import "./toast.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   DEFAULT_STALE_AFTER_MS,

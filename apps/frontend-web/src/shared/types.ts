@@ -565,6 +565,13 @@ export type LineDetail = {
   segments: LineSegment[];
 };
 
+/** Toast bildiriminin ekrandaki kosesi.
+ *
+ * Degerler backend `schemas/project_settings.py` ToastPosition ve
+ * `styles.css` `.toast-container--<deger>` sinifi ile BIREBIR ayni metindir —
+ * uc yerde birlikte degistirilmeli. */
+export type ToastPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
+
 export type ProjectSettings = {
   project_name?: string | null;
   customer_name?: string | null;
@@ -581,6 +588,12 @@ export type ProjectSettings = {
   favicon?: string | null;
   /** Login ekraninin sag tarafindaki dekoratif gorsel (data URL). */
   login_image?: string | null;
+  /** Toast bildirimlerinin kosesi. null/tanimsiz -> "bottom-right" (mevcut davranis). */
+  toast_position?: ToastPosition | null;
+  /** Kendiliginden gelen (alarm) bildirimleri sustur. null/false -> gorunur.
+   *  Kullanici eyleminin sonucu olan toast'lar (kaydedildi/hata) HER ZAMAN
+   *  gosterilir; bu bayrak onlari ETKILEMEZ. */
+  toast_muted?: boolean | null;
 };
 
 export type NotificationSettings = {

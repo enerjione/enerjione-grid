@@ -10,7 +10,7 @@ Buyuk dosya beklemiyoruz (max ~500 KB); sutun tipi TEXT, sinirsiz.
 
 from __future__ import annotations
 
-from sqlalchemy import Float, Integer, String, Text
+from sqlalchemy import Boolean, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -39,3 +39,21 @@ class ProjectSettings(Base):
     # Login ekraninda sag taraftaki dekoratif gorsel (data URL). NULL ise
     # default goruntu (varsa) veya bos kullanilir.
     login_image: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Toast bildirimlerinin ekrandaki kosesi: "bottom-right" (VARSAYILAN,
+    # mevcut davranis), "bottom-left", "top-right", "top-left". NULL veya
+    # taninmayan deger -> "bottom-right". Kurulum geneli tercih; kullanici
+    # basina degil (bir kullanici degistirince herkeste degisir).
+    toast_position: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Kendiliginden gelen (alarm) toast bildirimlerini sustur. NULL/False ise
+    # bildirimler gorunur — mevcut davranis, guncelleyen sahada hicbir sey
+    # degismez.
+    #
+    # KAPSAM: yalnizca KENDILIGINDEN gelen bildirimler susturulur. Kullanicinin
+    # kendi eyleminin sonucu olan toast'lar (kaydedildi / kaydedilemedi / yetki
+    # hatasi) HER ZAMAN gosterilir; aksi halde operator "Kaydet"e basip hata
+    # aldigini hic ogrenemez ve bu sessiz veri kaybi gibi davranir.
+    #
+    # Susturma bilgi KAYBETTIRMEZ: alarmlar bildirim canindan, Alarmlar
+    # sayfasindan ve e-posta/SMS/Telegram/push kanallarindan erisilebilir
+    # kalir; bu ayar yalnizca tarayicidaki gecici baloncugu etkiler.
+    toast_muted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

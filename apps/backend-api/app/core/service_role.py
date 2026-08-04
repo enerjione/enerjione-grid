@@ -2,9 +2,11 @@
 
 NEDEN VAR
 ---------
-Backend sureci HTTP servisinin yaninda 12 arka plan isi de calistiriyor:
+Backend sureci HTTP servisinin yaninda bir dizi arka plan isi de calistiriyor:
 telemetri tuketicisi, outbox flush, MQTT yayini, toplu bildirim zamanlayici,
 retention, alarm mutabakati, yedekleme... Bunlarin TAMAMI tekil olmali.
+Kayitli isler `leader.status()["jobs"]` ile (yani `/health` govdesinde)
+gorulur; sayiyi burada tekrar yazmak dokuman kaymasi uretiyordu.
 
 Tek uvicorn worker ile bu kendiliginden saglaniyordu. Olcek buyudukce
 (600 cihaz) iki sey gerekiyor:
@@ -123,6 +125,35 @@ class BackgroundLeader:
         """Bir arka plan isini kaydet. Sira KORUNUR (baslatma sirasi onemli)."""
         self._jobs.append((name, start, stop))
 
+    def claim(self) -> bool:
+        """Liderligi ISLERI BASLATMADAN talep et.
+
+        NEDEN AYRI BIR METOD
+        --------------------
+        IEC 104 sunuculari TCP portu baglar, yani kumede TEK surecte
+        acilmalidir. Ama acilislari `start_background_jobs`tan ONCEKI bir
+        FastAPI startup event'inde olmak zorunda: `deploy_all_active_targets`
+        calisan bir asyncio loop'u ister ve o loop yalnizca async startup
+        event'inde elde edilir.
+
+        O noktada `is_leader` HENUZ False oldugu icin duz bir liderlik
+        kontrolu HER ZAMAN False dondururdu ve IEC 104 HIC acilmazdi. Bu
+        metod kilidi erkenden alir; `try_start` daha sonra ayni kilidi
+        TEKRAR almaya calismaz (bkz. `_acquire` icindeki koruma).
+
+        Yalnizca role bakmak (eski davranis) yetmiyordu: rol `all` iken
+        `wants_background()` HER uvicorn worker'inda True'dur, yani
+        `--workers 4` ile dort surec de ayni porta bind denerdi.
+        """
+        if not wants_background():
+            return False
+        with self._lock:
+            if self._stopping:
+                return False
+            if self._started:
+                return True
+            return self._acquire()
+
     def try_start(self) -> bool:
         """Kilidi almayi dene; alirsa isleri baslat. Alinamadiysa yeniden dener."""
         if not wants_background():
@@ -181,6 +212,15 @@ class BackgroundLeader:
 
     def _acquire(self) -> bool:
         from app.db.session import engine
+
+        if self._conn is not None:
+            # Kilit BU SURECTE zaten tutuluyor (`claim()` erkenden almis
+            # olabilir). Ikinci bir baglantidan `pg_try_advisory_lock`
+            # cagirmak KENDI kilidimize takilir ve False donerdi: `try_start`
+            # "baska surec lider" deyip hicbir isi acmaz, 15sn'de bir sonsuza
+            # kadar yeniden dener. Yani IEC 104 acilan surecte arka plan
+            # isleri HIC baslamazdi.
+            return True
 
         try:
             conn = engine.connect()

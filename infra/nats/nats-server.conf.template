@@ -26,7 +26,7 @@ jetstream {
     #
     # Eskiden buradaki yorum "disk'in %95'i dolarsa" diyordu; bu YANLISTI ve
     # yanlis guven veriyordu: bu deger diskin ne kadar dolu oldugundan
-    # tamamen bagimsiz mutlak bir tavandir. Diskte 50GB bos alan yoksa NATS
+    # tamamen bagimsiz mutlak bir tavandir. Tavan kadar bos alan yoksa NATS
     # kendi tavanina ULASMADAN once HOST DISKINI doldurur (nats-data ve
     # postgres-data ayni dosya sisteminde -> Postgres de duser).
     #
@@ -34,12 +34,20 @@ jetstream {
     # telemetri akisi durur. Bu yuzden asil sinir burasi DEGIL, stream basina
     # `max_bytes` + `discard=old` olmali (bkz. config.py nats_stream_*_max_bytes
     # ve services/jetstream_bus.py). Backend bunlari her boot'ta idempotent
-    # uygular; toplam 12 GiB (raw 8 + normalized 3 + dlq 1).
+    # uygular; toplam 10 GiB (raw 6 + normalized 3 + dlq 1).
     #
-    # Buradaki 50GB o 12 GiB'in USTUNDE bir emniyet subabidir: normal
-    # sartlarda ASLA devreye girmez. Stream tavanlarini buyutursen bunu da
-    # buyutmen gerekir; kucultursen once bu carpar ve sert red geri gelir.
-    max_file_store: 50GB
+    # 50GB -> 12GB. Eski deger bir emniyet subabi DEGILDI: saha cihazinda o
+    # kadar bos alan hicbir zaman olmadigi icin NATS kendi tavanina ULASMADAN
+    # once host diskini doldururdu — yani subap hic calismazdi. Emniyet
+    # subabinin ise yaramasi icin iki sarti birden saglamasi gerekir:
+    #   (1) stream tavanlari toplaminin USTUNDE  -> 12e9 > 10 GiB (10,74e9)
+    #   (2) cihazin bos diskinin ALTINDA         -> 12 GB her sahada gecerli
+    # Stream tavanlarini buyutursen bunu da buyutmen gerekir; kucultursen once
+    # bu carpar ve sert red geri gelir.
+    #
+    # NOT: NATS'ta 'GB' = 10^9 (GiB degil). tests/test_config_consistency.py
+    # karsilastirmayi bu birimle yapiyor.
+    max_file_store: 12GB
     max_memory_store: 1GB
 }
 

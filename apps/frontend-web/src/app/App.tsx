@@ -927,22 +927,45 @@ export function App() {
       const deviceName = (id: number) => devices.find((d) => d.id === id)?.name ?? `#${id}`;
       // Alarm toast'i tiklanabilir: dogrudan Alarmlar sekmesini acar. Operator
       // bildirimi gorup ne yapacagini aramak zorunda kalmasin.
+      // `spontaneous`: bu bildirim kullanicinin bir eylemine cevap DEGIL,
+      // kendiliginden geliyor. Proje ayarindan susturulabilen TEK toast
+      // sinifi budur. Susturulsa bile alarm kaybolmaz — bildirim caninda,
+      // Alarmlar sayfasinda ve e-posta/SMS/Telegram/push kanallarinda kalir.
+      //
+      // KRITIK/ERROR SEVIYESI SUSTURMAYI DELER (`spontaneous` verilmez).
+      // Susturma KURULUM GENELI: bir kisinin "cok rahatsiz ediyor" diye
+      // actigi ayar, bundan haberi olmayan kontrol odasi operatorunun
+      // ekranindan da kritik ariza bildirimini kaldirirdi. Can sikan hacim
+      // info/warning kuyrugundan geliyor; kritigi de susturmak bu urunun
+      // varlik sebebini (arizayi hizla one cikarmak) iptal eder. Zil rozeti
+      // 30 sn'de bir guncellenen kucuk bir sayidir, kritik icin yeterli
+      // degildir.
       const alarmAction = {
         onAction: () => openTab({ kind: "page", page: "alarms" }),
         actionLabel: t("toasts.goToAlarms")
       };
+      // Susturulabilir varyant — yalnizca info/warning icin.
+      const susturulabilir = { ...alarmAction, spontaneous: true };
       if (fresh.length === 1) {
         const a = fresh[0];
         const lvl = a.level.toLowerCase();
-        const opts = { title: `${a.title} · ${deviceName(a.device_id)}`, ...alarmAction };
-        if (lvl === "critical" || lvl === "error") toast.error(a.description || a.title, opts);
+        const kritik = lvl === "critical" || lvl === "error";
+        const opts = {
+          title: `${a.title} · ${deviceName(a.device_id)}`,
+          ...(kritik ? alarmAction : susturulabilir)
+        };
+        if (kritik) toast.error(a.description || a.title, opts);
         else if (lvl === "warning") toast.warning(a.description || a.title, opts);
         else toast.info(a.description || a.title, opts);
       } else {
-        // Coklu: tek ozet toast (en yuksek seviyeye gore renk).
+        // Coklu: tek ozet toast (en yuksek seviyeye gore renk). Paketin
+        // icinde bir kritik varsa ozet de susturulamaz.
         const hasCritical = fresh.some((a) => ["critical", "error"].includes(a.level.toLowerCase()));
         const body = t("toasts.newAlarmsBody", { count: fresh.length });
-        const opts = { title: t("toasts.newAlarmsTitle"), ...alarmAction };
+        const opts = {
+          title: t("toasts.newAlarmsTitle"),
+          ...(hasCritical ? alarmAction : susturulabilir)
+        };
         if (hasCritical) toast.error(body, opts);
         else toast.warning(body, opts);
       }

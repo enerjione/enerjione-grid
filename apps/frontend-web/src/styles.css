@@ -952,6 +952,26 @@ body {
   color: #0f172a;
 }
 
+/* Susturma acikken zil listesinin basinda duran aciklama — operator neden
+   baloncuk gormedigini ve nereden geri alacagini buradan ogrenir. */
+.notif-muted-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  color: #78350f;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.notif-muted-note .material-symbols-outlined {
+  font-size: 16px;
+  flex-shrink: 0;
+  color: #b45309;
+}
+
 .notif-mark-all {
   background: none;
   border: none;
@@ -11765,13 +11785,136 @@ th.event-col-category {
   font-size: 13px;
 }
 
+/* Bildirim baloncugu (toast) ayarlari — batarya kutusuyla ayni yapi,
+   ayirt edici mavi vurgu. */
+.project-settings-toast-box {
+  background: linear-gradient(135deg, #f5f9ff, #ffffff);
+  border: 1px solid #d5e3f7;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.project-settings-toast-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.project-settings-toast-icon {
+  font-size: 32px;
+  color: #2563eb;
+  flex-shrink: 0;
+  background: #eaf1fe;
+  border-radius: 10px;
+  padding: 6px;
+}
+.project-settings-toast-head h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 600;
+}
+.project-settings-toast-head .helper-text {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.project-settings-toast-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 4px;
+  align-items: start;
+}
+.project-settings-toast-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+}
+.project-settings-toast-label {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: #475569;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.project-settings-toast-field select {
+  padding: 11px 14px;
+  border: 1px solid #d5e3f7;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #ffffff;
+}
+.project-settings-toast-field select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.project-settings-toast-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #d5e3f7;
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.project-settings-toast-check input {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+.project-settings-toast-check strong {
+  display: block;
+  font-size: 13px;
+  color: #0f172a;
+}
+.project-settings-toast-check small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.4;
+}
+/* Susturmanin NEYI kapsamadigi ekranda yazili dursun — kullanici "her sey
+   susar" sanip kaydet hatalarini kacirmasin. */
+.project-settings-toast-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #475569;
+  background: #eff6ff;
+  border-left: 3px solid #2563eb;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 12px;
+}
+.project-settings-toast-note .material-symbols-outlined {
+  font-size: 16px;
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
 @media (max-width: 1200px) {
   .project-settings-logo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-settings-panel { overflow-y: auto; }
 }
 @media (max-width: 768px) {
   .project-settings-field,
-  .project-settings-logo-grid {
+  .project-settings-logo-grid,
+  .project-settings-toast-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -18481,9 +18624,86 @@ th.event-col-category {
   50% { box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22), 0 0 0 8px rgba(239, 68, 68, 0); }
 }
 
+/* ----------------------------------------------------------
+   Toast konumu — proje ayarindan (ProjectSettings.toast_position).
+   Sinif adlari backend Literal degerleriyle BIREBIR aynidir:
+   bottom-right (VARSAYILAN) / bottom-left / top-right / top-left.
+
+   Her varyant IKI EKSENIN IKISINI DE sifirlar (top+bottom, left+right).
+   Taban `.toast-container` alt-sag verdigi icin tek eksen yazmak
+   yetmez — digeri sizar ve toast iki kosede birden konumlanir.
+   ---------------------------------------------------------- */
+.toast-container--bottom-right {
+  top: auto;
+  bottom: 28px;
+  left: auto;
+  right: 28px;
+}
+.toast-container--bottom-left {
+  top: auto;
+  bottom: 28px;
+  right: auto;
+  left: 28px;
+}
+/* Ust varyantlarda `top: 28px` DEGIL: header 68px + sekme cubugu ~40px
+   yer kapliyor ve toast'in z-index'i (10000) ikisinin de ustunde; 28px
+   verilirse toast header'i ve acik bildirim canini orter. */
+.toast-container--top-right {
+  bottom: auto;
+  top: 120px;
+  left: auto;
+  right: 28px;
+}
+.toast-container--top-left {
+  bottom: auto;
+  top: 120px;
+  right: auto;
+  left: 28px;
+}
+/* Ustte yigilirken en yeni toast koseye yakin kalsin (alt varyantlardaki
+   hisle tutarli). Okuma sirasi DOM'a bagli oldugu icin aria-live etkilenmez. */
+.toast-container--top-right,
+.toast-container--top-left {
+  flex-direction: column-reverse;
+}
+
+/* Giris animasyonu konuma gore ters yonden gelmeli; aksi halde ustteki
+   toast asagidan yukari kayar ve "kayboluyor" gibi okunur. */
+@keyframes toast-slide-in-top {
+  from {
+    transform: translateY(-14px) scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.toast-container--top-right .toast,
+.toast-container--top-left .toast {
+  animation-name: toast-slide-in-top;
+}
+
+/* Alarm toast'i (`.toast-error.toast--actionable`) `animation` KISAYOLU ile
+   IKI animasyon tanimliyor. Yukaridaki tekil `animation-name` ezmesi onunla
+   AYNI oncelikte (0,2,0) ve kisayol iki adi birden tuttugu icin nabzi
+   dusururdu. Bu yuzden ust varyantlarda kompozit kural yeniden yazilir. */
+.toast-container--top-right .toast-error.toast--actionable,
+.toast-container--top-left .toast-error.toast--actionable {
+  animation: toast-slide-in-top 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    toast-attention 1.1s ease-out 0.26s 2;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  /* Konum varyantlari daha yuksek oncelikli seciciler kullaniyor; hareket
+     azaltma tercihi yine de KAZANMALI — bu yuzden hepsi burada listeli. */
   .toast,
-  .toast-error.toast--actionable {
+  .toast-error.toast--actionable,
+  .toast-container--top-right .toast,
+  .toast-container--top-left .toast,
+  .toast-container--top-right .toast-error.toast--actionable,
+  .toast-container--top-left .toast-error.toast--actionable {
     animation: none;
   }
   .toast-progress {

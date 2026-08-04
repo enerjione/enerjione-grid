@@ -8,8 +8,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
-import { useToast } from "../../components/ToastProvider";
-import type { ProjectSettings } from "../../shared/types";
+import { DEFAULT_TOAST_POSITION, toastPosition, useToast } from "../../components/ToastProvider";
+import type { ProjectSettings, ToastPosition } from "../../shared/types";
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB (logo, favicon)
 const MAX_LOGIN_IMAGE_SIZE = 2_500_000; // 2.5 MB (login dekoratif gorsel daha buyuk olabilir)
@@ -45,6 +45,10 @@ export function ProjectSettingsPanel({ onSave }: Props) {
   const [siteTitle, setSiteTitle] = useState("");
   const [favicon, setFavicon] = useState<string | null>(null);
   const [loginImage, setLoginImage] = useState<string | null>(null);
+  // Toast tercihleri KURULUM GENELI (kullanici basina degil): burada
+  // degistirilen deger herkes icin gecerlidir.
+  const [toastPos, setToastPos] = useState<ToastPosition>(DEFAULT_TOAST_POSITION);
+  const [toastMuted, setToastMuted] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -65,6 +69,10 @@ export function ProjectSettingsPanel({ onSave }: Props) {
     setSiteTitle(settings.site_title ?? "");
     setFavicon(settings.favicon ?? null);
     setLoginImage(settings.login_image ?? null);
+    // Normalizasyon ToastProvider ile AYNI fonksiyondan gecer; boylece panel
+    // ile gercek davranis ayrisamaz (null/bozuk deger -> sag-alt).
+    setToastPos(toastPosition(settings.toast_position));
+    setToastMuted(settings.toast_muted === true);
   }, [settings]);
 
   const handlePickLogo = async (
@@ -114,7 +122,9 @@ export function ProjectSettingsPanel({ onSave }: Props) {
         battery_voltage_full: fullNum,
         site_title: siteTitle.trim() || null,
         favicon: favicon,
-        login_image: loginImage
+        login_image: loginImage,
+        toast_position: toastPos,
+        toast_muted: toastMuted
       });
       await refresh();
       toast.success(t("engineering.projectSettings.saveSuccess"));
@@ -254,6 +264,57 @@ export function ProjectSettingsPanel({ onSave }: Props) {
             </label>
           </div>
           </div>
+
+        <div className="project-settings-toast-box">
+          <div className="project-settings-toast-head">
+            <span className="project-settings-toast-icon material-symbols-outlined" aria-hidden="true">
+              notifications
+            </span>
+            <div>
+              <h4>{t("engineering.projectSettings.toastTitle")}</h4>
+              <p className="helper-text">{t("engineering.projectSettings.toastHint")}</p>
+            </div>
+          </div>
+          <div className="project-settings-toast-grid">
+            <label className="project-settings-toast-field">
+              <span className="project-settings-toast-label">
+                {t("engineering.projectSettings.toastPosition")}
+              </span>
+              <select
+                value={toastPos}
+                onChange={(event) => setToastPos(event.target.value as ToastPosition)}
+              >
+                <option value="bottom-right">
+                  {t("engineering.projectSettings.toastPositionBottomRight")}
+                </option>
+                <option value="bottom-left">
+                  {t("engineering.projectSettings.toastPositionBottomLeft")}
+                </option>
+                <option value="top-right">
+                  {t("engineering.projectSettings.toastPositionTopRight")}
+                </option>
+                <option value="top-left">
+                  {t("engineering.projectSettings.toastPositionTopLeft")}
+                </option>
+              </select>
+            </label>
+            <label className="project-settings-toast-check">
+              <input
+                type="checkbox"
+                checked={toastMuted}
+                onChange={(event) => setToastMuted(event.target.checked)}
+              />
+              <span>
+                <strong>{t("engineering.projectSettings.toastMute")}</strong>
+                <small>{t("engineering.projectSettings.toastMuteHint")}</small>
+              </span>
+            </label>
+          </div>
+          <p className="project-settings-toast-note">
+            <span className="material-symbols-outlined" aria-hidden="true">info</span>
+            {t("engineering.projectSettings.toastScopeNote")}
+          </p>
+        </div>
         </div>
       </div>
 

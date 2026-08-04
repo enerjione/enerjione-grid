@@ -5,7 +5,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 from app.db.base import Base
 from app.db.session import engine
@@ -43,8 +43,68 @@ from app.models import (  # noqa: F401
 
 log = logging.getLogger(__name__)
 
+# Migration icin AYRI bir advisory lock anahtari.
+# `service_role._BACKGROUND_LOCK_KEY` ile ayni OLMAMALI: o kilit surec omru
+# boyunca tutulur, bu ise yalnizca migration suresince. Ayni anahtari
+# paylassalardi migration biter bitmez liderlik de dusmus olurdu.
+_MIGRATION_LOCK_KEY = 0x0E1_6D_1167
+
+# Kilidi beklerken ust sinir. Sinirsiz beklemek container'i "starting"
+# durumunda SESSIZCE asardi: healthcheck henuz baslamadigi icin dusmez,
+# hicbir hata gorunmez, kimse sebebini bilmez.
+_MIGRATION_LOCK_WAIT_SEC = 600
+
 
 def migrate() -> None:
+    """Semayi head'e tasir — kumede TEK SUREC, digerleri bekler.
+
+    NEDEN KILIT: `backend-api` ve `backend-worker` AYNI imaji ve AYNI
+    komutu (`python -m scripts.migrate_db && exec uvicorn ...`) kullanir ve
+    ikisi de `postgres: service_healthy` kosuluyla ES ZAMANLI acilir. Iki
+    surec ayni anda `upgrade head` kosarsa ayni revizyon iki kez oynatilir:
+
+        psycopg2.errors.DuplicateColumn: column ... already exists
+
+    Container cikar, `restart: unless-stopped` ile donguye girer. Genelde
+    kendini toparlar ama uzun bir migration'da gorunur kesinti ve teshisi
+    cok zor bir hata olur.
+
+    `pg_try_advisory_lock` DEGIL `pg_advisory_lock`: ikinci surec ATLAMAMALI,
+    BEKLEMELI. Atlarsa uvicorn'u eski semayla acar ve ilk sorguda patlar.
+
+    KILIT ALINAMAZSA PATLAR (yutulmaz): tek sebebi onceki migration'in
+    asili kalmasidir ve o durumda kilitsiz devam etmek tam da onlemek
+    istedigimiz es zamanli upgrade'i yapardi. Container cikar, sebep log'da
+    goruntur — sessizce yanlis semayla acilmaktan iyidir.
+    """
+    if engine.dialect.name != "postgresql":
+        # SQLite (testler/gelistirme): advisory lock yok, es zamanli ikinci
+        # surec de yok. Kilitsiz kosmak dogru davranis.
+        log.debug("advisory lock desteklenmeyen backend — migration kilitsiz kosuyor")
+        _migrate_locked()
+        return
+
+    # AUTOCOMMIT: kilidi tutan baglanti migration boyunca "idle in
+    # transaction" kalmamali — o durumda VACUUM ilerleyemez ve uzun bir
+    # migration sirasinda tablo sismesi hizlanir.
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as lock_conn:
+        # lock_timeout SADECE bu baglantiyi baglar; alembic kendi
+        # baglantilarinda kosar ve bundan etkilenmez.
+        lock_conn.execute(text(f"SET lock_timeout = '{_MIGRATION_LOCK_WAIT_SEC}s'"))
+        lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _MIGRATION_LOCK_KEY})
+        try:
+            _migrate_locked()
+        finally:
+            try:
+                lock_conn.execute(
+                    text("SELECT pg_advisory_unlock(:k)"), {"k": _MIGRATION_LOCK_KEY}
+                )
+            except Exception:  # noqa: BLE001
+                # Baglanti nasil olsa kapaniyor; session-level kilit onunla duser.
+                log.debug("migration advisory unlock basarisiz", exc_info=True)
+
+
+def _migrate_locked() -> None:
     root = Path(__file__).resolve().parents[1]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic_migrations"))

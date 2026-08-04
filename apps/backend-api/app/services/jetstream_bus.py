@@ -487,9 +487,33 @@ class JetStreamBus:
                 )
             raise
 
-        sonuc: list[Exception | None] = [
-            r if isinstance(r, Exception) else None for r in ham
-        ]
+        # `isinstance(r, Exception)` TEK BASINA YETMEZ — SESSIZ KAYIP KAPISI.
+        #
+        # `gather(return_exceptions=True)` iptal edilen bir cocuk gorevi
+        # `CancelledError` NESNESI olarak sonuc listesine koyar ve o sinif
+        # `BaseException`dan turer, `Exception`dan DEGIL. Yalnizca `Exception`
+        # arayan bir esleme onu None'a — yani BASARILI'ya — cevirir.
+        # `flush_outbox` o satiri published=True yapar, retention birkac
+        # dakika sonra siler ve mesaj JetStream'e HIC gitmemis olur: alarm
+        # uretilmez, SCADA'ya gitmez, geri alinamaz. Bagli NATS oturumu
+        # yayin ucarken kapanirsa (broker restart, `update.sh nats`, ag
+        # kesintisi) bekleyen ack gorevleri tam olarak boyle iptal olur.
+        #
+        # Neden dogrudan `BaseException` DONDURMUYORUZ: `flush_outbox` tumu
+        # basarisizsa ilk hatayi RAISE eder ve `outbox_flush_worker._run`
+        # yalnizca `except Exception` yakalar. Ciplak bir `CancelledError`
+        # yayin thread'ini OLDURURDU (daemon thread, gozetimsiz) — outbox
+        # tamamen susardi. Bu yuzden gercek bir `Exception`a sariliyor.
+        sonuc: list[Exception | None] = []
+        for r in ham:
+            if isinstance(r, Exception):
+                sonuc.append(r)
+            elif isinstance(r, BaseException):
+                sonuc.append(
+                    RuntimeError(f"jetstream publish yarida kesildi: {type(r).__name__}")
+                )
+            else:
+                sonuc.append(None)
         basarisiz = sum(1 for r in sonuc if r is not None)
         if basarisiz:
             self._publish_failures += 1
