@@ -314,3 +314,43 @@ def test_link_durumu_DEGISMEYENI_yazmiyor():
     """Her turda ayni degeri yazmak, 600 cihazda gereksiz UPDATE yagmuru."""
     kod = _kod(inspect.getsource(wd.apply_link_states))
     assert "Device.communication_status != hedef" in kod
+
+
+# ---------------------------------------------------------------------------
+# Sayi bazli guvenli cikarim (2026-08-04): cihaz haritasi basliga sigmiyorsa
+# (400+ cihaz) gateway yalnizca SAYILARI gonderir. "Tum cihazlar koptu"
+# derken cihazlarin ONLINE kalmasi sahada iki kez yasandi (kuyruk purge/tikali
+# iken comm_lost event'leri kayboldu). Bu cikarim telemetri kuyrugundan
+# BAGIMSIZ calisir.
+# ---------------------------------------------------------------------------
+
+def test_sayi_bazli_cikarim_TUM_kopmada_offline_yapiyor():
+    import inspect
+
+    from app.services import gateway_staleness_watchdog as wd
+
+    kod = inspect.getsource(wd.apply_link_states)
+    # Harita yokken sayilara bakilir; yalnizca "hepsi koptu" durumunda ve
+    # yalnizca ONLINE olanlar OFFLINE'a cekilir.
+    assert "devices_lost" in kod and "devices_online" in kod, (
+        "sayi bazli cikarim kaldirilmis — kuyruk purge'unda cihazlar ONLINE "
+        "takili kalir (sahada yasandi)"
+    )
+    assert "kayip > 0 and online == 0" in kod, (
+        "cikarim yalnizca TUM kopmada uygulanmali — kismi kopmada hangi "
+        "cihazin koptugu sayidan bilinemez"
+    )
+
+
+def test_filo_alarmi_VAR_OLMAYAN_kolona_bakmiyor():
+    """User.is_active diye bir kolon YOK; onceki surum her turda
+    AttributeError firlatiyordu ve filo alarmi hic calismadi."""
+    import inspect
+
+    from app.services import gateway_fleet_alarm as fa
+
+    kod = inspect.getsource(fa._hedef_kullanicilar)
+    assert "User.is_active" not in kod, (
+        "User.is_active referansi geri gelmis — model bu kolonu tasimiyor, "
+        "watchdog dongusu her turda patlar"
+    )

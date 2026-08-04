@@ -144,11 +144,13 @@ def _clear_marker(db, gateway_code: str) -> None:
 
 
 def _hedef_kullanicilar(db) -> list[str]:
+    # NOT: User modelinde is_active KOLONU YOK — onceki surum var olmayan
+    # alana bakip her turda AttributeError firlatiyordu ve filo alarmi HIC
+    # calismadi (sahada watchdog dongusunun loglari boyle doluyordu).
+    # Kullanici pasiflestirme kavrami gelirse filtre o zaman eklenir.
     roller = [r.value for r in TARGET_ROLES]
     return list(
-        db.scalars(
-            select(User.username).where(User.role.in_(roller), User.is_active.is_(True))
-        ).all()
+        db.scalars(select(User.username).where(User.role.in_(roller))).all()
     )
 
 

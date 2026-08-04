@@ -103,6 +103,36 @@ def apply_link_states(db) -> int:
     for satir in saglik:
         durumlar = device_link_states(getattr(satir, "raw_json", None))
         if not durumlar:
+            # SAYI BAZLI GUVENLI CIKARIM — cihaz haritasi yoksa (400+ cihazda
+            # harita HTTP basligina sigmiyor, gateway yalnizca SAYILARI
+            # gonderir) ve gateway "TUM cihazlar koptu" diyorsa
+            # (devices_online=0, devices_lost>0), o gateway'in cihazlarini
+            # OFFLINE'a cek. Bu, telemetri kuyrugundan BAGIMSIZ calisir:
+            # kuyruk tikali ya da purge edilmis olsa bile haberlesme durumu
+            # en gec bir tarama periyodunda gercege oturur (sahada iki kez
+            # yasandi: comm_lost event'leri kuyrukla birlikte kaybolunca
+            # cihazlar ONLINE takili kaldi). Kismi kopmada (bazilari online)
+            # hangi cihazin koptugunu sayidan bilemeyiz — o karar telemetri
+            # comm_lost event'lerinde kalir.
+            kayip = int(getattr(satir, "devices_lost", 0) or 0)
+            online = int(getattr(satir, "devices_online", 0) or 0)
+            if kayip > 0 and online == 0:
+                sonuc = db.execute(
+                    update(Device)
+                    .where(
+                        Device.gateway_code == satir.gateway_code,
+                        Device.communication_status == CommunicationStatus.ONLINE,
+                    )
+                    .values(communication_status=CommunicationStatus.OFFLINE)
+                )
+                n = int(getattr(sonuc, "rowcount", 0) or 0)
+                if n:
+                    degisen += n
+                    logger.warning(
+                        "gateway_tum_cihazlar_koptu gateway=%s offline_yapilan=%d "
+                        "(saglik kanali sayilarindan — telemetri kuyrugundan bagimsiz)",
+                        satir.gateway_code, n,
+                    )
             continue
         for kod, durum in durumlar.items():
             hedef = (

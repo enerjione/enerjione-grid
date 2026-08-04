@@ -14,6 +14,20 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.45.3] — 2026-08-04
+
+### Düzeltildi — haberleşme durumu telemetri kuyruğundan bağımsızlaştı
+
+- **Sağlık kanalından sayı-bazlı güvenli çıkarım**: gateway "tüm cihazlar
+  koptu" diyorsa (devices_online=0) cihazlar en geç bir tarama periyodunda
+  OFFLINE'a çekilir — telemetri kuyruğu tıkalı/purge edilmiş olsa bile.
+  (Sahada iki kez yaşandı: comm_lost olayları kuyrukla birlikte kaybolunca
+  cihazlar ONLINE takılı kalıyordu.)
+- **Filo alarmı hiç çalışmamıştı**: var olmayan User.is_active kolonuna
+  bakıp her turda hata fırlatıyordu; düzeltildi.
+
+---
+
 ## [2.45.2] — 2026-08-04
 
 ### Düzeltildi
