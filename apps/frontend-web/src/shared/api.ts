@@ -33,6 +33,8 @@
   ResponsibilityAreaDetail,
   ResponsibilityAreaRow,
   SignalCatalogRow,
+  SignalHistorianBulkPayload,
+  SignalHistorianBulkResult,
   SignalLiveRow,
   SystemEvent,
   UserRead,
@@ -1251,6 +1253,56 @@ export async function updateGatewayLocally(
   return (await response.json()) as { request_id: string; code: string };
 }
 
+/** Gateway yasam dongusu uclari (durdur / baslat / yeniden baslat).
+ *
+ *  Ucu de 202 doner: ajan istegi asenkron isler, sonuc
+ *  `fetchGatewayAgentStatus().last_apply` ile izlenir. Backend'e giden tek
+ *  serbest deger gateway KODUDUR — komut metni gonderilmez. */
+type YasamDongusuSonuc = { request_id: string; code: string };
+
+async function gatewayLifecycle(
+  token: string,
+  gatewayCode: string,
+  path: "local-stop" | "local-start" | "local-restart",
+  hataMesaji: string
+): Promise<YasamDongusuSonuc> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/${path}`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, hataMesaji);
+  return (await response.json()) as YasamDongusuSonuc;
+}
+
+/** Bu cihazdaki gateway container'ini DURDUR.
+ *
+ *  KALDIRMA DEGIL: container yerinde kalir, durumu `exited` olur — arayuz
+ *  "durduruldu" ile "kurulu degil"i boylece ayirt eder.
+ *  SONUC: bu gateway'e bagli cihazlardan telemetri gelmez. Cagiran taraf
+ *  kullaniciya SORMALI. */
+export async function stopGatewayLocally(
+  token: string,
+  gatewayCode: string
+): Promise<YasamDongusuSonuc> {
+  return gatewayLifecycle(token, gatewayCode, "local-stop", "Gateway durdurulamadı.");
+}
+
+/** Durdurulmus gateway container'ini yeniden baslat (imaj cekmeden). */
+export async function startGatewayLocally(
+  token: string,
+  gatewayCode: string
+): Promise<YasamDongusuSonuc> {
+  return gatewayLifecycle(token, gatewayCode, "local-start", "Gateway başlatılamadı.");
+}
+
+/** Gateway container'ini ayni imajla yeniden baslat — kisa kesinti. */
+export async function restartGatewayLocally(
+  token: string,
+  gatewayCode: string
+): Promise<YasamDongusuSonuc> {
+  return gatewayLifecycle(token, gatewayCode, "local-restart", "Gateway yeniden başlatılamadı.");
+}
+
 export async function fetchOutboundTargets(token: string): Promise<OutboundTarget[]> {
   const response = await apiFetch(`${API_BASE_URL}/outbound-targets`, {
     headers: authHeaders(token)
@@ -2248,6 +2300,25 @@ export async function updateSignal(
   });
   if (!response.ok) throw await buildApiError(response, "Sinyal güncellenemedi.");
   return (await response.json()) as SignalCatalogRow;
+}
+
+/** Filtreye gore secilmis sinyallerin arsiv ayarini TEK istekte degistirir.
+ *
+ *  193 sinyali tek tek PATCH etmek 193 istek ve 193 denetim kaydi demekti.
+ *  Backend ariza sinyallerini (binary / binary_output) `confirm_fault_signals`
+ *  olmadan arsivden CIKARMAZ — bu kapi arayuzde degil sunucuda.
+ */
+export async function updateSignalsHistorian(
+  token: string,
+  payload: SignalHistorianBulkPayload
+): Promise<SignalHistorianBulkResult> {
+  const response = await apiFetch(`${API_BASE_URL}/signals/historian/bulk`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arşiv ayarı güncellenemedi.");
+  return (await response.json()) as SignalHistorianBulkResult;
 }
 
 export async function deleteSignal(token: string, signalKey: string): Promise<void> {

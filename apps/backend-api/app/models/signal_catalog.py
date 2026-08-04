@@ -4,6 +4,22 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
+#: Olu bandin UST SINIRI (sinyalin kendi biriminde). Katalogdaki birimler
+#: A / mA / V / °C / ° / dBm / ms / min / sec; bunlarin hicbirinde bir
+#: MILYONLUK esik "suzgec" degildir, "hic arsivleme" demektir.
+#:
+#: NEDEN SINIR SART:
+#:   1. Sinirsiz esik, `historize=false`in SESSIZ ve GORUNMEZ halidir.
+#:      Arsivi kapatmak arayuzde "Kapali" rozeti, denetim kaydinda "warning"
+#:      uretir; 999'luk bir olu bant ise sinyali "Arsivleniyor" gosterirken
+#:      arsive HICBIR SEY yazmaz. Niyet buysa `historize=false` ile SOYLENMELI.
+#:   2. `ge=0.0` tek basina `Infinity`yi GECIRIR (`inf >= 0` dogrudur) ve
+#:      `json.loads` `Infinity` sabitini kabul eder. Deger Postgres'e yazilir,
+#:      sonra `GET /signals` yanitini uretemez (starlette `allow_nan=False`)
+#:      ve sinyal katalogu TUM kullanicilar icin 500 vermeye baslar.
+OLU_BANT_UST_SINIR = 1_000_000.0
+
+
 class SignalCatalog(Base):
     """Standart sinyal listesi.
 
@@ -70,7 +86,8 @@ class SignalCatalog(Base):
     #
     # DIKKAT: bu ayar veri COZUNURLUGUNU kalici olarak dusurur. Cok buyuk bir
     # deger, gecmise donuk incelemede arizanin oncesindeki egriyi silikleştirir.
-    # Bu yuzden varsayilan 0 — operator kendi sahasina gore acar.
+    # Bu yuzden varsayilan 0 — operator kendi sahasina gore acar ve ust sinir
+    # `OLU_BANT_UST_SINIR` ile kilitli (bkz. yukarisi).
     historize_deadband: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     supports_alarm: Mapped[bool] = mapped_column(Boolean, default=False)

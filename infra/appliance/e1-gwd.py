@@ -856,10 +856,18 @@ def render_compose(code: str, name: str, params: dict) -> str:
     return body
 
 
+#: Ajanin kabul ettigi TUM eylemler. Bu kume SABITTIR: backend bir komut
+#: METNI gonderemez, yalnizca buradaki adlardan birini secebilir. Her adin
+#: karsiligi bu dosyada yazili bir `_do_*` fonksiyonudur; docker'a giden
+#: argumanlar da orada sabit yazilidir (istekten gelen tek serbest deger
+#: gateway KODUDUR ve CODE_RE'den gecer).
+ALLOWED_ACTIONS = ("install", "remove", "restart", "start", "stop", "update")
+
+
 def _validate(request: dict) -> dict:
     """Istegi ajanin kendi kurallariyla dogrula. Hata -> ValueError."""
     action = str(request.get("action") or "").strip()
-    if action not in ("install", "remove", "restart", "update"):
+    if action not in ALLOWED_ACTIONS:
         raise ValueError(f"desteklenmeyen aksiyon: {action or '(bos)'}")
 
     code = str(request.get("code") or "").strip()
@@ -969,18 +977,111 @@ def _do_remove(req: dict, compose_cmd: list[str]) -> dict:
     return {"ok": True, "stage": "done", "message": "gateway kaldirildi", "detail": out}
 
 
-def _do_restart(req: dict, compose_cmd: list[str]) -> dict:
-    code = req["code"]
+def _hedef_container(code: str) -> str:
+    """Bu gateway'e ait container adi — ISTEKTEN DEGIL, koddan turetilir.
+
+    COMPOSE_TEMPLATE'teki `container_name` ile ayni ifade. Backend bir
+    container adi GONDEREMEZ; gonderse bile okunmaz. Boylece "hangi
+    container'a dokunulacak" sorusunun cevabi her zaman ajanin kendi
+    hesabidir.
+    """
+    return f"e1-gw-{code.lower()}"
+
+
+def _dogrula_hedef(code: str, action: str) -> tuple[dict | None, dict]:
+    """start/stop/restart oncesi hedefi dogrula. (hata | None, container bilgisi)
+
+    Iki sart:
+      1) Bu kod icin bir compose dosyasi VAR (yani gateway'i biz kurduk).
+      2) docker'in BIZIM compose projemiz altinda bildirdigi container adi,
+         koddan urettigimiz adla BIREBIR ayni.
+
+    Ikincisi olmasa `_project_name` ile `container_name` arasinda ileride
+    olusacak bir ayrisma (ya da elle olusturulmus, ayni etiketi tasiyan bir
+    container) fark edilmeden islem gorurdu. Emin olamadigimizda islem
+    yapmiyoruz — yanlis container'i durdurmak sahada veri akisini kesmek
+    demek.
+    """
     path = _compose_path(code)
     if not os.path.isfile(path):
-        return {"ok": False, "stage": "restart", "message": "gateway bu cihazda kurulu degil", "detail": ""}
+        return {"ok": False, "stage": action,
+                "message": "gateway bu cihazda kurulu degil", "detail": ""}, {}
+    info = _container_info(code)
+    ad = str(info.get("container") or "")
+    if not ad:
+        return {"ok": False, "stage": action,
+                "message": "gateway container'i bulunamadi", "detail": ""}, info
+    beklenen = _hedef_container(code)
+    if ad != beklenen:
+        return {"ok": False, "stage": action,
+                "message": f"hedef container beklenen ada uymuyor ({ad} != {beklenen})",
+                "detail": ""}, info
+    return None, info
+
+
+def _do_restart(req: dict, compose_cmd: list[str]) -> dict:
+    code = req["code"]
+    hata, _ = _dogrula_hedef(code, "restart")
+    if hata:
+        return hata
+    _write_status({"id": req["id"], "action": "restart", "code": code,
+                   "stage": "restart", "running": True})
     rc, out = _run(
-        compose_cmd + ["-p", _project_name(code), "-f", path, "restart"],
+        compose_cmd + ["-p", _project_name(code), "-f", _compose_path(code), "restart"],
         UP_TIMEOUT_SEC,
     )
     if rc != 0:
         return {"ok": False, "stage": "restart", "message": "yeniden baslatilamadi", "detail": out}
     return {"ok": True, "stage": "done", "message": "yeniden baslatildi", "detail": out}
+
+
+def _do_stop(req: dict, compose_cmd: list[str]) -> dict:
+    """Gateway container'ini DURDUR (silme degil).
+
+    NEDEN `stop`, `down` DEGIL:
+      * `down` container'i SILER; ardindan `_container_info` `absent` doner ve
+        "operator durdurdu" ile "hic kurulu degil" ayirt edilemez hale gelir.
+        Arayuz de bu yuzden durduruldugunu bilemez, ariza gibi gosterir.
+      * compose'da `restart: unless-stopped` var: `stop` ile durdurulan
+        container cihaz yeniden baslatilsa bile KALKMAZ. Yani durdurma
+        kalici bir NIYET olarak korunur; kazara geri gelip veri akisini
+        baslatmaz.
+    """
+    code = req["code"]
+    hata, _ = _dogrula_hedef(code, "stop")
+    if hata:
+        return hata
+    _write_status({"id": req["id"], "action": "stop", "code": code,
+                   "stage": "stop", "running": True})
+    rc, out = _run(
+        compose_cmd + ["-p", _project_name(code), "-f", _compose_path(code), "stop"],
+        DOWN_TIMEOUT_SEC,
+    )
+    if rc != 0:
+        return {"ok": False, "stage": "stop", "message": "durdurulamadi", "detail": out}
+    return {"ok": True, "stage": "done", "message": "durduruldu", "detail": out}
+
+
+def _do_start(req: dict, compose_cmd: list[str]) -> dict:
+    """Durdurulmus container'i yeniden baslat.
+
+    Imaj CEKMEZ (`update` onun icin): mevcut imajla ayni surumu baslatir.
+    Container silinmisse (`absent`) `_dogrula_hedef` reddeder — sessizce
+    yeni bir container yaratmak, "baslat"in kurulum yapmasi olurdu.
+    """
+    code = req["code"]
+    hata, _ = _dogrula_hedef(code, "start")
+    if hata:
+        return hata
+    _write_status({"id": req["id"], "action": "start", "code": code,
+                   "stage": "start", "running": True})
+    rc, out = _run(
+        compose_cmd + ["-p", _project_name(code), "-f", _compose_path(code), "start"],
+        UP_TIMEOUT_SEC,
+    )
+    if rc != 0:
+        return {"ok": False, "stage": "start", "message": "baslatilamadi", "detail": out}
+    return {"ok": True, "stage": "done", "message": "baslatildi", "detail": out}
 
 
 def _do_update(req: dict, compose_cmd: list[str]) -> dict:
@@ -1103,6 +1204,10 @@ def cmd_apply() -> int:
             result = _do_remove(req, compose_cmd)
         elif req["action"] == "update":
             result = _do_update(req, compose_cmd)
+        elif req["action"] == "stop":
+            result = _do_stop(req, compose_cmd)
+        elif req["action"] == "start":
+            result = _do_start(req, compose_cmd)
         else:
             result = _do_restart(req, compose_cmd)
     except OSError as exc:

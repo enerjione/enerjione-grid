@@ -96,7 +96,11 @@ def test_update_available_UC_DURUMLU():
 # ---------------------------------------------------------------------------
 
 def test_update_eylemi_TANINIYOR():
-    assert '"install", "remove", "restart", "update"' in _ajan()
+    # Eylem kumesi tek bir sabitte toplandi (ALLOWED_ACTIONS); yasam dongusu
+    # eylemleri eklenince tuple'in metnini aramak kirilgan hale geldi.
+    kod = _ajan()
+    i = kod.index("ALLOWED_ACTIONS")
+    assert '"update"' in kod[i:kod.index(")", i)]
 
 
 def _update_govdesi() -> str:

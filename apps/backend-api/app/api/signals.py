@@ -14,8 +14,11 @@ from app.schemas.signal_catalog import (
     SignalCatalogCreate,
     SignalCatalogRead,
     SignalCatalogUpdate,
+    SignalHistorianBulkResult,
+    SignalHistorianBulkUpdate,
     SignalLiveValue,
 )
+from app.services import signal_catalog_service
 from app.services.event_service import record_event
 from app.services.signal_catalog_seed import (
     _MUTABLE_FIELDS as _SEED_MUTABLE_FIELDS,
@@ -25,6 +28,12 @@ from app.services.signal_catalog_seed import (
 )
 
 router = APIRouter(prefix="/signals", tags=["signals"])
+
+#: Toplu arsiv isleminde denetim kaydina yazilan EN FAZLA anahtar sayisi.
+#: Katalog 193 sinyal; sinir onun ustunde, yani normal kullanimda kirpma
+#: OLMAZ. Amac yalnizca betikle atilan devasa bir istegin tek bir denetim
+#: satirini sisirmesini engellemek.
+_DENETIM_ANAHTAR_SINIRI = 500
 
 
 @router.get("", response_model=list[SignalCatalogRead])
@@ -86,6 +95,27 @@ def update_signal(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signal not found")
     changes = payload.model_dump(exclude_none=True)
+    # Onay bayragi bir SUTUN DEGIL, bir izindir: `changes` icinde kalirsa
+    # `setattr` ile modele yazilmaya calisilirdi.
+    ariza_onayi = bool(changes.pop("confirm_fault_signals", False))
+
+    # HISTORIAN KURALLARI — servis katmaninda, cunku ayni kurallardan toplu
+    # uc de geciyor ve kural yalnizca arayuzde dursaydi elle atilan bir
+    # istek onu tamamen atlardi.
+    try:
+        signal_catalog_service.dogrula_tekil(
+            signal_key=row.key,
+            data_type=changes.get("data_type", row.data_type),
+            historize=changes.get("historize"),
+            deadband=changes.get("historize_deadband"),
+            ariza_onayi=ariza_onayi,
+        )
+    except signal_catalog_service.HistorianPolitikaHatasi as hata:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": hata.kod, "message": str(hata), "signals": hata.sinyaller},
+        ) from hata
+
     for key, value in changes.items():
         setattr(row, key, value)
 
@@ -100,18 +130,109 @@ def update_signal(
     # JSON kolonu: yeni liste ata (yerinde degistirme SQLAlchemy'ye "degisti"
     # sinyali vermez).
     row.user_overrides = sorted(mevcut)
+
+    # ARSIVI KAPATMAK "info" DEGILDIR. Veriyi geri getirilemez sekilde
+    # yazmamaya baslamak, denetim kaydinda etiket degisikligiyle ayni
+    # satirda durmamali; ariza sinyalinde bu bir gecis kaybi riskidir.
+    arsiv_kapatildi = changes.get("historize") is False
+    severity = "warning" if arsiv_kapatildi else "info"
+    metadata: dict = {"signal_key": row.key, "fields": list(changes.keys())}
+    if "historize" in changes:
+        metadata["historize"] = changes["historize"]
+    if "historize_deadband" in changes:
+        metadata["historize_deadband"] = changes["historize_deadband"]
+    if arsiv_kapatildi and signal_catalog_service.ariza_tasiyor(row.data_type):
+        metadata["fault_signal"] = True
+        severity = "warning"
     record_event(
         db,
         category="signal",
         event_type="signal_updated",
-        severity="info",
+        severity=severity,
         actor_username=current_user.username,
         message=f"Signal updated: {row.label} ({row.key})",
-        metadata={"signal_key": row.key, "fields": list(changes.keys())},
+        metadata=metadata,
     )
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.post("/historian/bulk", response_model=SignalHistorianBulkResult)
+def bulk_update_historian(
+    payload: SignalHistorianBulkUpdate,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Filtreye gore secilmis sinyallerin arsiv ayarini TEK istekte degistirir.
+
+    Yetki: INSTALLER (sinyal katalogu kurulum isidir — tekil PATCH ile ayni).
+
+    Denetim: islem basina TEK `record_event`. Sinyal basina bir kayit,
+    193 sinyallik bir islemde denetim kaydini okunamaz hale getirirdi;
+    mesaj ozet kalir, ETKILENEN ANAHTARLAR ise metadata'ya yazilir — sayi
+    tek basina "hangi sinyaller o gun kayit tutmayi birakti" sorusunu
+    cevaplamaz ve katalogun bugunku hali sonraki degisikliklerle ustuste
+    bindigi icin bu geriye donuk cikarilamaz.
+
+    NOT: yol iki parcali (`/historian/bulk`), bu yuzden `/{signal_key}`
+    kalibiyla CAKISMAZ.
+    """
+    try:
+        sonuc = signal_catalog_service.toplu_historian_guncelle(
+            db,
+            signal_keys=payload.signal_keys,
+            historize=payload.historize,
+            deadband=payload.historize_deadband,
+            ariza_onayi=payload.confirm_fault_signals,
+        )
+    except signal_catalog_service.HistorianPolitikaHatasi as hata:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": hata.kod, "message": str(hata), "signals": hata.sinyaller},
+        ) from hata
+
+    ariza_sinyalleri = sonuc.pop("fault_signals", [])
+    degisenler = sonuc.pop("changed_signals", [])
+    if sonuc["updated"]:
+        parcalar: list[str] = []
+        if payload.historize is not None:
+            parcalar.append("arsiv " + ("acildi" if payload.historize else "kapatildi"))
+        if payload.historize_deadband is not None:
+            parcalar.append(f"olu bant {payload.historize_deadband}")
+        record_event(
+            db,
+            category="signal",
+            event_type="signal_historian_bulk_updated",
+            # Arsivi kapatmak veri yazmayi durdurur; etiket duzenlemesiyle
+            # ayni siniftan degildir.
+            severity="warning" if payload.historize is False else "info",
+            actor_username=current_user.username,
+            message=(
+                f"Toplu arsiv ayari: {sonuc['updated']} sinyal guncellendi"
+                + (f" ({', '.join(parcalar)})" if parcalar else "")
+            ),
+            metadata={
+                "updated": sonuc["updated"],
+                "unchanged": sonuc["unchanged"],
+                "historize": payload.historize,
+                "historize_deadband": payload.historize_deadband,
+                "skipped_deadband": sonuc["skipped_deadband"],
+                "not_found": sonuc["not_found"],
+                # Gercekten degisen anahtarlar. Ust sinir, tek bir denetim
+                # satirinin sisip okunamaz hale gelmemesi icin; asildiginda
+                # `changed_truncated` ile ACIKCA soylenir (sessiz kirpma,
+                # denetim kaydina duyulan guveni bozardi).
+                "changed_signals": degisenler[:_DENETIM_ANAHTAR_SINIRI],
+                "changed_truncated": len(degisenler) > _DENETIM_ANAHTAR_SINIRI,
+                # Onaylanarak arsivden cikarilan ariza sinyalleri denetim
+                # kaydinda ADIYLA durur — "kim, ne zaman, hangi gecisi
+                # gormeyi biraktik" sorusunun cevabi budur.
+                "fault_signals": ariza_sinyalleri,
+            },
+        )
+    db.commit()
+    return sonuc
 
 
 @router.delete("/{signal_key}", status_code=status.HTTP_204_NO_CONTENT)

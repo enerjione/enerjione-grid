@@ -2,18 +2,48 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 import i18n from "../../shared/i18n";
-import type { DeviceModelOption, DeviceRow, Dnp3ExtendedSettings, Gateway, LicenseStatus } from "../../shared/types";
+import type {
+  DeviceModelOption,
+  DeviceRow,
+  Dnp3ExtendedSettings,
+  Gateway,
+  GatewayAgentStatus,
+  LicenseStatus,
+  LocalGateway
+} from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
+import {
+  deviceStatusUnderGateway,
+  gatewayLiveness,
+  type GatewayLivenessState
+} from "../../shared/gatewayLiveness";
+import {
+  fetchGatewayAgentStatus,
+  restartGatewayLocally,
+  startGatewayLocally,
+  stopGatewayLocally
+} from "../../shared/api";
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
 import { GatewayCreateModal } from "../gateways/GatewayCreateModal";
 import { GatewayEditModal } from "../gateways/GatewayEditModal";
 
-/** Son sinyal bundan eskiyse yeşil değil, kırmızı (kapalı/erişilemez collector için pencere) */
-const GATEWAY_LIVE_SEC = 60;
+/** Host ajani durumunun tazelenme araligi. Gateway listesi zaten ~12 sn'de
+ *  bir cekiliyor; container durumu daha yavas degisir. */
+const AJAN_YOKLAMA_MS = 20000;
+/** Islem surerken (durdur/baslat/yeniden baslat) hizli yoklama. */
+const ISLEM_YOKLAMA_MS = 1500;
+/** Yoklama tavani. Bu islemler saniyeler surer; asilirsa "bilmiyorum" denir,
+ *  "basarili" DENMEZ. */
+const ISLEM_TAVANI_MS = 120000;
 
-type GatewayLiveness = {
-  className: "inactive" | "never" | "online" | "offline";
-  title: string;
+/** Gateway kartinda suren yasam dongusu islemi. */
+type GatewayIslem = {
+  code: string;
+  action: "stop" | "start" | "restart";
+  /** gonderiliyor | uygulaniyor | stop | start | restart | done | bitti | zaman_asimi */
+  asama: string;
+  basarili?: boolean;
+  mesaj?: string;
 };
 
 function formatTrRel(iso: string): string {
@@ -27,22 +57,19 @@ function formatTrRel(iso: string): string {
   return d.toLocaleString(localeTag);
 }
 
-function getGatewayLiveness(gateway: Gateway): GatewayLiveness {
-  if (!gateway.is_active) {
-    return { className: "inactive", title: i18n.t("engineering.gatewayLive.inactive") };
-  }
-  if (!gateway.last_seen_at) {
-    return { className: "never", title: i18n.t("engineering.gatewayLive.never") };
-  }
-  const sec = (Date.now() - new Date(gateway.last_seen_at).getTime()) / 1000;
-  if (sec < GATEWAY_LIVE_SEC) {
-    return { className: "online", title: i18n.t("engineering.gatewayLive.online") };
-  }
-  return { className: "offline", title: i18n.t("engineering.gatewayLive.offline") };
+/** Durum -> `engineering.gatewayLive.*` etiketi. Karar mantigi
+ *  `shared/gatewayLiveness.ts` icinde (React'tan bagimsiz, test edilir). */
+function gatewayStateLabel(state: GatewayLivenessState): string {
+  return i18n.t(`engineering.gatewayLive.${state}`);
 }
 
-function deviceCommDotClass(status: DeviceRow["communicationStatus"]): "online" | "offline" {
-  return status === "online" ? "online" : "offline";
+function deviceCommDotClass(
+  status: DeviceRow["communicationStatus"]
+): "online" | "offline" | "unknown" {
+  if (status === "online") return "online";
+  // "unknown" ARTIK "offline"a katlanmiyor: gateway durdurulmusken cihazin
+  // durumunu bilmiyoruz, ariza rengi gostermek yanlis bilgi olur.
+  return status === "unknown" ? "unknown" : "offline";
 }
 
 const DEVICE_MODEL_IMAGES: Record<string, string> = {
@@ -54,17 +81,18 @@ function deviceImageSrc(modelCode: string): string {
   return DEVICE_MODEL_IMAGES[modelCode] ?? "/sn20.png";
 }
 
-/** Gateway down ise altindaki cihazlar da offline gozukmeli — collector ayakta
- * degilken cihaz sinyali fiziksel olarak gelse bile platform tarafinda yoktur. */
+/** Gateway calismiyorken cihaz sinyali fiziksel olarak gelse bile platform
+ * tarafinda yoktur. Ama "yok" ile "ariza" ayni sey degil: yalnizca gateway'in
+ * AYAKTA oldugunu bilip veri alamadigimizda kirmizi "offline" dogru; gateway
+ * durdurulmussa ya da durumu bilinmiyorsa cihaz da "unknown" olmali
+ * (bkz. shared/gatewayLiveness.ts). */
 function effectiveCommStatus(
   device: DeviceRow,
-  gateways: Gateway[]
+  gatewayStates: Map<string, GatewayLivenessState>
 ): DeviceRow["communicationStatus"] {
-  const gw = gateways.find((g) => g.code === device.gatewayCode);
-  if (gw && getGatewayLiveness(gw).className !== "online") {
-    return "offline";
-  }
-  return device.communicationStatus;
+  const state = device.gatewayCode ? gatewayStates.get(device.gatewayCode) : undefined;
+  if (!state) return device.communicationStatus;
+  return deviceStatusUnderGateway(state, device.communicationStatus);
 }
 
 type DevicePropsTab = "system" | "comms";
@@ -174,6 +202,12 @@ export function DeviceManagementPanel({
 }: Props) {
   const { t } = useTranslation();
   const canManageGateways = role === "installer";
+  // Ajan durumunu OKUMA yetkisi durdurma yetkisinden GENIS: backend
+  // `GET /gateways/local-agent` icin engineer'a da izin veriyor. Yoklamayi
+  // `canManageGateways` ile kisitlarsak engineer her duran gateway'i
+  // "Durum bilinmiyor" gorur — oysa sahada "veri neden gelmiyor" sorusunu
+  // once o sorar. Dugmeler yine yalnizca installer'da.
+  const canReadAgentStatus = role === "installer" || role === "engineer";
   // DNP3 adresleri (outstation port + dnp3_address + advanced master/IP) sadece
   // installer'a goz onunde. Engineer cihaz ekleyip kaldirabilir ama DNP3
   // adres detaylarini goremez/duzenleyemez. (Backend tarafinda da yazma
@@ -198,6 +232,69 @@ export function DeviceManagementPanel({
   // Gateway silme islemi sirasinda hangi gateway kodunu sildigimizi tutar.
   // Bu degisken hem butonu disable etmeye hem overlay'i gostermeye yarar.
   const [deletingGatewayCode, setDeletingGatewayCode] = useState<string | null>(null);
+
+  // --- Host ajani (e1-gwd) durumu ---------------------------------------
+  // Gateway kartinin "durduruldu" ile "ulasilamiyor"u ayirt edebilmesi icin
+  // container durumu gerekiyor; bu bilgi DB'de degil, ajanin state.json'inda.
+  const [agent, setAgent] = useState<GatewayAgentStatus | null>(null);
+  const [gwIslem, setGwIslem] = useState<GatewayIslem | null>(null);
+  // Bilesen sokulduktan sonra yoklama SURMEMELI.
+  const canli = useRef(true);
+
+  const localByCode = useMemo(() => {
+    const harita = new Map<string, LocalGateway>();
+    for (const item of agent?.gateways ?? []) harita.set(item.code, item);
+    return harita;
+  }, [agent]);
+
+  /** Her gateway icin tek karar noktasi; hem nokta/rozet hem cihaz listesi
+   *  bunu kullanir ki ikisi asla farkli sey soylemesin. */
+  const gatewayStates = useMemo(() => {
+    // Ajan raporu eskiyse (zamanlayici durmus) icindeki container durumu
+    // ARTIK BIR OLCUM DEGIL. Karari backend veriyor; burada esik tekrar
+    // hesaplanmaz (bkz. shared/gatewayLiveness.ts `localStale`).
+    const ajanEskimis = agent?.reason === "state_stale";
+    const harita = new Map<string, GatewayLivenessState>();
+    for (const gw of gateways) {
+      harita.set(
+        gw.code,
+        gatewayLiveness({
+          isActive: gw.is_active,
+          lastSeenAt: gw.last_seen_at,
+          localState: localByCode.get(gw.code)?.state ?? null,
+          // "Up 4 seconds": container yeni kalktiysa veri penceresi daha
+          // dolmadi, "ulasilamiyor" denemez (bkz. gatewayLiveness).
+          localStatus: localByCode.get(gw.code)?.status ?? null,
+          localStale: ajanEskimis
+        })
+      );
+    }
+    return harita;
+  }, [gateways, localByCode, agent?.reason]);
+
+  useEffect(() => {
+    canli.current = true;
+    return () => {
+      canli.current = false;
+    };
+  }, []);
+
+  const loadAgent = async () => {
+    // `fetchGatewayAgentStatus` ajan yoksa throw ETMEZ, available=false doner.
+    const durum = await fetchGatewayAgentStatus(accessToken);
+    if (canli.current) setAgent(durum);
+    return durum;
+  };
+
+  useEffect(() => {
+    // Yetkisi olmayan rollerde 403 alacagimiz bir istegi hic atmayalim;
+    // onlarda durum eskisi gibi yalnizca telemetriden okunur.
+    if (!canReadAgentStatus) return;
+    void loadAgent();
+    const timer = window.setInterval(() => void loadAgent(), AJAN_YOKLAMA_MS);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, canReadAgentStatus]);
 
   const openComposeModal = (gwCode: string) => {
     setComposeFor(gwCode);
@@ -559,6 +656,107 @@ export function DeviceManagementPanel({
     setEditingGatewayCode(gateway.code);
   };
 
+  /** Ajan istegi bitene kadar durumu yoklar ve asamayi ekrana yansitir.
+   *
+   *  Bu islemler saniyeler surer; yine de sessiz kalmak en kotu secenek
+   *  olurdu — operator bastigini goremeyip tekrar basar, ikinci istek
+   *  reddedilir. (Ayni desen GatewayEditModal.izleIslem'de.)
+   *
+   *  `requestId` ile eslesiyoruz, yalnizca kod+eylem ile DEGIL: ayni gateway
+   *  ikinci kez durdurulursa status.json'da bir ONCEKI durdurmanin "ok"
+   *  sonucu duruyor olabilir ve onu bu istegin sonucu sanardik. (Bugun
+   *  `pending` bayragi bu yarisi kapatiyor -- ajan istegi ancak sonucu
+   *  yazdiktan SONRA siliyor -- ama o siralamaya bagli kalmak kirilgan;
+   *  kimlik karsilastirmasi sirayla ilgilenmiyor.) */
+  const izleGatewayIslem = async (
+    code: string,
+    action: GatewayIslem["action"],
+    requestId: string
+  ) => {
+    const basla = Date.now();
+    while (canli.current && Date.now() - basla < ISLEM_TAVANI_MS) {
+      await new Promise((r) => window.setTimeout(r, ISLEM_YOKLAMA_MS));
+      if (!canli.current) return;
+      let durum: GatewayAgentStatus | null = null;
+      try {
+        durum = await loadAgent();
+      } catch {
+        // Tek bir basarisiz yoklama izlemeyi BITIRMEZ.
+        continue;
+      }
+      const sonuc = durum?.last_apply ?? null;
+      // Eski ajan `id` yazmiyor olabilir; o zaman kod+eylemle yetiniyoruz.
+      const bizim =
+        sonuc?.code === code &&
+        sonuc?.action === action &&
+        (!sonuc?.id || sonuc.id === requestId);
+      if (durum?.pending || sonuc?.running) {
+        if (bizim && sonuc?.stage) {
+          setGwIslem({ code, action, asama: sonuc.stage });
+        }
+        continue;
+      }
+      if (bizim) {
+        setGwIslem({
+          code,
+          action,
+          asama: "bitti",
+          basarili: sonuc?.ok === true,
+          mesaj: sonuc?.message ?? undefined
+        });
+        // Basarili sonuc kisa sure gorunup kaybolur; HATA ekranda kalir ki
+        // fark edilmeden gecmesin.
+        if (sonuc?.ok === true) {
+          window.setTimeout(() => {
+            if (canli.current) setGwIslem((o) => (o && o.code === code ? null : o));
+          }, 4000);
+        }
+        return;
+      }
+    }
+    if (!canli.current) return;
+    // Tavana carpildi: "bilmiyorum" de, "basarili" DEME.
+    setGwIslem({ code, action, asama: "zaman_asimi" });
+  };
+
+  /** Gateway durdur / baslat / yeniden baslat.
+   *
+   *  DURDURMA ONAY ISTER ve sonucu acikca yazar: bu gateway'e bagli
+   *  cihazlardan telemetri gelmeyecek. Baslatma onay istemez (veri akisini
+   *  geri getirir); yeniden baslatma kisa bir kesinti oldugu icin ister. */
+  const handleGatewayLifecycle = async (
+    gateway: Gateway,
+    action: GatewayIslem["action"]
+  ) => {
+    if (gwIslem && gwIslem.asama !== "bitti" && gwIslem.asama !== "zaman_asimi") return;
+    if (action !== "start") {
+      const onaylandi = await asyncConfirm(
+        t(
+          action === "stop"
+            ? "engineering.gateways.lifecycle.stopConfirm"
+            : "engineering.gateways.lifecycle.restartConfirm",
+          { name: gateway.name }
+        )
+      );
+      if (!onaylandi) return;
+    }
+    setError("");
+    setGwIslem({ code: gateway.code, action, asama: "gonderiliyor" });
+    try {
+      const kabul =
+        action === "stop"
+          ? await stopGatewayLocally(accessToken, gateway.code)
+          : action === "start"
+            ? await startGatewayLocally(accessToken, gateway.code)
+            : await restartGatewayLocally(accessToken, gateway.code);
+      setGwIslem({ code: gateway.code, action, asama: "uygulaniyor" });
+      void izleGatewayIslem(gateway.code, action, kabul.request_id);
+    } catch (err) {
+      setGwIslem(null);
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+    }
+  };
+
   /** Host/listen_port GONDERILMEZ: gateway DNP3 master rolunde, bu iki alan
    *  create akisindaki placeholder'lardi ("auto"/0) ve duzenlenebilir birer
    *  ayar degil. Yalnizca gercekten degistirilebilen alanlar PATCH edilir. */
@@ -627,9 +825,21 @@ export function DeviceManagementPanel({
               </div>
             ) : null}
             {gateways.map((gateway) => {
-              const gLive = getGatewayLiveness(gateway);
+              const gState = gatewayStates.get(gateway.code) ?? "unknown";
+              const gLabel = gatewayStateLabel(gState);
               const isDeletingThis = deletingGatewayCode === gateway.code;
               const anotherDeleting = Boolean(deletingGatewayCode) && !isDeletingThis;
+              // Yasam dongusu dugmeleri yalnizca BU cihazda kurulu gateway'ler
+              // icin anlamli; baska makinedeki container'a buradan erisilemez.
+              const local = localByCode.get(gateway.code) ?? null;
+              const islem = gwIslem && gwIslem.code === gateway.code ? gwIslem : null;
+              const islemSuruyor = Boolean(
+                gwIslem && gwIslem.asama !== "bitti" && gwIslem.asama !== "zaman_asimi"
+              );
+              const buIslemSuruyor = Boolean(
+                islem && islem.asama !== "bitti" && islem.asama !== "zaman_asimi"
+              );
+              const dugmeKapali = isDeletingThis || anotherDeleting || islemSuruyor;
               return (
               <div
                 key={gateway.id}
@@ -644,12 +854,19 @@ export function DeviceManagementPanel({
                   >
                     <div className="gateway-title-row">
                       <div className="gateway-name-with-status">
-                        <span className={`gateway-status ${gLive.className}`} title={gLive.title}>
+                        <span className={`gateway-status ${gState}`} title={gLabel}>
                           <span className="gateway-status-dot" aria-hidden="true" />
                         </span>
                         <strong className="gateway-name-only">{gateway.name}</strong>
                       </div>
                     </div>
+                    {/* DURUM ROZETI — yalnizca "calisiyor" DISINDAKI durumlarda.
+                        Normalde liste sade kalsin; bir sey normal disiysa
+                        operator SEBEBINI okusun ("Durduruldu" / "Bilinmiyor"),
+                        hepsi ayni kirmiziya boyanmasin. */}
+                    {gState !== "online" ? (
+                      <span className={`gateway-state-badge is-${gState}`}>{gLabel}</span>
+                    ) : null}
                   </button>
                   {canManageGateways ? (
                     <div className="item-actions inline-actions gateway-item-actions">
@@ -702,6 +919,73 @@ export function DeviceManagementPanel({
                           </svg>
                         </button>
                       ) : null}
+                      {/* YASAM DONGUSU — yalnizca bu cihazda kurulu gateway'de.
+                          Durmussa "Baslat", calisiyorsa "Durdur" + "Yeniden
+                          baslat" gosterilir; ikisini ayni anda gostermek
+                          "hangisi gecerli" sorusunu operatore birakirdi. */}
+                      {local ? (
+                        gState === "stopped" ? (
+                          <button
+                            type="button"
+                            className={`secondary-btn action-btn gateway-start-btn ${buIslemSuruyor ? "is-busy" : ""}`}
+                            onClick={() => void handleGatewayLifecycle(gateway, "start")}
+                            title={t("engineering.gateways.lifecycle.start")}
+                            aria-label={t("engineering.gateways.lifecycle.start")}
+                            aria-busy={buIslemSuruyor || undefined}
+                            disabled={dugmeKapali}
+                          >
+                            {buIslemSuruyor ? (
+                              <span className="btn-spinner" aria-hidden="true" />
+                            ) : (
+                              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                                <path fill="currentColor" d="M8 5v14l11-7z" />
+                              </svg>
+                            )}
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className={`secondary-btn action-btn gateway-stop-btn ${buIslemSuruyor && islem?.action === "stop" ? "is-busy" : ""}`}
+                              onClick={() => void handleGatewayLifecycle(gateway, "stop")}
+                              title={t("engineering.gateways.lifecycle.stop")}
+                              aria-label={t("engineering.gateways.lifecycle.stop")}
+                              aria-busy={(buIslemSuruyor && islem?.action === "stop") || undefined}
+                              disabled={dugmeKapali}
+                            >
+                              {buIslemSuruyor && islem?.action === "stop" ? (
+                                <span className="btn-spinner" aria-hidden="true" />
+                              ) : (
+                                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                                  <path fill="currentColor" d="M6 6h12v12H6z" />
+                                </svg>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className={`secondary-btn action-btn gateway-restart-btn ${buIslemSuruyor && islem?.action === "restart" ? "is-busy" : ""}`}
+                              onClick={() => void handleGatewayLifecycle(gateway, "restart")}
+                              title={t("engineering.gateways.lifecycle.restart")}
+                              aria-label={t("engineering.gateways.lifecycle.restart")}
+                              aria-busy={(buIslemSuruyor && islem?.action === "restart") || undefined}
+                              disabled={dugmeKapali}
+                            >
+                              {buIslemSuruyor && islem?.action === "restart" ? (
+                                <span className="btn-spinner" aria-hidden="true" />
+                              ) : (
+                                /* Inline SVG — "yenile" okuyla karismasin diye
+                                   restart_alt kalibi secildi. */
+                                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                                  <path
+                                    fill="currentColor"
+                                    d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 2.97-2.17 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93 0-4.42-3.58-8-8-8zm-6 8c0-1.65.67-3.15 1.76-4.24L6.34 7.34A7.94 7.94 0 0 0 4 13c0 4.08 3.05 7.44 7 7.93v-2.02c-2.83-.48-5-2.94-5-5.91z"
+                                  />
+                                </svg>
+                              )}
+                            </button>
+                          </>
+                        )
+                      ) : null}
                       <button
                         type="button"
                         className={`danger-btn action-btn gateway-delete-btn ${isDeletingThis ? "is-busy" : ""}`}
@@ -729,6 +1013,34 @@ export function DeviceManagementPanel({
                   <div className="gateway-item-deleting-overlay" role="status" aria-live="polite">
                     <span className="btn-spinner gateway-deleting-spinner" aria-hidden="true" />
                     <span className="gateway-deleting-text">{t("engineering.gateways.deleting")}</span>
+                  </div>
+                ) : null}
+                {/* ILERLEME — butona basildigi andan sonuca kadar gorunur.
+                    Islem saniyeler surse de sessiz kalmak operatoru "bastim
+                    mi" ikilemde birakir ve ikinci istege iter. */}
+                {islem ? (
+                  <div
+                    className={`gateway-islem ${
+                      islem.asama === "bitti"
+                        ? islem.basarili
+                          ? "is-ok"
+                          : "is-fail"
+                        : islem.asama === "zaman_asimi"
+                          ? "is-unknown"
+                          : "is-busy"
+                    }`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {buIslemSuruyor ? (
+                      <span className="btn-spinner" aria-hidden="true" />
+                    ) : null}
+                    <span className="gateway-islem-metin">
+                      {t(`engineering.gateways.lifecycle.progress.${islem.asama}`, {
+                        defaultValue: t("engineering.gateways.lifecycle.progress.uygulaniyor")
+                      })}
+                      {islem.asama === "bitti" && islem.mesaj ? ` — ${islem.mesaj}` : ""}
+                    </span>
                   </div>
                 ) : null}
               </div>
@@ -777,7 +1089,7 @@ export function DeviceManagementPanel({
           ) : null}
           <div className="device-group-list">
             {devices.map((device) => {
-              const effStatus = effectiveCommStatus(device, gateways);
+              const effStatus = effectiveCommStatus(device, gatewayStates);
               return (
               <button
                 key={device.id}
@@ -790,7 +1102,11 @@ export function DeviceManagementPanel({
                     <strong>{device.name}</strong>
                   </div>
                   <span className="device-status-sr-only">
-                    {effStatus === "online" ? t("engineering.devicesPanel.commOnline") : t("engineering.devicesPanel.commOffline")}
+                    {effStatus === "online"
+                      ? t("engineering.devicesPanel.commOnline")
+                      : effStatus === "unknown"
+                        ? t("engineering.devicesPanel.commUnknown")
+                        : t("engineering.devicesPanel.commOffline")}
                   </span>
                 </div>
                 <div className="device-meta-row">
@@ -1032,16 +1348,23 @@ export function DeviceManagementPanel({
               <div className="device-form-footer-bar">
                 <div className="device-comms-footer-subtle">
                   {(() => {
-                    const eff = effectiveCommStatus(selectedDevice, gateways);
+                    const eff = effectiveCommStatus(selectedDevice, gatewayStates);
+                    const gwState = selectedDevice.gatewayCode
+                      ? gatewayStates.get(selectedDevice.gatewayCode)
+                      : undefined;
                     const gwOffline =
                       eff === "offline" && selectedDevice.communicationStatus === "online";
                     return (
                       <span className={`device-comms-pill device-comms-pill--${deviceCommDotClass(eff)}`}>
                         {eff === "online"
                           ? t("engineering.devicesPanel.footer.ok")
-                          : gwOffline
-                            ? t("engineering.devicesPanel.footer.gwDisconnected")
-                            : t("engineering.devicesPanel.footer.stale")}
+                          : gwState === "stopped"
+                            ? /* Sebep BILINIYOR: gateway durduruldu. "Veri eski"
+                                 demek operatoru olmayan bir arizaya yonlendirirdi. */
+                              t("engineering.devicesPanel.footer.gwStopped")
+                            : gwOffline
+                              ? t("engineering.devicesPanel.footer.gwDisconnected")
+                              : t("engineering.devicesPanel.footer.stale")}
                       </span>
                     );
                   })()}
@@ -1079,7 +1402,9 @@ export function DeviceManagementPanel({
       {composeFor
         ? (() => {
             const composeGw = gateways.find((g) => g.code === composeFor);
-            const composeLive = composeGw ? getGatewayLiveness(composeGw) : null;
+            // Compose modali da AYNI karar noktasindan beslenir; kartta
+            // "Durduruldu" yazarken burada "Bagli degil" yazmasin.
+            const composeState = composeGw ? gatewayStates.get(composeGw.code) ?? "unknown" : null;
             const composeCmd = `docker compose -f e1-gw-${composeFor.toLowerCase()}.yml up -d`;
             const copyCmd = async () => {
               // Iki katmanli copy: modern Clipboard API (HTTPS gerekir) ve eski
@@ -1144,11 +1469,12 @@ export function DeviceManagementPanel({
                       required
                     />
                   </label>
-                  {composeLive ? (
-                    <div className={`compose-gw-status compose-gw-status--${composeLive.className}`}>
+                  {composeState ? (
+                    <div className={`compose-gw-status compose-gw-status--${composeState}`}>
                       <span className="compose-gw-status-dot" aria-hidden="true" />
                       <span>
-                        {t("engineering.gateways.compose.gwStatus")} <strong>{composeLive.title}</strong>
+                        {t("engineering.gateways.compose.gwStatus")}{" "}
+                        <strong>{gatewayStateLabel(composeState)}</strong>
                         {composeGw?.last_seen_at ? (
                           <span className="compose-gw-status-meta">
                             {" "}· {t("engineering.gateways.compose.lastSignal", { at: formatTrRel(composeGw.last_seen_at) })}

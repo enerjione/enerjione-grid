@@ -108,6 +108,7 @@ import {
   updateOutboundTarget,
   updateDevice,
   updateSignal,
+  updateSignalsHistorian,
   createOutboundTarget,
   deleteOutboundTarget,
   downloadIec104PointsCsv,
@@ -184,6 +185,7 @@ import type {
   OutboundTarget,
   ResponsibilityAreaRow,
   SignalCatalogRow,
+  SignalHistorianBulkPayload,
   SignalLiveRow,
   SystemEvent,
   UserRead,
@@ -1177,6 +1179,18 @@ export function App() {
     await updateSignal(session.accessToken, signalKey, payload);
     await reloadSignals();
     toast.success(t("toasts.signalUpdated"));
+  };
+
+  // Toplu arsiv (historian) ayari. Tekil duzenleme de bu ucu kullanir:
+  // tek kod yolu = ariza korumasinin tek kapisi.
+  const handleBulkHistorian = async (payload: SignalHistorianBulkPayload) => {
+    if (!session) throw new Error("Oturum yok.");
+    const sonuc = await updateSignalsHistorian(session.accessToken, payload);
+    await reloadSignals();
+    if (sonuc.updated > 0) {
+      toast.success(t("toasts.signalHistorianUpdated", { count: sonuc.updated }));
+    }
+    return sonuc;
   };
 
   const handleDeleteSignal = async (signalKey: string) => {
@@ -2722,6 +2736,7 @@ export function App() {
                 loading={signalLoading}
                 error={signalError}
                 onUpdate={handleUpdateSignal}
+                onBulkHistorian={handleBulkHistorian}
               />
             ) : null}
             {engineeringPage === "live-values" &&

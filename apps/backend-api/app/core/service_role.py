@@ -260,6 +260,19 @@ class BackgroundLeader:
                 pass
             return False
         # Baglanti ACIK BIRAKILIR — kilit session omru boyunca gecerli.
+        #
+        # TRANSACTION ISE KAPATILIR. Advisory lock SESSION seviyesidir,
+        # transaction'a ihtiyaci yoktur; SQLAlchemy'nin ortuk baslattigi
+        # transaction commit edilmeden birakilinca baglanti SONSUZA KADAR
+        # "idle in transaction" kaliyordu. Bu, tum veritabaninin VACUUM
+        # ufkunu sabitler: saniyede binlerce UPSERT alan `telemetry_latest`
+        # gibi tablolarda olu satir temizlenemez, tablo/index siser ve
+        # yazimlar zamanla yavaslar (sahada pg_stat_activity ile goruldu:
+        # kilit baglantisi gunlerce "idle in transaction" bekliyordu).
+        try:
+            conn.commit()
+        except Exception:  # noqa: BLE001
+            logger.debug("background_lock_commit_failed", exc_info=True)
         self._conn = conn
         return True
 

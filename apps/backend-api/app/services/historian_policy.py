@@ -64,7 +64,14 @@ _LAST_CACHE_MAX = 200_000
 #: Olu bandin uygulanabildigi TEK sinyal tipi. `binary`, `binary_output`,
 #: `counter` ve `string` DISARIDA: bu tiplerde "yakin deger" yoktur, her
 #: degisim bir olaydir. Bilinmeyen/bos tip de disarida kalir (guvenli yon).
-_OLU_BANT_TIPLERI = frozenset({"analog"})
+#:
+#: PUBLIC: arayuze olu bant alanini ACAN katman (signal_catalog_service) bunu
+#: okur. Kendi listesini tutsaydi ikisi kacinilmaz olarak birbirinden ayrilir
+#: ve arayuz, motorun UYGULAMADIGI bir ayari varmis gibi gosterirdi.
+OLU_BANT_TIPLERI = frozenset({"analog"})
+
+#: Dosya ici / geri uyumlu ad. TEK kaynak yukaridaki `OLU_BANT_TIPLERI`.
+_OLU_BANT_TIPLERI = OLU_BANT_TIPLERI
 
 
 @dataclass(frozen=True)

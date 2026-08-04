@@ -901,6 +901,151 @@ def update_gateway_locally(
     return LocalInstallResponse(request_id=request_id, code=gateway.code)
 
 
+# --------------------------------------------------------------------------
+# Gateway yasam dongusu: DURDUR / BASLAT / YENIDEN BASLAT
+#
+# YETKI — ucu de INSTALLER'a ozel, `local-install` / `local-update` ile ayni
+# kapi. Durdurmak bu gateway'e bagli TUM cihazlarin veri akisini keser;
+# operator (ve engineer) kazara tetikleyememeli. `require_role` HIYERARSIK
+# DEGIL, tam eslesme yapar (bkz. deps.require_role) — engineer / ops_manager /
+# operator otomatik icerilmez.
+#
+# DENETIM — her istek `record_event` ile olay kaydina duser. Sahadaki "veri
+# neden gelmiyor" sorusunun cevabi orada olmali; durdurma gorunmez olursa
+# arayuzun "durduruldu" demesi de kimsenin dogrulayamayacagi bir iddiaya
+# doner.
+#
+# KOMUT GONDERMIYORUZ: backend ajana yalnizca bir EYLEM ADI yazar
+# ("stop" / "start" / "restart"). docker argumanlari ajanin icinde sabit
+# yazili; hedef container adi da ajanda gateway kodundan turetilip
+# dogrulanir (bkz. e1-gwd `_dogrula_hedef`).
+# --------------------------------------------------------------------------
+_LIFECYCLE_ACTIONS: dict[str, dict[str, str]] = {
+    "stop": {
+        "event_type": "gateway_local_stop_requested",
+        # Veri akisi kesiliyor: bilgi degil UYARI. Olay listesinde
+        # kaybolmamali.
+        "severity": "warning",
+        "ozet": "durdurma istegi (veri akisi duracak)",
+    },
+    "start": {
+        "event_type": "gateway_local_start_requested",
+        "severity": "info",
+        "ozet": "baslatma istegi",
+    },
+    "restart": {
+        "event_type": "gateway_local_restart_requested",
+        # Kesinti kisa ama gercek; `local-update` ile ayni siniflandirma.
+        "severity": "info",
+        "ozet": "yeniden baslatma istegi",
+    },
+}
+
+
+def _lifecycle_request(
+    db: Session,
+    gateway_code: str,
+    current_user: User,
+    action: Literal["stop", "start", "restart"],
+) -> LocalInstallResponse:
+    """Uc yasam dongusu ucunun ortak govdesi.
+
+    202 doner: ajan istegi ASENKRON isler. Sonuc `GET /gateways/local-agent`
+    icindeki `last_apply` ile takip edilir (islem saniyeler surer).
+    """
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    if not gateway_agent_service.is_installed_locally(gateway.code):
+        # Gateway baska bir cihazda kosuyor olabilir; bu uc yalnizca BU
+        # cihazdaki container'i yonetir.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Gateway bu cihazda kurulu degil; buradan durdurulup baslatilamaz.",
+        )
+
+    istek = {
+        "stop": gateway_agent_service.request_stop,
+        "start": gateway_agent_service.request_start,
+        "restart": gateway_agent_service.request_restart,
+    }[action]
+    try:
+        request_id = istek(gateway.code, current_user.username)
+    except GatewayAgentError as exc:
+        raise _agent_http_error(exc) from exc
+
+    tanim = _LIFECYCLE_ACTIONS[action]
+    record_event(
+        db,
+        category="gateway",
+        event_type=tanim["event_type"],
+        severity=tanim["severity"],
+        actor_username=current_user.username,
+        message=f"{gateway.name} ({gateway.code}) — {tanim['ozet']}",
+        metadata={"gateway_code": gateway.code, "request_id": request_id, "action": action},
+        i18n_key=tanim["event_type"],
+        i18n_params={"name": gateway.name, "code": gateway.code},
+    )
+    db.commit()
+    return LocalInstallResponse(request_id=request_id, code=gateway.code)
+
+
+@router.post(
+    "/{gateway_code}/local-stop",
+    response_model=LocalInstallResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def stop_gateway_locally(
+    gateway_code: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Bu cihazdaki gateway container'ini DURDUR.
+
+    KALDIRMA DEGIL: compose dosyasi ve container yerinde kalir, ajan durumu
+    `exited` olarak raporlar. Bu ayrim olmadan arayuz "durduruldu" ile
+    "kurulu degil"i ayirt edemez ve durdurulmus gateway'i ariza gibi
+    gosterir.
+
+    SONUC: bu gateway'e bagli cihazlardan telemetri GELMEZ. Durdurma kalici
+    bir niyettir; cihaz yeniden baslatilsa bile container kalkmaz.
+    """
+    return _lifecycle_request(db, gateway_code, current_user, "stop")
+
+
+@router.post(
+    "/{gateway_code}/local-start",
+    response_model=LocalInstallResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_gateway_locally(
+    gateway_code: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Durdurulmus gateway container'ini yeniden baslat (imaj cekmeden)."""
+    return _lifecycle_request(db, gateway_code, current_user, "start")
+
+
+@router.post(
+    "/{gateway_code}/local-restart",
+    response_model=LocalInstallResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def restart_gateway_locally(
+    gateway_code: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Gateway container'ini ayni imajla yeniden baslat.
+
+    `local-update`ten farki: imaj CEKMEZ, surum degismez. Takilan bir
+    gateway'i toparlamak icin en ucuz mudahale — ama yine de kisa bir
+    kesintidir.
+    """
+    return _lifecycle_request(db, gateway_code, current_user, "restart")
+
+
 @router.get("/{gateway_code}/config", response_model=GatewayConfigResponse)
 def get_gateway_config(
     gateway_code: str,

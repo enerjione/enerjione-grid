@@ -218,7 +218,27 @@ def request_remove(code: str, actor_username: str) -> str:
 
 
 def request_restart(code: str, actor_username: str) -> str:
+    """Container'i ayni imajla yeniden baslat (kisa kesinti)."""
     return _write_request(_base_request("restart", code, actor_username))
+
+
+def request_stop(code: str, actor_username: str) -> str:
+    """Gateway container'ini DURDUR — kaldirma DEGIL.
+
+    `remove`dan farki: compose dosyasi ve container yerinde kalir, ajan
+    durumu `exited` olarak raporlar. Bu ayrim arayuz icin belirleyici:
+    "operator durdurdu" ile "cihaza ulasilamiyor" ayni renkte gosterilirse
+    saha "veri neden gelmiyor" sorusuna yanlis yerde cevap arar.
+
+    Durdurma KALICIDIR: compose'daki `restart: unless-stopped` sayesinde
+    cihaz yeniden baslatilsa bile container kalkmaz.
+    """
+    return _write_request(_base_request("stop", code, actor_username))
+
+
+def request_start(code: str, actor_username: str) -> str:
+    """Durdurulmus container'i yeniden baslat (imaj cekmeden)."""
+    return _write_request(_base_request("start", code, actor_username))
 
 
 def request_update(code: str, actor_username: str, *, nats_url: str | None = None) -> str:

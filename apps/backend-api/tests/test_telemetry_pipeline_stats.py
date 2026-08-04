@@ -41,7 +41,10 @@ def _reset_stats():
     # acilistan beri gecen suredir. Yeni acilmis bir CI konteynerinde
     # `now - 0.0 < interval` cikip uyari bastiriliyordu — bu testler tam olarak
     # oyle kirmizi oldu.
-    tc._last_backlog_warn_at = None
+    tc._last_backlog_warn_at.clear()
+    tc._hat_stats.clear()
+    tc._kayip_isareti.clear()
+    tc._son_kayip_denetimi.clear()
     yield
 
 
@@ -53,7 +56,7 @@ def test_stats_start_empty():
 
 
 def test_batch_updates_counters():
-    tc._stats_record_batch(size=500, duration=0.25, backlog=1200, bad=2)
+    tc._stats_record_batch(sinif=tc.SINIF_ONCELIKLI, size=500, duration=0.25, backlog=1200, bad=2)
 
     s = tc.get_stats()
     assert s["processed_total"] == 500
@@ -65,8 +68,8 @@ def test_batch_updates_counters():
 
 
 def test_counters_accumulate_across_batches():
-    tc._stats_record_batch(size=100, duration=0.1, backlog=10, bad=0)
-    tc._stats_record_batch(size=250, duration=0.2, backlog=5, bad=1)
+    tc._stats_record_batch(sinif=tc.SINIF_ONCELIKLI, size=100, duration=0.1, backlog=10, bad=0)
+    tc._stats_record_batch(sinif=tc.SINIF_ONCELIKLI, size=250, duration=0.2, backlog=5, bad=1)
 
     s = tc.get_stats()
     assert s["processed_total"] == 350
@@ -80,15 +83,15 @@ def test_backlog_none_does_not_overwrite_last_known():
     Aksi halde tek bir okunamayan batch gostergeyi sifirlar ve 'backlog yok'
     gibi gorunur — tam da yanlis guven veren durum.
     """
-    tc._stats_record_batch(size=10, duration=0.1, backlog=9999, bad=0)
-    tc._stats_record_batch(size=10, duration=0.1, backlog=None, bad=0)
+    tc._stats_record_batch(sinif=tc.SINIF_ONCELIKLI, size=10, duration=0.1, backlog=9999, bad=0)
+    tc._stats_record_batch(sinif=tc.SINIF_ONCELIKLI, size=10, duration=0.1, backlog=None, bad=0)
 
     assert tc.get_stats()["backlog"] == 9999
 
 
 def test_throughput_is_computed():
     for _ in range(4):
-        tc._stats_record_batch(size=100, duration=0.05, backlog=0, bad=0)
+        tc._stats_record_batch(sinif=tc.SINIF_ONCELIKLI, size=100, duration=0.05, backlog=0, bad=0)
 
     s = tc.get_stats()
     assert s["throughput_msgs_per_sec"] > 0, "throughput hesaplanmadi"
@@ -103,7 +106,7 @@ def test_backlog_below_threshold_does_not_warn(monkeypatch):
     monkeypatch.setattr(tc, "get_stats", lambda: {"throughput_msgs_per_sec": 1.0})
     monkeypatch.setattr(tc.logger, "warning", lambda *a, **k: calls.append(a))
 
-    tc._warn_if_backlog_high(49_999)
+    tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 49_999)
 
     assert calls == [], "esigin altinda uyari uretildi"
 
@@ -116,7 +119,7 @@ def test_backlog_above_threshold_warns(monkeypatch):
     # Olay kaydi DB ister; bu testte ilgilenmiyoruz.
     monkeypatch.setattr(tc, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("db yok")))
 
-    tc._warn_if_backlog_high(5_000)
+    tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 5_000)
 
     assert len(calls) == 1, "esik asildi ama uyari uretilmedi"
 
@@ -130,7 +133,7 @@ def test_warning_is_rate_limited(monkeypatch):
     monkeypatch.setattr(tc, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("db yok")))
 
     for _ in range(10):
-        tc._warn_if_backlog_high(5_000)
+        tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 5_000)
 
     assert len(calls) == 1, f"rate-limit calismadi: {len(calls)} uyari uretildi"
 
@@ -140,7 +143,7 @@ def test_none_backlog_never_warns(monkeypatch):
     calls = []
     monkeypatch.setattr(tc.logger, "warning", lambda *a, **k: calls.append(a))
 
-    tc._warn_if_backlog_high(None)
+    tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, None)
 
     assert calls == []
 
@@ -212,7 +215,7 @@ def test_ILK_uyari_makine_UPTIME_inden_BAGIMSIZ(monkeypatch):
     monkeypatch.setattr(tc.logger, "warning", lambda *a, **k: calls.append(a))
     monkeypatch.setattr(tc, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("db yok")))
 
-    tc._warn_if_backlog_high(5_000)
+    tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 5_000)
 
     assert len(calls) == 1, (
         "yeni acilmis makinede ilk backlog uyarisi bastirildi — "
@@ -230,13 +233,13 @@ def test_rate_limit_ILK_uyaridan_SONRA_isler(monkeypatch):
     monkeypatch.setattr(tc.logger, "warning", lambda *a, **k: calls.append(a))
     monkeypatch.setattr(tc, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("db yok")))
 
-    tc._warn_if_backlog_high(5_000)
+    tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 5_000)
     assert len(calls) == 1
 
     saat["t"] = 100.0          # 58 sn sonra — pencere icinde
-    tc._warn_if_backlog_high(5_000)
+    tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 5_000)
     assert len(calls) == 1, "rate-limit calismadi"
 
     saat["t"] = 400.0          # 358 sn sonra — pencere disi
-    tc._warn_if_backlog_high(5_000)
+    tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 5_000)
     assert len(calls) == 2, "pencere dolduktan sonra uyari gelmedi"

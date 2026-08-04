@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeviceModelOption, SignalCatalogRow, SignalDataType, SignalSource, UserRole } from "../../shared/types";
+import type {
+  DeviceModelOption,
+  SignalCatalogRow,
+  SignalDataType,
+  SignalHistorianBulkPayload,
+  SignalHistorianBulkResult,
+  SignalSource,
+  UserRole
+} from "../../shared/types";
 import { SignalEditModal } from "./SignalEditModal";
 import {
   DATA_TYPES,
@@ -8,7 +16,11 @@ import {
   DATA_TYPE_SHORT,
   IEC104_MONITOR_TYPES,
   SOURCE_LABEL,
-  SOURCES
+  SOURCES,
+  deadbandApplies,
+  effectiveDeadband,
+  isFaultSignal,
+  isHistorized
 } from "./signalCatalogConstants";
 
 type Props = {
@@ -18,12 +30,33 @@ type Props = {
   loading: boolean;
   error?: string;
   onUpdate: (signalKey: string, payload: Partial<Omit<SignalCatalogRow, "id" | "key">>) => Promise<void>;
+  /** Toplu arsiv ayari. Tekil duzenleme de buradan gecer: tek kod yolu =
+   *  tek kural yolu (ariza korumasi hem burada hem sunucuda ayni). */
+  onBulkHistorian: (payload: SignalHistorianBulkPayload) => Promise<SignalHistorianBulkResult>;
 };
 
 type SourceFilter = "all" | SignalSource;
 type TabKey = "all" | SignalDataType;
+/** Arsiv filtresi — "neyin yazildigini tek bakista gor". */
+type ArchiveFilter = "all" | "on" | "off" | "deadband";
 
-export function SignalsPage({ role, signals, deviceModels, loading, error, onUpdate }: Props) {
+/** Onay bekleyen arsiv degisikligi. `faultKeys` bos degilse once uyari. */
+type PendingHistorian = {
+  keys: string[];
+  faultKeys: string[];
+  historize?: boolean;
+  deadband?: number;
+};
+
+export function SignalsPage({
+  role,
+  signals,
+  deviceModels,
+  loading,
+  error,
+  onUpdate,
+  onBulkHistorian
+}: Props) {
   const { t } = useTranslation();
   const canEdit = role === "installer";
   const dataTypeLabel = (type: SignalDataType): string =>
@@ -31,11 +64,17 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [editModalSignal, setEditModalSignal] = useState<SignalCatalogRow | null>(null);
   const [iec104Expanded, setIec104Expanded] = useState(false);
   const [modbusExpanded, setModbusExpanded] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [bulkDeadband, setBulkDeadband] = useState("");
+  const [detailDeadband, setDetailDeadband] = useState("");
+  const [pending, setPending] = useState<PendingHistorian | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
   const [modelFilter, setModelFilter] = useState<string>(
     () => deviceModels[0]?.code ?? "horstmann_sn_2_0"
   );
@@ -66,6 +105,9 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
     return signalsForModel.filter((signal) => {
       if (activeTab !== "all" && signal.data_type !== activeTab) return false;
       if (sourceFilter !== "all" && signal.source !== sourceFilter) return false;
+      if (archiveFilter === "on" && !isHistorized(signal)) return false;
+      if (archiveFilter === "off" && isHistorized(signal)) return false;
+      if (archiveFilter === "deadband" && effectiveDeadband(signal) <= 0) return false;
       if (!q) return true;
       return (
         signal.label.toLowerCase().includes(q) ||
@@ -73,15 +115,49 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
         (signal.description ?? "").toLowerCase().includes(q)
       );
     });
-  }, [signalsForModel, activeTab, sourceFilter, searchTerm]);
+  }, [signalsForModel, activeTab, sourceFilter, archiveFilter, searchTerm]);
 
   const selected = useMemo(
     () => signalsForModel.find((signal) => signal.key === selectedKey) ?? null,
     [signalsForModel, selectedKey]
   );
 
+  // Secim degisince olu bant kutusunu o sinyalin degeriyle tazele.
+  useEffect(() => {
+    setDetailDeadband(selected ? String(selected.historize_deadband ?? 0) : "");
+  }, [selected]);
+
   const totalCount = signalsForModel.length;
   const visibleCount = filteredSignals.length;
+
+  // --- GORUNUR ETKI ---------------------------------------------------------
+  // Kullanici kararinin sonucunu GORMEDEN karar veremez. Arsivlenen sinyal
+  // sayisi, yazma yukunun dogrudan carpanidir: 600 cihazda her sinyal ayri
+  // bir satir akisidir. Olu bandin etkisi statik olarak KESTIRILEMEZ (sinyalin
+  // ne kadar oynadigina bagli), o yuzden ayri sayilir — tek bir "tahmini
+  // satir/sn" rakami uydurmak, guvenilir gorunen bir yalan olurdu.
+  const historianOzet = useMemo(() => {
+    let archived = 0;
+    let withDeadband = 0;
+    for (const s of signalsForModel) {
+      if (isHistorized(s)) {
+        archived += 1;
+        if (effectiveDeadband(s) > 0) withDeadband += 1;
+      }
+    }
+    const pct = totalCount === 0 ? 0 : Math.round((archived / totalCount) * 100);
+    return { archived, withDeadband, pct };
+  }, [signalsForModel, totalCount]);
+
+  // Filtredeki secim — toplu islem tam olarak buna uygulanir.
+  const filteredFaultKeys = useMemo(
+    () => filteredSignals.filter((s) => isFaultSignal(s.data_type)).map((s) => s.key),
+    [filteredSignals]
+  );
+  const filteredAnalogCount = useMemo(
+    () => filteredSignals.filter((s) => deadbandApplies(s.data_type)).length,
+    [filteredSignals]
+  );
 
   const downloadCsv = (filename: string, headers: string[], rows: (string | number)[][]) => {
     const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
@@ -123,6 +199,91 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
     downloadCsv(`modbus_${modelFilter}.csv`, ["Etiket", "Key", "Function Code", "Adres", "Kaynak"], rows);
     setExportMenuOpen(false);
   };
+
+  // --- Arsiv ayari uygulama -------------------------------------------------
+  // Tekil ve toplu ayni fonksiyondan gecer. Ariza sinyali varsa ve arsiv
+  // KAPATILIYORSA once onay istenir (engelleme degil — gerekce: `binary_output`
+  // komut noktalarinin arsivi zaten kapalidir ve sert engel sahadaki mevcut
+  // durumu yonetilemez kilardi). Onay sunucuya da gider; kural orada da var.
+  const uygula = async (istek: PendingHistorian) => {
+    if (istek.keys.length === 0) return;
+    setBusy(true);
+    setNotice("");
+    try {
+      const sonuc = await onBulkHistorian({
+        signal_keys: istek.keys,
+        ...(istek.historize === undefined ? {} : { historize: istek.historize }),
+        ...(istek.deadband === undefined ? {} : { historize_deadband: istek.deadband }),
+        confirm_fault_signals: istek.faultKeys.length > 0
+      });
+      const parcalar = [
+        sonuc.updated > 0
+          ? t("engineering.signals.historian.applied", { count: sonuc.updated })
+          : t("engineering.signals.historian.noChange")
+      ];
+      if (sonuc.skipped_deadband.length > 0) {
+        parcalar.push(
+          t("engineering.signals.historian.skipped", { count: sonuc.skipped_deadband.length })
+        );
+      }
+      setNotice(parcalar.join(" "));
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : t("engineering.signals.form.saveFail"));
+    } finally {
+      setBusy(false);
+      setPending(null);
+    }
+  };
+
+  /** Onay gerekiyorsa uyari penceresini acar, gerekmiyorsa dogrudan uygular. */
+  const istekBaslat = (istek: PendingHistorian) => {
+    if (istek.keys.length === 0) return;
+    if (istek.faultKeys.length > 0) {
+      setPending(istek);
+      return;
+    }
+    void uygula(istek);
+  };
+
+  const topluArsiv = (historize: boolean) => {
+    const keys = filteredSignals.map((s) => s.key);
+    istekBaslat({
+      keys,
+      // Arsivi ACMAK her zaman guvenli yon; onay yalnizca KAPATIRKEN.
+      faultKeys: historize ? [] : filteredFaultKeys,
+      historize
+    });
+  };
+
+  const topluOluBant = () => {
+    const deger = Number(bulkDeadband.trim());
+    if (!Number.isFinite(deger) || deger < 0) return;
+    istekBaslat({
+      keys: filteredSignals.map((s) => s.key),
+      faultKeys: [],
+      deadband: deger
+    });
+  };
+
+  const tekilArsiv = (signal: SignalCatalogRow, historize: boolean) => {
+    istekBaslat({
+      keys: [signal.key],
+      faultKeys: historize || !isFaultSignal(signal.data_type) ? [] : [signal.key],
+      historize
+    });
+  };
+
+  const tekilOluBant = (signal: SignalCatalogRow) => {
+    const deger = Number(detailDeadband.trim());
+    if (!Number.isFinite(deger) || deger < 0) return;
+    istekBaslat({ keys: [signal.key], faultKeys: [], deadband: deger });
+  };
+
+  const pendingFaultLabels = useMemo(() => {
+    if (!pending) return [];
+    const byKey = new Map(signalsForModel.map((s) => [s.key, s]));
+    return pending.faultKeys.map((k) => byKey.get(k)?.label ?? k);
+  }, [pending, signalsForModel]);
 
   return (
     <section className="tab-panel signals-panel signals-panel-modern">
@@ -219,7 +380,7 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
             className={`signals-type-tab ${activeTab === "all" ? "active" : ""}`}
             onClick={() => setActiveTab("all")}
           >
-            <span className="stt-label">Tümü</span>
+            <span className="stt-label">{t("engineering.signals.all")}</span>
             <span className="stt-count">{totalCount}</span>
           </button>
           {DATA_TYPES.map((type) => (
@@ -235,6 +396,108 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
         </div>
       </div>
 
+      {/* 3. satir: ARSIV. Solda "ne yaziliyor" ozeti, ortada arsiv filtresi,
+          sagda filtredeki sinyallere toplu islem. */}
+      <div className="signals-historian-bar">
+        <div className="shb-summary">
+          <span className="material-symbols-outlined shb-icon" aria-hidden="true">database</span>
+          <span className="shb-summary-main">
+            {t("engineering.signals.historian.summary", {
+              total: totalCount,
+              archived: historianOzet.archived
+            })}
+          </span>
+          <span className="shb-summary-meter" aria-hidden="true">
+            <span className="shb-summary-meter-fill" style={{ width: `${historianOzet.pct}%` }} />
+          </span>
+          <span className="shb-summary-sub">
+            {t("engineering.signals.historian.writeLoad", { pct: historianOzet.pct })}
+            {historianOzet.withDeadband > 0
+              ? ` · ${t("engineering.signals.historian.summaryDeadband", {
+                  count: historianOzet.withDeadband
+                })}`
+              : ""}
+          </span>
+        </div>
+
+        <div className="shb-filters">
+          {(["all", "on", "off", "deadband"] as ArchiveFilter[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`chip shb-chip-${key} ${archiveFilter === key ? "chip-active" : ""}`}
+              onClick={() => setArchiveFilter(key)}
+            >
+              {t(
+                key === "all"
+                  ? "engineering.signals.historian.filterAll"
+                  : key === "on"
+                    ? "engineering.signals.historian.filterArchived"
+                    : key === "off"
+                      ? "engineering.signals.historian.filterNotArchived"
+                      : "engineering.signals.historian.filterDeadband"
+              )}
+            </button>
+          ))}
+        </div>
+
+        {canEdit ? (
+          <div className="shb-bulk">
+            <span className="shb-bulk-scope">
+              {t("engineering.signals.historian.bulkScope", { count: visibleCount })}
+            </span>
+            <button
+              type="button"
+              className="secondary-btn shb-bulk-btn"
+              disabled={busy || visibleCount === 0}
+              onClick={() => topluArsiv(true)}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">save</span>
+              {t("engineering.signals.historian.bulkOn")}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn shb-bulk-btn shb-bulk-btn--off"
+              disabled={busy || visibleCount === 0}
+              onClick={() => topluArsiv(false)}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">block</span>
+              {t("engineering.signals.historian.bulkOff")}
+            </button>
+            <span className="shb-bulk-deadband">
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                className="shb-deadband-input"
+                value={bulkDeadband}
+                onChange={(event) => setBulkDeadband(event.target.value)}
+                placeholder={t("engineering.signals.historian.bulkDeadbandPlaceholder")}
+                disabled={busy || filteredAnalogCount === 0}
+                title={
+                  filteredAnalogCount === 0
+                    ? t("engineering.signals.historian.noAnalogInFilter")
+                    : t("engineering.signals.historian.bulkAnalogOnly", { count: filteredAnalogCount })
+                }
+              />
+              <button
+                type="button"
+                className="secondary-btn shb-bulk-btn"
+                disabled={busy || filteredAnalogCount === 0 || bulkDeadband.trim() === ""}
+                onClick={topluOluBant}
+              >
+                {t("engineering.signals.historian.bulkDeadbandApply")}
+              </button>
+            </span>
+          </div>
+        ) : null}
+      </div>
+
+      {notice ? <p className="helper-text shb-notice">{notice}</p> : null}
+      {canEdit ? (
+        <p className="helper-text shb-delay-hint">{t("engineering.signals.historian.effectDelay")}</p>
+      ) : null}
+
       <div className="signals-main-layout">
         <div className="signals-list-column">
           {loading ? <p className="helper-text">{t("common.loading")}</p> : null}
@@ -246,6 +509,8 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
                   <th className="col-type">Veri Tipi</th>
                   <th className="col-addr">Grup/Indeks</th>
                   <th className="col-label">Açıklama</th>
+                  <th className="col-archive">{t("engineering.signals.historian.colArchive")}</th>
+                  <th className="col-deadband">{t("engineering.signals.historian.colDeadband")}</th>
                   <th className={`col-proto ${iec104Expanded ? "col-proto--expanded" : ""}`}>
                     <span className="col-proto-head">
                       IEC104
@@ -294,6 +559,9 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
                     signal.modbus_function !== undefined &&
                     signal.modbus_address !== null &&
                     signal.modbus_address !== undefined;
+                  const arsivli = isHistorized(signal);
+                  const olculuBant = effectiveDeadband(signal);
+                  const arizali = isFaultSignal(signal.data_type);
                   return (
                     <tr
                       key={signal.key}
@@ -320,6 +588,55 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
                         {!signal.is_active ? (
                           <span className="cell-inactive-hint">{t("engineering.signals.inactive")}</span>
                         ) : null}
+                      </td>
+                      <td className="col-archive">
+                        <span
+                          className={`archive-chip ${arsivli ? "archive-chip--on" : "archive-chip--off"}`}
+                          title={
+                            arsivli
+                              ? t("engineering.signals.historian.onTitle")
+                              : arizali
+                                ? t("engineering.signals.historian.offFaultTitle")
+                                : t("engineering.signals.historian.offTitle")
+                          }
+                        >
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            {arsivli ? "database" : "block"}
+                          </span>
+                          {arsivli
+                            ? t("engineering.signals.historian.on")
+                            : t("engineering.signals.historian.off")}
+                        </span>
+                        {/* Ariza sinyalinin arsivi KAPALIYSA bunu susturmak,
+                            ekranin varlik sebebini ortadan kaldirirdi. */}
+                        {!arsivli && arizali ? (
+                          <span
+                            className="archive-fault-flag"
+                            title={t("engineering.signals.historian.offFaultTitle")}
+                          >
+                            <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="col-deadband">
+                        {!deadbandApplies(signal.data_type) ? (
+                          // Olmayan bir ayari varmis gibi gostermiyoruz.
+                          <span
+                            className="deadband-cell deadband-cell--na"
+                            title={t("engineering.signals.historian.deadbandNaTitle")}
+                          >
+                            —
+                          </span>
+                        ) : olculuBant > 0 ? (
+                          <span className="deadband-cell mono">
+                            ±{olculuBant}
+                            {signal.unit ? <span className="deadband-unit">{signal.unit}</span> : null}
+                          </span>
+                        ) : (
+                          <span className="deadband-cell deadband-cell--zero">
+                            {t("engineering.signals.historian.deadbandOff")}
+                          </span>
+                        )}
                       </td>
                       <td className={`col-proto ${iec104Expanded ? "col-proto--expanded" : ""}`}>
                         {iec104On ? (
@@ -358,7 +675,7 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
                 })}
                 {filteredSignals.length === 0 && !loading ? (
                   <tr>
-                    <td className="signals-empty-cell" colSpan={6}>
+                    <td className="signals-empty-cell" colSpan={8}>
                       {totalCount === 0 ? t("engineering.signals.noSignals") : t("engineering.signals.noResults")}
                     </td>
                   </tr>
@@ -448,6 +765,94 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
                   </div>
                 </dl>
 
+                {/* ARSIV — burada DUZENLENEBILIR. Sinyalin arsive yazilip
+                    yazilmayacagi ve olu bandi, sayfanin geri kalanindan
+                    farkli olarak dogrudan diske yazilan satiri belirler. */}
+                <div className="signals-historian-panel">
+                  <h5 className="shp-title">
+                    <span className="material-symbols-outlined" aria-hidden="true">database</span>
+                    {t("engineering.signals.historian.title")}
+                  </h5>
+
+                  <div className="shp-row">
+                    <span className="shp-label">{t("engineering.signals.historian.archiveLabel")}</span>
+                    {canEdit ? (
+                      <div className="shp-toggle-group" role="group">
+                        <button
+                          type="button"
+                          className={`shp-toggle ${isHistorized(selected) ? "shp-toggle--on" : ""}`}
+                          disabled={busy || isHistorized(selected)}
+                          onClick={() => tekilArsiv(selected, true)}
+                        >
+                          {t("engineering.signals.historian.on")}
+                        </button>
+                        <button
+                          type="button"
+                          className={`shp-toggle ${!isHistorized(selected) ? "shp-toggle--off" : ""}`}
+                          disabled={busy || !isHistorized(selected)}
+                          onClick={() => tekilArsiv(selected, false)}
+                        >
+                          {t("engineering.signals.historian.off")}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="shp-value">
+                        {isHistorized(selected)
+                          ? t("engineering.signals.historian.on")
+                          : t("engineering.signals.historian.off")}
+                      </span>
+                    )}
+                  </div>
+
+                  {isFaultSignal(selected.data_type) ? (
+                    <p className="shp-fault-hint">
+                      <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+                      {t("engineering.signals.historian.faultHint")}
+                    </p>
+                  ) : null}
+
+                  <div className="shp-row">
+                    <span className="shp-label">{t("engineering.signals.historian.colDeadband")}</span>
+                    {!deadbandApplies(selected.data_type) ? (
+                      // Duzenlenebilir OLMAMALI: motor bu tipte esigi yok sayar.
+                      <span className="shp-value shp-value--na">
+                        {t("engineering.signals.historian.notApplicable")}
+                      </span>
+                    ) : canEdit ? (
+                      <span className="shp-deadband-edit">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={detailDeadband}
+                          onChange={(event) => setDetailDeadband(event.target.value)}
+                          disabled={busy}
+                        />
+                        {selected.unit ? <span className="shp-unit">{selected.unit}</span> : null}
+                        <button
+                          type="button"
+                          className="secondary-btn shp-apply"
+                          disabled={
+                            busy ||
+                            detailDeadband.trim() === "" ||
+                            Number(detailDeadband) === (selected.historize_deadband ?? 0)
+                          }
+                          onClick={() => tekilOluBant(selected)}
+                        >
+                          {t("engineering.signals.historian.apply")}
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="shp-value mono">{selected.historize_deadband ?? 0}</span>
+                    )}
+                  </div>
+                  <p className="helper-text shp-hint">
+                    {deadbandApplies(selected.data_type)
+                      ? t("engineering.signals.historian.deadbandHint")
+                      : t("engineering.signals.historian.deadbandNaTitle")}
+                  </p>
+                </div>
+
                 {canEdit ? (
                   <div className="signal-form-actions">
                     <button type="button" className="primary-btn" onClick={() => setEditModalSignal(selected)}>
@@ -465,6 +870,56 @@ export function SignalsPage({ role, signals, deviceModels, loading, error, onUpd
 
       {editModalSignal ? (
         <SignalEditModal signal={editModalSignal} onSave={onUpdate} onClose={() => setEditModalSignal(null)} />
+      ) : null}
+
+      {/* ARIZA KORUMASI — engelleme degil ONAY.
+          Gerekce: `binary_output` komut noktalarinin arsivi migration 0032'den
+          beri KAPALI; sert engel sahadaki mevcut durumu yonetilemez kilardi ve
+          yanlislikla acilan bir noktayi geri kapatmayi imkansizlastirirdi.
+          Ayni kural sunucuda da var — bu pencere atlansa bile istek reddedilir. */}
+      {pending ? (
+        <div className="settings-modal-backdrop" onClick={() => setPending(null)}>
+          <div
+            className="settings-modal historian-warn-modal"
+            role="alertdialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="hwm-title">
+              <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+              {t("engineering.signals.historian.faultWarnTitle")}
+            </h3>
+            <p className="hwm-body">{t("engineering.signals.historian.faultWarnBody")}</p>
+            <p className="hwm-count">
+              {t("engineering.signals.historian.faultWarnCount", { count: pending.faultKeys.length })}
+            </p>
+            <ul className="hwm-list">
+              {pendingFaultLabels.slice(0, 12).map((label, i) => (
+                <li key={pending.faultKeys[i]}>{label}</li>
+              ))}
+              {pendingFaultLabels.length > 12 ? (
+                <li className="hwm-more">
+                  {t("engineering.signals.historian.faultWarnMore", {
+                    count: pendingFaultLabels.length - 12
+                  })}
+                </li>
+              ) : null}
+            </ul>
+            <div className="signal-form-actions hwm-actions">
+              <button type="button" className="secondary-btn" onClick={() => setPending(null)} disabled={busy}>
+                {t("engineering.signals.historian.cancel")}
+              </button>
+              <button
+                type="button"
+                className="primary-btn hwm-confirm"
+                disabled={busy}
+                onClick={() => void uygula(pending)}
+              >
+                {t("engineering.signals.historian.faultWarnConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   );

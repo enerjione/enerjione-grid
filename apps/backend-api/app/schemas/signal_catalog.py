@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.signal_catalog import OLU_BANT_UST_SINIR
+
 
 SignalDataType = Literal[
     "analog",
@@ -33,6 +35,16 @@ class SignalCatalogBase(BaseModel):
     supports_alarm: bool = False
     is_active: bool = True
     display_order: int = 0
+    # --- Historian (arsiv) politikasi ------------------------------------
+    # Alanlar DB'de migration 0032'den beri var ve `historian_policy` onlara
+    # gore karar veriyordu; sozlesmede olmadiklari icin arayuz ne okuyabiliyor
+    # ne yazabiliyordu. Yani sistem yaziyi kisiyor ama KIMSE gormuyordu.
+    historize: bool = True
+    # MUTLAK, sinyalin kendi biriminde. 0 = suzgec kapali. YALNIZCA analog
+    # tipte uygulanir (bkz. historian_policy.OLU_BANT_TIPLERI).
+    # `le`: ust sinir olmadan `Infinity` gecerdi (`inf >= 0` dogru) — bkz.
+    # `OLU_BANT_UST_SINIR`.
+    historize_deadband: float = Field(default=0.0, ge=0.0, le=OLU_BANT_UST_SINIR)
     # IEC 60870-5-104 adresleme — `string` ve desteklenmeyen tiplerde NULL.
     iec104_type_id: int | None = Field(default=None, ge=0, le=255)
     # Yeni model: sinyalin mutlak IOA'si. Cihaz bazli ayrim ASDU CA ile yapilir.
@@ -72,6 +84,14 @@ class SignalCatalogUpdate(BaseModel):
     supports_alarm: bool | None = None
     is_active: bool | None = None
     display_order: int | None = None
+    historize: bool | None = None
+    # DIKKAT: "olu bandi temizle" 0.0 GONDERMELI, null degil. Router
+    # `exclude_none=True` uyguladigi icin null "degistirme" anlamina gelir.
+    historize_deadband: float | None = Field(default=None, ge=0.0, le=OLU_BANT_UST_SINIR)
+    # Ariza gecisi tasiyan bir sinyalin (binary / binary_output) arsivini
+    # KAPATMAK icin acik onay. Kural servis katmaninda; arayuzde durmasi
+    # yetmezdi, elle atilan bir istek onu atlardi.
+    confirm_fault_signals: bool | None = None
     iec104_type_id: int | None = Field(default=None, ge=0, le=255)
     iec104_ioa: int | None = Field(default=None, ge=0, le=16_777_215)
     iec104_ioa_offset: int | None = Field(default=None, ge=0, le=16_777_215)
@@ -91,6 +111,31 @@ class SignalCatalogRead(SignalCatalogBase):
 
     class Config:
         from_attributes = True
+
+
+class SignalHistorianBulkUpdate(BaseModel):
+    """Filtreye gore secilmis sinyallerin arsiv ayarini tek istekte degistirir.
+
+    193 sinyali tek tek PATCH etmek 193 istek ve 193 denetim kaydi demekti;
+    o hacimde denetim kaydi OKUNAMAZ hale gelir ve ekranin varlik sebebi
+    (yazma yukunu bilincli kismak) islkenceye donerdi.
+    """
+
+    signal_keys: list[str] = Field(min_length=1, max_length=5_000)
+    historize: bool | None = None
+    historize_deadband: float | None = Field(default=None, ge=0.0, le=OLU_BANT_UST_SINIR)
+    #: Ariza gecisi tasiyan sinyaller secimde varsa ve arsiv KAPATILIYORSA
+    #: zorunlu. Arayuz once uyarir, kullanici onaylarsa bunu true gonderir.
+    confirm_fault_signals: bool = False
+
+
+class SignalHistorianBulkResult(BaseModel):
+    updated: int
+    unchanged: int
+    #: Olu bant istendi ama tip analog olmadigi icin UYGULANMAYAN sinyaller.
+    #: Sessizce yutulsaydi kullanici calismayan bir ayari yapilmis sanirdi.
+    skipped_deadband: list[str] = []
+    not_found: list[str] = []
 
 
 class SignalLiveValue(BaseModel):

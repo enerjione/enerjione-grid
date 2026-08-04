@@ -550,6 +550,13 @@ services:
       # defterin omrunu (PROCESSED_MESSAGES_RETENTION_HOURS) ASAMAZ — kod
       # tavani zorlar ve asilirsa kirpip loglar.
       TELEMETRY_PERSIST_CUTOVER_OVERLAP_SEC: ${TELEMETRY_PERSIST_CUTOVER_OVERLAP_SEC:-900}
+      # --- IKI HAT: oncelikli (dijital/durum) ve toplu (analog) -----------
+      # Kalicilastirma her sinifi KENDI durable'i ile ceker; toplu hattaki
+      # analog birikimi oncelikli hattin ONUNE GECEMEZ. Konu son token'ini
+      # tag-engine katalogdan cikarir (bkz. tag_engine/katalog.py).
+      # false -> tek hat (eski davranis). Iki hat once BOSALTILIR, sonra
+      # tek hatta donulur; olcum kaybolmaz.
+      TELEMETRY_PERSIST_SPLIT_ENABLED: ${TELEMETRY_PERSIST_SPLIT_ENABLED:-true}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -815,6 +822,14 @@ services:
       NATS_CA_FILE: ${NATS_CA_FILE:-}
       NATS_SUBJECT_TELEMETRY_RAW: ${NATS_SUBJECT_TELEMETRY_RAW:-e1.telemetry.raw.>}
       NATS_SUBJECT_NORMALIZED_PREFIX: ${NATS_SUBJECT_NORMALIZED_PREFIX:-e1.telemetry.normalized}
+      # HAT SINIFLANDIRMASI icin sinyal katalogu. Konu son token'i
+      # (prio/bulk) buradan cikar; kodda sinyal adi listesi YOK.
+      # Katalog cekilemezse TUM olcumler oncelikli hatta akar — yani en kotu
+      # durum eski davranistir (tek hat), sessiz bir gerileme degil.
+      BACKEND_API_BASE: http://backend-api:8000/api/v1
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SIGNAL_CATALOG_REFRESH_SEC: ${SIGNAL_CATALOG_REFRESH_SEC:-60}
+      SIGNAL_CATALOG_TIMEOUT_SEC: ${SIGNAL_CATALOG_TIMEOUT_SEC:-5}
       # Backend system-status, tag-engine icin 8011 portunu probe eder.
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8011
@@ -849,6 +864,12 @@ services:
       # ve NATS_URL'i tls:// semasina cevirin.
       NATS_CA_FILE: ${NATS_CA_FILE:-}
       NATS_SUBJECT_TELEMETRY_NORMALIZED: ${NATS_SUBJECT_TELEMETRY_NORMALIZED:-e1.telemetry.normalized.>}
+      # IKI HAT — alarm URETEN yol oncelikli hatta. Oncelikli hattin kuyruk
+      # tavani (`max_ack_pending`) kucuk tutulur: buyuk tutmak, ayirdigimiz
+      # hattin icine yeniden kuyruk kurmak olurdu.
+      NATS_STREAM_TELEMETRY_NORMALIZED: ${NATS_STREAM_TELEMETRY_NORMALIZED:-TELEMETRY_NORMALIZED}
+      NATS_ALARM_ACK_PENDING_PRIO: ${NATS_ALARM_ACK_PENDING_PRIO:-500}
+      NATS_ALARM_ACK_PENDING_BULK: ${NATS_ALARM_ACK_PENDING_BULK:-10000}
       # Alarm yayini: RabbitMQ (notification-worker buradan tuketiyor).
       # Vhost izolasyonu: kok `/` vhost'a degil dedicated `e1` (veya
       # `${RABBITMQ_VHOST}`) altinda calisilir. Backend startup'ta admin

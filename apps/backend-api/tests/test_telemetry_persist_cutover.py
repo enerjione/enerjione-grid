@@ -28,6 +28,7 @@ yesil kalmisti.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import sys
 import threading
@@ -63,16 +64,35 @@ from tag_engine.main import _build_processed_payload  # noqa: E402
 class _SahtePsub:
     """Pull subscription. `fetch` senaryodan beslenir."""
 
+    #: Senaryo bittikten sonra kac bos pencereye izin verilir. SONSUZ DONGU
+    #: EMNIYETI — davranis kurali degil.
+    _BOS_PENCERE_TAVANI = 50
+
     def __init__(self, ad: str, gunluk: list, senaryo: list) -> None:
         self.ad = ad
         self._gunluk = gunluk
         self._senaryo = senaryo
+        self._bos_pencere = 0
         self.abonelik_acik = True
 
     async def fetch(self, batch: int = 1, timeout: float = 5):
+        # Gercek `fetch` HER ZAMAN I/O bekler. Sahte de en az bir kez sira
+        # vermeli: aksi halde hat dongusu olay dongusunu HIC birakmaz ve
+        # gecis gozetmeni (ayri bir asyncio gorevi) calisma sirasi bulamaz —
+        # yani test, uretimde var olmayan bir zamanlama kurar.
+        await asyncio.sleep(0)
         self._gunluk.append(("fetch", self.ad))
         if not self._senaryo:
-            tc._stop_event.set()
+            # SENARYO BITTI = "artik mesaj yok", KAPANIS DEGIL.
+            #
+            # Onceden burasi `_stop_event`i set ediyordu ve ikisi ayni sey
+            # sayiliyordu. Gecis karari artik AYRI bir gozetmen gorevinde
+            # verildigi icin bu ayrim onemli: `_stop_event` KAPANIS demektir
+            # ve kapanista durable cerrahisi yapilmaz (dogru davranis), yani
+            # senaryonun bitmesi gecisi yanlislikla iptal ederdi.
+            self._bos_pencere += 1
+            if self._bos_pencere > self._BOS_PENCERE_TAVANI:
+                tc._stop_event.set()
             raise nats.errors.TimeoutError
         adim = self._senaryo.pop(0)
         if adim == "dur":
@@ -196,6 +216,13 @@ RAW_STREAM = settings.nats_stream_telemetry_raw
 NORM_STREAM = settings.nats_stream_telemetry_normalized
 RAW_DURABLE = settings.nats_consumer_telemetry_persist
 NORM_DURABLE = settings.nats_consumer_telemetry_persist_normalized
+# Hat ayrimi sonrasi NORMALIZED tarafi TEK durable degil IKI durable'dir:
+# oncelikli (dijital/durum) ve toplu (analog). Gecis artik dogrudan bu
+# topolojiyi kurar — araya yalnizca bosaltilip silinecek bir tek-hat duragi
+# koymanin anlami yok.
+PRIO_DURABLE = settings.nats_consumer_telemetry_persist_prio
+BULK_DURABLE = settings.nats_consumer_telemetry_persist_bulk
+HAT_DURABLELARI = (PRIO_DURABLE, BULK_DURABLE)
 
 
 def _kostur(monkeypatch, js: _SahteJS, *, kaynak_tercihi: str = "auto") -> None:
@@ -289,20 +316,27 @@ def test_faz1_eski_durable_AYNEN_devralinir(monkeypatch):
 
 
 def test_birikim_BITMEDEN_gecis_YAPILMAZ(monkeypatch):
-    """Fetch mesaj donduruyorsa (birikim suruyor) NORMALIZED'e GECILMEZ.
+    """Birikim SURERKEN NORMALIZED'e GECILMEZ.
 
     Gecis erken yapilirsa RAW'da bekleyen olcumler hicbir zaman yazilmaz.
     Bu, "hicbir olcum kaybolmayacak" sartinin tek kilidi.
+
+    "Birikim var"i SUNUCUNUN sayacindan kuruyoruz (`num_pending`), fetch'in
+    mesaj dondurmesinden degil: karari veren yer orasi. Fetch dolu ama sayac
+    bos olan bir sahte, uretimde var olmayan bir dunya kurardi ve testi
+    gercek davranistan kopartirdi.
     """
     js = _SahteJS(
         {(RAW_STREAM, RAW_DURABLE)},
         {RAW_DURABLE: [[_SahteMsg()], [_SahteMsg()], "mesaj_dur"]},
+        sayaclar={RAW_DURABLE: _SahteConsumerInfo(num_pending=12_000)},
     )
     _kostur(monkeypatch, js, kaynak_tercihi="auto")
 
-    assert not _var_mi(js.gunluk, "add_consumer", NORM_STREAM, NORM_DURABLE), (
-        "birikim varken NORMALIZED durable'i acildi — bekleyen olcumler yazilmadan atlanir"
-    )
+    for durable in (NORM_DURABLE, *HAT_DURABLELARI):
+        assert not _var_mi(js.gunluk, "add_consumer", NORM_STREAM, durable), (
+            f"birikim varken {durable} acildi — bekleyen olcumler yazilmadan atlanir"
+        )
     assert not _var_mi(js.gunluk, "delete_consumer"), (
         "birikim varken eski durable silindi — bekleyen olcumler KAYBOLUR"
     )
@@ -315,23 +349,61 @@ def test_birikim_BITMEDEN_gecis_YAPILMAZ(monkeypatch):
 
 
 def test_drenaj_bitince_NORMALIZED_e_gecilir_ve_SIRA_dogru(monkeypatch):
-    """Bos fetch = drenaj bitti. Gecis sirasi: yeni durable -> abonelik kes -> eskisini sil."""
+    """Bos fetch = drenaj bitti. Gecis sirasi: YENI durable -> ESKISINI sil.
+
+    KORUNAN OZELLIK: eski durable, yenisi HAZIR OLMADAN silinemez. Ikisi
+    arasinda surec olurse, silinmis eski durable + hic yaratilmamis yeni
+    durable = tuketicisiz pencere = kaybolan olcum.
+
+    ABONELIGIN kapatilmasi bu sirali kisitin PARCASI DEGILDIR ve artik
+    cerrahiden ONCE yapilir. Bilincli ve daha guvenli: abonelik kapansa da
+    durable (ve icindeki konum) sunucuda DURUR, dolayisiyla olcum kaybi
+    yaratmaz; buna karsilik "iki abonelik ayni anda acik" durumu — cift
+    kaydin en olasi kaynagi — artik YAPISAL olarak imkansiz.
+    """
     js = _SahteJS(
         {(RAW_STREAM, RAW_DURABLE)},
-        {RAW_DURABLE: ["bos"], NORM_DURABLE: ["dur"]},
+        {RAW_DURABLE: ["bos"], PRIO_DURABLE: ["dur"], BULK_DURABLE: ["dur"]},
     )
     _kostur(monkeypatch, js, kaynak_tercihi="auto")
 
-    i_yeni = _sira(js.gunluk, "add_consumer", NORM_STREAM, NORM_DURABLE)
-    i_bind = _sira(js.gunluk, "bind", NORM_STREAM, NORM_DURABLE)
-    i_kes = _sira(js.gunluk, "unsubscribe", RAW_DURABLE)
     i_sil = _sira(js.gunluk, "delete_consumer", RAW_STREAM, RAW_DURABLE)
-
-    assert i_yeni < i_bind < i_kes < i_sil, (
-        "gecis sirasi bozuk: eski durable yeni durable HAZIR OLMADAN kapatilirsa "
-        f"tuketicisiz bir pencere olusur ve o penceredeki olcumler kaybolur. gunluk={js.gunluk}"
-    )
+    i_kes = _sira(js.gunluk, "unsubscribe", RAW_DURABLE)
+    for durable in HAT_DURABLELARI:
+        i_yeni = _sira(js.gunluk, "add_consumer", NORM_STREAM, durable)
+        i_bind = _sira(js.gunluk, "bind", NORM_STREAM, durable)
+        assert i_yeni < i_sil, (
+            f"{durable} yaratilmadan eski durable silindi -> tuketicisiz "
+            f"pencere, olcum kaybolur. gunluk={js.gunluk}"
+        )
+        assert i_yeni < i_bind
+    assert i_kes < i_sil, "eski abonelik durable silinmeden kapatilmali"
     assert tc.get_stats()["source"] == tc.KAYNAK_NORMALIZED
+
+
+def test_gecis_CERRAHISI_sirasinda_ACIK_ABONELIK_YOK(monkeypatch):
+    """Durable olustur/sil isleri, TUM abonelikler kapandiktan SONRA yapilir.
+
+    Cift kaydin en olasi kaynagi "iki abonelik ayni anda besleniyor"du. Artik
+    bir dikkat meselesi degil: cerrahi ile abonelik yasam dongusu ayrildi.
+    """
+    js = _SahteJS(
+        {(RAW_STREAM, RAW_DURABLE)},
+        {RAW_DURABLE: ["bos"], PRIO_DURABLE: ["dur"], BULK_DURABLE: ["dur"]},
+    )
+    _kostur(monkeypatch, js, kaynak_tercihi="auto")
+
+    acik = 0
+    for kayit in js.gunluk:
+        if kayit[0] == "bind":
+            acik += 1
+        elif kayit[0] == "unsubscribe":
+            acik -= 1
+        elif kayit[0] in ("add_consumer", "delete_consumer"):
+            assert acik == 0, (
+                f"cerrahi ({kayit}) sirasinda {acik} abonelik acikti — "
+                f"ayni mesaj iki kez islenebilirdi. gunluk={js.gunluk}"
+            )
 
 
 def test_gecis_sonrasi_ESKI_abonelikten_okuma_YOK(monkeypatch):
@@ -359,21 +431,45 @@ def test_yeni_durable_GERI_SARILARAK_acilir(monkeypatch):
     monkeypatch.setattr(settings, "telemetry_persist_cutover_overlap_sec", 900)
     js = _SahteJS(
         {(RAW_STREAM, RAW_DURABLE)},
-        {RAW_DURABLE: ["bos"], NORM_DURABLE: ["dur"]},
+        {RAW_DURABLE: ["bos"], PRIO_DURABLE: ["dur"], BULK_DURABLE: ["dur"]},
     )
     simdi = datetime.now(timezone.utc)
     _kostur(monkeypatch, js, kaynak_tercihi="auto")
 
-    cfg = js.cfg[(NORM_STREAM, NORM_DURABLE)]
-    assert cfg.deliver_policy == DeliverPolicy.BY_START_TIME, (
-        "yeni durable 'simdiden' baslatilirsa drenaj ile gecis arasindaki "
-        "olcumler yazilmadan atlanir"
+    for durable in HAT_DURABLELARI:
+        cfg = js.cfg[(NORM_STREAM, durable)]
+        assert cfg.deliver_policy == DeliverPolicy.BY_START_TIME, (
+            f"{durable} 'simdiden' baslatildi — drenaj ile gecis arasindaki "
+            "olcumler yazilmadan atlanir"
+        )
+        assert cfg.opt_start_time, f"{durable}: opt_start_time bos — geri sarma yok"
+        baslangic = datetime.fromisoformat(cfg.opt_start_time)
+        beklenen = simdi - timedelta(seconds=900)
+        assert abs((baslangic - beklenen).total_seconds()) < 30, (
+            f"{durable}: geri sarma penceresi yanlis: {baslangic} vs {beklenen}"
+        )
+
+
+def test_hat_durablelari_KONU_FILTRESIYLE_acilir(monkeypatch):
+    """Filtre olmadan iki durable da HER SEYI ceker: hem ayrim yok olur hem
+    ayni olcum IKI KEZ islenir."""
+    js = _SahteJS(
+        {(RAW_STREAM, RAW_DURABLE)},
+        {RAW_DURABLE: ["bos"], PRIO_DURABLE: ["dur"], BULK_DURABLE: ["dur"]},
     )
-    assert cfg.opt_start_time, "opt_start_time bos — geri sarma yapilmamis"
-    baslangic = datetime.fromisoformat(cfg.opt_start_time)
-    beklenen = simdi - timedelta(seconds=900)
-    assert abs((baslangic - beklenen).total_seconds()) < 30, (
-        f"geri sarma penceresi yanlis: {baslangic} vs {beklenen}"
+    _kostur(monkeypatch, js, kaynak_tercihi="auto")
+
+    prio_cfg = js.cfg[(NORM_STREAM, PRIO_DURABLE)]
+    bulk_cfg = js.cfg[(NORM_STREAM, BULK_DURABLE)]
+    # Oncelikli hat IKI konu tasir: sinifli `*.prio` VE sinifsiz eski konu.
+    assert set(prio_cfg.filter_subjects or []) == {
+        settings.nats_subject_telemetry_normalized_prio,
+        settings.nats_subject_telemetry_normalized_legacy,
+    }, "oncelikli hat sinifsiz eski konuyu kapsamiyor — guncelleme penceresinde sessiz kayip"
+    # Toplu hat TEK konu: `filter_subject` (tekil) kullanilir.
+    assert bulk_cfg.filter_subject == settings.nats_subject_telemetry_normalized_bulk
+    assert not bulk_cfg.filter_subjects, (
+        "filter_subject ile filter_subjects AYNI ANDA gonderilemez — sunucu reddeder"
     )
 
 
@@ -453,18 +549,25 @@ def test_KESINTISIZ_YUKTE_de_gecis_yapilir(monkeypatch):
                 [_SahteMsgYetisen()],
                 [_SahteMsgYetisen()],
             ],
-            NORM_DURABLE: ["dur"],
+            PRIO_DURABLE: ["dur"],
+            BULK_DURABLE: ["dur"],
         },
     )
     _kostur(monkeypatch, js, kaynak_tercihi="auto")
 
-    assert _var_mi(js.gunluk, "add_consumer", NORM_STREAM, NORM_DURABLE), (
-        f"timeout olusmadan gecis yapilmadi — uretimde gecis HIC olmazdi. "
-        f"gunluk={js.gunluk}"
-    )
+    for durable in HAT_DURABLELARI:
+        assert _var_mi(js.gunluk, "add_consumer", NORM_STREAM, durable), (
+            f"timeout olusmadan gecis yapilmadi — uretimde gecis HIC olmazdi. "
+            f"gunluk={js.gunluk}"
+        )
     raw_fetch = [k for k in js.gunluk if k[0] == "fetch" and k[1] == RAW_DURABLE]
-    assert len(raw_fetch) == 1, (
-        f"birikim bittigi ILK batch'te gecilmedi (raw fetch={len(raw_fetch)})"
+    # Gecis karari artik AYRI bir gozetmen gorevinde veriliyor; hat "onumde
+    # bekleyen kalmadi" isaretini kaldirdiktan sonra gozetmenin bir calisma
+    # sirasi almasi gerekir. Bu, en fazla BIR fetch turu gecikme demektir —
+    # drenaj zaten bittigi icin o tur bos doner. Bagimsizlik bu bedele deger:
+    # hat dongusu gecis karari icin BEKLEMEZ.
+    assert len(raw_fetch) <= 2, (
+        f"birikim bittikten sonra gereginden cok fetch yapildi ({len(raw_fetch)})"
     )
     assert tc.get_stats()["source"] == tc.KAYNAK_NORMALIZED
 
@@ -516,10 +619,13 @@ def test_gecis_SONRASI_raw_a_donus_TUKETICISIZ_PENCERE_BIRAKMAZ(monkeypatch):
     _kostur(monkeypatch, js, kaynak_tercihi="raw")
 
     assert tc.get_stats()["source"] == tc.KAYNAK_RAW
-    i_ac = _sira(js.gunluk, "bind", RAW_STREAM, RAW_DURABLE)
+    # Guvence DURABLE'in varligidir, aboneligin degil: durable yaratildigi
+    # andan itibaren sunucu o konumdan itibaren mesajlari TUTAR. Bu yuzden
+    # sirali kisit `add_consumer(RAW) < delete_consumer(NORMALIZED)`.
+    i_ac = _sira(js.gunluk, "add_consumer", RAW_STREAM, RAW_DURABLE)
     i_sil = _sira(js.gunluk, "delete_consumer", NORM_STREAM, NORM_DURABLE)
     assert i_ac < i_sil, (
-        "NORMALIZED durable'i RAW aboneligi acilmadan silindi -> aradaki "
+        "NORMALIZED durable'i RAW durable'i yaratilmadan silindi -> aradaki "
         f"pencerede hicbir tuketici yok, olcum kaybolur. gunluk={js.gunluk}"
     )
 

@@ -22,6 +22,35 @@ NATS_SUBJECT_NORMALIZED = os.getenv(
     "NATS_SUBJECT_TELEMETRY_NORMALIZED", "e1.telemetry.normalized.>"
 )
 NATS_DURABLE = os.getenv("NATS_ALARM_DURABLE", "alarm-service-evaluator")
+# ----- IKI HAT: oncelikli (dijital/durum) ve toplu (analog) -------------------
+# tag-engine konuya bir sinif token'i ekler
+# (`e1.telemetry.normalized.<gw>.<prio|bulk>`). Alarm URETEN yol oncelikli
+# hatta baglanir; ayrinti icin bkz. _hatlari_kur.
+NATS_STREAM_NORMALIZED = os.getenv(
+    "NATS_STREAM_TELEMETRY_NORMALIZED", "TELEMETRY_NORMALIZED"
+)
+NATS_SUBJECT_PRIO = os.getenv(
+    "NATS_SUBJECT_TELEMETRY_NORMALIZED_PRIO", "e1.telemetry.normalized.*.prio"
+)
+NATS_SUBJECT_BULK = os.getenv(
+    "NATS_SUBJECT_TELEMETRY_NORMALIZED_BULK", "e1.telemetry.normalized.*.bulk"
+)
+# Sinifsiz (4 token'li) eski konu — guncelleme penceresinde henuz
+# yenilenmemis tag-engine buraya basar. Abone olunmazsa alarm
+# degerlendirmesi SESSIZCE dururdu.
+NATS_SUBJECT_LEGACY = os.getenv(
+    "NATS_SUBJECT_TELEMETRY_NORMALIZED_LEGACY", "e1.telemetry.normalized.*"
+)
+NATS_DURABLE_PRIO = os.getenv("NATS_ALARM_DURABLE_PRIO", "alarm-service-evaluator-prio")
+NATS_DURABLE_BULK = os.getenv("NATS_ALARM_DURABLE_BULK", "alarm-service-evaluator-bulk")
+NATS_DURABLE_LEGACY = os.getenv(
+    "NATS_ALARM_DURABLE_LEGACY", "alarm-service-evaluator-legacy"
+)
+# `max_ack_pending` = sunucunun teslim edip ack bekledigi tavan, yani
+# tuketicinin ONUNDEKI kuyrugun uzunlugu. Oncelikli hatta KUCUK tutulur:
+# buyuk bir tavan, ayirdigimiz hattin icine yeniden kuyruk kurmak olurdu.
+ACK_PENDING_PRIO = int(os.getenv("NATS_ALARM_ACK_PENDING_PRIO", "500"))
+ACK_PENDING_BULK = int(os.getenv("NATS_ALARM_ACK_PENDING_BULK", "10000"))
 # DLQ subject prefix — max_deliver'a takilan mesajlar buraya gider.
 SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.alarm-service")
 MAX_DELIVER = int(os.getenv("NATS_WORKER_MAX_DELIVER", "10"))
@@ -742,6 +771,97 @@ async def _kalp_dongusu() -> None:
         watchdog.kalp_at()
 
 
+async def _tek_hat_bosaldi_mi(js) -> bool:  # noqa: ANN001
+    """Eski TEK HAT durable'inda islenmemis mesaj kaldi mi?
+
+    Karar SUNUCUNUN sayaclarindan alinir (`num_pending` + `num_ack_pending`).
+    Teslim edilmis ama ack'lenmemis mesajlar `num_pending`de GORUNMEZ; ikisi
+    birlikte sorulmazsa "bitti" denip degerlendirilmemis olcumler terk
+    edilirdi.
+    """
+    try:
+        bilgi = await js.consumer_info(NATS_STREAM_NORMALIZED, NATS_DURABLE)
+    except Exception:  # noqa: BLE001  (NotFoundError dahil — durable yok = bitti)
+        return True
+    bekleyen = int(getattr(bilgi, "num_pending", 0) or 0)
+    ack_bekleyen = int(getattr(bilgi, "num_ack_pending", 0) or 0)
+    return not (bekleyen or ack_bekleyen)
+
+
+async def _hatlari_kur(js, cb):  # noqa: ANN001
+    """Alarm degerlendirmesini hatlara baglar. Donus: (subs, hat_adlari).
+
+    ALARM URETEN YOL ONCELIKLI HATTA. Onceden TEK durable tum akisi
+    geziyordu: bir ariza bayragi, onunde bekleyen on binlerce ANALOG
+    olcumunun ARDINDAN degerlendiriliyordu. Ariza alarminin gecikmesi
+    konfor degil DOGRULUK meselesi.
+
+    UC ABONELIK:
+      prio    dijital/durum + ariza belirleyen her sey. Kucuk
+              `max_ack_pending` ile: bu deger sunucunun teslim edip ack
+              bekledigi tavandir, buyuk tutmak oncelikli hattin ICINE kendi
+              kuyrugunu kurmak olurdu.
+      bulk    analog. TERK EDILMEZ — analog esik kurallari ve composite
+              `agg` terimleri buradan beslenir; terk edilseydi analog
+              tabanli her alarm SESSIZCE susardi. Yalnizca sirasi dusuk.
+      legacy  SINIFSIZ 4 token'li eski konu. Guncelleme sirasinda henuz
+              yenilenmemis bir tag-engine hala oraya basiyor olabilir;
+              abone olunmazsa alarm degerlendirmesi sessizce dururdu.
+
+    ESKI TEK HAT DURABLE'I ONCE BOSALTILIR: icinde HENUZ DEGERLENDIRILMEMIS
+    olcumler olabilir ve ayrima gecmek onu terk etmek demektir. Bosalana
+    kadar bugunku davranis (tek abonelik) aynen surer.
+    """
+    from nats.js.api import ConsumerConfig, DeliverPolicy
+
+    async def _abone(subject: str, durable: str, ack_pending: int):
+        return await js.subscribe(
+            subject=subject,
+            durable=durable,
+            cb=cb,
+            manual_ack=True,
+            config=ConsumerConfig(
+                durable_name=durable,
+                deliver_policy=DeliverPolicy.NEW,
+                ack_wait=60,
+                max_ack_pending=ack_pending,
+                max_deliver=MAX_DELIVER,
+                filter_subject=subject,
+            ),
+        )
+
+    if not await _tek_hat_bosaldi_mi(js):
+        print(
+            f"alarm-service-hat-ayrimi-erteleniyor durable={NATS_DURABLE} — "
+            "eski hatta degerlendirilmemis olcum var, once o bosaltilacak"
+        )
+        return [await _abone(NATS_SUBJECT_NORMALIZED, NATS_DURABLE, 10000)], ["karma"]
+
+    subs = []
+    adlar = []
+    for sinif, subject, durable, ack_pending in (
+        ("prio", NATS_SUBJECT_PRIO, NATS_DURABLE_PRIO, ACK_PENDING_PRIO),
+        ("legacy", NATS_SUBJECT_LEGACY, NATS_DURABLE_LEGACY, ACK_PENDING_PRIO),
+        ("bulk", NATS_SUBJECT_BULK, NATS_DURABLE_BULK, ACK_PENDING_BULK),
+    ):
+        subs.append(await _abone(subject, durable, ack_pending))
+        adlar.append(sinif)
+        print(
+            f"alarm-service-hat sinif={sinif} subject={subject} "
+            f"durable={durable} max_ack_pending={ack_pending}"
+        )
+    # Eski durable BOSTU ve artik uc yeni durable akisi tasiyor. Birakilirsa
+    # kimse tuketmez, `num_pending` sinirsiz buyur ve bir surum geri
+    # donusunde o birikimin tamami yeniden degerlendirilerek bayat alarm
+    # uretir. Silinince eski kod onu `DeliverPolicy.NEW` ile yeniden yaratir.
+    try:
+        await js.delete_consumer(NATS_STREAM_NORMALIZED, NATS_DURABLE)
+        print(f"alarm-service-eski-durable-silindi durable={NATS_DURABLE}")
+    except Exception:  # noqa: BLE001  (yoksa NotFoundError — normal)
+        pass
+    return subs, adlar
+
+
 async def _consume_jetstream() -> None:
     """Telemetry.normalized JetStream'i dinler, kural motoruna besler.
 
@@ -808,33 +928,23 @@ async def _consume_jetstream() -> None:
                         except Exception:  # noqa: BLE001
                             pass
 
-            # Consumer parametreleri uretim icin sertlestirilmis. Alarm-service
-            # her telemetri'yi kural-eslestirme icin gezer; max_ack_pending
-            # buyuk tutulmali. max_deliver=10 poison handling.
-            from nats.js.api import ConsumerConfig, DeliverPolicy
-
-            consumer_cfg = ConsumerConfig(
-                durable_name=NATS_DURABLE,
-                deliver_policy=DeliverPolicy.NEW,
-                ack_wait=60,
-                max_ack_pending=10000,
-                max_deliver=10,
-            )
-            sub = await js.subscribe(
-                subject=NATS_SUBJECT_NORMALIZED,
-                durable=NATS_DURABLE,
-                cb=_on_message,
-                manual_ack=True,
-                config=consumer_cfg,
-            )
-            print(
-                f"alarm-service-running subject={NATS_SUBJECT_NORMALIZED} "
-                f"durable={NATS_DURABLE} url={NATS_URL}"
-            )
+            # ALARM URETEN YOL ONCELIKLI HATTA. Consumer parametreleri
+            # (ack_wait, max_ack_pending, max_deliver) hat basina
+            # `_hatlari_kur` icinde belirlenir.
+            subs, hat_adlari = await _hatlari_kur(js, _on_message)
+            print(f"alarm-service-running hatlar={hat_adlari} url={NATS_URL}")
             backoff = 2
             while not _stop_event.is_set():
                 await asyncio.sleep(1)
-            await sub.unsubscribe()
+                # Tek hat modunda kaldiysak (eski durable henuz bosalmadi)
+                # periyodik olarak yeniden dene; bosalinca ayrima gecilir.
+                if len(subs) == 1 and await _tek_hat_bosaldi_mi(js):
+                    for sub in subs:
+                        await sub.unsubscribe()
+                    subs, hat_adlari = await _hatlari_kur(js, _on_message)
+                    print(f"alarm-service-hat-ayrimi hatlar={hat_adlari}")
+            for sub in subs:
+                await sub.unsubscribe()
         except Exception as ex:  # noqa: BLE001
             if _stop_event.is_set():
                 break

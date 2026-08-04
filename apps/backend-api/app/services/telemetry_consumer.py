@@ -40,6 +40,38 @@ CIFT KAYIT NEDEN OLMAZ
     defteriyle elenir; `CONSUMER_NAME` bilerek DEGISTIRILMEDI, aksi halde
     defter sifirlanir ve gecis aninda her olcum ikinci kez yazilirdi.
 
+IKI HAT — ONCELIKLI VE TOPLU
+----------------------------
+NORMALIZED akisi TEK bir durable ile cekildigi surece, yuz binlerce ANALOG
+olcumu ile bir ARIZA BAYRAGI ayni sirada bekler. Ariza gostergesinde gecikme
+konfor degil DOGRULUK meselesidir: 10 dakika gec gorulen ariza
+operasyonel olarak KACIRILMISTIR. Ustelik ekranin gordugu her sey
+(`telemetry_latest` + WS yayini) bu dongunun ARKASINDADIR.
+
+tag-engine artik konuya bir sinif token'i ekliyor
+(`e1.telemetry.normalized.<gw>.<prio|bulk>`) ve burada her sinif KENDI
+durable'i ile, KENDI fetch dongusunde cekilir:
+
+  ONCELIKLI (`prio`)  dijital/durum sinyalleri, ariza bayraklari/yonu,
+                      sayaclar, Class 1 analoglar (`fault_current`,
+                      `fault_duration`), katalogda olmayan her sey.
+                      Filtresi SINIFSIZ eski konuyu da tasir — guncelleme
+                      sirasinda henuz yenilenmemis bir tag-engine'in bastigi
+                      4 token'li mesajlar sessizce kaybolmasin.
+  TOPLU (`bulk`)      yalnizca surekli taranan Class 2 analog olcumler.
+
+IZOLASYON NEREDEN GELIYOR: her hat AYRI bir JetStream durable'idir; teslim
+sirasi, `num_pending` ve ack muhasebesi hat basinadir. Toplu hattaki
+birikim oncelikli hattin ONUNE GECEMEZ. DB isi de hat basina
+`asyncio.to_thread` ile ayri calisir; toplu hattin commit'i saniyelerce
+assa bile oncelikli hat ayni anda fetch/commit/ack yapmaya devam eder.
+
+CIFT KAYIT: iki hat AYRIK konu kumeleri tasir, ayni mesaj ikisine birden
+DUSMEZ. Ustelik `processed_messages` defteri iki hatta da AYNI
+`CONSUMER_NAME` ile tutulur ve `uq_processed_message_consumer_msg` bilesik
+UNIQUE index'i son savunmadir: bir yaris olsa bile DB ikinci yazimi
+reddeder, batch geri alinir ve yeniden teslimde dedup yutar.
+
 Asyncio loop ayri bir thread'de calisir; NATS reconnect ve durable consumer
 sayesinde process restart'inda kaldigi yerden devam eder.
 """
@@ -82,8 +114,39 @@ KAYNAK_NORMALIZED = "normalized"
 # `telemetry_persist_source` icin gecerli degerler ("auto" = otomatik gecis).
 KAYNAK_AUTO = "auto"
 
+# ----- Hat siniflari --------------------------------------------------------
+# Bu degerler OLAY KAYDINA yazilir (`sinif` alani) ve tag-engine'in konuya
+# koydugu token ile AYNI olmak zorunda (bkz. tag_engine/katalog.py).
+SINIF_ONCELIKLI = "prio"
+SINIF_TOPLU = "bulk"
+#: Tek hat donemi — ayni durable her iki sinifi da tasir (RAW fazi ve
+#: hat ayrimindan onceki NORMALIZED fazi). Olay kaydinda "hangi sinif dustu"
+#: sorusunun durusu bilinmedigi icin bu deger yazilir.
+SINIF_KARMA = "karma"
+
 _stop_event = threading.Event()
 _thread: threading.Thread | None = None
+
+
+class Hat:
+    """Tek bir tuketim hatti: sinif + stream + durable + acik abonelik."""
+
+    __slots__ = ("sinif", "stream", "durable", "psub")
+
+    def __init__(self, *, sinif: str, stream: str, durable: str, psub: Any) -> None:
+        self.sinif = sinif
+        self.stream = stream
+        self.durable = durable
+        self.psub = psub
+
+    async def kapat(self) -> None:
+        try:
+            await self.psub.unsubscribe()
+        except Exception:  # noqa: BLE001
+            logger.debug("telemetry_persist_unsubscribe_failed hat=%s", self.sinif)
+
+    def __repr__(self) -> str:  # pragma: no cover - teshis
+        return f"Hat({self.sinif}, {self.durable})"
 
 
 def _kaynak_tercihi() -> str:
@@ -161,22 +224,70 @@ _stats: dict[str, Any] = {
 _throughput_window: list[tuple[float, int]] = []
 _THROUGHPUT_WINDOW_SEC = 60.0
 
+# HAT BASINA olcum. Ust seviye `_stats` sozlugu (yukarida) GERIYE UYUMLU
+# kalir — `system_status.py` onu okuyor — ama artik TOPLAM/EN KOTU degerdir.
+# Hangi hattin geride oldugunu ayirt etmek icin burasi kullanilir; sistemin
+# tamami iyi gorunurken TEK BIR hattin bogulmasi tam da yakalanmasi gereken
+# durum.
+_hat_stats: dict[str, dict[str, Any]] = {}
+
+
+def _hat_kaydi(sinif: str) -> dict[str, Any]:
+    kayit = _hat_stats.get(sinif)
+    if kayit is None:
+        kayit = {
+            "backlog": None,
+            "processed_total": 0,
+            "bad_total": 0,
+            "dropped_total": 0,
+            "last_batch_duration_sec": 0.0,
+            "last_fetch_at": None,
+        }
+        _hat_stats[sinif] = kayit
+    return kayit
+
 
 def _stats_update(**kwargs: Any) -> None:
     with _stats_lock:
         _stats.update(kwargs)
 
 
-def _stats_record_batch(*, size: int, duration: float, backlog: int | None, bad: int) -> None:
+def _hat_backlog_yaz(sinif: str, backlog: int | None) -> None:
+    with _stats_lock:
+        _hat_kaydi(sinif)["backlog"] = backlog
+        _stats["backlog"] = _toplam_backlog_kilitsiz()
+
+
+def _toplam_backlog_kilitsiz() -> int | None:
+    """Ust seviye `backlog` = hatlarin EN BUYUGU.
+
+    Toplam DEGIL, EN KOTU: iki hattin toplami "ortalama iyi" gorunen bir sayi
+    uretebilirdi; oysa esik uyarisinin sormasi gereken soru "herhangi bir hat
+    bogulyor mu".
+    """
+    degerler = [k["backlog"] for k in _hat_stats.values() if k["backlog"] is not None]
+    return max(degerler) if degerler else None
+
+
+def _stats_record_batch(
+    *, sinif: str, size: int, duration: float, backlog: int | None, bad: int
+) -> None:
     now = _time.monotonic()
     with _stats_lock:
-        _stats["last_fetch_at"] = datetime.now(timezone.utc).isoformat()
+        kayit = _hat_kaydi(sinif)
+        simdi_iso = datetime.now(timezone.utc).isoformat()
+        kayit["last_fetch_at"] = simdi_iso
+        kayit["last_batch_duration_sec"] = round(duration, 4)
+        kayit["processed_total"] += size
+        kayit["bad_total"] += bad
+        if backlog is not None:
+            kayit["backlog"] = backlog
+        _stats["last_fetch_at"] = simdi_iso
         _stats["last_batch_size"] = size
         _stats["last_batch_duration_sec"] = round(duration, 4)
         _stats["processed_total"] += size
         _stats["bad_total"] += bad
-        if backlog is not None:
-            _stats["backlog"] = backlog
+        _stats["backlog"] = _toplam_backlog_kilitsiz()
         _throughput_window.append((now, size))
         cutoff = now - _THROUGHPUT_WINDOW_SEC
         while _throughput_window and _throughput_window[0][0] < cutoff:
@@ -192,41 +303,13 @@ def _stats_record_batch(*, size: int, duration: float, backlog: int | None, bad:
 # backlog'un en yuksek oldugu an, yeniden baslatmanin hemen ardindan.
 # (Windows'ta uptime buyuk oldugu icin bu davranis gorunmuyordu; hatayi
 # Linux CI ortaya cikardi.)
-_last_backlog_warn_at: float | None = None
+_last_backlog_warn_at: dict[str, float] = {}
 
 
-def _warn_if_backlog_high(backlog: int | None) -> None:
-    """Backlog esigi asilirsa loglar ve denetim kaydina yazar.
-
-    Bu, `discard=old` tercihinin karsiligidir: tampon tasarsa mesajlar
-    SESSIZCE dusuruluyor, dolayisiyla tasmaya YAKLASILDIGINI haber verecek
-    bir sinyal sart. Esik, stream tavaninin cok altinda tutulur ki operatorun
-    mudahale etmesi icin zaman kalsin.
-
-    Olay kaydi rate-limit'lidir; backlog saatlerce yuksek kalsa bile
-    `system_events` tablosunu doldurmaz.
-    """
-    global _last_backlog_warn_at
-    if backlog is None or backlog < settings.telemetry_backlog_warn_threshold:
-        return
-    now = _time.monotonic()
-    # ILK uyari her zaman gecer; rate-limit yalnizca IKINCIDEN itibaren isler.
-    # Mutlak degeri karsilastirmak yerine "daha once uyardik mi" sorusunu
-    # sormak, monotonic()'in baslangic noktasindan bagimsiz kilar.
-    if (
-        _last_backlog_warn_at is not None
-        and now - _last_backlog_warn_at < settings.telemetry_backlog_warn_interval_sec
-    ):
-        return
-    _last_backlog_warn_at = now
-    snapshot = get_stats()
-    logger.warning(
-        "telemetry_backlog_high backlog=%d threshold=%d throughput=%.1f msg/s "
-        "(tuketici gelis hizinin gerisinde — tampon tasarsa VERI KAYBI baslar)",
-        backlog,
-        settings.telemetry_backlog_warn_threshold,
-        snapshot.get("throughput_msgs_per_sec", 0.0),
-    )
+def _olay_yaz(
+    *, event_type: str, severity: str, message: str, metadata: dict[str, Any]
+) -> None:
+    """Kisa omurlu bir session ile denetim kaydi yazar; hata akisi bozmaz."""
     try:
         from app.services.event_service import record_event
 
@@ -235,24 +318,174 @@ def _warn_if_backlog_high(backlog: int | None) -> None:
             record_event(
                 db,
                 category="telemetry",
-                event_type="telemetry_backlog_high",
-                severity="warning",
-                message=(
-                    f"Telemetri tuketicisi geride: {backlog} mesaj bekliyor "
-                    f"({snapshot.get('throughput_msgs_per_sec', 0.0)} msg/sn isleniyor)"
-                ),
-                metadata={
-                    "backlog": backlog,
-                    "threshold": settings.telemetry_backlog_warn_threshold,
-                    "throughput_msgs_per_sec": snapshot.get("throughput_msgs_per_sec"),
-                    "last_batch_duration_sec": snapshot.get("last_batch_duration_sec"),
-                },
+                event_type=event_type,
+                severity=severity,
+                message=message,
+                metadata=metadata,
             )
             db.commit()
         finally:
             db.close()
     except Exception:  # noqa: BLE001
-        logger.debug("backlog_event_record_failed", exc_info=True)
+        logger.debug("telemetry_olay_yazilamadi type=%s", event_type, exc_info=True)
+
+
+def _warn_if_backlog_high(sinif: str, backlog: int | None) -> None:
+    """Backlog esigi asilirsa loglar ve denetim kaydina yazar — HAT BASINA.
+
+    Bu, `discard=old` tercihinin karsiligidir: tampon tasarsa mesajlar
+    SESSIZCE dusuruluyor, dolayisiyla tasmaya YAKLASILDIGINI haber verecek
+    bir sinyal sart. Esik, stream tavaninin cok altinda tutulur ki operatorun
+    mudahale etmesi icin zaman kalsin.
+
+    HAT BASINA olmasi sart: toplu hattin geride kalmasi beklenen ve kabul
+    edilebilir bir durumdur, oncelikli hattin geride kalmasi DEGILDIR. Tek
+    bir birlesik sayac ikisini ayirt edemez; oncelikli hat bogulurken toplu
+    hattin gurultusune karisir.
+
+    Olay kaydi rate-limit'lidir; backlog saatlerce yuksek kalsa bile
+    `system_events` tablosunu doldurmaz.
+    """
+    if backlog is None or backlog < settings.telemetry_backlog_warn_threshold:
+        return
+    now = _time.monotonic()
+    # ILK uyari her zaman gecer; rate-limit yalnizca IKINCIDEN itibaren isler.
+    # Mutlak degeri karsilastirmak yerine "daha once uyardik mi" sorusunu
+    # sormak, monotonic()'in baslangic noktasindan bagimsiz kilar.
+    onceki = _last_backlog_warn_at.get(sinif)
+    if onceki is not None and now - onceki < settings.telemetry_backlog_warn_interval_sec:
+        return
+    _last_backlog_warn_at[sinif] = now
+    snapshot = get_stats()
+    hat_ozeti = snapshot.get("hatlar", {}).get(sinif, {})
+    logger.warning(
+        "telemetry_backlog_high sinif=%s backlog=%d threshold=%d throughput=%.1f msg/s "
+        "(tuketici gelis hizinin gerisinde — tampon tasarsa VERI KAYBI baslar)",
+        sinif,
+        backlog,
+        settings.telemetry_backlog_warn_threshold,
+        snapshot.get("throughput_msgs_per_sec", 0.0),
+    )
+    _olay_yaz(
+        event_type="telemetry_backlog_high",
+        # Oncelikli hattin geride kalmasi ariza gorunurlugunu dogrudan
+        # tehdit eder; toplu hat icin ayni birikim yalnizca arsiv gecikmesi.
+        severity="critical" if sinif == SINIF_ONCELIKLI else "warning",
+        message=(
+            f"Telemetri tuketicisi geride ({_HAT_ADI.get(sinif, sinif)}): "
+            f"{backlog} mesaj bekliyor "
+            f"({snapshot.get('throughput_msgs_per_sec', 0.0)} msg/sn isleniyor)"
+        ),
+        metadata={
+            "sinif": sinif,
+            "backlog": backlog,
+            "threshold": settings.telemetry_backlog_warn_threshold,
+            "throughput_msgs_per_sec": snapshot.get("throughput_msgs_per_sec"),
+            "last_batch_duration_sec": hat_ozeti.get("last_batch_duration_sec"),
+        },
+    )
+
+
+#: Olay kaydinda operatorun gordugu Turkce hat adi.
+_HAT_ADI = {
+    SINIF_ONCELIKLI: "oncelikli hat / dijital-durum",
+    SINIF_TOPLU: "toplu hat / analog",
+    SINIF_KARMA: "tek hat (ayrim yapilmamis)",
+}
+
+#: Hat basina "buraya kadarki kayip ZATEN bildirildi" isareti (stream sirasi).
+_kayip_isareti: dict[str, int] = {}
+_son_kayip_denetimi: dict[str, float] = {}
+#: Kayip denetimi araligi. Ucuz bir cagri (`stream_info` + `consumer_info`)
+#: ama saniyede binlerce batch'te her turda yapmak gereksiz yuk.
+_KAYIP_DENETIM_ARALIK_SEC = 15.0
+
+
+async def _dusen_mesaj_denetimi(js, hat: Hat) -> None:  # noqa: ANN001
+    """Bu hattin mesajlari, hat onlari GORMEDEN dusuruldu mu?
+
+    NEDEN VAR — "tampon tasmasi SESSIZ OLMAYACAK" sartinin karsiligi.
+    Stream `discard=OLD` ile calisir: tavana carpinca EN ESKI mesajlari atar
+    ve bunu JetStream tuketiciye HABER VERMEZ. Bugune kadar yalnizca backlog
+    ESIGI izleniyordu; yani "tasmaya yaklasiyoruz" goruluyor ama "TASTI ve su
+    kadar mesaj gitti" HIC gorulmuyordu. Ariza sinifi dustuyse bu asla sessiz
+    kalmamali.
+
+    TESPIT — iki sayacin karsilastirilmasi:
+        stream.state.first_seq          stream'de duran EN ESKI mesajin sirasi
+        consumer.ack_floor.stream_seq   bu hattin ACK ettigi EN SON sira
+    Hat yetisiyorsa ack_floor daima first_seq'in ONUNDEDIR. Arkasina duserse
+    aradaki pencere, hat onlari HIC GORMEDEN silinmis mesajlardir.
+
+    SAYININ ANLAMI BIR UST SINIRDIR: stream sirasi tum hatlarin mesajlarini
+    birlikte numaralandirir, dolayisiyla pencere digger hattin mesajlarini da
+    icerir. Ama "0" TAM VE KESINDIR — hicbir sey kaybolmadi demektir, ki
+    oncelikli hat icin kanitlanmasi gereken tam olarak budur. Sifirdan buyuk
+    her deger operatore soylenmeli; hangi hat oldugu olay kaydinda yazar.
+    """
+    simdi = _time.monotonic()
+    onceki = _son_kayip_denetimi.get(hat.sinif)
+    if onceki is not None and simdi - onceki < _KAYIP_DENETIM_ARALIK_SEC:
+        return
+    _son_kayip_denetimi[hat.sinif] = simdi
+    try:
+        stream_bilgi = await js.stream_info(hat.stream)
+        tuketici_bilgi = await js.consumer_info(hat.stream, hat.durable)
+    except Exception:  # noqa: BLE001
+        # Bilgi okunamadi: KARAR VERME. Yanlis pozitif bir "veri kaybi"
+        # olayi, gercek olani da inandiriciliktan dusururdu.
+        logger.debug("telemetry_kayip_denetimi_basarisiz hat=%s", hat.sinif, exc_info=True)
+        return
+
+    ilk_sira = int(getattr(getattr(stream_bilgi, "state", None), "first_seq", 0) or 0)
+    ack_tabani = int(
+        getattr(getattr(tuketici_bilgi, "ack_floor", None), "stream_seq", 0) or 0
+    )
+    if ilk_sira <= 0:
+        return
+    ust = ilk_sira - 1
+    alt = max(ack_tabani, _kayip_isareti.get(hat.sinif, 0))
+    yeni_kayip = ust - alt
+    if yeni_kayip <= 0:
+        return
+    _kayip_isareti[hat.sinif] = ust
+    with _stats_lock:
+        _hat_kaydi(hat.sinif)["dropped_total"] += yeni_kayip
+    logger.error(
+        "telemetry_tampon_tasti sinif=%s dusen<=%d stream=%s durable=%s "
+        "ilk_sira=%d ack_tabani=%d — mesajlar bu hat ISLEMEDEN silindi",
+        hat.sinif,
+        yeni_kayip,
+        hat.stream,
+        hat.durable,
+        ilk_sira,
+        ack_tabani,
+    )
+    ariza_hatti = hat.sinif in (SINIF_ONCELIKLI, SINIF_KARMA)
+    await asyncio.to_thread(
+        _olay_yaz,
+        event_type="telemetry_tampon_tasmasi",
+        # Ariza belirleyen sinif dustuyse bu bir VERI KAYBI olayidir, uyari
+        # degil: kacan bir ariza gecisi geri getirilemez.
+        severity="critical" if ariza_hatti else "warning",
+        message=(
+            f"Telemetri tamponu tasti — {_HAT_ADI.get(hat.sinif, hat.sinif)}: "
+            f"en fazla {yeni_kayip} mesaj islenmeden dusuruldu"
+            + (
+                " (ARIZA BELIRLEYEN SINIF — kacan ariza gecisi olabilir)"
+                if ariza_hatti
+                else ""
+            )
+        ),
+        metadata={
+            "sinif": hat.sinif,
+            "dusen_ust_sinir": yeni_kayip,
+            "stream": hat.stream,
+            "durable": hat.durable,
+            "stream_ilk_sira": ilk_sira,
+            "ack_tabani": ack_tabani,
+        },
+    )
 
 
 def get_stats() -> dict[str, Any]:
@@ -265,6 +498,9 @@ def get_stats() -> dict[str, Any]:
     """
     with _stats_lock:
         snapshot = dict(_stats)
+        # Hat basina ozet: hangi hattin geride oldugunu ayirt etmenin tek yolu.
+        # Ust seviye alanlar (backlog/processed_total/...) GERIYE UYUMLU kalir.
+        snapshot["hatlar"] = {sinif: dict(k) for sinif, k in _hat_stats.items()}
         if _throughput_window:
             span = max(1e-6, _throughput_window[-1][0] - _throughput_window[0][0])
             total = sum(n for _t, n in _throughput_window)
@@ -274,6 +510,262 @@ def get_stats() -> dict[str, Any]:
         else:
             snapshot["throughput_msgs_per_sec"] = 0.0
     return snapshot
+
+
+# --------------------------------------------------------------------------
+# TOPLU YAZIM — COPY + execute_values
+#
+# NEDEN: MIKRO-OLCUM (600 cihaz, 500 mesajlik parti, yerel Postgres 18.3)
+# darbogazin DB OLMADIGINI gosterdi. Bir parti 142,7 ms suruyordu ve bunun
+# yalnizca 42,0 ms'i sunucuda gecen SQL suresiydi; kalan ~100 ms Python
+# tarafinda, SQLAlchemy'nin her partide YENIDEN yaptigi is:
+#
+#   * ORM unit-of-work (telemetry + processed_messages flush)   ~%39
+#   * `insert().values([...500 sozluk...])` derlemesi            ~%29
+#     (cok degerli INSERT'ler SQLAlchemy'de ONBELLEGE ALINMAZ —
+#      her partide sifirdan derlenir)
+#   * asil SQL calismasi (sunucu)                                ~%29
+#
+# JSON cozumu 1,8 us/mesaj (parti basina 0,91 ms, yani %0,6) — bu yuzden
+# `orjson` gibi YENI BIR BAGIMLILIK ALINMADI: en iyi ihtimalle 0,5 ms
+# kazandirirdi.
+#
+# COZUM: en buyuk iki tabloya (`telemetry`, `processed_messages`) psycopg2
+# COPY ile yazmak — SQL derlemesi de ORM turu de YOK; arsiv/canli tablolarina
+# ise `execute_values` ile TEK ifade. Sonuc olculdu, bkz. modul sonundaki
+# olcum notu.
+# --------------------------------------------------------------------------
+
+#: COPY TEXT formatinin kacis tablosu. Bu dort karakter kacirilmazsa satir
+#: sinirlari kayar ve BASKA BIR SATIRIN alanina veri tasar — sessiz bozulma.
+#: `\` ONCE gelmek zorunda degil: `str.translate` her karakteri TEK GECISTE
+#: cevirir, yani uretilen `\\` yeniden taranmaz.
+_COPY_KACIS = str.maketrans(
+    {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
+)
+
+#: COPY hedef kolonlari. `telemetry.id` BILEREK YOK — BIGSERIAL varsayilani
+#: sunucuda uretilir, boylece istemcinin sira uretmesi gerekmez.
+_TELEMETRI_KOLONLARI = (
+    "device_id", "signal_key", "value", "value_string", "quality",
+    "source_timestamp", "device_event_at", "timestamp_quality",
+)
+_DEDUP_KOLONLARI = ("consumer_name", "message_id", "processed_at")
+_ARSIV_KOLONLARI = (
+    "device_id", "signal_key", "value", "value_string", "quality",
+    "source_timestamp", "device_event_at", "timestamp_quality",
+)
+_CANLI_KOLONLARI = _ARSIV_KOLONLARI + ("updated_at",)
+
+
+def _copy_alan(deger: Any) -> str:
+    """Tek bir alani COPY TEXT gosterimine cevirir.
+
+    `bool` kontrolu `int`ten ONCE: Python'da `isinstance(True, int)` DOGRU'dur
+    ve bool once yakalanmazsa `True` alana `1` olarak yazilirdi.
+    """
+    if deger is None:
+        return "\\N"
+    if deger is True:
+        return "t"
+    if deger is False:
+        return "f"
+    if isinstance(deger, (int, float)):
+        return repr(deger)
+    if isinstance(deger, datetime):
+        return deger.isoformat()
+    return str(deger).translate(_COPY_KACIS)
+
+
+def _copy_govde(satirlar: list[tuple]) -> str:
+    return "".join(
+        "\t".join(_copy_alan(a) for a in satir) + "\n" for satir in satirlar
+    )
+
+
+def _parcala(satirlar: list, boyut: int):
+    """Satirlari en fazla `boyut`luk dilimlere ayirir.
+
+    TEK IFADEDE SINIRSIZ SATIR GONDERILEMEZ: `execute_values` bir INSERT
+    ifadesine tum satirlari bind eder ve PostgreSQL'in ifade basina 65535
+    parametre tavani vardir (9 kolonlu `telemetry_latest` icin ~7280 satir).
+    Parti boyutu ayarla buyutulebildigi icin bu tavan ELDE tutulmali.
+    """
+    if boyut <= 0:
+        boyut = 1
+    for i in range(0, len(satirlar), boyut):
+        yield satirlar[i:i + boyut]
+
+
+def _copy_yaz(db, tablo: str, kolonlar: tuple[str, ...], satirlar: list[tuple]) -> None:  # noqa: ANN001
+    """`COPY <tablo> (...) FROM STDIN` — SQL derlemesi ve ORM turu YOK.
+
+    Ayni session'in ACIK transaction'i uzerinden gider (SQLAlchemy `BEGIN`i
+    zaten actigi baglantinin ham kursoru kullanilir), yani atomikligi ve
+    savepoint davranisini AYNEN korur.
+    """
+    ham = db.connection().connection
+    sql = f"COPY {tablo} ({', '.join(kolonlar)}) FROM STDIN"
+    cur = ham.cursor()
+    try:
+        for dilim in _parcala(satirlar, settings.telemetry_write_chunk_size):
+            cur.copy_expert(sql, io.StringIO(_copy_govde(dilim)))
+    finally:
+        cur.close()
+
+
+def _degerlerle_yaz(db, sql: str, satirlar: list[tuple]) -> None:  # noqa: ANN001
+    """`INSERT ... VALUES %s ...` — psycopg2 `execute_values` ile TEK ifade.
+
+    SQLAlchemy'nin `insert().values([...])` yolu yerine bu kullaniliyor cunku
+    cok degerli INSERT'ler SQLAlchemy'de ONBELLEGE ALINMAZ: her partide
+    yeniden derlenir ve olcumde parti suresinin ~%29'unu yiyordu. Uretilen
+    SQL sabit oldugu icin burada derleme YOK.
+    """
+    from psycopg2.extras import execute_values
+
+    ham = db.connection().connection
+    cur = ham.cursor()
+    try:
+        for dilim in _parcala(satirlar, settings.telemetry_write_chunk_size):
+            execute_values(cur, sql, dilim, page_size=len(dilim))
+    finally:
+        cur.close()
+
+
+# Arsiv (historian) toplu INSERT'i. `ON CONFLICT DO NOTHING` idempotency
+# saglar: ayni okuma yeniden teslim edilirse ikinci satir YAZILMAZ.
+_ARSIV_SQL = (
+    "INSERT INTO telemetry_history "
+    "(device_id, signal_key, value, value_string, quality, "
+    "source_timestamp, device_event_at, timestamp_quality) VALUES %s "
+    "ON CONFLICT (device_id, signal_key, source_timestamp) DO NOTHING"
+)
+
+# Canli deger tablosu — ESKI DEGER YENIYI EZMEZ.
+#
+# `WHERE excluded.source_timestamp >= telemetry_latest.source_timestamp`
+# kosulu PAZARLIK EDILEMEZ. NATS en-az-bir-kez teslim eder ve mesajlar sira
+# DISINDA gelebilir (redelivery, gateway yeniden baglanmasi). Kosulsuz bir
+# `DO UPDATE` bayat bir okumayi "son deger" yapardi; bu tablo canli ekranin
+# ve WS yayininin kaynagi oldugu icin sonuc dogrudan operatore yansir: deger
+# geri sicrar, ariza gecisi yanlis gorunur.
+#
+# TUM alanlar birlikte guncellenir. Eksik birakilan alan "yari guncellenmis"
+# bir satir birakirdi — yeni deger ama eski kalite gibi, teshiste en
+# yaniltici hal.
+_CANLI_SQL = (
+    "INSERT INTO telemetry_latest "
+    "(device_id, signal_key, value, value_string, quality, "
+    "source_timestamp, device_event_at, timestamp_quality, updated_at) "
+    "VALUES %s "
+    "ON CONFLICT (device_id, signal_key) DO UPDATE SET "
+    "value = EXCLUDED.value, "
+    "value_string = EXCLUDED.value_string, "
+    "quality = EXCLUDED.quality, "
+    "source_timestamp = EXCLUDED.source_timestamp, "
+    "timestamp_quality = EXCLUDED.timestamp_quality, "
+    "device_event_at = EXCLUDED.device_event_at, "
+    "updated_at = EXCLUDED.updated_at "
+    "WHERE EXCLUDED.source_timestamp >= telemetry_latest.source_timestamp"
+)
+
+
+class _Satir:
+    """Tek bir olcumun DB'ye gidecek TUM satirlari — bir arada.
+
+    Bolerek yeniden deneme (bkz. `_satirlari_yaz`) ancak boyle mumkun:
+    bir olcum dusuruldugunde onun arsiv satiri, canli satiri VE dedup
+    kaydi da birlikte duser. Aksi halde `processed_messages`'a yazilmis
+    ama `telemetry`'ye yazilmamis bir olcum olusur ve yeniden teslimde
+    dedup onu YUTAR — olcum kalici olarak kaybolurdu.
+    """
+
+    __slots__ = ("msg", "message_id", "telemetri", "arsiv", "canli", "ws", "outbound")
+
+    def __init__(self, *, msg, message_id, telemetri, arsiv, canli, ws, outbound):  # noqa: ANN001
+        self.msg = msg
+        self.message_id = message_id
+        self.telemetri = telemetri
+        self.arsiv = arsiv
+        self.canli = canli
+        self.ws = ws
+        self.outbound = outbound
+
+
+def _tek_gecis_yaz(db, satirlar: list[_Satir], islenme_zamani: datetime) -> None:  # noqa: ANN001
+    """Verilen satirlari DORT tabloya yazar. Hata YUKARI FIRLAR."""
+    if not satirlar:
+        return
+    _copy_yaz(db, "telemetry", _TELEMETRI_KOLONLARI, [s.telemetri for s in satirlar])
+    _copy_yaz(
+        db,
+        "processed_messages",
+        _DEDUP_KOLONLARI,
+        [(CONSUMER_NAME, s.message_id, islenme_zamani) for s in satirlar],
+    )
+    arsiv = [s.arsiv for s in satirlar if s.arsiv is not None]
+    if arsiv:
+        _degerlerle_yaz(db, _ARSIV_SQL, arsiv)
+    # Ayni (cihaz, sinyal) cifti bu dilimde birden fazla kez gelebilir; tek
+    # bir INSERT icinde `ON CONFLICT DO UPDATE` ayni satiri IKI KEZ
+    # guncelleyemez ("cannot affect row a second time"). Bu yuzden burada
+    # tekillestirilip EN YENISI birakilir. Dilimler arasi sira onemsizdir:
+    # yukaridaki `WHERE` kosulu bayat degeri zaten reddeder.
+    canli_satirlar: dict[tuple[int, str], tuple] = {}
+    for s in satirlar:
+        if s.canli is None:
+            continue
+        anahtar = (s.canli[0], s.canli[1])
+        onceki = canli_satirlar.get(anahtar)
+        if onceki is None or s.canli[5] >= onceki[5]:  # source_timestamp
+            canli_satirlar[anahtar] = s.canli
+    if canli_satirlar:
+        _degerlerle_yaz(db, _CANLI_SQL, list(canli_satirlar.values()))
+
+
+def _satirlari_yaz(
+    db, satirlar: list[_Satir], islenme_zamani: datetime  # noqa: ANN001
+) -> tuple[list[_Satir], list[_Satir]]:
+    """Satirlari yazar; BIR SATIRIN hatasi TUM PARTIYI DUSURMEZ.
+
+    Donus: (yazilan, dusen).
+
+    HIZLI YOL tek gecistir. `DataError` (kolon genisligini asan bir deger,
+    sayiya cevrilemeyen bir alan...) gelirse parti IKIYE BOLUNUP yeniden
+    denenir ve bu ozyinelemeli olarak TEK SATIRA kadar iner. Boylece yalnizca
+    gercekten bozuk satir(lar) dusurulur; yanindaki 499 saglam olcum yazilir.
+    ~log2(N) fazladan gidis-donus, ve YALNIZCA hata halinde.
+
+    `IntegrityError` BILEREK yakalanmaz. O, `processed_messages` bilesik
+    UNIQUE index'inin "bu olcum ZATEN islenmis" demesidir; satir bozuk
+    degildir, yalnizca tekrardir. Bolup DLQ'ya atmak saglam bir olcumu
+    karantinaya gondermek olurdu. Yukari birakilir, cagiran TUM partiyi
+    yeniden teslime birakir ve bir sonraki turda `IN` on kontrolu onu eler.
+
+    SAVEPOINT sart: `DataError` transaction'i ABORTED yapar; savepoint
+    olmadan geri sarma cihaz mutasyonlarini (communication_status,
+    last_update_at) da gotururdu.
+    """
+    if not satirlar:
+        return [], []
+    try:
+        with db.begin_nested():
+            _tek_gecis_yaz(db, satirlar, islenme_zamani)
+        return satirlar, []
+    except DataError as exc:
+        if len(satirlar) == 1:
+            logger.error(
+                "telemetry_satir_karantinada msg=%s — bu TEK satir yazilamadi, "
+                "partinin geri kalani yazildi. Sebep: %s",
+                satirlar[0].message_id,
+                str(exc)[:300],
+            )
+            return [], satirlar
+        orta = len(satirlar) // 2
+        sol_ok, sol_bad = _satirlari_yaz(db, satirlar[:orta], islenme_zamani)
+        sag_ok, sag_bad = _satirlari_yaz(db, satirlar[orta:], islenme_zamani)
+        return sol_ok + sag_ok, sol_bad + sag_bad
 
 
 def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
@@ -298,11 +790,10 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
 
     Kismi hata: bir mesajin process'i patlarsa TUM batch nak EDILMEZ; o mesaj
     bad_msgs'e ayrilir, kalan batch commit'e girer. Tek poison mesaj 255
-    saglikli mesaji redeliver dongusune sokmaz.
+    saglikli mesaji redeliver dongusune sokmaz. Ayni koruma YAZIM asamasinda
+    da var: bkz. `_satirlari_yaz` (bozuk satir bolerek ayiklanir).
     """
     from app.models.telemetry import Telemetry
-    from app.models.telemetry_history import TelemetryHistory
-    from app.models.telemetry_latest import TelemetryLatest
     from app.services.device_clock_service import assess_device_timestamp
     from app.services import historian_policy
     from app.services.tag_engine_service import (
@@ -311,7 +802,6 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
         process_telemetry_reading,
         should_write_last_update,
     )
-    from sqlalchemy.dialects.postgresql import insert as _pg_insert
 
     ok_msgs: list = []
     bad_msgs: list = []
@@ -666,10 +1156,28 @@ async def _consumer_var_mi(js, stream: str, durable: str) -> bool:  # noqa: ANN0
         return False
 
 
-def _consumer_cfg(*, durable: str, deliver_policy, opt_start_time: str | None = None):  # noqa: ANN001
-    """Pull consumer konfigurasyonu — raw ve normalized icin AYNI parametreler."""
+def _consumer_cfg(  # noqa: ANN001
+    *,
+    durable: str,
+    deliver_policy,
+    opt_start_time: str | None = None,
+    filtreler: list[str] | None = None,
+):
+    """Pull consumer konfigurasyonu — tum hatlar icin AYNI parametreler.
+
+    `filtreler` verilirse durable YALNIZCA o konulari cekmesi icin kurulur;
+    hat ayriminin temeli budur. Tek eleman varsa `filter_subject`, birden
+    fazlaysa `filter_subjects` (NATS 2.10+) kullanilir — ikisi AYNI ANDA
+    gonderilemez, sunucu reddeder.
+    """
     from nats.js.api import ConsumerConfig
 
+    ek: dict[str, Any] = {}
+    if filtreler:
+        if len(filtreler) == 1:
+            ek["filter_subject"] = filtreler[0]
+        else:
+            ek["filter_subjects"] = list(filtreler)
     return ConsumerConfig(
         durable_name=durable,
         deliver_policy=deliver_policy,
@@ -681,11 +1189,18 @@ def _consumer_cfg(*, durable: str, deliver_policy, opt_start_time: str | None = 
         max_ack_pending=settings.nats_pull_max_ack_pending,
         # Poison message sonsuz redeliver edilmez -> DLQ.
         max_deliver=settings.nats_worker_max_deliver,
+        **ek,
     )
 
 
 async def _bagla(  # noqa: ANN001
-    js, *, stream: str, durable: str, deliver_policy, opt_start_time: str | None = None
+    js,
+    *,
+    stream: str,
+    durable: str,
+    deliver_policy,
+    opt_start_time: str | None = None,
+    filtreler: list[str] | None = None,
 ):
     """Durable YOKSA olustur, sonra ONA BAGLAN (config gondermeden).
 
@@ -704,9 +1219,29 @@ async def _bagla(  # noqa: ANN001
                 durable=durable,
                 deliver_policy=deliver_policy,
                 opt_start_time=opt_start_time,
+                filtreler=filtreler,
             ),
         )
     return await js.pull_subscribe_bind(consumer=durable, stream=stream)
+
+
+def _oncelikli_filtreler() -> list[str]:
+    """Oncelikli hattin konu filtresi — SINIFSIZ eski konu DAHIL.
+
+    Ikinci filtre (`e1.telemetry.normalized.*`, 4 token) bir gecis onlemi
+    DEGIL, KALICI bir guvenlik agidir: bir sekilde siniflandirilmamis bir
+    mesaj akisa girerse (eski surum tag-engine, elle publish, gelecekte
+    eklenen baska bir uretici) hicbir sinifli filtreye uymaz ve SESSIZCE
+    kaybolurdu. "Bilinmeyen -> oncelikli hat" kurali konu seviyesinde de
+    gecerli.
+
+    Iki desen CAKISMAZ: biri 5, digeri 4 token. Cakisan filtreler NATS
+    tarafindan reddedilir ve ayni mesaj iki kez islenmis olurdu.
+    """
+    return [
+        settings.nats_subject_telemetry_normalized_prio,
+        settings.nats_subject_telemetry_normalized_legacy,
+    ]
 
 
 async def _eski_raw_durable_temizle(js) -> None:  # noqa: ANN001
@@ -732,8 +1267,33 @@ async def _eski_raw_durable_temizle(js) -> None:  # noqa: ANN001
         logger.debug("telemetry_persist_raw_durable_delete_skipped", exc_info=True)
 
 
-async def _normalized_durable_temizle(js) -> None:  # noqa: ANN001
+async def _ayrik_durable_temizle(js) -> None:  # noqa: ANN001
+    """Oncelikli + toplu durable'larini siler (yoksa sessizce gecer).
+
+    TOPLU ONCE: silme sirasinda surec olurse geride ONCELIKLI hattin
+    durable'i kalsin — ariza sinifinin tuketicisiz kalmasi, analog
+    arsivinin gecikmesinden agirdir.
+    """
+    norm_stream = settings.nats_stream_telemetry_normalized
+    for durable in (
+        settings.nats_consumer_telemetry_persist_bulk,
+        settings.nats_consumer_telemetry_persist_prio,
+    ):
+        try:
+            await js.delete_consumer(norm_stream, durable)
+            logger.info("telemetry_persist_ayrik_durable_silindi durable=%s", durable)
+        except Exception:  # noqa: BLE001  (yoksa NotFoundError — normal)
+            logger.debug(
+                "telemetry_persist_ayrik_durable_delete_skipped durable=%s", durable
+            )
+
+
+async def _normalized_durable_temizle(js, *, yalnizca_tek_hat: bool = False) -> None:  # noqa: ANN001
     """Kaynak `raw`a alindiysa NORMALIZED durable'ini siler.
+
+    `yalnizca_tek_hat=True` ise SADECE tek hat donemi durable'i (v3) silinir;
+    hat ayrimina gecerken kullanilir. Varsayilan (False) iki hattin
+    durable'larini da siler — geri donus hepsini terk ediyor.
 
     NEDEN: `raw` gecisi ERTELEME/GERI ALMA kolu. Gecis daha once tamamlanmis
     ve sonra bu kola basilmissa, NORMALIZED durable'i ORTADA KALIR ve onu
@@ -754,13 +1314,14 @@ async def _normalized_durable_temizle(js) -> None:  # noqa: ANN001
             settings.nats_consumer_telemetry_persist_normalized,
         )
         logger.warning(
-            "telemetry_persist_normalized_durable_silindi durable=%s — kaynak "
-            "`raw`a alindi; tuketilmeyen durable birikip `auto`ya donuste "
-            "CIFT KAYIT uretirdi",
+            "telemetry_persist_normalized_durable_silindi durable=%s — "
+            "tuketilmeyen durable birikip `auto`ya donuste CIFT KAYIT uretirdi",
             settings.nats_consumer_telemetry_persist_normalized,
         )
     except Exception:  # noqa: BLE001  (yoksa NotFoundError — normal)
         logger.debug("telemetry_persist_normalized_durable_delete_skipped", exc_info=True)
+    if not yalnizca_tek_hat:
+        await _ayrik_durable_temizle(js)
 
 
 async def _drenaj_bitti_mi(js, *, stream: str, durable: str) -> bool:  # noqa: ANN001
@@ -834,57 +1395,228 @@ async def _normalized_drenaj_bitti_mi(js) -> bool:  # noqa: ANN001
     )
 
 
-async def _gecis_gerekiyorsa_yap(js, psub, kaynak):  # noqa: ANN001
-    """Tercih ile gercek kaynak ayrismissa, TERK EDILECEK durable BOSALINCA gecer.
+async def _ayrik_hatlar_drenaj_bitti_mi(js) -> bool:  # noqa: ANN001
+    """Oncelikli VE toplu durable'larin IKISI de bosaldi mi?"""
+    norm_stream = settings.nats_stream_telemetry_normalized
+    for durable in (
+        settings.nats_consumer_telemetry_persist_prio,
+        settings.nats_consumer_telemetry_persist_bulk,
+    ):
+        if not await _drenaj_bitti_mi(js, stream=norm_stream, durable=durable):
+            return False
+    return True
 
-    Iki yon de ayni kurala tabidir — terk edilen durable siliniyor, dolayisiyla
-    silinmeden once icinde yazilmamis olcum KALMAMALI:
 
-      RAW -> NORMALIZED : tercih `auto`, ileri gecis (bkz. `_cutover`).
-      NORMALIZED -> RAW : tercih `raw`, geri donus. Acilista da denenir
-                          (`_kaynaga_bagla`) ama NORMALIZED o an dolu ise
-                          ertelenir; bosalinca burada tamamlanir. Aksi halde
-                          geri donus, NORMALIZED'de bekleyen olcumleri
-                          silerdi — surec uzun sure duruk kaldiysa (yani tam
-                          da geri donus istenen durumda) o pencere RAW geri
-                          sarmasinin disinda kalir ve KAYBOLURDU.
+async def _normalized_tum_drenaj_bitti_mi(js) -> bool:  # noqa: ANN001
+    """NORMALIZED tarafindaki TUM durable'lar (tek hat + iki hat) bosaldi mi?
 
-    Donus: (psub, kaynak) — kosullar saglanmadiysa GIRDIYLE AYNI.
+    Geri donus (`raw`) hepsini SILIYOR; hangisinin var oldugu topolojiye
+    gore degistigi icin uc durable da tek tek sorulur. Biri bile doluysa
+    geri donus ertelenir — silinen bir durable'daki olcumler geri getirilemez.
+    """
+    return await _normalized_drenaj_bitti_mi(js) and await _ayrik_hatlar_drenaj_bitti_mi(js)
+
+
+# Gecis adlari — `_gecis_gerekli_mi` bunlardan birini doner, `_gecisi_uygula`
+# uygular. Tespit ile UYGULAMA bilerek AYRIK: uygulama yalnizca TUM
+# abonelikler kapatildiktan sonra calisir, boylece "iki abonelik ayni anda
+# acik kalmasin" kurali yapisal olarak garanti edilir.
+GECIS_CUTOVER = "cutover"
+GECIS_GERI_DONUS = "geri_donus"
+GECIS_HAT_AYRIMI = "hat_ayrimi"
+GECIS_TEK_HAT = "tek_hat"
+
+
+async def _gecis_gerekli_mi(js, kaynak: str, hatlar: list[Hat]) -> str | None:  # noqa: ANN001
+    """Bir gecisin vakti geldiyse ADINI doner, degilse None.
+
+    HER GECISIN ON KOSULU AYNI: terk edilecek durable(lar) SILINECEGI icin
+    once BOSALMALI. `_drenaj_bitti_mi` bunu sunucunun `num_pending` VE
+    `num_ack_pending` sayaclarindan sorar (fetch timeout'u iki yonden de
+    yanilticidir — bkz. o fonksiyonun docstring'i).
     """
     tercih = _kaynak_tercihi()
-    if kaynak == KAYNAK_RAW and tercih == KAYNAK_AUTO:
-        if not await _raw_drenaj_bitti_mi(js):
-            return psub, kaynak
-        psub, kaynak = await _cutover(js, psub)
-        _stats_update(source=kaynak)
-        return psub, kaynak
-    if kaynak == KAYNAK_NORMALIZED and tercih == KAYNAK_RAW:
-        if not await _normalized_drenaj_bitti_mi(js):
-            return psub, kaynak
-        psub, kaynak = await _geri_donus(js, psub)
-        _stats_update(source=kaynak)
-        return psub, kaynak
-    return psub, kaynak
+    if kaynak == KAYNAK_RAW:
+        if tercih == KAYNAK_AUTO and await _raw_drenaj_bitti_mi(js):
+            return GECIS_CUTOVER
+        return None
+
+    # kaynak == NORMALIZED
+    if tercih == KAYNAK_RAW:
+        if await _normalized_tum_drenaj_bitti_mi(js):
+            return GECIS_GERI_DONUS
+        return None
+
+    siniflar = {h.sinif for h in hatlar}
+    if settings.telemetry_persist_split_enabled and siniflar == {SINIF_KARMA}:
+        if await _normalized_drenaj_bitti_mi(js):
+            return GECIS_HAT_AYRIMI
+        return None
+    if not settings.telemetry_persist_split_enabled and SINIF_KARMA not in siniflar:
+        if await _ayrik_hatlar_drenaj_bitti_mi(js):
+            return GECIS_TEK_HAT
+        return None
+    return None
+
+
+async def _gecisi_uygula(js, gecis: str) -> None:  # noqa: ANN001
+    """Durable cerrahisi. CAGIRAN TUM ABONELIKLERI KAPATMIS OLMALIDIR."""
+    if gecis == GECIS_CUTOVER:
+        await _cutover(js)
+    elif gecis == GECIS_GERI_DONUS:
+        await _geri_donus(js)
+    elif gecis == GECIS_HAT_AYRIMI:
+        await _hat_ayrimina_gec(js)
+    elif gecis == GECIS_TEK_HAT:
+        await _tek_hatta_don(js)
+
+
+async def _durable_olustur(  # noqa: ANN001
+    js, *, stream: str, durable: str, deliver_policy, opt_start_time=None, filtreler=None
+) -> None:
+    """Durable YOKSA olusturur; VARSA DOKUNMAZ (konumu ezilmez)."""
+    if await _consumer_var_mi(js, stream, durable):
+        return
+    await js.add_consumer(
+        stream,
+        config=_consumer_cfg(
+            durable=durable,
+            deliver_policy=deliver_policy,
+            opt_start_time=opt_start_time,
+            filtreler=filtreler,
+        ),
+    )
+
+
+async def _ayrik_durablelari_olustur(js, *, deliver_policy, opt_start_time=None) -> None:  # noqa: ANN001
+    """Oncelikli + toplu durable'larini olusturur.
+
+    ONCELIKLI ONCE: iki cagri arasinda surec olurse (yeniden baslatma,
+    OOM) yalnizca biri kurulmus olur. Yarim kalan tarafin ONCELIKLI hat
+    olmasi, ariza sinifinin tuketicisiz kalmasi demekti.
+    """
+    norm_stream = settings.nats_stream_telemetry_normalized
+    await _durable_olustur(
+        js,
+        stream=norm_stream,
+        durable=settings.nats_consumer_telemetry_persist_prio,
+        deliver_policy=deliver_policy,
+        opt_start_time=opt_start_time,
+        filtreler=_oncelikli_filtreler(),
+    )
+    await _durable_olustur(
+        js,
+        stream=norm_stream,
+        durable=settings.nats_consumer_telemetry_persist_bulk,
+        deliver_policy=deliver_policy,
+        opt_start_time=opt_start_time,
+        filtreler=[settings.nats_subject_telemetry_normalized_bulk],
+    )
+
+
+async def _normalized_durable_kur(js, *, deliver_policy, opt_start_time=None) -> None:  # noqa: ANN001
+    """Yapilandirmanin ISTEDIGI NORMALIZED durable'larini olusturur.
+
+    Hat ayrimi acikken TEK HAT durable'i (v3) HIC yaratilmaz: yaratmak,
+    hemen ardindan bosaltilip silinecek gereksiz bir duragi akisa sokmak
+    olurdu.
+    """
+    if settings.telemetry_persist_split_enabled:
+        await _ayrik_durablelari_olustur(
+            js, deliver_policy=deliver_policy, opt_start_time=opt_start_time
+        )
+        return
+    await _durable_olustur(
+        js,
+        stream=settings.nats_stream_telemetry_normalized,
+        durable=settings.nats_consumer_telemetry_persist_normalized,
+        deliver_policy=deliver_policy,
+        opt_start_time=opt_start_time,
+    )
+
+
+async def _hatlari_bagla(js, durable_siniflari: list[tuple[str, str]]) -> list[Hat]:  # noqa: ANN001
+    """Var olan durable'lara baglanir; Hat listesi doner."""
+    norm_stream = settings.nats_stream_telemetry_normalized
+    hatlar: list[Hat] = []
+    for durable, sinif in durable_siniflari:
+        psub = await js.pull_subscribe_bind(consumer=durable, stream=norm_stream)
+        hatlar.append(Hat(sinif=sinif, stream=norm_stream, durable=durable, psub=psub))
+    return hatlar
+
+
+async def _normalized_hatlarina_bagla(js) -> list[Hat]:  # noqa: ANN001
+    """NORMALIZED tarafinda VAR OLAN topolojiye baglanir.
+
+    Karar defteri yine JetStream'in kendisidir: "hangi durable var?". Ayri
+    bir bayrak tutulmuyor — bayrak ile gercek durum ayrisabilir ve ayrisma
+    ancak veri kaybi/tekrari olarak fark edilirdi.
+    """
+    from nats.js.api import DeliverPolicy
+
+    norm_stream = settings.nats_stream_telemetry_normalized
+    prio_durable = settings.nats_consumer_telemetry_persist_prio
+    bulk_durable = settings.nats_consumer_telemetry_persist_bulk
+    v3_durable = settings.nats_consumer_telemetry_persist_normalized
+
+    ayrik_var = await _consumer_var_mi(js, norm_stream, prio_durable) or (
+        await _consumer_var_mi(js, norm_stream, bulk_durable)
+    )
+    tek_hat_var = await _consumer_var_mi(js, norm_stream, v3_durable)
+    if not ayrik_var and not tek_hat_var:
+        # Hicbiri yok — temiz kurulum. Yapilandirmanin istedigi topolojiyi
+        # kur ve ASAGIDAKI dallara birak (ozyineleme yok: kurulum
+        # basarisizsa sonsuz dongu degil, acik bir hata istiyoruz).
+        await _normalized_durable_kur(js, deliver_policy=DeliverPolicy.NEW)
+        ayrik_var = settings.telemetry_persist_split_enabled
+        tek_hat_var = not ayrik_var
+
+    if ayrik_var:
+        # Yarim kalmis kurulum (bir onceki surecin arasinda olmesi) burada
+        # TAMAMLANIR; eksik olan taraf `NEW` ile degil ayni geri sarmayla
+        # yaratilir ki ara pencere kaybolmasin.
+        geri_sarma = _cutover_geri_sarma_sec()
+        await _ayrik_durablelari_olustur(
+            js,
+            deliver_policy=DeliverPolicy.BY_START_TIME,
+            opt_start_time=(
+                datetime.now(timezone.utc) - timedelta(seconds=geri_sarma)
+            ).isoformat(),
+        )
+        return await _hatlari_bagla(
+            js, [(prio_durable, SINIF_ONCELIKLI), (bulk_durable, SINIF_TOPLU)]
+        )
+
+    # TEK HAT donemi. Ayrim acik olsa bile v3 BOSALMADAN bolunmez;
+    # bolunme `_gecis_gerekli_mi` -> `_hat_ayrimina_gec` ile olur.
+    return await _hatlari_bagla(js, [(v3_durable, SINIF_KARMA)])
 
 
 async def _kaynaga_bagla(js):  # noqa: ANN001
-    """Acilista hangi akistan okunacagini belirler. Donus: (psub, kaynak)."""
+    """Acilista hangi akistan okunacagini belirler. Donus: (hatlar, kaynak)."""
     from nats.js.api import DeliverPolicy
 
     tercih = _kaynak_tercihi()
-    norm_durable = settings.nats_consumer_telemetry_persist_normalized
     norm_stream = settings.nats_stream_telemetry_normalized
 
     # Gecis DAHA ONCE tamamlanmis mi? `raw` tercihi bunu GERI ALMA anlamina
     # gelir ve asagida ayrica ele alinir (bkz. `geri_donus`).
-    gecis_yapilmis = await _consumer_var_mi(js, norm_stream, norm_durable)
+    gecis_yapilmis = False
+    for durable in (
+        settings.nats_consumer_telemetry_persist_normalized,
+        settings.nats_consumer_telemetry_persist_prio,
+        settings.nats_consumer_telemetry_persist_bulk,
+    ):
+        if await _consumer_var_mi(js, norm_stream, durable):
+            gecis_yapilmis = True
+            break
 
     if tercih != KAYNAK_RAW and gecis_yapilmis:
-        psub = await js.pull_subscribe_bind(consumer=norm_durable, stream=norm_stream)
+        hatlar = await _normalized_hatlarina_bagla(js)
         # Gecis aninda silme adimina yetisemeden crash olmus olabilir; kalmis
         # olan bos RAW durable'i burada temizlenir (rollback tekrar riski).
         await _eski_raw_durable_temizle(js)
-        return psub, KAYNAK_NORMALIZED
+        return hatlar, KAYNAK_NORMALIZED
 
     if tercih == KAYNAK_NORMALIZED:
         logger.warning(
@@ -893,53 +1625,68 @@ async def _kaynaga_bagla(js):  # noqa: ANN001
             "Bu ayar yalnizca temiz kurulum icindir; mevcut sahada `auto` kullanin.",
             settings.nats_consumer_telemetry_persist,
         )
-        psub = await _bagla(
-            js,
-            stream=norm_stream,
-            durable=norm_durable,
-            deliver_policy=DeliverPolicy.NEW,
-        )
-        return psub, KAYNAK_NORMALIZED
+        await _normalized_durable_kur(js, deliver_policy=DeliverPolicy.NEW)
+        return await _normalized_hatlarina_bagla(js), KAYNAK_NORMALIZED
 
     # GERI DONUS MU, ERTELEME MI?
     #
     # `raw` iki farkli anlama gelir ve ikisi ayni sekilde ele ALINAMAZ:
     #   * gecis HIC yapilmamis  -> sadece ERTELEME. RAW durable'i yerinde,
     #     konumu korunur, yapacak baska bir sey yok (asagidaki FAZ 1).
-    #   * gecis yapilmis        -> GERI DONUS. Ama ONCE NORMALIZED durable'i
-    #     BOSALMALI: geri donus onu siliyor ve icinde yazilmamis olcum
+    #   * gecis yapilmis        -> GERI DONUS. Ama ONCE NORMALIZED durable'lari
+    #     BOSALMALI: geri donus onlari siliyor ve icinde yazilmamis olcum
     #     kalabilir. Surec bir sureligine duruk kaldiysa — yani tam da geri
     #     donusun istendigi durumda — o birikim RAW geri sarma penceresinin
     #     (varsayilan 15 dk) DISINDA kalir ve silinmesiyle birlikte
     #     KAYBOLURDU. Dolu ise NORMALIZED'de kaliriz; bosalinca gecisi
-    #     `_gecis_gerekiyorsa_yap` tamamlar.
+    #     `_gecis_gerekli_mi` tamamlar.
     if tercih == KAYNAK_RAW and gecis_yapilmis:
-        psub = await js.pull_subscribe_bind(consumer=norm_durable, stream=norm_stream)
-        if await _normalized_drenaj_bitti_mi(js):
-            return await _geri_donus(js, psub)
+        if await _normalized_tum_drenaj_bitti_mi(js):
+            await _geri_donus(js)
+            return await _raw_hattina_bagla(js), KAYNAK_RAW
         logger.warning(
-            "telemetry_persist_geri_donus_erteleniyor durable=%s — NORMALIZED "
-            "akisinda yazilmamis olcum var; once o bosaltilacak, sonra RAW'a "
-            "donulecek (silinmis durable'daki olcumler geri getirilemezdi)",
-            norm_durable,
+            "telemetry_persist_geri_donus_erteleniyor — NORMALIZED akisinda "
+            "yazilmamis olcum var; once o bosaltilacak, sonra RAW'a donulecek "
+            "(silinmis durable'daki olcumler geri getirilemezdi)",
         )
-        return psub, KAYNAK_NORMALIZED
+        return await _normalized_hatlarina_bagla(js), KAYNAK_NORMALIZED
 
     # FAZ 1 — eski RAW durable'i AYNEN devralinir: ayni isim, ayni stream,
     # ayni konum. JetStream mesajlari kaldigi yerden verir; birikim erir.
+    return await _raw_hattina_bagla(js), KAYNAK_RAW
+
+
+async def _raw_hattina_bagla(js) -> list[Hat]:  # noqa: ANN001
+    """RAW akisi TEK HATTIR: ham akista sinif token'i yoktur.
+
+    Ham konu (`e1.telemetry.raw.<gw>`) siniflandirilmamis; ayrimi tag-engine
+    yapiyor. Bu yuzden RAW fazinda hat sinifi `karma`dir ve olay kaydinda
+    oyle gorunur — "hangi sinif dustu" sorusuna burada durust cevap
+    "bilinmiyor, ikisi de olabilir"dir.
+    """
+    from nats.js.api import DeliverPolicy
+
+    stream = settings.nats_stream_telemetry_raw
+    durable = settings.nats_consumer_telemetry_persist
     psub = await _bagla(
         js,
-        stream=settings.nats_stream_telemetry_raw,
-        durable=settings.nats_consumer_telemetry_persist,
+        stream=stream,
+        durable=durable,
         # Yalnizca durable HIC YOKSA (temiz kurulum) gecerli: 2 gunluk
         # history'yi replay etmeyip guncelden baslar.
         deliver_policy=DeliverPolicy.NEW,
     )
-    return psub, KAYNAK_RAW
+    return [Hat(sinif=SINIF_KARMA, stream=stream, durable=durable, psub=psub)]
 
 
-async def _geri_donus(js, norm_psub):  # noqa: ANN001
-    """GERI DONUS — NORMALIZED bosaldi, RAW'a don. Donus: (psub, kaynak).
+def _geri_sarma_baslangici() -> tuple[int, str]:
+    geri_sarma = _cutover_geri_sarma_sec()
+    baslangic = datetime.now(timezone.utc) - timedelta(seconds=geri_sarma)
+    return geri_sarma, baslangic.isoformat()
+
+
+async def _geri_donus(js) -> None:  # noqa: ANN001
+    """GERI DONUS — NORMALIZED bosaldi, RAW'a don.
 
     `_cutover`un AYNASI; adim sirasi ve gerekceler birebir ayni:
       1) RAW durable'i olusturulur. Cutover sirasinda SILINMISTI, yani
@@ -948,26 +1695,22 @@ async def _geri_donus(js, norm_psub):  # noqa: ANN001
          cutover ile AYNI pencere kadar geri sarilir. Tekrar gelenleri
          `processed_messages` defteri eler — pencere zaten (bkz.
          `_cutover_geri_sarma_sec`) defterin omruyle sinirli.
-      2) NORMALIZED aboneligi kapatilir: iki abonelik ayni anda beslenmez.
-      3) NORMALIZED durable'i silinir. Birakilsaydi kimse tuketmedigi icin
+      2) NORMALIZED durable'lari silinir. Birakilsaydi kimse tuketmedigi icin
          birikir ve `auto`ya donuste (ki `auto` compose varsayilanidir)
          birikimin tamami yeniden islenerek CIFT KAYIT uretirdi.
+
+    Abonelikler cagiran tarafindan ZATEN kapatilmistir.
     """
     from nats.js.api import DeliverPolicy
 
-    geri_sarma = _cutover_geri_sarma_sec()
-    baslangic = datetime.now(timezone.utc) - timedelta(seconds=geri_sarma)
-    psub = await _bagla(
+    geri_sarma, baslangic = _geri_sarma_baslangici()
+    await _durable_olustur(
         js,
         stream=settings.nats_stream_telemetry_raw,
         durable=settings.nats_consumer_telemetry_persist,
         deliver_policy=DeliverPolicy.BY_START_TIME,
-        opt_start_time=baslangic.isoformat(),
+        opt_start_time=baslangic,
     )
-    try:
-        await norm_psub.unsubscribe()
-    except Exception:  # noqa: BLE001
-        logger.debug("telemetry_persist_normalized_unsubscribe_failed", exc_info=True)
     await _normalized_durable_temizle(js)
     logger.warning(
         "telemetry_persist_geri_donus kaynak=normalized->raw durable=%s "
@@ -975,46 +1718,250 @@ async def _geri_donus(js, norm_psub):  # noqa: ANN001
         settings.nats_consumer_telemetry_persist,
         geri_sarma,
     )
-    return psub, KAYNAK_RAW
 
 
-async def _cutover(js, raw_psub):  # noqa: ANN001
-    """FAZ 2 — RAW bosaldi, NORMALIZED'e gec. Donus: (psub, kaynak).
+async def _cutover(js) -> None:  # noqa: ANN001
+    """FAZ 2 — RAW bosaldi, NORMALIZED'e gec.
 
     ADIM SIRASI HAYATIDIR:
-      1) YENI durable olusturulur (geri sarilmis baslangicla). Once eskisini
-         silmek, aradaki bir hatada hicbir tuketicisi olmayan bir pencere
-         birakirdi — o penceredeki olcumler kaybolurdu.
-      2) RAW aboneligi kapatilir. Iki abonelik ASLA ayni anda acik kalmaz;
-         cift kaydin en olasi kaynagi budur.
-      3) Eski durable silinir (rollback tekrarini onler).
+      1) YENI durable(lar) olusturulur (geri sarilmis baslangicla). Once
+         eskisini silmek, aradaki bir hatada hicbir tuketicisi olmayan bir
+         pencere birakirdi — o penceredeki olcumler kaybolurdu.
+      2) Eski durable silinir (rollback tekrarini onler).
+
+    Iki abonelik ASLA ayni anda acik kalmaz — cift kaydin en olasi kaynagi
+    budur ve artik yapisal olarak imkansiz: bu fonksiyon yalnizca TUM
+    abonelikler kapatildiktan sonra cagrilir.
     """
     from nats.js.api import DeliverPolicy
 
-    geri_sarma = _cutover_geri_sarma_sec()
-    baslangic = datetime.now(timezone.utc) - timedelta(seconds=geri_sarma)
-    norm_durable = settings.nats_consumer_telemetry_persist_normalized
-    norm_stream = settings.nats_stream_telemetry_normalized
-
-    psub = await _bagla(
-        js,
-        stream=norm_stream,
-        durable=norm_durable,
-        deliver_policy=DeliverPolicy.BY_START_TIME,
-        opt_start_time=baslangic.isoformat(),
+    geri_sarma, baslangic = _geri_sarma_baslangici()
+    await _normalized_durable_kur(
+        js, deliver_policy=DeliverPolicy.BY_START_TIME, opt_start_time=baslangic
     )
-    try:
-        await raw_psub.unsubscribe()
-    except Exception:  # noqa: BLE001
-        logger.debug("telemetry_persist_raw_unsubscribe_failed", exc_info=True)
     await _eski_raw_durable_temizle(js)
     logger.info(
-        "telemetry_persist_cutover kaynak=raw->normalized durable=%s "
+        "telemetry_persist_cutover kaynak=raw->normalized ayrik_hat=%s "
         "geri_sarma=%ds (tekrar gelen olcumler processed_messages ile elenir)",
-        norm_durable,
+        settings.telemetry_persist_split_enabled,
         geri_sarma,
     )
-    return psub, KAYNAK_NORMALIZED
+
+
+async def _hat_ayrimina_gec(js) -> None:  # noqa: ANN001
+    """TEK HAT -> IKI HAT. `_cutover` ile AYNI disiplin: once kur, sonra sil.
+
+    Geri sarma neden yine gerekli: v3 drenaji ile yeni durable'larin
+    olusturuldugu an arasinda tag-engine yayin yapmaya devam eder. Geri
+    sarmazsak o penceredeki olcumler HIC yazilmaz. Tekrar gelenleri
+    `processed_messages` defteri eler.
+    """
+    from nats.js.api import DeliverPolicy
+
+    geri_sarma, baslangic = _geri_sarma_baslangici()
+    await _ayrik_durablelari_olustur(
+        js, deliver_policy=DeliverPolicy.BY_START_TIME, opt_start_time=baslangic
+    )
+    await _normalized_durable_temizle(js, yalnizca_tek_hat=True)
+    logger.info(
+        "telemetry_persist_hat_ayrimi oncelikli=%s toplu=%s geri_sarma=%ds — "
+        "dijital/durum sinyalleri artik analog selinin arkasinda beklemiyor",
+        settings.nats_consumer_telemetry_persist_prio,
+        settings.nats_consumer_telemetry_persist_bulk,
+        geri_sarma,
+    )
+
+
+async def _tek_hatta_don(js) -> None:  # noqa: ANN001
+    """IKI HAT -> TEK HAT (`TELEMETRY_PERSIST_SPLIT_ENABLED=false`).
+
+    `_hat_ayrimina_gec`in aynasi. Bu kolun gercekten calisir olmasi sart:
+    hicbir sey yapmayan bir geri alma kolu, operatorun "kapattim" sanip
+    kapanmamis bir davranisla yasamasi demekti.
+    """
+    from nats.js.api import DeliverPolicy
+
+    geri_sarma, baslangic = _geri_sarma_baslangici()
+    await _durable_olustur(
+        js,
+        stream=settings.nats_stream_telemetry_normalized,
+        durable=settings.nats_consumer_telemetry_persist_normalized,
+        deliver_policy=DeliverPolicy.BY_START_TIME,
+        opt_start_time=baslangic,
+    )
+    await _ayrik_durable_temizle(js)
+    logger.warning(
+        "telemetry_persist_tek_hat durable=%s geri_sarma=%ds — hat ayrimi "
+        "KAPATILDI; analog seli ile ariza bayragi yeniden ayni sirada bekliyor",
+        settings.nats_consumer_telemetry_persist_normalized,
+        geri_sarma,
+    )
+
+
+#: Gecis kosullarinin sunucuya sorulma araligi. Eski kod bunu yalnizca fetch
+#: timeout'unda veya `backlog == 0` aninda soruyordu; iki hatta bu kosullar
+#: farkli zamanlarda olustugu icin karar artik ZAMANA bagli ve hatlardan
+#: bagimsiz. Maliyeti 5 saniyede bir `consumer_info` — ihmal edilebilir.
+_GECIS_KONTROL_ARALIK_SEC = 5.0
+
+
+async def _hat_dongusu(  # noqa: ANN001
+    js, hat: Hat, yeniden_kur, handle_bad, timeout_hatasi, bosalma_isareti=None
+) -> None:
+    """TEK bir hattin fetch/isle/ack dongusu.
+
+    Her hat icin AYRI bir asyncio gorevi olarak calisir. DB isi
+    `asyncio.to_thread` ile olay dongusunun disina cikar; boylece toplu
+    hattin yavas bir commit'i oncelikli hattin fetch'ini BEKLETMEZ. Bu
+    fonksiyonun hat sinifindan haberdar olmasinin tek sebebi OLCUM ve OLAY
+    KAYDI — is mantigi iki hatta da birebir aynidir.
+
+    `bosalma_isareti`: hat "onumde bekleyen kalmadi" dedigi anda kaldirilir.
+    Gecis gozetmeni bunu bekler; boylece drenajin bitisi bir ZAMANLAYICIYA
+    degil hattin kendi olcumune bagli kalir ve gecis ANINDA denenir.
+    """
+    def _bosaldi() -> None:
+        _hat_backlog_yaz(hat.sinif, 0)
+        if bosalma_isareti is not None:
+            bosalma_isareti.set()
+
+    try:
+        await _hat_dongusu_govde(
+            js, hat, yeniden_kur, handle_bad, timeout_hatasi, _bosaldi
+        )
+    finally:
+        # Dongu hangi sebeple biterse bitsin gozetmeni UYANDIR: aksi halde
+        # kapanista veya bir hatada gozetmen bos yere `_GECIS_KONTROL_ARALIK_SEC`
+        # kadar bekler ve kapanis o kadar gecikirdi.
+        if bosalma_isareti is not None:
+            bosalma_isareti.set()
+
+
+async def _hat_dongusu_govde(  # noqa: ANN001
+    js, hat: Hat, yeniden_kur, handle_bad, timeout_hatasi, _bosaldi
+) -> None:
+    while not _stop_event.is_set() and not yeniden_kur.is_set():
+        try:
+            msgs = await hat.psub.fetch(batch=settings.nats_pull_batch_size, timeout=5)
+        except (asyncio.TimeoutError, timeout_hatasi):
+            # Bu pencerede yeni mesaj yok — NORMAL ve ayni zamanda "backlog
+            # bos" demektir; olcume yansitiyoruz ki ekranda bayat bir backlog
+            # degeri asili kalmasin.
+            _bosaldi()
+            # Gozetmene SIRA VER: drenaj isareti daha yeni kalkti, gecis
+            # karari bir sonraki fetch'i beklemeden verilebilsin.
+            await asyncio.sleep(0)
+            await _dusen_mesaj_denetimi(js, hat)
+            continue
+        if not msgs:
+            _bosaldi()
+            await asyncio.sleep(0)
+            continue
+        _batch_started = _time.monotonic()
+        # DB isi ayri thread'de (senkron SQLAlchemy event loop'u bloke
+        # etmesin). _persist_batch TEK commit yapar.
+        ok_msgs, bad_msgs, ok_payloads, outbound_payloads = await asyncio.to_thread(
+            _persist_batch, msgs
+        )
+        # DB commit SONRASI ama NATS ack ONCESI yan etkiler. Process burada
+        # crash ederse mesaj redeliver olur; DB idempotency duplicate'i yutar
+        # ve dis akis tekrar denenir (veri kaybi yok).
+        for payload in ok_payloads:
+            try:
+                ws_broadcaster.broadcast(payload)
+            except Exception:  # noqa: BLE001
+                logger.debug("ws_broadcast_failed", exc_info=True)
+        if outbound_payloads:
+            await asyncio.to_thread(_dispatch_outbound, outbound_payloads)
+        # DB + yan etkiler tamam -> iyi/skip mesajlari ack.
+        for m in ok_msgs:
+            try:
+                await m.ack()
+            except Exception:  # noqa: BLE001
+                logger.debug("js_ack_failed", exc_info=True)
+        # Parse/validation hatali mesajlar: DLQ/nak.
+        for m in bad_msgs:
+            await handle_bad(m)
+
+        # --- Olcum: yetisiyor muyuz? ------------------------------------
+        # Backlog'u BEDAVA aliyoruz: JetStream her mesajin metadata'sinda
+        # `num_pending` tasir (bu mesajdan SONRA tuketicinin onunde bekleyen
+        # adet). Ayrica consumer_info cagrisi yapmaya gerek yok. Son mesaji
+        # baz aliyoruz; batch'in en guncel noktasi orasi.
+        backlog: int | None = None
+        try:
+            meta = getattr(msgs[-1], "metadata", None)
+            if meta is not None and getattr(meta, "num_pending", None) is not None:
+                backlog = int(meta.num_pending)
+        except Exception:  # noqa: BLE001
+            backlog = None
+        _stats_record_batch(
+            sinif=hat.sinif,
+            size=len(ok_msgs),
+            duration=_time.monotonic() - _batch_started,
+            backlog=backlog,
+            bad=len(bad_msgs),
+        )
+        _warn_if_backlog_high(hat.sinif, backlog)
+        # `backlog == 0` = "bu batch'in ardinda bekleyen yok". Kesintisiz
+        # yukte fetch NEREDEYSE HIC timeout vermez (kismi batch de mesaj
+        # sayilir), yani yalnizca timeout'a bagli bir drenaj sinyali
+        # uretimde HIC olusmazdi.
+        if backlog == 0:
+            _bosaldi()
+            await asyncio.sleep(0)  # gozetmene sira ver (yukaridaki gerekce)
+        await _dusen_mesaj_denetimi(js, hat)
+
+
+async def _gecis_gozetmeni(  # noqa: ANN001
+    js, kaynak, hatlar, yeniden_kur, gecis_istegi, bosalma_isareti=None
+) -> None:
+    """Gecis kosullarini SUNUCUYA sorar; kosul olusunca teardown ister.
+
+    NE ZAMAN SORAR: bir hat "onumde bekleyen kalmadi" dedigi anda (bkz.
+    `bosalma_isareti`), ayrica en gec `_GECIS_KONTROL_ARALIK_SEC` saniyede
+    bir. Isaret hizli tepki, periyot ise emniyet agidir — isaretin hic
+    gelmedigi bir durumda gecis sonsuza kadar ertelenmesin.
+
+    Kosul olustugunda gecisi KENDISI UYGULAMAZ; yalnizca adini yazip
+    `yeniden_kur` bayragini kaldirir. Cerrahi (durable olustur/sil) tum
+    abonelikler kapandiktan sonra `_consume_loop` icinde yapilir. Boylece
+    "iki abonelik ayni anda acik kalmasin" kurali bir DIKKAT meselesi
+    olmaktan cikip yapisal hale gelir — cift kaydin en olasi kaynagi buydu.
+    """
+    while not _stop_event.is_set() and not yeniden_kur.is_set():
+        # ONCE SOR, SONRA BEKLE. Ters sirasi iki sorun uretirdi:
+        #   * Baglanma aninda ZATEN vadesi gelmis bir gecis, ilk bekleme
+        #     penceresi kadar (ya da bir hattin isaret gondermesine kadar)
+        #     gereksiz ertelenirdi.
+        #   * Karar, gozetmenin hat donguleriyle giristigi ZAMANLAMA YARISINI
+        #     kazanmasina baglanirdi — kapanis sirasinda kaybedilen bir yaris
+        #     gecisi tamamen atlatabilirdi.
+        try:
+            gecis = await _gecis_gerekli_mi(js, kaynak, hatlar)
+        except Exception:  # noqa: BLE001
+            logger.debug("telemetry_persist_gecis_kontrolu_basarisiz", exc_info=True)
+            gecis = None
+        if gecis:
+            gecis_istegi["ad"] = gecis
+            logger.info(
+                "telemetry_persist_gecis_istegi gecis=%s kaynak=%s hatlar=%s",
+                gecis,
+                kaynak,
+                [h.sinif for h in hatlar],
+            )
+            yeniden_kur.set()
+            return
+        # Bir hat "onumde bekleyen kalmadi" der demez yeniden sor; en gec
+        # `_GECIS_KONTROL_ARALIK_SEC` sonra periyodik olarak da sorulur
+        # (isaretin hic gelmedigi durumlar icin emniyet agi).
+        isaret = bosalma_isareti if bosalma_isareti is not None else yeniden_kur
+        try:
+            await asyncio.wait_for(isaret.wait(), timeout=_GECIS_KONTROL_ARALIK_SEC)
+        except asyncio.TimeoutError:
+            pass
+        if bosalma_isareti is not None:
+            bosalma_isareti.clear()
 
 
 def _consume_loop() -> None:
@@ -1102,100 +2049,69 @@ def _consume_loop() -> None:
                 #
                 # Hangi akisa baglanacagi ve gecisin hangi fazda oldugu
                 # `_kaynaga_bagla` icinde belirlenir (bkz. modul docstring'i).
-                psub, kaynak = await _kaynaga_bagla(js)
-                logger.info(
-                    "telemetry_consumer_running mode=pull kaynak=%s durable=%s url=%s",
-                    kaynak,
-                    (
-                        settings.nats_consumer_telemetry_persist
-                        if kaynak == KAYNAK_RAW
-                        else settings.nats_consumer_telemetry_persist_normalized
-                    ),
-                    settings.nats_url,
-                )
-                _stats_update(source=kaynak)
-                backoff = 2  # connect basarili — backoff sifirla
-                # Fetch dongusu: backend kendi hizinda batch ceker, TEK
-                # commit ile isler (_persist_batch), commit SONRASI topluca
-                # ack'ler. fetch timeout'unda mesaj yoksa TimeoutError normal.
-                # Batch-commit sayesinde throughput gelis hizini gecer ->
-                # backlog erir, slow-consumer/ack_pending tikanmasi olmaz.
-                _stats_update(connected=True, last_error=None)
+                #
+                # HER HAT KENDI DONGUSUNDE. `asyncio.gather` ile paralel
+                # calisirlar ve DB isi `asyncio.to_thread` ile olay
+                # dongusunun DISINDA yapilir: toplu hattin commit'i
+                # saniyelerce assa bile oncelikli hat ayni anda fetch eder,
+                # yazar, ack'ler ve WS'e yayar. Izolasyonun somut yeri burasi.
                 while not _stop_event.is_set():
-                    try:
-                        msgs = await psub.fetch(
-                            batch=settings.nats_pull_batch_size, timeout=5
+                    hatlar, kaynak = await _kaynaga_bagla(js)
+                    logger.info(
+                        "telemetry_consumer_running mode=pull kaynak=%s hatlar=%s url=%s",
+                        kaynak,
+                        [(h.sinif, h.durable) for h in hatlar],
+                        settings.nats_url,
+                    )
+                    _stats_update(source=kaynak, connected=True, last_error=None)
+                    backoff = 2  # connect basarili — backoff sifirla
+                    # Gecis istegi: gozetmen bunu set eder, TUM hat donguleri
+                    # cikar, abonelikler kapanir ve durable cerrahisi ANCAK
+                    # ondan sonra yapilir. "Iki abonelik ayni anda acik
+                    # kalmasin" kurali boylece yapisal olarak garanti edilir.
+                    gecis_istegi: dict[str, str | None] = {"ad": None}
+                    yeniden_kur = asyncio.Event()
+                    # Hatlar "onumde bekleyen kalmadi" dedigi anda kaldirilir;
+                    # gozetmen gecisi ZAMANLAYICI beklemeden dener.
+                    bosalma_isareti = asyncio.Event()
+                    gorevler = [
+                        asyncio.create_task(
+                            _hat_dongusu(
+                                js,
+                                hat,
+                                yeniden_kur,
+                                _handle_bad,
+                                _NatsTimeoutError,
+                                bosalma_isareti,
+                            )
                         )
-                    except (asyncio.TimeoutError, _NatsTimeoutError):
-                        # Bu pencerede yeni mesaj yok — NORMAL ve ayni zamanda
-                        # "backlog bos" demektir; olcume yansitiyoruz ki
-                        # ekranda bayat bir backlog degeri asili kalmasin.
-                        _stats_update(backlog=0)
-                        # Bos pencere gecis icin bir ISARETTIR ama KANIT
-                        # DEGILDIR: teslim edilmis ama ack'lenmemis mesajlar
-                        # bu pencerede gorunmez. Karari sunucunun sayaclari
-                        # verir — bkz. `_drenaj_bitti_mi`.
-                        psub, kaynak = await _gecis_gerekiyorsa_yap(js, psub, kaynak)
-                        continue
-                    if not msgs:
-                        _stats_update(backlog=0)
-                        continue
-                    _batch_started = _time.monotonic()
-                    # DB isi ayri thread'de (senkron SQLAlchemy event loop'u
-                    # bloke etmesin). _persist_batch TEK commit yapar.
-                    ok_msgs, bad_msgs, ok_payloads, outbound_payloads = (
-                        await asyncio.to_thread(_persist_batch, msgs)
+                        for hat in hatlar
+                    ]
+                    gorevler.append(
+                        asyncio.create_task(
+                            _gecis_gozetmeni(
+                                js,
+                                kaynak,
+                                hatlar,
+                                yeniden_kur,
+                                gecis_istegi,
+                                bosalma_isareti,
+                            )
+                        )
                     )
-                    # DB commit SONRASI ama NATS ack ONCESI yan etkiler. Process
-                    # burada crash ederse mesaj redeliver olur; DB idempotency
-                    # duplicate'i yutar ve dis akis tekrar denenir (veri kaybi yok).
-                    for payload in ok_payloads:
-                        try:
-                            ws_broadcaster.broadcast(payload)
-                        except Exception:  # noqa: BLE001
-                            logger.debug("ws_broadcast_failed", exc_info=True)
-                    if outbound_payloads:
-                        await asyncio.to_thread(_dispatch_outbound, outbound_payloads)
-                    # DB + yan etkiler tamam -> iyi/skip mesajlari ack.
-                    for m in ok_msgs:
-                        try:
-                            await m.ack()
-                        except Exception:  # noqa: BLE001
-                            logger.debug("js_ack_failed", exc_info=True)
-                    # Parse/validation hatali mesajlar: DLQ/nak.
-                    for m in bad_msgs:
-                        await _handle_bad(m)
-
-                    # --- Olcum: yetisiyor muyuz? --------------------------
-                    # Backlog'u BEDAVA aliyoruz: JetStream her mesajin
-                    # metadata'sinda `num_pending` tasir (bu mesajdan SONRA
-                    # tuketicinin onunde bekleyen adet). Ayrica consumer_info
-                    # cagrisi yapmaya gerek yok. Son mesaji baz aliyoruz;
-                    # batch'in en guncel noktasi orasi.
-                    backlog: int | None = None
                     try:
-                        meta = getattr(msgs[-1], "metadata", None)
-                        if meta is not None and getattr(meta, "num_pending", None) is not None:
-                            backlog = int(meta.num_pending)
-                    except Exception:  # noqa: BLE001
-                        backlog = None
-                    _stats_record_batch(
-                        size=len(ok_msgs),
-                        duration=_time.monotonic() - _batch_started,
-                        backlog=backlog,
-                        bad=len(bad_msgs),
-                    )
-                    _warn_if_backlog_high(backlog)
-
-                    # GECISIN ASIL TETIGI BURASI. Sahada telemetri kesintisiz
-                    # aktigi icin fetch NEREDEYSE HIC timeout vermez (kismi
-                    # batch de mesaj sayilir), yani yalnizca timeout'a bagli
-                    # bir gecis kosulu uretimde HIC saglanmazdi. `backlog == 0`
-                    # ise "bu batch'in ardinda bekleyen yok" demektir ve
-                    # yukun tam ortasinda bile duzenli olarak gorulur.
-                    # Kesin karar yine `_drenaj_bitti_mi` ile sunucudan alinir.
-                    if backlog == 0:
-                        psub, kaynak = await _gecis_gerekiyorsa_yap(js, psub, kaynak)
+                        await asyncio.gather(*gorevler)
+                    finally:
+                        yeniden_kur.set()
+                        for gorev in gorevler:
+                            gorev.cancel()
+                        for hat in hatlar:
+                            await hat.kapat()
+                    if _stop_event.is_set():
+                        break
+                    if gecis_istegi["ad"]:
+                        await _gecisi_uygula(js, gecis_istegi["ad"])
+                    # Dongu basa doner: `_kaynaga_bagla` yeni topolojiyi bulur.
             except Exception as exc:  # noqa: BLE001
                 if _stop_event.is_set():
                     break

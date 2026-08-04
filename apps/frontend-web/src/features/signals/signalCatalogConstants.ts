@@ -86,6 +86,64 @@ export const DATA_TYPE_SHORT: Record<SignalDataType, string> = {
   analog_output: "AO"
 };
 
+// --- Historian (arsiv) politikasi -----------------------------------------
+//
+// Bu uc sabit backend'deki kararlarin AYNASIDIR:
+//   OLU_BANT_TIPLERI     <- app/services/historian_policy.py
+//   ARIZA_TIPLERI        <- app/services/signal_catalog_service.py
+//   OLU_BANT_UST_SINIR   <- app/models/signal_catalog.py
+// Arayuz burada YETKILI DEGIL: son soz sunucuda: `POST /signals/historian/bulk`
+// ve `PATCH /signals/{key}` ayni kurallari yeniden uygular. Buradaki kopyanin
+// isi, kullanicinin calismayacak bir ayari girmesini ONCEDEN engellemek.
+
+/** Olu bandin GERCEKTEN uygulandigi veri tipleri. Digerlerinde motor esigi
+ *  yok sayar: `binary`de 0 -> 1 bir olaydir, "yakin deger" diye bir sey yok. */
+export const DEADBAND_DATA_TYPES: SignalDataType[] = ["analog"];
+
+/** Ariza gecisi tasiyan tipler — arsivi kapatmak gecmis incelemesini
+ *  imkansiz kilar; arayuz bunu acikca uyarmadan gecirmez. */
+export const FAULT_DATA_TYPES: SignalDataType[] = ["binary", "binary_output"];
+
+/** Olu bandin ust siniri (sinyalin kendi biriminde).
+ *
+ *  Katalogdaki birimler A / mA / V / °C / ° / dBm / ms; hicbirinde bir
+ *  milyonluk esik "suzgec" degildir, "hic arsivleme" demektir — ve bunu olu
+ *  bantla yapmak SESSIZDIR: sinyal listede "Arsivleniyor" gorunmeye devam
+ *  eder. Niyet buysa arsiv acikca kapatilmali (o yol uyari + denetim kaydi
+ *  uretir). Sunucu da ayni siniri uygular. */
+export const DEADBAND_MAX = 1_000_000;
+
+/** Girilen esik kabul edilebilir mi? `Number.isFinite` NaN'i da eler:
+ *  `Number("")` 0, `Number("abc")` NaN doner ve NaN her karsilastirmayi
+ *  sessizce gecerdi. */
+export function isValidDeadband(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= DEADBAND_MAX;
+}
+
+export function deadbandApplies(type: SignalDataType): boolean {
+  return DEADBAND_DATA_TYPES.includes(type);
+}
+
+export function isFaultSignal(type: SignalDataType): boolean {
+  return FAULT_DATA_TYPES.includes(type);
+}
+
+/** Arsiv acik mi? Eski backend alani hic gondermiyor; `undefined` = acik. */
+export function isHistorized(signal: { historize?: boolean }): boolean {
+  return signal.historize !== false;
+}
+
+/** Sinyalde ETKIN bir olu bant var mi? Tip analog degilse deger tasinsa bile
+ *  etkisizdir; "var" demek kullaniciyi yanıltırdı. */
+export function effectiveDeadband(signal: {
+  historize_deadband?: number;
+  data_type: SignalDataType;
+}): number {
+  if (!deadbandApplies(signal.data_type)) return 0;
+  const d = signal.historize_deadband ?? 0;
+  return Number.isFinite(d) && d > 0 ? d : 0;
+}
+
 // DNP3 standart nesne grubu - veri tipine göre 1-1 eşlesir.
 export const DNP3_GROUP_BY_TYPE: Record<SignalDataType, number> = {
   analog: 30,

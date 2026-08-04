@@ -687,6 +687,14 @@ export type SignalCatalogRow = {
   supports_alarm: boolean;
   is_active: boolean;
   display_order: number;
+  /** Bu sinyalin okumalari arsive (historian) yazilsin mi? Kapaliysa yalnizca
+   *  son deger tutulur — ekran ve alarm etkilenmez, GECMIS olusmaz.
+   *  Eski backend surumleri alani gondermiyor; okurken `!== false` kullanin. */
+  historize?: boolean;
+  /** Olu bant — MUTLAK, sinyalin kendi biriminde. 0 = suzgec kapali.
+   *  YALNIZCA `analog` tipte uygulanir; diger tiplerde deger tasinsa bile
+   *  motor onu yok sayar (bkz. historian_policy.OLU_BANT_TIPLERI). */
+  historize_deadband?: number;
   // IEC 60870-5-104 outbound template adresleme.
   // Yeni model: `iec104_ioa` mutlak IOA; cihaz bazli ayrim ASDU CA ile yapilir.
   // `iec104_ioa_offset` eski deploylar icin geri uyumlu fallback.
@@ -710,6 +718,24 @@ export type SignalCatalogRow = {
    *  (IOA, scale, label...) ilk yeniden baslatmada sessizce geri aliniyordu.
    *  Arayuz bu alanlari "fabrika degerinden farkli" olarak isaretleyebilir. */
   user_overrides?: string[] | null;
+};
+
+/** Toplu arsiv ayari istegi (POST /signals/historian/bulk). */
+export type SignalHistorianBulkPayload = {
+  signal_keys: string[];
+  historize?: boolean;
+  historize_deadband?: number;
+  /** Ariza gecisi tasiyan sinyallerin (binary / binary_output) arsivi
+   *  KAPATILIYORSA zorunlu; kullanici uyariyi onaylayinca true gider. */
+  confirm_fault_signals?: boolean;
+};
+
+export type SignalHistorianBulkResult = {
+  updated: number;
+  unchanged: number;
+  /** Olu bant istendi ama tip analog olmadigi icin uygulanmayan sinyaller. */
+  skipped_deadband: string[];
+  not_found: string[];
 };
 
 export type SignalLiveRow = {

@@ -4,8 +4,28 @@ Akis:
   e1.telemetry.raw.<gw>          (gateway'lerin yaylinladigi ham)
     -> tag-engine consume
     -> normalize (quality, status, processed_at)
-    -> publish: e1.telemetry.normalized.<gw>
-       (alarm-service ve iec104-outbound buradan tuketir)
+    -> publish: e1.telemetry.normalized.<gw>.<sinif>
+       (alarm-service, kalicilastirma, iec104/modbus-outbound buradan tuketir)
+
+IKI HAT — konudaki son token
+----------------------------
+`<sinif>` iki degerden biridir:
+  prio  ONCELIKLI hat. Dijital/durum sinyalleri ve ariza belirleyen her sey
+        (ariza bayraklari, yon, sayaclar, Class 1 analoglar, katalogda
+        olmayanlar). Kendi durable'iyla tuketilir.
+  bulk  TOPLU hat. Yalnizca surekli taranan Class 2 analog olcumler.
+
+Karar KATALOGDAN gelir (bkz. katalog.py) — kodda sinyal adi listesi YOK.
+Sinif belirlenemiyorsa (katalog henuz gelmedi, sinyal katalogda yok, tip
+taninmiyor) ONCELIKLI hat secilir: siniflandiramadigimiz bir sinyali
+geciktirmek, gereksiz hizlandirmaktan risklidir.
+
+KONU DEGISIMI ESKI TUKETICIYI KIRMAZ: subject 4 token'dan 5 token'a cikar,
+stream filtresi `e1.telemetry.normalized.>` (`>` = BIR VEYA DAHA FAZLA token)
+bunu aynen yakalar. NATS izin listesi de ayni kok altinda
+(`e1.telemetry.normalized.>`), yani sahadaki `nats-server.conf` yeniden
+render EDILMEK ZORUNDA DEGIL — aksi halde oncelikli hat izin ihlaliyle
+sessizce olurdu (bkz. update.sh conf imza kontrolu).
 
 RabbitMQ'dan tamamen kaldirildi. Telemetri akisi tamamen JetStream uzerinden
 ilerler; alarm.created akisi backend tarafinda RabbitMQ'da kalir (tag-engine
@@ -26,7 +46,7 @@ from uuid import uuid4
 
 import nats
 
-from . import watchdog
+from . import katalog, watchdog
 
 # Yapilandirilabilir logging — eski `print()` cagrilari structured log'a
 # tasindi. LOG_LEVEL env ile kontrol (INFO/WARNING/ERROR/DEBUG).
@@ -42,7 +62,7 @@ STREAM_NORMALIZED = os.getenv("NATS_STREAM_TELEMETRY_NORMALIZED", "TELEMETRY_NOR
 # Consumer subject pattern (incoming) — backend'in TELEMETRY_RAW stream'ine bind.
 # Cati 0.x cutover sonrasi `e1.*` prefix kullanilir (gateway+backend ile tutarli).
 SUBJECT_RAW = os.getenv("NATS_SUBJECT_TELEMETRY_RAW", "e1.telemetry.raw.>")
-# Outgoing subject prefix — konkre subject: e1.telemetry.normalized.<gw>
+# Outgoing subject prefix — konkre subject: e1.telemetry.normalized.<gw>.<sinif>
 SUBJECT_NORMALIZED_PREFIX = os.getenv(
     "NATS_SUBJECT_NORMALIZED_PREFIX", "e1.telemetry.normalized"
 )
@@ -53,6 +73,11 @@ SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.tag-engine")
 MAX_DELIVER = int(os.getenv("NATS_WORKER_MAX_DELIVER", "10"))
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8011"))
+
+# Sinyal -> hat sinifi tablosu. `main()` icinde baslatilir; o ana kadar (ve
+# katalog cekilemedigi surece) `sinif()` her sinyale ONCELIKLI der, yani
+# davranis BUGUNKUNE esit olur: tek hat, karisik trafik.
+KATALOG = katalog.onbellek_kur()
 
 
 def _nats_tls_context():
@@ -210,8 +235,12 @@ async def _run() -> None:
                             processed["message_id"],
                             processed["device_code"],
                         )
+                    # HAT SECIMI — konudaki son token. Bilinmeyen her durumda
+                    # oncelikli hat (bkz. katalog.KatalogOnbellegi.sinif).
+                    sinif = KATALOG.sinif(processed.get("signal_key"))
                     out_subject = (
-                        f"{SUBJECT_NORMALIZED_PREFIX}.{processed['source_gateway']}"
+                        f"{SUBJECT_NORMALIZED_PREFIX}."
+                        f"{processed['source_gateway']}.{sinif}"
                     )
                     # Nats-Msg-Id: stream-side dedup (2dk pencerede ayni id'yi tek alir).
                     headers = {
@@ -220,6 +249,9 @@ async def _run() -> None:
                         "source_gateway": str(processed["source_gateway"]),
                         "device_code": str(processed.get("device_code") or ""),
                         "signal_key": str(processed.get("signal_key") or ""),
+                        # Tuketici konudaki token'i ayristirmadan sinifi
+                        # gorebilsin (DLQ/olay kaydi icin).
+                        "X-Signal-Class": sinif,
                     }
                     await js.publish(
                         out_subject,
@@ -292,11 +324,14 @@ async def _run() -> None:
                 config=consumer_cfg,
             )
             logger.info(
-                "tag-engine-running url=%s in=%s out=%s.<gw> durable=%s",
+                "tag-engine-running url=%s in=%s out=%s.<gw>.{prio|bulk} durable=%s "
+                "katalog_yuklendi=%s sinyal=%d",
                 NATS_URL,
                 SUBJECT_RAW,
                 SUBJECT_NORMALIZED_PREFIX,
                 DURABLE_NAME,
+                KATALOG.yuklendi,
+                KATALOG.boyut,
             )
             backoff = 2  # connect basarili
             while not _stop_event.is_set():
@@ -339,8 +374,12 @@ def main() -> None:
     watchdog.baslat(60.0, servis="tag-engine")
     _start_health_server()
     _install_signal_handlers()
+    # Katalog AYRI ipliktedir; olay dongusu backend'in yavasligina bagli
+    # kalmaz. Ilk cekim bitene kadar her sinyal oncelikli hatta gider.
+    KATALOG.baslat()
     logger.info("tag-engine-starting")
     asyncio.run(_run())
+    KATALOG.durdur()
     logger.info("tag-engine-stopped")
 
 

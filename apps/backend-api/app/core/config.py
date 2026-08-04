@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Imajla birlikte paketlenen surum. Kok dizindeki VERSION dosyasi ve
 # apps/frontend-web/package.json ile AYNI olmali; release CI ucunu de
 # birbirine karsi dogrular.
-_FALLBACK_APP_VERSION = "2.41.0"
+_FALLBACK_APP_VERSION = "2.42.0"
 
 
 # Production'da reddedilen placeholder secret prefix'leri. Settings constructor
@@ -212,6 +212,37 @@ class Settings(BaseSettings):
     # once BOSALTILIR (bkz. telemetry_consumer._cutover_*), cunku icinde
     # HENUZ YAZILMAMIS olcumler durur.
     nats_consumer_telemetry_persist_normalized: str = "telemetry-persist-normalized-v3"
+
+    # ----- IKI HAT: oncelikli (dijital/durum) ve toplu (analog) --------------
+    # SORUN: tek durable ile yuz binlerce ANALOG olcumu ile bir ARIZA BAYRAGI
+    # AYNI SIRADA bekliyordu. Ariza gostergesinde gecikme konfor degil
+    # DOGRULUK meselesi: 10 dk gec gorulen ariza KACIRILMISTIR.
+    #
+    # COZUM: tag-engine konuya bir SINIF token'i ekler
+    # (`e1.telemetry.normalized.<gw>.<prio|bulk>`, bkz. tag_engine/katalog.py)
+    # ve kalicilastirma her sinifi KENDI durable'i ile ceker. JetStream
+    # durable'lari birbirinden bagimsiz teslim/ack muhasebesi tutar; toplu
+    # hattaki birikim oncelikli hattin ONUNE GECEMEZ.
+    #
+    # ONCELIKLI HAT KAPSAM DISI BIRAKMAZ: filtresi IKI konu tasir — sinifli
+    # `*.prio` VE SINIFSIZ 4 token'li eski konu. Guncelleme sirasinda henuz
+    # yenilenmemis bir tag-engine hala `...normalized.<gw>` basiyor olabilir;
+    # o mesajlar hicbir sinifli filtreye uymaz ve SESSIZCE KAYBOLURDU.
+    # Bilinmeyen -> oncelikli hat kurali burada da gecerli.
+    nats_subject_telemetry_normalized_prio: str = "e1.telemetry.normalized.*.prio"
+    nats_subject_telemetry_normalized_bulk: str = "e1.telemetry.normalized.*.bulk"
+    # Sinifsiz (eski surum tag-engine) konu — oncelikli hattin ikinci filtresi.
+    nats_subject_telemetry_normalized_legacy: str = "e1.telemetry.normalized.*"
+    # Hat basina durable. `telemetry-persist-normalized-v3` (yukarida) TEK HAT
+    # donemine ait; bu ikisi olusmadan ONCE o BOSALTILIR ve sonra silinir —
+    # ayni gerekce zinciri `_cutover` ile birebir ayni (bkz.
+    # telemetry_consumer._hat_ayrimina_gec).
+    nats_consumer_telemetry_persist_prio: str = "telemetry-persist-prio-v1"
+    nats_consumer_telemetry_persist_bulk: str = "telemetry-persist-bulk-v1"
+    # Hat ayrimini kapatma kolu (geri alma). false = TEK HAT (v3 durable'i,
+    # bugunku davranis). Ayrim yapilmis bir kurulumda false'a alinirsa iki hat
+    # BOSALTILIP silinir ve tek hatta donulur; kaybolan olcum olmaz.
+    telemetry_persist_split_enabled: bool = True
     # auto | raw | normalized
     #   auto       — VARSAYILAN. Once eski RAW durable'i bosaltir (birikmis
     #                mesajlar kaybolmasin), bosalinca NORMALIZED'e gecer.

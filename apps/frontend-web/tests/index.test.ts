@@ -14,6 +14,12 @@ import { test } from "node:test";
 // noktasi derledigi icin buradan iceri aliniyor).
 import "./toast.test";
 
+// Gateway durum modeli: "durduruldu" ariza gibi gosterilmesin.
+import "./gatewayLiveness.test";
+
+// Arsiv (historian) kurallari: olmayan bir ayar varmis gibi gosterilmesin.
+import "./signalHistorian.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   DEFAULT_STALE_AFTER_MS,
