@@ -891,7 +891,8 @@
       "gateway": "Gateway",
       "dns1": "DNS 1",
       "dns2": "DNS 2 (optional)",
-      "save": "Save and reboot"
+      "save": "Save and reboot",
+      "saveHint": "Saving restarts the network service; the connection may drop for a few seconds."
     },
     "confirm": {
       "title": "The device will reboot",

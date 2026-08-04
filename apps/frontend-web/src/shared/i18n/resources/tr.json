@@ -891,7 +891,8 @@
       "gateway": "Ağ geçidi",
       "dns1": "DNS 1",
       "dns2": "DNS 2 (opsiyonel)",
-      "save": "Kaydet ve yeniden başlat"
+      "save": "Kaydet ve yeniden başlat",
+      "saveHint": "Kaydetmek ağ servisini yeniden başlatır; bağlantı birkaç saniye kesilebilir."
     },
     "confirm": {
       "title": "Cihaz yeniden başlatılacak",

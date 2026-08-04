@@ -648,15 +648,10 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
 
             </div>
 
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => setAyarlarAcik(false)}
-              >
-                {t("common.close")}
-              </button>
-            </div>
+            {/* Ikinci bir "Kapat" dugmesi BILEREK YOK: basliktaki X yeterli.
+                Iki kapatma denetimi (ustte X solda, altta Kapat) hem gorsel
+                cift hem hiza tutarsizligiydi — tum modallarda tek desen:
+                sag ustte X. */}
           </div>
         </div>
       ) : null}
@@ -749,7 +744,18 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
 
           {scan && scan.networks.length > 0 ? (
             <ul className="wifi-list">
-              {scan.networks.map((n) => {
+              {[...scan.networks]
+                .sort((a, b) => {
+                  // BAGLI AG HER ZAMAN EN USTTE: kullanici once kendi
+                  // durumunu gorur, listede aramaz. Kalani sinyale gore.
+                  const aBagli =
+                    a.in_use || (Boolean(wifi?.connected) && wifi?.ssid === a.ssid) ? 1 : 0;
+                  const bBagli =
+                    b.in_use || (Boolean(wifi?.connected) && wifi?.ssid === b.ssid) ? 1 : 0;
+                  if (aBagli !== bBagli) return bBagli - aBagli;
+                  return (b.signal ?? 0) - (a.signal ?? 0);
+                })
+                .map((n) => {
                 // Bagli ag listede de ISARETLENIR. Once taramanin KENDI
                 // olcumu (nmcli IN-USE) — en dogrudan kanit; `wifi` blogu
                 // okunamasa ya da SSID yazimi ayrissa bile dogru satiri

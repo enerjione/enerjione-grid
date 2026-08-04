@@ -25,6 +25,7 @@ import {
   Copy,
   Globe,
   Globe2,
+  Info,
   Loader2,
   RefreshCw,
   RotateCw,
@@ -699,13 +700,21 @@ export function NetworkSettingsPage({ accessToken }: Props) {
 
             {formError ? <p className="error-text">{formError}</p> : null}
 
-            <div className="net-form-actions">
+            {/* Karta yapisik alt bolum: solda kisa uyari, sagda aksiyon.
+                `margin-top:auto` ile karti asagi kadar doldurur — yandaki
+                WiFi kartiyla ayni yukseklikte biter, dugme havada kalmaz. */}
+            <div className="net-form-actions net-form-footer">
+              <span className="net-form-hint">
+                <Info size={14} strokeWidth={2.2} />
+                {t("network.form.saveHint")}
+              </span>
               <button
                 type="button"
                 className="primary-btn"
                 disabled={busy || !form.ifname}
                 onClick={openConfirm}
               >
+                <RotateCw size={15} strokeWidth={2.2} />
                 {t("network.form.save")}
               </button>
             </div>

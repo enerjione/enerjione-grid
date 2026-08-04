@@ -14,6 +14,19 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.44.2] — 2026-08-04
+
+### Düzeltildi
+
+- **Ağ sayfası görsel düzeltmeleri**: WiFi ayarları penceresindeki çift
+  kapatma düğmesi kaldırıldı (tek desen: sağ üstte X); tüm modallarda
+  başlık/aksiyon hizası sabitlendi (aksiyonlar sağda). Kablolu ağ kartına
+  profesyonel alt bölüm (ayırıcı + uyarı notu + sağda buton; kart yandaki
+  WiFi kartıyla aynı yükseklikte biter). WiFi listesinde bağlı ağ her
+  zaman en üstte, kalanlar sinyal gücüne göre.
+
+---
+
 ## [2.44.1] — 2026-08-04
 
 ### Düzeltildi

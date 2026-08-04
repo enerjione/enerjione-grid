@@ -33375,6 +33375,66 @@ th.event-col-category {
   flex-wrap: wrap;
 }
 
+/* Kablolu kartin alt bolumu: karta yapisik, ayirici cizgili, dugme sagda.
+   `margin-top:auto` formu kartin dibine kadar uzatir — yandaki WiFi
+   kartiyla ayni hizada biter, dugme ortada havada kalmaz. */
+.net-form-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(30, 41, 59, 0.08);
+  justify-content: flex-end;
+}
+
+.net-card .net-form {
+  flex: 1;
+  max-width: none;
+}
+
+.net-form-footer .primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.net-form-hint {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(30, 41, 59, 0.55);
+}
+
+.net-form-hint svg {
+  flex: none;
+  color: rgba(233, 120, 0, 0.8);
+}
+
+/* Modal basligi: baslik solda, X HER ZAMAN sag ustte — tum modallarda
+   ayni desen. Bu kural yokken h3 ile X alt alta yigiliyordu (X solda,
+   basligin altinda gorunuyordu). */
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-head h3 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Modal aksiyonlari: HER modalda sagda. Bazi modallar solda bazilari
+   sagda birakiyordu — tek hiza. */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .net-empty {
   margin: 0;
   padding: 24px;
