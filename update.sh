@@ -243,11 +243,36 @@ e1_step "Lokal degisiklik kontrolu..."
 # operator icerik degistirmedigi halde update kilitlenir. Bu yaygin ve zararsiz
 # durumu gercek icerik degisikliginden ayirt ediyoruz.
 #
-# Paket kurulumunda (.deb) git yoktur; dosyalarin butunlugunu dpkg garanti
-# eder. Korumasiz bir `git diff` burada `set -e` altinda update'i oldururdu.
+# Paket kurulumunda (.deb) git YOKTUR ve bu mesrudur: guncelleme asagida
+# E1_PACKAGE_MODE ile yalnizca imaj cekerek ilerler, git'e hic dokunmaz.
+# Bu yuzden ".git klasoru hic yok" ile ".git var ama BOZUK" ayri seylerdir:
+#   - .git yok        -> paket modu, devam.
+#   - .git var, bozuk -> yarim kalmis klon / metadata'si dusmus kopyalama /
+#     sahiplik uyusmazligi. `-d .git` testi GECER ama sonraki `git diff`
+#     "Not a git repository" deyip 129 ile cikar ve `set -e` altinda update
+#     BEKLENMEYEN HATA ile olur — ustelik git modunun fetch/checkout adimlari
+#     da calisamayacakti. Erken ve anlasilir hatayla duruyoruz.
 if [[ ! -d .git ]]; then
   e1_ok "Paket kurulumu — dosya butunlugu dpkg tarafindan yonetiliyor."
-elif ! git diff --quiet || ! git diff --cached --quiet; then
+elif ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # BURADA DURUYORUZ, gecmiyoruz: git modunun sonraki adimlari (git fetch /
+  # git checkout) kosulsuz git istiyor. Devam etseydik ~200 satir sonra,
+  # yedek alindiktan ve servisler durdurulduktan SONRA anlasilmaz bir git
+  # hatasiyla olurduk.
+  echo
+  e1_err "'.git' klasoru var ama git bu dizini gecerli bir depo saymiyor:"
+  e1_err "    ${SCRIPT_DIR}"
+  echo
+  e1_err "Olasi sebep: yarim kalmis klon, kopyalanirken metadata'si dusmus"
+  e1_err "kurulum ya da dosya sahipligi uyusmazligi. Git modunda guncelleme"
+  e1_err "yeni surumu 'git fetch' ile alir; depo onarilmadan yapilamaz."
+  echo
+  e1_err "Cozum — kurulumu yeniden yapin (veri ve ayarlar KORUNUR):"
+  e1_err "    Kurulum aracindan 'Kur' deyin"
+  e1_err "  ya da cihazda:"
+  e1_err "    sudo bash /opt/enerjione-grid/install.sh"
+  e1_die "Depo onarilmadan guncelleme devam edemez."
+elif ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
   # Sadece izin biti mi degismis? (icerik ayni)
   content_changed="$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)"
   mode_only="$(git -c core.fileMode=false diff --name-only 2>/dev/null; \
