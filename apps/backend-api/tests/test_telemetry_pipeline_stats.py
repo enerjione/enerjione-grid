@@ -243,3 +243,61 @@ def test_rate_limit_ILK_uyaridan_SONRA_isler(monkeypatch):
     saat["t"] = 400.0          # 358 sn sonra — pencere disi
     tc._warn_if_backlog_high(tc.SINIF_ONCELIKLI, 5_000)
     assert len(calls) == 2, "pencere dolduktan sonra uyari gelmedi"
+
+
+# ---------------------------------------------------------------------------
+# Asama kuyruklari (stages) — NATS monitor'den, fail-soft
+# ---------------------------------------------------------------------------
+
+def test_asama_kuyruklari_jsz_den_ayikliyor():
+    """Tek 'bekleyen' sayisi tag-birikimi persist'e dokulurken yaniltiyordu;
+    asamalar ayri ayiklanmali."""
+    from app.api.system_status import parse_stage_queues
+
+    jsz = {
+        "account_details": [{
+            "stream_detail": [
+                {
+                    "name": "TELEMETRY_RAW",
+                    "state": {"last_seq": 1000},
+                    "consumer_detail": [
+                        {"name": "tag-engine-normalize", "num_pending": 42},
+                    ],
+                },
+                {
+                    "name": "TELEMETRY_NORMALIZED",
+                    "state": {"last_seq": 900},
+                    "consumer_detail": [
+                        {"name": "telemetry-persist-prio-v1", "num_pending": 7},
+                        {"name": "telemetry-persist-bulk-v1", "num_pending": 3},
+                        {"name": "alarm-service-evaluator-prio", "num_pending": 0},
+                    ],
+                },
+            ],
+        }],
+    }
+    q = parse_stage_queues(jsz)
+    assert q.raw_pending == 42
+    assert q.normalized_prio_pending == 7
+    assert q.normalized_bulk_pending == 3
+    assert q.raw_last_seq == 1000
+    assert q.normalized_last_seq == 900
+    assert q.sampled_at
+
+
+def test_monitor_ulasilamazsa_rapor_DUSMEZ(monkeypatch):
+    """Monitor yoklugu normaldir (eski kurulum, kapali port) — stages None
+    kalir, endpoint yine calisir."""
+    from app.api import system_status as ss
+
+    ss._stage_cache["ts"] = 0.0
+    ss._stage_cache["veri"] = None
+
+    class _Patlayan:
+        @staticmethod
+        def get(*_a, **_k):
+            raise OSError("monitor kapali")
+
+    import sys
+    monkeypatch.setitem(sys.modules, "requests", _Patlayan)
+    assert ss._fetch_stage_queues() is None

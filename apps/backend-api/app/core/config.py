@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Imajla birlikte paketlenen surum. Kok dizindeki VERSION dosyasi ve
 # apps/frontend-web/package.json ile AYNI olmali; release CI ucunu de
 # birbirine karsi dogrular.
-_FALLBACK_APP_VERSION = "2.43.2"
+_FALLBACK_APP_VERSION = "2.44.0"
 
 
 # Production'da reddedilen placeholder secret prefix'leri. Settings constructor
@@ -275,6 +275,10 @@ class Settings(BaseSettings):
     # `telemetry_latest` icin ~7280 satir); 5000 bu tavanin guvenli altinda
     # kalir ve parti boyutu ayarla buyutulse bile ifade tavani asilamaz.
     telemetry_write_chunk_size: int = 5000
+    # NATS HTTP monitor adresi (jsz) — Sistem Durumu asama kuyruklari buradan
+    # okunur. Compose icinden http://nats:8222; ulasilamazsa panel asamasiz
+    # calisir (fail-soft), rapor dusmez.
+    nats_monitor_url: str = "http://localhost:8222"
     # Gateway compose dosyasi indirilirken gateway user/password URL'e gomuluyor.
     # `infra/nats/nats-server.conf`'taki `gateway` user'inin cleartext sifresi.
     # bootstrap.sh urettiginde .env'e yazar; backend bu degeri okuyup compose

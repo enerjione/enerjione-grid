@@ -39,6 +39,7 @@ import os
 import ssl
 import signal
 import threading
+import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
@@ -407,6 +408,25 @@ def main() -> None:
     # Katalog AYRI ipliktedir; olay dongusu backend'in yavasligina bagli
     # kalmaz. Ilk cekim bitene kadar her sinyal oncelikli hatta gider.
     KATALOG.baslat()
+    # ILK CEKIMI SINIRLI SURE BEKLE — NEDEN
+    # -------------------------------------
+    # Katalog yokken "bilinmeyen -> oncelikli" kurali dogru ama pahali:
+    # buyuk bir RAW birikimi bosaltilirken katalog henuz gelmediyse TUM
+    # analog sel oncelikli hatta akar (sahada yasandi: 3M'lik bosaltmanin
+    # 1,58M'i oncelikli hatta yigildi; oncelikli hat kucuk-ve-hizli kalmak
+    # icin var). Birkac saniyelik bekleme bunu tamamen onler. Backend
+    # gelmezse SUREYI ASINCA yine baslariz — tag-engine backend'siz de
+    # calisir, yalnizca siniflandirma varsayilana doner.
+    bekleme = max(0.0, float(os.getenv("KATALOG_BEKLE_SEC", "20")))
+    baslangic = time.monotonic()
+    while not KATALOG.yuklendi and time.monotonic() - baslangic < bekleme:
+        time.sleep(0.5)
+    if not KATALOG.yuklendi:
+        logger.warning(
+            "katalog_beklenmedi sure=%.0fsn — siniflandirma katalog gelene "
+            "kadar 'bilinmeyen -> oncelikli' varsayilaniyla basliyor",
+            bekleme,
+        )
     logger.info("tag-engine-starting")
     asyncio.run(_run())
     KATALOG.durdur()

@@ -1040,6 +1040,25 @@ export type TelemetryPipelineStatus = {
   backlog_warn_threshold: number;
   /** ok | warning (backlog yuksek) | critical (tuketici durmus veya NATS yok). */
   severity: "ok" | "warning" | "critical";
+  /** Asama bazli kuyruklar (NATS monitor'den). null/undefined = monitor'e
+   *  ulasilamadi; panel asamasiz gosterime duser. */
+  stages?: PipelineStageQueues | null;
+};
+
+/** Boru hattinin her asamasinin kendi kuyrugu. Tek "bekleyen" sayisi, ust
+ *  kuyruk alt kuyruga bosalirken "kuyruk kendi kendine artiyor" yanilgisi
+ *  yaratiyordu; asamalar ayri gosterilir. Hizlar sunucudan GELMEZ — ardisik
+ *  iki orneklemin last_seq farkindan istemcide turetilir. */
+export type PipelineStageQueues = {
+  raw_pending?: number | null;
+  normalized_prio_pending?: number | null;
+  normalized_bulk_pending?: number | null;
+  normalized_legacy_pending?: number | null;
+  alarm_prio_pending?: number | null;
+  alarm_bulk_pending?: number | null;
+  raw_last_seq?: number | null;
+  normalized_last_seq?: number | null;
+  sampled_at?: string | null;
 };
 
 // ---- Modbus TCP outbound adres plani (`/outbound-targets/{id}/modbus-plan`) --

@@ -1325,6 +1325,18 @@
     "pipeline": {
       "title": "Telemetry Pipeline",
       "errorFetch": "Could not fetch telemetry pipeline status.",
+      "stages": {
+        "rawQueue": "Raw queue",
+        "normQueue": "Processed queue",
+        "archive": "Archive",
+        "archiveSub": "total written",
+        "prio": "Priority",
+        "bulk": "Bulk",
+        "persister": "persister",
+        "inRate": "in {{count}}/s",
+        "perSec": "{{count}}/s",
+        "measuring": "measuring…"
+      },
       "severity": {
         "ok": "Keeping up",
         "warning": "Falling behind",

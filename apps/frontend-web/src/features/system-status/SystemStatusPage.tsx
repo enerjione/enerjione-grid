@@ -424,12 +424,43 @@ export function SystemStatusPage({
   // --- Telemetri boru hatti: tuketici yetisiyor mu? -----------------------
   // Stream `discard=old` ile calisiyor: tampon dolarsa en eski mesajlar
   // SESSIZCE dusurulur. Bu gosterge o sessizligi gorunur kilan tek sey.
+  //
+  // Asama HIZLARI sunucudan gelmez: ardisik iki orneklemin last_seq
+  // farkindan burada turetilir (sunucu durumsuz kalir). Ilk orneklemde hiz
+  // bilinmez (null) — "olculuyor" gosterilir, sifir degil.
+  const oncekiOrneklem = useRef<{ raw: number; norm: number; at: number } | null>(null);
+  const [asamaHizlari, setAsamaHizlari] = useState<{
+    giris: number | null;
+    normalize: number | null;
+  }>({ giris: null, normalize: null });
   const pollPipeline = useCallback(async () => {
     const session = loadSession();
     if (!session) return;
     try {
-      setPipeline(await fetchTelemetryPipelineStatus(session.accessToken));
+      const veri = await fetchTelemetryPipelineStatus(session.accessToken);
+      setPipeline(veri);
       setPipelineError(null);
+      const s = veri.stages;
+      if (s?.raw_last_seq != null && s.normalized_last_seq != null) {
+        const simdi = Date.now();
+        const onceki = oncekiOrneklem.current;
+        if (onceki && simdi > onceki.at) {
+          const saniye = (simdi - onceki.at) / 1000;
+          setAsamaHizlari({
+            // Negatif fark = stream sifirlanmis (purge/yeniden kurulum);
+            // sacma negatif hiz gostermek yerine "olculuyor"a don.
+            giris:
+              s.raw_last_seq >= onceki.raw
+                ? Math.round((s.raw_last_seq - onceki.raw) / saniye)
+                : null,
+            normalize:
+              s.normalized_last_seq >= onceki.norm
+                ? Math.round((s.normalized_last_seq - onceki.norm) / saniye)
+                : null
+          });
+        }
+        oncekiOrneklem.current = { raw: s.raw_last_seq, norm: s.normalized_last_seq, at: simdi };
+      }
     } catch (exc) {
       const msg = exc instanceof Error ? exc.message : t("systemStatus.pipeline.errorFetch");
       setPipelineError(msg === "session_polling_401" ? null : msg);
@@ -1260,7 +1291,85 @@ export function SystemStatusPage({
                 </li>
               </ul>
             ) : null}
+            {/* ASAMA GORUNUMU — her kuyruk ayri. Tek "bekleyen" sayisi, ust
+                kuyruk alt kuyruga bosalirken "kuyruk kendi kendine artiyor"
+                yanilgisi yaratiyordu (sahada yasandi). Oklarin ustunde o
+                asamayi isleyen bilesenin hizi yazar. */}
+            {pipeline.stages ? (
+              <div className="sys-pipe-flow">
+                <div className="sys-pipe-stage">
+                  <span className="sys-pipe-stage-etiket">
+                    {t("systemStatus.pipeline.stages.rawQueue")}
+                  </span>
+                  <strong className="sys-pipe-stage-deger">
+                    {pipeline.stages.raw_pending == null
+                      ? "—"
+                      : pipeline.stages.raw_pending.toLocaleString()}
+                  </strong>
+                  <span className="sys-pipe-stage-alt">
+                    {asamaHizlari.giris == null
+                      ? t("systemStatus.pipeline.stages.measuring")
+                      : t("systemStatus.pipeline.stages.inRate", {
+                          count: asamaHizlari.giris
+                        })}
+                  </span>
+                </div>
+                <div className="sys-pipe-ok" aria-hidden="true">
+                  <span className="sys-pipe-ok-etiket">tag-engine</span>
+                  <span className="sys-pipe-ok-hiz">
+                    {asamaHizlari.normalize == null
+                      ? "…"
+                      : t("systemStatus.pipeline.stages.perSec", {
+                          count: asamaHizlari.normalize
+                        })}
+                  </span>
+                  <span className="sys-pipe-ok-cizgi">→</span>
+                </div>
+                <div className="sys-pipe-stage">
+                  <span className="sys-pipe-stage-etiket">
+                    {t("systemStatus.pipeline.stages.normQueue")}
+                  </span>
+                  <strong className="sys-pipe-stage-deger">
+                    {(
+                      (pipeline.stages.normalized_prio_pending ?? 0) +
+                      (pipeline.stages.normalized_bulk_pending ?? 0) +
+                      (pipeline.stages.normalized_legacy_pending ?? 0)
+                    ).toLocaleString()}
+                  </strong>
+                  <span className="sys-pipe-stage-alt">
+                    {t("systemStatus.pipeline.stages.prio")}:{" "}
+                    {(pipeline.stages.normalized_prio_pending ?? 0).toLocaleString()}
+                    {" · "}
+                    {t("systemStatus.pipeline.stages.bulk")}:{" "}
+                    {(pipeline.stages.normalized_bulk_pending ?? 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="sys-pipe-ok" aria-hidden="true">
+                  <span className="sys-pipe-ok-etiket">
+                    {t("systemStatus.pipeline.stages.persister")}
+                  </span>
+                  <span className="sys-pipe-ok-hiz">
+                    {t("systemStatus.pipeline.stages.perSec", {
+                      count: Math.round(pipeline.throughput_msgs_per_sec)
+                    })}
+                  </span>
+                  <span className="sys-pipe-ok-cizgi">→</span>
+                </div>
+                <div className="sys-pipe-stage sys-pipe-stage--son">
+                  <span className="sys-pipe-stage-etiket">
+                    {t("systemStatus.pipeline.stages.archive")}
+                  </span>
+                  <strong className="sys-pipe-stage-deger">
+                    {pipeline.processed_total.toLocaleString()}
+                  </strong>
+                  <span className="sys-pipe-stage-alt">
+                    {t("systemStatus.pipeline.stages.archiveSub")}
+                  </span>
+                </div>
+              </div>
+            ) : null}
             <div className="sys-info-tiles">
+              {!pipeline.stages ? (
               <div className="sys-info-tile">
                 <span className="sys-info-tile-icon">
                   <Timer size={17} strokeWidth={2} />
@@ -1292,6 +1401,7 @@ export function SystemStatusPage({
                   ) : null}
                 </div>
               </div>
+              ) : null}
               <div className="sys-info-tile">
                 <span className="sys-info-tile-icon">
                   <TrendingUp size={17} strokeWidth={2} />

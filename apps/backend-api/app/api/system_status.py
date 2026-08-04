@@ -848,6 +848,115 @@ class TelemetryPipelineReport(BaseModel):
         ..., description="Bu degerin uzerinde uyari/olay kaydi uretilir"
     )
     severity: str = Field(..., description="ok | warning | critical")
+    stages: PipelineStageQueues | None = Field(
+        default=None,
+        description=(
+            "Asama bazli kuyruklar (NATS monitor'den). None = monitor'e "
+            "ulasilamadi; rapor yine gecerlidir (fail-soft)."
+        ),
+    )
+
+
+class PipelineStageQueues(BaseModel):
+    """Boru hattinin HER asamasinin kendi kuyrugu.
+
+    Tek bir 'bekleyen' sayisi iki farkli durumu ayirt edemiyordu: tag-engine
+    birikimi eriyip persist kuyruguna dokulurken operator 'kuyruk kendi
+    kendine artiyor' goruyordu — oysa toplam su azaliyordu. Asamalar ayri
+    gosterilince ust kovanin alt kovaya bosaldigi GORUNUR olur.
+
+    Degerler NATS monitor endpoint'inden (jsz) gelir ve ~5 sn onbelleklidir;
+    hizlar sunucuda HESAPLANMAZ — istemci ardisik iki orneklemden turetir
+    (last_seq farklari), boylece sunucu durumsuz kalir.
+    """
+
+    raw_pending: int | None = Field(
+        default=None, description="tag-engine onunde bekleyen (RAW kuyrugu)"
+    )
+    normalized_prio_pending: int | None = Field(
+        default=None, description="Oncelikli persist hatti bekleyeni (dijital/durum)"
+    )
+    normalized_bulk_pending: int | None = Field(
+        default=None, description="Toplu persist hatti bekleyeni (analog)"
+    )
+    normalized_legacy_pending: int | None = Field(
+        default=None,
+        description="Gecis donemi tekil durable bekleyeni (hat ayrimi oncesi)",
+    )
+    alarm_prio_pending: int | None = None
+    alarm_bulk_pending: int | None = None
+    raw_last_seq: int | None = Field(
+        default=None, description="RAW stream son sira no — istemci giris hizini turetir"
+    )
+    normalized_last_seq: int | None = Field(
+        default=None,
+        description="NORMALIZED stream son sira no — istemci normalize hizini turetir",
+    )
+    sampled_at: str | None = Field(default=None, description="Orneklem zamani (ISO)")
+
+
+# `stages` alani PipelineStageQueues'u SINIFTAN ONCE referansliyor (rapor
+# sinifi yukarida). `from __future__ import annotations` ile ad ancak burada
+# cozulur; rebuild olmadan ilk instantiate "not fully defined" ile patlar.
+TelemetryPipelineReport.model_rebuild()
+
+#: NATS monitor orneklemi kisa sureli onbellekte tutulur: Sistem Durumu
+#: sayfasi 10 sn'de bir sorgular, her sorguda monitor'e gitmek gereksiz.
+_STAGE_CACHE_TTL_SEC = 5.0
+_stage_cache: dict = {"ts": 0.0, "veri": None}
+
+
+def parse_stage_queues(jsz: dict) -> PipelineStageQueues:
+    """jsz cevabindan asama kuyruklarini ayikla (saf fonksiyon — test edilir)."""
+    from datetime import datetime, timezone
+
+    consumers: dict[str, int] = {}
+    seqs: dict[str, int] = {}
+    for hesap in jsz.get("account_details") or []:
+        for stream in hesap.get("stream_detail") or []:
+            durum = stream.get("state") or {}
+            if stream.get("name"):
+                seqs[stream["name"]] = int(durum.get("last_seq") or 0)
+            for c in stream.get("consumer_detail") or []:
+                if c.get("name"):
+                    consumers[c["name"]] = int(c.get("num_pending") or 0)
+    return PipelineStageQueues(
+        raw_pending=consumers.get("tag-engine-normalize"),
+        normalized_prio_pending=consumers.get("telemetry-persist-prio-v1"),
+        normalized_bulk_pending=consumers.get("telemetry-persist-bulk-v1"),
+        normalized_legacy_pending=consumers.get("telemetry-persist-normalized-v3"),
+        alarm_prio_pending=consumers.get("alarm-service-evaluator-prio"),
+        alarm_bulk_pending=consumers.get("alarm-service-evaluator-bulk"),
+        raw_last_seq=seqs.get(settings.nats_stream_telemetry_raw),
+        normalized_last_seq=seqs.get(settings.nats_stream_telemetry_normalized),
+        sampled_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def _fetch_stage_queues() -> PipelineStageQueues | None:
+    """NATS monitor'den asama kuyruklari; ulasilamazsa None (fail-soft).
+
+    Monitor'un yoklugu raporu DUSURMEZ: eski kurulumda port kapali olabilir,
+    panel asamasiz ama calisir kalir.
+    """
+    simdi = time.monotonic()
+    if simdi - _stage_cache["ts"] < _STAGE_CACHE_TTL_SEC:
+        return _stage_cache["veri"]
+    veri: PipelineStageQueues | None = None
+    try:
+        import requests
+
+        resp = requests.get(
+            f"{settings.nats_monitor_url.rstrip('/')}/jsz?consumers=true",
+            timeout=2,
+        )
+        resp.raise_for_status()
+        veri = parse_stage_queues(resp.json())
+    except Exception:  # noqa: BLE001 — monitor yoklugu normal bir durum
+        veri = None
+    _stage_cache["ts"] = simdi
+    _stage_cache["veri"] = veri
+    return veri
 
 
 @router.get("/telemetry-pipeline", response_model=TelemetryPipelineReport)
@@ -870,10 +979,16 @@ def get_telemetry_pipeline_status(
     """
     from app.services import telemetry_consumer
 
+    # Asama kuyruklari NATS monitor'den gelir ve surec rolunden BAGIMSIZDIR:
+    # worker'a ulasilamasa bile kuyruklarin gercek durumu gosterilebilir.
+    asamalar = _fetch_stage_queues()
+
     if not service_role.wants_background() and not _is_internal_probe(request):
         rapor, hata = _fetch_worker_pipeline(_forwarded_credentials(request))
         if rapor is not None:
-            return TelemetryPipelineReport(**rapor)
+            sonuc = TelemetryPipelineReport(**rapor)
+            sonuc.stages = asamalar
+            return sonuc
         # Worker'a ULASILAMIYORSA "critical" DOGRUDUR: arka plan sureci
         # gercekten kapali olabilir ve o durumda telemetri islenmiyordur.
         # Sahte yesil gostermek bu urunde en agir hata sinifi.
@@ -885,6 +1000,7 @@ def get_telemetry_pipeline_status(
             last_error=hata,
             backlog_warn_threshold=settings.telemetry_backlog_warn_threshold,
             severity="critical",
+            stages=asamalar,
         )
 
     stats = telemetry_consumer.get_stats()
@@ -913,4 +1029,5 @@ def get_telemetry_pipeline_status(
         last_error=stats.get("last_error"),
         backlog_warn_threshold=threshold,
         severity=severity,
+        stages=asamalar,
     )

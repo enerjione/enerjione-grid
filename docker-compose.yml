@@ -426,6 +426,9 @@ services:
       # stream'leri otomatik ensure eder (TELEMETRY_RAW, TELEMETRY_NORMALIZED).
       # NATS server'da 3 user var (gateway/backend/worker); backend admin tam yetki.
       NATS_URL: ${NATS_URL_BACKEND:-${NATS_URL:-nats://nats:4222}}
+      # NATS HTTP monitor (jsz) — Sistem Durumu'ndaki asama kuyruklari buradan
+      # okunur. Ulasilamazsa panel asamasiz calisir (fail-soft).
+      NATS_MONITOR_URL: ${NATS_MONITOR_URL:-http://nats:8222}
       # TLS CA dosyasi. BOS = TLS kapali (varsayilan, bugunku davranis).
       # Doluysa baglanti YALNIZCA bu CA'ya guvenir; isletim sisteminin
       # guven deposu kullanilmaz. Acmak icin once sertifika uretin:

@@ -1325,6 +1325,18 @@
     "pipeline": {
       "title": "Telemetri Boru Hattı",
       "errorFetch": "Telemetri boru hattı durumu alınamadı.",
+      "stages": {
+        "rawQueue": "Ham kuyruk",
+        "normQueue": "İşlenmiş kuyruk",
+        "archive": "Arşiv",
+        "archiveSub": "toplam yazılan",
+        "prio": "Öncelikli",
+        "bulk": "Toplu",
+        "persister": "kalıcılaştırma",
+        "inRate": "giriş {{count}}/sn",
+        "perSec": "{{count}}/sn",
+        "measuring": "ölçülüyor…"
+      },
       "severity": {
         "ok": "Yetişiyor",
         "warning": "Geride",

@@ -14,6 +14,26 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.44.0] — 2026-08-04
+
+### Eklendi
+
+- **Sistem Durumu'nda aşama-aşama boru hattı görünümü**: ham kuyruk
+  (normalize bekleyen) → işlenmiş kuyruk (öncelikli/toplu ayrı) → arşiv;
+  oklarda tag-engine ve kalıcılaştırma hızları. Tek "bekleyen" sayısı,
+  üst kuyruk alt kuyruğa boşalırken "kuyruk kendi kendine artıyor"
+  yanılgısı yaratıyordu. Veri NATS monitor'den (NATS_MONITOR_URL,
+  fail-soft: ulaşılamazsa panel eski görünüme düşer).
+
+### Düzeltildi
+
+- **tag-engine artık sinyal kataloğunu sınırlı süre bekleyip öyle başlıyor**
+  (KATALOG_BEKLE_SEC, varsayılan 20 sn): katalog yüklü değilken büyük bir
+  birikim boşaltılırsa tüm analog sel "bilinmeyen → öncelikli" kuralıyla
+  öncelikli hatta yığılıyordu (sahada 3M boşaltmanın 1,58M'i).
+
+---
+
 ## [2.43.2] — 2026-08-04
 
 ### Düzeltildi
