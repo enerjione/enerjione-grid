@@ -75,12 +75,13 @@ BACKEND_INTERNAL_CLEAR_URL = os.getenv(
 BACKEND_API_BASE = os.getenv("BACKEND_API_BASE", "http://127.0.0.1:8000/api/v1")
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "change-me-internal-token")
 
-# Drift-recovery clear POST araligi (sn), (kural x cihaz) anahtari basina.
-# Eski 60 sn'lik aralik 401 cihazlik yuk testinde saniyede onlarca no-op
-# POST uretti (backend'de her biri DB sorgusu -> Postgres %173). Gercek
-# gecis clear'lari (was_active=True) bu araliktan MUAFTIR, aninda gider;
-# bu aralik yalnizca restart/drift telafisinin temposunu belirler.
-DRIFT_CLEAR_INTERVAL_SEC = max(60.0, float(os.getenv("ALARM_DRIFT_CLEAR_INTERVAL_SEC", "600")))
+# NOT: "Drift clear" (aktif olmayan her (kural x cihaz) anahtari icin
+# periyodik idempotent clear POST'u) KALDIRILDI. Uretim hizi O(kural x
+# cihaz) oldugu icin 401 cihazda HTTP gonderim hizini asiyor, kuyruk
+# sinirsiz buyuyordu. Restart/state-drift telafisi backend'de:
+# `alarm_reconciliation.py` 30 sn'de bir acik alarmlari son telemetriye
+# karsi degerlendirip kendisi kapatir. Clear artik yalnizca gercek
+# gecislerde (aktif -> normal) gonderilir.
 # Backend gonderim kuyrugu tavani — bellek guvenligi icin sinirli (bkz.
 # _SamplesCache OOM gecmisi). Dolarsa clear isleri dusurulur ve sayilir.
 NOTIFY_QUEUE_MAX = int(os.getenv("ALARM_NOTIFY_QUEUE_MAX", "10000"))
@@ -112,10 +113,6 @@ class _RuleState:
         self._lock = Lock()
         self._active: dict[tuple[int, str, str], bool] = {}
         self._pending_since: dict[tuple[int, str, str], float] = {}
-        # Son backend clear cagrisinin zaman damgasi (rate-limit icin):
-        # in-memory state drift senaryosunda her tick'te clear cagrisi
-        # atmamak icin (rule, device, signal) key'i basina min aralik tutariz.
-        self._last_clear_sent: dict[tuple[int, str, str], float] = {}
 
     def get_active(self, key: tuple[int, str, str]) -> bool:
         with self._lock:
@@ -139,21 +136,6 @@ class _RuleState:
     def clear_pending(self, key: tuple[int, str, str]) -> None:
         with self._lock:
             self._pending_since.pop(key, None)
-
-    def should_send_clear(self, key: tuple[int, str, str], now: float, min_interval_sec: float) -> bool:
-        """Drift-proof clear gonderme rate-limit'i.
-
-        prev_active=False olsa bile periyodik olarak backend'e clear gondeririz
-        (DB'de hala acik alarm kalmis olabilir — alarm-service restart edildi
-        veya state drift oldu). Min aralik kullaniyoruz ki her tick'te
-        flood etmesin."""
-        with self._lock:
-            last = self._last_clear_sent.get(key)
-            return last is None or (now - last) >= min_interval_sec
-
-    def mark_clear_sent(self, key: tuple[int, str, str], now: float) -> None:
-        with self._lock:
-            self._last_clear_sent[key] = now
 
 
 _STATE = _RuleState()
@@ -789,33 +771,28 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 f"rule_id={rule.id} signal={rule.signal_key} dev={device_code} value={value}"
             )
         elif not should_be_active:
-            # prev_active=True ise (transition kosulu) clear hemen gonderilir.
-            # prev_active=False ama should_be_active=False senaryosunda da
-            # periyodik clear gondeririz: alarm-service restart veya state
-            # drift'inde DB'de hala acik alarm kalmis olabilir; idempotent
-            # clear cagrisi atariz (backend eslesen acik alarm yoksa
-            # no_match doner). Aralik DRIFT_CLEAR_INTERVAL_SEC (varsayilan
-            # 600 sn) — eski 60 sn, 400+ cihazda backend'i no-op POST'larla
-            # bogup Postgres'i %173'e cikariyordu.
+            # Clear YALNIZCA gercek gecis (prev_active=True -> False) icin
+            # gonderilir. Eski "drift clear" yolu (alarm hic aktif olmamis
+            # her (kural x cihaz) anahtari icin periyodik idempotent POST)
+            # KALDIRILDI: 401 cihazda uretim hizi HTTP gonderim hizini
+            # asiyor, kuyruk sinirsiz buyuyordu ve her POST backend'de DB
+            # sorgusu demekti. Restart/state-drift telafisi zaten backend'in
+            # isi: `alarm_reconciliation.py` 30 sn'de bir DB'deki TUM acik
+            # alarmlari son telemetriye karsi degerlendirip kendisi kapatir
+            # (alarm-service tamamen down olsa bile). Ayni isi iki yerde,
+            # ustelik O(kural x cihaz) maliyetle yapmak gereksizdi.
             was_active = prev_active
             if was_active:
                 _STATE.set_active(key, False)
-            _STATE.clear_pending(key)
-            # Transition durumda hemen, drift durumunda rate-limited.
-            # Gonderim _BackendNotifier thread'inde — event loop bloklanmaz.
-            should_send = was_active or _STATE.should_send_clear(
-                key, now, DRIFT_CLEAR_INTERVAL_SEC
-            )
-            if should_send:
-                _STATE.mark_clear_sent(key, now)
                 _NOTIFIER.submit_clear(
                     rule_id=rule.id,
                     rule_title=rule.name,
                     device_code=str(device_code) if device_code else None,
                     source_gateway=payload.get("source_gateway"),
                     signal_key=rule.signal_key,
-                    was_active=was_active,
+                    was_active=True,
                 )
+            _STATE.clear_pending(key)
 
 
 class _RabbitAlarmPublisher:

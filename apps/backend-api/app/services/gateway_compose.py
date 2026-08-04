@@ -35,13 +35,24 @@ _COMPOSE_TEMPLATE = """\
 # EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
 # Kurulum: docker compose -f e1-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
 
-name: e1-gateway-{{GATEWAY_CODE_LOWER}}
+name: e1-gw-{{GATEWAY_CODE_LOWER}}
 
 services:
   gateway:
     image: {{IMAGE}}
     container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped
+    # DOSYA TANITICI (fd) TAVANI — cihaz sayisinin gercek sinirlayicisi.
+    # Her DNP3 cihazi bir TCP soketi tutar; 401 cihazli olcumde 420 fd
+    # acikti (2026-08-04). Docker'in varsayilan soft limiti 1024, ve
+    # baglanti flap'inde eski soket kapanmadan yenisi acildigi icin fd
+    # gecici olarak ikiye katlanabilir — pratik sinir cok daha erken.
+    # Limit dolunca soket acilamaz, hata "cihaz kopuk" gibi gorunur ve
+    # gercek sebep hicbir sayacta yazmaz. 500 cihaz hedefinde bol pay.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       GATEWAY_CODE: "{{GATEWAY_CODE}}"
       GATEWAY_TOKEN: "{{GATEWAY_TOKEN}}"

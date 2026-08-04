@@ -14,6 +14,30 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.45.5] — 2026-08-04
+
+### Düzeltildi — performans: alarm "drift clear" seli kökten kaldırıldı
+
+- **Alarm servisi artık boşa clear POST üretmiyor**: hiç aktif olmamış her
+  (kural × cihaz) çifti için atılan periyodik idempotent clear'lar
+  O(kural × cihaz) ölçeğinde büyüyor, 401 cihazda gönderim kuyruğunu
+  sınırsız şişiriyor ve Postgres'i no-op sorgularla meşgul ediyordu.
+  Aynı işi backend'deki reconcile worker'ı 30 sn'de bir tek sorguyla
+  zaten yapıyor; alarm servisi artık yalnızca gerçek geçiş (aktif → normal)
+  clear'ı gönderiyor. `ALARM_DRIFT_CLEAR_INTERVAL_SEC` ayarı kaldırıldı.
+
+### Düzeltildi — gateway compose şablonu (saha bildirimi)
+
+- **`ulimits: nofile 65536` şablona eklendi**: her DNP3 cihazı bir TCP
+  soketi tutar; Docker'ın 1024 varsayılanı 500 cihaz hedefinde yetersiz ve
+  limit dolunca hata "cihaz kopuk" gibi görünüyordu. Elle eklenen ayar her
+  render'da siliniyordu; artık kalıcı.
+- **Proje adı hizalandı**: şablon `name: e1-gateway-*` üretiyor ama agent
+  `-p e1-gw-*` ile kuruyordu; `-p`'siz her `docker compose up -d`
+  "container name already in use" veriyordu. Şablon artık `name: e1-gw-*`.
+
+---
+
 ## [2.45.4] — 2026-08-04
 
 ### Düzeltildi — alarm değerlendirme hattı artık backend'i beklemiyor

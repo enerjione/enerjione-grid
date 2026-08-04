@@ -122,6 +122,34 @@ def test_rendered_compose_contains_expected_values(agent):
     assert "20100-" not in body0
 
 
+def test_compose_project_adi_container_ile_hizali(agent):
+    """`name:` alani container/volume adlandirmasiyla AYNI prefix'te olmali.
+
+    Eski sablon `name: e1-gateway-*` uretiyordu ama agent `-p e1-gw-*` ile
+    kuruyor (container'lar o projeye kayitli). `-p`'siz calistirilan her
+    `docker compose up -d` "container name already in use" veriyordu ve
+    guncelleme yapilamiyordu (sahada yasandi)."""
+    params = agent._validate_params(_params())
+    body = agent.render_compose("GW-A", "x", params)
+    assert "name: e1-gw-gw-a\n" in body
+    assert "e1-gateway-" not in body
+    # Ajanin compose'a verdigi -p degeriyle dosyadaki name ayni olmali.
+    assert agent._project_name("GW-A") == "e1-gw-gw-a"
+
+
+def test_compose_ulimits_nofile_var(agent):
+    """fd tavani sablonda OLMALI — elle eklenen ulimits her render'da
+    siliniyordu. Her DNP3 cihazi bir TCP soketi tutar; Docker varsayilani
+    1024 soft limit, 500 cihaz hedefinde baglanti flap'iyle birlikte
+    yetersiz. Limit dolunca hata "cihaz kopuk" gibi gorunur."""
+    params = agent._validate_params(_params())
+    body = agent.render_compose("GW-A", "x", params)
+    assert "ulimits:" in body
+    assert "nofile:" in body
+    assert "soft: 65536" in body
+    assert "hard: 65536" in body
+
+
 # --- 2) compose govdesi reddi ----------------------------------------------
 def test_agent_rejects_compose_body(agent):
     """En onemli test: serbest metin compose ARTIK kabul edilmiyor."""

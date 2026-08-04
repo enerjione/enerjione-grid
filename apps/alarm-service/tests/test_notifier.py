@@ -32,13 +32,65 @@ def test_kural_dongusu_dogrudan_http_cagirmaz():
     assert "_NOTIFIER.submit_clear(" in kod
 
 
-def test_drift_clear_araligi_60sn_degil():
-    """60 sn'lik tempo 400+ cihazda backend'i boguyordu; min 60, default 600."""
-    assert m.DRIFT_CLEAR_INTERVAL_SEC >= 600.0
+def test_drift_clear_yolu_tamamen_kaldirildi():
+    """Periyodik drift clear O(kural x cihaz) uretiyordu ve 401 cihazda
+    gonderim kuyrugunu sinirsiz buyutuyordu. Drift telafisi backend'in
+    alarm_reconciliation worker'inda; alarm-service yalnizca GERCEK gecis
+    (aktif -> normal) clear'i gonderir."""
     kod = inspect.getsource(m._process_rules_for_payload)
-    assert "DRIFT_CLEAR_INTERVAL_SEC" in kod
-    # Eski sabit deger geri gelmesin.
-    assert "now, 60.0" not in kod
+    assert "should_send_clear" not in kod
+    assert "DRIFT_CLEAR_INTERVAL_SEC" not in kod
+    # Clear yalnizca was_active dalinda gonderilmeli.
+    assert "submit_clear" in kod
+    # Rate-limit altyapisi da geri gelmesin (olu kod olarak bile).
+    assert not hasattr(m._RuleState, "should_send_clear")
+    assert not hasattr(m._RuleState, "mark_clear_sent")
+
+
+def test_transition_clear_hala_gonderiliyor(monkeypatch):
+    """Drift yolu kalkarken gercek gecis clear'i YASAMALI: aktif bir alarm
+    normale dondugunde submit_clear cagrilir (kalite gecisi kurali: gercek
+    olay yutulmaz)."""
+    gidenler: list[dict] = []
+
+    class SahteNotifier:
+        def submit_raise(self, payload, *, rule_id):
+            pass
+
+        def submit_clear(self, **alan):
+            gidenler.append(alan)
+
+    monkeypatch.setattr(m, "_NOTIFIER", SahteNotifier())
+
+    class Kural:
+        id = 1
+        name = "Test Kurali"
+        description = "t"
+        level = "warning"
+        rule_kind = "simple"
+        expression = None
+        signal_key = "sat01.x"
+        comparator = "gt"
+        threshold = 100.0
+        debounce_sec = 0
+        produces_fault = False
+
+    monkeypatch.setattr(m._CACHE, "is_alarmable", lambda sk: True)
+    monkeypatch.setattr(m._CACHE, "needs_samples", lambda sk: False)
+    monkeypatch.setattr(m._CACHE, "rules_for", lambda sk, dc: [Kural()])
+    monkeypatch.setattr(m, "evaluate_rule", lambda rule, value, prev_active: value > 100.0)
+
+    payload = {"signal_key": "sat01.x", "device_code": "DEV1", "value": 150.0, "quality": "good"}
+    m._process_rules_for_payload(None, payload)  # aktif olur
+    payload["value"] = 50.0
+    m._process_rules_for_payload(None, payload)  # normale doner -> clear
+    assert len(gidenler) == 1
+    assert gidenler[0]["was_active"] is True
+    assert gidenler[0]["signal_key"] == "sat01.x"
+
+    # Ikinci normal okuma: gecis yok, drift clear de yok -> yeni is YOK.
+    m._process_rules_for_payload(None, payload)
+    assert len(gidenler) == 1
 
 
 # ------------------------------------------------------------- worker davranisi

@@ -940,10 +940,6 @@ services:
       NATS_STREAM_TELEMETRY_NORMALIZED: ${NATS_STREAM_TELEMETRY_NORMALIZED:-TELEMETRY_NORMALIZED}
       NATS_ALARM_ACK_PENDING_PRIO: ${NATS_ALARM_ACK_PENDING_PRIO:-500}
       NATS_ALARM_ACK_PENDING_BULK: ${NATS_ALARM_ACK_PENDING_BULK:-10000}
-      # Drift-recovery clear POST araligi (sn) — (kural x cihaz) basina.
-      # 60 sn'lik eski tempo 400+ cihazda backend'i no-op POST'larla boguyordu;
-      # gercek alarm gecisleri bu araliktan bagimsiz aninda gider.
-      ALARM_DRIFT_CLEAR_INTERVAL_SEC: ${ALARM_DRIFT_CLEAR_INTERVAL_SEC:-600}
       # Alarm yayini: RabbitMQ (notification-worker buradan tuketiyor).
       # Vhost izolasyonu: kok `/` vhost'a degil dedicated `e1` (veya
       # `${RABBITMQ_VHOST}`) altinda calisilir. Backend startup'ta admin
