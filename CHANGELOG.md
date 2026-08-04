@@ -14,6 +14,20 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.45.1] — 2026-08-04
+
+### Düzeltildi
+
+- **2.45.0'da tag-engine replikaları hiç başlayamıyordu** (nats-py kuralı:
+  queue aboneliğinde queue adı durable adıyla aynı olmalı; farklı
+  verildiğinde kütüphane consumer'ı yaratmadan hata fırlatıyor ve iki
+  replika da döngüye giriyordu — normalize akışı durdu). Ayrıca yeni
+  durable artık stream'de birikmiş ne varsa işler (DeliverPolicy.ALL):
+  kesinti sırasında biriken ham ölçümler atlanmaz, güncellemeden sonra
+  otomatik yeniden işlenir.
+
+---
+
 ## [2.45.0] — 2026-08-04
 
 ### Değişti — 400-500 cihaz ölçek paketi

@@ -73,7 +73,11 @@ DURABLE_NAME = os.getenv("NATS_TAG_ENGINE_DURABLE", "tag-engine-normalize")
 # queue-group'suz yaratildigi icin ikinci uye kabul etmez; gecis
 # `_kuyruk_grubuna_gec` ile kayipsiz yapilir (eski ack_floor'dan baslanir).
 DURABLE_Q = os.getenv("NATS_TAG_ENGINE_DURABLE_Q", "tag-engine-normalize-q1")
-QUEUE_GROUP = os.getenv("NATS_TAG_ENGINE_QUEUE", "tag-engine")
+# nats-py KURALI: queue push aboneliginde queue adi durable adiyla AYNI
+# olmak ZORUNDA — farkli verilirse kutuphane consumer'i hic yaratmadan
+# "cannot create queue subscription" firlatir (sahada yasandi: iki replika
+# saatlerce donguye girdi, normalize akisi durdu). Ayri bir queue sabiti
+# bu yuzden YOK; her yerde DURABLE_Q kullanilir.
 STREAM_RAW = os.getenv("NATS_STREAM_TELEMETRY_RAW", "TELEMETRY_RAW")
 # DLQ subject prefix — max_deliver'a takilan mesajlar buraya gider.
 # Subject: e1.dlq.tag-engine.<original-subject>
@@ -371,16 +375,20 @@ async def _run() -> None:
                     durable_name=DURABLE_Q,
                     deliver_policy=DeliverPolicy.BY_START_SEQUENCE,
                     opt_start_seq=baslangic_seq,
-                    deliver_group=QUEUE_GROUP,
+                    deliver_group=DURABLE_Q,
                     ack_wait=60,
                     max_ack_pending=10000,
                     max_deliver=10,
                 )
             else:
+                # Eski durable yok: stream'de birikmis NE VARSA islenir
+                # (DeliverPolicy.ALL). NEW olsaydi devir sirasinda birikmis
+                # mesajlar SONSUZA DEK atlanirdi (sahada 12M birikmisti).
+                # Bos stream'de ALL ile NEW ayni sey; kayipsizlik esas.
                 consumer_cfg = ConsumerConfig(
                     durable_name=DURABLE_Q,
-                    deliver_policy=DeliverPolicy.NEW,
-                    deliver_group=QUEUE_GROUP,
+                    deliver_policy=DeliverPolicy.ALL,
+                    deliver_group=DURABLE_Q,
                     ack_wait=60,
                     max_ack_pending=10000,
                     max_deliver=10,
@@ -388,7 +396,7 @@ async def _run() -> None:
             try:
                 sub = await js.subscribe(
                     subject=SUBJECT_RAW,
-                    queue=QUEUE_GROUP,
+                    queue=DURABLE_Q,
                     durable=DURABLE_Q,
                     cb=_on_message,
                     manual_ack=True,
@@ -400,13 +408,13 @@ async def _run() -> None:
                 # Mevcut durable'a minimal config ile baglan.
                 sub = await js.subscribe(
                     subject=SUBJECT_RAW,
-                    queue=QUEUE_GROUP,
+                    queue=DURABLE_Q,
                     durable=DURABLE_Q,
                     cb=_on_message,
                     manual_ack=True,
                     config=ConsumerConfig(
                         durable_name=DURABLE_Q,
-                        deliver_group=QUEUE_GROUP,
+                        deliver_group=DURABLE_Q,
                         ack_wait=60,
                         max_ack_pending=10000,
                         max_deliver=10,
