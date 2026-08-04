@@ -70,6 +70,10 @@ DURABLE_NAME = os.getenv("NATS_TAG_ENGINE_DURABLE", "tag-engine-normalize")
 # DLQ subject prefix — max_deliver'a takilan mesajlar buraya gider.
 # Subject: e1.dlq.tag-engine.<original-subject>
 SUBJECT_DLQ_PREFIX = os.getenv("NATS_SUBJECT_DLQ_PREFIX", "e1.dlq.tag-engine")
+# Ayni anda beklenen PubAck sayisi (paralel yayin penceresi). 1 = eski seri
+# davranis (~1k msj/sn tavan). Pencere buyudukce RTT amortize olur; 512,
+# max_ack_pending (10k) tavaninin guvenli altinda olculmus varsayilan.
+PUBLISH_PARALLEL = max(1, int(os.getenv("TAG_PUBLISH_PARALLEL", "512")))
 MAX_DELIVER = int(os.getenv("NATS_WORKER_MAX_DELIVER", "10"))
 HEALTH_HOST = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8011"))
@@ -224,7 +228,24 @@ async def _run() -> None:
             )
             js = nc.jetstream()
 
-            async def _on_message(msg) -> None:  # noqa: ANN001
+            # PARALEL YAYIN — NEDEN
+            # ---------------------
+            # Push aboneliginde nats-py callback'leri SIRAYLA calistirir ve
+            # eski kod her mesajda `await js.publish` (PubAck gidis-donusu)
+            # + `await msg.ack()` bekliyordu: ~1 ms RTT ile ~1.000 msj/sn'lik
+            # SERT tavan (sahada olculdu: 300 cihazda cikis 1.060/sn'de
+            # takildi, 657k birikti, CPU %11 BOSTAYDI — is degil bekleme).
+            # Cozum: mesaj isleme sinirli sayida es zamanli goreve dagitilir;
+            # PubAck'ler paralel beklenir. Semafor dolunca callback bekler —
+            # max_ack_pending ile birlikte dogal geri basinc. At-least-once
+            # degismez: ack yalnizca publish BASARILI olunca, gorevin icinde.
+            # Ayni sinyalin iki olcumu ayni pencereye dusecek kadar sik
+            # degisirse sira garantisi zayiflar; tuketiciler zaten bunu
+            # tolere eder (canli tablo source_timestamp korumali, arsiv
+            # ON CONFLICT'li, alarm degerlendirmesi damgaya bakar).
+            paralel = asyncio.Semaphore(PUBLISH_PARALLEL)
+
+            async def _isle(msg) -> None:  # noqa: ANN001
                 try:
                     payload = json.loads(msg.data.decode("utf-8"))
                     processed = _build_processed_payload(payload)
@@ -301,6 +322,15 @@ async def _run() -> None:
                             await msg.nak()
                         except Exception:  # noqa: BLE001
                             pass
+
+            async def _on_message(msg) -> None:  # noqa: ANN001
+                # Semafor DOLUYSA burada bekleriz: abonelik teslimi yavaslar,
+                # max_ack_pending tavani zaten teslimi sinirlar. Gorevin
+                # istisnasi olamaz (_isle kendi icinde DLQ/nak yapiyor);
+                # done-callback semaforu her durumda serbest birakir.
+                await paralel.acquire()
+                gorev = asyncio.get_running_loop().create_task(_isle(msg))
+                gorev.add_done_callback(lambda _g: paralel.release())
 
             # Consumer parametreleri uretim icin sertlestirilmis (bkz.
             # telemetry_consumer.py'daki ayni konfig). max_ack_pending=10000

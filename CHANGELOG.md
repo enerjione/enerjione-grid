@@ -14,6 +14,17 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.43.2] — 2026-08-04
+
+### Düzeltildi
+
+- **tag-engine ~1.000 msj/sn'de tıkanıyordu** (300 cihaz testinde görüldü):
+  her mesajda yayın onayı sırayla bekleniyordu. Yayın artık sınırlı
+  eşzamanlılıkla paralel (TAG_PUBLISH_PARALLEL, varsayılan 512); teslim
+  güvencesi (at-least-once) ve DLQ davranışı değişmedi.
+
+---
+
 ## [2.43.1] — 2026-08-04
 
 ### Değişti
