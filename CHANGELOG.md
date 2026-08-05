@@ -14,6 +14,53 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.51.0] — 2026-08-05
+
+### Eklendi
+
+- **Cihaz Ayarları ekranı.** Cihaz sayfasındaki "Yapılandırma" sekmesi artık
+  gerçek: cihazın `Configuration.csv` dosyası anlamlı adlarla listeleniyor,
+  sayısal ayarlar satır içinde düzenlenebiliyor, sürüm geçmişi görülüp eski
+  sürüme dönülebiliyor, dosya indirilip yüklenebiliyor. Kaydetmek **göndermek
+  değildir** — ekranda bu açıkça yazıyor; dosyanın cihaza ulaşması için FTP'ye
+  konup DNP3 komutuyla tetiklenmesi gerekir.
+- **FTP hareketlerinin izlenmesi.** `ftp-server` artık bağlantı ve dosya
+  olaylarını backend'e bildiriyor (kim bağlandı, hangi dosyayı yazdı/aldı,
+  yarım kalan yüklemeler dahil). Bildirim ayrı bir thread'de: pyftpdlib tek
+  thread'de çalışır ve callback içinde HTTP isteği yapmak tüm FTP sunucusunu
+  bloklardı.
+- **Cihazdan gelen config otomatik sürüme dönüşüyor.** Cihaz
+  `start_csv_upload` komutuyla kendi yapılandırmasını FTP'ye yazdığında, dosya
+  adındaki seri numarası cihazı tanımlar ve içerik "cihazdan çekildi" kaynaklı
+  yeni sürüm olarak kaydedilir. Aynı içerik tekrar gelirse sürüm üretilmez.
+- **Toplu yapılandırma ucu.** Bir şablon seçili cihazlara tek işlemde
+  uygulanabiliyor. Başarısızlar sessizce atlanmıyor; hangi cihaz neden alamadı
+  dönüyor ve model uyuşmazlığı engelleniyor.
+- **Yeni cihaz eklendiğinde** modelin varsayılan şablonundan ilk sürüm
+  otomatik üretiliyor.
+
+### Düzeltildi
+
+- **Yapılandırma dosyası yüklenemiyordu** ("required field"). `FormData`
+  gönderilirken araya `Content-Type: application/json` giriyor ve multipart
+  sınırlayıcısını eziyordu; sunucu gövdeyi ayrıştıramayıp dosyayı eksik alan
+  sayıyordu.
+- **FTP kök dizini backend tarafından yazılamıyordu.** Volume `root` sahipli
+  oluşuyor, backend ise `uid 10001` ile koşuyor. Harita karolarında yaşanan
+  arızanın aynısı; `ftp-server` açılışta dizini paylaşılabilir hale getiriyor.
+
+### Değiştirildi
+
+- Cihaz sayfasındaki DNP3 özeti kaldırıldı (aynı bilgi iki ekranda daha var) ve
+  başlık "FTP Config Yönetimi" yerine **"Cihaz Ayarları"** oldu — dosyanın FTP
+  ile taşınması bir taşıma detayı, başlıkta yer alması gereksiz kavram yüküydü.
+- **Yanlış cihaza dosya yüklemeye karşı uyarı.** Dosya adındaki seri cihazın
+  serisiyle uyuşmuyorsa onay isteniyor ama engellenmiyor (başka bir cihazın
+  dosyasını şablon olarak kullanmak meşru). Uyuşmazlık her hâlükârda denetim
+  kaydına yazılıyor.
+
+---
+
 ## [2.50.0] — 2026-08-05
 
 ### Eklendi

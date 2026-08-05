@@ -476,7 +476,7 @@ export function DeviceDetailPage({
         ) : null}
 
         {activeTab === "config" && canConfig ? (
-          <DeviceConfigPanel device={device} />
+          <DeviceConfigPanel device={device} token={token ?? ""} canConfig={canConfig} />
         ) : null}
       </div>
     </div>

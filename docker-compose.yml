@@ -446,6 +446,8 @@ services:
         # uzatmaktan baska bir sey yapmiyordu.
         condition: service_started
     environment:
+      # FTP kok dizini — ftp-server ile PAYLASILAN volume ile AYNI yol.
+      FTP_ROOT: /data/ftp
       APP_ENV: production
       # --- Olcekleme ---
       # Surec rolu. VARSAYILAN `api` = arka plan isleri BU SURECTE KOSMAZ;
@@ -793,6 +795,17 @@ services:
       # Cevrimdisi harita karolari. Named volume: imaj guncellemesinde
       # SILINMEZ -- sahada tekrar indirmek 4G uzerinden pahali/uzun olur.
       - map-tile-data:/var/lib/e1-map-tiles
+      # NOT: `FTP_ROOT` ortam degiskeni asagidaki `environment:` blogunda da
+      # verilir — backend dosyalari BURADAN okur/yazar ve yol iki tarafta
+      # AYNI olmak zorundadir.
+      #
+      # Cihaz config/firmware dosyalarinin FTP kok dizini. ftp-server ile
+      # PAYLASILIR. Backend'in iki yone de erisimi gerekiyor:
+      #   okuma -> cihazin yazdigi `<seri>_Configuration.csv` surum kaydina
+      #            cevrilir (config cekme akisi),
+      #   yazma -> cihaza gonderilecek config/firmware buraya konur.
+      # Salt-okunur baglamak yazma yonunu imkansiz kilardi.
+      - ftp-data:/data/ftp
     networks:
       - e1-net
     logging: *default-logging
@@ -1133,6 +1146,9 @@ services:
     environment:
       FTP_USER: ${FTP_USER:-device}
       FTP_PASSWORD: ${FTP_PASSWORD}
+      # Olay bildirimi: kim baglandi, hangi dosyayi yazdi/aldi.
+      E1_BACKEND_URL: ${E1_BACKEND_URL:-http://backend-api:8000/api/v1}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       FTP_ROOT: /data/ftp
       FTP_LISTEN_PORT: 21
       FTP_PASV_MIN_PORT: ${FTP_PASV_MIN_PORT:-30000}

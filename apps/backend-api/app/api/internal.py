@@ -1,7 +1,11 @@
 import hmac
+import logging as _logging
+import os
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -792,4 +796,184 @@ def get_protocol_command_status(
     return InternalCommandStatus(
         id=cmd.id, status=cmd.status, result_status=cmd.result_status,
         result_error=cmd.result_error,
+    )
+
+
+# ---------------------------------------------------------------------------
+# FTP olaylari — ftp-server'dan gelir.
+# ---------------------------------------------------------------------------
+class FtpEventIn(BaseModel):
+    """ftp-server'in bildirdigi tek bir olay.
+
+    Alanlarin cogu opsiyonel: bildirim ASIL ISI (dosya transferini) hicbir
+    kosulda bozmamali, dolayisiyla ftp-server eksik bilgiyle de gonderebilir.
+    """
+
+    event: str
+    occurred_at: datetime | None = None
+    filename: str | None = None
+    path: str | None = None
+    size: int | None = None
+    remote_ip: str | None = None
+    username: str | None = None
+
+
+#: Cihazin yazdigi yapilandirma dosyasi: `<seri>_Configuration.csv`.
+_CONFIG_FILE_RE = re.compile(r"^([A-Za-z0-9]{1,20})_Configuration\.csv$")
+
+#: FTP kok dizini — ftp-server ile PAYLASILAN volume (docker-compose:
+#: `ftp-data:/data/ftp` her iki serviste de bagli).
+_FTP_ROOT = os.getenv("FTP_ROOT", "/data/ftp")
+
+#: Yutulacak config dosyasi ust siniri. Gercek dosya ~1 KB; sinirsiz okumak,
+#: FTP'ye konan buyuk bir dosyayi bellege almak demek olurdu.
+_MAX_CONFIG_BYTES = 1024 * 1024
+
+
+@router.post("/ftp-events", status_code=status.HTTP_202_ACCEPTED)
+def ftp_event(
+    payload: FtpEventIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """FTP hareketini kaydeder; config dosyasiysa SURUME cevirir.
+
+    ASIL DEGER BURADA: cihaz `start_csv_upload` komutuyla kendi
+    yapilandirmasini FTP'ye yazar. Dosya adindaki seri cihazi TANIMLAR
+    (`master.serial_number`). Bu ucu yakalayarak "cihazdan config cek"
+    akisini KENDILIGINDEN tamamliyoruz — kullanici yalnizca komutu verir.
+
+    202 doner ve ASLA 5xx vermez: ftp-server yeniden denemiyor, dolayisiyla
+    burada patlamak olayi kaybetmekten baska bir sey yapmaz. Isleyemedigimiz
+    durumlar da olay olarak kaydedilir, boylece sessiz kalmaz.
+    """
+    _require_service_token(x_service_token, _extract_service_name(request))
+
+    ad = (payload.filename or "").strip()
+    m = _CONFIG_FILE_RE.match(ad) if ad else None
+    yutuldu = False
+    hata: str | None = None
+
+    if payload.event == "upload" and m:
+        try:
+            yutuldu = _ingest_config_upload(db, seri=m.group(1), payload=payload)
+        except Exception as exc:  # noqa: BLE001
+            # Yutma basarisiz olsa bile OLAY kaydedilir: "cihaz dosyayi yazdi
+            # ama biz alamadik" teshis edilebilir kalmali.
+            hata = str(exc)
+            _logging.getLogger(__name__).warning(
+                "ftp config yutulamadi: %s", ad, exc_info=True
+            )
+
+    _kaydet_ftp_olayi(db, payload, ingested=yutuldu, error=hata)
+    db.commit()
+    return {"ingested": yutuldu}
+
+
+def _ingest_config_upload(db: Session, *, seri: str, payload: FtpEventIn) -> bool:
+    """Cihazin yazdigi config dosyasini yeni SURUM olarak kaydeder.
+
+    Seriyi cihaza `master.serial_number` telemetrisi uzerinden baglar. Eslesme
+    yoksa yutmaz — bilinmeyen bir seriyi rastgele bir cihaza yazmak, yanlis
+    cihazin gecmisini kirletirdi.
+    """
+    from app.models.telemetry_latest import TelemetryLatest
+    from app.services import device_config_service as cfg_svc
+    from app.services.horstmann_config_codec import parse as cfg_parse
+
+    # Seri -> cihaz. Telemetri sayisal gelebilir (50984.0), metin de olabilir.
+    aday = db.execute(
+        select(TelemetryLatest.device_id, TelemetryLatest.value, TelemetryLatest.value_string)
+        .where(TelemetryLatest.signal_key == cfg_svc.SERIAL_SIGNAL)
+    ).all()
+    device_id = None
+    for did, deger, metin in aday:
+        okunan = (metin or "").strip() or (str(int(deger)) if deger is not None else "")
+        if okunan == seri:
+            device_id = did
+            break
+    if device_id is None:
+        raise LookupError(f"seri {seri} hicbir cihazla eslesmedi")
+
+    yol = os.path.join(_FTP_ROOT, (payload.path or payload.filename or "").lstrip("/"))
+    # Dizin disina cikma korumasi: `path` disaridan geliyor.
+    kok = os.path.realpath(_FTP_ROOT)
+    tam = os.path.realpath(yol)
+    if not tam.startswith(kok + os.sep) and tam != kok:
+        raise ValueError(f"kok dizin disinda yol: {payload.path!r}")
+
+    boyut = os.path.getsize(tam)
+    if boyut > _MAX_CONFIG_BYTES:
+        raise ValueError(f"dosya cok buyuk ({boyut} bayt)")
+
+    ham = open(tam, "rb").read()
+    belge = cfg_parse(ham)  # bozuksa burada patlar, olay 'error' ile kaydedilir
+
+    mevcut = cfg_svc.current_version(db, device_id)
+    if mevcut is not None and bytes(mevcut.raw) == ham:
+        # AYNI icerik: yeni surum URETME. Cihaz her cagrida ayni dosyayi
+        # yazarsa gecmis anlamsiz kayitlarla dolar ve gercek degisiklikler
+        # gorunmez hale gelir.
+        return False
+
+    cfg_svc.create_version(
+        db,
+        device_id=device_id,
+        raw=ham,
+        source="cihazdan_cekildi",
+        actor=None,  # cihazin kendisi yazdi, bir kullanici degil
+        note=(
+            f"Cihaz FTP'ye yazdi ({payload.filename})"
+            + ("" if belge.checksum_valid else " — saglama toplami GECERSIZ")
+        ),
+    )
+    return True
+
+
+def _kaydet_ftp_olayi(
+    db: Session, payload: FtpEventIn, *, ingested: bool, error: str | None
+) -> None:
+    """FTP hareketini olay kaydina yazar.
+
+    AYRI TABLO ACILMADI (bilincli): FTP baglantilari telemetri gibi surekli
+    degildir, yalnizca config/firmware islemlerinde olusur. Mevcut olay kaydi
+    (2 yil FIFO) yeterli; `category="ftp"` ile filtrelenebilir.
+    """
+    metinler = {
+        "login": "FTP baglantisi",
+        "upload": "Cihaz dosya yazdi",
+        "download": "Cihaz dosya aldi",
+        "upload_incomplete": "Dosya YARIM kaldi",
+    }
+    baslik = metinler.get(payload.event, f"FTP olayi: {payload.event}")
+    parcalar = [baslik]
+    if payload.filename:
+        parcalar.append(payload.filename)
+    if payload.remote_ip:
+        parcalar.append(f"({payload.remote_ip})")
+    if ingested:
+        parcalar.append("— yapilandirma surumu olusturuldu")
+    if error:
+        parcalar.append(f"— islenemedi: {error}")
+
+    record_event(
+        db,
+        category="ftp",
+        event_type=f"ftp_{payload.event}",
+        # Yarim dosya ve isleme hatasi UYARI: ikisi de "cihaz gonderdi ama
+        # sonuc yok" durumunun sebebi olabilir ve teshiste ilk bakilacak yer.
+        severity="warning" if (error or payload.event == "upload_incomplete") else "info",
+        message=" ".join(parcalar),
+        occurred_at=payload.occurred_at,
+        metadata={
+            "event": payload.event,
+            "filename": payload.filename,
+            "path": payload.path,
+            "size": payload.size,
+            "remote_ip": payload.remote_ip,
+            "username": payload.username,
+            "ingested": ingested,
+            "error": error,
+        },
     )

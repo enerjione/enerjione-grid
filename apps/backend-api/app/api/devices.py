@@ -1,3 +1,5 @@
+import logging
+
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -25,10 +27,11 @@ from app.schemas.device import (
     DeviceUpdate,
 )
 from app.schemas.telemetry import TelemetryAggregatePoint, TelemetryHistoryPoint
-from app.services import license_service
-from app.services import device_command_service
+from app.services import device_command_service, device_config_service, license_service
 from app.services.event_service import record_event
 from app.services.scope_service import get_visible_device_ids
+
+log = logging.getLogger(__name__)
 
 # Config-turu komut slug'lari — installer-only. Genel + alarm reset komutlari
 # engineer+installer'da kalir. Frontend DeviceCommandsPanel meta'daki 'config'
@@ -115,6 +118,21 @@ def create_device(
         i18n_key="device_created",
         i18n_params={"name": device.name, "code": device.code},
     )
+
+    # Cihaz modeli icin varsayilan yapilandirma sablonu varsa ilk surumu simdi
+    # uret. Sablon YOKSA `None` doner ve cihaz eklenmesi ETKILENMEZ — config
+    # sablonu tanimlanmamis olmasi cihaz eklemeyi engellememeli.
+    #
+    # Hata YUTULMAZ ama cihazi da dusurmez: bu noktada cihaz kaydi zaten
+    # gecerli, yalnizca yardimci bir adim basarisiz olmustur. Eksiklik
+    # arayuzde "yapilandirma dosyasi yok" olarak gorunur.
+    try:
+        device_config_service.ensure_initial_version(
+            db, device, actor=current_user.username
+        )
+    except Exception:  # noqa: BLE001
+        log.warning("ilk yapilandirma surumu uretilemedi: %s", device.code, exc_info=True)
+
     _bump_gateway_config_nonce(db, device.gateway_code)
     db.commit()
     return device

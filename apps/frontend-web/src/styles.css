@@ -36400,3 +36400,180 @@ th.event-col-category {
   background: #fef2f2;
   color: #b91c1c;
 }
+
+/* ===== Cihaz FTP yapilandirma karti ====================================
+   WiFi ilerleme ekraninda yasanan tuzagin tekrari onlensin diye bilesenle
+   BIRLIKTE yaziliyor: render edilmeyen bir bilesenin stilsiz kaldigi ancak
+   baglandiginda fark ediliyor. */
+.dev-ftp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin: 0.35rem 0 0.6rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.dev-ftp-meta code {
+  background: #f3f4f6;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.3rem;
+  color: #374151;
+}
+
+.dev-ftp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.dev-ftp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #374151;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.dev-ftp-btn:hover { background: #f9fafb; }
+.dev-ftp-btn .material-symbols-outlined { font-size: 1.05rem; }
+
+.dev-ftp-btn.is-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.dev-ftp-btn.is-primary:hover { background: #1d4ed8; }
+.dev-ftp-btn.is-primary:disabled,
+.dev-ftp-btn.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Surum gecmisi ------------------------------------------------------- */
+.dev-ftp-history {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #f9fafb;
+  /* Uzun gecmis sayfayi buyutmesin; kart icinde kalsin. */
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.dev-ftp-history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #eef0f3;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.dev-ftp-history li:last-child { border-bottom: none; }
+.dev-ftp-history li.is-current { color: #111827; font-weight: 600; }
+.dev-ftp-history li em { font-style: normal; color: #9ca3af; }
+
+.dev-ftp-history li button {
+  margin-left: auto;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.35rem;
+  background: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* Ayar tablosu -------------------------------------------------------- */
+.dev-ftp-table-wrap {
+  /* Genis icerik SAYFAYI degil kendi kutusunu kaydirsin. */
+  overflow-x: auto;
+  max-height: 28rem;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+}
+
+.dev-ftp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.dev-ftp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f9fafb;
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.dev-ftp-table td {
+  padding: 0.4rem 0.65rem;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.dev-ftp-table tbody tr:last-child td { border-bottom: none; }
+
+/* Degistirilmis ama HENUZ KAYDEDILMEMIS satir. Kaydedilenle karistirilmasin
+   diye sol kenarda belirgin bir seritle isaretleniyor. */
+.dev-ftp-table tr.is-changed td { background: #fffbeb; }
+.dev-ftp-table tr.is-changed td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+
+.dev-ftp-name { display: block; color: #111827; }
+
+.dev-ftp-key {
+  display: block;
+  font-size: 0.6875rem;
+  color: #9ca3af;
+}
+
+.dev-ftp-ro { color: #6b7280; }
+
+.dev-ftp-table input {
+  width: 100%;
+  max-width: 11rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.35rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.dev-ftp-table input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.dev-ftp-save {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.device-config-badge.is-bad {
+  background: #fee2e2;
+  color: #b91c1c;
+}

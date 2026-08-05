@@ -1513,3 +1513,70 @@ export type MapEstimate = {
   estimated_bytes: number;
   max_tiles: number;
 };
+
+// ===== Cihaz yapilandirma dosyasi (Horstmann Configuration.csv) ===========
+// Backend semasi: app/schemas/device_config.py — birlikte guncellenir.
+
+export type ConfigRow = {
+  catIndex: string;
+  group: string;
+  index: string;
+  length: number;
+  // Kisa alanlar sayi, uzun alanlar metin olarak anlamli; backend ikisini de
+  // dondurur, hangisinin gosterilecegine arayuz karar verir.
+  valueInt: number | null;
+  valueText: string | null;
+  rawHex: string;
+  // Explorer XML katalogu yuklenmemisse null — katalog eksikligi dosyayi
+  // goruntulenemez yapmaz.
+  meaning: string | null;
+  unit: string | null;
+};
+
+export type ConfigVersion = {
+  id: number;
+  deviceId: number;
+  version: number;
+  source: "sablon" | "cihazdan_cekildi" | "yuklendi" | "duzenlendi";
+  templateId: number | null;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  appliedAt: string | null;
+  sizeBytes: number;
+  // "gecerli" / "gecersiz" / "bilinmiyor (ayak yok)" UC AYRI durum.
+  checksumValid: boolean | null;
+};
+
+export type ConfigCurrent = {
+  version: ConfigVersion;
+  filename: string;
+  rows: ConfigRow[];
+};
+
+export type ConfigDiffRow = {
+  catIndex: string;
+  meaning: string | null;
+  before: string | null;
+  after: string | null;
+  beforeInt: number | null;
+  afterInt: number | null;
+};
+
+export type ConfigTemplate = {
+  id: number;
+  name: string;
+  deviceModel: string;
+  sourceFilename: string | null;
+  note: string | null;
+  isDefault: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  sizeBytes: number;
+};
+
+export type BulkApplyResult = {
+  applied: number[];
+  // Atlananlar SESSIZCE yutulmaz; hangi cihaz neden alamadi burada doner.
+  failed: { device_id: number; reason: string; detail?: string }[];
+};

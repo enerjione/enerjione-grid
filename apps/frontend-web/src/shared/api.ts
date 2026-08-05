@@ -3023,3 +3023,148 @@ export async function deleteMapPack(
   );
   if (!response.ok) throw await buildApiError(response, "Paket silinemedi.");
 }
+
+// ===== Cihaz yapilandirma dosyasi ========================================
+// Backend: app/api/device_configs.py . Bu uclar yalnizca SURUM yaratir;
+// dosyayi cihaza gondermek ayri bir adimdir (FTP + DNP3 komutu).
+
+type ApiConfigRow = {
+  cat_index: string; group: string; index: string; length: number;
+  value_int: number | null; value_text: string | null; raw_hex: string;
+  meaning: string | null; unit: string | null;
+};
+type ApiConfigVersion = {
+  id: number; device_id: number; version: number; source: ConfigVersion["source"];
+  template_id: number | null; note: string | null; created_by: string | null;
+  created_at: string; applied_at: string | null; size_bytes: number;
+  checksum_valid: boolean | null;
+};
+
+const mapConfigRow = (r: ApiConfigRow): ConfigRow => ({
+  catIndex: r.cat_index, group: r.group, index: r.index, length: r.length,
+  valueInt: r.value_int, valueText: r.value_text, rawHex: r.raw_hex,
+  meaning: r.meaning, unit: r.unit
+});
+
+const mapConfigVersion = (v: ApiConfigVersion): ConfigVersion => ({
+  id: v.id, deviceId: v.device_id, version: v.version, source: v.source,
+  templateId: v.template_id, note: v.note, createdBy: v.created_by,
+  createdAt: v.created_at, appliedAt: v.applied_at, sizeBytes: v.size_bytes,
+  checksumValid: v.checksum_valid
+});
+
+/** Guncel yapilandirma. Surum yoksa 404 doner — cagiran "henuz yok" olarak
+ *  ele almali; bu bir HATA degil, olagan bir baslangic durumudur. */
+export async function fetchDeviceConfig(token: string, deviceId: number): Promise<ConfigCurrent | null> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config`, {
+    headers: authHeaders(token)
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw await buildApiError(response, "Yapılandırma alınamadı.");
+  const data = (await response.json()) as { version: ApiConfigVersion; filename: string; rows: ApiConfigRow[] };
+  return {
+    version: mapConfigVersion(data.version),
+    filename: data.filename,
+    rows: data.rows.map(mapConfigRow)
+  };
+}
+
+export async function fetchDeviceConfigVersions(token: string, deviceId: number): Promise<ConfigVersion[]> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config/versions`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sürüm geçmişi alınamadı.");
+  return ((await response.json()) as ApiConfigVersion[]).map(mapConfigVersion);
+}
+
+export async function fetchDeviceConfigDiff(token: string, deviceId: number, version: number): Promise<ConfigDiffRow[]> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config/versions/${version}/diff`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Fark hesaplanamadı.");
+  const rows = (await response.json()) as {
+    cat_index: string; meaning: string | null; before: string | null;
+    after: string | null; before_int: number | null; after_int: number | null;
+  }[];
+  return rows.map((r) => ({
+    catIndex: r.cat_index, meaning: r.meaning, before: r.before,
+    after: r.after, beforeInt: r.before_int, afterInt: r.after_int
+  }));
+}
+
+/** Degerleri degistirir — YENI surum yaratir, eskisini bozmaz. */
+export async function updateDeviceConfig(
+  token: string, deviceId: number, changes: Record<string, number>, note?: string
+): Promise<ConfigVersion> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ changes, note: note ?? null })
+  });
+  if (!response.ok) throw await buildApiError(response, "Yapılandırma kaydedilemedi.");
+  return mapConfigVersion((await response.json()) as ApiConfigVersion);
+}
+
+export async function uploadDeviceConfig(token: string, deviceId: number, file: File): Promise<ConfigVersion> {
+  const form = new FormData();
+  form.append("file", file);
+  // `authHeaders` KULLANILMAZ: icinde `Content-Type: application/json` var ve
+  // bu, FormData'nin urettigi `multipart/...; boundary=...` basligini ezer.
+  // Sunucu govdeyi JSON sanip ayristiramaz ve dosyayi "eksik alan" olarak
+  // reddeder (FastAPI 422 "field required"). Ayni hata daha once baska bir
+  // yukleme ucunda da yasandi; kalip diger FormData cagrilariyla ayni.
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config/upload`, {
+    method: "POST",
+    headers,
+    body: form
+  });
+  if (!response.ok) throw await buildApiError(response, "Dosya yüklenemedi.");
+  return mapConfigVersion((await response.json()) as ApiConfigVersion);
+}
+
+export async function revertDeviceConfig(token: string, deviceId: number, version: number): Promise<ConfigVersion> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config/versions/${version}/revert`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Geri alınamadı.");
+  return mapConfigVersion((await response.json()) as ApiConfigVersion);
+}
+
+/** Ham dosyayi indirir. Ad `<seri>_Configuration.csv` — cihaz BASKA hicbir
+ *  adi tanimadigi icin adi backend uretir, burada degistirilmez. */
+export function deviceConfigDownloadUrl(deviceId: number, version?: number): string {
+  const q = version === undefined ? "" : `?version=${version}`;
+  return `${API_BASE_URL}/devices/${deviceId}/config/download${q}`;
+}
+
+export async function fetchConfigTemplates(token: string, deviceModel?: string): Promise<ConfigTemplate[]> {
+  const q = deviceModel ? `?device_model=${encodeURIComponent(deviceModel)}` : "";
+  const response = await apiFetch(`${API_BASE_URL}/config-templates${q}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablonlar alınamadı.");
+  return ((await response.json()) as {
+    id: number; name: string; device_model: string; source_filename: string | null;
+    note: string | null; is_default: boolean; created_by: string | null;
+    created_at: string; size_bytes: number;
+  }[]).map((s) => ({
+    id: s.id, name: s.name, deviceModel: s.device_model,
+    sourceFilename: s.source_filename, note: s.note, isDefault: s.is_default,
+    createdBy: s.created_by, createdAt: s.created_at, sizeBytes: s.size_bytes
+  }));
+}
+
+export async function applyTemplateToDevices(
+  token: string, templateId: number, deviceIds: number[], note?: string
+): Promise<BulkApplyResult> {
+  const response = await apiFetch(`${API_BASE_URL}/config-templates/bulk-apply`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ template_id: templateId, device_ids: deviceIds, note: note ?? null })
+  });
+  if (!response.ok) throw await buildApiError(response, "Toplu uygulama başarısız.");
+  return (await response.json()) as BulkApplyResult;
+}
