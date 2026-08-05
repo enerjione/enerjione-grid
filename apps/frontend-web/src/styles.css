@@ -36269,3 +36269,134 @@ th.event-col-category {
   background: #dc2626;
   border-color: #dc2626;
 }
+
+/* ===== WiFi gorev degisimi ilerleme modali ==============================
+   Bilesen (WifiModeProgress.tsx) yazilmis ama hicbir yerden RENDER
+   EDILMEDIGI icin stilleri de hic yazilmamisti; bagladigimizda bicimsiz
+   cikiyordu. Buradaki siniflar bilesenin uretttigi isimlerle birebir.
+   Kabuk (.net-modal / .net-modal-backdrop) mevcut stillerden gelir. */
+.wifi-prog {
+  max-width: 26rem;
+}
+
+.wifi-prog-head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.wifi-prog-head h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.wifi-prog-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.8125rem;
+  color: #6b7280;
+  /* Gecen sure her yarim saniyede degisiyor; bos stringde de yer kaplasin ki
+     sayi guncellendikce baslik asagi yukari ziplamasin. */
+  min-height: 1.1em;
+}
+
+.wifi-prog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.wifi-prog-icon .material-symbols-outlined {
+  font-size: 1.5rem;
+}
+
+.wifi-prog-head--tamam .wifi-prog-icon { background: #dcfce7; color: #15803d; }
+.wifi-prog-head--hata .wifi-prog-icon { background: #fee2e2; color: #b91c1c; }
+.wifi-prog-head--devirteslim .wifi-prog-icon { background: #ffedd5; color: #c2410c; }
+
+/* Donen halka — islemin SURDUGUNU gosteren tek isaret. */
+.wifi-prog-spin {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #d1d5db;
+  border-top-color: #2563eb;
+  border-radius: 999px;
+  animation: wifi-prog-spin 0.8s linear infinite;
+}
+
+@keyframes wifi-prog-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Hareketi azalt tercihi: donmeyi durdur ama isareti GORUNUR birak —
+   tamamen gizlemek "islem yok" izlenimi verirdi. */
+@media (prefers-reduced-motion: reduce) {
+  .wifi-prog-spin { animation-duration: 3s; }
+}
+
+.wifi-prog-steps {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.wifi-prog-step {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.wifi-prog-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #d1d5db;
+}
+
+.wifi-prog-step--calisiyor { color: #111827; font-weight: 600; }
+.wifi-prog-step--calisiyor .wifi-prog-dot {
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.wifi-prog-step--tamam { color: #374151; }
+.wifi-prog-step--tamam .wifi-prog-dot { background: #16a34a; }
+
+.wifi-prog-step--hata { color: #b91c1c; }
+.wifi-prog-step--hata .wifi-prog-dot { background: #dc2626; }
+
+/* "bilinmiyor" = oturum koptugu icin sonucu OLCEMIYORUZ. Basarisizlikla
+   ayni renkte gostermek yanlis olur; belirsizligi kesikli cerceve anlatir. */
+.wifi-prog-step--bilinmiyor .wifi-prog-dot {
+  background: transparent;
+  border: 2px dashed #9ca3af;
+}
+
+.wifi-prog-note {
+  margin: 0.85rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+  background: #f9fafb;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #4b5563;
+}
+
+.wifi-prog-note--bad {
+  background: #fef2f2;
+  color: #b91c1c;
+}

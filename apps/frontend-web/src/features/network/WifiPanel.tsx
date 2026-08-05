@@ -62,6 +62,7 @@ import {
   type WifiAction
 } from "./networkAccess";
 import { WifiActionConfirm, WifiConsequences } from "./WifiActionConfirm";
+import WifiModeProgress, { type ProgressAction } from "./WifiModeProgress";
 import { useToast } from "../../components/ToastProvider";
 
 type Props = {
@@ -122,6 +123,15 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
   // Istek gonderildi ve oturumumuz kopabilir: polling "basarisiz" oldugunda
   // kullanici hata sanmasin diye ne olacagini onceden yaziyoruz.
   const [handoverAt, setHandoverAt] = useState<number | null>(null);
+
+  // Gorev degisimi ANINDA sonuclanmaz: kart dusurulur, yeni profil kaldirilir,
+  // AP'de yayin gercekten baslayana kadar saniyeler gecer. Eskiden ekranda tek
+  // satirlik bir metin vardi ve kullanici bir sey olup olmadigini anlamiyordu;
+  // ayni butona tekrar basiliyordu. Artik islem boyunca ilerleme modali acik
+  // kalir. `null` = islem yok.
+  const [progress, setProgress] = useState<
+    { action: ProgressAction; startedAt: number; drops: boolean } | null
+  >(null);
   // Ac/kapa, gorev secimi ve olculen durum artik ayri bir popup'ta; panelde
   // yer kalmiyordu ve ag listesi ekranin disina dusuyordu.
   const [ayarlarAcik, setAyarlarAcik] = useState(false);
@@ -212,6 +222,14 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
             await setWifiRadio(accessToken, false);
             break;
           case "role":
+            // Modal istekten ONCE aciliyor: `setWifiMode` oturumu dusurebilir
+            // ve sonrasina hic donmeyebiliriz. Sonra acsaydik, tam da geri
+            // bildirime en cok ihtiyac duyulan durumda ekran bos kalirdi.
+            setProgress({
+              action: { kind: "role", mode: action.mode },
+              startedAt: Date.now(),
+              drops,
+            });
             await setWifiMode(accessToken, action.mode);
             break;
           case "connect":
@@ -232,6 +250,11 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
         if (drops) setHandoverAt(Date.now());
         onRefreshStatus();
       } catch (exc) {
+        // Istek ULASMADIYSA ilerleme modali kapanmali — aksi halde hicbir zaman
+        // gerceklesmeyecek bir islemi bekler halde asili kalirdi. Oturumun
+        // dustugu durum FARKLIDIR: orada istek ulasmis olabilir, o yuzden
+        // modal acik kalir ve sonucu kendisi olcer.
+        if (!drops) setProgress(null);
         toast.error(networkErrorText(exc, t));
       } finally {
         setSubmitting(false);
@@ -553,7 +576,10 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
                   ? t("network.wifi.roleClientHint", { ssid: apSsid })
                   : t("network.wifi.roleUnknown")}
             </p>
-            <p className="wifi-role-hint is-muted">{t("network.wifi.roleOneCardHint")}</p>
+            {/* "Tek kart var, ikisi ayni anda olmaz" bilgisi BIR KEZ veriliyor.
+                Eskiden ayni gercek ekranda uc yerde tekrarlaniyordu (buradaki
+                muted satir, rol ipucu ve AP kapali yardimi); panel bilgi
+                yiginina donuyor ve asil eylem gorunmez hale geliyordu. */}
             {status?.pending ? (
               <p className="wifi-role-hint" aria-live="polite">
                 {t("network.wifi.roleSwitching")}
@@ -604,13 +630,15 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
             ) : null}
           </div>
 
+          {/* AP ACIKKEN "nasil baglanirim" bilgisi ISE YARAR; kapaliyken
+              gosterilen yardim metni ise gorev secicinin hemen altindaki
+              ipucunu tekrarliyordu. Kapali olma SEBEBI zaten yukaridaki durum
+              kartinda (`apOffReason`) tek satir olarak yaziyor. */}
           {apActive === true ? (
             <p className="wifi-hint">
               {t("network.wifi.apJoinHint", { ssid: apSsid, url: apUrl(status) })}
             </p>
-          ) : (
-            <p className="wifi-hint">{t(`network.wifi.apOffHelp.${offReason}`)}</p>
-          )}
+          ) : null}
 
           {/* Bagli ag kunyesi — olculen wifi.connected. */}
           {wifi && (wifi.connected || wifi.saved || roleMode === "client") ? (
@@ -957,6 +985,19 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
             setAsk(null);
             void run(pending);
           }}
+        />
+      ) : null}
+
+      {/* Gorev degisimi ilerlemesi. Onay diyalogundan SONRA render ediliyor ki
+          ikisi ayni anda aciksa ustte kalsin. Kapatmayi bilesenin kendisi
+          yonetir: islem bitmeden `onClose` cagirmaz. */}
+      {progress ? (
+        <WifiModeProgress
+          action={progress.action}
+          status={status}
+          startedAt={progress.startedAt}
+          dropsSession={progress.drops}
+          onClose={() => setProgress(null)}
         />
       ) : null}
     </section>

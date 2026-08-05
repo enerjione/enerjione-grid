@@ -937,6 +937,22 @@
       "apSubnetClash": "Bu alt ağ WiFi erişim noktası ağıyla (10.42.0.0/24) çakışıyor."
     },
     "wifi": {
+      "progress": {
+        "title": "{{hedef}} görevine geçiliyor…",
+        "doneTitle": "{{hedef}} görevi etkin",
+        "failedTitle": "Görev değiştirilemedi",
+        "handoverTitle": "Bağlantı el değiştiriyor",
+        "elapsed": "{{sn}} saniyedir sürüyor",
+        "tookSeconds": "{{sn}} saniyede tamamlandı",
+        "stepSent": "İstek cihaza iletildi",
+        "stepApplying": "Ayarlar uygulanıyor",
+        "stepVerify": "{{hedef}} doğrulanıyor",
+        "slowHint": "Bu işlem birkaç saniye sürebilir; WiFi kartı kapatılıp yeni göreviyle yeniden açılıyor.",
+        "handoverToAp": "Cihaz artık \\\"{{ssid}}\\\" ağını yayınlıyor. Bu sayfa eski bağlantıdan açıldığı için sonucu göremeyebilir — telefonunuzdan o ağa bağlanın.",
+        "handoverGeneric": "Bu işlem mevcut bağlantınızı kesebilir. Sayfa yanıt vermezse cihaza yeni adresinden bağlanın.",
+        "failedGeneric": "İşlem tamamlanamadı.",
+        "working": "Sürüyor…"
+      },
       "title": "WiFi Bağlantısı",
       "scan": "Ağları Tara",
       "scanning": "Taranıyor...",

@@ -937,6 +937,22 @@
       "apSubnetClash": "This subnet clashes with the WiFi access point network (10.42.0.0/24)."
     },
     "wifi": {
+      "progress": {
+        "title": "Switching to {{hedef}}…",
+        "doneTitle": "{{hedef}} is active",
+        "failedTitle": "Could not switch role",
+        "handoverTitle": "Connection is changing over",
+        "elapsed": "Running for {{sn}} s",
+        "tookSeconds": "Completed in {{sn}} s",
+        "stepSent": "Request delivered to device",
+        "stepApplying": "Applying settings",
+        "stepVerify": "Verifying {{hedef}}",
+        "slowHint": "This can take a few seconds; the WiFi card is restarted in its new role.",
+        "handoverToAp": "The device is now broadcasting \\\"{{ssid}}\\\". This page was opened over the old connection and may not see the result — join that network from your phone.",
+        "handoverGeneric": "This may drop your current connection. If the page stops responding, reach the device at its new address.",
+        "failedGeneric": "The operation could not be completed.",
+        "working": "Working…"
+      },
       "title": "WiFi Connection",
       "scan": "Scan Networks",
       "scanning": "Scanning...",

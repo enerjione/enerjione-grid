@@ -14,6 +14,43 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.50.0] — 2026-08-05
+
+### Eklendi
+
+- **Horstmann `Configuration.csv` okuyucu/yazıcı.** Cihazın yapılandırma
+  dosyasının ikili biçimi çözüldü ve gerçek cihaz dosyasıyla doğrulandı
+  (60 girdinin 60'ı okundu, gidiş-dönüş bayt bayt aynı). Biçim
+  `GROUP(4hex),INDEX(2hex),UZUNLUK(2hex),DEĞER(little-endian hex)`; dosya
+  sonunda `<checksum: 2 bayt LE> FF FF` ve `checksum = (-sum(gövde)) & 0xFFFF`.
+  **Satır sonları CRLF'tir ve checksum'a dahildir** — LF'e "normalize" etmek
+  toplamı değiştirir ve cihaz dosyayı reddeder. Explorer'ın ürettiği
+  `<seri>.xml` kataloğu da okunuyor; böylece ham girdiler anlamlı adlarla
+  gösterilebiliyor.
+- **Cihaz yapılandırma şablonları ve sürüm geçmişi.** Şablonlar cihaz tipine
+  göre; sürümler cihaz başına artar ve **append-only**'dir: "geri al" eskiyi
+  geri yazmaz, eski baytlarla yeni sürüm yaratır — böylece "o gün cihazda ne
+  vardı" sorusunun cevabı hep doğru kalır. Yeni cihaz eklendiğinde varsayılan
+  şablondan ilk sürüm otomatik üretilir. Dosya adındaki seri numarası
+  `master.serial_number` telemetri sinyalinden gelir; seri yoksa işlem açık
+  hatayla durur (sessizce başka bir ada düşmek, cihazın hiç görmeyeceği bir
+  dosya üretirdi).
+
+### Değiştirildi
+
+- **WiFi görev değişiminde ilerleme penceresi.** AP ↔ istemci geçişi anında
+  sonuçlanmıyor — kart düşürülüp yeni göreviyle açılıyor. Eskiden ekranda tek
+  satırlık bir metin vardı; kullanıcı bir şey olup olmadığını anlamadığı için
+  aynı butona tekrar basıyordu. Artık dönen gösterge, geçen süre ve üç adımlı
+  ilerleme gösteren bir pencere açılıyor. Pencere istek gönderilmeden **önce**
+  açılıyor, çünkü işlem kendi bağlantımızı düşürebilir ve sonrasına
+  dönemeyebiliriz.
+- **WiFi ayarları penceresi sadeleştirildi.** "Tek WiFi kartı var, ikisi aynı
+  anda olamaz" bilgisi ekranda üç ayrı yerde tekrarlanıyordu; artık bir kez
+  veriliyor.
+
+---
+
 ## [2.49.1] — 2026-08-05
 
 ### Değişti — üretilen gateway compose/env dosyası production-temiz

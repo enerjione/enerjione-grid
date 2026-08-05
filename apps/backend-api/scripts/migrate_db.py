@@ -20,6 +20,7 @@ from app.models import (  # noqa: F401
     bulk_notification_template,
     device,
     device_command,
+    device_config,
     fault,
     gateway,
     gateway_ingest_batch,
