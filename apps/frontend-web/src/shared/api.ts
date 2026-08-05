@@ -3028,6 +3028,15 @@ export async function deleteMapPack(
 // Backend: app/api/device_configs.py . Bu uclar yalnizca SURUM yaratir;
 // dosyayi cihaza gondermek ayri bir adimdir (FTP + DNP3 komutu).
 
+import type {
+  BulkApplyResult,
+  ConfigCurrent,
+  ConfigDiffRow,
+  ConfigRow,
+  ConfigTemplate,
+  ConfigVersion
+} from "./types";
+
 type ApiConfigRow = {
   cat_index: string; group: string; index: string; length: number;
   value_int: number | null; value_text: string | null; raw_hex: string;

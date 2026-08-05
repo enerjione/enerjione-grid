@@ -14,6 +14,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.51.1] — 2026-08-05
+
+### Düzeltildi
+
+- **v2.51.0 derlenmiyordu.** `api.ts` içindeki yapılandırma tipleri import
+  edilmemişti; CI `tsc -b` ile bunu yakaladı.
+- **Tip kontrolü komutu yanıltıcıydı.** `CLAUDE.md` `npx tsc --noEmit`
+  diyordu; kök `tsconfig.json` solution-style (`files: []`, yalnızca
+  `references`) olduğu için bu komut **hiçbir dosyayı kontrol etmeden her
+  zaman başarılı** dönüyor. Doğrulama diye çalıştırılan ama hiçbir şeyi
+  doğrulamayan bir komuttu ve yukarıdaki hatanın yerelde fark edilmemesinin
+  sebebi buydu. Kılavuz `npx tsc -b` olarak düzeltildi.
+
+---
+
 ## [2.51.0] — 2026-08-05
 
 ### Eklendi
