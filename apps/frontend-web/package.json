@@ -1,13 +1,13 @@
 {
   "name": "enerjione-grid-frontend",
-  "version": "2.47.0",
+  "version": "2.48.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs && node --test tests/nginx-upstream.test.mjs"
   },
   "dependencies": {
     "chart.js": "^4.5.1",

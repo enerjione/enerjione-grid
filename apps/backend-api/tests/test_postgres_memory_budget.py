@@ -126,25 +126,57 @@ def test_work_mem_baglanti_tavaniyla_BIRLIKTE_degerlendirilmis():
     )
 
 
-def test_WAL_tavani_buyutulmediyse_URETIM_dusurulmus():
-    """OLCUM: pg_wal 2,0 GB = TAM `max_wal_size`. Checkpoint'ler ZAMAN degil
-    BOYUT tetikliyor.
+def test_WAL_tavani_DISK_BUTCESINE_gore_ve_URETIM_dusurulmus():
+    """WAL tavani, checkpoint'lerin ZAMAN tetiklemesine yetecek kadar buyuk
+    ama disk butcesinin kucuk bir parcasi olmali.
 
-    Bu durumda `checkpoint_timeout`'u uzatmak tek basina HICBIR SEY yapmaz —
-    boyut tetiklemesi once gelir. Diskte yer olmadigi icin max_wal_size de
-    buyutulemez. Geriye tek gercek kaldirac kalir: WAL hacmini kucultmek
-    (`wal_compression`, tam-sayfa imajlarini sikistirir).
+    ONCEKI KARAR VE NEDEN DEGISTI
+    -----------------------------
+    Bu test once `max_wal_size <= 2 GiB` diye kilitliyordu. Gerekce: "diskte
+    yer yok, geriye tek kaldirac WAL uretimini kucultmek kalir". O gerekce
+    O ANDAKI olcumle dogruydu.
 
-    Yani: max_wal_size buyutulmemisse wal_compression ACIK olmak ZORUNDA.
+    2026-08-05, 500 cihaz yuku, `pg_stat_bgwriter`:
+        zamanlanmis checkpoint :  34
+        ZORLANMIS checkpoint   : 654         <- %95
+        buffers_checkpoint     :  15.105.908
+        buffers_backend        : 367.505.585 <- 24 KAT fazla
+    2 GiB tavan o kadar hizli doluyordu ki Postgres surekli ACIL checkpoint
+    yapiyordu. Zorlanmis checkpoint YAYILAMAZ: bir anda buyuk bir yazma
+    dalgasi gelir ve o sirada gelen her INSERT bekler. Yazma hizi
+    3.355 <-> 1.666 satir/sn arasinda testere disi dalgalaniyordu.
+    `buffers_backend`in 24 kat baskin olmasi ikinci kanit: kirli sayfalari
+    checkpoint degil, VERI YAZAN SUREC diske indiriyordu.
+
+    "Disk dar" varsayimi da artik gecerli degil: arsiv 60/193 sinyale
+    indirildikten sonra disk %23-32'de, 300+ GB bos.
+
+    KURAL ARTIK SAYISAL, YASAK DEGIL
+    Yasak koymak, kosullar degistiginde yanlis tarafta kalir. Onun yerine
+    iliskiyi kilitliyoruz: pg_wal gecici olarak ~2 x max_wal_size'a
+    cikabilir; bu, tipik saha diskinin (456 GB) %10'unu ASMAMALI.
     """
     ayar = _pg_ayarlari()
-    assert _boyut_bayt(ayar["max_wal_size"]) <= 2 * GB, (
-        "max_wal_size buyutulmus — pg_wal gecici olarak ~2 katina cikabilir "
-        "ve olcumde disk zaten dardi; buyutmeden once disk butcesini dogrula"
+    wal = _boyut_bayt(ayar["max_wal_size"])
+
+    # Alt sinir: 2 GiB'de zorlanmis checkpoint OLCULDU; altina donmek
+    # olculmus bir arizaya geri donmektir.
+    assert wal > 2 * GB, (
+        f"max_wal_size {wal / GB:.0f}GiB — 2 GiB'de checkpoint'lerin %95'i "
+        "ZORLANMIS olculdu ve yazma hizi yariya dusuyordu"
     )
+
+    # Ust sinir: disk butcesi. pg_wal ~2x tavana cikabilir.
+    SAHA_DISK_GB = 456
+    assert wal * 2 <= SAHA_DISK_GB * GB * 0.10, (
+        f"max_wal_size {wal / GB:.0f}GiB — pg_wal ~{wal * 2 / GB:.0f}GiB'a "
+        f"cikabilir, {SAHA_DISK_GB}GB diskin %10'unu asiyor"
+    )
+
+    # WAL uretimini dusurmek HALA gecerli; tavan buyudu diye birakilmamali.
     assert ayar.get("wal_compression", "off") != "off", (
-        "max_wal_size sabit tutuluyor ama WAL uretimini dusuren hicbir ayar "
-        "yok — checkpoint'ler boyut tetiklemeli kosmaya devam eder"
+        "wal_compression kapatilmis — tavan buyutuldu diye WAL uretimini "
+        "dusurmekten vazgecilmemeli"
     )
 
 

@@ -238,9 +238,26 @@ services:
       # OLCUM: pg_wal dizini 2,0 GB — yani TAM `max_wal_size` kadar. Bu,
       # checkpoint'lerin ZAMAN degil BOYUT tetikledigi anlamina gelir.
       #
-      # Bu yuzden max_wal_size BUYUTULMEDI: buyutmek sadece diskteki pg_wal
-      # ayak izini buyutur (gecici olarak ~2 x max_wal_size'a cikabilir) ve
-      # zaten dolmakta olan diski hizlandirir. Cozum WAL URETIMINI dusurmek:
+      # 2026-08-05 GUNCELLEME — YUKARIDAKI KARAR OLCUMLE CURUTULDU.
+      # `pg_stat_bgwriter` 500 cihaz yukunde sunu gosterdi:
+      #     zamanlanmis checkpoint :  34
+      #     ZORLANMIS checkpoint   : 654   <- %95
+      #     buffers_checkpoint     :  15.105.908
+      #     buffers_backend        : 367.505.585   <- 24 KAT fazla
+      # Yani WAL 2 GB tavanina o kadar hizli doluyor ki Postgres surekli ACIL
+      # checkpoint yapiyor. Zorlanmis checkpoint YAYILAMAZ: bir anda buyuk bir
+      # yazma dalgasi gelir ve o sirada gelen her INSERT bekler. Yazma hizi
+      # 3.355 -> 1.666 satir/sn arasinda testere disi gibi dalgalaniyordu.
+      # `buffers_backend`in 24 kat baskin olmasi ayni seyin ikinci kaniti:
+      # kirli sayfalari checkpoint degil, VERI YAZAN SUREC diske indiriyor.
+      #
+      # Onceki gerekce "disk zaten doluyor" varsayimina dayaniyordu. O
+      # varsayim artik gecerli DEGIL: arsiv 60/193 sinyale indirildikten
+      # sonra disk %23-32'de ve 300+ GB bos. 16 GiB'lik WAL havuzu diskin
+      # %4'u — dalgalanmayi ortadan kaldirmak icin ucuz bir bedel.
+      #
+      # wal_compression ZATEN acik ve dogru; WAL uretimini dusurmek hala
+      # gecerli bir yol. Ikisi birlikte calisiyor:
       #
       #   wal_compression=on   Checkpoint sonrasi her sayfanin ilk
       #                        degisiminde tam sayfa imaji (FPI) WAL'a
@@ -261,7 +278,26 @@ services:
       #                        yeniden yaratiyordu; 1GB'lik havuz bu
       #                        yarat/sil churn'unu geri donusume cevirir.
       - "-c"
-      - "max_wal_size=2GB"
+      - "max_wal_size=16GB"
+      - "-c"
+      # ---- DAYANIKLILIK TAKASI — VARSAYILAN GUVENLI TARAFTA ----------------
+      # `synchronous_commit=off` her COMMIT'te WAL'in diske senkronize
+      # olmasini BEKLEMEZ. Yazma hizini ciddi artirir, ama ANI GUC KESINTISI
+      # ya da cekirdek cokmesinde son ~200 ms - 1 sn'lik commit'ler KAYBOLUR.
+      #
+      # NEDEN VARSAYILAN `on`
+      # Bu bir ariza-gecis gostergesi izleme sistemi ve tuketici COMMIT
+      # basarili donunce mesaji JetStream'de ACK'ler. `off` ile COMMIT, WAL
+      # daha diske inmeden basarili doner; arada guc giderse mesaj HEM
+      # ack'lenmis HEM yazilmamis olur — yani KALICI kayip, yeniden teslim
+      # kurtarmaz. Saha cihazinda UPS garantisi yok.
+      # 3.000 satir/sn'de bu pencere ~3.000 olcum eder ve icinde bir ariza
+      # gecisi bulunabilir.
+      #
+      # Yuk testinde acmak icin: .env'e E1_PG_SYNC_COMMIT=off yazin.
+      # Sahada acmadan once "bir gecisi kaybetmeyi goze aliyor muyuz"
+      # sorusunun cevabi YAZILI olmali.
+      - "synchronous_commit=${E1_PG_SYNC_COMMIT:-on}"
       - "-c"
       - "min_wal_size=1GB"
       - "-c"

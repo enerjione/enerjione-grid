@@ -14,6 +14,33 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.48.0] — 2026-08-05
+
+### Düzeltildi
+
+- **"Güncelleme sonrası giremiyorum" (502) kalıcı olarak çözüldü.** Backend
+  container'ı yeniden yaratıldığında yeni bir IP alıyor; nginx ise adresi
+  yalnızca başlangıçta çözüp sakladığı için ölü adrese gitmeye devam ediyor ve
+  arayüz 502 veriyordu. Teşhisi zordu, çünkü her şey sağlıklı görünüyor:
+  backend Up (healthy), `/health` container içinden 200, loglarda tek hata yok
+  — yalnızca nginx üzerinden geçen istek 502. v2.46.0'da `update.sh`'a frontend
+  tazeleme eklenmişti ama o yalnızca güncelleme akışını koruyordu; elle
+  `docker compose up -d` çalıştırınca aynı hata geri geliyordu (iki kez
+  yaşandı). nginx artık backend adresini **her istekte** çözüyor.
+- **Postgres checkpoint'lerinin %95'i zorlanmıştı.** `max_wal_size` 2 GB'a o
+  kadar hızlı doluyordu ki Postgres sürekli acil checkpoint yapıyor, her
+  seferinde yazma duruyordu; arşiv yazma hızı 3.355 ile 1.666 satır/sn
+  arasında testere dişi gibi dalgalanıyordu. Tavan 16 GB'a çıkarıldı.
+
+### Eklendi
+
+- `synchronous_commit` artık `E1_PG_SYNC_COMMIT` ile ayarlanabiliyor.
+  **Varsayılan `on` (güvenli).** `off` yazma hızını artırır ama ani güç
+  kesintisinde son ~200 ms - 1 saniyelik ölçümler kalıcı olarak kaybolur —
+  tüketici commit başarılı dönünce mesajı onayladığı için yeniden teslim
+  kurtarmaz. Yük testinde denemek için açılabilir; sahada açmadan önce karar
+  yazılı olmalı.
+
 ## [2.47.0] — 2026-08-05
 
 ### Düzeltildi
