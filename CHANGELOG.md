@@ -14,6 +14,18 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.3] — 2026-08-05
+
+### Düzeltildi
+
+- **Parola ayarlanmamışken PASV adresi uygulanmıyordu.** Dahili sunucu
+  kimliği henüz arayüzden kaydedilmemişse (env parolasıyla çalışırken)
+  kimlik yoklaması adres bilgisini de yok sayıyordu; PASV, adres kaydedilmiş
+  olsa bile konteyner IP'sini bildirmeye devam ediyordu. Adres artık
+  paroladan bağımsız uygulanır.
+
+---
+
 ## [2.53.2] — 2026-08-05
 
 ### Düzeltildi

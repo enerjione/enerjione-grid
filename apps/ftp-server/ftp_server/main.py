@@ -231,17 +231,22 @@ STANDARD_DEVICE_DIR = "SN20/FOTA"
 def _initial_credentials(poller: CredentialPoller) -> tuple[str, str, str | None]:
     """Acilis kimligi: once backend (arayuzden yonetilen), yoksa env.
 
-    Ikisi de yoksa acilmayi REDDEDER: parolasiz FTP sunucusu, sahadaki tum
-    cihaz config'lerine anonim yazma izni demek olurdu.
+    Backend parolasiz yanit da verebilir (henuz ayarlanmamis) — o durumda
+    kimlik env'den gelir ama MASQUERADE backend'den alinir: adres kaydedilmis
+    olabilir ve PASV'nin dogru calismasi parolaya bagli olmamali.
+
+    Hicbir kimlik yoksa acilis REDDEDILIR: parolasiz FTP sunucusu, sahadaki
+    tum cihaz config'lerine anonim yazma izni demek olurdu.
     """
     s = SETTINGS
     kimlik = poller.fetch_once()
-    if kimlik is not None:
+    masquerade = kimlik[2] if kimlik is not None else None
+    if kimlik is not None and kimlik[0] and kimlik[1]:
         log.info("FTP kimligi backend'den alindi (kullanici: %s).", kimlik[0])
-        return kimlik
+        return kimlik[0], kimlik[1], masquerade
     if s.ftp_password:
-        log.info("FTP kimligi env'den alindi (backend erisilemedi ya da bos).")
-        return s.ftp_user, s.ftp_password, None
+        log.info("FTP kimligi env'den alindi (backend'de parola ayarlanmamis ya da erisilemedi).")
+        return s.ftp_user, s.ftp_password, masquerade
     log.error(
         "FTP kimligi yok: backend'e erisilemiyor ve FTP_PASSWORD bos — "
         "sunucu baslatilmiyor (guvenlik)."
@@ -306,12 +311,17 @@ def _build_server() -> tuple[FTPServer, type[FTPHandler], CredentialPoller]:
     # Masquerade da ayni kanaldan gelir: arayuzde "Sunucu adresi" degisince
     # PASV yaniti yeniden baslatmasiz duzelir.
     def _kimlik_degisti(
-        yeni_kullanici: str, yeni_parola: str, yeni_masquerade: str | None
+        yeni_kullanici: str | None, yeni_parola: str | None, yeni_masquerade: str | None
     ) -> None:
-        eski = next(iter(handler.authorizer.user_table), None)
-        handler.authorizer = _make_authorizer(
-            yeni_kullanici, yeni_parola, s.ftp_root, eski_kullanici=eski
-        )
+        # Kimlik yalnizca TAM geldiyse takas edilir; parola henuz
+        # ayarlanmamissa mevcut (env) kimlik calismaya devam eder. Masquerade
+        # ise HER durumda uygulanir — PASV'nin dogrulugu parolaya bagli olamaz
+        # (kullanici arayuzden yalnizca adresi kaydetmis olabilir).
+        if yeni_kullanici and yeni_parola:
+            eski = next(iter(handler.authorizer.user_table), None)
+            handler.authorizer = _make_authorizer(
+                yeni_kullanici, yeni_parola, s.ftp_root, eski_kullanici=eski
+            )
         hedef = yeni_masquerade or s.masquerade_address or None
         if handler.masquerade_address != hedef:
             handler.masquerade_address = hedef
