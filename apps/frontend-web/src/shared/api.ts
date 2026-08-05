@@ -377,6 +377,7 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     id: item.id,
     code: item.code,
     name: item.name,
+    serialNumber: item.serial_number ?? null,
     description: item.description ?? undefined,
     model: item.model ?? "horstmann_sn_2_0",
     installationDate: item.installation_date ?? undefined,
@@ -412,6 +413,7 @@ export async function createDevice(
   payload: {
     code: string;
     name: string;
+    serial_number?: string | null;
     description?: string | null;
     model: string;
     installation_date?: string | null;
@@ -442,6 +444,7 @@ export async function updateDevice(
   deviceCode: string,
   payload: {
     name?: string;
+    serial_number?: string | null;
     description?: string | null;
     model?: string;
     installation_date?: string | null;

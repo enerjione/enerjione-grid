@@ -80,6 +80,64 @@ def test_dosya_adi_TELEMETRIDEN_gelen_seriyi_kullanir(db, cihaz) -> None:
     assert svc.config_filename(db, cihaz.id) == "50984_Configuration.csv"
 
 
+def test_KAYITTAKI_seri_telemetriden_ONCELIKLIDIR(db, cihaz) -> None:
+    """Kalici kaynak cihaz kaydi: telemetri anlik sacmalasa da (yanlis/eski
+    deger) dosya adi kayittaki seriden gider."""
+    cihaz.serial_number = "77777"
+    db.flush()
+    assert svc.device_serial(db, cihaz.id) == "77777"
+
+
+def test_seri_SIFIR_GECERSIZDIR_rakamsal_koda_duser(db) -> None:
+    """SAHADA YASANDI: cihaz bir an `master.serial_number = 0` gonderdi ve
+    sistem `0_Configuration.csv` uretmeye kalkti — o adi hicbir cihaz okumaz.
+    Sifir seri YOK sayilir; operatorler kodu seri ile actigi icin salt-rakam
+    kod son care olarak kullanilir."""
+    d = Device(code="50984", name="SN20", model="horstmann_sn_2_0", ip_address="192.168.1.12", latitude=0.0, longitude=0.0)
+    db.add(d)
+    db.flush()
+    db.add(
+        TelemetryLatest(
+            device_id=d.id,
+            signal_key=svc.SERIAL_SIGNAL,
+            value=0.0,
+            source_timestamp=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db.flush()
+    assert svc.device_serial(db, d.id) == "50984"
+    assert svc.config_filename(db, d.id) == "50984_Configuration.csv"
+
+
+def test_seri_sifir_ve_kod_rakam_DEGILSE_acik_hata(db) -> None:
+    d = Device(code="sahte-x", name="x", model="horstmann_sn_2_0", ip_address="192.168.1.13", latitude=0.0, longitude=0.0)
+    db.add(d)
+    db.flush()
+    db.add(
+        TelemetryLatest(
+            device_id=d.id,
+            signal_key=svc.SERIAL_SIGNAL,
+            value=0.0,
+            source_timestamp=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db.flush()
+    with pytest.raises(InvalidUpdateTarget):
+        svc.config_filename(db, d.id)
+
+
+def test_seri_ile_bulma_KAYITTAKI_seriyi_de_gorur(db, cihaz) -> None:
+    """Cihaz dosyayi kayitli serisiyle yazar; telemetri o an 0 olsa bile
+    eslesme kayit uzerinden kurulmali."""
+    cihaz.serial_number = "88888"
+    db.flush()
+    assert svc.find_device_id_by_serial(db, "88888") == cihaz.id
+    # Sifir seri hicbir cihazla eslesmez.
+    assert svc.find_device_id_by_serial(db, "0") is None
+
+
 def test_seri_ondalik_gelse_de_TAM_SAYI_yazilir(db, cihaz) -> None:
     """Telemetri sayisal (50984.0); dosya adinda ondalik olamaz."""
     assert svc.device_serial(db, cihaz.id) == "50984"

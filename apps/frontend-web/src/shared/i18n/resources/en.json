@@ -1914,6 +1914,8 @@
         "noGateway": "— No gateway —",
         "model": "Model",
         "deviceType": "Device Type",
+        "serialNumber": "Serial No",
+        "serialPlaceholder": "e.g. 50984 — auto-updated when the device connects",
         "installationDate": "Installation Date",
         "description": "Description",
         "ipAddress": "Outstation IP address",

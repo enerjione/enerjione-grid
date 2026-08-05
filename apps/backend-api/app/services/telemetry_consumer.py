@@ -977,6 +977,36 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 reading.value_string, _kalite, reading.source_timestamp,
                 _dev_at, _ts_quality, datetime.now(timezone.utc),
             )
+            # SERI NUMARASI OTOMATIK SENKRONU. Cihaz kaydindaki
+            # `serial_number`, config dosya adinin BIRINCIL kaynagi; cihaz
+            # baglaninca telemetriden tazelenir. SIFIR/bos deger YOK SAYILIR:
+            # sahada cihaz bir an seri=0 gonderdi ve dosya adi `0_...` oldu.
+            # Yalnizca DEGISIMDE calisir (nadir) — sicak yolda maliyeti,
+            # sinyal adi karsilastirmasindan ibaret.
+            if reading.signal_key == "master.serial_number":
+                try:
+                    _seri = (reading.value_string or "").strip() or (
+                        str(int(reading.value)) if reading.value else ""
+                    )
+                except (TypeError, ValueError):
+                    _seri = ""
+                if _seri and _seri.strip("0") and device.serial_number != _seri:
+                    from app.services.event_service import record_event
+
+                    _eski_seri = device.serial_number
+                    device.serial_number = _seri
+                    record_event(
+                        db,
+                        category="device",
+                        event_type="device_serial_synced",
+                        severity="info",
+                        device_code=device.code,
+                        message=(
+                            f"{device.name}: seri numarasi telemetriden guncellendi "
+                            f"({_eski_seri or 'yok'} -> {_seri})"
+                        ),
+                        metadata={"old": _eski_seri, "new": _seri},
+                    )
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
             # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
             # UZERINE YAZIYORUZ. Gateway'in ham bildirimi degil BIZIM

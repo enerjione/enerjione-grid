@@ -52,6 +52,9 @@ export type DeviceRow = {
   id: number;
   code: string;
   name: string;
+  // Seri numarasi — config dosya adinin birincil kaynagi. Kurulumda girilir,
+  // cihaz baglaninca telemetriden otomatik guncellenir.
+  serialNumber?: string | null;
   description?: string;
   model: string;
   installationDate?: string;
@@ -125,6 +128,7 @@ export type ApiDevice = {
   id: number;
   code: string;
   name: string;
+  serial_number?: string | null;
   description?: string | null;
   model?: string | null;
   installation_date?: string | null;

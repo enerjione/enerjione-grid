@@ -10,10 +10,13 @@ Hicbir surum guncellenmez ya da silinmez. "Geri al" eskiyi geri YAZMAZ, eski
 baytlarla YENI bir surum yaratir. Boylece "o gun cihazda ne vardi" sorusunun
 cevabi hep dogru kalir; denetim kaydinin degeri de zaten bu.
 
-DOSYA ADI TELEMETRIDEN GELIR
-----------------------------
-`<seri>_Configuration.csv` icindeki seri, `master.serial_number` SINYALIDIR.
-`devices` tablosunda seri kolonu YOKTUR. Ayrica `master.info_serial_number`
+DOSYA ADINDAKI SERI
+-------------------
+`<seri>_Configuration.csv` icindeki serinin BIRINCIL kaynagi artik
+`devices.serial_number` kolonudur: kurulumda girilir, cihaz baglaninca
+`master.serial_number` telemetrisinden otomatik guncellenir (bkz.
+telemetry_consumer). Telemetri tek basina guvenilmezdi — cihaz bir an 0
+gonderdi ve sistem `0_Configuration.csv` uretti. `master.info_serial_number`
 sifir dolguludur (`0000050984`) ve KULLANILMAMALIDIR — o adla yazilan dosyayi
 cihaz hic gormez.
 """
@@ -52,33 +55,83 @@ class NoTemplate(LookupError):
 
 
 # --- seri numarasi ---------------------------------------------------------
+def _gecerli_seri(seri: str | None) -> str | None:
+    """SIFIR gecerli seri DEGILDIR. Sahada yasandi (2026-08-05): gercek SN20
+    bir an `master.serial_number = 0` gonderdi ve sistem `0_Configuration.csv`
+    uretmeye kalkti — o adi hicbir cihaz okumaz."""
+    if not seri:
+        return None
+    s = seri.strip()
+    if not s or s.strip("0") == "":
+        return None
+    return s
+
+
 def device_serial(db: Session, device_id: int) -> str | None:
-    """Cihazin telemetriden okunan seri numarasi (dolgusuz)."""
+    """Cihazin seri numarasi (dolgusuz).
+
+    ONCELIK SIRASI:
+      1. `devices.serial_number` — kurulumda girilir, cihaz baglaninca
+         telemetriden OTOMATIK guncellenir (bkz. telemetry_consumer). Kalici
+         kaynak budur; telemetrinin anlik sifirlanmasi akisi KILITLEYEMEZ
+         (sahada yasandi: cihaz bir an seri=0 gonderdi).
+      2. Telemetri (`master.serial_number`) — kayitta seri yoksa ve gecerli
+         (sifir olmayan) bir deger geldiyse.
+      3. Cihaz KODU, salt rakamsa — operatorler kodu seri ile acar ("50984").
+         Rakam olmayan koda DUSULMEZ: yanlis ada yazilan dosyayi cihaz gormez.
+    """
+    cihaz = db.get(Device, device_id)
+    if cihaz is not None:
+        seri = _gecerli_seri(getattr(cihaz, "serial_number", None))
+        if seri:
+            return seri
+
     satir = db.execute(
         select(TelemetryLatest.value, TelemetryLatest.value_string).where(
             TelemetryLatest.device_id == device_id,
             TelemetryLatest.signal_key == SERIAL_SIGNAL,
         )
     ).first()
-    if satir is None:
-        return None
-    sayi, metin = satir
-    if metin:
-        return metin.strip() or None
-    if sayi is None:
-        return None
-    # Telemetri sayisal geliyor (50984.0); dosya adinda ondalik olamaz.
-    return str(int(sayi))
+    if satir is not None:
+        sayi, metin = satir
+        if metin:
+            seri = _gecerli_seri(metin)
+            if seri:
+                return seri
+        elif sayi is not None:
+            # Telemetri sayisal geliyor (50984.0); dosya adinda ondalik olamaz.
+            seri = _gecerli_seri(str(int(sayi)))
+            if seri:
+                return seri
+
+    import re as _re
+
+    if cihaz is not None and _re.fullmatch(r"[0-9]{1,20}", cihaz.code or ""):
+        return _gecerli_seri(cihaz.code)
+    return None
 
 
 def find_device_id_by_serial(db: Session, seri: str) -> int | None:
-    """Seri numarasindan cihaz bulur (`master.serial_number` telemetrisi).
+    """Seri numarasindan cihaz bulur.
 
-    Hem FTP olay yakalayicisi (gomulu mod) hem yoklama worker'i (harici mod)
+    Hem FTP olay yakalayicisi (dahili mod) hem yoklama worker'i (harici mod)
     bunu kullanir: cihazin yazdigi `<seri>_Configuration.csv` dosyasindaki
     seri, cihazi TANIMLAR. Eslesme yoksa None — bilinmeyen bir seriyi rastgele
     bir cihaza baglamak, yanlis cihazin gecmisini kirletirdi.
+
+    Oncelik `device_serial` ile AYNI: once cihaz kaydi, sonra telemetri,
+    son care salt-rakam cihaz kodu. Iki kaynak ayni cihazi gosterirse zaten
+    ayni sonuc; farkli cihazlari gosteriyorsa kalici kayit kazanir.
     """
+    if _gecerli_seri(seri) is None:
+        return None
+
+    kayit = db.execute(
+        select(Device.id).where(Device.serial_number == seri)
+    ).scalars().first()
+    if kayit is not None:
+        return kayit
+
     aday = db.execute(
         select(
             TelemetryLatest.device_id, TelemetryLatest.value, TelemetryLatest.value_string
@@ -88,7 +141,8 @@ def find_device_id_by_serial(db: Session, seri: str) -> int | None:
         okunan = (metin or "").strip() or (str(int(deger)) if deger is not None else "")
         if okunan == seri:
             return did
-    return None
+
+    return db.execute(select(Device.id).where(Device.code == seri)).scalars().first()
 
 
 def ingest_pulled_config(

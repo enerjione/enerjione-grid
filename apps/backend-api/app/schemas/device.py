@@ -9,6 +9,9 @@ from app.schemas.dnp3_extended import Dnp3ExtendedSettings, merge_dnp3_extended
 class DeviceScalarBase(BaseModel):
     code: str
     name: str
+    # Seri numarasi — config dosya adinin birincil kaynagi. Kurulumda girilir;
+    # cihaz baglaninca telemetriden otomatik guncellenir.
+    serial_number: str | None = Field(default=None, max_length=20)
     description: str | None = None
     model: str = "horstmann_sn_2_0"
     installation_date: date | None = None
@@ -34,6 +37,7 @@ class DeviceCreate(DeviceScalarBase):
 
 class DeviceUpdate(BaseModel):
     name: str | None = None
+    serial_number: str | None = Field(default=None, max_length=20)
     description: str | None = None
     model: str | None = None
     installation_date: date | None = None

@@ -1914,6 +1914,8 @@
         "noGateway": "— Gateway yok —",
         "model": "Model",
         "deviceType": "Cihaz Türü",
+        "serialNumber": "Seri No",
+        "serialPlaceholder": "örn. 50984 — cihaz bağlanınca otomatik güncellenir",
         "installationDate": "Montaj Tarihi",
         "description": "Açıklama",
         "ipAddress": "Outstation IP adresi",

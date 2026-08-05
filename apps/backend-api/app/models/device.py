@@ -13,6 +13,14 @@ class Device(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
+    # Cihazin seri numarasi — config dosya adinin (`<seri>_Configuration.csv`)
+    # ve FTP eslestirmesinin BIRINCIL kaynagi. Kurulumda elle girilir; cihaz
+    # baglaninca `master.serial_number` telemetrisinden OTOMATIK guncellenir
+    # (bkz. telemetry_consumer). Salt telemetriye guvenmek sahada kirildi:
+    # cihaz bir an seri=0 gonderdi ve sistem `0_Configuration.csv` uretti.
+    serial_number: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, index=True
+    )
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     model: Mapped[str] = mapped_column(String(80), default="horstmann_sn_2_0", index=True)
     installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
