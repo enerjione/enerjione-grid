@@ -64,7 +64,9 @@ def _device(db: Session, device_id: int) -> Device:
     return d
 
 
-def _version_read(surum, raw: bytes | None = None) -> ConfigVersionRead:
+def _version_read(
+    surum, raw: bytes | None = None, *, ftp_written: bool | None = None
+) -> ConfigVersionRead:
     baytlar = bytes(raw if raw is not None else surum.raw)
     try:
         checksum = parse(baytlar).checksum_valid
@@ -84,7 +86,39 @@ def _version_read(surum, raw: bytes | None = None) -> ConfigVersionRead:
         applied_at=surum.applied_at,
         size_bytes=len(baytlar),
         checksum_valid=checksum,
+        ftp_written=ftp_written,
     )
+
+
+def _ftp_esitle(db: Session, device_id: int, raw: bytes) -> bool | None:
+    """Yeni surumu FTP'deki dosyaya da yazar — ekran ile cihazin okuyacagi
+    dosya AYNI kalmali (kullanici sarti). Kaydetmek artik dosyayi da
+    guncelliyor; "Cihaza uygula" yalnizca guncelleme KOMUTUNU gonderir.
+
+    Basarisizlik SURUMU GERI ALMAZ: surum DB'de dogru kayittir ve kaybi daha
+    kotu olurdu. Ama sessiz de gecilmez — False doner (arayuz uyarir) ve
+    olay kaydina yazilir. None = seri bilinmedigi icin dosya adi yok,
+    yazilacak yer belirsiz.
+    """
+    from app.services import ftp_client_service
+
+    try:
+        dosya_adi = svc.config_filename(db, device_id)
+    except Exception:  # noqa: BLE001 - seri yoksa esitlenemez
+        return None
+    try:
+        ftp_client_service.write_config(db, filename=dosya_adi, raw=raw)
+        return True
+    except ftp_client_service.FtpAccessError as exc:
+        record_event(
+            db,
+            category="ftp",
+            event_type="ftp_sync_failed",
+            severity="warning",
+            message=f"Kaydedilen yapilandirma FTP'ye yazilamadi: {dosya_adi} — {exc}",
+            metadata={"device_id": device_id, "filename": dosya_adi, "error": str(exc)},
+        )
+        return False
 
 
 # --- cihaz yapilandirmasi --------------------------------------------------
@@ -225,6 +259,8 @@ def degerleri_degistir(
         # Sigmayan deger / olmayan girdi: SURUM YARATILMADAN reddedilir.
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    # Ekran == FTP dosyasi: kayit, cihazin okuyacagi dosyayi da gunceller.
+    ftp_ok = _ftp_esitle(db, device_id, bytes(surum.raw))
     record_event(
         db,
         category="device",
@@ -232,10 +268,10 @@ def degerleri_degistir(
         message=f"{cihaz.name}: {len(govde.changes)} yapilandirma ayari degistirildi (v{surum.version})",
         actor_username=user.username,
         device_code=cihaz.code,
-        metadata={"version": surum.version, "changes": govde.changes},
+        metadata={"version": surum.version, "changes": govde.changes, "ftp_written": ftp_ok},
     )
     db.commit()
-    return _version_read(surum)
+    return _version_read(surum, ftp_written=ftp_ok)
 
 
 @router.post(
@@ -290,6 +326,8 @@ async def dosya_yukle(
         actor=user.username,
         note=f"'{file.filename}' yuklendi",
     )
+    # Ekran == FTP dosyasi: yuklenen dosya cihazin okuyacagi ada yazilir.
+    ftp_ok = _ftp_esitle(db, device_id, raw)
     uyari = seri_uyusmuyor or not doc.checksum_valid
     record_event(
         db,
@@ -313,10 +351,11 @@ async def dosya_yukle(
             "expected_filename": beklenen,
             "serial_mismatch": seri_uyusmuyor,
             "checksum_valid": doc.checksum_valid,
+            "ftp_written": ftp_ok,
         },
     )
     db.commit()
-    return _version_read(surum, raw)
+    return _version_read(surum, raw, ftp_written=ftp_ok)
 
 
 @router.post("/devices/{device_id}/config/apply", response_model=ConfigVersionRead)
@@ -361,7 +400,11 @@ def cihaza_uygula(
     try:
         yazilan_yol = ftp_client_service.write_config(db, filename=dosya_adi, raw=raw)
     except ftp_client_service.FtpAccessError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        # 409, 502 DEGIL: arayuz 5xx detaylarini bilerek gizler
+        # (sanitizeErrorDetail) ve kullanici yalnizca "gonderilemedi" gorur —
+        # sahada tam boyle yasandi (volume izin hatasi gorunmez kalmisti).
+        # Sebep kullanicinin gorebilecegi kisa bir metin olarak doner.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
     try:
         komut = cmd_svc.queue_command(
@@ -413,6 +456,8 @@ def geri_al(
     except svc.ConfigNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
+    # Ekran == FTP dosyasi: geri donulen icerik dosyaya da yazilir.
+    ftp_ok = _ftp_esitle(db, device_id, bytes(surum.raw))
     record_event(
         db,
         category="device",
@@ -420,10 +465,10 @@ def geri_al(
         message=f"{cihaz.name}: v{version} yapilandirmasina geri donuldu (v{surum.version} olarak)",
         actor_username=user.username,
         device_code=cihaz.code,
-        metadata={"reverted_to": version, "new_version": surum.version},
+        metadata={"reverted_to": version, "new_version": surum.version, "ftp_written": ftp_ok},
     )
     db.commit()
-    return _version_read(surum)
+    return _version_read(surum, ftp_written=ftp_ok)
 
 
 # --- sablonlar -------------------------------------------------------------

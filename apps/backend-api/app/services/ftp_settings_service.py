@@ -54,24 +54,43 @@ def get_settings(db: Session) -> FtpSettings:
 
 
 def get_password(row: FtpSettings) -> str | None:
-    """Sifreli parolayi acik metne cevirir. Ayarlanmamissa None."""
+    """Harici sunucu parolasini acik metne cevirir. Ayarlanmamissa None."""
     if not row.password_enc:
         return None
     return decrypt_secret(row.password_enc)
 
 
+def get_embedded_password(row: FtpSettings) -> str | None:
+    """Dahili sunucu parolasini acik metne cevirir. Ayarlanmamissa None —
+    ftp-server o durumda env'deki FTP_PASSWORD ile devam eder."""
+    if not row.embedded_password_enc:
+        return None
+    return decrypt_secret(row.embedded_password_enc)
+
+
+#: Acik metin gelen parola alanlari -> sifreli kolon adlari.
+_PAROLA_ALANLARI = {
+    "password": "password_enc",
+    "embedded_password": "embedded_password_enc",
+}
+
+
 def update_settings(
     db: Session, *, updates: dict, actor: str | None = None
 ) -> FtpSettings:
-    """Alanlari gunceller. `password` acik metin gelir, sifreli yazilir.
+    """Alanlari gunceller. Parola alanlari acik metin gelir, sifreli yazilir.
+
+    Dahili ve harici kimlikler AYRI alanlardir; birini guncellemek digerine
+    dokunmaz (bkz. model docstring — sizinti sahada yasandi).
 
     Commit ETMEZ — cagiran taraf transaction'i yonetir (audit ile birlikte).
     """
     row = get_settings(db)
     for alan, deger in updates.items():
-        if alan == "password":
+        hedef_kolon = _PAROLA_ALANLARI.get(alan)
+        if hedef_kolon is not None:
             if deger:
-                row.password_enc = encrypt_secret(deger)
+                setattr(row, hedef_kolon, encrypt_secret(deger))
             continue
         setattr(row, alan, deger)
     row.updated_by = actor

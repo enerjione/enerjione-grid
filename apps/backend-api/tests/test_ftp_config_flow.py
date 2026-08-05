@@ -100,6 +100,46 @@ def test_bos_parola_MEVCUDU_SILMEZ(db) -> None:
     assert satir.port == 2121
 
 
+def test_harici_kimlik_DAHILI_sunucuya_SIZMAZ(db) -> None:
+    """SAHADA YASANDI (2026-08-05): kullanici harici modu yapilandirinca
+    musteri sunucusunun kimligi dahili sunucuya da geciyordu — cihazlar ve
+    kullanici bir anda 'device' ile giremez olmustu. Harici alanlari
+    guncellemek dahili kimlige ASLA dokunmamali."""
+    ftp_settings_service.update_settings(
+        db, updates={"embedded_password": "DahiliParola9"}
+    )
+    ftp_settings_service.update_settings(
+        db,
+        updates={
+            "mode": "harici",
+            "host": "77.83.37.44",
+            "username": "ENERJIONE",
+            "password": "MusteriParola1",
+        },
+    )
+    satir = ftp_settings_service.get_settings(db)
+    # Dahili taraf oldugu gibi durur; ftp-server'in servis ettigi kimlik bu.
+    assert satir.embedded_username == "device"
+    assert ftp_settings_service.get_embedded_password(satir) == "DahiliParola9"
+    # Harici taraf da kendi alanlarinda.
+    assert satir.username == "ENERJIONE"
+    assert ftp_settings_service.get_password(satir) == "MusteriParola1"
+
+
+def test_dahili_kimlik_guncellemesi_HARICIYI_degistirmez(db) -> None:
+    ftp_settings_service.update_settings(
+        db, updates={"username": "ENERJIONE", "password": "MusteriParola1"}
+    )
+    ftp_settings_service.update_settings(
+        db, updates={"embedded_username": "cihaz", "embedded_password": "YeniParola22"}
+    )
+    satir = ftp_settings_service.get_settings(db)
+    assert satir.username == "ENERJIONE"
+    assert ftp_settings_service.get_password(satir) == "MusteriParola1"
+    assert satir.embedded_username == "cihaz"
+    assert ftp_settings_service.get_embedded_password(satir) == "YeniParola22"
+
+
 def test_uretilen_parola_cihaz_ekranina_SIGAR_ve_OKUNABILIR() -> None:
     """Cihaz ekrani <20 karakter kabul eder; 0/O, 1/l/I ve simge YOK —
     parola elle girilecek."""

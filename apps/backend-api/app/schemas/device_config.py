@@ -37,6 +37,11 @@ class ConfigVersionRead(BaseModel):
     # Okunan dosyanin saglama toplami tutuyor muydu? None = ayak yoktu.
     # "Gecerli", "gecersiz" ve "bilinmiyor" UC AYRI durumdur.
     checksum_valid: bool | None = None
+    # Bu surum FTP'deki dosyaya da yazildi mi? Ekranda gorulen dosya ile
+    # cihazin okuyacagi dosya AYNI olmali (kullanici sarti). True=yazildi,
+    # False=denendi ama BASARISIZ (arayuz uyarir), None=bu istekte
+    # denenmedi (orn. listeleme).
+    ftp_written: bool | None = None
 
     model_config = {"from_attributes": True}
 

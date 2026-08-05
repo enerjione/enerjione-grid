@@ -1560,12 +1560,24 @@
         "serverUp": "FTP sunucusu çalışıyor — aktif kullanıcı: {{user}}, açık bağlantı: {{count}}",
         "serverDown": "FTP sunucusuna erişilemiyor. Servis durmuş ya da yeniden başlıyor olabilir.",
         "pendingSync": "Kimlik değişikliği sunucuya henüz yansımadı: sunucu şu an \"{{active}}\" kabul ediyor, kaydedilen \"{{expected}}\". En geç 30 saniye içinde eşitlenir.",
-        "eventsEmpty": "Henüz FTP hareketi yok. Cihaz bağlandığında girişler ve dosya transferleri burada listelenir."
+        "eventsEmpty": "Henüz FTP hareketi yok. Cihaz bağlandığında girişler ve dosya transferleri burada listelenir.",
+        "evt": {
+          "ftp_login": "Cihaz bağlandı",
+          "ftp_upload": "Cihaz dosya yazdı",
+          "ftp_download": "Cihaz dosya aldı",
+          "ftp_upload_incomplete": "Dosya yarım kaldı",
+          "ftp_settings_updated": "Ayarlar güncellendi",
+          "ftp_poll_ingested": "Uzak sunucudan yapılandırma alındı",
+          "ftp_poll_unreachable": "Harici sunucuya erişilemiyor",
+          "ftp_poll_recovered": "Harici sunucu erişimi normale döndü",
+          "ftp_poll_error": "Uzak dosya işlenemedi",
+          "ftp_sync_failed": "Dosya FTP'ye yazılamadı"
+        }
       },
       "ftp": {
         "title": "FTP Sunucu Ayarları",
         "mode": {
-          "gomulu": "Gömülü sunucu",
+          "gomulu": "Dahili sunucu",
           "harici": "Harici sunucu"
         },
         "modeDesc": {
@@ -1574,6 +1586,7 @@
         },
         "host": "Sunucu adresi",
         "port": "Port",
+        "modeLabel": "Mod",
         "username": "Kullanıcı adı",
         "password": "Parola",
         "generate": "Üret",
@@ -1582,7 +1595,8 @@
         "directory": "Dizin",
         "pollInterval": "Yoklama aralığı (saniye)",
         "pollHint": "Dizin bu aralıkla taranır (en az 60 sn).",
-        "embeddedNote": "Sunucu adresi, cihazların bu makineye ulaştığı IP'dir; boş bırakılırsa cihazlar dosya aktaramayabilir. Değişiklikler ~30 saniyede uygulanır.",
+        "embeddedNote": "Değişiklikler ~30 saniyede sunucuya uygulanır; yeniden başlatma gerekmez.",
+        "deviceScreenInfo": "Cihaz FTP ekranına girilecek değerler — Sunucu: {{host}} · Port: 21 · Dizin: {{dir}}",
         "externalNote": "Cihazlar ve bu yazılım aynı sunucu, kimlik ve dizini kullanmalı; dizin belirlenen aralıkla taranır.",
         "credentialWarning": "DİKKAT: Kimliği kaydettiğinizde sunucu yeni kimliği ~30 saniye içinde kullanmaya başlar; cihazlar ise ESKİ kimlikle bağlanmayı sürdürür ve girişleri reddedilir. Her cihazın FTP ekranındaki kullanıcı adı/parolayı elle güncellemeniz gerekir.",
         "portInvalid": "Port 1-65535 arasında olmalı.",
@@ -3465,7 +3479,8 @@
       "ftpHint": "Cihaz FTP config formatı çözüldüğünde bu alandan uzaktan config çekip güncelleyebileceksiniz.",
       "ftp": {
         "empty": "Bu cihazın yapılandırma dosyası henüz yok. Cihazdan çekilen dosyayı yükleyin ya da bir şablon tanımlayın.",
-        "notSentHint": "Buradaki değişiklikler kaydedilir ama cihaza GÖNDERİLMEZ. Göndermek için \"Cihaza uygula\" düğmesini kullanın: dosya FTP'ye yazılır ve güncelleme komutu kuyruğa alınır.",
+        "notSentHint": "Kaydedilen değişiklikler FTP'deki dosyaya da yazılır — bu ekranda görülen dosya, cihazın okuyacağı dosyadır. Cihazın uygulaması için \"Cihaza uygula\" ile güncelleme komutu gönderin.",
+        "syncFailed": "Sürüm kaydedildi ama FTP'deki dosya GÜNCELLENEMEDİ — cihaz eski dosyayı görüyor olabilir. FTP Sunucu Ayarları > Bağlantı Durumu loglarına bakın.",
         "serialMismatch": "Bu dosya bu cihaza ait görünmüyor.\n\nBeklenen ad: {{expected}}\nSeçilen dosya: {{got}}\n\nCihaz yalnızca kendi adını taşıyan dosyayı okur. Yine de yüklemek istiyor musunuz? (Şablon olarak kullanmak için geçerli bir sebep olabilir.)",
         "cmdPull": "Cihazdan çek",
         "cmdApply": "Cihaza uygula",
@@ -3480,7 +3495,7 @@
         "history": "Sürüm geçmişi ({{count}})",
         "revert": "Bu sürüme dön",
         "save": "Değişiklikleri kaydet",
-        "saved": "{{count}} ayar kaydedildi (yeni sürüm oluştu).",
+        "saved": "{{count}} ayar kaydedildi; FTP'deki dosya güncellendi.",
         "uploaded": "Dosya yüklendi — v{{version}} oluştu.",
         "reverted": "v{{from}} sürümüne dönüldü (v{{to}} olarak kaydedildi).",
         "pending": "{{count}} değişiklik kaydedilmeyi bekliyor",

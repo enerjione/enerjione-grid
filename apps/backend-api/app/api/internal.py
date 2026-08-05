@@ -925,18 +925,20 @@ def ftp_credentials(
 
     ayar = ftp_settings_service.get_settings(db)
     db.commit()  # ilk cagri satiri olusturmus olabilir
+    # HER ZAMAN dahili (embedded_*) alanlar doner — moddan BAGIMSIZ. Eskiden
+    # ortak kimlik alanlari donuyordu ve kullanici harici modu yapilandirinca
+    # musteri sunucusunun kimligi dahili sunucuya da siziyordu: cihazlar bir
+    # anda "device" ile giremez olmustu (sahada 2026-08-05'te yasandi).
     return {
         "mode": ayar.mode,
-        "username": ayar.username,
-        "password": ftp_settings_service.get_password(ayar),
+        "username": ayar.embedded_username,
+        "password": ftp_settings_service.get_embedded_password(ayar),
         # Pasif mod (PASV) yanitinda cihaza bildirilecek adres. Container
         # kendi IP'sini (172.18.x.x) bilir ama cihazlar oradan erisemez —
-        # PASV o adresi soylerse veri baglantisi zaman asimina duser (sahada
-        # FileZilla ile birebir yasandi). Ayarlardaki "Sunucu adresi" tam da
-        # cihazlarin bize ulastigi adres oldugu icin masquerade olarak o
-        # kullanilir. Bos ise ftp-server env fallback'ine (FTP_MASQUERADE_
-        # ADDRESS) doner.
-        "masquerade": (ayar.host or "").strip() or None,
+        # PASV o adresi soylerse veri baglantisi zaman asimina duser.
+        # `embedded_host` arayuzce tarayici adresinden OTOMATIK doldurulur;
+        # bos ise ftp-server env fallback'ine (FTP_MASQUERADE_ADDRESS) doner.
+        "masquerade": (ayar.embedded_host or "").strip() or None,
     }
 
 

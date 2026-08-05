@@ -37136,8 +37136,8 @@ th.event-col-category {
 
 .dcfg-status-events li {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  align-items: flex-start;
+  gap: 0.5rem;
   padding: 0.45rem 0.6rem;
   color: #374151;
   overflow-wrap: anywhere;
@@ -37149,9 +37149,45 @@ th.event-col-category {
   background: #fffbeb;
   box-shadow: inset 3px 0 0 #f59e0b;
 }
+.dcfg-status-events li.is-warn .dcfg-evt-icon { color: #f59e0b; }
+
+.dcfg-evt-icon {
+  font-size: 1rem;
+  color: #9ca3af;
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.dcfg-evt-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.dcfg-evt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dcfg-evt-head strong { font-weight: 600; font-size: 0.75rem; }
 
 .dcfg-status-events time {
   color: #9ca3af;
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Ayrinti soluk ve en fazla iki satir — uzun hata metni listeyi yutmasin. */
+.dcfg-evt-detail {
+  color: #6b7280;
+  font-size: 0.71875rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

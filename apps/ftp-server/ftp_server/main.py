@@ -53,6 +53,9 @@ def _make_handler(reporter: EventReporter) -> type[FTPHandler]:
 
         def on_file_received(self, file):  # noqa: ANN001
             """Cihaz -> sunucu. Config cekme akisinin tamamlandigi an."""
+            # Dosya (ve cihazin actigi yeni dizin zinciri) root olustu;
+            # backend'in de yazabilmesi icin grubu hemen duzelt.
+            _grant_backend_access(file)
             try:
                 reporter.report(
                     "upload",
@@ -83,6 +86,7 @@ def _make_handler(reporter: EventReporter) -> type[FTPHandler]:
             """YARIM dosya. SESSIZ GECILMEZ: yarim bir config dosyasi cihaz
             tarafindan okunursa ne olacagi belirsizdir; ayrica 'cihaz gonderdi
             ama biz gormedik' teshisinin en olasi sebebi budur."""
+            _grant_backend_access(file)
             try:
                 reporter.report(
                     "upload_incomplete",
@@ -103,20 +107,23 @@ _BACKEND_GID = 10001
 
 
 def _share_root_with_backend(root: str) -> None:
-    """FTP kok dizinini backend'in de YAZABILECEGI hale getirir.
+    """FTP agacinin TAMAMINI backend'in de YAZABILECEGI hale getirir.
 
     `ftp-data` volume'u iki servis tarafindan paylasilir. Bu servis root
     olarak kosar (port 21 <1024 bind etmesi gerekiyor), dolayisiyla volume
-    `root:root 0755` olusur. backend-api ise uid 10001 ile kosar ve o modda
-    yalnizca OKUYABILIR.
+    ve FTP uzerinden olusan HER dizin/dosya `root:root` olusur. backend-api
+    ise uid 10001 ile kosar ve o modda yalnizca OKUYABILIR.
 
-    Bunu duzeltmeden birakmak, tam olarak harita karolarinda yasadigimiz
-    arizayi uretirdi: dosya indirilir/uretilir, yazma `PermissionError` ile
-    duser, ust katman bunu "ag hatasi" sanip yanlis yone isaret eder.
-    Belirti ortaya cikana kadar hicbir sey bozuk GORUNMEZ.
+    NEDEN OZYINELI (2026-08-05'te sahada yasandi): onceleri yalnizca KOK
+    dizin paylasialiyordu. Cihazin (ya da bizim) actigi alt dizinler —
+    /SN20/FOTA/ dahil — root:root 0755 kaldi ve "Cihaza uygula" backend'de
+    PermissionError ile dustu; arayuzde yalnizca "gonderilemedi" gorundu.
+    Belirti ortaya cikana kadar hicbir sey bozuk GORUNMEZ — harita
+    karolarindaki arizanin birebir aynisi.
 
-    Cozum: grubu backend'in gid'ine cevir ve gruba yazma ver (0770). Dunyaya
-    acmak (0777) gereksiz genis olurdu — iki servis disinda kimse erismiyor.
+    Cozum: grubu backend'in gid'ine cevir; dizinlere 0770, dosyalara 0660.
+    Dunyaya acmak (0777) gereksiz genis olurdu. Calisma zamaninda olusan
+    yeni dosyalar icin bkz. _grant_backend_access (upload callback'i).
 
     Root DEGILSEK sessizce gecilir: bu durumda volume'u zaten baska biri
     hazirlamistir ve zorlamak anlamsiz bir hata uretirdi.
@@ -124,11 +131,50 @@ def _share_root_with_backend(root: str) -> None:
     try:
         os.chown(root, -1, _BACKEND_GID)  # sahibi degistirme, yalnizca grup
         os.chmod(root, 0o770)
-        log.info("FTP kok dizini backend ile paylasildi (gid=%s, 0770).", _BACKEND_GID)
+        for dirpath, dirnames, filenames in os.walk(root):
+            for ad in dirnames:
+                yol = os.path.join(dirpath, ad)
+                os.chown(yol, -1, _BACKEND_GID)
+                os.chmod(yol, 0o770)
+            for ad in filenames:
+                yol = os.path.join(dirpath, ad)
+                os.chown(yol, -1, _BACKEND_GID)
+                os.chmod(yol, 0o660)
+        log.info(
+            "FTP agaci backend ile paylasildi (gid=%s, dizin 0770 / dosya 0660).",
+            _BACKEND_GID,
+        )
     except PermissionError:
-        log.info("FTP kok dizini izinleri degistirilemedi (root degiliz) — atlaniyor.")
+        log.info("FTP izinleri degistirilemedi (root degiliz) — atlaniyor.")
     except OSError as exc:  # noqa: BLE001
-        log.warning("FTP kok dizini izinleri ayarlanamadi: %s", exc)
+        log.warning("FTP izinleri ayarlanamadi: %s", exc)
+
+
+def _grant_backend_access(path: str) -> None:
+    """Yeni olusan dosyayi ve ust dizin zincirini backend'le paylasir.
+
+    Cihaz FTP uzerinden dosya yazdiginda (ve MKD ile dizin actiginda) hepsi
+    root:root olusur; backend o dizine sonradan config YAZAMAZ. Upload
+    callback'inden cagrilir: dosya + kok dizine kadar ust zincir duzeltilir,
+    boylece acilistaki ozyineli duzeltmeden SONRA olusan yollar da acik
+    kalir. Yalnizca ucuz syscall'lar — pyftpdlib'in tek thread'ini bloklamaz.
+    """
+    try:
+        kok = os.path.realpath(SETTINGS.ftp_root)
+        hedef = os.path.realpath(path)
+        if os.path.isfile(hedef):
+            os.chown(hedef, -1, _BACKEND_GID)
+            os.chmod(hedef, 0o660)
+        dizin = os.path.dirname(hedef)
+        while dizin.startswith(kok):
+            os.chown(dizin, -1, _BACKEND_GID)
+            os.chmod(dizin, 0o770)
+            if dizin == kok:
+                break
+            dizin = os.path.dirname(dizin)
+    except OSError:
+        # Root degilsek ya da yol kayboldu: yan is, asil transferi etkilemez.
+        log.debug("izin duzeltilemedi: %s", path, exc_info=True)
 
 
 def _rel(path: str) -> str:

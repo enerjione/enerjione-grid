@@ -121,12 +121,22 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     [drafts]
   );
 
+  /** Kayit artik FTP'deki dosyayi da gunceller (ekran == cihazin okuyacagi
+   *  dosya). Yazma basarisizsa surum yine kaydedilmistir ama kullanici
+   *  UYARILIR — cihaz eski dosyayi goruyor olabilir. */
+  function ftpUyar(v: { ftpWritten: boolean | null }) {
+    if (v.ftpWritten === false) {
+      toast.error(t("deviceDetail.config.ftp.syncFailed"));
+    }
+  }
+
   async function save() {
     if (changeCount === 0) return;
     setBusy(true);
     try {
-      await updateDeviceConfig(accessToken, deviceId, changes);
+      const v = await updateDeviceConfig(accessToken, deviceId, changes);
       toast.success(t("deviceDetail.config.ftp.saved", { count: changeCount }));
+      ftpUyar(v);
       await load();
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
@@ -157,6 +167,7 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     try {
       const v = await uploadDeviceConfig(accessToken, deviceId, file);
       toast.success(t("deviceDetail.config.ftp.uploaded", { version: v.version }));
+      ftpUyar(v);
       await load();
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
@@ -203,6 +214,7 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     try {
       const v = await revertDeviceConfig(accessToken, deviceId, version);
       toast.success(t("deviceDetail.config.ftp.reverted", { from: version, to: v.version }));
+      ftpUyar(v);
       await load();
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));

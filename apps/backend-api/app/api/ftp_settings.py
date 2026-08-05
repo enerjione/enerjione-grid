@@ -42,6 +42,9 @@ _YETKI = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER]))
 def _read(row) -> FtpSettingsRead:
     return FtpSettingsRead(
         mode=row.mode,
+        embedded_username=row.embedded_username,
+        embedded_password=ftp_settings_service.get_embedded_password(row),
+        embedded_host=row.embedded_host,
         host=row.host,
         port=row.port,
         username=row.username,
@@ -119,7 +122,7 @@ def baglanti_durumu(db: Session = Depends(get_db), _u: User = _YETKI) -> FtpStat
 
     sunucu: FtpServerHealth | None = None
     if ayar.mode == "gomulu":
-        sunucu = _gomulu_sunucu_durumu(expected_user=ayar.username)
+        sunucu = _gomulu_sunucu_durumu(expected_user=ayar.embedded_username)
 
     from sqlalchemy import select
 
@@ -133,6 +136,17 @@ def baglanti_durumu(db: Session = Depends(get_db), _u: User = _YETKI) -> FtpStat
             .limit(15)
         ).scalars()
     )
+    import json
+
+    def _meta(o) -> dict | None:
+        if not o.metadata_json:
+            return None
+        try:
+            veri = json.loads(o.metadata_json)
+            return veri if isinstance(veri, dict) else None
+        except ValueError:
+            return None
+
     return FtpStatusRead(
         mode=ayar.mode,
         server=sunucu,
@@ -143,6 +157,7 @@ def baglanti_durumu(db: Session = Depends(get_db), _u: User = _YETKI) -> FtpStat
                 message=o.message,
                 device_code=o.device_code,
                 created_at=o.created_at,
+                metadata=_meta(o),
             )
             for o in olaylar
         ],

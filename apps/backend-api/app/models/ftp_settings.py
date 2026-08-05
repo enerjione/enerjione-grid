@@ -39,17 +39,31 @@ class FtpSettings(Base):
     __tablename__ = "ftp_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    # "gomulu" | "harici" — bkz. FTP_MODLARI.
+    # "gomulu" | "harici" — bkz. FTP_MODLARI. (Arayuzde "Dahili" / "Harici"
+    # diye gecer; DB degeri geriye uyum icin "gomulu" kaldi.)
     mode: Mapped[str] = mapped_column(String(10), default="gomulu")
-    # Harici modda musterinin FTP sunucusu. Gomulu modda BILGI amacli tutulur
-    # (cihaz ekranina girilecek adres) ama baglanti icin kullanilmaz.
+
+    # --- DAHILI (gomulu) sunucunun kimligi --------------------------------
+    # Harici alanlardan AYRI tutulur (2026-08-05'te sahada yasandi): tek set
+    # varken kullanici harici modu yapilandirinca musteri sunucusunun
+    # kimligi DAHILI sunucuya da siziyordu — cihazlar/kullanici bir anda
+    # "device" ile giremez oluyordu. Mod degistirmek diger modun kimligine
+    # ASLA dokunmamali.
+    embedded_username: Mapped[str] = mapped_column(String(30), default="device")
+    embedded_password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # PASV (pasif mod) yanitinda cihaza bildirilen adres. Kullanicidan IP
+    # istemeyiz — arayuz kaydederken tarayicinin kullandigi adresi otomatik
+    # gonderir (operator sisteme hangi adresten ulasiyorsa cihazlar da
+    # oradan ulasir). Bos ise ftp-server env fallback'ine doner.
+    embedded_host: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # --- HARICI (musteri) sunucusu ----------------------------------------
     host: Mapped[str | None] = mapped_column(String(200), nullable=True)
     port: Mapped[int] = mapped_column(Integer, default=21)
     # Cihaz ekrani sinirlari: kullanici adi <30, parola <20 karakter.
     # Sema katmani da ayni siniri uygular; buradaki genislik DB tavani.
     username: Mapped[str] = mapped_column(String(30), default="device")
-    # secrets_vault ile sifreli ("enc:v1:..."). Bos = henuz ayarlanmadi;
-    # ftp-server o durumda env'deki FTP_PASSWORD ile devam eder.
+    # secrets_vault ile sifreli ("enc:v1:..."). Bos = henuz ayarlanmadi.
     password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Cihazlarin dosya yazdigi/okudugu dizin. Gomulu modda kok dizine gore,
     # harici modda sunucudaki mutlak/goreli yol. Cihaz ekranindaki "Dir"

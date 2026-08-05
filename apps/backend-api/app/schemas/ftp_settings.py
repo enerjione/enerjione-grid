@@ -20,12 +20,23 @@ from pydantic import BaseModel, Field
 
 class FtpSettingsRead(BaseModel):
     mode: Literal["gomulu", "harici"] = "gomulu"
+
+    # --- dahili (gomulu) sunucu ---
+    embedded_username: str = "device"
+    # Acik metin (bkz. modul docstring). None = henuz ayarlanmadi; dahili
+    # sunucu o durumda .env'deki FTP_PASSWORD ile calismaya devam eder.
+    embedded_password: str | None = None
+    # PASV adresi — arayuz kaydederken tarayici adresinden otomatik doldurur;
+    # kullanicidan IP istenmez. Cihaz ekranina girilecek adres olarak da
+    # gosterilir.
+    embedded_host: str | None = None
+
+    # --- harici (musteri) sunucusu ---
     host: str | None = None
     port: int = 21
     username: str = "device"
-    # Acik metin (bkz. modul docstring). None = henuz ayarlanmadi; gomulu
-    # sunucu o durumda .env'deki FTP_PASSWORD ile calismaya devam eder.
     password: str | None = None
+
     directory: str = "/SN20/FOTA/"
     poll_interval_sec: int = 300
     updated_by: str | None = None
@@ -34,11 +45,17 @@ class FtpSettingsRead(BaseModel):
 
 class FtpSettingsUpdate(BaseModel):
     mode: Literal["gomulu", "harici"] | None = None
+
+    # Dahili kimlik — harici alanlardan AYRI; birini gondermek digerine
+    # dokunmaz. Cihaz ekrani sinirlari ikisinde de gecerli (kullanici <30,
+    # parola <20): cihazlar hangi moddaysa o kimlikle giris yapiyor.
+    embedded_username: str | None = Field(default=None, min_length=1, max_length=29)
+    embedded_password: str | None = Field(default=None, min_length=6, max_length=19)
+    embedded_host: str | None = Field(default=None, max_length=200)
+
     host: str | None = Field(default=None, max_length=200)
     port: int | None = Field(default=None, ge=1, le=65535)
-    # Cihaz ekrani en fazla 29 karakter kullanici adi kabul ediyor.
     username: str | None = Field(default=None, min_length=1, max_length=29)
-    # Cihaz ekrani en fazla 19 karakter parola kabul ediyor.
     password: str | None = Field(default=None, min_length=6, max_length=19)
     directory: str | None = Field(default=None, max_length=200)
     # Alt sinir 60 sn: daha sik yoklama musterinin FTP sunucusunu gereksiz
@@ -47,13 +64,19 @@ class FtpSettingsUpdate(BaseModel):
 
 
 class FtpEventRow(BaseModel):
-    """Son FTP hareketi — kim baglandi, hangi dosya gitti/geldi."""
+    """Son FTP hareketi — kim baglandi, hangi dosya gitti/geldi.
+
+    `metadata` ham olay meta verisidir (ip, dosya adi, degisen alanlar...);
+    arayuz ham `message` yerine bundan derli toplu bir satir kurar. `message`
+    yedek olarak kalir — bilinmeyen olay tipi de bos gorunmesin.
+    """
 
     event_type: str
     severity: str
     message: str
     device_code: str | None = None
     created_at: datetime
+    metadata: dict | None = None
 
 
 class FtpServerHealth(BaseModel):

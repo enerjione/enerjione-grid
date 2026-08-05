@@ -36,6 +36,7 @@ import type {
   ConfigTemplate,
   DeviceConfigSummary,
   DeviceRow,
+  FtpEventRow as FtpEventRowT,
   FtpMode,
   FtpSettings,
   FtpStatus,
@@ -249,11 +250,16 @@ function FtpSettingsModal({
   const { t } = useTranslation();
   const [loaded, setLoaded] = useState<FtpSettings | null>(null);
   const [mode, setMode] = useState<FtpMode>("gomulu");
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("21");
-  const [username, setUsername] = useState("device");
-  const [password, setPassword] = useState("");
-  const [directory, setDirectory] = useState("/");
+  // DAHILI ve HARICI kimlikler AYRI durumdadir — mod degistirmek digerinin
+  // alanlarina dokunmaz. Tek set varken harici sunucu bilgileri dahili
+  // sunucuya siziyordu (cihazlar bir anda giremez olmustu).
+  const [embUser, setEmbUser] = useState("device");
+  const [embPass, setEmbPass] = useState("");
+  const [extHost, setExtHost] = useState("");
+  const [extPort, setExtPort] = useState("21");
+  const [extUser, setExtUser] = useState("");
+  const [extPass, setExtPass] = useState("");
+  const [directory, setDirectory] = useState("/SN20/FOTA/");
   const [pollInterval, setPollInterval] = useState("300");
   const [busy, setBusy] = useState(false);
   const [testResult, setTestResult] = useState<FtpTestResult | null>(null);
@@ -264,16 +270,27 @@ function FtpSettingsModal({
       const s = await fetchFtpSettings(accessToken);
       setLoaded(s);
       setMode(s.mode);
-      setHost(s.host ?? "");
-      setPort(String(s.port));
-      setUsername(s.username);
-      setPassword(s.password ?? "");
+      setEmbUser(s.embeddedUsername);
+      setEmbPass(s.embeddedPassword ?? "");
+      setExtHost(s.host ?? "");
+      setExtPort(String(s.port));
+      setExtUser(s.username);
+      setExtPass(s.password ?? "");
       setDirectory(s.directory);
       setPollInterval(String(s.pollIntervalSec));
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
     }
   }, [accessToken, toast]);
+
+  /** PASV/cihaz ekrani adresi — kullanicidan IP ISTENMEZ: operator sisteme
+   *  hangi adresten ulasiyorsa cihazlar da ayni LAN adresinden ulasir.
+   *  localhost ile gelistirme durumunda anlamsiz olacagi icin gonderilmez. */
+  function autoEmbeddedHost(): string | null {
+    const h = window.location.hostname;
+    if (!h || h === "localhost" || h.startsWith("127.")) return null;
+    return h;
+  }
 
   const loadStatus = useCallback(async () => {
     try {
@@ -292,26 +309,35 @@ function FtpSettingsModal({
     return () => window.clearInterval(timer);
   }, [load, loadStatus]);
 
-  const userTooLong = username.length > MAX_FTP_USER;
-  const passTooLong = password.length > MAX_FTP_PASS;
-  const passTooShort = password.length > 0 && password.length < 6;
+  // Aktif modun alanlari dogrulanir; diger modun alanlari forma GIRMEZ.
+  const aktifUser = mode === "gomulu" ? embUser : extUser;
+  const aktifPass = mode === "gomulu" ? embPass : extPass;
+  const userTooLong = aktifUser.length > MAX_FTP_USER;
+  const passTooLong = aktifPass.length > MAX_FTP_PASS;
+  const passTooShort = aktifPass.length > 0 && aktifPass.length < 6;
+  // Kimlik degisim uyarisi yalniz DAHILI modda: cihaz ekranlari elle
+  // guncellenmek zorunda. Harici modda parola musterinin sunucusunundur.
   const credentialsChanged =
     loaded !== null &&
-    (username !== loaded.username || password !== (loaded.password ?? ""));
+    mode === "gomulu" &&
+    (embUser !== loaded.embeddedUsername || embPass !== (loaded.embeddedPassword ?? ""));
 
   const dirty =
     loaded !== null &&
     (mode !== loaded.mode ||
-      host !== (loaded.host ?? "") ||
-      port !== String(loaded.port) ||
-      credentialsChanged ||
       directory !== loaded.directory ||
-      pollInterval !== String(loaded.pollIntervalSec));
+      (mode === "gomulu"
+        ? embUser !== loaded.embeddedUsername || embPass !== (loaded.embeddedPassword ?? "")
+        : extHost !== (loaded.host ?? "") ||
+          extPort !== String(loaded.port) ||
+          extUser !== loaded.username ||
+          extPass !== (loaded.password ?? "") ||
+          pollInterval !== String(loaded.pollIntervalSec)));
 
   async function generate() {
     setBusy(true);
     try {
-      setPassword(await generateFtpPassword(accessToken));
+      setEmbPass(await generateFtpPassword(accessToken));
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
     } finally {
@@ -321,29 +347,42 @@ function FtpSettingsModal({
 
   async function save() {
     if (userTooLong || passTooLong || passTooShort) return;
-    const portNum = Number(port);
-    const pollNum = Number(pollInterval);
-    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      toast.error(t("engineering.deviceConfig.ftp.portInvalid"));
-      return;
-    }
-    if (mode === "harici" && !host.trim()) {
-      toast.error(t("engineering.deviceConfig.ftp.hostRequired"));
-      return;
-    }
     setBusy(true);
     try {
-      const s = await updateFtpSettings(accessToken, {
-        mode,
-        host: host.trim(),
-        port: portNum,
-        username: username.trim(),
-        // Bos parola GONDERILMEZ: mevcut parolayi silmek degil, dokunmamak
-        // demektir. Parola degistirmenin tek yolu yeni deger yazmaktir.
-        ...(password ? { password } : {}),
-        directory: directory.trim() || "/",
-        ...(Number.isInteger(pollNum) && pollNum >= 60 ? { pollIntervalSec: pollNum } : {})
-      });
+      let s: FtpSettings;
+      if (mode === "gomulu") {
+        const otoAdres = autoEmbeddedHost();
+        s = await updateFtpSettings(accessToken, {
+          mode,
+          embeddedUsername: embUser.trim(),
+          // Bos parola GONDERILMEZ: mevcut parolayi silmek degil, dokunmamak
+          // demektir. Parola degistirmenin tek yolu yeni deger yazmaktir.
+          ...(embPass ? { embeddedPassword: embPass } : {}),
+          // PASV adresi otomatik — kullanicidan IP istemek sacmaydi.
+          ...(otoAdres ? { embeddedHost: otoAdres } : {}),
+          directory: directory.trim() || "/"
+        });
+      } else {
+        const portNum = Number(extPort);
+        const pollNum = Number(pollInterval);
+        if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+          toast.error(t("engineering.deviceConfig.ftp.portInvalid"));
+          return;
+        }
+        if (!extHost.trim()) {
+          toast.error(t("engineering.deviceConfig.ftp.hostRequired"));
+          return;
+        }
+        s = await updateFtpSettings(accessToken, {
+          mode,
+          host: extHost.trim(),
+          port: portNum,
+          username: extUser.trim(),
+          ...(extPass ? { password: extPass } : {}),
+          directory: directory.trim() || "/",
+          ...(Number.isInteger(pollNum) && pollNum >= 60 ? { pollIntervalSec: pollNum } : {})
+        });
+      }
       setLoaded(s);
       setTestResult(null);
       toast.success(t("engineering.deviceConfig.ftp.saved"));
@@ -386,7 +425,7 @@ function FtpSettingsModal({
 
         <div className="dcfg-ftp-body">
           <aside className="dcfg-ftp-side">
-            <FtpStatusPanel status={status} expectedUser={loaded?.username ?? null} />
+            <FtpStatusPanel status={status} expectedUser={loaded?.embeddedUsername ?? null} />
           </aside>
 
           <div className="dcfg-ftp-main">
@@ -407,61 +446,64 @@ function FtpSettingsModal({
         </div>
 
         <div className="dcfg-grid">
-          {/* Adres + port AYNI satirda: port 5 haneyi gecmez, kendi basina
-              koca bir satiri hak etmiyor. Aciklamalar KISA tutulur — uzun
-              ipuclari alana sigmayip kirpiliyordu ve gurultuydu; PASV
-              aciklamasi alttaki tek notta. */}
-          <div className="dcfg-host-row">
-            <label>
-              {t("engineering.deviceConfig.ftp.host")}
-              <input
-                type="text"
-                value={host}
-                disabled={busy}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder={mode === "gomulu" ? "örn. 192.168.2.99" : "ftp.example.com"}
-              />
-            </label>
-            <label className="dcfg-port">
-              {t("engineering.deviceConfig.ftp.port")}
-              <input
-                type="text"
-                inputMode="numeric"
-                value={port}
-                disabled={busy}
-                onChange={(e) => setPort(e.target.value)}
-              />
-            </label>
-          </div>
+          {/* DAHILI modda adres/port ALANI YOK: adres tarayicinin kullandigi
+              adresten otomatik alinir (kullanicidan kendi IP'sini istemek
+              sacmaydi), port sabit 21. Degerler cihaz ekranina girilecek
+              bilgi kutusunda gosterilir. */}
+          {mode === "harici" ? (
+            <div className="dcfg-host-row">
+              <label>
+                {t("engineering.deviceConfig.ftp.host")}
+                <input
+                  type="text"
+                  value={extHost}
+                  disabled={busy}
+                  onChange={(e) => setExtHost(e.target.value)}
+                  placeholder="ftp.example.com"
+                />
+              </label>
+              <label className="dcfg-port">
+                {t("engineering.deviceConfig.ftp.port")}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={extPort}
+                  disabled={busy}
+                  onChange={(e) => setExtPort(e.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
           <label>
             {t("engineering.deviceConfig.ftp.username")}
             {/* Sinir ipucu YOK: maxLength zaten yazmayi durduruyor. */}
             <input
               type="text"
-              value={username}
+              value={mode === "gomulu" ? embUser : extUser}
               disabled={busy}
               maxLength={MAX_FTP_USER}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) =>
+                mode === "gomulu" ? setEmbUser(e.target.value) : setExtUser(e.target.value)
+              }
             />
           </label>
           <label>
             {t("engineering.deviceConfig.ftp.password")}
             {/* IKI MODUN PAROLASI FARKLI SEYDIR:
-                - Gomulu: BIZIM sunucumuzun kimligi. Kullanici onu okuyup
+                - Dahili: BIZIM sunucumuzun kimligi. Kullanici onu okuyup
                   cihaz ekranina elle gececek -> acik gosterilir ve "Uret"
                   okunabilir parola onerir.
                 - Harici: MUSTERININ sunucusunun parolasi. Bizim uretecegimiz
                   bir sey degil -> normal parola alani gibi maskeli girilir,
-                  "Uret" dugmesi GOSTERILMEZ (musteri parolasinin yerine
-                  rastgele deger onermek yalnizca kafa karistirir). */}
+                  "Uret" dugmesi GOSTERILMEZ. */}
             {mode === "gomulu" ? (
               <span className="dcfg-pass-row">
                 <input
                   type="text"
-                  value={password}
+                  value={embPass}
                   disabled={busy}
                   maxLength={MAX_FTP_PASS}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => setEmbPass(e.target.value)}
                   className={passTooShort ? "is-invalid" : ""}
                 />
                 <button type="button" className="dcfg-btn" disabled={busy} onClick={() => void generate()}>
@@ -473,15 +515,13 @@ function FtpSettingsModal({
               <input
                 type="password"
                 autoComplete="new-password"
-                value={password}
+                value={extPass}
                 disabled={busy}
                 maxLength={MAX_FTP_PASS}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setExtPass(e.target.value)}
                 className={passTooShort ? "is-invalid" : ""}
               />
             )}
-            {/* Yalnizca GEREKTIGINDE metin: hata varsa hata, gomulu modda
-                tek satirlik ipucu; harici modda hicbir sey. */}
             {passTooShort ? (
               <small className="dcfg-hint">{t("engineering.deviceConfig.ftp.passTooShort")}</small>
             ) : mode === "gomulu" ? (
@@ -514,6 +554,17 @@ function FtpSettingsModal({
             </label>
           ) : null}
         </div>
+
+        {/* Cihaz FTP ekranina girilecek degerler — tek bakista. Adres,
+            kaydedilmis embeddedHost; henuz yoksa tarayicinin adresi. */}
+        {mode === "gomulu" ? (
+          <p className="dcfg-note">
+            {t("engineering.deviceConfig.ftp.deviceScreenInfo", {
+              host: loaded?.embeddedHost ?? autoEmbeddedHost() ?? "—",
+              dir: directory || "/"
+            })}
+          </p>
+        ) : null}
 
         {/* KIMLIK DEGISIM UYARISI: sunucu yeni kimligi ~30 sn'de alir ama
             cihazlar ESKI kimlikle gelmeye devam eder — her cihazin FTP
@@ -616,16 +667,109 @@ function FtpStatusPanel({
           ) : (
             <ul className="dcfg-status-events">
               {status.events.map((e, i) => (
-                <li key={i} className={e.severity === "warning" ? "is-warn" : ""}>
-                  <time>{new Date(e.createdAt).toLocaleString()}</time>
-                  <span>{e.message}</span>
-                </li>
+                <FtpEventItem key={i} event={e} />
               ))}
             </ul>
           )}
         </>
       )}
     </div>
+  );
+}
+
+/** Olay tipi -> ikon + baslik anahtari. Bilinmeyen tip ham `message` ile
+ *  duser — yeni bir olay turu eklendiginde liste BOS gorunmez. */
+const FTP_EVT: Record<string, { icon: string; warn?: boolean }> = {
+  ftp_login: { icon: "person" },
+  ftp_upload: { icon: "upload_file" },
+  ftp_download: { icon: "file_download" },
+  ftp_upload_incomplete: { icon: "warning", warn: true },
+  ftp_settings_updated: { icon: "tune" },
+  ftp_poll_ingested: { icon: "cloud_download" },
+  ftp_poll_unreachable: { icon: "link_off", warn: true },
+  ftp_poll_recovered: { icon: "link" },
+  ftp_poll_error: { icon: "warning", warn: true },
+  ftp_sync_failed: { icon: "warning", warn: true }
+};
+
+/** Ayar alanlarinin okunur adlari (ftp_settings_updated ayrintisi icin). */
+const FTP_FIELD_KEY: Record<string, string> = {
+  mode: "engineering.deviceConfig.ftp.modeLabel",
+  host: "engineering.deviceConfig.ftp.host",
+  port: "engineering.deviceConfig.ftp.port",
+  username: "engineering.deviceConfig.ftp.username",
+  password: "engineering.deviceConfig.ftp.password",
+  directory: "engineering.deviceConfig.ftp.directory",
+  poll_interval_sec: "engineering.deviceConfig.ftp.pollInterval"
+};
+
+/** Tek log satiri: ikon + baslik + kisa ayrinti + sagda saat.
+
+    Ham denetim metni ("mode=harici, host=..., password(degisti)") teknik bir
+    dokumdu; burada olay tipine gore DERLI satir kurulur, ham metin yalnizca
+    bilinmeyen tiplerde yedek. */
+function FtpEventItem({ event }: { event: FtpEventRowT }) {
+  const { t } = useTranslation();
+  const bilgi = FTP_EVT[event.eventType];
+  const meta = event.metadata ?? {};
+  const d = new Date(event.createdAt);
+  // Ayni gunun olayinda tarih tekrari gurultu; yalnizca saat yeter.
+  const zaman =
+    d.toDateString() === new Date().toDateString()
+      ? d.toLocaleTimeString()
+      : d.toLocaleString();
+
+  let baslik: string;
+  let ayrinti: string | null = null;
+  if (!bilgi) {
+    baslik = event.message;
+  } else {
+    baslik = t(`engineering.deviceConfig.status.evt.${event.eventType}`);
+    switch (event.eventType) {
+      case "ftp_login":
+        ayrinti = typeof meta.remote_ip === "string" ? meta.remote_ip : null;
+        break;
+      case "ftp_upload":
+      case "ftp_download":
+      case "ftp_upload_incomplete":
+      case "ftp_poll_ingested":
+        ayrinti = typeof meta.filename === "string" ? meta.filename : null;
+        if (ayrinti && typeof meta.version === "number") ayrinti += ` (v${meta.version})`;
+        break;
+      case "ftp_settings_updated":
+        ayrinti = Array.isArray(meta.fields)
+          ? (meta.fields as string[])
+              .map((f) => (FTP_FIELD_KEY[f] ? t(FTP_FIELD_KEY[f]) : f))
+              .join(", ")
+          : null;
+        break;
+      case "ftp_poll_unreachable":
+      case "ftp_poll_error":
+        ayrinti = typeof meta.error === "string" ? meta.error : null;
+        break;
+      case "ftp_sync_failed":
+        ayrinti = [meta.filename, meta.error]
+          .filter((s): s is string => typeof s === "string")
+          .join(" — ") || null;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return (
+    <li className={bilgi?.warn || event.severity === "warning" ? "is-warn" : ""}>
+      <span className="material-symbols-outlined dcfg-evt-icon">
+        {bilgi?.icon ?? "info"}
+      </span>
+      <span className="dcfg-evt-body">
+        <span className="dcfg-evt-head">
+          <strong>{baslik}</strong>
+          <time>{zaman}</time>
+        </span>
+        {ayrinti ? <span className="dcfg-evt-detail">{ayrinti}</span> : null}
+      </span>
+    </li>
   );
 }
 

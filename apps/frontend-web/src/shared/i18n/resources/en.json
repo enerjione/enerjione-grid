@@ -1560,12 +1560,24 @@
         "serverUp": "FTP server is running — active user: {{user}}, open connections: {{count}}",
         "serverDown": "Cannot reach the FTP server. The service may be down or restarting.",
         "pendingSync": "Credential change has not reached the server yet: it currently accepts \"{{active}}\", saved is \"{{expected}}\". Syncs within 30 seconds.",
-        "eventsEmpty": "No FTP activity yet. Logins and file transfers will be listed here once a device connects."
+        "eventsEmpty": "No FTP activity yet. Logins and file transfers will be listed here once a device connects.",
+        "evt": {
+          "ftp_login": "Device connected",
+          "ftp_upload": "Device wrote a file",
+          "ftp_download": "Device downloaded a file",
+          "ftp_upload_incomplete": "File left incomplete",
+          "ftp_settings_updated": "Settings updated",
+          "ftp_poll_ingested": "Configuration pulled from remote server",
+          "ftp_poll_unreachable": "External server unreachable",
+          "ftp_poll_recovered": "External server access restored",
+          "ftp_poll_error": "Remote file could not be processed",
+          "ftp_sync_failed": "File could not be written to FTP"
+        }
       },
       "ftp": {
         "title": "FTP Server Settings",
         "mode": {
-          "gomulu": "Embedded server",
+          "gomulu": "Internal server",
           "harici": "External server"
         },
         "modeDesc": {
@@ -1574,6 +1586,7 @@
         },
         "host": "Server address",
         "port": "Port",
+        "modeLabel": "Mode",
         "username": "Username",
         "password": "Password",
         "generate": "Generate",
@@ -1582,7 +1595,8 @@
         "directory": "Directory",
         "pollInterval": "Poll interval (seconds)",
         "pollHint": "The directory is scanned at this interval (minimum 60 s).",
-        "embeddedNote": "Server address is the IP devices use to reach this machine; if left empty, devices may fail to transfer files. Changes apply within ~30 seconds.",
+        "embeddedNote": "Changes are applied to the server within ~30 seconds; no restart needed.",
+        "deviceScreenInfo": "Values to enter on the device FTP screen — Server: {{host}} · Port: 21 · Directory: {{dir}}",
         "externalNote": "Devices and this software must use the same server, credentials and directory; the directory is scanned at the configured interval.",
         "credentialWarning": "WARNING: Once saved, the server starts using the new credentials within ~30 seconds; devices keep connecting with the OLD credentials and their logins will be rejected. You must manually update the username/password on each device's FTP screen.",
         "portInvalid": "Port must be between 1 and 65535.",
@@ -3465,7 +3479,8 @@
       "ftpHint": "Once the device FTP config format is decoded, you will be able to pull and update config remotely here.",
       "ftp": {
         "empty": "This device has no configuration file yet. Upload a file pulled from the device, or define a template.",
-        "notSentHint": "Changes here are saved but NOT sent to the device. To send, use the \"Apply to device\" button: the file is written to FTP and the update command is queued.",
+        "notSentHint": "Saved changes are also written to the file on FTP — what you see here is the file the device will read. Use \"Apply to device\" to queue the update command for the device.",
+        "syncFailed": "The version was saved but the file on FTP could NOT be updated — the device may still see the old file. Check FTP Server Settings > Connection Status logs.",
         "serialMismatch": "This file does not appear to belong to this device.\n\nExpected name: {{expected}}\nSelected file: {{got}}\n\nThe device only reads a file carrying its own name. Upload anyway? (Using it as a template can be a valid reason.)",
         "cmdPull": "Pull from device",
         "cmdApply": "Apply to device",
@@ -3480,7 +3495,7 @@
         "history": "Version history ({{count}})",
         "revert": "Revert to this version",
         "save": "Save changes",
-        "saved": "{{count}} setting(s) saved (new version created).",
+        "saved": "{{count}} setting(s) saved; file on FTP updated.",
         "uploaded": "File uploaded — v{{version}} created.",
         "reverted": "Reverted to v{{from}} (saved as v{{to}}).",
         "pending": "{{count}} change(s) pending",

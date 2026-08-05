@@ -3046,7 +3046,7 @@ type ApiConfigVersion = {
   id: number; device_id: number; version: number; source: ConfigVersion["source"];
   template_id: number | null; note: string | null; created_by: string | null;
   created_at: string; applied_at: string | null; size_bytes: number;
-  checksum_valid: boolean | null;
+  checksum_valid: boolean | null; ftp_written?: boolean | null;
 };
 
 const mapConfigRow = (r: ApiConfigRow): ConfigRow => ({
@@ -3059,7 +3059,7 @@ const mapConfigVersion = (v: ApiConfigVersion): ConfigVersion => ({
   id: v.id, deviceId: v.device_id, version: v.version, source: v.source,
   templateId: v.template_id, note: v.note, createdBy: v.created_by,
   createdAt: v.created_at, appliedAt: v.applied_at, sizeBytes: v.size_bytes,
-  checksumValid: v.checksum_valid
+  checksumValid: v.checksum_valid, ftpWritten: v.ftp_written ?? null
 });
 
 /** Guncel yapilandirma. Surum yoksa 404 doner — cagiran "henuz yok" olarak
@@ -3247,13 +3247,18 @@ import type {
 } from "./types";
 
 type ApiFtpSettings = {
-  mode: FtpSettings["mode"]; host: string | null; port: number; username: string;
+  mode: FtpSettings["mode"];
+  embedded_username: string; embedded_password: string | null; embedded_host: string | null;
+  host: string | null; port: number; username: string;
   password: string | null; directory: string; poll_interval_sec: number;
   updated_by: string | null; updated_at: string | null;
 };
 
 const mapFtpSettings = (s: ApiFtpSettings): FtpSettings => ({
-  mode: s.mode, host: s.host, port: s.port, username: s.username,
+  mode: s.mode,
+  embeddedUsername: s.embedded_username, embeddedPassword: s.embedded_password,
+  embeddedHost: s.embedded_host,
+  host: s.host, port: s.port, username: s.username,
   password: s.password, directory: s.directory, pollIntervalSec: s.poll_interval_sec,
   updatedBy: s.updated_by, updatedAt: s.updated_at
 });
@@ -3271,6 +3276,9 @@ export async function updateFtpSettings(
 ): Promise<FtpSettings> {
   const body: Record<string, unknown> = {};
   if (updates.mode !== undefined) body.mode = updates.mode;
+  if (updates.embeddedUsername !== undefined) body.embedded_username = updates.embeddedUsername;
+  if (updates.embeddedPassword !== undefined) body.embedded_password = updates.embeddedPassword;
+  if (updates.embeddedHost !== undefined) body.embedded_host = updates.embeddedHost;
   if (updates.host !== undefined) body.host = updates.host;
   if (updates.port !== undefined) body.port = updates.port;
   if (updates.username !== undefined) body.username = updates.username;
@@ -3295,14 +3303,18 @@ export async function fetchFtpStatus(token: string): Promise<FtpStatus> {
   const r = (await response.json()) as {
     mode: FtpStatus["mode"];
     server: { reachable: boolean; username: string | null; connections: number | null; synced: boolean | null } | null;
-    events: { event_type: string; severity: string; message: string; device_code: string | null; created_at: string }[];
+    events: {
+      event_type: string; severity: string; message: string;
+      device_code: string | null; created_at: string;
+      metadata: Record<string, unknown> | null;
+    }[];
   };
   return {
     mode: r.mode,
     server: r.server,
     events: r.events.map((e) => ({
       eventType: e.event_type, severity: e.severity, message: e.message,
-      deviceCode: e.device_code, createdAt: e.created_at
+      deviceCode: e.device_code, createdAt: e.created_at, metadata: e.metadata
     }))
   };
 }

@@ -1546,6 +1546,9 @@ export type ConfigVersion = {
   sizeBytes: number;
   // "gecerli" / "gecersiz" / "bilinmiyor (ayak yok)" UC AYRI durum.
   checksumValid: boolean | null;
+  // Kayit sirasinda FTP'deki dosya da guncellendi mi? false = surum kaydedildi
+  // ama dosya YAZILAMADI (arayuz uyarir); null = bu istekte denenmedi.
+  ftpWritten: boolean | null;
 };
 
 export type ConfigCurrent = {
@@ -1588,10 +1591,17 @@ export type FtpMode = "gomulu" | "harici";
 
 export type FtpSettings = {
   mode: FtpMode;
+  // Dahili sunucu kimligi — harici alanlardan AYRI; mod degistirmek digerine
+  // dokunmaz. Parola acik metin: cihaz ekranina elle girilecegi icin
+  // kullanici okumali.
+  embeddedUsername: string;
+  embeddedPassword: string | null;
+  // PASV adresi — kayitta tarayici adresinden otomatik doldurulur.
+  embeddedHost: string | null;
+  // Harici (musteri) sunucusu.
   host: string | null;
   port: number;
   username: string;
-  // Acik metin: cihazin FTP ekranina ELLE girilecegi icin kullanici okumali.
   password: string | null;
   directory: string;
   pollIntervalSec: number;
@@ -1601,6 +1611,9 @@ export type FtpSettings = {
 
 export type FtpSettingsUpdate = Partial<{
   mode: FtpMode;
+  embeddedUsername: string;
+  embeddedPassword: string;
+  embeddedHost: string;
   host: string;
   port: number;
   username: string;
@@ -1622,6 +1635,9 @@ export type FtpEventRow = {
   message: string;
   deviceCode: string | null;
   createdAt: string;
+  // Ham olay meta verisi (ip, dosya adi, degisen alanlar...). Arayuz derli
+  // toplu satiri bundan kurar; `message` bilinmeyen tipler icin yedek.
+  metadata: Record<string, unknown> | null;
 };
 
 export type FtpServerHealth = {

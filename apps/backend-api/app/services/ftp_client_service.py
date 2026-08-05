@@ -232,7 +232,10 @@ def _write_embedded(db: Session, *, filename: str, raw: bytes) -> str:
         # Hic yoksa ayarlardaki dizine (kok'e gore) yaz.
         alt = (ayar.directory or "/").strip("/")
         hedef_dizin = os.path.join(FTP_ROOT, alt) if alt else FTP_ROOT
-        os.makedirs(hedef_dizin, exist_ok=True)
+        try:
+            os.makedirs(hedef_dizin, exist_ok=True)
+        except OSError as exc:
+            raise FtpAccessError(f"FTP dizini olusturulamadi: {exc}") from exc
 
     hedef = os.path.join(hedef_dizin, filename)
     # Kok disina cikma korumasi — directory ayari kullanicidan geliyor.
