@@ -14,6 +14,38 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.2] — 2026-08-05
+
+### Düzeltildi
+
+- **Harici FTP kimliği dahili sunucuya sızıyordu.** Tek kimlik seti varken
+  harici mod yapılandırılınca müşteri sunucusunun kullanıcı/parolası dahili
+  sunucuya da geçiyor, cihazlar ve kullanıcı bir anda eski kimlikle giremez
+  oluyordu (sahada yaşandı). Dahili ve harici kimlikler artık AYRI saklanır;
+  mod değiştirmek diğerinin kimliğine dokunmaz (migration 0043).
+- **Dahili FTP dizinlerine backend yazamıyordu.** ftp-server yalnızca kök
+  dizini paylaşıma açıyordu; cihazın (ya da sunucunun) açtığı alt dizinler
+  root'ta kalıyor ve "Cihaza uygula" izin hatasıyla düşüyordu — arayüzde
+  yalnızca "gönderilemedi" görünüyordu. İzin düzeltme artık özyineli ve her
+  dosya alımında ilgili zincire uygulanıyor; hata olursa gerçek sebep artık
+  arayüzde görünür.
+
+### Değişti
+
+- **Ekranda görülen dosya = FTP'deki dosya.** Kaydet / dosya yükle / geri al
+  işlemleri yeni sürümü FTP'deki `<seri>_Configuration.csv` dosyasına da
+  yazar (dahili veya harici, mod fark etmez). Yazma başarısız olursa sürüm
+  kaydedilir ama kullanıcı uyarılır ve olay loglarda görünür. "Cihaza
+  uygula" artık yalnızca güncelleme komutunu gönderir (dosyayı da tazeler).
+- **Dahili modda IP girme kalktı.** PASV/cihaz ekranı adresi, arayüzün
+  eriştiği adresten otomatik alınır; form yalnızca kullanıcı adı, parola ve
+  dizin sorar. Cihaz ekranına girilecek değerler tek satırda gösterilir.
+- "Gömülü sunucu" arayüzde "Dahili sunucu" olarak adlandırıldı.
+- Bağlantı Durumu logları olay tipine göre ikonlu başlık + kısa ayrıntı
+  olarak gösterilir; ham denetim metni yerine okunur satırlar.
+
+---
+
 ## [2.53.1] — 2026-08-05
 
 ### Düzeltildi
