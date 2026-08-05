@@ -14,6 +14,32 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.4] — 2026-08-05
+
+### Eklendi
+
+- **Seri numarası artık cihaz kaydında** (`devices.serial_number`). Kurulumda
+  cihaz formundan girilir; cihaz bağlanınca `master.serial_number`
+  telemetrisinden OTOMATİK güncellenir (değişim olay kaydına yazılır: eski →
+  yeni). Config dosya adı ve FTP eşleştirmesi artık önce kayıttan gider;
+  telemetri anlık sıfır/yanlış okusa bile akış kilitlenmez. Mevcut cihazlar
+  migration ile doldurulur (telemetrideki geçerli seri; yoksa salt-rakam
+  cihaz kodu).
+
+### Düzeltildi
+
+- **`0_Configuration.csv` üretilebiliyordu.** Cihaz bir an seri=0 gönderince
+  dosya adı sıfırdan türetiliyordu — o adı hiçbir cihaz okumaz. Sıfır seri
+  artık hiçbir kaynaktan kabul edilmez.
+- **"Harici FTP'ye yazılamadı:" boş sebeple bitiyordu.** Metinsiz istisnalar
+  (bağlantının sunucu tarafından kapatılması gibi) artık istisna türüyle
+  raporlanır.
+- **Harici FTP'ye yazma sadeleşti.** Dosya, dizin taraması yapılmadan doğrudan
+  ayarlardaki dizine yazılır — tarama WAN üzerinde yavaştı ve bağlantıyı
+  erken kapatan sunucularda yazmayı düşürüyordu.
+
+---
+
 ## [2.53.3] — 2026-08-05
 
 ### Düzeltildi
