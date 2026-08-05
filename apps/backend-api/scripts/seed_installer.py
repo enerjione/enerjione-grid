@@ -29,25 +29,68 @@ DEFAULT_USERNAME = "installer"
 DEFAULT_EMAIL = "installer@local"
 DEFAULT_FULL_NAME = "Default Installer"
 
-DEFAULT_PASSWORD = "ChangeMe123!"
-
-# Kurulum kolayligi icin varsayilan parola SABIT tutuluyor (bilincli karar).
+# SABIT VARSAYILAN PAROLA YOK — parola her kurulumda RASTGELE uretilir.
 #
-# ARTAKALAN RISK — bilinerek kabul edildi:
-#   Parola herkese acik kaynak kodda yaziyor. Kurulum bittikten sonra, siz ilk
-#   login'i yapana kadar gecen surede ayni aga erisen biri bu hesapla girip
-#   parolayi KENDISI degistirebilir; o andan itibaren en yetkili hesap onun
-#   olur ve siz disarida kalirsiniz.
+# ESKIDEN `DEFAULT_PASSWORD = "ChangeMe123!"` sabiti vardi ve artakalan risk
+# "bilinerek kabul edilmis"ti. Kabulun dayanagi deponun OZEL olmasiydi: parolayi
+# ogrenmek icin once kaynak koda erisim gerekiyordu. Depo 2026-08-05'te herkese
+# acik hale gelince o dayanak ortadan kalkti — parola artik tek bir arama
+# sorgusu uzakta ve saldirgan hangi urunu aradigini da biliyor.
 #
-#   `must_change_password` zorlamasi (app/api/deps.py) bu pencereyi DARALTIR
-#   ama KAPATMAZ: bayrak acikken yalnizca /auth/me, sifre degisimi ve cikis
-#   uclari calisir — ama sifre degisimi tam da saldirganin ihtiyaci olan sey.
+# Risk soyleydi: kurulum bittikten sonra siz ilk login'i yapana kadar gecen
+# surede ayni aga erisen biri bu hesapla girip parolayi KENDISI degistirir;
+# o andan itibaren en yetkili hesap onun olur ve siz disarida kalirsiniz.
+# `must_change_password` zorlamasi (app/api/deps.py) bu pencereyi DARALTIR ama
+# KAPATMAZ: bayrak acikken sifre degisimi ucu calisir — tam da saldirganin
+# ihtiyaci olan sey.
 #
-#   Azaltim: kurulumdan hemen sonra ilk isiniz parolayi degistirmek olsun.
+# Rastgele parola bu pencereyi tamamen kapatir: parola yalnizca kurulum
+# ciktisinda gorunur, hicbir yerde yazili degildir.
 #
 # `E1_INSTALLER_PASSWORD` ile kuruluma ozel parola verilebilir; verildiginde
-# sabit varsayilan HIC kullanilmaz. Sahaya cikan cihazlarda bu onerilir.
+# uretim yapilmaz. Toplu saha kurulumlarinda merkezi parola dagitimi icin.
 _PASSWORD_ENV = "E1_INSTALLER_PASSWORD"
+
+# Parola ilk girişte zaten degistiriliyor; uzunluk kirilmazlik icin degil,
+# kurulum ciktisindan ELLE KOPYALANABILIR olmasi icin sinirli tutuldu.
+_GENERATED_LENGTH = 20
+
+
+def _generate_password() -> str:
+    """Kriptografik olarak guvenli, parola politikasini KESIN saglayan parola.
+
+    `secrets.token_urlsafe` TEK BASINA YETMEZ: ciktisi yalnizca harf, rakam,
+    `-` ve `_` icerir ve her kosumda buyuk harf/rakam GARANTI DEGILDIR. Parola
+    politikasi (app/services/auth_service.py) her sinifi zorunlu tutuyor; garanti
+    olmayan bir uretici, binde bir kosumda politikayi saglamayan parola uretir
+    ve kurulum o cihazda -yalnizca o cihazda- sifre degistirilemez halde kalir.
+    Bu yuzden her siniftan en az bir karakter ONCE secilip sonra karistiriliyor.
+
+    Belirsiz karakterler (0/O, 1/l/I) DISARIDA: parola kurulum ciktisindan elle
+    okunup yazilacak; "sifre yanlis" diye geri donen her cihaz saha ziyareti
+    demektir.
+    """
+    import secrets
+
+    kucuk = "abcdefghijkmnopqrstuvwxyz"  # l yok
+    buyuk = "ABCDEFGHJKLMNPQRSTUVWXYZ"  # I, O yok
+    rakam = "23456789"  # 0, 1 yok
+    simge = "!@#%^&*+-="  # kabuk/URL'de sorun cikaranlar disarida
+
+    havuz = kucuk + buyuk + rakam + simge
+    zorunlu = [
+        secrets.choice(kucuk),
+        secrets.choice(buyuk),
+        secrets.choice(rakam),
+        secrets.choice(simge),
+    ]
+    kalan = [secrets.choice(havuz) for _ in range(_GENERATED_LENGTH - len(zorunlu))]
+
+    karakterler = zorunlu + kalan
+    # `random.shuffle` DEGIL: zorunlu karakterler hep bastaki 4 pozisyonda
+    # kalirsa parola bicimi tahmin edilebilir olur.
+    secrets.SystemRandom().shuffle(karakterler)
+    return "".join(karakterler)
 
 
 def _make_password() -> tuple[str, bool]:
@@ -57,7 +100,7 @@ def _make_password() -> tuple[str, bool]:
     disaridan = (os.getenv(_PASSWORD_ENV) or "").strip()
     if disaridan:
         return disaridan, True
-    return DEFAULT_PASSWORD, False
+    return _generate_password(), False
 
 
 def ensure_enum_value() -> None:

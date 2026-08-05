@@ -14,6 +14,48 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.49.0] — 2026-08-05
+
+### Düzeltildi
+
+- **Çevrimdışı harita indirmesi hiç çalışmıyordu.** "577 karo indirilemedi
+  (internet kesintisi olabilir)" hatasının sebebi internet değildi: karolar
+  başarıyla iniyor ama diske **yazılamıyordu**. Backend `e1` (uid 10001)
+  kullanıcısıyla koşuyor, harita önbelleği için oluşan volume ise `root`
+  sahipliydi. Docker, imajda **bulunmayan** bir volume hedefini `root:root`
+  yaratır; harita özelliği eklenirken `docker-compose.yml`'a volume eklenmiş
+  ama Dockerfile'daki `mkdir`/`chown` satırına eklenmemişti. Teşhis zordu
+  çünkü her şey sağlıklı görünüyordu — DNS çözülüyor, karo çekme çalışıyor,
+  `online: True`; yalnızca yazma düşüyordu ve hata "internet yok" diye
+  raporlanıyordu. Artık `/var/lib/e1-map-tiles` de imajda oluşturulup `e1`
+  kullanıcısına veriliyor.
+
+### Güvenlik
+
+- **Sabit kurulum parolası kaldırıldı.** `installer` hesabı artık her kurulumda
+  **rastgele** parola ile yaratılıyor; parola yalnızca kurulum çıktısında
+  görünür, kaynak kodda yazılı değildir. Önceki `ChangeMe123!` sabiti,
+  deponun özel olmasına dayanan bilinçli bir kabuldü; depo 2026-08-05'te
+  herkese açık hale gelince o dayanak ortadan kalktı. Üretilen parola belirsiz
+  karakterler (0/O, 1/l/I) içermez — kurulum çıktısından elle okunacağı için.
+  Toplu saha kurulumlarında `E1_INSTALLER_PASSWORD` ile merkezi parola
+  verilebilir.
+
+### Eklendi
+
+- **Horstmann SN2.0 güncelleme dosyası adlandırması** (HH-EW-25-019 Rev 1.0).
+  Firmware / yapılandırma / DNP3 nokta listesi dosyalarının adı artık tek
+  yerden üretiliyor: tekil güncellemede seri numarasından
+  (`49904_Firmware.utf`), toplu güncellemede firmware sürümünden
+  (`V2_338_55_Firmware.utf`). Dosya adı ile tetikleyici DNP3 komutu **birlikte**
+  döndürülüyor — ayrı seçilebilselerdi "toplu ad + tekil komut" gibi bir
+  eşleşmezlik mümkün olurdu. Bu alanda en olası arıza biçimi "hata" değil
+  **sessizlik**: adı bir karakter tutmayan dosyayı cihaz hiç görmez, log da
+  üretmez. Seri numarası olmayan cihazda tekil güncelleme reddediliyor
+  (sessizce topluya düşseydi aynı sürümdeki tüm cihazlar güncellenirdi).
+
+---
+
 ## [2.48.0] — 2026-08-05
 
 ### Düzeltildi

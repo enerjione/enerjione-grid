@@ -55,13 +55,24 @@ COPY alembic.ini ./alembic.ini
 COPY alembic_migrations ./alembic_migrations
 
 # Non-root user — container escape exploit'lerinde host root'a yakin
-# olmamak icin. UID 10001 reserved-range; backup-data volume host'unda
-# (`/var/lib/e1-backups`) bu UID'in yazma yetkisi olmali — Dockerfile
-# `chown` ile /app + /var/lib/e1-backups'i kendisine atar.
+# olmamak icin. UID 10001 reserved-range.
+#
+# HER NAMED VOLUME HEDEFI BURADA YARATILIP `chown` EDILMELIDIR — aksi halde
+# ozellik SESSIZCE calismaz. Docker, imajda BULUNMAYAN bir volume hedefini
+# `root:root` sahipli yaratir; uid 10001 oraya yazamaz.
+#
+# YASANAN ARIZA (2026-08-05): harita ozelligi eklenirken compose'a
+# `map-tile-data` volume'u eklendi ama bu satira EKLENMEDI. Sonuc: cevrimdisi
+# harita indirmesi 577 karonun 577'sini basariyla indirdi, hicbirini
+# yazamadi ve arayuz "Hicbir karo indirilemedi (internet yok olabilir)" dedi
+# — yani hata agi suclu gosterdi, gercek sebep `PermissionError` idi.
+# Teshis zor: `fetch_tile` calisiyor, DNS calisiyor, `online: True`.
+#
+# Yeni bir volume eklerken: docker-compose.yml + BU SATIR birlikte guncellenir.
 RUN groupadd -r e1 --gid=10001 \
  && useradd -r -g e1 --uid=10001 --home-dir=/app --shell=/sbin/nologin e1 \
- && mkdir -p /var/lib/e1-backups /var/lib/e1-license \
- && chown -R e1:e1 /app /var/lib/e1-backups /var/lib/e1-license
+ && mkdir -p /var/lib/e1-backups /var/lib/e1-license /var/lib/e1-map-tiles \
+ && chown -R e1:e1 /app /var/lib/e1-backups /var/lib/e1-license /var/lib/e1-map-tiles
 USER e1
 
 EXPOSE 8000
