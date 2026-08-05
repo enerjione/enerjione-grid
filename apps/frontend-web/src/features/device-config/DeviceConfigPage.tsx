@@ -369,7 +369,11 @@ function FtpSettingsModal({
 
   return (
     <div className="dcfg-modal-backdrop" role="dialog" aria-modal="true">
-      <div className="dcfg-modal dcfg-modal--wide">
+      {/* SABIT boyutlu, iki sutunlu popup: solda baglanti durumu + log
+          listesi (kendi icinde kayar), sagda ayar formu. Loglar govdeye
+          eklendikce popup'in boyu UZAMAZ — eski tek sutunlu halin sikayet
+          edilen kusuru buydu. */}
+      <div className="dcfg-modal dcfg-modal--ftp">
         <div className="dcfg-modal-head">
           <h4>
             <span className="material-symbols-outlined">dns</span>
@@ -380,6 +384,12 @@ function FtpSettingsModal({
           </button>
         </div>
 
+        <div className="dcfg-ftp-body">
+          <aside className="dcfg-ftp-side">
+            <FtpStatusPanel status={status} expectedUser={loaded?.username ?? null} />
+          </aside>
+
+          <div className="dcfg-ftp-main">
         <div className="dcfg-mode-row" role="radiogroup">
           {(["gomulu", "harici"] as const).map((m) => (
             <label key={m} className={`dcfg-mode ${mode === m ? "is-active" : ""}`}>
@@ -397,32 +407,35 @@ function FtpSettingsModal({
         </div>
 
         <div className="dcfg-grid">
-          <label>
-            {t("engineering.deviceConfig.ftp.host")}
-            <input
-              type="text"
-              value={host}
-              disabled={busy}
-              onChange={(e) => setHost(e.target.value)}
-              placeholder={
-                mode === "gomulu"
-                  ? t("engineering.deviceConfig.ftp.hostHintEmbedded")
-                  : "ftp.example.com"
-              }
-            />
-          </label>
-          <label>
-            {t("engineering.deviceConfig.ftp.port")}
-            <input
-              type="text"
-              inputMode="numeric"
-              value={port}
-              disabled={busy}
-              onChange={(e) => setPort(e.target.value)}
-            />
-          </label>
+          {/* Adres + port AYNI satirda: port 5 haneyi gecmez, kendi basina
+              koca bir satiri hak etmiyor. Aciklamalar KISA tutulur — uzun
+              ipuclari alana sigmayip kirpiliyordu ve gurultuydu; PASV
+              aciklamasi alttaki tek notta. */}
+          <div className="dcfg-host-row">
+            <label>
+              {t("engineering.deviceConfig.ftp.host")}
+              <input
+                type="text"
+                value={host}
+                disabled={busy}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder={mode === "gomulu" ? "örn. 192.168.2.99" : "ftp.example.com"}
+              />
+            </label>
+            <label className="dcfg-port">
+              {t("engineering.deviceConfig.ftp.port")}
+              <input
+                type="text"
+                inputMode="numeric"
+                value={port}
+                disabled={busy}
+                onChange={(e) => setPort(e.target.value)}
+              />
+            </label>
+          </div>
           <label>
             {t("engineering.deviceConfig.ftp.username")}
+            {/* Sinir ipucu YOK: maxLength zaten yazmayi durduruyor. */}
             <input
               type="text"
               value={username}
@@ -430,33 +443,52 @@ function FtpSettingsModal({
               maxLength={MAX_FTP_USER}
               onChange={(e) => setUsername(e.target.value)}
             />
-            <small className="dcfg-hint">
-              {t("engineering.deviceConfig.ftp.userLimit", { max: MAX_FTP_USER })}
-            </small>
           </label>
           <label>
             {t("engineering.deviceConfig.ftp.password")}
-            <span className="dcfg-pass-row">
-              {/* type="text": parola cihaz ekranina ELLE girilecek; gizlemek
-                  okumayi imkansiz kilardi, guvenligi degil. */}
+            {/* IKI MODUN PAROLASI FARKLI SEYDIR:
+                - Gomulu: BIZIM sunucumuzun kimligi. Kullanici onu okuyup
+                  cihaz ekranina elle gececek -> acik gosterilir ve "Uret"
+                  okunabilir parola onerir.
+                - Harici: MUSTERININ sunucusunun parolasi. Bizim uretecegimiz
+                  bir sey degil -> normal parola alani gibi maskeli girilir,
+                  "Uret" dugmesi GOSTERILMEZ (musteri parolasinin yerine
+                  rastgele deger onermek yalnizca kafa karistirir). */}
+            {mode === "gomulu" ? (
+              <span className="dcfg-pass-row">
+                <input
+                  type="text"
+                  value={password}
+                  disabled={busy}
+                  maxLength={MAX_FTP_PASS}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={passTooShort ? "is-invalid" : ""}
+                />
+                <button type="button" className="dcfg-btn" disabled={busy} onClick={() => void generate()}>
+                  <span className="material-symbols-outlined">refresh</span>
+                  {t("engineering.deviceConfig.ftp.generate")}
+                </button>
+              </span>
+            ) : (
               <input
-                type="text"
+                type="password"
+                autoComplete="new-password"
                 value={password}
                 disabled={busy}
                 maxLength={MAX_FTP_PASS}
                 onChange={(e) => setPassword(e.target.value)}
                 className={passTooShort ? "is-invalid" : ""}
               />
-              <button type="button" className="dcfg-btn" disabled={busy} onClick={() => void generate()}>
-                <span className="material-symbols-outlined">refresh</span>
-                {t("engineering.deviceConfig.ftp.generate")}
-              </button>
-            </span>
-            <small className="dcfg-hint">
-              {passTooShort
-                ? t("engineering.deviceConfig.ftp.passTooShort")
-                : t("engineering.deviceConfig.ftp.passLimit", { max: MAX_FTP_PASS })}
-            </small>
+            )}
+            {/* Yalnizca GEREKTIGINDE metin: hata varsa hata, gomulu modda
+                tek satirlik ipucu; harici modda hicbir sey. */}
+            {passTooShort ? (
+              <small className="dcfg-hint">{t("engineering.deviceConfig.ftp.passTooShort")}</small>
+            ) : mode === "gomulu" ? (
+              <small className="dcfg-hint">
+                {t("engineering.deviceConfig.ftp.passLimit", { max: MAX_FTP_PASS })}
+              </small>
+            ) : null}
           </label>
           <label>
             {t("engineering.deviceConfig.ftp.directory")}
@@ -527,14 +559,17 @@ function FtpSettingsModal({
             {t("engineering.deviceConfig.ftp.save")}
           </button>
         </div>
-
-        <FtpStatusPanel status={status} expectedUser={loaded?.username ?? null} />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-/** Baglanti durumu: sunucu sagligi + aktif kimlik + son FTP hareketleri. */
+/** Baglanti durumu: sunucu sagligi + aktif kimlik + son FTP hareketleri.
+
+    Popup'in SOL sutununu doldurur; olay listesi kendi icinde kayar, popup'i
+    uzatmaz. */
 function FtpStatusPanel({
   status,
   expectedUser
@@ -543,47 +578,52 @@ function FtpStatusPanel({
   expectedUser: string | null;
 }) {
   const { t } = useTranslation();
-  if (!status) return null;
 
   return (
     <div className="dcfg-status">
       <h5>{t("engineering.deviceConfig.status.title")}</h5>
 
-      {status.mode === "gomulu" && status.server ? (
-        status.server.reachable ? (
-          <p className={`dcfg-status-line ${status.server.synced === false ? "is-warn" : "is-ok"}`}>
-            <span className="material-symbols-outlined">
-              {status.server.synced === false ? "hourglass_top" : "check_circle"}
-            </span>
-            {status.server.synced === false
-              ? t("engineering.deviceConfig.status.pendingSync", {
-                  active: status.server.username ?? "?",
-                  expected: expectedUser ?? "?"
-                })
-              : t("engineering.deviceConfig.status.serverUp", {
-                  user: status.server.username ?? "?",
-                  count: status.server.connections ?? 0
-                })}
-          </p>
-        ) : (
-          <p className="dcfg-status-line is-bad">
-            <span className="material-symbols-outlined">error</span>
-            {t("engineering.deviceConfig.status.serverDown")}
-          </p>
-        )
-      ) : null}
-
-      {status.events.length === 0 ? (
-        <p className="dcfg-empty">{t("engineering.deviceConfig.status.eventsEmpty")}</p>
+      {!status ? (
+        <p className="dcfg-empty">{t("common.loading")}</p>
       ) : (
-        <ul className="dcfg-status-events">
-          {status.events.map((e, i) => (
-            <li key={i} className={e.severity === "warning" ? "is-warn" : ""}>
-              <time>{new Date(e.createdAt).toLocaleString()}</time>
-              <span>{e.message}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          {status.mode === "gomulu" && status.server ? (
+            status.server.reachable ? (
+              <p className={`dcfg-status-line ${status.server.synced === false ? "is-warn" : "is-ok"}`}>
+                <span className="material-symbols-outlined">
+                  {status.server.synced === false ? "hourglass_top" : "check_circle"}
+                </span>
+                {status.server.synced === false
+                  ? t("engineering.deviceConfig.status.pendingSync", {
+                      active: status.server.username ?? "?",
+                      expected: expectedUser ?? "?"
+                    })
+                  : t("engineering.deviceConfig.status.serverUp", {
+                      user: status.server.username ?? "?",
+                      count: status.server.connections ?? 0
+                    })}
+              </p>
+            ) : (
+              <p className="dcfg-status-line is-bad">
+                <span className="material-symbols-outlined">error</span>
+                {t("engineering.deviceConfig.status.serverDown")}
+              </p>
+            )
+          ) : null}
+
+          {status.events.length === 0 ? (
+            <p className="dcfg-empty">{t("engineering.deviceConfig.status.eventsEmpty")}</p>
+          ) : (
+            <ul className="dcfg-status-events">
+              {status.events.map((e, i) => (
+                <li key={i} className={e.severity === "warning" ? "is-warn" : ""}>
+                  <time>{new Date(e.createdAt).toLocaleString()}</time>
+                  <span>{e.message}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );

@@ -26,7 +26,7 @@ class FtpSettingsRead(BaseModel):
     # Acik metin (bkz. modul docstring). None = henuz ayarlanmadi; gomulu
     # sunucu o durumda .env'deki FTP_PASSWORD ile calismaya devam eder.
     password: str | None = None
-    directory: str = "/"
+    directory: str = "/SN20/FOTA/"
     poll_interval_sec: int = 300
     updated_by: str | None = None
     updated_at: datetime | None = None

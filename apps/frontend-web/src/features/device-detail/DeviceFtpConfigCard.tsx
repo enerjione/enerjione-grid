@@ -390,7 +390,10 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
                     setDrafts((d) => ({ ...d, [row.catIndex]: e.target.value }))
                   }
                 />
-                {row.unit ? <em>{row.unit}</em> : null}
+                {/* Birim yuvasi HEP basilir (bos da olsa): yalnizca birimi
+                    olanlarda basmak, birimsiz alanlarin kutusunu saga kaydirip
+                    kolonlari tirtikli gosteriyordu. */}
+                <em>{row.unit ?? ""}</em>
               </span>
             </label>
           );

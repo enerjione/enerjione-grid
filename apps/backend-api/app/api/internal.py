@@ -929,6 +929,14 @@ def ftp_credentials(
         "mode": ayar.mode,
         "username": ayar.username,
         "password": ftp_settings_service.get_password(ayar),
+        # Pasif mod (PASV) yanitinda cihaza bildirilecek adres. Container
+        # kendi IP'sini (172.18.x.x) bilir ama cihazlar oradan erisemez —
+        # PASV o adresi soylerse veri baglantisi zaman asimina duser (sahada
+        # FileZilla ile birebir yasandi). Ayarlardaki "Sunucu adresi" tam da
+        # cihazlarin bize ulastigi adres oldugu icin masquerade olarak o
+        # kullanilir. Bos ise ftp-server env fallback'ine (FTP_MASQUERADE_
+        # ADDRESS) doner.
+        "masquerade": (ayar.host or "").strip() or None,
     }
 
 

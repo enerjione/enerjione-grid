@@ -53,8 +53,9 @@ class FtpSettings(Base):
     password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Cihazlarin dosya yazdigi/okudugu dizin. Gomulu modda kok dizine gore,
     # harici modda sunucudaki mutlak/goreli yol. Cihaz ekranindaki "Dir"
-    # alanina da bu girilir.
-    directory: Mapped[str] = mapped_column(String(200), default="/")
+    # alanina da bu girilir. Varsayilan, Smart Navigator 2.0'in standart
+    # yolu — cihaz ekraninda fabrika degeri de budur.
+    directory: Mapped[str] = mapped_column(String(200), default="/SN20/FOTA/")
     # Harici mod yoklama araligi (saniye). Gomulu modda kullanilmaz — orada
     # olaylar aninda gelir (ftp-server callback'leri).
     poll_interval_sec: Mapped[int] = mapped_column(Integer, default=300)

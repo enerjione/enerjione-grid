@@ -68,6 +68,19 @@ def ayarlari_guncelle(
     row = ftp_settings_service.update_settings(
         db, updates=updates, actor=user.username
     )
+    # Gomulu modda secilen dizin volume'da HAZIR olsun: cihaz var olmayan
+    # dizine cwd deneyince 550 alir ve transfer hic baslamaz. Hata kaydi
+    # ENGELLEMEZ — dizin acilamamasi (ors. gelistirme ortaminda volume yok)
+    # ayarin kendisini kaybettirmemeli; ftp-server acilista standardi kurar.
+    if row.mode == "gomulu":
+        try:
+            ftp_client_service.ensure_embedded_dir(row.directory)
+        except Exception:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "gomulu FTP dizini olusturulamadi: %s", row.directory, exc_info=True
+            )
     # Parolanin degeri denetim kaydina YAZILMAZ; degistigi bilgisi yazilir.
     ozet = [
         ("password(degisti)" if k == "password" else f"{k}={v}")

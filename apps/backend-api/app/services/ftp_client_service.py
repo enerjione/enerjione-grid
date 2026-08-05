@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from ftplib import FTP, error_perm
+from ftplib import FTP, all_errors as ftp_errors, error_perm
 from io import BytesIO
 
 from sqlalchemy.orm import Session
@@ -83,11 +83,19 @@ def _connect(db: Session) -> tuple[FTP, str]:
     try:
         ftp = FTP()
         ftp.connect(ayar.host, int(ayar.port or 21), timeout=TIMEOUT_SEC)
-        ftp.login(ayar.username, parola)
     except OSError as exc:
         raise FtpAccessError(f"FTP sunucusuna baglanilamadi: {exc}") from exc
+    try:
+        ftp.login(ayar.username, parola)
     except error_perm as exc:
+        _quit(ftp)
         raise FtpAccessError(f"FTP kimlik dogrulamasi reddedildi: {exc}") from exc
+    except ftp_errors as exc:
+        # 4xx/bozuk yanit dahil TUM ftplib hatalari. Daha once yalnizca
+        # error_perm yakalaniyordu; error_temp/error_reply 500'e donusuyor ve
+        # kullanici gercek sebebi goremiyordu ("Baglanti sinanamadi").
+        _quit(ftp)
+        raise FtpAccessError(f"FTP oturumu acilamadi: {exc}") from exc
     return ftp, (ayar.directory or "/")
 
 
@@ -106,7 +114,7 @@ def _remote_dirs(ftp: FTP, base: str) -> list[str]:
             continue
         try:
             adlar = ftp.nlst(yol)
-        except error_perm:
+        except ftp_errors:
             continue
         for ad in adlar:
             # NLST bazen tam yol, bazen yalnizca ad doner — ikisini de ele al.
@@ -117,7 +125,7 @@ def _remote_dirs(ftp: FTP, base: str) -> list[str]:
                 onceki = ftp.pwd()
                 ftp.cwd(tam)
                 ftp.cwd(onceki)
-            except error_perm:
+            except ftp_errors:
                 continue  # dosya (ya da girilemeyen dizin)
             dirs.append(tam)
             sinir.append((tam, derinlik + 1))
@@ -135,7 +143,7 @@ def read_remote_configs(db: Session) -> list[RemoteConfig]:
         for dizin in _remote_dirs(ftp, taban):
             try:
                 adlar = ftp.nlst(dizin)
-            except error_perm:
+            except ftp_errors:
                 continue
             for ad in adlar:
                 dosya = ad.rsplit("/", 1)[-1]
@@ -146,12 +154,12 @@ def read_remote_configs(db: Session) -> list[RemoteConfig]:
                 zaman: str | None = None
                 try:
                     boyut = ftp.size(tam)
-                except (error_perm, OSError):
+                except ftp_errors:
                     pass
                 try:
                     yanit = ftp.voidcmd(f"MDTM {tam}")
                     zaman = yanit.split(" ", 1)[-1].strip()
-                except (error_perm, OSError):
+                except ftp_errors:
                     pass
                 sonuc.append(RemoteConfig(path=tam, filename=dosya, size=boyut, mtime=zaman))
         return sonuc
@@ -172,11 +180,28 @@ def download_remote(db: Session, path: str) -> bytes:
 
         try:
             ftp.retrbinary(f"RETR {path}", _yaz)
-        except error_perm as exc:
+        except ftp_errors as exc:
             raise FtpAccessError(f"Dosya indirilemedi: {path} ({exc})") from exc
         return tampon.getvalue()
     finally:
         _quit(ftp)
+
+
+def ensure_embedded_dir(directory: str) -> str:
+    """Gomulu volume'da dizini olusturur (varsa dokunmaz); tam yolu doner.
+
+    Ayarlar kaydedilirken cagrilir: cihaz FTP ekranindaki "Dir" degeri var
+    olmayan bir dizini gosterirse cihaz 550 alip durur ve bu sahada "baglandi
+    ama dosya gitmiyor" olarak gorunur. ftp-server acilista standart dizini
+    (/SN20/FOTA/) zaten kurar; burasi ARAYUZDEN secilen farkli dizinleri de
+    kapsar.
+    """
+    alt = (directory or "/").strip("/")
+    hedef = os.path.join(FTP_ROOT, alt) if alt else FTP_ROOT
+    if not os.path.realpath(hedef).startswith(os.path.realpath(FTP_ROOT)):
+        raise FtpAccessError(f"FTP koku disinda dizin: {directory!r}")
+    os.makedirs(hedef, exist_ok=True)
+    return hedef
 
 
 # --- yazma ------------------------------------------------------------------
@@ -268,9 +293,9 @@ def _write_external(db: Session, *, filename: str, raw: bytes) -> str:
                 ftp.storbinary(f"STOR {hedef}", BytesIO(raw))
                 try:
                     ftp.delete(gecici)
-                except error_perm:
+                except ftp_errors:
                     pass
-        except (OSError, error_perm) as exc:
+        except ftp_errors as exc:
             raise FtpAccessError(f"Harici FTP'ye yazilamadi: {exc}") from exc
 
         logger.info("config harici FTP'ye yazildi: %s (%d bayt)", hedef, len(raw))
@@ -295,38 +320,50 @@ def _find_existing(ftp: FTP, taban: str, filename: str) -> list[str]:
 
 # --- sinama -----------------------------------------------------------------
 def test_connection(db: Session) -> tuple[bool, str, int | None]:
-    """Harici sunucuya baglan, dizine gir, config dosyalarini say.
+    """Harici sunucuya baglan, dizine gir, TABAN dizindeki config'leri say.
 
-    (ok, detay, config_dosya_sayisi) doner. HTTP katmani bunu FtpTestResult'a
-    cevirir. Hata FIRLATMAZ — olumsuz sonuc da bir SONUCTUR.
+    (ok, detay, config_dosya_sayisi) doner. HICBIR KOSULDA hata firlatmaz —
+    olumsuz sonuc da bir SONUCTUR ve `detail` gercek sebebi soyler. Eskiden
+    yakalanmayan bir ftplib hatasi 500'e donusuyor ve kullanici yalnizca
+    "Baglanti sinanamadi" goruyordu; sunucusuna mi, kimlige mi, dizine mi
+    takildigini bilemiyordu.
+
+    Tarama SIG tutulur (yalnizca taban dizin): sinamanin isi erisimi
+    dogrulamak, envanter cikarmak degil. Alt dizinleri de gezen derin tarama
+    WAN uzerinde onlarca gidis-donus demek ve istegi zaman asimina surukler;
+    derin islerin yeri yoklama worker'i.
     """
     try:
-        ftp, taban = _connect(db)
-    except FtpAccessError as exc:
-        return False, str(exc), None
-    try:
         try:
-            ftp.cwd(taban)
-        except error_perm as exc:
-            return False, f"Dizine girilemedi: {taban} ({exc})", None
+            ftp, taban = _connect(db)
+        except FtpAccessError as exc:
+            return False, str(exc), None
         try:
-            import re
+            try:
+                ftp.cwd(taban)
+            except ftp_errors as exc:
+                return False, f"Dizine girilemedi: {taban} ({exc})", None
+            try:
+                import re
 
-            desen = re.compile(r"^[A-Za-z0-9]{1,20}_Configuration\.csv$")
-            sayi = 0
-            for dizin in _remote_dirs(ftp, taban):
-                try:
-                    for ad in ftp.nlst(dizin):
-                        if desen.match(ad.rsplit("/", 1)[-1]):
-                            sayi += 1
-                except error_perm:
-                    continue
-            return True, "Baglanti basarili.", sayi
-        except (OSError, error_perm) as exc:
-            # Baglanti + login + cwd calisti; listeleme sorunu ayri raporlanir.
-            return True, f"Baglanti basarili ama dizin listelenemedi: {exc}", None
-    finally:
-        _quit(ftp)
+                desen = re.compile(r"^[A-Za-z0-9]{1,20}_Configuration\.csv$")
+                sayi = sum(
+                    1 for ad in ftp.nlst(taban) if desen.match(ad.rsplit("/", 1)[-1])
+                )
+                return True, "Baglanti basarili.", sayi
+            except ftp_errors as exc:
+                # Baglanti + login + cwd calisti; listeleme (veri kanali)
+                # sorunu AYRI raporlanir — tipik sebep pasif mod portlarinin
+                # guvenlik duvarinda kapali olmasi.
+                return True, (
+                    "Baglanti basarili ama dizin listelenemedi (veri kanali "
+                    f"kurulamadi — pasif mod portlari kapali olabilir): {exc}"
+                ), None
+        finally:
+            _quit(ftp)
+    except Exception as exc:  # noqa: BLE001 - sinama ASLA 500 uretmemeli
+        logger.warning("ftp sinama beklenmeyen hata", exc_info=True)
+        return False, f"Sinama basarisiz: {exc}", None
 
 
 def _quit(ftp: FTP) -> None:

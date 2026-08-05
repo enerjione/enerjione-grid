@@ -40,14 +40,21 @@ TIMEOUT_SEC = 5
 
 
 class CredentialPoller:
-    """Backend'den (kullanici, parola) ceker; degisince callback cagirir."""
+    """Backend'den (kullanici, parola, masquerade) ceker; degisince callback
+    cagirir.
+
+    Masquerade = pasif mod (PASV) yanitinda cihaza bildirilecek adres.
+    Container kendi IP'sini (172.18.x.x) soylerse LAN'daki cihaz veri
+    baglantisi kuramaz; dogru adres, ayarlardaki "Sunucu adresi"dir ve
+    kimlikle ayni yoldan tasinir ki o da yeniden baslatmasiz degissin.
+    """
 
     def __init__(
         self,
         *,
         backend_url: str,
         service_token: str,
-        on_change: Callable[[str, str], None] | None = None,
+        on_change: Callable[[str, str, str | None], None] | None = None,
     ) -> None:
         self._url = backend_url.rstrip("/") + "/internal/ftp-credentials"
         self._headers = {
@@ -56,10 +63,10 @@ class CredentialPoller:
         }
         self._on_change = on_change
         self._enabled = bool(backend_url and service_token)
-        self._last: tuple[str, str] | None = None
+        self._last: tuple[str, str, str | None] | None = None
         self._unreachable_logged = False
 
-    def set_on_change(self, cb: Callable[[str, str], None]) -> None:
+    def set_on_change(self, cb: Callable[[str, str, str | None], None]) -> None:
         """Degisim callback'ini sonradan baglar.
 
         Acilista tavuk-yumurta var: ilk kimligi POLLER ceker, ama callback'in
@@ -69,8 +76,8 @@ class CredentialPoller:
         """
         self._on_change = cb
 
-    def fetch_once(self) -> tuple[str, str] | None:
-        """Tek deneme. (kullanici, parola) ya da None (erisilemedi/eksik).
+    def fetch_once(self) -> tuple[str, str, str | None] | None:
+        """Tek deneme. (kullanici, parola, masquerade) ya da None.
 
         Parolasi henuz ayarlanmamis backend de None sayilir — bos parolayla
         hesap acmak, sunucuyu parolasiz birakmak olurdu.
@@ -89,9 +96,10 @@ class CredentialPoller:
         self._unreachable_logged = False
         kullanici = (veri.get("username") or "").strip()
         parola = veri.get("password") or ""
+        masquerade = (veri.get("masquerade") or "").strip() or None
         if not kullanici or not parola:
             return None
-        return kullanici, parola
+        return kullanici, parola, masquerade
 
     def start(self) -> None:
         """Arka plan yoklamasini baslatir (daemon thread)."""
@@ -119,7 +127,7 @@ class CredentialPoller:
                     log.exception("FTP kimligi uygulanamadi")
             time.sleep(POLL_SEC)
 
-    def prime(self, kimlik: tuple[str, str]) -> None:
+    def prime(self, kimlik: tuple[str, str, str | None]) -> None:
         """Acilista uygulanmis kimligi kaydeder ki ilk yoklama onu 'degisti'
         sanip gereksiz bir swap yapmasin."""
         self._last = kimlik

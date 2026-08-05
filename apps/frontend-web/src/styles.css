@@ -36539,52 +36539,63 @@ th.event-col-category {
    hemen yaninda ve iki ayar yan yana sigiyor. */
 .dev-ftp-grid {
   display: grid;
-  /* Dar ekranda kendiliginden tek sutuna duser. */
-  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
-  gap: 0.35rem 1.25rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
+  /* Dar ekranda kendiliginden tek sutuna duser. auto-FILL: son satirda az
+     hucre kalirsa hucreler tum genislige YAYILMAZ — devasa tek kutu cirkin. */
+  grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+  gap: 0.5rem;
 }
 
+/* Her ayar KENDI kutusunda. Ince cizgilerle ayrilan duz satirlar 3-4
+   kolonlu genis ekranda birbirine karisiyordu; kutu, ad-deger ciftini
+   gorsel olarak baglar ve kolonlar duzgun bir izgara gibi okunur. */
 .dev-ftp-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.35rem 0.4rem;
-  border-radius: 0.4rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #eef0f3;
+  background: #fafbfc;
+  border-radius: 0.5rem;
+  /* Adlar 1 ya da 2 satir olabiliyor; sabit yukseklik hizayi korur. */
+  min-height: 3rem;
   /* `label` oldugu icin ada tiklamak da alani odaklar. */
   cursor: text;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
-.dev-ftp-item + .dev-ftp-item { border-top: 1px solid #f6f7f9; }
+.dev-ftp-item:hover { border-color: #d1d5db; }
+.dev-ftp-item:focus-within { border-color: #2563eb; background: #fff; }
 
 .dev-ftp-item-name {
   display: flex;
   flex-direction: column;
+  gap: 0.1rem;
   min-width: 0;
   font-size: 0.8125rem;
+  line-height: 1.25;
   color: #111827;
 }
 
 .dev-ftp-item-name code {
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
   color: #9ca3af;
 }
 
 .dev-ftp-item-input {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.4rem;
   flex: 0 0 auto;
 }
 
 .dev-ftp-item-input input {
-  width: 7.5rem;
-  padding: 0.25rem 0.45rem;
+  width: 6.5rem;
+  padding: 0.3rem 0.45rem;
   border: 1px solid #d1d5db;
   border-radius: 0.35rem;
+  background: #fff;
   font: inherit;
   font-size: 0.8125rem;
   text-align: right;
@@ -36602,18 +36613,21 @@ th.event-col-category {
   color: #6b7280;
 }
 
+/* Birim yuvasi HEP vardir (bilesende bos da olsa basilir) ve sabit
+   genisliktedir: birimsiz alanlarin kutusu birimlilerle AYNI hizada durur.
+   Yalnizca birimi olanlara yer acmak kolonlari tirtikli gosteriyordu. */
 .dev-ftp-item-input em {
   font-style: normal;
-  font-size: 0.75rem;
+  font-size: 0.71875rem;
   color: #6b7280;
-  /* Birim sutunu sabit: farkli uzunluktaki birimler degerleri kaydirmasin. */
-  min-width: 2.2rem;
+  width: 2.3rem;
+  flex-shrink: 0;
 }
 
 /* Kaydedilmemis degisiklik — kaydedilenle karismasin. */
 .dev-ftp-item.is-changed {
   background: #fffbeb;
-  box-shadow: inset 3px 0 0 #f59e0b;
+  border-color: #f59e0b;
 }
 
 /* Cihaz sayfasi: bu surum cihaza gonderildi bilgisi. */
@@ -37016,11 +37030,73 @@ th.event-col-category {
   border-left-color: #f59e0b;
 }
 
+/* -- FTP popup'i: sabit boyut, iki sutun ---------------------------------- */
+/* Boy SABIT: log listesi buyudukce popup uzamaz — loglar kendi sutununda
+   kayar. Sikayet edilen "surekli uzayan popup" kusuru buydu. */
+.dcfg-modal--ftp {
+  width: min(64rem, calc(100vw - 2rem));
+  height: min(42rem, 90vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dcfg-ftp-body {
+  display: flex;
+  gap: 1.1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.dcfg-ftp-side {
+  width: 20rem;
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #eef0f3;
+  padding-right: 1.1rem;
+}
+
+.dcfg-ftp-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* FTP formu TEK SUTUN: iki sutunlu izgara, sabit boylu popup'in altinda
+   genis bos alan birakiyordu. Tek sutun asagiya dogru dolar; Kaydet en
+   altta durur (margin-top:auto — icerik kisa kalsa da dibe yaslanir). */
+.dcfg-ftp-main .dcfg-grid { grid-template-columns: 1fr; }
+.dcfg-ftp-main .dcfg-actions { margin-top: auto; padding-top: 0.9rem; }
+
+/* Adres + port ayni satirda: port 5 haneyi gecmez, satiri hak etmiyor. */
+.dcfg-host-row { display: flex; gap: 0.75rem; }
+.dcfg-host-row label:first-child { flex: 1; min-width: 0; }
+.dcfg-host-row .dcfg-port { width: 6.5rem; flex-shrink: 0; }
+
+/* Dar ekranda sutunlar alt alta; log listesi sinirli yukseklikte kalir. */
+@media (max-width: 62rem) {
+  .dcfg-ftp-body { flex-direction: column; overflow-y: auto; }
+  .dcfg-ftp-side {
+    width: auto;
+    border-right: 0;
+    padding-right: 0;
+    border-bottom: 1px solid #eef0f3;
+    padding-bottom: 0.75rem;
+  }
+  .dcfg-ftp-side .dcfg-status-events { max-height: 11rem; }
+}
+
 /* -- baglanti durumu paneli ---------------------------------------------- */
 .dcfg-status {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px dashed #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .dcfg-status h5 {
@@ -37031,40 +37107,51 @@ th.event-col-category {
 
 .dcfg-status-line {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.4rem;
   margin: 0 0 0.6rem;
-  font-size: 0.8125rem;
+  font-size: 0.78125rem;
+  line-height: 1.35;
 }
 
-.dcfg-status-line .material-symbols-outlined { font-size: 1.1rem; }
+.dcfg-status-line .material-symbols-outlined { font-size: 1.05rem; margin-top: 0.05rem; }
 .dcfg-status-line.is-ok { color: #047857; }
 .dcfg-status-line.is-warn { color: #b45309; }
 .dcfg-status-line.is-bad { color: #b91c1c; }
 
+/* Log listesi: zaman ustte kucuk, mesaj altinda — dar sutunda tek satira
+   sikistirmak okunmuyordu. Liste kendi icinde kayar. */
 .dcfg-status-events {
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 12rem;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   font-size: 0.75rem;
   border: 1px solid #f3f4f6;
   border-radius: 0.45rem;
+  background: #fafbfc;
 }
 
 .dcfg-status-events li {
   display: flex;
-  gap: 0.6rem;
-  padding: 0.3rem 0.55rem;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.6rem;
   color: #374151;
+  overflow-wrap: anywhere;
 }
 
-.dcfg-status-events li + li { border-top: 1px solid #f6f7f9; }
-.dcfg-status-events li.is-warn { color: #b45309; background: #fffbeb; }
+.dcfg-status-events li + li { border-top: 1px solid #eef0f3; }
+.dcfg-status-events li.is-warn {
+  color: #b45309;
+  background: #fffbeb;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
 
 .dcfg-status-events time {
-  flex-shrink: 0;
   color: #9ca3af;
+  font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
 }

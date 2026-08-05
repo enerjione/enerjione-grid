@@ -176,7 +176,13 @@ def _make_authorizer(
     return authorizer
 
 
-def _initial_credentials(poller: CredentialPoller) -> tuple[str, str]:
+#: Smart Navigator 2.0'in FTP ekranindaki standart dizin. Cihazlar config/
+#: firmware icin bu yola bakar; acilista otomatik olusturulur ki cihaz ilk
+#: baglantida "550 dizin yok" ile donmesin.
+STANDARD_DEVICE_DIR = "SN20/FOTA"
+
+
+def _initial_credentials(poller: CredentialPoller) -> tuple[str, str, str | None]:
     """Acilis kimligi: once backend (arayuzden yonetilen), yoksa env.
 
     Ikisi de yoksa acilmayi REDDEDER: parolasiz FTP sunucusu, sahadaki tum
@@ -189,7 +195,7 @@ def _initial_credentials(poller: CredentialPoller) -> tuple[str, str]:
         return kimlik
     if s.ftp_password:
         log.info("FTP kimligi env'den alindi (backend erisilemedi ya da bos).")
-        return s.ftp_user, s.ftp_password
+        return s.ftp_user, s.ftp_password, None
     log.error(
         "FTP kimligi yok: backend'e erisilemiyor ve FTP_PASSWORD bos — "
         "sunucu baslatilmiyor (guvenlik)."
@@ -201,6 +207,9 @@ def _build_server() -> tuple[FTPServer, type[FTPHandler], CredentialPoller]:
     s = SETTINGS
 
     os.makedirs(s.ftp_root, exist_ok=True)
+    # SN2'nin standart dizini hazir olsun — cihaz FTP ekranindaki "Dir"
+    # alanina /SN20/FOTA/ girilir ve dizin yoksa cihaz 550 alip durur.
+    os.makedirs(os.path.join(s.ftp_root, STANDARD_DEVICE_DIR), exist_ok=True)
     _share_root_with_backend(s.ftp_root)
 
     # TEK HESAP (bilincli karar, 2026-08-05). Kisa sureligine ikinci bir
@@ -216,8 +225,8 @@ def _build_server() -> tuple[FTPServer, type[FTPHandler], CredentialPoller]:
         backend_url=s.backend_url,
         service_token=s.internal_service_token,
     )
-    kullanici, parola = _initial_credentials(poller)
-    poller.prime((kullanici, parola))
+    kullanici, parola, masquerade = _initial_credentials(poller)
+    poller.prime((kullanici, parola, masquerade))
 
     reporter = EventReporter(
         backend_url=s.backend_url, service_token=s.internal_service_token
@@ -231,19 +240,36 @@ def _build_server() -> tuple[FTPServer, type[FTPHandler], CredentialPoller]:
     handler.banner = "EnerjiOne FTP ready."
     # Pasif mod veri portu araligi — docker-compose'ta host'a map edilmeli.
     handler.passive_ports = range(s.pasv_min_port, s.pasv_max_port + 1)
-    if s.masquerade_address:
-        # NAT arkasindaysa cihaza gorunen dis IP.
-        handler.masquerade_address = s.masquerade_address
+    # PASV yanitinda cihaza bildirilen adres. ZORUNLU dogru olmali: container
+    # kendi IP'sini (172.18.x.x) soylerse LAN'daki istemci veri baglantisini
+    # kuramaz ve her listeleme/transfer zaman asimina duser (sahada FileZilla
+    # ile yasandi). Oncelik: backend'deki "Sunucu adresi" > env fallback.
+    if masquerade or s.masquerade_address:
+        handler.masquerade_address = masquerade or s.masquerade_address
+        log.info("PASV masquerade adresi: %s", handler.masquerade_address)
+    else:
+        log.warning(
+            "PASV masquerade adresi YOK — arayuzden 'Sunucu adresi' girilmedikce "
+            "dis istemciler pasif modda veri baglantisi kuramayabilir."
+        )
 
     # Kimlik degisiminde Authorizer TAKAS edilir — tabloyu yerinde degistirmek
     # degil. Sinif ozniteligi atamasi tek referans yazimidir (GIL altinda
     # atomik); login akisi ya tamamen eskisini ya tamamen yenisini gorur.
     # Aktif oturumlarin eski kullanici adi icin bkz. _make_authorizer.
-    def _kimlik_degisti(yeni_kullanici: str, yeni_parola: str) -> None:
+    # Masquerade da ayni kanaldan gelir: arayuzde "Sunucu adresi" degisince
+    # PASV yaniti yeniden baslatmasiz duzelir.
+    def _kimlik_degisti(
+        yeni_kullanici: str, yeni_parola: str, yeni_masquerade: str | None
+    ) -> None:
         eski = next(iter(handler.authorizer.user_table), None)
         handler.authorizer = _make_authorizer(
             yeni_kullanici, yeni_parola, s.ftp_root, eski_kullanici=eski
         )
+        hedef = yeni_masquerade or s.masquerade_address or None
+        if handler.masquerade_address != hedef:
+            handler.masquerade_address = hedef
+            log.info("PASV masquerade adresi guncellendi: %s", hedef)
 
     poller.set_on_change(_kimlik_degisti)
 
