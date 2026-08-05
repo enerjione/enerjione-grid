@@ -14,6 +14,46 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.0] — 2026-08-05
+
+### Eklendi
+
+- **"Cihaz Yapılandırma" mühendislik sayfası** (Kurulum grubunda, engineer+installer).
+  Solda aranabilir cihaz listesi — her satırda güncel yapılandırma rozeti
+  (v3 · cihazdan çekildi); sağda seçili cihazın config kartı. Cihazlar arası
+  tek tıkla gezilir; FTP ayarları, şablonlar ve toplu uygulama popup'tadır.
+- **FTP sunucu ayarları arayüzden yönetiliyor** (gömülü/harici mod, sunucu,
+  port, kullanıcı, parola, dizin). Parola değişikliği için yeniden başlatma
+  GEREKMEZ: gömülü sunucu kimliği backend'den ~30 saniyede bir çeker.
+  "Üret" düğmesi cihaz ekranına elle girilebilir, karışan karakter (0/O,
+  1/l/I) içermeyen parola önerir; alan sınırları cihaz ekranıyla aynı
+  (kullanıcı ≤29, parola ≤19).
+- **Harici FTP sunucu desteği.** Cihazlar ve yazılım müşterinin FTP
+  sunucusunu kullanabilir: config oraya yazılır, cihazın yazdığı dosyalar
+  belirlenen aralıkla yoklanıp sürüme çevrilir. "Bağlantıyı sına" düğmesi
+  sunucu/kimlik/dizini doğrular.
+- **"Cihaza uygula" zinciri kapandı.** Dosya artık FTP'ye otomatik yazılır,
+  ardından `config_update` komutu kuyruğa alınır ve sürümün "cihaza
+  gönderildi" zamanı işlenir. FTP yazımı başarısızsa komut gönderilmez —
+  cihaza eski dosya okutulmaz.
+- **Yapılandırma şablonu yükleme ve toplu uygulama.** Bilinen-iyi dosya
+  şablon olarak yüklenir, varsayılan işaretlenir; yeni eklenen cihaz ilk
+  yapılandırmasını varsayılan şablondan alır. Toplu uygulamada onay ekranı
+  kaç cihaz / hangi şablon / cihaz başına hangi sürümden hangisine bilgisini
+  ve modeli uymadığı için atlanacakları gösterir.
+- **Bağlantı durumu paneli.** Gömülü sunucunun sağlığı, şu an kabul ettiği
+  kimlik (kimlik değişimi yansıyana kadar "senkron bekleniyor" uyarısı) ve
+  son FTP hareketleri (girişler, dosya transferleri, yoklama hataları).
+
+### Değişti
+
+- Gömülü FTP sunucusunun kimliği artık `.env` yerine veritabanından yönetilir;
+  `.env`'deki `FTP_USER`/`FTP_PASSWORD` yalnızca backend'e erişilemeyen ilk
+  açılışta yedek olarak kullanılır. Kimlik değişimi aktif dosya transferlerini
+  düşürmez.
+
+---
+
 ## [2.52.1] — 2026-08-05
 
 ### Düzeltildi
