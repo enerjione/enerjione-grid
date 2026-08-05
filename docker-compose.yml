@@ -510,7 +510,7 @@ services:
       # ack_wait(60s) x max_deliver(10) = 10 DAKIKA; 24 saat 144 kat marj.
       # (Onceki 7 GUNluk deger tabloyu ~180M satira cikariyordu.)
       PROCESSED_MESSAGES_RETENTION_HOURS: ${PROCESSED_MESSAGES_RETENTION_HOURS:-2}
-      PROCESSED_MESSAGES_INTERVAL_SEC: ${PROCESSED_MESSAGES_INTERVAL_SEC:-600}
+      PROCESSED_MESSAGES_INTERVAL_SEC: ${PROCESSED_MESSAGES_INTERVAL_SEC:-60}
       # system_events: denetim/olay kaydi. 2 yil (730 gun) + FIFO adet tavani.
       # Tavan, olay firtinasinda 2 yil dolmadan da devreye giren emniyet subabi.
       SYSTEM_EVENTS_RETENTION_DAYS: ${SYSTEM_EVENTS_RETENTION_DAYS:-730}

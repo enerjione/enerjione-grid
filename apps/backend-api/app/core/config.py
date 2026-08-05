@@ -451,7 +451,34 @@ class Settings(BaseSettings):
     # NOT: birim GUN'den SAAT'e cevrildi; eski PROCESSED_MESSAGES_RETENTION_DAYS
     # artik okunmuyor — telemetry_retention.py set edilmisse uyari loglar.
     processed_messages_retention_hours: int = 2
-    processed_messages_interval_sec: int = 600
+    # TEMIZLIK ARALIGI — SILME KAPASITESI URETIMIN USTUNDE OLMALI
+    #
+    # 2026-08-05 SAHA OLCUMU: bu deger 600 sn idi ve tablo 20 GB'a / 74 MILYON
+    # satira ciktiy. 2 saatlik pencerede olmasi gereken tabloda 10,5 SAATLIK
+    # veri birikmisti.
+    #
+    # HESAP — neden kacinilmazdi:
+    #   silme kapasitesi = retention_delete_batch (20.000)
+    #                    x retention_max_batches_per_run (50)
+    #                    / aralik (600 sn)          = 1.666 satir/sn
+    #   olculen uretim   = ~2.900 satir/sn
+    # Silme uretimin ALTINDA oldugu icin tablo kararli duruma HIC gelemez.
+    #
+    # KISIR DONGU: tablo buyur -> dedup sorgusu onbellege sigmaz -> her mesaj
+    # icin DISKTEN okuma -> tuketim yavaslar -> temizlik daha da geri kalar.
+    # Postgres bekleme olaylarinda birebir gorulmustu:
+    #   IO | DataFileRead | SELECT processed_messages.message_id FROM ...
+    # Yazma hizi 2.920 -> 1.581 satir/sn'ye dusmustu ve CPU'lar BOSTA
+    # bekliyordu (tikanma degil, disk sirasi).
+    #
+    # 60 sn ile kapasite 16.666 satir/sn = uretimin ~5,7 KATI. Kararli
+    # durumda maliyet yok: `_batch_delete` parti dolmayinca ERKEN CIKAR,
+    # yani yalnizca gercekten silinecek kadar is yapilir.
+    #
+    # AYNI HATA outbox_events'te de yasanmisti (bkz. 2026-08-04). Kural:
+    # bir temizlik isinin kapasitesi, temizledigi seyin URETIM HIZINI
+    # asmali — aksi halde is "calisiyor" gorunur ama hicbir zaman yetismez.
+    processed_messages_interval_sec: int = 60
     # `system_events` — denetim/olay kaydi. Onceden HIC retention yoktu.
     # 2 yil: operator karari (yasal/operasyonel geriye donuk inceleme ufku).
     # Alarm KENDILIGINDEN normale dondugunde `system_events`e ayrica kayit

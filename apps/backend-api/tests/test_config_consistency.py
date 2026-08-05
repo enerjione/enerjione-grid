@@ -473,3 +473,41 @@ def test_saklama_ISLENEN_saniyeye_ceviriliyor():
 
     kaynak = inspect.getsource(t)
     assert "timedelta(seconds=saniye)" in kaynak
+
+
+def test_dedup_temizligi_URETIM_HIZININ_USTUNDE():
+    """Silme kapasitesi, temizledigi seyin URETIM hizini ASMALI.
+
+    YASANAN ARIZA (2026-08-05, 500 cihaz yuk testi)
+    -----------------------------------------------
+    `processed_messages_interval_sec` 600 idi:
+        kapasite = 20.000 x 50 / 600 sn = 1.666 satir/sn
+        uretim   = ~2.900 satir/sn
+    Silme uretimin ALTINDA oldugu icin tablo kararli duruma HIC gelemedi:
+    2 saatlik pencerede 10,5 SAATLIK veri, 74 milyon satir, 20 GB.
+
+    Sonra kisir dongu: tablo onbellege sigmayinca her mesajin dedup sorgusu
+    DISKTEN okumaya basladi, yazma hizi 2.920 -> 1.581 satir/sn'ye dustu ve
+    CPU'lar bosta bekledi (tikanma degil, disk sirasi).
+
+    AYNI HATA outbox_events'te de yasanmisti (2026-08-04). Bu test kurali
+    genel olarak kilitliyor: bir temizlik isi "calisiyor" gorunup hicbir
+    zaman yetismeyebilir; tek koruma kapasiteyi uretime karsi olcmek.
+
+    Hedef uretim: 500 cihaz x ~100 degisen sinyal / ... olculen ~2.900/sn.
+    En az 3 KAT pay istiyoruz — saha yuku dalgalanir ve temizlik
+    tam kapasitede kosarsa ilk dalgada geri duser.
+    """
+    from app.core.config import settings as ayar
+
+    olculen_uretim_satir_sn = 2900
+    kapasite = (
+        ayar.retention_delete_batch
+        * ayar.retention_max_batches_per_run
+        / ayar.processed_messages_interval_sec
+    )
+    assert kapasite >= olculen_uretim_satir_sn * 3, (
+        f"dedup temizlik kapasitesi {kapasite:.0f} satir/sn, olculen uretim "
+        f"{olculen_uretim_satir_sn}/sn — en az 3 kat pay gerekli. "
+        "Tablo kararli duruma gelemez ve dedup sorgusu diske duser."
+    )
