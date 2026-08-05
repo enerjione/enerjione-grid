@@ -14,6 +14,31 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.52.0] — 2026-08-05
+
+### Eklendi
+
+- **Ayarların adları görünüyor.** Cihazdan gelen CSV yalnızca `GROUP,INDEX`
+  taşır, adları taşımaz; ekran bu yüzden "381101 = 0" gibi anlamsız satırlar
+  gösteriyordu — hangi ayarı değiştirdiğinizi bilmeden düzenleme yapmak,
+  yanlış ayar değiştirmenin en kolay yoluydu. Smart Navigator Explorer'ın
+  ürettiği katalogdan 144 girdilik bir anlam tablosu çıkarılıp uygulamaya
+  gömüldü; gerçek cihaz dosyasında 60 ayarın 56'sı artık adı ve birimiyle
+  görünüyor ("Dial-In Interval — 1440 min").
+- **Cihaz komutları Ayarlar ekranına taşındı.** "Cihazdan çek"
+  (`start_csv_file_upload`) ve "Cihaza uygula" (`config_update`) artık aynı
+  ekranda; Komutlar sekmesine gitmek gerekmiyor. Yapılandırması olmayan
+  cihazda da "Cihazdan çek" görünüyor — tam da o durumda ihtiyaç duyulan
+  işlem o.
+
+### Değiştirildi
+
+- **Ayar listesi tam boy uzuyor.** Tablo 28 rem'de kesilip kendi kaydırma
+  çubuğunu çıkarıyordu; 60 ayarlık bir listede bu, küçük bir pencereden
+  bakmaya zorluyordu. Artık liste tam boy, başlık satırı üstte sabit kalıyor.
+
+---
+
 ## [2.51.1] — 2026-08-05
 
 ### Düzeltildi

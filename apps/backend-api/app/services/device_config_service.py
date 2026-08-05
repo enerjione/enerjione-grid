@@ -20,7 +20,9 @@ cihaz hic gormez.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -308,16 +310,50 @@ def revert_to(
 
 
 # --- gosterim --------------------------------------------------------------
+#: Yerlesik anlam katalogu (CatIndex -> ad/birim). Kaynak: Smart Navigator
+#: Explorer'in urettigi `<seri>.xml` ObjectCatalog dosyasi; bir kez cikarilip
+#: `app/data/horstmann_sn2_config_catalog.json` olarak gomuldu.
+#:
+#: NEDEN GOMULU: cihazdan gelen CSV yalnizca `GROUP,INDEX,...` icerir, ADLARI
+#: TASIMAZ. Katalog olmadan arayuz "381101 = 0" gostermek zorunda kalir ve
+#: kullanici hangi ayari degistirdigini bilemez — bu, yanlis ayar degistirmenin
+#: en kolay yoludur.
+_KATALOG_YOLU = Path(__file__).resolve().parents[1] / "data/horstmann_sn2_config_catalog.json"
+_katalog_onbellek: dict[str, CatalogEntry] | None = None
+
+
+def builtin_catalog() -> dict[str, CatalogEntry]:
+    """Gomulu katalogu dondurur (bir kez okunur).
+
+    Dosya okunamazsa BOS doner, PATLAMAZ: katalog bir GOSTERIM zenginligidir,
+    onun yoklugu yapilandirmayi goruntulenemez yapmamali.
+    """
+    global _katalog_onbellek
+    if _katalog_onbellek is None:
+        try:
+            ham = json.loads(_KATALOG_YOLU.read_text(encoding="utf-8"))
+            _katalog_onbellek = {
+                ci: CatalogEntry(
+                    cat_index=ci, meaning=v.get("meaning", ""), value=None,
+                    unit=v.get("unit"),
+                )
+                for ci, v in ham.items()
+            }
+        except Exception:  # noqa: BLE001
+            _katalog_onbellek = {}
+    return _katalog_onbellek
+
+
 def describe(
     raw: bytes, catalog: dict[str, CatalogEntry] | None = None
 ) -> list[dict]:
     """Ham dosyayi arayuzun gosterebilecegi satirlara cevirir.
 
-    Katalog verilmisse anlamli ad ve birim eklenir; verilmemisse ham
-    CatIndex ile donulur — katalog eksikligi dosyayi GORUNTULENEMEZ yapmamali.
+    Katalog verilmezse GOMULU katalog kullanilir. Katalogda olmayan girdi ham
+    CatIndex ile donulur — eksik bir ad, satiri GIZLEMEK icin sebep degildir.
     """
     doc = parse(raw)
-    katalog = catalog or {}
+    katalog = catalog if catalog is not None else builtin_catalog()
     satirlar: list[dict] = []
     for e in doc.entries:
         bilgi = katalog.get(e.cat_index)

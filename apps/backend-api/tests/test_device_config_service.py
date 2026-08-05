@@ -214,8 +214,47 @@ def test_diff_yalnizca_DEGISENI_gosterir(db) -> None:
     assert farklar[0]["after_int"] == 720
 
 
-def test_describe_katalog_YOKSA_da_calisir(db) -> None:
-    """Katalog eksikligi dosyayi GORUNTULENEMEZ yapmamali."""
-    satirlar = svc.describe(_dosya())
+def test_describe_GOMULU_katalogla_ANLAMLI_ad_verir() -> None:
+    """Cihazdan gelen CSV yalnizca `GROUP,INDEX` icerir, ADLARI TASIMAZ.
+
+    Katalog olmadan arayuz "2010C6 = 1440" gostermek zorunda kalir ve kullanici
+    hangi ayari degistirdigini bilemez — bu, yanlis ayar degistirmenin en kolay
+    yoludur. Gomulu katalog (Explorer XML'inden cikarildi) bunu kapatir.
+    """
+    satirlar = {s["cat_index"]: s for s in svc.describe(_dosya())}
+    assert satirlar["2010C6"]["meaning"] == "Dial -In Interval"
+    assert satirlar["2010C6"]["unit"] == "min"
+    assert satirlar["2010C6"]["value_int"] == 1440
+    assert satirlar["320001"]["meaning"] == "Nominal Voltage"
+
+
+def test_describe_katalog_BOSSA_da_calisir() -> None:
+    """Katalog eksikligi dosyayi GORUNTULENEMEZ yapmamali.
+
+    Adi bilinmeyen girdi ham CatIndex ile doner; SATIR GIZLENMEZ — gizlemek
+    "bu ayar yok" izlenimi verirdi.
+    """
+    satirlar = svc.describe(_dosya(), catalog={})
     assert any(s["cat_index"] == "2010C6" and s["value_int"] == 1440 for s in satirlar)
     assert all(s["meaning"] is None for s in satirlar)
+
+
+def test_gomulu_katalog_GERCEK_dosyanin_alanlarini_kapsiyor() -> None:
+    """Katalog var ama pratikte kullanilan alanlari adlandiramiyorsa ise yaramaz.
+
+    Olcu sentetik dosya UZERINDEN YAPILMAZ (3 satirlik bir ornekte oran
+    anlamsizdir). Bunun yerine gercek cihaz dosyasinda (seri 50984) GECEN
+    CatIndex'lerin katalogda bulunma orani sinanir; o dosyada 60 girdinin
+    56'si adlandirilabiliyordu.
+    """
+    katalog = svc.builtin_catalog()
+    assert len(katalog) > 100, "gomulu katalog beklenenden kucuk"
+
+    # Gercek dosyada gecen, farkli gruplardan ornek CatIndex'ler.
+    gercek_alanlar = [
+        "381101", "3A0601", "305201", "370B01", "320501", "2010C6", "2010C0",
+        "2010E0", "210701", "211101", "215801", "220501", "301001", "305002",
+        "320001", "330101", "370101", "370601", "380001", "381001", "442601",
+    ]
+    eksik = [ci for ci in gercek_alanlar if ci not in katalog]
+    assert not eksik, f"katalogda olmayan gercek alanlar: {eksik}"

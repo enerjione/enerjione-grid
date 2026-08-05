@@ -1,0 +1,578 @@
+{
+  "101909": {
+    "meaning": "Part No.",
+    "unit": null
+  },
+  "200301": {
+    "meaning": "SIM Pin",
+    "unit": null
+  },
+  "201000": {
+    "meaning": "Main URL",
+    "unit": null
+  },
+  "201001": {
+    "meaning": "APN",
+    "unit": null
+  },
+  "201002": {
+    "meaning": "APN Username",
+    "unit": null
+  },
+  "201003": {
+    "meaning": "APN Password",
+    "unit": null
+  },
+  "201004": {
+    "meaning": "Port Number",
+    "unit": null
+  },
+  "201005": {
+    "meaning": "TLS",
+    "unit": null
+  },
+  "201006": {
+    "meaning": "TLS",
+    "unit": null
+  },
+  "201007": {
+    "meaning": "TLS",
+    "unit": null
+  },
+  "201009": {
+    "meaning": "APN Username Part 2",
+    "unit": null
+  },
+  "20100B": {
+    "meaning": "Firmware URL",
+    "unit": null
+  },
+  "20100E": {
+    "meaning": "Authentication",
+    "unit": null
+  },
+  "201013": {
+    "meaning": "HTTP Username",
+    "unit": null
+  },
+  "201014": {
+    "meaning": "HTTP Password",
+    "unit": null
+  },
+  "201016": {
+    "meaning": "Port",
+    "unit": null
+  },
+  "201017": {
+    "meaning": "Server URL",
+    "unit": null
+  },
+  "20103C": {
+    "meaning": "Select Network Operator (Firmware Image)",
+    "unit": null
+  },
+  "20103D": {
+    "meaning": "Select IOT Technology",
+    "unit": null
+  },
+  "20103E": {
+    "meaning": "Select Wireless Network",
+    "unit": null
+  },
+  "20103F": {
+    "meaning": "Select Cipher Suite",
+    "unit": null
+  },
+  "201040": {
+    "meaning": "2nd APN",
+    "unit": null
+  },
+  "201066": {
+    "meaning": "Session Timeout (Initiating Endpoint)",
+    "unit": "s"
+  },
+  "20107B": {
+    "meaning": "CSV->DNP3 (A)",
+    "unit": null
+  },
+  "2010C0": {
+    "meaning": "Enable Dial -In Settings",
+    "unit": "h"
+  },
+  "2010C2": {
+    "meaning": "Dial -In Hour (UTC)",
+    "unit": "h"
+  },
+  "2010C4": {
+    "meaning": "Dial -In Minute",
+    "unit": "min"
+  },
+  "2010C6": {
+    "meaning": "Dial -In Interval",
+    "unit": "min"
+  },
+  "2010C7": {
+    "meaning": "Enable Preselection Network Operator",
+    "unit": null
+  },
+  "2010C8": {
+    "meaning": "Mobile Country Code",
+    "unit": null
+  },
+  "2010C9": {
+    "meaning": "Mobile Network Code",
+    "unit": null
+  },
+  "2010D0": {
+    "meaning": "Dual Enpoint (A)",
+    "unit": null
+  },
+  "2010D2": {
+    "meaning": "Socket Listening Port",
+    "unit": null
+  },
+  "2010D4": {
+    "meaning": "Socket Listening Timeout",
+    "unit": "s"
+  },
+  "2010D6": {
+    "meaning": "Firewall (A)",
+    "unit": null
+  },
+  "2010D8": {
+    "meaning": "IPv4 Address DNP3 Master Firewall (A)",
+    "unit": null
+  },
+  "2010DA": {
+    "meaning": "IPv4 Subnet Mask DNP3 Master Firewall (A)",
+    "unit": null
+  },
+  "2010DE": {
+    "meaning": "Dual-Endpoint Send Unsolicited (A)",
+    "unit": null
+  },
+  "2010E0": {
+    "meaning": "Session Timeout (Listening Endpoint)",
+    "unit": "s"
+  },
+  "2010F0": {
+    "meaning": "FTP Server Name",
+    "unit": null
+  },
+  "2010F1": {
+    "meaning": "FTP Port",
+    "unit": null
+  },
+  "2010F2": {
+    "meaning": "FTP Username",
+    "unit": null
+  },
+  "2010F3": {
+    "meaning": "FTP Password",
+    "unit": null
+  },
+  "2010F4": {
+    "meaning": "FTP Directory",
+    "unit": null
+  },
+  "2010F5": {
+    "meaning": "FTP Filename",
+    "unit": null
+  },
+  "2010F6": {
+    "meaning": "FTP for File Up- / Downloads (A)",
+    "unit": null
+  },
+  "2010F9": {
+    "meaning": "Selects Access Technology",
+    "unit": null
+  },
+  "210701": {
+    "meaning": "Reporting Period Gateway",
+    "unit": null
+  },
+  "210703": {
+    "meaning": "Reporting Period",
+    "unit": "min"
+  },
+  "21070A": {
+    "meaning": "Data Update Interval",
+    "unit": null
+  },
+  "21070B": {
+    "meaning": "Data Update Interval",
+    "unit": "sec"
+  },
+  "21070C": {
+    "meaning": "Enable Consumer Notification",
+    "unit": null
+  },
+  "211101": {
+    "meaning": "Short-range Radio Offline Timeout",
+    "unit": "min"
+  },
+  "211B01": {
+    "meaning": "Powersetting",
+    "unit": null
+  },
+  "212401": {
+    "meaning": "PLL1",
+    "unit": null
+  },
+  "212801": {
+    "meaning": "Trip Current Minimum",
+    "unit": "A"
+  },
+  "212802": {
+    "meaning": "Trip Current Maximum",
+    "unit": "A"
+  },
+  "212803": {
+    "meaning": "Instantaneous Factor",
+    "unit": null
+  },
+  "213101": {
+    "meaning": "Auto Reset Fault Values",
+    "unit": null
+  },
+  "215801": {
+    "meaning": "Max. Suppression Time",
+    "unit": "min"
+  },
+  "220001": {
+    "meaning": "Master Address",
+    "unit": null
+  },
+  "220101": {
+    "meaning": "Outstation Address",
+    "unit": null
+  },
+  "220201": {
+    "meaning": "Unsolicited Reporting",
+    "unit": null
+  },
+  "220301": {
+    "meaning": "Unsolicited Class Mask ID",
+    "unit": null
+  },
+  "220401": {
+    "meaning": "Unsolicited On Startup",
+    "unit": null
+  },
+  "220501": {
+    "meaning": "DNP3 Link Status Period",
+    "unit": "min"
+  },
+  "220502": {
+    "meaning": "DNP3 Link Confirmation Timeout",
+    "unit": "sec"
+  },
+  "220801": {
+    "meaning": "UnsolRetryDelay",
+    "unit": null
+  },
+  "220806": {
+    "meaning": "ClockValidPeriod",
+    "unit": null
+  },
+  "220808": {
+    "meaning": "UnsolConfirmTimeout",
+    "unit": null
+  },
+  "220809": {
+    "meaning": "Enable Self Address",
+    "unit": null
+  },
+  "22080A": {
+    "meaning": "Validate Source Address",
+    "unit": null
+  },
+  "222001": {
+    "meaning": "Reverse LoadFlow",
+    "unit": null
+  },
+  "300301": {
+    "meaning": "Stromgeber Kennlinie",
+    "unit": null
+  },
+  "300701": {
+    "meaning": "Gainfaktor 1:Unterer Messbereich",
+    "unit": null
+  },
+  "300702": {
+    "meaning": "Gainfaktor 2:Oberer Messbereich",
+    "unit": null
+  },
+  "300801": {
+    "meaning": "OFFSET1",
+    "unit": null
+  },
+  "300802": {
+    "meaning": "OFFSET2_DEZI",
+    "unit": null
+  },
+  "300901": {
+    "meaning": "Offset Trigger",
+    "unit": null
+  },
+  "300B01": {
+    "meaning": "WINKELKORR",
+    "unit": null
+  },
+  "301001": {
+    "meaning": "Reporting Period",
+    "unit": "min"
+  },
+  "301201": {
+    "meaning": "VF_GEMEINSAM",
+    "unit": null
+  },
+  "301301": {
+    "meaning": "Feldplatte Verstärkungsfaktor 0",
+    "unit": null
+  },
+  "301302": {
+    "meaning": "Feldplatte Verstärkungsfaktor 1",
+    "unit": null
+  },
+  "301303": {
+    "meaning": "Feldplatte Verstärkungsfaktor 2",
+    "unit": null
+  },
+  "301304": {
+    "meaning": "Feldplatte Verstärkungsfaktor 3",
+    "unit": null
+  },
+  "305002": {
+    "meaning": "Minimum Trip Current @ 200 msec.",
+    "unit": "A"
+  },
+  "305003": {
+    "meaning": "Maximum Trip Current @ 200 msec.",
+    "unit": "A"
+  },
+  "305004": {
+    "meaning": "I-Type Auslösekennlinie",
+    "unit": null
+  },
+  "305005": {
+    "meaning": "Response Delay",
+    "unit": "ms"
+  },
+  "305006": {
+    "meaning": "OC-Trip Level (IB)",
+    "unit": "A"
+  },
+  "305009": {
+    "meaning": "I-Trigger",
+    "unit": null
+  },
+  "30500A": {
+    "meaning": "I-Reset",
+    "unit": null
+  },
+  "305103": {
+    "meaning": "Relay Characteristic Angle",
+    "unit": "°"
+  },
+  "305201": {
+    "meaning": "Overcurrent Delevel Timer T1",
+    "unit": "h"
+  },
+  "305202": {
+    "meaning": "Overcurrent Delevel Timer T2",
+    "unit": "h"
+  },
+  "305701": {
+    "meaning": "Instantaneous Factor",
+    "unit": null
+  },
+  "305801": {
+    "meaning": "Fast Curve",
+    "unit": null
+  },
+  "310002": {
+    "meaning": "Level Factor",
+    "unit": null
+  },
+  "320001": {
+    "meaning": "Nominal Voltage",
+    "unit": "kV"
+  },
+  "320101": {
+    "meaning": "Lower Threshold",
+    "unit": "%"
+  },
+  "320201": {
+    "meaning": "Upper Threshold",
+    "unit": "%"
+  },
+  "320301": {
+    "meaning": "Time",
+    "unit": "ms"
+  },
+  "320501": {
+    "meaning": "Voltage Loss",
+    "unit": null
+  },
+  "320801": {
+    "meaning": "Inrush Suppression - 2. Harmonic",
+    "unit": null
+  },
+  "320A01": {
+    "meaning": "Restraint Delay",
+    "unit": "ms"
+  },
+  "330001": {
+    "meaning": "Enable",
+    "unit": null
+  },
+  "330101": {
+    "meaning": "Trip Current",
+    "unit": "A"
+  },
+  "330201": {
+    "meaning": "Response Delay",
+    "unit": "ms"
+  },
+  "331201": {
+    "meaning": "Relay Characteristic Angle",
+    "unit": "°"
+  },
+  "335001": {
+    "meaning": "PU Enable",
+    "unit": null
+  },
+  "335201": {
+    "meaning": "Response Delay",
+    "unit": "ms"
+  },
+  "370101": {
+    "meaning": "Reset Time",
+    "unit": "min"
+  },
+  "370201": {
+    "meaning": "Voltage Reset Enable",
+    "unit": null
+  },
+  "370401": {
+    "meaning": "Current Reset Enable",
+    "unit": null
+  },
+  "370402": {
+    "meaning": "Current Reset EF Enable",
+    "unit": null
+  },
+  "370403": {
+    "meaning": "Current Reset Pickup Enable",
+    "unit": null
+  },
+  "370501": {
+    "meaning": "Current Reset Signaling Time",
+    "unit": null
+  },
+  "370502": {
+    "meaning": "Current Reset Time",
+    "unit": null
+  },
+  "370601": {
+    "meaning": "Current Reset Threshold",
+    "unit": "A"
+  },
+  "370B01": {
+    "meaning": "Dual Reset",
+    "unit": null
+  },
+  "370B02": {
+    "meaning": "Dual Reset (Directional)",
+    "unit": null
+  },
+  "380001": {
+    "meaning": "Fault Classification Delay",
+    "unit": "sec"
+  },
+  "380003": {
+    "meaning": "Fault Requirement",
+    "unit": null
+  },
+  "381001": {
+    "meaning": "Current Loss Threshold",
+    "unit": "A"
+  },
+  "381002": {
+    "meaning": "Current Return Threshold",
+    "unit": "A"
+  },
+  "381101": {
+    "meaning": "Current Loss",
+    "unit": null
+  },
+  "382101": {
+    "meaning": "Lastflussrichtung: Stromschwelle",
+    "unit": null
+  },
+  "382601": {
+    "meaning": "Lastflussrichtung enable",
+    "unit": null
+  },
+  "391701": {
+    "meaning": "Auto Reset OC Alarm",
+    "unit": null
+  },
+  "3A0601": {
+    "meaning": "Boost Mode",
+    "unit": null
+  },
+  "400501": {
+    "meaning": "Analog Test Point",
+    "unit": null
+  },
+  "440601": {
+    "meaning": "Update",
+    "unit": "°"
+  },
+  "440602": {
+    "meaning": "Update",
+    "unit": "°"
+  },
+  "440604": {
+    "meaning": "Update",
+    "unit": "°"
+  },
+  "440606": {
+    "meaning": "Update",
+    "unit": "°"
+  },
+  "440608": {
+    "meaning": "Update",
+    "unit": "°"
+  },
+  "44060A": {
+    "meaning": "Update",
+    "unit": "°"
+  },
+  "442601": {
+    "meaning": "Conductor Temperature Alarm",
+    "unit": "1/100°C"
+  },
+  "442602": {
+    "meaning": "Conductor Temperature Alarm",
+    "unit": "1/100°C"
+  },
+  "442701": {
+    "meaning": "Conductor Temperature Alarm Threshold",
+    "unit": "°C"
+  },
+  "F10301": {
+    "meaning": "Powersetting",
+    "unit": null
+  },
+  "F10401": {
+    "meaning": "PLL1",
+    "unit": null
+  },
+  "F10F01": {
+    "meaning": "Discovermode",
+    "unit": null
+  }
+}

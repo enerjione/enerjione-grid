@@ -25,6 +25,7 @@ import {
   fetchDeviceConfig,
   fetchDeviceConfigVersions,
   revertDeviceConfig,
+  sendDeviceCommand,
   updateDeviceConfig,
   uploadDeviceConfig
 } from "../../shared/api";
@@ -33,9 +34,14 @@ import { useToast } from "../../components/ToastProvider";
 
 type Props = {
   deviceId: number;
+  /** Komut gonderme cihaz KODU ile yapilir (id ile degil). */
+  deviceCode: string;
   accessToken: string;
   /** Yalnizca engineer/installer duzenleyebilir. */
   canEdit: boolean;
+  /** Cihaza komut gonderme yetkisi. Duzenleme yetkisinden AYRI: dosyayi
+   *  duzenlemek yerel bir istir, cihaza komut gondermek sahayi etkiler. */
+  canCommand: boolean;
 };
 
 const KAYNAK_ANAHTARI: Record<ConfigVersion["source"], string> = {
@@ -45,7 +51,7 @@ const KAYNAK_ANAHTARI: Record<ConfigVersion["source"], string> = {
   duzenlendi: "edited"
 };
 
-export function DeviceFtpConfigCard({ deviceId, accessToken, canEdit }: Props) {
+export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit, canCommand }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
 
@@ -149,6 +155,22 @@ export function DeviceFtpConfigCard({ deviceId, accessToken, canEdit }: Props) {
     }
   }
 
+  /** Cihaza DNP3 komutu gonderir. Komut KUYRUGA alinir; cihaz onu ancak bir
+   *  sonraki DNP oturumunda alabilir (gunluk planli cagri ya da olay). Bu
+   *  yuzden mesaj "gonderildi" degil "kuyruga alindi" der — aksi halde
+   *  kullanici islemin bittigini sanardi. */
+  async function komut(slug: string) {
+    setBusy(true);
+    try {
+      await sendDeviceCommand(accessToken, deviceCode, slug);
+      toast.success(t("deviceDetail.config.ftp.cmdQueued"));
+    } catch (exc) {
+      toast.error(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function revert(version: number) {
     setBusy(true);
     try {
@@ -183,7 +205,22 @@ export function DeviceFtpConfigCard({ deviceId, accessToken, canEdit }: Props) {
           {t("deviceDetail.config.ftpTitle")}
         </h4>
         <p className="device-config-hint">{t("deviceDetail.config.ftp.empty")}</p>
-        {canEdit ? <UploadButton onPick={upload} busy={busy} /> : null}
+        <div className="dev-ftp-actions">
+          {/* Config YOKKEN "cihazdan cek" tam da ihtiyac duyulan islem;
+              bos durumda gizlemek kullaniciyi Komutlar sekmesine gonderirdi. */}
+          {canCommand ? (
+            <button
+              type="button"
+              className="dev-ftp-btn is-primary"
+              disabled={busy}
+              onClick={() => void komut("start_csv_file_upload")}
+            >
+              <span className="material-symbols-outlined">cloud_download</span>
+              {t("deviceDetail.config.ftp.cmdPull")}
+            </button>
+          ) : null}
+          {canEdit ? <UploadButton onPick={upload} busy={busy} /> : null}
+        </div>
       </section>
     );
   }
@@ -217,6 +254,36 @@ export function DeviceFtpConfigCard({ deviceId, accessToken, canEdit }: Props) {
 
       {/* Kaydetmek gondermek degildir — kullanici bunu BILMELI. */}
       <p className="device-config-hint">{t("deviceDetail.config.ftp.notSentHint")}</p>
+
+      {/* CIHAZ KOMUTLARI — asil dongu burada kapanir.
+          "Cihazdan cek": binary output 3, cihaz kendi config'ini FTP'ye yazar;
+          backend olayi yakalayip yeni surum olusturur.
+          "Cihaza uygula": binary output 0, cihaz FTP'den dosyayi indirip
+          uygular. Dosyanin FTP'de HAZIR olmasi gerekir.
+          Komutlar sekmesine gitmek zorunda kalmak, akisi ikiye boluyordu. */}
+      {canCommand ? (
+        <div className="dev-ftp-cmds">
+          <button
+            type="button"
+            className="dev-ftp-btn is-primary"
+            disabled={busy}
+            onClick={() => void komut("start_csv_file_upload")}
+          >
+            <span className="material-symbols-outlined">cloud_download</span>
+            {t("deviceDetail.config.ftp.cmdPull")}
+          </button>
+          <button
+            type="button"
+            className="dev-ftp-btn"
+            disabled={busy}
+            onClick={() => void komut("config_update")}
+          >
+            <span className="material-symbols-outlined">cloud_upload</span>
+            {t("deviceDetail.config.ftp.cmdApply")}
+          </button>
+          <span className="dev-ftp-cmds-hint">{t("deviceDetail.config.ftp.cmdHint")}</span>
+        </div>
+      ) : null}
 
       <div className="dev-ftp-actions">
         <a className="dev-ftp-btn" href={deviceConfigDownloadUrl(deviceId)} download>

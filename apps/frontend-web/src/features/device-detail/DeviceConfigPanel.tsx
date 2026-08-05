@@ -20,12 +20,20 @@ type Props = {
   /** Yapilandirmayi DEGISTIRME yetkisi (engineer/installer). Yetkisiz kullanici
    *  dosyayi gorur ama duzenleyemez — goruntuleme teshis icin degerlidir. */
   canConfig?: boolean;
+  /** Cihaza komut gonderme yetkisi — duzenlemeden AYRI. */
+  canCommand?: boolean;
 };
 
-export function DeviceConfigPanel({ device, token, canConfig = false }: Props) {
+export function DeviceConfigPanel({ device, token, canConfig = false, canCommand = false }: Props) {
   return (
     <div className="device-config-panel">
-      <DeviceFtpConfigCard deviceId={device.id} accessToken={token} canEdit={canConfig} />
+      <DeviceFtpConfigCard
+        deviceId={device.id}
+        deviceCode={device.code}
+        accessToken={token}
+        canEdit={canConfig}
+        canCommand={canCommand}
+      />
     </div>
   );
 }

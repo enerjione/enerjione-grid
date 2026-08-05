@@ -36500,8 +36500,10 @@ th.event-col-category {
 .dev-ftp-table-wrap {
   /* Genis icerik SAYFAYI degil kendi kutusunu kaydirsin. */
   overflow-x: auto;
-  max-height: 28rem;
-  overflow-y: auto;
+  /* Dikey SINIR YOK: eskiden 28rem'de kesiliyor ve tablonun kendi kaydirma
+     cubugu cikiyordu. 60 ayarlik bir listede bu, kullaniciyi kucuk bir
+     pencereden bakmaya zorluyordu. Artik liste tam boy uzar, sayfa kaydirilir
+     ve baslik satiri `position: sticky` ile ustte kalir. */
   border: 1px solid #e5e7eb;
   border-radius: 0.5rem;
 }
@@ -36576,4 +36578,24 @@ th.event-col-category {
 .device-config-badge.is-bad {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+/* Cihaz komutlari — config dongusunu kapatan iki islem. */
+.dev-ftp-cmds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #dbeafe;
+  border-radius: 0.5rem;
+  background: #eff6ff;
+}
+
+.dev-ftp-cmds-hint {
+  font-size: 0.75rem;
+  color: #6b7280;
+  /* Ipucu butonlarin YANINDA kalsin, altina dusup blogu buyutmesin. */
+  flex: 1 1 12rem;
 }
