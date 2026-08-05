@@ -1580,3 +1580,72 @@ export type BulkApplyResult = {
   // Atlananlar SESSIZCE yutulmaz; hangi cihaz neden alamadi burada doner.
   failed: { device_id: number; reason: string; detail?: string }[];
 };
+
+// ===== FTP sunucu ayarlari ================================================
+// Backend semasi: app/schemas/ftp_settings.py — birlikte guncellenir.
+
+export type FtpMode = "gomulu" | "harici";
+
+export type FtpSettings = {
+  mode: FtpMode;
+  host: string | null;
+  port: number;
+  username: string;
+  // Acik metin: cihazin FTP ekranina ELLE girilecegi icin kullanici okumali.
+  password: string | null;
+  directory: string;
+  pollIntervalSec: number;
+  updatedBy: string | null;
+  updatedAt: string | null;
+};
+
+export type FtpSettingsUpdate = Partial<{
+  mode: FtpMode;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  directory: string;
+  pollIntervalSec: number;
+}>;
+
+export type FtpTestResult = {
+  ok: boolean;
+  detail: string;
+  // Dizinde gorulen `<seri>_Configuration.csv` sayisi.
+  configFiles: number | null;
+};
+
+export type FtpEventRow = {
+  eventType: string;
+  severity: string;
+  message: string;
+  deviceCode: string | null;
+  createdAt: string;
+};
+
+export type FtpServerHealth = {
+  reachable: boolean;
+  // Sunucunun SU AN kabul ettigi kullanici adi.
+  username: string | null;
+  connections: number | null;
+  // Sunucudaki aktif kimlik == ayarlardaki kimlik. Kimlik degisiminden
+  // sonraki ~30 saniyede false gorunur.
+  synced: boolean | null;
+};
+
+export type FtpStatus = {
+  mode: FtpMode;
+  // Yalnizca gomulu modda dolu.
+  server: FtpServerHealth | null;
+  events: FtpEventRow[];
+};
+
+// Cihaz basina guncel config surumu ozeti (sol liste rozetleri).
+export type DeviceConfigSummary = {
+  deviceId: number;
+  version: number;
+  source: ConfigVersion["source"];
+  createdAt: string;
+  appliedAt: string | null;
+};

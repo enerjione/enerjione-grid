@@ -60,6 +60,14 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         canSee: (role) => role !== "ops_manager",
       },
       {
+        // FTP sunucu ayarlari + config sablonlari + toplu uygulama.
+        // Yanlis ayar sahada koruma degerini bozar -> engineer/installer.
+        page: "device-config",
+        labelKey: "engineering.nav.deviceConfig",
+        descKey: "engineering.navDesc.deviceConfig",
+        canSee: isInstallerOrEngineer,
+      },
+      {
         page: "signals",
         labelKey: "engineering.nav.signals",
         descKey: "engineering.navDesc.signals",

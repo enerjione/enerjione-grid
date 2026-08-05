@@ -24,6 +24,7 @@ from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
 
 from .config import SETTINGS
+from .credentials import CredentialPoller
 from .health import start_health_server
 from .reporter import EventReporter
 
@@ -145,28 +146,62 @@ def _size(path: str) -> int | None:
         return None
 
 
-def _build_server() -> FTPServer:
-    s = SETTINGS
+def _make_authorizer(
+    user: str, password: str, root: str, *, eski_kullanici: str | None = None
+) -> DummyAuthorizer:
+    """Tek hesapli Authorizer kurar.
 
-    if not s.ftp_password:
-        log.error("FTP_PASSWORD bos — sunucu baslatilmiyor (guvenlik).")
-        raise SystemExit(2)
+    perm: e=girme, l=liste, r=oku indir, a=ekle, d=sil, f=yeniden adlandir,
+          m=dizin olustur, w=yaz yukle, M=chmod, T=zaman degistir
+
+    CIHAZ hesabi kok icinde tam yetkili olmak ZORUNDA: kendi SN alt dizinini
+    yaratir (m), config/debug dosyalarini yazar (w/a) ve firmware indirir (r).
+    Hesap `homedir` HAPSINDEDIR (pyftpdlib ust dizine cikisa izin vermez) —
+    yani "root olmayan, kendi dizinine kisitli" sart burada saglanir: erisim
+    yalnizca paylasilan ftp-data volume'u ile sinirlidir.
+
+    `eski_kullanici`: kimlik degisiminde AKTIF oturumlar hala eski adla
+    `has_perm` sorar; adi tablodan tamamen silmek o oturumlari KeyError ile
+    dusururdu. Eski ad, TAHMIN EDILEMEZ bir parolayla tabloda tutulur — yeni
+    login ALAMAZ ama acik oturum dosya islemini bitirebilir.
+    """
+    import secrets
+
+    authorizer = DummyAuthorizer()
+    authorizer.add_user(user, password, homedir=root, perm="elradfmwMT")
+    if eski_kullanici and eski_kullanici != user:
+        authorizer.add_user(
+            eski_kullanici, secrets.token_urlsafe(32), homedir=root, perm="elradfmwMT"
+        )
+    return authorizer
+
+
+def _initial_credentials(poller: CredentialPoller) -> tuple[str, str]:
+    """Acilis kimligi: once backend (arayuzden yonetilen), yoksa env.
+
+    Ikisi de yoksa acilmayi REDDEDER: parolasiz FTP sunucusu, sahadaki tum
+    cihaz config'lerine anonim yazma izni demek olurdu.
+    """
+    s = SETTINGS
+    kimlik = poller.fetch_once()
+    if kimlik is not None:
+        log.info("FTP kimligi backend'den alindi (kullanici: %s).", kimlik[0])
+        return kimlik
+    if s.ftp_password:
+        log.info("FTP kimligi env'den alindi (backend erisilemedi ya da bos).")
+        return s.ftp_user, s.ftp_password
+    log.error(
+        "FTP kimligi yok: backend'e erisilemiyor ve FTP_PASSWORD bos — "
+        "sunucu baslatilmiyor (guvenlik)."
+    )
+    raise SystemExit(2)
+
+
+def _build_server() -> tuple[FTPServer, type[FTPHandler], CredentialPoller]:
+    s = SETTINGS
 
     os.makedirs(s.ftp_root, exist_ok=True)
     _share_root_with_backend(s.ftp_root)
-
-    authorizer = DummyAuthorizer()
-    # perm: e=girme, l=liste, r=oku indir, a=ekle, d=sil, f=yeniden adlandir,
-    #       m=dizin olustur, w=yaz yukle, M=chmod, T=zaman degistir
-    #
-    # CIHAZ hesabi tam yetkili olmak ZORUNDA: kendi SN alt dizinini yaratir
-    # (m), config/debug dosyalarini yazar (w/a) ve firmware indirir (r).
-    authorizer.add_user(
-        s.ftp_user,
-        s.ftp_password,
-        homedir=s.ftp_root,
-        perm="elradfmwMT",
-    )
 
     # TEK HESAP (bilincli karar, 2026-08-05). Kisa sureligine ikinci bir
     # salt-okunur hesap eklenmisti; kaldirildi. Sebep: cihazin FTP ekranina
@@ -174,6 +209,15 @@ def _build_server() -> FTPServer:
     # uretiyor — hangi hesabin nereye yazdigi belirsizlesiyor. Kimlik bilgisi
     # artik arayuzden yonetiliyor, dolayisiyla "guvenli ikinci hesap" ihtiyaci
     # yerine TEK ve DEGISTIRILEBILIR bir kimlik tercih edildi.
+    # Callback SONRADAN baglanir (bkz. CredentialPoller.set_on_change):
+    # ilk kimligi poller ceker, handler o kimlikle kurulur, callback handler'a
+    # ihtiyac duyar.
+    poller = CredentialPoller(
+        backend_url=s.backend_url,
+        service_token=s.internal_service_token,
+    )
+    kullanici, parola = _initial_credentials(poller)
+    poller.prime((kullanici, parola))
 
     reporter = EventReporter(
         backend_url=s.backend_url, service_token=s.internal_service_token
@@ -183,7 +227,7 @@ def _build_server() -> FTPServer:
     # bu, ayni surecte ikinci bir sunucu kurulursa ayarlari paylasilan global
     # bir duruma yazmak demekti. Alt sinif her kurulumu yalitir.
     handler = _make_handler(reporter)
-    handler.authorizer = authorizer
+    handler.authorizer = _make_authorizer(kullanici, parola, s.ftp_root)
     handler.banner = "EnerjiOne FTP ready."
     # Pasif mod veri portu araligi — docker-compose'ta host'a map edilmeli.
     handler.passive_ports = range(s.pasv_min_port, s.pasv_max_port + 1)
@@ -191,11 +235,23 @@ def _build_server() -> FTPServer:
         # NAT arkasindaysa cihaza gorunen dis IP.
         handler.masquerade_address = s.masquerade_address
 
+    # Kimlik degisiminde Authorizer TAKAS edilir — tabloyu yerinde degistirmek
+    # degil. Sinif ozniteligi atamasi tek referans yazimidir (GIL altinda
+    # atomik); login akisi ya tamamen eskisini ya tamamen yenisini gorur.
+    # Aktif oturumlarin eski kullanici adi icin bkz. _make_authorizer.
+    def _kimlik_degisti(yeni_kullanici: str, yeni_parola: str) -> None:
+        eski = next(iter(handler.authorizer.user_table), None)
+        handler.authorizer = _make_authorizer(
+            yeni_kullanici, yeni_parola, s.ftp_root, eski_kullanici=eski
+        )
+
+    poller.set_on_change(_kimlik_degisti)
+
     server = FTPServer((s.listen_host, s.listen_port), handler)
     # Es zamanli baglanti sinirlari (kaynak korumasi).
     server.max_cons = 256
     server.max_cons_per_ip = 16
-    return server
+    return server, handler, poller
 
 
 def main() -> None:
@@ -204,7 +260,10 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     s = SETTINGS
-    server = _build_server()
+    server, _handler, poller = _build_server()
+    # Kimlik yoklamasi handler kurulduktan SONRA baslar; boylece ilk swap
+    # hicbir zaman yarim kurulmus bir sunucuya denk gelmez.
+    poller.start()
 
     start_health_server(
         host=s.health_host,
@@ -215,6 +274,12 @@ def main() -> None:
             "ftp_port": s.listen_port,
             "ftp_root": s.ftp_root,
             "connections": len(getattr(server, "ip_map", []) or []),
+            # AKTIF kullanici adi — arayuzdeki "baglanti durumu" paneli,
+            # kimlik degisiminin sunucuya yansiyip yansimadigini buradan
+            # gorur. Kimlik takasinda tabloya ilk eklenen YENI kullanicidir
+            # (bkz. _make_authorizer); eski ad yalnizca acik oturumlar icin
+            # fallback olarak durur.
+            "ftp_user": next(iter(_handler.authorizer.user_table), None),
         },
     )
 

@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Imajla birlikte paketlenen surum. Kok dizindeki VERSION dosyasi ve
 # apps/frontend-web/package.json ile AYNI olmali; release CI ucunu de
 # birbirine karsi dogrular.
-_FALLBACK_APP_VERSION = "2.49.1"
+_FALLBACK_APP_VERSION = "2.53.0"
 
 
 # Production'da reddedilen placeholder secret prefix'leri. Settings constructor
@@ -620,6 +620,11 @@ class Settings(BaseSettings):
     # WhatsApp Web sidecar (Baileys, QR ile giris) — internal_service_token
     # ile ayni auth. Docker network icinde servis adiyla erisilir.
     whatsapp_web_gateway_url: str = "http://whatsapp-web-gateway:8016"
+    # Gomulu FTP sunucusunun health ucu — FTP ayarlari ekranindaki "baglanti
+    # durumu" paneli buradan sunucunun ayakta olup olmadigini ve AKTIF
+    # kullanici adini okur (kimlik degisiminin sunucuya yansiyip yansimadigi
+    # ancak boyle gorulur). Docker network icinde servis adiyla erisilir.
+    ftp_server_health_url: str = "http://ftp-server:8015"
     # Surec rolu: all | api | worker. Bkz. app/core/service_role.py.
     #
     #   all    — HTTP + arka plan isleri (VARSAYILAN, bugunku davranis)

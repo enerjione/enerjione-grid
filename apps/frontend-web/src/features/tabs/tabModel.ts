@@ -22,6 +22,7 @@ export type PageMode =
 
 export type EngineeringPage =
   | "devices"
+  | "device-config"
   | "signals"
   | "live-values"
   | "alarm-rules"
@@ -98,6 +99,7 @@ export function tabLabel(
     case "engineering": {
       const map: Record<EngineeringPage, string> = {
         devices: "engineering.nav.devices",
+        "device-config": "engineering.nav.deviceConfig",
         signals: "engineering.nav.signals",
         "live-values": "engineering.nav.liveValues",
         "alarm-rules": "engineering.nav.alarmRules",

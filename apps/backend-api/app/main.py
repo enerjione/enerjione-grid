@@ -10,7 +10,7 @@ from sqlalchemy import select as _select, text
 from app.core.license_gate import LicenseGateMiddleware
 from app.core.rate_limit import limiter
 
-from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_configs, device_models, devices, events, faults, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_configs, device_models, devices, events, faults, ftp_settings as ftp_settings_api, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.core import service_role
 from app.core.service_role import leader
@@ -93,6 +93,7 @@ app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
 app.include_router(device_models.router, prefix=settings.api_prefix)
 app.include_router(device_configs.router, prefix=settings.api_prefix)
+app.include_router(ftp_settings_api.router, prefix=settings.api_prefix)
 app.include_router(licensing.router, prefix=settings.api_prefix)
 app.include_router(responsibility_areas.router, prefix=settings.api_prefix)
 app.include_router(gateways.router, prefix=settings.api_prefix)
@@ -1204,6 +1205,15 @@ leader.register(
 # Periyodik yedekleme. IKI KEZ CALISMASI ozellikle pahali: her tetikte pg_dump
 # kosar, diski ve CPU'yu iki katina cikarir ve retention sayimini bozar.
 leader.register("backup_scheduler", backup_scheduler.start, backup_scheduler.stop)
+
+# Harici FTP yoklayicisi — FTP modu "harici" iken musterinin sunucusundaki
+# `<seri>_Configuration.csv` dosyalarini tarayip surume cevirir. Gomulu modda
+# hicbir sey yapmaz (orada olaylar ftp-server callback'lerinden aninda gelir).
+# Tek surecte kosmali: iki yoklayici ayni dosyayi iki kez indirir ve ayni
+# anda iki surum yaratmaya kalkabilirdi (unique kisitta patlar).
+from app.services import ftp_poll_worker  # noqa: E402
+
+leader.register("ftp_config_poll", ftp_poll_worker.start, ftp_poll_worker.stop)
 
 
 @app.on_event("startup")

@@ -1423,6 +1423,7 @@
     },
     "navDesc": {
       "devices": "Gateway ve saha cihazlarını ekle, düzenle, dağıt.",
+      "deviceConfig": "FTP sunucusu, config şablonları ve toplu uygulama.",
       "signals": "Cihaz modeline ait sinyal kataloğunu yönet.",
       "grid": "Bölge ve hat topolojisini kur, cihazları hatlara bağla.",
       "liveValues": "Sahadan gelen anlık sinyal değerlerini izle.",
@@ -1444,6 +1445,7 @@
     },
     "nav": {
       "devices": "Cihazlar",
+      "deviceConfig": "Cihaz Yapılandırma",
       "liveValues": "Canlı Değerler",
       "users": "Kullanıcılar",
       "responsibilityAreas": "Ekip Yönetimi",
@@ -1543,6 +1545,93 @@
         "operator": "Operatör",
         "ops_manager": "Operasyon Yöneticisi",
         "installerSuper": "Kurulumcu (Süper Admin)"
+      }
+    },
+    "deviceConfig": {
+      "list": {
+        "search": "Cihaz ara (ad ya da kod)…",
+        "aria": "Cihaz listesi",
+        "empty": "Eşleşen cihaz yok.",
+        "noConfig": "yapılandırma yok",
+        "pickOne": "Soldan bir cihaz seçin."
+      },
+      "status": {
+        "title": "Bağlantı Durumu",
+        "serverUp": "FTP sunucusu çalışıyor — aktif kullanıcı: {{user}}, açık bağlantı: {{count}}",
+        "serverDown": "FTP sunucusuna erişilemiyor. Servis durmuş ya da yeniden başlıyor olabilir.",
+        "pendingSync": "Kimlik değişikliği sunucuya henüz yansımadı: sunucu şu an \"{{active}}\" kabul ediyor, kaydedilen \"{{expected}}\". En geç 30 saniye içinde eşitlenir.",
+        "eventsEmpty": "Henüz FTP hareketi yok. Cihaz bağlandığında girişler ve dosya transferleri burada listelenir."
+      },
+      "ftp": {
+        "title": "FTP Sunucu Ayarları",
+        "mode": {
+          "gomulu": "Gömülü sunucu",
+          "harici": "Harici sunucu"
+        },
+        "modeDesc": {
+          "gomulu": "Cihazlar bu sistemin kendi FTP sunucusuna bağlanır. Sahada internet yokken tek çalışan seçenek.",
+          "harici": "Hem bu yazılım hem cihazlar müşterinin FTP sunucusunu kullanır; dosyalar oradan yoklama ile okunur."
+        },
+        "host": "Sunucu adresi",
+        "hostHintEmbedded": "Cihazların bu sisteme ulaştığı IP (bilgi amaçlı)",
+        "port": "Port",
+        "username": "Kullanıcı adı",
+        "password": "Parola",
+        "generate": "Üret",
+        "userLimit": "Cihaz ekranı en fazla {{max}} karakter kabul eder.",
+        "passLimit": "Cihaz ekranı en fazla {{max}} karakter kabul eder. Parola cihaz ekranına elle girilir; üretici karışan karakterleri (0/O, 1/l/I) kullanmaz.",
+        "passTooShort": "Parola en az 6 karakter olmalı.",
+        "directory": "Dizin",
+        "pollInterval": "Yoklama aralığı (saniye)",
+        "pollHint": "Harici sunucudaki dizin bu aralıkla taranır; cihazın yazdığı dosyalar sürüme çevrilir. En az 60 sn.",
+        "embeddedNote": "Gömülü modda cihaz dosya yazdığı anda sistem haberdar olur; ek ayar gerekmez. Kimlik değişikliği yaklaşık 30 saniye içinde sunucuya yansır, yeniden başlatma gerekmez.",
+        "externalNote": "Harici modda dosya hareketleri anında görülemez; dizin belirlenen aralıkla taranır. Cihazların ve bu yazılımın aynı sunucu, kimlik ve dizinle yapılandırıldığından emin olun.",
+        "credentialWarning": "DİKKAT: Kimliği kaydettiğinizde sunucu yeni kimliği ~30 saniye içinde kullanmaya başlar; cihazlar ise ESKİ kimlikle bağlanmayı sürdürür ve girişleri reddedilir. Her cihazın FTP ekranındaki kullanıcı adı/parolayı elle güncellemeniz gerekir.",
+        "portInvalid": "Port 1-65535 arasında olmalı.",
+        "hostRequired": "Harici modda sunucu adresi zorunlu.",
+        "saved": "FTP ayarları kaydedildi.",
+        "test": "Bağlantıyı sına",
+        "testNeedsSave": "Önce kaydedin — sınama kayıtlı ayarlarla yapılır.",
+        "testFiles": "Dizinde {{count}} yapılandırma dosyası görüldü.",
+        "save": "Kaydet"
+      },
+      "templates": {
+        "title": "Yapılandırma Şablonları",
+        "empty": "Henüz şablon yok. Bilinen-iyi bir cihaz dosyası yükleyin — yeni eklenen cihazların ilk yapılandırması varsayılan şablondan üretilir.",
+        "name": "Şablon adı",
+        "namePlaceholder": "örn. Fabrika ayarları",
+        "model": "Cihaz modeli",
+        "file": "Dosya",
+        "created": "Oluşturulma",
+        "default": "varsayılan",
+        "makeDefault": "Varsayılan yap",
+        "markDefault": "Varsayılan şablon olsun",
+        "pickFile": "Dosya seç (.csv)",
+        "upload": "Şablonu yükle",
+        "uploaded": "\"{{name}}\" şablonu kaydedildi.",
+        "defaultSet": "Varsayılan şablon güncellendi.",
+        "checksumNote": "Sağlama toplamı geçersiz dosya şablon olamaz — şablon her yeni cihaza kopyalanır, bozuk tek dosya filoya yayılırdı."
+      },
+      "bulk": {
+        "open": "Şablon uygula ({{count}})",
+        "template": "Şablon",
+        "pickTemplate": "Şablon seçin…",
+        "confirmTitle": "Toplu uygulamayı onayla",
+        "confirmSummary": "\"{{template}}\" şablonu ({{model}}) {{count}} cihaza yeni sürüm olarak uygulanacak.",
+        "versionChange": "v{{from}} → v{{to}}",
+        "versionNew": "ilk sürüm (v1) oluşacak",
+        "ineligibleNote": "Seçili {{count}} cihaz modeli {{model}} olmadığı için UYGULANMAYACAK.",
+        "confirmNote": "Bu işlem yalnızca yeni SÜRÜM oluşturur; dosyalar cihazlara otomatik GÖNDERİLMEZ. Göndermek için cihazın \"Cihaza uygula\" adımı gerekir. Yanlış şablonu geri almak cihaz başına yeni sürüm gerektirir.",
+        "cancel": "Vazgeç",
+        "confirm": "Onaylıyorum, {{count}} cihaza uygula",
+        "close": "Kapat",
+        "done": "{{count}} cihaza uygulandı.",
+        "doneWithFailures": "{{ok}} cihaza uygulandı, {{failed}} cihaz atlandı.",
+        "failedTitle": "Atlanan cihazlar ({{count}})",
+        "reason": {
+          "cihaz_yok": "cihaz bulunamadı",
+          "model_uyusmuyor": "model şablonla uyuşmuyor"
+        }
       }
     },
     "projectSettings": {
@@ -3378,12 +3467,14 @@
       "ftpHint": "Cihaz FTP config formatı çözüldüğünde bu alandan uzaktan config çekip güncelleyebileceksiniz.",
       "ftp": {
         "empty": "Bu cihazın yapılandırma dosyası henüz yok. Cihazdan çekilen dosyayı yükleyin ya da bir şablon tanımlayın.",
-        "notSentHint": "Buradaki değişiklikler kaydedilir ama cihaza GÖNDERİLMEZ. Göndermek için dosyayı FTP sunucusuna koyup Komutlar sekmesinden \"Configuration Update\" komutunu verin.",
+        "notSentHint": "Buradaki değişiklikler kaydedilir ama cihaza GÖNDERİLMEZ. Göndermek için \"Cihaza uygula\" düğmesini kullanın: dosya FTP'ye yazılır ve güncelleme komutu kuyruğa alınır.",
         "serialMismatch": "Bu dosya bu cihaza ait görünmüyor.\n\nBeklenen ad: {{expected}}\nSeçilen dosya: {{got}}\n\nCihaz yalnızca kendi adını taşıyan dosyayı okur. Yine de yüklemek istiyor musunuz? (Şablon olarak kullanmak için geçerli bir sebep olabilir.)",
         "cmdPull": "Cihazdan çek",
         "cmdApply": "Cihaza uygula",
         "cmdHint": "Komut kuyruğa alınır; cihaz bir sonraki DNP oturumunda uygular.",
         "cmdQueued": "Komut kuyruğa alındı. Cihaz bir sonraki bağlantısında uygulayacak.",
+        "applied": "Dosya FTP'ye yazıldı ve komut kuyruğa alındı. Cihaz bir sonraki bağlantısında uygulayacak.",
+        "appliedAt": "Cihaza gönderildi: {{date}}",
         "checksumBad": "sağlama toplamı geçersiz",
         "checksumUnknown": "sağlama toplamı yok",
         "download": "İndir",

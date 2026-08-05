@@ -3177,3 +3177,169 @@ export async function applyTemplateToDevices(
   if (!response.ok) throw await buildApiError(response, "Toplu uygulama başarısız.");
   return (await response.json()) as BulkApplyResult;
 }
+
+/** Guncel surumu FTP'ye yazar + `config_update` DNP3 komutunu kuyruga alir.
+ *  Eski akista dosyayi FTP'ye kullanici elle koymak zorundaydi; bu uc zinciri
+ *  tek adimda kapatir. Basarida surumun `appliedAt` alani dolar. */
+export async function applyDeviceConfig(token: string, deviceId: number): Promise<ConfigVersion> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config/apply`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yapılandırma cihaza gönderilemedi.");
+  return mapConfigVersion((await response.json()) as ApiConfigVersion);
+}
+
+/** Sablon yukler. Backend `name`/`device_model` degerlerini QUERY parametresi
+ *  olarak bekler; dosya multipart govdede gider. authHeaders KULLANILMAZ —
+ *  icindeki Content-Type multipart boundary'sini ezer (bkz. uploadDeviceConfig). */
+export async function uploadConfigTemplate(
+  token: string,
+  params: { name: string; deviceModel: string; isDefault: boolean; note?: string },
+  file: File
+): Promise<ConfigTemplate> {
+  const q = new URLSearchParams({
+    name: params.name,
+    device_model: params.deviceModel,
+    is_default: String(params.isDefault)
+  });
+  if (params.note) q.set("note", params.note);
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const response = await apiFetch(`${API_BASE_URL}/config-templates?${q.toString()}`, {
+    method: "POST",
+    headers,
+    body: form
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablon yüklenemedi.");
+  const s = (await response.json()) as {
+    id: number; name: string; device_model: string; source_filename: string | null;
+    note: string | null; is_default: boolean; created_by: string | null;
+    created_at: string; size_bytes: number;
+  };
+  return {
+    id: s.id, name: s.name, deviceModel: s.device_model,
+    sourceFilename: s.source_filename, note: s.note, isDefault: s.is_default,
+    createdBy: s.created_by, createdAt: s.created_at, sizeBytes: s.size_bytes
+  };
+}
+
+export async function setDefaultConfigTemplate(token: string, templateId: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/config-templates/${templateId}/default`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Varsayılan yapılamadı.");
+}
+
+// ===== FTP sunucu ayarlari ================================================
+// Backend: app/api/ftp_settings.py . Parola GET'te ACIK doner — cihazin FTP
+// ekranina elle girilecegi icin kullanici okuyabilmeli.
+
+import type {
+  DeviceConfigSummary,
+  FtpSettings,
+  FtpSettingsUpdate,
+  FtpStatus,
+  FtpTestResult
+} from "./types";
+
+type ApiFtpSettings = {
+  mode: FtpSettings["mode"]; host: string | null; port: number; username: string;
+  password: string | null; directory: string; poll_interval_sec: number;
+  updated_by: string | null; updated_at: string | null;
+};
+
+const mapFtpSettings = (s: ApiFtpSettings): FtpSettings => ({
+  mode: s.mode, host: s.host, port: s.port, username: s.username,
+  password: s.password, directory: s.directory, pollIntervalSec: s.poll_interval_sec,
+  updatedBy: s.updated_by, updatedAt: s.updated_at
+});
+
+export async function fetchFtpSettings(token: string): Promise<FtpSettings> {
+  const response = await apiFetch(`${API_BASE_URL}/ftp-settings`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "FTP ayarları alınamadı.");
+  return mapFtpSettings((await response.json()) as ApiFtpSettings);
+}
+
+export async function updateFtpSettings(
+  token: string, updates: FtpSettingsUpdate
+): Promise<FtpSettings> {
+  const body: Record<string, unknown> = {};
+  if (updates.mode !== undefined) body.mode = updates.mode;
+  if (updates.host !== undefined) body.host = updates.host;
+  if (updates.port !== undefined) body.port = updates.port;
+  if (updates.username !== undefined) body.username = updates.username;
+  if (updates.password !== undefined) body.password = updates.password;
+  if (updates.directory !== undefined) body.directory = updates.directory;
+  if (updates.pollIntervalSec !== undefined) body.poll_interval_sec = updates.pollIntervalSec;
+  const response = await apiFetch(`${API_BASE_URL}/ftp-settings`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw await buildApiError(response, "FTP ayarları kaydedilemedi.");
+  return mapFtpSettings((await response.json()) as ApiFtpSettings);
+}
+
+/** Baglanti durumu: gomulu sunucunun sagligi + aktif kimlik + son hareketler. */
+export async function fetchFtpStatus(token: string): Promise<FtpStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/ftp-settings/status`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "FTP durumu alınamadı.");
+  const r = (await response.json()) as {
+    mode: FtpStatus["mode"];
+    server: { reachable: boolean; username: string | null; connections: number | null; synced: boolean | null } | null;
+    events: { event_type: string; severity: string; message: string; device_code: string | null; created_at: string }[];
+  };
+  return {
+    mode: r.mode,
+    server: r.server,
+    events: r.events.map((e) => ({
+      eventType: e.event_type, severity: e.severity, message: e.message,
+      deviceCode: e.device_code, createdAt: e.created_at
+    }))
+  };
+}
+
+/** Cihaz basina guncel surum ozeti — cihaz listesi rozetleri (tek istek). */
+export async function fetchDeviceConfigSummaries(token: string): Promise<DeviceConfigSummary[]> {
+  const response = await apiFetch(`${API_BASE_URL}/device-configs/summary`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Yapılandırma özeti alınamadı.");
+  return ((await response.json()) as {
+    device_id: number; version: number; source: DeviceConfigSummary["source"];
+    created_at: string; applied_at: string | null;
+  }[]).map((s) => ({
+    deviceId: s.device_id, version: s.version, source: s.source,
+    createdAt: s.created_at, appliedAt: s.applied_at
+  }));
+}
+
+/** Okunabilir parola ONERISI — sunucu uretir ama KAYDETMEZ; kayit PUT ile. */
+export async function generateFtpPassword(token: string): Promise<string> {
+  const response = await apiFetch(`${API_BASE_URL}/ftp-settings/generate-password`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Parola üretilemedi.");
+  return ((await response.json()) as { password: string }).password;
+}
+
+/** KAYITLI ayarlarla harici sunucuya baglanti sinar. ok=false HTTP hatasi
+ *  degildir — sinama calisti, sonuc olumsuz; ayrinti `detail` icinde. */
+export async function testFtpSettings(token: string): Promise<FtpTestResult> {
+  const response = await apiFetch(`${API_BASE_URL}/ftp-settings/test`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Bağlantı sınanamadı.");
+  const r = (await response.json()) as { ok: boolean; detail: string; config_files: number | null };
+  return { ok: r.ok, detail: r.detail, configFiles: r.config_files };
+}

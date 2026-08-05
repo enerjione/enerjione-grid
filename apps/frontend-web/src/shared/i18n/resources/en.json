@@ -1423,6 +1423,7 @@
     },
     "navDesc": {
       "devices": "Add, edit and deploy gateways and field devices.",
+      "deviceConfig": "FTP server, config templates and bulk apply.",
       "signals": "Manage the signal catalog for each device model.",
       "grid": "Build region and line topology, attach devices to lines.",
       "liveValues": "Watch live signal values coming from the field.",
@@ -1444,6 +1445,7 @@
     },
     "nav": {
       "devices": "Devices",
+      "deviceConfig": "Device Configuration",
       "liveValues": "Live Values",
       "users": "Users",
       "responsibilityAreas": "Team Management",
@@ -1543,6 +1545,93 @@
         "operator": "Operator",
         "ops_manager": "Operations Manager",
         "installerSuper": "Installer (Super Admin)"
+      }
+    },
+    "deviceConfig": {
+      "list": {
+        "search": "Search device (name or code)…",
+        "aria": "Device list",
+        "empty": "No matching devices.",
+        "noConfig": "no configuration",
+        "pickOne": "Pick a device on the left."
+      },
+      "status": {
+        "title": "Connection Status",
+        "serverUp": "FTP server is running — active user: {{user}}, open connections: {{count}}",
+        "serverDown": "Cannot reach the FTP server. The service may be down or restarting.",
+        "pendingSync": "Credential change has not reached the server yet: it currently accepts \"{{active}}\", saved is \"{{expected}}\". Syncs within 30 seconds.",
+        "eventsEmpty": "No FTP activity yet. Logins and file transfers will be listed here once a device connects."
+      },
+      "ftp": {
+        "title": "FTP Server Settings",
+        "mode": {
+          "gomulu": "Embedded server",
+          "harici": "External server"
+        },
+        "modeDesc": {
+          "gomulu": "Devices connect to this system's own FTP server. The only option that works without internet in the field.",
+          "harici": "Both this software and the devices use the customer's FTP server; files are read from it by polling."
+        },
+        "host": "Server address",
+        "hostHintEmbedded": "IP the devices use to reach this system (informational)",
+        "port": "Port",
+        "username": "Username",
+        "password": "Password",
+        "generate": "Generate",
+        "userLimit": "The device screen accepts at most {{max}} characters.",
+        "passLimit": "The device screen accepts at most {{max}} characters. The password is typed on the device screen by hand; the generator avoids ambiguous characters (0/O, 1/l/I).",
+        "passTooShort": "Password must be at least 6 characters.",
+        "directory": "Directory",
+        "pollInterval": "Poll interval (seconds)",
+        "pollHint": "The directory on the external server is scanned at this interval; files written by devices become versions. Minimum 60 s.",
+        "embeddedNote": "In embedded mode the system is notified the moment a device writes a file; no extra setup needed. Credential changes reach the server within ~30 seconds, no restart required.",
+        "externalNote": "In external mode file activity cannot be seen instantly; the directory is scanned at the configured interval. Make sure devices and this software use the same server, credentials and directory.",
+        "credentialWarning": "WARNING: Once saved, the server starts using the new credentials within ~30 seconds; devices keep connecting with the OLD credentials and their logins will be rejected. You must manually update the username/password on each device's FTP screen.",
+        "portInvalid": "Port must be between 1 and 65535.",
+        "hostRequired": "Server address is required in external mode.",
+        "saved": "FTP settings saved.",
+        "test": "Test connection",
+        "testNeedsSave": "Save first — the test uses saved settings.",
+        "testFiles": "{{count}} configuration file(s) seen in the directory.",
+        "save": "Save"
+      },
+      "templates": {
+        "title": "Configuration Templates",
+        "empty": "No templates yet. Upload a known-good device file — newly added devices get their initial configuration from the default template.",
+        "name": "Template name",
+        "namePlaceholder": "e.g. Factory defaults",
+        "model": "Device model",
+        "file": "File",
+        "created": "Created",
+        "default": "default",
+        "makeDefault": "Make default",
+        "markDefault": "Set as default template",
+        "pickFile": "Choose file (.csv)",
+        "upload": "Upload template",
+        "uploaded": "Template \"{{name}}\" saved.",
+        "defaultSet": "Default template updated.",
+        "checksumNote": "A file with an invalid checksum cannot be a template — templates are copied to every new device, one broken file would spread across the fleet."
+      },
+      "bulk": {
+        "open": "Apply template ({{count}})",
+        "template": "Template",
+        "pickTemplate": "Pick a template…",
+        "confirmTitle": "Confirm bulk apply",
+        "confirmSummary": "Template \"{{template}}\" ({{model}}) will be applied to {{count}} device(s) as a new version.",
+        "versionChange": "v{{from}} → v{{to}}",
+        "versionNew": "first version (v1) will be created",
+        "ineligibleNote": "{{count}} selected device(s) will be SKIPPED because their model is not {{model}}.",
+        "confirmNote": "This only creates new VERSIONS; files are NOT sent to devices automatically. Sending requires the device's \"Apply to device\" step. Undoing a wrong template requires a new version per device.",
+        "cancel": "Cancel",
+        "confirm": "Confirm, apply to {{count}} device(s)",
+        "close": "Close",
+        "done": "Applied to {{count}} device(s).",
+        "doneWithFailures": "Applied to {{ok}} device(s), {{failed}} skipped.",
+        "failedTitle": "Skipped devices ({{count}})",
+        "reason": {
+          "cihaz_yok": "device not found",
+          "model_uyusmuyor": "model does not match the template"
+        }
       }
     },
     "projectSettings": {
@@ -3378,12 +3467,14 @@
       "ftpHint": "Once the device FTP config format is decoded, you will be able to pull and update config remotely here.",
       "ftp": {
         "empty": "This device has no configuration file yet. Upload a file pulled from the device, or define a template.",
-        "notSentHint": "Changes here are saved but NOT sent to the device. To send, place the file on the FTP server and issue the \"Configuration Update\" command from the Commands tab.",
+        "notSentHint": "Changes here are saved but NOT sent to the device. To send, use the \"Apply to device\" button: the file is written to FTP and the update command is queued.",
         "serialMismatch": "This file does not appear to belong to this device.\n\nExpected name: {{expected}}\nSelected file: {{got}}\n\nThe device only reads a file carrying its own name. Upload anyway? (Using it as a template can be a valid reason.)",
         "cmdPull": "Pull from device",
         "cmdApply": "Apply to device",
         "cmdHint": "The command is queued; the device applies it on its next DNP session.",
         "cmdQueued": "Command queued. The device will apply it on its next connection.",
+        "applied": "File written to FTP and command queued. The device will apply it on its next connection.",
+        "appliedAt": "Sent to device: {{date}}",
         "checksumBad": "invalid checksum",
         "checksumUnknown": "no checksum",
         "download": "Download",

@@ -36615,3 +36615,456 @@ th.event-col-category {
   background: #fffbeb;
   box-shadow: inset 3px 0 0 #f59e0b;
 }
+
+/* Cihaz sayfasi: bu surum cihaza gonderildi bilgisi. */
+.dev-ftp-applied { color: #047857; }
+
+/* ===========================================================================
+   Muhendislik > Cihaz Yapilandirma (DeviceConfigPage)
+   Sol: cihaz listesi (rozetli). Sag: secili cihazin config karti (dev-ftp-*
+   bileseni yeniden kullanilir). FTP ayarlari / sablonlar / toplu uygulama
+   POPUP'ta. Cihaz detayindaki dille ayni ton: acik zemin, ince cerceve.
+   ======================================================================== */
+.dcfg-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* -- ust arac cubugu ----------------------------------------------------- */
+.dcfg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dcfg-search {
+  width: 16rem;
+  max-width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.dcfg-toolbar-spacer { flex: 1; }
+
+/* -- iki sutunlu yerlesim ------------------------------------------------- */
+.dcfg-layout {
+  display: flex;
+  gap: 0.9rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.dcfg-devlist {
+  width: 19rem;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.6rem;
+  background: #fff;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.dcfg-devrow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 0.45rem;
+}
+
+.dcfg-devrow.is-active { background: #eff6ff; box-shadow: inset 3px 0 0 #2563eb; }
+
+.dcfg-devrow-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.3rem 0.2rem;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.dcfg-devrow-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: #111827;
+  min-width: 0;
+}
+
+.dcfg-devrow-name code { font-size: 0.6875rem; color: #9ca3af; }
+
+.dcfg-devrow-badge { font-size: 0.71875rem; color: #6b7280; }
+
+.dcfg-detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.6rem;
+  background: #fff;
+  padding: 0.75rem 1rem;
+}
+
+/* -- mod secimi ---------------------------------------------------------- */
+.dcfg-mode-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.dcfg-mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: #374151;
+}
+
+.dcfg-mode input { position: absolute; opacity: 0; pointer-events: none; }
+.dcfg-mode small { color: #6b7280; }
+.dcfg-mode.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+/* -- form izgarasi ------------------------------------------------------- */
+.dcfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.dcfg-grid label,
+.dcfg-upload-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  color: #374151;
+}
+
+.dcfg-grid input,
+.dcfg-grid select,
+.dcfg-upload-row input,
+.dcfg-upload-row select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.45rem;
+  font-size: 0.8125rem;
+  background: #fff;
+  color: #111827;
+}
+
+.dcfg-grid input.is-invalid { border-color: #dc2626; }
+.dcfg-hint { color: #6b7280; font-size: 0.71875rem; }
+
+.dcfg-pass-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+
+.dcfg-pass-row input {
+  flex: 1;
+  min-width: 0;
+  /* Parola cihaz ekranina elle gecirilecek — karakterler NET okunmali. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.06em;
+}
+
+.dcfg-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  color: #6b7280;
+  background: #f9fafb;
+  border-left: 3px solid #d1d5db;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0 0.4rem 0.4rem 0;
+}
+
+.dcfg-test-result {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+}
+
+.dcfg-test-result .material-symbols-outlined { font-size: 1.1rem; }
+.dcfg-test-result.is-ok { color: #047857; }
+.dcfg-test-result.is-bad { color: #b91c1c; }
+
+/* -- dugmeler ------------------------------------------------------------ */
+.dcfg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.dcfg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #374151;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.dcfg-btn:hover:not(:disabled) { background: #f9fafb; }
+.dcfg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.dcfg-btn .material-symbols-outlined { font-size: 1.05rem; }
+.dcfg-btn.is-small { padding: 0.25rem 0.55rem; font-size: 0.75rem; }
+
+.dcfg-btn.is-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.dcfg-btn.is-primary:hover:not(:disabled) { background: #1d4ed8; }
+
+.dcfg-btn.is-danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+.dcfg-btn.is-danger:hover:not(:disabled) { background: #b91c1c; }
+
+/* -- sablon tablosu ------------------------------------------------------ */
+.dcfg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin-bottom: 0.9rem;
+}
+
+.dcfg-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 0.71875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dcfg-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: #111827;
+  vertical-align: middle;
+}
+
+.dcfg-table code {
+  background: #f3f4f6;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  font-size: 0.71875rem;
+  color: #374151;
+}
+
+.dcfg-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.6875rem;
+}
+
+.dcfg-dim { color: #9ca3af; }
+.dcfg-empty { font-size: 0.8125rem; color: #6b7280; margin: 0 0 0.9rem; }
+
+/* -- sablon yukleme satiri ---------------------------------------------- */
+.dcfg-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.dcfg-upload-row > label:first-child { flex: 1 1 14rem; }
+
+.dcfg-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem !important;
+  padding-bottom: 0.45rem;
+}
+
+.dcfg-file { max-width: 18rem; overflow: hidden; white-space: nowrap; }
+
+.dcfg-failed {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+}
+
+.dcfg-failed ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+
+/* -- onay ekrani --------------------------------------------------------- */
+.dcfg-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dcfg-modal {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.1rem 1.3rem;
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 18px 45px rgba(17, 24, 39, 0.25);
+}
+
+.dcfg-modal h4 { margin: 0 0 0.6rem; font-size: 0.9375rem; color: #111827; }
+.dcfg-confirm-summary { font-size: 0.8438rem; color: #374151; margin: 0 0 0.5rem; }
+
+.dcfg-confirm-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+/* -- popup basligi / genis popup ----------------------------------------- */
+.dcfg-modal--wide { width: min(46rem, calc(100vw - 2rem)); }
+
+.dcfg-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.dcfg-modal-head h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.9375rem;
+  color: #111827;
+}
+
+.dcfg-modal-head .material-symbols-outlined { font-size: 1.2rem; color: #4b5563; }
+
+.dcfg-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  margin-bottom: 0.75rem;
+}
+
+.dcfg-modal-field select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.45rem;
+  font-size: 0.8125rem;
+  background: #fff;
+}
+
+.dcfg-note.is-warning {
+  color: #92400e;
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}
+
+/* -- baglanti durumu paneli ---------------------------------------------- */
+.dcfg-status {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.dcfg-status h5 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  color: #111827;
+}
+
+.dcfg-status-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.8125rem;
+}
+
+.dcfg-status-line .material-symbols-outlined { font-size: 1.1rem; }
+.dcfg-status-line.is-ok { color: #047857; }
+.dcfg-status-line.is-warn { color: #b45309; }
+.dcfg-status-line.is-bad { color: #b91c1c; }
+
+.dcfg-status-events {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 12rem;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  border: 1px solid #f3f4f6;
+  border-radius: 0.45rem;
+}
+
+.dcfg-status-events li {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.3rem 0.55rem;
+  color: #374151;
+}
+
+.dcfg-status-events li + li { border-top: 1px solid #f6f7f9; }
+.dcfg-status-events li.is-warn { color: #b45309; background: #fffbeb; }
+
+.dcfg-status-events time {
+  flex-shrink: 0;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+}

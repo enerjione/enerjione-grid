@@ -3,6 +3,7 @@
 Cihaz sayfasi "Yapilandirma" sekmesi ve muhendislik toplu ekrani bu uclari
 kullanir:
 
+  GET    /device-configs/summary                 -> cihaz basina guncel surum ozeti
   GET    /devices/{id}/config                    -> guncel surum + satirlar
   GET    /devices/{id}/config/download           -> ham dosya (indir)
   GET    /devices/{id}/config/versions           -> surum gecmisi
@@ -10,6 +11,7 @@ kullanir:
   POST   /devices/{id}/config/upload             -> dosya yukle (yeni surum)
   PATCH  /devices/{id}/config                    -> deger degistir (yeni surum)
   POST   /devices/{id}/config/versions/{v}/revert-> eski surume don (yeni surum)
+  POST   /devices/{id}/config/apply              -> FTP'ye yaz + DNP3 komutu
 
   GET    /config-templates                       -> sablon listesi
   POST   /config-templates                       -> sablon yukle
@@ -86,6 +88,41 @@ def _version_read(surum, raw: bytes | None = None) -> ConfigVersionRead:
 
 
 # --- cihaz yapilandirmasi --------------------------------------------------
+@router.get("/device-configs/summary")
+def config_ozeti(db: Session = Depends(get_db), _u: User = _YETKI) -> list[dict]:
+    """Cihaz basina GUNCEL surumun ozeti — muhendislik sayfasindaki cihaz
+    listesi rozetleri icin.
+
+    Tek sorgu: cihaz basina /config cagirmak, 500 cihazlik sahada listeyi
+    acmak icin 500 istek demek olurdu. Ham bayt TASINMAZ; yalnizca surum
+    numarasi/kaynak/zamanlar doner.
+    """
+    from sqlalchemy import func, select
+
+    from app.models.device_config import DeviceConfigVersion as V
+
+    enbuyuk = (
+        select(V.device_id, func.max(V.version).label("v"))
+        .group_by(V.device_id)
+        .subquery()
+    )
+    satirlar = db.execute(
+        select(V).join(
+            enbuyuk, (V.device_id == enbuyuk.c.device_id) & (V.version == enbuyuk.c.v)
+        )
+    ).scalars()
+    return [
+        {
+            "device_id": s.device_id,
+            "version": s.version,
+            "source": s.source,
+            "created_at": s.created_at,
+            "applied_at": s.applied_at,
+        }
+        for s in satirlar
+    ]
+
+
 @router.get("/devices/{device_id}/config", response_model=ConfigCurrentRead)
 def guncel_config(
     device_id: int, db: Session = Depends(get_db), _u: User = _YETKI
@@ -276,6 +313,85 @@ async def dosya_yukle(
             "expected_filename": beklenen,
             "serial_mismatch": seri_uyusmuyor,
             "checksum_valid": doc.checksum_valid,
+        },
+    )
+    db.commit()
+    return _version_read(surum, raw)
+
+
+@router.post("/devices/{device_id}/config/apply", response_model=ConfigVersionRead)
+def cihaza_uygula(
+    device_id: int, db: Session = Depends(get_db), user: User = _YETKI
+) -> ConfigVersionRead:
+    """Guncel surumu FTP'ye yazar + `config_update` komutunu kuyruga alir.
+
+    Eskiden kullanici dosyayi FTP'ye ELLE koymak zorundaydi; komut gidiyor
+    ama cihaz eski dosyayi okuyordu. Bu uc zinciri kapatir:
+
+      1. dosya FTP'ye yazilir (gomulu volume ya da harici sunucu — mod
+         ayarina gore, bkz. ftp_client_service),
+      2. DNP3 `config_update` (binary output 0) kuyruga alinir,
+      3. surumun `applied_at` alani isaretlenir.
+
+    `applied_at` = "dosya cihazin okuyacagi yere kondu ve komut kuyruga
+    alindi". Cihazin dosyayi GERCEKTEN okudugu an degil — cihaz komutu ancak
+    bir sonraki DNP oturumunda alir ve harici modda indirme anini goremeyiz.
+    Bos birakmaktan (hicbir iz yok) cok daha durustur; kesin teyit FTP
+    'download' olayindan izlenebilir.
+
+    Sira onemli: FTP yazimi BASARISIZSA komut kuyruga ALINMAZ — cihaza "yeni
+    dosyayi oku" deyip eski dosyayi okutmak, tam da kapatmaya calistigimiz
+    hatanin kendisi olurdu.
+    """
+    from app.services import device_command_service as cmd_svc
+    from app.services import ftp_client_service
+
+    cihaz = _device(db, device_id)
+    surum = svc.current_version(db, device_id)
+    if surum is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Bu cihazin yapilandirma surumu yok."
+        )
+    try:
+        dosya_adi = svc.config_filename(db, device_id)
+    except Exception as exc:  # noqa: BLE001 - seri yoksa acik hata
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    raw = bytes(surum.raw)
+    try:
+        yazilan_yol = ftp_client_service.write_config(db, filename=dosya_adi, raw=raw)
+    except ftp_client_service.FtpAccessError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    try:
+        komut = cmd_svc.queue_command(
+            db, device=cihaz, slug="config_update", actor=user.username, origin="ui"
+        )
+    except cmd_svc.CommandRejected as exc:
+        # Dosya yazildi ama komut gidemedi (orn. gateway yok). Acik soyle:
+        # kullanici komutu Komutlar sekmesinden ayrica tetikleyebilir.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Dosya FTP'ye yazildi ({yazilan_yol}) ama komut kuyruga alinamadi: {exc.detail}",
+        ) from exc
+
+    from datetime import datetime, timezone
+
+    surum.applied_at = datetime.now(timezone.utc)
+    record_event(
+        db,
+        category="device",
+        event_type="config_applied",
+        message=(
+            f"{cihaz.name}: yapilandirma v{surum.version} FTP'ye yazildi "
+            f"({yazilan_yol}) ve config_update komutu kuyruga alindi (#{komut.id})"
+        ),
+        actor_username=user.username,
+        device_code=cihaz.code,
+        metadata={
+            "version": surum.version,
+            "ftp_path": yazilan_yol,
+            "command_id": komut.id,
         },
     )
     db.commit()

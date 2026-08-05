@@ -71,6 +71,55 @@ def device_serial(db: Session, device_id: int) -> str | None:
     return str(int(sayi))
 
 
+def find_device_id_by_serial(db: Session, seri: str) -> int | None:
+    """Seri numarasindan cihaz bulur (`master.serial_number` telemetrisi).
+
+    Hem FTP olay yakalayicisi (gomulu mod) hem yoklama worker'i (harici mod)
+    bunu kullanir: cihazin yazdigi `<seri>_Configuration.csv` dosyasindaki
+    seri, cihazi TANIMLAR. Eslesme yoksa None — bilinmeyen bir seriyi rastgele
+    bir cihaza baglamak, yanlis cihazin gecmisini kirletirdi.
+    """
+    aday = db.execute(
+        select(
+            TelemetryLatest.device_id, TelemetryLatest.value, TelemetryLatest.value_string
+        ).where(TelemetryLatest.signal_key == SERIAL_SIGNAL)
+    ).all()
+    for did, deger, metin in aday:
+        okunan = (metin or "").strip() or (str(int(deger)) if deger is not None else "")
+        if okunan == seri:
+            return did
+    return None
+
+
+def ingest_pulled_config(
+    db: Session, *, device_id: int, ham: bytes, filename: str
+) -> DeviceConfigVersion | None:
+    """Cihazin FTP'ye yazdigi config baytlarini yeni SURUM olarak kaydeder.
+
+    AYNI icerik yeni surum URETMEZ (None doner): cihaz her cagrida ayni
+    dosyayi yazarsa gecmis anlamsiz kayitlarla dolar ve gercek degisiklikler
+    gorunmez hale gelir.
+
+    Bozuk dosya burada PATLAR (ConfigParseError) — cagiran taraf olayi
+    'islenemedi' olarak kaydeder; sessizce yutmak teshisi imkansiz kilardi.
+    """
+    belge = parse(ham)
+    mevcut = current_version(db, device_id)
+    if mevcut is not None and bytes(mevcut.raw) == ham:
+        return None
+    return create_version(
+        db,
+        device_id=device_id,
+        raw=ham,
+        source="cihazdan_cekildi",
+        actor=None,  # cihazin kendisi yazdi, bir kullanici degil
+        note=(
+            f"Cihaz FTP'ye yazdi ({filename})"
+            + ("" if belge.checksum_valid else " — saglama toplami GECERSIZ")
+        ),
+    )
+
+
 def config_filename(db: Session, device_id: int) -> str:
     """`<seri>_Configuration.csv`. Seri yoksa ACIK hata verir.
 

@@ -874,25 +874,13 @@ def ftp_event(
 def _ingest_config_upload(db: Session, *, seri: str, payload: FtpEventIn) -> bool:
     """Cihazin yazdigi config dosyasini yeni SURUM olarak kaydeder.
 
-    Seriyi cihaza `master.serial_number` telemetrisi uzerinden baglar. Eslesme
-    yoksa yutmaz — bilinmeyen bir seriyi rastgele bir cihaza yazmak, yanlis
-    cihazin gecmisini kirletirdi.
+    Seri->cihaz eslesmesi ve icerik yutma `device_config_service`'te — harici
+    mod yoklama worker'i (ftp_poll_worker) ile ORTAK. Burada yalnizca yerel
+    dosya guvenligi (yol/boyut) kalir; o kisim gomulu moda ozgu.
     """
-    from app.models.telemetry_latest import TelemetryLatest
     from app.services import device_config_service as cfg_svc
-    from app.services.horstmann_config_codec import parse as cfg_parse
 
-    # Seri -> cihaz. Telemetri sayisal gelebilir (50984.0), metin de olabilir.
-    aday = db.execute(
-        select(TelemetryLatest.device_id, TelemetryLatest.value, TelemetryLatest.value_string)
-        .where(TelemetryLatest.signal_key == cfg_svc.SERIAL_SIGNAL)
-    ).all()
-    device_id = None
-    for did, deger, metin in aday:
-        okunan = (metin or "").strip() or (str(int(deger)) if deger is not None else "")
-        if okunan == seri:
-            device_id = did
-            break
+    device_id = cfg_svc.find_device_id_by_serial(db, seri)
     if device_id is None:
         raise LookupError(f"seri {seri} hicbir cihazla eslesmedi")
 
@@ -908,27 +896,40 @@ def _ingest_config_upload(db: Session, *, seri: str, payload: FtpEventIn) -> boo
         raise ValueError(f"dosya cok buyuk ({boyut} bayt)")
 
     ham = open(tam, "rb").read()
-    belge = cfg_parse(ham)  # bozuksa burada patlar, olay 'error' ile kaydedilir
-
-    mevcut = cfg_svc.current_version(db, device_id)
-    if mevcut is not None and bytes(mevcut.raw) == ham:
-        # AYNI icerik: yeni surum URETME. Cihaz her cagrida ayni dosyayi
-        # yazarsa gecmis anlamsiz kayitlarla dolar ve gercek degisiklikler
-        # gorunmez hale gelir.
-        return False
-
-    cfg_svc.create_version(
-        db,
-        device_id=device_id,
-        raw=ham,
-        source="cihazdan_cekildi",
-        actor=None,  # cihazin kendisi yazdi, bir kullanici degil
-        note=(
-            f"Cihaz FTP'ye yazdi ({payload.filename})"
-            + ("" if belge.checksum_valid else " — saglama toplami GECERSIZ")
-        ),
+    # Bozuk dosya parse'ta patlar, olay 'error' ile kaydedilir.
+    surum = cfg_svc.ingest_pulled_config(
+        db, device_id=device_id, ham=ham, filename=payload.filename or ""
     )
-    return True
+    return surum is not None
+
+
+@router.get("/ftp-credentials")
+def ftp_credentials(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """ftp-server'in gomulu sunucu kimligini cektigi uc.
+
+    ftp-server bunu kisa araliklarla (30 sn) yoklar ve kimlik degisince
+    Authorizer'ini gunceller — yani arayuzden parola degistirmek icin
+    container'i yeniden baslatmak GEREKMEZ.
+
+    Parola ACIK doner: iki ic servis arasinda, INTERNAL_SERVICE_TOKEN korumali
+    bir uctur; ftp-server parolayi zaten dogrulamak icin acik bilmek zorunda.
+    Parola henuz ayarlanmadiysa None doner ve ftp-server env'deki
+    FTP_PASSWORD ile devam eder.
+    """
+    _require_service_token(x_service_token, _extract_service_name(request))
+    from app.services import ftp_settings_service
+
+    ayar = ftp_settings_service.get_settings(db)
+    db.commit()  # ilk cagri satiri olusturmus olabilir
+    return {
+        "mode": ayar.mode,
+        "username": ayar.username,
+        "password": ftp_settings_service.get_password(ayar),
+    }
 
 
 def _kaydet_ftp_olayi(

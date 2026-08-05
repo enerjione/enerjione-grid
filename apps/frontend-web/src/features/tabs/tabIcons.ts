@@ -15,6 +15,7 @@ import {
   BellRing,
   Cpu,
   DatabaseBackup,
+  FileCog,
   FileText,
   GitBranch,
   HeartPulse,
@@ -39,6 +40,7 @@ import type { EngineeringPage, PageMode, TabRoute } from "./tabModel";
 
 export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   devices: Router,
+  "device-config": FileCog,
   signals: Radio,
   grid: GitBranch,
   "live-values": Activity,

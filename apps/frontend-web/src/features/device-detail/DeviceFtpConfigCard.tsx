@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  applyDeviceConfig,
   deviceConfigDownloadUrl,
   fetchDeviceConfig,
   fetchDeviceConfigVersions,
@@ -180,6 +181,23 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     }
   }
 
+  /** "Cihaza uygula" ZINCIRI: backend dosyayi FTP'ye yazar, sonra
+   *  `config_update` komutunu kuyruga alir. Eskiden yalnizca komut gidiyordu
+   *  ve dosyayi FTP'ye kullanici elle koymak zorundaydi — koymayi unutmak
+   *  cihaza ESKI dosyayi okutuyordu. */
+  async function uygula() {
+    setBusy(true);
+    try {
+      await applyDeviceConfig(accessToken, deviceId);
+      toast.success(t("deviceDetail.config.ftp.applied"));
+      await load();
+    } catch (exc) {
+      toast.error(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function revert(version: number) {
     setBusy(true);
     try {
@@ -259,6 +277,16 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
         <span>{t(`deviceDetail.config.ftp.source.${KAYNAK_ANAHTARI[v.source]}`)}</span>
         <span>{new Date(v.createdAt).toLocaleString()}</span>
         {v.createdBy ? <span>{v.createdBy}</span> : null}
+        {/* Bu surum cihazin okuyacagi yere kondu mu? Dolu = FTP'ye yazildi ve
+            komut kuyruga alindi (cihazin okudugu an DEGIL — o, FTP indirme
+            olayindan izlenir). */}
+        {v.appliedAt ? (
+          <span className="dev-ftp-applied">
+            {t("deviceDetail.config.ftp.appliedAt", {
+              date: new Date(v.appliedAt).toLocaleString()
+            })}
+          </span>
+        ) : null}
       </div>
 
       {/* Kaydetmek gondermek degildir — kullanici bunu BILMELI. */}
@@ -267,8 +295,10 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
       {/* CIHAZ KOMUTLARI — asil dongu burada kapanir.
           "Cihazdan cek": binary output 3, cihaz kendi config'ini FTP'ye yazar;
           backend olayi yakalayip yeni surum olusturur.
-          "Cihaza uygula": binary output 0, cihaz FTP'den dosyayi indirip
-          uygular. Dosyanin FTP'de HAZIR olmasi gerekir.
+          "Cihaza uygula": once dosya FTP'ye YAZILIR (backend, mod ayarina
+          gore gomulu volume ya da harici sunucu), sonra binary output 0
+          kuyruga alinir — cihaz dosyayi indirip uygular. Iki adim tek ucta:
+          dosyayi elle FTP'ye koymayi unutmak cihaza eski dosyayi okutuyordu.
           Komutlar sekmesine gitmek zorunda kalmak, akisi ikiye boluyordu. */}
       {canCommand ? (
         <div className="dev-ftp-cmds">
@@ -285,7 +315,7 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
             type="button"
             className="dev-ftp-btn"
             disabled={busy}
-            onClick={() => void komut("config_update")}
+            onClick={() => void uygula()}
           >
             <span className="material-symbols-outlined">cloud_upload</span>
             {t("deviceDetail.config.ftp.cmdApply")}

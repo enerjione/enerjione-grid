@@ -152,6 +152,7 @@ const BulkNotificationPage = lazy(() => import("../features/bulk-notify/BulkNoti
 const DeviceDetailPage = lazy(() => import("../features/device-detail/DeviceDetailPage").then((m) => ({ default: m.DeviceDetailPage })));
 const DeviceManagementPanel = lazy(() => import("../features/devices/DeviceManagementPanel").then((m) => ({ default: m.DeviceManagementPanel })));
 const EventsPage = lazy(() => import("../features/events/EventsPage").then((m) => ({ default: m.EventsPage })));
+const DeviceConfigPage = lazy(() => import("../features/device-config/DeviceConfigPage").then((m) => ({ default: m.DeviceConfigPage })));
 const FaultListPage = lazy(() => import("../features/faults/FaultListPage").then((m) => ({ default: m.FaultListPage })));
 const GridManagementPanel = lazy(() => import("../features/grid/GridManagementPanel").then((m) => ({ default: m.GridManagementPanel })));
 const LicenseManagementPanel = lazy(() => import("../features/license/LicenseManagementPanel").then((m) => ({ default: m.LicenseManagementPanel })));
@@ -2875,6 +2876,10 @@ export function App() {
             {engineeringPage === "grid" &&
             (session.role === "engineer" || session.role === "installer") ? (
               <GridManagementPanel accessToken={session.accessToken} devices={devices} gridSnapshot={gridSnapshot} />
+            ) : null}
+            {engineeringPage === "device-config" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <DeviceConfigPage accessToken={session.accessToken} devices={devices} />
             ) : null}
             {engineeringPage === "license" &&
             (session.role === "engineer" || session.role === "installer") ? (
