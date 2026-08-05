@@ -14,6 +14,43 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.1] — 2026-08-05
+
+### Düzeltildi
+
+- **Gömülü FTP'de pasif mod (PASV) dışarıdan çalışmıyordu.** Sunucu pasif mod
+  yanıtında Docker'ın iç IP'sini (172.18.x.x) bildiriyordu; LAN'daki cihaz/
+  istemci veri bağlantısı kuramıyor, her dosya listeleme/transfer zaman
+  aşımına düşüyordu. FTP ayarlarındaki "Sunucu adresi" artık pasif mod
+  yanıtında cihazlara bildirilen adres olarak kullanılıyor ve değişiklik
+  yeniden başlatmasız (~30 sn) uygulanıyor. Adres boşsa ftp-server log'a
+  açık uyarı yazar.
+- **Harici sunucu sınaması gerçek sebebi göstermiyordu.** Sunucudan gelen
+  bazı hata yanıtları yakalanmayıp genel "Bağlantı sınanamadı" mesajına
+  dönüşüyordu. Sınama artık hiçbir koşulda patlamaz; kimlik reddi, bağlantı
+  zaman aşımı ve "veri kanalı kurulamadı (pasif mod portları kapalı
+  olabilir)" ayrımıyla raporlar. Sınama yalnızca taban dizini listeler —
+  derin tarama WAN üzerinde isteği zaman aşımına sürüklüyordu.
+
+### Değişti
+
+- **Varsayılan dizin Smart Navigator 2.0 standardına çekildi:** `/SN20/FOTA/`.
+  ftp-server açılışta bu dizini otomatik oluşturur; ayarlarda seçilen dizin
+  de kayıtta oluşturulur (cihaz var olmayan dizine girmeye çalışıp 550
+  almasın). Eski varsayılanda (`/`) duran mevcut kayıt migration ile
+  güncellenir; elle seçilmiş farklı dizinlere dokunulmaz.
+- **FTP ayarları popup'ı yeniden düzenlendi.** Sabit boyutlu iki sütun:
+  solda bağlantı durumu + kendi içinde kayan hareket listesi, sağda tek
+  sütun ayar formu (port, sunucu adresinin yanında) — loglar geldikçe popup
+  artık uzamıyor. Açıklama metinleri kısaltıldı; sınırlar alanların kendi
+  `maxLength`'iyle uygulanıyor, ekranda gereksiz bilgi yok.
+- **Harici modda parola normal parola alanı gibi girilir** (maskeli, "Üret"
+  düğmesi yok) — o parola müşterinin sunucusuna aittir. Açık gösterim ve
+  okunabilir parola üretici yalnızca gömülü modda (cihaz ekranına elle
+  girilecek kimlik) kalır.
+
+---
+
 ## [2.53.0] — 2026-08-05
 
 ### Eklendi
