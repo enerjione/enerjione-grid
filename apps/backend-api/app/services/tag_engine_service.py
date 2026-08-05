@@ -64,7 +64,21 @@ ALARM_BLOCKING_QUALITIES = frozenset(_OFFLINE_QUALITIES | {"forced"})
 #: saniyelik gecikme orada GORUNMEZ. Karar veren bir esikte kullanilmiyor —
 #: cihazin cevrimici olup olmadigi `communication_status` ile belirleniyor ve
 #: O ALAN KISILMIYOR, durum degisimi aninda yazilir.
-LAST_UPDATE_WRITE_THROTTLE_SEC = 5.0
+#: 2026-08-05 SAHA OLCUMU (500 cihaz): 5 saniye YETMEDI. Postgres bekleme
+#: olaylarinda kilit cekismesi goruldu:
+#:     Lock | transactionid | UPDATE devices SET last_update_at=...
+#: uc sorgu ayni anda kilit bekliyordu. Sebep: 500 cihazda 5 sn kisitlama
+#: saniyede ~100 UPDATE demek, ve ONCELIKLI ile TOPLU hat AYNI cihaz
+#: satirina es zamanli yaziyor. Iki islem ayni satiri guncellemeye
+#: calisinca biri digerini bekler; bekleme yazma yoluna geri yansir.
+#:
+#: 30 sn ile saniyede ~17 UPDATE kalir (6 kat az) ve cakisma olasiligi
+#: buyuk olcude duser. Arayuzdeki "Son veri: X once" gostergesinde 30
+#: saniyelik granulerlik GORUNMEZ; cihazin cevrimici olup olmadigi zaten
+#: `communication_status` ile belirleniyor ve O ALAN KISILMIYOR — durum
+#: degisimi aninda yaziliyor. Gateway bayatlik esigi de 180 sn, yani bu
+#: deger onun cok altinda kaliyor.
+LAST_UPDATE_WRITE_THROTTLE_SEC = 30.0
 
 
 def should_write_last_update(

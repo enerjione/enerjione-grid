@@ -242,3 +242,36 @@ def test_kurulum_akisi_depolama_kurulumunu_cagirir(monkeypatch) -> None:
     assert "historian" in sira, "migrate_db depolama kurulumunu cagirmiyor"
     # Sema kurulduktan SONRA cagrilmali; once cagrilirsa tablo henuz yok.
     assert sira.index("create_all") < sira.index("historian")
+
+
+def test_SIKISTIRMA_ESIGI_disk_butcesiyle_TUTARLI() -> None:
+    """Sikistirma esigi, urunun disk butcesiyle CELISMEMELI.
+
+    YASANAN ARIZA (2026-08-05, 500 cihaz yuk testi)
+    -----------------------------------------------
+    Esik 7 gundu ve 46 chunk'in SIFIRI sikistirilmisti. Disk saatte ~8 GB
+    buyuyordu; 7 gun boyunca hicbir sey sikismayacagi icin ~1,3 TB
+    sikismamis veri birikecekti. Tipik saha cihazinda 456 GB disk var.
+
+    Yani ayar "calisiyor" gorunuyordu (politika kuruluydu, is zamanlanmisti)
+    ama esik urunun kendi disk butcesini ASIYORDU. Bu, sessiz bir celiski:
+    hicbir hata uretmez, yalnizca disk dolar.
+
+    HESAP: sikismamis pencere = gunluk buyume x esik.
+    8 GB/saat x 24 = ~192 GB/gun. 456 GB diskin %10'u bos kalmali (~410 GB
+    kullanilabilir) ve arsiv disindaki her sey de oraya sigmali. Iki gunluk
+    bir pencere bile butcenin buyuk kismini yer.
+    """
+    from app.db.timescale_setup import COMPRESS_AFTER_DAYS
+
+    assert COMPRESS_AFTER_DAYS <= 2, (
+        f"sikistirma esigi {COMPRESS_AFTER_DAYS} gun — olculen ~192 GB/gun "
+        "buyume ile sikismamis veri disk butcesini asar"
+    )
+    # Alt sinir: sikistirilmis chunk'a gec gelen veri yazmak kisitlidir.
+    # Gateway tamponu saatler mertebesinde, o yuzden bir gunun altina inmek
+    # gec gelen olcumleri riske atar.
+    assert COMPRESS_AFTER_DAYS >= 1, (
+        "bir gunun altinda esik, gec gelen olcumleri sikistirilmis chunk'a "
+        "yazmaya zorlar"
+    )

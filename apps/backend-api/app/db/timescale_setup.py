@@ -63,7 +63,17 @@ logger = logging.getLogger(__name__)
 
 TABLE = "telemetry_history"
 RETENTION_DAYS = 90
-COMPRESS_AFTER_DAYS = 7
+# 2026-08-05 SAHA OLCUMU: 7 gunluk esikle 46 chunk'in SIFIRI sikistirilmisti.
+# Yuk testinde disk saatte ~8 GB buyuyordu; 7 gun boyunca hicbir sey
+# sikismayacagi icin ~1,3 TB sikismamis veri birikecekti — 456 GB diske
+# sigmaz. Yani esik, urunun kendi disk butcesiyle CELISIYORDU.
+#
+# 1 gun: TimescaleDB bu veri seklinde tipik olarak 10-20 kat sikistirir,
+# yani sikismamis pencere 8 GB civarinda kalir. Sikistirilmis chunk'a
+# gec gelen veri yazmak kisitlidir; cihazlar veriyi aninda gonderdigi
+# icin bir gunluk pencere fazlasiyla yeterli (gateway tamponu saatler
+# mertebesinde, gunler degil).
+COMPRESS_AFTER_DAYS = 1
 CHUNK_INTERVAL = "1 day"
 
 # (view adi, kova araligi, policy start_offset, calisma araligi)

@@ -14,6 +14,34 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.47.0] — 2026-08-05
+
+### Düzeltildi
+
+- **Tekilleştirme defteri sınırsız büyüyordu ve tüm sistemi yavaşlatıyordu.**
+  `processed_messages` 2 saatlik pencerede tutulmalıydı; 500 cihazlık yük
+  testinde 74 milyon satır / 20 GB / 10,5 saatlik veri birikmişti. Sebep:
+  silme kapasitesi (1.666 satır/sn) üretimin (~2.900 satır/sn) altındaydı,
+  yani tablo hiçbir zaman kararlı duruma gelemezdi. Tablo büyüdükçe
+  tekilleştirme sorgusu önbelleğe sığmayıp diskten okumaya başlıyor, yazma
+  hızı %46 düşüyor ve kuyruk şişiyordu. Temizlik aralığı 600 → 60 saniyeye
+  indirildi; kapasite artık üretimin ~5,7 katı.
+- **Cihaz satırında kilit çekişmesi.** Her ölçüm `devices.last_update_at`
+  alanına yazıyordu ve 500 cihazda öncelikli/toplu hatlar aynı satırda
+  çakışıyordu. Yazma sıklığı 5 → 30 saniyeye indirildi (saniyede ~100 yerine
+  ~17 güncelleme). Arayüzdeki "Son veri" göstergesinde fark edilmez; cihazın
+  çevrimiçi olup olmadığı bu alandan değil, anında yazılan
+  `communication_status` alanından belirleniyor.
+- **Sıkıştırma hiç devreye girmiyordu.** Eşik 7 gündü ve 46 chunk'ın sıfırı
+  sıkıştırılmıştı. Günde ~192 GB büyüyen bir arşivde bu, 1,3 TB sıkıştırılmamış
+  veri demekti — 456 GB diske sığmaz. Eşik 1 güne indirildi.
+
+### Eklendi
+
+- Bu üç arıza da aynı sınıftan: bir ayar "çalışıyor" görünürken üretim hızını
+  ya da disk bütçesini aşıyor. Her biri için kuralı sayısal olarak kilitleyen
+  test eklendi (temizlik kapasitesi ≥ üretim × 3, sıkıştırma eşiği ≤ 2 gün).
+
 ## [2.46.0] — 2026-08-05
 
 ### Düzeltildi
