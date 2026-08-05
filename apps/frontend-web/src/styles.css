@@ -36497,73 +36497,6 @@ th.event-col-category {
 }
 
 /* Ayar tablosu -------------------------------------------------------- */
-.dev-ftp-table-wrap {
-  /* Genis icerik SAYFAYI degil kendi kutusunu kaydirsin. */
-  overflow-x: auto;
-  /* Dikey SINIR YOK: eskiden 28rem'de kesiliyor ve tablonun kendi kaydirma
-     cubugu cikiyordu. 60 ayarlik bir listede bu, kullaniciyi kucuk bir
-     pencereden bakmaya zorluyordu. Artik liste tam boy uzar, sayfa kaydirilir
-     ve baslik satiri `position: sticky` ile ustte kalir. */
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-}
-
-.dev-ftp-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8125rem;
-}
-
-.dev-ftp-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #f9fafb;
-  text-align: left;
-  padding: 0.5rem 0.65rem;
-  border-bottom: 1px solid #e5e7eb;
-  color: #6b7280;
-  font-weight: 600;
-}
-
-.dev-ftp-table td {
-  padding: 0.4rem 0.65rem;
-  border-bottom: 1px solid #f3f4f6;
-  vertical-align: middle;
-}
-
-.dev-ftp-table tbody tr:last-child td { border-bottom: none; }
-
-/* Degistirilmis ama HENUZ KAYDEDILMEMIS satir. Kaydedilenle karistirilmasin
-   diye sol kenarda belirgin bir seritle isaretleniyor. */
-.dev-ftp-table tr.is-changed td { background: #fffbeb; }
-.dev-ftp-table tr.is-changed td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
-
-.dev-ftp-name { display: block; color: #111827; }
-
-.dev-ftp-key {
-  display: block;
-  font-size: 0.6875rem;
-  color: #9ca3af;
-}
-
-.dev-ftp-ro { color: #6b7280; }
-
-.dev-ftp-table input {
-  width: 100%;
-  max-width: 11rem;
-  padding: 0.25rem 0.45rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.35rem;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-}
-
-.dev-ftp-table input:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-}
 
 .dev-ftp-save {
   display: flex;
@@ -36598,4 +36531,87 @@ th.event-col-category {
   color: #6b7280;
   /* Ipucu butonlarin YANINDA kalsin, altina dusup blogu buyutmesin. */
   flex: 1 1 12rem;
+}
+
+/* Ayar izgarasi — IKI SUTUN.
+   Tabloda "Birim" en sagda ayri bir sutundu; goz deger ile birimi
+   eslestirmek icin satiri bastan sona tariyordu. Burada birim degerin
+   hemen yaninda ve iki ayar yan yana sigiyor. */
+.dev-ftp-grid {
+  display: grid;
+  /* Dar ekranda kendiliginden tek sutuna duser. */
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 0.35rem 1.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.dev-ftp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0.4rem;
+  /* `label` oldugu icin ada tiklamak da alani odaklar. */
+  cursor: text;
+}
+
+.dev-ftp-item + .dev-ftp-item { border-top: 1px solid #f6f7f9; }
+
+.dev-ftp-item-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: #111827;
+}
+
+.dev-ftp-item-name code {
+  font-size: 0.6875rem;
+  color: #9ca3af;
+}
+
+.dev-ftp-item-input {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.dev-ftp-item-input input {
+  width: 7.5rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.35rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dev-ftp-item-input input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.dev-ftp-item-input input:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.dev-ftp-item-input em {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: #6b7280;
+  /* Birim sutunu sabit: farkli uzunluktaki birimler degerleri kaydirmasin. */
+  min-width: 2.2rem;
+}
+
+/* Kaydedilmemis degisiklik — kaydedilenle karismasin. */
+.dev-ftp-item.is-changed {
+  background: #fffbeb;
+  box-shadow: inset 3px 0 0 #f59e0b;
 }

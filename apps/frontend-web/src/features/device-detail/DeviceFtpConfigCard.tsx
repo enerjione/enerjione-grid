@@ -100,6 +100,15 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     return out;
   }, [current, drafts]);
 
+  /** Yalnizca SAYISAL alanlar duzenlenebilir; metin alanlari sabit genislikte
+   *  oldugu icin bayt sayisini tutturmayi gerektirir. Duzenlenemeyen satirlari
+   *  GOSTERMIYORUZ — kullanici istegi ve dogru karar: degistirilemeyen bir
+   *  satir ekranda yalnizca gurultu. */
+  const duzenlenebilir = useMemo(
+    () => (current?.rows ?? []).filter((r) => r.valueInt !== null),
+    [current]
+  );
+
   const changeCount = Object.keys(changes).length;
   const invalidDraft = useMemo(
     () =>
@@ -319,52 +328,43 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
         </ol>
       ) : null}
 
-      <div className="dev-ftp-table-wrap">
-        <table className="dev-ftp-table">
-          <thead>
-            <tr>
-              <th>{t("deviceDetail.config.ftp.col.setting")}</th>
-              <th>{t("deviceDetail.config.ftp.col.value")}</th>
-              <th>{t("deviceDetail.config.ftp.col.unit")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {current.rows.map((row) => {
-              const editable = canEdit && row.valueInt !== null;
-              const draft = drafts[row.catIndex];
-              const degisti = changes[row.catIndex] !== undefined;
-              return (
-                <tr key={row.catIndex} className={degisti ? "is-changed" : ""}>
-                  <td>
-                    {/* Katalog yoksa ham CatIndex gosterilir — anlamsiz bir
-                        satir bile GORUNMELI, gizlemek veri kaybi izlenimi
-                        yaratirdi. */}
-                    <span className="dev-ftp-name">{row.meaning ?? row.catIndex}</span>
-                    <code className="dev-ftp-key">{row.catIndex}</code>
-                  </td>
-                  <td>
-                    {editable ? (
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={draft ?? String(row.valueInt)}
-                        disabled={busy}
-                        onChange={(e) =>
-                          setDrafts((d) => ({ ...d, [row.catIndex]: e.target.value }))
-                        }
-                      />
-                    ) : (
-                      <span className="dev-ftp-ro">
-                        {row.valueText ?? row.valueInt ?? row.rawHex}
-                      </span>
-                    )}
-                  </td>
-                  <td>{row.unit ?? ""}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* IKI SUTUNLU IZGARA — tablo degil.
+          Tabloda "Birim" ayri bir sutundu ve ekranin en saginda kaliyordu;
+          goz deger ile birimi eslestirmek icin ekrani bastan sona tariyordu.
+          Burada birim degerin HEMEN yaninda.
+
+          DEGISTIRILEMEYEN satirlar GOSTERILMIYOR (kullanici istegi): metin
+          alanlari sabit genislikte oldugu icin duzenlenemiyor ve
+          "[not configured]" gibi kayitlar ekrani doldurup asil ayarlari
+          gormeyi zorlastiriyordu. */}
+      <div className="dev-ftp-grid">
+        {duzenlenebilir.map((row) => {
+          const draft = drafts[row.catIndex];
+          const degisti = changes[row.catIndex] !== undefined;
+          return (
+            <label
+              key={row.catIndex}
+              className={`dev-ftp-item ${degisti ? "is-changed" : ""}`}
+            >
+              <span className="dev-ftp-item-name">
+                {row.meaning ?? row.catIndex}
+                <code>{row.catIndex}</code>
+              </span>
+              <span className="dev-ftp-item-input">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={draft ?? String(row.valueInt)}
+                  disabled={busy || !canEdit}
+                  onChange={(e) =>
+                    setDrafts((d) => ({ ...d, [row.catIndex]: e.target.value }))
+                  }
+                />
+                {row.unit ? <em>{row.unit}</em> : null}
+              </span>
+            </label>
+          );
+        })}
       </div>
 
       {canEdit ? (

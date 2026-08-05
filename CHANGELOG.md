@@ -14,6 +14,27 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.52.1] — 2026-08-05
+
+### Düzeltildi
+
+- **"Cihaza uygula" butonunda ikon yerine `CLOUD_UPLOAD` yazıyordu.** İkon fontu
+  kodda gerçekten kullanılan ~220 ikonluk bir alt küme; yeni ikon eklendiğinde
+  font yeniden üretilmezse ikon yerine **adı** görünür. Font yeniden üretildi
+  (222 ikon, 156 kB).
+
+### Değiştirildi
+
+- **Ayarlar iki sütunlu ızgaraya geçti.** Tabloda "Birim" en sağda ayrı bir
+  sütundu; göz değer ile birimi eşleştirmek için satırı baştan sona tarıyordu.
+  Artık birim değerin hemen yanında ve iki ayar yan yana sığıyor (dar ekranda
+  kendiliğinden tek sütuna düşer).
+- **Değiştirilemeyen satırlar gösterilmiyor.** Metin alanları sabit genişlikte
+  olduğu için düzenlenemiyordu; `[not configured]` gibi kayıtlar ekranı
+  doldurup asıl ayarları görmeyi zorlaştırıyordu.
+
+---
+
 ## [2.52.0] — 2026-08-05
 
 ### Eklendi
