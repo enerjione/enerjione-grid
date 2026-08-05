@@ -438,6 +438,11 @@ export function GatewayCreateModal({
                       {composeFile}
                     </button>
                   </div>
+                  {/* Uretilen dosya bilerek yorumsuz; varsayilanlarin
+                      gerekcesi docs/APPLIANCE.md bolum 8'de. */}
+                  <small className="gw-manual-hint">
+                    {t("engineering.gateways.wizard.composeHelp")}
+                  </small>
                 </div>
               </li>
               <li>

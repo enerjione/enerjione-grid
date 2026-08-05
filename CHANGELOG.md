@@ -14,6 +14,23 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.49.1] — 2026-08-05
+
+### Değişti — üretilen gateway compose/env dosyası production-temiz
+
+- **Geliştirme notları çıktıdan çıkarıldı**: üretilen dosyada artık çok
+  satırlı gerekçe yorumu, ölçüm/tarih anlatısı yok — yalnızca 2 satırlık
+  kimlik başlığı + tek satırlık bölüm başlıkları. Gerekçeler şablon kaynak
+  koduna ve `docs/APPLIANCE.md` bölüm 8'e taşındı; sihirbazdaki indirme
+  adımına kısa yardım metni eklendi.
+- **`GATEWAY_INSECURE_ALLOW_PLAINTEXT` artık koşullu**: backend adresi
+  `https://` ise `false`, değilse bilinçli opt-out olarak `true` üretilir.
+  Güvenlik opt-out'u her dosyada açık gelmiyor.
+- **Env değişkenleri mantıksal sırada**: kimlik → ortam → backend →
+  telemetri → sağlık/polling → DNP3 → log.
+
+---
+
 ## [2.49.0] — 2026-08-05
 
 ### Düzeltildi

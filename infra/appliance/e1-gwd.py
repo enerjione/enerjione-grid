@@ -136,6 +136,10 @@ UPDATE_PARAM_KEYS = frozenset({"nats_url"})
 # Ikisini birbirine baglayan test:
 #   apps/backend-api/tests/test_gateway_agent_compose_parity.py
 # Sablonu burada degistirirsen orayi da degistir; test aksi halde kirmizi olur.
+# URETILEN DOSYA PRODUCTION CIKTI — cok satirli gerekce yorumu koyma.
+# Gerekceler gateway_compose.py basindaki yorumda ve docs/APPLIANCE.md
+# "Gateway compose'u" bolumunde. INSECURE_ALLOW_PLAINTEXT kosullu render
+# edilir (https -> false); bkz. render_compose.
 COMPOSE_TEMPLATE = """\
 # EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
 # Kurulum: docker compose -f e1-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
@@ -147,49 +151,38 @@ services:
     image: {{IMAGE}}
     container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped
-    # DOSYA TANITICI (fd) TAVANI — cihaz sayisinin gercek sinirlayicisi.
-    # Her DNP3 cihazi bir TCP soketi tutar; 401 cihazli olcumde 420 fd
-    # acikti (2026-08-04). Docker'in varsayilan soft limiti 1024, ve
-    # baglanti flap'inde eski soket kapanmadan yenisi acildigi icin fd
-    # gecici olarak ikiye katlanabilir — pratik sinir cok daha erken.
-    # Limit dolunca soket acilamaz, hata "cihaz kopuk" gibi gorunur ve
-    # gercek sebep hicbir sayacta yazmaz. 500 cihaz hedefinde bol pay.
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
     environment:
+      # Kimlik
       GATEWAY_CODE: "{{GATEWAY_CODE}}"
       GATEWAY_TOKEN: "{{GATEWAY_TOKEN}}"
       GATEWAY_NAME: "{{GATEWAY_NAME}}"
+      # Ortam
       APP_ENVIRONMENT: "{{APP_ENVIRONMENT}}"
       GATEWAY_MODE: "dnp3"
+      # Backend
       BACKEND_API_URL: "{{BACKEND_API_URL}}"
       BACKEND_API_VERIFY_SSL: "true"
-      # Public IP + HTTP icin gateway production guard'i 'https' bekler.
-      # TLS henuz kurulu degilse (Caddy/Traefik/Cloudflare yok) bu flag ile
-      # bilincli opt-out — gateway boot'ta WARN log atar, calismaya devam eder.
-      # Kullanici TLS terminator kurunca BACKEND_API_URL'i https:// yapip
-      # bu flag'i 'false' yapabilir.
-      GATEWAY_INSECURE_ALLOW_PLAINTEXT: "true"
-      # NATS JetStream — gateway'in telemetri yayin yolu (RabbitMQ kaldirildi).
+      GATEWAY_INSECURE_ALLOW_PLAINTEXT: "{{INSECURE_ALLOW_PLAINTEXT}}"
+      # Telemetri
       NATS_URL: "{{NATS_URL}}"
       NATS_SUBJECT_PREFIX: "e1.telemetry.raw"
+      # Saglik / polling
       WORKER_HEALTH_HOST: "0.0.0.0"
       WORKER_HEALTH_PORT: "8020"
       DEFAULT_POLL_INTERVAL_SEC: "1"
       MAX_PARALLEL_DEVICES: "500"
+      # DNP3
       DNP3_LOCAL_ADDRESS: "1"
       DNP3_TCP_PORT: "20000"
       DNP3_RESPONSE_TIMEOUT_SEC: "5"
-      # DNP3 kalite bayraklarini yayinla (invalid / restart / forced).
-      # Gateway ayarlarindan acilir. KAPALIYKEN her okuma "good" gider —
-      # outstation CT referansini kaybedip 0 A raporlasa bile SCADA bunu
-      # gecerli olcum sanar. Backend bu kaliteleri v2.28.0'dan beri taniyor;
-      # kademeli acilis icin gateway BAZINDA ayarlanabilir tutuldu.
-      GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       DNP3_READ_STRATEGY: "event_driven"
       DNP3_EVENT_BASELINE_INTERVAL_SEC: "30"
+      GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
+      # Log
       LOG_LEVEL: "INFO"
       LOG_FORMAT: "json"
       SHOW_GATEWAY_TOKEN_ON_START: "false"
@@ -839,6 +832,13 @@ def render_compose(code: str, name: str, params: dict) -> str:
         "GATEWAY_TOKEN": params["token"],
         "GATEWAY_NAME": name,
         "BACKEND_API_URL": params["backend_url"].rstrip("/"),
+        # Guvenlik opt-out'u kosullu: https backend'de "false" render edilir
+        # (gateway_compose.py _insecure_allow_plaintext ile ayni mantik).
+        "INSECURE_ALLOW_PLAINTEXT": (
+            "false"
+            if params["backend_url"].strip().lower().startswith("https://")
+            else "true"
+        ),
         "NATS_URL": params["nats_url"],
         "HOST_HEALTH_PORT": str(params["host_port"]),
         "IMAGE": params["image"],

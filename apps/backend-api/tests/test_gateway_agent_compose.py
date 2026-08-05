@@ -137,6 +137,59 @@ def test_compose_project_adi_container_ile_hizali(agent):
     assert agent._project_name("GW-A") == "e1-gw-gw-a"
 
 
+def test_cikti_production_temiz(agent):
+    """Uretilen dosya musteriye gider: cok satirli gerekce yorumu, olcum
+    sonucu, tarih anlatisi OLMAMALI. En fazla 2 satirlik baslik + tek
+    satirlik bolum basliklari. Gerekceler kaynak kodda ve docs/APPLIANCE.md
+    bolum 8'de yasar."""
+    params = agent._validate_params(_params())
+    body = agent.render_compose("GW-A", "Saha", params)
+    satirlar = body.splitlines()
+    # Ilk iki satir kimlik basligi; sonrasinda ardisik yorum satiri yok
+    # (cok satirli anlatinin imzasi ardisik # satirlaridir).
+    govde = satirlar[2:]
+    for onceki, simdiki in zip(govde, govde[1:]):
+        ikisi_de_yorum = onceki.strip().startswith("#") and simdiki.strip().startswith("#")
+        assert not ikisi_de_yorum, f"cok satirli yorum blogu: {onceki!r} / {simdiki!r}"
+    # Olcum/tarih/anlati kaliplari geri gelmesin.
+    for yasak in ("2026-", "olcum", "sahada", "eskiden", "fd acikti", "v2.2"):
+        assert yasak not in body.lower(), f"gelistirme notu sizmis: {yasak!r}"
+
+
+def test_plaintext_bayragi_kosullu(agent):
+    """GATEWAY_INSECURE_ALLOW_PLAINTEXT guvenlik opt-out'u: https backend'de
+    "false", http backend'de "true" uretilmeli — sabit "true" her dosyada
+    acik geliyordu."""
+    p_http = agent._validate_params(_params())
+    assert p_http["backend_url"].startswith("http://") or "://" not in p_http["backend_url"]
+    body_http = agent.render_compose("GW-A", "x", p_http)
+    assert 'GATEWAY_INSECURE_ALLOW_PLAINTEXT: "true"' in body_http
+
+    p_https = agent._validate_params(_params(backend_url="https://scada.example.com/api/v1"))
+    body_https = agent.render_compose("GW-A", "x", p_https)
+    assert 'GATEWAY_INSECURE_ALLOW_PLAINTEXT: "false"' in body_https
+
+    # Backend renderer ayni mantigi kullanmali (parity zaten sablonu esitler;
+    # bu, HESAPLANAN degerin esitligini kilitler).
+    from app.services.gateway_compose import _insecure_allow_plaintext
+
+    assert _insecure_allow_plaintext("https://scada.example.com") == "false"
+    assert _insecure_allow_plaintext("http://10.0.0.5:8000") == "true"
+
+
+def test_env_sirasi_mantiksal(agent):
+    """kimlik -> ortam -> backend -> telemetri -> saglik/polling -> DNP3 ->
+    log. Rastgele sira karsilastirmayi zorlastiriyordu."""
+    params = agent._validate_params(_params())
+    body = agent.render_compose("GW-A", "x", params)
+    sira = [
+        "GATEWAY_CODE:", "APP_ENVIRONMENT:", "BACKEND_API_URL:",
+        "NATS_URL:", "WORKER_HEALTH_HOST:", "DNP3_LOCAL_ADDRESS:", "LOG_LEVEL:",
+    ]
+    konumlar = [body.index(anahtar) for anahtar in sira]
+    assert konumlar == sorted(konumlar), f"env sirasi bozuk: {sira} -> {konumlar}"
+
+
 def test_compose_ulimits_nofile_var(agent):
     """fd tavani sablonda OLMALI — elle eklenen ulimits her render'da
     siliniyordu. Her DNP3 cihazi bir TCP soketi tutar; Docker varsayilani

@@ -263,3 +263,51 @@ uninstall ciktisi geri alma komutlarini ve netplan yedeginin yerini yazar.
   wifi-sec.psk "<parola>"` (setup scripti tekrar calisirsa acik aga geri
   ceker; kalici istiyorsaniz scripti de guncelleyin).
 - Ayni anda tek istek islenir; onceki uygulanmadan ikincisi reddedilir.
+
+---
+
+## 8. Gateway compose'u — uretilen dosyanin varsayilanlari
+
+"Yeni gateway ekle" akisinin urettigi `docker-compose.yml` / `.env` dosyasi
+bilerek yorumsuz ve kisadir: musteriye giden production ciktidir. Ayarlarin
+gerekceleri surada durur; dosyada degil.
+
+### `ulimits: nofile 65536` neden var?
+
+Her DNP3 cihazi bir TCP soketi (dosya taniticisi) tutar. Docker'in
+varsayilan soft limiti 1024'tur ve baglanti kopup yeniden kurulurken eski
+soket kapanmadan yenisi acilabildigi icin anlik kullanim ikiye katlanabilir.
+Limit dolunca yeni soket acilamaz; hata sahada "cihaz kopuk" gibi gorunur
+ve gercek sebep hicbir sayacta yazmaz — teshisi en zor ariza tiplerinden
+biridir. 65536, tek gateway'de 500 cihaz hedefi icin bol pay birakir.
+Bu ayar sablonda kalicidir; dosyayi elle duzenlemek gerekmez (elle eklenen
+ayarlar bir sonraki render'da kaybolur).
+
+### `GATEWAY_INSECURE_ALLOW_PLAINTEXT` neden bazen `true` bazen `false`?
+
+Gateway, production ortaminda backend'e **https** ile baglanmak ister; URL
+`http://` ise normalde baslamayi reddeder. Bu bayrak o korumanin bilincli
+opt-out'udur ve **kosullu** uretilir:
+
+- `BACKEND_API_URL` `https://` ise -> `false` (koruma acik; olmasi gereken).
+- `http://` ise -> `true` (gateway boot'ta WARN loglar ama calisir; TLS
+  terminatoru henuz kurulmamis sahalar icindir).
+
+TLS terminatoru (Caddy/Traefik/Cloudflare) kurulunca backend URL'i
+`https://` yapin ve dosyayi yeniden indirin/render edin — bayrak
+kendiliginden `false` uretilir.
+
+### `GATEWAY_PUBLISH_DNP3_QUALITY` neden varsayilan kapali?
+
+Acildiginda gateway DNP3 kalite bayraklarini (invalid/restart/forced)
+yayinlar ve kotu kaliteli okumalar alarm degerlendirmesinden bloke olur —
+saha davranisini degistirir. Kapaliyken her okuma "good" gider; outstation
+CT referansini kaybedip 0 A raporlasa bile sistem bunu gecerli olcum sanar.
+Acmak operator karari olmali; gateway ayarlarindan gateway bazinda acilir.
+
+### Adlandirma: `e1-gw-<kod>`
+
+Compose proje adi (`name:`), container adi ve volume adi ayni prefix'i
+kullanir: `e1-gw-<kod>`. Ajan da `docker compose -p e1-gw-<kod>` ile
+calisir; dosya `-p`'siz elle calistirildiginda da ayni projeye cozulur,
+"container name already in use" catismasi olusmaz.

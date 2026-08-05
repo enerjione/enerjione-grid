@@ -34787,6 +34787,14 @@ th.event-col-category {
   color: #64748b;
 }
 
+.gw-manual-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
 .gw-manual-actions {
   display: flex;
   align-items: center;

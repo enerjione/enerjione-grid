@@ -1726,6 +1726,7 @@
         "fallbackToManual": "Show manual installation steps",
         "backendIpHint": "IP or hostname the gateway will use to reach this server. A local IP is enough on the same network.",
         "step1Title": "Download the compose file",
+        "composeHelp": "The downloaded file is production-ready: the file-descriptor limit (500-device target) is built in, and plaintext opt-out is rendered off when the backend URL is https. See the installation guide for details.",
         "step2Title": "Copy the file to the target machine",
         "step2Desc": "Docker must be installed. Place the file in any directory.",
         "step3Title": "Run it on the target machine"

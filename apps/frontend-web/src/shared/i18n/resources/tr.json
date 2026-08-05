@@ -1726,6 +1726,7 @@
         "fallbackToManual": "Elle kurulum adimlarini goster",
         "backendIpHint": "Gateway'in bu sunucuya erisecegi IP veya alan adi. Ayni ag icindeyse yerel IP yeterli.",
         "step1Title": "Compose dosyasini indirin",
+        "composeHelp": "İndirilen dosya üretime hazırdır: dosya tanıtıcı limiti (500 cihaz hedefi) hazır gelir ve backend adresi https ise düz-metin izni kapalı üretilir. Ayrıntılar için kurulum kılavuzuna bakın.",
         "step2Title": "Dosyayi hedef makineye kopyalayin",
         "step2Desc": "Docker kurulu olmali. Dosyayi istediginiz bir dizine koyun.",
         "step3Title": "Hedef makinede calistirin"
