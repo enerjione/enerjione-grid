@@ -23,7 +23,7 @@ import io
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.device import Device
@@ -58,6 +58,57 @@ def _col(name: str) -> str:
 
 
 POLE_TYPES = ["pole", "transformer", "breaker"]
+
+# Hizli Yapistir sayfasi: direk sirasi ve segment OTOMATIK — kullanici yalnizca
+# koordinat listesi yapistirir. Tek 'Koordinat' hucresi "enlem, boylam" alir
+# (Google Maps'ten kopyalanan bicim); istenirse ad/tip eklenir.
+QUICK_SHEET = "Hizli_Yapistir"
+QUICK_COLUMNS = ["Bolge", "Hat", "Koordinat", "Direk_Adi", "Direk_Tipi"]
+
+
+def _parse_coord_pair(text: str) -> tuple[float, float] | None:
+    """Tek hucre koordinati coz: "39.92, 32.85" / "39.92 32.85" / "39,92;32,85".
+
+    AKILLI DAVRANISLAR (kullanici ugrasmasin diye):
+      - Ayirac: virgul, noktali virgul, bosluk, tab — hangisi varsa.
+      - Ondalik virgul destegi: "39,92 32,85" (iki sayi, ikiser parca) da cozulur.
+      - Enlem/boylam TERS yapistirilmissa (|enlem|>90 ama takasla gecerli)
+        SESSIZCE duzeltilir — Google Earth bazi bicimlerde boylami one koyar.
+    """
+    s = (text or "").strip()
+    if not s:
+        return None
+    # Once standart ayiraclarla dene.
+    for sep in (",", ";", "\t", " "):
+        if sep in s:
+            parts = [p for p in s.replace("\t", " ").split(sep) if p.strip()]
+            if len(parts) == 2:
+                lat = _to_float(parts[0])
+                lon = _to_float(parts[1])
+                if lat is not None and lon is not None:
+                    return _maybe_swap(lat, lon)
+            if sep == "," and len(parts) == 4:
+                # "39,92 32,85" ondalik virgul + bosluk: "39","92 32","85" gibi
+                # bolunmus olabilir — bosluga gore yeniden dene.
+                sol, sag = s.split(None, 1) if " " in s else (None, None)
+                if sol and sag:
+                    lat = _to_float(sol)
+                    lon = _to_float(sag)
+                    if lat is not None and lon is not None:
+                        return _maybe_swap(lat, lon)
+    return None
+
+
+def _maybe_swap(lat: float, lon: float) -> tuple[float, float] | None:
+    """Gecersiz enlem, takasla gecerliyse takasla; ikisi de gecersizse None."""
+    def ok(la: float, lo: float) -> bool:
+        return -90 <= la <= 90 and -180 <= lo <= 180
+
+    if ok(lat, lon):
+        return (lat, lon)
+    if ok(lon, lat):
+        return (lon, lat)
+    return None
 
 # Yon (Excel) -> device_orientation (DB) esleme.
 YON_TO_ORIENTATION = {
@@ -346,6 +397,9 @@ def build_template_workbook(db: Session) -> io.BytesIO:
     )
     _add_conditional_formats(ws, last_data_row=blank_end)
 
+    # --- Hizli Yapistir sheet (toplu koordinat girisi) ---
+    _add_quick_sheet(wb, header_font, header_fill)
+
     # --- Yardim sheet ---
     _add_help_sheet(wb, header_font, header_fill)
 
@@ -353,6 +407,63 @@ def build_template_workbook(db: Session) -> io.BytesIO:
     wb.save(buf)
     buf.seek(0)
     return buf
+
+
+def _add_quick_sheet(wb, header_font, header_fill) -> None:
+    """Hizli Yapistir: direkleri TEK SEFERDE yapistirmak icin sade sayfa.
+
+    Kullanim: Bolge + Hat bir kez yazilir (alt satirlarda bos = ustteki),
+    Koordinat kolonuna "enlem, boylam" listesi komple yapistirilir. Sira
+    numarasi ve segmentler OTOMATIK; hat mevcutsa direkler SONUNA eklenir.
+    """
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    ws = wb.create_sheet(QUICK_SHEET)
+    ws.append(QUICK_COLUMNS)
+    for col_idx in range(1, len(QUICK_COLUMNS) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    widths = [16, 16, 30, 18, 13]
+    for i, w in enumerate(widths, start=1):
+        from openpyxl.utils import get_column_letter
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "A2"
+
+    # Direk_Tipi dropdown (E kolonu).
+    dv = DataValidation(
+        type="list", formula1='"' + ",".join(POLE_TYPES) + '"',
+        allow_blank=True, showDropDown=False,
+    )
+    ws.add_data_validation(dv)
+    dv.add("E2:E5001")
+
+    # Sag tarafta kisa kullanim notu (parser ilk 5 kolonu okur; G serbest).
+    notlar = [
+        "NASIL KULLANILIR",
+        "1) Bolge ve Hat adini ILK satira bir kez yazin (altta bos birakin).",
+        "2) Koordinat kolonuna 'enlem, boylam' listesini KOMPLE yapistirin.",
+        "   Google Maps kopyasi (39.92042, 32.85411) dogrudan calisir.",
+        "   'enlem boylam' (bosluklu) ve ondalik virgul de kabul edilir.",
+        "3) Sira ve segmentler OTOMATIK: satir sirasi = direk sirasi.",
+        "   Hat zaten varsa yeni direkler hattin SONUNA eklenir.",
+        "4) Direk_Adi ve Direk_Tipi istege bagli (bos = pole).",
+        "Ayni dosyada birden fazla hat: yeni hatta gecerken Bolge/Hat yazin.",
+    ]
+    note_font = Font(color="475569", size=10)
+    for i, satir in enumerate(notlar):
+        c = ws.cell(row=2 + i, column=7, value=satir)
+        c.font = Font(bold=True, size=11) if i == 0 else note_font
+    ws.column_dimensions["G"].width = 70
+
+    # Ornek iki satir (acik gri) — parser icin zararsiz ORNEK etiketli Bolge
+    # kullanilmaz: ornek koordinatlar bos birakilir, sadece bicim gosterilir.
+    ornek_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+    ws.cell(row=2, column=3, value="ornek: 39.92042, 32.85411").fill = ornek_fill
+    ws.cell(row=2, column=3).font = Font(italic=True, color="94A3B8")
 
 
 def _add_conditional_formats(ws, last_data_row: int) -> None:
@@ -722,7 +833,174 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
                 pole_by_key, slot_orders,
             )
 
+    # ---- HIZLI YAPISTIR sayfasi (varsa) ----
+    if QUICK_SHEET in wb.sheetnames:
+        _parse_quick_sheet(wb[QUICK_SHEET], plan, db, pole_by_key, slot_orders)
+
     wb.close()
+    return plan
+
+
+def _next_seq_start(
+    db: Session, region_code: str, line_code: str,
+    pole_by_key: dict[tuple[str, str, int], "ParsedPole"],
+) -> int:
+    """Hatta EKLENECEK ilk sira: DB'deki + plandaki (Topoloji sayfasi) en
+    buyuk siranin devami. Hat yoksa 1."""
+    en_buyuk = 0
+    region = db.scalar(select(Region).where(Region.code == region_code))
+    if region is not None:
+        line = db.scalar(
+            select(Line).where(Line.region_id == region.id, Line.code == line_code)
+        )
+        if line is not None:
+            db_max = db.scalar(
+                select(func.max(Pole.sequence_no)).where(Pole.line_id == line.id)
+            )
+            en_buyuk = int(db_max or 0)
+    for (rc, lc, seq) in pole_by_key:
+        if rc == region_code and lc == line_code and seq > en_buyuk:
+            en_buyuk = seq
+    return en_buyuk + 1
+
+
+def _parse_quick_sheet(
+    ws, plan: ImportPlan, db: Session,
+    pole_by_key: dict[tuple[str, str, int], "ParsedPole"],
+    slot_orders: dict[tuple[str, str, int], set[int]],
+) -> None:
+    """Hizli Yapistir satirlarini plana cevir.
+
+    Kurallar:
+      - Bolge/Hat forward-fill (bir kez yazilir). Tek hucre hem kod hem ad
+        sayilir — hizli giriste ayri kod/ad ayrimi kullaniciyi ugrastirir.
+      - Koordinat tek hucrede "enlem, boylam"; ters yapistirma otomatik takas.
+      - Sira OTOMATIK: satir sirasi = direk sirasi; hat mevcutsa (DB'de ya da
+        Topoloji sayfasinda) yeni direkler SONUNA eklenir.
+      - "ornek" ile baslayan koordinat hucreleri yok sayilir (sablon ornegi).
+    """
+    ff_bolge = ""
+    ff_hat = ""
+    seq_next: dict[tuple[str, str], int] = {}
+
+    for idx, raw in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if raw is None or all((c is None or _clean(c) == "") for c in raw):
+            continue
+        cells = list(raw) + [None] * (len(QUICK_COLUMNS) - len(raw))
+        rec = dict(zip(QUICK_COLUMNS, cells[: len(QUICK_COLUMNS)]))
+
+        b = _clean(rec["Bolge"])
+        if b:
+            ff_bolge = b
+        h = _clean(rec["Hat"])
+        if h:
+            ff_hat = h
+
+        koor = _clean(rec["Koordinat"])
+        if not koor or koor.lower().startswith("ornek"):
+            continue
+        if not ff_bolge:
+            plan.errors.append(RowError(idx, f"{QUICK_SHEET}: Bolge boş (üstte de yok)."))
+            continue
+        if not ff_hat:
+            plan.errors.append(RowError(idx, f"{QUICK_SHEET}: Hat boş (üstte de yok)."))
+            continue
+
+        cift = _parse_coord_pair(koor)
+        if cift is None:
+            plan.errors.append(
+                RowError(idx, f"{QUICK_SHEET}: Koordinat çözülemedi: {koor!r} (beklenen: 'enlem, boylam').")
+            )
+            continue
+        lat, lon = cift
+
+        pole_type = _clean(rec["Direk_Tipi"]).lower() or "pole"
+        if pole_type not in POLE_TYPES:
+            plan.errors.append(RowError(idx, f"{QUICK_SHEET}: Direk_Tipi geçersiz: {pole_type!r}."))
+            continue
+
+        anahtar = (ff_bolge, ff_hat)
+        if anahtar not in seq_next:
+            seq_next[anahtar] = _next_seq_start(db, ff_bolge, ff_hat, pole_by_key)
+        seq = seq_next[anahtar]
+        seq_next[anahtar] = seq + 1
+
+        if ff_bolge not in plan.regions:
+            plan.regions[ff_bolge] = ff_bolge
+        line_key = f"{ff_bolge}|{ff_hat}"
+        if line_key not in plan.lines:
+            plan.lines[line_key] = ParsedLine(
+                region_code=ff_bolge, code=ff_hat, name=ff_hat,
+            )
+        pp = ParsedPole(
+            region_code=ff_bolge, line_code=ff_hat, sequence_no=seq,
+            name=_clean(rec["Direk_Adi"]) or None,
+            latitude=lat, longitude=lon, pole_type=pole_type, excel_row=idx,
+        )
+        pole_by_key[(ff_bolge, ff_hat, seq)] = pp
+        plan.poles.append(pp)
+        slot_orders[(ff_bolge, ff_hat, seq)] = set()
+
+
+# --------------------------------------------------------------------------- #
+# Soru-cevap sihirbazi — tek hatti JSON'dan plana cevir
+# --------------------------------------------------------------------------- #
+def plan_for_wizard(
+    db: Session,
+    *,
+    region_code: str,
+    region_name: str | None,
+    line_code: str,
+    line_name: str | None,
+    poles: list[dict],
+    branch_line_code: str | None = None,
+    branch_pole_seq: int | None = None,
+) -> ImportPlan:
+    """Sihirbaz girdisini (tek hat + koordinat listesi) ImportPlan'a cevir.
+
+    Excel yoluyla AYNI apply_plan'dan gecer — tek dogruluk kaynagi. Hat
+    mevcutsa direkler sonuna eklenir (sira otomatik devam eder).
+    """
+    plan = ImportPlan()
+    region_code = region_code.strip()
+    line_code = line_code.strip()
+    if not region_code:
+        plan.errors.append(RowError(0, "Bölge boş."))
+        return plan
+    if not line_code:
+        plan.errors.append(RowError(0, "Hat kodu boş."))
+        return plan
+
+    plan.regions[region_code] = (region_name or region_code).strip() or region_code
+    plan.lines[f"{region_code}|{line_code}"] = ParsedLine(
+        region_code=region_code, code=line_code,
+        name=(line_name or line_code).strip() or line_code,
+        branch_line_code=(branch_line_code or "").strip() or None,
+        branch_pole_seq=branch_pole_seq,
+    )
+
+    bos: dict[tuple[str, str, int], ParsedPole] = {}
+    seq = _next_seq_start(db, region_code, line_code, bos)
+    for i, p in enumerate(poles, start=1):
+        lat = _to_float(p.get("latitude"))
+        lon = _to_float(p.get("longitude"))
+        cift = _maybe_swap(lat, lon) if lat is not None and lon is not None else None
+        if cift is None:
+            plan.errors.append(RowError(i, f"{i}. direk koordinatı geçersiz."))
+            continue
+        pole_type = _clean(p.get("pole_type")).lower() or "pole"
+        if pole_type not in POLE_TYPES:
+            plan.errors.append(RowError(i, f"{i}. direk tipi geçersiz: {pole_type!r}."))
+            continue
+        plan.poles.append(
+            ParsedPole(
+                region_code=region_code, line_code=line_code, sequence_no=seq,
+                name=_clean(p.get("name")) or None,
+                latitude=cift[0], longitude=cift[1],
+                pole_type=pole_type, excel_row=i,
+            )
+        )
+        seq += 1
     return plan
 
 
@@ -927,8 +1205,26 @@ def apply_plan(plan: ImportPlan, db: Session) -> ImportResult:
         line = line_by_key.get(key)
         if line is None:
             continue
-        # Bransmanin bagli olacagi hat: ayni bolgede aranir.
+        # Bransmanin bagli olacagi hat: once plandaki direkler, yoksa DB.
+        # DB fallback'i SIHIRBAZ icin sart: hedef hat plana hic girmez
+        # (kullanici yalnizca yeni hatti gonderir), Excel'de de hedef hat
+        # sayfada olmayabilir.
         target_pole = pole_map.get((pl.region_code, pl.branch_line_code, pl.branch_pole_seq))
+        if target_pole is None:
+            region = db.scalar(select(Region).where(Region.code == pl.region_code))
+            if region is not None:
+                t_line = db.scalar(
+                    select(Line).where(
+                        Line.region_id == region.id, Line.code == pl.branch_line_code
+                    )
+                )
+                if t_line is not None:
+                    target_pole = db.scalar(
+                        select(Pole).where(
+                            Pole.line_id == t_line.id,
+                            Pole.sequence_no == pl.branch_pole_seq,
+                        )
+                    )
         if target_pole is not None:
             line.branched_from_pole_id = target_pole.id
 

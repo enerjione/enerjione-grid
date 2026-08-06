@@ -14,6 +14,31 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.16] — 2026-08-06
+
+### Eklendi
+
+- **Soru-cevap Hat Sihirbazı** artık aktif: bölge → hat (kod addan otomatik
+  önerilir) → koordinatlar (tek kutuya "enlem, boylam" listesi yapıştırılır;
+  Google Maps kopyası doğrudan çalışır, ters sıra otomatik düzeltilir,
+  canlı sayaç/hata gösterimi) → özet → tek istekle oluştur. Segmentler
+  otomatik; hat mevcutsa direkler sonuna eklenir; direk adları önekten
+  otomatik üretilir.
+- **Branşman tahmini** (sadece tahmin): yeni hattın ilk direği mevcut bir
+  hattın direğine ≤200 m ise sihirbaz "bu hattan dallanıyor olabilir" diye
+  önerir; ≤60 m'de öneri işaretli gelir, karar kullanıcının.
+- **Excel şablonuna "Hizli_Yapistir" sayfası**: Bölge/Hat bir kez yazılır,
+  Koordinat kolonuna "enlem, boylam" listesi komple yapıştırılır — sıra
+  numarası ve segmentler otomatik, hat mevcutsa sonuna ekler; tek hücrede
+  virgül/boşluk/ondalık virgül ve ters koordinat desteklenir.
+
+### Düzeltildi
+
+- İçe aktarmada branşman hedefi sayfada/planda olmayan MEVCUT bir hatta da
+  bağlanabiliyor (DB araması eklendi).
+
+---
+
 ## [2.53.15] — 2026-08-06
 
 ### Değişti

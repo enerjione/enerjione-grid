@@ -194,6 +194,30 @@ class ImportPreviewResponse(BaseModel):
     errors: list[ImportRowError]
 
 
+class WizardPole(BaseModel):
+    """Sihirbazdan gelen tek direk. Koordinat ters yapistirildiysa servis
+    otomatik takaslar (Excel yoluyla ayni akillilik)."""
+    latitude: float
+    longitude: float
+    name: str | None = None
+    pole_type: str | None = None
+
+
+class WizardLineRequest(BaseModel):
+    """Soru-cevap sihirbazi: TEK hatti tek istekte kur.
+
+    Bolge/hat kodu mevcutsa birlestirir (ad gunceller, direkleri SONUNA
+    ekler) — Excel import ile ayni ekle/birlestir kurali.
+    """
+    region_code: str = Field(min_length=1, max_length=64)
+    region_name: str | None = Field(default=None, max_length=120)
+    line_code: str = Field(min_length=1, max_length=64)
+    line_name: str | None = Field(default=None, max_length=120)
+    poles: list[WizardPole] = Field(min_length=2, max_length=2000)
+    branch_line_code: str | None = Field(default=None, max_length=64)
+    branch_pole_seq: int | None = None
+
+
 class ImportCommitResponse(BaseModel):
     """Commit sonucu: gercekten yaratilan/guncellenen sayilar + kalan hatalar."""
     regions_created: int

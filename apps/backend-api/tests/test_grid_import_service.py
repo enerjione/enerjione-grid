@@ -308,3 +308,107 @@ def test_same_line_code_in_different_regions_does_not_merge_poles(db):
     assert db.query(Region).count() == 2
     assert db.query(Line).count() == 2
     assert db.query(Pole).count() == 4
+
+
+# --------------------------------------------------------------------------- #
+# Hizli Yapistir + sihirbaz
+# --------------------------------------------------------------------------- #
+def _quick_sheet(rows: list[list], with_topo: bool = False) -> bytes:
+    wb = Workbook()
+    ws0 = wb.active
+    ws0.title = "Topoloji"
+    ws0.append(g.COLUMNS)
+    if with_topo:
+        ws0.append(_row("B1", "Bolge 1", "H1", "Hat 1", 1, "", 39.0, 32.0))
+        ws0.append(_row(sira=2, lat=39.1, lon=32.1))
+    ws = wb.create_sheet(g.QUICK_SHEET)
+    ws.append(g.QUICK_COLUMNS)
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_parse_coord_pair_bicimleri():
+    """Virgul, bosluk, noktali virgul, ondalik virgul ve TERS yapistirma."""
+    assert g._parse_coord_pair("39.92042, 32.85411") == (39.92042, 32.85411)
+    assert g._parse_coord_pair("39.92 32.85") == (39.92, 32.85)
+    assert g._parse_coord_pair("39.92;32.85") == (39.92, 32.85)
+    assert g._parse_coord_pair("39,92 32,85") == (39.92, 32.85)
+    # Ters (boylam once): |lat|>90 -> otomatik takas.
+    assert g._parse_coord_pair("132.85, 39.92") == (39.92, 132.85)
+    assert g._parse_coord_pair("") is None
+    assert g._parse_coord_pair("abc") is None
+
+
+def test_quick_sheet_otomatik_sira_ve_forward_fill(db):
+    """Bolge/Hat bir kez yazilir; sira otomatik 1..N; 'ornek' satiri atlanir."""
+    data = _quick_sheet([
+        ["B1", "H1", "ornek: 39.9, 32.8", "", ""],
+        ["B1", "H1", "39.0, 32.0", "", ""],
+        ["", "", "39.1, 32.1", "ara direk", ""],
+        ["", "", "39.2 32.2", "", "transformer"],
+    ])
+    plan = g.parse_and_plan(data, db)
+    assert [e.message for e in plan.errors] == []
+    assert [(p.sequence_no, p.pole_type) for p in plan.poles] == [
+        (1, "pole"), (2, "pole"), (3, "transformer"),
+    ]
+    assert plan.poles[1].name == "ara direk"
+    assert plan.regions == {"B1": "B1"}
+
+
+def test_quick_sheet_mevcut_hatta_SONUNA_ekler(db):
+    """Hat Topoloji sayfasinda 2 direkle geliyorsa hizli satirlar 3'ten baslar."""
+    data = _quick_sheet([
+        ["B1", "H1", "39.5, 32.5", "", ""],
+    ], with_topo=True)
+    plan = g.parse_and_plan(data, db)
+    assert [e.message for e in plan.errors] == []
+    hizli = [p for p in plan.poles if p.sequence_no == 3]
+    assert len(hizli) == 1 and hizli[0].latitude == 39.5
+
+
+def test_quick_sheet_db_deki_hatta_ekler(db):
+    """Hat DB'de 4 direkle varsa yeni direkler 5'ten devam eder."""
+    r = Region(code="B1", name="Bolge 1"); db.add(r); db.flush()
+    ln = Line(region_id=r.id, code="H1", name="Hat 1"); db.add(ln); db.flush()
+    for i in range(1, 5):
+        db.add(Pole(line_id=ln.id, sequence_no=i, latitude=39.0 + i * 0.01, longitude=32.0))
+    db.flush()
+    data = _quick_sheet([["B1", "H1", "39.9, 32.9", "", ""]])
+    plan = g.parse_and_plan(data, db)
+    assert plan.poles[0].sequence_no == 5
+
+
+def test_wizard_plan_ve_apply(db):
+    """Sihirbaz plani apply_plan'dan gecer: bolge+hat+direkler olusur,
+    ters koordinat otomatik takaslanir."""
+    plan = g.plan_for_wizard(
+        db,
+        region_code="B2", region_name="Bolge 2",
+        line_code="H9", line_name="Hat 9",
+        poles=[
+            {"latitude": 39.0, "longitude": 32.0},
+            {"latitude": 132.5, "longitude": 39.5},  # ters -> takas
+            {"latitude": 39.2, "longitude": 32.2, "name": "son", "pole_type": "breaker"},
+        ],
+    )
+    assert [e.message for e in plan.errors] == []
+    result = g.apply_plan(plan, db)
+    assert result.regions_created == 1
+    assert result.lines_created == 1
+    assert result.poles_created == 3
+    poles = db.query(Pole).order_by(Pole.sequence_no).all()
+    assert poles[1].latitude == 39.5 and poles[1].longitude == 132.5
+    assert poles[2].pole_type == "breaker"
+
+
+def test_template_hizli_yapistir_sayfasi_var(db):
+    buf = g.build_template_workbook(db)
+    wb = load_workbook(io.BytesIO(buf.getvalue()))
+    assert g.QUICK_SHEET in wb.sheetnames
+    ws = wb[g.QUICK_SHEET]
+    basliklar = [c.value for c in ws[1][: len(g.QUICK_COLUMNS)]]
+    assert basliklar == g.QUICK_COLUMNS

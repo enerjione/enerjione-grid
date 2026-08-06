@@ -1111,6 +1111,60 @@ export async function fetchSystemEvents(token: string): Promise<SystemEvent[]> {
   return (await response.json()) as SystemEvent[];
 }
 
+export type SystemEventFilters = {
+  category?: string;
+  severity?: string;
+  q?: string;
+  /** Kullanıcı adı — kısmi eşleşir. */
+  actorUsername?: string;
+  deviceCode?: string;
+  /** Durum grubu ILIKE desenleri (OR'lanır). */
+  eventTypeLike?: string[];
+  /** ISO 8601 (UTC) — new Date(...).toISOString() */
+  dateFrom?: string;
+  dateTo?: string;
+  limit: number;
+  offset: number;
+};
+
+/** Filtreleri query param'a çevirir. Liste ve export AYNI parametreleri
+ *  kullansın diye ortak — aksi halde indirilen dosya ekrandakinden farklı
+ *  bir kümeyi içerebilir. */
+export function buildEventFilterParams(
+  filters: Omit<SystemEventFilters, "limit" | "offset">,
+): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.category) params.set("category", filters.category);
+  if (filters.severity) params.set("severity", filters.severity);
+  if (filters.q?.trim()) params.set("q", filters.q.trim());
+  if (filters.actorUsername?.trim()) params.set("actor_username", filters.actorUsername.trim());
+  if (filters.deviceCode) params.set("device_code", filters.deviceCode);
+  if (filters.eventTypeLike?.length) {
+    params.set("event_type_like", filters.eventTypeLike.join(","));
+  }
+  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters.dateTo) params.set("date_to", filters.dateTo);
+  return params;
+}
+
+/** Olaylar sayfası: sunucu taraflı filtre + sayfalama. Toplam kayıt sayısı
+ *  backend'in X-Total-Count header'ından okunur. */
+export async function fetchSystemEventsPaged(
+  token: string,
+  filters: SystemEventFilters,
+): Promise<{ items: SystemEvent[]; total: number }> {
+  const params = buildEventFilterParams(filters);
+  params.set("limit", String(filters.limit));
+  params.set("offset", String(filters.offset));
+  const response = await apiFetch(`${API_BASE_URL}/events?${params.toString()}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sistem olayları alınamadı.");
+  const items = (await response.json()) as SystemEvent[];
+  const rawTotal = Number(response.headers.get("X-Total-Count"));
+  return { items, total: Number.isFinite(rawTotal) ? rawTotal : items.length };
+}
+
 export async function fetchGateways(token: string): Promise<Gateway[]> {
   const response = await apiFetch(`${API_BASE_URL}/gateways`, {
     headers: authHeaders(token)
@@ -2198,6 +2252,30 @@ export async function commitGridImport(
     method: "POST", headers, body: form
   });
   if (!response.ok) throw await buildApiError(response, "İçe aktarma başarısız.");
+  return (await response.json()) as GridImportResult;
+}
+
+/** Soru-cevap sihirbazi: tek hatti (bolge + hat + direk listesi) tek istekte
+ *  kurar. Excel import ile ayni plan/apply yolundan gecer; hat mevcutsa
+ *  direkler sonuna eklenir. */
+export async function createGridWizardLine(
+  token: string,
+  payload: {
+    region_code: string;
+    region_name?: string | null;
+    line_code: string;
+    line_name?: string | null;
+    poles: Array<{ latitude: number; longitude: number; name?: string | null; pole_type?: string | null }>;
+    branch_line_code?: string;
+    branch_pole_seq?: number;
+  }
+): Promise<GridImportResult> {
+  const response = await apiFetch(`${API_BASE_URL}/grid/wizard-line`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Hat oluşturulamadı.");
   return (await response.json()) as GridImportResult;
 }
 

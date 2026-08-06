@@ -42,6 +42,7 @@ from app.schemas.grid_topology import (
     RegionCreate,
     RegionRead,
     RegionUpdate,
+    WizardLineRequest,
 )
 from app.services import grid_import_service
 from app.services.event_service import record_event
@@ -953,6 +954,65 @@ async def _read_xlsx_upload(file: UploadFile) -> bytes:
             detail="Dosya boş.",
         )
     return content
+
+
+@router.post("/wizard-line", response_model=ImportCommitResponse)
+def wizard_line(
+    payload: WizardLineRequest,
+    current_user: User = Depends(require_roles(_EDIT_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Soru-cevap sihirbazi: tek hatti (bolge + hat + direk listesi) tek
+    istekte kurar. Excel import ile AYNI plan/apply yolundan gecer — segmentler
+    otomatik, mevcut hat varsa direkler sonuna eklenir."""
+    plan = grid_import_service.plan_for_wizard(
+        db,
+        region_code=payload.region_code,
+        region_name=payload.region_name,
+        line_code=payload.line_code,
+        line_name=payload.line_name,
+        poles=[p.model_dump() for p in payload.poles],
+        branch_line_code=payload.branch_line_code,
+        branch_pole_seq=payload.branch_pole_seq,
+    )
+    if plan.errors and not plan.poles:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "; ".join(e.message for e in plan.errors[:5]),
+        )
+    result = grid_import_service.apply_plan(plan, db)
+    record_event(
+        db, category="grid", event_type="topology_imported", severity="info",
+        actor_username=current_user.username,
+        message=(
+            f"Hat sihirbazı: {payload.line_code} hattı kuruldu "
+            f"({result.poles_created} direk eklendi)."
+        ),
+        metadata={
+            "line_code": payload.line_code,
+            "region_code": payload.region_code,
+            "poles_created": result.poles_created,
+            "errors": len(result.errors),
+        },
+        i18n_key="topology_imported",
+        i18n_params={
+            "regions": result.regions_created,
+            "lines": result.lines_created,
+            "poles": result.poles_created,
+        },
+    )
+    db.commit()
+    return ImportCommitResponse(
+        regions_created=result.regions_created,
+        regions_updated=result.regions_updated,
+        lines_created=result.lines_created,
+        lines_updated=result.lines_updated,
+        poles_created=result.poles_created,
+        poles_updated=result.poles_updated,
+        segments_created=result.segments_created,
+        skipped=result.skipped,
+        errors=[ImportRowError(row=e.row, message=e.message) for e in result.errors],
+    )
 
 
 @router.get("/import-template.xlsx")
