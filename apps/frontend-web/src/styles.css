@@ -126,29 +126,6 @@ body {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* Lisans yonetimi — endustriyel kontrol paneli, tek seri kapasite meter'i. */
 .license-panel {
   --license-ink: #172033;
@@ -197,14 +174,6 @@ body {
 .license-panel > .license-status-cards  { grid-row: 2; }
 .license-panel > .license-dashboard     { grid-row: 3; }
 .license-panel > .license-ops-card      { grid-row: 4; }
-
-
-
-
-
-
-
-
 
 
 .license-status-cards {
@@ -6321,89 +6290,109 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   min-width: 0;
 }
 
-/* Cekirdek kullanimi / takas alani / ag trafigi — UC KART YAN YANA.
-   Onceden ucu de "kaynaklar" kartinin icinde alt alta duruyor ve her biri
-   tam genisligi kaplayip sagda genis bir bosluk birakiyordu (kullanici
-   istegi, 2026-08-06). Kartlar esit yukseklikte hizalanir; icerikleri
-   kendi kutularinda dikeyde ortalanir ki farkli yukseklikteki bilesenler
-   ayni satirda dengeli dursun.
+/* Cekirdek kullanimi / ag trafigi — IKI KART YAN YANA.
+   Ikisi de "kaynaklar" kartinin icinde alt alta duruyor ve her biri tam
+   genisligi kaplayip sagda genis bir bosluk birakiyordu (kullanici istegi,
+   2026-08-06). Takas alani karti ayni istekle kaldirildi.
 
-   `auto-fit` DEGIL sabit uc kolon: cekirdek karti tek cekirdekli makinede,
-   takas karti swap'siz sistemde HIC render edilmez; auto-fit ile kalan
-   kart(lar) tum satiri kaplayip devasa gorunurdu. Sabit kolonla ikisi de
-   dogal genisliginde kalir. */
-.sys-trio-grid {
+   `auto-fit` DEGIL sabit iki kolon degil, `1fr 1fr`: tek cekirdekli
+   makinede cekirdek karti HIC render edilmez ve ag karti satiri tek basina
+   doldurur — grid bunu kendiliginden yapar. */
+.sys-duo-cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
   align-items: stretch;
   flex: 0 0 auto;
   min-width: 0;
 }
 
-/* Uclu kartlar sol sutunda dar kalir: ic kutular sigmali. */
-.sys-trio-card {
-  padding: 12px 14px;
+.sys-metric-card {
+  padding: 14px 16px;
   min-width: 0;
+  /* Kartlar daha ferah: cubuklar/ag oklari sikismasin (kullanici istegi). */
+  min-height: 170px;
 }
 
-/* Ag karti dar kolonda: yon bilgileri yan yana SIGMAZ, alt alta gecer. */
-.sys-trio-card .sys-net-flow {
-  flex-direction: column;
-  gap: 8px;
+/* Ag kutusu kartin kalan yuksekligini alir; giden/gelen bloklari dikeyde
+   ortalanir. (`.sys-net-flow` bir GRID'dir — `flex-direction` burada olu
+   kalirdi; kolon duzeni asagidaki dar-ekran sorgusunda yapiliyor.) */
+.sys-metric-card .sys-net-flow {
+  flex: 1;
+  align-content: center;
 }
 
-.sys-trio-card .sys-net-divider {
+/* Dar kolonda giden/gelen yan yana sigmaz: alt alta gecsin. */
+@media (max-width: 1280px) {
+  .sys-metric-card .sys-net-flow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .sys-metric-card .sys-net-side--up {
+    justify-content: flex-start;
+  }
+  .sys-metric-card .sys-net-divider {
+    width: 100%;
+    height: 1px;
+  }
+}
+
+/* CEKIRDEK CUBUKLARI KARTIN GENISLIGINE YAYILIR.
+   Cubuklar sabit 14px genisligindeydi ve kartin SOL kenarinda kumelenip
+   sagda buyuk bir bosluk birakiyorlardi (kullanici bildirimi). Her cubuk
+   esit pay alir; boylece 4 cekirdekli de 16 cekirdekli de makinede karti
+   ayni sekilde doldururlar. */
+.sys-metric-card .sys-core-bars {
+  flex-wrap: nowrap;
+  gap: 6px;
+  /* `stretch` — taban kuraldaki `flex-end` DEGIL: cubuklarin kartin
+     yuksekligine uzayabilmesi icin once SUTUNLARIN tam yuksekligi almasi
+     gerekir. `flex-end` cocuklari kendi icerik yuksekligine kirpar ve
+     asagidaki `flex: 1` olu kalirdi. Dolgu zaten track'in ICINDE alttan
+     yukseldigi icin hizalama kaybi olmaz. */
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.sys-metric-card .sys-core-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  /* Etiket (cekirdek no) altta sabit; track ustteki bosluğu doldurur. */
+  justify-content: flex-end;
+}
+
+/* Cubuklar KARTIN YUKSEKLIGINE yayilir. Sabit 44px'te, genislikleri karta
+   yayilinca kisa/genis dikdortgenlere donusup doluluk orani okunmaz
+   olmustu (kullanici bildirimi, 2026-08-06). */
+.sys-metric-card .sys-core-bar-track {
   width: 100%;
-  height: 1px;
+  height: auto;
+  flex: 1;
+  min-height: 84px;
 }
 
-/* Cekirdek cubuklari dar kolonda tasmasin. */
-.sys-trio-card .sys-core-bars {
-  flex-wrap: wrap;
-}
-
-.sys-trio-card {
+.sys-metric-card {
   gap: 10px;
   justify-content: center;
 }
 
 /* Kart basliklari (CEKIRDEK KULLANIMI / AG TRAFIGI) ic kutuda degil kartin
    kendisinde duruyor; ust bosluk kartin padding'inden gelsin. */
-.sys-trio-card .sys-metric-group-title {
+.sys-metric-card .sys-metric-group-title {
   padding: 0;
 }
 
-/* Ic kutular kart cercevesinin icinde IKINCI bir cerceve cizmesin: kart
-   zaten beyaz/cerceveli, ic panel seffaf kalir. */
-.sys-trio-card .sys-cores,
-.sys-trio-card .sys-meter {
+/* Ic kutu kart cercevesinin icinde IKINCI bir cerceve cizmesin: kart
+   zaten beyaz/cerceveli, ic panel seffaf kalir. Kutu kartin kalan
+   yuksekligini alir ki cubuklar uzayabilsin. */
+.sys-metric-card .sys-cores {
   background: transparent;
   border: none;
   border-radius: 0;
   padding: 0;
-}
-
-/* Uyari/kritik tonu kartin KENDI cercevesine tasinir. */
-.sys-trio-card:has(.sys-meter--warn) {
-  border-color: #fde68a;
-  background: #fffbeb;
-}
-.sys-trio-card:has(.sys-meter--bad) {
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-@media (max-width: 1100px) {
-  .sys-trio-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .sys-trio-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  flex: 1;
+  min-height: 0;
 }
 
 /* Kaynak karti sayfa kayarken YERINDE KALIR; servis listesi yanindan akar.
@@ -6739,71 +6728,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 }
 
 /* ----- Genel amacli yatay olcek (swap vb.) ----- */
-.sys-meter {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 11px 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-}
 
-.sys-meter--warn { border-color: #fde68a; background: #fffbeb; }
-.sys-meter--bad { border-color: #fecaca; background: #fef2f2; }
-
-.sys-meter-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sys-meter-head svg {
-  font-size: 18px;
-  color: #6d28d9;
-}
-
-.sys-meter-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #64748b;
-  flex: 1 1 auto;
-}
-
-.sys-meter-value {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-}
-
-.sys-meter--warn .sys-meter-value { color: #b45309; }
-.sys-meter--bad .sys-meter-value { color: #b91c1c; }
-
-.sys-meter-track {
-  height: 7px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  overflow: hidden;
-}
-
-.sys-meter-fill {
-  height: 100%;
-  border-radius: 999px;
-  transition: width 500ms ease;
-}
-
-.sys-meter-fill--ok { background: linear-gradient(90deg, #a78bfa, #7c3aed); }
-.sys-meter-fill--warn { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
-.sys-meter-fill--bad { background: linear-gradient(90deg, #f87171, #dc2626); }
-
-.sys-meter-sub {
-  font-size: 11px;
-  color: #64748b;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
 
 /* ----- Yuk ortalamasi rozeti (Linux only) ----- */
 .sys-loadavg {
@@ -33527,11 +33452,6 @@ th.event-col-category {
   color: #94a3b8;
   font-size: 13px;
 }
-
-
-
-
-
 
 
 /* --- Onay modali --- */

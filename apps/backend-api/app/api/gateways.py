@@ -23,6 +23,7 @@ from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.gateway_agent import (
     GatewayAgentStatus,
+    GatewayLogsResponse,
     LocalInstallRequest,
     LocalInstallResponse,
 )
@@ -1044,6 +1045,74 @@ def restart_gateway_locally(
     kesintidir.
     """
     return _lifecycle_request(db, gateway_code, current_user, "restart")
+
+
+# --------------------------------------------------------------------------
+# UZAKTAN LOG — "gateway ne diyor" sorusunun cevabi.
+#
+# YETKI: installer + engineer. Yasam dongusu uclarindan DAHA GENIS, cunku
+# log OKUMAK sistemi degistirmez; sahadaki muhendis "veri neden gelmiyor"u
+# arastirirken kurulumcuyu beklememeli. operator/ops_manager'a KAPALI:
+# container ciktisi ic ayrintilar (host adlari, yollar) icerir.
+#
+# SIR SIZINTISI: cikti `read_logs` icinde MASKELENIR (token/parola/bearer,
+# URL icindeki kimlik). Bkz. gateway_agent_service._SECRET_PATTERNS.
+#
+# AUDIT: log ISTEGI kalici bir state degisimi degil; olay kaydi YAZILMAZ.
+# (Yasam dongusu uclari yaziyor — onlar sahayi etkiliyor.)
+# --------------------------------------------------------------------------
+@router.post(
+    "/{gateway_code}/local-logs",
+    response_model=LocalInstallResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def request_gateway_logs(
+    gateway_code: str,
+    tail: int = Query(
+        default=gateway_agent_service.LOGS_TAIL_DEFAULT,
+        ge=gateway_agent_service.LOGS_TAIL_MIN,
+        le=gateway_agent_service.LOGS_TAIL_MAX,
+        description="Kac satir gerilere bakilacak",
+    ),
+    current_user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+    db: Session = Depends(get_db),
+):
+    """Gateway container loglarini ajandan iste (asenkron, 202).
+
+    Sonuc birkac saniye icinde `GET /gateways/{code}/local-logs` ile okunur.
+    """
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    if not gateway_agent_service.is_installed_locally(gateway.code):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Gateway bu cihazda kurulu degil; logu buradan alinamaz.",
+        )
+    try:
+        request_id = gateway_agent_service.request_logs(
+            gateway.code, current_user.username, tail=tail
+        )
+    except GatewayAgentError as exc:
+        raise _agent_http_error(exc) from exc
+    return LocalInstallResponse(request_id=request_id, code=gateway.code)
+
+
+@router.get("/{gateway_code}/local-logs", response_model=GatewayLogsResponse)
+def get_gateway_logs(
+    gateway_code: str,
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+):
+    """Ajanin yazdigi SON log ciktisi.
+
+    Henuz log alinmamissa `available: false` doner — 404 DEGIL: "hic
+    istenmemis" bir hata durumu degil, arayuzun "Log Al" demesi gereken
+    normal bir baslangic hali.
+    """
+    data = gateway_agent_service.read_logs(gateway_code)
+    if data is None:
+        return GatewayLogsResponse(available=False, code=gateway_code)
+    return GatewayLogsResponse(available=True, **data)
 
 
 @router.get("/{gateway_code}/config", response_model=GatewayConfigResponse)

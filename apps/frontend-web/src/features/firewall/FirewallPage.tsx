@@ -28,17 +28,20 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   BrickWall,
+  Check,
   ChevronDown,
   ChevronUp,
   History,
   Loader2,
   Lock,
+  Pencil,
   Plus,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 
 import { useToast } from "../../components/ToastProvider";
@@ -209,6 +212,26 @@ export function FirewallPage({ accessToken }: Props) {
   const [fwdDestPort, setFwdDestPort] = useState("");
   const [fwdComment, setFwdComment] = useState("");
 
+  // Satir ici duzenleme: mevcut kural/yonlendirme yerinde guncellenir
+  // (silip yeniden eklemek hem zahmetli hem sirayi bozuyordu). Ayni anda
+  // tek satir duzenlenebilir; kaydet/vazgec o satirin uzerindedir.
+  const [ruleEditIndex, setRuleEditIndex] = useState<number | null>(null);
+  const [ruleEdit, setRuleEdit] = useState<{
+    action: "allow" | "deny";
+    proto: "tcp" | "udp";
+    ports: string;
+    source: string;
+    comment: string;
+  } | null>(null);
+  const [fwdEditIndex, setFwdEditIndex] = useState<number | null>(null);
+  const [fwdEdit, setFwdEdit] = useState<{
+    proto: "tcp" | "udp";
+    listen: string;
+    destIp: string;
+    destPort: string;
+    comment: string;
+  } | null>(null);
+
   const dirty = serialize(draft) !== baseline;
 
   const load = useCallback(async () => {
@@ -242,14 +265,17 @@ export function FirewallPage({ accessToken }: Props) {
   // Sunucu yapilandirmasi taslaga yalnizca taslak TEMIZKEN akar; kullanicinin
   // yarim duzenlemesi yoklamayla kaybolmaz. Taslak kirliyken temel yine de
   // guncellenir ki "kirli" bayragi gercek farki olcmeye devam etsin.
+  // Satir ici duzenleme suruyorsa senkron ERTELENIR: satir indeksleri
+  // kayabilirdi; duzenleme bitince ilk yoklamada yakalanir.
   useEffect(() => {
     if (status === null) return;
+    if (ruleEditIndex !== null || fwdEditIndex !== null) return;
     const server = normalizeConfig(status.config);
     const serverSerialized = serialize(server);
     if (serverSerialized === baseline) return;
     setDraft((prev) => (serialize(prev) === baseline ? server : prev));
     setBaseline(serverSerialized);
-  }, [status, baseline]);
+  }, [status, baseline, ruleEditIndex, fwdEditIndex]);
 
   // ---- Durum turetmeleri ----------------------------------------------------
   const available = status?.available === true;
@@ -288,6 +314,11 @@ export function FirewallPage({ accessToken }: Props) {
       : null;
 
   const formDisabled = blockedReason !== null || !canManage || pending || submitting;
+  // Bir satir duzenlenirken taslagin geri kalani KILITLENIR: baska satiri
+  // tasimak/silmek duzenlenen indeksi kaydirir, kaydet/uygula ise henuz
+  // satira islenmemis degisikligi "dahilmis gibi" gonderirdi.
+  const editingAny = ruleEditIndex !== null || fwdEditIndex !== null;
+  const draftLocked = formDisabled || editingAny;
 
   // ---- Taslak islemleri -----------------------------------------------------
   const ruleError = useMemo(() => {
@@ -320,6 +351,48 @@ export function FirewallPage({ accessToken }: Props) {
 
   const removeRule = (index: number) => {
     setDraft((prev) => ({ ...prev, rules: prev.rules.filter((_, i) => i !== index) }));
+  };
+
+  // ---- Kural satir ici duzenleme -------------------------------------------
+  const startRuleEdit = (index: number) => {
+    const rule = draft.rules[index];
+    setRuleEditIndex(index);
+    setRuleEdit({
+      action: rule.action,
+      proto: rule.proto,
+      ports: rule.ports,
+      source: rule.source ?? "",
+      comment: rule.comment ?? ""
+    });
+  };
+
+  const cancelRuleEdit = () => {
+    setRuleEditIndex(null);
+    setRuleEdit(null);
+  };
+
+  const ruleEditError = useMemo(() => {
+    if (!ruleEdit) return null;
+    if (!portsValid(ruleEdit.ports.trim())) return t("firewall.rules.invalidPorts");
+    const source = ruleEdit.source.trim();
+    if (source && !CIDR_RE.test(source)) return t("firewall.rules.invalidSource");
+    return null;
+  }, [ruleEdit, t]);
+
+  const saveRuleEdit = () => {
+    if (ruleEditIndex === null || !ruleEdit || ruleEditError) return;
+    const next: FirewallRule = {
+      action: ruleEdit.action,
+      proto: ruleEdit.proto,
+      ports: ruleEdit.ports.trim(),
+      source: ruleEdit.source.trim() || null,
+      comment: ruleEdit.comment.trim() || null
+    };
+    setDraft((prev) => ({
+      ...prev,
+      rules: prev.rules.map((rule, i) => (i === ruleEditIndex ? next : rule))
+    }));
+    cancelRuleEdit();
   };
 
   /** Kural sirasi ONEMLI (ilk eslesen kazanir) — engel kurali izinden once
@@ -424,7 +497,70 @@ export function FirewallPage({ accessToken }: Props) {
     setDraft((prev) => ({ ...prev, forwards: prev.forwards.filter((_, i) => i !== index) }));
   };
 
+  // ---- Yonlendirme satir ici duzenleme -------------------------------------
+  const startFwdEdit = (index: number) => {
+    const fwd = draft.forwards[index];
+    setFwdEditIndex(index);
+    setFwdEdit({
+      proto: fwd.proto,
+      listen: String(fwd.listen_port),
+      destIp: fwd.dest_ip,
+      destPort: String(fwd.dest_port),
+      comment: fwd.comment ?? ""
+    });
+  };
+
+  const cancelFwdEdit = () => {
+    setFwdEditIndex(null);
+    setFwdEdit(null);
+  };
+
+  const fwdEditError = useMemo(() => {
+    if (!fwdEdit) return null;
+    const listen = Number(fwdEdit.listen.trim());
+    if (!/^\d{1,5}$/.test(fwdEdit.listen.trim()) || listen < 1 || listen > 65535) {
+      return t("firewall.forwards.invalidListen");
+    }
+    if ((status?.reserved_listen_ports ?? []).includes(listen)) {
+      return t("firewall.forwards.reservedListen", { port: listen });
+    }
+    // Ayni portu dinleyen BASKA bir yonlendirme var mi (kendisi haric)?
+    if (
+      draft.forwards.some(
+        (fwd, i) => i !== fwdEditIndex && fwd.proto === fwdEdit.proto && fwd.listen_port === listen
+      )
+    ) {
+      return t("firewall.forwards.duplicateListen", { port: listen });
+    }
+    if (!IP_RE.test(fwdEdit.destIp.trim())) return t("firewall.forwards.invalidDestIp");
+    const destPort = Number(fwdEdit.destPort.trim());
+    if (!/^\d{1,5}$/.test(fwdEdit.destPort.trim()) || destPort < 1 || destPort > 65535) {
+      return t("firewall.forwards.invalidDestPort");
+    }
+    return null;
+  }, [fwdEdit, fwdEditIndex, draft.forwards, status?.reserved_listen_ports, t]);
+
+  const saveFwdEdit = () => {
+    if (fwdEditIndex === null || !fwdEdit || fwdEditError) return;
+    const next: FirewallForward = {
+      proto: fwdEdit.proto,
+      listen_port: Number(fwdEdit.listen.trim()),
+      dest_ip: fwdEdit.destIp.trim(),
+      dest_port: Number(fwdEdit.destPort.trim()),
+      comment: fwdEdit.comment.trim() || null
+    };
+    setDraft((prev) => ({
+      ...prev,
+      forwards: prev.forwards.map((fwd, i) => (i === fwdEditIndex ? next : fwd))
+    }));
+    cancelFwdEdit();
+  };
+
   const discardDraft = () => {
+    // Yarim kalmis satir duzenlemesi de taslakla birlikte atilir; aksi halde
+    // duzenleme indeksi artik var olmayan bir satiri gosterebilirdi.
+    cancelRuleEdit();
+    cancelFwdEdit();
     if (status) setDraft(normalizeConfig(status.config));
   };
 
@@ -548,7 +684,7 @@ export function FirewallPage({ accessToken }: Props) {
                 <button
                   type="button"
                   className="primary-btn"
-                  disabled={formDisabled}
+                  disabled={draftLocked}
                   onClick={() => setConfirmOpen("enable")}
                 >
                   <ShieldCheck size={16} />
@@ -558,7 +694,7 @@ export function FirewallPage({ accessToken }: Props) {
                 <button
                   type="button"
                   className="danger-btn"
-                  disabled={formDisabled}
+                  disabled={draftLocked}
                   onClick={() => setConfirmOpen("disable")}
                 >
                   <ShieldOff size={16} />
@@ -594,7 +730,7 @@ export function FirewallPage({ accessToken }: Props) {
                 key={preset.key}
                 type="button"
                 className="fw-preset-chip"
-                disabled={formDisabled || presetCovered(preset)}
+                disabled={draftLocked || presetCovered(preset)}
                 title={preset.rules.map((r) => `${r.ports}/${r.proto}`).join(", ")}
                 onClick={() => addPreset(preset)}
               >
@@ -609,7 +745,7 @@ export function FirewallPage({ accessToken }: Props) {
           <div className="fw-add-row">
             <select
               value={ruleAction}
-              disabled={formDisabled}
+              disabled={draftLocked}
               onChange={(event) => setRuleAction(event.target.value as "allow" | "deny")}
             >
               <option value="allow">{t("firewall.rules.allow")}</option>
@@ -617,7 +753,7 @@ export function FirewallPage({ accessToken }: Props) {
             </select>
             <select
               value={ruleProto}
-              disabled={formDisabled}
+              disabled={draftLocked}
               onChange={(event) => setRuleProto(event.target.value as "tcp" | "udp")}
             >
               <option value="tcp">TCP</option>
@@ -625,19 +761,19 @@ export function FirewallPage({ accessToken }: Props) {
             </select>
             <input
               value={rulePorts}
-              disabled={formDisabled}
+              disabled={draftLocked}
               placeholder={t("firewall.rules.portsPlaceholder")}
               onChange={(event) => setRulePorts(event.target.value.replace(/[^\d-]/g, ""))}
             />
             <input
               value={ruleSource}
-              disabled={formDisabled}
+              disabled={draftLocked}
               placeholder={t("firewall.rules.sourcePlaceholder")}
               onChange={(event) => setRuleSource(event.target.value.replace(/[^\d./]/g, ""))}
             />
             <input
               value={ruleComment}
-              disabled={formDisabled}
+              disabled={draftLocked}
               maxLength={80}
               placeholder={t("firewall.rules.commentPlaceholder")}
               onChange={(event) => setRuleComment(event.target.value)}
@@ -645,7 +781,7 @@ export function FirewallPage({ accessToken }: Props) {
             <button
               type="button"
               className="secondary-btn"
-              disabled={formDisabled || rulePorts.trim().length === 0 || ruleError !== null}
+              disabled={draftLocked || rulePorts.trim().length === 0 || ruleError !== null}
               onClick={addRule}
             >
               <Plus size={15} />
@@ -672,7 +808,92 @@ export function FirewallPage({ accessToken }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {draft.rules.map((rule, index) => (
+                {draft.rules.map((rule, index) =>
+                  ruleEditIndex === index && ruleEdit ? (
+                    // Duzenleme modu: satir yerinde forma donusur; kaydet/vazgec
+                    // ayni satirin aracligindadir.
+                    <tr key={`edit-${index}`} className="fw-edit-row">
+                      <td className="fw-col-order">{index + 1}</td>
+                      <td className="fw-edit-cell">
+                        <select
+                          className="fw-edit-input"
+                          value={ruleEdit.action}
+                          disabled={formDisabled}
+                          onChange={(event) =>
+                            setRuleEdit({ ...ruleEdit, action: event.target.value as "allow" | "deny" })
+                          }
+                        >
+                          <option value="allow">{t("firewall.rules.allow")}</option>
+                          <option value="deny">{t("firewall.rules.deny")}</option>
+                        </select>
+                      </td>
+                      <td className="fw-edit-cell">
+                        <select
+                          className="fw-edit-input"
+                          value={ruleEdit.proto}
+                          disabled={formDisabled}
+                          onChange={(event) =>
+                            setRuleEdit({ ...ruleEdit, proto: event.target.value as "tcp" | "udp" })
+                          }
+                        >
+                          <option value="tcp">TCP</option>
+                          <option value="udp">UDP</option>
+                        </select>
+                      </td>
+                      <td className="fw-edit-cell">
+                        <input
+                          className="fw-edit-input"
+                          value={ruleEdit.ports}
+                          disabled={formDisabled}
+                          placeholder={t("firewall.rules.portsPlaceholder")}
+                          onChange={(event) =>
+                            setRuleEdit({ ...ruleEdit, ports: event.target.value.replace(/[^\d-]/g, "") })
+                          }
+                        />
+                      </td>
+                      <td className="fw-edit-cell">
+                        <input
+                          className="fw-edit-input"
+                          value={ruleEdit.source}
+                          disabled={formDisabled}
+                          placeholder={t("firewall.rules.sourcePlaceholder")}
+                          onChange={(event) =>
+                            setRuleEdit({ ...ruleEdit, source: event.target.value.replace(/[^\d./]/g, "") })
+                          }
+                        />
+                      </td>
+                      <td className="fw-edit-cell">
+                        <input
+                          className="fw-edit-input"
+                          value={ruleEdit.comment}
+                          disabled={formDisabled}
+                          maxLength={80}
+                          placeholder={t("firewall.rules.commentPlaceholder")}
+                          onChange={(event) => setRuleEdit({ ...ruleEdit, comment: event.target.value })}
+                        />
+                      </td>
+                      <td className="fw-col-tools">
+                        <button
+                          type="button"
+                          className="fw-tool-btn fw-tool-btn--ok"
+                          disabled={formDisabled || ruleEditError !== null}
+                          title={t("firewall.rules.editSave")}
+                          onClick={saveRuleEdit}
+                        >
+                          <Check size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="fw-tool-btn"
+                          disabled={formDisabled}
+                          title={t("firewall.rules.editCancel")}
+                          onClick={cancelRuleEdit}
+                        >
+                          <X size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ) : (
                   <tr key={`${rule.proto}-${rule.ports}-${rule.source ?? ""}-${index}`}>
                     <td className="fw-col-order">{index + 1}</td>
                     <td>
@@ -689,7 +910,16 @@ export function FirewallPage({ accessToken }: Props) {
                         <button
                           type="button"
                           className="fw-tool-btn"
-                          disabled={formDisabled || index === 0}
+                          disabled={draftLocked}
+                          title={t("firewall.rules.edit")}
+                          onClick={() => startRuleEdit(index)}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="fw-tool-btn"
+                          disabled={draftLocked || index === 0}
                           title={t("firewall.rules.moveUp")}
                           onClick={() => moveRule(index, -1)}
                         >
@@ -698,7 +928,7 @@ export function FirewallPage({ accessToken }: Props) {
                         <button
                           type="button"
                           className="fw-tool-btn"
-                          disabled={formDisabled || index === draft.rules.length - 1}
+                          disabled={draftLocked || index === draft.rules.length - 1}
                           title={t("firewall.rules.moveDown")}
                           onClick={() => moveRule(index, 1)}
                         >
@@ -707,7 +937,7 @@ export function FirewallPage({ accessToken }: Props) {
                         <button
                           type="button"
                           className="fw-tool-btn fw-tool-btn--danger"
-                          disabled={formDisabled}
+                          disabled={draftLocked}
                           title={t("firewall.rules.delete")}
                           onClick={() => removeRule(index)}
                         >
@@ -716,11 +946,13 @@ export function FirewallPage({ accessToken }: Props) {
                       </td>
                     ) : null}
                   </tr>
-                ))}
+                  )
+                )}
               </tbody>
             </table>
           </div>
         )}
+        {ruleEditError ? <small className="fw-form-error">{ruleEditError}</small> : null}
 
         </>
         ) : (
@@ -731,7 +963,7 @@ export function FirewallPage({ accessToken }: Props) {
           <div className="fw-add-row fw-add-row--forward">
             <select
               value={fwdProto}
-              disabled={formDisabled}
+              disabled={draftLocked}
               onChange={(event) => setFwdProto(event.target.value as "tcp" | "udp")}
             >
               <option value="tcp">TCP</option>
@@ -739,7 +971,7 @@ export function FirewallPage({ accessToken }: Props) {
             </select>
             <input
               value={fwdListen}
-              disabled={formDisabled}
+              disabled={draftLocked}
               inputMode="numeric"
               placeholder={t("firewall.forwards.listenPlaceholder")}
               onChange={(event) => setFwdListen(event.target.value.replace(/[^\d]/g, ""))}
@@ -749,20 +981,20 @@ export function FirewallPage({ accessToken }: Props) {
             </span>
             <input
               value={fwdDestIp}
-              disabled={formDisabled}
+              disabled={draftLocked}
               placeholder={t("firewall.forwards.destIpPlaceholder")}
               onChange={(event) => setFwdDestIp(event.target.value.replace(/[^\d.]/g, ""))}
             />
             <input
               value={fwdDestPort}
-              disabled={formDisabled}
+              disabled={draftLocked}
               inputMode="numeric"
               placeholder={t("firewall.forwards.destPortPlaceholder")}
               onChange={(event) => setFwdDestPort(event.target.value.replace(/[^\d]/g, ""))}
             />
             <input
               value={fwdComment}
-              disabled={formDisabled}
+              disabled={draftLocked}
               maxLength={80}
               placeholder={t("firewall.rules.commentPlaceholder")}
               onChange={(event) => setFwdComment(event.target.value)}
@@ -770,7 +1002,7 @@ export function FirewallPage({ accessToken }: Props) {
             <button
               type="button"
               className="secondary-btn"
-              disabled={formDisabled || !forwardComplete || forwardError !== null}
+              disabled={draftLocked || !forwardComplete || forwardError !== null}
               onClick={addForward}
             >
               <Plus size={15} />
@@ -795,7 +1027,89 @@ export function FirewallPage({ accessToken }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {draft.forwards.map((fwd, index) => (
+                {draft.forwards.map((fwd, index) =>
+                  fwdEditIndex === index && fwdEdit ? (
+                    <tr key={`edit-${index}`} className="fw-edit-row">
+                      <td className="fw-edit-cell">
+                        <select
+                          className="fw-edit-input"
+                          value={fwdEdit.proto}
+                          disabled={formDisabled}
+                          onChange={(event) =>
+                            setFwdEdit({ ...fwdEdit, proto: event.target.value as "tcp" | "udp" })
+                          }
+                        >
+                          <option value="tcp">TCP</option>
+                          <option value="udp">UDP</option>
+                        </select>
+                      </td>
+                      <td className="fw-edit-cell">
+                        <input
+                          className="fw-edit-input"
+                          value={fwdEdit.listen}
+                          disabled={formDisabled}
+                          inputMode="numeric"
+                          placeholder={t("firewall.forwards.listenPlaceholder")}
+                          onChange={(event) =>
+                            setFwdEdit({ ...fwdEdit, listen: event.target.value.replace(/[^\d]/g, "") })
+                          }
+                        />
+                      </td>
+                      <td className="fw-edit-cell">
+                        <span className="fw-edit-dest">
+                          <input
+                            className="fw-edit-input"
+                            value={fwdEdit.destIp}
+                            disabled={formDisabled}
+                            placeholder={t("firewall.forwards.destIpPlaceholder")}
+                            onChange={(event) =>
+                              setFwdEdit({ ...fwdEdit, destIp: event.target.value.replace(/[^\d.]/g, "") })
+                            }
+                          />
+                          <input
+                            className="fw-edit-input fw-edit-input--port"
+                            value={fwdEdit.destPort}
+                            disabled={formDisabled}
+                            inputMode="numeric"
+                            placeholder={t("firewall.forwards.destPortPlaceholder")}
+                            onChange={(event) =>
+                              setFwdEdit({ ...fwdEdit, destPort: event.target.value.replace(/[^\d]/g, "") })
+                            }
+                          />
+                        </span>
+                      </td>
+                      <td className="fw-edit-cell">
+                        <input
+                          className="fw-edit-input"
+                          value={fwdEdit.comment}
+                          disabled={formDisabled}
+                          maxLength={80}
+                          placeholder={t("firewall.rules.commentPlaceholder")}
+                          onChange={(event) => setFwdEdit({ ...fwdEdit, comment: event.target.value })}
+                        />
+                      </td>
+                      <td className="fw-col-tools">
+                        <button
+                          type="button"
+                          className="fw-tool-btn fw-tool-btn--ok"
+                          disabled={formDisabled || fwdEditError !== null}
+                          title={t("firewall.rules.editSave")}
+                          onClick={saveFwdEdit}
+                        >
+                          <Check size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="fw-tool-btn"
+                          disabled={formDisabled}
+                          title={t("firewall.rules.editCancel")}
+                          onClick={cancelFwdEdit}
+                        >
+                          <X size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ) : (
                   <tr key={`${fwd.proto}-${fwd.listen_port}-${index}`}>
                     <td className="fw-mono">{fwd.proto.toUpperCase()}</td>
                     <td className="fw-mono">{fwd.listen_port}</td>
@@ -807,8 +1121,17 @@ export function FirewallPage({ accessToken }: Props) {
                       <td className="fw-col-tools">
                         <button
                           type="button"
+                          className="fw-tool-btn"
+                          disabled={draftLocked}
+                          title={t("firewall.rules.edit")}
+                          onClick={() => startFwdEdit(index)}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
                           className="fw-tool-btn fw-tool-btn--danger"
-                          disabled={formDisabled}
+                          disabled={draftLocked}
                           title={t("firewall.rules.delete")}
                           onClick={() => removeForward(index)}
                         >
@@ -817,11 +1140,13 @@ export function FirewallPage({ accessToken }: Props) {
                       </td>
                     ) : null}
                   </tr>
-                ))}
+                  )
+                )}
               </tbody>
             </table>
           </div>
         )}
+        {fwdEditError ? <small className="fw-form-error">{fwdEditError}</small> : null}
 
         </>
         )}
@@ -846,7 +1171,7 @@ export function FirewallPage({ accessToken }: Props) {
             <button
               type="button"
               className="primary-btn"
-              disabled={formDisabled}
+              disabled={draftLocked}
               onClick={() => setConfirmOpen("save")}
             >
               {t("firewall.save.apply")}

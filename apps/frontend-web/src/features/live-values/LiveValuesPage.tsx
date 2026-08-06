@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { WsStatusBadge } from "../../components/WsStatusBadge";
+import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
 import { TablePagination } from "../../components/TablePagination";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { usePolling } from "../../shared/usePolling";
@@ -20,6 +23,13 @@ type Props = {
   loading: boolean;
   error?: string;
   onRefresh: () => Promise<void>;
+  /** Canli telemetri soketi durumu. Rozet BU sayfada duruyor cunku soket
+   *  yalnizca burada (ve Anasayfa/cihaz detayda) ACIK — Sistem Durumu gibi
+   *  soketin bilerek kapali oldugu bir sayfada rozet her zaman "Kopuk" der
+   *  ve bu bir ARIZA sanilir. Bkz. App.tsx `liveValuesNeeded`. */
+  wsState?: WsConnectionState;
+  /** Son TELEMETRI mesajinin zamani (ms). */
+  wsLastDataAt?: number | null;
 };
 
 const GATEWAY_LIVE_SEC = 60;
@@ -168,7 +178,10 @@ function clockWarningOf(row: SignalLiveRow): "invalid" | "unsynchronized" | null
   return null;
 }
 
-export function LiveValuesPage({ values, signals, devices, gateways, loading, error, onRefresh }: Props) {
+export function LiveValuesPage({ values, signals, devices, gateways, loading, error, onRefresh,
+  wsState,
+  wsLastDataAt
+}: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const numberFmt = useMemo(() => makeNumberFormatter(localeTag), [localeTag]);
@@ -351,6 +364,10 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
       {/* Duzen: once arama/filtre cubugu, ALTINDA veri tipi filtresi.
           Alarm kurallari ve sinyaller sayfalariyla ayni sira. */}
       <div className="signals-toolbar live-values-toolbar">
+        {/* Veri akiyor mu — bu sayfanin ilk sorusu. */}
+        {wsState ? (
+          <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt} />
+        ) : null}
         <input
           className="signals-search"
           type="search"

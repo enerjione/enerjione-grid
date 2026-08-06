@@ -71,6 +71,10 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(LicenseGateMiddleware)
 
 _cors_origins = settings.cors_origin_list
+# X-Total-Count: /events sayfalama toplami; Content-Disposition: export dosya
+# adi. Cross-origin (Vite dev :5173) istemcisinin okuyabilmesi icin expose
+# edilmeli — same-origin production'da zaten gorunur.
+_cors_expose = ["X-Total-Count", "Content-Disposition"]
 if "*" in _cors_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -78,6 +82,7 @@ if "*" in _cors_origins:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=_cors_expose,
     )
 else:
     app.add_middleware(
@@ -86,6 +91,7 @@ else:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=_cors_expose,
     )
 
 app.include_router(health.router, prefix=settings.api_prefix)

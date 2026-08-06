@@ -80,6 +80,9 @@ class GatewayAgentStatus(BaseModel):
     # state_stale
     reason: str | None = None
     docker_available: bool = False
+    # Guncelleme TESPITI `docker buildx` gerektirir; yoksa surum durumu
+    # kalici olarak "bilinmiyor" kalir (arayuz sebebi gostersin).
+    buildx_available: bool = True
     updated_at: str | None = None
     state_age_seconds: float | None = None
     gateways: list[LocalGateway] = Field(default_factory=list)
@@ -105,3 +108,20 @@ class LocalInstallRequest(BaseModel):
 class LocalInstallResponse(BaseModel):
     request_id: str
     code: str
+
+
+class GatewayLogsResponse(BaseModel):
+    """Ajanin yazdigi son container log ciktisi.
+
+    `available=False` -> henuz hic log alinmamis (veya dosya okunamiyor);
+    UI "Log Al" demeyi onerir. `stale=True` -> cikti eski, tazelemek gerek.
+    """
+
+    available: bool = False
+    code: str
+    tail: int | None = None
+    truncated: bool = False
+    generated_at: str | None = None
+    age_seconds: float | None = None
+    stale: bool = False
+    output: str = ""

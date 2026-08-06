@@ -341,32 +341,17 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                   </span>
                 ) : null}
                 {local.update_available === true ? (
-                  <>
-                    <span className="gw-ver-badge is-new">
-                      <ArrowUpCircle size={13} strokeWidth={2.2} />
-                      {/* Hedef surum BILINIYORSA yaz: "0.6.0 -> 0.7.0".
-                          Bilinmiyorsa (etiket yok / kayit defteri okunamadi)
-                          eski genel ifadeye dusulur — uydurma yapilmaz. */}
-                      {local.remote_version && local.remote_version !== local.local_version
-                        ? t("engineering.gateways.editForm.updateAvailableTo", {
-                            version: local.remote_version
-                          })
-                        : t("engineering.gateways.editForm.updateAvailable")}
-                    </span>
-                    <button
-                      type="button"
-                      className="primary-btn gw-update-btn"
-                      onClick={() => void handleLocalUpdate()}
-                      disabled={localBusy || busy}
-                    >
-                      {localBusy ? (
-                        <Loader2 size={14} strokeWidth={2.2} className="net-spin" />
-                      ) : (
-                        <ArrowUpCircle size={14} strokeWidth={2.2} />
-                      )}
-                      {t("engineering.gateways.editForm.updateNow")}
-                    </button>
-                  </>
+                  <span className="gw-ver-badge is-new">
+                    <ArrowUpCircle size={13} strokeWidth={2.2} />
+                    {/* Hedef surum BILINIYORSA yaz: "0.6.0 -> 0.7.0".
+                        Bilinmiyorsa (etiket yok / kayit defteri okunamadi)
+                        eski genel ifadeye dusulur — uydurma yapilmaz. */}
+                    {local.remote_version && local.remote_version !== local.local_version
+                      ? t("engineering.gateways.editForm.updateAvailableTo", {
+                          version: local.remote_version
+                        })
+                      : t("engineering.gateways.editForm.updateAvailable")}
+                  </span>
                 ) : local.update_available === false ? (
                   <span className="gw-ver-badge is-current">
                     {t("engineering.gateways.editForm.upToDate")}
@@ -376,6 +361,42 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                     {t("engineering.gateways.editForm.versionUnknown")}
                   </span>
                 )}
+
+                {/* GUNCELLE HER ZAMAN ERISILEBILIR.
+                    Eskiden bu buton YALNIZCA `update_available === true` iken
+                    ciziliyordu. Karsilastirma `docker buildx` gerektiriyor;
+                    buildx kurulu degilse (Docker Engine'de siklikla oyle) ya
+                    da kayit defterine ulasilamazsa durum "bilinmiyor" olur ve
+                    operator yeni bir surum yayinlanmis olsa bile GUNCELLEME
+                    YAPAMIYORDU — tespit edilemeyen bir sey eylemi de
+                    kilitliyordu.
+
+                    Zaten guncel olan bir gateway'de `pull` bir sey indirmez;
+                    en kotu ihtimalle kisa bir yeniden baslatma olur. Yani
+                    butonun acik olmasinin bedeli, kilitli olmasinin
+                    bedelinden cok daha dusuk. */}
+                <button
+                  type="button"
+                  className={`gw-update-btn ${
+                    local.update_available === true ? "primary-btn" : "secondary-btn"
+                  }`}
+                  onClick={() => void handleLocalUpdate()}
+                  disabled={localBusy || busy}
+                  title={
+                    local.update_available === true
+                      ? t("engineering.gateways.editForm.updateNow")
+                      : t("engineering.gateways.editForm.updateAnywayHint")
+                  }
+                >
+                  {localBusy ? (
+                    <Loader2 size={14} strokeWidth={2.2} className="net-spin" />
+                  ) : (
+                    <ArrowUpCircle size={14} strokeWidth={2.2} />
+                  )}
+                  {local.update_available === true
+                    ? t("engineering.gateways.editForm.updateNow")
+                    : t("engineering.gateways.editForm.updateAnyway")}
+                </button>
               </div>
               {/* ILERLEME — butona basildigi andan bitene kadar gorunur.
                   Sessiz kalmak en kotu secenekti: operator basip basmadigini

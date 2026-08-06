@@ -17,6 +17,10 @@ WORKDIR /app
 #     varsayilan acik verir, iputils ICMP datagram soketi kullanir.
 #   - iputils-tracepath: saha araclari traceroute (/field-tools/traceroute).
 #     Klasik `traceroute` CAP_NET_RAW ister; tracepath root GEREKTIRMEZ.
+#   - fonts-dejavu-core: PDF raporlarinda TURKCE karakter. reportlab'in
+#     gomulu Helvetica'si WinAnsi kodlar ve `g s i I G S` (yumusak g, s
+#     cedilla, noktasiz i) ICERMEZ; bu font olmadan rapor "Guvenlik duvari"
+#     yerine bozuk kutu basar (bkz. services/report_layout.py).
 #   - postgresql-client-16: pg_dump / pg_restore (DB yedek alma).
 #     Postgres server (compose) 16 — istemcinin de ayni major surum olmali,
 #     yoksa "server version mismatch" hatasi alinir.
@@ -29,6 +33,7 @@ RUN apt-get update \
         ca-certificates \
         iputils-ping \
         iputils-tracepath \
+        fonts-dejavu-core \
  && install -d /usr/share/postgresql-common/pgdg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \

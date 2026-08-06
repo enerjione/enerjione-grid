@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -112,6 +113,8 @@ def read_status() -> GatewayAgentStatus:
         available=True,
         reason="state_stale" if (age is not None and age > STALE_STATE_SECONDS) else None,
         docker_available=bool(raw.get("docker_available")),
+        # Eski ajan bu alani yazmaz -> True varsay (davranis degismesin).
+        buildx_available=bool(raw.get("buildx_available", True)),
         updated_at=raw.get("updated_at"),
         state_age_seconds=age,
         gateways=gateways,
@@ -239,6 +242,75 @@ def request_stop(code: str, actor_username: str) -> str:
 def request_start(code: str, actor_username: str) -> str:
     """Durdurulmus container'i yeniden baslat (imaj cekmeden)."""
     return _write_request(_base_request("start", code, actor_username))
+
+
+# --- Uzaktan log ------------------------------------------------------------
+# Backend Docker'a erisemez (bilincli, bkz. modul basligi). Gateway'in ne
+# dedigini gorebilmek icin ajan `docker compose logs` ciktisini
+# `logs-<code>.json`e yazar, biz de okuruz.
+LOGS_TAIL_MIN = 50
+LOGS_TAIL_MAX = 2000
+LOGS_TAIL_DEFAULT = 300
+
+# Log dosyasi bu suredan eskiyse "bayat" sayilir: kullanici eski bir cikti
+# gorup "gateway hala bunu diyor" sanmamali.
+LOGS_STALE_SECONDS = 900
+
+# Container ciktisinda gateway token'i gorunebilir (baslangicta yapilandirma
+# ozeti basan bir surum). Sizinti KAYNAKTA degil, GOSTERIMDE kesilir.
+_SECRET_PATTERNS = [
+    re.compile(r"(token[\"'\s:=]+)([A-Za-z0-9._\-]{8,})", re.IGNORECASE),
+    re.compile(r"(password[\"'\s:=]+)(\S{4,})", re.IGNORECASE),
+    re.compile(r"(authorization:\s*bearer\s+)(\S+)", re.IGNORECASE),
+    # nats://kullanici:parola@host
+    re.compile(r"(\b[a-z]+://[^:\s/]+:)([^@\s]+)(@)", re.IGNORECASE),
+]
+
+
+def _redact(text: str) -> str:
+    """Log ciktisindaki sirlari maskele."""
+    for pattern in _SECRET_PATTERNS:
+        if pattern.groups >= 3:
+            text = pattern.sub(r"\1***\3", text)
+        else:
+            text = pattern.sub(r"\1***", text)
+    return text
+
+
+def request_logs(code: str, actor_username: str, *, tail: int = LOGS_TAIL_DEFAULT) -> str:
+    """Ajandan gateway container loglarini iste (asenkron).
+
+    Sonuc `read_logs(code)` ile okunur; ajan istegi isleyene kadar ESKI
+    cikti (varsa) durur — `generated_at` alanina bakip tazeligi anlarsiniz.
+    """
+    body = _base_request("logs", code, actor_username)
+    body["tail"] = max(LOGS_TAIL_MIN, min(LOGS_TAIL_MAX, int(tail)))
+    return _write_request(body)
+
+
+def read_logs(code: str) -> dict | None:
+    """Ajanin yazdigi son log ciktisi. Yoksa None.
+
+    Sirlar maskelenir ve dosyanin yasi `age_seconds` olarak eklenir.
+    """
+    path = state_dir() / f"logs-{code}.json"
+    raw = _read_json(path)
+    if raw is None:
+        return None
+    age: float | None = None
+    try:
+        age = max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        age = None
+    return {
+        "code": code,
+        "tail": raw.get("tail"),
+        "truncated": bool(raw.get("truncated")),
+        "generated_at": raw.get("generated_at"),
+        "age_seconds": age,
+        "stale": age is not None and age > LOGS_STALE_SECONDS,
+        "output": _redact(str(raw.get("output") or "")),
+    }
 
 
 def request_update(code: str, actor_username: str, *, nats_url: str | None = None) -> str:

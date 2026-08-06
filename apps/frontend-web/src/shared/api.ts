@@ -11,6 +11,7 @@
   DeviceCommandRow,
   Gateway,
   GatewayAgentStatus,
+  GatewayLogs,
   HistoryBucket,
   HostStatus,
   LicenseGate,
@@ -1513,6 +1514,35 @@ export async function restartGatewayLocally(
   gatewayCode: string
 ): Promise<YasamDongusuSonuc> {
   return gatewayLifecycle(token, gatewayCode, "local-restart", "Gateway yeniden başlatılamadı.");
+}
+
+/** Gateway container loglarını ajandan İSTE (202, asenkron).
+ *
+ *  Backend Docker'a erişemez; ajan `docker compose logs` çıktısını paylaşılan
+ *  dizine yazar. Sonuç birkaç saniye sonra `fetchGatewayLogs` ile okunur. */
+export async function requestGatewayLogs(
+  token: string,
+  gatewayCode: string,
+  tail = 300
+): Promise<YasamDongusuSonuc> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/gateways/${gatewayCode}/local-logs?tail=${tail}`,
+    { method: "POST", headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Gateway logu istenemedi.");
+  return (await response.json()) as YasamDongusuSonuc;
+}
+
+/** Ajanın yazdığı SON log çıktısı. Henüz log alınmamışsa available=false. */
+export async function fetchGatewayLogs(
+  token: string,
+  gatewayCode: string
+): Promise<GatewayLogs> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/local-logs`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Gateway logu alınamadı.");
+  return (await response.json()) as GatewayLogs;
 }
 
 export async function fetchOutboundTargets(token: string): Promise<OutboundTarget[]> {

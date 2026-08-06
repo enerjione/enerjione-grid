@@ -13,14 +13,15 @@ import { useTranslation } from "react-i18next";
 import {
   Activity,
   ArrowDown,
-  ArrowLeftRight,
   ArrowUp,
   ArrowUpCircle,
   BellRing,
+  Building2,
+  CalendarClock,
   CheckCircle2,
-  Code,
   Cpu,
   Database,
+  FolderKanban,
   Gauge,
   Globe,
   HardDrive,
@@ -52,8 +53,8 @@ import {
   fetchVersionInfo,
   loadSession
 } from "../../shared/api";
-import { WsStatusBadge } from "../../components/WsStatusBadge";
-import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
+import { GatewayControlCard } from "./GatewayControlCard";
+import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { usePolling } from "../../shared/usePolling";
 import type {
   AlarmEvent,
@@ -73,10 +74,10 @@ type Props = {
   alarms: AlarmEvent[];
   loading?: boolean;
   onRefresh?: () => void | Promise<void>;
-  /** Live telemetry WebSocket baglantisi durumu — header'dan tasindi. */
-  wsState?: WsConnectionState;
-  /** Son TELEMETRI mesajinin zamani (ms) — bkz. components/WsStatusBadge.tsx. */
-  wsLastDataAt?: number | null;
+  // WS rozeti BU SAYFADA YOK — bilincli. Soket burada zaten kapali
+  // (App.tsx `liveValuesNeeded`), dolayisiyla rozet her zaman "Kopuk"
+  // gosteriyordu ve gercek bir kopmayla ayirt edilemiyordu. Rozet soketin
+  // ACIK oldugu Canli Degerler sayfasina tasindi.
 };
 
 /** Sunucu kaynak / servis durumu yenileme aralığı (sn). */
@@ -266,11 +267,12 @@ export function SystemStatusPage({
   gateways,
   alarms,
   loading,
-  onRefresh,
-  wsState,
-  wsLastDataAt,
+  onRefresh
 }: Props) {
   const { t, i18n } = useTranslation();
+  // Kurulumun kimligi (proje/musteri adi) — Proje Ayarlari'ndan gelir ve
+  // Sistem Bilgisi kartinda "hangi saha" sorusunu cevaplar.
+  const project = useProjectSettings().settings;
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const isTr = i18n.language?.startsWith("tr");
   const durationUnits = isTr
@@ -303,6 +305,10 @@ export function SystemStatusPage({
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [historianError, setHistorianError] = useState<string | null>(null);
   const servicesInFlightRef = useRef(false);
+
+  // Oturum (token + rol) — gateway kontrol karti icin. `loadSession` senkron
+  // storage okur; her render'da cagirmak yerine bir kez sakliyoruz.
+  const [sessionInfo] = useState(() => loadSession());
 
   // Surum + guncelleme durumu. Backend sonucu 6 saat cache'liyor, o yuzden
   // burada polling YOK — sayfa acilisinda bir kez cekiyoruz.
@@ -520,9 +526,9 @@ export function SystemStatusPage({
   const cpuTone = host ? percentTone(host.cpu.percent) : "ok";
   const memTone = host ? percentTone(host.memory.percent) : "ok";
   const diskTone = host ? percentTone(host.disk.percent) : "ok";
-  const swapPercent = host?.memory.swap_percent ?? null;
-  const hasSwap = Boolean(host && (host.memory.swap_total_bytes ?? 0) > 0 && swapPercent != null);
-  const swapTone: Tone = swapPercent != null ? percentTone(swapPercent) : "ok";
+  // NOT: takas (swap) olcumleri artik GOSTERILMIYOR (kullanici istegi,
+  // 2026-08-06). Backend alanlari duruyor; RAM baskisi RAM halkasi ve
+  // trend grafiginden okunuyor.
   const perCpu = host?.cpu.per_cpu_percent ?? [];
 
   return (
@@ -536,14 +542,6 @@ export function SystemStatusPage({
           -> "hangi makine, ne zamandir ayakta, son ornek" -> "hangi surum" ->
           eylem. Okuma sirasi operatorun sordugu sirayla ayni. */}
       <header className="sys-bar">
-        {/* EN SOLDA CANLI VERI DURUMU: bu sayfanin cevapladigi ilk soru
-            "veri akiyor mu". Eskiden basligin altinda kucuk bir rozetti. */}
-        {wsState ? (
-          <div className="sys-bar-live">
-            <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt} />
-          </div>
-        ) : null}
-
         {host ? (
           <div className="sys-bar-meta">
             <span className="sys-bar-chip" title={host.info.hostname}>
@@ -562,6 +560,63 @@ export function SystemStatusPage({
             </span>
           </div>
         ) : null}
+
+        {/* KPI'LAR BURADA — eskiden altta 6 ayri buyuk kart olarak duruyor ve
+            ekranin ust ucte birini yiyordu. Ayni 6 sayi tek seride sigiyor;
+            asil icerik (kaynaklar, servisler, gateway) yukari geliyor. */}
+        <div className="sys-bar-stats">
+          <span className="sys-stat" title={t("systemStatus.kpi.totalDevices")}>
+            <Router size={14} strokeWidth={2} />
+            <strong>{deviceStats.total}</strong>
+            <span>{t("systemStatus.kpi.totalDevices")}</span>
+          </span>
+          <span className="sys-stat sys-stat--ok" title={t("systemStatus.kpi.onlineSub")}>
+            <Wifi size={14} strokeWidth={2} />
+            <strong>{deviceStats.online}</strong>
+            <span>{t("systemStatus.kpi.online")}</span>
+          </span>
+          <span
+            className={`sys-stat ${deviceStats.offline > 0 ? "sys-stat--bad" : ""}`}
+            title={t("systemStatus.kpi.offlineSub")}
+          >
+            <WifiOff size={14} strokeWidth={2} />
+            <strong>{deviceStats.offline}</strong>
+            <span>{t("systemStatus.kpi.offline")}</span>
+          </span>
+          <span
+            className={`sys-stat ${alarmStats.open > 0 ? "sys-stat--alarm" : ""}`}
+            title={t("systemStatus.kpi.activeAlarmSub")}
+          >
+            <BellRing size={14} strokeWidth={2} />
+            <strong>{alarmStats.open}</strong>
+            <span>{t("systemStatus.kpi.activeAlarm")}</span>
+          </span>
+          <span className="sys-stat" title={t("systemStatus.kpi.gatewaySub")}>
+            <Network size={14} strokeWidth={2} />
+            <strong>
+              {gatewayStats.active}
+              <span className="sys-stat-frac">/{gatewayStats.total}</span>
+            </strong>
+            <span>{t("systemStatus.kpi.gateway")}</span>
+          </span>
+          <span
+            className={`sys-stat ${
+              serviceCounts.unhealthy > 0 ? "sys-stat--bad" : "sys-stat--ok"
+            }`}
+            title={
+              serviceCounts.unhealthy === 0
+                ? t("systemStatus.kpi.servicesAllOk")
+                : t("systemStatus.kpi.servicesIssue", { count: serviceCounts.unhealthy })
+            }
+          >
+            <Activity size={14} strokeWidth={2} />
+            <strong>
+              {serviceCounts.healthy}
+              <span className="sys-stat-frac">/{serviceCounts.total}</span>
+            </strong>
+            <span>{t("systemStatus.kpi.services")}</span>
+          </span>
+        </div>
 
         <div className="sys-bar-actions">
           {/* Surum + guncelleme ibaresi.
@@ -613,93 +668,23 @@ export function SystemStatusPage({
         </div>
       </header>
 
-      {/* KPI: 6 ana sayim - Toplam / Haberleşen / Haberleşmeyen / Alarm / Gateway / Servis */}
-      <section className="sys-kpis">
-        <article className="sys-kpi sys-kpi--total">
-          <div className="sys-kpi-icon">
-            <Router size={20} strokeWidth={2} />
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">{t("systemStatus.kpi.totalDevices")}</span>
-            <strong className="sys-kpi-value">{deviceStats.total}</strong>
-            <span className="sys-kpi-sub">{t("systemStatus.kpi.totalDevicesSub", { percent: deviceStats.onlineRatio })}</span>
-          </div>
-        </article>
-
-        <article className="sys-kpi sys-kpi--ok">
-          <div className="sys-kpi-icon">
-            <Wifi size={20} strokeWidth={2} />
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">{t("systemStatus.kpi.online")}</span>
-            <strong className="sys-kpi-value">{deviceStats.online}</strong>
-            <span className="sys-kpi-sub">{t("systemStatus.kpi.onlineSub")}</span>
-          </div>
-        </article>
-
-        <article className="sys-kpi sys-kpi--bad">
-          <div className="sys-kpi-icon">
-            <WifiOff size={20} strokeWidth={2} />
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">{t("systemStatus.kpi.offline")}</span>
-            <strong className="sys-kpi-value">{deviceStats.offline}</strong>
-            <span className="sys-kpi-sub">{t("systemStatus.kpi.offlineSub")}</span>
-          </div>
-        </article>
-
-        <article className="sys-kpi sys-kpi--alarm">
-          <div className="sys-kpi-icon">
-            <BellRing size={20} strokeWidth={2} />
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">{t("systemStatus.kpi.activeAlarm")}</span>
-            <strong className="sys-kpi-value">{alarmStats.open}</strong>
-            <span className="sys-kpi-sub">{t("systemStatus.kpi.activeAlarmSub")}</span>
-          </div>
-        </article>
-
-        <article className="sys-kpi sys-kpi--gw">
-          <div className="sys-kpi-icon">
-            <Network size={20} strokeWidth={2} />
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">{t("systemStatus.kpi.gateway")}</span>
-            <strong className="sys-kpi-value">
-              {gatewayStats.active} <span className="sys-kpi-frac">/ {gatewayStats.total}</span>
-            </strong>
-            <span className="sys-kpi-sub">{t("systemStatus.kpi.gatewaySub")}</span>
-          </div>
-        </article>
-
-        <article
-          className={`sys-kpi ${
-            serviceCounts.unhealthy > 0 ? "sys-kpi--bad" : "sys-kpi--ok"
-          }`}
-        >
-          <div className="sys-kpi-icon">
-            <Activity size={20} strokeWidth={2} />
-          </div>
-          <div className="sys-kpi-body">
-            <span className="sys-kpi-label">{t("systemStatus.kpi.services")}</span>
-            <strong className="sys-kpi-value">
-              {serviceCounts.healthy} <span className="sys-kpi-frac">/ {serviceCounts.total}</span>
-            </strong>
-            <span className="sys-kpi-sub">
-              {serviceCounts.unhealthy === 0
-                ? t("systemStatus.kpi.servicesAllOk")
-                : t("systemStatus.kpi.servicesIssue", { count: serviceCounts.unhealthy })}
-            </span>
-          </div>
-        </article>
-      </section>
+      {/* Gateway kontrol + uzaktan log. Kaynak/servis kartlarindan ONCE:
+          "veri neden gelmiyor" teshisinde ilk bakilacak yer gateway'in
+          ayakta olup olmadigi ve ne dedigi. */}
+      {sessionInfo ? (
+        <GatewayControlCard accessToken={sessionInfo.accessToken} role={sessionInfo.role} />
+      ) : null}
 
       {/* 2 kolon: Sunucu Kaynaklari · Servisler (Gateway karti kaldirildi) */}
       <div className="sys-duo-grid">
-        {/* ------ KART 1: SUNUCU KAYNAKLARI ------
-            `--resources`: bu kart sayfa kayarken YERINDE SABIT kalir
-            (position: sticky). Servis listesi bundan uzun oldugu icin
-            kaynak olcumleri gozden kaybolmadan liste taranabilir. */}
+        {/* SOL SUTUN: kaynak karti + altinda cekirdek/takas/ag ucluleri.
+            Servis listesi sag sutunda cok uzun oldugu icin sol tarafta
+            genis bir bosluk kaliyordu; ucluler tam o boslugu doldurur
+            (kullanici istegi, 2026-08-06). Yapiskanlik (sticky) kart
+            yerine SUTUNA uygulanir — aksi halde sutun icindeki kart
+            yapisamaz. */}
+        <div className="sys-col-left">
+        {/* ------ KART 1: SUNUCU KAYNAKLARI ------ */}
         <section className="sys-card sys-card--resources">
           <header className="sys-card-head">
             <div className="sys-card-title-wrap">
@@ -794,56 +779,10 @@ export function SystemStatusPage({
                 </div>
               </div>
 
-              {/* Cekirdek basina CPU kullanimi — tek bir cekirdegin dolmasi
-                  ortalamada gorunmez, burada aninda fark edilir. */}
-              {perCpu.length > 1 ? (
-                <div className="sys-cores">
-                  <div className="sys-metric-group-title">
-                    <LayoutGrid size={14} strokeWidth={2.1} />
-                    {t("systemStatus.host.cores", { value: perCpu.length })}
-                  </div>
-                  <div className="sys-core-bars">
-                    {perCpu.map((value, index) => {
-                      const tone = percentTone(value);
-                      return (
-                        <div
-                          key={index}
-                          className={`sys-core-bar sys-core-bar--${tone}`}
-                          title={`#${index + 1} · ${value.toFixed(0)}%`}
-                        >
-                          <div className="sys-core-bar-track">
-                            <div
-                              className="sys-core-bar-fill"
-                              style={{ height: `${Math.max(2, Math.min(100, value))}%` }}
-                            />
-                          </div>
-                          <span className="sys-core-bar-label">{index + 1}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Takas alani — RAM tukendiginde buradan anlasilir (Linux/Windows). */}
-              {hasSwap ? (
-                <div className={`sys-meter sys-meter--${swapTone}`}>
-                  <div className="sys-meter-head">
-                    <ArrowLeftRight size={15} strokeWidth={2.1} />
-                    <span className="sys-meter-label">{t("systemStatus.host.swap")}</span>
-                    <strong className="sys-meter-value">{(swapPercent ?? 0).toFixed(0)}%</strong>
-                  </div>
-                  <div className="sys-meter-track">
-                    <div
-                      className={`sys-meter-fill sys-meter-fill--${swapTone}`}
-                      style={{ width: `${Math.max(0, Math.min(100, swapPercent ?? 0))}%` }}
-                    />
-                  </div>
-                  <span className="sys-meter-sub">
-                    {formatBytes(host.memory.swap_used_bytes)} / {formatBytes(host.memory.swap_total_bytes)}
-                  </span>
-                </div>
-              ) : null}
+              {/* NOT: Cekirdek kullanimi, takas alani ve ag trafigi bu karttan
+                  CIKARILDI (kullanici istegi, 2026-08-06). Ucu de alt alta
+                  dizilip sagda genis bir bosluk birakiyordu; artik kartin
+                  altinda YAN YANA uc ayri kart olarak duruyorlar. */}
 
               {/* Yuk ortalamasi (sadece Linux'ta var) — tek bagimsiz rozet */}
               {host.cpu.load_avg_1m != null ? (
@@ -871,39 +810,85 @@ export function SystemStatusPage({
                 </div>
               ) : null}
 
-              {/* Ag trafigi — onde anlik hiz, arkada kumulatif toplam */}
-              <div className="sys-net-panel">
-                <div className="sys-metric-group-title">
-                  <Network size={14} strokeWidth={2.1} />
-                  {t("systemStatus.host.network")}
-                </div>
-                <div className="sys-net-flow">
-                  <div className="sys-net-side sys-net-side--up">
-                    <div className="sys-net-arrow">
-                      <ArrowUp size={17} strokeWidth={2.4} />
-                    </div>
-                    <div className="sys-net-info">
-                      <strong>{formatRate(netRate?.up ?? null)}</strong>
-                      <span>{t("systemStatus.host.netTotalUp", { value: formatBytes(host.network.bytes_sent) })}</span>
-                      <span>{t("systemStatus.host.netUp", { value: host.network.packets_sent.toLocaleString(localeTag) })}</span>
-                    </div>
-                  </div>
-                  <div className="sys-net-divider" />
-                  <div className="sys-net-side sys-net-side--down">
-                    <div className="sys-net-arrow">
-                      <ArrowDown size={17} strokeWidth={2.4} />
-                    </div>
-                    <div className="sys-net-info">
-                      <strong>{formatRate(netRate?.down ?? null)}</strong>
-                      <span>{t("systemStatus.host.netTotalDown", { value: formatBytes(host.network.bytes_recv) })}</span>
-                      <span>{t("systemStatus.host.netDown", { value: host.network.packets_recv.toLocaleString(localeTag) })}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           ) : null}
         </section>
+
+        {/* ------ IKI KART YAN YANA: CEKIRDEK / AG ------
+            Ikisi de "kaynak" kartinin icinde alt alta duruyordu; her biri tam
+            genisligi kaplayip sagda genis bir bosluk birakiyordu. Ayri kartlar
+            olarak yan yana konuldular (kullanici istegi, 2026-08-06).
+            Gorunurluk kosulu korundu: tek cekirdekli makinede cekirdek karti
+            CIKMAZ — o durumda ag karti satiri tek basina doldurur. */}
+        {host ? (
+          <div className="sys-duo-cards">
+            {perCpu.length > 1 ? (
+              <section className="sys-card sys-metric-card">
+                <div className="sys-metric-group-title">
+                  <LayoutGrid size={14} strokeWidth={2.1} />
+                  {t("systemStatus.host.cores", { value: perCpu.length })}
+                </div>
+                <div className="sys-core-bars">
+                  {perCpu.map((value, index) => {
+                    const tone = percentTone(value);
+                    return (
+                      <div
+                        key={index}
+                        className={`sys-core-bar sys-core-bar--${tone}`}
+                        title={`#${index + 1} · ${value.toFixed(0)}%`}
+                      >
+                        <div className="sys-core-bar-track">
+                          <div
+                            className="sys-core-bar-fill"
+                            style={{ height: `${Math.max(2, Math.min(100, value))}%` }}
+                          />
+                        </div>
+                        <span className="sys-core-bar-label">{index + 1}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            {/* NOT: Takas alani (swap) karti KALDIRILDI (kullanici istegi,
+                2026-08-06). RAM baskisi zaten yukaridaki RAM halkasindan ve
+                trend grafiginden okunuyor; takas yuzdesi sahada nadiren
+                karar degistiren bir olcum. */}
+
+            {/* Ag trafigi — onde anlik hiz, arkada kumulatif toplam */}
+            <section className="sys-card sys-metric-card">
+              <div className="sys-metric-group-title">
+                <Network size={14} strokeWidth={2.1} />
+                {t("systemStatus.host.network")}
+              </div>
+              <div className="sys-net-flow">
+                <div className="sys-net-side sys-net-side--up">
+                  <div className="sys-net-arrow">
+                    <ArrowUp size={17} strokeWidth={2.4} />
+                  </div>
+                  <div className="sys-net-info">
+                    <strong>{formatRate(netRate?.up ?? null)}</strong>
+                    <span>{t("systemStatus.host.netTotalUp", { value: formatBytes(host.network.bytes_sent) })}</span>
+                    <span>{t("systemStatus.host.netUp", { value: host.network.packets_sent.toLocaleString(localeTag) })}</span>
+                  </div>
+                </div>
+                <div className="sys-net-divider" />
+                <div className="sys-net-side sys-net-side--down">
+                  <div className="sys-net-arrow">
+                    <ArrowDown size={17} strokeWidth={2.4} />
+                  </div>
+                  <div className="sys-net-info">
+                    <strong>{formatRate(netRate?.down ?? null)}</strong>
+                    <span>{t("systemStatus.host.netTotalDown", { value: formatBytes(host.network.bytes_recv) })}</span>
+                    <span>{t("systemStatus.host.netDown", { value: host.network.packets_recv.toLocaleString(localeTag) })}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
+        </div>
 
         {/* ------ KART 2: SERVIS DURUMLARI ------
             Liste KIRPILMAZ / ic scroll YOK: tum servisler alt alta listelenir,
@@ -1082,31 +1067,61 @@ export function SystemStatusPage({
                 </span>
               </div>
             </div>
-            <div className="sys-info-tile">
-              <span className="sys-info-tile-icon">
-                <Code size={17} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="sys-info-tile-label">{t("systemStatus.host.infoPython")}</span>
-                <strong className="sys-info-tile-val sys-info-tile-val--mono">
-                  {host.info.python_version}
-                </strong>
-              </div>
-            </div>
-            <div className="sys-info-tile">
-              <span className="sys-info-tile-icon">
-                <HardDrive size={17} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="sys-info-tile-label">{t("systemStatus.host.infoDiskPath")}</span>
-                <strong className="sys-info-tile-val sys-info-tile-val--mono">
-                  {host.disk.path}
-                </strong>
-                <span className="sys-info-tile-sub">
-                  {t("systemStatus.host.freeLabel", { value: formatBytes(host.disk.free_bytes) })}
+            {/* NOT: "Python surumu" ve "Disk yolu" kutulari KALDIRILDI
+                (kullanici istegi, 2026-08-06). Python surumu operatorun
+                karar veremeyecegi bir ic ayrinti; disk yolu ve bos alan
+                zaten yukaridaki Disk halkasinda gorunuyor. */}
+
+            {/* Kurulumun kimligi: proje ve musteri adi kurulum sirasinda
+                Proje Ayarlari'ndan giriliyor. Sistem Durumu ekran goruntusu
+                destege gonderildiginde "hangi saha" sorusunu bu iki kutu
+                cevaplar. Bos birakilmislarsa kutu HIC cikmaz — bos etiket
+                gostermek bilgi vermez. */}
+            {project.project_name ? (
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <FolderKanban size={17} strokeWidth={2} />
                 </span>
+                <div>
+                  <span className="sys-info-tile-label">{t("systemStatus.host.infoProject")}</span>
+                  <strong className="sys-info-tile-val">{project.project_name}</strong>
+                </div>
               </div>
-            </div>
+            ) : null}
+            {project.customer_name ? (
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <Building2 size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="sys-info-tile-label">{t("systemStatus.host.infoCustomer")}</span>
+                  <strong className="sys-info-tile-val">{project.customer_name}</strong>
+                </div>
+              </div>
+            ) : null}
+            {host.info.first_started_at ? (
+              <div className="sys-info-tile">
+                <span className="sys-info-tile-icon">
+                  <CalendarClock size={17} strokeWidth={2} />
+                </span>
+                <div>
+                  {/* Etiket "kurulum" DEGIL "ilk calistirma": olculen sey
+                      denetim kaydindaki en eski olaydir. Kurulum damgasi
+                      tutan bir alan yok; "kurulum tarihi" demek olculmeyen
+                      bir seyi olculmus gibi gosterirdi. */}
+                  <span className="sys-info-tile-label">{t("systemStatus.host.infoFirstStarted")}</span>
+                  <strong className="sys-info-tile-val">
+                    {new Date(host.info.first_started_at).toLocaleDateString(localeTag)}
+                  </strong>
+                  <span className="sys-info-tile-sub">
+                    {new Date(host.info.first_started_at).toLocaleTimeString(localeTag, {
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    })}
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}

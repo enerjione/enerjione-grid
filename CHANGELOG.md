@@ -14,6 +14,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.21] — 2026-08-06
+
+### Eklendi
+
+- **Olay dışa aktarımı ekranla birebir**: PDF/Excel/CSV çıktıları arayüzde
+  görünen Türkçe olay metinleriyle üretilir (`event_labels` + parite testi);
+  PDF'lerde ortak üstbilgi/altbilgi düzeni ve Türkçe karakter desteği
+  (`report_layout`). Olay durum rozetleri sadeleşti.
+- **Gateway ajanı güncellemeleri** (`e1-gwd`): gateway API ve düzenleme
+  modalında yeni alanlar.
+- Sinyal arşiv sayfası ve yedekler panelinde iyileştirmeler; sistem durumu
+  zaman alanları UTC-aware.
+
+---
+
 ## [2.53.20] — 2026-08-06
 
 ### Değişti

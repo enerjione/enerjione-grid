@@ -24,6 +24,7 @@ import platform
 import socket
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import psutil
@@ -91,6 +92,15 @@ class HostInfo(BaseModel):
     uptime_seconds: float
     process_pid: int
     process_uptime_seconds: float
+    # Sistemin bu cihazda ILK calistigi an (denetim kaydindaki en eski olay).
+    # NULL = henuz hic olay yazilmamis (taze kurulum) veya sorgu basarisiz.
+    # DIKKAT: bu "yazilimin kuruldugu tarih" DEGIL, "ilk kez calistigi tarih"
+    # olcumudur — ikisi ayni gunde olur ama esdeger degil. Arayuz de bunu
+    # "ilk calistirma" olarak etiketler; kesin kurulum damgasi tutan bir alan
+    # yok ve uydurmak yaniltici olurdu.
+    first_started_at: str | None = Field(
+        default=None, description="En eski sistem olayinin zamani (ISO-8601, UTC)"
+    )
 
 
 class HostStatus(BaseModel):
@@ -148,9 +158,45 @@ def get_version_info(_: User = Depends(get_current_user)):
     return VersionInfo(**_info())
 
 
+def _first_started_at(db: Session) -> str | None:
+    """Denetim kaydindaki EN ESKI olayin zamani — "sistem ne zamandir ayakta".
+
+    Kurulum damgasi tutan bir alan YOK; en eski `system_events` satiri bu
+    soruya verilebilecek en dogru cevap (ilk kullanici olusturma, ilk giris
+    vb. kurulumun ilk dakikalarinda yazilir). Hata YUTULUR: bu bilgi sayfanin
+    ana isi degil, kaynak metrikleri onun yuzunden kaybolmamali.
+    """
+    try:
+        row = db.execute(
+            text("SELECT MIN(created_at) FROM system_events")
+        ).scalar()
+    except Exception:  # noqa: BLE001 — tablo yok / DB kapali: bilgi opsiyonel
+        return None
+    if row is None:
+        return None
+
+    # SAAT DILIMI HER ZAMAN TASINMALI. Surucu/kolon tipine gore buraya
+    # datetime da gelebilir duz METIN de (SQLite tarihleri metin saklar).
+    # Offset'siz bir metin gonderirsek tarayicidaki `new Date(...)` onu
+    # YEREL saat sayar ve tarih sessizce saatlerce kayar — Turkiye'de 3 saat.
+    if isinstance(row, datetime):
+        stamp = row
+    else:
+        try:
+            stamp = datetime.fromisoformat(str(row))
+        except ValueError:
+            return None
+    if stamp.tzinfo is None:
+        # Tum yazma yollari UTC-aware kaydediyor (CLAUDE.md: naive datetime
+        # kullanilmaz); tz'yi kaybeden katman surucudur, deger UTC'dir.
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
 @router.get("/host", response_model=HostStatus)
 def get_host_status(
     disk_path: str | None = Query(default=None, description="Override: hangi mount'un kullanim oranini doneyim"),
+    db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     """Backend'in calistigi host'un guncel kaynak metriklerini doner.
@@ -192,6 +238,7 @@ def get_host_status(
             uptime_seconds=max(0.0, now - boot_t),
             process_pid=os.getpid(),
             process_uptime_seconds=max(0.0, now - proc_create),
+            first_started_at=_first_started_at(db),
         ),
         cpu=HostCpuMetrics(
             percent=cpu_percent,

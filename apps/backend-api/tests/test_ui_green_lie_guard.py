@@ -237,6 +237,10 @@ BADGE = FE / "components" / "WsStatusBadge.tsx"
 WS_STATUS_TS = FE / "shared" / "wsDataStatus.ts"
 HEADER = FE / "components" / "Header.tsx"
 SYS_STATUS = FE / "features" / "system-status" / "SystemStatusPage.tsx"
+LIVE_VALUES = FE / "features" / "live-values" / "LiveValuesPage.tsx"
+#: Rozetin durabilecegi sayfalar. Yerlesim urun karari; korunan sey
+#: rozetin BIR YERDE gorunur olmasi.
+ROZET_ADAYLARI = [HEADER, SYS_STATUS, LIVE_VALUES]
 FE_TESTS = FE.parent / "tests" / "index.test.ts"
 
 
@@ -252,15 +256,24 @@ def test_rozet_EN_AZ_BIR_YERDE_render_ediliyor():
     Korunmasi gereken sey yerlesim DEGIL, sudur: soket kopsa bile
     operatorun bunu gorebilecegi BIR yer olmali. Rozet hicbir yerde
     render edilmezse (eski hali oyleydi) burasi duser.
+
+    2026-08 GUNCELLEME — rozet Sistem Durumu'ndan Canli Degerler'e tasindi.
+    Sebep: soket YALNIZCA Anasayfa / cihaz detay / Canli Degerler
+    sayfalarinda aciliyor (App.tsx `liveValuesNeeded`). Sistem Durumu'nda
+    soket bilerek kapali oldugu icin rozet orada HER ZAMAN "Kopuk"
+    diyordu — yani gercek bir kopmayla tasarim geregi kapaliligi ayirt
+    etmek imkansizdi ve surekli yanlis alarm veriyordu. Rozet artik
+    soketin ACIK oldugu sayfada; "Kopuk" gordugunde bu GERCEKTEN bir
+    kopmadir.
     """
-    render_edenler = [y for y in (HEADER, SYS_STATUS) if "<WsStatusBadge" in _kod(y)]
+    render_edenler = [y for y in ROZET_ADAYLARI if "<WsStatusBadge" in _kod(y)]
     assert render_edenler, (
         "WsStatusBadge hicbir yerde render EDILMIYOR — soket kopsa bile "
         "operator bunu ekranda goremez"
     )
 
 
-@pytest.mark.parametrize("yol", [HEADER, SYS_STATUS], ids=lambda p: p.name)
+@pytest.mark.parametrize("yol", ROZET_ADAYLARI, ids=lambda p: p.name)
 def test_rozet_render_ediliyorsa_GERCEK_veriyle(yol: Path):
     """Rozeti gosteren sayfa ona DOGRU girdileri vermeli.
 
@@ -279,7 +292,7 @@ def test_rozet_render_ediliyorsa_GERCEK_veriyle(yol: Path):
     )
 
 
-@pytest.mark.parametrize("yol", [HEADER, SYS_STATUS], ids=lambda p: p.name)
+@pytest.mark.parametrize("yol", ROZET_ADAYLARI, ids=lambda p: p.name)
 def test_OLU_prop_birakilmadi(yol: Path):
     """Prop'u alip kullanmamak, gecirmemekten daha kotudur: cagiran taraf
     durumu gosterdigini SANIR. Bu depoda tam olarak bu yasandi."""

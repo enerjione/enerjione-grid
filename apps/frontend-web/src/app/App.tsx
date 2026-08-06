@@ -1047,11 +1047,12 @@ export function App() {
     fn: pollFaultStats
   });
 
-  // Olaylar (system events) canli refresh: 5 sn'de bir. Olay sayfasinda
-  // kullanici yeni kayitlari sayfa yenilemeden gorebilsin.
+  // Olaylar (system events) canli refresh: 5 sn'de bir.
   //
-  // `events` iki yere gidiyor: Olaylar sayfasi ve Alarmlar sayfasi (alarm
-  // detayindaki olay zaman cizelgesi). Ikisi disinda cekilmiyor.
+  // `events` artik yalnizca Alarmlar sayfasina gidiyor (alarm detayindaki
+  // olay zaman cizelgesi). Olaylar sayfasi kendi verisini sunucu taraflı
+  // filtre + sayfalama ile ceker (EventsPage icinde) — burada cekmek hem
+  // gereksiz hem 1000 satirlik sorguyu 5 sn'de bir bosa kosturmak olurdu.
   const pollEvents = useCallback(async () => {
     if (!session) return;
     try {
@@ -1063,7 +1064,7 @@ export function App() {
   }, [session]);
 
   usePolling({
-    enabled: Boolean(session) && (pageMode === "events" || pageMode === "alarms"),
+    enabled: Boolean(session) && pageMode === "alarms",
     intervalMs: 5000,
     fn: pollEvents
   });
@@ -2752,6 +2753,8 @@ export function App() {
                 loading={signalLiveLoading}
                 error={signalLiveError}
                 onRefresh={handleRefreshSignalLive}
+                wsState={liveSocket.connectionState}
+                wsLastDataAt={liveSocket.lastDataAt}
               />
             ) : null}
             {engineeringPage === "alarm-rules" && session.role === "installer" ? (
@@ -2904,8 +2907,6 @@ export function App() {
                 alarms={alarms}
                 loading={loadingData}
                 onRefresh={handleRefreshSystemStatus}
-                wsState={liveSocket.connectionState}
-                wsLastDataAt={liveSocket.lastDataAt}
               />
             ) : null}
             {engineeringPage === "network-settings" && session.role === "installer" ? (
@@ -2984,7 +2985,7 @@ export function App() {
               />
             ) : null}
             {pageMode === "events" ? (
-              <EventsPage events={events} loading={loadingData} devices={devices} />
+              <EventsPage accessToken={session.accessToken} devices={devices} />
             ) : null}
           </main>
         ) : (

@@ -37,8 +37,6 @@ type Props = {
 
 type SourceFilter = "all" | SignalSource;
 type TabKey = "all" | SignalDataType;
-/** Arsiv filtresi — "neyin yazildigini tek bakista gor". */
-type ArchiveFilter = "all" | "on" | "off" | "deadband";
 
 /** Onay bekleyen arsiv degisikligi. `faultKeys` bos degilse once uyari. */
 type PendingHistorian = {
@@ -64,7 +62,6 @@ export function SignalsPage({
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
-  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
   // Arsiv yonetimi ayri bir popup'ta: ozet + filtre + toplu islemler orada.
   // Sayfa duz kalir; kontroller goz onunde durmaz.
   const [arsivPanelAcik, setArsivPanelAcik] = useState(false);
@@ -108,9 +105,6 @@ export function SignalsPage({
     return signalsForModel.filter((signal) => {
       if (activeTab !== "all" && signal.data_type !== activeTab) return false;
       if (sourceFilter !== "all" && signal.source !== sourceFilter) return false;
-      if (archiveFilter === "on" && !isHistorized(signal)) return false;
-      if (archiveFilter === "off" && isHistorized(signal)) return false;
-      if (archiveFilter === "deadband" && effectiveDeadband(signal) <= 0) return false;
       if (!q) return true;
       return (
         signal.label.toLowerCase().includes(q) ||
@@ -118,7 +112,7 @@ export function SignalsPage({
         (signal.description ?? "").toLowerCase().includes(q)
       );
     });
-  }, [signalsForModel, activeTab, sourceFilter, archiveFilter, searchTerm]);
+  }, [signalsForModel, activeTab, sourceFilter, searchTerm]);
 
   const selected = useMemo(
     () => signalsForModel.find((signal) => signal.key === selectedKey) ?? null,
@@ -397,37 +391,18 @@ export function SignalsPage({
             </button>
           ))}
         </div>
-      </div>
-
-      {/* 3. satir: ARSIV — kontroller sayfada degil, dugmenin actigi popup'ta.
-          Satirda yalnizca kompakt ozet + "Arsiv yonetimi" dugmesi durur. */}
-      <div className="signals-arsiv-trigger-row">
-        <span className="shb-summary-main">
-          <span className="material-symbols-outlined shb-icon" aria-hidden="true">database</span>
-          {t("engineering.signals.historian.summary", {
-            total: totalCount,
-            archived: historianOzet.archived
-          })}
-          {archiveFilter !== "all" ? (
-            <span className="chip chip-active signals-arsiv-filtre-rozeti">
-              {t(
-                archiveFilter === "on"
-                  ? "engineering.signals.historian.filterArchived"
-                  : archiveFilter === "off"
-                    ? "engineering.signals.historian.filterNotArchived"
-                    : "engineering.signals.historian.filterDeadband"
-              )}
-            </span>
-          ) : null}
-        </span>
-        <button
-          type="button"
-          className="secondary-btn signals-arsiv-ac-btn"
-          onClick={() => setArsivPanelAcik(true)}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">tune</span>
-          {t("engineering.signals.historian.manage")}
-        </button>
+        {/* ARSIV — kontroller dugmenin actigi popup'ta; dugme filtrelerin
+            sagina yaslanir, ayri bir satir KAPLAMAZ. */}
+        <div className="signals-arsiv-sag">
+          <button
+            type="button"
+            className="secondary-btn signals-arsiv-ac-btn"
+            onClick={() => setArsivPanelAcik(true)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">database</span>
+            {t("engineering.signals.historian.manage")}
+          </button>
+        </div>
       </div>
 
       {notice ? <p className="helper-text shb-notice">{notice}</p> : null}
@@ -465,15 +440,9 @@ export function SignalsPage({
               </div>
               <div className="arsiv-stat-govde">
                 <div className="arsiv-stat-etiket">
-                  <span>
-                    {t("engineering.signals.historian.summary", {
-                      total: totalCount,
-                      archived: historianOzet.archived
-                    })}
-                  </span>
-                  <span className="arsiv-stat-yuk">
-                    {t("engineering.signals.historian.writeLoad", { pct: historianOzet.pct })}
-                  </span>
+                  {/* Buyuk sayinin yanina ayni cumleyi bir daha yazmiyoruz;
+                      kisa etiket yeter. */}
+                  <span>{t("engineering.signals.historian.statLabel")}</span>
                 </div>
                 <div className="arsiv-metre" aria-hidden="true">
                   <div className="arsiv-metre-dolgu" style={{ width: `${historianOzet.pct}%` }} />
@@ -487,32 +456,6 @@ export function SignalsPage({
                 ) : null}
               </div>
             </div>
-
-            <section className="arsiv-bolum">
-              <h4 className="arsiv-bolum-baslik">
-                {t("engineering.signals.historian.sectionFilter")}
-              </h4>
-              <div className="shb-filters arsiv-filtreler">
-                {(["all", "on", "off", "deadband"] as ArchiveFilter[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`chip shb-chip-${key} ${archiveFilter === key ? "chip-active" : ""}`}
-                    onClick={() => setArchiveFilter(key)}
-                  >
-                    {t(
-                      key === "all"
-                        ? "engineering.signals.historian.filterAll"
-                        : key === "on"
-                          ? "engineering.signals.historian.filterArchived"
-                          : key === "off"
-                            ? "engineering.signals.historian.filterNotArchived"
-                            : "engineering.signals.historian.filterDeadband"
-                    )}
-                  </button>
-                ))}
-              </div>
-            </section>
 
             {canEdit ? (
               <section className="arsiv-bolum">
@@ -648,7 +591,6 @@ export function SignalsPage({
                     signal.modbus_address !== undefined;
                   const arsivli = isHistorized(signal);
                   const olculuBant = effectiveDeadband(signal);
-                  const arizali = isFaultSignal(signal.data_type);
                   return (
                     <tr
                       key={signal.key}
@@ -677,14 +619,16 @@ export function SignalsPage({
                         ) : null}
                       </td>
                       <td className="col-archive">
+                        {/* Kapali durum icin ekstra uyari ikonu YOK (kullanici
+                            istegi, 2026-08-06): 133 kapali sinyalde uyari
+                            seli anlamini yitiriyordu. Ariza korumasi kapatma
+                            ANINDA onay penceresi olarak devam ediyor. */}
                         <span
                           className={`archive-chip ${arsivli ? "archive-chip--on" : "archive-chip--off"}`}
                           title={
                             arsivli
                               ? t("engineering.signals.historian.onTitle")
-                              : arizali
-                                ? t("engineering.signals.historian.offFaultTitle")
-                                : t("engineering.signals.historian.offTitle")
+                              : t("engineering.signals.historian.offTitle")
                           }
                         >
                           <span className="material-symbols-outlined" aria-hidden="true">
@@ -694,16 +638,6 @@ export function SignalsPage({
                             ? t("engineering.signals.historian.on")
                             : t("engineering.signals.historian.off")}
                         </span>
-                        {/* Ariza sinyalinin arsivi KAPALIYSA bunu susturmak,
-                            ekranin varlik sebebini ortadan kaldirirdi. */}
-                        {!arsivli && arizali ? (
-                          <span
-                            className="archive-fault-flag"
-                            title={t("engineering.signals.historian.offFaultTitle")}
-                          >
-                            <span className="material-symbols-outlined" aria-hidden="true">warning</span>
-                          </span>
-                        ) : null}
                       </td>
                       <td className="col-deadband">
                         {!deadbandApplies(signal.data_type) ? (

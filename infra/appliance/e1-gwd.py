@@ -459,6 +459,21 @@ def _local_digest(image: str) -> str:
     return ham.split("@", 1)[1] if "@" in ham else ""
 
 
+def _buildx_var() -> bool:
+    """`docker buildx` kullanilabilir mi (uzak surum/digest sorgusu icin).
+
+    Docker Engine'in bazi kurulumlarinda (ornegin `apt install docker.io`)
+    buildx eklentisi GELMEZ. O cihazlarda uzak digest hep bos doner ve
+    guncelleme durumu kalici olarak "bilinmiyor" olur — sebebi disariya
+    bildirmezsek "neden guncelleme cikmiyor" sorusu cevapsiz kalir.
+    """
+    docker = shutil.which("docker")
+    if not docker:
+        return False
+    rc, _ = _run([docker, "buildx", "version"], DOCKER_QUERY_TIMEOUT_SEC)
+    return rc == 0
+
+
 def _remote_digest(image: str) -> str:
     """Kayit defterindeki etiketin MANIFEST LISTESI digest'i.
 
@@ -615,6 +630,13 @@ def build_state() -> dict:
         "schema": SCHEMA_VERSION,
         "updated_at": _now_iso(),
         "docker_available": compose is not None,
+        # Guncelleme TESPITI buildx'e bagli (`_remote_digest` / `_remote_version`).
+        # Buildx kurulu degilse surum durumu kalici olarak "bilinmiyor" kalir;
+        # arayuz bunu "kayit defteri okunamiyor" diye gostermeli, sessizce
+        # "guncel" gibi davranmamali. Eskiden bu ayrim disariya hic
+        # bildirilmiyordu ve "neden guncelleme cikmiyor" sorusunun cevabi
+        # cihaza girmeden bulunamiyordu.
+        "buildx_available": _buildx_var(),
         "gateways": gateways,
     }
 
@@ -872,7 +894,24 @@ def render_compose(code: str, name: str, params: dict) -> str:
 #: karsiligi bu dosyada yazili bir `_do_*` fonksiyonudur; docker'a giden
 #: argumanlar da orada sabit yazilidir (istekten gelen tek serbest deger
 #: gateway KODUDUR ve CODE_RE'den gecer).
-ALLOWED_ACTIONS = ("install", "remove", "restart", "start", "stop", "update")
+ALLOWED_ACTIONS = ("install", "remove", "restart", "start", "stop", "update", "logs")
+
+# `logs`: container ciktisini backend'in OKUYABILECEGI bir dosyaya yazar.
+# Backend Docker'a erisemedigi icin ("bkz. gateway_agent_service" basligi)
+# sahadaki "gateway ne diyor" sorusu ancak bu koprüyle cevaplanabiliyor.
+# Satir sayisi SINIRLI: dosya paylasilan dizinde durur ve diski sismemeli.
+LOGS_TAIL_MIN = 50
+LOGS_TAIL_MAX = 2000
+LOGS_TAIL_DEFAULT = 300
+LOGS_TIMEOUT_SEC = 60
+# Cikti ust siniri (karakter). Uzun satirlar (stack trace) 2000 satirda
+# birkac MB olabiliyor; okuma tarafi bunu tek seferde JSON'a aliyor.
+LOGS_MAX_CHARS = 400_000
+
+
+def _logs_path(code: str) -> str:
+    """Kod CODE_RE'den gectigi icin dosya adi guvenli (path traversal yok)."""
+    return os.path.join(STATE_DIR, f"logs-{code}.json")
 
 
 def _validate(request: dict) -> dict:
@@ -907,6 +946,16 @@ def _validate(request: dict) -> dict:
         # uretilir (bkz. UPDATE_PARAM_KEYS). Eski backend params gondermez;
         # o durumda update yalnizca imaj ceker (eski davranis).
         clean["params"] = _validate_update_params(request.get("params"))
+
+    if action == "logs":
+        # `tail` docker'a ARGUMAN olarak gidiyor: tam sayiya cevrilip
+        # sinirlara kelepcelenir. Metin asla gecmez.
+        raw_tail = request.get("tail", LOGS_TAIL_DEFAULT)
+        try:
+            tail = int(raw_tail)
+        except (TypeError, ValueError):
+            raise ValueError("gecersiz tail degeri")
+        clean["tail"] = max(LOGS_TAIL_MIN, min(LOGS_TAIL_MAX, tail))
 
     return clean
 
@@ -1095,6 +1144,52 @@ def _do_start(req: dict, compose_cmd: list[str]) -> dict:
     return {"ok": True, "stage": "done", "message": "baslatildi", "detail": out}
 
 
+def _do_logs(req: dict, compose_cmd: list[str]) -> dict:
+    """Container ciktisini `logs-<code>.json` dosyasina yaz.
+
+    Backend Docker daemon'a ERISEMEZ (bilincli); sahadaki gateway'in ne
+    dedigini gormenin tek yolu bu kopru. Cikti dosyasi `_write_json` ile
+    yazilir — yani symlink/yaris korumalari ve root:<grup> 0640 izni aynen
+    gecerli: container okuyabilir, YAZAMAZ.
+
+    Container CALISMIYORSA da log alinir (`docker compose logs` durmus
+    container'in ciktisini da verir) — zaten en cok o durumda lazim.
+    """
+    code = req["code"]
+    hata, _ = _dogrula_hedef(code, "logs")
+    if hata:
+        return hata
+    tail = int(req.get("tail") or LOGS_TAIL_DEFAULT)
+    _write_status({"id": req["id"], "action": "logs", "code": code,
+                   "stage": "logs", "running": True})
+    rc, out = _run(
+        compose_cmd
+        + ["-p", _project_name(code), "-f", _compose_path(code),
+           "logs", "--no-color", "--timestamps", "--tail", str(tail)],
+        LOGS_TIMEOUT_SEC,
+    )
+    if rc != 0:
+        return {"ok": False, "stage": "logs", "message": "log alinamadi", "detail": out}
+
+    metin = out or ""
+    kirpildi = len(metin) > LOGS_MAX_CHARS
+    if kirpildi:
+        # BASTAN kirp: en yeni satirlar sonda ve teshis icin onemli olan onlar.
+        metin = metin[-LOGS_MAX_CHARS:]
+    _write_json(
+        _logs_path(code),
+        {
+            "code": code,
+            "tail": tail,
+            "truncated": kirpildi,
+            "generated_at": _now_iso(),
+            "requested_by": str(req.get("requested_by") or ""),
+            "output": metin,
+        },
+    )
+    return {"ok": True, "stage": "done", "message": f"{tail} satir log alindi", "detail": ""}
+
+
 def _do_update(req: dict, compose_cmd: list[str]) -> dict:
     """Yeni imaji cek ve container'i yeniden olustur.
 
@@ -1219,6 +1314,8 @@ def cmd_apply() -> int:
             result = _do_stop(req, compose_cmd)
         elif req["action"] == "start":
             result = _do_start(req, compose_cmd)
+        elif req["action"] == "logs":
+            result = _do_logs(req, compose_cmd)
         else:
             result = _do_restart(req, compose_cmd)
     except OSError as exc:

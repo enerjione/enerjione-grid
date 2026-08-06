@@ -71,6 +71,14 @@ const HEALTH_ICON: Record<BackupHealth, string> = {
   empty: "cloud_off"
 };
 
+/** Durum seridi tonu — uygulama genelindeki `net-banner` paleti. */
+const HEALTH_TONE: Record<BackupHealth, string> = {
+  ok: "net-banner--ok",
+  stale: "net-banner--warn",
+  fail: "net-banner--bad",
+  empty: "net-banner--info"
+};
+
 /** Otomatik program kapaliysa bu suredan eski yedek "eski" sayilir. */
 const STALE_FALLBACK_HOURS = 24 * 7;
 
@@ -330,16 +338,6 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
     return { health: h, lastSuccess: ok };
   }, [sortedBackups, schedule]);
 
-  const statTiles = useMemo(
-    () => [
-      { key: "total", icon: "inventory_2", tone: "", value: String(stats.total) },
-      { key: "success", icon: "task_alt", tone: "is-ok", value: String(stats.success) },
-      { key: "failed", icon: "error", tone: "is-fail", value: String(stats.failed) },
-      { key: "totalSize", icon: "database", tone: "is-size", value: fmtBytes(stats.totalSize) }
-    ],
-    [stats]
-  );
-
   const confirmJob = useMemo(
     () => backups.find((b) => b.id === confirmRestoreId) ?? null,
     [confirmRestoreId, backups]
@@ -355,47 +353,60 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
         onChange={(e) => void handleFileChosen(e)}
       />
 
-      {/* HERO — panelin konusu: yedekleme sagligi + son yedek kunyesi.
-          Saga dogru periyodik program durumu ve ana aksiyonlar. */}
-      <div className={`backups-hero is-${health}`}>
-        <div className="backups-hero-main">
-          <div className="backups-hero-badge">
-            <span className="material-symbols-outlined">{HEALTH_ICON[health]}</span>
-          </div>
-          <div className="backups-hero-text">
-            <h3>{t(`backups.hero.title.${health}`)}</h3>
-            {lastSuccess ? (
-              <div className="backups-hero-meta">
-                <span>
-                  <span className="material-symbols-outlined">event</span>
-                  {fmtDate(lastSuccess.created_at, localeTag)}
-                </span>
-                <span>
-                  <span className="material-symbols-outlined">history</span>
-                  {fmtRelative(lastSuccess.created_at, localeTag)}
-                </span>
-                <span>
-                  <span className="material-symbols-outlined">database</span>
-                  {fmtBytes(lastSuccess.size_bytes)}
-                </span>
-                {lastSuccess.created_by_username ? (
-                  <span>
-                    <span className="material-symbols-outlined">person</span>
-                    {lastSuccess.created_by_username}
-                  </span>
-                ) : null}
-              </div>
-            ) : (
-              <p className="backups-hero-sub">{t("backups.hero.noneYet")}</p>
-            )}
+      {/* DURUM SERIDI — eski "hero" blogunun yerine tek satir.
+          Buyuk rozet + degrade + dort sayac karti sayfayi uygulamanin geri
+          kalanindan bambaska gosteriyordu (kullanici istegi, 2026-08-06).
+          Ayni bilgi burada: saglik + son yedek kunyesi; sayilar liste
+          basligindaki sayac ve asagidaki satirlarda zaten var. */}
+      <p className={`net-banner ${HEALTH_TONE[health]} bk-status`}>
+        <span className="material-symbols-outlined">{HEALTH_ICON[health]}</span>
+        <strong>{t(`backups.hero.title.${health}`)}</strong>
+        {lastSuccess ? (
+          <span className="bk-status-meta">
+            {fmtDate(lastSuccess.created_at, localeTag)}
+            <i>·</i>
+            {fmtRelative(lastSuccess.created_at, localeTag)}
+            <i>·</i>
+            {fmtBytes(lastSuccess.size_bytes)}
+            {lastSuccess.created_by_username ? (
+              <>
+                <i>·</i>
+                {lastSuccess.created_by_username}
+              </>
+            ) : null}
+          </span>
+        ) : (
+          <span className="bk-status-meta">{t("backups.hero.noneYet")}</span>
+        )}
+      </p>
 
-            {/* Periyodik program: bir AKSIYON degil DURUM gostergesi, o yuzden
-                sag taraftaki buton grubunda degil kunye satirinin altinda.
-                Eskiden aksiyonlarla ayni satirdaydi, sigmayip sarmalanarak
-                butonlarin ustunde tek basina asili kaliyordu. */}
+      {/* Basarisiz yedek varsa sessiz gecmiyoruz — eski "0 BASARISIZ"
+          sayac karti her zaman yer kapliyordu, bu serit yalnizca sorun
+          varken cikar. */}
+      {stats.failed > 0 ? (
+        <p className="net-banner net-banner--bad bk-status">
+          <span className="material-symbols-outlined">error</span>
+          {t("backups.failedBanner", { count: stats.failed })}
+        </p>
+      ) : null}
+
+      {/* Liste — tek kart; aksiyonlar basligin saginda (Guvenlik Duvari ve
+          Ag Ayarlari sayfalariyla ayni gorsel dil). */}
+      <section className="rad-card bk-card">
+        <header className="rad-card-head bk-card-head">
+          <h3>
+            <span className="material-symbols-outlined">history</span>
+            {t("backups.history")}
+            <span className="bk-count">{backups.length}</span>
+            {stats.totalSize > 0 ? (
+              <span className="bk-count-size">{fmtBytes(stats.totalSize)}</span>
+            ) : null}
+          </h3>
+          <div className="bk-head-actions">
+            {/* Periyodik program: DURUM gostergesi + ayar girisi. */}
             <button
               type="button"
-              className={`backups-schedule-chip ${schedule?.enabled ? "is-on" : "is-off"}`}
+              className={`bk-schedule-chip ${schedule?.enabled ? "is-on" : "is-off"}`}
               onClick={() => setScheduleModalOpen(true)}
               title={`${t("backups.schedule.title")} — ${
                 schedule?.enabled
@@ -406,105 +417,53 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
               <span className="material-symbols-outlined">
                 {schedule?.enabled ? "autorenew" : "timer_off"}
               </span>
-              <span className="backups-schedule-chip-text">
-                {schedule?.enabled
-                  ? t("backups.hero.autoOn", { hours: schedule.interval_hours })
-                  : t("backups.hero.autoOff")}
+              {schedule?.enabled
+                ? t("backups.hero.autoOn", { hours: schedule.interval_hours })
+                : t("backups.hero.autoOff")}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn bk-btn"
+              onClick={() => void reload()}
+              disabled={loading}
+              title={t("backups.refresh")}
+            >
+              <span
+                className={`material-symbols-outlined ${loading ? "bk-spin" : ""}`}
+              >
+                refresh
               </span>
-              <span className="backups-schedule-chip-hint">
-                {schedule?.enabled
-                  ? t("backups.hero.retention", { count: schedule.retention_count })
-                  : t("backups.hero.autoOffHint")}
+              {t("backups.refresh")}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn bk-btn"
+              onClick={handleUploadClick}
+              disabled={uploading}
+              title={t("backups.uploadHint")}
+            >
+              <span className="material-symbols-outlined">upload_file</span>
+              {uploading ? t("backups.uploading") : t("backups.uploadBackup")}
+            </button>
+            <button
+              type="button"
+              className="primary-btn bk-btn"
+              onClick={() => void handleCreate()}
+              disabled={creating}
+            >
+              <span className={`material-symbols-outlined ${creating ? "bk-spin" : ""}`}>
+                {creating ? "progress_activity" : "backup"}
               </span>
-              <span className="material-symbols-outlined backups-schedule-chip-arrow">
-                chevron_right
-              </span>
+              {creating ? t("backups.creatingBackup") : t("backups.manualBackup")}
             </button>
           </div>
-        </div>
-
-        {/* Sadece aksiyonlar — program chip'i sola, kunye altina alindi.
-            Ucu birden tek satira rahat siger, sarmalanma yok. */}
-        <div className="backups-hero-actions">
-          <button
-            type="button"
-            className="secondary-btn backups-action-btn backups-restart-btn"
-            onClick={() => setConfirmRestart(true)}
-            title={t("backups.restart.title")}
-            disabled={restarting}
-          >
-            <span className="material-symbols-outlined">power_settings_new</span>
-            {t("backups.restart.btn")}
-          </button>
-          <button
-            type="button"
-            className="secondary-btn backups-action-btn backups-upload-btn"
-            onClick={handleUploadClick}
-            disabled={uploading}
-            title={t("backups.uploadHint")}
-          >
-            <span className="material-symbols-outlined">upload_file</span>
-            {uploading ? t("backups.uploading") : t("backups.uploadBackup")}
-          </button>
-          <button
-            type="button"
-            className="primary-btn backups-action-btn backups-create-btn"
-            onClick={() => void handleCreate()}
-            disabled={creating}
-          >
-            <span className="material-symbols-outlined">
-              {creating ? "progress_activity" : "backup"}
-            </span>
-            {creating ? t("backups.creatingBackup") : t("backups.manualBackup")}
-          </button>
-        </div>
-      </div>
-
-      {/* Sayac kartlari — ikon rozeti + deger. */}
-      <div className="backups-stats">
-        {statTiles.map((tile) => (
-          <div key={tile.key} className={`backups-stat-chip ${tile.tone}`}>
-            <span className="backups-stat-icon">
-              <span className="material-symbols-outlined">{tile.icon}</span>
-            </span>
-            <span className="backups-stat-body">
-              <span className="backups-stat-num">{tile.value}</span>
-              <span className="backups-stat-label">{t(`backups.stats.${tile.key}`)}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Liste */}
-      <div className="backups-list">
-        <div className="backups-list-head">
-          <h4>
-            <span className="material-symbols-outlined">history</span>
-            {t("backups.history")}
-            <span className="backups-list-count">{backups.length}</span>
-          </h4>
-          <button
-            type="button"
-            className={`backups-refresh-btn ${loading ? "is-spinning" : ""}`}
-            onClick={() => void reload()}
-            disabled={loading}
-            title={t("backups.refresh")}
-            aria-label={t("backups.refresh")}
-          >
-            <span className="material-symbols-outlined backups-refresh-icon">refresh</span>
-            <span className="backups-refresh-label">{t("backups.refresh")}</span>
-          </button>
-        </div>
+        </header>
         {loading && backups.length === 0 ? (
-          <div className="backups-empty">{t("common.loading")}</div>
+          <p className="net-empty">{t("common.loading")}</p>
         ) : backups.length === 0 ? (
-          <div className="backups-empty">
-            <span className="material-symbols-outlined backups-empty-icon">cloud_off</span>
-            <h3>{t("backups.hero.title.empty")}</h3>
-            <p>{t("backups.empty")}</p>
-          </div>
+          <p className="net-empty">{t("backups.empty")}</p>
         ) : (
-          <div className="backups-list-table-wrap">
+          <div className="bk-table-wrap">
           <table className="backups-table">
             <thead>
               <tr>
@@ -549,27 +508,17 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
                         {t(`backups.status.${b.status}`, { defaultValue: b.status })}
                       </span>
                     </td>
-                    <td>
-                      <span className="backups-size-badge">{fmtBytes(b.size_bytes)}</span>
-                    </td>
+                    <td className="backups-cell-mono">{fmtBytes(b.size_bytes)}</td>
                     <td>
                       {b.created_by_username ? (
-                        <span className="backups-user-cell">
-                          <span className="backups-user-avatar">
-                            {b.created_by_username.charAt(0).toUpperCase()}
-                          </span>
-                          {b.created_by_username}
-                        </span>
+                        b.created_by_username
                       ) : (
                         <span className="backups-muted">—</span>
                       )}
                     </td>
                     <td className="backups-cell-filename" title={b.filename ?? undefined}>
                       {b.filename ? (
-                        <span className="backups-file-cell">
-                          <span className="material-symbols-outlined">folder_zip</span>
-                          <code>{b.filename}</code>
-                        </span>
+                        <code>{b.filename}</code>
                       ) : (
                         <span className="backups-muted">—</span>
                       )}
@@ -638,7 +587,24 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
           </table>
           </div>
         )}
-      </div>
+
+        {/* Sistemi yeniden baslatma bu sayfanin ANA isi degil (yedek/geri
+            yukleme sonrasi bakim aksiyonu). Ust satirdaki turuncu vurgulu
+            buton yerine kart altinda sakin bir satir — Guvenlik Duvari
+            sayfasindaki kilitlenme korumasi notuyla ayni yerlesim. */}
+        <p className="bk-foot">
+          <span className="material-symbols-outlined">power_settings_new</span>
+          <span>{t("backups.restart.title")}</span>
+          <button
+            type="button"
+            className="bk-foot-btn"
+            onClick={() => setConfirmRestart(true)}
+            disabled={restarting}
+          >
+            {t("backups.restart.btn")}
+          </button>
+        </p>
+      </section>
 
       {/* Periyodik program modali — ayri popup */}
       {scheduleModalOpen && schedule ? (

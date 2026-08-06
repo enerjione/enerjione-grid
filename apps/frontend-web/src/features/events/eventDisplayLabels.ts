@@ -33,6 +33,7 @@ const CATEGORY_KEY: Record<string, string> = {
   fault_assignment: "events.category.faultAssignment",
   fault_comment: "events.category.faultComment",
   system: "events.category.system",
+  security: "events.category.security",
 };
 
 /** Bilinmeyen kategori string'ini insan okur formata çevirir:
@@ -90,6 +91,7 @@ const CATEGORY_MOD: Record<string, string> = {
   fault_assignment: "alarm",
   fault_comment: "alarm",
   system: "system",
+  security: "auth",
 };
 
 export function categoryPillClass(category: string): string {

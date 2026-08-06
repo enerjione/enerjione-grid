@@ -4,12 +4,22 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.project_settings import ProjectSettings
 from app.models.user import User
 from app.schemas.event import SystemEventRead
+from app.services.event_labels import (
+    category_label,
+    format_message,
+    message_subject,
+    severity_label,
+    status_label,
+)
+from app.services.report_layout import format_report_time
 from app.services.system_event_service import list_system_events
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -23,17 +33,65 @@ _EXPORT_FORMATS = ("csv", "json", "xlsx", "pdf")
 
 @router.get("", response_model=list[SystemEventRead])
 def list_events(
+    response: Response,
     category: str | None = Query(default=None),
     severity: str | None = Query(default=None),
     actor_username: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    event_type_like: str | None = Query(
+        default=None,
+        max_length=500,
+        description="Virgulle ayrilmis ILIKE desenleri (OR) — orn. %_deleted,%_removed",
+    ),
+    device_code: str | None = Query(default=None, max_length=80),
+    q: str | None = Query(default=None, max_length=200, description="Serbest metin arama"),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    limit: int = Query(default=1000, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return list_system_events(db, category=category, severity=severity, actor_username=actor_username)
+    """Filtreli olay listesi (yeniden eskiye).
+
+    Sayfalama: `limit` + `offset`; filtreye uyan TOPLAM kayit sayisi
+    `X-Total-Count` header'inda doner (govde geriye uyumlu duz liste).
+    Eski cagiranlar parametresiz kullanmaya devam edebilir (ilk 1000).
+    """
+    events, total = list_system_events(
+        db,
+        category=category,
+        severity=severity,
+        actor_username=actor_username,
+        event_type=event_type,
+        event_type_like=_split_patterns(event_type_like),
+        device_code=device_code,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return events
 
 
-def _format_rows_for_export(events) -> list[dict]:
-    """Tum format'lar icin ortak satir yapisi. ISO timestamp + flat fields."""
+def _split_patterns(raw: str | None) -> list[str] | None:
+    if not raw:
+        return None
+    patterns = [item.strip() for item in raw.split(",") if item.strip()]
+    return patterns or None
+
+
+def _format_rows_for_export(events, device_names: dict[str, str] | None = None) -> list[dict]:
+    """Tum format'lar icin ortak satir yapisi — EKRANDAKI ile ayni icerik.
+
+    Sutunlar ve degerler Olaylar tablosunun birebir karsiligi: cevrilmis
+    mesaj/kategori/oncelik, olay tipinden turetilen DURUM ve cihaz KODU
+    yerine cihaz ADI. Ham alanlar (event_type, metadata) ek kolon olarak
+    kalir — makine tarafinda islenen CSV/JSON export'lari icin gerekli.
+    """
+    names = device_names or {}
     rows = []
     for ev in events:
         meta_summary = ""
@@ -41,23 +99,37 @@ def _format_rows_for_export(events) -> list[dict]:
             try:
                 parsed = json.loads(ev.metadata_json)
                 if isinstance(parsed, dict):
-                    meta_summary = ", ".join(f"{k}={v}" for k, v in parsed.items())
+                    # `_i18n` teknik bir tas; ozet metinde kullaniciya gosterme.
+                    meta_summary = ", ".join(
+                        f"{k}={v}" for k, v in parsed.items() if k != "_i18n"
+                    )
                 else:
                     meta_summary = str(parsed)
             except (json.JSONDecodeError, TypeError):
                 meta_summary = (ev.metadata_json or "")[:200]
+        device_code = ev.device_code or ""
         rows.append({
             "id": ev.id,
-            "created_at": ev.created_at.isoformat() if ev.created_at else "",
-            "severity": ev.severity or "",
-            "category": ev.category or "",
-            "event_type": ev.event_type or "",
-            "message": ev.message or "",
+            "created_at": format_report_time(ev.created_at, with_seconds=True),
+            "severity": severity_label(ev.severity or ""),
+            "category": category_label(ev.category or ""),
+            "status": status_label(ev.event_type or ""),
+            "message": message_subject(ev.message or "", ev.metadata_json),
+            "message_full": format_message(ev.message or "", ev.metadata_json),
             "actor": ev.actor_username or "",
-            "device": ev.device_code or "",
+            "device": names.get(device_code, device_code),
+            "event_type": ev.event_type or "",
             "metadata": meta_summary,
         })
     return rows
+
+
+def _device_name_map(db: Session) -> dict[str, str]:
+    """Cihaz kodu -> ad. Arayuz tabloda ADI gosteriyor, export de oyle olmali."""
+    from app.models.device import Device
+
+    rows = db.execute(select(Device.code, Device.name)).all()
+    return {code: name for code, name in rows if code}
 
 
 def _build_csv(rows: list[dict]) -> bytes:
@@ -74,6 +146,22 @@ def _build_csv(rows: list[dict]) -> bytes:
     return csv_bytes
 
 
+# Export kolon basliklari — ekrandaki sutun adlariyla ayni.
+_COLUMN_TITLES = {
+    "id": "Kayıt No",
+    "created_at": "Tarih",
+    "severity": "Öncelik",
+    "category": "Kategori",
+    "status": "Durum",
+    "message": "Mesaj",
+    "message_full": "Mesaj (tam)",
+    "actor": "Kullanıcı",
+    "device": "Cihaz",
+    "event_type": "Olay Tipi",
+    "metadata": "Ek Bilgi",
+}
+
+
 def _build_xlsx(rows: list[dict]) -> bytes:
     """openpyxl ile .xlsx — hucre tipleri korunur, baslik kalin, donduruldu."""
     from openpyxl import Workbook
@@ -81,16 +169,16 @@ def _build_xlsx(rows: list[dict]) -> bytes:
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Events"
+    ws.title = "Olaylar"
 
     if not rows:
-        ws.append(["No events to export"])
+        ws.append(["Filtreye uygun olay bulunamadı."])
         out = io.BytesIO()
         wb.save(out)
         return out.getvalue()
 
     headers = list(rows[0].keys())
-    ws.append(headers)
+    ws.append([_COLUMN_TITLES.get(h, h) for h in headers])
     # Header satiri: kalin + soluk turuncu arka plan (marka uyumu)
     header_font = Font(bold=True, color="FFFFFFFF")
     header_fill = PatternFill(start_color="FFFF8C00", end_color="FFFF8C00", fill_type="solid")
@@ -103,7 +191,7 @@ def _build_xlsx(rows: list[dict]) -> bytes:
         ws.append([row.get(h, "") for h in headers])
 
     # Sutun genisliklerini icerige gore otomatik ayarla
-    col_widths = {h: max(len(h), 12) for h in headers}
+    col_widths = {h: max(len(_COLUMN_TITLES.get(h, h)), 12) for h in headers}
     for row in rows:
         for h in headers:
             v = str(row.get(h, ""))
@@ -121,21 +209,23 @@ def _build_xlsx(rows: list[dict]) -> bytes:
     return out.getvalue()
 
 
-def _build_pdf(rows: list[dict]) -> bytes:
-    """reportlab ile A4 landscape PDF. Baslik + uretim zamani + tablo +
-    sayfa numarasi. Buyuk export'larda tek tabloyu sayfalara boler."""
+def _build_pdf(rows: list[dict], *, settings_row: ProjectSettings | None) -> bytes:
+    """A4 yatay olay raporu.
+
+    Duzen: her sayfada solda EnerjiOne, sagda musteri logosu; altbilgide
+    olusturma zamani + "Sayfa X / Y" (bkz. report_layout.ReportCanvas).
+
+    Hucreler Paragraph — metin sutun genisliginde SARAR. Eski surum duz
+    string kullaniyordu; uzun mesaj sutunu tasip komsu hucrenin uzerine
+    biniyordu ("Toplu arsiv ayari..." metni Type sutununa giriyordu).
+    """
     try:
         from reportlab.lib import colors
+        from reportlab.lib.enums import TA_LEFT
         from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import mm
-        from reportlab.platypus import (
-            SimpleDocTemplate,
-            Table,
-            TableStyle,
-            Paragraph,
-            Spacer,
-        )
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
     except ImportError:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -143,67 +233,107 @@ def _build_pdf(rows: list[dict]) -> bytes:
             "Sistem yoneticisine 'pip install reportlab' calistirmasini soyleyin.",
         )
 
+    from app.services.report_layout import (
+        BRAND_ORANGE,
+        FOOTER_HEIGHT,
+        HEADER_HEIGHT,
+        INK,
+        ReportCanvas,
+        decode_data_url_image,
+        report_fonts,
+    )
+
+    regular_font, bold_font = report_fonts()
+    customer_name = (settings_row.customer_name if settings_row else None) or ""
+    project_name = (settings_row.project_name if settings_row else None) or ""
+    customer_logo = decode_data_url_image(
+        settings_row.customer_logo if settings_row else None
+    )
+
+    generated = format_report_time(datetime.now(timezone.utc), with_seconds=True)
+    subtitle_parts = [part for part in (project_name, customer_name) if part]
+    ReportCanvas.configure(
+        title="Olay Raporu",
+        subtitle=" · ".join(subtitle_parts),
+        footer_left=f"Oluşturma: {generated}  ·  Toplam {len(rows)} olay",
+        customer_logo=customer_logo,
+        customer_name=customer_name,
+    )
+
+    margin = 12 * mm
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
         pagesize=landscape(A4),
-        leftMargin=12 * mm,
-        rightMargin=12 * mm,
-        topMargin=12 * mm,
-        bottomMargin=12 * mm,
-        title="EnerjiOne Event Report",
+        leftMargin=margin,
+        rightMargin=margin,
+        # Ustbilgi/altbilgi seritleri canvas'ta ciziliyor; govde onlarla
+        # CAKISMASIN diye kenar bosluklari serit yuksekligi kadar buyuk.
+        topMargin=margin + HEADER_HEIGHT,
+        bottomMargin=margin + FOOTER_HEIGHT,
+        title="EnerjiOne — Olay Raporu",
+        author="EnerjiOne Grid",
     )
-    styles = getSampleStyleSheet()
-    story = []
 
-    # Baslik
-    story.append(Paragraph("<b>EnerjiOne — Event Report</b>", styles["Title"]))
-    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    story.append(Paragraph(f"Generated: {generated} · Total events: {len(rows)}", styles["Normal"]))
-    story.append(Spacer(1, 8))
+    cell_style = ParagraphStyle(
+        "cell",
+        fontName=regular_font,
+        fontSize=7.5,
+        leading=9.5,
+        alignment=TA_LEFT,
+        textColor=INK,
+        wordWrap="CJK",  # uzun kesintisiz dizeleri (kod/yol) de kirar
+    )
+    head_style = ParagraphStyle(
+        "cellHead",
+        parent=cell_style,
+        fontName=bold_font,
+        fontSize=8,
+        textColor=colors.white,
+    )
 
-    # Tablo
-    # PDF sutun seti CSV/Excel'den daha dar (sayfa genisligi sinirli) —
-    # metadata kolonunu cikartiyoruz, message'i kisaltarak veriyoruz.
-    visible_keys = ["created_at", "severity", "category", "event_type", "message", "actor", "device"]
-    headers = ["Time", "Severity", "Category", "Type", "Message", "User", "Device"]
-    data = [headers]
-    for r in rows:
-        msg = str(r.get("message", ""))
-        if len(msg) > 80:
-            msg = msg[:77] + "..."
+    # Sutun seti EKRANDAKI ile ayni sirada: Tarih, Oncelik, Kategori, Mesaj,
+    # Durum, Kullanici, Cihaz.
+    headers = ["Tarih", "Öncelik", "Kategori", "Mesaj", "Durum", "Kullanıcı", "Cihaz"]
+    col_widths = [30 * mm, 20 * mm, 32 * mm, 98 * mm, 26 * mm, 26 * mm, 41 * mm]
+
+    data: list[list] = [[Paragraph(h, head_style) for h in headers]]
+    for row in rows:
         data.append([
-            str(r.get("created_at", ""))[:19],  # YYYY-MM-DD HH:MM:SS
-            str(r.get("severity", "")),
-            str(r.get("category", "")),
-            str(r.get("event_type", "")),
-            msg,
-            str(r.get("actor", "")),
-            str(r.get("device", "")),
+            Paragraph(str(row.get("created_at", "")), cell_style),
+            Paragraph(str(row.get("severity", "")), cell_style),
+            Paragraph(str(row.get("category", "")), cell_style),
+            Paragraph(str(row.get("message", "")), cell_style),
+            Paragraph(str(row.get("status", "")), cell_style),
+            Paragraph(str(row.get("actor", "")), cell_style),
+            Paragraph(str(row.get("device", "")), cell_style),
         ])
 
+    story = []
     if len(data) > 1:
-        tbl = Table(data, repeatRows=1, colWidths=[
-            38 * mm, 18 * mm, 28 * mm, 32 * mm, 90 * mm, 22 * mm, 22 * mm,
-        ])
-        tbl.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ff8c00")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, 0), 9),
-            ("FONTSIZE", (0, 1), (-1, -1), 8),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#fafafa"), colors.white]),
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dddddd")),
+        table = Table(data, repeatRows=1, colWidths=col_widths)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), BRAND_ORANGE),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ]))
-        story.append(tbl)
+        story.append(table)
     else:
-        story.append(Paragraph("<i>No events match the current filters.</i>", styles["Normal"]))
+        story.append(
+            Paragraph("Filtreye uygun olay bulunamadı.", cell_style)
+        )
 
-    doc.build(story)
+    doc.build(story, canvasmaker=ReportCanvas)
     return buf.getvalue()
+
+
+# Export tavani: tek dosyada makul ust sinir (xlsx/pdf uretimi bellekte).
+_EXPORT_MAX_ROWS = 20000
 
 
 @router.get("/export")
@@ -212,6 +342,12 @@ def export_events(
     category: str | None = Query(default=None),
     severity: str | None = Query(default=None),
     actor_username: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    event_type_like: str | None = Query(default=None, max_length=500),
+    device_code: str | None = Query(default=None, max_length=80),
+    q: str | None = Query(default=None, max_length=200),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -219,7 +355,8 @@ def export_events(
 
     Frontend Events sayfasinda Export modal'i bu endpoint'i cagiriyor.
     Filtre query param'lari list_events ile birebir ayni — UI'da uygulanan
-    kategori/severity/actor filtreleri ayni davranisi gosterir.
+    filtreler ayni davranisi gosterir. Sayfalama YOK: filtreye uyan tum
+    kayitlar iner (ust sinir _EXPORT_MAX_ROWS).
     """
     if fmt not in _EXPORT_FORMATS:
         raise HTTPException(
@@ -227,12 +364,22 @@ def export_events(
             detail=f"Unsupported format: {fmt!r}. Allowed: {', '.join(_EXPORT_FORMATS)}",
         )
 
-    events = list_system_events(
-        db, category=category, severity=severity, actor_username=actor_username
+    events, _total = list_system_events(
+        db,
+        category=category,
+        severity=severity,
+        actor_username=actor_username,
+        event_type=event_type,
+        event_type_like=_split_patterns(event_type_like),
+        device_code=device_code,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        limit=_EXPORT_MAX_ROWS,
     )
-    rows = _format_rows_for_export(events)
+    rows = _format_rows_for_export(events, _device_name_map(db))
     now = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    filename_base = f"events-{now}"
+    filename_base = f"olaylar-{now}"
 
     if fmt == "csv":
         content = _build_csv(rows)
@@ -255,8 +402,9 @@ def export_events(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename_base}.xlsx"'},
         )
-    # pdf
-    content = _build_pdf(rows)
+    # pdf — musteri logosu/adi rapor basligi icin proje ayarlarindan gelir.
+    settings_row = db.get(ProjectSettings, 1)
+    content = _build_pdf(rows, settings_row=settings_row)
     return Response(
         content=content,
         media_type="application/pdf",
