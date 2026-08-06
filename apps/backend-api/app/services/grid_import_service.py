@@ -403,6 +403,12 @@ def build_template_workbook(db: Session) -> io.BytesIO:
     # --- Yardim sheet ---
     _add_help_sheet(wb, header_font, header_fill)
 
+    # HIZLI SAYFA ONE + ACIK GELIR: kullanicilar sablonu acinca 13 kolonlu
+    # Topoloji sayfasiyla karsilasip hizli yolu hic goremiyordu. Sira:
+    # Hizli_Yapistir, Topoloji, Yardim (gizli sayfalar sonda kalir).
+    wb.move_sheet(QUICK_SHEET, offset=-(wb.sheetnames.index(QUICK_SHEET)))
+    wb.active = wb.sheetnames.index(QUICK_SHEET)
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -459,11 +465,22 @@ def _add_quick_sheet(wb, header_font, header_fill) -> None:
         c.font = Font(bold=True, size=11) if i == 0 else note_font
     ws.column_dimensions["G"].width = 70
 
-    # Ornek iki satir (acik gri) — parser icin zararsiz ORNEK etiketli Bolge
-    # kullanilmaz: ornek koordinatlar bos birakilir, sadece bicim gosterilir.
+    # ORNEK BLOK (acik gri, italik): bicimi gostermek icin gercege benzer
+    # 4 satirlik mini hat. Koordinatlar "ornek:" ile basladigi icin parser
+    # tarafindan YOK SAYILIR — kullanici uzerine yazabilir ya da birakabilir.
     ornek_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-    ws.cell(row=2, column=3, value="ornek: 39.92042, 32.85411").fill = ornek_fill
-    ws.cell(row=2, column=3).font = Font(italic=True, color="94A3B8")
+    ornek_font = Font(italic=True, color="94A3B8")
+    ornek = [
+        ["ANKARA", "TR-3", "ornek: 39.92042, 32.85411", "d1", ""],
+        ["", "", "ornek: 39.92180, 32.85602", "d2", ""],
+        ["", "", "ornek: 39.92311, 32.85795", "d3", "transformer"],
+        ["", "", "ornek: 39.92455, 32.85990", "d4", ""],
+    ]
+    for r_i, satir in enumerate(ornek):
+        for c_i, deger in enumerate(satir):
+            c = ws.cell(row=2 + r_i, column=1 + c_i, value=deger or None)
+            c.fill = ornek_fill
+            c.font = ornek_font
 
 
 def _add_conditional_formats(ws, last_data_row: int) -> None:
@@ -889,6 +906,13 @@ def _parse_quick_sheet(
         cells = list(raw) + [None] * (len(QUICK_COLUMNS) - len(raw))
         rec = dict(zip(QUICK_COLUMNS, cells[: len(QUICK_COLUMNS)]))
 
+        koor = _clean(rec["Koordinat"])
+        # ORNEK satirlari TAMAMEN yok sayilir — forward-fill'e de girmez:
+        # ornekteki "ANKARA/TR-3" degerleri kullanicinin kendi satirlarina
+        # sizarsa istemeden ornek bolge/hat olusurdu.
+        if koor.lower().startswith("ornek"):
+            continue
+
         b = _clean(rec["Bolge"])
         if b:
             ff_bolge = b
@@ -896,8 +920,7 @@ def _parse_quick_sheet(
         if h:
             ff_hat = h
 
-        koor = _clean(rec["Koordinat"])
-        if not koor or koor.lower().startswith("ornek"):
+        if not koor:
             continue
         if not ff_bolge:
             plan.errors.append(RowError(idx, f"{QUICK_SHEET}: Bolge boş (üstte de yok)."))

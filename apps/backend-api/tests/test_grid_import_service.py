@@ -412,3 +412,27 @@ def test_template_hizli_yapistir_sayfasi_var(db):
     ws = wb[g.QUICK_SHEET]
     basliklar = [c.value for c in ws[1][: len(g.QUICK_COLUMNS)]]
     assert basliklar == g.QUICK_COLUMNS
+
+
+def test_template_hizli_sayfa_ILK_ve_aktif(db):
+    """Sablon hizli sayfayla ACILIR — kullanici karmasik Topoloji sayfasina
+    dusup hizli yolu kacirmasin."""
+    buf = g.build_template_workbook(db)
+    wb = load_workbook(io.BytesIO(buf.getvalue()))
+    assert wb.sheetnames[0] == g.QUICK_SHEET
+    assert wb.active.title == g.QUICK_SHEET
+
+
+def test_quick_sheet_ornek_blok_forward_fill_KIRLETMEZ(db):
+    """Ornek bloktaki ANKARA/TR-3, kullanicinin kendi satirlarina sizmaz."""
+    data = _quick_sheet([
+        ["ANKARA", "TR-3", "ornek: 39.92, 32.85", "d1", ""],
+        ["", "", "ornek: 39.93, 32.86", "d2", ""],
+        ["B-GERCEK", "H-GERCEK", "40.0, 33.0", "", ""],
+        ["", "", "40.1, 33.1", "", ""],
+    ])
+    plan = g.parse_and_plan(data, db)
+    assert [e.message for e in plan.errors] == []
+    assert "ANKARA" not in plan.regions
+    assert plan.regions == {"B-GERCEK": "B-GERCEK"}
+    assert len(plan.poles) == 2

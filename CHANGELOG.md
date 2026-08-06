@@ -14,6 +14,18 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.18] — 2026-08-06
+
+### Değişti
+
+- Excel şablonu artık **Hizli_Yapistir sayfasıyla açılıyor** (13 kolonlu
+  Topoloji sayfası ayrıntılı düzenleme için ikinci sırada) ve içinde
+  gri/italik 4 satırlık örnek blok var — örnek satırlar içe aktarımda
+  tamamen yok sayılır, kullanıcının verisine karışmaz. Sihirbazdaki adım
+  metinleri hızlı sayfayı anlatıyor.
+
+---
+
 ## [2.53.17] — 2026-08-06
 
 ### Eklendi
