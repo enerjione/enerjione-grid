@@ -14,6 +14,18 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.9] — 2026-08-06
+
+### Eklendi
+
+- **Ayar açıklamaları** Horstmann SN2.0 kullanma kılavuzundan (104101-2038V4)
+  işlendi: cihaz ayarları ve şablon düzenleyicide 73 ayarın üzerine gelince
+  ne işe yaradığı Türkçe açıklanır (arıza algılama, sıfırlama, gerilim/akım
+  kaybı, inrush bastırma, DNP3/raporlama, ağ/FTP grupları). Açıklamalar
+  aramaya da dahildir.
+
+---
+
 ## [2.53.8] — 2026-08-06
 
 ### Değişti

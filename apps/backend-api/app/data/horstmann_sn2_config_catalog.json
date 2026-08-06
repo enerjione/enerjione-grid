@@ -5,7 +5,8 @@
   },
   "200301": {
     "meaning": "SIM Pin",
-    "unit": null
+    "unit": null,
+    "desc": "SIM PIN: SIM kartın PIN kodu (operatör sağlar)."
   },
   "201000": {
     "meaning": "Main URL",
@@ -13,15 +14,18 @@
   },
   "201001": {
     "meaning": "APN",
-    "unit": null
+    "unit": null,
+    "desc": "APN: Mobil şebeke erişim noktası adı (operatör sağlar)."
   },
   "201002": {
     "meaning": "APN Username",
-    "unit": null
+    "unit": null,
+    "desc": "APN Username: Mobil şebeke kullanıcı adı (operatör sağlar)."
   },
   "201003": {
     "meaning": "APN Password",
-    "unit": null
+    "unit": null,
+    "desc": "APN Password: Mobil şebeke parolası (operatör sağlar)."
   },
   "201004": {
     "meaning": "Port Number",
@@ -29,15 +33,18 @@
   },
   "201005": {
     "meaning": "TLS",
-    "unit": null
+    "unit": null,
+    "desc": "TLS: İlgili kanal için TLS şifrelemesini açar. Açıksa sertifikaların cihaza yüklenmesi gerekir."
   },
   "201006": {
     "meaning": "TLS",
-    "unit": null
+    "unit": null,
+    "desc": "TLS: İlgili kanal için TLS şifrelemesini açar. Açıksa sertifikaların cihaza yüklenmesi gerekir."
   },
   "201007": {
     "meaning": "TLS",
-    "unit": null
+    "unit": null,
+    "desc": "TLS: İlgili kanal için TLS şifrelemesini açar. Açıksa sertifikaların cihaza yüklenmesi gerekir."
   },
   "201009": {
     "meaning": "APN Username Part 2",
@@ -49,15 +56,18 @@
   },
   "20100E": {
     "meaning": "Authentication",
-    "unit": null
+    "unit": null,
+    "desc": "Authentication: APN kimlik doğrulama yöntemi (No/PAP/CHAP). CHAP günceldir ve önerilir."
   },
   "201013": {
     "meaning": "HTTP Username",
-    "unit": null
+    "unit": null,
+    "desc": "HTTP Username: HTTP (iHost) kimlik doğrulama kullanıcı adı."
   },
   "201014": {
     "meaning": "HTTP Password",
-    "unit": null
+    "unit": null,
+    "desc": "HTTP Password: HTTP (iHost) kimlik doğrulama parolası."
   },
   "201016": {
     "meaning": "Port",
@@ -89,7 +99,8 @@
   },
   "201066": {
     "meaning": "Session Timeout (Initiating Endpoint)",
-    "unit": "s"
+    "unit": "s",
+    "desc": "Session Timeout (Initiating Endpoint): Başlatan uç modunda oturum zaman aşımı (kılavuzda bu modda 15 sn sabittir)."
   },
   "20107B": {
     "meaning": "CSV->DNP3 (A)",
@@ -97,19 +108,23 @@
   },
   "2010C0": {
     "meaning": "Enable Dial -In Settings",
-    "unit": "h"
+    "unit": "h",
+    "desc": "Enable Dial-In Settings: Sabit günlük raporlama zamanının (Dial-In Hour/Minute) kullanılmasını etkinleştirir."
   },
   "2010C2": {
     "meaning": "Dial -In Hour (UTC)",
-    "unit": "h"
+    "unit": "h",
+    "desc": "Dial-In Hour (UTC): Cihazın her gün izleme verilerini SCADA'ya raporladığı sabit saat (UTC). Enable Dial-In Settings açık olmalıdır."
   },
   "2010C4": {
     "meaning": "Dial -In Minute",
-    "unit": "min"
+    "unit": "min",
+    "desc": "Dial-In Minute: Sabit günlük raporlama zamanının dakika bileşeni. Enable Dial-In Settings açık olmalıdır."
   },
   "2010C6": {
     "meaning": "Dial -In Interval",
-    "unit": "min"
+    "unit": "min",
+    "desc": "Dial-In Interval: Cihazın izleme (monitoring) verilerini SCADA'ya raporlama aralığı. Değer 1440 dakikanın (24 saat) böleni olmalıdır (60-1440 dk)."
   },
   "2010C7": {
     "meaning": "Enable Preselection Network Operator",
@@ -125,15 +140,18 @@
   },
   "2010D0": {
     "meaning": "Dual Enpoint (A)",
-    "unit": null
+    "unit": null,
+    "desc": "Dual Endpoint: DNP3 TCP uç tipi (IEEE1815-2012 böl. 13) — cihaz hem bağlantı başlatan hem dinleyen uç olarak çalışır."
   },
   "2010D2": {
     "meaning": "Socket Listening Port",
-    "unit": null
+    "unit": null,
+    "desc": "Socket Listening Port: Cihazın (outstation) dinlediği IP portu."
   },
   "2010D4": {
     "meaning": "Socket Listening Timeout",
-    "unit": "s"
+    "unit": "s",
+    "desc": "Socket Listening Timeout: Dinleyen uç modunda DNP3 master'ın bağlantı kurması bu süre kadar beklenir; dolunca modem kapatılır (yalnızca Smart Mode'da geçerli)."
   },
   "2010D6": {
     "meaning": "Firewall (A)",
@@ -153,27 +171,33 @@
   },
   "2010E0": {
     "meaning": "Session Timeout (Listening Endpoint)",
-    "unit": "s"
+    "unit": "s",
+    "desc": "Session Timeout (Listening Endpoint): Cihaz gönderdiği her TCP mesajından sonra bu sayacı başlatır; süre içinde yeni mesaj olmazsa oturum kapatılır ve Smart Mode'da modem kapatılır (60-180 sn)."
   },
   "2010F0": {
     "meaning": "FTP Server Name",
-    "unit": null
+    "unit": null,
+    "desc": "FTP Server Address: Dosya indirme/yükleme için kullanılan FTP sunucusunun adresi."
   },
   "2010F1": {
     "meaning": "FTP Port",
-    "unit": null
+    "unit": null,
+    "desc": "FTP Server Port: FTP sunucusunun IP portu (varsayılan 21)."
   },
   "2010F2": {
     "meaning": "FTP Username",
-    "unit": null
+    "unit": null,
+    "desc": "FTP Username: FTP kimlik doğrulama kullanıcı adı."
   },
   "2010F3": {
     "meaning": "FTP Password",
-    "unit": null
+    "unit": null,
+    "desc": "FTP Password: FTP kimlik doğrulama parolası."
   },
   "2010F4": {
     "meaning": "FTP Directory",
-    "unit": null
+    "unit": null,
+    "desc": "FTP Directory: Dosyaların tutulduğu FTP dizini (varsayılan /SN20/FOTA/)."
   },
   "2010F5": {
     "meaning": "FTP Filename",
@@ -181,7 +205,8 @@
   },
   "2010F6": {
     "meaning": "FTP for File Up- / Downloads (A)",
-    "unit": null
+    "unit": null,
+    "desc": "FTP for File Up-/Downloads: Cihaz yönetimi (yazılım güncellemesi, yapılandırma dosyaları) FTP sunucusu üzerinden yapılır. Bu sistemde EnerjiOne Grid'in FTP yayını kullanılır."
   },
   "2010F9": {
     "meaning": "Selects Access Technology",
@@ -193,15 +218,18 @@
   },
   "210703": {
     "meaning": "Reporting Period",
-    "unit": "min"
+    "unit": "min",
+    "desc": "Reporting Interval: Zaman planlı verilerin damgalanma aralığı ve uydu (satellite) birimlerinin ölçümlerini Master'a raporlama aralığı (5-60 dk, varsayılan 15)."
   },
   "21070A": {
     "meaning": "Data Update Interval",
-    "unit": null
+    "unit": null,
+    "desc": "Data Update Interval etkinleştirme: Master'ın Class 0 sorguları için dahili DNP belleğindeki analog verileri güncelleme özelliğini açar. Yalnızca Boost Mode'da anlamlıdır; varsayılan kapalı."
   },
   "21070B": {
     "meaning": "Data Update Interval",
-    "unit": "sec"
+    "unit": "sec",
+    "desc": "Data Update Interval: Analog ölçümlerin Master'ın dahili DNP belleğine (ve uydulardan Master'a) aktarılma sıklığı. Reporting Interval'dan KÜÇÜK olmalı; yalnızca Boost Mode + Class 0 sorgularında yararlıdır."
   },
   "21070C": {
     "meaning": "Enable Consumer Notification",
@@ -221,51 +249,63 @@
   },
   "212801": {
     "meaning": "Trip Current Minimum",
-    "unit": "A"
+    "unit": "A",
+    "desc": "Trip Current Minimum: Yük izleme (load tracking) için açma akımı eşiğinin alt sınırı."
   },
   "212802": {
     "meaning": "Trip Current Maximum",
-    "unit": "A"
+    "unit": "A",
+    "desc": "Trip Current Maximum: Yük izleme için açma akımı eşiğinin üst sınırı."
   },
   "212803": {
     "meaning": "Instantaneous Factor",
-    "unit": null
+    "unit": null,
+    "desc": "Instantaneous Factor: Anında açma eşiğinin Minimum Trip Current'a oranı (Fast Curve modunda kullanılır)."
   },
   "213101": {
     "meaning": "Auto Reset Fault Values",
-    "unit": null
+    "unit": null,
+    "desc": "Auto Reset Fault Values: Açıkken arıza sonrası sıfırlamada Fault Current, Fault Duration ve Last Good Known Current değerleri sıfırlanır. Kapalıyken değerler bir sonraki arızaya dek saklanır."
   },
   "215801": {
     "meaning": "Max. Suppression Time",
-    "unit": "min"
+    "unit": "min",
+    "desc": "Max. Suppression Time: Hiçbir deadband koşulu oluşmasa bile her DNP3 noktası en geç bu süre sonunda kayıt edilip raporlanır."
   },
   "220001": {
     "meaning": "Master Address",
-    "unit": null
+    "unit": null,
+    "desc": "Master Address: DNP3 master (SCADA) adresi (1-32767)."
   },
   "220101": {
     "meaning": "Outstation Address",
-    "unit": null
+    "unit": null,
+    "desc": "Outstation Address: Cihazın DNP3 outstation adresi. iHost sistemi kullanılıyorsa cihazın seri numarasıyla AYNI olmalıdır."
   },
   "220201": {
     "meaning": "Unsolicited Reporting",
-    "unit": null
+    "unit": null,
+    "desc": "Unsolicited Reporting: Cihazın master sorgusu beklemeden kendiliğinden olay raporlaması göndermesini açar."
   },
   "220301": {
     "meaning": "Unsolicited Class Mask ID",
-    "unit": null
+    "unit": null,
+    "desc": "Unsolicited Class Mask ID: Kendiliğinden raporlama yapılacak DNP3 sınıflarını seçer (0=hiçbiri ... 7=Class 1+2+3). Master oturum kurarken bu ayarı genellikle ezer."
   },
   "220401": {
     "meaning": "Unsolicited On Startup",
-    "unit": null
+    "unit": null,
+    "desc": "Unsolicited On Startup: Açılışta kendiliğinden raporlamanın etkin başlamasını sağlar."
   },
   "220501": {
     "meaning": "DNP3 Link Status Period",
-    "unit": "min"
+    "unit": "min",
+    "desc": "DNP3 Link Status Period: İki DNP3 keep-alive mesajı arasındaki süre. Reporting Interval'ın ~1,5 katı önerilir — gereksiz iletişim güç tüketimini artırır."
   },
   "220502": {
     "meaning": "DNP3 Link Confirmation Timeout",
-    "unit": "sec"
+    "unit": "sec",
+    "desc": "DNP3 Link Confirmation Timeout: DNP3 bağlantı katmanı onayının beklendiği süre."
   },
   "220801": {
     "meaning": "UnsolRetryDelay",
@@ -281,11 +321,13 @@
   },
   "220809": {
     "meaning": "Enable Self Address",
-    "unit": null
+    "unit": null,
+    "desc": "Enable Self Address: 0xFFFC öz-adres desteği (IEEE1815). Cihaz adresi bilinmeden devreye alma/tanılamayı kolaylaştırır; aynı anda YALNIZCA TEK cihazda açık olmalıdır."
   },
   "22080A": {
     "meaning": "Validate Source Address",
-    "unit": null
+    "unit": null,
+    "desc": "Validate Source Address: Açıkken yalnızca yapılandırılmış master adresinden gelen bağlantı istekleri kabul edilir; kapalıyken her DNP3 master bağlanabilir."
   },
   "222001": {
     "meaning": "Reverse LoadFlow",
@@ -321,7 +363,8 @@
   },
   "301001": {
     "meaning": "Reporting Period",
-    "unit": "min"
+    "unit": "min",
+    "desc": "Reporting Interval: Zaman planlı verilerin damgalanma aralığı ve uydu birimlerinin ölçümlerini Master'a raporlama aralığı (5-60 dk, varsayılan 15)."
   },
   "301201": {
     "meaning": "VF_GEMEINSAM",
@@ -345,19 +388,23 @@
   },
   "305002": {
     "meaning": "Minimum Trip Current @ 200 msec.",
-    "unit": "A"
+    "unit": "A",
+    "desc": "Minimum Trip Current: Zaman-akım açma eğrisinin (sigorta eğrisi) EN SOL konumunu belirler — yük izlemenin (load tracking) alt sınırı. Min ve Max eşit yapılırsa yük izleme devre dışı kalır."
   },
   "305003": {
     "meaning": "Maximum Trip Current @ 200 msec.",
-    "unit": "A"
+    "unit": "A",
+    "desc": "Maximum Trip Current: Zaman-akım açma eğrisinin EN SAĞ konumunu belirler — yük izlemenin üst sınırı. Min ve Max eşit yapılırsa yük izleme devre dışı kalır."
   },
   "305004": {
     "meaning": "I-Type Auslösekennlinie",
-    "unit": null
+    "unit": null,
+    "desc": "Açma karakteristiği tipi: IDMT (sigorta eğrisi) ya da DT (sabit minimum süre)."
   },
   "305005": {
     "meaning": "Response Delay",
-    "unit": "ms"
+    "unit": "ms",
+    "desc": "Response Delay (tI>>): Aşırı akımın açma sayılması için eşiğin üzerinde kalması gereken minimum süre (DT karakteristiği gecikmesi)."
   },
   "305006": {
     "meaning": "OC-Trip Level (IB)",
@@ -385,11 +432,13 @@
   },
   "305701": {
     "meaning": "Instantaneous Factor",
-    "unit": null
+    "unit": null,
+    "desc": "Instantaneous Factor: Anında açma eşiğinin Minimum Trip Current'a oranı (Fast Curve modunda kullanılır)."
   },
   "305801": {
     "meaning": "Fast Curve",
-    "unit": null
+    "unit": null,
+    "desc": "Fast Curve: İkinci bir akım eşiği tanımlar (Instantaneous Factor ile); bu eşik aşılınca gecikme 0'a iner ve cihaz mümkün olan en hızlı şekilde açar. Fast Curve modunda yük izleme DEVRE DIŞIDIR."
   },
   "310002": {
     "meaning": "Level Factor",
@@ -397,43 +446,53 @@
   },
   "320001": {
     "meaning": "Nominal Voltage",
-    "unit": "kV"
+    "unit": "kV",
+    "desc": "Nominal Voltage: Havai hattın anma gerilimi (faz-faz). Gerilim kaybı eşikleri (alt/üst) bu değerin yüzdesi olarak hesaplanır."
   },
   "320101": {
     "meaning": "Lower Threshold",
-    "unit": "%"
+    "unit": "%",
+    "desc": "Lower Threshold (Vlt<): Hat gerilimi bu eşiğin (anma geriliminin yüzdesi) altına tVt> süresinden uzun düşerse Voltage Loss alarmı üretilir."
   },
   "320201": {
     "meaning": "Upper Threshold",
-    "unit": "%"
+    "unit": "%",
+    "desc": "Upper Threshold (Vut>): Hat gerilimi bu eşiğin üzerine tVt> süresince çıkınca Voltage Loss alarmı temizlenir."
   },
   "320301": {
     "meaning": "Time",
-    "unit": "ms"
+    "unit": "ms",
+    "desc": "Time (tVt>): Gerilim eşik ihlalinin alarm üretmesi/temizlemesi için gereken süre."
   },
   "320501": {
     "meaning": "Voltage Loss",
-    "unit": null
+    "unit": null,
+    "desc": "Voltage Loss: Gerilim kaybı algılamayı açar/kapatır (yalnızca DFCI sürümlerde)."
   },
   "320801": {
     "meaning": "Inrush Suppression - 2. Harmonic",
-    "unit": null
+    "unit": null,
+    "desc": "Inrush Suppression - 2. Harmonik: Trafolu fider enerjilenirken oluşan inrush akımını 2. harmonik / temel dalga oranından tanır ve aşırı akım ile ΔI/ΔT algılamayı geçici olarak BLOKLAR — yanlış alarm önlenir."
   },
   "320A01": {
     "meaning": "Restraint Delay",
-    "unit": "ms"
+    "unit": "ms",
+    "desc": "Restraint/Blocking Delay: Olası arıza akımı algılandığında inrush bastırma fonksiyonunun aktif kaldığı süre."
   },
   "330001": {
     "meaning": "Enable",
-    "unit": null
+    "unit": null,
+    "desc": "ΔI/ΔT algoritması: Maksimum yük akımını aşmayan YÜKSEK DİRENÇLİ arızaları yakalar. Akım ΔI kadar ΔT süresinden uzun artar ve 10 sn içinde hat gerilimi Vlt< altına düşerse alarm üretilir."
   },
   "330101": {
     "meaning": "Trip Current",
-    "unit": "A"
+    "unit": "A",
+    "desc": "ΔI (Trip Current): ΔI/ΔT algoritması için akım ARTIŞ eşiği — akım bu değerden fazla artarsa (ve gerilim düşerse) arıza sayılır."
   },
   "330201": {
     "meaning": "Response Delay",
-    "unit": "ms"
+    "unit": "ms",
+    "desc": "ΔT (Response Delay): ΔI/ΔT algoritması için akım artışının sürmesi gereken süre."
   },
   "331201": {
     "meaning": "Relay Characteristic Angle",
@@ -449,15 +508,18 @@
   },
   "370101": {
     "meaning": "Reset Time",
-    "unit": "min"
+    "unit": "min",
+    "desc": "Reset Time: Arıza göstergesinin (LED + DNP3 alarmları) otomatik sıfırlandığı süre."
   },
   "370201": {
     "meaning": "Voltage Reset Enable",
-    "unit": null
+    "unit": null,
+    "desc": "Voltage Reset: Sınıflandırma gecikmesinden 10 sn sonra gerilim sensörü etkinleşir; hat gerilimi algılanırsa arıza göstergesi sıfırlanır."
   },
   "370401": {
     "meaning": "Current Reset Enable",
-    "unit": null
+    "unit": null,
+    "desc": "Current Reset: Sınıflandırma gecikmesinden 10 sn sonra akım sensörü etkinleşir; hat akımı algılanırsa arıza göstergesi sıfırlanır."
   },
   "370402": {
     "meaning": "Current Reset EF Enable",
@@ -477,19 +539,23 @@
   },
   "370601": {
     "meaning": "Current Reset Threshold",
-    "unit": "A"
+    "unit": "A",
+    "desc": "Current Reset Threshold: Akım sıfırlamasının gerçekleşmesi için hat akımının aşması gereken eşik."
   },
   "370B01": {
     "meaning": "Dual Reset",
-    "unit": null
+    "unit": null,
+    "desc": "Dual Reset: Akım/gerilim sıfırlaması ile zaman sıfırlamasını birleştirir. Akım/gerilim dönünce ALARMLAR temizlenir ama LED'ler Reset Time doluncaya kadar yanıp sönmeye devam eder — saha ekibi hat yeniden enerjilense bile arıza yerine yönlendirilir."
   },
   "370B02": {
     "meaning": "Dual Reset (Directional)",
-    "unit": null
+    "unit": null,
+    "desc": "Dual Reset (Directional): Dual Reset sonrası yanıp sönme desenine arıza YÖN bilgisi (kırmızı/yeşil) eklenir. Dual Reset de açık olmalıdır (yalnızca DFCI)."
   },
   "380001": {
     "meaning": "Fault Classification Delay",
-    "unit": "sec"
+    "unit": "sec",
+    "desc": "Fault Classification Delay: Arızadan sonra cihazın arızayı KALICI mı (hat hâlâ kesik) GEÇİCİ mi (hat yeniden enerjilendi) diye sınıflandırdığı bekleme süresi (10-120 sn, varsayılan 60)."
   },
   "380003": {
     "meaning": "Fault Requirement",
@@ -497,15 +563,18 @@
   },
   "381001": {
     "meaning": "Current Loss Threshold",
-    "unit": "A"
+    "unit": "A",
+    "desc": "Current Loss Threshold: Hat akımı bu eşiğin altına düşünce Current Loss alarmı üretilir."
   },
   "381002": {
     "meaning": "Current Return Threshold",
-    "unit": "A"
+    "unit": "A",
+    "desc": "Current Return Threshold: Hat akımı bu eşiğin üzerine çıkınca Current Loss alarmı temizlenir."
   },
   "381101": {
     "meaning": "Current Loss",
-    "unit": null
+    "unit": null,
+    "desc": "Current Loss: Akım kaybı algılamayı açar/kapatır. DİKKAT: Düşük yüklü hatlarda normal günlük yük profili bile alarm üretebilir; hücresel raporlama bataryayı yorabilir. Algılama 1-5 sn sürer."
   },
   "382101": {
     "meaning": "Lastflussrichtung: Stromschwelle",
@@ -521,7 +590,8 @@
   },
   "3A0601": {
     "meaning": "Boost Mode",
-    "unit": null
+    "unit": null,
+    "desc": "Boost Mode: Hücresel modem şebekeye SÜREKLİ bağlı kalır ve DNP3 verileri oluştuğu anda raporlanır. Kapalıyken cihaz Smart Mode'da çalışır: modem yalnızca günde bir kez ya da alarm anında bağlanır — batarya ömrü belirgin uzar (tam dolu bataryada ~20 gün ek süre)."
   },
   "400501": {
     "meaning": "Analog Test Point",
@@ -553,15 +623,18 @@
   },
   "442601": {
     "meaning": "Conductor Temperature Alarm",
-    "unit": "1/100°C"
+    "unit": "1/100°C",
+    "desc": "Conductor Temperature Alarm: İletken sıcaklığı eşiği — ölçülen sıcaklık bu değeri aşarsa alarm üretilir."
   },
   "442602": {
     "meaning": "Conductor Temperature Alarm",
-    "unit": "1/100°C"
+    "unit": "1/100°C",
+    "desc": "Conductor Temperature Alarm: İletken sıcaklığı eşiği — ölçülen sıcaklık bu değeri aşarsa alarm üretilir."
   },
   "442701": {
     "meaning": "Conductor Temperature Alarm Threshold",
-    "unit": "°C"
+    "unit": "°C",
+    "desc": "Conductor Temperature Alarm Threshold: Cihazın ölçtüğü iletken sıcaklığı bu eşiği aşarsa alarm üretilir (0-180 °C, varsayılan 60)."
   },
   "F10301": {
     "meaning": "Powersetting",
