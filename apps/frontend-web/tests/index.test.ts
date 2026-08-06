@@ -20,6 +20,9 @@ import "./gatewayLiveness.test";
 // Arsiv (historian) kurallari: olmayan bir ayar varmis gibi gosterilmesin.
 import "./signalHistorian.test";
 
+// Hat secilince harita o hatta odaklansin (Hat Yonetimi > Harita).
+import "./lineFocus.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   DEFAULT_STALE_AFTER_MS,

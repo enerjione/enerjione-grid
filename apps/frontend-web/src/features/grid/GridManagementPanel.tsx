@@ -24,6 +24,14 @@ import { MAP_LAYERS } from "../../shared/mapTiles";
 import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
+import { planLineFocus } from "./lineFocus";
+import {
+  ENERGY_ROLE_META,
+  SELECTABLE_TOPOLOGY_ROLES,
+  energyBadgeHtml,
+  rolesOf,
+  topologyMeta,
+} from "./poleTypeMeta";
 
 import {
   createLine,
@@ -43,7 +51,7 @@ import {
   updateRegion,
   updateSegment
 } from "../../shared/api";
-import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region } from "../../shared/types";
+import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region, TopologyRole } from "../../shared/types";
 import type { GridSnapshot } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
 import { LineWizardModal } from "./LineWizardModal";
@@ -67,33 +75,28 @@ const poleIcon = (
   isStart: boolean,
   isEnd: boolean,
   draftState?: "added" | "moved" | null,
-  poleType?: string
+  pole?: Pick<Pole, "topology_role" | "energy_role" | "pole_type">
 ) => {
-  const typeCls =
-    poleType === "transformer"
-      ? "is-transformer"
-      : poleType === "breaker"
-        ? "is-breaker"
-        : "";
+  // ANA ikon TOPOLOJIK rolden, kosedeki rozet ENERJI rolunden (rol modeli —
+  // poleTypeMeta tek kaynak; eski pole_type verisi role donusturulur).
+  const { topo, energy } = rolesOf(pole ?? {});
+  const meta = topologyMeta(topo);
   const cls = [
     isStart ? "is-start" : isEnd ? "is-end" : "",
-    typeCls,
+    meta.cls,
     draftState === "added" ? "is-draft-added" : "",
     draftState === "moved" ? "is-draft-moved" : ""
   ]
     .filter(Boolean)
     .join(" ");
-  // Trafo/kesici icin sembolu icine yaz; aksi halde sira numarasi.
-  let inner = `<span>${label}</span>`;
-  if (poleType === "transformer") {
-    inner = `<span class="grid-pole-symbol" title="Trafo">⚡</span><span class="grid-pole-seq">${label}</span>`;
-  } else if (poleType === "breaker") {
-    inner = `<span class="grid-pole-symbol" title="Kesici">▣</span><span class="grid-pole-seq">${label}</span>`;
-  }
-  const size: [number, number] = poleType && poleType !== "pole" ? [34, 34] : [28, 28];
+  // Rollu direkte sembol + kucuk sira rozeti; duz gecis direginde sira no.
+  const inner = meta.symbol
+    ? `<span class="grid-pole-symbol" title="${meta.title}">${meta.symbol}</span><span class="grid-pole-seq">${label}</span>`
+    : `<span>${label}</span>`;
+  const size: [number, number] = meta.symbol ? [34, 34] : [28, 28];
   return L.divIcon({
     className: "grid-pole-leaflet-wrap",
-    html: `<div class="grid-pole-pin ${cls}">${inner}</div>`,
+    html: `<div class="grid-pole-pin ${cls}">${inner}${energyBadgeHtml(energy)}</div>`,
     iconSize: size,
     iconAnchor: [size[0] / 2, size[1] / 2]
   });
@@ -124,6 +127,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
   const [detail, setDetail] = useState<LineDetail | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
+  /** Haritayi secili hatta odaklama istegi. Listede bir hatta HER tiklamada
+   *  artar; boylece zaten secili hatta tekrar tiklamak da haritayi hatta
+   *  geri getirir (kullanici haritada baska yere kaydirdiktan sonra
+   *  "hatta don" davranisi). Bkz. FitToLine. */
+  const [fitNonce, setFitNonce] = useState(0);
 
   // ----- UI state -----
   const [detailTab, setDetailTab] = useState<DetailTab>("map");
@@ -370,7 +378,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
         : null;
       cache.set(
         p.id,
-        poleIcon(String(p.sequence_no), isStart, isEnd, draftState, p.pole_type)
+        poleIcon(String(p.sequence_no), isStart, isEnd, draftState, p)
       );
     });
     return cache;
@@ -378,7 +386,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
   }, [
     sortedPoles.length,
     editMode,
-    sortedPoles.map((p) => `${p.id}:${p.sequence_no}:${p.pole_type ?? ""}:${draftPoleEdits.has(p.id) ? "m" : ""}:${p.id < 0 ? "n" : ""}`).join("|")
+    sortedPoles.map((p) => `${p.id}:${p.sequence_no}:${p.topology_role ?? p.pole_type ?? ""}:${p.energy_role ?? ""}:${draftPoleEdits.has(p.id) ? "m" : ""}:${p.id < 0 ? "n" : ""}`).join("|")
   ]);
 
   // Ardışık direk segmentleri (otomatik segment listesi). DB'deki LineSegment
@@ -768,7 +776,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
             {lines.map((l) => (
               <div key={l.id}
                 className={`grid-mgmt-list-item ${selectedLineId === l.id ? "active" : ""}`}
-                onClick={() => setSelectedLineId(l.id)}
+                onClick={() => {
+                  setSelectedLineId(l.id);
+                  // Secim degismese bile haritayi hatta geri getir.
+                  setFitNonce((n) => n + 1);
+                }}
               >
                 <div className="grid-mgmt-list-item-main">
                   <strong>{l.name}</strong>
@@ -941,7 +953,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
                   {/* Hat secildiginde haritayi otomatik olarak hattin tum
                       direklerini kapsayan alana zoomla. */}
-                  <FitToLine lineId={selectedLineId} poles={sortedPoles} />
+                  <FitToLine lineId={selectedLineId} poles={sortedPoles} nonce={fitNonce} />
 
                   {addPoleMode ? (
                     <MapClickHandler onClick={(lat, lon) => void handleMapClickAddPole(lat, lon)} />
@@ -1086,7 +1098,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                         position={poleMarkerPositions.get(p.id) ?? [p.latitude, p.longitude]}
                         icon={
                           poleMarkerIcons.get(p.id) ??
-                          poleIcon(String(p.sequence_no), isStart, isEnd, draftState, p.pole_type)
+                          poleIcon(String(p.sequence_no), isStart, isEnd, draftState, p)
                         }
                         draggable={editMode}
                         eventHandlers={{
@@ -1414,14 +1426,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                   const dev = nextSlot?.segment?.device_id
                     ? devices.find((d) => d.id === nextSlot.segment!.device_id)
                     : null;
-                  // Material icon — pin/lightning emoji yerine. SVG-tabanli,
-                  // tarayicilar arasi tutarli, renklendirme CSS'ten gelir.
-                  const iconName =
-                    p.pole_type === "transformer"
-                      ? "bolt"
-                      : p.pole_type === "breaker"
-                        ? "electrical_services"
-                        : "location_on";
+                  // Rol modeli: liste ikonu topolojik rolden, etiketler
+                  // rollerden (poleTypeMeta tek kaynak).
+                  const roller = rolesOf(p);
+                  const topoMeta = topologyMeta(roller.topo);
+                  const iconName = topoMeta.icon;
                   const isDeviceDropTarget =
                     draggedDeviceSegId !== null &&
                     nextSlot &&
@@ -1440,13 +1449,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                         <span className="grid-mgmt-pole-card-handle" title={t("common.drag")}>
                           <span className="material-symbols-outlined">drag_indicator</span>
                         </span>
-                        <span className={`grid-mgmt-pole-card-icon ${
-                          p.pole_type === "transformer"
-                            ? "is-transformer"
-                            : p.pole_type === "breaker"
-                              ? "is-breaker"
-                              : ""
-                        }`}>
+                        <span className={`grid-mgmt-pole-card-icon ${topoMeta.cls}`}>
                           <span className="material-symbols-outlined">{iconName}</span>
                         </span>
                         <div className="grid-mgmt-pole-card-main">
@@ -1459,10 +1462,13 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             <strong>{p.name ?? "(adsız)"}</strong>
                             {isStart ? <span className="grid-mgmt-pole-card-tag is-start">BAŞ</span> : null}
                             {isEnd ? <span className="grid-mgmt-pole-card-tag is-end">SON</span> : null}
-                            {p.pole_type === "transformer" ? (
-                              <span className="grid-mgmt-pole-card-tag is-type">{t("engineering.grid.typeTransformer")}</span>
-                            ) : p.pole_type === "breaker" ? (
-                              <span className="grid-mgmt-pole-card-tag is-type">{t("engineering.grid.typeBreaker")}</span>
+                            {roller.topo === "branch" || roller.topo === "cable_transition" ? (
+                              <span className="grid-mgmt-pole-card-tag is-type">{t(topoMeta.labelKey)}</span>
+                            ) : null}
+                            {roller.energy !== "none" ? (
+                              <span className="grid-mgmt-pole-card-tag is-energy">
+                                {t(ENERGY_ROLE_META.find((m) => m.value === roller.energy)!.labelKey)}
+                              </span>
                             ) : null}
                           </div>
                           <div className="grid-mgmt-pole-card-meta">
@@ -1836,34 +1842,60 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
 // ============= Helper components =============
 
-/** Hat secimi degistiginde haritayi secili hattin direk tutarini kapsayan
- *  alana otomatik fitBounds ile zoomlar. lineId degisikligini izler;
- *  ayni hat icinde direk eklemek/silmek harita zoom'unu yenilemez. */
+/** Hat secimi degistiginde haritayi secili hattin direklerini kapsayan alana
+ *  zoomlar.
+ *
+ *  ODAKLAMA NE ZAMAN CALISIR: `lineId` degisince VE `nonce` artinca. Nonce,
+ *  listede bir hatta tiklanmasidir — ZATEN SECILI hatta tekrar tiklayinca da
+ *  odaklansin diye. Yalnizca lineId izlenseydi "hatta tikliyorum ama harita
+ *  gitmiyor" durumu yasanirdi (kullanici bildirimi, 2026-08-06).
+ *  Ayni hat icinde direk eklemek/silmek zoom'u yenilemez — poles degisimi
+ *  tek basina fit tetiklemez.
+ *
+ *  ILK ACILIS TUZAGI: harita kabi (grid-mgmt-map-shell) mount edildigi ilk
+ *  karede henuz olculmemis olabilir; Leaflet o anda `getSize()` icin 0x0
+ *  gorur ve fitBounds hesabi bozulur — sonuc tum dunyayi gosteren bir zoom
+ *  olur (yasanan sikayet tam da buydu). Bu yuzden fit bir sonraki animasyon
+ *  karesine ertelenir ve oncesinde invalidateSize() ile kap yeniden olculur.
+ */
 function FitToLine({
   lineId,
-  poles
+  poles,
+  nonce
 }: {
   lineId: number | null;
   poles: { latitude: number; longitude: number }[];
+  /** Listede hatta her tiklamada artan sayac — ayni hat icin de odakla. */
+  nonce: number;
 }) {
   const map = useMap();
-  const lastLineRef = useRef<number | null>(null);
+  const doneKeyRef = useRef<string>("");
   useEffect(() => {
-    // Yeni hat secildiginde, poles YUKLENDIKTEN sonra bir kez fit et. "Yuklendi"
-    // isaretini poles hazir olunca koyariz; yoksa poles gelmeden isaretleyip
-    // bir daha fit etmiyordu (veya eski poles'a fit edip yanlis alana gidiyordu).
-    if (lineId === null || poles.length === 0) return;
-    if (lineId === lastLineRef.current) return;
-    lastLineRef.current = lineId;
-    if (poles.length === 1) {
-      map.setView([poles[0].latitude, poles[0].longitude], 16, { animate: true });
-      return;
-    }
-    const latlngs: L.LatLngExpression[] = poles.map((p) => [p.latitude, p.longitude]);
-    const bounds = L.latLngBounds(latlngs);
-    // Pad: kenarlardan biraz nefes payi ver; max zoom 17 (cok yakin gitmesin).
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17, animate: true });
-  }, [lineId, poles, map]);
+    // Karar SAF fonksiyonda (lineFocus.ts) — orada testlerle kilitli.
+    const plan = planLineFocus({
+      lineId,
+      poles,
+      nonce,
+      lastKey: doneKeyRef.current
+    });
+    if (plan.kind === "skip") return;
+    doneKeyRef.current = plan.key;
+
+    const frame = window.requestAnimationFrame(() => {
+      // Kabin gercek olcusunu al (sekme gecisi / ilk mount sonrasi sart).
+      map.invalidateSize({ animate: false });
+      if (plan.kind === "point") {
+        map.setView([plan.latitude, plan.longitude], plan.zoom, { animate: true });
+        return;
+      }
+      const bounds = L.latLngBounds(
+        plan.points.map((p) => [p.latitude, p.longitude] as L.LatLngExpression)
+      );
+      // Pad: kenarlardan biraz nefes payi ver; max zoom 17 (cok yakin gitmesin).
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17, animate: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [lineId, poles, nonce, map]);
   return null;
 }
 
@@ -2425,7 +2457,16 @@ function PoleEditModal({
   const [name, setName] = useState(pole.name ?? "");
   const [latitude, setLatitude] = useState(String(pole.latitude));
   const [longitude, setLongitude] = useState(String(pole.longitude));
-  const [poleType, setPoleType] = useState<string>(pole.pole_type ?? "pole");
+  // ROL MODELI: iki BAGIMSIZ secim — topolojik gorev + enerji gorevi.
+  // Eski kayitta rol alanlari yoksa ekipman tipinden donusturulur.
+  const ilkRoller = rolesOf(pole);
+  // Uc roller (line_start/line_end) formdan SECILEMEZ — konumdan turetilir.
+  // Kayitli deger uc rolse duzenlemede "transit" olarak gorunur; kaydetmek
+  // konumsal BAS/SON gosterimini etkilemez.
+  const [topoRole, setTopoRole] = useState<TopologyRole>(
+    ilkRoller.topo === "line_start" || ilkRoller.topo === "line_end" ? "transit" : ilkRoller.topo
+  );
+  const [energyRole, setEnergyRole] = useState(ilkRoller.energy);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const lat = Number(latitude);
@@ -2434,35 +2475,53 @@ function PoleEditModal({
     await onSubmit({
       name: name.trim() || null,
       latitude: lat, longitude: lon,
-      pole_type: poleType as Pole["pole_type"]
+      topology_role: topoRole,
+      energy_role: energyRole
     });
   };
   const { t } = useTranslation();
-  // Material icon adlari (SVG-tabanli, emoji yerine).
-  const typeOptions: { value: NonNullable<Pole["pole_type"]>; labelKey: string; icon: string }[] = [
-    { value: "pole", labelKey: "engineering.grid.typePole", icon: "location_on" },
-    { value: "transformer", labelKey: "engineering.grid.typeTransformer", icon: "bolt" },
-    { value: "breaker", labelKey: "engineering.grid.typeBreaker", icon: "electrical_services" }
-  ];
   return (
     <div className="settings-modal-backdrop">
       <form className="settings-modal" onSubmit={submit}>
         <h3>{t("engineering.grid.poleEditTitle", { seq: pole.sequence_no })}</h3>
         <label>{t("engineering.grid.poleNameLabel")} <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("engineering.grid.poleNamePlaceholder")} /></label>
         <fieldset className="pole-type-fieldset">
-          <legend>{t("engineering.grid.symbolType")}</legend>
+          <legend>{t("engineering.grid.topoRoleLegend")}</legend>
           <div className="pole-type-options">
-            {typeOptions.map((opt) => (
+            {SELECTABLE_TOPOLOGY_ROLES.map((opt) => (
               <label
                 key={opt.value}
-                className={`pole-type-option ${poleType === opt.value ? "is-selected" : ""}`}
+                className={`pole-type-option ${topoRole === opt.value ? "is-selected" : ""}`}
               >
                 <input
                   type="radio"
-                  name="pole_type"
+                  name="topology_role"
                   value={opt.value}
-                  checked={poleType === opt.value}
-                  onChange={() => setPoleType(opt.value)}
+                  checked={topoRole === opt.value}
+                  onChange={() => setTopoRole(opt.value)}
+                />
+                <span className="pole-type-icon">
+                  <span className="material-symbols-outlined">{opt.icon}</span>
+                </span>
+                <span>{t(opt.labelKey)}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="pole-type-fieldset">
+          <legend>{t("engineering.grid.energyRoleLegend")}</legend>
+          <div className="pole-type-options">
+            {ENERGY_ROLE_META.map((opt) => (
+              <label
+                key={opt.value}
+                className={`pole-type-option ${energyRole === opt.value ? "is-selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="energy_role"
+                  value={opt.value}
+                  checked={energyRole === opt.value}
+                  onChange={() => setEnergyRole(opt.value)}
                 />
                 <span className="pole-type-icon">
                   <span className="material-symbols-outlined">{opt.icon}</span>

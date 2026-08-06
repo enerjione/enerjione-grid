@@ -1540,12 +1540,13 @@
       "infoOS": "Operating system",
       "infoUptime": "Uptime",
       "infoBackend": "Backend",
-      "infoPython": "Python",
-      "infoDiskPath": "Disk path",
       "backendActive": "active for {{duration}}",
       "liveHint": "Last sample time — refreshed every 5 seconds",
       "errorMetrics": "Could not fetch host metrics.",
-      "loading": "Loading…"
+      "loading": "Loading…",
+      "infoProject": "Project",
+      "infoCustomer": "Customer",
+      "infoFirstStarted": "First started"
     },
     "version": {
       "label": "Version",
@@ -1643,6 +1644,30 @@
       "connected": "Connected",
       "disconnected": "Disconnected",
       "reconnectsSub": "Reconnects: {{count}}"
+    },
+    "gwControl": {
+      "title": "Gateway Control",
+      "pending": "Applying...",
+      "agentUnavailable": "The gateway agent is not installed on this device; control is unavailable.",
+      "empty": "No gateway installed on this device.",
+      "running": "Running",
+      "stopped": "Stopped",
+      "stop": "Stop",
+      "start": "Start",
+      "restart": "Restart",
+      "logs": "Logs",
+      "requested": "Request sent; it will be applied within seconds.",
+      "confirmStop": "Stop gateway {{code}}? Devices behind it will send NO data, and it stays down even after a reboot.",
+      "confirmRestart": "Restart gateway {{code}}? This causes a brief data outage.",
+      "lastApply": "Last action: {{action}} · {{code}} — {{message}}",
+      "logsFor": "{{code}} logs",
+      "lastLines": "Last {{count}} lines",
+      "logFetch": "Fetch Logs",
+      "logFetching": "Fetching...",
+      "logEmpty": "No logs fetched yet. Use \"Fetch Logs\" to pull gateway output.",
+      "logTimeout": "The agent did not respond in time; try again shortly.",
+      "logStale": "stale output",
+      "logTruncated": "truncated"
     }
   },
   "engineering": {
@@ -2159,7 +2184,9 @@
         "updateAvailableTo": "Version {{version}} available",
         "currentVersion": "Running version",
         "qualityFlags": "Publish DNP3 quality flags",
-        "qualityFlagsHint": "While off, every reading is sent as \"good\" even if the device reports it invalid. When on, invalid readings are excluded from alarm evaluation. Saving reinstalls the gateway; telemetry pauses briefly."
+        "qualityFlagsHint": "While off, every reading is sent as \"good\" even if the device reports it invalid. When on, invalid readings are excluded from alarm evaluation. Saving reinstalls the gateway; telemetry pauses briefly.",
+        "updateAnyway": "Update Anyway",
+        "updateAnywayHint": "Version comparison unavailable (registry unreachable or docker buildx missing). You can still pull the latest image; nothing is downloaded if it is already current."
       }
     },
     "devicesPanel": {
@@ -2906,6 +2933,26 @@
         "qaSumBranches": "Branch lines (automatic)",
         "qaSumBranchesVal": "{{count}} line(s), {{poles}} poles",
         "qaSuccessToastBranched": "Line {{line}} created: {{poles}} poles + {{branches}} branch line(s) attached."
+      },
+      "typeDisconnector": "Disconnector",
+      "typeFuseCutout": "Fuse cutout",
+      "typeSource": "Feeder source",
+      "typeCableTransition": "Cable transition",
+      "typeBranchPoint": "Branch point",
+      "topoRoleLegend": "Topology role",
+      "energyRoleLegend": "Energy role",
+      "roleTopo": {
+        "line_start": "Line start",
+        "transit": "Transit pole",
+        "branch": "Branch point",
+        "line_end": "Line end",
+        "cable_transition": "Cable transition"
+      },
+      "roleEnergy": {
+        "none": "No special role",
+        "generation": "Generation point",
+        "consumption": "Consumption point",
+        "bidirectional": "Bidirectional"
       }
     },
     "license": {

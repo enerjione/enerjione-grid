@@ -14,6 +14,25 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.20] — 2026-08-06
+
+### Değişti
+
+- **Direk sınıflandırması rol modeline geçti** (ekipman envanteri değil,
+  işlev): her direkte iki bağımsız alan — **topolojik görev** (hat
+  başlangıcı / geçiş / branşman noktası / hat sonu / kablo geçişi) ve
+  **enerji görevi** (yok / üretim / tüketim / çift yön). Kesici, ayırıcı,
+  sigorta, trafo gibi ekipman tipleri sınıflandırmadan kaldırıldı; mevcut
+  veriler migration ile dönüştürüldü (trafo→tüketim, kaynak→üretim,
+  branşman hedefleri→branşman, hat uçları→başlangıç/son). Haritada ana
+  ikon topolojik rolden; enerji rolü köşede renkli rozet (↑ yeşil üretim,
+  ↓ mavi tüketim, ⇅ mor çift yön). Direk formunda iki ayrı rol seçimi.
+  Excel: Direk_Tipi artık topolojik rol alır (eski değerler kabul edilip
+  dönüştürülür), yeni Enerji_Rolu kolonu eklendi; branşman hedef listesi
+  "branşman" rollü direkleri önceler. Eski dosyalar çalışmaya devam eder.
+
+---
+
 ## [2.53.19] — 2026-08-06
 
 ### Eklendi

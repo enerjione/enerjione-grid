@@ -358,6 +358,12 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
           latitude: p.lat,
           longitude: p.lon,
           name: onek ? `${onek}${i + 1}` : null,
+          // Dal kaynagi direkler ROL modelinde "bransman noktasi" olarak
+          // isaretlenir; uc roller (line_start/line_end) backend'de yeni
+          // hatlar icin otomatik atanir.
+          ...(qaParsed.branches.some((b) => b.fromSeq === i + 1)
+            ? { topology_role: "branch" as const }
+            : {}),
         })),
         ...(qaBranchOn && qaBranchGuess
           ? {

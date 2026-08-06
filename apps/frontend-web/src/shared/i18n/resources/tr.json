@@ -1537,12 +1537,13 @@
       "infoOS": "İşletim sistemi",
       "infoUptime": "Uptime",
       "infoBackend": "Backend",
-      "infoPython": "Python",
-      "infoDiskPath": "Disk yolu",
       "backendActive": "{{duration}} aktif",
       "liveHint": "Son ölçüm saati — veriler 5 saniyede bir yenilenir",
       "errorMetrics": "Sunucu kaynak metrikleri alınamadı.",
-      "loading": "Yükleniyor…"
+      "loading": "Yükleniyor…",
+      "infoProject": "Proje",
+      "infoCustomer": "Müşteri",
+      "infoFirstStarted": "İlk çalıştırma"
     },
     "version": {
       "label": "Sürüm",
@@ -1640,6 +1641,30 @@
       "connected": "Bağlı",
       "disconnected": "Kopuk",
       "reconnectsSub": "Yeniden bağlanma: {{count}}"
+    },
+    "gwControl": {
+      "title": "Gateway Kontrol",
+      "pending": "İşleniyor...",
+      "agentUnavailable": "Gateway ajanı bu cihazda kurulu değil; buradan kontrol edilemez.",
+      "empty": "Bu cihazda kurulu gateway yok.",
+      "running": "Çalışıyor",
+      "stopped": "Durduruldu",
+      "stop": "Durdur",
+      "start": "Başlat",
+      "restart": "Yeniden Başlat",
+      "logs": "Log",
+      "requested": "İstek gönderildi; birkaç saniye içinde uygulanacak.",
+      "confirmStop": "{{code}} gateway'i durdurulsun mu? Bu gateway'e bağlı cihazlardan veri AKMAYACAK ve cihaz yeniden başlasa bile kalkmayacak.",
+      "confirmRestart": "{{code}} gateway'i yeniden başlatılsın mı? Kısa bir veri kesintisi olur.",
+      "lastApply": "Son işlem: {{action}} · {{code}} — {{message}}",
+      "logsFor": "{{code}} logları",
+      "lastLines": "Son {{count}} satır",
+      "logFetch": "Log Al",
+      "logFetching": "Alınıyor...",
+      "logEmpty": "Henüz log alınmadı. \"Log Al\" ile gateway çıktısını getirin.",
+      "logTimeout": "Ajan zamanında yanıt vermedi; birazdan tekrar deneyin.",
+      "logStale": "eski çıktı",
+      "logTruncated": "kırpıldı"
     }
   },
   "engineering": {
@@ -2156,7 +2181,9 @@
         "updateAvailableTo": "{{version}} sürümü hazır",
         "currentVersion": "Çalışan sürüm",
         "qualityFlags": "DNP3 kalite bayraklarını yayınla",
-        "qualityFlagsHint": "Kapalıyken her ölçüm \"iyi\" olarak gönderilir; cihaz geçersiz değer bildirse bile fark edilmez. Açıldığında geçersiz ölçümler alarm değerlendirmesine girmez. Kaydedince gateway yeniden kurulur, kısa süre telemetri gelmez."
+        "qualityFlagsHint": "Kapalıyken her ölçüm \"iyi\" olarak gönderilir; cihaz geçersiz değer bildirse bile fark edilmez. Açıldığında geçersiz ölçümler alarm değerlendirmesine girmez. Kaydedince gateway yeniden kurulur, kısa süre telemetri gelmez.",
+        "updateAnyway": "Yine de Güncelle",
+        "updateAnywayHint": "Sürüm karşılaştırması yapılamadı (kayıt defterine ulaşılamıyor veya docker buildx kurulu değil). Yine de en güncel imajı çekmeyi deneyebilirsiniz; gateway zaten güncelse bir şey indirilmez."
       }
     },
     "devicesPanel": {
@@ -2903,6 +2930,26 @@
         "qaSumBranches": "Branşman hattı (otomatik)",
         "qaSumBranchesVal": "{{count}} hat, {{poles}} direk",
         "qaSuccessToastBranched": "{{line}} hattı oluşturuldu: {{poles}} direk + {{branches}} branşman hattı bağlandı."
+      },
+      "typeDisconnector": "Ayırıcı (seksiyoner)",
+      "typeFuseCutout": "Sigortalı ayırıcı",
+      "typeSource": "Fider çıkışı (kaynak)",
+      "typeCableTransition": "Kablo geçişi",
+      "typeBranchPoint": "Branşman noktası",
+      "topoRoleLegend": "Topolojik görev",
+      "energyRoleLegend": "Enerji görevi",
+      "roleTopo": {
+        "line_start": "Hat başlangıcı",
+        "transit": "Geçiş direği",
+        "branch": "Branşman noktası",
+        "line_end": "Hat sonu",
+        "cable_transition": "Kablo geçişi"
+      },
+      "roleEnergy": {
+        "none": "Özel görev yok",
+        "generation": "Üretim noktası",
+        "consumption": "Tüketim noktası",
+        "bidirectional": "Çift yönlü"
       }
     },
     "license": {

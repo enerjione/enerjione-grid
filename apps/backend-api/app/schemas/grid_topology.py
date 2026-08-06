@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -73,14 +75,23 @@ class LineRead(LineBase):
 
 # ----- Pole -----
 
+# ROL MODELI: direk siniflandirmasi EKIPMAN degil ISLEV anlatir. Iki bagimsiz
+# eksen — ariza/enerji-kesik/haberlesme gibi operasyonel durumlar buraya girmez.
+TopologyRole = Literal["line_start", "transit", "branch", "line_end", "cable_transition"]
+EnergyRole = Literal["none", "generation", "consumption", "bidirectional"]
+
+
 class PoleBase(BaseModel):
     line_id: int
     sequence_no: int = Field(ge=1)
     name: str | None = Field(default=None, max_length=120)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
-    # Direk tipi: 'pole' | 'transformer' | 'breaker' (varsayilan: pole)
+    # ESKI ekipman alani — geriye uyum icin kabul edilir, yeni arayuz kullanmaz.
     pole_type: str = Field(default="pole", max_length=20)
+    # Topolojik gorev (hattin neresi) + enerji gorevi (uretim/tuketim/cift yon).
+    topology_role: TopologyRole = "transit"
+    energy_role: EnergyRole = "none"
 
 
 class PoleCreate(PoleBase):
@@ -93,6 +104,8 @@ class PoleUpdate(BaseModel):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     pole_type: str | None = Field(default=None, max_length=20)
+    topology_role: TopologyRole | None = None
+    energy_role: EnergyRole | None = None
 
 
 class PoleRead(PoleBase):
@@ -200,7 +213,10 @@ class WizardPole(BaseModel):
     latitude: float
     longitude: float
     name: str | None = None
+    # Eski ekipman degeri de kabul edilir (role donusturulur).
     pole_type: str | None = None
+    topology_role: TopologyRole | None = None
+    energy_role: EnergyRole | None = None
 
 
 class WizardLineRequest(BaseModel):

@@ -6,6 +6,7 @@ import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
 
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
+import { energyBadgeHtml, rolesOf, topologyMeta } from "../grid/poleTypeMeta";
 import type { GridSnapshot } from "../../shared/api";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
@@ -54,19 +55,17 @@ const polePin = (
   label: string,
   isStart: boolean,
   isEnd: boolean,
-  poleType?: string,
+  pole?: { topology_role?: string | null; energy_role?: string | null; pole_type?: string | null },
   isBranchPoint?: boolean,
   isBranchEntry?: boolean
 ) => {
-  const key = `${label}|${isStart ? 1 : 0}|${isEnd ? 1 : 0}|${poleType ?? ""}|${isBranchPoint ? 1 : 0}|${isBranchEntry ? 1 : 0}`;
+  const { topo, energy } = rolesOf(pole ?? {});
+  const key = `${label}|${isStart ? 1 : 0}|${isEnd ? 1 : 0}|${topo}|${energy}|${isBranchPoint ? 1 : 0}|${isBranchEntry ? 1 : 0}`;
   const cached = _polePinCache.get(key);
   if (cached) return cached;
-  const typeCls =
-    poleType === "transformer"
-      ? "is-transformer"
-      : poleType === "breaker"
-        ? "is-breaker"
-        : "";
+  // ANA ikon topolojik rolden; enerji rolu kose rozeti (rol modeli).
+  const meta = topologyMeta(topo);
+  const typeCls = meta.cls;
   const cls = [
     isStart ? "is-start" : isEnd ? "is-end" : "",
     typeCls,
@@ -79,25 +78,17 @@ const polePin = (
   ].filter(Boolean).join(" ");
   // Trafo: ic ice cift halka — fiziksel sembol cagrisimi.
   // Numara halka altinda kucuk badge olarak gosterilir.
-  const isTrafo = poleType === "transformer";
-  const isBreaker = poleType === "breaker";
-  const inner = isTrafo
-    ? `<span class="grid-trafo-rings" aria-label="Trafo">
-         <span class="grid-trafo-ring grid-trafo-ring--outer"></span>
-         <span class="grid-trafo-ring grid-trafo-ring--inner"></span>
-       </span>
-       <span class="grid-pole-seq">${label}</span>`
-    : isBreaker
-      ? `<span class="grid-pole-symbol" aria-label="Kesici">▣</span><span class="grid-pole-seq">${label}</span>`
-      : `<span>${label}</span>`;
+  const inner = meta.symbol
+    ? `<span class="grid-pole-symbol" aria-label="${meta.title}">${meta.symbol}</span><span class="grid-pole-seq">${label}</span>`
+    : `<span>${label}</span>`;
   // Bransman noktasi ise pin'in ust kosesine kucuk Y-catalli rozet.
   const branchBadge = (isBranchPoint || isBranchEntry)
     ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
     : "";
-  const size: [number, number] = isTrafo || isBreaker ? [40, 40] : [20, 20];
+  const size: [number, number] = meta.symbol ? [40, 40] : [20, 20];
   const icon = L.divIcon({
     className: "grid-pole-leaflet-wrap",
-    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}</div>`,
+    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}${energyBadgeHtml(energy)}</div>`,
     iconSize: size,
     iconAnchor: [size[0] / 2, size[1] / 2]
   });
@@ -1277,7 +1268,7 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               key={`pole-${p.id}`}
               position={[p.latitude, p.longitude]}
               opacity={hiddenLineIds?.has(p.line_id) ? 0.35 : 1}
-              icon={polePin(String(p.sequence_no), isStart, isEnd, p.pole_type, isBranchPoint, isBranchEntry)}
+              icon={polePin(String(p.sequence_no), isStart, isEnd, p, isBranchPoint, isBranchEntry)}
               eventHandlers={{
                 click: () => {
                   setPoleInfo({

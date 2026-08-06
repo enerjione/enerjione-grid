@@ -41,11 +41,13 @@ COLUMNS = [
     "Direk_Adi",
     "Enlem",
     "Boylam",
-    "Direk_Tipi",
+    "Direk_Tipi",   # TOPOLOJIK ROL (line_start/transit/branch/line_end/cable_transition)
     "Cihaz",
     "Yon",          # FCI yon oryantasyonu: yesil | kirmizi
     "Bransman_Hat_Kodu",
     "Bransman_Direk_Sira",
+    # SONDA (eski dosyalar bozulmasin — pozisyonel okuma pad'ler):
+    "Enerji_Rolu",  # none/generation/consumption/bidirectional
 ]
 
 
@@ -57,7 +59,45 @@ def _col(name: str) -> str:
     return get_column_letter(COLUMNS.index(name) + 1)
 
 
-POLE_TYPES = ["pole", "transformer", "breaker"]
+# ROL MODELI (frontend poleRoleMeta.ts ile AYNI): direk siniflandirmasi
+# ekipman degil ISLEV anlatir. Direk_Tipi kolonu artik TOPOLOJIK ROL alir;
+# Enerji_Rolu ayri kolondur. Eski ekipman degerleri geriye uyum icin kabul
+# edilir ve rollere DONUSTURULUR (asagidaki LEGACY map).
+TOPOLOGY_ROLES = ["line_start", "transit", "branch", "line_end", "cable_transition"]
+ENERGY_ROLES = ["none", "generation", "consumption", "bidirectional"]
+
+#: Eski ekipman tipi -> (topology_role, energy_role). Kesici/ayirici/sigorta
+#: ekipman bilgisidir, rol modelinde karsiligi yoktur -> transit/none.
+LEGACY_TYPE_TO_ROLES = {
+    "pole": ("transit", "none"),
+    "transformer": ("transit", "consumption"),
+    "breaker": ("transit", "none"),
+    "disconnector": ("transit", "none"),
+    "fuse_cutout": ("transit", "none"),
+    "source": ("transit", "generation"),
+    "cable_transition": ("cable_transition", "none"),
+    "branch_point": ("branch", "none"),
+}
+
+
+def _rolleri_coz(tipi: str, enerji: str) -> tuple[str, str] | None:
+    """Direk_Tipi + Enerji_Rolu hucrelerini rol ciftine cevir.
+
+    Direk_Tipi: yeni topolojik rol YA DA eski ekipman degeri (donusturulur).
+    Enerji_Rolu dolu ise eski tipin ima ettigi enerjiyi EZER. None = gecersiz.
+    """
+    tipi = tipi.lower()
+    enerji = enerji.lower()
+    if enerji and enerji not in ENERGY_ROLES:
+        return None
+    if not tipi:
+        return ("transit", enerji or "none")
+    if tipi in TOPOLOGY_ROLES:
+        return (tipi, enerji or "none")
+    if tipi in LEGACY_TYPE_TO_ROLES:
+        topo, ima = LEGACY_TYPE_TO_ROLES[tipi]
+        return (topo, enerji or ima)
+    return None
 
 # Hizli Yapistir sayfasi: direk sirasi ve segment OTOMATIK — kullanici yalnizca
 # koordinat listesi yapistirir. Tek 'Koordinat' hucresi "enlem, boylam" alir
@@ -270,14 +310,15 @@ def build_template_workbook(db: Session) -> io.BytesIO:
     devices = list(db.scalars(select(Device).order_by(Device.code)).all())
     all_device_codes = [d.code for d in devices]
     all_line_codes = list(db.scalars(select(Line.code).order_by(Line.code)).all())
-    # Hat kodu -> o hattin direk sira listesi (bransman bagimli dropdown icin).
+    # Hat kodu -> bransman hedefi olabilecek direk siralari. Kullanici istegi:
+    # secim karisik olmasin diye hatta BRANSMAN NOKTASI (branch_point) tipinde
+    # direk varsa YALNIZ onlar listelenir; hic yoksa tum direkler (aksi halde
+    # dropdown bos kalir ve hedef secilemezdi).
     line_pole_seqs: dict[str, list[int]] = {}
     for ln in db.scalars(select(Line)).all():
-        seqs = sorted(
-            p.sequence_no
-            for p in db.scalars(select(Pole).where(Pole.line_id == ln.id)).all()
-        )
-        line_pole_seqs[ln.code] = seqs
+        hepsi = db.scalars(select(Pole).where(Pole.line_id == ln.id)).all()
+        bransmanlar = sorted(p.sequence_no for p in hepsi if p.topology_role == "branch")
+        line_pole_seqs[ln.code] = bransmanlar or sorted(p.sequence_no for p in hepsi)
 
     wb = Workbook()
     header_font = Font(bold=True, color="FFFFFF")
@@ -315,6 +356,24 @@ def build_template_workbook(db: Session) -> io.BytesIO:
                 return nr["pole"].sequence_no
         return None
 
+    def _next_pole(idx: int, line_id: int):
+        for j in range(idx + 1, len(topo_rows)):
+            nr = topo_rows[j]
+            if nr["line"].id != line_id:
+                return None
+            if nr["kind"] == "pole":
+                return nr["pole"]
+        return None
+
+    # Bir slottaki cihaz sirasi (ara-satirlarin kacincisi) — konum
+    # enterpolasyonu icin: t = sira/(toplam+1), backend apply_plan ile ayni.
+    slot_sayaci: dict[tuple[int, int], int] = {}
+    slot_toplam: dict[tuple[int, int], int] = {}
+    for r0 in topo_rows:
+        if r0["kind"] == "device":
+            key0 = (r0["line"].id, r0["pole"].sequence_no)
+            slot_toplam[key0] = slot_toplam.get(key0, 0) + 1
+
     for i, r in enumerate(topo_rows):
         region = r["region"]
         line = r["line"]
@@ -334,22 +393,36 @@ def build_template_workbook(db: Session) -> io.BytesIO:
                 pole.name or "",
                 pole.latitude,
                 pole.longitude,
-                pole.pole_type or "pole",
+                pole.topology_role or "transit",
                 "", "",  # Cihaz, Yon bos
                 r["branch_line_code"] if is_new_line else "",
                 r["branch_pole_seq"] if is_new_line else "",
+                pole.energy_role or "none",
             ]
         else:  # device ara-satiri
-            nxt = _next_pole_seq(i, line.id)
+            nxt_pole = _next_pole(i, line.id)
+            nxt = nxt_pole.sequence_no if nxt_pole else None
             label = f"-> {pole.sequence_no}-{nxt} arasi" if nxt else f"-> {pole.sequence_no} sonrasi"
+            # CIHAZ KONUMU OTOMATIK HESAPLANIR (kullanici istegi): segment
+            # uzerinde t = sira/(toplam+1) noktasinin enterpolasyonu. SALT
+            # BILGI — parser cihaz satirindaki koordinati OKUMAZ; turuncu
+            # renk "otomatik/bilgi" oldugunu soyler.
+            key = (line.id, pole.sequence_no)
+            slot_sayaci[key] = slot_sayaci.get(key, 0) + 1
+            c_lat = c_lon = ""
+            if nxt_pole is not None:
+                t = slot_sayaci[key] / (slot_toplam.get(key, 1) + 1)
+                c_lat = round(pole.latitude + (nxt_pole.latitude - pole.latitude) * t, 6)
+                c_lon = round(pole.longitude + (nxt_pole.longitude - pole.longitude) * t, 6)
             vals = [
                 "", "", "", "",   # bolge/hat bos (ust satirdan gelir)
                 "",               # Direk_Sira BOS -> cihaz satiri isareti
                 label,            # Direk_Adi = bilgilendirici etiket
-                "", "", "",       # Enlem/Boylam/Direk_Tipi bos
+                c_lat, c_lon, "", # cihazin OTOMATIK konumu (bilgi) / tip bos
                 r["device_code"],
                 r["yon"],
                 "", "",           # bransman bos
+                "",               # enerji rolu bos (cihaz satiri)
             ]
         ws.append(vals)
 
@@ -376,6 +449,11 @@ def build_template_workbook(db: Session) -> io.BytesIO:
             # Cihaz ara-satirini hafifce boya (gorsel ayrim).
             for col in range(1, len(COLUMNS) + 1):
                 ws.cell(row=excel_row, column=col).fill = device_fill
+            # Otomatik hesaplanan cihaz koordinati TURUNCU — direk
+            # koordinatindan (siyah) gorsel olarak ayrilir.
+            for kolon_adi in ("Enlem", "Boylam"):
+                hucre = ws.cell(row=excel_row, column=COLUMNS.index(kolon_adi) + 1)
+                hucre.font = Font(color="C2600A", italic=True)
 
         last_region_code = region_code
         last_line_key = line_key
@@ -386,10 +464,20 @@ def build_template_workbook(db: Session) -> io.BytesIO:
     # Bos ekleme satirlari (yeni hat/direk/cihaz icin).
     blank_end = excel_row + 200
 
-    widths = [12, 20, 10, 18, 10, 18, 12, 12, 13, 18, 10, 18, 18]
+    widths = [12, 20, 10, 18, 10, 18, 12, 12, 14, 18, 10, 18, 18, 14]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[_col(COLUMNS[i - 1])].width = w
     ws.freeze_panes = "A2"
+
+    # KOD KOLONLARI GIZLI (kullanici istegi): Bolge_Kodu/Hat_Kodu ic kimlik —
+    # kullanici adlarla calisir, kodlar kafa karistiriyordu. Parser gizli
+    # kolonu yine okur (round-trip bozulmaz); kullanicinin ELLE ekledigi yeni
+    # bolge/hat icin kod bos kalirsa ADDAN otomatik uretilir (parse tarafi).
+    ws.column_dimensions[_col("Bolge_Kodu")].hidden = True
+    ws.column_dimensions[_col("Hat_Kodu")].hidden = True
+
+    # Baslik satirina FILTRE — buyuk dosyada hat/bolge/tip suzme.
+    ws.auto_filter.ref = f"A1:{_col(COLUMNS[-1])}{blank_end}"
 
     _add_dropdowns(
         wb, ws, all_device_codes, all_line_codes, line_pole_seqs,
@@ -441,7 +529,7 @@ def _add_quick_sheet(wb, header_font, header_fill) -> None:
 
     # Direk_Tipi dropdown (E kolonu).
     dv = DataValidation(
-        type="list", formula1='"' + ",".join(POLE_TYPES) + '"',
+        type="list", formula1='"' + ",".join(TOPOLOGY_ROLES) + '"',
         allow_blank=True, showDropDown=False,
     )
     ws.add_data_validation(dv)
@@ -527,7 +615,8 @@ def _add_dropdowns(
         dv.add(f"{col}2:{col}{end}")
 
     # Direk_Tipi + Yon: inline liste.
-    _add_list_dv(c_tip, '"' + ",".join(POLE_TYPES) + '"')
+    _add_list_dv(c_tip, '"' + ",".join(TOPOLOGY_ROLES) + '"')
+    _add_list_dv(_col("Enerji_Rolu"), '"' + ",".join(ENERGY_ROLES) + '"')
     _add_list_dv(c_yon, '"' + ",".join(YON_CHOICES) + '"')
 
     # Cihaz: gizli "Cihazlar" sheet'inden (atanmislar dahil — dolu satirlar
@@ -603,13 +692,14 @@ def _add_help_sheet(wb, header_font, header_fill) -> None:
     help_rows = [
         ["Kolon / Konu", "Açıklama"],
         ["YAPISI", "İki satır tipi vardır: DİREK satırı (Direk_Sira dolu) ve CİHAZ ara-satırı (Direk_Sira BOŞ, Cihaz dolu). Cihaz ara-satırı, hemen ÜSTÜNDEKİ direkten sonraki segmente bağlanır."],
-        ["Bolge_Kodu / Bolge_Adi", "Bölge kodu ve adı. Grup başında bir kez yazılır; alt satırlarda boş bırakılabilir (üstteki geçerli sayılır)."],
-        ["Hat_Kodu / Hat_Adi", "Hat kodu ve adı. Aynı bölge içinde kod benzersiz. Grup başında bir kez yazılır."],
+        ["Bolge_Adi", "Bölge adı. Grup başında bir kez yazılır; alt satırlarda boş bırakılır (üstteki geçerli). Kod kolonu GİZLİDİR — yeni bölge için sadece ad yazın, kod addan otomatik üretilir."],
+        ["Hat_Adi", "Hat adı. Grup başında bir kez yazılır. Kod kolonu GİZLİDİR — yeni hat için sadece ad yazın, kod addan otomatik üretilir."],
         ["Direk_Sira", "DİREK satırında 1'den başlayan sıra. Boşluksuz artmalı. Cihaz ara-satırında BOŞ bırakılır."],
         ["Direk_Adi", "Direk satırında opsiyonel ad. Cihaz ara-satırında '-> N-M arası' bilgi etiketi (elle doldurmaya gerek yok)."],
         ["Enlem / Boylam", "Direk satırında ondalık derece. Enlem -90..90, Boylam -180..180."],
-        ["Direk_Tipi", "pole / transformer / breaker. Boş = pole."],
-        ["Cihaz", "Bir CİHAZ ara-satırına yazılır: üstteki direkten sonraki segmente bağlanacak cihaz (açılır liste). Aynı iki direk arasında birden fazla cihaz için üst üste birden çok cihaz ara-satırı ekleyin; sıra satır sırasıdır (otomatik)."],
+        ["Direk_Tipi (TOPOLOJİK ROL)", "Direğin hattaki görevi: line_start (hat başlangıcı) / transit (geçiş direği) / branch (branşman noktası) / line_end (hat sonu) / cable_transition (havai-yeraltı geçişi). Boş = transit. Eski ekipman değerleri (transformer, breaker…) de kabul edilir ve role dönüştürülür. Branşman hedefi seçilirken hatta 'branch' rollü direk varsa YALNIZ onlar listelenir."],
+        ["Enerji_Rolu", "Direğin enerji görevi (topolojik rolden BAĞIMSIZ): none (özel görev yok) / generation (üretim noktası) / consumption (tüketim noktası) / bidirectional (çift yönlü). Boş = none. Haritada ana ikonun köşesinde rozet olarak görünür."],
+        ["Cihaz", "Bir CİHAZ ara-satırına yazılır: üstteki direkten sonraki segmente bağlanacak cihaz (açılır liste). Aynı iki direk arasında birden fazla cihaz için üst üste birden çok ara-satır ekleyin; sıra satır sırasıdır. Cihaz satırındaki TURUNCU Enlem/Boylam otomatik hesaplanan konumdur (salt bilgi — içe aktarımda okunmaz)."],
         ["Yon", "Cihazın FCI yön oryantasyonu: yesil (A ucu ileri) / kirmizi (B ucu ileri). Opsiyonel."],
         ["Bransman_Hat_Kodu", "Bu hat başka hattın direğinden dallanıyorsa o hattın kodu (açılır liste). Hat başı satırına yazılır."],
         ["Bransman_Direk_Sira", "Bağlanılacak direk sırası. Bransman_Hat_Kodu seçilince açılır liste O HATTIN direk sıralarını gösterir (bağımlı liste)."],
@@ -651,7 +741,8 @@ class ParsedPole:
     name: str | None
     latitude: float
     longitude: float
-    pole_type: str
+    topology_role: str
+    energy_role: str
     excel_row: int
     # Bu direkten baslayan segmentteki cihaz(lar). Coklu olabilir (slot ici sira).
     devices: list[ParsedDevice] = field(default_factory=list)
@@ -713,6 +804,23 @@ def _clean(v: Any) -> str:
     return str(v).strip()
 
 
+_TR_TRANSLIT = str.maketrans("ÇĞİIÖŞÜçğıöşü", "CGIIOSUcgiosu")
+
+
+def _kod_uret(ad: str) -> str:
+    """Addan deterministik kod uret: "Merkez TR-3 Hattı" -> "MERKEZ-TR-3-HATTI".
+
+    Kod kolonlari sablonda GIZLI; kullanici yalniz ad yazar. Ayni ad her
+    seferinde ayni kodu uretir — yeniden iceri aktarim ayni kayda birlesir.
+    """
+    s = ad.translate(_TR_TRANSLIT).upper()
+    out = []
+    for ch in s:
+        out.append(ch if ch.isalnum() else "-")
+    kod = "-".join(p for p in "".join(out).split("-") if p)[:24]
+    return kod or s[:24] or "AD"
+
+
 def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
     """Excel'i oku, dogrula, DB'ye YAZMADAN plan cikar. Satir-bazli hatalar
     plan.errors'da toplanir; hatasiz satirlar yine plana girer (commit onlari
@@ -760,15 +868,22 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
         cells = list(raw) + [None] * (len(COLUMNS) - len(raw))
         rec = dict(zip(COLUMNS, cells))
 
-        # Forward-fill bolge/hat.
+        # Forward-fill bolge/hat. Kod kolonlari sablonda GIZLI: kullanici
+        # yalniz AD yazarsa kod addan otomatik uretilir (deterministik —
+        # ayni ad ayni koda birlesir).
         rc = _clean(rec["Bolge_Kodu"])
+        ra = _clean(rec["Bolge_Adi"])
         if rc:
             ff_region_code = rc
-            ff_region_name = _clean(rec["Bolge_Adi"]) or rc
+            ff_region_name = ra or rc
+        elif ra:
+            ff_region_code = _kod_uret(ra)
+            ff_region_name = ra
         hc = _clean(rec["Hat_Kodu"])
-        if hc:
-            ff_hat_code = hc
-            ff_hat_name = _clean(rec["Hat_Adi"]) or hc
+        ha = _clean(rec["Hat_Adi"])
+        if hc or ha:
+            ff_hat_code = hc or _kod_uret(ha)
+            ff_hat_name = ha or hc
             # Bransman bilgisi hat basinda tasinir.
             ff_branch_line = _clean(rec["Bransman_Hat_Kodu"])
             ff_branch_seq = _to_int(rec["Bransman_Direk_Sira"])
@@ -817,9 +932,9 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
             if lon is None or not (-180 <= lon <= 180):
                 plan.errors.append(RowError(idx, f"Boylam geçersiz: {rec['Boylam']!r} (-180..180)."))
                 continue
-            pole_type = _clean(rec["Direk_Tipi"]).lower() or "pole"
-            if pole_type not in POLE_TYPES:
-                plan.errors.append(RowError(idx, f"Direk_Tipi geçersiz: {pole_type!r}."))
+            roller = _rolleri_coz(_clean(rec["Direk_Tipi"]), _clean(rec.get("Enerji_Rolu")))
+            if roller is None:
+                plan.errors.append(RowError(idx, f"Direk_Tipi/Enerji_Rolu geçersiz: {rec['Direk_Tipi']!r}/{rec.get('Enerji_Rolu')!r}."))
                 continue
             # Bolge + hat plana ekle (upsert — kod bazli).
             if region_code not in plan.regions:
@@ -833,7 +948,8 @@ def parse_and_plan(file_bytes: bytes, db: Session) -> ImportPlan:
             existing_pole = ParsedPole(
                 region_code=region_code, line_code=hat_code, sequence_no=seq,
                 name=_clean(rec["Direk_Adi"]) or None,
-                latitude=lat, longitude=lon, pole_type=pole_type, excel_row=idx,
+                latitude=lat, longitude=lon,
+                topology_role=roller[0], energy_role=roller[1], excel_row=idx,
             )
             pole_by_key[pole_key] = existing_pole
             plan.poles.append(existing_pole)
@@ -937,9 +1053,9 @@ def _parse_quick_sheet(
             continue
         lat, lon = cift
 
-        pole_type = _clean(rec["Direk_Tipi"]).lower() or "pole"
-        if pole_type not in POLE_TYPES:
-            plan.errors.append(RowError(idx, f"{QUICK_SHEET}: Direk_Tipi geçersiz: {pole_type!r}."))
+        roller = _rolleri_coz(_clean(rec["Direk_Tipi"]), "")
+        if roller is None:
+            plan.errors.append(RowError(idx, f"{QUICK_SHEET}: Direk_Tipi geçersiz: {rec['Direk_Tipi']!r}."))
             continue
 
         anahtar = (ff_bolge, ff_hat)
@@ -958,7 +1074,8 @@ def _parse_quick_sheet(
         pp = ParsedPole(
             region_code=ff_bolge, line_code=ff_hat, sequence_no=seq,
             name=_clean(rec["Direk_Adi"]) or None,
-            latitude=lat, longitude=lon, pole_type=pole_type, excel_row=idx,
+            latitude=lat, longitude=lon,
+            topology_role=roller[0], energy_role=roller[1], excel_row=idx,
         )
         pole_by_key[(ff_bolge, ff_hat, seq)] = pp
         plan.poles.append(pp)
@@ -1011,19 +1128,34 @@ def plan_for_wizard(
         if cift is None:
             plan.errors.append(RowError(i, f"{i}. direk koordinatı geçersiz."))
             continue
-        pole_type = _clean(p.get("pole_type")).lower() or "pole"
-        if pole_type not in POLE_TYPES:
-            plan.errors.append(RowError(i, f"{i}. direk tipi geçersiz: {pole_type!r}."))
-            continue
+        topo = _clean(p.get("topology_role")).lower()
+        enerji = _clean(p.get("energy_role")).lower()
+        if topo or enerji:
+            roller = (topo or "transit", enerji or "none")
+            if roller[0] not in TOPOLOGY_ROLES or roller[1] not in ENERGY_ROLES:
+                plan.errors.append(RowError(i, f"{i}. direk rolü geçersiz."))
+                continue
+        else:
+            roller = _rolleri_coz(_clean(p.get("pole_type")), "")
+            if roller is None:
+                plan.errors.append(RowError(i, f"{i}. direk tipi geçersiz."))
+                continue
         plan.poles.append(
             ParsedPole(
                 region_code=region_code, line_code=line_code, sequence_no=seq,
                 name=_clean(p.get("name")) or None,
                 latitude=cift[0], longitude=cift[1],
-                pole_type=pole_type, excel_row=i,
+                topology_role=roller[0], energy_role=roller[1], excel_row=i,
             )
         )
         seq += 1
+    # YENI hatta (1'den basliyorsa) uc roller otomatik: ilk direk line_start,
+    # son direk line_end — acikca farkli rol verilmediyse.
+    if plan.poles and plan.poles[0].sequence_no == 1:
+        if plan.poles[0].topology_role == "transit":
+            plan.poles[0].topology_role = "line_start"
+        if len(plan.poles) > 1 and plan.poles[-1].topology_role == "transit":
+            plan.poles[-1].topology_role = "line_end"
     return plan
 
 
@@ -1161,7 +1293,8 @@ def apply_plan(plan: ImportPlan, db: Session) -> ImportResult:
                 name=pp.name,
                 latitude=pp.latitude,
                 longitude=pp.longitude,
-                pole_type=pp.pole_type,
+                topology_role=pp.topology_role,
+                energy_role=pp.energy_role,
             )
             db.add(pole)
             db.flush()
@@ -1170,7 +1303,8 @@ def apply_plan(plan: ImportPlan, db: Session) -> ImportResult:
             existing.name = pp.name
             existing.latitude = pp.latitude
             existing.longitude = pp.longitude
-            existing.pole_type = pp.pole_type
+            existing.topology_role = pp.topology_role
+            existing.energy_role = pp.energy_role
             pole = existing
             result.poles_updated += 1
         pole_map[(pp.region_code, pp.line_code, pp.sequence_no)] = pole

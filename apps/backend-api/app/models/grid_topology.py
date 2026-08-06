@@ -97,9 +97,20 @@ class Pole(Base):
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
-    # Direk tipi: 'pole' (varsayilan), 'transformer' (trafo), 'breaker', vs.
-    # UI hat baslangic/bitis sembolunu bu alana gore degistirir.
+    # ESKI ekipman-tipi alani (pole/transformer/breaker...). Rol modeline
+    # gecildi (asagida); geriye uyum icin kolon DURUYOR, yeni kod okumaz.
     pole_type: Mapped[str] = mapped_column(String(20), nullable=False, default="pole")
+    # ROL MODELI: sistem ekipman envanteri DEGIL — direk hattin neresinde
+    # ve enerji akisinda ne is goruyor, onu tutariz. Iki BAGIMSIZ eksen:
+    #   topology_role: line_start | transit | branch | line_end | cable_transition
+    #   energy_role:   none | generation | consumption | bidirectional
+    # Ariza/enerji/haberlesme gibi OPERASYONEL durumlar buraya KARISMAZ.
+    topology_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="transit"
+    )
+    energy_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="none"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )

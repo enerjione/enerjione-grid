@@ -398,6 +398,9 @@ export type GatewayAgentStatus = {
    *  state_stale | unreachable */
   reason?: string | null;
   docker_available: boolean;
+  /** Guncelleme TESPITI `docker buildx` gerektirir; false ise surum
+   *  durumu kalici olarak "bilinmiyor" gorunur. */
+  buildx_available?: boolean;
   updated_at?: string | null;
   state_age_seconds?: number | null;
   gateways: LocalGateway[];
@@ -532,7 +535,21 @@ export type Line = {
   segment_count?: number;
 };
 
-export type PoleType = "pole" | "transformer" | "breaker";
+/** ESKI ekipman-tipi alani — geriye uyum icin duruyor; yeni kod ROL modelini
+ *  kullanir (topology_role + energy_role, bkz. poleTypeMeta.ts). */
+export type PoleType =
+  | "pole"
+  | "transformer"
+  | "breaker"
+  | "disconnector"
+  | "fuse_cutout"
+  | "source"
+  | "cable_transition"
+  | "branch_point";
+
+/** Direk ROL modeli: siniflandirma ekipman degil ISLEV anlatir. */
+export type TopologyRole = "line_start" | "transit" | "branch" | "line_end" | "cable_transition";
+export type EnergyRole = "none" | "generation" | "consumption" | "bidirectional";
 
 export type Pole = {
   id: number;
@@ -542,6 +559,10 @@ export type Pole = {
   latitude: number;
   longitude: number;
   pole_type?: PoleType;
+  // Rol modeli (yeni): eski backend'de alanlar gelmeyebilir — rolesOf()
+  // ekipman tipinden donusturur.
+  topology_role?: TopologyRole;
+  energy_role?: EnergyRole;
   created_at: string;
 };
 
@@ -917,6 +938,11 @@ export type HostStatusInfo = {
   uptime_seconds: number;
   process_pid: number;
   process_uptime_seconds: number;
+  /** Sistemin bu cihazda ILK calistigi an (ISO-8601, UTC): denetim
+   *  kaydindaki en eski olay. "Kurulum tarihi" DEGIL — kurulum damgasi
+   *  tutan bir alan yok; arayuz bunu "ilk calistirma" diye etiketler.
+   *  null = henuz hic olay yok (taze kurulum) veya sorgu basarisiz. */
+  first_started_at?: string | null;
 };
 
 export type HostCpuMetrics = {
@@ -1814,4 +1840,17 @@ export type DeviceScanResult = {
   portOpen: boolean | null;
   // no_ip | invalid_host | ping_unavailable | ping_timeout
   error: string | null;
+};
+
+/** Ajanin yazdigi gateway container log ciktisi (uzaktan log). */
+export type GatewayLogs = {
+  available: boolean;
+  code: string;
+  tail: number | null;
+  truncated: boolean;
+  generated_at: string | null;
+  age_seconds: number | null;
+  /** Cikti eski (varsayilan 15 dk) — tazelemek gerekir. */
+  stale: boolean;
+  output: string;
 };

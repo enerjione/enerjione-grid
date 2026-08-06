@@ -68,7 +68,7 @@ def test_build_template_has_sheets_and_headers(db):
     assert header == g.COLUMNS
     assert "Cihaz_Sira" not in header   # kaldirildi
     assert "Yon" in header and "Cihaz" in header
-    assert len(header) == 13
+    assert len(header) == 14  # +Enerji_Rolu
 
 
 def test_build_template_fills_existing_data_as_tree(db):
@@ -352,8 +352,10 @@ def test_quick_sheet_otomatik_sira_ve_forward_fill(db):
     ])
     plan = g.parse_and_plan(data, db)
     assert [e.message for e in plan.errors] == []
-    assert [(p.sequence_no, p.pole_type) for p in plan.poles] == [
-        (1, "pole"), (2, "pole"), (3, "transformer"),
+    assert [(p.sequence_no, p.topology_role, p.energy_role) for p in plan.poles] == [
+        (1, "transit", "none"), (2, "transit", "none"),
+        # Eski "transformer" degeri rol modeline donusur: tuketim noktasi.
+        (3, "transit", "consumption"),
     ]
     assert plan.poles[1].name == "ara direk"
     assert plan.regions == {"B1": "B1"}
@@ -392,7 +394,8 @@ def test_wizard_plan_ve_apply(db):
         poles=[
             {"latitude": 39.0, "longitude": 32.0},
             {"latitude": 132.5, "longitude": 39.5},  # ters -> takas
-            {"latitude": 39.2, "longitude": 32.2, "name": "son", "pole_type": "breaker"},
+            {"latitude": 39.2, "longitude": 32.2, "name": "son",
+             "topology_role": "line_end", "energy_role": "consumption"},
         ],
     )
     assert [e.message for e in plan.errors] == []
@@ -402,7 +405,8 @@ def test_wizard_plan_ve_apply(db):
     assert result.poles_created == 3
     poles = db.query(Pole).order_by(Pole.sequence_no).all()
     assert poles[1].latitude == 39.5 and poles[1].longitude == 132.5
-    assert poles[2].pole_type == "breaker"
+    assert poles[2].topology_role == "line_end"
+    assert poles[2].energy_role == "consumption"
 
 
 def test_template_hizli_yapistir_sayfasi_var(db):
@@ -436,3 +440,59 @@ def test_quick_sheet_ornek_blok_forward_fill_KIRLETMEZ(db):
     assert "ANKARA" not in plan.regions
     assert plan.regions == {"B-GERCEK": "B-GERCEK"}
     assert len(plan.poles) == 2
+
+
+def test_kod_uret_deterministik():
+    assert g._kod_uret("Merkez TR-3 Hattı") == "MERKEZ-TR-3-HATTI"
+    assert g._kod_uret("Merkez TR-3 Hattı") == g._kod_uret("Merkez TR-3 Hattı")
+    assert g._kod_uret("çĞüŞİö") == "CGUSIO"
+
+
+def test_parse_yalniz_AD_ile_yeni_hat(db):
+    """Kod kolonlari gizli: kullanici yalniz Bolge_Adi/Hat_Adi yazar, kod
+    addan uretilir ve direkler o hatta baglanir."""
+    data = _sheet([
+        ["", "Merkez", "", "Ana Hat", 1, "", 39.0, 32.0, "", "", "", "", ""],
+        ["", "", "", "", 2, "", 39.1, 32.1, "", "", "", "", ""],
+    ])
+    plan = g.parse_and_plan(data, db)
+    assert [e.message for e in plan.errors] == []
+    assert plan.regions == {"MERKEZ": "Merkez"}
+    assert list(plan.lines.values())[0].code == "ANA-HAT"
+    assert len(plan.poles) == 2
+
+
+def test_template_kod_kolonlari_gizli_ve_cihaz_koordinati_dolu(db):
+    """Sablonda Bolge_Kodu/Hat_Kodu kolonlari gizli; cihaz ara-satirinda
+    otomatik enterpolasyonlu koordinat yazili (parser onu OKUMAZ)."""
+    r = Region(code="B1", name="Bolge 1"); db.add(r); db.flush()
+    ln = Line(region_id=r.id, code="H1", name="Hat 1"); db.add(ln); db.flush()
+    p1 = Pole(line_id=ln.id, sequence_no=1, latitude=39.0, longitude=32.0)
+    p2 = Pole(line_id=ln.id, sequence_no=2, latitude=40.0, longitude=33.0)
+    db.add_all([p1, p2]); db.flush()
+    d = Device(code="CIHAZ-1", name="c1", ip_address="10.0.0.9", latitude=0, longitude=0)
+    db.add(d); db.flush()
+    db.add(LineSegment(line_id=ln.id, from_pole_id=p1.id, to_pole_id=p2.id,
+                       device_id=d.id, device_position_t=0.5)); db.flush()
+
+    buf = g.build_template_workbook(db)
+    wb = load_workbook(io.BytesIO(buf.getvalue()))
+    ws = wb["Topoloji"]
+    assert ws.column_dimensions[g._col("Bolge_Kodu")].hidden is True
+    assert ws.column_dimensions[g._col("Hat_Kodu")].hidden is True
+    # Cihaz ara-satiri: Direk_Sira bos + Cihaz dolu; Enlem orta nokta ~39.5.
+    cihaz_satiri = None
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        rec = dict(zip(g.COLUMNS, list(row) + [None] * (len(g.COLUMNS) - len(row))))
+        if g._clean(rec["Cihaz"]) == "CIHAZ-1":
+            cihaz_satiri = rec
+            break
+    assert cihaz_satiri is not None
+    assert abs(float(cihaz_satiri["Enlem"]) - 39.5) < 1e-6
+    assert abs(float(cihaz_satiri["Boylam"]) - 32.5) < 1e-6
+    # Round-trip: ayni dosya parse edildiginde cihaz koordinati direk sanilmaz.
+    buf2 = io.BytesIO(); wb.save(buf2)
+    plan = g.parse_and_plan(buf2.getvalue(), db)
+    assert [e.message for e in plan.errors] == []
+    assert len(plan.poles) == 2
+    assert sum(len(p.devices) for p in plan.poles) == 1

@@ -6311,11 +6311,110 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   flex: 0 0 auto;
 }
 
+/* SOL SUTUN: kaynak karti + altinda uclu kartlar. Servis listesi (sag
+   sutun) cok daha uzun oldugu icin sol tarafta genis bir bosluk kaliyordu;
+   ucluler tam o boslugu doldurur. */
+.sys-col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Cekirdek kullanimi / takas alani / ag trafigi — UC KART YAN YANA.
+   Onceden ucu de "kaynaklar" kartinin icinde alt alta duruyor ve her biri
+   tam genisligi kaplayip sagda genis bir bosluk birakiyordu (kullanici
+   istegi, 2026-08-06). Kartlar esit yukseklikte hizalanir; icerikleri
+   kendi kutularinda dikeyde ortalanir ki farkli yukseklikteki bilesenler
+   ayni satirda dengeli dursun.
+
+   `auto-fit` DEGIL sabit uc kolon: cekirdek karti tek cekirdekli makinede,
+   takas karti swap'siz sistemde HIC render edilmez; auto-fit ile kalan
+   kart(lar) tum satiri kaplayip devasa gorunurdu. Sabit kolonla ikisi de
+   dogal genisliginde kalir. */
+.sys-trio-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Uclu kartlar sol sutunda dar kalir: ic kutular sigmali. */
+.sys-trio-card {
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+/* Ag karti dar kolonda: yon bilgileri yan yana SIGMAZ, alt alta gecer. */
+.sys-trio-card .sys-net-flow {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sys-trio-card .sys-net-divider {
+  width: 100%;
+  height: 1px;
+}
+
+/* Cekirdek cubuklari dar kolonda tasmasin. */
+.sys-trio-card .sys-core-bars {
+  flex-wrap: wrap;
+}
+
+.sys-trio-card {
+  gap: 10px;
+  justify-content: center;
+}
+
+/* Kart basliklari (CEKIRDEK KULLANIMI / AG TRAFIGI) ic kutuda degil kartin
+   kendisinde duruyor; ust bosluk kartin padding'inden gelsin. */
+.sys-trio-card .sys-metric-group-title {
+  padding: 0;
+}
+
+/* Ic kutular kart cercevesinin icinde IKINCI bir cerceve cizmesin: kart
+   zaten beyaz/cerceveli, ic panel seffaf kalir. */
+.sys-trio-card .sys-cores,
+.sys-trio-card .sys-meter {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* Uyari/kritik tonu kartin KENDI cercevesine tasinir. */
+.sys-trio-card:has(.sys-meter--warn) {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+.sys-trio-card:has(.sys-meter--bad) {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+@media (max-width: 1100px) {
+  .sys-trio-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .sys-trio-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Kaynak karti sayfa kayarken YERINDE KALIR; servis listesi yanindan akar.
    Yapisma referansi `.system-status-shell` (overflow-y: auto olan kap).
    Ust sinir grid satiridir: kart, servis listesi bitene kadar yapisik kalir,
    sonra normal akisa doner. */
-.sys-duo-grid > .sys-card--resources {
+/* Yapiskanlik artik KARTA degil SOL SUTUNA uygulanir: kart bir sarmalayicinin
+   (`.sys-col-left`) icine girdi ve grid cocugu olmaktan cikti — `sticky` bir
+   ogenin yapisabilmesi icin kaydirilabilir kapsayicisinda pay olmasi gerekir,
+   sarmalayici icinde bu pay yoktu ve kural olu kalirdi. */
+.sys-duo-grid > .sys-col-left {
   position: sticky;
   top: 8px;
 }
@@ -6326,7 +6425,7 @@ main.content.engineering-content:has(.bulk-notify-panel) {
   }
   /* Tek kolonda yapiskanlik anlamsiz: kart genisligin tamamini kaplar ve
      altindaki servis listesini surekli orterdi. */
-  .sys-duo-grid > .sys-card--resources {
+  .sys-duo-grid > .sys-col-left {
     position: static;
   }
 }
@@ -21116,6 +21215,111 @@ th.event-col-category {
   outline: 3px solid #dc2626;
   outline-offset: 1px;
 }
+
+/* Yeni gercekci tipler — her tip ayirt edici renkte. Kesici kalibiyla ayni
+   iskelet (sembol + kucuk sira rozeti); baslangic/bitis cerceveleri ortak
+   kurallardan gelir. */
+.grid-pole-pin.is-disconnector, .grid-pole-pin--sm.is-disconnector {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(3, 105, 161, 0.4);
+}
+
+.grid-pole-pin.is-fuse, .grid-pole-pin--sm.is-fuse {
+  background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(180, 83, 9, 0.4);
+}
+
+.grid-pole-pin.is-source, .grid-pole-pin--sm.is-source {
+  background: linear-gradient(135deg, #334155 0%, #0f172a 100%);
+  width: 36px; height: 36px;
+  border-radius: 6px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.45);
+}
+
+.grid-pole-pin.is-cable, .grid-pole-pin--sm.is-cable {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(109, 40, 217, 0.4);
+}
+
+/* Rol modeli: hat baslangici (yesil) / hat sonu (kirmizi) pinleri. */
+.grid-pole-pin.is-role-start, .grid-pole-pin--sm.is-role-start {
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(21, 128, 61, 0.4);
+}
+
+.grid-pole-pin.is-role-end, .grid-pole-pin--sm.is-role-end {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.4);
+}
+
+/* Enerji rolu ROZETI — ana ikonun sol alt kosesinde kucuk yuvarlak.
+   Uretim yesil ↑, tuketim mavi ↓, cift yon mor ⇅; birbirinden renk +
+   sembolle ayrisir. Operasyonel durumlarla (alarm vb.) karismaz. */
+.grid-pole-energy {
+  position: absolute;
+  bottom: -6px;
+  left: -6px;
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+}
+
+.grid-pole-energy.is-gen { background: #16a34a; }
+.grid-pole-energy.is-cons { background: #2563eb; }
+.grid-pole-energy.is-bi { background: #7c3aed; }
+
+/* Liste gorunumunde enerji etiketi. */
+.grid-mgmt-pole-card-tag.is-energy {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.grid-pole-pin.is-branchpt, .grid-pole-pin--sm.is-branchpt {
+  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(15, 118, 110, 0.4);
+}
+
+.grid-pole-pin.is-disconnector.is-start, .grid-pole-pin.is-fuse.is-start,
+.grid-pole-pin.is-source.is-start, .grid-pole-pin.is-cable.is-start,
+.grid-pole-pin.is-branchpt.is-start {
+  outline: 3px solid #16a34a;
+  outline-offset: 1px;
+}
+
+.grid-pole-pin.is-disconnector.is-end, .grid-pole-pin.is-fuse.is-end,
+.grid-pole-pin.is-source.is-end, .grid-pole-pin.is-cable.is-end,
+.grid-pole-pin.is-branchpt.is-end {
+  outline: 3px solid #dc2626;
+  outline-offset: 1px;
+}
 .grid-pole-pin .grid-pole-symbol {
   font-size: 16px;
   line-height: 1;
@@ -21594,21 +21798,18 @@ th.event-col-category {
 .grid-mgmt-pole-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  transition: all 0.15s;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
 }
-.grid-mgmt-pole-card:hover {
-  border-color: #94a3b8;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-}
+.grid-mgmt-pole-card:hover { border-color: #cbd5e1; background: #fafbfc; }
 .grid-mgmt-pole-card.is-dragging { opacity: 0.55; }
-.grid-mgmt-pole-card.is-start { border-left: 4px solid #16a34a; }
-.grid-mgmt-pole-card.is-end { border-left: 4px solid #dc2626; }
+/* Uclar kalin serit yerine INCE sol vurgu — sakin ama okunur. */
+.grid-mgmt-pole-card.is-start { border-left: 3px solid #86efac; }
+.grid-mgmt-pole-card.is-end { border-left: 3px solid #fca5a5; }
 
 .grid-mgmt-pole-card-handle {
   display: inline-flex;
@@ -21620,20 +21821,19 @@ th.event-col-category {
 .grid-mgmt-pole-card-handle .material-symbols-outlined { font-size: 20px; }
 
 .grid-mgmt-pole-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
-  color: #1e3a8a;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(30, 58, 138, 0.15);
 }
 .grid-mgmt-pole-card-icon .material-symbols-outlined {
-  font-size: 22px;
-  font-variation-settings: "FILL" 1, "wght" 500;
+  font-size: 18px;
+  font-variation-settings: "FILL" 0, "wght" 400;
 }
 .grid-mgmt-pole-card-icon.is-transformer {
   background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
@@ -21644,16 +21844,13 @@ th.event-col-category {
   font-variation-settings: "FILL" 1, "wght" 600;
 }
 /* BAS pole — yesil gradient */
-.grid-mgmt-pole-card.is-start .grid-mgmt-pole-card-icon:not(.is-transformer) {
-  background: linear-gradient(135deg, #dcfce7 0%, #4ade80 100%);
-  color: #14532d;
-  box-shadow: 0 1px 3px rgba(20, 83, 45, 0.2);
+.grid-mgmt-pole-card.is-start .grid-mgmt-pole-card-icon {
+  background: #f0fdf4;
+  color: #16a34a;
 }
-/* SON pole — kirmizi gradient */
-.grid-mgmt-pole-card.is-end .grid-mgmt-pole-card-icon:not(.is-transformer) {
-  background: linear-gradient(135deg, #fee2e2 0%, #f87171 100%);
-  color: #7f1d1d;
-  box-shadow: 0 1px 3px rgba(127, 29, 29, 0.2);
+.grid-mgmt-pole-card.is-end .grid-mgmt-pole-card-icon {
+  background: #fef2f2;
+  color: #dc2626;
 }
 
 .grid-mgmt-pole-card-main {
@@ -21690,9 +21887,9 @@ th.event-col-category {
   letter-spacing: 0.4px;
   text-transform: uppercase;
 }
-.grid-mgmt-pole-card-tag.is-start { background: #16a34a; color: #fff; }
-.grid-mgmt-pole-card-tag.is-end { background: #dc2626; color: #fff; }
-.grid-mgmt-pole-card-tag.is-type { background: #fef3c7; color: #b45309; }
+.grid-mgmt-pole-card-tag.is-start { background: #dcfce7; color: #15803d; }
+.grid-mgmt-pole-card-tag.is-end { background: #fee2e2; color: #b91c1c; }
+.grid-mgmt-pole-card-tag.is-type { background: #f0fdfa; color: #0f766e; }
 
 .grid-mgmt-pole-card-meta {
   display: inline-flex;
@@ -21720,22 +21917,20 @@ th.event-col-category {
 .grid-mgmt-segment-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin: 4px 0 4px 36px;
-  padding: 10px 14px;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
+  gap: 12px;
+  margin: 2px 0 2px 40px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-left: 2px solid #eef2f7;
+  border-radius: 0;
   position: relative;
-  transition: all 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
-.grid-mgmt-segment-card.is-empty {
-  background: #fafbfc;
-}
+.grid-mgmt-segment-card.is-empty { background: transparent; }
 .grid-mgmt-segment-card.has-device {
-  background: #f0fdf4;
-  border-color: #86efac;
-  border-style: solid;
+  background: transparent;
+  border-left-color: #bbf7d0;
 }
 .grid-mgmt-segment-card.is-drop-target {
   background: #eef2ff;
@@ -21751,26 +21946,24 @@ th.event-col-category {
   flex-shrink: 0;
 }
 .grid-mgmt-segment-card-dot {
-  width: 22px; height: 22px;
+  width: 18px; height: 18px;
   border-radius: 50%;
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 10px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 9.5px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 .grid-mgmt-segment-card-line {
-  width: 28px;
-  height: 3px;
-  background: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
-  border-radius: 2px;
+  width: 20px;
+  height: 2px;
+  background: #cbd5e1;
+  border-radius: 1px;
 }
 .grid-mgmt-segment-card.has-device .grid-mgmt-segment-card-line {
-  background: linear-gradient(90deg, #16a34a 0%, #15803d 100%);
+  background: #22c55e;
 }
 
 /* Cihaz chip'i */
@@ -38497,3 +38690,288 @@ th.event-col-category {
   border-color: #e97800;
 }
 
+
+/* =========================================================================
+   Sistem Durumu — ust seritteki KPI cipleri + Gateway kontrol karti.
+   KPI'lar eskiden 6 buyuk kart olarak ekranin ust ucte birini yiyordu;
+   ayni sayilar tek seride, host bilgisiyle ayni satirda duruyor.
+   ========================================================================= */
+.sys-bar-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sys-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 11.5px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.sys-stat strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-stat-frac {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.sys-stat svg {
+  color: #94a3b8;
+  flex: none;
+}
+
+.sys-stat--ok {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+.sys-stat--ok strong,
+.sys-stat--ok svg {
+  color: #047857;
+}
+
+.sys-stat--bad {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+.sys-stat--bad strong,
+.sys-stat--bad svg {
+  color: #b91c1c;
+}
+
+.sys-stat--alarm {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+.sys-stat--alarm strong,
+.sys-stat--alarm svg {
+  color: #c2410c;
+}
+
+/* --- Gateway kontrol karti --- */
+.sys-card--gw {
+  gap: 12px;
+}
+
+.sys-card-icon--gw {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.sys-refresh-btn--sm {
+  padding: 4px 8px;
+  height: 28px;
+}
+
+.sys-gw-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sys-gw-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.sys-gw-ident {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.sys-gw-ident strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.sys-gw-ident small {
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-gw-state {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.sys-gw-state.is-run {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.sys-gw-state.is-stop {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+
+.sys-gw-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sys-gw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.sys-gw-btn:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.sys-gw-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sys-gw-btn.is-active {
+  border-color: #4338ca;
+  color: #4338ca;
+  background: #eef2ff;
+}
+
+/* Durdurma yikici: kirmizi. Baslatma iyilestirici: yesil. */
+.sys-gw-btn.is-stop {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.sys-gw-btn.is-stop:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+.sys-gw-btn.is-start {
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.sys-gw-btn.is-start:hover:not(:disabled) {
+  background: #ecfdf5;
+  border-color: #10b981;
+}
+
+.sys-gw-apply {
+  margin: 0;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.sys-gw-apply.is-bad {
+  color: #b91c1c;
+}
+
+/* --- Uzaktan log gorunumu --- */
+.sys-gw-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.sys-gw-logs-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sys-gw-logs-head strong {
+  font-size: 12.5px;
+  color: #0f172a;
+  margin-right: auto;
+}
+
+.sys-gw-logs-head select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+}
+
+.sys-gw-logs-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.sys-gw-stale {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #b45309;
+  font-weight: 600;
+}
+
+/* Log govdesi: koyu zemin, KENDI icinde kayar — sayfayi uzatmaz. */
+.sys-gw-logs-body {
+  margin: 0;
+  padding: 12px;
+  max-height: 340px;
+  overflow: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* WS rozeti serit icinde: cip cercevesi rozetin KENDI cercevesiyle
+   cakismasin diye sarmalayici saydam. */
+.sys-stat--ws {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
