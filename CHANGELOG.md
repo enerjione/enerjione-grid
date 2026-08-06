@@ -14,6 +14,18 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.27] — 2026-08-06
+
+### Düzeltildi
+
+- **Komut olayları Türkçe**: "reset_all_fcis (50984)" gibi satırlar artık
+  "Tüm Göstergeleri Sıfırla (50984)" şeklinde görünür — komut parametresi
+  makine anahtarı olarak saklanır, ekran sinyal sözlüğünden, PDF/Excel/CSV
+  export aynı sözlüğün sunucu kopyasından çevirir (yeni kayıtlar; eski ham
+  satırlar olduğu gibi kalır).
+
+---
+
 ## [2.53.26] — 2026-08-06
 
 ### Düzeltildi
