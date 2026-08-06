@@ -119,8 +119,22 @@ case "$LAYER" in
     e1_info "Hostname korundu. Geri almak: sudo hostnamectl set-hostname <eski-ad>"
     ;;
 
+  firewall)
+    e1_step "Guvenlik duvari ajani kaldiriliyor"
+    _units_remove e1-fwd.path e1-fwd-report.timer \
+                  e1-fwd.service e1-fwd-report.service
+    # KURALLARA DOKUNMUYORUZ. Ajan yalnizca kurallari UYGULAYAN taraf;
+    # kaldirirken duvari acmak (ya da kapatmak) operatorun bilerek
+    # yaptigi bir sey olmali. Sessizce port acan bir "kaldirma" guvenlik
+    # acigi yaratirdi.
+    rm -rf /var/lib/e1-grid/fw /var/lib/e1-grid/fw-priv 2>/dev/null || true
+    e1_ok "Ajan ve durum dizinleri kaldirildi."
+    e1_warn "Mevcut nftables/iptables kurallarina DOKUNULMADI."
+    e1_info "Kurallari gormek icin: sudo nft list ruleset"
+    ;;
+
   *)
-    e1_warn "Kullanim: remove-layer.sh {tailscale|kiosk|appliance}"
+    e1_warn "Kullanim: remove-layer.sh {tailscale|kiosk|appliance|firewall}"
     exit 1
     ;;
 esac

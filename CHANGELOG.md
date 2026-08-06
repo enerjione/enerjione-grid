@@ -14,6 +14,16 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.14] — 2026-08-06
+
+### Değişti
+
+- Uzaktan Bakım: üst durum bloğu daha basık — "AÇIK" rozeti kaldırıldı
+  (başlık zaten söylüyor), geri sayım ve "Erişimi şimdi kapat" tek yatay
+  satırda.
+
+---
+
 ## [2.53.13] — 2026-08-06
 
 ### Değişti

@@ -386,10 +386,8 @@ export function RemoteAccessPage({ accessToken }: Props) {
       {/* ================= Durum blogu — sayfanin tek ana mesaji ============ */}
       <div className={`rad-switch is-${mode}`}>
         <div className="rad-switch-body">
-          <span className="rad-switch-pill">
-            <span className="rad-dot" aria-hidden="true" />
-            {t(HERO_TEXT[mode].state)}
-          </span>
+          {/* "ACIK/KAPALI" rozeti KALDIRILDI (kullanici istegi): baslik zaten
+              durumu soyluyor, rozet ayni bilgiyi tekrar edip yer yiyordu. */}
           <h2>
             {mode === "on" ? (
               <LockOpen size={20} strokeWidth={2.2} />

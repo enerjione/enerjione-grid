@@ -35117,7 +35117,7 @@ th.event-col-category {
   flex-shrink: 0;
   /* BASIK tutulur (kullanici istegi): ust blok dikeyde yer yemesin,
      genislik zaten bol — bilgiler yatayda dagilir. */
-  padding: 12px 18px;
+  padding: 10px 16px;
   border: 1px solid var(--rad-line);
   border-radius: 14px;
   background: #fff;
@@ -35190,7 +35190,7 @@ th.event-col-category {
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 650;
   color: var(--rad-ink);
 }
@@ -35224,13 +35224,14 @@ th.event-col-category {
 
 .rad-switch-meta li svg { opacity: 0.75; flex-shrink: 0; }
 
+/* Sag blok TEK YATAY SATIR: geri sayim + kapat dugmesi yan yana — dikey
+   yigilma hero'yu uzatiyor, sag taraf bos gorunuyordu. */
 .rad-switch-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
+  align-items: center;
+  gap: 16px;
   flex-shrink: 0;
-  padding-left: 20px;
+  padding-left: 18px;
   border-left: 1px solid var(--rad-on-line);
 }
 
@@ -35279,11 +35280,12 @@ th.event-col-category {
 /* Geri sayim: buyuk, monospace — saat bilgisi bir "gosterge" gibi okunmali. */
 .rad-countdown strong {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--rad-on-ink);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .rad-countdown span {
