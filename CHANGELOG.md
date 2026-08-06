@@ -14,6 +14,22 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.22] — 2026-08-06
+
+### Düzeltildi
+
+- **Olay dışa aktarımında Cihaz kolonu** artık boş kalmıyor: olay kaydında
+  cihaz kodu yoksa metadata'dan geri kazanılır (eski alarm kayıtları).
+- Tüm export biçimlerine **Seri No** kolonu eklendi (cihaz adının yanında).
+
+### Değişti
+
+- **PDF export yalnızca görünen sayfayı** içerir — 1.8M kayıtlık tabloda
+  "tüm olaylar" PDF'i anlamsızdı; modal bunu açıkça söyler. CSV/Excel veri
+  dökümü olarak filtre kapsamında kalır (20k tavan).
+
+---
+
 ## [2.53.21] — 2026-08-06
 
 ### Eklendi

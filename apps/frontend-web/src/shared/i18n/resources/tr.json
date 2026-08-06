@@ -671,7 +671,8 @@
       "title": "Olayları Dışa Aktar",
       "hint": "Filtrelenmiş olaylar seçtiğiniz formatta indirilecektir.",
       "format": "Format",
-      "download": "İndir"
+      "download": "İndir",
+      "pdfPageOnly": "PDF, ekranda görünen sayfayı içerir (tarih/filtre seçimine göre daraltıp sayfalayın). Tüm kayıtlar için CSV veya Excel kullanın."
     },
     "itemLabel": "olay",
     "severity": {
@@ -1656,7 +1657,6 @@
       "requested": "İstek gönderildi; birkaç saniye içinde uygulanacak.",
       "confirmStop": "{{code}} gateway'i durdurulsun mu? Bu gateway'e bağlı cihazlardan veri AKMAYACAK ve cihaz yeniden başlasa bile kalkmayacak.",
       "confirmRestart": "{{code}} gateway'i yeniden başlatılsın mı? Kısa bir veri kesintisi olur.",
-      "lastApply": "Son işlem: {{action}} · {{code}} — {{message}}",
       "logsFor": "{{code}} logları",
       "lastLines": "Son {{count}} satır",
       "logFetch": "Log Al",
@@ -1664,7 +1664,8 @@
       "logEmpty": "Henüz log alınmadı. \"Log Al\" ile gateway çıktısını getirin.",
       "logTimeout": "Ajan zamanında yanıt vermedi; birazdan tekrar deneyin.",
       "logStale": "eski çıktı",
-      "logTruncated": "kırpıldı"
+      "logTruncated": "kırpıldı",
+      "applyFailed": "Son işlem başarısız ({{action}}): {{message}}"
     }
   },
   "engineering": {

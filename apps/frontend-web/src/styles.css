@@ -38698,198 +38698,314 @@ th.event-col-category {
   height: 28px;
 }
 
-.sys-gw-list {
+/* =========================================================================
+   GATEWAY KONTROL karti (features/system-status/GatewayControlCard.tsx)
+
+   2026-08-06 (kullanici istegi): kart minimal + gorsel hale getirildi.
+   Kalici "son islem" satiri kaldirildi, log ciktisi POPUP'a tasindi,
+   aksiyonlar ikon dugme oldu. Eski `.sys-gw-row/-btn/-logs*` kurallari
+   bunlarla degistirildi; `.sys-gw-item*` (baska bolum) DOKUNULMADI.
+   ========================================================================= */
+.gwc-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.sys-gw-row {
-  display: flex;
+/* Satir: durum noktasi · kimlik · durum rozeti · aksiyonlar.
+   `grid` (flex degil): kimlik sutunu esner, digerleri dogal genisliginde
+   kalir; boylece cok gateway'de rozetler ALT ALTA HIZALI durur. */
+.gwc-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
-  padding: 9px 12px;
+  padding: 12px 14px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.sys-gw-ident {
+.gwc-row:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+/* Calisan gateway solda ince yesil serit tasir — bir bakista "ayakta". */
+.gwc-row.is-run {
+  box-shadow: inset 3px 0 0 #10b981;
+}
+.gwc-row.is-stop {
+  box-shadow: inset 3px 0 0 #cbd5e1;
+  background: #f8fafc;
+}
+.gwc-row.has-error {
+  border-color: #fecaca;
+}
+
+/* Durum noktasi: calisirken nabiz atar (canli sinyal), dururken sabit. */
+.gwc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.gwc-dot.is-run {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
+  animation: gwc-pulse 2s ease-in-out infinite;
+}
+.gwc-dot.is-stop {
+  background: #cbd5e1;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.14);
+}
+
+@keyframes gwc-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16); }
+  50%      { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.05); }
+}
+
+.gwc-ident {
   display: flex;
   flex-direction: column;
+  gap: 1px;
   min-width: 0;
-  flex: 1;
 }
 
-.sys-gw-ident strong {
-  font-size: 13px;
+.gwc-ident strong {
+  font-size: 13.5px;
+  font-weight: 700;
   color: #0f172a;
+  letter-spacing: -0.01em;
 }
 
-.sys-gw-ident small {
-  font-size: 11px;
-  color: #64748b;
+.gwc-ident small {
+  font-size: 11.5px;
+  color: #94a3b8;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sys-gw-state {
+.gwc-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
   white-space: nowrap;
+  border: 1px solid transparent;
 }
-
-.sys-gw-state.is-run {
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  color: #047857;
+.gwc-state.is-run {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
 }
-
-.sys-gw-state.is-stop {
+.gwc-state.is-stop {
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-color: #e2e8f0;
   color: #64748b;
 }
 
-.sys-gw-actions {
+/* --- Aksiyonlar: ikon dugmeler --- */
+.gwc-actions {
   display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gwc-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.gwc-icon-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.gwc-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Durdurma VERI AKISINI KESER: notr degil, uyari renginde. */
+.gwc-icon-btn.is-stop:not(:disabled) {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.gwc-icon-btn.is-stop:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+.gwc-icon-btn.is-start:not(:disabled) {
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.gwc-icon-btn.is-start:hover:not(:disabled) {
+  background: #f0fdf4;
+  border-color: #4ade80;
+}
+
+/* Yalnizca BASARISIZ son islem — satirin altinda, tum sutunlari kapsar. */
+.gwc-row-error {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
   gap: 6px;
+  margin: 2px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #fee2e2;
+  font-size: 11.5px;
+  color: #b91c1c;
+}
+
+.gwc-row-error svg {
+  flex-shrink: 0;
+}
+
+/* --- Log popup --- */
+.gwc-log-modal {
+  width: min(860px, calc(100vw - 48px));
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+}
+
+.gwc-log-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gwc-log-head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.gwc-log-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  color: #4338ca;
+}
+
+.gwc-log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.sys-gw-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 30px;
+.gwc-log-toolbar select {
+  height: 32px;
   padding: 0 10px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #fff;
-  font-size: 12px;
+  font-size: 12.5px;
+  color: #0f172a;
+}
+
+.gwc-log-fetch.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 0;
+  padding: 7px 14px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #334155;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
-.sys-gw-btn:hover:not(:disabled) {
-  border-color: #94a3b8;
+.gwc-log-fetch.secondary-btn:hover:not(:disabled) {
+  filter: none;
   background: #f8fafc;
+  color: #0f172a;
 }
 
-.sys-gw-btn:disabled {
-  opacity: 0.45;
+.gwc-log-fetch.secondary-btn:disabled {
+  opacity: 0.55;
   cursor: default;
 }
 
-.sys-gw-btn.is-active {
-  border-color: #4338ca;
-  color: #4338ca;
-  background: #eef2ff;
-}
-
-/* Durdurma yikici: kirmizi. Baslatma iyilestirici: yesil. */
-.sys-gw-btn.is-stop {
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-.sys-gw-btn.is-stop:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #dc2626;
-}
-
-.sys-gw-btn.is-start {
-  border-color: #a7f3d0;
-  color: #047857;
-}
-.sys-gw-btn.is-start:hover:not(:disabled) {
-  background: #ecfdf5;
-  border-color: #10b981;
-}
-
-.sys-gw-apply {
-  margin: 0;
+/* Cikti damgasi + tazelik bayraklari arac cubugunun saginda. */
+.gwc-log-meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11.5px;
-  color: #64748b;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
-.sys-gw-apply.is-bad {
-  color: #b91c1c;
-}
-
-/* --- Uzaktan log gorunumu --- */
-.sys-gw-logs {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-.sys-gw-logs-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.sys-gw-logs-head strong {
-  font-size: 12.5px;
-  color: #0f172a;
-  margin-right: auto;
-}
-
-.sys-gw-logs-head select {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 12px;
-  font-family: inherit;
-  background: #fff;
-}
-
-.sys-gw-logs-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.sys-gw-stale {
-  padding: 2px 7px;
+.gwc-log-flag {
+  font-style: normal;
+  padding: 1px 7px;
   border-radius: 999px;
   background: #fffbeb;
   border: 1px solid #fde68a;
   color: #b45309;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
 }
 
-/* Log govdesi: koyu zemin, KENDI icinde kayar — sayfayi uzatmaz. */
-.sys-gw-logs-body {
+.gwc-log-body {
   margin: 0;
-  padding: 12px;
-  max-height: 340px;
+  padding: 12px 14px;
+  max-height: min(60vh, 520px);
   overflow: auto;
+  border-radius: 10px;
   background: #0f172a;
   color: #e2e8f0;
-  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11.5px;
-  line-height: 1.55;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  /* Uzun tek satirli JSON log'lar yatayda tasmasin. */
+  overflow-wrap: anywhere;
 }
 
-/* WS rozeti serit icinde: cip cercevesi rozetin KENDI cercevesiyle
-   cakismasin diye sarmalayici saydam. */
+.gwc-log-empty {
+  margin: 0;
+  padding: 28px 16px;
+  text-align: center;
+  border: 1px dashed #e2e8f0;
+  border-radius: 10px;
+  color: #94a3b8;
+  font-size: 12.5px;
+}
+
+
 .sys-stat--ws {
   padding: 0;
   border: none;

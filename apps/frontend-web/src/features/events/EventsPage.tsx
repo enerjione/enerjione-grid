@@ -329,6 +329,13 @@ export function EventsPage({ accessToken, devices }: Props) {
     try {
       const params = buildEventFilterParams(activeFilters);
       params.set("fmt", exportFormat);
+      // PDF = ekranin OKUNABILIR raporu: yalnizca GORUNEN SAYFA iner
+      // (1.8M kayitta "tum olaylar" PDF'i anlamsiz ve cok agir). CSV/XLSX
+      // veri dokumu olarak filtre kapsaminda kalir (backend tavani 20k).
+      if (exportFormat === "pdf") {
+        params.set("offset", String((page - 1) * pageSize));
+        params.set("limit", String(pageSize));
+      }
 
       const response = await fetch(`/api/v1/events/export?${params.toString()}`, {
         credentials: "include",
@@ -647,6 +654,9 @@ export function EventsPage({ accessToken, devices }: Props) {
                 <option value="json">JSON (raw data)</option>
               </select>
             </label>
+            {exportFormat === "pdf" ? (
+              <p className="helper-text">{t("events.export.pdfPageOnly")}</p>
+            ) : null}
             <div className="modal-actions">
               <button
                 type="button"

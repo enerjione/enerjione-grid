@@ -108,6 +108,22 @@ def _format_rows_for_export(events, device_names: dict[str, str] | None = None) 
             except (json.JSONDecodeError, TypeError):
                 meta_summary = (ev.metadata_json or "")[:200]
         device_code = ev.device_code or ""
+        # Cihaz kolonunun BOS kalmamasi icin geri kazanim: bazi olaylar
+        # (ozellikle eski alarm kayitlari) cihazi yalnizca metadata'da tasir.
+        meta_dict = None
+        if not device_code and ev.metadata_json:
+            try:
+                meta_dict = json.loads(ev.metadata_json)
+            except (json.JSONDecodeError, TypeError):
+                meta_dict = None
+            if isinstance(meta_dict, dict):
+                device_code = str(
+                    meta_dict.get("device_code") or meta_dict.get("device") or ""
+                )
+        ham = names.get(device_code)
+        # Geriye uyum: harita degeri duz ad (str) da olabilir (testler/eski
+        # cagiranlar) — (ad, seri) ciftine normallestir.
+        ad_seri = (ham, "") if isinstance(ham, str) else ham
         rows.append({
             "id": ev.id,
             "created_at": format_report_time(ev.created_at, with_seconds=True),
@@ -117,19 +133,21 @@ def _format_rows_for_export(events, device_names: dict[str, str] | None = None) 
             "message": message_subject(ev.message or "", ev.metadata_json),
             "message_full": format_message(ev.message or "", ev.metadata_json),
             "actor": ev.actor_username or "",
-            "device": names.get(device_code, device_code),
+            "device": (ad_seri[0] if ad_seri else device_code),
+            "serial": (ad_seri[1] if ad_seri else ""),
             "event_type": ev.event_type or "",
             "metadata": meta_summary,
         })
     return rows
 
 
-def _device_name_map(db: Session) -> dict[str, str]:
-    """Cihaz kodu -> ad. Arayuz tabloda ADI gosteriyor, export de oyle olmali."""
+def _device_name_map(db: Session) -> dict[str, tuple[str, str]]:
+    """Cihaz kodu -> (ad, seri no). Arayuz tabloda ADI gosteriyor; export'ta
+    ad + SERI NO birlikte iner (saha eslesmesi seri no ile yapiliyor)."""
     from app.models.device import Device
 
-    rows = db.execute(select(Device.code, Device.name)).all()
-    return {code: name for code, name in rows if code}
+    rows = db.execute(select(Device.code, Device.name, Device.serial_number)).all()
+    return {code: (name, serial or "") for code, name, serial in rows if code}
 
 
 def _build_csv(rows: list[dict]) -> bytes:
@@ -157,6 +175,7 @@ _COLUMN_TITLES = {
     "message_full": "Mesaj (tam)",
     "actor": "Kullanıcı",
     "device": "Cihaz",
+    "serial": "Seri No",
     "event_type": "Olay Tipi",
     "metadata": "Ek Bilgi",
 }
@@ -294,8 +313,8 @@ def _build_pdf(rows: list[dict], *, settings_row: ProjectSettings | None) -> byt
 
     # Sutun seti EKRANDAKI ile ayni sirada: Tarih, Oncelik, Kategori, Mesaj,
     # Durum, Kullanici, Cihaz.
-    headers = ["Tarih", "Öncelik", "Kategori", "Mesaj", "Durum", "Kullanıcı", "Cihaz"]
-    col_widths = [30 * mm, 20 * mm, 32 * mm, 98 * mm, 26 * mm, 26 * mm, 41 * mm]
+    headers = ["Tarih", "Öncelik", "Kategori", "Mesaj", "Durum", "Kullanıcı", "Cihaz", "Seri No"]
+    col_widths = [28 * mm, 18 * mm, 28 * mm, 88 * mm, 24 * mm, 24 * mm, 34 * mm, 24 * mm]
 
     data: list[list] = [[Paragraph(h, head_style) for h in headers]]
     for row in rows:
@@ -307,6 +326,7 @@ def _build_pdf(rows: list[dict], *, settings_row: ProjectSettings | None) -> byt
             Paragraph(str(row.get("status", "")), cell_style),
             Paragraph(str(row.get("actor", "")), cell_style),
             Paragraph(str(row.get("device", "")), cell_style),
+            Paragraph(str(row.get("serial", "")), cell_style),
         ])
 
     story = []
@@ -375,7 +395,8 @@ def export_events(
         q=q,
         date_from=date_from,
         date_to=date_to,
-        limit=_EXPORT_MAX_ROWS,
+        limit=min(limit or _EXPORT_MAX_ROWS, _EXPORT_MAX_ROWS),
+        offset=offset,
     )
     rows = _format_rows_for_export(events, _device_name_map(db))
     now = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")

@@ -674,7 +674,8 @@
       "title": "Export Events",
       "hint": "Filtered events will be downloaded in the chosen format.",
       "format": "Format",
-      "download": "Download"
+      "download": "Download",
+      "pdfPageOnly": "The PDF contains the currently visible page (narrow with filters and paginate). Use CSV or Excel for the full data set."
     },
     "itemLabel": "event",
     "severity": {
@@ -1659,7 +1660,6 @@
       "requested": "Request sent; it will be applied within seconds.",
       "confirmStop": "Stop gateway {{code}}? Devices behind it will send NO data, and it stays down even after a reboot.",
       "confirmRestart": "Restart gateway {{code}}? This causes a brief data outage.",
-      "lastApply": "Last action: {{action}} · {{code}} — {{message}}",
       "logsFor": "{{code}} logs",
       "lastLines": "Last {{count}} lines",
       "logFetch": "Fetch Logs",
@@ -1667,7 +1667,8 @@
       "logEmpty": "No logs fetched yet. Use \"Fetch Logs\" to pull gateway output.",
       "logTimeout": "The agent did not respond in time; try again shortly.",
       "logStale": "stale output",
-      "logTruncated": "truncated"
+      "logTruncated": "truncated",
+      "applyFailed": "Last action failed ({{action}}): {{message}}"
     }
   },
   "engineering": {

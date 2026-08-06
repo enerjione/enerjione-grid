@@ -13,10 +13,21 @@
  * ASENKRON: ucu de 202 doner, isi host ajani (e1-gwd) yapar. Sonuc
  * `last_apply` ile izlenir — bu yuzden istek sonrasi durum yenilemesi
  * hizlanir (POLL_FAST_MS) ve is bitince normale doner.
+ *
+ * GORUNUM (2026-08-06, kullanici istegi): kart minimal tutulur —
+ *   * "Son islem: logs · GW-001 — 300 satir log alindi" satiri KALDIRILDI.
+ *     Basarili islem zaten toast ile bildiriliyor ve durum rozetinden
+ *     okunuyor; ekranda kalici bir islem gunlugu tutulmuyor. BASARISIZLIK
+ *     ise ilgili gateway satirinin altinda gosterilir — istek "gonderildi"
+ *     dedikten sonra ajanda patlarsa kullanici bunu baska yerden ogrenemez.
+ *   * Log ciktisi kartin altinda DEGIL POPUP'ta acilir; uzun cikti sayfayi
+ *     asagi itip Sistem Durumu'nun geri kalanini ekrandan kaciriyordu.
+ *   * Aksiyonlar ikon dugme; uc metinli buton satiri doldurup kalabalik
+ *     yapiyordu.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FileText, Play, RefreshCw, RotateCw, Square } from "lucide-react";
+import { AlertTriangle, FileText, Play, RefreshCw, RotateCw, Square } from "lucide-react";
 
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useToast } from "../../components/ToastProvider";
@@ -187,151 +198,206 @@ export function GatewayControlCard({ accessToken, role }: Props) {
       ) : gateways.length === 0 ? (
         <p className="sys-loading-banner">{t("systemStatus.gwControl.empty")}</p>
       ) : (
-        <div className="sys-gw-list">
+        <div className="gwc-list">
           {gateways.map((gw) => {
             const calisiyor = gw.state === "running";
             const busy = busyCode === gw.code || Boolean(agent?.pending);
+            // Son ajan islemi BU gateway'e mi aitti ve BASARISIZ mi bitti?
+            // Basarili islem satir alti metni olarak YAZILMAZ (kullanici
+            // istegi): zaten toast ile bildirildi ve durum rozeti guncellendi.
+            // Basarisizlik ise sessiz gecilemez — istek "gonderildi" toast'i
+            // aldiktan sonra ajanda patlarsa kullanici bunu baska hicbir
+            // yerden ogrenemez.
+            const hata =
+              lastApply && lastApply.ok === false && lastApply.code === gw.code
+                ? lastApply
+                : null;
             return (
-              <div key={gw.code} className="sys-gw-row">
-                <span className="sys-gw-ident">
+              <div
+                key={gw.code}
+                className={`gwc-row ${calisiyor ? "is-run" : "is-stop"}${
+                  hata ? " has-error" : ""
+                }`}
+              >
+                <span className={`gwc-dot ${calisiyor ? "is-run" : "is-stop"}`} aria-hidden="true" />
+                <span className="gwc-ident">
                   <strong>{gw.code}</strong>
-                  <small title={gw.image ?? undefined}>{gw.status ?? gw.state ?? "—"}</small>
+                  <small title={gw.image ?? undefined}>
+                    {gw.status ?? gw.state ?? "—"}
+                  </small>
                 </span>
-                <span
-                  className={`sys-gw-state ${calisiyor ? "is-run" : "is-stop"}`}
-                >
+
+                <span className={`gwc-state ${calisiyor ? "is-run" : "is-stop"}`}>
                   {calisiyor
                     ? t("systemStatus.gwControl.running")
                     : t("systemStatus.gwControl.stopped")}
                 </span>
-                <span className="sys-gw-actions">
+
+                {/* Aksiyonlar IKON dugmeler: uc metinli buton satiri
+                    doldurup karti kalabaliklastiriyordu. Erisim icin
+                    aria-label + title birlikte veriliyor. */}
+                <span className="gwc-actions">
                   {canControl ? (
                     <>
                       {calisiyor ? (
                         <button
                           type="button"
-                          className="sys-gw-btn is-stop"
+                          className="gwc-icon-btn is-stop"
                           disabled={busy}
                           onClick={() => void runAction(gw.code, "stop")}
                           title={t("systemStatus.gwControl.stop")}
+                          aria-label={t("systemStatus.gwControl.stop")}
                         >
-                          <Square size={13} strokeWidth={2.4} />
-                          {t("systemStatus.gwControl.stop")}
+                          <Square size={15} strokeWidth={2.4} />
                         </button>
                       ) : (
                         <button
                           type="button"
-                          className="sys-gw-btn is-start"
+                          className="gwc-icon-btn is-start"
                           disabled={busy}
                           onClick={() => void runAction(gw.code, "start")}
                           title={t("systemStatus.gwControl.start")}
+                          aria-label={t("systemStatus.gwControl.start")}
                         >
-                          <Play size={13} strokeWidth={2.4} />
-                          {t("systemStatus.gwControl.start")}
+                          <Play size={15} strokeWidth={2.4} />
                         </button>
                       )}
                       <button
                         type="button"
-                        className="sys-gw-btn"
+                        className="gwc-icon-btn"
                         disabled={busy || !calisiyor}
                         onClick={() => void runAction(gw.code, "restart")}
                         title={t("systemStatus.gwControl.restart")}
+                        aria-label={t("systemStatus.gwControl.restart")}
                       >
-                        <RotateCw size={13} strokeWidth={2.4} />
-                        {t("systemStatus.gwControl.restart")}
+                        <RotateCw
+                          size={15}
+                          strokeWidth={2.4}
+                          className={busy ? "sys-spin" : undefined}
+                        />
                       </button>
                     </>
                   ) : null}
                   {canViewLogs ? (
                     <button
                       type="button"
-                      className={`sys-gw-btn ${logCode === gw.code ? "is-active" : ""}`}
+                      className="gwc-icon-btn"
                       onClick={() => void openLogs(gw.code)}
                       title={t("systemStatus.gwControl.logs")}
+                      aria-label={t("systemStatus.gwControl.logs")}
                     >
-                      <FileText size={13} strokeWidth={2.4} />
-                      {t("systemStatus.gwControl.logs")}
+                      <FileText size={15} strokeWidth={2.4} />
                     </button>
                   ) : null}
                 </span>
+
+                {/* Yalnizca BASARISIZ son islem — satirin altinda ince serit. */}
+                {hata ? (
+                  <p className="gwc-row-error">
+                    <AlertTriangle size={13} strokeWidth={2.4} />
+                    {t("systemStatus.gwControl.applyFailed", {
+                      action: hata.action ?? "—",
+                      message: hata.message ?? "—"
+                    })}
+                  </p>
+                ) : null}
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Son ajan islemi — istek gerçekten uygulandi mi. */}
-      {lastApply ? (
-        <p className={`sys-gw-apply ${lastApply.ok === false ? "is-bad" : ""}`}>
-          {t("systemStatus.gwControl.lastApply", {
-            action: lastApply.action ?? "—",
-            code: lastApply.code ?? "—",
-            message: lastApply.message ?? (lastApply.ok ? "ok" : "—")
-          })}
-        </p>
-      ) : null}
-
-      {/* --- Uzaktan log gorunumu --- */}
+      {/* --- Uzaktan log: POPUP (kullanici istegi) ---
+          Eskiden kartin ALTINDA aciliyordu; uzun cikti sayfayi asagi
+          itiyor ve Sistem Durumu'nun geri kalanini ekrandan kaciriyordu. */}
       {canViewLogs && logCode ? (
-        <div className="sys-gw-logs">
-          <div className="sys-gw-logs-head">
-            <strong>{t("systemStatus.gwControl.logsFor", { code: logCode })}</strong>
-            <select
-              value={logTail}
-              onChange={(e) => setLogTail(Number(e.target.value))}
-              disabled={logBusy}
-            >
-              {LOG_TAIL_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {t("systemStatus.gwControl.lastLines", { count: n })}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="sys-gw-btn"
-              disabled={logBusy}
-              onClick={() => void pullLogs(logCode)}
-            >
-              <RefreshCw size={13} strokeWidth={2.4} className={logBusy ? "sys-spin" : undefined} />
-              {logBusy
-                ? t("systemStatus.gwControl.logFetching")
-                : t("systemStatus.gwControl.logFetch")}
-            </button>
-            <button
-              type="button"
-              className="sys-gw-btn"
-              onClick={() => {
-                setLogCode(null);
-                setLogs(null);
-              }}
-            >
-              {t("common.close")}
-            </button>
+        <div
+          className="settings-modal-backdrop"
+          onClick={() => {
+            setLogCode(null);
+            setLogs(null);
+          }}
+        >
+          <div
+            className="settings-modal gwc-log-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="gwc-log-head">
+              <span className="gwc-log-icon">
+                <FileText size={17} strokeWidth={2.1} />
+              </span>
+              <h3>{t("systemStatus.gwControl.logsFor", { code: logCode })}</h3>
+              <button
+                type="button"
+                className="gw-wizard-close"
+                onClick={() => {
+                  setLogCode(null);
+                  setLogs(null);
+                }}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="gwc-log-toolbar">
+              <select
+                value={logTail}
+                onChange={(e) => setLogTail(Number(e.target.value))}
+                disabled={logBusy}
+              >
+                {LOG_TAIL_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {t("systemStatus.gwControl.lastLines", { count: n })}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="secondary-btn gwc-log-fetch"
+                disabled={logBusy}
+                onClick={() => void pullLogs(logCode)}
+              >
+                <RefreshCw
+                  size={14}
+                  strokeWidth={2.4}
+                  className={logBusy ? "sys-spin" : undefined}
+                />
+                {logBusy
+                  ? t("systemStatus.gwControl.logFetching")
+                  : t("systemStatus.gwControl.logFetch")}
+              </button>
+              {/* Cikti damgasi ve tazelik uyarilari araç cubugunun saginda:
+                  ayri bir satir daha acmaya degmez. */}
+              {logs?.available ? (
+                <span className="gwc-log-meta">
+                  {logs.generated_at
+                    ? new Date(logs.generated_at).toLocaleString()
+                    : "—"}
+                  {logs.stale ? (
+                    <em className="gwc-log-flag">
+                      {t("systemStatus.gwControl.logStale")}
+                    </em>
+                  ) : null}
+                  {logs.truncated ? (
+                    <em className="gwc-log-flag">
+                      {t("systemStatus.gwControl.logTruncated")}
+                    </em>
+                  ) : null}
+                </span>
+              ) : null}
+            </div>
+
+            {logError ? <p className="sys-error-banner">{logError}</p> : null}
+
+            {logs?.available ? (
+              <pre className="gwc-log-body">{logs.output || "—"}</pre>
+            ) : !logBusy && !logError ? (
+              <p className="gwc-log-empty">{t("systemStatus.gwControl.logEmpty")}</p>
+            ) : null}
           </div>
-
-          {logError ? <p className="sys-error-banner">{logError}</p> : null}
-
-          {logs?.available ? (
-            <>
-              <div className="sys-gw-logs-meta">
-                {logs.generated_at
-                  ? new Date(logs.generated_at).toLocaleString()
-                  : "—"}
-                {logs.stale ? (
-                  <span className="sys-gw-stale">{t("systemStatus.gwControl.logStale")}</span>
-                ) : null}
-                {logs.truncated ? (
-                  <span className="sys-gw-stale">
-                    {t("systemStatus.gwControl.logTruncated")}
-                  </span>
-                ) : null}
-              </div>
-              <pre className="sys-gw-logs-body">{logs.output || "—"}</pre>
-            </>
-          ) : !logBusy && !logError ? (
-            <p className="sys-loading-banner">{t("systemStatus.gwControl.logEmpty")}</p>
-          ) : null}
         </div>
       ) : null}
     </section>
