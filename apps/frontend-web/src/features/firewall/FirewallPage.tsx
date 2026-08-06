@@ -515,10 +515,12 @@ export function FirewallPage({ accessToken }: Props) {
         {t("firewall.guard.text", { ports: guardPorts.join(", ") })}
       </p>
 
-      {/* ================= Kurallar + Port Yonlendirme (SEKMELI) =============
-           Iki ayri kart alt alta sayfayi uzatiyordu; ayni kartin iki sekmesi
-           oldular. Baslik satirinda: sekmeler solda, durum rozeti + ac/kapat
-           + yenile sagda (kaldirilan hero'nun islevleri buraya tasindi). */}
+      {/* ================= Iki sutun: solda sekmeli kart, sagda gecmis ======
+           Kurallar/Port Yonlendirme tek kartin iki sekmesi; "Son islemler"
+           yaninda ayri kutu (kullanici istegi). "Nasil calisir" karti
+           kaldirildi — kilitlenme korumasi zaten ustteki seritte yaziyor. */}
+      <div className="fw-columns">
+      <div className="fw-col-main">
       <section className="rad-card fw-card fw-main">
         <header className="fw-tabs-head">
           <div className="fw-tabs" role="tablist">
@@ -850,44 +852,9 @@ export function FirewallPage({ accessToken }: Props) {
           </div>
         </div>
       ) : null}
+      </div>
 
-      {/* ================= Gecmis + aciklama ================= */}
-      <div className="rad-columns">
-        <section className="rad-card rad-explain">
-          <header className="rad-card-head">
-            <h3>{t("firewall.explain.title")}</h3>
-          </header>
-          <ul className="rad-explain-list">
-            <li>
-              <span className="rad-explain-icon">
-                <BrickWall size={17} />
-              </span>
-              <span>
-                <strong>{t("firewall.explain.whatTitle")}</strong>
-                <small>{t("firewall.explain.whatText")}</small>
-              </span>
-            </li>
-            <li>
-              <span className="rad-explain-icon">
-                <Lock size={17} />
-              </span>
-              <span>
-                <strong>{t("firewall.explain.guardTitle")}</strong>
-                <small>{t("firewall.explain.guardText", { ports: guardPorts.join(", ") })}</small>
-              </span>
-            </li>
-            <li>
-              <span className="rad-explain-icon">
-                <ShieldAlert size={17} />
-              </span>
-              <span>
-                <strong>{t("firewall.explain.telemetryTitle")}</strong>
-                <small>{t("firewall.explain.telemetryText")}</small>
-              </span>
-            </li>
-          </ul>
-        </section>
-
+        {/* ---- SAG: son islemler ---- */}
         <section className="rad-card rad-log">
           <header className="rad-card-head">
             <h3>

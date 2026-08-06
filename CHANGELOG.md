@@ -14,6 +14,15 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.13] — 2026-08-06
+
+### Değişti
+
+- Güvenlik Duvarı: "Nasıl çalışır" kartı kaldırıldı; sekmeli kurallar kartı
+  ile "Son işlemler" yan yana kutular. Uzayan içerik kartın içinde kayar.
+
+---
+
 ## [2.53.12] — 2026-08-06
 
 ### Eklendi

@@ -37829,6 +37829,35 @@ th.event-col-category {
   gap: 7px;
 }
 
+/* ---------- Iki sutun: solda sekmeli kart, sagda gecmis ---------- */
+.fw-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.fw-col-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Sekmeli kart kalan yuksekligi alir; uzayan tablo kart icinde kayar. */
+.fw-col-main .fw-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 1100px) {
+  .fw-columns { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ---------- Sekmeli ana kart ----------
    Kurallar + Port Yonlendirme tek kartin iki sekmesi; hero kaldirildi,
    durum rozeti ve ac/kapat baslik satirinda. Sekme gorunumu cihaz
