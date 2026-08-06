@@ -14,6 +14,32 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.6] — 2026-08-06
+
+### Eklendi
+
+- **Fabrika config şablonu depoyla geliyor.** SN2 için hiç şablon
+  tanımlanmamış kurulumda, gerçek cihazdan alınmış doğrulanmış dosya
+  açılışta varsayılan şablon olarak yüklenir. Yapılandırması olmayan cihazda
+  kart artık yönlendirir: "Cihazdan çek", "Dosya yükle" veya tek tıkla
+  **"Şablondan oluştur"** (oluşan dosya FTP'ye de yazılır).
+
+### Değişti
+
+- **Cihaz Ayarları kartı sadeleşti.** Tek satır başlık: solda ad + sürüm,
+  sağda işlemler (Cihazdan çek / Cihaza uygula + indir-yükle-geçmiş ikonları).
+  FTP mekaniği anlatan uzun ipucu metinleri kaldırıldı; sürüm geçmişi sayfa
+  içi liste yerine popup'ta.
+
+### Düzeltildi
+
+- **Serisi çözülemeyen cihazda kart hiç açılmıyordu** ("Yapılandırma
+  alınamadı"): dosya adı üretilemeyince istek patlıyordu. Kart artık açılır,
+  "seri numarası yok" rozetiyle durumu söyler; cihaza gönderme, seri
+  girilene kadar kapalı kalır.
+
+---
+
 ## [2.53.5] — 2026-08-06
 
 ### Eklendi
