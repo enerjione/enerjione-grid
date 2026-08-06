@@ -14,6 +14,15 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.24] — 2026-08-06
+
+### Değişti
+
+- Ana sayfa haritasında direk seçim kartı sağ üstten **sağ alta** taşındı
+  (katman düğmesiyle çakışıyordu).
+
+---
+
 ## [2.53.23] — 2026-08-06
 
 ### Düzeltildi

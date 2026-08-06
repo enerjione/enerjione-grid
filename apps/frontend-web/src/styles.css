@@ -10837,6 +10837,7 @@ th.event-col-category {
   position: absolute;
   top: 12px;
   right: 12px;
+  /* NOT: direk karti (--pole) SAG ALTA tasinir — asagida override. */
   width: 280px;
   max-width: calc(100vw - 24px);
   background: #ffffff;
@@ -10848,6 +10849,13 @@ th.event-col-category {
   font-size: 13px;
   color: #0f172a;
   animation: map-info-card-in 0.18s ease-out;
+}
+
+/* Direk secim karti SAG ALTTA (kullanici istegi): sag ust kosede harita
+   katman dugmesiyle cakisiyor ve harita basligini kapatiyordu. */
+.map-info-card--pole {
+  top: auto;
+  bottom: 14px;
 }
 @keyframes map-info-card-in {
   from { opacity: 0; transform: translateY(-4px); }
