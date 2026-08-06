@@ -51,6 +51,7 @@ from app.schemas.network import (
     NetworkConfigUpdate,
     NetworkStatus,
     WifiConnectRequest,
+    WifiForgetRequest,
     WifiModeRequest,
     WifiRadioRequest,
     WifiScanRequest,
@@ -230,19 +231,31 @@ def connect_wifi(
 
 @router.post("/wifi/forget", status_code=status.HTTP_202_ACCEPTED)
 def forget_wifi(
+    payload: WifiForgetRequest | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles([UserRole.INSTALLER])),
 ):
-    """Kayitli WiFi profilini siler ve AP'yi geri acar."""
-    request_id = _queue(network_service.request_wifi_forget, current_user.username)
+    """Agi unutur.
+
+    `ssid` verilirse yalnizca o ag bilinen aglar listesinden silinir (aktif
+    baglanti ve AP etkilenmez). Verilmezse aktif profil silinir, AP geri acilir.
+    """
+    ssid = payload.ssid if payload else None
+    request_id = _queue(
+        network_service.request_wifi_forget, current_user.username, ssid
+    )
     record_event(
         db,
         category="system",
         event_type="wifi_forgotten",
         severity="info",
         actor_username=current_user.username,
-        message="WiFi baglantisi kaldirildi, erisim noktasi (AP) geri acildi.",
-        metadata={"request_id": request_id},
+        message=(
+            f"Bilinen WiFi agi unutuldu: {ssid}"
+            if ssid
+            else "WiFi baglantisi kaldirildi, erisim noktasi (AP) geri acildi."
+        ),
+        metadata={"request_id": request_id, "ssid": ssid},
     )
     return {"request_id": request_id}
 

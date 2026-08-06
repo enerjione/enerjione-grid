@@ -518,12 +518,37 @@ export function NetworkSettingsPage({ accessToken }: Props) {
       </div>
 
 
+      {/* BANT YUVASI SABIT (min-height): bant sonradan belirince alttaki
+          kartlar ASAGI KAYIYORDU (kullanici sikayeti). Yuva her zaman yer
+          tutar; internet IYIyken de bos durmaz, ayni yerde tek satirlik
+          durum gosterir — boylece gorunum degisse de yerlesim oynamaz. */}
+      <div className="net-banners">
       {/* Internet kotu/bilinmiyorken NE ETKILENIR — serit icine sigmaz,
-          tooltip dokunmatikte calismaz. Internet varken banner cikmaz. */}
+          tooltip dokunmatikte calismaz. */}
       {status?.available && hasLayers(status) && internetImpact ? (
         <p className="net-banner net-banner--warn net-banner--action">
           <AlertTriangle size={16} />
           <span>{t(internetImpact)}</span>
+          <button
+            type="button"
+            className="net-banner-btn"
+            disabled={internetChecking}
+            onClick={() => void runInternetCheck()}
+          >
+            {internetChecking ? t("network.internet.checking") : t("network.internet.check")}
+          </button>
+        </p>
+      ) : null}
+
+      {/* Internet IYI: ayni yuvada sakin bir durum satiri + sina dugmesi. */}
+      {status?.available && hasLayers(status) && !internetImpact ? (
+        <p className="net-banner net-banner--ok net-banner--action">
+          <Wifi size={16} />
+          <span>
+            {t("network.internet.okBanner", {
+              via: internet?.ifname ?? "-"
+            })}
+          </span>
           <button
             type="button"
             className="net-banner-btn"
@@ -564,6 +589,7 @@ export function NetworkSettingsPage({ accessToken }: Props) {
           {t("network.pending")}
         </p>
       ) : null}
+      </div>
 
       {/* ---- Iki sutun: solda kablolu yapilandirma, sagda WiFi ----
            Ikisi de ayni seyin (cihazin aga baglanmasi) alternatifi; alt alta

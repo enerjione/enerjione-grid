@@ -345,9 +345,17 @@ def request_wifi_connect(payload: WifiConnectRequest, actor_username: str) -> st
     return _write_request(body)
 
 
-def request_wifi_forget(actor_username: str) -> str:
-    """Kayitli WiFi profilini sil ve AP'yi geri ac."""
-    return _write_request(_base_request("wifi_forget", actor_username))
+def request_wifi_forget(actor_username: str, ssid: str | None = None) -> str:
+    """Agi unut.
+
+    `ssid` verilirse ajan yalnizca o agi bilinen aglar deposundan siler
+    (aktif baglanti ve AP etkilenmez). Verilmezse aktif profil silinir ve
+    AP geri acilir.
+    """
+    body = _base_request("wifi_forget", actor_username)
+    if ssid:
+        body["ssid"] = ssid
+    return _write_request(body)
 
 
 def request_wifi_radio(enabled: bool, actor_username: str) -> str:

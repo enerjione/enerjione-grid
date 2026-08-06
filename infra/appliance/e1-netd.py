@@ -98,6 +98,17 @@ WIFI_GUARD_SEC = int(os.environ.get("E1_WIFI_GUARD_SEC", "180"))
 # report turunda pahali rescan yapmamak icin).
 SCAN_PATH = os.path.join(STATE_DIR, "wifi-scan.json")
 
+# --- Bilinen aglar (telefon gibi "kayitli aglar") ---------------------------
+# ssid -> psk. Bir aga bir kez baglanildiginda buraya yazilir; kullanici ayni
+# aga geri donerken SIFRE ISTENMEZ (UI psk gondermez, ajan buradan tamamlar).
+# NEDEN NM PROFILLERINE GUVENILMIYOR: tek radyo mimarisi tek STA profili
+# (STA_CON_NAME) kullaniyor ve ag degistirince profil SILINIP yeniden
+# kuruluyor — NM'nin kendi hafizasi her gecoste kayboluyordu. Dosya root:0600,
+# NM'nin kendi profil deposuyla (system-connections, plaintext psk) ayni
+# guven duzeyinde.
+KNOWN_WIFI_PATH = os.path.join(STATE_DIR, "known-wifi.json")
+KNOWN_WIFI_MAX = 32
+
 # --- WiFi kartinin GOREVI (kalici tercih) -----------------------------------
 # Tek radyo ayni anda hem erisim noktasi (AP) hem client OLAMAZ. Kullanicinin
 # hangisini istedigi KALICI bir tercihtir ve burada tutulur:
@@ -164,7 +175,12 @@ def _nmcli(*args: str, check: bool = True, timeout: float | None = None) -> str:
     acmaz ya da kurulumcunun baglantisini keser.
     """
     cmd = ["nmcli", *args]
-    env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
+    # C.UTF-8, C DEGIL (2026-08-06'da sahada yasandi): C yerelinin karakter
+    # kumesi ASCII'dir ve glib, SSID argumanindaki Turkce/Unicode karakterleri
+    # `?` yapar — "Fikret Safak iPhone'u" agi `Fikret ?afak iPhone?u` diye
+    # aranip bulunamadi. C.UTF-8 mesajlari yine INGILIZCE tutar (asagidaki
+    # yerellestirme gerekcesi korunur) ama karakter kumesi UTF-8'dir.
+    env = {**os.environ, "LC_ALL": "C.UTF-8", "LANG": "C.UTF-8"}
     try:
         proc = subprocess.run(
             cmd,
@@ -819,6 +835,42 @@ def _any_global_ipv4(devices: list[dict]) -> bool:
             continue
         if any(is_global_ipv4(a) for a in _connection_ipv4_addrs(dev["ifname"])):
             return True
+    return False
+
+
+# --- Bilinen aglar deposu ---------------------------------------------------
+def _known_load() -> dict:
+    """ssid -> psk sozlugu. Dosya yoksa/bozuksa bos — depo bir kolaylik,
+    yoklugu baglanmayi engellemez."""
+    veri = _read_json(KNOWN_WIFI_PATH)
+    return veri if isinstance(veri, dict) else {}
+
+
+def _known_save(veri: dict) -> None:
+    """Depoyu 0600 ile yazar — psk iceriyor, yalnizca root okuyabilmeli."""
+    tmp = KNOWN_WIFI_PATH + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(veri, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, KNOWN_WIFI_PATH)
+
+
+def _known_add(ssid: str, psk: str) -> None:
+    veri = _known_load()
+    veri[ssid] = psk
+    # Tavan: en eski kayitlari at (dict ekleme sirasi korunur). Sinirsiz
+    # buyume anlamsiz — sahada bir cihaz bir avuc ag gorur.
+    while len(veri) > KNOWN_WIFI_MAX:
+        veri.pop(next(iter(veri)))
+    _known_save(veri)
+
+
+def _known_remove(ssid: str) -> bool:
+    veri = _known_load()
+    if ssid in veri:
+        del veri[ssid]
+        _known_save(veri)
+        return True
     return False
 
 
@@ -1477,6 +1529,9 @@ def _wifi_state(devices: list[dict]) -> dict:
         "addresses": [],
         # Kayitli profil var mi (baglanti kopmus olsa bile).
         "saved": False,
+        # Bilinen aglar (daha once baglanilan SSID'ler) — UI bunlara
+        # SIFRESIZ yeniden baglanma sunar. Yalnizca adlar; psk ASLA.
+        "known": [],
         # Muhafiz aktifse UI geri sayim gosterir.
         "guard_active": False,
         "guard_deadline": None,
@@ -1485,6 +1540,10 @@ def _wifi_state(devices: list[dict]) -> dict:
         return info
 
     info["saved"] = _sta_profile_exists()
+    try:
+        info["known"] = sorted(_known_load().keys())
+    except Exception:  # noqa: BLE001 - depo bozuksa liste bos kalir, o kadar
+        pass
 
     dev = next((d for d in devices if d["ifname"] == ifname), None)
     if dev is not None and dev["connection"] == STA_CON_NAME:
@@ -1827,12 +1886,25 @@ def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> i
             applied={"action": "wifi_scan", "count": len(networks), "deep": deep},
         )
 
-    # ---- Kayitli agi unut: STA profilini sil, AP'yi geri ac ----
+    # ---- Agi unut ----
     if action == "wifi_forget":
+        istenen_ssid = str(raw.get("ssid") or "").strip()
+        aktif_ssid = _sta_profile_ssid() if _sta_profile_exists() else None
+        if istenen_ssid and istenen_ssid != aktif_ssid:
+            # Yalnizca DEPODAN sil: baglanti o aga degil, AP'ye dokunmaya ve
+            # profili silmeye gerek yok. "Kayitli aglar" listesindeki tekil
+            # 'unut' dugmesi bu yola duser.
+            _known_remove(istenen_ssid)
+            _log(f"Bilinen ag unutuldu (depo): {istenen_ssid}")
+            return write_result(
+                True, None, applied={"action": "wifi_forget", "ssid": istenen_ssid}
+            )
         try:
             _nmcli("connection", "delete", STA_CON_NAME, check=False)
         except RuntimeError as exc:
             _log(f"STA profili silinemedi: {exc}")
+        if aktif_ssid:
+            _known_remove(aktif_ssid)
         _guard_clear()
         _set_mode("ap", None)
         _ap_restore("kullanici agi unuttu")
@@ -1848,6 +1920,20 @@ def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> i
         return write_result(
             False, f"WiFi sifresi {PSK_MIN_LEN}-{PSK_MAX_LEN} karakter olmali."
         )
+    # Sifre verilmediyse BILINEN AGLAR deposundan tamamla — telefon davranisi:
+    # bir kez baglanilan aga geri donerken sifre istenmez.
+    if not psk:
+        psk = str(_known_load().get(ssid) or "")
+
+    # BAYAT PROFIL TEMIZLIGI (2026-08-06'da sahada yasandi): tek STA profili
+    # onceki agin SSID'siyle dururken ayni ada yeni SSID ile baglanmak nmcli
+    # tarafindan reddedilir ("Connection 'e1-grid-wifi' exists but properties
+    # don't match"). Profil her baglanti oncesi silinir; kimlik zaten bilinen
+    # aglar deposunda ve NM profili yeniden kurulur.
+    try:
+        _nmcli("connection", "delete", STA_CON_NAME, check=False)
+    except RuntimeError as exc:
+        _log(f"bayat STA profili silinemedi (devam ediliyor): {exc}")
 
     # AP'nin dusecegini KAYIT ALTINA AL: muhafiz once kurulur ki baglanma
     # sirasinda ajan olse bile bir sonraki report turu AP'yi geri acsin.
@@ -1863,6 +1949,13 @@ def _handle_wifi(raw: dict, action: str, devices: list[dict], write_result) -> i
         _ap_restore("baglanti hatasi")
         _guard_clear()
         return write_result(False, f"'{ssid}' agina baglanilamadi: {exc}")
+
+    # Basarili baglanti bilinen aglara yazilir (acik ag = bos psk de kayit
+    # edilir ki listede gorunsun ve tek tikla geri donulebilsin).
+    try:
+        _known_add(ssid, psk)
+    except OSError as exc:
+        _log(f"bilinen aglar deposuna yazilamadi: {exc}")
 
     # Kullanicinin niyeti acik: bir aga baglandiysa gorev artik "client".
     # autoconnect da burada acilir, aksi halde reboot'ta AP geri alir.

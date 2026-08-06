@@ -66,6 +66,9 @@ class WifiState(BaseModel):
     addresses: list[str] = Field(default_factory=list)
     # Kayitli profil var mi (baglanti kopuk olsa bile).
     saved: bool = False
+    # Bilinen aglar (daha once baglanilan SSID'ler). UI bunlara sifre
+    # sormadan yeniden baglanma sunar; psk'lar ajanda kalir, buraya GELMEZ.
+    known: list[str] = Field(default_factory=list)
     # AP geri donus muhafizi aktif mi + ne zaman dolacak (epoch).
     guard_active: bool = False
     guard_deadline: float | None = None
@@ -186,6 +189,17 @@ class WifiScanRequest(BaseModel):
     """
 
     deep: bool = False
+
+
+class WifiForgetRequest(BaseModel):
+    """Ag unutma istegi.
+
+    `ssid` verilirse yalnizca o ag BILINEN AGLAR listesinden silinir; aktif
+    baglantiya ve AP'ye dokunulmaz. Verilmezse eski davranis: aktif profil
+    silinir ve AP geri acilir.
+    """
+
+    ssid: str | None = Field(default=None, min_length=1, max_length=32)
 
 
 class WifiRadioRequest(BaseModel):

@@ -32647,6 +32647,17 @@ th.event-col-category {
 .net-banner--info { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
 .net-banner--warn { background: #fffbeb; border-color: #fde68a; color: #b45309; }
 .net-banner--bad { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.net-banner--ok { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+
+/* Bant YUVASI: her zaman yer tutar. Bant sonradan belirince alttaki kartlar
+   asagi kayiyordu — min-height tek bant boyunu rezerve eder; internet iyiyken
+   de ayni yuvada durum satiri gosterildigi icin yuva zaten bos kalmaz. */
+.net-banners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 41px;
+}
 
 /* Icinde eylem dugmesi olan serit (or. "Internet durumunu simdi sina"). */
 .net-banner--action { align-items: center; }
@@ -36632,6 +36643,20 @@ th.event-col-category {
 
 /* Cihaz sayfasi: bu surum cihaza gonderildi bilgisi. */
 .dev-ftp-applied { color: #047857; }
+
+/* WiFi: bilinen ag rozeti + kayitli aglar listesi. */
+.wifi-known-badge {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.wifi-known-list li .wifi-forget-btn { margin-left: 6px; }
 
 /* ===========================================================================
    Muhendislik > Cihaz Yapilandirma (DeviceConfigPage)

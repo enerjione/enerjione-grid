@@ -2525,10 +2525,14 @@ export async function connectWifi(
   if (!response.ok) throw await buildApiError(response, "WiFi ağına bağlanılamadı.");
 }
 
-export async function forgetWifi(token: string): Promise<void> {
+/** Agi unutur. `ssid` verilirse yalnizca o ag bilinen aglar listesinden
+ *  silinir (aktif baglanti ve AP etkilenmez); verilmezse aktif profil
+ *  silinir ve cihazin kendi agi (AP) geri acilir. */
+export async function forgetWifi(token: string, ssid?: string): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/network/wifi/forget`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(ssid ? { ssid } : {})
   });
   if (!response.ok) throw await buildApiError(response, "WiFi ağı unutulamadı.");
 }

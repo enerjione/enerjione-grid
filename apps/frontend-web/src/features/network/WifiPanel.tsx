@@ -190,12 +190,33 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
     return Math.max(0, Math.ceil((wifi.guard_deadline * 1000 - now) / 1000));
   }, [wifi?.guard_active, wifi?.guard_deadline, now]);
 
+  // Bilinen aglar (daha once baglanilanlar): bunlara sifre SORULMAZ — parola
+  // ajanin deposunda. Eski ajan alani yazmaz; undefined = bos.
+  const knownList = wifi?.known ?? [];
+
   const retryLeft = useMemo(() => {
     if (!role?.fallback_active || !role.next_retry_at) return null;
     return Math.max(0, Math.ceil((role.next_retry_at * 1000 - now) / 1000));
   }, [role?.fallback_active, role?.next_retry_at, now]);
 
   // ---- Islem calistirici -------------------------------------------------
+  /** Bilinen agi DEPODAN sil. Aktif baglantiya ve AP'ye dokunmaz; geri
+   *  donusu olan kucuk bir islem oldugu icin onay da sorulmaz. */
+  const forgetKnown = useCallback(
+    async (ssid: string) => {
+      setSubmitting(true);
+      try {
+        await forgetWifi(accessToken, ssid);
+        onRefreshStatus();
+      } catch (exc) {
+        toast.error(networkErrorText(exc, t));
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [accessToken, onRefreshStatus, t]
+  );
+
   /** WiFi kartini ac — hicbir seyi bozmaz, onay sorulmaz. */
   const turnRadioOn = useCallback(async () => {
     setSubmitting(true);
@@ -790,6 +811,7 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
                 // isaretler. Ikincil olarak baglanti kunyesiyle eslesme.
                 const isCurrent =
                   n.in_use || (Boolean(wifi?.connected) && wifi?.ssid === n.ssid);
+                const isKnown = knownList.includes(n.ssid);
                 return (
                   <li key={n.ssid} className={isCurrent ? "is-current" : undefined}>
                     <SignalIcon signal={n.signal} />
@@ -800,6 +822,11 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
                       ) : (
                         <LockOpen size={12} strokeWidth={2.4} />
                       )}
+                      {/* Telefonlardaki "kayitli ag" rozeti: sifre sorulmadan
+                          baglanilacagini onceden soyler. */}
+                      {isKnown && !isCurrent ? (
+                        <span className="wifi-known-badge">{t("network.wifi.knownBadge")}</span>
+                      ) : null}
                     </span>
                     <span className="wifi-list-sec">
                       {n.secured ? n.security ?? "WPA" : t("network.wifi.open")}
@@ -833,6 +860,61 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
             </p>
           )}
 
+          {/* ---- Kayitli aglar ---- (telefonlardaki gibi)
+              Daha once baglanilan aglar; sifre YENIDEN SORULMAZ. Menzil
+              disindaki ag da listelenir — baglanma denemesi ajanin acik
+              hatasiyla doner, sessizce kaybolmaz. */}
+          {knownList.length > 0 ? (
+            <>
+              <div className="wifi-list-head">
+                <span className="wifi-scan-age">{t("network.wifi.knownTitle")}</span>
+              </div>
+              <ul className="wifi-list wifi-known-list">
+                {knownList.map((ssid) => {
+                  const current = Boolean(wifi?.connected) && wifi?.ssid === ssid;
+                  return (
+                    <li key={ssid} className={current ? "is-current" : undefined}>
+                      <Wifi size={16} strokeWidth={2.2} />
+                      <span className="wifi-list-ssid">{ssid}</span>
+                      {current ? (
+                        <span className="wifi-list-badge">{t("network.wifi.current")}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="wifi-connect-btn"
+                          disabled={busy}
+                          onClick={() => {
+                            setTarget({
+                              ssid,
+                              signal: 0,
+                              secured: true,
+                              security: null,
+                              freq: null,
+                              in_use: false
+                            });
+                            setPsk("");
+                          }}
+                        >
+                          {t("network.wifi.connect")}
+                        </button>
+                      )}
+                      {!current ? (
+                        <button
+                          type="button"
+                          className="wifi-forget-btn"
+                          disabled={busy}
+                          onClick={() => void forgetKnown(ssid)}
+                        >
+                          {t("network.wifi.forget")}
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          ) : null}
+
           {/* Derin tarama — AP yayindayken tek radyo kanal degistiremez ve
               liste EKSIK doner. Bedeli AP'nin ~15 sn inmesidir; bu yuzden
               ayri dugme ve ayri onay. */}
@@ -865,7 +947,9 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
             <p className="wifi-consequences-lead">{t("network.wifi.confirm.effects")}</p>
             <WifiConsequences items={connectItems} />
 
-            {target.secured ? (
+            {/* BILINEN aga sifre SORULMAZ: parola ajanin deposunda, bos psk
+                gonderilir ve ajan tamamlar. Telefon davranisi. */}
+            {target.secured && !knownList.includes(target.ssid) ? (
               <label className="wifi-psk-label">
                 {t("network.wifi.password")}
                 <input
@@ -879,6 +963,8 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
                 />
                 <small>{t("network.wifi.passwordHint")}</small>
               </label>
+            ) : target.secured ? (
+              <p className="net-hint">{t("network.wifi.knownHint")}</p>
             ) : (
               <p className="net-hint">{t("network.wifi.openHint")}</p>
             )}
@@ -890,9 +976,15 @@ export function WifiPanel({ accessToken, status, onRefreshStatus }: Props) {
               <button
                 type="button"
                 className="wifi-connect-confirm"
-                disabled={busy || (target.secured && psk.length < 8)}
+                disabled={
+                  busy ||
+                  (target.secured && !knownList.includes(target.ssid) && psk.length < 8)
+                }
                 onClick={() =>
-                  void run({ kind: "connect", ssid: target.ssid }, target.secured ? psk : null)
+                  void run(
+                    { kind: "connect", ssid: target.ssid },
+                    target.secured && !knownList.includes(target.ssid) ? psk : null
+                  )
                 }
               >
                 {busy ? t("network.wifi.connecting") : t("network.wifi.connect")}

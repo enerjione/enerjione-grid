@@ -1184,6 +1184,9 @@ export type WifiState = {
   addresses: string[];
   /** Kayitli profil var mi (baglanti kopuk olsa bile). */
   saved: boolean;
+  /** Bilinen aglar (daha once baglanilan SSID'ler) — bunlara sifre sormadan
+   *  yeniden baglanilir. Eski ajanda alan yoktur; undefined = bos say. */
+  known?: string[];
   /** AP geri donus muhafizi aktif mi + ne zaman dolacak (epoch saniye). */
   guard_active: boolean;
   guard_deadline?: number | null;
