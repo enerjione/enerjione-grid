@@ -142,7 +142,7 @@ def queue_command(
             "origin": origin,
         },
         i18n_key="device_command_queued",
-        i18n_params={"command": label, "code": device.code},
+        i18n_params={"command": slug, "code": device.code},
     )
     return QueuedCommand(
         id=cmd.id,

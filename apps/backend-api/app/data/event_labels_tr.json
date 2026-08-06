@@ -143,5 +143,26 @@
     "triggered": "Tetiklendi",
     "updated": "Güncellendi",
     "warning": "Uyarı"
+  },
+  "command_labels": {
+    "config_update": "Yapılandırma Güncelleme",
+    "dnp3_config_update": "DNP3 Yapılandırma Güncelleme",
+    "firmware_update": "Yazılım Güncelleme",
+    "start_csv_upload": "CSV Dosya Yüklemeyi Başlat",
+    "start_csv_file_upload": "CSV Dosya Yüklemeyi Başlat",
+    "upload_debug_file": "Tanılama Dosyasını Yükle",
+    "reset_all_fcis": "Tüm Göstergeleri Sıfırla",
+    "reset_tamper_alarm": "Kurcalama Alarmını Sıfırla",
+    "software_reset": "Yazılımı Yeniden Başlat",
+    "clear_counters": "Sayaçları Temizle",
+    "clear_dnp3_buffer": "DNP3 Tamponunu Temizle",
+    "enable_password": "Parolayı Aç/Kapat",
+    "enable_local_communication": "Yerel İletişimi Aç/Kapat",
+    "modem_firmware_ota": "Modem Yazılımını Uzaktan Güncelle",
+    "auto_reset_fault_values": "Arıza Değerlerini Otomatik Sıfırla",
+    "trigger_config_download": "Yapılandırma İndirmeyi Tetikle (Toplu)",
+    "trigger_dnp3_config_download": "DNP3 Yapılandırma İndirmeyi Tetikle (Toplu)",
+    "trigger_firmware_download": "Yazılım İndirmeyi Tetikle (Toplu)",
+    "boost_mode": "Boost Modu"
   }
 }

@@ -131,7 +131,14 @@ def format_message(message: str, metadata_json: str | None) -> str:
     template = _labels()["message"].get(key)
     if not template:
         return message or ""
-    params = tag.get("params") if isinstance(tag.get("params"), dict) else {}
+    params = dict(tag.get("params")) if isinstance(tag.get("params"), dict) else {}
+    # KOMUT ADI CEVIRISI (frontend formatEventMessage ile ayni kural):
+    # `command` parami makine slug'i tasir; ekran/export Turkce adi basar.
+    cmd = params.get("command")
+    if isinstance(cmd, str):
+        ceviri = _labels().get("command_labels", {}).get(cmd)
+        if ceviri:
+            params["command"] = ceviri
 
     def replace(match: re.Match[str]) -> str:
         name = match.group(1)

@@ -1,5 +1,9 @@
 import i18n from "../../shared/i18n";
+import { signalLabel } from "../../shared/signalLabel";
 import type { SystemEvent } from "../../shared/types";
+
+/** Slug gorunumlu deger mi? (reset_all_fcis gibi) */
+const SLUG_RE = /^[a-z0-9_]+$/;
 
 /**
  * Olay mesajini i18n destegi ile cevirir.
@@ -31,7 +35,14 @@ export function formatEventMessage(event: SystemEvent): string {
   if (i18nKey) {
     const fullKey = `events.message.${i18nKey}`;
     if (i18n.exists(fullKey)) {
-      return i18n.t(fullKey, i18nParams ?? {});
+      const params = { ...(i18nParams ?? {}) };
+      // KOMUT ADI CEVIRISI: command parametresi makine slug'i tasir
+      // (reset_all_fcis). Ekranda sinyal sozlugundeki Turkce ad gosterilir
+      // ("Tüm Göstergeleri Sıfırla"); sozlukte yoksa slug oldugu gibi kalir.
+      if (typeof params.command === "string" && SLUG_RE.test(params.command)) {
+        params.command = signalLabel(`master.${params.command}`, params.command);
+      }
+      return i18n.t(fullKey, params);
     }
   }
 
