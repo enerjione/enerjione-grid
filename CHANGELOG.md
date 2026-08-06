@@ -14,6 +14,16 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.15] — 2026-08-06
+
+### Değişti
+
+- Güvenlik Duvarı: kural/yönlendirme ekleme formu listenin ÜSTÜNE alındı;
+  başlıktaki Duvarı Aç/Kapat ve Yenile düğmeleri eş boy; kilitlenme
+  koruması üst şeritten kartın altındaki sade nota taşındı.
+
+---
+
 ## [2.53.14] — 2026-08-06
 
 ### Değişti

@@ -508,13 +508,6 @@ export function FirewallPage({ accessToken }: Props) {
         </p>
       ) : null}
 
-      {/* Kilitlenme korumasi — kullanici "ya kendimi disari kilitlersem"
-          korkusunu tasimasin; bu koruma ajanda sabittir. */}
-      <p className="net-banner fw-banner-guard">
-        <Lock size={16} />
-        {t("firewall.guard.text", { ports: guardPorts.join(", ") })}
-      </p>
-
       {/* ================= Iki sutun: solda sekmeli kart, sagda gecmis ======
            Kurallar/Port Yonlendirme tek kartin iki sekmesi; "Son islemler"
            yaninda ayri kutu (kullanici istegi). "Nasil calisir" karti
@@ -612,6 +605,56 @@ export function FirewallPage({ accessToken }: Props) {
           </div>
         ) : null}
 
+        {canManage ? (
+          <div className="fw-add-row">
+            <select
+              value={ruleAction}
+              disabled={formDisabled}
+              onChange={(event) => setRuleAction(event.target.value as "allow" | "deny")}
+            >
+              <option value="allow">{t("firewall.rules.allow")}</option>
+              <option value="deny">{t("firewall.rules.deny")}</option>
+            </select>
+            <select
+              value={ruleProto}
+              disabled={formDisabled}
+              onChange={(event) => setRuleProto(event.target.value as "tcp" | "udp")}
+            >
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+            </select>
+            <input
+              value={rulePorts}
+              disabled={formDisabled}
+              placeholder={t("firewall.rules.portsPlaceholder")}
+              onChange={(event) => setRulePorts(event.target.value.replace(/[^\d-]/g, ""))}
+            />
+            <input
+              value={ruleSource}
+              disabled={formDisabled}
+              placeholder={t("firewall.rules.sourcePlaceholder")}
+              onChange={(event) => setRuleSource(event.target.value.replace(/[^\d./]/g, ""))}
+            />
+            <input
+              value={ruleComment}
+              disabled={formDisabled}
+              maxLength={80}
+              placeholder={t("firewall.rules.commentPlaceholder")}
+              onChange={(event) => setRuleComment(event.target.value)}
+            />
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={formDisabled || rulePorts.trim().length === 0 || ruleError !== null}
+              onClick={addRule}
+            >
+              <Plus size={15} />
+              {t("firewall.rules.add")}
+            </button>
+          </div>
+        ) : null}
+        {ruleError ? <small className="fw-form-error">{ruleError}</small> : null}
+
         {draft.rules.length === 0 ? (
           <p className="net-empty">{t("firewall.rules.empty")}</p>
         ) : (
@@ -679,102 +722,10 @@ export function FirewallPage({ accessToken }: Props) {
           </div>
         )}
 
-        {canManage ? (
-          <div className="fw-add-row">
-            <select
-              value={ruleAction}
-              disabled={formDisabled}
-              onChange={(event) => setRuleAction(event.target.value as "allow" | "deny")}
-            >
-              <option value="allow">{t("firewall.rules.allow")}</option>
-              <option value="deny">{t("firewall.rules.deny")}</option>
-            </select>
-            <select
-              value={ruleProto}
-              disabled={formDisabled}
-              onChange={(event) => setRuleProto(event.target.value as "tcp" | "udp")}
-            >
-              <option value="tcp">TCP</option>
-              <option value="udp">UDP</option>
-            </select>
-            <input
-              value={rulePorts}
-              disabled={formDisabled}
-              placeholder={t("firewall.rules.portsPlaceholder")}
-              onChange={(event) => setRulePorts(event.target.value.replace(/[^\d-]/g, ""))}
-            />
-            <input
-              value={ruleSource}
-              disabled={formDisabled}
-              placeholder={t("firewall.rules.sourcePlaceholder")}
-              onChange={(event) => setRuleSource(event.target.value.replace(/[^\d./]/g, ""))}
-            />
-            <input
-              value={ruleComment}
-              disabled={formDisabled}
-              maxLength={80}
-              placeholder={t("firewall.rules.commentPlaceholder")}
-              onChange={(event) => setRuleComment(event.target.value)}
-            />
-            <button
-              type="button"
-              className="secondary-btn"
-              disabled={formDisabled || rulePorts.trim().length === 0 || ruleError !== null}
-              onClick={addRule}
-            >
-              <Plus size={15} />
-              {t("firewall.rules.add")}
-            </button>
-          </div>
-        ) : null}
-        {ruleError ? <small className="fw-form-error">{ruleError}</small> : null}
         </>
         ) : (
         <>
         <p className="fw-hint">{t("firewall.forwards.hint")}</p>
-
-        {draft.forwards.length === 0 ? (
-          <p className="net-empty">{t("firewall.forwards.empty")}</p>
-        ) : (
-          <div className="fw-table-wrap">
-            <table className="fw-table">
-              <thead>
-                <tr>
-                  <th>{t("firewall.rules.colProto")}</th>
-                  <th>{t("firewall.forwards.colListen")}</th>
-                  <th>{t("firewall.forwards.colDest")}</th>
-                  <th>{t("firewall.rules.colComment")}</th>
-                  {canManage ? <th className="fw-col-tools" /> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {draft.forwards.map((fwd, index) => (
-                  <tr key={`${fwd.proto}-${fwd.listen_port}-${index}`}>
-                    <td className="fw-mono">{fwd.proto.toUpperCase()}</td>
-                    <td className="fw-mono">{fwd.listen_port}</td>
-                    <td className="fw-mono">
-                      {fwd.dest_ip}:{fwd.dest_port}
-                    </td>
-                    <td className="fw-comment">{fwd.comment ?? "—"}</td>
-                    {canManage ? (
-                      <td className="fw-col-tools">
-                        <button
-                          type="button"
-                          className="fw-tool-btn fw-tool-btn--danger"
-                          disabled={formDisabled}
-                          title={t("firewall.rules.delete")}
-                          onClick={() => removeForward(index)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
 
         {canManage ? (
           <div className="fw-add-row fw-add-row--forward">
@@ -828,8 +779,59 @@ export function FirewallPage({ accessToken }: Props) {
           </div>
         ) : null}
         {forwardError ? <small className="fw-form-error">{forwardError}</small> : null}
+
+        {draft.forwards.length === 0 ? (
+          <p className="net-empty">{t("firewall.forwards.empty")}</p>
+        ) : (
+          <div className="fw-table-wrap">
+            <table className="fw-table">
+              <thead>
+                <tr>
+                  <th>{t("firewall.rules.colProto")}</th>
+                  <th>{t("firewall.forwards.colListen")}</th>
+                  <th>{t("firewall.forwards.colDest")}</th>
+                  <th>{t("firewall.rules.colComment")}</th>
+                  {canManage ? <th className="fw-col-tools" /> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {draft.forwards.map((fwd, index) => (
+                  <tr key={`${fwd.proto}-${fwd.listen_port}-${index}`}>
+                    <td className="fw-mono">{fwd.proto.toUpperCase()}</td>
+                    <td className="fw-mono">{fwd.listen_port}</td>
+                    <td className="fw-mono">
+                      {fwd.dest_ip}:{fwd.dest_port}
+                    </td>
+                    <td className="fw-comment">{fwd.comment ?? "—"}</td>
+                    {canManage ? (
+                      <td className="fw-col-tools">
+                        <button
+                          type="button"
+                          className="fw-tool-btn fw-tool-btn--danger"
+                          disabled={formDisabled}
+                          title={t("firewall.rules.delete")}
+                          onClick={() => removeForward(index)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         </>
         )}
+
+        {/* Kilitlenme korumasi — ust seritten buraya alindi: her zaman
+            gorunur ama sayfanin basini isgal etmez. Koruma AJANDA sabittir. */}
+        <p className="fw-guard-note">
+          <Lock size={13} />
+          {t("firewall.guard.text", { ports: guardPorts.join(", ") })}
+        </p>
       </section>
 
       {/* ================= Kaydet cubugu — taslak kirliyken ================= */}
