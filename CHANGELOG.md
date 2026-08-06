@@ -14,6 +14,31 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.5] — 2026-08-06
+
+### Eklendi
+
+- **Kayıtlı WiFi ağları** (telefonlardaki gibi). Bir kez bağlanılan ağın
+  parolası cihazda saklanır; aynı ağa dönerken parola SORULMAZ. Ağ Ayarları
+  sayfasında "Kayıtlı ağlar" listesi: tek tıkla bağlan, tekil "unut"
+  (aktif bağlantıya ve cihazın kendi ağına dokunmaz). Tarama listesinde
+  kayıtlı ağlar "Kayıtlı" rozetiyle işaretlenir.
+
+### Düzeltildi
+
+- **Türkçe/Unicode adlı WiFi ağlarına bağlanılamıyordu** ("Fikret Şafak
+  iPhone'u" → `Fikret ?afak iPhone?u` aranıyordu): ağ ajanı nmcli'yi ASCII
+  karakter kümesiyle (C yereli) çalıştırıyordu; C.UTF-8'e geçildi (durum
+  metinleri İngilizce kalır, ayrıştırma bozulmaz).
+- **Ağ değiştirirken "Connection 'e1-grid-wifi' exists but properties don't
+  match" hatası**: önceki ağın profili dururken yeni SSID'ye bağlanılamıyordu.
+  Bayat profil bağlanmadan önce temizlenir; kimlik zaten kayıtlı ağlarda.
+- **Ağ sayfasında uyarı belirince kartlar aşağı kayıyordu.** Uyarı yuvası
+  artık sabit yer tutar; internet İYİYKEN de aynı yuvada tek satırlık durum
+  ("İnternet bağlantısı var — X üzerinden") gösterilir, yerleşim oynamaz.
+
+---
+
 ## [2.53.4] — 2026-08-05
 
 ### Eklendi
