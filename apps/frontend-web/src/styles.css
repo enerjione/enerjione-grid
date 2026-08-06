@@ -29890,6 +29890,22 @@ th.event-col-category {
   resize: vertical;
 }
 
+/* Akilli dal ayiklama bilgisi — mavi bilgi tonu. */
+.grid-qa-split-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  background: #f0f9ff;
+  font-size: 12.5px;
+  color: #075985;
+}
+
+.grid-qa-split-info .material-symbols-outlined { font-size: 17px; flex-shrink: 0; }
+
 /* Onizleme haritasi — modal icinde sabit yukseklik, kose yumusatma. */
 .grid-qa-map {
   height: 240px;
@@ -38240,6 +38256,11 @@ th.event-col-category {
   text-align: center;
 }
 
+/* Rozet HUCREYE SIGAR — tasma yok.
+   `min-width: 108px` sutun ic genisliginden (sutun - padding) buyuktu ve
+   table-layout:fixed altinda rozet komsu sutunun uzerine tasiyordu
+   (Oncelik rozeti Kategori'nin uzerine biniyordu). Artik taban genislik
+   sutuna sigacak kadar; uzun etiket ... ile kirpilir, tam metin title'da. */
 .events-table .event-pill-sev,
 .events-table .event-pill-cat,
 .events-table .event-pill-status,
@@ -38247,19 +38268,100 @@ th.event-col-category {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 108px;
+  min-width: 84px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: center;
 }
 
-.events-table .event-col-priority { width: 130px; }
-.events-table .event-col-category { width: 160px; }
-.events-table .event-col-status { width: 130px; }
-.events-table .event-col-source { width: 120px; }
+/* YATAY KAYDIRMA YOK: sabit sutunlar + kalani yutan Mesaj sutunu.
+   Onceki kurallarda her sutunun min-width'i vardi ve toplamlari kabi
+   asinca tablo saga kayiyordu (kullanici sagdaki Kaynak sutununu gormek
+   icin yatay scroll etmek zorunda kaliyordu). table-layout: fixed ile
+   genislikler ilan edildigi gibi uygulanir, Mesaj esner ve SARAR.
+   `!important`: yukaridaki eski min/max-width kurallari ayni secicilikte. */
+.events-table {
+  table-layout: fixed;
+  width: 100%;
+}
 
-/* Kategori adlari uzun olabiliyor ("Sorumluluk alanı") — o sutunda rozet
-   sutuna yayilsin, digerleri sabit kalsin. */
+/* Sutun genislikleri rozet taban genisligi + 20px padding'i KARSILAR:
+   rozet min-width 84 (kategoride 120) -> sutun >= 104 (kategoride 140). */
+.events-table .event-col-date {
+  width: 150px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.events-table .event-col-priority {
+  width: 116px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.events-table .event-col-category {
+  width: 168px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.events-table .event-col-status {
+  width: 132px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* Kullanici / Cihaz / Kaynak bilerek GENIS: bu sutunlar okunakli olsun ve
+   Mesaj sutunu tum bos alani yutmasin (kullanici istegi: mesaj daralsin). */
+.events-table .event-col-user {
+  width: 150px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.events-table .event-col-device {
+  width: 190px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.events-table .event-col-source {
+  width: 118px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* Mesaj: kalan genisligi alir; tasan uzun metin tek satirda kirpilir
+   (tam metin hucrenin title'inda ve PDF/Excel export'unda tam haliyle
+   duruyor, bilgi kaybi yok). */
+.events-table .event-col-message {
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sarmalayici artik yatayda kaymamali; dikey kaydirma aynen kalir. */
+.events-table-wrap {
+  overflow-x: hidden;
+}
+
+/* Hucreler icerigi KIRPAR — hicbir sey komsu sutuna tasamaz. Bu kural
+   `!important` degil ama en sonda oldugu icin eski max-width/min-width
+   tanimlarindan sonra gelir; sutun genislikleri yukarida !important. */
+.events-table th,
+.events-table td {
+  overflow: hidden;
+  padding: 9px 10px;
+}
+
+/* Kategori adlari uzun ("Dış sistemlere aktarım") — kendi sutununda biraz
+   daha genis taban, yine de sutuna sigar (168 - 20 padding = 148). */
 .events-table .event-col-category .event-pill-cat {
-  min-width: 140px;
+  min-width: 120px;
 }
 
 /* --- Gelismis filtre paneli --- */

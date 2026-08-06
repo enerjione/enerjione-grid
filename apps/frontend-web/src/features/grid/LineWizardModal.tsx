@@ -44,6 +44,40 @@ function metreMesafe(lat1: number, lon1: number, lat2: number, lon2: number): nu
  *  "bu hattan dallaniyor olabilir" onerilir. SADECE TAHMIN — karar kullanicinin. */
 const BRANSMAN_ESIK_M = 200;
 
+/** Ayni direk sayilma esigi (m) — yapistirilan listede YINELENEN koordinat
+ *  "geri donus" demektir (dal bitti, ana hatta devam). */
+const AYNI_NOKTA_M = 5;
+
+type Nokta = { lat: number; lon: number };
+type DalTespiti = {
+  main: Nokta[];
+  branches: Array<{ fromSeq: number; poles: Nokta[] }>;
+};
+
+/** Yapistirilan sirali listeden dallari AYIKLA (derinlemesine gezinti izi).
+ *
+ *  Kural: daha once gecen bir noktaya GERI DONULURSE (ardisik tekrar degil),
+ *  o noktadan sonra eklenmis direkler bir BRANSMAN hattidir — ana listeden
+ *  cikarilir, "fromSeq. direkten dallanir" olarak kaydedilir; gezinti ayni
+ *  noktadan devam eder. Ornek: 1-2-3-4-3-6-7 -> ana: 1,2,3,6,7; dal: [4] (3'ten).
+ *  Ardisik ayni nokta (kaza ile cift yapistirma) sessizce tekillestirilir.
+ */
+function dallariAyikla(poles: Nokta[]): DalTespiti {
+  const main: Nokta[] = [];
+  const branches: DalTespiti["branches"] = [];
+  for (const p of poles) {
+    const k = main.findIndex((m) => metreMesafe(m.lat, m.lon, p.lat, p.lon) < AYNI_NOKTA_M);
+    if (k >= 0) {
+      if (k === main.length - 1) continue; // ardisik tekrar
+      const dal = main.splice(k + 1);
+      if (dal.length > 0) branches.push({ fromSeq: k + 1, poles: dal });
+      continue; // nokta zaten ana hatta
+    }
+    main.push(p);
+  }
+  return { main, branches };
+}
+
 /** Yapistirilan direkler degistikce haritayi onlara sigdir. */
 function FitToPoles({ poles }: { poles: Array<{ lat: number; lon: number }> }) {
   const map = useMap();
@@ -64,10 +98,12 @@ function FitToPoles({ poles }: { poles: Array<{ lat: number; lon: number }> }) {
  *  olusturduktan sonra Duzenleme Modu'nda. */
 function QaPreviewMap({
   poles,
+  branches = [],
   snapshot,
   branchGuess,
 }: {
   poles: Array<{ lat: number; lon: number }>;
+  branches?: Array<{ fromSeq: number; poles: Nokta[] }>;
   snapshot: GridSnapshot | null;
   branchGuess: { lat: number; lon: number } | null;
 }) {
@@ -105,6 +141,32 @@ function QaPreviewMap({
       {yeni.length >= 2 ? (
         <Polyline positions={yeni} pathOptions={{ color: "#ea9010", weight: 4, opacity: 0.9 }} />
       ) : null}
+      {/* Algilanan DALLAR: mavi cizgi; ana direkten dala kesikli baglanti. */}
+      {branches.map((dal, n) => {
+        const kaynak = poles[dal.fromSeq - 1];
+        if (!kaynak) return null;
+        const dalPts = [
+          [kaynak.lat, kaynak.lon] as [number, number],
+          ...dal.poles.map((p) => [p.lat, p.lon] as [number, number]),
+        ];
+        return (
+          <Polyline
+            key={`dal-${n}`}
+            positions={dalPts}
+            pathOptions={{ color: "#0284c7", weight: 3.5, opacity: 0.9, dashArray: "6 4" }}
+          />
+        );
+      })}
+      {branches.flatMap((dal, n) =>
+        dal.poles.map((p, i) => (
+          <CircleMarker
+            key={`dalp-${n}-${i}`}
+            center={[p.lat, p.lon]}
+            radius={4.5}
+            pathOptions={{ color: "#0284c7", fillColor: "#ffffff", fillOpacity: 1, weight: 2.5 }}
+          />
+        ))
+      )}
       {poles.map((p, i) => (
         <CircleMarker
           key={i}
@@ -225,21 +287,23 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
   }, [qaLineName, qaCodeTouched]);
 
   /** Yapistirilan koordinat metninin canli cozumu: gecerli direkler + ilk
-   *  hatali satirlar. Kullanici daha gondermeden ne olacagini gorur. */
+   *  hatali satirlar + AKILLI DAL AYIKLAMA (tekrar eden nokta = geri donus,
+   *  aradaki direkler ayri bransman hatti olur). */
   const qaParsed = useMemo(() => {
     const satirlar = qaCoordText.split(/\r?\n/);
-    const poles: Array<{ lat: number; lon: number }> = [];
+    const ham: Nokta[] = [];
     const badLines: number[] = [];
     for (let i = 0; i < satirlar.length; i++) {
       const s = satirlar[i].trim();
       if (!s) continue;
       const p = parseCoordLine(s);
-      if (p) poles.push(p);
+      if (p) ham.push(p);
       else if (!s.toLowerCase().startsWith("ornek") && !s.toLowerCase().startsWith("örnek")) {
         badLines.push(i + 1);
       }
     }
-    return { poles, badLines };
+    const { main, branches } = dallariAyikla(ham);
+    return { poles: main, branches, badLines };
   }, [qaCoordText]);
 
   const qaRegion = qaRegionCode === "__new__" ? qaNewRegion.trim() : qaRegionCode;
@@ -281,15 +345,19 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
     setError("");
     try {
       const secili = regions.find((r) => r.code === qaRegionCode);
+      const bolgeAdi =
+        qaRegionCode === "__new__" ? qaNewRegion.trim() : secili?.name ?? qaRegion;
+      const kod = qaLineCode.trim();
+      const onek = qaNamePrefix.trim();
       const result = await createGridWizardLine(accessToken, {
         region_code: qaRegion,
-        region_name: qaRegionCode === "__new__" ? qaNewRegion.trim() : secili?.name ?? qaRegion,
-        line_code: qaLineCode.trim(),
-        line_name: qaLineName.trim() || qaLineCode.trim(),
+        region_name: bolgeAdi,
+        line_code: kod,
+        line_name: qaLineName.trim() || kod,
         poles: qaParsed.poles.map((p, i) => ({
           latitude: p.lat,
           longitude: p.lon,
-          name: qaNamePrefix.trim() ? `${qaNamePrefix.trim()}${i + 1}` : null,
+          name: onek ? `${onek}${i + 1}` : null,
         })),
         ...(qaBranchOn && qaBranchGuess
           ? {
@@ -298,11 +366,38 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
             }
           : {}),
       });
+
+      // ALGILANAN DALLAR: her biri AYRI hat olarak eklenir ve ana hattin
+      // ilgili diregine BRANSMAN olarak baglanir. Sirali (ana hat once —
+      // bransman hedefi DB'de olmali).
+      for (let n = 0; n < qaParsed.branches.length; n++) {
+        const dal = qaParsed.branches[n];
+        await createGridWizardLine(accessToken, {
+          region_code: qaRegion,
+          region_name: bolgeAdi,
+          line_code: `${kod}-BR${n + 1}`,
+          line_name: `${qaLineName.trim() || kod} Branşman ${n + 1}`,
+          poles: dal.poles.map((p, i) => ({
+            latitude: p.lat,
+            longitude: p.lon,
+            name: onek ? `${onek}B${n + 1}-${i + 1}` : null,
+          })),
+          branch_line_code: kod,
+          branch_pole_seq: dal.fromSeq,
+        });
+      }
+
       toast.success(
-        t("engineering.grid.wizard.qaSuccessToast", {
-          line: qaLineCode.trim(),
-          poles: result.poles_created,
-        })
+        qaParsed.branches.length > 0
+          ? t("engineering.grid.wizard.qaSuccessToastBranched", {
+              line: kod,
+              poles: result.poles_created,
+              branches: qaParsed.branches.length,
+            })
+          : t("engineering.grid.wizard.qaSuccessToast", {
+              line: kod,
+              poles: result.poles_created,
+            })
       );
       onImported();
       onClose();
@@ -527,11 +622,25 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                   ) : null}
                 </div>
 
+                {/* AKILLI DAL AYIKLAMA bilgisi: tekrar eden koordinat = geri
+                    donus; aradaki direkler ayri bransman hatti olur. */}
+                {qaParsed.branches.length > 0 ? (
+                  <p className="grid-qa-split-info">
+                    <span className="material-symbols-outlined">account_tree</span>
+                    {t("engineering.grid.wizard.qaSplitInfo", {
+                      count: qaParsed.branches.length,
+                      poles: qaParsed.branches.reduce((a, b) => a + b.poles.length, 0),
+                      seqs: qaParsed.branches.map((b) => b.fromSeq).join(", "),
+                    })}
+                  </p>
+                ) : null}
+
                 {/* CANLI HARITA ONIZLEME: yapistirdikca hat haritada cizilir;
                     mevcut topoloji soluk gri baglam olarak gorunur. */}
                 {qaParsed.poles.length > 0 ? (
                   <QaPreviewMap
                     poles={qaParsed.poles}
+                    branches={qaParsed.branches}
                     snapshot={snapshot}
                     branchGuess={qaBranchGuess}
                   />
@@ -562,6 +671,7 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                 {qaParsed.poles.length > 0 ? (
                   <QaPreviewMap
                     poles={qaParsed.poles}
+                    branches={qaParsed.branches}
                     snapshot={snapshot}
                     branchGuess={qaBranchOn ? qaBranchGuess : null}
                   />
@@ -583,6 +693,17 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                     <span>{t("engineering.grid.wizard.qaSumSegments")}</span>
                     <strong>{Math.max(qaParsed.poles.length - 1, 0)}</strong>
                   </li>
+                  {qaParsed.branches.length > 0 ? (
+                    <li>
+                      <span>{t("engineering.grid.wizard.qaSumBranches")}</span>
+                      <strong>
+                        {t("engineering.grid.wizard.qaSumBranchesVal", {
+                          count: qaParsed.branches.length,
+                          poles: qaParsed.branches.reduce((a, b) => a + b.poles.length, 0),
+                        })}
+                      </strong>
+                    </li>
+                  ) : null}
                 </ul>
 
                 {/* BRANSMAN TAHMINI — sadece oneri; onay kullanicinin. */}

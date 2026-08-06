@@ -14,6 +14,19 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.19] — 2026-08-06
+
+### Eklendi
+
+- Hat Sihirbazı'nda **akıllı dal ayıklama**: yapıştırılan listede yinelenen
+  koordinat "geri dönüş" sayılır — aradaki direkler otomatik olarak ayrı bir
+  **branşman hattı** olur (KOD-BR1, KOD-BR2…), ana hattın ilgili direğine
+  branşman bağlantısıyla bağlanır. Haritada dallar kesikli mavi çizilir;
+  özet ve bilgi satırı kaç dal/direk ayıklandığını söyler. Tek direklik
+  dallara izin verildi (kısa trafo çıkışları).
+
+---
+
 ## [2.53.18] — 2026-08-06
 
 ### Değişti

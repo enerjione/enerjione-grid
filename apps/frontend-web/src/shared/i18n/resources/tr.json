@@ -2898,7 +2898,11 @@
         "qaCreateFail": "Hat oluşturulamadı.",
         "qaSuccessToast": "{{line}} hattı oluşturuldu: {{poles}} direk, segmentler otomatik kuruldu.",
         "qaBranchTitle": "Branşman tahmini",
-        "qaBranchText": "İlk direk, {{line}} hattının {{seq}}. direğine ~{{m}} m mesafede — bu hat oradan dallanıyor olabilir. İşaretlerseniz hat o direğe bağlanır."
+        "qaBranchText": "İlk direk, {{line}} hattının {{seq}}. direğine ~{{m}} m mesafede — bu hat oradan dallanıyor olabilir. İşaretlerseniz hat o direğe bağlanır.",
+        "qaSplitInfo": "Yinelenen koordinat algılandı: {{count}} branşman ayıklandı ({{poles}} direk; ana hattın {{seqs}}. direğinden dallanıyor). Dallar ayrı hat olarak eklenip branşman bağlantısıyla bağlanacak.",
+        "qaSumBranches": "Branşman hattı (otomatik)",
+        "qaSumBranchesVal": "{{count}} hat, {{poles}} direk",
+        "qaSuccessToastBranched": "{{line}} hattı oluşturuldu: {{poles}} direk + {{branches}} branşman hattı bağlandı."
       }
     },
     "license": {

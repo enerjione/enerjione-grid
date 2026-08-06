@@ -213,7 +213,9 @@ class WizardLineRequest(BaseModel):
     region_name: str | None = Field(default=None, max_length=120)
     line_code: str = Field(min_length=1, max_length=64)
     line_name: str | None = Field(default=None, max_length=120)
-    poles: list[WizardPole] = Field(min_length=2, max_length=2000)
+    # min 1: BRANSMAN hatlari tek direklik olabilir (kisa dal — trafo cikisi).
+    # Ana hat icin >=2 kuralini arayuz uygular.
+    poles: list[WizardPole] = Field(min_length=1, max_length=2000)
     branch_line_code: str | None = Field(default=None, max_length=64)
     branch_pole_seq: int | None = None
 

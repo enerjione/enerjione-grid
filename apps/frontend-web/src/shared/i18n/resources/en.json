@@ -2901,7 +2901,11 @@
         "qaCreateFail": "Line could not be created.",
         "qaSuccessToast": "Line {{line}} created: {{poles}} poles, segments built automatically.",
         "qaBranchTitle": "Branch prediction",
-        "qaBranchText": "The first pole is ~{{m}} m from pole {{seq}} of line {{line}} — this line may branch from there. Check to attach it."
+        "qaBranchText": "The first pole is ~{{m}} m from pole {{seq}} of line {{line}} — this line may branch from there. Check to attach it.",
+        "qaSplitInfo": "Repeated coordinate detected: {{count}} branch(es) extracted ({{poles}} poles; branching from main-line pole {{seqs}}). Branches are added as separate lines and attached via branch links.",
+        "qaSumBranches": "Branch lines (automatic)",
+        "qaSumBranchesVal": "{{count}} line(s), {{poles}} poles",
+        "qaSuccessToastBranched": "Line {{line}} created: {{poles}} poles + {{branches}} branch line(s) attached."
       }
     },
     "license": {
