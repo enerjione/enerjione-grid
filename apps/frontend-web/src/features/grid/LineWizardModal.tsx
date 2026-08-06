@@ -167,19 +167,22 @@ function QaPreviewMap({
           />
         ))
       )}
-      {poles.map((p, i) => (
-        <CircleMarker
-          key={i}
-          center={[p.lat, p.lon]}
-          radius={i === 0 ? 6 : 4.5}
-          pathOptions={{
-            color: i === 0 ? "#15803d" : "#ea9010",
-            fillColor: "#ffffff",
-            fillOpacity: 1,
-            weight: 2.5,
-          }}
-        />
-      ))}
+      {poles.map((p, i) => {
+        const dalKaynagi = branches.some((b) => b.fromSeq === i + 1);
+        return (
+          <CircleMarker
+            key={i}
+            center={[p.lat, p.lon]}
+            radius={dalKaynagi ? 7 : i === 0 ? 6 : 4.5}
+            pathOptions={{
+              color: dalKaynagi ? "#0d9488" : i === 0 ? "#15803d" : "#ea9010",
+              fillColor: dalKaynagi ? "#ccfbf1" : "#ffffff",
+              fillOpacity: 1,
+              weight: dalKaynagi ? 3 : 2.5,
+            }}
+          />
+        );
+      })}
       {branchGuess ? (
         <CircleMarker
           center={[branchGuess.lat, branchGuess.lon]}
@@ -474,7 +477,10 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
   const hasValidRows = (preview?.poles ?? 0) > 0;
 
   return (
-    <div className="settings-modal-backdrop" onClick={onClose}>
+    /* Disari tiklama BILEREK kapatmaz: koordinat listesi yapistirilmis
+       sihirbazin kaza ile kaybolmasi veri kaybi (kullanici sikayeti).
+       Kapatma yalnizca sag ustteki X (ve ESC) ile. */
+    <div className="settings-modal-backdrop">
       <div
         className="settings-modal grid-wizard-modal"
         onClick={(e) => e.stopPropagation()}
@@ -484,12 +490,14 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
       >
         <div className="grid-wizard-head">
           <h3>{t("engineering.grid.wizard.title")}</h3>
-          {method ? (
-            <button className="grid-wizard-back" onClick={() => setMethod(null)}>
-              <span className="material-symbols-outlined">arrow_back</span>
-              {t("engineering.grid.wizard.back")}
-            </button>
-          ) : null}
+          <button
+            className="grid-wizard-close"
+            onClick={onClose}
+            aria-label={t("common.close")}
+            title={t("common.close")}
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
         </div>
 
         {/* Adım 0 — Yol seçimi */}
@@ -859,8 +867,12 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
             {error ? <p className="error-text">{error}</p> : null}
 
             <div className="settings-actions grid-import-actions">
-              <button className="grid-import-btn-cancel" onClick={onClose} disabled={committing}>
-                {t("common.cancel")}
+              <button
+                className="grid-import-btn-cancel"
+                onClick={() => setMethod(null)}
+                disabled={committing}
+              >
+                {t("engineering.grid.wizard.back")}
               </button>
               <button
                 className="grid-import-btn-primary"

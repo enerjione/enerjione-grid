@@ -29823,6 +29823,23 @@ th.event-col-category {
   font-size: 18px;
   color: #0f172a;
 }
+/* Sag ust KAPAT (X) — tek kapatma noktasi; disari tiklama kapatmaz. */
+.grid-wizard-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.grid-wizard-close:hover { background: #f8fafc; color: #0f172a; }
+.grid-wizard-close .material-symbols-outlined { font-size: 18px; }
+
 .grid-wizard-back {
   display: inline-flex;
   align-items: center;
@@ -30039,12 +30056,14 @@ th.event-col-category {
 .grid-qa-coord-status .is-ok, .grid-qa-coord-status span.is-ok { color: #15803d; }
 .grid-qa-coord-status .is-bad { color: #b91c1c; }
 
-/* Bransman tahmini kutusu — oneri tonu (mavi), zorlayici degil. */
+/* Bransman ONERI kutusu — oneri tonu (mavi), zorlayici degil.
+   Checkbox SOLDA sabit genislikte durur; genel input kurallari (width:100%)
+   onu tam satira yayip dizilimi bozuyordu (kullanici sikayeti). */
 .grid-qa-branch {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 11px 13px;
   border: 1px solid #bfdbfe;
   border-radius: 10px;
   background: #eff6ff;
@@ -30053,9 +30072,24 @@ th.event-col-category {
   cursor: pointer;
 }
 
-.grid-qa-branch input { margin-top: 2px; }
-.grid-qa-branch .material-symbols-outlined { font-size: 18px; }
-.grid-qa-branch-text { display: flex; flex-direction: column; gap: 2px; }
+.grid-qa-branch input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  accent-color: #1d4ed8;
+  cursor: pointer;
+}
+
+.grid-qa-branch .material-symbols-outlined {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.grid-qa-branch-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.grid-qa-branch-text strong { font-size: 13px; color: #1e3a8a; }
+.grid-qa-branch-text { line-height: 1.5; }
 
 .grid-wizard-qa-placeholder {
   display: flex;

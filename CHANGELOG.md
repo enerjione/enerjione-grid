@@ -14,6 +14,19 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.23] — 2026-08-06
+
+### Düzeltildi
+
+- Hat Sihirbazı: **dışarı tıklayınca kapanmıyor** (yapıştırılan veriler
+  kaza ile kaybolmasın) — kapatma sağ üstteki X ile; **tek "Geri"** kavramı
+  (üstteki ikinci geri kalktı, geri yönü alttaki düğmede).
+- Sihirbaz önizlemesinde **çatal direği branşman noktası olarak** işaretli
+  (turkuaz); branşman öneri kutusunun bozuk dizilimi ve metni düzeltildi
+  (işaretli/işaretsiz ne olacağı açıkça yazıyor).
+
+---
+
 ## [2.53.22] — 2026-08-06
 
 ### Düzeltildi
