@@ -27,6 +27,7 @@
   TelemetryPipelineStatus,
   HistorianStatus,
   NotificationItem,
+  PingResult,
   ServicesReport,
   NotificationSettings,
   OutboundTarget,
@@ -406,6 +407,47 @@ export async function fetchDeviceModels(token: string): Promise<DeviceModelOptio
   });
   if (!response.ok) throw await buildApiError(response, "Cihaz modeli listesi alınamadı.");
   return (await response.json()) as DeviceModelOption[];
+}
+
+// Backend PingResult (snake_case) — saha araclari ping testi.
+type ApiPingResult = {
+  host: string;
+  success: boolean;
+  packets_sent: number;
+  packets_received: number;
+  packet_loss_percent: number;
+  rtt_min_ms: number | null;
+  rtt_avg_ms: number | null;
+  rtt_max_ms: number | null;
+  output: string;
+  duration_ms: number;
+};
+
+/** Mini PC'den hedef IP/hostname'e ping testi (installer/engineer). */
+export async function pingFieldHost(
+  token: string,
+  host: string,
+  count: number = 4,
+): Promise<PingResult> {
+  const response = await apiFetch(`${API_BASE_URL}/field-tools/ping`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ host, count }),
+  });
+  if (!response.ok) throw await buildApiError(response, "Ping testi çalıştırılamadı.");
+  const data = (await response.json()) as ApiPingResult;
+  return {
+    host: data.host,
+    success: data.success,
+    packetsSent: data.packets_sent,
+    packetsReceived: data.packets_received,
+    packetLossPercent: data.packet_loss_percent,
+    rttMinMs: data.rtt_min_ms,
+    rttAvgMs: data.rtt_avg_ms,
+    rttMaxMs: data.rtt_max_ms,
+    output: data.output,
+    durationMs: data.duration_ms,
+  };
 }
 
 export async function createDevice(

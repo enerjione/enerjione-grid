@@ -10,7 +10,7 @@ from sqlalchemy import select as _select, text
 from app.core.license_gate import LicenseGateMiddleware
 from app.core.rate_limit import limiter
 
-from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_configs, device_models, devices, events, faults, ftp_settings as ftp_settings_api, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_configs, device_models, devices, events, faults, field_tools, ftp_settings as ftp_settings_api, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.core import service_role
 from app.core.service_role import leader
@@ -114,6 +114,7 @@ app.include_router(project_settings_api.router, prefix=settings.api_prefix)
 app.include_router(grid_topology.router, prefix=settings.api_prefix)
 app.include_router(system_status.router, prefix=settings.api_prefix)
 app.include_router(network.router, prefix=settings.api_prefix)
+app.include_router(field_tools.router, prefix=settings.api_prefix)
 app.include_router(remote_access.router, prefix=settings.api_prefix)
 app.include_router(map_tiles.router, prefix=settings.api_prefix)
 app.include_router(notifications_api.router, prefix=settings.api_prefix)

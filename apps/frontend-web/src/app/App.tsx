@@ -154,6 +154,7 @@ const DeviceManagementPanel = lazy(() => import("../features/devices/DeviceManag
 const EventsPage = lazy(() => import("../features/events/EventsPage").then((m) => ({ default: m.EventsPage })));
 const DeviceConfigPage = lazy(() => import("../features/device-config/DeviceConfigPage").then((m) => ({ default: m.DeviceConfigPage })));
 const FaultListPage = lazy(() => import("../features/faults/FaultListPage").then((m) => ({ default: m.FaultListPage })));
+const FieldToolsPage = lazy(() => import("../features/field-tools/FieldToolsPage").then((m) => ({ default: m.FieldToolsPage })));
 const GridManagementPanel = lazy(() => import("../features/grid/GridManagementPanel").then((m) => ({ default: m.GridManagementPanel })));
 const LicenseManagementPanel = lazy(() => import("../features/license/LicenseManagementPanel").then((m) => ({ default: m.LicenseManagementPanel })));
 const LiveValuesPage = lazy(() => import("../features/live-values/LiveValuesPage").then((m) => ({ default: m.LiveValuesPage })));
@@ -2926,6 +2927,10 @@ export function App() {
             ) : null}
             {engineeringPage === "active-sessions" && session.role === "installer" ? (
               <ActiveSessionsPage accessToken={session.accessToken} />
+            ) : null}
+            {engineeringPage === "field-tools" &&
+            (session.role === "engineer" || session.role === "installer") ? (
+              <FieldToolsPage accessToken={session.accessToken} />
             ) : null}
           </main>
         ) : pageMode !== "home" ? (

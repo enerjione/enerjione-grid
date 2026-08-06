@@ -40,7 +40,8 @@ export type EngineeringPage =
   | "network-settings"
   | "remote-access"
   | "offline-map"
-  | "active-sessions";
+  | "active-sessions"
+  | "field-tools";
 
 export type TabRoute =
   // Ust menu sayfalari (engineering HARIC — o kendi alt sayfasiyla acilir)
@@ -118,6 +119,7 @@ export function tabLabel(
         "remote-access": "engineering.nav.remoteAccess",
         "offline-map": "engineering.nav.offlineMap",
         "active-sessions": "engineering.nav.activeSessions",
+        "field-tools": "engineering.nav.fieldTools",
       };
       return t(map[route.page]);
     }
@@ -180,6 +182,8 @@ const ENGINEER_ENG: EngineeringPage[] = [
   // Uzaktan bakim iznini VEREN tek rol engineer (bkz. backend
   // api/remote_access.py: _GRANT_ROLES).
   "remote-access",
+  // Saha araclari (ping testi): backend /field-tools installer+engineer.
+  "field-tools",
 ];
 // installer: tum engineering sayfalari.
 

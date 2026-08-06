@@ -33,6 +33,7 @@ import {
   TriangleAlert,
   Users,
   MapPin,
+  Wrench,
   type LucideIcon
 } from "lucide-react";
 
@@ -61,6 +62,7 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   "remote-access": Headset,
   "offline-map": MapPin,
   "active-sessions": MonitorSmartphone,
+  "field-tools": Wrench,
 };
 
 const PAGE_ICON: Record<Exclude<PageMode, "engineering">, LucideIcon> = {

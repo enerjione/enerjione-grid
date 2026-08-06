@@ -111,6 +111,39 @@
     "ops_manager": "Operations Manager",
     "user": "User"
   },
+  "fieldTools": {
+    "title": "Field Tools",
+    "subtitle": "Connectivity tests toward field devices, run from the mini PC. Ping packets are sent from the server — not from your browser.",
+    "ping": {
+      "cardTitle": "Ping Test",
+      "hostLabel": "Target IP / Hostname",
+      "hostPlaceholder": "e.g. 10.0.0.15",
+      "countLabel": "Packet Count",
+      "run": "Ping",
+      "running": "Pinging...",
+      "invalidHost": "Enter a valid IP address or hostname.",
+      "reachable": "Reachable",
+      "unreachable": "Unreachable",
+      "packets": "Packets",
+      "packetsValue": "{{received}} / {{sent}} replies",
+      "loss": "Loss",
+      "rtt": "Latency (min / avg / max)",
+      "rttValue": "{{min}} / {{avg}} / {{max}} ms",
+      "duration": "Duration",
+      "rawOutput": "Raw Output",
+      "successToast": "{{host}} is reachable ({{avg}} ms avg latency).",
+      "failToast": "{{host}} did not respond."
+    },
+    "devices": {
+      "cardTitle": "Registered Devices",
+      "hint": "Click a device to copy its IP into the target field.",
+      "searchPlaceholder": "Search device name, code or IP...",
+      "empty": "No registered devices.",
+      "emptyNoMatch": "No device matches your search.",
+      "noIp": "No IP set",
+      "test": "Test"
+    }
+  },
   "activeSessions": {
     "title": "Active Sessions",
     "subtitle": "Users currently signed in — with IP, device and last activity. You can terminate a suspicious session with 'Revoke'.",
@@ -1449,6 +1482,7 @@
       "networkSettings": "Configure the device IP address, gateway and DNS.",
       "activeSessions": "See who is connected and terminate sessions.",
       "offlineMap": "Download map areas for sites without internet; view and manage downloaded areas.",
+      "fieldTools": "Test connectivity to field devices; ping an IP address.",
       "remoteAccess": "Grant the support team time-limited remote access; close it whenever you want."
     },
     "nav": {
@@ -1471,7 +1505,8 @@
       "networkSettings": "Network Settings",
       "activeSessions": "Active Sessions",
       "offlineMap": "Offline Map",
-      "remoteAccess": "Remote Maintenance"
+      "remoteAccess": "Remote Maintenance",
+      "fieldTools": "Field Tools"
     },
     "users": {
       "title": "Users",
@@ -3507,6 +3542,7 @@
         "searchPlaceholder": "Search settings…",
         "deviceUpdate": "Device-reported last update: {{date}}",
         "deviceUpdateHint": "Timestamp reported by the device itself (Last Configuration Update). If it changed after the command, the update was really applied on the device.",
+        "saveCount": "Save ({{count}})",
         "noSerial": "no serial number",
         "noSerialHint": "The device's serial number is unknown; the file name cannot be produced. Enter a serial number on the device record.",
         "fromTemplate": "Create from template",

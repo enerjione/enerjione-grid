@@ -414,10 +414,23 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
               {t("deviceDetail.config.ftp.cmdPull")}
             </button>
           ) : null}
-          {canCommand ? (
+          {/* Bekleyen degisiklik varken kaydetme BASLIKTA da durur — uzun
+              izgarada asagidaki cubuga inmek gerekmesin (kullanici istegi). */}
+          {canEdit && changeCount > 0 ? (
             <button
               type="button"
               className="dev-ftp-btn is-primary"
+              disabled={busy || invalidDraft}
+              onClick={() => void save()}
+            >
+              <span className="material-symbols-outlined">save</span>
+              {t("deviceDetail.config.ftp.saveCount", { count: changeCount })}
+            </button>
+          ) : null}
+          {canCommand ? (
+            <button
+              type="button"
+              className={`dev-ftp-btn ${changeCount === 0 ? "is-primary" : ""}`}
               disabled={busy || current.filename === null}
               title={
                 current.filename === null

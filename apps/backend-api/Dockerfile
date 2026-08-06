@@ -12,6 +12,9 @@ WORKDIR /app
 #   - build-essential, libpq-dev: psycopg2 build icin
 #   - curl: healthcheck icin
 #   - gnupg, ca-certificates: PostgreSQL APT reposunu eklemek icin
+#   - iputils-ping: saha araclari ping testi (/field-tools/ping). Non-root
+#     kullanicida da calisir: Docker `net.ipv4.ping_group_range` sysctl'ini
+#     varsayilan acik verir, iputils ICMP datagram soketi kullanir.
 #   - postgresql-client-16: pg_dump / pg_restore (DB yedek alma).
 #     Postgres server (compose) 16 — istemcinin de ayni major surum olmali,
 #     yoksa "server version mismatch" hatasi alinir.
@@ -22,6 +25,7 @@ RUN apt-get update \
         curl \
         gnupg \
         ca-certificates \
+        iputils-ping \
  && install -d /usr/share/postgresql-common/pgdg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \

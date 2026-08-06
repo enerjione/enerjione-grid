@@ -1680,3 +1680,19 @@ export type DeviceConfigSummary = {
   createdAt: string;
   appliedAt: string | null;
 };
+
+// Saha araclari: mini PC'den hedef IP/hostname'e ping testi sonucu.
+export type PingResult = {
+  host: string;
+  success: boolean;
+  packetsSent: number;
+  packetsReceived: number;
+  packetLossPercent: number;
+  // Hic yanit gelmediyse null.
+  rttMinMs: number | null;
+  rttAvgMs: number | null;
+  rttMaxMs: number | null;
+  // Ham ping ciktisi — teshis icin oldugu gibi gosterilir.
+  output: string;
+  durationMs: number;
+};

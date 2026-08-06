@@ -108,6 +108,39 @@
     "ops_manager": "Operasyon Yöneticisi",
     "user": "Kullanıcı"
   },
+  "fieldTools": {
+    "title": "Saha Araçları",
+    "subtitle": "Mini PC üzerinden saha cihazlarına erişim testleri. Ping testi ICMP paketlerini sunucudan gönderir — tarayıcıdan değil.",
+    "ping": {
+      "cardTitle": "Ping Testi",
+      "hostLabel": "Hedef IP / Hostname",
+      "hostPlaceholder": "örn. 10.0.0.15",
+      "countLabel": "Paket Sayısı",
+      "run": "Ping At",
+      "running": "Ping atılıyor...",
+      "invalidHost": "Geçerli bir IP adresi veya hostname girin.",
+      "reachable": "Erişilebilir",
+      "unreachable": "Erişilemiyor",
+      "packets": "Paket",
+      "packetsValue": "{{received}} / {{sent}} yanıt",
+      "loss": "Kayıp",
+      "rtt": "Gecikme (min / ort / maks)",
+      "rttValue": "{{min}} / {{avg}} / {{max}} ms",
+      "duration": "Süre",
+      "rawOutput": "Ham Çıktı",
+      "successToast": "{{host}} erişilebilir ({{avg}} ms ort. gecikme).",
+      "failToast": "{{host}} yanıt vermedi."
+    },
+    "devices": {
+      "cardTitle": "Kayıtlı Cihazlar",
+      "hint": "Bir cihaza tıklayınca IP adresi hedefe yazılır.",
+      "searchPlaceholder": "Cihaz adı, kodu veya IP ara...",
+      "empty": "Kayıtlı cihaz yok.",
+      "emptyNoMatch": "Aramaya uyan cihaz yok.",
+      "noIp": "IP tanımsız",
+      "test": "Test Et"
+    }
+  },
   "activeSessions": {
     "title": "Aktif Oturumlar",
     "subtitle": "Sisteme şu anda giriş yapmış kullanıcılar — IP, cihaz ve son aktivite bilgisiyle. Şüpheli bir oturumu 'At' ile sonlandırabilirsin.",
@@ -1446,7 +1479,8 @@
       "networkSettings": "Cihazın IP, ağ geçidi ve DNS ayarlarını yapılandır.",
       "activeSessions": "Sisteme kimlerin bağlı olduğunu gör, oturum sonlandır.",
       "offlineMap": "İnternet olmayan sahalar için harita alanı indir; indirilmiş alanları gör ve yönet.",
-      "remoteAccess": "Teknik destek ekibine süreli uzaktan erişim izni ver; istediğin an kapat."
+      "remoteAccess": "Teknik destek ekibine süreli uzaktan erişim izni ver; istediğin an kapat.",
+      "fieldTools": "Saha cihazlarına erişimi test et; IP adresine ping at."
     },
     "nav": {
       "devices": "Cihazlar",
@@ -1468,7 +1502,8 @@
       "networkSettings": "Ağ Ayarları",
       "activeSessions": "Aktif Oturumlar",
       "offlineMap": "Çevrimdışı Harita",
-      "remoteAccess": "Uzaktan Bakım"
+      "remoteAccess": "Uzaktan Bakım",
+      "fieldTools": "Saha Araçları"
     },
     "users": {
       "title": "Kullanıcılar",
@@ -3504,6 +3539,7 @@
         "searchPlaceholder": "Ayar ara…",
         "deviceUpdate": "Cihazın bildirdiği son güncelleme: {{date}}",
         "deviceUpdateHint": "Cihazın kendi raporladığı damga (Last Configuration Update). Komut sonrası bu değer değiştiyse güncelleme cihazda gerçekten uygulanmıştır.",
+        "saveCount": "Kaydet ({{count}})",
         "noSerial": "seri numarası yok",
         "noSerialHint": "Cihazın seri numarası bilinmiyor; dosya adı üretilemiyor. Cihaz kaydına seri numarası girin.",
         "fromTemplate": "Şablondan oluştur",

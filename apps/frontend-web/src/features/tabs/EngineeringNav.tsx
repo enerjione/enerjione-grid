@@ -230,6 +230,14 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         descKey: "engineering.navDesc.remoteAccess",
         canSee: isTeamManager,
       },
+      {
+        // Saha araclari: mini PC'den saha cihazlarina erisim testleri
+        // (simdilik ping). Backend /field-tools installer+engineer.
+        page: "field-tools",
+        labelKey: "engineering.nav.fieldTools",
+        descKey: "engineering.navDesc.fieldTools",
+        canSee: isInstallerOrEngineer,
+      },
     ],
   },
 ];

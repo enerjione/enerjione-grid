@@ -37311,3 +37311,347 @@ th.event-col-category {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* =========================================================================
+   Saha Araclari (FieldToolsPage) — ping testi + kayitli cihaz listesi.
+   Gorsel dil: net-page/rad-page kartlariyla ayni (beyaz kart, #e2e8f0
+   cerceve, yumusak golge).
+   ========================================================================= */
+.ft-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.ft-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+  color: #0f172a;
+}
+
+.ft-header p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 720px;
+}
+
+.ft-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.2fr) minmax(300px, 1fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 980px) {
+  .ft-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ft-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.ft-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ft-card-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #172033;
+}
+
+.ft-card-head h3 .material-symbols-outlined {
+  font-size: 19px;
+  color: #e97800;
+}
+
+.ft-card-head > small {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+/* --- Ping formu --- */
+.ft-ping-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ft-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.ft-field--host {
+  flex: 1;
+  min-width: 220px;
+}
+
+.ft-field input,
+.ft-field select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #0f172a;
+  background: #fff;
+}
+
+.ft-field input:focus,
+.ft-field select:focus {
+  outline: 2px solid #fed7aa;
+  border-color: #e97800;
+}
+
+.ft-ping-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+}
+
+.ft-ping-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.ft-spin {
+  animation: ft-rotate 1s linear infinite;
+}
+
+@keyframes ft-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Sonuc --- */
+.ft-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ft-result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ft-result-badge .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.ft-result-badge code {
+  font-weight: 600;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.ft-result-badge.is-ok {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.ft-result-badge.is-fail {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.ft-result-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.ft-result-stats > div {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.ft-result-stats dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin: 0 0 4px;
+}
+
+.ft-result-stats dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ft-raw summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.ft-raw pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- Cihaz listesi --- */
+.ft-device-search {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.ft-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ft-device-empty {
+  margin: 12px 0;
+  font-size: 13px;
+  color: #64748b;
+  text-align: center;
+}
+
+.ft-device-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ft-device-row:hover {
+  border-color: #e97800;
+  background: #fffaf3;
+}
+
+.ft-device-row.is-disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.ft-device-row.is-disabled:hover {
+  border-color: #e2e8f0;
+  background: #fff;
+}
+
+.ft-device-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.ft-device-text strong {
+  font-size: 13px;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ft-device-text small {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ft-device-ip {
+  font-size: 12.5px;
+  color: #334155;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.ft-device-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ft-device-test-btn:hover:not(:disabled) {
+  border-color: #e97800;
+  color: #9a4c07;
+}
+
+.ft-device-test-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ft-device-test-btn .material-symbols-outlined {
+  font-size: 16px;
+}

@@ -14,6 +14,15 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.10] — 2026-08-06
+
+### Değişti
+
+- Cihaz Ayarları: bekleyen değişiklik varken **Kaydet (N)** düğmesi başlık
+  satırında da görünür — uzun ayar listesinde en alta inmeye gerek kalmaz.
+
+---
+
 ## [2.53.9] — 2026-08-06
 
 ### Eklendi
