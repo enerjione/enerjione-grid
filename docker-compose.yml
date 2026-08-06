@@ -690,6 +690,10 @@ services:
       # "izni ac/kapat" istegi yazar; sureyi ve tailscale komutlarini host'taki
       # ajan (root) yurutur. Uzaktan erisim VARSAYILAN KAPALIDIR.
       REMOTE_ACCESS_STATE_DIR: /var/lib/e1-grid/remote
+      # Guvenlik duvari ajani (e1-fwd) ile paylasilan dizin. Backend buraya
+      # "duvari ac/kapat + kurallar" istegini yazar; iptables komutlarini
+      # host'taki ajan (root) yurutur. Duvar VARSAYILAN KAPALIDIR.
+      FIREWALL_STATE_DIR: /var/lib/e1-grid/fw
       # Site tavani: bir iznin en fazla kac dakika surebilecegi. Varsayilan
       # 1440 (24 saat). Musteri daha kisa bir ust sinir isterse .env'e
       # REMOTE_ACCESS_MAX_MINUTES=... yazar.
@@ -792,6 +796,13 @@ services:
       # izin uydurabilir ya da bitis tarihini silebilirdi.
       # infra/appliance/setup-remote-access.sh olusturur (root:10001, 0770).
       - /var/lib/e1-grid/remote:/var/lib/e1-grid/remote
+      # Guvenlik duvari ajani (e1-fwd) ile TEK temas noktasi. Backend iptables
+      # calistirmaz; buraya bir JSON istegi yazar, ajan bagimsiz dogrulayip
+      # uygular. Yetkili yapilandirmanin durdugu /var/lib/e1-grid/fw-priv
+      # BILEREK MOUNT EDILMEZ (remote-priv ile ayni gerekce: 0770 dizinde
+      # yazma izni olan backend root dosyalarini da unlink/rename edebilir).
+      # infra/appliance/setup-firewall-agent.sh olusturur (root:10001, 0770).
+      - /var/lib/e1-grid/fw:/var/lib/e1-grid/fw
       # Cevrimdisi harita karolari. Named volume: imaj guncellemesinde
       # SILINMEZ -- sahada tekrar indirmek 4G uzerinden pahali/uzun olur.
       - map-tile-data:/var/lib/e1-map-tiles

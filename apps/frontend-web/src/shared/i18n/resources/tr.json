@@ -721,7 +721,10 @@
       "remote_access_extended": "Uzaktan bakım süresi {{minutes}} dakika olarak uzatıldı",
       "remote_access_revoked": "Uzaktan bakım izni kapatıldı",
       "remote_access_session_ended": "Uzaktan bakım erişimi kapandı ({{reason}})",
-      "remote_access_apply_failed": "Uzaktan bakım isteği uygulanamadı: {{error}}"
+      "remote_access_apply_failed": "Uzaktan bakım isteği uygulanamadı: {{error}}",
+      "firewall_enabled": "Güvenlik duvarı açıldı ({{rules}} kural, {{forwards}} yönlendirme)",
+      "firewall_disabled": "Güvenlik duvarı kapatıldı",
+      "firewall_config_changed": "Güvenlik duvarı kuralları güncellendi ({{rules}} kural, {{forwards}} yönlendirme)"
     },
     "category": {
       "auth": "Giriş ve oturum",
@@ -1149,6 +1152,141 @@
       "radioUnmanagedHint": "Cihazda WiFi kartı bulundu ama ağ yöneticisi (NetworkManager) onu yönetmiyor; bu yüzden buradan açılıp kapatılamıyor. Kart yeni takıldıysa cihazı yeniden başlatmak genellikle yeterlidir."
     }
   },
+  "firewall": {
+    "state": {
+      "loading": "Yükleniyor",
+      "applying": "Uygulanıyor",
+      "on": "AÇIK",
+      "off": "KAPALI",
+      "unknown": "BİLİNMİYOR"
+    },
+    "hero": {
+      "loadingTitle": "Güvenlik duvarı durumu okunuyor",
+      "loadingLead": "Cihazdaki güvenlik duvarı ajanından güncel durum alınıyor.",
+      "applyingTitle": "Değişiklik uygulanıyor",
+      "applyingLead": "İstek cihaza iletildi; güvenlik duvarı kuralları birkaç saniye içinde güncellenir.",
+      "onTitle": "Güvenlik duvarı açık",
+      "onLead": "İzin verilen portlar dışındaki tüm gelen bağlantılar engelleniyor. Web arayüzü ve SSH her zaman açık kalır.",
+      "offTitle": "Güvenlik duvarı kapalı",
+      "offLead": "Tüm gelen bağlantılara izin veriliyor. SCADA ve mesajlaşma portları (Modbus, IEC 104, NATS…) ağdaki herkese açık.",
+      "unknownTitle": "Durum doğrulanamıyor",
+      "unknownLead": "Güvenlik duvarı ajanına ulaşılamıyor veya istenen durum cihazda doğrulanamadı. Aşağıdaki uyarılara bakın.",
+      "counts": "{{rules}} kural, {{forwards}} yönlendirme",
+      "changedBy": "Son değişiklik: {{user}} — {{time}}"
+    },
+    "actions": {
+      "enable": "Duvarı Aç",
+      "disable": "Duvarı Kapat"
+    },
+    "guard": {
+      "text": "Kilitlenme koruması: web arayüzü ve SSH (TCP {{ports}}) ile uzaktan bakım tüneli her zaman açık kalır; hiçbir kural bunları kapatamaz."
+    },
+    "blocked": {
+      "generic": "Güvenlik duvarı bu kurulumda yönetilemiyor.",
+      "reason": {
+        "state_dir_missing": "Güvenlik duvarı ajanı bu kurulumda yok. Cihazda update.sh çalıştırıldığında otomatik kurulur.",
+        "state_dir_not_writable": "Ajan dizinine yazılamıyor; kurulum betiği (setup-firewall-agent.sh) yeniden çalıştırılmalı.",
+        "agent_never_reported": "Ajan kurulu görünüyor ama hiç rapor yazmamış; cihazda e1-fwd-report.timer'ın çalıştığını kontrol edin.",
+        "iptables_missing": "Cihazda iptables bulunamadı; güvenlik duvarı uygulanamaz.",
+        "unknown": "Güvenlik duvarı durumu okunamadı."
+      }
+    },
+    "warn": {
+      "staleAgent": "Cihazdaki güvenlik duvarı ajanı uzun süredir rapor yazmıyor. Yeniden başlatma sonrası kurallar kendiliğinden GERİ KURULMAZ; cihazı kontrol edin.",
+      "applyFailed": "Son istek uygulanamadı: {{error}}",
+      "mismatch": {
+        "apply_failed": "Kurallar cihaza kurulamadı: duvar 'açık' görünse de koruma etkin olmayabilir.",
+        "clear_failed": "Kurallar cihazdan kaldırılamadı: duvar 'kapalı' görünse de bazı kurallar etkin olabilir.",
+        "generic": "İstenen durum ile cihazda ölçülen durum birbirini tutmuyor."
+      }
+    },
+    "rules": {
+      "title": "Kurallar ({{count}}/{{max}})",
+      "hint": "Sıra önemlidir: gelen bağlantı listedeki İLK eşleşen kurala göre işlem görür. Hiçbir kurala uymayan bağlantı duvar açıkken engellenir.",
+      "empty": "Henüz kural yok. Duvar açıkken yalnızca web arayüzü, SSH ve uzaktan bakım erişilebilir kalır; ihtiyacınız olan servisleri ekleyin.",
+      "colAction": "İşlem",
+      "colProto": "Protokol",
+      "colPorts": "Port",
+      "colSource": "Kaynak",
+      "colComment": "Açıklama",
+      "allow": "İzin ver",
+      "deny": "Engelle",
+      "anySource": "Her kaynak",
+      "add": "Ekle",
+      "portsPlaceholder": "2404 veya 2404-2406",
+      "sourcePlaceholder": "Kaynak ağı (ör. 10.0.0.0/24, boş = hepsi)",
+      "commentPlaceholder": "Açıklama (isteğe bağlı)",
+      "invalidPorts": "Port '2404' veya '2404-2406' biçiminde olmalı (1-65535).",
+      "invalidSource": "Kaynak ağı IPv4 CIDR biçiminde olmalı (ör. 10.0.0.0/24).",
+      "limitReached": "En fazla {{max}} kural tanımlanabilir.",
+      "moveUp": "Yukarı taşı",
+      "moveDown": "Aşağı taşı",
+      "delete": "Sil"
+    },
+    "presets": {
+      "title": "Hazır servisler:",
+      "iec104": "IEC 104 (SCADA)",
+      "modbus": "Modbus TCP",
+      "nats": "NATS (telemetri)",
+      "rabbitmq": "RabbitMQ",
+      "ftp": "FTP (cihaz dosyaları)"
+    },
+    "forwards": {
+      "title": "Port Yönlendirme ({{count}}/{{max}})",
+      "hint": "Gelen bağlantıyı ağdaki başka bir cihaza aktarır (DNAT).",
+      "empty": "Tanımlı yönlendirme yok.",
+      "colListen": "Dinlenen Port",
+      "colDest": "Hedef",
+      "listenPlaceholder": "Dinlenecek port",
+      "destIpPlaceholder": "Hedef IP",
+      "destPortPlaceholder": "Hedef port",
+      "invalidListen": "Dinlenecek port 1-65535 arasında olmalı.",
+      "reservedListen": "{{port}} portu sistem tarafından kullanılıyor; yönlendirme bu portu dinleyemez.",
+      "duplicateListen": "{{port}} portu için zaten bir yönlendirme var.",
+      "invalidDestIp": "Hedef IP geçerli bir IPv4 adresi olmalı.",
+      "invalidDestPort": "Hedef port 1-65535 arasında olmalı.",
+      "limitReached": "En fazla {{max}} yönlendirme tanımlanabilir."
+    },
+    "save": {
+      "dirty": "Kaydedilmemiş değişiklikler var; cihaza henüz gönderilmedi.",
+      "apply": "Kaydet ve Uygula",
+      "discard": "Vazgeç"
+    },
+    "confirm": {
+      "titleEnable": "Güvenlik duvarı açılsın mı?",
+      "titleDisable": "Güvenlik duvarı kapatılsın mı?",
+      "titleSave": "Değişiklikler uygulansın mı?",
+      "lead": "Aşağıdaki yapılandırma cihaza gönderilecek ve birkaç saniye içinde uygulanacak.",
+      "leadDisable": "Duvar kapatıldığında tüm gelen bağlantılara yeniden izin verilir; SCADA ve mesajlaşma portları ağa açılır. Kurallarınız silinmez, duvarı tekrar açtığınızda geri gelir.",
+      "rowState": "Güvenlik duvarı",
+      "rowRules": "Kural sayısı",
+      "rowForwards": "Yönlendirme sayısı",
+      "telemetryWarn": "Dikkat: telemetri portuna (4222/TCP, NATS) izin veren kural yok. Uzak gateway'ler bu porta bağlanıyorsa saha veri akışı DURUR.",
+      "approve": "Onayla ve Uygula",
+      "working": "Gönderiliyor…"
+    },
+    "explain": {
+      "title": "Nasıl çalışır?",
+      "whatTitle": "Neyi korur?",
+      "whatText": "Cihaza gelen bağlantıları süzer — hem cihazın kendi servislerini hem konteynerlerde yayınlanan portları (Modbus, IEC 104, NATS…). Duvar açıkken listedeki ilk eşleşen kural uygulanır; hiçbir kurala uymayan bağlantı engellenir.",
+      "guardTitle": "Kendinizi dışarıda bırakamazsınız",
+      "guardText": "Web arayüzü ve SSH (TCP {{ports}}) ile uzaktan bakım tüneli cihaz tarafında sabit olarak açık tutulur; hiçbir kural bunları kapatamaz. Acil durumda cihaz konsolundan 'sudo e1-fwd.py disable' komutu duvarı kapatır.",
+      "telemetryTitle": "Saha veri akışına dikkat",
+      "telemetryText": "Uzak gateway'ler telemetriyi NATS (4222/TCP) üzerinden basar. Duvarı açarken bu porta izin vermezseniz saha verisi kesilir; 'Hazır servisler' düğmeleri doğru portları tek tıkla ekler."
+    },
+    "log": {
+      "title": "Son işlemler",
+      "hint": "Denetim kaydı",
+      "empty": "Henüz işlem yok."
+    },
+    "toasts": {
+      "saved": "Yapılandırma cihaza gönderildi; birkaç saniye içinde uygulanır."
+    },
+    "errors": {
+      "load": "Güvenlik duvarı durumu alınamadı.",
+      "save": "Yapılandırma gönderilemedi."
+    }
+  },
   "remoteAccess": {
     "endReason": {
       "expired": "Süre doldu",
@@ -1518,6 +1656,7 @@
       "activeSessions": "Sisteme kimlerin bağlı olduğunu gör, oturum sonlandır.",
       "offlineMap": "İnternet olmayan sahalar için harita alanı indir; indirilmiş alanları gör ve yönet.",
       "remoteAccess": "Teknik destek ekibine süreli uzaktan erişim izni ver; istediğin an kapat.",
+      "firewall": "Sistemin güvenlik duvarını yönet: portları aç/kapat, kural ve yönlendirme tanımla.",
       "fieldTools": "Saha cihazlarına erişimi test et; IP adresine ping at."
     },
     "nav": {
@@ -1541,6 +1680,7 @@
       "activeSessions": "Aktif Oturumlar",
       "offlineMap": "Çevrimdışı Harita",
       "remoteAccess": "Uzaktan Bakım",
+      "firewall": "Güvenlik Duvarı",
       "fieldTools": "Saha Araçları"
     },
     "users": {

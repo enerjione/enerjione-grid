@@ -14,6 +14,36 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.12] — 2026-08-06
+
+### Eklendi
+
+- **Güvenlik Duvarı sayfası** (Mühendislik > Cihaz Ayarları): sistemin host
+  güvenlik duvarı artık arayüzden yönetiliyor — açma/kapama, izin/engel
+  kuralları (port, protokol, kaynak ağı) ve port yönlendirme (DNAT).
+  Docker'ın yayınladığı SCADA portları (Modbus 502, IEC 104 2404-2406,
+  NATS 4222, RabbitMQ 5672, FTP) `DOCKER-USER` zinciri üzerinden filtrelenir;
+  "Hazır servisler" düğmeleri doğru portları tek tıkla ekler. Kilitlenme
+  koruması cihaz tarafında sabittir: web arayüzü (80/443), SSH (22) ve
+  uzaktan bakım tüneli hiçbir kuralla kapatılamaz. Uygulama host'ta root
+  ile çalışan yeni `e1-fwd` ajanı üzerinden yapılır (e1-rad ile aynı
+  dosya-IPC deseni); yapılandırma yeniden başlatmada 60 sn'lik zorlayıcı
+  timer ile geri kurulur. Duvar VARSAYILAN KAPALI — mevcut kurulumların
+  davranışı güncellemeyle değişmez. Görüntüleme: engineer/installer/
+  ops_manager; değiştirme: engineer/installer. Tüm değişiklikler güvenlik
+  kategorisinde denetim kaydına yazılır. Kurallar ve Port Yönlendirme aynı
+  kartın iki sekmesi; duvar durumu ve aç/kapat düğmesi kart başlığında.
+- **Saha Araçları güncellemeleri**: ping ile cihaz erişim testi (backend'in
+  koştuğu makineden), DNS çözümleme ve cihaz tarama; çıktı ayrıştırma
+  yerelden bağımsız, hedef doğrulaması enjeksiyona kapalı.
+
+### Değişti
+
+- Uzaktan Bakım: üst durum bloğu basıklaştırıldı; "neden" alanı kartın
+  dibine kadar uzayarak ölü boşluğu dolduruyor.
+
+---
+
 ## [2.53.11] — 2026-08-06
 
 ### Eklendi

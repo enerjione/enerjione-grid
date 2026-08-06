@@ -35115,7 +35115,9 @@ th.event-col-category {
   align-items: center;
   gap: 18px;
   flex-shrink: 0;
-  padding: 18px 20px;
+  /* BASIK tutulur (kullanici istegi): ust blok dikeyde yer yemesin,
+     genislik zaten bol — bilgiler yatayda dagilir. */
+  padding: 12px 18px;
   border: 1px solid var(--rad-line);
   border-radius: 14px;
   background: #fff;
@@ -35137,10 +35139,14 @@ th.event-col-category {
 .rad-switch-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   flex: 1;
 }
+
+/* Meta satiri + cihaz cipleri ayni yatay akista dagilir — dikey yigilma
+   ust blogu gereksiz uzatiyordu. */
+.rad-switch-body > p { font-size: 13px; }
 
 /* Durum rozeti — diger sayfalardaki .net-chip ile ayni gorunum. */
 .rad-switch-pill {
@@ -35500,14 +35506,26 @@ th.event-col-category {
 
 /* Secilen sureyi karar anindan ONCE somutlastirir: kullanici "8 saat"i
    degil, KAPANIS SAATINI anlamali. */
+/* Sebep alani kalan yuksekligi DOLDURUR: kartta olu bosluk kalmaz,
+   metin alani karta gore uzar (kullanici istegi). */
+.rad-card .rad-field:has(> textarea) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rad-card .rad-field:has(> textarea) textarea {
+  flex: 1;
+  min-height: 72px;
+  resize: none;
+}
+
 .rad-endsat {
   display: flex;
   align-items: center;
   gap: 9px;
   flex-wrap: wrap;
-  /* Kart dibine yapissin: iki sutunun alt hizasi tutsun ve karar satiri
-     her zaman butonun hemen ustunde olsun. */
-  margin-top: auto;
   padding: 11px 13px;
   background: var(--rad-on-bg);
   border: 1px solid var(--rad-on-line);
@@ -37789,4 +37807,347 @@ th.event-col-category {
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
+}
+
+/* ===========================================================================
+   Guvenlik Duvari sayfasi (features/firewall/FirewallPage.tsx)
+   Gorsel dil: rad-page (Uzaktan Bakim) kartlariyla ayni — beyaz kart,
+   #e2e8f0 cerceve. Buradaki siniflar yalnizca sayfaya ozgu parcalar:
+   kural/yonlendirme tablosu, hazir servis cipleri, kaydet cubugu.
+   =========================================================================== */
+
+/* Kilitlenme korumasi bandi: uyari degil BILGI — mavi tonda. */
+.fw-banner-guard {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.fw-card .rad-card-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ---------- Sekmeli ana kart ----------
+   Kurallar + Port Yonlendirme tek kartin iki sekmesi; hero kaldirildi,
+   durum rozeti ve ac/kapat baslik satirinda. Sekme gorunumu cihaz
+   detayindaki .device-status-tab diliyle ayni. */
+.fw-tabs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #eef2f7;
+  padding-bottom: 10px;
+}
+
+.fw-tabs { display: flex; gap: 6px; }
+
+.fw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.fw-tab:hover { background: #f8fafc; }
+
+.fw-tab.is-active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+}
+
+.fw-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Durum rozeti — kaldirilan hero'nun ozeti. Renkler net-banner tonlari. */
+.fw-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fw-state-pill.is-on {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.fw-state-pill.is-on .rad-dot { background: #16a34a; }
+
+.fw-state-pill.is-off {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.fw-state-pill.is-off .rad-dot { background: #dc2626; }
+
+.fw-hint {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* ---------- Hazir servis cipleri ---------- */
+.fw-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.fw-presets-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.fw-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.fw-preset-chip:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.fw-preset-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---------- Kural / yonlendirme tablosu ---------- */
+.fw-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.fw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.fw-table th {
+  text-align: left;
+  padding: 8px 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.fw-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #0f172a;
+  vertical-align: middle;
+}
+
+.fw-table tbody tr:last-child td { border-bottom: none; }
+
+.fw-col-order {
+  width: 34px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.fw-col-tools {
+  width: 96px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.fw-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.fw-comment {
+  color: #64748b;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fw-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fw-chip.is-allow {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.fw-chip.is-deny {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.fw-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fw-tool-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.fw-tool-btn--danger:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.fw-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---------- Ekleme satiri ---------- */
+.fw-add-row {
+  display: grid;
+  grid-template-columns: 110px 84px minmax(120px, 1fr) minmax(160px, 1.2fr) minmax(140px, 1.2fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.fw-add-row--forward {
+  grid-template-columns: 84px minmax(110px, 1fr) auto minmax(130px, 1fr) minmax(100px, 1fr) minmax(130px, 1.2fr) auto;
+}
+
+.fw-add-row select,
+.fw-add-row input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12.5px;
+  color: #0f172a;
+  min-width: 0;
+}
+
+.fw-add-row select:focus,
+.fw-add-row input:focus {
+  outline: none;
+  border-color: #94a3b8;
+}
+
+.fw-add-row .secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.fw-add-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.fw-form-error {
+  display: block;
+  margin-top: 6px;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+/* ---------- Kaydet cubugu ---------- */
+.fw-savebar {
+  position: sticky;
+  bottom: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 13px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+}
+
+.fw-savebar span { flex: 1; }
+
+.fw-savebar-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.fw-confirm-warn {
+  margin: 10px 0 0;
+}
+
+@media (max-width: 900px) {
+  .fw-add-row,
+  .fw-add-row--forward {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .fw-add-arrow { display: none; }
 }

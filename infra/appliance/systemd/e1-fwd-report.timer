@@ -1,0 +1,15 @@
+[Unit]
+Description=EnerjiOne Grid guvenlik duvarini periyodik denetle
+
+[Timer]
+# Boot'tan 40 sn sonra ilk tur (docker zincirlerini kursun), sonra 60 sn'de
+# bir. e1-netd (15 sn), e1-gwd (25 sn) ve e1-rad (30 sn) ile cakismasin diye
+# kaydirildi. 60 sn yeterli: duvar durumu saniyelik degil, dakikalik yakinsama
+# kabul edilebilir — uzaktan bakim suresi gibi bir guvenlik sayaci YOK.
+OnBootSec=40s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=e1-fwd-report.service
+
+[Install]
+WantedBy=timers.target

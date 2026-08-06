@@ -913,6 +913,17 @@ if [[ -f "${INSTALL_DIR}/infra/appliance/setup-remote-access.sh" ]]; then
     || e1_warn "e1-rad kurulamadi; 'Uzaktan Bakim' sayfasi calismayacak."
 fi
 
+# ---- Guvenlik duvari ajani (e1-fwd) --------------------------------------
+# Host guvenlik duvarini (iptables) arayuzden yonetilir yapar. VARSAYILAN
+# KAPALI kurulur: bu adim tek basina hicbir trafigi kesmez; duvari kullanici
+# arayuzden bilerek acar. VPS dahil her kurulumda calisir — yayinlanan SCADA
+# portlari (502/2404/4222...) en cok VPS'te aciktadir.
+if [[ -f "${INSTALL_DIR}/infra/appliance/setup-firewall-agent.sh" ]]; then
+  INSTALL_DIR="$INSTALL_DIR" bash "${INSTALL_DIR}/infra/appliance/setup-firewall-agent.sh" \
+    >/dev/null 2>&1 && e1_ok "Guvenlik duvari ajani (e1-fwd) aktif." \
+    || e1_warn "e1-fwd kurulamadi; 'Guvenlik Duvari' sayfasi calismayacak."
+fi
+
 # ---- Final rehber ---------------------------------------------------------
 e1_rollback_disarm
 e1_step_done

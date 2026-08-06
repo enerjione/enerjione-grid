@@ -19,6 +19,9 @@
   NetworkConfigAccepted,
   NetworkConfigPayload,
   NetworkStatus,
+  FirewallConfig,
+  FirewallConfigAccepted,
+  FirewallStatus,
   RemoteAccessAccepted,
   RemoteAccessGrantPayload,
   RemoteAccessStatus,
@@ -26,9 +29,13 @@
   TelemetryAggregatePoint,
   TelemetryPipelineStatus,
   HistorianStatus,
+  DeviceScanResult,
+  DnsResult,
   NotificationItem,
   PingResult,
+  PortCheckResult,
   ServicesReport,
+  TracerouteResult,
   NotificationSettings,
   OutboundTarget,
   ResponsibilityAreaDetail,
@@ -448,6 +455,112 @@ export async function pingFieldHost(
     output: data.output,
     durationMs: data.duration_ms,
   };
+}
+
+/** Hedefte TCP portu açık mı (DNP3 20001 vb.) — saha araçları. */
+export async function checkFieldPort(
+  token: string,
+  host: string,
+  port: number,
+): Promise<PortCheckResult> {
+  const response = await apiFetch(`${API_BASE_URL}/field-tools/port-check`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ host, port }),
+  });
+  if (!response.ok) throw await buildApiError(response, "Port testi çalıştırılamadı.");
+  const data = (await response.json()) as {
+    host: string;
+    port: number;
+    open: boolean;
+    elapsed_ms: number;
+    error: string | null;
+  };
+  return {
+    host: data.host,
+    port: data.port,
+    open: data.open,
+    elapsedMs: data.elapsed_ms,
+    error: data.error,
+  };
+}
+
+/** Hedefe giden rota (traceroute) — ham çıktı döner, dakikaya yakın sürebilir. */
+export async function traceFieldRoute(
+  token: string,
+  host: string,
+): Promise<TracerouteResult> {
+  const response = await apiFetch(`${API_BASE_URL}/field-tools/traceroute`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ host }),
+  });
+  if (!response.ok) throw await buildApiError(response, "Traceroute çalıştırılamadı.");
+  const data = (await response.json()) as {
+    host: string;
+    success: boolean;
+    output: string;
+    duration_ms: number;
+  };
+  return {
+    host: data.host,
+    success: data.success,
+    output: data.output,
+    durationMs: data.duration_ms,
+  };
+}
+
+/** Ad -> IP çözümleme testi — saha araçları. */
+export async function resolveFieldDns(token: string, name: string): Promise<DnsResult> {
+  const response = await apiFetch(`${API_BASE_URL}/field-tools/dns`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw await buildApiError(response, "DNS testi çalıştırılamadı.");
+  const data = (await response.json()) as {
+    name: string;
+    resolved: boolean;
+    addresses: string[];
+    elapsed_ms: number;
+  };
+  return {
+    name: data.name,
+    resolved: data.resolved,
+    addresses: data.addresses,
+    elapsedMs: data.elapsed_ms,
+  };
+}
+
+/** Kayıtlı cihazlarda toplu ping + DNP3 port testi (<=50 id / istek). */
+export async function scanFieldDevices(
+  token: string,
+  deviceIds: number[],
+): Promise<DeviceScanResult[]> {
+  const response = await apiFetch(`${API_BASE_URL}/field-tools/scan`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ device_ids: deviceIds }),
+  });
+  if (!response.ok) throw await buildApiError(response, "Toplu tarama çalıştırılamadı.");
+  const data = (await response.json()) as Array<{
+    device_id: number;
+    host: string | null;
+    ping_success: boolean | null;
+    rtt_avg_ms: number | null;
+    port: number | null;
+    port_open: boolean | null;
+    error: string | null;
+  }>;
+  return data.map((item) => ({
+    deviceId: item.device_id,
+    host: item.host,
+    pingSuccess: item.ping_success,
+    rttAvgMs: item.rtt_avg_ms,
+    port: item.port,
+    portOpen: item.port_open,
+    error: item.error,
+  }));
 }
 
 export async function createDevice(
@@ -2726,6 +2839,70 @@ export async function fetchRemoteAccessAudit(
   const rows = (await response.json()) as SystemEvent[];
   return rows
     .filter((row) => row.event_type.startsWith("remote_access_"))
+    .slice(0, limit);
+}
+
+/* ===== Guvenlik duvari (`/firewall/*`) =====
+   Backend iptables CALISTIRMAZ: istenen yapilandirmayi request.json'a yazar,
+   host'ta root ile calisan `e1-fwd` ajani uygular (remote-access/network ile
+   ayni desen). Bu yuzden PUT 202 doner ve sonuc bir sonraki durum okumasinda
+   gorunur. */
+
+/** Rol bu ucu goremiyor (backend: engineer/installer/ops_manager). Cagiran
+ *  taraf bu sentinel'i gorunce yoklamayi KALICI olarak kapatir. */
+export const FIREWALL_FORBIDDEN = "firewall_forbidden";
+
+export async function fetchFirewallStatus(token: string): Promise<FirewallStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/firewall/status`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    // DIKKAT: buildApiError KULLANILMAZ — periyodik yoklanan uc; gecici bir
+    // 401 session-expired event'i yayip herkesi login'e dusururdu
+    // (bkz. fetchRemoteAccessStatus).
+    throw new Error(
+      response.status === 401
+        ? "session_polling_401"
+        : response.status === 403
+        ? FIREWALL_FORBIDDEN
+        : "Güvenlik duvarı durumu alınamadı."
+    );
+  }
+  return (await response.json()) as FirewallStatus;
+}
+
+/** Yapilandirmanin TAMAMINI uygula (artimli degisiklik yok; ajan atomik
+ *  degistirir). 202: istek ajana kuyruklandi. */
+export async function updateFirewallConfig(
+  token: string,
+  payload: FirewallConfig
+): Promise<FirewallConfigAccepted> {
+  const response = await apiFetch(`${API_BASE_URL}/firewall/config`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "Güvenlik duvarı ayarı uygulanamadı.");
+  }
+  return (await response.json()) as FirewallConfigAccepted;
+}
+
+/** Denetim izi. Yeni DB modeli YOK: kaynak `system_events`, backend her
+ *  ac/kapat/kural degisikligi icin `firewall_*` olayi yaziyor. */
+export async function fetchFirewallAudit(
+  token: string,
+  limit = 12
+): Promise<SystemEvent[]> {
+  const response = await apiFetch(`${API_BASE_URL}/events?category=security`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, "İşlem geçmişi alınamadı.");
+  }
+  const rows = (await response.json()) as SystemEvent[];
+  return rows
+    .filter((row) => row.event_type.startsWith("firewall_"))
     .slice(0, limit);
 }
 

@@ -15,6 +15,8 @@ WORKDIR /app
 #   - iputils-ping: saha araclari ping testi (/field-tools/ping). Non-root
 #     kullanicida da calisir: Docker `net.ipv4.ping_group_range` sysctl'ini
 #     varsayilan acik verir, iputils ICMP datagram soketi kullanir.
+#   - iputils-tracepath: saha araclari traceroute (/field-tools/traceroute).
+#     Klasik `traceroute` CAP_NET_RAW ister; tracepath root GEREKTIRMEZ.
 #   - postgresql-client-16: pg_dump / pg_restore (DB yedek alma).
 #     Postgres server (compose) 16 — istemcinin de ayni major surum olmali,
 #     yoksa "server version mismatch" hatasi alinir.
@@ -26,6 +28,7 @@ RUN apt-get update \
         gnupg \
         ca-certificates \
         iputils-ping \
+        iputils-tracepath \
  && install -d /usr/share/postgresql-common/pgdg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \

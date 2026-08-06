@@ -1,0 +1,13 @@
+[Unit]
+# Guvenlik duvari yapilandirma isteklerini uygular. e1-fwd.path tetikler
+# (backend container /var/lib/e1-grid/fw/request.json yazinca).
+Description=EnerjiOne Grid guvenlik duvari ajani - istekleri uygular
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-fwd.py apply
+# Reddedilen istek unit'i "failed" birakmasin; hata status.json'a yazilir.
+SuccessExitStatus=0 1
+TimeoutStartSec=120

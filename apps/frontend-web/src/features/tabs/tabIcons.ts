@@ -13,6 +13,7 @@ import {
   BadgeCheck,
   Bell,
   BellRing,
+  BrickWall,
   Cpu,
   DatabaseBackup,
   FileCog,
@@ -60,6 +61,7 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   // Uzaktan bakim izni: "destek/kulaklik" — sayfa ICINDE durum ikonu kilit
   // (Lock/LockOpen), menu ikonuyla karismasin diye bilerek farkli.
   "remote-access": Headset,
+  firewall: BrickWall,
   "offline-map": MapPin,
   "active-sessions": MonitorSmartphone,
   "field-tools": Wrench,

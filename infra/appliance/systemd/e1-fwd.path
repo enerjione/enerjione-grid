@@ -1,0 +1,13 @@
+[Unit]
+Description=EnerjiOne Grid guvenlik duvari istegi izleyici
+
+[Path]
+# Backend container bu dosyayi yazinca e1-fwd.service tetiklenir.
+# PathExists + PathChanged birlikte: dosya yeni olusturulduysa da, uzerine
+# yazildiysa da yakalanir (e1-rad.path ile ayni desen).
+PathExists=/var/lib/e1-grid/fw/request.json
+PathChanged=/var/lib/e1-grid/fw/request.json
+Unit=e1-fwd.service
+
+[Install]
+WantedBy=multi-user.target

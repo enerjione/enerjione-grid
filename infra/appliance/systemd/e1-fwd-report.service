@@ -1,0 +1,22 @@
+[Unit]
+# Guvenlik duvarinin istenen yapilandirmasini OLCER ve farkliysa YENIDEN
+# UYGULAR; durumu state.json'a yazar.
+#
+# KRITIK: iptables kurallari reboot'ta ucar ve ayri bir persistence paketi
+# YOK — "duvar acik" garantisi bu birime baglidir. Boot'tan sonraki ilk tur
+# kayitli yapilandirmayi geri kurar; elle `iptables -F` yapan biri de en gec
+# bir tur sonra geri alinir.
+Description=EnerjiOne Grid guvenlik duvari zorlayici
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enerjione-grid/infra/appliance/e1-fwd.py report
+# Hata durumunda unit "failed" kalmasin; sorun state.json'a yazilir ve UI'da
+# gorunur (e1-netd/e1-gwd/e1-rad ile ayni davranis).
+SuccessExitStatus=0 1
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

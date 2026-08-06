@@ -714,6 +714,17 @@ if [[ -f infra/appliance/setup-remote-access.sh ]]; then
     || e1_warn "e1-rad guncellenemedi; 'Uzaktan Bakim' sayfasi calismayabilir."
 fi
 
+# ---- Guvenlik duvari ajani (e1-fwd) --------------------------------------
+# Sahadaki mevcut cihazlar ajani ilk guncellemede burada alir. VARSAYILAN
+# KAPALI: mevcut kurulumlarin davranisi degismez, duvar arayuzden acilir.
+# Duvari ZATEN acik olan cihazda betik yalnizca unit'leri tazeler; mevcut
+# kurallar korunur (config.json fw-priv'de durur, guncelleme dokunmaz).
+if [[ -f infra/appliance/setup-firewall-agent.sh ]]; then
+  INSTALL_DIR="$SCRIPT_DIR" bash infra/appliance/setup-firewall-agent.sh \
+    >/dev/null 2>&1 && e1_ok "Guvenlik duvari ajani (e1-fwd) guncel." \
+    || e1_warn "e1-fwd guncellenemedi; 'Guvenlik Duvari' sayfasi calismayabilir."
+fi
+
 # Kurulum adresini (enerjione.com/grid/install.sh) yayinlayan sunucuda,
 # yayinlanan kopya bu surumle tazelenir. Yayin dizini yoksa burasi hic
 # calismaz — saha PC'leri ve normal VPS'ler etkilenmez.

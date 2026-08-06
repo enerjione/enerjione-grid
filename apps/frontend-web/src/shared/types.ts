@@ -1423,6 +1423,87 @@ export type RemoteAccessAccepted = {
   expires_at?: string | null;
 };
 
+// ---- Guvenlik duvari (`/firewall/*`) ---------------------------------------
+// Backend iptables CALISTIRMAZ: istenen yapilandirmayi request.json'a yazar,
+// host'ta root ile calisan `e1-fwd` ajani dogrulayip uygular. Kilitlenme
+// korumasi (22/80/443 + uzaktan bakim tuneli hep acik) AJANDADIR.
+// Kaynak: apps/backend-api/app/schemas/firewall.py
+
+/** Tek bir izin/engel kurali. Sira ONEMLIDIR: ilk eslesen kazanir. */
+export type FirewallRule = {
+  action: "allow" | "deny";
+  proto: "tcp" | "udp";
+  /** "2404" veya "2404-2406" (aralik). */
+  ports: string;
+  /** Istege bagli kaynak agi (IPv4 CIDR). Bos = her kaynak. */
+  source?: string | null;
+  comment?: string | null;
+};
+
+/** Port yonlendirme: appliance:listen_port -> dest_ip:dest_port (DNAT). */
+export type FirewallForward = {
+  proto: "tcp" | "udp";
+  listen_port: number;
+  dest_ip: string;
+  dest_port: number;
+  comment?: string | null;
+};
+
+/** Istenen yapilandirmanin TAMAMI — artimli degisiklik yok, her PUT tum
+ *  listeyi tasir ve ajan atomik degistirir. */
+export type FirewallConfig = {
+  enabled: boolean;
+  rules: FirewallRule[];
+  forwards: FirewallForward[];
+};
+
+export type FirewallApplyStatus = {
+  request_id?: string | null;
+  /** set_config */
+  action?: string | null;
+  /** applying | applied | failed */
+  status?: string | null;
+  error?: string | null;
+  at?: string | null;
+  applied?: Record<string, unknown> | null;
+};
+
+export type FirewallStatus = {
+  available: boolean;
+  /** state_dir_missing | state_dir_not_writable | agent_never_reported | state_stale */
+  reason?: string | null;
+  /** iptables_missing */
+  agent_reason?: string | null;
+  updated_at?: string | null;
+  state_age_seconds?: number | null;
+  iptables: boolean;
+  ipv6: boolean;
+  /** Istenen durum (yapilandirma "acik" diyor mu). */
+  enabled: boolean;
+  /** OLCULEN durum — kurallar sahada gercekten kurulu mu. */
+  active: boolean;
+  /** apply_failed | clear_failed */
+  mismatch?: string | null;
+  config?: FirewallConfig | null;
+  changed_by?: string | null;
+  changed_at?: string | null;
+  /** Bu portlar HEP acik; kullanici kurali ezemez (kilitlenme korumasi). */
+  guard_tcp_ports: number[];
+  /** Yonlendirmenin dinleyemeyecegi portlar. */
+  reserved_listen_ports: number[];
+  max_rules: number;
+  max_forwards: number;
+  pending: boolean;
+  last_apply?: FirewallApplyStatus | null;
+  /** Yapilandirma yetkisi (backend: engineer/installer). UI butonu buna bakar. */
+  can_manage: boolean;
+};
+
+export type FirewallConfigAccepted = {
+  request_id: string;
+  action: "set_config";
+};
+
 /** Bildirim merkezi (Header zil ikonu). */
 export type NotificationCategory =
   | "alarm"
@@ -1695,4 +1776,42 @@ export type PingResult = {
   // Ham ping ciktisi — teshis icin oldugu gibi gosterilir.
   output: string;
   durationMs: number;
+};
+
+// Saha araclari: TCP port kontrolu sonucu.
+export type PortCheckResult = {
+  host: string;
+  port: number;
+  open: boolean;
+  elapsedMs: number;
+  // Kapaliysa kisa sebep (orn. "Connection refused").
+  error: string | null;
+};
+
+// Saha araclari: traceroute sonucu (ham cikti; locale bagimli, ayristirilmaz).
+export type TracerouteResult = {
+  host: string;
+  success: boolean;
+  output: string;
+  durationMs: number;
+};
+
+// Saha araclari: DNS cozumleme sonucu.
+export type DnsResult = {
+  name: string;
+  resolved: boolean;
+  addresses: string[];
+  elapsedMs: number;
+};
+
+// Saha araclari: toplu taramada tek cihazin sonucu.
+export type DeviceScanResult = {
+  deviceId: number;
+  host: string | null;
+  pingSuccess: boolean | null;
+  rttAvgMs: number | null;
+  port: number | null;
+  portOpen: boolean | null;
+  // no_ip | invalid_host | ping_unavailable | ping_timeout
+  error: string | null;
 };

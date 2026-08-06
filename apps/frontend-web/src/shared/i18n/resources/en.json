@@ -724,7 +724,10 @@
       "remote_access_extended": "Remote maintenance extended to {{minutes}} minutes",
       "remote_access_revoked": "Remote maintenance access closed",
       "remote_access_session_ended": "Remote maintenance access ended ({{reason}})",
-      "remote_access_apply_failed": "Remote maintenance request could not be applied: {{error}}"
+      "remote_access_apply_failed": "Remote maintenance request could not be applied: {{error}}",
+      "firewall_enabled": "Firewall enabled ({{rules}} rules, {{forwards}} forwards)",
+      "firewall_disabled": "Firewall disabled",
+      "firewall_config_changed": "Firewall rules updated ({{rules}} rules, {{forwards}} forwards)"
     },
     "category": {
       "auth": "Login & session",
@@ -1152,6 +1155,141 @@
       "radioUnmanagedHint": "A WiFi card was found but NetworkManager is not managing it, so it cannot be controlled from here. If the card was just plugged in, restarting the device usually resolves it."
     }
   },
+  "firewall": {
+    "state": {
+      "loading": "Loading",
+      "applying": "Applying",
+      "on": "ON",
+      "off": "OFF",
+      "unknown": "UNKNOWN"
+    },
+    "hero": {
+      "loadingTitle": "Reading firewall status",
+      "loadingLead": "Fetching the current status from the firewall agent on the device.",
+      "applyingTitle": "Applying changes",
+      "applyingLead": "The request has been sent to the device; firewall rules update within a few seconds.",
+      "onTitle": "Firewall is on",
+      "onLead": "All incoming connections outside the allowed ports are blocked. The web interface and SSH always stay open.",
+      "offTitle": "Firewall is off",
+      "offLead": "All incoming connections are allowed. SCADA and messaging ports (Modbus, IEC 104, NATS…) are open to everyone on the network.",
+      "unknownTitle": "Status cannot be verified",
+      "unknownLead": "The firewall agent is unreachable or the desired state could not be verified on the device. See the warnings below.",
+      "counts": "{{rules}} rules, {{forwards}} forwards",
+      "changedBy": "Last change: {{user}} — {{time}}"
+    },
+    "actions": {
+      "enable": "Enable Firewall",
+      "disable": "Disable Firewall"
+    },
+    "guard": {
+      "text": "Lockout protection: the web interface and SSH (TCP {{ports}}) plus the remote maintenance tunnel always stay open; no rule can close them."
+    },
+    "blocked": {
+      "generic": "The firewall cannot be managed on this installation.",
+      "reason": {
+        "state_dir_missing": "The firewall agent is not installed. It is set up automatically when update.sh runs on the device.",
+        "state_dir_not_writable": "The agent directory is not writable; re-run the setup script (setup-firewall-agent.sh).",
+        "agent_never_reported": "The agent appears installed but has never reported; check that e1-fwd-report.timer is running on the device.",
+        "iptables_missing": "iptables was not found on the device; the firewall cannot be applied.",
+        "unknown": "Firewall status could not be read."
+      }
+    },
+    "warn": {
+      "staleAgent": "The firewall agent on the device has not reported for a long time. After a reboot the rules are NOT restored automatically; check the device.",
+      "applyFailed": "The last request could not be applied: {{error}}",
+      "mismatch": {
+        "apply_failed": "The rules could not be installed on the device: the firewall may show 'on' while protection is not active.",
+        "clear_failed": "The rules could not be removed from the device: the firewall may show 'off' while some rules are still active.",
+        "generic": "The desired state and the measured state on the device do not match."
+      }
+    },
+    "rules": {
+      "title": "Rules ({{count}}/{{max}})",
+      "hint": "Order matters: an incoming connection is handled by the FIRST matching rule in the list. Connections matching no rule are blocked while the firewall is on.",
+      "empty": "No rules yet. While the firewall is on, only the web interface, SSH and remote maintenance stay reachable; add the services you need.",
+      "colAction": "Action",
+      "colProto": "Protocol",
+      "colPorts": "Port",
+      "colSource": "Source",
+      "colComment": "Comment",
+      "allow": "Allow",
+      "deny": "Deny",
+      "anySource": "Any source",
+      "add": "Add",
+      "portsPlaceholder": "2404 or 2404-2406",
+      "sourcePlaceholder": "Source network (e.g. 10.0.0.0/24, empty = any)",
+      "commentPlaceholder": "Comment (optional)",
+      "invalidPorts": "Port must look like '2404' or '2404-2406' (1-65535).",
+      "invalidSource": "Source must be an IPv4 CIDR (e.g. 10.0.0.0/24).",
+      "limitReached": "At most {{max}} rules can be defined.",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "delete": "Delete"
+    },
+    "presets": {
+      "title": "Service presets:",
+      "iec104": "IEC 104 (SCADA)",
+      "modbus": "Modbus TCP",
+      "nats": "NATS (telemetry)",
+      "rabbitmq": "RabbitMQ",
+      "ftp": "FTP (device files)"
+    },
+    "forwards": {
+      "title": "Port Forwarding ({{count}}/{{max}})",
+      "hint": "Forwards an incoming connection to another device on the network (DNAT).",
+      "empty": "No forwards defined.",
+      "colListen": "Listen Port",
+      "colDest": "Destination",
+      "listenPlaceholder": "Listen port",
+      "destIpPlaceholder": "Destination IP",
+      "destPortPlaceholder": "Destination port",
+      "invalidListen": "Listen port must be between 1 and 65535.",
+      "reservedListen": "Port {{port}} is used by the system; a forward cannot listen on it.",
+      "duplicateListen": "A forward for port {{port}} already exists.",
+      "invalidDestIp": "Destination IP must be a valid IPv4 address.",
+      "invalidDestPort": "Destination port must be between 1 and 65535.",
+      "limitReached": "At most {{max}} forwards can be defined."
+    },
+    "save": {
+      "dirty": "There are unsaved changes; they have not been sent to the device yet.",
+      "apply": "Save and Apply",
+      "discard": "Discard"
+    },
+    "confirm": {
+      "titleEnable": "Enable the firewall?",
+      "titleDisable": "Disable the firewall?",
+      "titleSave": "Apply the changes?",
+      "lead": "The configuration below will be sent to the device and applied within a few seconds.",
+      "leadDisable": "When the firewall is disabled, all incoming connections are allowed again; SCADA and messaging ports open to the network. Your rules are not deleted and return when you enable the firewall again.",
+      "rowState": "Firewall",
+      "rowRules": "Rule count",
+      "rowForwards": "Forward count",
+      "telemetryWarn": "Warning: there is no rule allowing the telemetry port (4222/TCP, NATS). If remote gateways connect to this port, field data flow WILL STOP.",
+      "approve": "Confirm and Apply",
+      "working": "Sending…"
+    },
+    "explain": {
+      "title": "How does it work?",
+      "whatTitle": "What does it protect?",
+      "whatText": "It filters incoming connections — both the device's own services and the ports published by containers (Modbus, IEC 104, NATS…). While on, the first matching rule applies; connections matching no rule are blocked.",
+      "guardTitle": "You cannot lock yourself out",
+      "guardText": "The web interface and SSH (TCP {{ports}}) plus the remote maintenance tunnel are kept open on the device itself; no rule can close them. In an emergency, 'sudo e1-fwd.py disable' on the device console turns the firewall off.",
+      "telemetryTitle": "Mind the field data flow",
+      "telemetryText": "Remote gateways push telemetry over NATS (4222/TCP). If you enable the firewall without allowing this port, field data stops; the 'Service presets' buttons add the right ports with one click."
+    },
+    "log": {
+      "title": "Recent actions",
+      "hint": "Audit log",
+      "empty": "No actions yet."
+    },
+    "toasts": {
+      "saved": "Configuration sent to the device; it applies within a few seconds."
+    },
+    "errors": {
+      "load": "Firewall status could not be read.",
+      "save": "Configuration could not be sent."
+    }
+  },
   "remoteAccess": {
     "endReason": {
       "expired": "Time expired",
@@ -1521,7 +1659,8 @@
       "activeSessions": "See who is connected and terminate sessions.",
       "offlineMap": "Download map areas for sites without internet; view and manage downloaded areas.",
       "fieldTools": "Test connectivity to field devices; ping an IP address.",
-      "remoteAccess": "Grant the support team time-limited remote access; close it whenever you want."
+      "remoteAccess": "Grant the support team time-limited remote access; close it whenever you want.",
+      "firewall": "Manage the system firewall: open/close ports, define rules and forwards."
     },
     "nav": {
       "devices": "Devices",
@@ -1544,6 +1683,7 @@
       "activeSessions": "Active Sessions",
       "offlineMap": "Offline Map",
       "remoteAccess": "Remote Maintenance",
+      "firewall": "Firewall",
       "fieldTools": "Field Tools"
     },
     "users": {
