@@ -2184,7 +2184,8 @@
         "qualityFlags": "DNP3 kalite bayraklarını yayınla",
         "qualityFlagsHint": "Kapalıyken her ölçüm \"iyi\" olarak gönderilir; cihaz geçersiz değer bildirse bile fark edilmez. Açıldığında geçersiz ölçümler alarm değerlendirmesine girmez. Kaydedince gateway yeniden kurulur, kısa süre telemetri gelmez.",
         "updateAnyway": "Yine de Güncelle",
-        "updateAnywayHint": "Sürüm karşılaştırması yapılamadı (kayıt defterine ulaşılamıyor veya docker buildx kurulu değil). Yine de en güncel imajı çekmeyi deneyebilirsiniz; gateway zaten güncelse bir şey indirilmez."
+        "updateAnywayHint": "Sürüm karşılaştırması yapılamadı (kayıt defterine ulaşılamıyor veya docker buildx kurulu değil). Yine de en güncel imajı çekmeyi deneyebilirsiniz; gateway zaten güncelse bir şey indirilmez.",
+        "trackedImage": "Çalışan sürüm. Güncelleme kontrolü şu etikete bakıyor: {{image}}"
       }
     },
     "devicesPanel": {

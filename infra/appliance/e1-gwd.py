@@ -595,9 +595,10 @@ def _container_info(code: str) -> dict:
     }
 
 
-#: compose dosyasindaki `image:` satiri (ilk eslesme yeter — sablonda tek
-#: servis var). Yorumlar ve tirnaklar ayiklanir.
-_COMPOSE_IMAGE_RE = re.compile(r"^\s*image:\s*['\"]?([^'\"#\s]+)", re.MULTILINE)
+#: Guncelleme kontrolu icin compose'daki `image:` satiri. Yorum ve tirnak
+#: ayiklar; asagidaki `_COMPOSE_IMAGE_RE`den AYRI tutulur (o, kendi
+#: uretttigimiz katı bicimi geri okur ve `_params_from_compose`e aittir).
+_TAKIP_IMAGE_RE = re.compile(r"^\s*image:\s*['\"]?([^'\"#\s]+)", re.MULTILINE)
 
 
 def _compose_image(code: str) -> str:
@@ -624,7 +625,7 @@ def _compose_image(code: str) -> str:
             govde = fh.read(MAX_COMPOSE_BYTES)
     except OSError:
         return ""
-    m = _COMPOSE_IMAGE_RE.search(govde)
+    m = _TAKIP_IMAGE_RE.search(govde)
     if not m:
         return ""
     ref = m.group(1).strip()

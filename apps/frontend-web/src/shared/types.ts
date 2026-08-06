@@ -359,6 +359,9 @@ export type LocalGateway = {
   image_digest?: string | null;
   /** Etiketin kayit defterindeki su anki digest'i. */
   remote_digest?: string | null;
+  /** Guncelleme kontrolunun baktigi referans (compose'daki `image:`).
+   *  Surume sabitlenmis bir etiket izleniyorsa yeni surum gorunmez. */
+  tracked_image?: string | null;
   /**
    * UC DURUMLU. `null`/`undefined` = BILINMIYOR (kayit defterine
    * ulasilamadi). `false` ile ayni sayma: "guncel" demek, sormadan

@@ -14,6 +14,35 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.26] — 2026-08-06
+
+### Düzeltildi
+
+- **Gateway'de yeni sürüm çıktığı halde "Güncel" yazıyordu.** Güncelleme
+  kontrolü, container'ın yaratıldığı andaki *çözülmüş* imaj referansına
+  (digest'e sabitlenmiş ya da imaj ID'sine dönmüş olabilen) bakıyordu; bu
+  referansa sorulan kayıt defteri sorgusu kendi digest'ini geri döndürdüğü
+  için karşılaştırma **daima eşit** çıkıyor ve sonuç kalıcı olarak "Güncel"
+  oluyordu. Kayıt defterinde `:latest` 1.6.1'e taşınmışken cihaz 1.5.0
+  koşuyor ve güncelleme seçeneği hiç görünmüyordu. Kontrol artık compose
+  dosyasındaki `image:` satırına — yani operatörün gerçekten izlediği
+  etikete — göre yapılıyor; digest'e sabitlenmiş referansta `@sha256:…`
+  kısmı atılır.
+- **"Güncelle" düğmesi artık her durumda erişilebilir.** Önceden yalnızca
+  güncelleme *tespit edilebildiğinde* çiziliyordu; `docker buildx` kurulu
+  değilse veya kayıt defterine ulaşılamıyorsa durum "bilinmiyor" kalıyor ve
+  operatör yeni sürüm yayınlanmış olsa bile **güncelleme yapamıyordu**.
+  Tespit edilemeyen bir şey artık eylemi kilitlemiyor ("Yine de Güncelle").
+
+### Eklendi
+
+- Sürüm rozetinin ipucunda **hangi etiketin izlendiği** yazıyor; sürüme
+  sabitlenmiş bir kurulumda "neden güncelleme çıkmıyor" sorusu cihaza
+  girmeden cevaplanabiliyor. Ajan ayrıca `docker buildx` var mı bilgisini
+  raporluyor (tespitin ön koşulu).
+
+---
+
 ## [2.53.25] — 2026-08-06
 
 ### Değişti

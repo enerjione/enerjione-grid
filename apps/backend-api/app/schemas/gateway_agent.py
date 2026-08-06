@@ -34,6 +34,10 @@ class LocalGateway(BaseModel):
     image_digest: str | None = None
     #: Kayit defterindeki etiketin su anki digest'i.
     remote_digest: str | None = None
+    #: Guncelleme kontrolunun BAKTIGI referans (compose'daki `image:`).
+    #: Surume sabitlenmis bir etiket izleniyorsa "neden guncelleme
+    #: cikmiyor" sorusu bu alandan cevaplanir.
+    tracked_image: str | None = None
     #: UC DURUMLU. `None` = BILINMIYOR (kayit defterine ulasilamadi).
     #: `False` ile ayni sayilmamali: "guncel" demek, sormadan verilmis bir
     #: iddia olurdu ve arayuzde yanlis bir guven yaratirdi.

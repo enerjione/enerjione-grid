@@ -2187,7 +2187,8 @@
         "qualityFlags": "Publish DNP3 quality flags",
         "qualityFlagsHint": "While off, every reading is sent as \"good\" even if the device reports it invalid. When on, invalid readings are excluded from alarm evaluation. Saving reinstalls the gateway; telemetry pauses briefly.",
         "updateAnyway": "Update Anyway",
-        "updateAnywayHint": "Version comparison unavailable (registry unreachable or docker buildx missing). You can still pull the latest image; nothing is downloaded if it is already current."
+        "updateAnywayHint": "Version comparison unavailable (registry unreachable or docker buildx missing). You can still pull the latest image; nothing is downloaded if it is already current.",
+        "trackedImage": "Running version. Update check follows this tag: {{image}}"
       }
     },
     "devicesPanel": {

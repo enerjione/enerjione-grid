@@ -336,7 +336,20 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                     "guncel" derken bile operator hangi surumde oldugunu
                     gormeli. */}
                 {local.local_version ? (
-                  <span className="gw-ver-now" title={t("engineering.gateways.editForm.currentVersion")}>
+                  <span
+                    className="gw-ver-now"
+                    title={
+                      // Hangi etiket izleniyor — "neden guncelleme cikmiyor"
+                      // sorusunun cevabi burada. Surume sabitlenmis bir
+                      // etiket (or. `:1.5.0`) izleniyorsa yeni surum
+                      // yayinlansa bile guncelleme GORUNMEZ.
+                      local.tracked_image
+                        ? t("engineering.gateways.editForm.trackedImage", {
+                            image: local.tracked_image
+                          })
+                        : t("engineering.gateways.editForm.currentVersion")
+                    }
+                  >
                     {local.local_version}
                   </span>
                 ) : null}
