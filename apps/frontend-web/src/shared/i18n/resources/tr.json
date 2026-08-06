@@ -1420,6 +1420,7 @@
     "navGroups": {
       "aria": "Mühendislik menüsü",
       "setup": "Kurulum",
+      "deviceSettings": "Cihaz Ayarları",
       "monitoring": "İzleme",
       "team": "Ekip",
       "integrations": "Entegrasyon",

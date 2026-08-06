@@ -394,6 +394,15 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
           ) : null}
         </h4>
         <div className="dev-ftp-head-actions">
+          {/* Arama dugmelerin yaninda — ayri satirda tek basina durmasi
+              yerlesimi bolup dagitiyordu (kullanici istegi). */}
+          <input
+            type="search"
+            className="dev-ftp-search"
+            value={ara}
+            onChange={(e) => setAra(e.target.value)}
+            placeholder={t("deviceDetail.config.ftp.searchPlaceholder")}
+          />
           {CIHAZDAN_CEK_GORUNUR && canCommand ? (
             <button
               type="button"
@@ -443,39 +452,33 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
         </div>
       </div>
 
-      {/* Durum satiri + ayar aramasi. Cihazin KENDI bildirdigi damga en
-          degerli bilgi: komut sonrasi degistiyse guncelleme cihazda
-          GERCEKTEN uygulandi demektir. */}
-      <div className="dev-ftp-meta">
-        {current.filename === null ? (
-          <span>{t("deviceDetail.config.ftp.noSerialHint")}</span>
-        ) : null}
-        {v.appliedAt ? (
-          <span className="dev-ftp-applied">
-            {t("deviceDetail.config.ftp.appliedAt", {
-              date: new Date(v.appliedAt).toLocaleString()
-            })}
-          </span>
-        ) : null}
-        {current.deviceLastUpdate ? (
-          <span
-            className="dev-ftp-device-update"
-            title={t("deviceDetail.config.ftp.deviceUpdateHint")}
-          >
-            {t("deviceDetail.config.ftp.deviceUpdate", {
-              date: current.deviceLastUpdate
-            })}
-          </span>
-        ) : null}
-        <span className="dev-ftp-meta-spacer" />
-        <input
-          type="search"
-          className="dev-ftp-search"
-          value={ara}
-          onChange={(e) => setAra(e.target.value)}
-          placeholder={t("deviceDetail.config.ftp.searchPlaceholder")}
-        />
-      </div>
+      {/* Durum satiri — yalnizca soyleyecek bir sey varsa basilir. Cihazin
+          KENDI bildirdigi damga en degerli bilgi: komut sonrasi degistiyse
+          guncelleme cihazda GERCEKTEN uygulandi demektir. */}
+      {current.filename === null || v.appliedAt || current.deviceLastUpdate ? (
+        <div className="dev-ftp-meta">
+          {current.filename === null ? (
+            <span>{t("deviceDetail.config.ftp.noSerialHint")}</span>
+          ) : null}
+          {v.appliedAt ? (
+            <span className="dev-ftp-applied">
+              {t("deviceDetail.config.ftp.appliedAt", {
+                date: new Date(v.appliedAt).toLocaleString()
+              })}
+            </span>
+          ) : null}
+          {current.deviceLastUpdate ? (
+            <span
+              className="dev-ftp-device-update"
+              title={t("deviceDetail.config.ftp.deviceUpdateHint")}
+            >
+              {t("deviceDetail.config.ftp.deviceUpdate", {
+                date: current.deviceLastUpdate
+              })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="dev-ftp-grid">
         {gorunen.map((row) => {

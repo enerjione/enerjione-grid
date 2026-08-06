@@ -14,6 +14,15 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.8] — 2026-08-06
+
+### Değişti
+
+- Cihaz Ayarları'nda ayar arama kutusu başlık satırına, düğmelerin yanına
+  taşındı; durum satırı yalnızca gösterecek bilgi olduğunda basılır.
+
+---
+
 ## [2.53.7] — 2026-08-06
 
 ### Eklendi

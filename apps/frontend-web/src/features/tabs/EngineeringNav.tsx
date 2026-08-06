@@ -1,5 +1,5 @@
 /**
- * Muhendislik ust menusu — 16 duz sekme yerine 5 gruplu acilir menu.
+ * Muhendislik ust menusu — 16 duz sekme yerine 6 gruplu acilir menu.
  *
  * Sekmeler yatayda tasip kayiyordu; ilgili sayfalar App.tsx'te zaten yorum
  * satirlariyla gruplanmisti (TOPOLOJI, IZLEME, EKIP, ENTEGRASYON, SISTEM),
@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Plug,
   ServerCog,
+  SlidersHorizontal,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -60,7 +61,8 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         canSee: (role) => role !== "ops_manager",
       },
       {
-        // FTP sunucu ayarlari + config sablonlari + toplu uygulama.
+        // FTP sunucu ayarlari + config sablonlari + toplu uygulama. FID
+        // (saha cihazi) yapilandirmasidir, mini PC ayari DEGIL -> Kurulum'da.
         // Yanlis ayar sahada koruma degerini bozar -> engineer/installer.
         page: "device-config",
         labelKey: "engineering.nav.deviceConfig",
@@ -71,6 +73,14 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         page: "signals",
         labelKey: "engineering.nav.signals",
         descKey: "engineering.navDesc.signals",
+        canSee: isInstaller,
+      },
+      {
+        // Alarm kurallari FID sinyalleri uzerinde tanimlanir; saha kurulum
+        // baglaminin parcasidir.
+        page: "alarm-rules",
+        labelKey: "engineering.nav.alarmRules",
+        descKey: "engineering.navDesc.alarmRules",
         canSee: isInstaller,
       },
       {
@@ -101,9 +111,10 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         canSee: isInstallerOrEngineer,
       },
       {
-        page: "alarm-rules",
-        labelKey: "engineering.nav.alarmRules",
-        descKey: "engineering.navDesc.alarmRules",
+        // Sistem durumu servis/baglanti sagligini IZLEME isidir.
+        page: "system-status",
+        labelKey: "header.systemStatus",
+        descKey: "engineering.navDesc.systemStatus",
         canSee: isInstaller,
       },
     ],
@@ -189,12 +200,17 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         descKey: "engineering.navDesc.backups",
         canSee: isInstallerOrEngineer,
       },
-      {
-        page: "system-status",
-        labelKey: "header.systemStatus",
-        descKey: "engineering.navDesc.systemStatus",
-        canSee: isInstaller,
-      },
+    ],
+  },
+  {
+    // Cihaz Ayarlari: buradaki "cihaz" uygulamanin kostugu MINI PC'dir
+    // (appliance); FID/saha cihazi isleri Kurulum grubundadir. Ileride mini
+    // PC uzerinde calisan saha araclari (ornek: FID'e ping) da buraya
+    // eklenebilir. Menude bilerek EN SAGDA durur.
+    key: "deviceSettings",
+    labelKey: "engineering.navGroups.deviceSettings",
+    Icon: SlidersHorizontal,
+    items: [
       {
         // Appliance (mini PC) modu: cihazin kendi IP/DNS ayari. Yanlis ayar
         // cihazi kablolu agdan erisilemez yapabilir -> sadece installer.
