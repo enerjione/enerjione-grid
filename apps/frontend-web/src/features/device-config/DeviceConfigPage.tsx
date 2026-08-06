@@ -25,14 +25,18 @@ import {
   fetchDeviceConfigSummaries,
   fetchFtpSettings,
   fetchFtpStatus,
+  fetchTemplateRows,
   generateFtpPassword,
+  sendDeviceCommand,
   setDefaultConfigTemplate,
   testFtpSettings,
+  updateConfigTemplate,
   updateFtpSettings,
   uploadConfigTemplate
 } from "../../shared/api";
 import type {
   BulkApplyResult,
+  ConfigRow,
   ConfigTemplate,
   DeviceConfigSummary,
   DeviceRow,
@@ -75,6 +79,46 @@ export function DeviceConfigPage({ accessToken, devices }: Props) {
   const [ftpOpen, setFtpOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [cmdBusy, setCmdBusy] = useState(false);
+
+  /** Secili cihazlara SIRAYLA `config_update` DNP3 komutu kuyruklar.
+   *  Sirali (paralel degil): gateway komutlari config-poll ile tek tek
+   *  cekiyor; ayrica hangi cihazda takildigi net gorulur. */
+  async function topluGuncelleKomutu() {
+    const secili = devices.filter((d) => checked.has(d.id));
+    if (secili.length === 0) return;
+    if (
+      !window.confirm(
+        t("engineering.deviceConfig.bulkCmd.confirm", { count: secili.length })
+      )
+    )
+      return;
+    setCmdBusy(true);
+    const basarisiz: string[] = [];
+    try {
+      for (const d of secili) {
+        try {
+          await sendDeviceCommand(accessToken, d.code, "config_update");
+        } catch {
+          basarisiz.push(d.name);
+        }
+      }
+      if (basarisiz.length === 0) {
+        toast.success(
+          t("engineering.deviceConfig.bulkCmd.done", { count: secili.length })
+        );
+      } else {
+        toast.error(
+          t("engineering.deviceConfig.bulkCmd.doneWithFail", {
+            ok: secili.length - basarisiz.length,
+            failed: basarisiz.join(", ")
+          })
+        );
+      }
+    } finally {
+      setCmdBusy(false);
+    }
+  }
 
   const loadSummaries = useCallback(async () => {
     try {
@@ -129,10 +173,23 @@ export function DeviceConfigPage({ accessToken, devices }: Props) {
         />
         <span className="dcfg-toolbar-spacer" />
         {checked.size > 0 ? (
-          <button type="button" className="dcfg-btn is-primary" onClick={() => setBulkOpen(true)}>
-            <span className="material-symbols-outlined">checklist</span>
-            {t("engineering.deviceConfig.bulk.open", { count: checked.size })}
-          </button>
+          <>
+            <button type="button" className="dcfg-btn is-primary" onClick={() => setBulkOpen(true)}>
+              <span className="material-symbols-outlined">checklist</span>
+              {t("engineering.deviceConfig.bulk.open", { count: checked.size })}
+            </button>
+            <button
+              type="button"
+              className="dcfg-btn"
+              disabled={cmdBusy}
+              onClick={() => void topluGuncelleKomutu()}
+            >
+              <span className="material-symbols-outlined">cloud_upload</span>
+              {cmdBusy
+                ? t("engineering.deviceConfig.bulkCmd.sending")
+                : t("engineering.deviceConfig.bulkCmd.open", { count: checked.size })}
+            </button>
+          </>
         ) : null}
         <button type="button" className="dcfg-btn" onClick={() => setTemplatesOpen(true)}>
           <span className="material-symbols-outlined">description</span>
@@ -795,6 +852,8 @@ function TemplatesModal({
   const [upModel, setUpModel] = useState(DEFAULT_DEVICE_MODEL);
   const [upDefault, setUpDefault] = useState(true);
   const [upFile, setUpFile] = useState<File | null>(null);
+  /** Duzenlenen sablon — ayri bir modal, cihaz kartiyla ayni izgara. */
+  const [editing, setEditing] = useState<ConfigTemplate | null>(null);
 
   const models = useMemo(() => {
     const set = new Set<string>(devices.map((d) => d.model));
@@ -851,50 +910,51 @@ function TemplatesModal({
         {templates.length === 0 ? (
           <p className="dcfg-empty">{t("engineering.deviceConfig.templates.empty")}</p>
         ) : (
-          <table className="dcfg-table">
-            <thead>
-              <tr>
-                <th>{t("engineering.deviceConfig.templates.name")}</th>
-                <th>{t("engineering.deviceConfig.templates.model")}</th>
-                <th>{t("engineering.deviceConfig.templates.file")}</th>
-                <th>{t("engineering.deviceConfig.templates.created")}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((s) => (
-                <tr key={s.id}>
-                  <td>
+          /* Tablo yerine SATIR KARTLARI: dort sutunlu tablo dar modalda
+             sikisiyordu ve gozden gecirilecek tek sey aslinda ad + kimlik.
+             Islemler satirin sagida: Duzenle / Varsayilan yap. */
+          <ul className="dcfg-tpl-list">
+            {templates.map((s) => (
+              <li key={s.id} className={s.isDefault ? "is-default" : ""}>
+                <span className="material-symbols-outlined dcfg-tpl-icon">description</span>
+                <span className="dcfg-tpl-body">
+                  <span className="dcfg-tpl-name">
                     {s.name}
                     {s.isDefault ? (
-                      <span className="dcfg-badge">{t("engineering.deviceConfig.templates.default")}</span>
+                      <span className="dcfg-badge">
+                        {t("engineering.deviceConfig.templates.default")}
+                      </span>
                     ) : null}
-                  </td>
-                  <td><code>{s.deviceModel}</code></td>
-                  <td>
-                    {s.sourceFilename ?? "—"}
-                    <small className="dcfg-dim"> ({s.sizeBytes} B)</small>
-                  </td>
-                  <td>
-                    {new Date(s.createdAt).toLocaleString()}
-                    {s.createdBy ? <small className="dcfg-dim"> {s.createdBy}</small> : null}
-                  </td>
-                  <td>
-                    {!s.isDefault ? (
-                      <button
-                        type="button"
-                        className="dcfg-btn is-small"
-                        disabled={busy}
-                        onClick={() => void makeDefault(s.id)}
-                      >
-                        {t("engineering.deviceConfig.templates.makeDefault")}
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </span>
+                  <span className="dcfg-tpl-sub">
+                    <code>{s.deviceModel}</code>
+                    {s.sourceFilename ? <span>{s.sourceFilename}</span> : null}
+                    <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                    {s.createdBy ? <span>{s.createdBy}</span> : null}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="dcfg-btn is-small"
+                  disabled={busy}
+                  onClick={() => setEditing(s)}
+                >
+                  <span className="material-symbols-outlined">edit</span>
+                  {t("engineering.deviceConfig.templates.edit")}
+                </button>
+                {!s.isDefault ? (
+                  <button
+                    type="button"
+                    className="dcfg-btn is-small"
+                    disabled={busy}
+                    onClick={() => void makeDefault(s.id)}
+                  >
+                    {t("engineering.deviceConfig.templates.makeDefault")}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         )}
 
         <div className="dcfg-upload-row">
@@ -951,6 +1011,184 @@ function TemplatesModal({
           </button>
         </div>
         <p className="dcfg-note">{t("engineering.deviceConfig.templates.checksumNote")}</p>
+      </div>
+
+      {editing ? (
+        <TemplateEditModal
+          accessToken={accessToken}
+          template={editing}
+          toast={toast}
+          onSaved={onChanged}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ===== Sablon duzenleyici ==================================================
+/** Sablon degerlerini duzenler — cihaz kartiyla AYNI izgara (dev-ftp-item).
+ *  Sablon YERINDE degisir: gecmis cihaz surumleri baytlari kopyaladigi icin
+ *  etkilenmez; degisiklik bundan sonra uygulanacak cihazlara yansir. */
+function TemplateEditModal({
+  accessToken,
+  template,
+  toast,
+  onSaved,
+  onClose
+}: {
+  accessToken: string;
+  template: ConfigTemplate;
+  toast: ReturnType<typeof useToast>;
+  onSaved: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [rows, setRows] = useState<ConfigRow[] | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [ara, setAra] = useState("");
+
+  useEffect(() => {
+    let iptal = false;
+    void (async () => {
+      try {
+        const r = await fetchTemplateRows(accessToken, template.id);
+        if (!iptal) setRows(r);
+      } catch (exc) {
+        toast.error(exc instanceof Error ? exc.message : String(exc));
+        if (!iptal) onClose();
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [accessToken, template.id, toast, onClose]);
+
+  const duzenlenebilir = useMemo(
+    () => (rows ?? []).filter((r) => r.valueInt !== null),
+    [rows]
+  );
+  const gorunen = useMemo(() => {
+    const q = ara.trim().toLocaleLowerCase("tr");
+    if (!q) return duzenlenebilir;
+    return duzenlenebilir.filter((r) =>
+      [r.meaning, r.catIndex, r.description]
+        .filter((s): s is string => Boolean(s))
+        .some((s) => s.toLocaleLowerCase("tr").includes(q))
+    );
+  }, [duzenlenebilir, ara]);
+
+  const changes = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const row of duzenlenebilir) {
+      const draft = drafts[row.catIndex];
+      if (draft === undefined || draft.trim() === "") continue;
+      const n = Number(draft);
+      if (!Number.isInteger(n) || n < 0) continue;
+      if (row.valueInt !== null && n !== row.valueInt) out[row.catIndex] = n;
+    }
+    return out;
+  }, [duzenlenebilir, drafts]);
+  const changeCount = Object.keys(changes).length;
+
+  async function kaydet() {
+    if (changeCount === 0) return;
+    setBusy(true);
+    try {
+      await updateConfigTemplate(accessToken, template.id, changes);
+      toast.success(
+        t("engineering.deviceConfig.templates.editSaved", { count: changeCount })
+      );
+      onSaved();
+      onClose();
+    } catch (exc) {
+      toast.error(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="dcfg-modal-backdrop" role="dialog" aria-modal="true">
+      <div className="dcfg-modal dcfg-modal--wide dcfg-modal--editor">
+        <div className="dcfg-modal-head">
+          <h4>
+            <span className="material-symbols-outlined">edit</span>
+            {t("engineering.deviceConfig.templates.editTitle", { name: template.name })}
+          </h4>
+          <span className="dcfg-toolbar-spacer" />
+          <input
+            type="search"
+            className="dev-ftp-search"
+            value={ara}
+            onChange={(e) => setAra(e.target.value)}
+            placeholder={t("deviceDetail.config.ftp.searchPlaceholder")}
+          />
+          <button type="button" className="dcfg-btn is-small" onClick={onClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        {rows === null ? (
+          <p className="dcfg-empty">{t("common.loading")}</p>
+        ) : (
+          <div className="dcfg-editor-body">
+            <div className="dev-ftp-grid">
+              {gorunen.map((row) => {
+                const draft = drafts[row.catIndex];
+                const degisti = changes[row.catIndex] !== undefined;
+                return (
+                  <label
+                    key={row.catIndex}
+                    className={`dev-ftp-item ${degisti ? "is-changed" : ""}`}
+                    title={
+                      row.description ??
+                      (row.meaning ? `${row.meaning} (${row.catIndex})` : row.catIndex)
+                    }
+                  >
+                    <span className="dev-ftp-item-name">
+                      {row.meaning ?? row.catIndex}
+                      <code>{row.catIndex}</code>
+                    </span>
+                    <span className="dev-ftp-item-input">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={draft ?? String(row.valueInt)}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setDrafts((d) => ({ ...d, [row.catIndex]: e.target.value }))
+                        }
+                      />
+                      <em>{row.unit ?? ""}</em>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="dcfg-actions">
+          <span className="dcfg-dim">
+            {changeCount > 0
+              ? t("deviceDetail.config.ftp.pending", { count: changeCount })
+              : t("deviceDetail.config.ftp.noChange")}
+          </span>
+          <span className="dcfg-toolbar-spacer" />
+          <button type="button" className="dcfg-btn" disabled={busy} onClick={onClose}>
+            {t("engineering.deviceConfig.bulk.cancel")}
+          </button>
+          <button
+            type="button"
+            className="dcfg-btn is-primary"
+            disabled={busy || changeCount === 0}
+            onClick={() => void kaydet()}
+          >
+            {t("deviceDetail.config.ftp.save")}
+          </button>
+        </div>
       </div>
     </div>
   );

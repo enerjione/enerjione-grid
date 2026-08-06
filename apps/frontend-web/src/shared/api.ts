@@ -3047,7 +3047,7 @@ import type {
 type ApiConfigRow = {
   cat_index: string; group: string; index: string; length: number;
   value_int: number | null; value_text: string | null; raw_hex: string;
-  meaning: string | null; unit: string | null;
+  meaning: string | null; unit: string | null; description?: string | null;
 };
 type ApiConfigVersion = {
   id: number; device_id: number; version: number; source: ConfigVersion["source"];
@@ -3059,7 +3059,7 @@ type ApiConfigVersion = {
 const mapConfigRow = (r: ApiConfigRow): ConfigRow => ({
   catIndex: r.cat_index, group: r.group, index: r.index, length: r.length,
   valueInt: r.value_int, valueText: r.value_text, rawHex: r.raw_hex,
-  meaning: r.meaning, unit: r.unit
+  meaning: r.meaning, unit: r.unit, description: r.description ?? null
 });
 
 const mapConfigVersion = (v: ApiConfigVersion): ConfigVersion => ({
@@ -3077,12 +3077,37 @@ export async function fetchDeviceConfig(token: string, deviceId: number): Promis
   });
   if (response.status === 404) return null;
   if (!response.ok) throw await buildApiError(response, "Yapılandırma alınamadı.");
-  const data = (await response.json()) as { version: ApiConfigVersion; filename: string | null; rows: ApiConfigRow[] };
+  const data = (await response.json()) as {
+    version: ApiConfigVersion; filename: string | null; rows: ApiConfigRow[];
+    device_last_update?: string | null;
+  };
   return {
     version: mapConfigVersion(data.version),
     filename: data.filename,
-    rows: data.rows.map(mapConfigRow)
+    rows: data.rows.map(mapConfigRow),
+    deviceLastUpdate: data.device_last_update ?? null
   };
+}
+
+/** Sablonun ayar satirlari — sablon duzenleyicisi cihaz kartiyla ayni izgara. */
+export async function fetchTemplateRows(token: string, templateId: number): Promise<ConfigRow[]> {
+  const response = await apiFetch(`${API_BASE_URL}/config-templates/${templateId}/rows`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablon okunamadı.");
+  return ((await response.json()) as ApiConfigRow[]).map(mapConfigRow);
+}
+
+/** Sablon degerlerini YERINDE gunceller (gecmis cihaz surumleri etkilenmez). */
+export async function updateConfigTemplate(
+  token: string, templateId: number, changes: Record<string, number>
+): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/config-templates/${templateId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ changes })
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablon kaydedilemedi.");
 }
 
 export async function fetchDeviceConfigVersions(token: string, deviceId: number): Promise<ConfigVersion[]> {
@@ -3183,6 +3208,20 @@ export async function applyTemplateToDevices(
   });
   if (!response.ok) throw await buildApiError(response, "Toplu uygulama başarısız.");
   return (await response.json()) as BulkApplyResult;
+}
+
+/** FTP'de cihazin dosyasi varsa alir ve surume cevirir. 404 = dosya FTP'de
+ *  yok (hata degil, "yukle ya da sablon kullan" durumu) — null doner. */
+export async function pullDeviceConfigFromFtp(
+  token: string, deviceId: number
+): Promise<ConfigVersion | null> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config/pull-from-ftp`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw await buildApiError(response, "FTP sorgulanamadı.");
+  return mapConfigVersion((await response.json()) as ApiConfigVersion);
 }
 
 /** Yapilandirmasi olmayan cihaz icin varsayilan sablondan ilk surumu uretir.

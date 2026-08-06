@@ -274,6 +274,29 @@ def test_surum_yokken_duzenleme_ACIK_hata(db, cihaz) -> None:
         svc.apply_changes(db, device_id=cihaz.id, changes={"2010C6": 1})
 
 
+# --- sablon duzenleme ------------------------------------------------------
+def test_sablon_duzenleme_YERINDE_ve_checksum_gecerli(db) -> None:
+    """Sablon surumlenmez, yerinde degisir; gecmis cihaz surumleri baytlari
+    kopyaladigi icin ETKILENMEZ. Checksum yeniden uretilmeli."""
+    sablon = svc.create_template(
+        db, name="f", device_model="horstmann_sn_2_0", raw=_dosya(1440), is_default=True
+    )
+    svc.apply_template_changes(db, template_id=sablon.id, changes={"2010C6": 720})
+    doc = parse(bytes(sablon.raw))
+    assert doc.get("2010C6").as_int() == 720
+    assert doc.checksum_valid is True
+
+
+def test_sablon_duzenleme_SIGMAYAN_degeri_reddeder(db) -> None:
+    sablon = svc.create_template(
+        db, name="f2", device_model="horstmann_sn_2_0", raw=_dosya(), is_default=False
+    )
+    onceki = bytes(sablon.raw)
+    with pytest.raises(ConfigParseError):
+        svc.apply_template_changes(db, template_id=sablon.id, changes={"2010C6": 70000})
+    assert bytes(sablon.raw) == onceki
+
+
 # --- geri alma -------------------------------------------------------------
 def test_geri_alma_ESKIYI_GERI_YAZMAZ_yeni_surum_yaratir(db, cihaz) -> None:
     """Gecmis her zaman dogru kalmali: v1'e donmek v3 uretir, v2'yi SILMEZ."""

@@ -21,6 +21,9 @@ class ConfigRow(BaseModel):
     # dosyayi goruntulenemez yapmamali.
     meaning: str | None = None
     unit: str | None = None
+    # Ayarin NE ANLAMA geldigi (Horstmann manuelinden, katalogdaki "desc").
+    # Arayuz tooltip'te gosterir; icerigi olmayan girdide None.
+    description: str | None = None
 
 
 class ConfigVersionRead(BaseModel):
@@ -58,6 +61,11 @@ class ConfigCurrentRead(BaseModel):
     version: ConfigVersionRead
     filename: str | None = None
     rows: list[ConfigRow]
+    # Cihazin KENDI bildirdigi son yapilandirma guncelleme zamani
+    # (`master.info_last_configuration_update` telemetrisi, ham metin).
+    # Kullanici "guncelleme gercekten oldu mu" sorusunu bununla dogrular:
+    # komut sonrasi bu damga degistiyse cihaz dosyayi uygulamistir.
+    device_last_update: str | None = None
 
 
 class ConfigDiffRow(BaseModel):

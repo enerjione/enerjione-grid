@@ -79,6 +79,14 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         descKey: "engineering.navDesc.grid",
         canSee: isInstallerOrEngineer,
       },
+      {
+        // Cevrimdisi harita: sahaya cikmadan ONCE indirilir; sebeke/harita
+        // hazirligiyla ayni baglamda oldugu icin Kurulum grubunda.
+        page: "offline-map",
+        labelKey: "engineering.nav.offlineMap",
+        descKey: "engineering.navDesc.offlineMap",
+        canSee: isInstallerOrEngineer,
+      },
     ],
   },
   {
@@ -122,6 +130,14 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         labelKey: "engineering.nav.bulkNotify",
         descKey: "engineering.navDesc.bulkNotify",
         canSee: isTeamManager,
+      },
+      {
+        // Aktif oturumlar: kimin bagli oldugu kullanici yonetiminin devami,
+        // bu yuzden Ekip grubunda (Kullanicilar'in yaninda).
+        page: "active-sessions",
+        labelKey: "engineering.nav.activeSessions",
+        descKey: "engineering.navDesc.activeSessions",
+        canSee: isInstaller,
       },
     ],
   },
@@ -197,21 +213,6 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         labelKey: "engineering.nav.remoteAccess",
         descKey: "engineering.navDesc.remoteAccess",
         canSee: isTeamManager,
-      },
-      {
-        // Cevrimdisi harita: sahaya cikmadan ONCE indirilir. Yonetim
-        // alaninda olmasi dogru -- indirilmis alanlar harita uzerinde
-        // gorunur ve yeni alan buradan secilir.
-        page: "offline-map",
-        labelKey: "engineering.nav.offlineMap",
-        descKey: "engineering.navDesc.offlineMap",
-        canSee: isInstallerOrEngineer,
-      },
-      {
-        page: "active-sessions",
-        labelKey: "engineering.nav.activeSessions",
-        descKey: "engineering.navDesc.activeSessions",
-        canSee: isInstaller,
       },
     ],
   },

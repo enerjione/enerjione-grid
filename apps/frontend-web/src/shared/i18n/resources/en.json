@@ -1624,12 +1624,22 @@
         "created": "Created",
         "default": "default",
         "makeDefault": "Make default",
+        "edit": "Edit",
+        "editTitle": "Edit template: {{name}}",
+        "editSaved": "{{count}} setting(s) saved to the template.",
         "markDefault": "Set as default template",
         "pickFile": "Choose file (.csv)",
         "upload": "Upload template",
         "uploaded": "Template \"{{name}}\" saved.",
         "defaultSet": "Default template updated.",
         "checksumNote": "A file with an invalid checksum cannot be a template — templates are copied to every new device, one broken file would spread across the fleet."
+      },
+      "bulkCmd": {
+        "open": "Update command ({{count}})",
+        "sending": "Sending commands…",
+        "confirm": "A config_update (DNP3) command will be queued for {{count}} device(s) in sequence. Devices apply the file on FTP at their next session. Continue?",
+        "done": "Update command queued for {{count}} device(s).",
+        "doneWithFail": "Queued for {{ok}} device(s); failed: {{failed}}"
       },
       "bulk": {
         "open": "Apply template ({{count}})",
@@ -3489,6 +3499,13 @@
       "ftp": {
         "empty": "This device has no configuration file yet. Upload a file pulled from the device, or define a template.",
         "syncFailed": "The version was saved but the file on FTP could NOT be updated — the device may still see the old file. Check FTP Server Settings > Connection Status logs.",
+        "queryFtp": "Query FTP",
+        "ftpSearching": "Searching FTP for this device's file…",
+        "ftpNotFound": "No file found on FTP for this device. Upload a file or create from template.",
+        "ftpFound": "File pulled from FTP — v{{version}} created.",
+        "searchPlaceholder": "Search settings…",
+        "deviceUpdate": "Device-reported last update: {{date}}",
+        "deviceUpdateHint": "Timestamp reported by the device itself (Last Configuration Update). If it changed after the command, the update was really applied on the device.",
         "noSerial": "no serial number",
         "noSerialHint": "The device's serial number is unknown; the file name cannot be produced. Enter a serial number on the device record.",
         "fromTemplate": "Create from template",

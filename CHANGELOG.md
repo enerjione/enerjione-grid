@@ -14,6 +14,34 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.7] — 2026-08-06
+
+### Eklendi
+
+- **FTP'den otomatik sorgu.** Yapılandırması olmayan cihazda sistem önce
+  FTP'de `<seri>_Configuration.csv` var mı diye kendisi bakar; bulursa
+  sürüme çevirir. Elle "FTP'den sorgula" düğmesi de var. "Cihazdan çek"
+  DNP3 komutu, cihazdaki update-CSV akışı doğrulanana kadar gizlendi.
+- **Ayar arama** ve **ayar açıklama tooltip'i** (açıklama içerikleri
+  Horstmann manüelinden doldurulacak; altyapı hazır). Dosya adı başlık
+  satırına taşındı.
+- **Cihazın bildirdiği son güncelleme damgası** (Last Configuration Update)
+  kartta gösterilir — komut sonrası değiştiyse güncellemenin cihazda
+  gerçekten uygulandığı doğrulanır.
+- **Seçili cihazlara sırayla `config_update` komutu** (Cihaz Yapılandırma
+  araç çubuğu).
+- **Şablon düzenleyici**: şablon değerleri cihaz kartıyla aynı ızgarada
+  düzenlenir (yerinde; geçmiş cihaz sürümleri etkilenmez). Şablon listesi
+  satır kartlarına geçti.
+
+### Düzeltildi
+
+- **Fabrika şablonu CI/imajda bozuk çıkıyordu**: git, CRLF satır sonları
+  sağlama toplamına dahil olan dosyayı metin sanıp LF'e çeviriyordu. Dosya
+  ikili işaretlendi; v2.53.6 imajındaki seed bu yüzden çalışmıyordu.
+
+---
+
 ## [2.53.6] — 2026-08-06
 
 ### Eklendi

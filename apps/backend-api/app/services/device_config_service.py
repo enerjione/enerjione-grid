@@ -391,6 +391,27 @@ def ensure_initial_version(
     )
 
 
+def apply_template_changes(
+    db: Session, *, template_id: int, changes: dict[str, int], actor: str | None = None
+) -> DeviceConfigTemplate:
+    """Sablondaki degerleri degistirir (YERINDE — sablonlar surumlenmez).
+
+    Cihaz surumlerinden FARKI bilincli: surumler denetim gecmisidir ve
+    append-only'dir; sablon ise gelecekteki cihazlarin kaynagi olan TEK
+    guncel dosyadir. Gecmis surumler baytlari kopyaladigi icin sablon
+    degisikligi onlari ETKILEMEZ. Checksum codec tarafindan yeniden uretilir.
+    """
+    sablon = db.get(DeviceConfigTemplate, template_id)
+    if sablon is None:
+        raise LookupError(f"Sablon bulunamadi: {template_id}")
+    doc = parse(bytes(sablon.raw))
+    for cat_index, deger in changes.items():
+        doc.set_int(cat_index, deger)
+    sablon.raw = render(doc)
+    db.flush()
+    return sablon
+
+
 def apply_changes(
     db: Session,
     *,
@@ -459,6 +480,8 @@ def revert_to(
 #: en kolay yoludur.
 _KATALOG_YOLU = Path(__file__).resolve().parents[1] / "data/horstmann_sn2_config_catalog.json"
 _katalog_onbellek: dict[str, CatalogEntry] | None = None
+#: CatIndex -> aciklama (katalogdaki opsiyonel "desc" alani; manuel kaynakli).
+_aciklama_onbellek: dict[str, str] = {}
 
 
 def builtin_catalog() -> dict[str, CatalogEntry]:
@@ -467,7 +490,7 @@ def builtin_catalog() -> dict[str, CatalogEntry]:
     Dosya okunamazsa BOS doner, PATLAMAZ: katalog bir GOSTERIM zenginligidir,
     onun yoklugu yapilandirmayi goruntulenemez yapmamali.
     """
-    global _katalog_onbellek
+    global _katalog_onbellek, _aciklama_onbellek
     if _katalog_onbellek is None:
         try:
             ham = json.loads(_KATALOG_YOLU.read_text(encoding="utf-8"))
@@ -478,8 +501,16 @@ def builtin_catalog() -> dict[str, CatalogEntry]:
                 )
                 for ci, v in ham.items()
             }
+            # Ayar ACIKLAMALARI (Horstmann manuelinden) ayni dosyadaki "desc"
+            # alanindan gelir; arayuz tooltip'te gosterir. Alani olmayan
+            # girdide tooltip yalnizca ad/kod gosterir — icerik dolduruldukca
+            # zenginlesir, kod degismez.
+            _aciklama_onbellek = {
+                ci: v["desc"] for ci, v in ham.items() if v.get("desc")
+            }
         except Exception:  # noqa: BLE001
             _katalog_onbellek = {}
+            _aciklama_onbellek = {}
     return _katalog_onbellek
 
 
@@ -509,6 +540,7 @@ def describe(
                 "raw_hex": e.raw.hex().upper(),
                 "meaning": bilgi.meaning if bilgi else None,
                 "unit": bilgi.unit if bilgi else None,
+                "description": _aciklama_onbellek.get(e.cat_index),
             }
         )
     return satirlar

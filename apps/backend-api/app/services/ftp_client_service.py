@@ -220,6 +220,63 @@ def ensure_embedded_dir(directory: str) -> str:
     return hedef
 
 
+def find_config_on_ftp(db: Session, filename: str) -> bytes | None:
+    """FTP'de `filename` var mi diye bakar; varsa icerigini dondurur.
+
+    "Cihazdan cek" DNP3 komutu calismadiginda (sahada su an oyle) dosya
+    cihaz tarafindan ZATEN yazilmis olabilir — sistem sormadan once FTP'ye
+    kendisi bakar. None = dosya yok (hata DEGIL); erisim sorunu ise
+    FtpAccessError firlatilir ki kullanici sebebi gorsun.
+    """
+    ayar = ftp_settings_service.get_settings(db)
+    if ayar.mode != "harici":
+        for kok_dizin, _dirs, dosyalar in os.walk(FTP_ROOT):
+            if filename in dosyalar:
+                yol = os.path.join(kok_dizin, filename)
+                if os.path.getsize(yol) > MAX_CONFIG_BYTES:
+                    raise FtpAccessError(f"Dosya cok buyuk: {filename}")
+                with open(yol, "rb") as fh:
+                    return fh.read()
+        return None
+
+    # Harici mod: once sozlesme geregi beklenen yol (taban dizin), o yoksa
+    # sinirli tarama — cihaz farkli bir alt dizine yazmis olabilir.
+    ftp, taban = _connect(db)
+    try:
+        tampon = BytesIO()
+
+        def _yaz(parca: bytes) -> None:
+            if tampon.tell() + len(parca) > MAX_CONFIG_BYTES:
+                raise FtpAccessError(f"Dosya cok buyuk: {filename}")
+            tampon.write(parca)
+
+        try:
+            ftp.retrbinary(f"RETR {taban.rstrip('/')}/{filename}", _yaz)
+            return tampon.getvalue()
+        except error_perm:
+            pass  # taban dizinde yok — sinirli taramaya dus
+        except ftp_errors as exc:
+            raise FtpAccessError(f"Dosya okunamadi: {_hata(exc)}") from exc
+
+        for dizin in _remote_dirs(ftp, taban):
+            try:
+                adlar = ftp.nlst(dizin)
+            except ftp_errors:
+                continue
+            for ad in adlar:
+                if ad.rsplit("/", 1)[-1] == filename:
+                    tam = ad if ad.startswith("/") else f"{dizin.rstrip('/')}/{filename}"
+                    tampon = BytesIO()
+                    try:
+                        ftp.retrbinary(f"RETR {tam}", _yaz)
+                    except ftp_errors as exc:
+                        raise FtpAccessError(f"Dosya okunamadi: {_hata(exc)}") from exc
+                    return tampon.getvalue()
+        return None
+    finally:
+        _quit(ftp)
+
+
 # --- yazma ------------------------------------------------------------------
 def write_config(db: Session, *, filename: str, raw: bytes) -> str:
     """Config dosyasini cihazin gorecegi yere yazar; yazilan yolu doner.

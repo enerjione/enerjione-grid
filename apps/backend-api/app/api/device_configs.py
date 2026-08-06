@@ -41,6 +41,7 @@ from app.schemas.device_config import (
     ConfigChangeRequest,
     ConfigCurrentRead,
     ConfigDiffRow,
+    ConfigRow,
     ConfigVersionRead,
     TemplateRead,
 )
@@ -177,10 +178,23 @@ def guncel_config(
         dosya_adi: str | None = svc.config_filename(db, device_id)
     except Exception:  # noqa: BLE001
         dosya_adi = None
+    # Cihazin kendi bildirdigi son guncelleme damgasi — "guncelleme gercekten
+    # oldu mu" dogrulamasinin tek cihaz-kaynakli kaniti.
+    from sqlalchemy import select as _select
+
+    from app.models.telemetry_latest import TelemetryLatest as _TL
+
+    son_guncelleme = db.execute(
+        _select(_TL.value_string).where(
+            _TL.device_id == device_id,
+            _TL.signal_key == "master.info_last_configuration_update",
+        )
+    ).scalar()
     return ConfigCurrentRead(
         version=_version_read(surum, raw),
         filename=dosya_adi,
         rows=svc.describe(raw),
+        device_last_update=(son_guncelleme or None),
     )
 
 
@@ -363,6 +377,60 @@ async def dosya_yukle(
     )
     db.commit()
     return _version_read(surum, raw, ftp_written=ftp_ok)
+
+
+@router.post("/devices/{device_id}/config/pull-from-ftp", response_model=ConfigVersionRead)
+def ftpden_sorgula(
+    device_id: int, db: Session = Depends(get_db), user: User = _YETKI
+) -> ConfigVersionRead:
+    """FTP'de cihazin dosyasi VARSA alir ve surume cevirir.
+
+    "Cihazdan cek" DNP3 komutu her cihazda calismiyor; dosya cogu zaman FTP'de
+    zaten duruyor (cihaz onceden yazmis). Bu uc, komut gondermeden dogrudan
+    FTP'ye bakar. Ayni icerik zaten kayitliysa YENI surum uretmez, mevcut
+    surumu doner (200) — gecmis collenmez.
+    """
+    _device(db, device_id)
+    try:
+        dosya_adi = svc.config_filename(db, device_id)
+    except Exception as exc:  # noqa: BLE001 - seri yoksa acik hata
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    from app.services import ftp_client_service
+
+    try:
+        ham = ftp_client_service.find_config_on_ftp(db, dosya_adi)
+    except ftp_client_service.FtpAccessError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if ham is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"FTP'de {dosya_adi} bulunamadi. Dosyayi yukleyin ya da sablondan olusturun.",
+        )
+    try:
+        surum = svc.ingest_pulled_config(
+            db, device_id=device_id, ham=ham, filename=dosya_adi
+        )
+    except ConfigParseError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"FTP'deki dosya okunamadi: {exc}"
+        ) from exc
+    if surum is None:
+        # Ayni icerik zaten guncel surum — kayit degismedi, sorun da yok.
+        mevcut = svc.current_version(db, device_id)
+        db.commit()
+        return _version_read(mevcut)
+    record_event(
+        db,
+        category="device",
+        event_type="config_pulled_from_ftp",
+        message=f"FTP'deki {dosya_adi} yapilandirma surumune cevrildi (v{surum.version})",
+        actor_username=user.username,
+        device_code=_device(db, device_id).code,
+        metadata={"filename": dosya_adi, "version": surum.version},
+    )
+    db.commit()
+    return _version_read(surum)
 
 
 @router.post(
@@ -588,6 +656,50 @@ async def sablon_yukle(
         message=f"Yapilandirma sablonu eklendi: {name} ({device_model})",
         actor_username=user.username,
         metadata={"template_id": sablon.id, "is_default": is_default},
+    )
+    db.commit()
+    return _template_read(sablon)
+
+
+@router.get("/config-templates/{template_id}/rows", response_model=list[ConfigRow])
+def sablon_satirlari(
+    template_id: int, db: Session = Depends(get_db), _u: User = _YETKI
+):
+    """Sablonun ayar satirlari — sablon duzenleyicisi cihaz kartiyla AYNI
+    izgarayi kullanir; veri de ayni bicimde doner."""
+    sablon = db.get(DeviceConfigTemplate, template_id)
+    if sablon is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sablon bulunamadi")
+    return svc.describe(bytes(sablon.raw))
+
+
+@router.patch("/config-templates/{template_id}", response_model=TemplateRead)
+def sablon_duzenle(
+    template_id: int,
+    govde: ConfigChangeRequest,
+    db: Session = Depends(get_db),
+    user: User = _YETKI,
+) -> TemplateRead:
+    """Sablondaki degerleri degistirir (yerinde; checksum yeniden uretilir).
+
+    Gecmis cihaz surumleri ETKILENMEZ (baytlar kopyalanmisti); degisiklik
+    yalnizca bundan sonra uygulanacak cihazlara yansir.
+    """
+    try:
+        sablon = svc.apply_template_changes(
+            db, template_id=template_id, changes=govde.changes, actor=user.username
+        )
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except (ConfigParseError, KeyError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    record_event(
+        db,
+        category="device",
+        event_type="config_template_edited",
+        message=f"'{sablon.name}' sablonunda {len(govde.changes)} ayar degistirildi",
+        actor_username=user.username,
+        metadata={"template_id": sablon.id, "changes": govde.changes},
     )
     db.commit()
     return _template_read(sablon)

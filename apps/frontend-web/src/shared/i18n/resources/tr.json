@@ -1621,12 +1621,22 @@
         "created": "Oluşturulma",
         "default": "varsayılan",
         "makeDefault": "Varsayılan yap",
+        "edit": "Düzenle",
+        "editTitle": "Şablonu düzenle: {{name}}",
+        "editSaved": "{{count}} ayar şablona kaydedildi.",
         "markDefault": "Varsayılan şablon olsun",
         "pickFile": "Dosya seç (.csv)",
         "upload": "Şablonu yükle",
         "uploaded": "\"{{name}}\" şablonu kaydedildi.",
         "defaultSet": "Varsayılan şablon güncellendi.",
         "checksumNote": "Sağlama toplamı geçersiz dosya şablon olamaz — şablon her yeni cihaza kopyalanır, bozuk tek dosya filoya yayılırdı."
+      },
+      "bulkCmd": {
+        "open": "Güncelleme komutu ({{count}})",
+        "sending": "Komutlar gönderiliyor…",
+        "confirm": "{{count}} cihaza sırayla config_update (DNP3) komutu kuyruğa alınacak. Cihazlar FTP'deki dosyayı bir sonraki oturumlarında uygular. Devam edilsin mi?",
+        "done": "{{count}} cihaza güncelleme komutu kuyruğa alındı.",
+        "doneWithFail": "{{ok}} cihaza kuyruğa alındı; başarısız: {{failed}}"
       },
       "bulk": {
         "open": "Şablon uygula ({{count}})",
@@ -3486,6 +3496,13 @@
       "ftp": {
         "empty": "Bu cihazın yapılandırma dosyası henüz yok. Cihazdan çekilen dosyayı yükleyin ya da bir şablon tanımlayın.",
         "syncFailed": "Sürüm kaydedildi ama FTP'deki dosya GÜNCELLENEMEDİ — cihaz eski dosyayı görüyor olabilir. FTP Sunucu Ayarları > Bağlantı Durumu loglarına bakın.",
+        "queryFtp": "FTP'den sorgula",
+        "ftpSearching": "FTP'de bu cihazın dosyası aranıyor…",
+        "ftpNotFound": "FTP'de bu cihaz için dosya bulunamadı. Dosya yükleyin ya da şablondan oluşturun.",
+        "ftpFound": "FTP'deki dosya alındı — v{{version}} oluştu.",
+        "searchPlaceholder": "Ayar ara…",
+        "deviceUpdate": "Cihazın bildirdiği son güncelleme: {{date}}",
+        "deviceUpdateHint": "Cihazın kendi raporladığı damga (Last Configuration Update). Komut sonrası bu değer değiştiyse güncelleme cihazda gerçekten uygulanmıştır.",
         "noSerial": "seri numarası yok",
         "noSerialHint": "Cihazın seri numarası bilinmiyor; dosya adı üretilemiyor. Cihaz kaydına seri numarası girin.",
         "fromTemplate": "Şablondan oluştur",

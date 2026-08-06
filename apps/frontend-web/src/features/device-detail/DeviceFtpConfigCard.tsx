@@ -31,6 +31,7 @@ import {
   fetchDeviceConfig,
   fetchDeviceConfigVersions,
   initDeviceConfigFromTemplate,
+  pullDeviceConfigFromFtp,
   revertDeviceConfig,
   sendDeviceCommand,
   updateDeviceConfig,
@@ -58,6 +59,12 @@ const KAYNAK_ANAHTARI: Record<ConfigVersion["source"], string> = {
   duzenlendi: "edited"
 };
 
+/** "Cihazdan cek" (start_csv_upload) DNP3 komutu SIMDILIK GIZLI: sahadaki
+ *  cihazda update-CSV akisi calismiyor (2026-08-06). Sistem bunun yerine
+ *  FTP'de dosya var mi diye KENDISI sorguluyor. Komut cihazda dogrulaninca
+ *  bu bayrak acilarak geri getirilir. */
+const CIHAZDAN_CEK_GORUNUR = false;
+
 export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit, canCommand }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
@@ -67,9 +74,14 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  /** FTP otomatik sorgusu: null=yapilmadi, "aranıyor", "yok" (FTP'de dosya
+   *  bulunamadi — yukle/sablon secenekleri gosterilir). */
+  const [probe, setProbe] = useState<null | "searching" | "absent">(null);
   /** CatIndex -> kullanicinin yazdigi ham metin. Sayiya cevirme KAYDETMEDE
    *  yapilir; yazarken cevirmek "12" yazarken "1"i reddetmek olurdu. */
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  /** Ayar arama metni — 60 satirlik izgarada gozle taramak yavasti. */
+  const [ara, setAra] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +104,53 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     void load();
   }, [load]);
 
+  /** Yapilandirma yoksa sistem SORMADAN FTP'ye bakar: dosya cihaz tarafindan
+   *  zaten yazilmis olabilir ("Cihazdan cek" komutu su an calismadigi icin
+   *  tek otomatik kaynak bu). Bulursa surume cevirir; bulamazsa kullaniciya
+   *  yukleme/sablon secenekleri kalir. Cihaz basina BIR kez denenir. */
+  useEffect(() => {
+    if (loading || current !== null || probe !== null) return;
+    let iptal = false;
+    setProbe("searching");
+    void (async () => {
+      try {
+        const v = await pullDeviceConfigFromFtp(accessToken, deviceId);
+        if (iptal) return;
+        if (v) {
+          toast.success(t("deviceDetail.config.ftp.ftpFound", { version: v.version }));
+          await load();
+        } else {
+          setProbe("absent");
+        }
+      } catch {
+        // Erisim sorunu vb. — sessiz: bos durum secenekleri zaten gorunur,
+        // elle "FTP'den sorgula" denenirse gercek hata toast'ta gosterilir.
+        if (!iptal) setProbe("absent");
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [loading, current, probe, accessToken, deviceId, load, t, toast]);
+
+  /** Elle FTP sorgusu — hata bu kez GOSTERILIR. */
+  async function ftpSorgula() {
+    setBusy(true);
+    try {
+      const v = await pullDeviceConfigFromFtp(accessToken, deviceId);
+      if (v) {
+        toast.success(t("deviceDetail.config.ftp.ftpFound", { version: v.version }));
+        await load();
+      } else {
+        toast.error(t("deviceDetail.config.ftp.ftpNotFound"));
+      }
+    } catch (exc) {
+      toast.error(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** Yalnizca GERCEKTEN degisenler. Ayni degeri tekrar yazmak surum
    *  uretmemeli — gecmis anlamsiz kayitlarla dolardi. */
   const changes = useMemo(() => {
@@ -111,6 +170,17 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     () => (current?.rows ?? []).filter((r) => r.valueInt !== null),
     [current]
   );
+
+  /** Arama: ad, CatIndex ve aciklama uzerinde; Turkce kucuk harf duyarli. */
+  const gorunen = useMemo(() => {
+    const q = ara.trim().toLocaleLowerCase("tr");
+    if (!q) return duzenlenebilir;
+    return duzenlenebilir.filter((r) =>
+      [r.meaning, r.catIndex, r.description]
+        .filter((s): s is string => Boolean(s))
+        .some((s) => s.toLocaleLowerCase("tr").includes(q))
+    );
+  }, [duzenlenebilir, ara]);
 
   const changeCount = Object.keys(changes).length;
   const invalidDraft = useMemo(
@@ -242,8 +312,9 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     );
   }
 
-  // Henuz surum yok: bu bir HATA degil, olagan baslangic durumu. Sistem
-  // kullaniciyi YONLENDIRIR: cihazdan cek / dosya yukle / sablondan olustur.
+  // Henuz surum yok: bu bir HATA degil, olagan baslangic durumu. Sistem once
+  // FTP'ye KENDISI bakti (ust effect); bulamadiysa kullaniciyi yonlendirir:
+  // FTP'den sorgula (elle tekrar) / dosya yukle / sablondan olustur.
   if (!current) {
     return (
       <section className="device-config-section">
@@ -251,12 +322,27 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
           <span className="material-symbols-outlined">folder_shared</span>
           {t("deviceDetail.config.ftpTitle")}
         </h4>
-        <p className="device-config-hint">{t("deviceDetail.config.ftp.empty")}</p>
+        <p className="device-config-hint">
+          {probe === "searching"
+            ? t("deviceDetail.config.ftp.ftpSearching")
+            : probe === "absent"
+              ? t("deviceDetail.config.ftp.ftpNotFound")
+              : t("deviceDetail.config.ftp.empty")}
+        </p>
         <div className="dev-ftp-actions">
-          {canCommand ? (
+          <button
+            type="button"
+            className="dev-ftp-btn is-primary"
+            disabled={busy || probe === "searching"}
+            onClick={() => void ftpSorgula()}
+          >
+            <span className="material-symbols-outlined">cloud_download</span>
+            {t("deviceDetail.config.ftp.queryFtp")}
+          </button>
+          {CIHAZDAN_CEK_GORUNUR && canCommand ? (
             <button
               type="button"
-              className="dev-ftp-btn is-primary"
+              className="dev-ftp-btn"
               disabled={busy}
               onClick={() => void komut("start_csv_file_upload")}
             >
@@ -291,6 +377,11 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
           <span className="material-symbols-outlined">folder_shared</span>
           {t("deviceDetail.config.ftpTitle")}
           <span className="device-config-badge is-muted">v{v.version}</span>
+          {/* Dosya adi BASLIK satirinda — ikinci satirda tek basina sarkmasi
+              sikayet konusuydu. */}
+          {current.filename ? (
+            <code className="dev-ftp-file">{current.filename}</code>
+          ) : null}
           {v.checksumValid === false ? (
             <span className="device-config-badge is-bad">
               {t("deviceDetail.config.ftp.checksumBad")}
@@ -303,32 +394,32 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
           ) : null}
         </h4>
         <div className="dev-ftp-head-actions">
+          {CIHAZDAN_CEK_GORUNUR && canCommand ? (
+            <button
+              type="button"
+              className="dev-ftp-btn"
+              disabled={busy}
+              onClick={() => void komut("start_csv_file_upload")}
+            >
+              <span className="material-symbols-outlined">cloud_download</span>
+              {t("deviceDetail.config.ftp.cmdPull")}
+            </button>
+          ) : null}
           {canCommand ? (
-            <>
-              <button
-                type="button"
-                className="dev-ftp-btn is-primary"
-                disabled={busy}
-                onClick={() => void komut("start_csv_file_upload")}
-              >
-                <span className="material-symbols-outlined">cloud_download</span>
-                {t("deviceDetail.config.ftp.cmdPull")}
-              </button>
-              <button
-                type="button"
-                className="dev-ftp-btn"
-                disabled={busy || current.filename === null}
-                title={
-                  current.filename === null
-                    ? t("deviceDetail.config.ftp.noSerialHint")
-                    : undefined
-                }
-                onClick={() => void uygula()}
-              >
-                <span className="material-symbols-outlined">cloud_upload</span>
-                {t("deviceDetail.config.ftp.cmdApply")}
-              </button>
-            </>
+            <button
+              type="button"
+              className="dev-ftp-btn is-primary"
+              disabled={busy || current.filename === null}
+              title={
+                current.filename === null
+                  ? t("deviceDetail.config.ftp.noSerialHint")
+                  : undefined
+              }
+              onClick={() => void uygula()}
+            >
+              <span className="material-symbols-outlined">cloud_upload</span>
+              {t("deviceDetail.config.ftp.cmdApply")}
+            </button>
           ) : null}
           {/* Ikincil isler IKON olarak — genis dugme seridi ayarlarin yerini
               yiyordu. Ad, tooltip'te. */}
@@ -352,13 +443,13 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
         </div>
       </div>
 
-      {/* Tek satir kunye: dosya adi (varsa) + cihaza gonderilme zamani. */}
+      {/* Durum satiri + ayar aramasi. Cihazin KENDI bildirdigi damga en
+          degerli bilgi: komut sonrasi degistiyse guncelleme cihazda
+          GERCEKTEN uygulandi demektir. */}
       <div className="dev-ftp-meta">
-        {current.filename ? (
-          <code>{current.filename}</code>
-        ) : (
+        {current.filename === null ? (
           <span>{t("deviceDetail.config.ftp.noSerialHint")}</span>
-        )}
+        ) : null}
         {v.appliedAt ? (
           <span className="dev-ftp-applied">
             {t("deviceDetail.config.ftp.appliedAt", {
@@ -366,16 +457,40 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
             })}
           </span>
         ) : null}
+        {current.deviceLastUpdate ? (
+          <span
+            className="dev-ftp-device-update"
+            title={t("deviceDetail.config.ftp.deviceUpdateHint")}
+          >
+            {t("deviceDetail.config.ftp.deviceUpdate", {
+              date: current.deviceLastUpdate
+            })}
+          </span>
+        ) : null}
+        <span className="dev-ftp-meta-spacer" />
+        <input
+          type="search"
+          className="dev-ftp-search"
+          value={ara}
+          onChange={(e) => setAra(e.target.value)}
+          placeholder={t("deviceDetail.config.ftp.searchPlaceholder")}
+        />
       </div>
 
       <div className="dev-ftp-grid">
-        {duzenlenebilir.map((row) => {
+        {gorunen.map((row) => {
           const draft = drafts[row.catIndex];
           const degisti = changes[row.catIndex] !== undefined;
           return (
             <label
               key={row.catIndex}
               className={`dev-ftp-item ${degisti ? "is-changed" : ""}`}
+              // Aciklama tooltip'i: manuel kaynakli metin varsa o; yoksa
+              // ad + kod (en azindan kimlik dogrulanabilir olsun).
+              title={
+                row.description ??
+                (row.meaning ? `${row.meaning} (${row.catIndex})` : row.catIndex)
+              }
             >
               <span className="dev-ftp-item-name">
                 {row.meaning ?? row.catIndex}

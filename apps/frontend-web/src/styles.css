@@ -36440,6 +36440,29 @@ th.event-col-category {
   padding: 0.4rem 0.45rem;
 }
 
+/* Dosya adi baslik satirinda kucuk cip — ayri satirda sarkmasin. */
+.dev-ftp-file {
+  background: #f3f4f6;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.35rem;
+  font-size: 0.71875rem;
+  color: #374151;
+  font-weight: 400;
+}
+
+.dev-ftp-meta-spacer { flex: 1; }
+
+.dev-ftp-search {
+  width: 14rem;
+  max-width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.45rem;
+  font-size: 0.78125rem;
+}
+
+.dev-ftp-device-update { color: #1d4ed8; }
+
 .dev-ftp-meta {
   display: flex;
   flex-wrap: wrap;
@@ -36967,6 +36990,54 @@ th.event-col-category {
 
 .dcfg-dim { color: #9ca3af; }
 .dcfg-empty { font-size: 0.8125rem; color: #6b7280; margin: 0 0 0.9rem; }
+
+/* -- sablon listesi (satir kartlari) -------------------------------------- */
+.dcfg-tpl-list {
+  margin: 0 0 0.9rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.dcfg-tpl-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.55rem;
+  background: #fafbfc;
+}
+
+.dcfg-tpl-list li.is-default { border-color: #bbf7d0; background: #f0fdf4; }
+.dcfg-tpl-icon { font-size: 1.15rem; color: #6b7280; }
+
+.dcfg-tpl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.dcfg-tpl-name { font-size: 0.8438rem; font-weight: 600; color: #111827; }
+.dcfg-tpl-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  font-size: 0.71875rem;
+  color: #6b7280;
+}
+.dcfg-tpl-sub code {
+  background: #f3f4f6;
+  padding: 0 0.35rem;
+  border-radius: 0.3rem;
+}
+
+/* -- sablon duzenleyici --------------------------------------------------- */
+.dcfg-modal--editor {
+  height: min(40rem, 88vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dcfg-editor-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 0.25rem; }
+.dcfg-modal--editor .dcfg-actions { margin-top: 0.75rem; align-items: center; }
 
 /* -- sablon yukleme satiri ---------------------------------------------- */
 .dcfg-upload-row {

@@ -1538,6 +1538,8 @@ export type ConfigRow = {
   // goruntulenemez yapmaz.
   meaning: string | null;
   unit: string | null;
+  // Ayarin ne anlama geldigi (manuel kaynakli, tooltip'te gosterilir).
+  description: string | null;
 };
 
 export type ConfigVersion = {
@@ -1564,6 +1566,10 @@ export type ConfigCurrent = {
   // Kart yine acilir, FTP esitleme/uygulama devre disi kalir.
   filename: string | null;
   rows: ConfigRow[];
+  // Cihazin KENDI bildirdigi son yapilandirma guncelleme damgasi
+  // (master.info_last_configuration_update). Komut sonrasi degistiyse
+  // guncelleme cihazda GERCEKTEN uygulanmistir.
+  deviceLastUpdate: string | null;
 };
 
 export type ConfigDiffRow = {
