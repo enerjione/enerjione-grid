@@ -47,10 +47,16 @@ class ConfigVersionRead(BaseModel):
 
 
 class ConfigCurrentRead(BaseModel):
-    """Cihazin guncel yapilandirmasi + gosterilecek satirlar."""
+    """Cihazin guncel yapilandirmasi + gosterilecek satirlar.
+
+    `filename` None olabilir: cihazin serisi (kayit/telemetri/kod) hicbir
+    kaynaktan cozulemiyorsa dosya adi uretilmez. Bu durum kartin ACILMASINI
+    ENGELLEMEZ (eskiden 500 veriyordu ve kart hic gelmiyordu); arayuz seri
+    eksikligini acikca soyler, FTP esitleme ve uygulama devre disi kalir.
+    """
 
     version: ConfigVersionRead
-    filename: str
+    filename: str | None = None
     rows: list[ConfigRow]
 
 

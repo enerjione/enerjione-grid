@@ -1,20 +1,25 @@
 /**
- * DeviceFtpConfigCard — cihazin `<seri>_Configuration.csv` dosyasini goruntule,
- * duzenle, surumler arasinda gezin.
+ * DeviceFtpConfigCard — cihazin ayar dosyasini goruntule, duzenle, gonder.
  *
  * TASARIM KARARLARI
  * -----------------
- * 1. KAYDETMEK GONDERMEK DEGILDIR. Bu ekran yalnizca yeni bir SURUM yaratir.
- *    Dosyanin cihaza ulasmasi icin FTP'ye yazilmasi ve DNP3 komutuyla
- *    tetiklenmesi gerekir. Ikisini tek butonda birlestirmek "kaydettim, demek
- *    ki gitti" yanilgisini uretirdi — sahada en pahali yanilgi turu.
+ * 1. UST BOLUM MINIMAL (kullanici istegi, 2026-08-06): tek baslik satiri —
+ *    solda ad + surum rozeti, sagda islemler. FTP mekanigi anlatilmaz;
+ *    kullanicinin isi "cihazdan cek / duzenle / cihaza uygula"dir. Uzun
+ *    ipucu paragraflari kaldirildi; sistem zaten dogru olani yapiyor
+ *    (kaydedilen dosya cihazin okuyacagi dosyadir).
  *
- * 2. YALNIZCA DEGISENLER gonderilir. Tum tabloyu gondermek, dokunulmamis
- *    alanlarda da yuvarlama/bicim farki riski dogururdu.
+ * 2. SURUM GECMISI POPUP'ta — sayfa ici acilir liste ayarlari asagi itiyordu;
+ *    diger sayfalarin kaliplariyla (dcfg-modal) ayni.
  *
- * 3. Uzun alanlar (metin) SALT-OKUNUR. Uzunluk sabit oldugu icin metni
- *    degistirmek bayt sayisini tutturmayi gerektirir; sayisal alanlarda bu
- *    sorun yok. Metin duzenleme, gercek ihtiyac dogunca ayrica ele alinmali.
+ * 3. KAYDETMEK != GONDERMEK. Kayit yeni surum yaratir ve dosyayi FTP'de
+ *    gunceller; cihazin UYGULAMASI icin "Cihaza uygula" komutu gerekir.
+ *
+ * 4. YALNIZCA DEGISENLER gonderilir; metin alanlari salt-okunur (sabit
+ *    genislik) ve GOSTERILMEZ — degistirilemeyen satir yalnizca gurultu.
+ *
+ * 5. Seri numarasi cozulemeyen cihazda kart YINE ACILIR (filename=null);
+ *    dosya uretilemeyecegi acikca soylenir, gonderme kapali kalir.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -25,6 +30,7 @@ import {
   deviceConfigDownloadUrl,
   fetchDeviceConfig,
   fetchDeviceConfigVersions,
+  initDeviceConfigFromTemplate,
   revertDeviceConfig,
   sendDeviceCommand,
   updateDeviceConfig,
@@ -101,10 +107,6 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     return out;
   }, [current, drafts]);
 
-  /** Yalnizca SAYISAL alanlar duzenlenebilir; metin alanlari sabit genislikte
-   *  oldugu icin bayt sayisini tutturmayi gerektirir. Duzenlenemeyen satirlari
-   *  GOSTERMIYORUZ — kullanici istegi ve dogru karar: degistirilemeyen bir
-   *  satir ekranda yalnizca gurultu. */
   const duzenlenebilir = useMemo(
     () => (current?.rows ?? []).filter((r) => r.valueInt !== null),
     [current]
@@ -121,9 +123,8 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     [drafts]
   );
 
-  /** Kayit artik FTP'deki dosyayi da gunceller (ekran == cihazin okuyacagi
-   *  dosya). Yazma basarisizsa surum yine kaydedilmistir ama kullanici
-   *  UYARILIR — cihaz eski dosyayi goruyor olabilir. */
+  /** Kayit FTP'deki dosyayi da gunceller; yazma basarisizsa surum yine
+   *  kaydedilmistir ama kullanici UYARILIR. */
   function ftpUyar(v: { ftpWritten: boolean | null }) {
     if (v.ftpWritten === false) {
       toast.error(t("deviceDetail.config.ftp.syncFailed"));
@@ -146,15 +147,10 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
   }
 
   async function upload(file: File) {
-    // Dosya adindaki seri, cihazin kendi serisiyle uyusmuyorsa UYAR ama
-    // ENGELLEME: baska bir cihazin dosyasini sablon olarak kullanmak mesru
-    // bir ihtiyac. Sessizce kabul etmek ise yanlis cihaza yanlis ayar
-    // gondermeye kadar gider ve sonucu ancak sahada fark edilir.
-    //
-    // Guncel surum yoksa `current` null olur ve beklenen adi bilemeyiz; o
-    // durumda kontrol ATLANIR — backend uyusmazligi yine denetim kaydina
-    // yazar, yani kontrol tek noktaya bagli degil.
-    if (current && file.name !== current.filename) {
+    // Dosya adi cihazin serisiyle uyusmuyorsa UYAR ama ENGELLEME (baska
+    // cihazin dosyasini sablon gibi kullanmak mesru). Seri bilinmiyorsa
+    // (filename null) kontrol atlanir — backend denetim kaydini yine tutar.
+    if (current?.filename && file.name !== current.filename) {
       const onay = window.confirm(
         t("deviceDetail.config.ftp.serialMismatch", {
           expected: current.filename,
@@ -176,10 +172,8 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     }
   }
 
-  /** Cihaza DNP3 komutu gonderir. Komut KUYRUGA alinir; cihaz onu ancak bir
-   *  sonraki DNP oturumunda alabilir (gunluk planli cagri ya da olay). Bu
-   *  yuzden mesaj "gonderildi" degil "kuyruga alindi" der — aksi halde
-   *  kullanici islemin bittigini sanardi. */
+  /** "Cihazdan cek": cihaz kendi dosyasini FTP'ye yazar, sistem yakalayip
+   *  yeni surum yapar. Komut kuyruga alinir; cihaz sonraki oturumda uygular. */
   async function komut(slug: string) {
     setBusy(true);
     try {
@@ -192,15 +186,28 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     }
   }
 
-  /** "Cihaza uygula" ZINCIRI: backend dosyayi FTP'ye yazar, sonra
-   *  `config_update` komutunu kuyruga alir. Eskiden yalnizca komut gidiyordu
-   *  ve dosyayi FTP'ye kullanici elle koymak zorundaydi — koymayi unutmak
-   *  cihaza ESKI dosyayi okutuyordu. */
+  /** "Cihaza uygula": dosya cihazin okuyacagi yere yazilir + guncelleme
+   *  komutu kuyruga alinir. */
   async function uygula() {
     setBusy(true);
     try {
       await applyDeviceConfig(accessToken, deviceId);
       toast.success(t("deviceDetail.config.ftp.applied"));
+      await load();
+    } catch (exc) {
+      toast.error(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Yapilandirmasi olmayan cihaz: varsayilan sablondan ilk surum. */
+  async function sablondan() {
+    setBusy(true);
+    try {
+      const v = await initDeviceConfigFromTemplate(accessToken, deviceId);
+      toast.success(t("deviceDetail.config.ftp.fromTemplateDone", { version: v.version }));
+      ftpUyar(v);
       await load();
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
@@ -235,7 +242,8 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
     );
   }
 
-  // Henuz surum yok: bu bir HATA degil, olagan baslangic durumu.
+  // Henuz surum yok: bu bir HATA degil, olagan baslangic durumu. Sistem
+  // kullaniciyi YONLENDIRIR: cihazdan cek / dosya yukle / sablondan olustur.
   if (!current) {
     return (
       <section className="device-config-section">
@@ -245,8 +253,6 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
         </h4>
         <p className="device-config-hint">{t("deviceDetail.config.ftp.empty")}</p>
         <div className="dev-ftp-actions">
-          {/* Config YOKKEN "cihazdan cek" tam da ihtiyac duyulan islem;
-              bos durumda gizlemek kullaniciyi Komutlar sekmesine gonderirdi. */}
           {canCommand ? (
             <button
               type="button"
@@ -259,6 +265,17 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
             </button>
           ) : null}
           {canEdit ? <UploadButton onPick={upload} busy={busy} /> : null}
+          {canEdit ? (
+            <button
+              type="button"
+              className="dev-ftp-btn"
+              disabled={busy}
+              onClick={() => void sablondan()}
+            >
+              <span className="material-symbols-outlined">description</span>
+              {t("deviceDetail.config.ftp.fromTemplate")}
+            </button>
+          ) : null}
         </div>
       </section>
     );
@@ -268,30 +285,80 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
 
   return (
     <section className="device-config-section dev-ftp">
-      <h4 className="device-config-title">
-        <span className="material-symbols-outlined">folder_shared</span>
-        {t("deviceDetail.config.ftpTitle")}
-        <span className="device-config-badge is-muted">v{v.version}</span>
-        {/* Checksum durumu: gecerli olan sessiz kalir, sorunlu olan gorunur. */}
-        {v.checksumValid === false ? (
-          <span className="device-config-badge is-bad">
-            {t("deviceDetail.config.ftp.checksumBad")}
-          </span>
-        ) : v.checksumValid === null ? (
-          <span className="device-config-badge">
-            {t("deviceDetail.config.ftp.checksumUnknown")}
-          </span>
-        ) : null}
-      </h4>
+      {/* TEK satir baslik: solda kimlik, sagda islemler. */}
+      <div className="dev-ftp-head">
+        <h4 className="device-config-title">
+          <span className="material-symbols-outlined">folder_shared</span>
+          {t("deviceDetail.config.ftpTitle")}
+          <span className="device-config-badge is-muted">v{v.version}</span>
+          {v.checksumValid === false ? (
+            <span className="device-config-badge is-bad">
+              {t("deviceDetail.config.ftp.checksumBad")}
+            </span>
+          ) : null}
+          {current.filename === null ? (
+            <span className="device-config-badge is-bad">
+              {t("deviceDetail.config.ftp.noSerial")}
+            </span>
+          ) : null}
+        </h4>
+        <div className="dev-ftp-head-actions">
+          {canCommand ? (
+            <>
+              <button
+                type="button"
+                className="dev-ftp-btn is-primary"
+                disabled={busy}
+                onClick={() => void komut("start_csv_file_upload")}
+              >
+                <span className="material-symbols-outlined">cloud_download</span>
+                {t("deviceDetail.config.ftp.cmdPull")}
+              </button>
+              <button
+                type="button"
+                className="dev-ftp-btn"
+                disabled={busy || current.filename === null}
+                title={
+                  current.filename === null
+                    ? t("deviceDetail.config.ftp.noSerialHint")
+                    : undefined
+                }
+                onClick={() => void uygula()}
+              >
+                <span className="material-symbols-outlined">cloud_upload</span>
+                {t("deviceDetail.config.ftp.cmdApply")}
+              </button>
+            </>
+          ) : null}
+          {/* Ikincil isler IKON olarak — genis dugme seridi ayarlarin yerini
+              yiyordu. Ad, tooltip'te. */}
+          <a
+            className="dev-ftp-btn is-icon"
+            href={deviceConfigDownloadUrl(deviceId)}
+            download
+            title={t("deviceDetail.config.ftp.download")}
+          >
+            <span className="material-symbols-outlined">file_download</span>
+          </a>
+          {canEdit ? <UploadButton onPick={upload} busy={busy} iconOnly /> : null}
+          <button
+            type="button"
+            className="dev-ftp-btn is-icon"
+            title={t("deviceDetail.config.ftp.history", { count: versions.length })}
+            onClick={() => setHistoryOpen(true)}
+          >
+            <span className="material-symbols-outlined">history</span>
+          </button>
+        </div>
+      </div>
 
+      {/* Tek satir kunye: dosya adi (varsa) + cihaza gonderilme zamani. */}
       <div className="dev-ftp-meta">
-        <code>{current.filename}</code>
-        <span>{t(`deviceDetail.config.ftp.source.${KAYNAK_ANAHTARI[v.source]}`)}</span>
-        <span>{new Date(v.createdAt).toLocaleString()}</span>
-        {v.createdBy ? <span>{v.createdBy}</span> : null}
-        {/* Bu surum cihazin okuyacagi yere kondu mu? Dolu = FTP'ye yazildi ve
-            komut kuyruga alindi (cihazin okudugu an DEGIL — o, FTP indirme
-            olayindan izlenir). */}
+        {current.filename ? (
+          <code>{current.filename}</code>
+        ) : (
+          <span>{t("deviceDetail.config.ftp.noSerialHint")}</span>
+        )}
         {v.appliedAt ? (
           <span className="dev-ftp-applied">
             {t("deviceDetail.config.ftp.appliedAt", {
@@ -301,84 +368,6 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
         ) : null}
       </div>
 
-      {/* Kaydetmek gondermek degildir — kullanici bunu BILMELI. */}
-      <p className="device-config-hint">{t("deviceDetail.config.ftp.notSentHint")}</p>
-
-      {/* CIHAZ KOMUTLARI — asil dongu burada kapanir.
-          "Cihazdan cek": binary output 3, cihaz kendi config'ini FTP'ye yazar;
-          backend olayi yakalayip yeni surum olusturur.
-          "Cihaza uygula": once dosya FTP'ye YAZILIR (backend, mod ayarina
-          gore gomulu volume ya da harici sunucu), sonra binary output 0
-          kuyruga alinir — cihaz dosyayi indirip uygular. Iki adim tek ucta:
-          dosyayi elle FTP'ye koymayi unutmak cihaza eski dosyayi okutuyordu.
-          Komutlar sekmesine gitmek zorunda kalmak, akisi ikiye boluyordu. */}
-      {canCommand ? (
-        <div className="dev-ftp-cmds">
-          <button
-            type="button"
-            className="dev-ftp-btn is-primary"
-            disabled={busy}
-            onClick={() => void komut("start_csv_file_upload")}
-          >
-            <span className="material-symbols-outlined">cloud_download</span>
-            {t("deviceDetail.config.ftp.cmdPull")}
-          </button>
-          <button
-            type="button"
-            className="dev-ftp-btn"
-            disabled={busy}
-            onClick={() => void uygula()}
-          >
-            <span className="material-symbols-outlined">cloud_upload</span>
-            {t("deviceDetail.config.ftp.cmdApply")}
-          </button>
-          <span className="dev-ftp-cmds-hint">{t("deviceDetail.config.ftp.cmdHint")}</span>
-        </div>
-      ) : null}
-
-      <div className="dev-ftp-actions">
-        <a className="dev-ftp-btn" href={deviceConfigDownloadUrl(deviceId)} download>
-          <span className="material-symbols-outlined">file_download</span>
-          {t("deviceDetail.config.ftp.download")}
-        </a>
-        {canEdit ? <UploadButton onPick={upload} busy={busy} /> : null}
-        <button
-          type="button"
-          className="dev-ftp-btn"
-          onClick={() => setHistoryOpen((o) => !o)}
-        >
-          <span className="material-symbols-outlined">history</span>
-          {t("deviceDetail.config.ftp.history", { count: versions.length })}
-        </button>
-      </div>
-
-      {historyOpen ? (
-        <ol className="dev-ftp-history">
-          {versions.map((h) => (
-            <li key={h.id} className={h.version === v.version ? "is-current" : ""}>
-              <strong>v{h.version}</strong>
-              <span>{t(`deviceDetail.config.ftp.source.${KAYNAK_ANAHTARI[h.source]}`)}</span>
-              <span>{new Date(h.createdAt).toLocaleString()}</span>
-              {h.note ? <em>{h.note}</em> : null}
-              {canEdit && h.version !== v.version ? (
-                <button type="button" disabled={busy} onClick={() => void revert(h.version)}>
-                  {t("deviceDetail.config.ftp.revert")}
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      ) : null}
-
-      {/* IKI SUTUNLU IZGARA — tablo degil.
-          Tabloda "Birim" ayri bir sutundu ve ekranin en saginda kaliyordu;
-          goz deger ile birimi eslestirmek icin ekrani bastan sona tariyordu.
-          Burada birim degerin HEMEN yaninda.
-
-          DEGISTIRILEMEYEN satirlar GOSTERILMIYOR (kullanici istegi): metin
-          alanlari sabit genislikte oldugu icin duzenlenemiyor ve
-          "[not configured]" gibi kayitlar ekrani doldurup asil ayarlari
-          gormeyi zorlastiriyordu. */}
       <div className="dev-ftp-grid">
         {duzenlenebilir.map((row) => {
           const draft = drafts[row.catIndex];
@@ -403,8 +392,7 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
                   }
                 />
                 {/* Birim yuvasi HEP basilir (bos da olsa): yalnizca birimi
-                    olanlarda basmak, birimsiz alanlarin kutusunu saga kaydirip
-                    kolonlari tirtikli gosteriyordu. */}
+                    olanlarda basmak kolonlari tirtikli gosteriyordu. */}
                 <em>{row.unit ?? ""}</em>
               </span>
             </label>
@@ -429,16 +417,63 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
           </button>
         </div>
       ) : null}
+
+      {/* ---- Surum gecmisi POPUP (diger sayfalarin kalibi) ---- */}
+      {historyOpen ? (
+        <div className="dcfg-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="dcfg-modal">
+            <div className="dcfg-modal-head">
+              <h4>
+                <span className="material-symbols-outlined">history</span>
+                {t("deviceDetail.config.ftp.history", { count: versions.length })}
+              </h4>
+              <button
+                type="button"
+                className="dcfg-btn is-small"
+                onClick={() => setHistoryOpen(false)}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <ol className="dev-ftp-history">
+              {versions.map((h) => (
+                <li key={h.id} className={h.version === v.version ? "is-current" : ""}>
+                  <strong>v{h.version}</strong>
+                  <span>{t(`deviceDetail.config.ftp.source.${KAYNAK_ANAHTARI[h.source]}`)}</span>
+                  <span>{new Date(h.createdAt).toLocaleString()}</span>
+                  {h.note ? <em>{h.note}</em> : null}
+                  {canEdit && h.version !== v.version ? (
+                    <button type="button" disabled={busy} onClick={() => void revert(h.version)}>
+                      {t("deviceDetail.config.ftp.revert")}
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function UploadButton({ onPick, busy }: { onPick: (f: File) => void; busy: boolean }) {
+function UploadButton({
+  onPick,
+  busy,
+  iconOnly
+}: {
+  onPick: (f: File) => void;
+  busy: boolean;
+  iconOnly?: boolean;
+}) {
   const { t } = useTranslation();
   return (
-    <label className={`dev-ftp-btn ${busy ? "is-disabled" : ""}`}>
+    <label
+      className={`dev-ftp-btn ${iconOnly ? "is-icon" : ""} ${busy ? "is-disabled" : ""}`}
+      title={iconOnly ? t("deviceDetail.config.ftp.upload") : undefined}
+    >
       <span className="material-symbols-outlined">upload_file</span>
-      {t("deviceDetail.config.ftp.upload")}
+      {iconOnly ? null : t("deviceDetail.config.ftp.upload")}
       <input
         type="file"
         accept=".csv"

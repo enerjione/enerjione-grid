@@ -36416,6 +36416,30 @@ th.event-col-category {
    WiFi ilerleme ekraninda yasanan tuzagin tekrari onlensin diye bilesenle
    BIRLIKTE yaziliyor: render edilmeyen bir bilesenin stilsiz kaldigi ancak
    baglandiginda fark ediliyor. */
+/* Tek satir baslik: solda kimlik, sagda islemler. Genis dugme seritleri ve
+   ipucu paragraflari kaldirildi — ayarlar izgarasi asil icerik. */
+.dev-ftp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dev-ftp-head .device-config-title { margin: 0; }
+
+.dev-ftp-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+/* Ikincil isler ikon dugme — adi tooltip'te. */
+.dev-ftp-btn.is-icon {
+  padding: 0.4rem 0.45rem;
+}
+
 .dev-ftp-meta {
   display: flex;
   flex-wrap: wrap;

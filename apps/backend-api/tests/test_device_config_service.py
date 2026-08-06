@@ -178,6 +178,29 @@ def test_tip_basina_TEK_varsayilan_kalir(db) -> None:
     assert db.get(DeviceConfigTemplate, a.id).is_default is False
 
 
+# --- fabrika sablonu -------------------------------------------------------
+def test_fabrika_sablonu_BOS_kurulumda_yuklenir(db) -> None:
+    """Depoyla gelen dogrulanmis dosya, sablonsuz kurulumda varsayilan olur —
+    'yeni cihaza otomatik config' kancasi ve 'Sablondan olustur' dugmesi
+    buna dayanir."""
+    sablon = svc.seed_factory_template(db)
+    assert sablon is not None
+    assert sablon.is_default is True
+    assert sablon.name == svc.FABRIKA_SABLON_ADI
+    assert parse(bytes(sablon.raw)).checksum_valid is True
+    # Ikinci cagri yenisini URETMEZ (her acilista kosuyor).
+    assert svc.seed_factory_template(db) is None
+
+
+def test_fabrika_sablonu_KULLANICI_SABLONUNU_ezmez(db) -> None:
+    """Kullanici kendi sablonunu tanimladiysa (varsayilan olmasa bile) seed
+    DOKUNMAZ — fabrika dosyasini dayatmak kullanicinin kararini ezerdi."""
+    svc.create_template(
+        db, name="ozel", device_model="horstmann_sn_2_0", raw=_dosya(), is_default=False
+    )
+    assert svc.seed_factory_template(db) is None
+
+
 # --- ilk surum -------------------------------------------------------------
 def test_cihaz_eklendiginde_sablondan_ILK_SURUM_uretilir(db, cihaz) -> None:
     sablon = svc.create_template(

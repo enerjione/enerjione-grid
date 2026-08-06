@@ -170,9 +170,16 @@ def guncel_config(
             "cihazdan cekilen dosyayi yukleyin.",
         )
     raw = bytes(surum.raw)
+    # Seri cozulemiyorsa dosya adi None — kartin acilmasini ENGELLEMEZ.
+    # Eskiden burada patlayip 500 donuyordu ve kullanici yalnizca
+    # "Yapilandirma alinamadi" goruyordu (sahada yasandi).
+    try:
+        dosya_adi: str | None = svc.config_filename(db, device_id)
+    except Exception:  # noqa: BLE001
+        dosya_adi = None
     return ConfigCurrentRead(
         version=_version_read(surum, raw),
-        filename=svc.config_filename(db, device_id),
+        filename=dosya_adi,
         rows=svc.describe(raw),
     )
 
@@ -199,14 +206,14 @@ def config_indir(
     if surum is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Yapilandirma surumu bulunamadi")
 
+    try:
+        indirme_adi = svc.config_filename(db, device_id)
+    except Exception:  # noqa: BLE001 - seri yoksa jenerik ad; indirme engellenmez
+        indirme_adi = "Configuration.csv"
     return Response(
         content=bytes(surum.raw),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{svc.config_filename(db, device_id)}"'
-            )
-        },
+        headers={"Content-Disposition": f'attachment; filename="{indirme_adi}"'},
     )
 
 
@@ -356,6 +363,56 @@ async def dosya_yukle(
     )
     db.commit()
     return _version_read(surum, raw, ftp_written=ftp_ok)
+
+
+@router.post(
+    "/devices/{device_id}/config/from-template",
+    response_model=ConfigVersionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def sablondan_olustur(
+    device_id: int, db: Session = Depends(get_db), user: User = _YETKI
+) -> ConfigVersionRead:
+    """Yapilandirmasi OLMAYAN cihaz icin varsayilan sablondan ilk surumu uretir.
+
+    Bos durumdaki "Sablondan olustur" dugmesi buraya gelir: kullanici dosyayi
+    elle yuklemek istemiyorsa fabrika/proje sablonu tek tikla uygulanir.
+    Mevcut yapilandirmasi olan cihazda 409 — ustune sablon basmak kullanicinin
+    duzenlemelerini sessizce ezerdi (onun yolu: toplu uygulama, onayli).
+    """
+    cihaz = _device(db, device_id)
+    if svc.current_version(db, device_id) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Cihazin zaten yapilandirmasi var."
+        )
+    sablon = svc.default_template(db, cihaz.model)
+    if sablon is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"{cihaz.model} icin varsayilan sablon tanimli degil. "
+            "Cihaz Yapilandirma > Sablonlar'dan yukleyin.",
+        )
+    surum = svc.create_version(
+        db,
+        device_id=device_id,
+        raw=bytes(sablon.raw),
+        source="sablon",
+        actor=user.username,
+        template_id=sablon.id,
+        note=f"'{sablon.name}' sablonundan olusturuldu",
+    )
+    ftp_ok = _ftp_esitle(db, device_id, bytes(surum.raw))
+    record_event(
+        db,
+        category="device",
+        event_type="config_from_template",
+        message=f"{cihaz.name}: '{sablon.name}' sablonundan ilk yapilandirma olusturuldu (v{surum.version})",
+        actor_username=user.username,
+        device_code=cihaz.code,
+        metadata={"template_id": sablon.id, "version": surum.version, "ftp_written": ftp_ok},
+    )
+    db.commit()
+    return _version_read(surum, ftp_written=ftp_ok)
 
 
 @router.post("/devices/{device_id}/config/apply", response_model=ConfigVersionRead)

@@ -3077,7 +3077,7 @@ export async function fetchDeviceConfig(token: string, deviceId: number): Promis
   });
   if (response.status === 404) return null;
   if (!response.ok) throw await buildApiError(response, "Yapılandırma alınamadı.");
-  const data = (await response.json()) as { version: ApiConfigVersion; filename: string; rows: ApiConfigRow[] };
+  const data = (await response.json()) as { version: ApiConfigVersion; filename: string | null; rows: ApiConfigRow[] };
   return {
     version: mapConfigVersion(data.version),
     filename: data.filename,
@@ -3183,6 +3183,19 @@ export async function applyTemplateToDevices(
   });
   if (!response.ok) throw await buildApiError(response, "Toplu uygulama başarısız.");
   return (await response.json()) as BulkApplyResult;
+}
+
+/** Yapilandirmasi olmayan cihaz icin varsayilan sablondan ilk surumu uretir.
+ *  Mevcut yapilandirmasi olan cihazda 409 doner (duzenlemeler ezilmez). */
+export async function initDeviceConfigFromTemplate(
+  token: string, deviceId: number
+): Promise<ConfigVersion> {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${deviceId}/config/from-template`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Şablondan oluşturulamadı.");
+  return mapConfigVersion((await response.json()) as ApiConfigVersion);
 }
 
 /** Guncel surumu FTP'ye yazar + `config_update` DNP3 komutunu kuyruga alir.

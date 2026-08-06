@@ -1560,7 +1560,9 @@ export type ConfigVersion = {
 
 export type ConfigCurrent = {
   version: ConfigVersion;
-  filename: string;
+  // null = cihazin serisi hicbir kaynaktan cozulemedi; dosya adi uretilemiyor.
+  // Kart yine acilir, FTP esitleme/uygulama devre disi kalir.
+  filename: string | null;
   rows: ConfigRow[];
 };
 

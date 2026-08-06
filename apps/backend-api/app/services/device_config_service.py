@@ -326,6 +326,42 @@ def create_version(
     return surum
 
 
+#: Depoyla birlikte gelen fabrika config'i (gercek 50984 cihazindan alindi,
+#: checksum'i dogrulanmis 1095 baytlik dosya). CSV govdesi cihaza ozel kimlik
+#: TASIMAZ (bkz. DeviceConfigTemplate docstring) — her SN2 cihazina uygulanabilir.
+_FABRIKA_DOSYASI = Path(__file__).resolve().parents[1] / "data/horstmann_sn2_factory_config.csv"
+FABRIKA_SABLON_ADI = "Fabrika ayarlari (SN2)"
+
+
+def seed_factory_template(db: Session) -> DeviceConfigTemplate | None:
+    """SN2 modeli icin HIC sablon yoksa fabrika sablonunu yukler.
+
+    Kurulumdan cikan sistemde "sablon tanimlanmamis, yeni cihaz config'siz"
+    durumu kalmasin diye acilista cagrilir. Kullanici sablon tanimladiysa
+    (bir tane bile) DOKUNMAZ — id yerine varligina bakmak bilincli: kullanici
+    fabrika sablonunu silmisse tekrar dayatmak onun kararini ezerdi.
+    """
+    if list_templates(db, "horstmann_sn_2_0"):
+        return None
+    try:
+        ham = _FABRIKA_DOSYASI.read_bytes()
+    except OSError:
+        return None  # paketle gelmemis olabilir; eksiklik arayuzde gorunur
+    try:
+        return create_template(
+            db,
+            name=FABRIKA_SABLON_ADI,
+            device_model="horstmann_sn_2_0",
+            raw=ham,
+            source_filename="50984_Configuration.csv",
+            note="Depoyla gelen fabrika yapilandirmasi (gercek cihazdan alindi)",
+            is_default=True,
+            actor="sistem",
+        )
+    except ConfigParseError:
+        return None  # bozuk paket dosyasi sablon olamaz; sessizce dayatilmaz
+
+
 def ensure_initial_version(
     db: Session, device: Device, *, actor: str | None = None
 ) -> DeviceConfigVersion | None:

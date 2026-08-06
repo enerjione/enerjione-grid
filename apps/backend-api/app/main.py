@@ -848,6 +848,27 @@ def _legacy_bootstrap_ddl():
         # ayni satirlari yayinlamaya kalkiyordu. Yayin artik TEK yerden,
         # `leader.register("outbox_flush", ...)` arkasindaki worker'dan yapilir
         # ve o en gec OUTBOX_FLUSH_INTERVAL_SEC (0.3 sn) icinde ayni isi yapar.
+
+        # Fabrika config sablonu: SN2 icin HIC sablon yoksa depoyla gelen
+        # dogrulanmis dosya varsayilan yapilir. Sablonsuz kurulumda "yeni
+        # cihaza otomatik config" kancasi hic tetiklenemiyordu; bos durumdaki
+        # "Sablondan olustur" dugmesi de buna dayanir. Coklu surec guvenli:
+        # varlik kontrolu var, yaris halinde en kotu iki sablon olusur ve
+        # tek varsayilan kurali zaten uygulanir.
+        try:
+            from app.services import device_config_service as _cfg_svc
+
+            if _cfg_svc.seed_factory_template(db) is not None:
+                db.commit()
+                import logging
+
+                logging.getLogger(__name__).info("fabrika config sablonu yuklendi")
+        except Exception:  # noqa: BLE001 - seed eksikligi acilisi engellemez
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "fabrika config sablonu yuklenemedi", exc_info=True
+            )
     finally:
         db.close()
 
