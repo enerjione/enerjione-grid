@@ -9,6 +9,11 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CircleMarker, MapContainer, Polyline, useMap } from "react-leaflet";
+import type { LatLngBoundsExpression } from "leaflet";
+
+import { ResilientTileLayer } from "../../components/ResilientTileLayer";
+import { MAP_LAYERS } from "../../shared/mapTiles";
 
 import {
   commitGridImport,
@@ -38,6 +43,91 @@ function metreMesafe(lat1: number, lon1: number, lat2: number, lon2: number): nu
 /** Bransman tahmini esigi (m): ilk direk mevcut bir direge bundan yakinsa
  *  "bu hattan dallaniyor olabilir" onerilir. SADECE TAHMIN — karar kullanicinin. */
 const BRANSMAN_ESIK_M = 200;
+
+/** Yapistirilan direkler degistikce haritayi onlara sigdir. */
+function FitToPoles({ poles }: { poles: Array<{ lat: number; lon: number }> }) {
+  const map = useMap();
+  useEffect(() => {
+    if (poles.length === 0) return;
+    if (poles.length === 1) {
+      map.setView([poles[0].lat, poles[0].lon], 15);
+      return;
+    }
+    const bounds: LatLngBoundsExpression = poles.map((p) => [p.lat, p.lon] as [number, number]);
+    map.fitBounds(bounds, { padding: [24, 24] });
+  }, [map, poles]);
+  return null;
+}
+
+/** Sihirbaz onizleme haritasi: yeni hat TURUNCU, mevcut topoloji SOLUK gri,
+ *  bransman adayi MAVI halka. Salt gorsel — tiklama/duzenleme yok; ince ayar
+ *  olusturduktan sonra Duzenleme Modu'nda. */
+function QaPreviewMap({
+  poles,
+  snapshot,
+  branchGuess,
+}: {
+  poles: Array<{ lat: number; lon: number }>;
+  snapshot: GridSnapshot | null;
+  branchGuess: { lat: number; lon: number } | null;
+}) {
+  // Mevcut hatlarin cizgileri (line_id -> sirali koordinatlar).
+  const existing = useMemo(() => {
+    if (!snapshot) return [];
+    const byLine = new Map<number, Array<{ seq: number; lat: number; lon: number }>>();
+    for (const p of snapshot.poles) {
+      const arr = byLine.get(p.line_id) ?? [];
+      arr.push({ seq: p.sequence_no, lat: p.latitude, lon: p.longitude });
+      byLine.set(p.line_id, arr);
+    }
+    return [...byLine.values()].map((arr) =>
+      arr.sort((a, b) => a.seq - b.seq).map((p) => [p.lat, p.lon] as [number, number])
+    );
+  }, [snapshot]);
+
+  const yeni = poles.map((p) => [p.lat, p.lon] as [number, number]);
+
+  return (
+    <MapContainer
+      center={yeni[0] ?? [39.0, 35.0]}
+      zoom={6}
+      className="grid-qa-map"
+      scrollWheelZoom
+      attributionControl={false}
+    >
+      <ResilientTileLayer layer="osm" maxZoom={MAP_LAYERS[0].maxZoom} />
+      <FitToPoles poles={poles} />
+      {existing.map((pts, i) =>
+        pts.length >= 2 ? (
+          <Polyline key={i} positions={pts} pathOptions={{ color: "#94a3b8", weight: 2, opacity: 0.6 }} />
+        ) : null
+      )}
+      {yeni.length >= 2 ? (
+        <Polyline positions={yeni} pathOptions={{ color: "#ea9010", weight: 4, opacity: 0.9 }} />
+      ) : null}
+      {poles.map((p, i) => (
+        <CircleMarker
+          key={i}
+          center={[p.lat, p.lon]}
+          radius={i === 0 ? 6 : 4.5}
+          pathOptions={{
+            color: i === 0 ? "#15803d" : "#ea9010",
+            fillColor: "#ffffff",
+            fillOpacity: 1,
+            weight: 2.5,
+          }}
+        />
+      ))}
+      {branchGuess ? (
+        <CircleMarker
+          center={[branchGuess.lat, branchGuess.lon]}
+          radius={9}
+          pathOptions={{ color: "#1d4ed8", fillOpacity: 0, weight: 3, dashArray: "4 3" }}
+        />
+      ) : null}
+    </MapContainer>
+  );
+}
 import { useToast } from "../../components/ToastProvider";
 import { useModalDialog } from "../../shared/useModalDialog";
 
@@ -163,13 +253,18 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
     if (!snapshot || qaParsed.poles.length === 0) return null;
     const ilk = qaParsed.poles[0];
     const lineById = new Map(snapshot.lines.map((l) => [l.id, l]));
-    let enIyi: { lineCode: string; lineName: string; seq: number; mesafe: number } | null = null;
+    let enIyi:
+      | { lineCode: string; lineName: string; seq: number; mesafe: number; lat: number; lon: number }
+      | null = null;
     for (const p of snapshot.poles) {
       const hat = lineById.get(p.line_id);
       if (!hat || hat.code === qaLineCode.trim()) continue;
       const d = metreMesafe(ilk.lat, ilk.lon, p.latitude, p.longitude);
       if (d <= BRANSMAN_ESIK_M && (enIyi === null || d < enIyi.mesafe)) {
-        enIyi = { lineCode: hat.code, lineName: hat.name, seq: p.sequence_no, mesafe: d };
+        enIyi = {
+          lineCode: hat.code, lineName: hat.name, seq: p.sequence_no,
+          mesafe: d, lat: p.latitude, lon: p.longitude,
+        };
       }
     }
     return enIyi;
@@ -431,6 +526,16 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                     </span>
                   ) : null}
                 </div>
+
+                {/* CANLI HARITA ONIZLEME: yapistirdikca hat haritada cizilir;
+                    mevcut topoloji soluk gri baglam olarak gorunur. */}
+                {qaParsed.poles.length > 0 ? (
+                  <QaPreviewMap
+                    poles={qaParsed.poles}
+                    snapshot={snapshot}
+                    branchGuess={qaBranchGuess}
+                  />
+                ) : null}
                 <label className="grid-qa-field grid-qa-field--inline">
                   <span>{t("engineering.grid.wizard.qaNamePrefix")}</span>
                   <input
@@ -453,6 +558,14 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
             {/* Adim 3 — Ozet */}
             {qaStep === 3 ? (
               <div className="grid-qa-body">
+                {/* Cizilecek hattin son hali haritada. */}
+                {qaParsed.poles.length > 0 ? (
+                  <QaPreviewMap
+                    poles={qaParsed.poles}
+                    snapshot={snapshot}
+                    branchGuess={qaBranchOn ? qaBranchGuess : null}
+                  />
+                ) : null}
                 <ul className="net-confirm-summary">
                   <li>
                     <span>{t("engineering.grid.wizard.qaSumRegion")}</span>

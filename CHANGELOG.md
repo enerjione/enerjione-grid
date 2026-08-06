@@ -14,6 +14,17 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.17] — 2026-08-06
+
+### Eklendi
+
+- Hat Sihirbazı'nda **canlı harita önizlemesi**: koordinatlar yapıştırılırken
+  ve özet adımında çizilecek hat haritada görünür — yeni hat turuncu, mevcut
+  topoloji soluk gri, branşman adayı kesikli mavi halka; harita direklere
+  otomatik sığar.
+
+---
+
 ## [2.53.16] — 2026-08-06
 
 ### Eklendi

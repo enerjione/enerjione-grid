@@ -29890,6 +29890,15 @@ th.event-col-category {
   resize: vertical;
 }
 
+/* Onizleme haritasi — modal icinde sabit yukseklik, kose yumusatma. */
+.grid-qa-map {
+  height: 240px;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
 .grid-qa-coord-status { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: #64748b; }
 .grid-qa-coord-status > span { display: inline-flex; align-items: center; gap: 5px; }
 .grid-qa-coord-status .material-symbols-outlined { font-size: 16px; }
