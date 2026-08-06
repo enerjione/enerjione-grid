@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchDeviceCommands } from "../../shared/api";
+import { signalLabel } from "../../shared/signalLabel";
 import { formatDateTime, formatRelative } from "../../shared/format";
 import type { DeviceCommandRow, SignalCatalogRow } from "../../shared/types";
 import { usePolling } from "../../shared/usePolling";
@@ -96,7 +97,7 @@ export function DeviceCommandsPanel({
       .map((s) => {
         const slug = s.key.replace(/^master\./, "");
         const meta = CMD_META[slug] ?? DEFAULT_META;
-        return { slug, label: s.label, icon: meta.icon, group: meta.group, order: s.display_order };
+        return { slug, label: signalLabel(s.key, s.label), icon: meta.icon, group: meta.group, order: s.display_order };
       })
       .sort((a, b) => a.order - b.order);
   }, [signals]);

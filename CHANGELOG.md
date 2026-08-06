@@ -14,6 +14,26 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.11] — 2026-08-06
+
+### Eklendi
+
+- **Sinyal adları i18n**: 95 Horstmann sinyali Türkçe adlandırıldı (Mevcut
+  Durum, Canlı Değerler, grafikler ve komut listesi). Sinyal anahtarları
+  sabittir; çeviri cihaz önekinden arındırılmış sonek üzerinden bulunur,
+  sözlükte olmayan sinyal katalog adıyla görünmeye devam eder.
+
+### Değişti
+
+- **Uzaktan Bakım sayfası uygulamanın ortak görsel diline taşındı**: şalter
+  grafiği, degrade ve hale efektleri kaldırıldı; kartlar diğer sayfalarla
+  aynı ölçü/renkte. Kart yerleşimi sabit — uzayan içerik kartın içinde
+  kayar. Tailnet bilgileri durum bloğunda küçük çipler halinde; "İzin
+  verdiğinizde ne olur" sağ sütuna kompakt kart olarak alındı; geri sayım
+  gösterge gibi (monospace) ve izin düğmesi tam genişlik.
+
+---
+
 ## [2.53.10] — 2026-08-06
 
 ### Değişti

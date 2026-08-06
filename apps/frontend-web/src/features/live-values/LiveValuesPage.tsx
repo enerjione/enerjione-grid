@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { TablePagination } from "../../components/TablePagination";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { usePolling } from "../../shared/usePolling";
+import { signalLabel } from "../../shared/signalLabel";
 import type {
   DeviceRow,
   Gateway,
@@ -307,6 +308,9 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
       if (!q) return true;
       return (
         row.signal_label.toLowerCase().includes(q) ||
+        // Cevrilmis ad da aranabilir olmali — kullanici ekranda gordugu
+        // Turkce adi yazarak filtreleyebilsin.
+        signalLabel(row.signal_key, row.signal_label).toLowerCase().includes(q) ||
         row.signal_key.toLowerCase().includes(q) ||
         row.device_code.toLowerCase().includes(q) ||
         row.device_name.toLowerCase().includes(q)
@@ -487,7 +491,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                     </span>
                   </td>
                   <td>
-                    <div className="cell-strong">{row.signal_label}</div>
+                    <div className="cell-strong">{signalLabel(row.signal_key, row.signal_label)}</div>
                     <div className="cell-helper">{row.signal_key}</div>
                   </td>
                   <td className="cell-center">

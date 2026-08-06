@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Imajla birlikte paketlenen surum. Kok dizindeki VERSION dosyasi ve
 # apps/frontend-web/package.json ile AYNI olmali; release CI ucunu de
 # birbirine karsi dogrular.
-_FALLBACK_APP_VERSION = "2.53.10"
+_FALLBACK_APP_VERSION = "2.53.11"
 
 
 # Production'da reddedilen placeholder secret prefix'leri. Settings constructor
@@ -686,6 +686,17 @@ class Settings(BaseSettings):
     # bile izin kapanmali, bu yuzden son tarih DB'de DEGIL ajanin lease
     # dosyasinda (root:root 0700, /var/lib/e1-grid/remote-priv) tutulur.
     remote_access_state_dir: str = "/var/lib/e1-grid/remote"
+
+    # Guvenlik duvari ajani (e1-fwd) ile paylasilan dizin. Backend buraya
+    # SADECE request.json yazar (istenen yapilandirmanin tamami); state.json/
+    # status.json okur. iptables'i CALISTIRMAZ — komutlari host'ta root ile
+    # calisan ajan yurutur ve istegi bagimsiz dogrular.
+    #
+    # Duvar VARSAYILAN KAPALIDIR. Web arayuzu (80/443), SSH (22) ve uzaktan
+    # bakim tuneli ajanda SABIT acik tutulur (kilitlenme korumasi); kullanici
+    # kurali bunlari ezemez. Yetkili yapilandirma DB'de DEGIL ajanin config
+    # dosyasinda (root:root 0700, /var/lib/e1-grid/fw-priv) tutulur.
+    firewall_state_dir: str = "/var/lib/e1-grid/fw"
 
     # Site basina ust sinir (dakika). Semadaki ve ajandaki mutlak tavan 1440
     # (24 saat); bu ayar yalnizca DAHA DUSUGE cekebilir, yukari cikaramaz —

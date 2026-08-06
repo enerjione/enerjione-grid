@@ -35081,17 +35081,18 @@ th.event-col-category {
  * Ayarlari'ni da aciyor, iki sayfa ayni urunden gozukmeli.
  */
 .rad-page {
-  /* Panel kapsamli degiskenler (.license-panel deseni) — sayfa disina
-     sizmasin diye burada tanimli. */
-  --rad-ink: #172033;
+  /* Panel kapsamli degiskenler. Renkler UYGULAMANIN ORTAK PALETI:
+     kartlar net-card (#e2e8f0), ACIK hali net-banner--warn tonlari.
+     Ozel palet + degrade/hale efektleri sayfayi baska bir yazilim gibi
+     gosteriyordu ve kaldirildi (2026-08-06). ACIK amber, kirmizi DEGIL:
+     "acik" bir hata degil, dikkat gerektiren normal bir durum. */
+  --rad-ink: #0f172a;
   --rad-muted: #64748b;
-  --rad-line: #d9e1ec;
-  --rad-accent: #e97800;
-  /* ACIK hali amber. Kirmizi DEGIL: "acik" bir hata degil, dikkat
-     gerektiren normal bir durum. */
-  --rad-on-bg: #fff8ed;
-  --rad-on-line: #f6c98d;
-  --rad-on-ink: #9a4c07;
+  --rad-line: #e2e8f0;
+  --rad-accent: #d97706;
+  --rad-on-bg: #fffbeb;
+  --rad-on-line: #fde68a;
+  --rad-on-ink: #b45309;
 
   display: flex;
   flex-direction: column;
@@ -35105,101 +35106,32 @@ th.event-col-category {
   overflow: hidden;
 }
 
-/* ---------- SALTER blogu ---------- */
+/* ---------- Durum blogu ----------
+   Diger sayfalardaki kartlarla AYNI dil: duz beyaz, ayni kenarlik ve
+   yaricap. ACIK hali net-banner--warn tonlariyla ayrisir — degrade, hale
+   ve dekoratif salter grafigi kaldirildi. */
 .rad-switch {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 18px;
   flex-shrink: 0;
-  padding: 20px 22px;
+  padding: 18px 20px;
   border: 1px solid var(--rad-line);
-  /* Sol kenar seridi KALDIRILDI: sayfadaki tek ana blok oldugu icin
-     "hangi kategori" demeye gerek yok; renk zaten durumu soyluyordu ve
-     dort piksellik sert cubuk bloku bir uyari kutusu gibi gosteriyordu. */
-  border-radius: 16px;
-  background: linear-gradient(180deg, #ffffff, #f8fafc);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
-/* ACIK: sicak bir hale. Renk zaten amber (kirmizi degil — "acik" bir hata
-   degil, dikkat gerektiren normal bir durum); hale onu bagirmadan one
-   cikariyor. */
 .rad-switch.is-on {
-  background: linear-gradient(180deg, var(--rad-on-bg), #fffdf9);
+  background: var(--rad-on-bg);
   border-color: var(--rad-on-line);
-  box-shadow:
-    0 1px 2px rgba(154, 76, 7, 0.06),
-    0 0 0 4px rgba(233, 120, 0, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .rad-switch.is-unknown,
 .rad-switch.is-loading {
   background: #fbfcfe;
-  border-left-color: #e2e8f0;
   border-style: dashed;
-}
-
-/* --- Sebeke salteri grafigi: I (acik) ustte, O (kapali) altta ---
-   Dekoratif; asil bilgi yanindaki metinde. Operatorun zihnindeki fiziksel
-   salterle ayni dil. */
-.rad-breaker {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-shrink: 0;
-}
-
-.rad-breaker-marks {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 76px;
-  padding: 3px 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
-}
-
-.rad-breaker-track {
-  position: relative;
-  width: 44px;
-  height: 76px;
-  border-radius: 10px;
-  background: #e8edf4;
-  border: 1px solid var(--rad-line);
-  box-shadow: inset 0 1px 4px rgba(15, 23, 42, 0.14);
-  transition: background 0.3s ease, border-color 0.3s ease;
-}
-
-.rad-breaker-knob {
-  position: absolute;
-  left: 5px;
-  right: 5px;
-  height: 32px;
-  /* KAPALI: kol asagida. Gecis akilda kalsin diye hafif yayli. */
-  top: 37px;
-  border-radius: 7px;
-  background: linear-gradient(180deg, #ffffff, #eef2f7);
-  border: 1px solid #cbd5e1;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
-  transition: top 0.32s cubic-bezier(0.22, 0.9, 0.3, 1.12),
-    background 0.3s ease, border-color 0.3s ease;
-}
-
-.rad-switch.is-on .rad-breaker-track {
-  background: #fde8cb;
-  border-color: var(--rad-on-line);
-}
-
-.rad-switch.is-on .rad-breaker-knob {
-  top: 5px;
-  background: linear-gradient(180deg, #ffffff, #ffeacd);
-  border-color: #edb877;
 }
 
 .rad-switch-body {
@@ -35210,23 +35142,22 @@ th.event-col-category {
   flex: 1;
 }
 
+/* Durum rozeti — diger sayfalardaki .net-chip ile ayni gorunum. */
 .rad-switch-pill {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   align-self: flex-start;
-  padding: 3px 10px 3px 8px;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: #eef2f7;
+  background: #f1f5f9;
   color: var(--rad-muted);
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .rad-switch.is-on .rad-switch-pill {
-  background: #fde8cb;
+  background: var(--rad-on-line);
   color: var(--rad-on-ink);
 }
 
@@ -35249,14 +35180,12 @@ th.event-col-category {
 }
 
 .rad-switch-body h2 {
-  letter-spacing: -0.02em;
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 1.18rem;
-  font-weight: 750;
-  letter-spacing: -0.01em;
+  font-size: 1.05rem;
+  font-weight: 650;
   color: var(--rad-ink);
 }
 
@@ -35341,6 +35270,50 @@ th.event-col-category {
 
 .rad-revoke-btn { white-space: nowrap; }
 
+/* Geri sayim: buyuk, monospace — saat bilgisi bir "gosterge" gibi okunmali. */
+.rad-countdown strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--rad-on-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rad-countdown span {
+  font-size: 11px;
+  color: var(--rad-muted);
+}
+
+/* Cihazin bakim agindaki kimligi — durum blogunda kucuk cipler. */
+.rad-switch-device {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-top: 4px;
+}
+
+.rad-device-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-size: 11.5px;
+  color: #334155;
+}
+
+.rad-device-chip b {
+  font-weight: 600;
+  color: var(--rad-muted);
+  font-size: 10.5px;
+}
+
+.rad-device-chip.is-ok { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.rad-device-chip.is-off { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+
 /* ---------- Iki sutun ---------- */
 .rad-columns {
   display: grid;
@@ -35355,14 +35328,15 @@ th.event-col-category {
   min-height: 0;
 }
 
+/* Kartlar .net-card ile AYNI olcu ve renkte — sayfalar arasi tutarlilik. */
 .rad-card {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: 16px;
+  padding: 18px 20px;
   background: #fff;
   border: 1px solid var(--rad-line);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   min-width: 0;
 }
@@ -35557,6 +35531,36 @@ th.event-col-category {
   justify-content: flex-end;
 }
 
+/* Izin dugmesi belirgin ve tam genislik — sayfanin tek ana eylemi. */
+.rad-grant-btn {
+  width: 100%;
+  justify-content: center;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-size: 14px;
+}
+
+/* SABIT YERLESIM (kullanici istegi): kartlarin yeri ve yuksekligi icerige
+   gore OYNAMAZ — sutunlar ekrani doldurur, uzayan icerik kartin ICINDE
+   kayar. Sayfa duzeyinde kaydirma yok. */
+.rad-columns > .rad-card {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Sag sutun: gecmis + "ne olur" alt alta; gecmis artan alani alir. */
+.rad-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.rad-col .rad-log { flex: 1; }
+.rad-col .rad-explain { flex-shrink: 0; gap: 10px; }
+.rad-col .rad-explain-list { gap: 10px; }
+
 .rad-grant-btn {
   display: inline-flex;
   align-items: center;
@@ -35568,8 +35572,12 @@ th.event-col-category {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  /* Karti DOLDURUR: kart yuksekligi sutunla esitlenince altta olu bosluk
+     kaliyordu; icerik dikeyde ortalanip alani kullanir. */
+  flex: 1;
   gap: 8px;
-  padding: 26px 18px;
+  padding: 22px 18px;
   text-align: center;
   border: 1px dashed #d3dbe7;
   border-radius: 10px;
@@ -37327,19 +37335,6 @@ th.event-col-category {
   overflow: hidden;
 }
 
-.ft-header h2 {
-  margin: 0 0 4px;
-  font-size: 1.15rem;
-  color: #0f172a;
-}
-
-.ft-header p {
-  margin: 0;
-  font-size: 13px;
-  color: #64748b;
-  max-width: 720px;
-}
-
 .ft-grid {
   display: grid;
   grid-template-columns: minmax(360px, 1.2fr) minmax(300px, 1fr);
@@ -37383,11 +37378,6 @@ th.event-col-category {
   font-size: 0.95rem;
   font-weight: 700;
   color: #172033;
-}
-
-.ft-card-head h3 .material-symbols-outlined {
-  font-size: 19px;
-  color: #e97800;
 }
 
 .ft-card-head > small {
@@ -37442,20 +37432,6 @@ th.event-col-category {
   height: 36px;
 }
 
-.ft-ping-btn .material-symbols-outlined {
-  font-size: 18px;
-}
-
-.ft-spin {
-  animation: ft-rotate 1s linear infinite;
-}
-
-@keyframes ft-rotate {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* --- Sonuc --- */
 .ft-result {
   display: flex;
@@ -37472,10 +37448,6 @@ th.event-col-category {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
-}
-
-.ft-result-badge .material-symbols-outlined {
-  font-size: 18px;
 }
 
 .ft-result-badge code {
@@ -37652,6 +37624,169 @@ th.event-col-category {
   cursor: default;
 }
 
-.ft-device-test-btn .material-symbols-outlined {
-  font-size: 16px;
+
+/* --- Saha Araclari: arac sekmeleri + tarama + ek sonuc gorunumleri --- */
+.ft-tools {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+
+.ft-tool-tab {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ft-tool-tab:hover {
+  color: #0f172a;
+}
+
+.ft-tool-tab.active {
+  background: #fff;
+  color: #9a4c07;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.ft-tool-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.ft-result-badge.is-neutral {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.ft-trace-output {
+  margin: 0;
+  padding: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ft-dns-addresses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ft-dns-addresses code {
+  font-size: 12.5px;
+  color: #334155;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+
+.ft-scan-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ft-scan-bar .ft-device-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.ft-scan-btn {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid #e97800;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #9a4c07;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.ft-scan-btn:hover:not(:disabled) {
+  background: #fffaf3;
+}
+
+.ft-scan-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ft-scan-btn.is-stop {
+  border-color: #dc2626;
+  color: #b91c1c;
+}
+
+.ft-scan-btn.is-stop:hover {
+  background: #fef2f2;
+}
+
+.ft-scan-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.ft-scan-progress-track {
+  flex: 1;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ft-scan-progress-fill {
+  height: 100%;
+  background: #e97800;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.ft-scan-badges {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ft-scan-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ft-scan-badge.is-ok {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.ft-scan-badge.is-fail {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
 }

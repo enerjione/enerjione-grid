@@ -26,6 +26,7 @@ import {
 import { CanvasRenderer } from "echarts/renderers";
 
 import { fetchDeviceHistory, API_BASE_URL } from "../../shared/api";
+import { signalLabel } from "../../shared/signalLabel";
 import { useLiveValuesSocket } from "../../shared/useLiveValuesSocket";
 import type {
   HistoryBucket,
@@ -139,7 +140,7 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       if (!s.is_active) continue;
       const suf = suffixOf(s.key);
       if (NON_TREND_RE.test(suf)) continue; // grafige uygun degil
-      const e = m.get(suf) ?? { label: s.label, unit: s.unit ?? null, sources: new Set<SignalSource>() };
+      const e = m.get(suf) ?? { label: signalLabel(s.key, s.label), unit: s.unit ?? null, sources: new Set<SignalSource>() };
       e.sources.add(s.source);
       m.set(suf, e);
     }

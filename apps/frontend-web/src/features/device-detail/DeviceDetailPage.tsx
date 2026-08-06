@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useTranslation } from "react-i18next";
 
 import { fetchAlarmEvents } from "../../shared/api";
+import { signalLabel } from "../../shared/signalLabel";
 import { signalTrust } from "../../shared/signalQuality";
 import type { AlarmEvent } from "../../shared/types";
 
@@ -639,7 +640,9 @@ function StatusItem({
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const suffix = suffixOf(row.signal_key);
-  const label = row.signal_label || suffix;
+  // Katalog adi Ingilizce girildigi icin ceviri SONEK uzerinden yapilir;
+  // sozlukte olmayan sinyal katalog adiyla gorunmeye devam eder.
+  const label = signalLabel(row.signal_key, row.signal_label);
   const dt = (row.effType as string | undefined) ?? (row.data_type as string | undefined);
   const isBinary = dt === "binary" || dt === "binary_output";
 

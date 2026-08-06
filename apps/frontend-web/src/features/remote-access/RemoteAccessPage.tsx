@@ -11,10 +11,12 @@
  * state.json'a yazar. Bu sayfa yalnizca o durumu okur, 202'den sonra sonuc bir
  * sonraki yoklamada gorunur.
  *
- * TASARIM — "SALTER": sayfanin iki belirgin hali var (KAPALI / ACIK) ve gecis
- * anlasilir olsun diye ust blok gorsel olarak donusuyor. ACIK halde kahraman
- * oge GERI SAYIM'dir; kalan sure sunucudan gelir, yerelde saniye saniye akar
- * ve her yoklamada resenkron olur (saha PC'lerinde istemci saati guvenilmez).
+ * TASARIM: ust blok sayfanin tek ana mesaji (KAPALI / ACIK) — ama gorsel dil
+ * uygulamanin GERI KALANIYLA AYNI (duz beyaz kart, net-card paleti). Onceki
+ * "sebeke salteri" grafigi + degrade/hale efektleri sayfayi baska bir yazilim
+ * gibi gosteriyordu ve kaldirildi (kullanici istegi, 2026-08-06). ACIK halde
+ * kahraman oge GERI SAYIM'dir; kalan sure sunucudan gelir, yerelde saniye
+ * saniye akar ve her yoklamada resenkron olur (istemci saati guvenilmez).
  *
  * Metin tonu: bu ekrani MUSTERI okur ve "uretici firmaya erisim veriyorum"
  * karari verir. Jargon (tailnet/SSH/daemon) YOK; ne verildigi duz Turkce.
@@ -381,20 +383,8 @@ export function RemoteAccessPage({ accessToken }: Props) {
 
   return (
     <section className="tab-panel rad-page">
-      {/* ================= SALTER — sayfanin tek ana mesaji ================= */}
+      {/* ================= Durum blogu — sayfanin tek ana mesaji ============ */}
       <div className={`rad-switch is-${mode}`}>
-        {/* Sebeke salteri metaforu: I = acik, O = kapali. Dekoratif; asil
-            bilgi yanindaki metinde. */}
-        <span className="rad-breaker" aria-hidden="true">
-          <span className="rad-breaker-marks">
-            <b>I</b>
-            <b>O</b>
-          </span>
-          <span className="rad-breaker-track">
-            <span className="rad-breaker-knob" />
-          </span>
-        </span>
-
         <div className="rad-switch-body">
           <span className="rad-switch-pill">
             <span className="rad-dot" aria-hidden="true" />
@@ -453,6 +443,30 @@ export function RemoteAccessPage({ accessToken }: Props) {
                 </li>
               ) : null}
             </ul>
+          ) : null}
+
+          {/* Cihazin bakim agindaki kimligi — KUCUK cipler halinde durum
+              blogunun icinde. Ayri bir tablo bolumu sayfanin dibinde
+              kaybolup gidiyordu (kullanici istegi). */}
+          {available ? (
+            <div className="rad-switch-device">
+              <span className="rad-device-chip">
+                <b>{t("remoteAccess.device.name")}</b>
+                {status?.tailscale.hostname ?? "—"}
+              </span>
+              <span className="rad-device-chip">
+                <b>{t("remoteAccess.device.address")}</b>
+                {status?.tailscale.ipv4 ?? "—"}
+              </span>
+              <span className={`rad-device-chip ${registered ? "is-ok" : "is-off"}`}>
+                <b>{t("remoteAccess.device.link")}</b>
+                {t(
+                  registered
+                    ? "remoteAccess.device.linkRegistered"
+                    : "remoteAccess.device.linkMissing"
+                )}
+              </span>
+            </div>
           ) : null}
         </div>
 
@@ -673,11 +687,11 @@ export function RemoteAccessPage({ accessToken }: Props) {
           )}
         </section>
 
-        {/* ---- SAG: son islemler ----
-             Kullanici istegi: gecmis sagda dursun, "ne olur" aciklamasi
-             en altta tam genislikte. Denetim satirlari kisa oldugu icin dar
-             sutuna oturuyor; aciklama metinleri genis alanda daha rahat
-             okunuyor ve sag sutundaki buyuk bosluk kapaniyor. */}
+        {/* ---- SAG SUTUN: son islemler + "ne olur" ----
+             "Ne olur" karti en alttan buraya tasindi (kullanici istegi):
+             tam genislik seridi sayfayi uzatiyordu; sag sutunda gecmisin
+             altina kompakt oturuyor ve sutun boslugunu dolduruyor. */}
+        <div className="rad-col">
         <section className="rad-card rad-log">
           <header className="rad-card-head">
             <h3>
@@ -736,72 +750,48 @@ export function RemoteAccessPage({ accessToken }: Props) {
             </ul>
           )}
         </section>
-      </div>
 
-      {/* ================= Izin verdiginizde ne olur? =================
-           EN ALTTA ve TAM GENISLIKTE: musteri burada guvenlik karari
-           veriyor, metinlerin sikismamasi gerekiyor. */}
-      <section className="rad-card rad-explain rad-explain--wide">
-        <header className="rad-card-head">
-          <h3>{t("remoteAccess.explain.title")}</h3>
-        </header>
-        <ul className="rad-explain-list">
-          <li>
-            <span className="rad-explain-icon">
-              <Headset size={17} />
-            </span>
-            <span>
-              <strong>{t("remoteAccess.explain.whoTitle")}</strong>
-              <small>{t("remoteAccess.explain.whoText")}</small>
-            </span>
-          </li>
-          <li>
-            <span className="rad-explain-icon">
-              <Timer size={17} />
-            </span>
-            <span>
-              <strong>{t("remoteAccess.explain.howLongTitle")}</strong>
-              <small>
-                {t("remoteAccess.explain.howLongText", {
-                  max: formatDurationMinutes(maxMinutes, t)
-                })}
-              </small>
-            </span>
-          </li>
-          <li>
-            <span className="rad-explain-icon">
-              <Lock size={17} />
-            </span>
-            <span>
-              <strong>{t("remoteAccess.explain.afterTitle")}</strong>
-              <small>{t("remoteAccess.explain.afterText")}</small>
-            </span>
-          </li>
-        </ul>
-
-        {/* Cihazin bakim agindaki kimligi — teknik ama musteri "hangi cihaz"
-            sorusunun cevabini gormeli. */}
-        <div className="rad-device">
-          <div>
-            <span>{t("remoteAccess.device.name")}</span>
-            <strong>{status?.tailscale.hostname ?? "—"}</strong>
-          </div>
-          <div>
-            <span>{t("remoteAccess.device.address")}</span>
-            <strong>{status?.tailscale.ipv4 ?? "—"}</strong>
-          </div>
-          <div>
-            <span>{t("remoteAccess.device.link")}</span>
-            <strong className={registered ? "is-ok" : "is-off"}>
-              {t(
-                registered
-                  ? "remoteAccess.device.linkRegistered"
-                  : "remoteAccess.device.linkMissing"
-              )}
-            </strong>
-          </div>
+        {/* Izin verdiginizde ne olur? — kompakt bilgi karti. */}
+        <section className="rad-card rad-explain">
+          <header className="rad-card-head">
+            <h3>{t("remoteAccess.explain.title")}</h3>
+          </header>
+          <ul className="rad-explain-list">
+            <li>
+              <span className="rad-explain-icon">
+                <Headset size={16} />
+              </span>
+              <span>
+                <strong>{t("remoteAccess.explain.whoTitle")}</strong>
+                <small>{t("remoteAccess.explain.whoText")}</small>
+              </span>
+            </li>
+            <li>
+              <span className="rad-explain-icon">
+                <Timer size={16} />
+              </span>
+              <span>
+                <strong>{t("remoteAccess.explain.howLongTitle")}</strong>
+                <small>
+                  {t("remoteAccess.explain.howLongText", {
+                    max: formatDurationMinutes(maxMinutes, t)
+                  })}
+                </small>
+              </span>
+            </li>
+            <li>
+              <span className="rad-explain-icon">
+                <Lock size={16} />
+              </span>
+              <span>
+                <strong>{t("remoteAccess.explain.afterTitle")}</strong>
+                <small>{t("remoteAccess.explain.afterText")}</small>
+              </span>
+            </li>
+          </ul>
+        </section>
         </div>
-      </section>
+      </div>
 
       {/* ================= Onay modali — TEK surtunme noktasi ================= */}
       {confirmOpen && effectiveMinutes !== null ? (
