@@ -30008,6 +30008,12 @@ th.event-col-category {
 .grid-qa-chip.is-active { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .grid-qa-chip .material-symbols-outlined { font-size: 16px; }
 
+.grid-qa-chip-coord {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
 .grid-qa-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: #475569; }
 .grid-qa-field > span { font-weight: 600; }
 .grid-qa-field--inline { flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }

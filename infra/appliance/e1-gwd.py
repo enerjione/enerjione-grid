@@ -595,6 +595,43 @@ def _container_info(code: str) -> dict:
     }
 
 
+#: compose dosyasindaki `image:` satiri (ilk eslesme yeter — sablonda tek
+#: servis var). Yorumlar ve tirnaklar ayiklanir.
+_COMPOSE_IMAGE_RE = re.compile(r"^\s*image:\s*['\"]?([^'\"#\s]+)", re.MULTILINE)
+
+
+def _compose_image(code: str) -> str:
+    """Gateway'in TAKIP ETTIGI imaj referansi (compose dosyasindan).
+
+    NEDEN `docker ps` CIKTISI DEGIL:
+      Guncelleme kontrolu "operator hangi etiketi izliyor" sorusuna gore
+      yapilmali. `docker ps --format {{.Image}}` ise container'in YARATILDIGI
+      andaki cozulmus referansi verir; bu deger digest'e sabitlenmis
+      (`repo@sha256:...`) ya da etiket baska imaja kayinca ham imaj ID'si
+      olabilir. Ikisinde de uzak digest sorgusu KENDI digest'ini geri
+      dondurur ve karsilastirma HER ZAMAN "guncel" cikar.
+
+      Sahada tam bu yasandi: kayit defterinde `:latest` 1.6.1'e tasinmisken
+      cihaz 1.5.0 calistirip "Guncel" diyordu — yani yeni surum yayinlandigi
+      halde guncelleme HIC gorunmuyordu.
+
+    Digest'e sabitlenmis referans gelirse (`repo:tag@sha256:...`) digest
+    kismi ATILIR: takip edilen sey etikettir, o anki digest degil.
+    """
+    path = _compose_path(code)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            govde = fh.read(MAX_COMPOSE_BYTES)
+    except OSError:
+        return ""
+    m = _COMPOSE_IMAGE_RE.search(govde)
+    if not m:
+        return ""
+    ref = m.group(1).strip()
+    # `repo:tag@sha256:...` -> `repo:tag`;  `repo@sha256:...` -> `repo`
+    return ref.split("@", 1)[0]
+
+
 def build_state() -> dict:
     compose = _compose_cmd()
     gateways = []
@@ -604,10 +641,19 @@ def build_state() -> dict:
         # Guncelleme kontrolu. `update_available` UCUNCU BIR DURUM tasir:
         # None = BILINMIYOR (kayit defterine ulasilamadi). False ile ayni
         # sayilmamali — "guncel" demek, sormadan verilmis bir iddia olurdu.
+        # YEREL: calisan container'in imaji (ne kosuyor).
+        # UZAK : compose'da yazan ETIKET (ne izleniyor) — bkz. _compose_image.
+        # Ikisini ayirmak sart: ayni referans uzerinden sorulursa cevap her
+        # zaman "guncel" cikar ve yeni surum hic gorunmez.
+        takip = _compose_image(code) or (info.get("image") or "")
         yerel = _local_digest(info.get("image") or "")
-        uzak = _remote_digest(info.get("image") or "")
+        uzak = _remote_digest(takip)
         info["image_digest"] = yerel
         info["remote_digest"] = uzak
+        # Hangi referansa bakildigini DISARI ver: "neden guncelleme cikmiyor"
+        # sorusu cihaza girmeden cevaplanabilsin (or. surume sabitlenmis
+        # bir etiket izleniyorsa bu ekranda gorunur).
+        info["tracked_image"] = takip
         info["update_available"] = (
             None if (not yerel or not uzak) else (yerel != uzak)
         )
@@ -619,9 +665,7 @@ def build_state() -> dict:
         # yalnizca GOSTERIM icin. Etiket eksik ya da okunamazsa alan bos
         # kalir, guncelleme mantigi bundan etkilenmez.
         info["local_version"] = _local_version(info.get("image") or "")
-        info["remote_version"] = (
-            _remote_version(info.get("image") or "") if uzak else ""
-        )
+        info["remote_version"] = _remote_version(takip) if uzak else ""
         info["code"] = code
         info["name"] = meta.get("name")
         info["installed_at"] = meta.get("installed_at")

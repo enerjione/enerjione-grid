@@ -26,6 +26,12 @@ import {
   type GridSnapshot,
 } from "../../shared/api";
 import type { Region } from "../../shared/types";
+import {
+  dalIstatistik,
+  dallariDuzlestir,
+  topolojiCikar,
+  type TNokta,
+} from "./topologyInfer";
 
 /** Iki koordinat arasi mesafe (metre) — haversine. Bransman tahmini icin
  *  hassasiyet fazlasiyla yeterli. */
@@ -101,11 +107,15 @@ function QaPreviewMap({
   branches = [],
   snapshot,
   branchGuess,
+  drawLine = true,
 }: {
   poles: Array<{ lat: number; lon: number }>;
-  branches?: Array<{ fromSeq: number; poles: Nokta[] }>;
+  branches?: Array<{ from: Nokta; poles: Nokta[]; depth?: number }>;
   snapshot: GridSnapshot | null;
   branchGuess: { lat: number; lon: number } | null;
+  /** false: noktalar henuz SIRASIZ (topoloji cikarilmadan once) — yaniltici
+   *  cizgi cizme, yalnizca noktalari goster. */
+  drawLine?: boolean;
 }) {
   // Mevcut hatlarin cizgileri (line_id -> sirali koordinatlar).
   const existing = useMemo(() => {
@@ -138,22 +148,22 @@ function QaPreviewMap({
           <Polyline key={i} positions={pts} pathOptions={{ color: "#94a3b8", weight: 2, opacity: 0.6 }} />
         ) : null
       )}
-      {yeni.length >= 2 ? (
+      {drawLine && yeni.length >= 2 ? (
         <Polyline positions={yeni} pathOptions={{ color: "#ea9010", weight: 4, opacity: 0.9 }} />
       ) : null}
-      {/* Algilanan DALLAR: mavi cizgi; ana direkten dala kesikli baglanti. */}
+      {/* DALLAR: mavi cizgi; baglanti noktasindan dala. Ic ice dallar
+          acik maviye dogru solar (derinlik). */}
       {branches.map((dal, n) => {
-        const kaynak = poles[dal.fromSeq - 1];
-        if (!kaynak) return null;
         const dalPts = [
-          [kaynak.lat, kaynak.lon] as [number, number],
+          [dal.from.lat, dal.from.lon] as [number, number],
           ...dal.poles.map((p) => [p.lat, p.lon] as [number, number]),
         ];
+        const renk = (dal.depth ?? 1) >= 2 ? "#38bdf8" : "#0284c7";
         return (
           <Polyline
             key={`dal-${n}`}
             positions={dalPts}
-            pathOptions={{ color: "#0284c7", weight: 3.5, opacity: 0.9, dashArray: "6 4" }}
+            pathOptions={{ color: renk, weight: 3.5, opacity: 0.9, dashArray: "6 4" }}
           />
         );
       })}
@@ -168,7 +178,9 @@ function QaPreviewMap({
         ))
       )}
       {poles.map((p, i) => {
-        const dalKaynagi = branches.some((b) => b.fromSeq === i + 1);
+        const dalKaynagi = branches.some(
+          (b) => Math.abs(b.from.lat - p.lat) < 1e-9 && Math.abs(b.from.lon - p.lon) < 1e-9
+        );
         return (
           <CircleMarker
             key={i}
@@ -289,9 +301,8 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
     setQaLineCode(kod);
   }, [qaLineName, qaCodeTouched]);
 
-  /** Yapistirilan koordinat metninin canli cozumu: gecerli direkler + ilk
-   *  hatali satirlar + AKILLI DAL AYIKLAMA (tekrar eden nokta = geri donus,
-   *  aradaki direkler ayri bransman hatti olur). */
+  /** Yapistirilan koordinat metninin canli cozumu: gecerli noktalar +
+   *  hatali satirlar. SIRA ONEMSIZ — topoloji MST ile cikarilir (asagida). */
   const qaParsed = useMemo(() => {
     const satirlar = qaCoordText.split(/\r?\n/);
     const ham: Nokta[] = [];
@@ -305,9 +316,20 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
         badLines.push(i + 1);
       }
     }
-    const { main, branches } = dallariAyikla(ham);
-    return { poles: main, branches, badLines };
+    return { points: ham, badLines };
   }, [qaCoordText]);
+
+  /** "Hat hangi uctan basliyor?" cevabi (capin 0. veya 1. ucu). */
+  const [qaStartEnd, setQaStartEnd] = useState<0 | 1>(0);
+
+  /** MST tabanli topoloji ONERISI — makine onerir, kullanici baslangic
+   *  ucunu secip haritada onaylar. Sira/geri-donus numarasi BEKLENMEZ. */
+  const qaTopo = useMemo(
+    () => topolojiCikar(qaParsed.points as TNokta[], qaStartEnd),
+    [qaParsed.points, qaStartEnd]
+  );
+  const qaDuz = useMemo(() => dallariDuzlestir(qaTopo), [qaTopo]);
+  const qaIst = useMemo(() => dalIstatistik(qaTopo), [qaTopo]);
 
   const qaRegion = qaRegionCode === "__new__" ? qaNewRegion.trim() : qaRegionCode;
   const qaRegionOk = qaRegion.length > 0;
@@ -317,8 +339,8 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
    *  hattin diregine BRANSMAN_ESIK_M'den yakinsa en yakin adayi oner.
    *  Ayni kodlu hat (ekleme senaryosu) aday sayilmaz. */
   const qaBranchGuess = useMemo(() => {
-    if (!snapshot || qaParsed.poles.length === 0) return null;
-    const ilk = qaParsed.poles[0];
+    if (!snapshot || qaTopo.main.length === 0) return null;
+    const ilk = qaTopo.main[0];
     const lineById = new Map(snapshot.lines.map((l) => [l.id, l]));
     let enIyi:
       | { lineCode: string; lineName: string; seq: number; mesafe: number; lat: number; lon: number }
@@ -335,7 +357,7 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
       }
     }
     return enIyi;
-  }, [snapshot, qaParsed.poles, qaLineCode]);
+  }, [snapshot, qaTopo.main, qaLineCode]);
 
   // Cok yakin aday (<=60 m) varsayilan ISARETLI gelir; yine de kullanici
   // kapatabilir. Uzak aday yalnizca oneri olarak sunulur.
@@ -352,21 +374,19 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
         qaRegionCode === "__new__" ? qaNewRegion.trim() : secili?.name ?? qaRegion;
       const kod = qaLineCode.trim();
       const onek = qaNamePrefix.trim();
+      // ANA HAT: cikarilan govde. Dal baglanan direkler ROL modelinde
+      // "bransman noktasi" olarak isaretlenir.
+      const anaDalSeqleri = new Set(qaTopo.branches.map((b) => b.attachSeq));
       const result = await createGridWizardLine(accessToken, {
         region_code: qaRegion,
         region_name: bolgeAdi,
         line_code: kod,
         line_name: qaLineName.trim() || kod,
-        poles: qaParsed.poles.map((p, i) => ({
+        poles: qaTopo.main.map((p, i) => ({
           latitude: p.lat,
           longitude: p.lon,
           name: onek ? `${onek}${i + 1}` : null,
-          // Dal kaynagi direkler ROL modelinde "bransman noktasi" olarak
-          // isaretlenir; uc roller (line_start/line_end) backend'de yeni
-          // hatlar icin otomatik atanir.
-          ...(qaParsed.branches.some((b) => b.fromSeq === i + 1)
-            ? { topology_role: "branch" as const }
-            : {}),
+          ...(anaDalSeqleri.has(i + 1) ? { topology_role: "branch" as const } : {}),
         })),
         ...(qaBranchOn && qaBranchGuess
           ? {
@@ -376,32 +396,45 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
           : {}),
       });
 
-      // ALGILANAN DALLAR: her biri AYRI hat olarak eklenir ve ana hattin
-      // ilgili diregine BRANSMAN olarak baglanir. Sirali (ana hat once —
-      // bransman hedefi DB'de olmali).
-      for (let n = 0; n < qaParsed.branches.length; n++) {
-        const dal = qaParsed.branches[n];
-        await createGridWizardLine(accessToken, {
-          region_code: qaRegion,
-          region_name: bolgeAdi,
-          line_code: `${kod}-BR${n + 1}`,
-          line_name: `${qaLineName.trim() || kod} Branşman ${n + 1}`,
-          poles: dal.poles.map((p, i) => ({
-            latitude: p.lat,
-            longitude: p.lon,
-            name: onek ? `${onek}B${n + 1}-${i + 1}` : null,
-          })),
-          branch_line_code: kod,
-          branch_pole_seq: dal.fromSeq,
-        });
-      }
+      // DALLAR (ic ice): ebeveyn once olusur; kod `-BR1`, `-BR1-1`...
+      let toplamDal = 0;
+      const dalKur = async (
+        dallar: typeof qaTopo.branches,
+        parentKod: string,
+        parentAd: string,
+        onekYol: string
+      ): Promise<void> => {
+        for (let n = 0; n < dallar.length; n++) {
+          const dal = dallar[n];
+          const dalKod = `${parentKod}-${onekYol}${n + 1}`;
+          const dalAd = `${parentAd} Branşman ${onekYol.replace("BR", "")}${n + 1}`;
+          const altSeqler = new Set(dal.branches.map((b) => b.attachSeq));
+          toplamDal += 1;
+          await createGridWizardLine(accessToken, {
+            region_code: qaRegion,
+            region_name: bolgeAdi,
+            line_code: dalKod,
+            line_name: dalAd,
+            poles: dal.poles.map((p, i) => ({
+              latitude: p.lat,
+              longitude: p.lon,
+              name: onek ? `${onek}${dalKod.slice(kod.length + 1)}-${i + 1}` : null,
+              ...(altSeqler.has(i + 1) ? { topology_role: "branch" as const } : {}),
+            })),
+            branch_line_code: parentKod,
+            branch_pole_seq: dal.attachSeq,
+          });
+          await dalKur(dal.branches, dalKod, qaLineName.trim() || kod, "");
+        }
+      };
+      await dalKur(qaTopo.branches, kod, qaLineName.trim() || kod, "BR");
 
       toast.success(
-        qaParsed.branches.length > 0
+        toplamDal > 0
           ? t("engineering.grid.wizard.qaSuccessToastBranched", {
               line: kod,
               poles: result.poles_created,
-              branches: qaParsed.branches.length,
+              branches: toplamDal,
             })
           : t("engineering.grid.wizard.qaSuccessToast", {
               line: kod,
@@ -528,7 +561,7 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
           <div className="grid-wizard-qa">
             {/* Adim gostergesi */}
             <div className="grid-qa-steps">
-              {[0, 1, 2, 3].map((s) => (
+              {[0, 1, 2, 3, 4].map((s) => (
                 <span
                   key={s}
                   className={`grid-qa-step-dot${qaStep === s ? " is-active" : qaStep > s ? " is-done" : ""}`}
@@ -621,9 +654,9 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                   onChange={(e) => setQaCoordText(e.target.value)}
                 />
                 <div className="grid-qa-coord-status">
-                  <span className={qaParsed.poles.length >= 2 ? "is-ok" : ""}>
+                  <span className={qaParsed.points.length >= 2 ? "is-ok" : ""}>
                     <span className="material-symbols-outlined">location_on</span>
-                    {t("engineering.grid.wizard.qaCoordCount", { count: qaParsed.poles.length })}
+                    {t("engineering.grid.wizard.qaCoordCount", { count: qaParsed.points.length })}
                   </span>
                   {qaParsed.badLines.length > 0 ? (
                     <span className="is-bad">
@@ -636,27 +669,16 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                   ) : null}
                 </div>
 
-                {/* AKILLI DAL AYIKLAMA bilgisi: tekrar eden koordinat = geri
-                    donus; aradaki direkler ayri bransman hatti olur. */}
-                {qaParsed.branches.length > 0 ? (
-                  <p className="grid-qa-split-info">
-                    <span className="material-symbols-outlined">account_tree</span>
-                    {t("engineering.grid.wizard.qaSplitInfo", {
-                      count: qaParsed.branches.length,
-                      poles: qaParsed.branches.reduce((a, b) => a + b.poles.length, 0),
-                      seqs: qaParsed.branches.map((b) => b.fromSeq).join(", "),
-                    })}
-                  </p>
-                ) : null}
-
-                {/* CANLI HARITA ONIZLEME: yapistirdikca hat haritada cizilir;
-                    mevcut topoloji soluk gri baglam olarak gorunur. */}
-                {qaParsed.poles.length > 0 ? (
+                {/* CANLI ONIZLEME (SIRASIZ): noktalar haritada gorunur;
+                    cizgi CIZILMEZ — topoloji bir sonraki adimda cikarilip
+                    onaylanir. */}
+                {qaParsed.points.length > 0 ? (
                   <QaPreviewMap
-                    poles={qaParsed.poles}
-                    branches={qaParsed.branches}
+                    poles={qaParsed.points}
+                    branches={[]}
+                    drawLine={false}
                     snapshot={snapshot}
-                    branchGuess={qaBranchGuess}
+                    branchGuess={null}
                   />
                 ) : null}
                 <label className="grid-qa-field grid-qa-field--inline">
@@ -670,7 +692,7 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                     {qaNamePrefix.trim()
                       ? t("engineering.grid.wizard.qaNamePreview", {
                           first: `${qaNamePrefix.trim()}1`,
-                          last: `${qaNamePrefix.trim()}${Math.max(qaParsed.poles.length, 1)}`,
+                          last: `${qaNamePrefix.trim()}${Math.max(qaTopo.main.length, 1)}`,
                         })
                       : t("engineering.grid.wizard.qaNameNone")}
                   </small>
@@ -678,14 +700,65 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
               </div>
             ) : null}
 
-            {/* Adim 3 — Ozet */}
+            {/* Adim 3 — TOPOLOJI: makine onerir, kullanici onaylar.
+                MST'den cikan ana hat + dallar haritada; tek soru: hat hangi
+                uctan basliyor? (kalan her sey deterministik ve gorunur) */}
             {qaStep === 3 ? (
               <div className="grid-qa-body">
-                {/* Cizilecek hattin son hali haritada. */}
-                {qaParsed.poles.length > 0 ? (
+                <p className="helper-text">{t("engineering.grid.wizard.qaTopoHint")}</p>
+                {qaTopo.main.length > 0 ? (
                   <QaPreviewMap
-                    poles={qaParsed.poles}
-                    branches={qaParsed.branches}
+                    poles={qaTopo.main}
+                    branches={qaDuz}
+                    snapshot={snapshot}
+                    branchGuess={null}
+                  />
+                ) : null}
+                {qaTopo.endpoints ? (
+                  <div className="grid-qa-field">
+                    <span>{t("engineering.grid.wizard.qaStartQuestion")}</span>
+                    <div className="grid-qa-region-list">
+                      {([0, 1] as const).map((uc) => (
+                        <button
+                          key={uc}
+                          className={`grid-qa-chip${qaStartEnd === uc ? " is-active" : ""}`}
+                          onClick={() => setQaStartEnd(uc)}
+                        >
+                          <span className="material-symbols-outlined">
+                            {qaStartEnd === uc ? "check" : "flag"}
+                          </span>
+                          {t("engineering.grid.wizard.qaEndpoint", { no: uc + 1 })}
+                          <code className="grid-qa-chip-coord">
+                            {qaTopo.endpoints![uc].lat.toFixed(5)}, {qaTopo.endpoints![uc].lon.toFixed(5)}
+                          </code>
+                        </button>
+                      ))}
+                    </div>
+                    <small className="helper-text">
+                      {t("engineering.grid.wizard.qaStartHint")}
+                    </small>
+                  </div>
+                ) : null}
+                <p className="grid-qa-split-info">
+                  <span className="material-symbols-outlined">account_tree</span>
+                  {t("engineering.grid.wizard.qaTopoStats", {
+                    total: qaTopo.nodeCount,
+                    main: qaTopo.main.length,
+                    branches: qaIst.dal,
+                    branchPoles: qaIst.direk,
+                  })}
+                </p>
+              </div>
+            ) : null}
+
+            {/* Adim 4 — Ozet */}
+            {qaStep === 4 ? (
+              <div className="grid-qa-body">
+                {/* Cizilecek hattin son hali haritada. */}
+                {qaTopo.main.length > 0 ? (
+                  <QaPreviewMap
+                    poles={qaTopo.main}
+                    branches={qaDuz}
                     snapshot={snapshot}
                     branchGuess={qaBranchOn ? qaBranchGuess : null}
                   />
@@ -701,19 +774,19 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
                   </li>
                   <li>
                     <span>{t("engineering.grid.wizard.qaSumPoles")}</span>
-                    <strong>{qaParsed.poles.length}</strong>
+                    <strong>{qaTopo.main.length}</strong>
                   </li>
                   <li>
                     <span>{t("engineering.grid.wizard.qaSumSegments")}</span>
-                    <strong>{Math.max(qaParsed.poles.length - 1, 0)}</strong>
+                    <strong>{Math.max(qaTopo.main.length - 1, 0)}</strong>
                   </li>
-                  {qaParsed.branches.length > 0 ? (
+                  {qaIst.dal > 0 ? (
                     <li>
                       <span>{t("engineering.grid.wizard.qaSumBranches")}</span>
                       <strong>
                         {t("engineering.grid.wizard.qaSumBranchesVal", {
-                          count: qaParsed.branches.length,
-                          poles: qaParsed.branches.reduce((a, b) => a + b.poles.length, 0),
+                          count: qaIst.dal,
+                          poles: qaIst.direk,
                         })}
                       </strong>
                     </li>
@@ -754,13 +827,13 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
               >
                 {qaStep === 0 ? t("common.cancel") : t("engineering.grid.wizard.qaBack")}
               </button>
-              {qaStep < 3 ? (
+              {qaStep < 4 ? (
                 <button
                   className="grid-import-btn-primary"
                   disabled={
                     (qaStep === 0 && !qaRegionOk) ||
                     (qaStep === 1 && !qaLineOk) ||
-                    (qaStep === 2 && qaParsed.poles.length < 2)
+                    (qaStep === 2 && qaParsed.points.length < 2)
                   }
                   onClick={() => setQaStep(qaStep + 1)}
                 >
@@ -770,7 +843,7 @@ export function LineWizardModal({ accessToken, onClose, onImported }: Props) {
               ) : (
                 <button
                   className="grid-import-btn-primary"
-                  disabled={committing || qaParsed.poles.length < 2}
+                  disabled={committing || qaTopo.main.length < 2}
                   onClick={handleQaCreate}
                 >
                   <span className="material-symbols-outlined">check</span>

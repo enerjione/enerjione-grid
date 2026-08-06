@@ -2899,7 +2899,7 @@
         "qaStep0": "Bölge",
         "qaStep1": "Hat",
         "qaStep2": "Direkler",
-        "qaStep3": "Özet",
+        "qaStep3": "Topoloji",
         "qaRegionHint": "Hat hangi bölgede? Mevcut bir bölgeyi seçin ya da yeni bölge oluşturun.",
         "qaNewRegion": "Yeni bölge",
         "qaNewRegionPlaceholder": "Bölge adı (örn. Merkez)",
@@ -2930,7 +2930,13 @@
         "qaSplitInfo": "Yinelenen koordinat algılandı: {{count}} branşman ayıklandı ({{poles}} direk; ana hattın {{seqs}}. direğinden dallanıyor). Dallar ayrı hat olarak eklenip branşman bağlantısıyla bağlanacak.",
         "qaSumBranches": "Branşman hattı (otomatik)",
         "qaSumBranchesVal": "{{count}} hat, {{poles}} direk",
-        "qaSuccessToastBranched": "{{line}} hattı oluşturuldu: {{poles}} direk + {{branches}} branşman hattı bağlandı."
+        "qaSuccessToastBranched": "{{line}} hattı oluşturuldu: {{poles}} direk + {{branches}} branşman hattı bağlandı.",
+        "qaStep4": "Özet",
+        "qaTopoHint": "Topoloji koordinatlardan çıkarıldı: direkler en yakın komşusuna bağlandı, en uzun yol ana hat sayıldı, ayrılan kollar branşman oldu. Sıra ya da tekrar girmenize gerek yok — tek karar sizde: hat hangi uçtan başlıyor?",
+        "qaStartQuestion": "Hat hangi uçtan başlıyor? (fider çıkışı / besleme yönü)",
+        "qaEndpoint": "Uç {{no}}",
+        "qaStartHint": "Seçtiğiniz uç 1. direk olur; numaralar ve BAŞ/SON işaretleri ona göre dizilir. Haritadaki yeşil nokta seçili başlangıçtır.",
+        "qaTopoStats": "{{total}} direk çözüldü: ana hat {{main}} direk, {{branches}} branşman hattı ({{branchPoles}} direk). Branşman noktaları turkuaz, dallar mavi."
       },
       "typeDisconnector": "Ayırıcı (seksiyoner)",
       "typeFuseCutout": "Sigortalı ayırıcı",

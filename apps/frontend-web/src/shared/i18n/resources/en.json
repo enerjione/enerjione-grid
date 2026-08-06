@@ -2902,7 +2902,7 @@
         "qaStep0": "Region",
         "qaStep1": "Line",
         "qaStep2": "Poles",
-        "qaStep3": "Summary",
+        "qaStep3": "Topology",
         "qaRegionHint": "Which region is the line in? Pick an existing region or create a new one.",
         "qaNewRegion": "New region",
         "qaNewRegionPlaceholder": "Region name (e.g. Central)",
@@ -2933,7 +2933,13 @@
         "qaSplitInfo": "Repeated coordinate detected: {{count}} branch(es) extracted ({{poles}} poles; branching from main-line pole {{seqs}}). Branches are added as separate lines and attached via branch links.",
         "qaSumBranches": "Branch lines (automatic)",
         "qaSumBranchesVal": "{{count}} line(s), {{poles}} poles",
-        "qaSuccessToastBranched": "Line {{line}} created: {{poles}} poles + {{branches}} branch line(s) attached."
+        "qaSuccessToastBranched": "Line {{line}} created: {{poles}} poles + {{branches}} branch line(s) attached.",
+        "qaStep4": "Summary",
+        "qaTopoHint": "Topology was inferred from the coordinates: poles connect to their nearest neighbour, the longest path is the main line, side arms become branches. No ordering or repeats needed — one decision is yours: which end does the line start from?",
+        "qaStartQuestion": "Which end does the line start from? (feeder / supply side)",
+        "qaEndpoint": "End {{no}}",
+        "qaStartHint": "The chosen end becomes pole 1; numbering and START/END markers follow it. The green dot on the map is the selected start.",
+        "qaTopoStats": "{{total}} poles resolved: main line {{main}} poles, {{branches}} branch line(s) ({{branchPoles}} poles). Branch points are teal, branches blue."
       },
       "typeDisconnector": "Disconnector",
       "typeFuseCutout": "Fuse cutout",

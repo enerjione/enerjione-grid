@@ -14,6 +14,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.25] — 2026-08-06
+
+### Değişti
+
+- **Hat Sihirbazı topolojiyi artık kendisi çıkarıyor** (makine önerir,
+  insan onaylar): koordinatlar sıra/tekrar beklenmeden yapıştırılır;
+  direkler en yakın komşusuna bağlanır (minimum örten ağaç), en uzun yol
+  ana hat, ayrılan kollar branşman olur — iç içe dallar dahil. Yeni
+  "Topoloji" adımında öneri haritada gösterilir ve tek soru sorulur:
+  **hat hangi uçtan başlıyor?** Numaralar/BAŞ-SON seçime göre dizilir.
+  Eski "geri dönüş koordinatı" numarasına gerek kalmadı; dallar `-BR1`,
+  `-BR1-1`… kodlarıyla ayrı hat olarak kurulup branşman noktasına bağlanır.
+
+---
+
 ## [2.53.24] — 2026-08-06
 
 ### Değişti
