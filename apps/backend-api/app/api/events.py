@@ -368,6 +368,8 @@ def export_events(
     q: str | None = Query(default=None, max_length=200),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
+    offset: int = Query(default=0, ge=0),
+    limit: int | None = Query(default=None, ge=1, le=_EXPORT_MAX_ROWS),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -375,8 +377,9 @@ def export_events(
 
     Frontend Events sayfasinda Export modal'i bu endpoint'i cagiriyor.
     Filtre query param'lari list_events ile birebir ayni — UI'da uygulanan
-    filtreler ayni davranisi gosterir. Sayfalama YOK: filtreye uyan tum
-    kayitlar iner (ust sinir _EXPORT_MAX_ROWS).
+    filtreler ayni davranisi gosterir. Varsayilan sayfalama YOK: filtreye
+    uyan tum kayitlar iner (ust sinir _EXPORT_MAX_ROWS). PDF'te yalnizca
+    gorunen sayfa istenirse frontend offset/limit gonderir.
     """
     if fmt not in _EXPORT_FORMATS:
         raise HTTPException(

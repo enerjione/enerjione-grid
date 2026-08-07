@@ -14,6 +14,18 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.28] — 2026-08-07
+
+### Düzeltildi
+
+- **Olay export'u 500 veriyordu** (v2.53.22–v2.53.27): export endpoint'i
+  gövdede `offset/limit` kullanıyor ama imzada parametreler eksikti —
+  her CSV/JSON/XLSX/PDF indirme NameError ile düşüyordu. Parametreler
+  imzaya eklendi; PDF "yalnızca görünen sayfa" davranışı artık gerçekten
+  çalışır.
+
+---
+
 ## [2.53.27] — 2026-08-06
 
 ### Düzeltildi
