@@ -1693,6 +1693,8 @@
       "masterPort": "Master IP port",
       "masterPortInitTooltip": "In Initiating mode the port is auto-assigned",
       "masterAddr": "Master address",
+      "masterAddrAuto": "Gateway default",
+      "masterAddrHelp": "The master (link layer) address the field device EXPECTS. A wrong value silently kills communication: TCP connects but the device never replies. Leave empty to use the gateway default — if unsure, leave it empty.",
       "unsolicited": "Unsolicited reporting",
       "unsolicitedStartup": "Unsolicited reporting on startup",
       "unsolicitedClassMask": "Unsolicited class mask ID",

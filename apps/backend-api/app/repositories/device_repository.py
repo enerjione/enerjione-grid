@@ -8,6 +8,7 @@ from app.models.device_command import DeviceCommand
 from app.models.telemetry import Telemetry
 from app.models.telemetry_history import TelemetryHistory
 from app.schemas.device import DeviceCreate, DeviceUpdate
+from app.schemas.dnp3_extended import dnp3_extended_to_store
 
 # IEC 60870-5-104: 65535 yayin (broadcast) adresidir, cihaza atanamaz.
 BROADCAST_COMMON_ADDRESS = 0xFFFF
@@ -30,7 +31,14 @@ class DeviceRepository:
         return self.db.scalar(stmt)
 
     def create(self, payload: DeviceCreate) -> Device:
-        device = Device(**payload.model_dump())
+        alanlar = payload.model_dump()
+        # DNP3 ek ayarlari: yalnizca ISTEMCININ GONDERDIGI anahtarlar yazilir.
+        # Tum alanlari somutlastirmak, operatorun dokunmadigi ayarlari merkezi
+        # varsayilanlarla sabitler (2026-08-07: master_address=100 boyle
+        # yazildi ve gercek cihazin haberlesmesini kesti — bkz.
+        # schemas/dnp3_extended.py docstring'i).
+        alanlar["dnp3_extended"] = dnp3_extended_to_store(payload.dnp3_extended)
+        device = Device(**alanlar)
         if device.iec104_common_address is None:
             device.iec104_common_address = self.next_free_iec104_ca()
         self.db.add(device)
@@ -69,6 +77,18 @@ class DeviceRepository:
 
     def update(self, device: Device, payload: DeviceUpdate) -> Device:
         for key, value in payload.model_dump(exclude_unset=True).items():
+            if key == "dnp3_extended":
+                # Gonderilen anahtarlar MEVCUT kaydin uzerine biner; gonderilmeyen
+                # alan OLDUGU GIBI kalir. Tam sozluk yazmak, dokunulmamis alanlari
+                # merkezi varsayilanlarla ezerdi (bkz. create()).
+                gelen = dnp3_extended_to_store(payload.dnp3_extended)
+                if gelen is None:
+                    setattr(device, key, None)
+                else:
+                    mevcut = dict(device.dnp3_extended or {})
+                    mevcut.update(gelen)
+                    setattr(device, key, mevcut)
+                continue
             setattr(device, key, value)
         self.db.flush()
         return device

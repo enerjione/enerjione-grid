@@ -699,10 +699,30 @@ if [[ $backend_ready -eq 1 ]]; then
   seed_ok=0
   for attempt in 1 2 3 4 5; do
     # Subshell + `|| true` ile `set -e` altinda kirilmaz; cikti tee ile gosterilir.
-    seed_output="$(docker compose exec -T backend-api python -m scripts.seed_installer 2>&1)" || true
+    # `-e E1_INSTALLER_PASSWORD` (YALNIZCA AD, deger yok): docker degeri
+    # cagiranin ortamindan alir ve argv'ye KOYMAZ — parola `ps` ciktisinda
+    # gorunmez. Bu satir olmadan degisken container'a HIC ulasmiyordu;
+    # seed_installer'in belgeledigi "kuruluma ozel parola" yolu calismiyor,
+    # her kurulum 20 karakterlik rastgele parola uretip terminale basiyordu.
+    seed_output="$(docker compose exec -T -e E1_INSTALLER_PASSWORD                      backend-api python -m scripts.seed_installer 2>&1)" || true
     if echo "$seed_output" | grep -qE 'Installer user (created|password reset)'; then
       echo "$seed_output" | grep -E 'Installer user' | sed 's/^/      /'
+      # OZETTE GERCEK PAROLAYI GOSTEREBILMEK ICIN yakala. Eskiden ozet
+      # bolumu sabit "ChangeMe123!" yaziyordu; parola 2026-08-05'ten beri
+      # her kurulumda RASTGELE uretildigi icin bu metin YANLISTI ve
+      # kurulumcu giris yapamiyordu (sahada gorildu).
+      E1_INSTALLER_PW="$(printf '%s' "$seed_output" | sed -n 's/.*password=\(.*\))\.*//p' | head -1)"
       e1_ok "Installer hesabi hazir (${attempt}. denemede)."
+      seed_ok=1
+      break
+    fi
+    if echo "$seed_output" | grep -q 'Installer user already exists'; then
+      echo "$seed_output" | grep -E 'Installer user' | sed 's/^/      /'
+      # Hesap zaten var: parolayi BILMIYORUZ (idempotent kosum sifreyi
+      # resetlemez). Ozet bolumu bunu acikca soylemeli, uydurmamalı.
+      E1_INSTALLER_PW=""
+      E1_INSTALLER_EXISTING=1
+      e1_ok "Installer hesabi zaten mevcut (parola degistirilmedi)."
       seed_ok=1
       break
     fi
@@ -972,7 +992,15 @@ fi
 
 e1_box "2. ILK GIRIS"
 e1_kv "Kullanici" "${E1_CYAN}installer${E1_RESET}"
-e1_kv "Sifre" "${E1_CYAN}ChangeMe123!${E1_RESET}"
+if [[ -n "${E1_INSTALLER_PW:-}" ]]; then
+  e1_kv "Sifre" "${E1_CYAN}${E1_INSTALLER_PW}${E1_RESET}"
+  printf '  %s%sBu parola YALNIZCA burada gorunur, hicbir yerde yazili degil.%s
+'     "${E1_YELLOW}" "${E1_BOLD}" "${E1_RESET}"
+elif [[ "${E1_INSTALLER_EXISTING:-0}" == "1" ]]; then
+  e1_kv "Sifre" "${E1_DIM}(mevcut hesap — parolaniz degistirilmedi)${E1_RESET}"
+else
+  e1_kv "Sifre" "${E1_DIM}(kurulum ciktisindaki 'Installer user created' satirina bakin)${E1_RESET}"
+fi
 echo
 printf '  %s%sIlk giriste sifre degistirme ekrani otomatik acilir.%s\n' \
   "${E1_YELLOW}" "${E1_BOLD}" "${E1_RESET}"

@@ -144,10 +144,11 @@ def run() -> None:
         )
         if not disaridan:
             print(
-                "UYARI: bu parola SABIT ve kaynak kodda aciktir. Kurulumdan "
-                "sonra ilk isiniz onu degistirmek olsun — siz degistirene kadar "
-                "ayni aga erisen biri hesabi ele gecirebilir. Kuruluma ozel "
-                f"parola icin {_PASSWORD_ENV} ortam degiskenini kullanin."
+                "NOT: bu parola bu kuruluma OZEL olarak rastgele uretildi ve "
+                "yalnizca bu ciktida gorunur — hicbir yerde yazili degildir. "
+                "Simdi guvenli bir yere not edin; kaybederseniz SQL ile reset "
+                "gerekir (bkz. modul docstring'i). Toplu kurulumlarda merkezi "
+                f"parola vermek icin {_PASSWORD_ENV} ortam degiskenini kullanin."
             )
         print(
             "MUST_CHANGE_PASSWORD=True - ilk login'de degistirmeniz istenecek "

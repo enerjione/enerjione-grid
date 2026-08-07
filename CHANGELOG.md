@@ -14,6 +14,49 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.54.1] — 2026-08-07
+
+### Düzeltildi
+
+- **ASIL ARIZA — `master_address` varsayılanı haberleşmeyi kesiyordu.** Bu alanın
+  varsayılanı 100'dü ve kayıt akışı **tüm** DNP3 ek ayarlarını somutlaştırdığı
+  için, operatör ilgisiz bir alanı (örn. TCP portu) değiştirip kaydettiğinde
+  master_address diske 100 olarak yazılıyor, gateway o cihaza artık 100
+  adresiyle konuşuyordu (gateway'in kendi varsayılanı 1). DNP3 cihazları
+  beklemedikleri master adresinden gelen isteği **sessizce atar**: TCP bağlanır,
+  cihaz hiç cevap vermez — sahada `link_open → 15sn fresh frame yok → lost →
+  forced_relink` döngüsü olarak görüldü. Simülatör master adresini
+  doğrulamadığı için bu hata simülasyon testlerinde **görünmüyordu**.
+  Alan artık opsiyonel (boş = gateway kendi varsayılanını kullanır) ve
+  **yalnızca operatörün açıkça girdiği alanlar diske yazılıyor** — aynı sessiz
+  yazma riski `unsolicited_*`, `validate_source_address`, `session_timeout_*`
+  için de kapatıldı. Arayüze uyarı metni eklendi.
+- **Güncelleme gateway ayarlarını siliyordu.** `DNP3_EVENT_SCAN_INTERVAL_SEC` ve
+  `INSTALL_MODE` compose şablonlarında yoktu; ajan güncellemede compose'u kendi
+  şablonundan yeniden ürettiği için bu ayarlar her güncellemede siliniyordu.
+  Scan aralığı poll aralığına (1 sn) düşüyor, cihaz başına saniyede bir DNP3
+  isteği üretiliyordu (401 cihazda CPU %108) — yani bir güncelleme, çözülmüş
+  bir performans sorununu geri getiriyordu.
+- **Sabit imaj etiketi güncellemeyi kalıcı kilitliyordu.** Compose'a bir kez
+  sabit etiket (`:1.5.0`) yazıldığında "Güncelle" butonu onu bir daha
+  değiştiremiyordu; ekran kalıcı olarak "Güncel" diyor, yeni sürümler hiç
+  görünmüyordu. Güncelleme artık etiketi `:latest`e normalleştiriyor ve
+  compose her kalkışta imajı yeniden çekiyor (`pull_policy: always`).
+- **Kurulum çıktısı yanlış şifre gösteriyordu.** Kurulum her seferinde rastgele
+  şifre üretiyor ama özet ekranı sabit `ChangeMe123!` yazıyordu; kurulumcu
+  giriş yapamıyordu. Artık gerçek üretilen şifre gösteriliyor (hesap zaten
+  varsa "parolanız değiştirilmedi" denir, uydurulmaz). `seed_installer`
+  içindeki "bu parola sabittir" uyarısı da güncellendi.
+
+### Değişti
+
+- Poll havuzu (`MAX_PARALLEL_DEVICES`) cihaz sayısına göre ölçekleniyor
+  (taban 50, tavan 1000, %20 pay). Sabit 500'de cihaz sayısı bu değere eşit
+  olduğunda pay kalmıyor ve yavaş cihazlar slotu tutunca diğerlerine o turda
+  hiç istek gidemiyordu.
+
+---
+
 ## [2.54.0] — 2026-08-07
 
 ### Kaldırıldı

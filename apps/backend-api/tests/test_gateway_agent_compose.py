@@ -21,6 +21,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import re
+
 import pytest
 
 from app.services.gateway_compose import ComposeRenderInput, render_compose
@@ -79,6 +81,25 @@ def _backend_compose(code="GW-1", name="Saha 1", **over):
     )
 
 
+#: Iki sablonun BILINCLI olarak farkli olmasi gereken satirlari.
+#: Parity testi bunlari normalize eder; geri kalan HER SEY icin ayrisma
+#: korumasi aynen surer (sablon iki yerde oldugu icin biri guncellenip
+#: digerinin unutulmasi bu depoda defalarca yasandi).
+_BILINCLI_FARKLAR = (
+    # Ajan cihaza YERELDE kurar; indirilen dosya baska makinede kosar.
+    (re.compile(r'INSTALL_MODE:\s*"(local|remote)"'), 'INSTALL_MODE: "<mod>"'),
+    # Ajan havuzu cihaz sayisina gore olcekler (bkz. _max_parallel_devices);
+    # indirilen dosya render aninda cihaz sayisini bilmez, sabit kalir.
+    (re.compile(r'MAX_PARALLEL_DEVICES:\s*"\d+"'), 'MAX_PARALLEL_DEVICES: "<n>"'),
+)
+
+
+def _parity_normalize(body: str) -> str:
+    for desen, yerine in _BILINCLI_FARKLAR:
+        body = desen.sub(yerine, body)
+    return body
+
+
 # --- 1) Parity --------------------------------------------------------------
 @pytest.mark.parametrize(
     "over",
@@ -97,11 +118,15 @@ def _backend_compose(code="GW-1", name="Saha 1", **over):
     ],
 )
 def test_agent_and_backend_render_identical_compose(agent, over):
-    """Ajan sablonu backend sablonundan AYRISMAMIS olmali."""
+    """Ajan sablonu backend sablonundan AYRISMAMIS olmali.
+
+    Bilincli farklar (INSTALL_MODE, MAX_PARALLEL_DEVICES) normalize edilir —
+    bunlar disindaki her ayrisma HATA sayilir.
+    """
     code, name = "GW-1", "Saha 1"
     params = agent._validate_params(_params(**over))
-    from_agent = agent.render_compose(code, name, params)
-    from_backend = _backend_compose(code=code, name=name, **over)
+    from_agent = _parity_normalize(agent.render_compose(code, name, params))
+    from_backend = _parity_normalize(_backend_compose(code=code, name=name, **over))
     assert from_agent == from_backend, (
         "e1-gwd.py COMPOSE_TEMPLATE ile gateway_compose.py _COMPOSE_TEMPLATE "
         "ayrismis. Iki sablonu da guncelleyin."

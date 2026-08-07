@@ -327,6 +327,16 @@ def request_update(code: str, actor_username: str, *, nats_url: str | None = Non
     gormezden gelir; davranis geriye uyumludur.
     """
     body = _base_request("update", code, actor_username)
+    # IMAJ ETIKETI HER GUNCELLEMEDE NORMALLESTIRILIR (2026-08-07 saha bulgusu):
+    # compose'a bir kez SABIT etiket yazildiysa (orn. `:1.5.0`) ajan
+    # guncellemede mevcut etiketi geri kazanip aynen yaziyordu; "Guncelle"
+    # butonu onu bir daha degistiremiyor, ekran kalici olarak "Guncel" diyor
+    # ve yeni surumler HIC gorunmuyordu. `image` gondererek sahada
+    # sabitlenmis kurulumlar ilk guncellemede kendiliginden `:latest`e doner.
+    from app.services.gateway_compose import DEFAULT_GATEWAY_IMAGE
+
+    params: dict[str, str] = {"image": DEFAULT_GATEWAY_IMAGE}
     if nats_url and nats_url.strip():
-        body["params"] = {"nats_url": nats_url.strip()}
+        params["nats_url"] = nats_url.strip()
+    body["params"] = params
     return _write_request(body)

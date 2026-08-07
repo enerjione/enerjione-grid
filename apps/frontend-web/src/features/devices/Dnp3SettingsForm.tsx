@@ -132,9 +132,17 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideCo
                 type="number"
                 min={0}
                 max={65535}
-                value={v.master_address}
-                onChange={(e) => set({ master_address: Number(e.target.value) || 0 })}
+                value={v.master_address ?? ""}
+                placeholder={t("engineering.dnp3.masterAddrAuto")}
+                title={t("engineering.dnp3.masterAddrHelp")}
+                onChange={(e) =>
+                  set({
+                    master_address:
+                      e.target.value.trim() === "" ? null : Number(e.target.value)
+                  })
+                }
               />
+              <small className="dnp3-help">{t("engineering.dnp3.masterAddrHelp")}</small>
             </label>
           </>
         ) : null}

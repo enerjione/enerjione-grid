@@ -1690,6 +1690,8 @@
       "masterPort": "Master IP portu",
       "masterPortInitTooltip": "Initiating modunda port otomatik atanır",
       "masterAddr": "Master adres",
+      "masterAddrAuto": "Gateway varsayılanı",
+      "masterAddrHelp": "Saha cihazının BEKLEDİĞİ master (link layer) adresi. Yanlış değer haberleşmeyi tamamen keser: TCP bağlanır ama cihaz hiç cevap vermez. Boş bırakırsanız gateway kendi varsayılanını kullanır — emin değilseniz boş bırakın.",
       "unsolicited": "İstenmeyen raporlama (Unsolicited)",
       "unsolicitedStartup": "Başlangıçta istenmeyen raporlama",
       "unsolicitedClassMask": "İstenmeyen sınıf maskesi ID",

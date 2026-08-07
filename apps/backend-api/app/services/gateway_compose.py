@@ -52,6 +52,11 @@ _PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 #   * Env sirasi mantiksal: kimlik -> ortam -> backend -> telemetri ->
 #     saglik/polling -> DNP3 -> log. Rastgele sira gozden gecirmeyi
 #     zorlastiriyordu.
+#: Gateway imajinin TAKIP EDILEN etiketi. Sabit bir surume (`:1.5.0` gibi)
+#: sabitlemek guncellemeyi kalici olarak kilitler — bkz.
+#: gateway_agent_service.request_update.
+DEFAULT_GATEWAY_IMAGE = "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
+
 _COMPOSE_TEMPLATE = """\
 # EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
 # Kurulum: docker compose -f e1-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
@@ -61,6 +66,8 @@ name: e1-gw-{{GATEWAY_CODE_LOWER}}
 services:
   gateway:
     image: {{IMAGE}}
+    # Her kalkista imaji yeniden ceker (:latest tek basina yetmez).
+    pull_policy: always
     container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped
     ulimits:
@@ -86,13 +93,18 @@ services:
       WORKER_HEALTH_HOST: "0.0.0.0"
       WORKER_HEALTH_PORT: "8020"
       DEFAULT_POLL_INTERVAL_SEC: "1"
+      # Cihaz sayisina gore olceklenir; sabit deger havuzu ac birakiyordu.
       MAX_PARALLEL_DEVICES: "500"
+      # Kurulum modu (yerel/uzak) — guncellemede silinmemeli.
+      INSTALL_MODE: "remote"
       # DNP3
       DNP3_LOCAL_ADDRESS: "1"
       DNP3_TCP_PORT: "20000"
       DNP3_RESPONSE_TIMEOUT_SEC: "5"
       DNP3_READ_STRATEGY: "event_driven"
       DNP3_EVENT_BASELINE_INTERVAL_SEC: "30"
+      # Yoksa scan poll araligina duser: cihaz basina saniyede 1 istek.
+      DNP3_EVENT_SCAN_INTERVAL_SEC: "5"
       GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       # Log
       LOG_LEVEL: "INFO"
@@ -159,6 +171,7 @@ WORKER_HEALTH_PORT=8020
 CONFIG_REFRESH_SEC=30
 DEFAULT_POLL_INTERVAL_SEC=1
 MAX_PARALLEL_DEVICES=500
+INSTALL_MODE=remote
 
 # DNP3
 DNP3_LIBRARY=dnp3py
@@ -167,6 +180,7 @@ DNP3_TCP_PORT=20000
 DNP3_RESPONSE_TIMEOUT_SEC=5
 DNP3_READ_STRATEGY=event_driven
 DNP3_EVENT_BASELINE_INTERVAL_SEC=30
+DNP3_EVENT_SCAN_INTERVAL_SEC=5
 GATEWAY_PUBLISH_DNP3_QUALITY={{PUBLISH_DNP3_QUALITY}}
 
 # Log
@@ -189,7 +203,7 @@ class ComposeRenderInput:
     # `rabbitmq_url` parametresi kaldirildi (gateway artik RabbitMQ kullanmiyor).
     nats_url: str
     host_port: int = 8020
-    image: str = "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
+    image: str = DEFAULT_GATEWAY_IMAGE
     app_environment: Literal["development", "staging", "production"] = "production"
     # Initiating cihaz portu icin host tarafi baslangic (multi-gateway port
     # catismasi onleme — her gateway'e benzersiz blok 20100, 21100, ...).

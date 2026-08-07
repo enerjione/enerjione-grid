@@ -197,12 +197,18 @@ def test_update_istegi_nats_url_tasiyor(monkeypatch):
 
     monkeypatch.setattr(s, "_write_request", _yakala)
     s.request_update("GW-001", "installer", nats_url="nats://gateway:pw@h:4222")
-    assert yakalanan["params"] == {"nats_url": "nats://gateway:pw@h:4222"}
+    assert yakalanan["params"]["nats_url"] == "nats://gateway:pw@h:4222"
+    # `image` ARTIK HER GUNCELLEMEDE gonderilir: sabit etikete kilitlenmis
+    # kurulumlar (orn. `:1.5.0`) aksi halde guncellemeyle DUZELMIYOR.
+    assert yakalanan["params"]["image"].endswith(":latest")
 
 
-def test_update_istegi_nats_url_yoksa_params_gondermiyor(monkeypatch):
-    """Eski davranis korunur: URL turetilemediyse (parola bos) compose'a
-    dokunulmaz, yalnizca imaj cekilir."""
+def test_update_istegi_nats_url_yoksa_yalnizca_imaj_gonderir(monkeypatch):
+    """URL turetilemediyse (parola bos) NATS_URL'e dokunulmaz.
+
+    Ama `image` yine gonderilir — sabit etikete kilitlenmis bir kurulumun
+    ilk guncellemede normallesmesi buna bagli (2026-08-07 saha bulgusu:
+    GW-001 `:1.5.0`e sabitliydi, ekran kalici olarak "Guncel" diyordu)."""
     from app.services import gateway_agent_service as s
 
     yakalanan: dict = {}
@@ -213,10 +219,12 @@ def test_update_istegi_nats_url_yoksa_params_gondermiyor(monkeypatch):
 
     monkeypatch.setattr(s, "_write_request", _yakala)
     s.request_update("GW-001", "installer")
-    assert "params" not in yakalanan
+    assert "nats_url" not in yakalanan["params"]
+    assert yakalanan["params"]["image"].endswith(":latest")
     yakalanan.clear()
     s.request_update("GW-001", "installer", nats_url="   ")
-    assert "params" not in yakalanan
+    assert "nats_url" not in yakalanan["params"]
+    assert yakalanan["params"]["image"].endswith(":latest")
 
 
 def test_endpoint_standart_nats_url_turetiyor():

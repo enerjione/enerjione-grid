@@ -57,6 +57,11 @@ def test_env_dosyasi_da_ayni_degeri_tasiyor() -> None:
     assert "GATEWAY_PUBLISH_DNP3_QUALITY=false" in render_env(_girdi())
 
 
+#: Iki sablonun BILINCLI farklari (INSTALL_MODE, MAX_PARALLEL_DEVICES)
+#: test_gateway_agent_compose ile AYNI kuraldan gelir — tek kaynak.
+from tests.test_gateway_agent_compose import _parity_normalize  # noqa: E402
+
+
 @pytest.mark.parametrize("acik", [True, False])
 def test_ajan_ve_backend_ayni_composeyu_uretiyor(acik: bool) -> None:
     """Ajan sablonu backend'inkinden AYRISMAMIS olmali.
@@ -85,8 +90,8 @@ def test_ajan_ve_backend_ayni_composeyu_uretiyor(acik: bool) -> None:
             "publish_dnp3_quality": acik,
         }
     )
-    ajandan = ajan.render_compose("GW-1", "Saha 1", params)
-    backendden = render_compose(_girdi(publish_dnp3_quality=acik))
+    ajandan = _parity_normalize(ajan.render_compose("GW-1", "Saha 1", params))
+    backendden = _parity_normalize(render_compose(_girdi(publish_dnp3_quality=acik)))
     assert ajandan == backendden, "ajan ve backend compose sablonlari ayrismis"
 
 

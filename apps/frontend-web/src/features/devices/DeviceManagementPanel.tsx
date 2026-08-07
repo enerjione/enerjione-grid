@@ -595,7 +595,7 @@ export function DeviceManagementPanel({
         // explicit default vermeye gerek yok.
         ip_address: endpointType === "initiating" ? "0.0.0.0" : createIpAddress.trim(),
         dnp3_outstation_port: endpointType === "initiating" ? nextInitiatingMasterPort : Number(createDnp3OutstationPort),
-        dnp3_address: endpointType === "initiating" ? createDnp3Ext.master_address : Number(createDnp3Address),
+        dnp3_address: endpointType === "initiating" ? (createDnp3Ext.master_address ?? 1) : Number(createDnp3Address),
         dnp3_extended: {
           ...createDnp3Ext,
           master_ip_address: selectedGateway?.control_host || "127.0.0.1",
@@ -1321,7 +1321,7 @@ export function DeviceManagementPanel({
                           </label>
                           <label>
                             {t("engineering.dnp3.masterAddr")}
-                            <input value={dnp3Ext.master_address} disabled readOnly />
+                            <input value={dnp3Ext.master_address ?? ""} disabled readOnly />
                           </label>
                         </>
                       ) : (
@@ -1653,7 +1653,7 @@ export function DeviceManagementPanel({
                   </label>
                   <label>
                     {t("engineering.dnp3.masterAddr")}
-                    <input value={createDnp3Ext.master_address} disabled readOnly />
+                    <input value={createDnp3Ext.master_address ?? ""} disabled readOnly />
                   </label>
                 </>
               ) : (

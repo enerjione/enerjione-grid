@@ -57,6 +57,7 @@ etkilenmez.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -126,7 +127,12 @@ ALLOWED_PARAM_KEYS = frozenset({
 # uzerine yazar. Su an tek amac NATS-direkt telemetriyi STANDART kilmak —
 # eski (NATS_URL'siz / anonim URL'li) kurulumlar guncellemede kendiliginden
 # NATS'a gecer, gateway HTTP fallback'inde takili kalmaz.
-UPDATE_PARAM_KEYS = frozenset({"nats_url"})
+# `image` BURADA OLMAK ZORUNDA: yoksa _do_update compose'daki mevcut
+# etiketi geri kazanip aynen yazar ve compose'a bir kez sabit bir etiket
+# (orn. `:1.5.0`) yazilirsa "Guncelle" butonu onu BIR DAHA ASLA
+# degistiremez. Sahada gorildu: GW-001 `:1.5.0`e sabitliydi, ekran
+# kalici olarak "Guncel" diyordu, 1.6.0/1.6.1 hic gorunmedi.
+UPDATE_PARAM_KEYS = frozenset({"nats_url", "image"})
 
 # Compose sablonu — apps/backend-api/app/services/gateway_compose.py icindeki
 # `_COMPOSE_TEMPLATE` ile BIREBIR AYNI olmali. "Baska cihaza kur" akisinda
@@ -149,6 +155,8 @@ name: e1-gw-{{GATEWAY_CODE_LOWER}}
 services:
   gateway:
     image: {{IMAGE}}
+    # Her kalkista imaji yeniden ceker (:latest tek basina yetmez).
+    pull_policy: always
     container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped
     ulimits:
@@ -174,13 +182,18 @@ services:
       WORKER_HEALTH_HOST: "0.0.0.0"
       WORKER_HEALTH_PORT: "8020"
       DEFAULT_POLL_INTERVAL_SEC: "1"
-      MAX_PARALLEL_DEVICES: "500"
+      # Cihaz sayisina gore olceklenir; sabit deger havuzu ac birakiyordu.
+      MAX_PARALLEL_DEVICES: "{{MAX_PARALLEL_DEVICES}}"
+      # Kurulum modu (yerel/uzak) — guncellemede silinmemeli.
+      INSTALL_MODE: "local"
       # DNP3
       DNP3_LOCAL_ADDRESS: "1"
       DNP3_TCP_PORT: "20000"
       DNP3_RESPONSE_TIMEOUT_SEC: "5"
       DNP3_READ_STRATEGY: "event_driven"
       DNP3_EVENT_BASELINE_INTERVAL_SEC: "30"
+      # Yoksa scan poll araligina duser: cihaz basina saniyede 1 istek.
+      DNP3_EVENT_SCAN_INTERVAL_SEC: "5"
       GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       # Log
       LOG_LEVEL: "INFO"
@@ -888,6 +901,23 @@ def _initiating_ports_block(base: int, count: int) -> str:
     return f'      - "{base}-{last}:20100-{container_last}"'
 
 
+def _max_parallel_devices(device_count: object) -> int:
+    """Poll havuzu boyutu — cihaz sayisina gore, uzerine %20 pay.
+
+    SABIT 500 yaziliydi. Cihaz sayisi bu degere ESIT oldugunda hic pay
+    kalmiyor; yavas cevap veren birkac cihaz slotu tutunca digerlerine o
+    turda HIC istek gonderilemiyor (sahada: poll_pool_starved baslamayan=6
+    due=500 workers=500). Taban 50, tavan 1000.
+    """
+    try:
+        adet = int(device_count or 0)
+    except (TypeError, ValueError):
+        adet = 0
+    if adet <= 0:
+        return 500
+    return max(50, min(1000, math.ceil(adet * 1.2)))
+
+
 def render_compose(code: str, name: str, params: dict) -> str:
     """Dogrulanmis parametrelerden compose YAML'i uret.
 
@@ -914,6 +944,7 @@ def render_compose(code: str, name: str, params: dict) -> str:
             params["initiating_port_base"], params["initiating_port_count"]
         ),
         "PUBLISH_DNP3_QUALITY": "true" if params.get("publish_dnp3_quality") else "false",
+        "MAX_PARALLEL_DEVICES": str(_max_parallel_devices(params.get("device_count"))),
     }
 
     def _sub(match: "re.Match[str]") -> str:

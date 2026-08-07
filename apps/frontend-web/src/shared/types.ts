@@ -6,7 +6,10 @@ export type Dnp3ExtendedSettings = {
   ip_endpoint_type: IpEndpointType;
   master_ip_address: string;
   master_ip_port: number;
-  master_address: number;
+  /** null = gateway kendi DNP3_LOCAL_ADDRESS varsayilanini kullansin.
+   *  Merkezi bir varsayilan yazmak saha cihazinin bekledigini ezer ve
+   *  haberlesmeyi SESSIZCE keser (2026-08-07 arizasi). */
+  master_address: number | null;
   unsolicited_reporting: boolean;
   unsolicited_on_startup: boolean;
   unsolicited_class_mask_id: number;
@@ -22,7 +25,7 @@ export const DEFAULT_DNP3_EXTENDED: Dnp3ExtendedSettings = {
   ip_endpoint_type: "listening",
   master_ip_address: "",
   master_ip_port: 20002,
-  master_address: 100,
+  master_address: null,
   unsolicited_reporting: true,
   unsolicited_on_startup: true,
   unsolicited_class_mask_id: 7,
