@@ -680,16 +680,52 @@ def _publish_alarm(channel, alarm_payload: dict) -> None:
     )
 
 
+def _process_device_comm_alarm(payload: dict) -> None:
+    """Cihaz bazli 'Haberlesme arizasi' alarmi — sinyal/kuraldan bagimsiz.
+
+    2026-08-07 OLAYI: `_QualityState`/`_build_quality_alarm` onceden de
+    TANIMLIYDI ama hicbir yerden CAGRILMIYORDU — sahada bir cihaz saatlerce
+    haberlesmeden dustu ve operatore HICBIR bildirim (SMS/Telegram/e-posta)
+    gitmedi; sorun ancak elle fark edildi. Bu fonksiyon o bosluğu kapatir:
+    ilk `comm_lost`/`offline`/`invalid` kaliteli okumada CRITICAL alarm
+    ACAR (backend'in normal /internal/alarms hatti uzerinden — bildirim
+    dispatch'i otomatik calisir), kalite `good`'a donunce CLEAR gonderir.
+    `_QUALITY_STATE` cihaz basina dedup sagladigi icin ayni cihazdan gelen
+    binlerce ardisik comm_lost okumasi TEK alarm uretir.
+
+    Kalite tespiti gateway TARAFINDA zaten debounce'lu (yadnp3 adaptoru
+    ancak recovery-timeout grace suresinden SONRA comm_lost basar) — burada
+    ekstra bekleme eklemek operatoru bilgilendirmeyi gereksiz gecikirdi.
+    """
+    device_code = payload.get("device_code")
+    dc = str(device_code or "")
+    if not dc:
+        return
+    if _quality_is_bad(payload):
+        if not _QUALITY_STATE.is_bad(dc):
+            _QUALITY_STATE.mark_bad(dc)
+            _NOTIFIER.submit_raise(_build_quality_alarm(payload), rule_id=None)
+    elif _QUALITY_STATE.mark_good(dc):
+        _NOTIFIER.submit_clear(
+            rule_id=None,
+            rule_title="Haberleşme arızası",
+            device_code=device_code,
+            source_gateway=payload.get("source_gateway"),
+            signal_key=None,
+            was_active=True,
+        )
+
+
 def _process_rules_for_payload(channel, payload: dict) -> None:
     signal_key = payload.get("signal_key")
     device_code = payload.get("device_code")
     value_raw = payload.get("value")
+    _process_device_comm_alarm(payload)
     if signal_key is None or value_raw is None:
         return
     # KALITE KAPISI — bu satir olmadan sistem, cihazla baglanti koptugu anda
     # "ariza gecti" diyordu. Erken donuyoruz: ne kural degerlendirilir, ne
     # canli deger/ornek onbellegi guncellenir, ne de clear cagrisi atilir.
-    # (Fonksiyon zaten tanimliydi ama HIC CAGRILMIYORDU — olu kod.)
     if _quality_is_bad(payload):
         return
     if not _CACHE.is_alarmable(str(signal_key)):

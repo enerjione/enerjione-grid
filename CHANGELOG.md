@@ -14,6 +14,22 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.36] — 2026-08-07
+
+### Eklendi
+
+- **Cihaz haberleşme kaybı artık bildirim üretiyor.** Denetim sırasında
+  ortaya çıktı: bir cihaz haberleşmeyi kestiğinde (gateway `comm_lost`
+  kalitesi basınca) CRITICAL seviyede "Haberleşme arızası" alarmı üretecek
+  kod (`_QualityState`, `_build_quality_alarm`) önceden yazılmıştı ama
+  hiçbir yerden çağrılmıyordu — sistem sessizce hiçbir SMS/Telegram/e-posta
+  göndermiyordu. Artık ilk kötü kaliteli okumada bu alarm otomatik açılıyor
+  (mevcut bildirim hattı üzerinden — kim aboneyse ulaşır), cihaz aynı
+  anda birden çok mesajla haberleşmeyi kesse de tek alarm üretilir (spam
+  yok), haberleşme geri gelince otomatik "normale döndü" olarak kapanır.
+
+---
+
 ## [2.53.35] — 2026-08-07
 
 ### Düzeltildi

@@ -93,6 +93,105 @@ def test_transition_clear_hala_gonderiliyor(monkeypatch):
     assert len(gidenler) == 1
 
 
+# ------------------------------------------------------ haberlesme (comm_lost) alarmi
+def test_haberlesme_arizasi_2026_08_07_olayi_regresyon_kilidi(monkeypatch):
+    """`_QualityState`/`_build_quality_alarm` tanimliydi ama hicbir yerden
+    cagrilmiyordu (2026-08-07): sahada bir cihaz saatlerce haberlesmeden
+    dustu, operatore HICBIR bildirim gitmedi. Bu test _process_rules_for_payload
+    icinde comm-alarm yolunun GERCEKTEN cagrildigini kilitler."""
+    kod = inspect.getsource(m._process_rules_for_payload)
+    assert "_process_device_comm_alarm(" in kod
+    kod_comm = inspect.getsource(m._process_device_comm_alarm)
+    assert "requests." not in kod_comm
+    assert "_notify_backend(" not in kod_comm
+    assert "_NOTIFIER.submit_raise(" in kod_comm
+    assert "_NOTIFIER.submit_clear(" in kod_comm
+
+
+def test_haberlesme_arizasi_ilk_kotu_kalitede_TEK_alarm_acar(monkeypatch):
+    """Ayni cihazdan ardisik comm_lost okumalari TEK alarm uretmeli (dedup);
+    saniyede onlarca ayni bildirim SMS/Telegram kotasini tuketmemeli."""
+    raised: list[dict] = []
+
+    class SahteNotifier:
+        def submit_raise(self, payload, *, rule_id):
+            raised.append(payload)
+
+        def submit_clear(self, **alan):
+            pass
+
+    monkeypatch.setattr(m, "_NOTIFIER", SahteNotifier())
+    m._QUALITY_STATE._bad.clear()  # onceki testlerden sizinti olmasin
+
+    payload = {"device_code": "DEV-COMM", "quality": "comm_lost", "value": 0.0}
+    m._process_device_comm_alarm(payload)
+    m._process_device_comm_alarm(payload)
+    m._process_device_comm_alarm(payload)
+
+    assert len(raised) == 1
+    assert raised[0]["title"] == "Haberleşme arızası"
+    assert raised[0]["level"] == "critical"
+    assert raised[0]["device_code"] == "DEV-COMM"
+
+
+def test_haberlesme_arizasi_iyi_kaliteye_donunce_clear_gonderilir(monkeypatch):
+    """Haberlesme geri gelince (quality=good) acik alarm CLEAR edilmeli —
+    tekrar comm_lost gelirse yeni bir alarm ACILABILMELI (state sifirlanir)."""
+    raised: list[dict] = []
+    cleared: list[dict] = []
+
+    class SahteNotifier:
+        def submit_raise(self, payload, *, rule_id):
+            raised.append(payload)
+
+        def submit_clear(self, **alan):
+            cleared.append(alan)
+
+    monkeypatch.setattr(m, "_NOTIFIER", SahteNotifier())
+    m._QUALITY_STATE._bad.clear()
+
+    bad = {"device_code": "DEV-COMM2", "quality": "comm_lost", "value": 0.0}
+    good = {"device_code": "DEV-COMM2", "quality": "good", "value": 230.0,
+            "signal_key": "master.actual_voltage"}
+
+    m._process_device_comm_alarm(bad)
+    assert len(raised) == 1
+
+    # Iyi kaliteye donus -> clear
+    m._process_device_comm_alarm(good)
+    assert len(cleared) == 1
+    assert cleared[0]["rule_title"] == "Haberleşme arızası"
+    assert cleared[0]["device_code"] == "DEV-COMM2"
+    assert cleared[0]["signal_key"] is None
+    assert cleared[0]["was_active"] is True
+
+    # Ardisik iyi okumalar -> ikinci bir clear DAHA gitmemeli (spam yok).
+    m._process_device_comm_alarm(good)
+    assert len(cleared) == 1
+
+    # Tekrar coktu -> YENI bir alarm acilabilmeli (state dogru sifirlanmis).
+    m._process_device_comm_alarm(bad)
+    assert len(raised) == 2
+
+
+def test_haberlesme_alarmi_device_code_yoksa_sessizce_gecer(monkeypatch):
+    """device_code bos/None ise ne raise ne clear denenmeli (anahtarsiz
+    dedup state'i bozardi)."""
+    calls: list[str] = []
+
+    class SahteNotifier:
+        def submit_raise(self, payload, *, rule_id):
+            calls.append("raise")
+
+        def submit_clear(self, **alan):
+            calls.append("clear")
+
+    monkeypatch.setattr(m, "_NOTIFIER", SahteNotifier())
+    m._process_device_comm_alarm({"device_code": None, "quality": "comm_lost"})
+    m._process_device_comm_alarm({"quality": "good"})
+    assert calls == []
+
+
 # ------------------------------------------------------------- worker davranisi
 def _bekle(kosul, timeout=5.0):
     son = time.monotonic() + timeout
