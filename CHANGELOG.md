@@ -14,6 +14,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.54.0] — 2026-08-07
+
+### Kaldırıldı
+
+- **Otomatik seri numarası eşleştirme kaldırıldı.** Cihaz bağlandığında
+  `master.serial_number` telemetrisinden `serial_number` alanını otomatik
+  güncelleyen mekanizma (`_seri_ve_kod_senkronu`) tamamen çıkarıldı. Bugünkü
+  olaylar zincirinden (v2.53.31'deki kod otomatik değişimi) sonra karar
+  verildi: cihaz kimliğiyle ilgili hiçbir alan artık otomatik/telemetri
+  kaynaklı değişmeyecek — Seri No, Cihaz Kodu gibi, yeniden tamamen elle
+  girilen/düzenlenen bir alan. Cihaz ekleme formunda ayrı bir "Seri No"
+  alanı geri geldi; düzenleme ekranında da yine serbestçe değiştirilebilir.
+
+---
+
 ## [2.53.36] — 2026-08-07
 
 ### Eklendi

@@ -357,8 +357,8 @@ export function DeviceManagementPanel({
   };
 
   const [name, setName] = useState("");
-  // Seri numarasi — config dosya adinin birincil kaynagi. Kurulumda girilir;
-  // cihaz baglaninca telemetriden otomatik guncellenir.
+  // Seri numarasi — config dosya adinin birincil kaynagi, elle girilir.
+  const [serial, setSerial] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("horstmann_sn_2_0");
   const [installationDate, setInstallationDate] = useState("");
@@ -381,6 +381,7 @@ export function DeviceManagementPanel({
 
   const [createCode, setCreateCode] = useState("");
   const [createName, setCreateName] = useState("");
+  const [createSerial, setCreateSerial] = useState("");
   const [createModel, setCreateModel] = useState("horstmann_sn_2_0");
   const [createInstallationDate, setCreateInstallationDate] = useState("");
   const [createIpAddress, setCreateIpAddress] = useState("");
@@ -481,6 +482,7 @@ export function DeviceManagementPanel({
 
   const applySelectedDeviceToForm = (device: DeviceRow) => {
     setName(device.name);
+    setSerial(device.serialNumber ?? "");
     setDescription(device.description ?? "");
     setModel(device.model ?? "horstmann_sn_2_0");
     setInstallationDate(device.installationDate ?? "");
@@ -527,6 +529,7 @@ export function DeviceManagementPanel({
       const caValue = caTrimmed === "" ? null : Number(caTrimmed);
       await onUpdate(selectedDevice.code, {
         name,
+        serial_number: serial.trim() || null,
         description: description.trim() || null,
         model,
         installation_date: installationDate || null,
@@ -583,9 +586,7 @@ export function DeviceManagementPanel({
       await onCreate({
         code: createCode,
         name: createName,
-        // Seri no kullanici tarafindan girilmez — cihaz baglaninca
-        // telemetriden otomatik yazilir (bkz. _seri_ve_kod_senkronu).
-        serial_number: null,
+        serial_number: createSerial.trim() || null,
         model: createModel,
         installation_date: createInstallationDate || null,
         gateway_code: selectedGatewayCode || null,
@@ -610,6 +611,7 @@ export function DeviceManagementPanel({
       setShowCreateModal(false);
       setCreateCode("");
       setCreateName("");
+      setCreateSerial("");
       setCreateModel("horstmann_sn_2_0");
       setCreateInstallationDate("");
       setCreateIpAddress("");
@@ -1236,15 +1238,12 @@ export function DeviceManagementPanel({
                         <label>
                           {t("engineering.devicesPanel.form.serialNumber")}
                           <input
-                            value={selectedDevice.serialNumber ?? ""}
-                            disabled
-                            readOnly
-                            placeholder={t("engineering.devicesPanel.form.serialAutoPlaceholder")}
+                            value={serial}
+                            maxLength={20}
+                            onChange={(event) => setSerial(event.target.value)}
+                            placeholder={t("engineering.devicesPanel.form.serialPlaceholder")}
                           />
                         </label>
-                        <p className="helper-text device-serial-hint">
-                          {t("engineering.devicesPanel.form.serialAutoHint")}
-                        </p>
                         <label>
                           {t("engineering.devicesPanel.form.name")}
                           <input value={name} onChange={(event) => setName(event.target.value)} />
@@ -1588,6 +1587,15 @@ export function DeviceManagementPanel({
                   <label>
                     {t("engineering.devicesPanel.form.name")}
                     <input value={createName} onChange={(event) => setCreateName(event.target.value)} required />
+                  </label>
+                  <label>
+                    {t("engineering.devicesPanel.form.serialNumber")}
+                    <input
+                      value={createSerial}
+                      maxLength={20}
+                      onChange={(event) => setCreateSerial(event.target.value)}
+                      placeholder={t("engineering.devicesPanel.form.serialPlaceholder")}
+                    />
                   </label>
                   <label>
                     {t("engineering.devicesPanel.form.deviceType")}

@@ -9713,9 +9713,6 @@ th.event-col-category {
 
 .mb-runtime-counters td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 
-/* Cihaz kimligi (Cihaz Kodu/Seri No) yanindaki aciklama satiri */
-.device-serial-hint { margin: -4px 0 8px; font-size: 0.78rem; }
-
 /* ===== Modern outbound tablosu ===== */
 .outbound-modern-table-wrap {
   margin-top: 12px;

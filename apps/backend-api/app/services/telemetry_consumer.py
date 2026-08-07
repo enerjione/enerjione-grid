@@ -725,58 +725,6 @@ def _tek_gecis_yaz(db, satirlar: list[_Satir], islenme_zamani: datetime) -> None
         _degerlerle_yaz(db, _CANLI_SQL, list(canli_satirlar.values()))
 
 
-def _seri_ve_kod_senkronu(db, device, reading) -> None:  # noqa: ANN001
-    """`master.serial_number` telemetrisinden `serial_number` senkronu.
-
-    Cihaz KODU (device.code) ve SERI NUMARASI (device.serial_number) BILEREK
-    BAGIMSIZ iki alandir: kod kurulumda operator tarafindan serbestce
-    secilir ve sistemdeki yonlendirme anahtaridir (ingest, gateway config,
-    outbound planlar hep bununla calisir); seri ise cihazin fabrika
-    etiketindeki gercek numaradir ve YALNIZCA burada, otomatik olarak
-    yazilir — kullanicinin cihaz eklerken elle girmesi istenmez (riskli:
-    yanlis/eksik girilirse config dosyasi yanlis adla uretilir).
-
-    KOD'A HICBIR ZAMAN DOKUNULMAZ (2026-08-07 olayi). Once kod da otomatik
-    olarak gercek seriye cekiliyordu; sahada canli bir cihaz bunun yuzunden
-    HABERLESMEYI KESTI — ingest her telemetri batch'inde cihazi `device_code`
-    ile bulan tek sorgudan sonra calisir, kod degistiginde gateway'in kendi
-    yayin dongusu ESKI kodu kullanmaya devam eder ve o aradaki paketler
-    "bilinmeyen cihaz" sayilip sessizce duser. Kod ve seri BASTAN BERI
-    FARKLI OLABILECEK iki kavram oldugu icin bir "uyusmazlik" durumu da
-    yoktur; sadece seri alani senkron tutulur.
-
-    SIFIR/bos deger YOK SAYILIR: sahada cihaz bir an seri=0 gonderdi ve
-    config dosya adi `0_...` oldu.
-    """
-    from app.services.event_service import record_event
-
-    try:
-        seri = (reading.value_string or "").strip() or (
-            str(int(reading.value)) if reading.value else ""
-        )
-    except (TypeError, ValueError):
-        seri = ""
-    if not seri or not seri.strip("0"):
-        return
-    if device.serial_number == seri:
-        return
-
-    eski_seri = device.serial_number
-    device.serial_number = seri
-    record_event(
-        db,
-        category="device",
-        event_type="device_serial_synced",
-        severity="info",
-        device_code=device.code,
-        message=(
-            f"{device.name}: seri numarasi telemetriden guncellendi "
-            f"({eski_seri or 'yok'} -> {seri})"
-        ),
-        metadata={"old": eski_seri, "new": seri},
-    )
-
-
 def _satirlari_yaz(
     db, satirlar: list[_Satir], islenme_zamani: datetime  # noqa: ANN001
 ) -> tuple[list[_Satir], list[_Satir]]:
@@ -1029,10 +977,6 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 reading.value_string, _kalite, reading.source_timestamp,
                 _dev_at, _ts_quality, datetime.now(timezone.utc),
             )
-            # Seri + kod otomatik senkronu (bkz. _seri_ve_kod_senkronu).
-            # Sicak yoldaki maliyeti sinyal adi karsilastirmasindan ibaret.
-            if reading.signal_key == "master.serial_number":
-                _seri_ve_kod_senkronu(db, device, reading)
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
             # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
             # UZERINE YAZIYORUZ. Gateway'in ham bildirimi degil BIZIM
