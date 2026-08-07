@@ -725,6 +725,98 @@ def _tek_gecis_yaz(db, satirlar: list[_Satir], islenme_zamani: datetime) -> None
         _degerlerle_yaz(db, _CANLI_SQL, list(canli_satirlar.values()))
 
 
+def _seri_ve_kod_senkronu(db, device, reading) -> None:  # noqa: ANN001
+    """`master.serial_number` telemetrisinden seri + kod senkronu.
+
+    SERI: cihaz kaydindaki `serial_number` config dosya adinin BIRINCIL
+    kaynagi; cihaz baglaninca telemetriden tazelenir. SIFIR/bos deger YOK
+    SAYILIR: sahada cihaz bir an seri=0 gonderdi ve dosya adi `0_...` oldu.
+
+    KOD = SERI NO KONVANSIYONU: cihaz kimligi (code) gercek fabrika
+    serisidir; kurulumda yanlis girildiyse cihaz baglandiginda kod gercek
+    seriye cekilir. Guvenli cunku:
+      * telemetry/telemetry_latest device.id ile anahtarli — gecmis KOPMAZ;
+      * gateway config_nonce artisini ~1 sn'de gorup cihaz listesini yeni
+        kodla tazeler;
+      * outbound (modbus/iec104) planlari 30 sn'de yeniden cekilir ve
+        slotlar device_id uzerinden korunur.
+    Cakisma (ayni kodda baska cihaz) varsa DOKUNULMAZ; uyari olayi yalnizca
+    seri DEGISIMIYLE ayni anda dusulur — her telemetride spam uretmez.
+    """
+    from app.services.event_service import record_event
+
+    try:
+        seri = (reading.value_string or "").strip() or (
+            str(int(reading.value)) if reading.value else ""
+        )
+    except (TypeError, ValueError):
+        seri = ""
+    if not seri or not seri.strip("0"):
+        return
+
+    seri_degisti = False
+    if device.serial_number != seri:
+        eski_seri = device.serial_number
+        device.serial_number = seri
+        seri_degisti = True
+        record_event(
+            db,
+            category="device",
+            event_type="device_serial_synced",
+            severity="info",
+            device_code=device.code,
+            message=(
+                f"{device.name}: seri numarasi telemetriden guncellendi "
+                f"({eski_seri or 'yok'} -> {seri})"
+            ),
+            metadata={"old": eski_seri, "new": seri},
+        )
+
+    if device.code == seri:
+        return
+
+    cakisan = db.scalar(
+        select(Device.id).where(Device.code == seri, Device.id != device.id)
+    )
+    if cakisan is not None:
+        if seri_degisti:
+            record_event(
+                db,
+                category="device",
+                event_type="device_code_sync_blocked",
+                severity="warning",
+                device_code=device.code,
+                message=(
+                    f"{device.name}: cihaz kodu gercek seriye ({seri}) "
+                    f"cekilemedi — ayni kodda baska bir cihaz kayitli. "
+                    f"Cakisan kaydi duzeltip cihazi yeniden baglayin."
+                ),
+                metadata={"code": device.code, "serial": seri},
+            )
+        return
+
+    from app.models.gateway import Gateway
+
+    eski_kod = device.code
+    device.code = seri
+    if device.gateway_code:
+        gw = db.scalar(select(Gateway).where(Gateway.code == device.gateway_code))
+        if gw is not None:
+            gw.config_nonce = int(getattr(gw, "config_nonce", 0) or 0) + 1
+    record_event(
+        db,
+        category="device",
+        event_type="device_code_synced",
+        severity="info",
+        device_code=device.code,
+        message=(
+            f"{device.name}: cihaz kodu gercek seri numarasina "
+            f"guncellendi ({eski_kod} -> {seri})"
+        ),
+        metadata={"old": eski_kod, "new": seri},
+    )
+
+
 def _satirlari_yaz(
     db, satirlar: list[_Satir], islenme_zamani: datetime  # noqa: ANN001
 ) -> tuple[list[_Satir], list[_Satir]]:
@@ -977,36 +1069,10 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 reading.value_string, _kalite, reading.source_timestamp,
                 _dev_at, _ts_quality, datetime.now(timezone.utc),
             )
-            # SERI NUMARASI OTOMATIK SENKRONU. Cihaz kaydindaki
-            # `serial_number`, config dosya adinin BIRINCIL kaynagi; cihaz
-            # baglaninca telemetriden tazelenir. SIFIR/bos deger YOK SAYILIR:
-            # sahada cihaz bir an seri=0 gonderdi ve dosya adi `0_...` oldu.
-            # Yalnizca DEGISIMDE calisir (nadir) — sicak yolda maliyeti,
-            # sinyal adi karsilastirmasindan ibaret.
+            # Seri + kod otomatik senkronu (bkz. _seri_ve_kod_senkronu).
+            # Sicak yoldaki maliyeti sinyal adi karsilastirmasindan ibaret.
             if reading.signal_key == "master.serial_number":
-                try:
-                    _seri = (reading.value_string or "").strip() or (
-                        str(int(reading.value)) if reading.value else ""
-                    )
-                except (TypeError, ValueError):
-                    _seri = ""
-                if _seri and _seri.strip("0") and device.serial_number != _seri:
-                    from app.services.event_service import record_event
-
-                    _eski_seri = device.serial_number
-                    device.serial_number = _seri
-                    record_event(
-                        db,
-                        category="device",
-                        event_type="device_serial_synced",
-                        severity="info",
-                        device_code=device.code,
-                        message=(
-                            f"{device.name}: seri numarasi telemetriden guncellendi "
-                            f"({_eski_seri or 'yok'} -> {_seri})"
-                        ),
-                        metadata={"old": _eski_seri, "new": _seri},
-                    )
+                _seri_ve_kod_senkronu(db, device, reading)
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
             # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
             # UZERINE YAZIYORUZ. Gateway'in ham bildirimi degil BIZIM

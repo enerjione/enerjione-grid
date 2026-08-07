@@ -14,6 +14,20 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.31] — 2026-08-07
+
+### Değişti
+
+- **Cihaz kimliği = Seri No**: cihaz eklerken tek kimlik alanı kaldı — cihazın
+  fabrika seri numarası girilir ve sistem kimliği (cihaz kodu) olarak
+  kaydedilir; formdaki ikinci "Seri No" alanı kaldırıldı. Yanlış girilirse
+  cihaz bağlandığında bildirdiği gerçek seri ile **kod otomatik düzeltilir**
+  (gateway ~1 sn'de yeni kodu çeker; telemetri geçmişi cihaz id'siyle
+  anahtarlı olduğundan kopmaz). Aynı kodda başka cihaz varsa dokunulmaz,
+  bir kez uyarı olayı düşülür ve cihaz kartında uyuşmazlık uyarısı görünür.
+
+---
+
 ## [2.53.30] — 2026-08-07
 
 ### Düzeltildi

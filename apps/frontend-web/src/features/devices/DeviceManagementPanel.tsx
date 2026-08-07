@@ -359,7 +359,6 @@ export function DeviceManagementPanel({
   const [name, setName] = useState("");
   // Seri numarasi — config dosya adinin birincil kaynagi. Kurulumda girilir;
   // cihaz baglaninca telemetriden otomatik guncellenir.
-  const [serial, setSerial] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("horstmann_sn_2_0");
   const [installationDate, setInstallationDate] = useState("");
@@ -382,7 +381,6 @@ export function DeviceManagementPanel({
 
   const [createCode, setCreateCode] = useState("");
   const [createName, setCreateName] = useState("");
-  const [createSerial, setCreateSerial] = useState("");
   const [createModel, setCreateModel] = useState("horstmann_sn_2_0");
   const [createInstallationDate, setCreateInstallationDate] = useState("");
   const [createIpAddress, setCreateIpAddress] = useState("");
@@ -483,7 +481,6 @@ export function DeviceManagementPanel({
 
   const applySelectedDeviceToForm = (device: DeviceRow) => {
     setName(device.name);
-    setSerial(device.serialNumber ?? "");
     setDescription(device.description ?? "");
     setModel(device.model ?? "horstmann_sn_2_0");
     setInstallationDate(device.installationDate ?? "");
@@ -530,7 +527,6 @@ export function DeviceManagementPanel({
       const caValue = caTrimmed === "" ? null : Number(caTrimmed);
       await onUpdate(selectedDevice.code, {
         name,
-        serial_number: serial.trim() || null,
         description: description.trim() || null,
         model,
         installation_date: installationDate || null,
@@ -587,7 +583,7 @@ export function DeviceManagementPanel({
       await onCreate({
         code: createCode,
         name: createName,
-        serial_number: createSerial.trim() || null,
+        serial_number: createCode.trim() || null,
         model: createModel,
         installation_date: createInstallationDate || null,
         gateway_code: selectedGatewayCode || null,
@@ -612,7 +608,6 @@ export function DeviceManagementPanel({
       setShowCreateModal(false);
       setCreateCode("");
       setCreateName("");
-      setCreateSerial("");
       setCreateModel("horstmann_sn_2_0");
       setCreateInstallationDate("");
       setCreateIpAddress("");
@@ -1233,21 +1228,20 @@ export function DeviceManagementPanel({
                     <div className="device-system-top-row">
                       <div className="device-info-card">
                         <label>
-                          {t("engineering.devicesPanel.form.code")}
+                          {t("engineering.devicesPanel.form.serialNumber")}
                           <input value={selectedDevice.code} disabled readOnly />
                         </label>
+                        {selectedDevice.serialNumber &&
+                        selectedDevice.serialNumber !== selectedDevice.code ? (
+                          <p className="helper-text device-serial-mismatch">
+                            {t("engineering.devicesPanel.form.serialReportedMismatch", {
+                              reported: selectedDevice.serialNumber
+                            })}
+                          </p>
+                        ) : null}
                         <label>
                           {t("engineering.devicesPanel.form.name")}
                           <input value={name} onChange={(event) => setName(event.target.value)} />
-                        </label>
-                        <label>
-                          {t("engineering.devicesPanel.form.serialNumber")}
-                          <input
-                            value={serial}
-                            maxLength={20}
-                            onChange={(event) => setSerial(event.target.value)}
-                            placeholder={t("engineering.devicesPanel.form.serialPlaceholder")}
-                          />
                         </label>
                         <label>
                           {t("engineering.devicesPanel.form.deviceType")}
@@ -1577,21 +1571,21 @@ export function DeviceManagementPanel({
               <div className="device-system-top-row">
                 <div className="device-info-card">
                   <label>
-                    {t("engineering.devicesPanel.form.code")}
-                    <input value={createCode} onChange={(event) => setCreateCode(event.target.value)} required />
+                    {t("engineering.devicesPanel.form.serialNumber")}
+                    <input
+                      value={createCode}
+                      maxLength={20}
+                      onChange={(event) => setCreateCode(event.target.value)}
+                      placeholder={t("engineering.devicesPanel.form.serialPlaceholder")}
+                      required
+                    />
                   </label>
+                  <p className="helper-text device-serial-hint">
+                    {t("engineering.devicesPanel.form.serialIdentityHint")}
+                  </p>
                   <label>
                     {t("engineering.devicesPanel.form.name")}
                     <input value={createName} onChange={(event) => setCreateName(event.target.value)} required />
-                  </label>
-                  <label>
-                    {t("engineering.devicesPanel.form.serialNumber")}
-                    <input
-                      value={createSerial}
-                      maxLength={20}
-                      onChange={(event) => setCreateSerial(event.target.value)}
-                      placeholder={t("engineering.devicesPanel.form.serialPlaceholder")}
-                    />
                   </label>
                   <label>
                     {t("engineering.devicesPanel.form.deviceType")}
