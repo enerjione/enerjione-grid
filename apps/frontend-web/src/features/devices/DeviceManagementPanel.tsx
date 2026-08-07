@@ -1233,7 +1233,7 @@ export function DeviceManagementPanel({
                     <div className="device-system-top-row">
                       <div className="device-info-card">
                         <label>
-                          {t("engineering.devicesPanel.form.serialNo")}
+                          {t("engineering.devicesPanel.form.code")}
                           <input value={selectedDevice.code} disabled readOnly />
                         </label>
                         <label>
@@ -1577,7 +1577,7 @@ export function DeviceManagementPanel({
               <div className="device-system-top-row">
                 <div className="device-info-card">
                   <label>
-                    {t("engineering.devicesPanel.form.serialNo")}
+                    {t("engineering.devicesPanel.form.code")}
                     <input value={createCode} onChange={(event) => setCreateCode(event.target.value)} required />
                   </label>
                   <label>

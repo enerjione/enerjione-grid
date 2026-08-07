@@ -14,6 +14,17 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.30] — 2026-08-07
+
+### Düzeltildi
+
+- **Cihaz formunda çift "Seri No"**: cihaz kodu alanının etiketi yanlışlıkla
+  "Seri No" kalmıştı; gerçek seri numarası alanı eklenince form iki "Seri No"
+  gösteriyordu. Kod alanı yeniden "Cihaz Kodu" oldu — üstteki sistemin
+  değişmez cihaz anahtarı, alttaki cihazın bildirdiği gerçek seri numarası.
+
+---
+
 ## [2.53.29] — 2026-08-07
 
 ### Eklendi

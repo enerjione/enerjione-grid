@@ -2215,7 +2215,6 @@
       "deleteConfirm": "Bu cihaz silinecek. Devam edilsin mi?",
       "form": {
         "code": "Cihaz Kodu",
-        "serialNo": "Seri No",
         "name": "Cihaz Adı",
         "nameShort": "İsim",
         "gateway": "Gateway",

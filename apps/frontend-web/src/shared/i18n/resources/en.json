@@ -2218,7 +2218,6 @@
       "deleteConfirm": "This device will be deleted. Continue?",
       "form": {
         "code": "Device Code",
-        "serialNo": "Serial No",
         "name": "Device Name",
         "nameShort": "Name",
         "gateway": "Gateway",
