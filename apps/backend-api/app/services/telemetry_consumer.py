@@ -728,24 +728,25 @@ def _tek_gecis_yaz(db, satirlar: list[_Satir], islenme_zamani: datetime) -> None
 def _seri_ve_kod_senkronu(db, device, reading) -> None:  # noqa: ANN001
     """`master.serial_number` telemetrisinden `serial_number` senkronu.
 
-    SERI: cihaz kaydindaki `serial_number` config dosya adinin BIRINCIL
-    kaynagi; cihaz baglaninca telemetriden tazelenir. SIFIR/bos deger YOK
-    SAYILIR: sahada cihaz bir an seri=0 gonderdi ve dosya adi `0_...` oldu.
+    Cihaz KODU (device.code) ve SERI NUMARASI (device.serial_number) BILEREK
+    BAGIMSIZ iki alandir: kod kurulumda operator tarafindan serbestce
+    secilir ve sistemdeki yonlendirme anahtaridir (ingest, gateway config,
+    outbound planlar hep bununla calisir); seri ise cihazin fabrika
+    etiketindeki gercek numaradir ve YALNIZCA burada, otomatik olarak
+    yazilir — kullanicinin cihaz eklerken elle girmesi istenmez (riskli:
+    yanlis/eksik girilirse config dosyasi yanlis adla uretilir).
 
-    KOD'A BILEREK DOKUNULMAZ (2026-08-07 olayi). v2.53.31'de `device.code`
-    burada otomatik olarak gercek seriye cekiliyordu; sahada canli bir
-    cihaz bunun yuzunden HABERLESMEYI KESTI: bu fonksiyon her telemetri
-    batch'inde cihazi `device_code` ile bulan tek sorgudan SONRA calisir
-    (bkz. `_satirlari_isle` batch basi `device_cache`), ama kod
-    degistiginde gateway'in kendi yayin dongusu ESKI kodu kullanmaya
-    devam eder — sonraki batch'lerde eski kodla gelen paketler
-    `telemetry-consumer-device-not-found` ile SESSIZCE DUSER; gateway
-    yeni config'i cekip yeni koda gecene kadar (sure garantisi yok, dis
-    repo) cihaz "haberlesmiyor" gorunur. `code` yonlendirme icin ingest'te
-    birincil anahtar oldugundan, canli trafik akarken otomatik degistirmek
-    GUVENLI DEGIL. Operator gormesi ve KENDI SECTIGI zamanda elle
-    duzeltmesi icin yalnizca uyari olayi dusulur; kod hic mutasyona
-    UGRAMAZ. Frontend cihaz kartinda ayni uyusmazlik uyariyla gosterilir.
+    KOD'A HICBIR ZAMAN DOKUNULMAZ (2026-08-07 olayi). Once kod da otomatik
+    olarak gercek seriye cekiliyordu; sahada canli bir cihaz bunun yuzunden
+    HABERLESMEYI KESTI — ingest her telemetri batch'inde cihazi `device_code`
+    ile bulan tek sorgudan sonra calisir, kod degistiginde gateway'in kendi
+    yayin dongusu ESKI kodu kullanmaya devam eder ve o aradaki paketler
+    "bilinmeyen cihaz" sayilip sessizce duser. Kod ve seri BASTAN BERI
+    FARKLI OLABILECEK iki kavram oldugu icin bir "uyusmazlik" durumu da
+    yoktur; sadece seri alani senkron tutulur.
+
+    SIFIR/bos deger YOK SAYILIR: sahada cihaz bir an seri=0 gonderdi ve
+    config dosya adi `0_...` oldu.
     """
     from app.services.event_service import record_event
 
@@ -757,37 +758,23 @@ def _seri_ve_kod_senkronu(db, device, reading) -> None:  # noqa: ANN001
         seri = ""
     if not seri or not seri.strip("0"):
         return
+    if device.serial_number == seri:
+        return
 
-    if device.serial_number != seri:
-        eski_seri = device.serial_number
-        device.serial_number = seri
-        record_event(
-            db,
-            category="device",
-            event_type="device_serial_synced",
-            severity="info",
-            device_code=device.code,
-            message=(
-                f"{device.name}: seri numarasi telemetriden guncellendi "
-                f"({eski_seri or 'yok'} -> {seri})"
-            ),
-            metadata={"old": eski_seri, "new": seri},
-        )
-        if device.code != seri:
-            record_event(
-                db,
-                category="device",
-                event_type="device_code_mismatch",
-                severity="warning",
-                device_code=device.code,
-                message=(
-                    f"{device.name}: cihaz kodu ({device.code}) cihazin "
-                    f"bildirdigi gercek seriden ({seri}) farkli — canli "
-                    f"trafik akarken otomatik duzeltilmez (bkz. 2026-08-07 "
-                    f"olayi). Uygun bir bakim penceresinde elle duzeltin."
-                ),
-                metadata={"code": device.code, "reported_serial": seri},
-            )
+    eski_seri = device.serial_number
+    device.serial_number = seri
+    record_event(
+        db,
+        category="device",
+        event_type="device_serial_synced",
+        severity="info",
+        device_code=device.code,
+        message=(
+            f"{device.name}: seri numarasi telemetriden guncellendi "
+            f"({eski_seri or 'yok'} -> {seri})"
+        ),
+        metadata={"old": eski_seri, "new": seri},
+    )
 
 
 def _satirlari_yaz(

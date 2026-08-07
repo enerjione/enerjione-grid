@@ -9713,16 +9713,8 @@ th.event-col-category {
 
 .mb-runtime-counters td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 
-/* Cihaz kimligi (Seri No) ipucu + cihazin bildirdigi seri uyusmazligi */
+/* Cihaz kimligi (Cihaz Kodu/Seri No) yanindaki aciklama satiri */
 .device-serial-hint { margin: -4px 0 8px; font-size: 0.78rem; }
-.device-serial-mismatch {
-  margin: -4px 0 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
-}
 
 /* ===== Modern outbound tablosu ===== */
 .outbound-modern-table-wrap {

@@ -583,7 +583,9 @@ export function DeviceManagementPanel({
       await onCreate({
         code: createCode,
         name: createName,
-        serial_number: createCode.trim() || null,
+        // Seri no kullanici tarafindan girilmez — cihaz baglaninca
+        // telemetriden otomatik yazilir (bkz. _seri_ve_kod_senkronu).
+        serial_number: null,
         model: createModel,
         installation_date: createInstallationDate || null,
         gateway_code: selectedGatewayCode || null,
@@ -1228,17 +1230,21 @@ export function DeviceManagementPanel({
                     <div className="device-system-top-row">
                       <div className="device-info-card">
                         <label>
-                          {t("engineering.devicesPanel.form.serialNumber")}
+                          {t("engineering.devicesPanel.form.code")}
                           <input value={selectedDevice.code} disabled readOnly />
                         </label>
-                        {selectedDevice.serialNumber &&
-                        selectedDevice.serialNumber !== selectedDevice.code ? (
-                          <p className="helper-text device-serial-mismatch">
-                            {t("engineering.devicesPanel.form.serialReportedMismatch", {
-                              reported: selectedDevice.serialNumber
-                            })}
-                          </p>
-                        ) : null}
+                        <label>
+                          {t("engineering.devicesPanel.form.serialNumber")}
+                          <input
+                            value={selectedDevice.serialNumber ?? ""}
+                            disabled
+                            readOnly
+                            placeholder={t("engineering.devicesPanel.form.serialAutoPlaceholder")}
+                          />
+                        </label>
+                        <p className="helper-text device-serial-hint">
+                          {t("engineering.devicesPanel.form.serialAutoHint")}
+                        </p>
                         <label>
                           {t("engineering.devicesPanel.form.name")}
                           <input value={name} onChange={(event) => setName(event.target.value)} />
@@ -1571,17 +1577,16 @@ export function DeviceManagementPanel({
               <div className="device-system-top-row">
                 <div className="device-info-card">
                   <label>
-                    {t("engineering.devicesPanel.form.serialNumber")}
+                    {t("engineering.devicesPanel.form.code")}
                     <input
                       value={createCode}
-                      maxLength={20}
+                      maxLength={40}
                       onChange={(event) => setCreateCode(event.target.value)}
-                      placeholder={t("engineering.devicesPanel.form.serialPlaceholder")}
                       required
                     />
                   </label>
                   <p className="helper-text device-serial-hint">
-                    {t("engineering.devicesPanel.form.serialIdentityHint")}
+                    {t("engineering.devicesPanel.form.serialAutoHint")}
                   </p>
                   <label>
                     {t("engineering.devicesPanel.form.name")}

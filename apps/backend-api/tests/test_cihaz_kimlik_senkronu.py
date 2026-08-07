@@ -1,18 +1,15 @@
-"""Cihaz seri numarasi senkronu — KOD'a BILEREK dokunmaz (2026-08-07 olayi).
+"""Cihaz seri numarasi senkronu — kod ve seri BAGIMSIZ iki alandir.
 
-v2.53.31'de `master.serial_number` telemetrisi geldiginde `device.code` da
-otomatik olarak gercek seriye cekiliyordu. Sahada canli bir cihaz bunun
-yuzunden HABERLESMEYI KESTI: ingest her telemetri batch'inde cihazi
-`device_code` ile bulan TEK sorguyu batch basinda calistirir; kod
-degistiginde gateway'in kendi yayin dongusu ESKI kodu kullanmaya devam
-eder (config'i ne zaman yeniden cekecegi garanti degil, dis repo) ve o
-aradaki paketler `telemetry-consumer-device-not-found` ile SESSIZCE
-DUSER — cihaz fiziksel olarak konusuyor ama sistem "bilinmeyen cihaz"
-sayip atiyor.
+device.code operatorun serbestce sectigi, sistemdeki YONLENDIRME
+anahtaridir (ingest/gateway/outbound hep bununla calisir). serial_number
+ise cihazin fabrika etiketindeki gercek numaradir; yalnizca telemetriden
+otomatik yazilir, kullanici cihaz eklerken elle girmez.
 
-Bu testler DUZELTILMIS davranisi kilitler: seri senkronu KALIR (config
-dosyasi icin gerekli), kod mutasyonu KALICI OLARAK KALDIRILDI, yerine
-tek seferlik (spam yapmayan) bir uyari olayi var.
+Bu testler REGRESYON KILIDI: kod ASLA otomatik degismemeli. 2026-08-07'de
+`device.code` da otomatik gercek seriye cekiliyordu; sahada canli bir
+cihaz bunun yuzunden HABERLESMEYI KESTI (ingest batch basi `device_code`
+ile cihaz bulur, kod DB'de degisince gateway eski kodla yayina devam eder
+ve paketler "bilinmeyen cihaz" sayilip sessizce duser).
 """
 
 from __future__ import annotations
@@ -41,11 +38,10 @@ def db():
         s.close()
 
 
-def _cihaz(db, code: str, ip_son: int, gateway_code: str | None = None) -> Device:
+def _cihaz(db, code: str, ip_son: int) -> Device:
     d = Device(
         code=code, name=f"cihaz-{code}", model="horstmann_sn_2_0",
         ip_address=f"192.168.1.{ip_son}", latitude=0.0, longitude=0.0,
-        gateway_code=gateway_code,
     )
     db.add(d)
     db.flush()
@@ -64,7 +60,7 @@ def _olay_tipleri(db) -> list[str]:
 
 def test_seri_senkronlanir_kod_ASLA_degismez(db):
     """Regresyon kilidi: bu test kirilirsa 2026-08-07 olayi tekrar ediyordur."""
-    d = _cihaz(db, "0001", 10, gateway_code="GW-1")
+    d = _cihaz(db, "0001", 10)
 
     _seri_ve_kod_senkronu(db, d, _okuma())
 
@@ -74,35 +70,22 @@ def test_seri_senkronlanir_kod_ASLA_degismez(db):
         "'haberlesmiyor' gosteren regresyon (batch basi device_code lookup, "
         "gateway eski kodla yayina devam eder)."
     )
-    tipler = _olay_tipleri(db)
-    assert "device_serial_synced" in tipler
-    assert "device_code_synced" not in tipler
-    assert "device_code_mismatch" in tipler
+    assert _olay_tipleri(db) == ["device_serial_synced"]
 
 
-def test_kod_zaten_seri_ise_uyusmazlik_olayi_dusmez(db):
-    d = _cihaz(db, "50984", 11)
-    d.serial_number = "50984"
-    db.flush()
+def test_kod_ve_seri_farkli_olmasi_NORMAL_uyari_uretmez(db):
+    """Kod ve seri BASTAN BERI farkli iki kavram — 'uyusmazlik' diye bir
+    durum yok, bu yuzden ayni seri tekrar gelince ikinci bir olay olmamali."""
+    d = _cihaz(db, "F1-DEV-001", 11)
 
     _seri_ve_kod_senkronu(db, d, _okuma())
-
-    assert d.code == "50984"
-    assert _olay_tipleri(db) == []
-
-
-def test_uyusmazlik_uyarisi_seri_DEGISTIGINDE_bir_kez_duser(db):
-    d = _cihaz(db, "0001", 13)
-
-    _seri_ve_kod_senkronu(db, d, _okuma())
-    assert d.code == "0001"  # kimlige HICBIR ZAMAN dokunulmaz
+    assert d.code == "F1-DEV-001"
     assert d.serial_number == "50984"
-    assert _olay_tipleri(db).count("device_code_mismatch") == 1
+    assert _olay_tipleri(db) == ["device_serial_synced"]
 
-    # Ayni seri tekrar gelirse (periyodik telemetri) spam uretilmemeli —
-    # serial_number zaten esit oldugu icin senkron bloguna hic girilmez.
+    # Ayni seri tekrar gelirse (periyodik telemetri) ikinci olay dusmemeli.
     _seri_ve_kod_senkronu(db, d, _okuma())
-    assert _olay_tipleri(db).count("device_code_mismatch") == 1
+    assert _olay_tipleri(db) == ["device_serial_synced"]
 
 
 def test_sifir_ve_bos_seri_yok_sayilir(db):

@@ -14,6 +14,22 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.34] — 2026-08-07
+
+### Değişti
+
+- **Cihaz Kodu ve Seri No yeniden bağımsız iki alan** (v2.53.31'in "tek
+  kimlik alanı" birleştirmesi geri alındı). Cihaz Kodu operatörün serbestçe
+  seçtiği, sistemin yönlendirme anahtarıdır (ingest/gateway/outbound hep
+  bununla çalışır) — cihaz eklerken elle girilir, sonradan değişmez. Seri
+  No artık **cihaz eklerken hiç girilmez** — yalnızca cihaz bağlandığında
+  telemetriden otomatik okunur ve düzenleme ekranında salt okunur gösterilir.
+  Kod ile serinin farklı olması artık normal kabul edilir; bu yüzden
+  "uyuşmazlık" uyarısı da kaldırıldı (kod hiçbir zaman otomatik değişmediği
+  için gerek kalmadı — bkz. v2.53.32).
+
+---
+
 ## [2.53.33] — 2026-08-07
 
 ### Düzeltildi
