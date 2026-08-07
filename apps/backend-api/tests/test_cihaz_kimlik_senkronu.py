@@ -1,16 +1,18 @@
-"""Cihaz kimligi senkronu — kod = gercek seri no konvansiyonu.
+"""Cihaz seri numarasi senkronu — KOD'a BILEREK dokunmaz (2026-08-07 olayi).
 
-Cihaz kurulumda yanlis kodla kaydedildiyse, baglandiginda bildirdigi
-`master.serial_number` ile hem `serial_number` hem `code` otomatik
-duzeltilmeli. Buradaki riskler "fonksiyon calisti mi"dan buyuk:
+v2.53.31'de `master.serial_number` telemetrisi geldiginde `device.code` da
+otomatik olarak gercek seriye cekiliyordu. Sahada canli bir cihaz bunun
+yuzunden HABERLESMEYI KESTI: ingest her telemetri batch'inde cihazi
+`device_code` ile bulan TEK sorguyu batch basinda calistirir; kod
+degistiginde gateway'in kendi yayin dongusu ESKI kodu kullanmaya devam
+eder (config'i ne zaman yeniden cekecegi garanti degil, dis repo) ve o
+aradaki paketler `telemetry-consumer-device-not-found` ile SESSIZCE
+DUSER — cihaz fiziksel olarak konusuyor ama sistem "bilinmeyen cihaz"
+sayip atiyor.
 
-  - Kod baska bir cihazla CAKISIYORSA dokunulmamali (unique kimlik);
-    uyari olayi da her telemetride degil BIR KEZ dusmeli (event spam'i
-    system_events'te 2 yil yasar).
-  - Sifir/bos seri YOK SAYILMALI (sahada cihaz bir an seri=0 gonderdi).
-  - Kod degisince gateway config_nonce artmali ki gateway ~1 sn'de yeni
-    kodu ceksin; artmazsa gateway eski kodla yayinlamaya devam eder ve
-    telemetri eslesmez.
+Bu testler DUZELTILMIS davranisi kilitler: seri senkronu KALIR (config
+dosyasi icin gerekli), kod mutasyonu KALICI OLARAK KALDIRILDI, yerine
+tek seferlik (spam yapmayan) bir uyari olayi var.
 """
 
 from __future__ import annotations
@@ -23,7 +25,6 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
 from app.models.device import Device
-from app.models.gateway import Gateway
 from app.models.system_event import SystemEvent
 from app.services.telemetry_consumer import _seri_ve_kod_senkronu
 
@@ -61,27 +62,25 @@ def _olay_tipleri(db) -> list[str]:
     return list(db.scalars(select(SystemEvent.event_type)).all())
 
 
-def test_yanlis_kod_gercek_seriyle_duzeltilir(db):
-    gw = Gateway(
-        code="GW-1", name="GW 1", token="t" * 32,
-        host="127.0.0.1", listen_port=20000,
-    )
-    db.add(gw)
+def test_seri_senkronlanir_kod_ASLA_degismez(db):
+    """Regresyon kilidi: bu test kirilirsa 2026-08-07 olayi tekrar ediyordur."""
     d = _cihaz(db, "0001", 10, gateway_code="GW-1")
-    eski_nonce = int(getattr(gw, "config_nonce", 0) or 0)
 
     _seri_ve_kod_senkronu(db, d, _okuma())
 
     assert d.serial_number == "50984"
-    assert d.code == "50984"
+    assert d.code == "0001", (
+        "device.code otomatik degisti — bu tam olarak sahada canli cihazi "
+        "'haberlesmiyor' gosteren regresyon (batch basi device_code lookup, "
+        "gateway eski kodla yayina devam eder)."
+    )
     tipler = _olay_tipleri(db)
     assert "device_serial_synced" in tipler
-    assert "device_code_synced" in tipler
-    # Gateway yeni kodu cekebilsin diye nonce artmali.
-    assert int(gw.config_nonce or 0) == eski_nonce + 1
+    assert "device_code_synced" not in tipler
+    assert "device_code_mismatch" in tipler
 
 
-def test_kod_zaten_seri_ise_dokunulmaz(db):
+def test_kod_zaten_seri_ise_uyusmazlik_olayi_dusmez(db):
     d = _cihaz(db, "50984", 11)
     d.serial_number = "50984"
     db.flush()
@@ -92,18 +91,18 @@ def test_kod_zaten_seri_ise_dokunulmaz(db):
     assert _olay_tipleri(db) == []
 
 
-def test_cakisan_kod_varsa_dokunulmaz_ve_uyari_BIR_KEZ_dusulur(db):
-    _cihaz(db, "50984", 12)  # gercek seriyi kod olarak tasiyan baska cihaz
+def test_uyusmazlik_uyarisi_seri_DEGISTIGINDE_bir_kez_duser(db):
     d = _cihaz(db, "0001", 13)
 
     _seri_ve_kod_senkronu(db, d, _okuma())
-    assert d.code == "0001"  # kimlige dokunulmadi
-    assert d.serial_number == "50984"  # seri yine de senkronlandi
-    assert _olay_tipleri(db).count("device_code_sync_blocked") == 1
+    assert d.code == "0001"  # kimlige HICBIR ZAMAN dokunulmaz
+    assert d.serial_number == "50984"
+    assert _olay_tipleri(db).count("device_code_mismatch") == 1
 
-    # Ayni seri tekrar gelirse (periyodik integrity poll) spam uretilmemeli.
+    # Ayni seri tekrar gelirse (periyodik telemetri) spam uretilmemeli —
+    # serial_number zaten esit oldugu icin senkron bloguna hic girilmez.
     _seri_ve_kod_senkronu(db, d, _okuma())
-    assert _olay_tipleri(db).count("device_code_sync_blocked") == 1
+    assert _olay_tipleri(db).count("device_code_mismatch") == 1
 
 
 def test_sifir_ve_bos_seri_yok_sayilir(db):

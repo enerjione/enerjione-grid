@@ -14,6 +14,26 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.32] — 2026-08-07 — ACİL DÜZELTME
+
+### Düzeltildi
+
+- **v2.53.31'deki otomatik "kod düzeltme" gerçek bir cihazın haberleşmesini
+  kesti — geri alındı.** Cihaz bağlandığında `device.code`'u otomatik olarak
+  gerçek seriye çeken özellik, sahada canlı bir cihazı "haberleşmiyor"
+  durumuna soktu. Sebep: telemetri işleyici cihazı her toplu işte `code`
+  üzerinden buluyor; kod DB'de değiştiği anda gateway hâlâ ESKİ kodla
+  yayın yapmaya devam ediyor (kendi config'ini ne zaman yenileyeceği
+  garanti değil) ve o aradaki paketler "bilinmeyen cihaz" sayılıp sessizce
+  düşüyor — cihaz fiziksel olarak konuşuyor ama sistem görmüyor.
+  **Kod artık asla otomatik değiştirilmiyor.** Seri numarası senkronu
+  (config dosya adı için) kalıyor; kod uyuşmazlığı yalnızca bir kez bilgi
+  amaçlı uyarı olayı + cihaz kartında görünür uyarı olarak işaretleniyor.
+  Etkilenen cihaz için: gateway servisini yeniden başlatmak (config'i
+  sıfırdan çekmesini sağlar) haberleşmeyi geri getirmeli.
+
+---
+
 ## [2.53.31] — 2026-08-07
 
 ### Değişti

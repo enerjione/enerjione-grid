@@ -726,22 +726,26 @@ def _tek_gecis_yaz(db, satirlar: list[_Satir], islenme_zamani: datetime) -> None
 
 
 def _seri_ve_kod_senkronu(db, device, reading) -> None:  # noqa: ANN001
-    """`master.serial_number` telemetrisinden seri + kod senkronu.
+    """`master.serial_number` telemetrisinden `serial_number` senkronu.
 
     SERI: cihaz kaydindaki `serial_number` config dosya adinin BIRINCIL
     kaynagi; cihaz baglaninca telemetriden tazelenir. SIFIR/bos deger YOK
     SAYILIR: sahada cihaz bir an seri=0 gonderdi ve dosya adi `0_...` oldu.
 
-    KOD = SERI NO KONVANSIYONU: cihaz kimligi (code) gercek fabrika
-    serisidir; kurulumda yanlis girildiyse cihaz baglandiginda kod gercek
-    seriye cekilir. Guvenli cunku:
-      * telemetry/telemetry_latest device.id ile anahtarli — gecmis KOPMAZ;
-      * gateway config_nonce artisini ~1 sn'de gorup cihaz listesini yeni
-        kodla tazeler;
-      * outbound (modbus/iec104) planlari 30 sn'de yeniden cekilir ve
-        slotlar device_id uzerinden korunur.
-    Cakisma (ayni kodda baska cihaz) varsa DOKUNULMAZ; uyari olayi yalnizca
-    seri DEGISIMIYLE ayni anda dusulur — her telemetride spam uretmez.
+    KOD'A BILEREK DOKUNULMAZ (2026-08-07 olayi). v2.53.31'de `device.code`
+    burada otomatik olarak gercek seriye cekiliyordu; sahada canli bir
+    cihaz bunun yuzunden HABERLESMEYI KESTI: bu fonksiyon her telemetri
+    batch'inde cihazi `device_code` ile bulan tek sorgudan SONRA calisir
+    (bkz. `_satirlari_isle` batch basi `device_cache`), ama kod
+    degistiginde gateway'in kendi yayin dongusu ESKI kodu kullanmaya
+    devam eder — sonraki batch'lerde eski kodla gelen paketler
+    `telemetry-consumer-device-not-found` ile SESSIZCE DUSER; gateway
+    yeni config'i cekip yeni koda gecene kadar (sure garantisi yok, dis
+    repo) cihaz "haberlesmiyor" gorunur. `code` yonlendirme icin ingest'te
+    birincil anahtar oldugundan, canli trafik akarken otomatik degistirmek
+    GUVENLI DEGIL. Operator gormesi ve KENDI SECTIGI zamanda elle
+    duzeltmesi icin yalnizca uyari olayi dusulur; kod hic mutasyona
+    UGRAMAZ. Frontend cihaz kartinda ayni uyusmazlik uyariyla gosterilir.
     """
     from app.services.event_service import record_event
 
@@ -754,11 +758,9 @@ def _seri_ve_kod_senkronu(db, device, reading) -> None:  # noqa: ANN001
     if not seri or not seri.strip("0"):
         return
 
-    seri_degisti = False
     if device.serial_number != seri:
         eski_seri = device.serial_number
         device.serial_number = seri
-        seri_degisti = True
         record_event(
             db,
             category="device",
@@ -771,50 +773,21 @@ def _seri_ve_kod_senkronu(db, device, reading) -> None:  # noqa: ANN001
             ),
             metadata={"old": eski_seri, "new": seri},
         )
-
-    if device.code == seri:
-        return
-
-    cakisan = db.scalar(
-        select(Device.id).where(Device.code == seri, Device.id != device.id)
-    )
-    if cakisan is not None:
-        if seri_degisti:
+        if device.code != seri:
             record_event(
                 db,
                 category="device",
-                event_type="device_code_sync_blocked",
+                event_type="device_code_mismatch",
                 severity="warning",
                 device_code=device.code,
                 message=(
-                    f"{device.name}: cihaz kodu gercek seriye ({seri}) "
-                    f"cekilemedi — ayni kodda baska bir cihaz kayitli. "
-                    f"Cakisan kaydi duzeltip cihazi yeniden baglayin."
+                    f"{device.name}: cihaz kodu ({device.code}) cihazin "
+                    f"bildirdigi gercek seriden ({seri}) farkli — canli "
+                    f"trafik akarken otomatik duzeltilmez (bkz. 2026-08-07 "
+                    f"olayi). Uygun bir bakim penceresinde elle duzeltin."
                 ),
-                metadata={"code": device.code, "serial": seri},
+                metadata={"code": device.code, "reported_serial": seri},
             )
-        return
-
-    from app.models.gateway import Gateway
-
-    eski_kod = device.code
-    device.code = seri
-    if device.gateway_code:
-        gw = db.scalar(select(Gateway).where(Gateway.code == device.gateway_code))
-        if gw is not None:
-            gw.config_nonce = int(getattr(gw, "config_nonce", 0) or 0) + 1
-    record_event(
-        db,
-        category="device",
-        event_type="device_code_synced",
-        severity="info",
-        device_code=device.code,
-        message=(
-            f"{device.name}: cihaz kodu gercek seri numarasina "
-            f"guncellendi ({eski_kod} -> {seri})"
-        ),
-        metadata={"old": eski_kod, "new": seri},
-    )
 
 
 def _satirlari_yaz(
