@@ -115,6 +115,7 @@ import {
   downloadIec104PointsXlsx,
   autoAssignDeviceCa,
   fetchIec104Runtime,
+  fetchModbusRuntime,
   updateProjectSettings,
   testNotificationSms,
   testNotificationSmtp,
@@ -2836,6 +2837,10 @@ export function App() {
                 onFetchIec104Runtime={async (id) => {
                   if (!session) throw new Error("Oturum yok.");
                   return fetchIec104Runtime(session.accessToken, id);
+                }}
+                onFetchModbusRuntime={async (id) => {
+                  if (!session) throw new Error("Oturum yok.");
+                  return fetchModbusRuntime(session.accessToken, id);
                 }}
               />
             ) : null}

@@ -2755,6 +2755,30 @@
         "lastSuccess": "Last success",
         "lastError": "Last error"
       },
+      "mbRuntime": {
+        "title": "Modbus Publish Status — {{name}}",
+        "badgeLoading": "Checking…",
+        "badgeNoFlow": "No data flow",
+        "pointsLabel": "Address plan:",
+        "pointsValue": "{{points}} points / {{units}} units",
+        "messagesProcessed": "Telemetry messages processed from NATS",
+        "updatesApplied": "Updates written to registers",
+        "updatesUnmapped": "Telemetry not matching the address plan",
+        "requestsServed": "SCADA requests served",
+        "rejectedPeers": "Connections rejected by IP allowlist",
+        "skippedBadQuality": "Measurements skipped due to bad quality",
+        "lastSyncError": "Last plan sync error",
+        "diag": {
+          "ok": "Flow is healthy: telemetry is being written to registers and SCADA is polling. If values still look empty, check the client-side address/format settings (FC3/FC4, unit ID, 40001 base offset, int16 vs float32).",
+          "workerDown": "The modbus-outbound service is unreachable — the container is down or its health port is closed.",
+          "serverDown": "Worker is up but no TCP server runs for this target — the target may be inactive or the plan failed to load (see plan sync error).",
+          "consumerError": "The telemetry consumer is failing — NATS connection/subscription problem:",
+          "noTelemetry": "No telemetry has been processed from NATS. Check that devices are sending data (Live Values updating) and the gateway/NATS are up; if the service just started it may be waiting for the first measurement (only new messages are processed, history is not replayed).",
+          "unmapped": "Telemetry arrives but does not match the device/signal keys in this target's address plan — the plan may be stale (refreshes every 30 s) or device codes differ.",
+          "noWrites": "Telemetry is processed but nothing was written to this target yet — measurements may have bad quality (see skipped counter) or the incoming signals are outside the plan.",
+          "noReads": "Values are written to registers but SCADA has not read anything yet — the client connects but sends no queries, or is polling the wrong port."
+        }
+      },
       "table": {
         "name": "Name",
         "protocol": "Protocol",

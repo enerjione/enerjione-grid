@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
 import { useToast } from "../../components/ToastProvider";
-import type { DeviceRow, Iec104RuntimeStatus, OutboundTarget } from "../../shared/types";
+import type { DeviceRow, Iec104RuntimeStatus, ModbusRuntimeStatus, OutboundTarget } from "../../shared/types";
 import type { MqttPayloadFields, OutboundRuntimeStatus, OutboundAutoTopic } from "../../shared/api";
 import { fetchOutboundRuntimeStatus, fetchOutboundAutoTopics, uploadMqttCert, testOutboundTarget } from "../../shared/api";
 import { MqttTopicMappingModal } from "./MqttTopicMappingModal";
@@ -120,6 +120,7 @@ type Props = {
   onUpdateDeviceCa?: (deviceCode: string, ca: number | null) => Promise<void>;
   onAutoAssignDeviceCa?: (targetId: number, overwrite: boolean) => Promise<void>;
   onFetchIec104Runtime?: (targetId: number) => Promise<Iec104RuntimeStatus>;
+  onFetchModbusRuntime?: (targetId: number) => Promise<ModbusRuntimeStatus>;
 };
 
 export function OutboundTargetsPanel({
@@ -138,7 +139,8 @@ export function OutboundTargetsPanel({
   onDownloadIec104Xlsx,
   onUpdateDeviceCa,
   onAutoAssignDeviceCa,
-  onFetchIec104Runtime
+  onFetchIec104Runtime,
+  onFetchModbusRuntime
 }: Props) {
   const { t } = useTranslation();
   const protocolKey = (allowedProtocols ?? DEFAULT_PROTOCOLS).join("|");
@@ -196,6 +198,12 @@ export function OutboundTargetsPanel({
   const [runtimeLoading, setRuntimeLoading] = useState(false);
 
   const [runtimeBadges, setRuntimeBadges] = useState<Record<number, { running: boolean; clients: number }>>({});
+
+  // Modbus runtime — rozet + teshis popup'i (IEC104 kalibiyla ayni akis)
+  const [mbRuntimeTarget, setMbRuntimeTarget] = useState<OutboundTarget | null>(null);
+  const [mbRuntime, setMbRuntime] = useState<ModbusRuntimeStatus | null>(null);
+  const [mbRuntimeLoading, setMbRuntimeLoading] = useState(false);
+  const [mbBadges, setMbBadges] = useState<Record<number, { running: boolean; clients: number; flowing: boolean }>>({});
 
   // REST/MQTT runtime status (Durum sutunu)
   const [outboundRuntime, setOutboundRuntime] = useState<Record<number, OutboundRuntimeStatus>>({});
@@ -773,6 +781,61 @@ export function OutboundTargetsPanel({
     enabled: Boolean(onFetchIec104Runtime) && iec104Ids.length > 0,
     intervalMs: 10000,
     fn: pollRuntimeBadges
+  });
+
+  // ---- Modbus runtime: teshis popup'i 5 sn, liste rozetleri 10 sn ----
+  const pollMbRuntime = useCallback(async () => {
+    if (!mbRuntimeTarget || !onFetchModbusRuntime) return;
+    setMbRuntimeLoading(true);
+    try {
+      setMbRuntime(await onFetchModbusRuntime(mbRuntimeTarget.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+    } finally {
+      setMbRuntimeLoading(false);
+    }
+  }, [mbRuntimeTarget, onFetchModbusRuntime, t]);
+
+  usePolling({
+    enabled: Boolean(mbRuntimeTarget && onFetchModbusRuntime),
+    intervalMs: 5000,
+    fn: pollMbRuntime
+  });
+
+  const modbusIds = useMemo(
+    () => visibleTargets.filter((tg) => tg.protocol === "modbus").map((tg) => tg.id),
+    [visibleTargets]
+  );
+
+  useEffect(() => {
+    if (modbusIds.length === 0) setMbBadges({});
+  }, [modbusIds]);
+
+  const pollMbBadges = useCallback(async () => {
+    if (!onFetchModbusRuntime) return;
+    const updates: Record<number, { running: boolean; clients: number; flowing: boolean }> = {};
+    await Promise.all(
+      modbusIds.map(async (id) => {
+        try {
+          const r = await onFetchModbusRuntime(id);
+          updates[id] = {
+            running: r.server_running,
+            clients: r.connected_clients,
+            // "Akis var" = telemetri register'lara gercekten yaziliyor.
+            flowing: r.updates_applied > 0
+          };
+        } catch {
+          // ignore
+        }
+      })
+    );
+    setMbBadges(updates);
+  }, [modbusIds, onFetchModbusRuntime]);
+
+  usePolling({
+    enabled: Boolean(onFetchModbusRuntime) && modbusIds.length > 0,
+    intervalMs: 10000,
+    fn: pollMbBadges
   });
 
   // REST/MQTT runtime status — 'Durum' sutunu icin 5sn poll
@@ -1854,6 +1917,117 @@ export function OutboundTargetsPanel({
         </div>
       ) : null}
 
+      {/* Modbus runtime + teshis popup'i */}
+      {mbRuntimeTarget ? (
+        <div className="settings-modal-backdrop">
+          <div className="settings-modal iec104-runtime-modal">
+            <h3>{t("engineering.outbound.mbRuntime.title", { name: mbRuntimeTarget.name })}</h3>
+            {mbRuntimeLoading && !mbRuntime ? (
+              <p className="helper-text">{t("engineering.outbound.runtime.loading")}</p>
+            ) : null}
+            {mbRuntime ? (
+              <>
+                {(() => {
+                  // Sayaclardan tek cumlelik teshis — "deger neden yok"
+                  // sorusunun cevabi operatorun onunde dursun.
+                  const c = mbRuntime.consumer;
+                  let key = "ok";
+                  let tone: "ok" | "warn" | "bad" = "ok";
+                  if (!mbRuntime.worker_reachable) {
+                    key = "workerDown"; tone = "bad";
+                  } else if (!mbRuntime.server_running) {
+                    key = "serverDown"; tone = "bad";
+                  } else if (c.last_error) {
+                    key = "consumerError"; tone = "bad";
+                  } else if (c.messages_processed === 0) {
+                    key = "noTelemetry"; tone = "warn";
+                  } else if (mbRuntime.updates_applied === 0 && mbRuntime.updates_unmapped > 0) {
+                    key = "unmapped"; tone = "warn";
+                  } else if (mbRuntime.updates_applied === 0) {
+                    key = "noWrites"; tone = "warn";
+                  } else if (mbRuntime.requests_served === 0) {
+                    key = "noReads"; tone = "warn";
+                  }
+                  return (
+                    <p className={`mb-runtime-diagnosis mb-runtime-diagnosis--${tone}`}>
+                      {t(`engineering.outbound.mbRuntime.diag.${key}`)}
+                      {key === "workerDown" && mbRuntime.worker_error ? (
+                        <> <code>{mbRuntime.worker_error}</code></>
+                      ) : null}
+                      {key === "consumerError" && c.last_error ? (
+                        <> <code>{c.last_error}</code></>
+                      ) : null}
+                    </p>
+                  );
+                })()}
+                <div className="iec104-runtime-summary">
+                  <div>
+                    <span className={`status-dot ${mbRuntime.server_running ? "status-dot--ok" : "status-dot--bad"}`} />
+                    <strong>{t("engineering.outbound.runtime.server")}</strong>{" "}
+                    {mbRuntime.server_running
+                      ? t("engineering.outbound.runtime.running")
+                      : t("engineering.outbound.runtime.stopped")}
+                    {mbRuntime.listen ? <> · <code>{mbRuntime.listen}</code></> : null}
+                  </div>
+                  <div>
+                    <strong>{t("engineering.outbound.mbRuntime.pointsLabel")}</strong>{" "}
+                    {t("engineering.outbound.mbRuntime.pointsValue", {
+                      points: mbRuntime.points,
+                      units: mbRuntime.units
+                    })}
+                  </div>
+                  <div>
+                    <strong>{t("engineering.outbound.runtime.connected")}</strong> {mbRuntime.connected_clients}
+                  </div>
+                </div>
+                <table className="values-table mb-runtime-counters">
+                  <tbody>
+                    <tr>
+                      <td>{t("engineering.outbound.mbRuntime.messagesProcessed")}</td>
+                      <td>{mbRuntime.consumer.messages_processed.toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td>{t("engineering.outbound.mbRuntime.updatesApplied")}</td>
+                      <td>{mbRuntime.updates_applied.toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td>{t("engineering.outbound.mbRuntime.updatesUnmapped")}</td>
+                      <td>{mbRuntime.updates_unmapped.toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td>{t("engineering.outbound.mbRuntime.requestsServed")}</td>
+                      <td>{mbRuntime.requests_served.toLocaleString()}</td>
+                    </tr>
+                    {mbRuntime.rejected_peers > 0 ? (
+                      <tr>
+                        <td>{t("engineering.outbound.mbRuntime.rejectedPeers")}</td>
+                        <td>{mbRuntime.rejected_peers.toLocaleString()}</td>
+                      </tr>
+                    ) : null}
+                    {mbRuntime.consumer.skipped_bad_quality > 0 ? (
+                      <tr>
+                        <td>{t("engineering.outbound.mbRuntime.skippedBadQuality")}</td>
+                        <td>{mbRuntime.consumer.skipped_bad_quality.toLocaleString()}</td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+                {mbRuntime.consumer.last_sync_error ? (
+                  <p className="helper-text">
+                    {t("engineering.outbound.mbRuntime.lastSyncError")}: <code>{mbRuntime.consumer.last_sync_error}</code>
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            <div className="settings-actions">
+              <button type="button" onClick={() => { setMbRuntimeTarget(null); setMbRuntime(null); }}>
+                {t("engineering.outbound.asdu.close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {isWebhookMode ? (
         <div className="webhook-list">
           {filteredTargets.length === 0 ? (
@@ -2111,6 +2285,35 @@ export function OutboundTargetsPanel({
                           </span>
                         ) : (
                           <span className="helper-text">—</span>
+                        );
+                      })()
+                    ) : item.protocol === "modbus" && onFetchModbusRuntime ? (
+                      (() => {
+                        const mb = mbBadges[item.id];
+                        const cls = !mb
+                          ? ""
+                          : !mb.running
+                          ? "iec104-badge--bad"
+                          : mb.flowing
+                          ? "iec104-badge--ok"
+                          : "iec104-badge--warn";
+                        const label = !mb
+                          ? t("engineering.outbound.mbRuntime.badgeLoading")
+                          : !mb.running
+                          ? t("engineering.outbound.scadaOff")
+                          : mb.flowing
+                          ? t("engineering.outbound.scadaConnected", { count: mb.clients })
+                          : t("engineering.outbound.mbRuntime.badgeNoFlow");
+                        return (
+                          <button
+                            type="button"
+                            className={`iec104-badge ${cls}`}
+                            onClick={() => setMbRuntimeTarget(item)}
+                            title={t("engineering.outbound.mbRuntime.title", { name: item.name })}
+                          >
+                            <span className="status-dot" />
+                            {label}
+                          </button>
                         );
                       })()
                     ) : (

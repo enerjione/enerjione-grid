@@ -483,6 +483,31 @@ export type Iec104RuntimeStatus = {
   connected_clients: { peer: string; started: boolean; connected_at: string }[];
 };
 
+// Modbus hedefi canli durumu — worker /health sayaclarindan derlenir.
+// Sayaclar "deger neden gorunmuyor" teshisinin kendisidir (bkz. backend
+// get_modbus_runtime docstring'i).
+export type ModbusRuntimeStatus = {
+  target_id: number;
+  worker_reachable: boolean;
+  worker_error: string | null;
+  server_running: boolean;
+  listen: string | null;
+  units: number;
+  points: number;
+  connected_clients: number;
+  requests_served: number;
+  rejected_peers: number;
+  updates_applied: number;
+  updates_unmapped: number;
+  consumer: {
+    messages_processed: number;
+    points_written: number;
+    skipped_bad_quality: number;
+    last_error: string | null;
+    last_sync_error: string | null;
+  };
+};
+
 // ===== Public API — Personal Access Token (PAT) =====
 // Kullanici Postman/curl/script ile dis erisim icin token uretir. Token plain
 // hali yalniz olusturma cevabinda bir kez doner; sonra DB'de sha256 hash kalir.

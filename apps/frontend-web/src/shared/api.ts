@@ -1955,6 +1955,14 @@ export async function fetchIec104Runtime(token: string, targetId: number) {
   return (await response.json()) as import("./types").Iec104RuntimeStatus;
 }
 
+export async function fetchModbusRuntime(token: string, targetId: number) {
+  const response = await apiFetch(`${API_BASE_URL}/outbound-targets/${targetId}/modbus-runtime`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Modbus runtime alınamadı.");
+  return (await response.json()) as import("./types").ModbusRuntimeStatus;
+}
+
 /** Bu IEC 104 hedefi icin Excel (.xlsx) sinyal listesini indirir.
  *  Cihaz × aktif IEC 104 sinyali kombinasyonlari + ASDU adresleri ile.
  *  Donus deger: indirilen point sayisi (X-Point-Count header'i; yoksa null). */

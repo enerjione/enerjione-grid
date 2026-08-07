@@ -14,6 +14,20 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.29] — 2026-08-07
+
+### Eklendi
+
+- **Modbus yayın durumu paneli**: SCADA Çıkışları tablosunda Modbus hedefleri
+  artık canlı durum rozeti gösterir (çalışıyor / veri akışı yok / kapalı) ve
+  rozete tıklayınca sayaçlarla teşhis penceresi açılır: NATS'tan işlenen
+  telemetri, register'lara yazılan güncelleme, adres planıyla eşleşmeyen
+  telemetri, cevaplanan SCADA isteği. Pencere sayaçlardan tek cümlelik teşhis
+  üretir — "değer neden görünmüyor" sorusunun cevabı artık ekranda
+  (worker kapalı / telemetri yok / plan eşleşmiyor / SCADA okumuyor ayrımı).
+
+---
+
 ## [2.53.28] — 2026-08-07
 
 ### Düzeltildi

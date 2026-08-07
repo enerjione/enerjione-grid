@@ -2752,6 +2752,30 @@
         "lastSuccess": "Son başarı",
         "lastError": "Son hata"
       },
+      "mbRuntime": {
+        "title": "Modbus Yayın Durumu — {{name}}",
+        "badgeLoading": "Sorgulanıyor…",
+        "badgeNoFlow": "Veri akışı yok",
+        "pointsLabel": "Adres planı:",
+        "pointsValue": "{{points}} nokta / {{units}} unit",
+        "messagesProcessed": "NATS'tan işlenen telemetri mesajı",
+        "updatesApplied": "Register'lara yazılan güncelleme",
+        "updatesUnmapped": "Adres planıyla eşleşmeyen telemetri",
+        "requestsServed": "Cevaplanan SCADA isteği",
+        "rejectedPeers": "IP listesi nedeniyle reddedilen bağlantı",
+        "skippedBadQuality": "Kötü kalite nedeniyle atlanan ölçüm",
+        "lastSyncError": "Son plan senkron hatası",
+        "diag": {
+          "ok": "Akış sağlıklı: telemetri register'lara yazılıyor ve SCADA okuma yapıyor. Değer hâlâ görünmüyorsa istemci tarafındaki adres/format ayarını kontrol edin (FC3/FC4, unit ID, 40001 taban kayması, int16-float32 seçimi).",
+          "workerDown": "modbus-outbound servisine erişilemiyor — konteyner çalışmıyor veya health portu kapalı.",
+          "serverDown": "Worker ayakta ama bu hedef için TCP sunucusu çalışmıyor — hedef pasif olabilir ya da plan yüklenememiş (plan senkron hatasına bakın).",
+          "consumerError": "Telemetri tüketicisi hata veriyor — NATS bağlantısı/aboneliği sorunlu:",
+          "noTelemetry": "NATS'tan hiç telemetri işlenmedi. Cihazlardan veri akışı var mı (Canlı Değerler güncelleniyor mu) ve gateway/NATS ayakta mı kontrol edin; servis yeni başladıysa ilk ölçümü bekliyor olabilir (yalnızca yeni mesajlar işlenir, geçmiş oynatılmaz).",
+          "unmapped": "Telemetri geliyor ama bu hedefin adres planındaki cihaz/sinyal anahtarlarıyla eşleşmiyor — plan eski olabilir (30 sn'de bir tazelenir) ya da cihaz kodları farklı.",
+          "noWrites": "Telemetri işleniyor ama bu hedefe henüz değer yazılmadı — ölçümler kötü kaliteli olabilir (atlanan ölçüm sayacına bakın) ya da gelen sinyaller plan dışı.",
+          "noReads": "Değerler register'lara yazılıyor ama SCADA henüz hiç okuma yapmadı — istemci bağlantı kurup sorgu göndermiyor ya da yanlış porta bağlı."
+        }
+      },
       "table": {
         "name": "Ad",
         "protocol": "Protokol",

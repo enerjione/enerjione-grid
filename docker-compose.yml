@@ -513,6 +513,8 @@ services:
       # NATS HTTP monitor (jsz) — Sistem Durumu'ndaki asama kuyruklari buradan
       # okunur. Ulasilamazsa panel asamasiz calisir (fail-soft).
       NATS_MONITOR_URL: ${NATS_MONITOR_URL:-http://nats:8222}
+      # Modbus runtime teshisi: worker /health adresi (ayni ag icinde varsayilan yeterli)
+      MODBUS_OUTBOUND_HEALTH_URL: ${MODBUS_OUTBOUND_HEALTH_URL:-http://modbus-outbound:8017}
       # TLS CA dosyasi. BOS = TLS kapali (varsayilan, bugunku davranis).
       # Doluysa baglanti YALNIZCA bu CA'ya guvenir; isletim sisteminin
       # guven deposu kullanilmaz. Acmak icin once sertifika uretin:

@@ -376,6 +376,79 @@ def get_iec104_runtime(
     }
 
 
+@router.get("/{target_id}/modbus-runtime")
+def get_modbus_runtime(
+    target_id: int,
+    _: User = Depends(
+        require_roles([UserRole.ENGINEER, UserRole.INSTALLER])
+    ),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Bu Modbus hedefinin canli durumu + veri akisi sayaclari.
+
+    Gercek Modbus TCP server'lari `modbus-outbound` servisinde calisir; bu
+    endpoint worker'in /health ciktisindan hedefe ait anlik goruntuyu ve
+    NATS tuketici sayaclarini toplar. Sayaclarin okunusu:
+
+      messages_processed=0                  -> NATS'tan telemetri hic gelmiyor
+      updates_unmapped artiyor, applied=0   -> telemetri geliyor ama adres
+                                               planindaki (cihaz, sinyal)
+                                               anahtarlariyla eslesmiyor
+      updates_applied artiyor               -> degerler register'lara yaziliyor;
+                                               SCADA sifir goruyorsa sorun
+                                               istemci adres/format tarafinda
+    """
+    import os
+
+    import requests as _requests
+
+    target = _require_modbus_target(db, target_id)
+    base = os.getenv("MODBUS_OUTBOUND_HEALTH_URL", "http://modbus-outbound:8017")
+
+    worker: dict | None = None
+    worker_error: str | None = None
+    try:
+        resp = _requests.get(f"{base}/health", timeout=2.5)
+        if resp.status_code == 200:
+            worker = resp.json() or {}
+        else:
+            worker_error = f"health HTTP {resp.status_code}"
+    except Exception as exc:  # noqa: BLE001
+        worker_error = str(exc)
+
+    snapshot: dict | None = None
+    if worker is not None:
+        for row in worker.get("targets") or []:
+            try:
+                if int(row.get("target_id") or 0) == target.id:
+                    snapshot = row
+                    break
+            except (TypeError, ValueError):
+                continue
+
+    return {
+        "target_id": target.id,
+        "worker_reachable": worker is not None,
+        "worker_error": worker_error,
+        "server_running": snapshot is not None,
+        "listen": (snapshot or {}).get("listen"),
+        "units": int((snapshot or {}).get("units") or 0),
+        "points": int((snapshot or {}).get("points") or 0),
+        "connected_clients": int((snapshot or {}).get("connected_clients") or 0),
+        "requests_served": int((snapshot or {}).get("requests_served") or 0),
+        "rejected_peers": int((snapshot or {}).get("rejected_peers") or 0),
+        "updates_applied": int((snapshot or {}).get("updates_applied") or 0),
+        "updates_unmapped": int((snapshot or {}).get("updates_unmapped") or 0),
+        "consumer": {
+            "messages_processed": int((worker or {}).get("messages_processed") or 0),
+            "points_written": int((worker or {}).get("points_written") or 0),
+            "skipped_bad_quality": int((worker or {}).get("skipped_bad_quality") or 0),
+            "last_error": (worker or {}).get("last_consumer_error"),
+            "last_sync_error": (worker or {}).get("last_sync_error"),
+        },
+    }
+
+
 @router.get("/{target_id}/iec104-points.csv")
 def export_iec104_points_csv(
     target_id: int,
