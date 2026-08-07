@@ -14,6 +14,22 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.54.2] — 2026-08-07
+
+### Düzeltildi
+
+- **v2.54.1'deki imaj etiketi düzeltmesi yarım kalmıştı.** `image` güncelleme
+  parametreleri kabul listesine eklenmişti ama doğrulama fonksiyonu onu çıktıya
+  **kopyalamıyordu**; değer sessizce düşüyor, ajan yine compose'daki eski
+  etiketi geri yazıyordu. Yani sabit etikete (`:1.5.0`) kilitlenmiş kurulum
+  hâlâ düzelmiyordu. Artık gerçekten uygulanıyor.
+- **Zaman bombası test**: `test_device_event_time` sabit bir tarih (2026-07-31)
+  kullanıyordu ve saat değerlendirmesi 7 günden eski damgayı "invalid" saydığı
+  için test, o tarihten tam 7 gün sonra (bugün 12:00 UTC) hiçbir kod
+  değişmeden kendiliğinden kırıldı. Damga artık "şimdi"ye göre üretiliyor.
+
+---
+
 ## [2.54.1] — 2026-08-07
 
 ### Düzeltildi

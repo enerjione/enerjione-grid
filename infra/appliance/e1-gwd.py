@@ -825,6 +825,13 @@ def _validate_update_params(params: object) -> dict:
     out: dict = {}
     if "nats_url" in params:
         out["nats_url"] = _require_str(params, "nats_url", NATS_URL_RE, "nats:// URL")
+    if "image" in params:
+        # KOPYALANMASI SART: yalnizca kabul listesine eklemek yetmez —
+        # buraya yazilmazsa deger sessizce duser ve _do_update compose'daki
+        # ESKI etiketi geri kazanip aynen yazar. Sabit etikete kilitlenmis
+        # kurulum (orn. `:1.5.0`) o zaman guncellemeyle DUZELMEZ; ekran
+        # kalici "Guncel" der, yeni surumler hic gorunmez (2026-08-07).
+        out["image"] = _require_str(params, "image", IMAGE_RE, "imaj referansi")
     return out
 
 

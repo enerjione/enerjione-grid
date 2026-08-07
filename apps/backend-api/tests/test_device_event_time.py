@@ -29,7 +29,11 @@ from app.services.device_clock_service import (
     assess_device_timestamp,
 )
 
-SIMDI = datetime(2026, 7, 31, 12, 0, 0, tzinfo=timezone.utc)
+# ZAMAN BOMBASI OLMASIN: sabit tarih (2026-07-31) kullaniliyordu ve saat
+# degerlendirmesi 7 GUNDEN eski damgayi "invalid" saydigi icin test, o
+# tarihten tam 7 gun sonra (2026-08-07 12:00 UTC) KENDILIGINDEN kirildi —
+# hicbir kod degismeden. Damga artik "simdi"ye gore uretiliyor.
+SIMDI = datetime.now(timezone.utc).replace(microsecond=0)
 
 
 # ------------------------------------------------------------ eski gateway

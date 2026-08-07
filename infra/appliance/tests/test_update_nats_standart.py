@@ -61,10 +61,20 @@ def test_update_params_nats_url_kabul_ediyor():
     assert out == {"nats_url": YENI_NATS_URL}
 
 
+def test_update_params_image_KABUL_EDER():
+    """`image` 2026-08-07'de BILINCLI olarak kabul listesine alindi.
+
+    Oncesinde ajan guncellemede compose'daki mevcut etiketi geri kazanip
+    aynen yaziyordu: compose'a bir kez sabit etiket (`:1.5.0`) yazildiysa
+    "Guncelle" butonu onu BIR DAHA degistiremiyordu. Sahada GW-001 boyle
+    kilitlendi, ekran kalici "Guncel" dedi ve 1.6.x hic gorunmedi.
+    """
+    temiz = gwd._validate_update_params({"image": "ghcr.io/x/y:latest"})
+    assert temiz["image"] == "ghcr.io/x/y:latest"
+
+
 def test_update_params_diger_anahtarlari_reddediyor():
-    """update, install degildir: imaj/token gibi alanlar bu yoldan degismemeli."""
-    with pytest.raises(ValueError):
-        gwd._validate_update_params({"image": "kotu/imaj:latest"})
+    """update, install degildir: token gibi alanlar bu yoldan degismemeli."""
     with pytest.raises(ValueError):
         gwd._validate_update_params({"nats_url": YENI_NATS_URL, "token": "x" * 20})
 
