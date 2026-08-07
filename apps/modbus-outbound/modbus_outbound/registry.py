@@ -89,6 +89,10 @@ class PointRegistry:
         self._lock = RLock()
         self.updates_applied = 0
         self.updates_unmapped = 0
+        # Eslesme + kalite sorunu YOK ama deger sayiya cevrilemedi (bos,
+        # metin, vb.) — eskiden burada SESSIZCE `continue` vardi ve
+        # "yazilan=0" teshis edilemiyordu (bkz. consumer.py docstring'i).
+        self.updates_uncoercible = 0
 
     # ---- Kurulum ----------------------------------------------------------
     def add_point(
@@ -146,6 +150,7 @@ class PointRegistry:
                 else:
                     number = coerce_number(value)
                     if number is None:
+                        self.updates_uncoercible += 1
                         continue
                     words = encode_registers(
                         number,

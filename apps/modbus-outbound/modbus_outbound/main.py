@@ -68,7 +68,7 @@ async def _async_main() -> None:
             "plans_seen": syncer.last_plan_count,
             "messages_processed": consumer.messages_processed,
             "points_written": consumer.points_written,
-            "skipped_bad_quality": consumer.skipped_bad_quality,
+            "bad_quality_count": consumer.bad_quality_count,
             "last_consumer_error": consumer.last_error,
             "last_sync_error": syncer.last_error,
             "targets": modbus_manager.runtime_snapshot(),

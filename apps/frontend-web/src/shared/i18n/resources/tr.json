@@ -2762,9 +2762,10 @@
         "messagesProcessed": "NATS'tan işlenen telemetri mesajı",
         "updatesApplied": "Register'lara yazılan güncelleme",
         "updatesUnmapped": "Adres planıyla eşleşmeyen telemetri",
+        "updatesUncoercible": "Sayıya/bit'e çevrilemeyen ölçüm",
         "requestsServed": "Cevaplanan SCADA isteği",
         "rejectedPeers": "IP listesi nedeniyle reddedilen bağlantı",
-        "skippedBadQuality": "Kötü kalite nedeniyle atlanan ölçüm",
+        "badQualityCount": "Kötü kaliteli alınan ölçüm (yine de yazıldı)",
         "lastSyncError": "Son plan senkron hatası",
         "diag": {
           "ok": "Akış sağlıklı: telemetri register'lara yazılıyor ve SCADA okuma yapıyor. Değer hâlâ görünmüyorsa istemci tarafındaki adres/format ayarını kontrol edin (FC3/FC4, unit ID, 40001 taban kayması, int16-float32 seçimi).",
@@ -2773,7 +2774,8 @@
           "consumerError": "Telemetri tüketicisi hata veriyor — NATS bağlantısı/aboneliği sorunlu:",
           "noTelemetry": "NATS'tan hiç telemetri işlenmedi. Cihazlardan veri akışı var mı (Canlı Değerler güncelleniyor mu) ve gateway/NATS ayakta mı kontrol edin; servis yeni başladıysa ilk ölçümü bekliyor olabilir (yalnızca yeni mesajlar işlenir, geçmiş oynatılmaz).",
           "unmapped": "Telemetri geliyor ama bu hedefin adres planındaki cihaz/sinyal anahtarlarıyla eşleşmiyor — plan eski olabilir (30 sn'de bir tazelenir) ya da cihaz kodları farklı.",
-          "noWrites": "Telemetri işleniyor ama bu hedefe henüz değer yazılmadı — ölçümler kötü kaliteli olabilir (atlanan ölçüm sayacına bakın) ya da gelen sinyaller plan dışı.",
+          "uncoercible": "Telemetri geliyor, eşleşme sorunu yok ama değer sayıya/bit'e çevrilemiyor — sinyalin sayısal alanı boş gelmiş olabilir (bkz. çevrilemeyen ölçüm sayacı).",
+          "noWrites": "Telemetri işleniyor ama bu hedefe henüz değer yazılmadı — gelen sinyaller plan dışı olabilir ya da bu hedefin sinyalleri için henüz hiç ölçüm gelmedi.",
           "noReads": "Değerler register'lara yazılıyor ama SCADA henüz hiç okuma yapmadı — istemci bağlantı kurup sorgu göndermiyor ya da yanlış porta bağlı."
         }
       },

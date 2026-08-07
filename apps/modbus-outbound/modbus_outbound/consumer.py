@@ -6,9 +6,18 @@ ve o kilitle korunuyor, bu yuzden ekstra kopruye gerek yok (IEC 104'te ASDU
 yayini asenkron oldugu icin threadsafe kopru gerekiyordu; Modbus'ta sunucu
 istek geldiginde okur, biz sadece hafizayi guncelleriz).
 
-Kalite (quality) yonetimi: Modbus'ta kalite biti YOKTUR. Bozuk kaliteli olcum
-geldiginde son iyi deger korunur — 0 yazmak, SCADA'da "gerilim sifir oldu"
-gibi gercek bir olay gibi gorunur ve yanlis alarm uretir.
+Kalite (quality) yonetimi: Modbus'ta kalite biti YOKTUR ve register/bit
+alanlarinin "henuz hic yazilmadi" diye bir hali de yoktur — SCADA ne
+sorarsa depoda ne varsa onu okur. Once "bozuk kaliteli olcumu atla, son
+iyi degeri koru" davranisi vardi; ama bir sinyal HIC iyi kaliteli
+gelmezse (2026-08-07: sahada bir hedefte 10K+ mesajin 6K+'si surekli
+"bad" — asla bir kez bile "good" olmadi) register hicbir zaman
+yazilmiyor ve SCADA'nin gordugu deger sonsuza dek varsayilan 0 kaliyor.
+Bu, Canli Degerler ekraninin gosterdigi GERCEK degerden DAHA YANILTICI:
+sistemin geri kalani "su an okunan deger buydu" derken Modbus sessizce
+"hic olcum yok" gibi 0 gosteriyordu. Artik davranis Canli Degerler ile
+BIREBIR AYNI: kalite ne olursa olsun o an gelen deger yazilir; kalite
+sayaci yalnizca teshis icin ayrica tutulur, yazmayi ENGELLEMEZ.
 """
 
 from __future__ import annotations
@@ -61,7 +70,7 @@ class TelemetryConsumer:
         self._thread: Thread | None = None
         self._messages_processed = 0
         self._points_written = 0
-        self._skipped_bad_quality = 0
+        self._bad_quality_count = 0
         self._last_error: str | None = None
 
     # ---- Yasam dongusu ----------------------------------------------------
@@ -85,8 +94,8 @@ class TelemetryConsumer:
         return self._points_written
 
     @property
-    def skipped_bad_quality(self) -> int:
-        return self._skipped_bad_quality
+    def bad_quality_count(self) -> int:
+        return self._bad_quality_count
 
     @property
     def last_error(self) -> str | None:
@@ -184,10 +193,18 @@ class TelemetryConsumer:
         if not device_code or not signal_key:
             return
         if not _is_good(payload.get("quality")):
-            # Son iyi deger korunur (bkz. modul docstring'i).
-            self._skipped_bad_quality += 1
-            return
+            # ARTIK ATLAMA YOK (bkz. modul docstring'i) — yalnizca sayilir.
+            self._bad_quality_count += 1
+
+        # `value` bazi sinyallerde bos gelir, gercek deger `value_string`
+        # tasir (orn. DNP3 tarafinin sayisal alani doldurmadigi durumlar —
+        # bkz. `_seri_ve_kod_senkronu`daki ayni ikilik). Yalnizca `value`'ya
+        # bakmak bu sinyaller icin register'i SESSIZCE hic yazdirmiyordu.
+        raw_value = payload.get("value")
+        if raw_value is None:
+            raw_value = payload.get("value_string")
+
         written = self.manager.update_point(
-            str(device_code), str(signal_key), payload.get("value")
+            str(device_code), str(signal_key), raw_value
         )
         self._points_written += written

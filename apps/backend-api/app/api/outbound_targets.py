@@ -390,13 +390,19 @@ def get_modbus_runtime(
     endpoint worker'in /health ciktisindan hedefe ait anlik goruntuyu ve
     NATS tuketici sayaclarini toplar. Sayaclarin okunusu:
 
-      messages_processed=0                  -> NATS'tan telemetri hic gelmiyor
-      updates_unmapped artiyor, applied=0   -> telemetri geliyor ama adres
-                                               planindaki (cihaz, sinyal)
-                                               anahtarlariyla eslesmiyor
-      updates_applied artiyor               -> degerler register'lara yaziliyor;
-                                               SCADA sifir goruyorsa sorun
-                                               istemci adres/format tarafinda
+      messages_processed=0                    -> NATS'tan telemetri hic gelmiyor
+      updates_unmapped artiyor, applied=0     -> telemetri geliyor ama adres
+                                                 planindaki (cihaz, sinyal)
+                                                 anahtarlariyla eslesmiyor
+      updates_uncoercible artiyor, applied=0  -> eslesme/kalite sorunu yok ama
+                                                 deger sayiya/bit'e cevrilemiyor
+      updates_applied artiyor                 -> degerler register'lara yaziliyor;
+                                                 SCADA sifir goruyorsa sorun
+                                                 istemci adres/format tarafinda
+
+    NOT: kalite (bad_quality_count) YAZMAYI ENGELLEMEZ — Modbus'ta kalite
+    biti olmadigi icin gelen deger kalite ne olursa olsun yazilir (Canli
+    Degerler ekraniyla birebir ayni davranis, bkz. worker consumer.py).
     """
     import os
 
@@ -439,10 +445,11 @@ def get_modbus_runtime(
         "rejected_peers": int((snapshot or {}).get("rejected_peers") or 0),
         "updates_applied": int((snapshot or {}).get("updates_applied") or 0),
         "updates_unmapped": int((snapshot or {}).get("updates_unmapped") or 0),
+        "updates_uncoercible": int((snapshot or {}).get("updates_uncoercible") or 0),
         "consumer": {
             "messages_processed": int((worker or {}).get("messages_processed") or 0),
             "points_written": int((worker or {}).get("points_written") or 0),
-            "skipped_bad_quality": int((worker or {}).get("skipped_bad_quality") or 0),
+            "bad_quality_count": int((worker or {}).get("bad_quality_count") or 0),
             "last_error": (worker or {}).get("last_consumer_error"),
             "last_sync_error": (worker or {}).get("last_sync_error"),
         },

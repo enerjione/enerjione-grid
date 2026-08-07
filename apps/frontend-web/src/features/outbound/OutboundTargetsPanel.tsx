@@ -1943,6 +1943,8 @@ export function OutboundTargetsPanel({
                     key = "noTelemetry"; tone = "warn";
                   } else if (mbRuntime.updates_applied === 0 && mbRuntime.updates_unmapped > 0) {
                     key = "unmapped"; tone = "warn";
+                  } else if (mbRuntime.updates_applied === 0 && mbRuntime.updates_uncoercible > 0) {
+                    key = "uncoercible"; tone = "warn";
                   } else if (mbRuntime.updates_applied === 0) {
                     key = "noWrites"; tone = "warn";
                   } else if (mbRuntime.requests_served === 0) {
@@ -2004,10 +2006,16 @@ export function OutboundTargetsPanel({
                         <td>{mbRuntime.rejected_peers.toLocaleString()}</td>
                       </tr>
                     ) : null}
-                    {mbRuntime.consumer.skipped_bad_quality > 0 ? (
+                    {mbRuntime.updates_uncoercible > 0 ? (
                       <tr>
-                        <td>{t("engineering.outbound.mbRuntime.skippedBadQuality")}</td>
-                        <td>{mbRuntime.consumer.skipped_bad_quality.toLocaleString()}</td>
+                        <td>{t("engineering.outbound.mbRuntime.updatesUncoercible")}</td>
+                        <td>{mbRuntime.updates_uncoercible.toLocaleString()}</td>
+                      </tr>
+                    ) : null}
+                    {mbRuntime.consumer.bad_quality_count > 0 ? (
+                      <tr>
+                        <td>{t("engineering.outbound.mbRuntime.badQualityCount")}</td>
+                        <td>{mbRuntime.consumer.bad_quality_count.toLocaleString()}</td>
                       </tr>
                     ) : null}
                   </tbody>

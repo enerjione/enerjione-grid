@@ -14,6 +14,29 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.33] — 2026-08-07
+
+### Düzeltildi
+
+- **Modbus yayınında değerler görünmüyordu — kalite filtresi yanlış tasarlanmıştı.**
+  Modbus protokolünde kalite biti diye bir kavram yok; buna rağmen worker
+  "kötü kaliteli" işaretlenen ölçümleri register'a hiç yazmıyordu. Bir
+  sinyal hiç "iyi kaliteli" gelmezse (sahada görüldü: 10K+ mesajın 6K+'si
+  sürekli kötü kaliteliydi) register sonsuza dek varsayılan 0'da kalıyor,
+  SCADA "ölçüm yok" görüyordu — Canlı Değerler ekranı aynı anda doğru
+  değeri gösteriyor olsa bile. Artık kalite ne olursa olsun **o an gelen
+  değer yazılır**, Canlı Değerler ile birebir aynı davranış; kalite yalnızca
+  ayrı bir sayaçla izlenir, yazmayı engellemez.
+- **İkinci, sessiz bir hata daha vardı**: bazı sinyallerde sayısal değer
+  `value` alanında değil `value_string`'te geliyordu; worker yalnızca
+  `value`'ya baktığı için bu ölçümler hiçbir zaman register'a dönmüyordu
+  (ve hiçbir sayaçta görünmüyordu). Artık `value` boşsa `value_string`'e
+  bakılıyor; ayrıca eşleşme/kalite sorunu olmadığı hâlde sayıya çevrilemeyen
+  ölçümler için yeni bir "çevrilemeyen ölçüm" sayacı eklendi (Modbus Yayın
+  Durumu penceresinde görünür) — bundan sonra bu durum SESSİZ kalmayacak.
+
+---
+
 ## [2.53.32] — 2026-08-07 — ACİL DÜZELTME
 
 ### Düzeltildi

@@ -274,6 +274,7 @@ class ModbusServerManager:
                 "rejected_peers": s.rejected_peers,
                 "updates_applied": s.registry.updates_applied,
                 "updates_unmapped": s.registry.updates_unmapped,
+                "updates_uncoercible": s.registry.updates_uncoercible,
             }
             for s in self._servers.values()
         ]

@@ -16,14 +16,17 @@ import asyncio
 import socket
 import struct
 import sys
+from types import SimpleNamespace
 
 from modbus_outbound import codec
+from modbus_outbound.consumer import TelemetryConsumer
 from modbus_outbound.registry import build_registry_from_plan
 from modbus_outbound.server import (
     EXC_GATEWAY_TARGET_FAILED,
     EXC_ILLEGAL_DATA_ADDRESS,
     EXC_ILLEGAL_DATA_VALUE,
     EXC_ILLEGAL_FUNCTION,
+    ModbusServerManager,
     ModbusTargetServer,
     handle_pdu,
 )
@@ -146,6 +149,51 @@ def test_registry() -> None:
 
     check("bos adres 0 doner", reg.read(1, 3, 5000, 2) == [0, 0])
     check("bilinmeyen unit -> None", reg.read(99, 3, 0, 1) is None)
+
+    before_unc = reg.updates_uncoercible
+    reg.update("DEV-001", "master.actual_voltage", "cevrilemez-metin")
+    check("cevrilemeyen deger SAYILIR (eskiden sessizce kayboluyordu)",
+          reg.updates_uncoercible == before_unc + 1, str(reg.updates_uncoercible))
+    check("cevrilemeyen deger register'i BOZMAZ (onceki deger kalir)",
+          reg.read(1, 3, 0, 1) == [2305], str(reg.read(1, 3, 0, 1)))
+
+
+def test_consumer_kalite_ve_deger_cozumu() -> None:
+    """2026-08-07 olayi: kullanici sahada 'Modbus'ta kalite yok, o an okunan
+    ne ise o yazilmali, degerler hala gozukmuyor' dedi. Sayaclar da bunu
+    dogruladi: binlerce mesaj islendi, 'kotu kalite' diye binlercesi
+    atlaniyordu, KALAN iyi-kaliteli olcumlerden BILE hicbiri yazilmamisti.
+    Iki ayri kok neden vardi, bu test ikisini de kilitler:
+      1) kalite kotu diye yazma ATLANIYORDU (Modbus'ta kalite biti yok —
+         Canli Degerler ekrani neyi gosteriyorsa Modbus da onu yazmali).
+      2) `value` alani bos, gercek deger `value_string`'te olan mesajlar
+         hicbir zaman register'a donmuyordu (sessiz dusme, sayilmiyordu bile).
+    """
+    print("\n6) TelemetryConsumer._handle_payload")
+
+    reg = build_registry_from_plan(PLAN)
+    mgr = ModbusServerManager()
+    mgr._servers[1] = SimpleNamespace(registry=reg)  # noqa: SLF001
+    consumer = TelemetryConsumer(settings=object(), manager=mgr)  # type: ignore[arg-type]
+
+    consumer._handle_payload({  # noqa: SLF001
+        "device_code": "DEV-001", "signal_key": "master.actual_voltage",
+        "quality": "bad", "value": 12.5,
+    })
+    check("kotu kalite ARTIK yazmayi engellemiyor",
+          reg.read(1, 3, 0, 1) == [125], str(reg.read(1, 3, 0, 1)))
+    check("kotu kalite yine de SAYILIR (teshis icin)", consumer.bad_quality_count == 1)
+
+    reg2 = build_registry_from_plan(PLAN)
+    mgr2 = ModbusServerManager()
+    mgr2._servers[1] = SimpleNamespace(registry=reg2)  # noqa: SLF001
+    consumer2 = TelemetryConsumer(settings=object(), manager=mgr2)  # type: ignore[arg-type]
+    consumer2._handle_payload({  # noqa: SLF001
+        "device_code": "DEV-002", "signal_key": "master.actual_voltage",
+        "quality": "good", "value": None, "value_string": "45.0",
+    })
+    check("value bos, value_string dolu ise fallback ile yazilir",
+          reg2.read(1, 3, 100, 1) == [450], str(reg2.read(1, 3, 100, 1)))
 
 
 def test_pdu() -> None:
@@ -316,6 +364,7 @@ def main() -> int:
     try:
         test_codec()
         test_registry()
+        test_consumer_kalite_ve_deger_cozumu()
         test_pdu()
         test_tcp_end_to_end()
     except AssertionError as exc:

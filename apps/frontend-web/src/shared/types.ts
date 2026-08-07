@@ -499,10 +499,11 @@ export type ModbusRuntimeStatus = {
   rejected_peers: number;
   updates_applied: number;
   updates_unmapped: number;
+  updates_uncoercible: number;
   consumer: {
     messages_processed: number;
     points_written: number;
-    skipped_bad_quality: number;
+    bad_quality_count: number;
     last_error: string | null;
     last_sync_error: string | null;
   };
