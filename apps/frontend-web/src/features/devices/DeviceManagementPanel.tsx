@@ -1585,9 +1585,6 @@ export function DeviceManagementPanel({
                       required
                     />
                   </label>
-                  <p className="helper-text device-serial-hint">
-                    {t("engineering.devicesPanel.form.serialAutoHint")}
-                  </p>
                   <label>
                     {t("engineering.devicesPanel.form.name")}
                     <input value={createName} onChange={(event) => setCreateName(event.target.value)} required />

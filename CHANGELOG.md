@@ -14,6 +14,15 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.53.35] — 2026-08-07
+
+### Düzeltildi
+
+- Yeni Cihaz Ekle formunda Cihaz Kodu altındaki açıklama satırı kaldırıldı —
+  form sadeleşti, gereksiz metin kalabalığı gitti.
+
+---
+
 ## [2.53.34] — 2026-08-07
 
 ### Değişti
