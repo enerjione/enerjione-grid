@@ -28,12 +28,19 @@ from app.schemas.dnp3_extended import (
 )
 
 
-def test_master_address_varsayilani_YOK():
-    """Merkezi bir varsayilan, saha cihazinin bekledigini ezer."""
-    assert Dnp3ExtendedSettings().master_address is None, (
-        "master_address'e varsayilan atanmis — her kayitta diske yazilir ve "
-        "gercek cihazin haberlesmesini SESSIZCE keser"
-    )
+def test_master_address_semada_zorlanmaz():
+    """Sema TEK BASINA deger uydurmaz — ama bu 'deger gonderilmesin'
+    demek DEGIL.
+
+    Cihazin (Horstmann SN2) fabrika ayarinda Master Address = 100'dur ve
+    gateway'in kendi varsayilani 1'dir. Yani 100 GONDERILMEZSE gateway 1
+    ile konusur ve cihaz cevap vermez. Bu yuzden FORM 100 ile gelir
+    (bkz. frontend DEFAULT_DNP3_EXTENDED) ve deger ACIKCA gonderilir.
+
+    Semada None kalmasinin amaci farkli: istemcinin GONDERMEDIGI bir alani
+    kayit sirasinda uydurup diske sabitlememek (bkz. dnp3_extended_to_store).
+    """
+    assert Dnp3ExtendedSettings().master_address is None
 
 
 def test_gonderilmeyen_alan_diske_yazilmaz():

@@ -14,6 +14,22 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.54.3] — 2026-08-07
+
+### Düzeltildi
+
+- **v2.54.1'de Master Adres varsayılanını yanlışlıkla kaldırmıştım — geri
+  alındı.** Cihazın (Horstmann SN2) kendi ayarında `Master Address = 100`
+  yazıyor; yani sistemin gönderdiği 100 **doğruydu**. Alanı boş bırakmak
+  gateway'in kendi varsayılanını (1) kullanmasına yol açar ve cihaz 100
+  beklediği için haberleşmeyi **keser**. Form yeniden 100 ile geliyor —
+  amaç: cihazda hiçbir ayar yapmadan IP + port + Outstation ID girip cihaz
+  eklenebilmesi. (Şemada alanın opsiyonel kalması ayrı bir konu: kullanıcının
+  hiç göndermediği alanı kayıt sırasında uydurup diske sabitlememek için —
+  bu davranış v2.54.1'den beri korunuyor.)
+
+---
+
 ## [2.54.2] — 2026-08-07
 
 ### Düzeltildi

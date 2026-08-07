@@ -31,8 +31,11 @@ class Dnp3ExtendedSettings(BaseModel):
     ip_endpoint_type: IpEndpointType = "listening"
     master_ip_address: str = ""
     master_ip_port: int = Field(default=20002, ge=1, le=65535)
-    #: None birakilmali; bkz. sinif docstring'i. Deger girilirse saha
-    #: cihazinin BEKLEDIGI adresle bire bir ayni olmali.
+    #: Saha cihazinin BEKLEDIGI master (link layer) adresi. Horstmann SN2
+    #: fabrika degeri 100'dur; frontend formu da 100 ile gelir ki cihazda
+    #: hicbir ayar yapmadan IP/port/ID girip cihaz eklenebilsin.
+    #: None = "gateway kendi DNP3_LOCAL_ADDRESS'ini (1) kullansin" — cihaz
+    #: 100 bekliyorsa bu haberlesmeyi KESER, bilerek secilmeli.
     master_address: int | None = Field(default=None, ge=0, le=65535)
     unsolicited_reporting: bool = True
     unsolicited_on_startup: bool = True

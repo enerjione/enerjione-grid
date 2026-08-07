@@ -6,9 +6,11 @@ export type Dnp3ExtendedSettings = {
   ip_endpoint_type: IpEndpointType;
   master_ip_address: string;
   master_ip_port: number;
-  /** null = gateway kendi DNP3_LOCAL_ADDRESS varsayilanini kullansin.
-   *  Merkezi bir varsayilan yazmak saha cihazinin bekledigini ezer ve
-   *  haberlesmeyi SESSIZCE keser (2026-08-07 arizasi). */
+  /** Saha cihazinin BEKLEDIGI master (link layer) adresi.
+   *  Horstmann SN2 fabrika degeri 100 — form bu degerle gelir ki cihazda
+   *  hicbir ayar yapmadan IP/port/ID girip cihaz eklenebilsin.
+   *  Bos birakilirsa gateway kendi varsayilanini (1) kullanir; cihaz 100
+   *  bekliyorsa bu haberlesmeyi KESER. */
   master_address: number | null;
   unsolicited_reporting: boolean;
   unsolicited_on_startup: boolean;
@@ -25,7 +27,7 @@ export const DEFAULT_DNP3_EXTENDED: Dnp3ExtendedSettings = {
   ip_endpoint_type: "listening",
   master_ip_address: "",
   master_ip_port: 20002,
-  master_address: null,
+  master_address: 100,
   unsolicited_reporting: true,
   unsolicited_on_startup: true,
   unsolicited_class_mask_id: 7,
