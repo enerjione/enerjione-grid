@@ -135,6 +135,12 @@ export type DeviceRow = {
   subunitIndex?: number | null;
   /** Kite bağlı set sayısı (yalnızca fiziksel kit kaydında dolu). */
   satelliteSetCount?: number | null;
+  /** Setin uydu ataması: üç fiziksel uydu numarası (1–9), ünite sırasıyla.
+   *
+   *  Varsayılan yerleşim 1-2-3 / 4-5-6 / 7-8-9'dur ama uyduları kelepçeyi
+   *  takan kişi bağlar ve sıra kite göre değil DİREĞE göre oluşur; bu yüzden
+   *  düzenlenebilir. Backend her zaman ÇÖZÜLMÜŞ hâlini döner. */
+  subunitSatellites?: number[] | null;
 };
 
 export type UserRole = "operator" | "engineer" | "installer" | "ops_manager";
@@ -222,6 +228,7 @@ export type ApiDevice = {
   parent_device_code?: string | null;
   subunit_index?: number | null;
   satellite_set_count?: number | null;
+  subunit_satellites?: number[] | null;
 };
 
 /** Geçerli faz kodu. Serbest metin DEĞİL: "A" / "L1" / "faz-a" gibi birbirinden

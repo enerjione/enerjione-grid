@@ -1888,6 +1888,7 @@ export function App() {
       phase_sat03?: PhaseCode | null;
       /** Set sayisini DUSURMEK veri siler; panel once acik onay alir. */
       satellite_set_count?: number | null;
+      subunit_satellites?: number[] | null;
     }
   ) => {
     if (!session) return;

@@ -170,7 +170,7 @@ def device_map_internal(
                 {
                     "code": c.code,
                     "set_index": c.subunit_index,
-                    "sources": subunit_source_map(c.subunit_index),
+                    "sources": subunit_source_map(c.subunit_index, c.subunit_satellites),
                 }
             )
         devices.append(

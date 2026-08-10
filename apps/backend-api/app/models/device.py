@@ -48,10 +48,25 @@ class Device(Base):
     parent_device_id: Mapped[int | None] = mapped_column(
         ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    #: Setin kit uzerindeki sirasi (1 tabanli). Uydu numaralari buradan cikar:
-    #: set 1 -> Satellite 01/02/03, set 2 -> 04/05/06, set 3 -> 07/08/09.
-    #: Fiziksel satirlarda NULL.
+    #: Setin kit uzerindeki sirasi (1 tabanli). Varsayilan uydu atamasi
+    #: buradan cikar: set 1 -> Satellite 01/02/03, set 2 -> 04/05/06,
+    #: set 3 -> 07/08/09. Fiziksel satirlarda NULL.
     subunit_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    #: Setin GERCEK uydu atamasi — uc fiziksel uydu numarasi (1..9), unite
+    #: sirasiyla: [1. unite, 2. unite, 3. unite].
+    #:
+    #: NEDEN AYRI ALAN, NEDEN `subunit_index`TEN TURETILMIYOR: varsayilan
+    #: yerlesim (1-2-3 / 4-5-6 / 7-8-9) en yaygin kurulum ama uyduları
+    #: kelepceyi takan kisi baglar ve sira kite gore degil DIREGE gore
+    #: olusur. Ikinci sete 4/5/6 yerine 2/7/9 baglanmis bir kurulumda sabit
+    #: turetme telemetriyi YANLIS setlere yazardi ve bu hicbir hata
+    #: uretmezdi — yalnizca "bu setin akimi tuhaf" diye gorunurdu.
+    #:
+    #: NULL = varsayilani kullan (geriye uyum). Kit genelinde BIJEKTIF olmali:
+    #: ayni uydu iki sete atanirsa olcumlerden biri sessizce kaybolur
+    #: (canli tabloda (device_id, signal_key) tekil, en yenisi kazanir).
+    subunit_satellites: Mapped[list | None] = mapped_column(JSON, nullable=True)
     installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     gateway_code: Mapped[str | None] = mapped_column(
         ForeignKey("gateways.code", ondelete="RESTRICT", onupdate="CASCADE"),

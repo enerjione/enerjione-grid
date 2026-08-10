@@ -2373,7 +2373,10 @@
         "setCountOption": "{{count}} set (Satellite {{from}}-{{to}})",
         "setCountHint": "Set sayısını AZALTMAK, kaldırılan setin telemetrisini, alarmlarını, arıza geçmişini ve hat yerleşimini de siler. Geri alınamaz.",
         "setCountCreateHint": "Kit tek bir cihaz olarak bağlanır ama her set ayrı bir cihaz olarak eklenir: hatta ayrı yerleştirilir, arızası kendine düşer ve kendi detay sayfası olur.",
-        "setCountReduceConfirm": "{{count}} set silinecek: {{codes}}\n\nBu setlerin telemetrisi, alarmları, arıza geçmişi ve hat yerleşimi de silinir. Bu işlem geri alınamaz. Devam edilsin mi?"
+        "setCountReduceConfirm": "{{count}} set silinecek: {{codes}}\n\nBu setlerin telemetrisi, alarmları, arıza geçmişi ve hat yerleşimi de silinir. Bu işlem geri alınamaz. Devam edilsin mi?",
+        "unitNo": "{{no}}. ünite",
+        "satelliteNo": "Satellite {{no}}",
+        "satellitePhaseTitle": "Uydu ve faz eşlemesi"
       },
       "footer": {
         "ok": "OK",
@@ -2381,7 +2384,8 @@
         "stale": "Kesik / bekleniyor",
         "lastData": "Son veri:"
       },
-      "deviceImageAltPmk": "Horstmann Pole Master Kit cihaz görseli"
+      "deviceImageAltPmk": "Horstmann Pole Master Kit cihaz görseli",
+      "deviceImageAltPmkSet": "Pole Master Kit uydusu cihaz görseli"
     },
     "devices": {
       "title": "Cihaz Yönetimi",

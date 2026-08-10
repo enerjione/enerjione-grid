@@ -16,7 +16,28 @@ SignalDataType = Literal[
     "analog_output",
 ]
 
-SignalSource = Literal["master", "sat01", "sat02"]
+#: Sinyal kaynagi (anahtarin nokta oncesi parcasi).
+#:
+#: Horstmann SN 2.0 uc unite kullanir (master + iki uydu). Horstmann Pole
+#: Master Kit'in FIZIKSEL kaydi DOKUZ uydu tasir, sanal setleri ise ucer.
+#:
+#: NEDEN BURASI KRITIK: bu tip `SignalCatalogRead.source` alaninda. Dar
+#: birakildiginda `sat03`+ satirlari yanit dogrulamasini dusuruyor ve
+#: `GET /signals` TUM katalog icin 500 doner — yani tek bir modelin fazladan
+#: uydusu, arayuzde HICBIR sinyalin gorunmemesine yol acar. Belirti
+#: ("Henuz sinyal tanimli degil") sebebe hic benzemez.
+SignalSource = Literal[
+    "master",
+    "sat01",
+    "sat02",
+    "sat03",
+    "sat04",
+    "sat05",
+    "sat06",
+    "sat07",
+    "sat08",
+    "sat09",
+]
 
 
 class SignalCatalogBase(BaseModel):

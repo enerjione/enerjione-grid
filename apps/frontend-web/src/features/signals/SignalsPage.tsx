@@ -91,6 +91,25 @@ export function SignalsPage({
     [signals, modelFilter]
   );
 
+  /** Kaynak cipleri SECILI MODELIN kendi sinyallerinden turer.
+   *
+   *  Sabit bir liste kullanmak, Smart Navigator 2.0 secilijken dokuz uydu
+   *  cipi gostermek demekti — o modelde `sat03`..`sat09` diye bir sey YOK ve
+   *  cipe basan kullanici bos liste goruyordu. Kaynak kumesi VERIDIR. */
+  const sourcesForModel = useMemo(() => {
+    const kume = new Set(signalsForModel.map((s) => s.source));
+    return SOURCES.filter((s) => kume.has(s));
+  }, [signalsForModel]);
+
+  // Model degisince onceki kaynak secimi bu modelde olmayabilir (orn. SN2'ye
+  // gecerken "Satellite 07" secili kalirsa); liste sessizce bos gorunur ve
+  // kullanici sebebini anlamaz.
+  useEffect(() => {
+    if (sourceFilter !== "all" && !sourcesForModel.some((s) => s === sourceFilter)) {
+      setSourceFilter("all");
+    }
+  }, [sourcesForModel, sourceFilter]);
+
   const countsByType = useMemo(() => {
     const map = new Map<SignalDataType, number>();
     DATA_TYPES.forEach((tp) => map.set(tp, 0));
@@ -361,7 +380,7 @@ export function SignalsPage({
           >
             {t("engineering.signals.allSources")}
           </button>
-          {SOURCES.map((src) => (
+          {sourcesForModel.map((src) => (
             <button
               key={src}
               type="button"

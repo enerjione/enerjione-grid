@@ -416,7 +416,8 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     parentDeviceId: item.parent_device_id ?? null,
     parentDeviceCode: item.parent_device_code ?? null,
     subunitIndex: item.subunit_index ?? null,
-    satelliteSetCount: item.satellite_set_count ?? null
+    satelliteSetCount: item.satellite_set_count ?? null,
+    subunitSatellites: item.subunit_satellites ?? null
   }));
 }
 
@@ -644,6 +645,9 @@ export async function updateDevice(
     /** Set sayisini DUSURMEK veri siler (setin telemetrisi, alarmlari, ariza
      *  gecmisi ve hat yerlesimi). Arayuz once acik uyari gostermeli. */
     satellite_set_count?: number | null;
+    /** Setin uydu atamasi (uc numara, 1..9). Kit genelinde BIJEKTIF olmali;
+     *  backend cakismayi 422 ile reddeder. */
+    subunit_satellites?: number[] | null;
   }
 ): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/devices/${deviceCode}`, {

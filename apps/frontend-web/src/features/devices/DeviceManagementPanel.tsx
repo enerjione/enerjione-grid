@@ -82,11 +82,11 @@ function deviceCommDotClass(
 
 const DEVICE_MODEL_IMAGES: Record<string, string> = {
   horstmann_sn_2_0: "/sn20.png",
-  // Fiziksel kit: gunes paneli + RTU govdesi. Sanal SET kaydi da AYNI
-  // gorseli kullanir — set fiziksel olarak kitin bir parcasidir ve ayri bir
-  // urun fotografi yoktur.
+  // Fiziksel kit: gunes paneli + RTU govdesi (modemin bulundugu cihaz).
   [POLE_MASTER_KIT_MODEL]: "/pole_master_kit.png",
-  [PMK_SET_MODEL]: "/pole_master_kit.png"
+  // Sanal set: sahada asili duran UYDU. Kit fotografini kullanmak, setin
+  // kendi RTU'su varmis gibi gosterirdi; oysa set uc uydudan ibarettir.
+  [PMK_SET_MODEL]: "/smart_ln.png"
 };
 const INITIATING_PORT_BASE_DEFAULT = 20100;
 
@@ -100,9 +100,9 @@ function deviceImageSrc(modelCode: string): string {
  * okuyucuya YANLIS cihazi soyluyordu; gorsel degisiyor ama metin degismiyordu.
  */
 function deviceImageAltKey(modelCode: string): string {
-  return modelCode === POLE_MASTER_KIT_MODEL || modelCode === PMK_SET_MODEL
-    ? "engineering.devicesPanel.deviceImageAltPmk"
-    : "engineering.devicesPanel.deviceImageAlt";
+  if (modelCode === PMK_SET_MODEL) return "engineering.devicesPanel.deviceImageAltPmkSet";
+  if (modelCode === POLE_MASTER_KIT_MODEL) return "engineering.devicesPanel.deviceImageAltPmk";
+  return "engineering.devicesPanel.deviceImageAlt";
 }
 
 /** Gateway calismiyorken cihaz sinyali fiziksel olarak gelse bile platform
@@ -213,6 +213,8 @@ type Props = {
       /** Set sayisini DUSURMEK veri siler (telemetri, alarm, ariza gecmisi,
        *  hat yerlesimi). Arayuz once acik onay alir. */
       satellite_set_count?: number | null;
+      /** Setin uydu atamasi (uc numara, 1..9). */
+      subunit_satellites?: number[] | null;
     }
   ) => Promise<void>;
   onDelete: (deviceCode: string) => Promise<void>;
@@ -400,6 +402,9 @@ export function DeviceManagementPanel({
   // AZALTMAK setin telemetrisini, alarmlarini, ariza gecmisini ve hat
   // yerlesimini SILER — kaydetmeden once acik onay alinir.
   const [setCount, setSetCount] = useState("1");
+  // Setin uydu atamasi — unite sirasiyla uc fiziksel uydu numarasi (1..9).
+  // Varsayilan 1-2-3 / 4-5-6 / 7-8-9 ama sahada baska baglanmis olabilir.
+  const [satellites, setSatellites] = useState<number[]>([1, 2, 3]);
   // Unite -> faz eslemesi. Bos = "Proje Ayarlari'ndaki konvansiyonu kullan".
   // VARSAYILAN L1/L2/L3: master ilk faza, uydular sirayla digerlerine
   // kelepcelenir — sahadaki standart kurulum sirasi budur. Eskiden ucu de
@@ -536,12 +541,25 @@ export function DeviceManagementPanel({
     }
   }, [gateways, selectedGatewayCode, onSelectGateway, unassignedCount]);
 
+  // Alt cihazda Haberlesme sekmesi YOK; onceki secimden kalan sekme bos
+  // panel gosterirdi.
+  useEffect(() => {
+    if ((selectedDevice?.parentDeviceId ?? null) !== null && devicePropsTab === "comms") {
+      setDevicePropsTab("system");
+    }
+  }, [selectedDevice, devicePropsTab]);
+
   const applySelectedDeviceToForm = (device: DeviceRow) => {
     setName(device.name);
     setSerial(device.serialNumber ?? "");
     setDescription(device.description ?? "");
     setModel(device.model ?? "horstmann_sn_2_0");
     setSetCount(String(device.satelliteSetCount ?? 1));
+    setSatellites(
+      device.subunitSatellites && device.subunitSatellites.length === 3
+        ? [...device.subunitSatellites]
+        : [1, 2, 3]
+    );
     // Faz eslemesi MODELE gore: SN2'de olcum yapan ucuncu unite `master`,
     // Pole Master Kit setinde ise ucu de uydudur (sat01/02/03).
     setPhaseMaster(device.phaseMaster ?? "a");
@@ -585,6 +603,63 @@ export function DeviceManagementPanel({
   // kaydi mi? Form alanlari buna gore degisir: kitte "bagli set sayisi" ve
   // baglanti ayarlari, sette faz eslemesi ve hat yerlesimi anlamlidir.
   const isKit = isKitModel(selectedDevice?.model);
+
+  /** Listedeki tek cihaz satiri.
+   *
+   *  `altCihaz` true ise (kit seti) haberlesme bilgisi GOSTERILMEZ: setin
+   *  kendi DNP3 oturumu yoktur, durum noktasi ve IP kitten kopyalanmis
+   *  bilgidir. Gostermek, setin oyle bir ayari varmis izlenimi verirdi. */
+  const renderDeviceItem = (device: DeviceRow, altCihaz: boolean) => {
+    const effStatus = effectiveCommStatus(device, gatewayStates);
+    const secili = selectedDeviceCode === device.code;
+    return (
+      <button
+        key={device.id}
+        className={
+          `device-group-item device-item${secili ? " active" : ""}` +
+          (altCihaz ? " device-item--subunit" : "")
+        }
+        onClick={() => handleDeviceSelect(device)}
+      >
+        <div className="device-title-row">
+          <div className="device-name-with-status">
+            {altCihaz ? (
+              <span className="material-symbols-outlined device-subunit-icon" aria-hidden="true">
+                subdirectory_arrow_right
+              </span>
+            ) : (
+              <span className={`device-status-dot ${deviceCommDotClass(effStatus)}`} />
+            )}
+            <strong>{device.name}</strong>
+          </div>
+          {altCihaz ? null : (
+            <span className="device-status-sr-only">
+              {effStatus === "online"
+                ? t("engineering.devicesPanel.commOnline")
+                : effStatus === "unknown"
+                  ? t("engineering.devicesPanel.commUnknown")
+                  : t("engineering.devicesPanel.commOffline")}
+            </span>
+          )}
+        </div>
+        <div className="device-meta-row">
+          <span>{device.code}</span>
+          {altCihaz ? (
+            <span className="device-subunit-sats">
+              {(device.subunitSatellites ?? [])
+                .map((n) => `S${String(n).padStart(2, "0")}`)
+                .join(" · ")}
+            </span>
+          ) : (
+            <span className="device-ip-text">
+              {device.ipAddress ?? "-"}
+              {canSeeDnp3 ? `:${device.dnp3OutstationPort ?? 20001}` : ""}
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  };
   const isPmkSet = (selectedDevice?.parentDeviceId ?? null) !== null;
 
   const handleSaveDevice = async () => {
@@ -649,6 +724,7 @@ export function DeviceManagementPanel({
         // yok sayar (o modelin unite listesinde `sat03` yok).
         phase_sat03: isPmkSet ? phaseSat03 || null : null,
         ...(isKit ? { satellite_set_count: Number(setCount) } : {}),
+        ...(isPmkSet ? { subunit_satellites: satellites } : {}),
         latitude: Number(latitude),
         longitude: Number(longitude)
       });
@@ -1244,37 +1320,29 @@ export function DeviceManagementPanel({
             </div>
           ) : null}
           <div className="device-group-list">
-            {devices.map((device) => {
-              const effStatus = effectiveCommStatus(device, gatewayStates);
-              return (
-              <button
-                key={device.id}
-                className={`device-group-item device-item ${selectedDeviceCode === device.code ? "active" : ""}`}
-                onClick={() => handleDeviceSelect(device)}
-              >
-                <div className="device-title-row">
-                  <div className="device-name-with-status">
-                    <span className={`device-status-dot ${deviceCommDotClass(effStatus)}`} />
-                    <strong>{device.name}</strong>
+            {/* KIT SETLERI ALT MENU OLARAK.
+                Setler kitin ic bolumlemesidir; duz listede kardes gibi
+                gorunduklerinde hangi kite ait olduklari ancak isimden
+                anlasiliyordu. Ayrica setin KENDI haberlesmesi yoktur —
+                durum noktasi ve IP kitten kopyalanmis bilgidir ve setin
+                oyle bir ayari varmis gibi gosterirdi. */}
+            {devices
+              .filter((d) => (d.parentDeviceId ?? null) === null)
+              .map((device) => {
+                const setler = devices
+                  .filter((d) => d.parentDeviceId === device.id)
+                  .sort((a, b) => (a.subunitIndex ?? 0) - (b.subunitIndex ?? 0));
+                return (
+                  <div className="device-group-block" key={device.id}>
+                    {renderDeviceItem(device, false)}
+                    {setler.length > 0 ? (
+                      <div className="device-subunit-list">
+                        {setler.map((s) => renderDeviceItem(s, true))}
+                      </div>
+                    ) : null}
                   </div>
-                  <span className="device-status-sr-only">
-                    {effStatus === "online"
-                      ? t("engineering.devicesPanel.commOnline")
-                      : effStatus === "unknown"
-                        ? t("engineering.devicesPanel.commUnknown")
-                        : t("engineering.devicesPanel.commOffline")}
-                  </span>
-                </div>
-                <div className="device-meta-row">
-                  <span>{device.code}</span>
-                  <span className="device-ip-text">
-                    {device.ipAddress ?? "-"}
-                    {canSeeDnp3 ? `:${device.dnp3OutstationPort ?? 20001}` : ""}
-                  </span>
-                </div>
-              </button>
-              );
-            })}
+                );
+              })}
             {devices.length === 0 ? (
               <div className="empty-state empty-state--compact">
                 <span className="material-symbols-outlined">developer_board</span>
@@ -1308,16 +1376,22 @@ export function DeviceManagementPanel({
                   >
                     {t("engineering.devicesPanel.tabSystem")}
                   </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    id="device-tab-comms"
-                    aria-selected={devicePropsTab === "comms"}
-                    className={devicePropsTab === "comms" ? "active" : ""}
-                    onClick={() => setDevicePropsTab("comms")}
-                  >
-                    {t("engineering.devicesPanel.tabComms")}
-                  </button>
+                  {/* Setin KENDI haberlesmesi yoktur: DNP3 oturumu kitindir
+                      ve set gateway'e poll hedefi olarak hic verilmez.
+                      Sekmeyi gostermek, degistirilebilir bir ayar varmis
+                      izlenimi verirdi. */}
+                  {isPmkSet ? null : (
+                    <button
+                      type="button"
+                      role="tab"
+                      id="device-tab-comms"
+                      aria-selected={devicePropsTab === "comms"}
+                      className={devicePropsTab === "comms" ? "active" : ""}
+                      onClick={() => setDevicePropsTab("comms")}
+                    >
+                      {t("engineering.devicesPanel.tabComms")}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1419,7 +1493,9 @@ export function DeviceManagementPanel({
                       hidden={isKit}
                     >
                       <span className="device-phase-title">
-                        {t("engineering.devicesPanel.form.phaseTitle")}
+                        {isPmkSet
+                          ? t("engineering.devicesPanel.form.satellitePhaseTitle")
+                          : t("engineering.devicesPanel.form.phaseTitle")}
                       </span>
                       <div className="device-phase-grid">
                         {(isPmkSet
@@ -1436,9 +1512,37 @@ export function DeviceManagementPanel({
                               ["sat01", phaseSat01, setPhaseSat01],
                               ["sat02", phaseSat02, setPhaseSat02]
                             ] as const)
-                        ).map(([unite, deger, setter]) => (
+                        ).map(([unite, deger, setter], uniteIdx) => (
                           <label key={unite}>
-                            {t(`engineering.devicesPanel.form.phaseUnit.${unite}`)}
+                            {isPmkSet
+                              ? t("engineering.devicesPanel.form.unitNo", { no: uniteIdx + 1 })
+                              : t(`engineering.devicesPanel.form.phaseUnit.${unite}`)}
+                            {/* KIT SETI: once HANGI UYDU, sonra hangi faz.
+                                Uydu atamasi varsayilan olarak 1-2-3 / 4-5-6 /
+                                7-8-9 gelir ama uyduları kelepceyi takan kisi
+                                baglar ve sira kite gore degil DIREGE gore
+                                olusur; bu yuzden degistirilebilir. */}
+                            {isPmkSet ? (
+                              <select
+                                className="device-sat-select"
+                                value={String(satellites[uniteIdx] ?? uniteIdx + 1)}
+                                onChange={(event) =>
+                                  setSatellites((onceki) => {
+                                    const yeni = [...onceki];
+                                    yeni[uniteIdx] = Number(event.target.value);
+                                    return yeni;
+                                  })
+                                }
+                              >
+                                {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => (
+                                  <option key={n} value={String(n)}>
+                                    {t("engineering.devicesPanel.form.satelliteNo", {
+                                      no: String(n).padStart(2, "0")
+                                    })}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
                             <select
                               value={deger}
                               onChange={(event) =>

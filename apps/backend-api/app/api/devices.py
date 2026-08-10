@@ -301,13 +301,42 @@ def update_device(
     # degerleri (verilmisse) mevcutlarla harmanlayip kontrol ediyoruz;
     # yalnizca `changes` icindekilere bakmak, IP degisip port ayni kaldiginda
     # cakismayi kacirirdi.
-    _require_unique_endpoint(
-        db,
-        gateway_code=changes.get("gateway_code", device.gateway_code),
-        ip_address=changes.get("ip_address", device.ip_address),
-        port=changes.get("dnp3_outstation_port", device.dnp3_outstation_port),
-        exclude_device_id=device.id,
-    )
+    # SANAL SET KAYITLARI BU KONTROLDEN MUAF.
+    #
+    # Setin kendi uc noktasi YOKTUR; baglanti alanlari kitten kopyalanmis
+    # bilgidir ve gateway'e poll hedefi olarak verilmez. Kontrol edilseydi
+    # set HER ZAMAN kendi kitiyle cakisirdi (ayni IP:port) ve setin
+    # herhangi bir ayarini — uydu atamasi, faz, ad — degistirmek 409 ile
+    # reddedilirdi. Yani muafiyet olusturmada vardi ama GUNCELLEMEDE yoktu.
+    if device.parent_device_id is None:
+        _require_unique_endpoint(
+            db,
+            gateway_code=changes.get("gateway_code", device.gateway_code),
+            ip_address=changes.get("ip_address", device.ip_address),
+            port=changes.get("dnp3_outstation_port", device.dnp3_outstation_port),
+            exclude_device_id=device.id,
+        )
+    # --- UYDU ATAMASI ---
+    #
+    # Kit genelinde BIJEKTIF olmali: ayni uydu iki sete atanirsa bolme
+    # haritasi bozulur ve ikinci setin o unitesi HIC veri almaz — arayuzde
+    # set saglikli gorunur, yalnizca "bir faz hic olcum vermiyor" diye
+    # fark edilir. Dogrulama yazmadan ONCE yapilir.
+    if "subunit_satellites" in changes:
+        if device.parent_device_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Uydu atamasi yalnizca kit setlerinde degistirilebilir.",
+            )
+        try:
+            payload.subunit_satellites = device_kit_service.normalize_satellites(
+                db, device, payload.subunit_satellites
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+
     updated = repository.update(device, payload)
 
     # --- SET SAYISI DEGISIKLIGI ---

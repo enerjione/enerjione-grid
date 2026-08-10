@@ -7,6 +7,7 @@ import { TablePagination } from "../../components/TablePagination";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { usePolling } from "../../shared/usePolling";
 import { signalLabel } from "../../shared/signalLabel";
+import { sourceLabel } from "../signals/signalCatalogConstants";
 import type {
   DeviceRow,
   Gateway,
@@ -53,11 +54,7 @@ const DATA_TYPES: SignalDataType[] = [
   "analog_output"
 ];
 
-const SOURCE_LABEL: Record<string, string> = {
-  master: "Master",
-  sat01: "Satellite 01",
-  sat02: "Satellite 02"
-};
+
 
 // Auto refresh options — labels come from i18n at render time.
 type RefreshOpt = { value: number; labelKey: string; labelArgs?: Record<string, unknown> };
@@ -253,23 +250,51 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     immediate: false
   });
 
-  const signalByKey = useMemo(() => {
+  /** Cihaz kodu -> model. Katalog eslemesi buna gore yapilir. */
+  const modelByDeviceCode = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of devices) map.set(d.code, d.model);
+    return map;
+  }, [devices]);
+
+  /** (model, key) -> katalog satiri.
+   *
+   *  Sinyal anahtari MODEL BAZINDA tekil: `master.actual_current` hem Smart
+   *  Navigator 2.0'da hem Pole Master Kit'te var ve DNP3 adresleri farkli.
+   *  Yalnizca `key` ile anahtarlamak son okunan modelin satirini kazandirir;
+   *  tip sekmesi sayimlari ve satirin tipi yanlis modelden gelirdi.
+   *
+   *  Yalnizca-key haritasi YEDEK: cihaz listesi henuz yuklenmediyse satiri
+   *  tamamen kaybetmek yerine eldeki bilgiyle gostermek dogru. */
+  const signalByModelKey = useMemo(() => {
     const map = new Map<string, SignalCatalogRow>();
-    for (const s of signals) {
-      map.set(s.key, s);
-    }
+    for (const s of signals) map.set(`${s.model}|${s.key}`, s);
     return map;
   }, [signals]);
+
+  const signalByAnyKey = useMemo(() => {
+    const map = new Map<string, SignalCatalogRow>();
+    for (const s of signals) if (!map.has(s.key)) map.set(s.key, s);
+    return map;
+  }, [signals]);
+
+  const signalOf = (row: SignalLiveRow): SignalCatalogRow | undefined => {
+    const model = modelByDeviceCode.get(row.device_code);
+    return (
+      (model ? signalByModelKey.get(`${model}|${row.signal_key}`) : undefined) ??
+      signalByAnyKey.get(row.signal_key)
+    );
+  };
 
   const countsByType = useMemo(() => {
     const map = new Map<SignalDataType, number>();
     DATA_TYPES.forEach((t) => map.set(t, 0));
     for (const row of values) {
-      const type = signalByKey.get(row.signal_key)?.data_type;
+      const type = signalOf(row)?.data_type;
       if (type) map.set(type, (map.get(type) ?? 0) + 1);
     }
     return map;
-  }, [values, signalByKey]);
+  }, [values, signals, devices]);
 
   // Filtre dropdown'ları için mevcut canlı değerlerden çıkarılan benzersiz listeler
   const deviceOptions = useMemo(() => {
@@ -304,7 +329,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return values.filter((row) => {
-      const sig = signalByKey.get(row.signal_key);
+      const sig = signalOf(row);
       if (activeTab !== "all") {
         if (!sig || sig.data_type !== activeTab) return false;
       }
@@ -330,7 +355,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values, signalByKey, activeTab, search, deviceFilter, sourceFilter, qualityFilter]);
+  }, [values, signals, devices, activeTab, search, deviceFilter, sourceFilter, qualityFilter]);
 
   // Filtre/tab/sayfa boyutu degisince ilk sayfaya don
   useEffect(() => {
@@ -400,7 +425,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
             <option value="all">{t("engineering.liveValues.filter.allSources")}</option>
             {sourceOptions.map((src) => (
               <option key={src} value={src}>
-                {SOURCE_LABEL[src] ?? src}
+                {sourceLabel(src)}
               </option>
             ))}
           </select>
@@ -491,7 +516,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
           </thead>
           <tbody>
             {pagedRows.map((row) => {
-              const sig = signalByKey.get(row.signal_key);
+              const sig = signalOf(row);
               // Once row.data_type (backend live endpoint'inden gelir; en doğru kaynak),
               // sonra catalog. Catalog yuklenmemis olsa bile string sinyaller dogru
               // gosterilsin diye row.data_type one alindi.
@@ -504,7 +529,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
                   </td>
                   <td className="cell-center">
                     <span className={`badge badge-source badge-source-${row.source}`}>
-                      {SOURCE_LABEL[row.source] ?? row.source}
+                      {sourceLabel(row.source)}
                     </span>
                   </td>
                   <td>

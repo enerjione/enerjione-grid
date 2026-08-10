@@ -48,7 +48,14 @@ import logging
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.data.device_models import is_kit_model, max_sets_for, subunit_model_for
+from app.data.device_models import (
+    SATELLITE_COUNT,
+    SATELLITES_PER_SET,
+    is_kit_model,
+    max_sets_for,
+    resolve_subunit_satellites,
+    subunit_model_for,
+)
 from app.models.device import Device
 
 log = logging.getLogger(__name__)
@@ -120,6 +127,52 @@ def command_target(db: Session, device: Device) -> Device:
 # --------------------------------------------------------------------------
 # Set sayisi yonetimi
 # --------------------------------------------------------------------------
+
+
+def normalize_satellites(
+    db: Session, child: Device, istenen: list | None
+) -> list[int] | None:
+    """Setin uydu atamasini dogrular ve normalize eder.
+
+    KURALLAR
+      1. Tam olarak uc numara, hepsi 1..9 araliginda.
+      2. Set ICINDE tekrar YOK.
+      3. AYNI KITTEKI diger setlerle CAKISMA YOK.
+
+    (3) en kritigi ve sessiz olani: ayni uydu iki sete atanirsa bolme haritasi
+    bijektif olmaktan cikar; tag-engine ilk eslemeyi korur (ve hata loglar) ama
+    ikinci setin o unitesi HIC veri almaz. Arayuzde set saglikli gorunur,
+    yalnizca "bir faz hic olcum vermiyor" diye fark edilir.
+    """
+    if istenen is None:
+        return None
+    try:
+        sayilar = [int(n) for n in istenen]
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Uydu numaralari sayi olmali.") from exc
+
+    if len(sayilar) != SATELLITES_PER_SET:
+        raise ValueError(f"Her set icin {SATELLITES_PER_SET} uydu secilmeli.")
+    if any(not 1 <= n <= SATELLITE_COUNT for n in sayilar):
+        raise ValueError(f"Uydu numarasi 1 ile {SATELLITE_COUNT} arasinda olmali.")
+    if len(set(sayilar)) != len(sayilar):
+        raise ValueError("Ayni uydu bir sette iki kez kullanilamaz.")
+
+    if child.parent_device_id is not None:
+        for kardes in list_subunits(db, child.parent_device_id):
+            if kardes.id == child.id:
+                continue
+            kardes_uydular = set(
+                resolve_subunit_satellites(kardes.subunit_index, kardes.subunit_satellites)
+            )
+            cakisan = sorted(kardes_uydular.intersection(sayilar))
+            if cakisan:
+                adlar = ", ".join(f"Satellite {n:02d}" for n in cakisan)
+                raise ValueError(
+                    f"{adlar} zaten '{kardes.name}' setine atanmis. "
+                    "Bir uydu yalnizca TEK bir sete baglanabilir."
+                )
+    return sayilar
 
 
 def normalize_set_count(model: str | None, istenen: int | None) -> int | None:
@@ -203,6 +256,10 @@ def create_subunits(
             longitude=parent.longitude,
             parent_device_id=parent.id,
             subunit_index=index,
+            # Varsayilan yerlesim ACIKCA yazilir (turetmeye birakilmaz):
+            # kurulumcu ekranda ne gorduyse veritabaninda da o durur ve
+            # ileride varsayilan degisirse mevcut setler kaymaz.
+            subunit_satellites=list(resolve_subunit_satellites(index)),
         )
         # Her setin KENDI Common Address'i olur: SCADA uc seti ayri cihaz
         # olarak gorur. Ortak CA verilseydi uc setin ayni IOA'lari birbirini
@@ -325,9 +382,38 @@ def annotate(db: Session, devices: list[Device]) -> list[Device]:
             ).all()
         )
 
+    # HABERLESME DURUMU KITTEN DEVRALINIR.
+    #
+    # Setin kendi DNP3 oturumu yok; hepsi TEK fiziksel baglantidan besleniyor.
+    # Her set kendi satirinda durum tutsaydi, link koptugunda yalnizca
+    # telemetriyi EN SON alan set offline gorunur, digerleri saatlerce
+    # "online" kalirdi — ariza motoru da hattin saglikli oldugunu sanardi.
+    # Tek gercek var: kitin durumu.
+    kit_durumu: dict[int, tuple] = {}
+    if parent_ids:
+        kit_durumu = {
+            r[0]: (r[1], r[2])
+            for r in db.execute(
+                select(Device.id, Device.communication_status, Device.last_update_at).where(
+                    Device.id.in_(parent_ids)
+                )
+            ).all()
+        }
+
     for d in devices:
         d.parent_device_code = kodlar.get(d.parent_device_id) if d.parent_device_id else None
+        if d.parent_device_id in kit_durumu:
+            durum, son_guncelleme = kit_durumu[d.parent_device_id]
+            d.communication_status = durum
+            d.last_update_at = son_guncelleme
         d.satellite_set_count = sayilar.get(d.id) if is_kit_model(d.model) else None
+        # COZULMUS atama: kolon NULL olsa bile arayuz gercek uydu numaralarini
+        # gorur. Bos birakip "varsayilani sen turet" demek, ayni kurali iki
+        # dilde iki kez yazmak olurdu.
+        if d.parent_device_id is not None:
+            d.subunit_satellites = list(
+                resolve_subunit_satellites(d.subunit_index, d.subunit_satellites)
+            )
     return devices
 
 
@@ -356,6 +442,7 @@ __all__ = [
     "is_subunit",
     "list_subunits",
     "master_source_device",
+    "normalize_satellites",
     "normalize_set_count",
     "propagate_to_subunits",
     "signal_model",

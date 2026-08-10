@@ -225,18 +225,52 @@ def set_satellite_numbers(set_index: int) -> tuple[int, ...]:
     return tuple(range(ilk, ilk + SATELLITES_PER_SET))
 
 
-def subunit_source_map(set_index: int) -> dict[str, str]:
+#: Kitteki toplam uydu sayisi.
+SATELLITE_COUNT: int = 9
+
+
+def resolve_subunit_satellites(
+    set_index: int | None, stored: list | None = None
+) -> tuple[int, ...]:
+    """Setin uydu atamasi: KAYITLI deger varsa o, yoksa set sirasindan turetilir.
+
+    NEDEN KAYITLI DEGER OLABILIYOR
+    ------------------------------
+    Varsayilan yerlesim (set 1 -> 1/2/3, set 2 -> 4/5/6, set 3 -> 7/8/9)
+    sahadaki en yaygin kurulum; ama uyduları kelepceyi takan kisi baglar ve
+    sirasi kite gore degil DIREGE gore olusur. Ikinci sete 4/5/6 yerine
+    2/7/9 baglanmis bir kurulumda, atama sabit kalsaydi telemetri yanlis
+    setlere yazilir ve bu HICBIR hata uretmezdi — yalnizca "bu setin akimi
+    tuhaf" diye gorunurdu.
+
+    Bu yuzden atama duzenlenebilir; varsayilan yalnizca BASLANGIC noktasidir.
+    """
+    if stored:
+        temiz = [int(n) for n in stored if isinstance(n, (int, float, str)) and str(n).strip()]
+        if len(temiz) == SATELLITES_PER_SET:
+            return tuple(temiz)
+    if not set_index:
+        return ()
+    return set_satellite_numbers(set_index)
+
+
+def subunit_source_map(
+    set_index: int | None, satellites: list | None = None
+) -> dict[str, str]:
     """FIZIKSEL kaynak adi -> SANAL set icindeki kaynak adi.
 
-    Set 2 icin:  {"sat04": "sat01", "sat05": "sat02", "sat06": "sat03"}
+    Varsayilan set 2 icin:  {"sat04": "sat01", "sat05": "sat02", "sat06": "sat03"}
 
-    Set 1 icin esleme birim (kimlik) fonksiyonudur; yine de acikca uretilir ki
-    bolme mantigi tum setlerde AYNI kod yolundan gecsin — "set 1 ozel durum"
-    kaciniyor, cunku o ozel durum ilk kirilan sey olurdu.
+    Set 1'de varsayilan esleme birim (kimlik) fonksiyonudur; yine de acikca
+    uretilir ki bolme mantigi tum setlerde AYNI kod yolundan gecsin — "set 1
+    ozel durum" kaciniyor, cunku o ozel durum ilk kirilan sey olurdu.
+
+    `satellites` verilirse (kurulumcu atamayi degistirmisse) esleme ondan
+    kurulur: orn. [2, 7, 9] -> {"sat02": "sat01", "sat07": "sat02", "sat09": "sat03"}.
     """
     return {
         f"sat{n:02d}": SET_UNIT_SOURCES[i]
-        for i, n in enumerate(set_satellite_numbers(set_index))
+        for i, n in enumerate(resolve_subunit_satellites(set_index, satellites))
     }
 
 

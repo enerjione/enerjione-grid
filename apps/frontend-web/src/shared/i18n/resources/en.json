@@ -2376,7 +2376,10 @@
         "setCountOption": "{{count}} set(s) (Satellite {{from}}-{{to}})",
         "setCountHint": "REDUCING the set count also deletes the removed set's telemetry, alarms, fault history and line placement. This cannot be undone.",
         "setCountCreateHint": "The kit connects as a single device, but each set is added as a separate device: placed on the line on its own, raising its own faults and having its own detail page.",
-        "setCountReduceConfirm": "{{count}} set(s) will be deleted: {{codes}}\n\nTheir telemetry, alarms, fault history and line placement will be deleted too. This cannot be undone. Continue?"
+        "setCountReduceConfirm": "{{count}} set(s) will be deleted: {{codes}}\n\nTheir telemetry, alarms, fault history and line placement will be deleted too. This cannot be undone. Continue?",
+        "unitNo": "Unit {{no}}",
+        "satelliteNo": "Satellite {{no}}",
+        "satellitePhaseTitle": "Satellite and phase mapping"
       },
       "footer": {
         "ok": "OK",
@@ -2384,7 +2387,8 @@
         "stale": "Disconnected / waiting",
         "lastData": "Last data:"
       },
-      "deviceImageAltPmk": "Horstmann Pole Master Kit device image"
+      "deviceImageAltPmk": "Horstmann Pole Master Kit device image",
+      "deviceImageAltPmkSet": "Pole Master Kit satellite device image"
     },
     "devices": {
       "title": "Device Management",

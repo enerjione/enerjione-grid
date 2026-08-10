@@ -44,6 +44,7 @@ from app.api import gateways as gateways_api
 from app.api import internal as internal_api
 from app.core.config import settings
 from app.data.device_models import (
+    resolve_subunit_satellites,
     DEFAULT_MODEL,
     POLE_MASTER_KIT_MODEL,
     PMK_SET_MODEL,
@@ -1113,3 +1114,173 @@ def test_kit_eklenince_MEVCUT_cihazlarin_modbus_adresleri_KAYMAZ(
     assert layout_sonra.summary.discrete_bits <= modbus_plan_service.BIT_STRIDE, (
         "bit blogu sabit stride'i asiyor; komsu cihazin bitlerinin uzerine yazar"
     )
+
+
+# ---------------------------------------------------------------------------
+# 15) UYDU ATAMASI — varsayilan var ama SABIT DEGIL
+# ---------------------------------------------------------------------------
+
+
+def test_yeni_setler_varsayilan_atamayi_ACIKCA_yazar(db, kurulumcu, gateway, lisans_acik):
+    """1-2-3 / 4-5-6 / 7-8-9 turetilmekle kalmaz, kayda da yazilir.
+
+    Turetmeye birakilsaydi ileride varsayilan degistiginde MEVCUT setlerin
+    uydu atamasi sessizce kayardi.
+    """
+    kit = _kit_ekle(db, kurulumcu, set_count=3)
+    beklenen = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    assert [s.subunit_satellites for s in _setler(db, kit)] == beklenen
+
+
+def test_uydu_atamasi_DEGISTIRILEBILIR(db, kurulumcu, gateway, lisans_acik):
+    """Uyduları kelepceyi takan kisi baglar; sira kite gore degil DIREGE gore."""
+    # TEK setli kit: bitisik olmayan bir atama (2/7/9) kardes cakismasi
+    # olmadan denenebilsin.
+    kit = _kit_ekle(db, kurulumcu, set_count=1)
+    set1 = _setler(db, kit)[0]
+
+    devices_api.update_device(
+        device_code=set1.code,
+        payload=DeviceUpdate(subunit_satellites=[2, 7, 9]),
+        current_user=kurulumcu,
+        db=db,
+    )
+    db.refresh(set1)
+    assert set1.subunit_satellites == [2, 7, 9]
+    set2 = set1
+
+    # Bolme haritasi da yeni atamayi kullanmali — yoksa telemetri hala eski
+    # uydulardan gelirdi ve degisiklik hicbir ise yaramazdi.
+    harita = subunit_source_map(set2.subunit_index, set2.subunit_satellites)
+    assert harita == {"sat02": "sat01", "sat07": "sat02", "sat09": "sat03"}
+
+
+def test_ayni_uydu_IKI_SETE_atanamaz(db, kurulumcu, gateway, lisans_acik):
+    """En sinsi hata: bolme bijektif olmazsa ikinci set HIC veri almaz.
+
+    tag-engine ilk eslemeyi korur ve hata loglar, ama arayuzde set saglikli
+    gorunur — yalnizca "bir faz hic olcum vermiyor" diye fark edilir.
+    """
+    kit = _kit_ekle(db, kurulumcu, set_count=2)
+    set2 = _setler(db, kit)[1]
+
+    with pytest.raises(HTTPException) as hata:
+        devices_api.update_device(
+            device_code=set2.code,
+            payload=DeviceUpdate(subunit_satellites=[1, 5, 6]),  # 1 -> set 1'de
+            current_user=kurulumcu,
+            db=db,
+        )
+    assert hata.value.status_code == 422
+    assert "Satellite 01" in str(hata.value.detail)
+
+
+@pytest.mark.parametrize(
+    "atama",
+    [
+        [1, 2],           # eksik
+        [1, 2, 3, 4],     # fazla
+        [1, 1, 2],        # set icinde tekrar
+        [0, 1, 2],        # aralik disi (alt)
+        [1, 2, 10],       # aralik disi (ust)
+    ],
+)
+def test_gecersiz_atama_REDDEDILIR(db, kurulumcu, gateway, lisans_acik, atama):
+    kit = _kit_ekle(db, kurulumcu, set_count=1)
+    set1 = _setler(db, kit)[0]
+    with pytest.raises(HTTPException) as hata:
+        devices_api.update_device(
+            device_code=set1.code,
+            payload=DeviceUpdate(subunit_satellites=atama),
+            current_user=kurulumcu,
+            db=db,
+        )
+    assert hata.value.status_code == 422
+
+
+def test_fiziksel_cihazda_uydu_atamasi_DEGISTIRILEMEZ(db, kurulumcu, gateway, lisans_acik):
+    """Atama SETIN ozelligi; kitin ya da bir SN2'nin degil."""
+    kit = _kit_ekle(db, kurulumcu, set_count=1)
+    with pytest.raises(HTTPException) as hata:
+        devices_api.update_device(
+            device_code=kit.code,
+            payload=DeviceUpdate(subunit_satellites=[1, 2, 3]),
+            current_user=kurulumcu,
+            db=db,
+        )
+    assert hata.value.status_code == 422
+
+
+def test_kayitli_atama_YOKSA_varsayilana_duser(db, kurulumcu, gateway, lisans_acik):
+    """Geriye uyum: 0051 oncesi acilmis setlerde kolon NULL.
+
+    NULL'a toplu deger yazmak, kurulumcunun onaylamadigi bir atamayi
+    "secilmis" gostermek olurdu; cozum okuma tarafinda yapilir.
+    """
+    kit = _kit_ekle(db, kurulumcu, set_count=2)
+    set2 = _setler(db, kit)[1]
+    set2.subunit_satellites = None      # eski kayit taklidi
+    db.flush()
+
+    assert resolve_subunit_satellites(set2.subunit_index, None) == (4, 5, 6)
+    # Arayuze COZULMUS hali gider, bos degil.
+    device_kit_service.annotate(db, [set2])
+    assert set2.subunit_satellites == [4, 5, 6]
+
+
+def test_bolme_haritasi_degisen_atamayi_yansitir(db, kurulumcu, gateway, lisans_acik):
+    """/internal/device-map tag-engine'in tek kaynagi; atama oraya ulasmali."""
+    kit = _kit_ekle(db, kurulumcu, set_count=1)
+    set1 = _setler(db, kit)[0]
+    devices_api.update_device(
+        device_code=set1.code,
+        payload=DeviceUpdate(subunit_satellites=[2, 7, 9]),
+        current_user=kurulumcu,
+        db=db,
+    )
+    harita = internal_api.device_map_internal(db=db, x_service_token=settings.internal_service_token)
+    kayit = next(d for d in harita["devices"] if d["code"] == kit.code)
+    alt = next(s for s in kayit["subunits"] if s["set_index"] == 1)
+    assert alt["sources"] == {"sat02": "sat01", "sat07": "sat02", "sat09": "sat03"}
+
+
+# ---------------------------------------------------------------------------
+# 16) YANIT SEMASI — tek bir modelin fazladan uydusu TUM katalogu dusurmesin
+# ---------------------------------------------------------------------------
+
+
+def test_katalogun_TAMAMI_yanit_semasindan_gecer(db):
+    """`GET /signals` her satiri serilestirebilmeli.
+
+    YASANAN: `SignalCatalogRead.source` alani `Literal["master","sat01","sat02"]`
+    idi. Pole Master Kit'in `sat03`..`sat09` satirlari eklenince yanit
+    dogrulamasi dustu ve uc TUM katalog icin 500 dondu — arayuzde Sinyaller
+    sayfasi, canli deger tip sayaclari ve alarm kurali sinyal secici AYNI ANDA
+    bosaldi. Belirti ("Henuz sinyal tanimli degil") sebebe hic benzemiyordu.
+
+    Ders: kaynak kumesi VERIDIR; sema onu daraltirsa yeni bir model tum
+    sistemi karartir.
+    """
+    from app.schemas.signal_catalog import SignalCatalogRead
+
+    seed_default_signals(db, strict=True)
+    satirlar = db.scalars(select(SignalCatalog)).all()
+    assert satirlar, "katalog bos — seed calismamis"
+    for satir in satirlar:
+        SignalCatalogRead.model_validate(satir)
+
+
+def test_her_modelin_sinyalleri_AYRI_listelenir(db):
+    """Model filtresi gercekten o modelin kaynaklarini dondurmeli."""
+    seed_default_signals(db, strict=True)
+    beklenen = {
+        DEFAULT_MODEL: {"master", "sat01", "sat02"},
+        POLE_MASTER_KIT_MODEL: {"master"} | {f"sat{n:02d}" for n in range(1, 10)},
+        PMK_SET_MODEL: {"sat01", "sat02", "sat03"},
+    }
+    for model, kaynaklar in beklenen.items():
+        satirlar = db.scalars(
+            select(SignalCatalog).where(SignalCatalog.model == model)
+        ).all()
+        assert satirlar, f"{model} icin sinyal yok"
+        assert {s.source for s in satirlar} == kaynaklar, model

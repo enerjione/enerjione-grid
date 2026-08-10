@@ -88,6 +88,10 @@ class DeviceUpdate(BaseModel):
     phase_sat01: PhaseCode | None = None
     phase_sat02: PhaseCode | None = None
     phase_sat03: PhaseCode | None = None
+    # Setin uydu atamasi: uc fiziksel uydu numarasi (1..9), unite sirasiyla.
+    # Yalnizca sanal set kayitlarinda anlamli. Varsayilan set sirasindan
+    # turetilir (1-2-3 / 4-5-6 / 7-8-9) ama sahada baska baglanmis olabilir.
+    subunit_satellites: list[int] | None = None
     # Kite bagli set sayisi. Artirilirsa eksik setler uretilir, azaltilirsa
     # fazla setler SILINIR (telemetrisi, alarmlari, arizalari ve hat
     # yerlesimiyle birlikte) — bu yuzden arayuz once acik uyari gosterir.
@@ -106,6 +110,9 @@ class DeviceRead(DeviceScalarBase):
     parent_device_id: int | None = None
     #: Setin kit uzerindeki sirasi (1..3). Fiziksel kayitlarda NULL.
     subunit_index: int | None = None
+    #: Setin uydu atamasi (COZULMUS): kayitli deger yoksa set sirasindan
+    #: turetilmis hali doner, yani arayuz her zaman gercek atamayi gorur.
+    subunit_satellites: list[int] | None = None
     #: Fiziksel kitin kodu — arayuz "PMK-001 / Set 2" diyebilsin diye.
     parent_device_code: str | None = None
     #: Kite bagli set sayisi (yalnizca kit satirlarinda dolu).
