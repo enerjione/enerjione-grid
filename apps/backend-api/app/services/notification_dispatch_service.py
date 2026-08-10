@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Iterable
 
 from sqlalchemy import select
@@ -100,17 +101,28 @@ def _alarm_metadata(alarm: AlarmEvent) -> dict:
 
 
 def _get_pref(db: Session, user_id: int) -> UserNotificationPreference:
+    """Kullanicinin kanal tercihleri. Satir yoksa HEPSI ACIK kabul edilir.
+
+    KURAL OTORITEDIR. Eskiden burada sms/telegram/whatsapp default'u False'ti
+    ve dispatcher "kuralda secili VE kullanici tercihinde acik" seklinde
+    AND'liyordu. Sonuc: kurulumcu alarm kuralinda "SMS + WhatsApp" isaretliyor,
+    alarm gercek olusuyor, hicbir sey gitmiyordu — ve bunun hicbir izi yoktu.
+    Kimin haberdar olacagi zaten iki yerde sinirli:
+      * Alici kumesi `get_users_in_scope_for_device` ile (ekip disina cikmaz)
+      * Kanal secimi alarm kuralindaki `notify_*` bayraklariyla
+    Bu yuzden kullanici tercihi artik yalnizca BILINCLI OPT-OUT'tur: sadece
+    kullanici (veya yonetici) o kanali elle kapattiysa gonderim durur.
+    Tabloya KAYDETMEYIZ — dispatcher cagrisi sadece okumadir.
+    """
     pref = db.get(UserNotificationPreference, user_id)
     if pref is None:
-        # Default: web ve email acik, sms kapali. Tabloya KAYDETMEYIZ —
-        # dispatcher cagrisi sadece okumadir; kullanicinin tercih
-        # gostermesi gerekene kadar default'larla calisir.
         pref = UserNotificationPreference(
             user_id=user_id,
             web_enabled=True,
             email_enabled=True,
-            sms_enabled=False,
-            whatsapp_web_enabled=False,
+            sms_enabled=True,
+            telegram_enabled=True,
+            whatsapp_web_enabled=True,
             min_level_rank=0,
         )
     return pref
@@ -407,15 +419,20 @@ def dispatch_fault_notifications(
     opened_at,
     assigned_to_username: str | None = None,
 ) -> None:
-    """Hat arizasi acildiginda mail gonder. Konum varsa harita gorseli + yol
-    tarifi linki dahil edilir.
+    """Hat arizasi acildiginda bildirim gonder (e-posta + SMS + WhatsApp grup).
+    Konum varsa mailde harita gorseli + yol tarifi linki dahil edilir.
 
-    KAPSAM: Hatta sorumlu olan tum kullanicilara mail. Kural gerek yok —
-    fault otomatik bildirim olarak her zaman atilir (kullanici talebi).
-    SMTP enabled olmasi yeterli.
+    KAPSAM: `get_users_in_scope_for_device` — engineer/installer/ops_manager
+    her arizadan haberdar olur; operator YALNIZCA sorumluluk alanindaki
+    (cihaz/hat/bolge) arizalari alir. Alarm kurali GEREKMEZ; ariza otomatik
+    bildirim olarak her zaman atilir.
+
+    Kanal kapilari birbirinden BAGIMSIZ: SMTP kapaliyken de WhatsApp grubuna
+    ariza duser. (Eskiden fonksiyon `smtp_enabled` degilse en basta donuyordu,
+    yani e-posta kapaliysa hicbir kanaldan ariza bildirimi cikmiyordu.)
     """
     settings = _system_settings(db)
-    if settings is None or not settings.smtp_enabled:
+    if settings is None:
         return
     project_title = _project_title(db)
 
@@ -430,12 +447,13 @@ def dispatch_fault_notifications(
         return
 
     # Hatta sorumlu tum kullanicilari topla (last_red device uzerinden scope).
+    # Bos olmasi akisi DURDURMAZ: WhatsApp grup yayini alici kumesinden
+    # bagimsizdir ve grup seciliyse ariza oraya her kosulda dusmelidir.
     recipients: list[User] = []
     if last_red_device_id is not None:
         recipients = list(get_users_in_scope_for_device(db, last_red_device_id))
     if not recipients:
         logger.info("fault_dispatch_no_recipients fault_id=%d", fault_id)
-        return
 
     from app.services.email_templates import render_fault_email
     subject, html_body = render_fault_email(
@@ -462,26 +480,150 @@ def dispatch_fault_notifications(
         f"Konum: {latitude}, {longitude}\n"
     )
 
+    # Kisa metin — SMS ve WhatsApp icin ortak.
+    zone_text = (
+        f" Direk #{from_pole_seq}-#{to_pole_seq}."
+        if from_pole_seq is not None and to_pole_seq is not None
+        else ""
+    )
+    konum_text = (
+        f" Konum: https://maps.google.com/?q={latitude},{longitude}"
+        if latitude is not None and longitude is not None
+        else ""
+    )
+    kisa_metin = (
+        f"HAT ARIZASI: {line.name}"
+        f"{f' ({region.name})' if region else ''}.{zone_text}"
+        f"{f' Son arizali cihaz: {last_red_dev.name}.' if last_red_dev else ''}"
+        f"{konum_text}"
+    )
+
     for user in recipients:
-        if not user.email:
-            continue
+        pref = _get_pref(db, user.id)
+        if settings.smtp_enabled and user.email and pref.email_enabled:
+            try:
+                send_smtp_test(
+                    settings,
+                    recipient_email=user.email,
+                    subject=subject,
+                    message=plain_text,
+                    html_body=html_body,
+                    from_name=project_title,
+                )
+                logger.info(
+                    "fault_email_sent user=%s fault_id=%d", user.username, fault_id
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "fault_email_failed user=%s fault_id=%d error=%s",
+                    user.username, fault_id, exc,
+                )
+        # SMS: ariza = sahaya cikis demek; e-postayi gormeyen ekip icin
+        # tek guvenilir kanal. Kullanici elle kapatmadiysa gider.
+        if settings.sms_enabled and user.phone_number and pref.sms_enabled:
+            try:
+                send_sms_test(
+                    settings, recipient_phone=user.phone_number, message=kisa_metin[:300]
+                )
+                logger.info("fault_sms_sent user=%s fault_id=%d", user.username, fault_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "fault_sms_failed user=%s fault_id=%d error=%s",
+                    user.username, fault_id, exc,
+                )
+        # WhatsApp kisisel — SADECE grup modu kapaliyken.
+        if (
+            settings.whatsapp_web_enabled
+            and not settings.whatsapp_web_group_mode
+            and user.phone_number
+            and getattr(pref, "whatsapp_web_enabled", True)
+        ):
+            try:
+                whatsapp_web_client_service.send_test_message(
+                    user.phone_number, kisa_metin[:1000]
+                )
+                logger.info(
+                    "fault_whatsapp_sent user=%s fault_id=%d", user.username, fault_id
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "fault_whatsapp_failed user=%s fault_id=%d error=%s",
+                    user.username, fault_id, exc,
+                )
+
+    # WhatsApp grup: grup modu acikken ariza KOSULSUZ secili gruplara duser
+    # (alarm yolundaki davranisla ayni). Alici kumesinden bagimsizdir.
+    if settings.whatsapp_web_enabled and settings.whatsapp_web_group_mode:
+        jids = [
+            j.strip()
+            for j in (settings.whatsapp_web_group_jids or "").split(",")
+            if j.strip()
+        ]
+        for jid in jids:
+            try:
+                whatsapp_web_client_service.send_test_message(jid, kisa_metin[:1000])
+                logger.info(
+                    "fault_whatsapp_group_sent jid=%s fault_id=%d", jid, fault_id
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "fault_whatsapp_group_failed jid=%s fault_id=%d error=%s",
+                    jid, fault_id, exc,
+                )
+
+
+def dispatch_pending_fault_notifications(db: Session, *, limit: int = 20) -> int:
+    """Bildirimi bekleyen (notified_at IS NULL) acik arizalari gonderir.
+
+    Ariza motoru (`fault_recompute_service`) kaydi acar ama SMTP/HTTP
+    yapmaz — yanit vermeyen bir relay ariza kaydinin commit edilmesini
+    engelliyordu. Gonderim buraya, yani notification-worker'in tetikledigi
+    HTTP istegi icine alindi.
+
+    `notified_at` damgasi idempotency saglar: worker ayni alarmi retry etse
+    veya ust uste birden fazla alarm dusse bile bir ariza icin tek bildirim.
+    Donus: gonderilen ariza sayisi. Caller commit eder.
+    """
+    from app.models.fault import FaultEvent
+    from app.models.grid_topology import Pole
+
+    pending = db.scalars(
+        select(FaultEvent)
+        .where(FaultEvent.notified_at.is_(None))
+        .where(FaultEvent.status.in_(("open", "assigned", "in_progress")))
+        .order_by(FaultEvent.opened_at.asc())
+        .limit(limit)
+    ).all()
+    if not pending:
+        return 0
+
+    sent = 0
+    for fault in pending:
+        from_pole = db.get(Pole, fault.from_pole_id) if fault.from_pole_id else None
         try:
-            send_smtp_test(
-                settings,
-                recipient_email=user.email,
-                subject=subject,
-                message=plain_text,
-                html_body=html_body,
-                from_name=project_title,
+            dispatch_fault_notifications(
+                db,
+                fault_id=fault.id,
+                line_id=fault.line_id,
+                region_id=fault.region_id,
+                last_red_device_id=fault.last_red_device_id,
+                first_green_device_id=fault.first_green_device_id,
+                from_pole_seq=fault.from_pole_seq,
+                to_pole_seq=fault.to_pole_seq,
+                latitude=from_pole.latitude if from_pole else None,
+                longitude=from_pole.longitude if from_pole else None,
+                opened_at=fault.opened_at,
+                assigned_to_username=fault.assigned_to_username,
             )
-            logger.info(
-                "fault_email_sent user=%s fault_id=%d", user.username, fault_id
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "fault_email_failed user=%s fault_id=%d error=%s",
-                user.username, fault_id, exc,
-            )
+            sent += 1
+        except Exception:  # noqa: BLE001
+            logger.exception("fault_dispatch_failed fault_id=%s", fault.id)
+        # Damgayi HER durumda basariz: kalici bir hata (orn. yanlis SMTP
+        # sifresi) yuzunden ayni ariza her alarmda yeniden denenip dispatch
+        # ucunu yavaslatmasin. Kanal bazli hatalar zaten loglaniyor.
+        fault.notified_at = datetime.now(timezone.utc)
+    logger.info("fault_pending_dispatch count=%d sent=%d", len(pending), sent)
+    return sent
 
 
 def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
@@ -490,14 +632,18 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     KURAL-BAZLI KANAL SECIMI:
       - Web bildirimi: kuraldan bagimsiz; kullanici tercihi (web_enabled)
         acik ise olusturulur.
-      - Email/SMS/Telegram: hem kuralda ilgili notify_* AKTIF olmali HEM
-        kullanicinin kendi tercihi (email_enabled / sms_enabled /
-        telegram_enabled) acik olmali.
+      - Email/SMS/Telegram/WhatsApp: kuralda ilgili notify_* AKTIF olmali.
+        Kullanici tercihi yalnizca OPT-OUT'tur (bkz. `_get_pref`) — hic
+        tercih kaydetmemis kullanici kuralda secilen kanaldan bildirim alir.
       - Telegram: bot tek bir kanaldan broadcast eder ama scope'taki
-        kullanicilardan EN AZ BIRI telegram_enabled=True olmali. Hicbiri
-        acik degilse Telegram atilmaz (gereksiz bildirim engellenir).
-      - Kural bulunamadiysa (eski alarm, manuel test) eski davranis:
-        sadece web bildirimi.
+        kullanicilardan EN AZ BIRI telegram_enabled olmali. Hepsi elle
+        kapatmissa Telegram atilmaz.
+      - Kural bulunamadiysa (haberlesme/kalite alarmi, manuel test, adi
+        degistirilmis kural) FAIL-OPEN: sistemde ETKIN olan tum kanallardan
+        gonderilir. Eski davranis "sadece web"di; cihaz haberlesmeden
+        dustugunde operatore hicbir sey gitmiyordu.
+      - WhatsApp grup modu acikken secili gruplara alarm KOSULSUZ gider;
+        grup hedefi operator tarafindan bilincli secilmistir.
     """
     if alarm.device_id is None:
         return
@@ -508,10 +654,19 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     settings = _system_settings(db)
     project_title = _project_title(db)
     rule = _resolve_active_rule(db, alarm)
-    rule_email = bool(rule and rule.notify_email)
-    rule_sms = bool(rule and rule.notify_sms)
-    rule_telegram = bool(rule and rule.notify_telegram)
-    rule_whatsapp = bool(rule and rule.notify_whatsapp_web)
+    # Kural yoksa kanal kapisi acilir (fail-open) — sistem ayarlari ve
+    # kullanicinin opt-out'u yine de gecerli, yani spam riski yok.
+    rule_email = rule.notify_email if rule is not None else True
+    rule_sms = rule.notify_sms if rule is not None else True
+    rule_telegram = rule.notify_telegram if rule is not None else True
+    rule_whatsapp = rule.notify_whatsapp_web if rule is not None else True
+    if rule is None:
+        logger.info(
+            "alarm_dispatch_kural_yok alarm_id=%d title=%r — tum etkin "
+            "kanallardan gonderiliyor",
+            alarm.id, alarm.title,
+        )
+    group_mode = bool(settings is not None and settings.whatsapp_web_group_mode)
     alarm_rank = _level_rank(alarm.level)
     any_telegram_optin = False
     for user in recipients:
@@ -527,32 +682,29 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
         # SMS: kuralda notify_sms AND kullanici tercihi acik
         if rule_sms and pref.sms_enabled:
             _send_sms_for_user(settings, user, alarm)
-        # WhatsApp kisisel (grup modu KAPALI): kuralda notify_whatsapp_web +
-        # kullanicinin PROFIL tercihi (whatsapp_web_enabled) acik ise o
-        # kullanicinin telefon numarasina gider. Grup modu seciliyse kisisel
-        # gonderim YAPILMAZ (tek mod — grup hepsine tek mesaj). Master switch +
-        # telefon kontrolu _send_whatsapp_for_user icinde.
+        # WhatsApp kisisel — SADECE grup modu KAPALI iken. Grup modu aciksa
+        # kisiye tek tek mesaj ATILMAZ (tek mod: gruba tek mesaj).
         if (
             rule_whatsapp
-            and getattr(pref, "whatsapp_web_enabled", False)
-            and not (settings and settings.whatsapp_web_group_mode)
+            and getattr(pref, "whatsapp_web_enabled", True)
+            and not group_mode
         ):
             _send_whatsapp_for_user(settings, user, alarm)
-        # Telegram: kullanici tercihi opt-in oldu mu?
-        if getattr(pref, "telegram_enabled", False):
+        # Telegram: kullanici bu kanali elle kapatmis mi?
+        if getattr(pref, "telegram_enabled", True):
             any_telegram_optin = True
-    # Telegram: kural izin verdi + en az 1 kullanici opt-in oldu ise
-    # global broadcast. Bot tek bir kanaldan yayin yapar (ayar listesi
-    # icinde tanimli chat_ids), bu yuzden kisi-bazli filtre yapamayiz
-    # ama opt-in olan yoksa gondermeyiz.
+    # Telegram: kural izin verdi + kanali elle kapatmamis en az 1 kullanici
+    # varsa global broadcast. Bot tek bir kanaldan yayin yapar (ayar listesi
+    # icinde tanimli chat_ids), bu yuzden kisi-bazli filtre yapamayiz.
     if rule_telegram and any_telegram_optin:
         _send_telegram_broadcast(settings, alarm)
-    # WhatsApp grup: kural izin verdi + grup modu acik ise secili grup JID
-    # listesine broadcast. GRUP hedefi operator tarafindan bilincli secildigi
-    # icin kullanici opt-in'i (whatsapp_web_enabled) ARANMAZ — kisisel moddan
-    # farki budur. Master switch (whatsapp_web_enabled) ve grup JID listesi
-    # kontrolu _send_whatsapp_group_broadcast icinde yapilir.
-    if rule_whatsapp and settings and settings.whatsapp_web_group_mode:
+    # WhatsApp grup: grup modu acik ise secili grup JID listesine KOSULSUZ
+    # broadcast — kural bazli kanal secimi ARANMAZ. Gerekce: grup hedefi
+    # operator tarafindan "buraya her alarm dussun" niyetiyle secilir; tek
+    # tek her kuralda WhatsApp'i isaretlemeyi unutmak sessiz kayip demektir.
+    # Master switch (whatsapp_web_enabled) ve grup JID listesi kontrolu
+    # _send_whatsapp_group_broadcast icinde yapilir.
+    if group_mode:
         _send_whatsapp_group_broadcast(settings, alarm)
 
 

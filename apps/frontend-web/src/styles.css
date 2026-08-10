@@ -23113,6 +23113,52 @@ th.event-col-category {
   font-weight: 700;
   color: #0f172a;
 }
+/* =========================================================================
+   Profil sayfasi (kullanici menusu > Profil)
+   Eskiden modaldi; kart dili diger muhendislik sekmeleriyle ayni (rad-card).
+   ========================================================================= */
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  /* Kaydirma sayfanin kendisinde: kartlar kisa, ust uste binmesinler. */
+  overflow-y: auto;
+}
+
+/* Kimlik + sifre yan yana; dar ekranda alt alta. Bildirim karti tam
+   genislikte (asagida `--wide`). */
+.profile-page-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.profile-card {
+  gap: 14px;
+}
+
+/* Kartlarin dugmesi saga yaslanir — Ag Ayarlari'ndaki form kartlariyla ayni. */
+.profile-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.profile-card--wide {
+  grid-column: 1 / -1;
+}
+
+/* Bildirim satirlari iki sutuna yayilir; dort kanal tek ekranda gorunur. */
+.profile-notif-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 4px 20px;
+}
+
 .notif-prefs-row {
   display: flex;
   justify-content: space-between;

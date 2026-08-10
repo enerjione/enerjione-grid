@@ -14,6 +14,29 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ### Düzeltildi
 
+- **Hat arızası bildirimi hiçbir kanaldan gitmiyordu.** Arıza açıldı, e-posta
+  ve WhatsApp grubu açıktı, hiçbiri gelmedi. Tek bir hata değil, zincir
+  kopukluğu: (1) arıza motoru gönderim yapmaz — satır içi gönderim
+  `notification_inline_dispatch_enabled` bayrağına bağlı ve bayrak
+  production'da **varsayılan kapalı** (SMTP'yi arıza motorunun içinde
+  koştururken arıza kaydı commit edilmeden asılı kalıyordu); (2) gönderimi
+  tetikleyen tek yer notification-worker'ın **alarm** yoluydu; (3) arıza
+  kaydını açan `recompute_faults_debounced` hesaplamayı sonraki tetiğe
+  bırakabiliyor. Sonuç: alarmın dispatch'i arıza satırı **henüz yokken**
+  koşuyor, mesaj "işlenmiş" damgalanıyor, debounce arızayı sonra açıyor ve
+  onu gönderecek kimse kalmıyordu — **tekil arızada bildirim hiç
+  gitmiyordu.** Artık alarm akışından bağımsız bir süpürücü bekleyen
+  arızaları tarıyor; ayrıca tekrarlanan alarm mesajı ve alarm gönderim
+  hatası da arıza gönderimini engellemiyor.
+- **Kullanıcı şifresini değiştiremiyordu.** Profil modalı tek "Kaydet" ile
+  önce profili, sonra şifreyi kaydediyordu; profil çağrısı patlarsa (geçersiz
+  e-posta → 422, başkasında kayıtlı → 409) şifre çağrısı **hiç
+  yapılmıyordu**. Ayrıca yalnızca "yeni şifre" doldurulduğunda hiçbir çağrı
+  yapılmıyor, modal kaydedilmiş gibi kapanıyordu — kullanıcı şifresini
+  değiştirdiğini sanıyordu. API yardımcıları da sabit metin fırlattığı için
+  backend'in söylediği sebep ("Mevcut şifre yanlış", "Yeni şifre eskisiyle
+  aynı olamaz", hız sınırı) ekrana hiç ulaşmıyordu.
+
 - **Modbus'ta akım değerleri 32.767 A'de kilitleniyordu.** Register ölçeği
   olarak sinyal kataloğundaki katsayı kullanılıyordu; ama o katsayı DNP3
   **çözme** katsayısıdır ve cihazın ham birimini anlatır (akımlar için mA).
@@ -66,6 +89,21 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ### Değişti
 
+- **Hat Arızaları sayfasındaki arıza bölgesi çizimi yenilendi.** Önceden
+  direkler dizilip aralarına düz bir taban çizgisi çekiliyordu ve **cihazlar
+  çizimde hiç yoktu** — "arıza şu iki cihaz arasında" bilgisi yalnızca
+  metinle anlatılıyordu. Artık gerçek bir havai hat kesiti var: direkler
+  travers + izolatörlü siluet, iletkenler direkler arasında **sarkarak**
+  (katener) geçiyor, cihazlar **telin üzerinde** segmentteki gerçek
+  konumlarında duruyor ve **arızalı tel parçası** son "gördüm" diyen cihaz
+  ile ilk "görmedim" diyen cihaz arasında kırmızı çiziliyor. Yeşil cihaz
+  yoksa arıza hat ucuna kadar sürer. Geometri React'ten ayrıldı ve testlerle
+  korunuyor.
+- **Profil ayarları artık modal değil, ayrı bir sayfa.** Modal sekme
+  sisteminde yer almadığı için sayfa yenilenince kayboluyor ve geri tuşu
+  çalışmıyordu. Sayfa üç bağımsız kart: kimlik bilgileri, şifre ve bildirim
+  tercihleri — her birinin kendi kaydet düğmesi var, birinin hatası diğerini
+  bloklamıyor. Şifre bölümünde "yeni şifre (tekrar)" alanı eklendi.
 - **Yedek ve Uzaktan Erişim sayfalarının üst şeridi** diğer mühendislik
   sekmeleriyle aynı dile getirildi (Ağ Ayarları / Güvenlik Duvarı'ndaki tek
   satırlık durum şeridi). Uzaktan Erişim'deki başlık + açıklama paragrafı +

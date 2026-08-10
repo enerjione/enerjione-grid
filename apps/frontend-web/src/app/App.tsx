@@ -164,6 +164,7 @@ const NetworkSettingsPage = lazy(() => import("../features/network/NetworkSettin
 const OfflineMapPage = lazy(() => import("../features/map/OfflineMapPage").then((m) => ({ default: m.OfflineMapPage })));
 const NotificationSettingsPanel = lazy(() => import("../features/settings/NotificationSettingsPanel").then((m) => ({ default: m.NotificationSettingsPanel })));
 const OutboundTargetsPanel = lazy(() => import("../features/outbound/OutboundTargetsPanel").then((m) => ({ default: m.OutboundTargetsPanel })));
+const ProfilePage = lazy(() => import("../features/profile/ProfilePage").then((m) => ({ default: m.ProfilePage })));
 const ProjectSettingsPanel = lazy(() => import("../features/settings/ProjectSettingsPanel").then((m) => ({ default: m.ProjectSettingsPanel })));
 const RemoteAccessPage = lazy(() => import("../features/remote-access/RemoteAccessPage").then((m) => ({ default: m.RemoteAccessPage })));
 const ResponsibilityAreasPage = lazy(() => import("../features/responsibility-areas/ResponsibilityAreasPage").then((m) => ({ default: m.ResponsibilityAreasPage })));
@@ -494,15 +495,8 @@ export function App() {
       cancelled = true;
     };
   }, [dashboardAreaId, session]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<UserNotificationPreferences | null>(null);
   const [notifPrefsSaving, setNotifPrefsSaving] = useState(false);
-  const [settingsFullName, setSettingsFullName] = useState("");
-  const [settingsEmail, setSettingsEmail] = useState("");
-  const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
-  const [settingsNewPassword, setSettingsNewPassword] = useState("");
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsError, setSettingsError] = useState("");
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
   const [notificationSettingsLoading, setNotificationSettingsLoading] = useState(false);
   const [notificationSettingsSaving, setNotificationSettingsSaving] = useState(false);
@@ -605,8 +599,6 @@ export function App() {
       try {
         const me = await fetchMe(session.accessToken);
         setCurrentUser(me);
-        setSettingsFullName(me.full_name);
-        setSettingsEmail(me.email);
         try {
           const [loadedDevices, gatewayRows] = await Promise.all([
             fetchDevices(session.accessToken),
@@ -2195,15 +2187,14 @@ export function App() {
     return logoutWhatsappWeb(session.accessToken);
   };
 
+  /** Ust sagdaki kullanici menusu > Profil.
+   *
+   *  Artik MODAL DEGIL, sekme rotasi: modal sekme sisteminde yer almadigi
+   *  icin sayfa yenilenince kayboluyor ve geri tusu calismiyordu. Ayrica
+   *  profil bilgileri ile sifre degistirme tek "Kaydet" dugmesine bagliydi;
+   *  profil cagrisi patlayinca sifre HIC degismiyordu (bkz. ProfilePage). */
   const handleOpenSettings = () => {
-    if (currentUser) {
-      setSettingsFullName(currentUser.full_name);
-      setSettingsEmail(currentUser.email);
-    }
-    setSettingsCurrentPassword("");
-    setSettingsNewPassword("");
-    setSettingsError("");
-    setSettingsOpen(true);
+    openEng("profile");
     if (session) {
       void (async () => {
         try {
@@ -2245,30 +2236,6 @@ export function App() {
       if (isSupportedLanguage(previous)) setI18nLanguage(previous);
       setCurrentUser((u) => (u ? { ...u, language: previous } : u));
       toast.error(err instanceof Error ? err.message : t("toasts.languagePrefSaveFail"));
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    if (!session) return;
-    setSettingsSaving(true);
-    setSettingsError("");
-    try {
-      const updated = await updateMyProfile(session.accessToken, {
-        full_name: settingsFullName,
-        email: settingsEmail
-      });
-      setCurrentUser(updated);
-      if (settingsCurrentPassword && settingsNewPassword) {
-        await changeMyPassword(session.accessToken, {
-          current_password: settingsCurrentPassword,
-          new_password: settingsNewPassword
-        });
-      }
-      setSettingsOpen(false);
-    } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : "Ayarlar kaydedilemedi.");
-    } finally {
-      setSettingsSaving(false);
     }
   };
 
@@ -2901,6 +2868,20 @@ export function App() {
                 onRefresh={reloadLicenseStatus}
               />
             ) : null}
+            {/* Profil — ROL KAPISI YOK: herkes kendi bilgilerini duzenler ve
+                sifresini degistirir (bkz. tabModel.canAccessRoute). */}
+            {engineeringPage === "profile" ? (
+              <ProfilePage
+                accessToken={session.accessToken}
+                currentUser={currentUser}
+                onUserUpdated={setCurrentUser}
+                language={currentUser?.language}
+                onChangeLanguage={handleChangeLanguage}
+                notifPrefs={notifPrefs}
+                notifPrefsSaving={notifPrefsSaving}
+                onToggleNotifPref={handleToggleNotifPref}
+              />
+            ) : null}
             {engineeringPage === "backups" &&
             (session.role === "engineer" || session.role === "installer") ? (
               <BackupsPanel accessToken={session.accessToken} currentRole={session.role} />
@@ -3055,129 +3036,6 @@ export function App() {
         )}
       </div>
 
-      {settingsOpen ? (
-        <div className="settings-modal-backdrop">
-          <div className="settings-modal">
-            <h3>{t("userSettings.title")}</h3>
-            <label>
-              {t("common.fullName")}
-              <input value={settingsFullName} onChange={(event) => setSettingsFullName(event.target.value)} />
-            </label>
-            <label>
-              {t("common.email")}
-              <input value={settingsEmail} onChange={(event) => setSettingsEmail(event.target.value)} />
-            </label>
-            <label>
-              {t("userSettings.language")}
-              <select
-                value={
-                  isSupportedLanguage(currentUser?.language) ? (currentUser!.language as string) : "tr"
-                }
-                onChange={(event) => void handleChangeLanguage(event.target.value as SupportedLanguage)}
-              >
-                {SUPPORTED_LANGUAGES.map((code) => (
-                  <option key={code} value={code}>
-                    {LANGUAGE_LABELS[code]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("userSettings.currentPassword")}
-              <input
-                type="password"
-                value={settingsCurrentPassword}
-                onChange={(event) => setSettingsCurrentPassword(event.target.value)}
-              />
-            </label>
-            <label>
-              {t("userSettings.newPassword")}
-              <input
-                type="password"
-                value={settingsNewPassword}
-                onChange={(event) => setSettingsNewPassword(event.target.value)}
-              />
-            </label>
-            {settingsError ? <p className="error-text">{settingsError}</p> : null}
-
-            {/* Bildirim tercihleri — kanal bazli toggle. Kullanici burada
-                kapatirsa sistem cap'inda etkin olsa bile bildirim almaz. */}
-            {notifPrefs ? (
-              <div className="notif-prefs-section">
-                <h4>{t("userSettings.notifPrefs.title")}</h4>
-                <div className="notif-prefs-row">
-                  <div className="notif-prefs-row-label">
-                    <strong>{t("userSettings.notifPrefs.web")}</strong>
-                    <span>{t("userSettings.notifPrefs.webHint")}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`notif-prefs-toggle ${notifPrefs.web_enabled ? "on" : ""}`}
-                    onClick={() => void handleToggleNotifPref("web_enabled")}
-                    disabled={notifPrefsSaving}
-                    aria-label={t("userSettings.notifPrefs.web")}
-                  />
-                </div>
-                <div className="notif-prefs-row">
-                  <div className="notif-prefs-row-label">
-                    <strong>{t("userSettings.notifPrefs.email")}</strong>
-                    <span>
-                      {t("userSettings.notifPrefs.emailHint")}
-                      {currentUser?.email ? "" : t("userSettings.notifPrefs.emailMissing")}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`notif-prefs-toggle ${notifPrefs.email_enabled ? "on" : ""}`}
-                    onClick={() => void handleToggleNotifPref("email_enabled")}
-                    disabled={notifPrefsSaving}
-                    aria-label={t("userSettings.notifPrefs.email")}
-                  />
-                </div>
-                <div className="notif-prefs-row">
-                  <div className="notif-prefs-row-label">
-                    <strong>{t("userSettings.notifPrefs.sms")}</strong>
-                    <span>
-                      {t("userSettings.notifPrefs.smsHint")}
-                      {currentUser?.phone_number ? "" : t("userSettings.notifPrefs.smsMissing")}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`notif-prefs-toggle ${notifPrefs.sms_enabled ? "on" : ""}`}
-                    onClick={() => void handleToggleNotifPref("sms_enabled")}
-                    disabled={notifPrefsSaving}
-                    aria-label={t("userSettings.notifPrefs.sms")}
-                  />
-                </div>
-                <div className="notif-prefs-row">
-                  <div className="notif-prefs-row-label">
-                    <strong>{t("userSettings.notifPrefs.whatsapp")}</strong>
-                    <span>
-                      {t("userSettings.notifPrefs.whatsappHint")}
-                      {currentUser?.phone_number ? "" : t("userSettings.notifPrefs.whatsappMissing")}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`notif-prefs-toggle ${notifPrefs.whatsapp_web_enabled ? "on" : ""}`}
-                    onClick={() => void handleToggleNotifPref("whatsapp_web_enabled")}
-                    disabled={notifPrefsSaving}
-                    aria-label={t("userSettings.notifPrefs.whatsapp")}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            <div className="settings-actions">
-              <button onClick={() => setSettingsOpen(false)}>{t("userSettings.actions.cancel")}</button>
-              <button onClick={handleSaveSettings} disabled={settingsSaving}>
-                {settingsSaving ? t("userSettings.actions.saving") : t("userSettings.actions.save")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <GlobalLoading
         show={loadingData || alarmsLoading || dashboardAreaLoading}

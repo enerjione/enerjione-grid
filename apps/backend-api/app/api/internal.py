@@ -639,6 +639,16 @@ def dispatch_notification_for_alarm(
 
     Eski "sadece print" davranisi yerine gercek dispatch — production'da
     bildirimler asla kaybolmasin ama duplicate da gitmesin.
+
+    ARIZA (fault) BILDIRIMI DE BURADAN CIKAR. Ariza kaydini alarm ingest
+    icindeki `recompute_faults_debounced` acar, ama SMTP/HTTP'yi ariza
+    motorunun icinde calistirmak yanit vermeyen bir relay'de arizanin
+    COMMIT EDILMEMESINE yol aciyordu; bu yuzden satir ici dispatch
+    `notification_inline_dispatch_enabled` bayragina baglandi ve bayrak
+    production'da False. Sonuc: ariza bildirimi HICBIR yerden gonderilmiyordu
+    (worker yalnizca alarm yolunu biliyordu). Artik ariza "bildirim bekliyor"
+    (notified_at IS NULL) olarak acilir ve gonderimi burasi yapar — HTTP
+    istegi worker'in icinde kostugu icin ariza motoru bloklanmaz.
     """
     _require_service_token(x_service_token)
     alarm = db.scalar(select(AlarmEvent).where(AlarmEvent.id == alarm_id))
@@ -650,11 +660,37 @@ def dispatch_notification_for_alarm(
     msg_id = (x_message_id or "").strip() or f"alarm-{alarm_id}"
     from app.services.idempotency_service import is_processed, mark_processed
 
+    # Bekleyen ariza bildirimlerini gonderen yardimci.
+    #
+    # NEDEN AYRI FONKSIYON: asagida UC cikis yolu var (duplicate, alarm
+    # dispatch hatasi, basari) ve ariza gonderimi ONCEDEN yalnizca sonuncuya
+    # bagliydi. Ariza kaydi alarmdan BAGIMSIZ bir yasam dongusune sahip
+    # (debounce'lu recompute onu daha sonra acabiliyor), bu yuzden alarmin
+    # akibeti ne olursa olsun denenmeli. Damga (`notified_at`) tekrar
+    # gondermeyi zaten engelliyor.
+    def _bekleyen_arizalari_gonder() -> None:
+        try:
+            from app.services.notification_dispatch_service import (
+                dispatch_pending_fault_notifications,
+            )
+            dispatch_pending_fault_notifications(db)
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+
+            _logging.getLogger(__name__).exception(
+                "fault_dispatch_via_worker_failed alarm_id=%s", alarm_id
+            )
+
     if is_processed(
         db,
         consumer_name=_IDEMPOTENCY_CONSUMER_INTERNAL_DISPATCH,
         message_id=msg_id,
     ):
+        # Alarm tekrari yok sayilir AMA ariza bildirimi denenir: worker'in
+        # retry'i cogu kez tam da ariza kaydi olustuktan SONRA gelir; burada
+        # erken donmek o arizayi ebediyen bekletiyordu.
+        _bekleyen_arizalari_gonder()
+        db.commit()
         return {"status": "duplicate_ignored", "alarm_id": alarm_id, "message_id": msg_id}
 
     try:
@@ -667,10 +703,18 @@ def dispatch_notification_for_alarm(
         _logging.getLogger(__name__).exception(
             "notification_dispatch_via_worker_failed alarm_id=%s", alarm_id
         )
+        # Ariza bildirimi alarm bildiriminden BAGIMSIZDIR: SMTP'nin alarm
+        # icin patlamasi, hat arizasinin WhatsApp grubuna dusmesini
+        # engellememeli.
+        _bekleyen_arizalari_gonder()
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="notification dispatch failed",
         )
+
+    _bekleyen_arizalari_gonder()
+
     mark_processed(
         db,
         consumer_name=_IDEMPOTENCY_CONSUMER_INTERNAL_DISPATCH,

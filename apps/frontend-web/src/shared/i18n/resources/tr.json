@@ -3588,8 +3588,8 @@
     "language": "Dil",
     "languageHelp": "Arayüz dili. Giriş yaptığınızda bu dilde açılır.",
     "changePassword": "Şifre Değiştir",
-    "currentPassword": "Mevcut Şifre (opsiyonel)",
-    "newPassword": "Yeni Şifre (opsiyonel)",
+    "currentPassword": "Mevcut Şifre",
+    "newPassword": "Yeni Şifre",
     "confirmPassword": "Yeni Şifre (Tekrar)",
     "saveProfile": "Profili Kaydet",
     "savePassword": "Şifreyi Değiştir",
@@ -3606,7 +3606,8 @@
       "whatsapp": "WhatsApp",
       "whatsappHint": "WhatsApp Web üzerinden telefon numaranıza mesaj (bağlantı ayarları grup modundaysa mesaj yalnız gruba gider).",
       "whatsappMissing": " (Telefon numarası eklenmemiş.)",
-      "saveFail": "Tercih kaydedilemedi."
+      "saveFail": "Tercih kaydedilemedi.",
+      "autoSaveHint": "Bu anahtarlar anında kaydedilir."
     },
     "actions": {
       "cancel": "Vazgeç",
@@ -3614,6 +3615,20 @@
       "saving": "Kaydediliyor...",
       "saveFail": "Ayarlar kaydedilemedi.",
       "languageFail": "Dil tercihi kaydedilemedi."
+    },
+    "passwordHint": "En az {{min}} karakter",
+    "profileSaved": "Profil bilgileri kaydedildi.",
+    "passwordSaved": "Şifreniz değiştirildi.",
+    "errors": {
+      "fullNameRequired": "Ad soyad boş bırakılamaz.",
+      "emailRequired": "E-posta boş bırakılamaz.",
+      "profileSave": "Profil güncellenemedi.",
+      "currentPasswordRequired": "Mevcut şifrenizi girin.",
+      "newPasswordRequired": "Yeni şifreyi girin.",
+      "tooShort": "Yeni şifre en az {{min}} karakter olmalı.",
+      "repeatMismatch": "Yeni şifre ile tekrarı aynı değil.",
+      "sameAsOld": "Yeni şifre mevcut şifreyle aynı olamaz.",
+      "passwordSave": "Şifre değiştirilemedi."
     }
   },
   "globalLoading": {

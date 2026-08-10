@@ -1,15 +1,17 @@
-"""Kullanici basina bildirim kanal tercihleri.
+"""Kullanici basina bildirim kanal tercihleri — BILINCLI OPT-OUT.
 
-Sistem cap'inda alarm bildirimleri uretilir; ancak hangi kanaldan
-(web bildirim, e-posta, SMS, Telegram) gonderilecegi kullanicinin kendi
-tercihine biraktir. Tabloda bir satir = bir kullanici icin tercih demetidir.
+Hangi alarmin hangi kanaldan cikacagini ALARM KURALI belirler
+(`alarm_rules.notify_*`), kimin alacagini ise sorumluluk alani
+(`scope_service.get_users_in_scope_for_device`). Bu tablo ucuncu bir kapi
+degildir; yalnizca "ben bu kanaldan bildirim istemiyorum" diyen kullanici
+icin vardir. Tum alanlarin varsayilani ACIK.
 
-Default'lar (satir yoksa):
-  web_enabled=True, email_enabled=True, sms_enabled=False,
-  telegram_enabled=False
-SMS ve Telegram varsayilan KAPALI cunku maliyet (SMS) ya da kullanicinin
-bot'a hic mesaj atmamis olmasi durumunda (Telegram) anlamsiz bildirim
-denenmesini onlemek icin opt-in mantigi tercih ettik.
+TARIHCE: sms/telegram/whatsapp varsayilani eskiden KAPALI'ydi (maliyet ve
+opt-in gerekcesiyle) ve dispatcher "kuralda secili VE burada acik" seklinde
+AND'liyordu. Ustelik satir, kullanici bildirim ekranini sadece ACTIGINDA
+bile kapali degerlerle yaziliyordu. Sonuc: alarm kuralinda SMS/WhatsApp
+isaretlenmis olmasina ragmen sahada hicbir bildirim gitmiyor, hicbir iz de
+kalmiyordu. Bkz. migration 0047.
 """
 
 from sqlalchemy import Boolean, ForeignKey, Integer
@@ -26,9 +28,9 @@ class UserNotificationPreference(Base):
     )
     web_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    sms_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    telegram_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    whatsapp_web_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sms_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    telegram_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    whatsapp_web_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Min seviye (info, warning, critical) — bu seviyeden DUSUK olanlar
     # bildirim olarak gonderilmez. Default "info" = hepsi.

@@ -23,6 +23,10 @@ import "./signalHistorian.test";
 // Hat secilince harita o hatta odaklansin (Hat Yonetimi > Harita).
 import "./lineFocus.test";
 
+// Ariza seridi geometrisi: cihaz telin uzerinde, kirmizi parca dogru iki
+// cihazin arasinda. Yanlis konum sahada yanlis direge gitmek demek.
+import "./faultStrip.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   DEFAULT_STALE_AFTER_MS,

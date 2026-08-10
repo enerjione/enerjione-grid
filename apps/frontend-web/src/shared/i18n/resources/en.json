@@ -3591,8 +3591,8 @@
     "language": "Language",
     "languageHelp": "Interface language. The app opens in this language when you sign in.",
     "changePassword": "Change Password",
-    "currentPassword": "Current Password (optional)",
-    "newPassword": "New Password (optional)",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
     "confirmPassword": "New Password (Confirm)",
     "saveProfile": "Save Profile",
     "savePassword": "Update Password",
@@ -3609,7 +3609,8 @@
       "whatsapp": "WhatsApp",
       "whatsappHint": "WhatsApp message to your phone number (if connection settings use group mode, only the group is notified).",
       "whatsappMissing": " (No phone number set.)",
-      "saveFail": "Failed to save preference."
+      "saveFail": "Failed to save preference.",
+      "autoSaveHint": "These switches save instantly."
     },
     "actions": {
       "cancel": "Cancel",
@@ -3617,6 +3618,20 @@
       "saving": "Saving...",
       "saveFail": "Failed to save settings.",
       "languageFail": "Failed to save language preference."
+    },
+    "passwordHint": "At least {{min}} characters",
+    "profileSaved": "Profile details saved.",
+    "passwordSaved": "Your password has been changed.",
+    "errors": {
+      "fullNameRequired": "Full name cannot be empty.",
+      "emailRequired": "Email cannot be empty.",
+      "profileSave": "Profile could not be updated.",
+      "currentPasswordRequired": "Enter your current password.",
+      "newPasswordRequired": "Enter the new password.",
+      "tooShort": "New password must be at least {{min}} characters.",
+      "repeatMismatch": "New password and confirmation do not match.",
+      "sameAsOld": "New password cannot be the same as the current one.",
+      "passwordSave": "Password could not be changed."
     }
   },
   "globalLoading": {

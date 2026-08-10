@@ -112,6 +112,24 @@ class FaultEvent(Base):
     # icin FaultComment kullanin — bu alan basit ozet).
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Ariza bildiriminin (e-posta/SMS/WhatsApp) gonderildigi an. NULL =
+    # bildirim BEKLIYOR.
+    #
+    # Neden ayri bir kolon: ariza kaydini `fault_recompute_service` uretir ve
+    # o servis ariza motorunun icinde kosar. SMTP/HTTP cagrisini oraya koymak
+    # yanit vermeyen bir relay'de arizanin COMMIT EDILMEMESINE yol aciyordu;
+    # bu yuzden satir ici dispatch `notification_inline_dispatch_enabled`
+    # bayragina baglandi ve bayrak production'da False. Ancak notification-
+    # worker yalnizca `alarm.created` tuketip ALARM dispatch'i tetikliyordu —
+    # ariza icin hicbir yol yoktu, yani ariza bildirimi production
+    # varsayilaninda HIC gonderilmiyordu.
+    # Cozum: recompute yalnizca kaydi acar ve bildirimi "bekliyor" birakir;
+    # gonderimi worker'in tetikledigi dispatch ucu yapar ve bu alani damgalar.
+    # Damga ayni zamanda idempotency saglar (worker retry'inda ikinci mail yok).
+    notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
 
 class FaultComment(Base):
     """Ariza ticket'ina baglı yorum/rapor satirlari.

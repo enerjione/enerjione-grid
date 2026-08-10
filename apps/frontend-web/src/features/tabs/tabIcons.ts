@@ -32,6 +32,7 @@ import {
   Settings,
   Share2,
   TriangleAlert,
+  UserCog,
   Users,
   MapPin,
   Wrench,
@@ -65,6 +66,8 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   "offline-map": MapPin,
   "active-sessions": MonitorSmartphone,
   "field-tools": Wrench,
+  // Kendi profili — menude gorunmez, kullanici menusunden acilir.
+  profile: UserCog,
 };
 
 const PAGE_ICON: Record<Exclude<PageMode, "engineering">, LucideIcon> = {

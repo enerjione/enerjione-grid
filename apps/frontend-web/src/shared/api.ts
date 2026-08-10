@@ -659,7 +659,11 @@ export async function updateMyProfile(
     headers: authHeaders(token),
     body: JSON.stringify(payload)
   });
-  if (!response.ok) throw new Error("Profil güncellenemedi.");
+  // `buildApiError` backend'in `detail`ini tasir. Once sabit bir metin
+  // firlatiliyordu ve "bu e-posta baska bir kullanicida kayitli" (409) ya da
+  // "gecerli bir e-posta degil" (422) gibi DUZELTILEBILIR sebepler ekrana
+  // hic ulasmiyordu.
+  if (!response.ok) throw await buildApiError(response, "Profil güncellenemedi.");
   return (await response.json()) as UserRead;
 }
 
@@ -672,7 +676,11 @@ export async function changeMyPassword(
     headers: authHeaders(token),
     body: JSON.stringify(payload)
   });
-  if (!response.ok) throw new Error("Şifre değiştirilemedi.");
+  // AYNI GEREKCE: backend "Mevcut sifre yanlis" / "Yeni sifre eskisiyle ayni
+  // olamaz" diyor, hiz siniri asilinca 429 donuyor. Sabit metin bunlarin
+  // hepsini "Sifre degistirilemedi." e indirgiyor ve kullanici neyi
+  // duzeltecegini bilemiyordu.
+  if (!response.ok) throw await buildApiError(response, "Şifre değiştirilemedi.");
 }
 
 export async function updateMyLanguage(token: string, language: string): Promise<UserRead> {

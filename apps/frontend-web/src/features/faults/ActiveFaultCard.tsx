@@ -28,11 +28,14 @@ import {
 import type { FaultEvent } from "../../shared/types";
 import { formatDistanceM, formatDistanceRange } from "../../shared/lineDistance";
 import { FaultPoleStrip } from "./FaultPoleStrip";
+import type { StripSegment } from "./FaultPoleStrip";
 
 type Props = {
   fault: FaultEvent;
   /** Hattin tum direk sira numaralari (sematik serit icin). */
   poleSeqs: number[];
+  /** Hattin segmentleri — cihazlari TELIN UZERINDE cizmek icin. */
+  segments: StripSegment[];
   localeTag: string;
   /** Canli sure sayaci icin ortak "now" (parent 30sn'de bir gunceller). */
   now: number;
@@ -69,6 +72,7 @@ function fmtElapsed(fromIso: string, endMs: number): string {
 export function ActiveFaultCard({
   fault: f,
   poleSeqs,
+  segments,
   localeTag,
   now,
   canAssign,
@@ -170,8 +174,11 @@ export function ActiveFaultCard({
         <div className="fx-card-zone-title">{t("faults.card.zoneTitle")}</div>
         <FaultPoleStrip
           poleSeqs={poleSeqs}
+          segments={segments}
           fromSeq={f.from_pole_seq}
           toSeq={f.to_pole_seq}
+          lastRedDeviceCode={f.last_red_device_code}
+          firstGreenDeviceCode={f.first_green_device_code}
           active
         />
         <div className="fx-card-devices">

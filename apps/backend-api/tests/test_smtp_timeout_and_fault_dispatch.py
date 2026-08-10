@@ -91,21 +91,21 @@ def test_ariza_dispatch_i_BAYRAGA_bagli():
     kaynak = inspect.getsource(frs)
     agac = ast.parse(kaynak)
 
-    # `dispatch_fault_notifications` cagrisini iceren fonksiyonu bul
+    # Ariza motorundaki dispatch cagrisini iceren fonksiyonu bul
     hedef_fn = None
     for fn in ast.walk(agac):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for n in ast.walk(fn):
-            if (
-                isinstance(n, ast.Call)
-                and getattr(n.func, "id", None) == "dispatch_fault_notifications"
+            if isinstance(n, ast.Call) and getattr(n.func, "id", None) in (
+                "dispatch_fault_notifications",
+                "dispatch_pending_fault_notifications",
             ):
                 hedef_fn = fn
                 break
         if hedef_fn is not None:
             break
-    assert hedef_fn is not None, "dispatch_fault_notifications cagrisi bulunamadi"
+    assert hedef_fn is not None, "ariza dispatch cagrisi bulunamadi"
 
     # Ayni fonksiyonda bayragi okuyan bir dal olmali
     bayrak_okundu = any(
@@ -116,6 +116,34 @@ def test_ariza_dispatch_i_BAYRAGA_bagli():
         "ariza dispatch'i `notification_inline_dispatch_enabled` bayragini "
         "kontrol etmiyor — SMTP/HTTP cagrisi ariza motorunun icinde kosar ve "
         "yanit vermeyen bir relay ariza kaydinin COMMIT EDILMEMESINE yol acar"
+    )
+
+
+def test_bayrak_KAPALIYKEN_ariza_bildirimi_WORKER_yolundan_cikar():
+    """Bayragin kapali olmasi 'ariza bildirimi hic gitmez' demek OLMAMALI.
+
+    Yasanan arizanin ta kendisi buydu: satir ici dispatch bayrakla kapatildi
+    ama notification-worker yalnizca `alarm.created` tuketip ALARM dispatch'i
+    tetikliyordu. Ariza icin hicbir yol yoktu; production varsayilaninda hat
+    arizasi bildirimi HIC gonderilmiyordu. Worker'in cagirdigi dispatch ucu
+    bekleyen ariza bildirimlerini de gondermeli.
+    """
+    from app.api import internal
+
+    kaynak = inspect.getsource(internal.dispatch_notification_for_alarm)
+    assert "dispatch_pending_fault_notifications" in kaynak, (
+        "worker'in tetikledigi dispatch ucu bekleyen ariza bildirimlerini "
+        "gondermiyor — bayrak kapaliyken ariza bildirimi hicbir yerden cikmaz"
+    )
+
+
+def test_ariza_kaydinda_bildirim_damgasi_VAR():
+    """`notified_at` olmadan worker yolu her alarmda ayni arizayi yeniden yollar."""
+    from app.models.fault import FaultEvent
+
+    assert hasattr(FaultEvent, "notified_at"), (
+        "FaultEvent.notified_at yok — bekleyen ariza bildirimi kuyrugu ve "
+        "idempotency bu alana dayaniyor"
     )
 
 

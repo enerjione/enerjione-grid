@@ -138,6 +138,19 @@ export function FaultListPage({
     return m;
   }, [gridSnapshot]);
 
+  /** line_id -> hattin segmentleri. Cihazlar TELIN UZERINDE bunlardan cizilir
+   *  (`device_position_t` segment icindeki gercek konumu verir). */
+  const segmentsByLine = useMemo(() => {
+    type Seg = NonNullable<typeof gridSnapshot>["segments"][number];
+    const m = new Map<number, Seg[]>();
+    for (const s of gridSnapshot?.segments ?? []) {
+      const arr = m.get(s.line_id);
+      if (arr) arr.push(s);
+      else m.set(s.line_id, [s]);
+    }
+    return m;
+  }, [gridSnapshot]);
+
   const openFault = useMemo(
     () => (openFaultId !== null ? faults.find((f) => f.id === openFaultId) ?? null : null),
     [faults, openFaultId]
@@ -264,6 +277,7 @@ export function FaultListPage({
                 key={f.id}
                 fault={f}
                 poleSeqs={poleSeqsByLine.get(f.line_id) ?? []}
+                segments={segmentsByLine.get(f.line_id) ?? []}
                 localeTag={localeTag}
                 now={now}
                 canAssign={canAssign}

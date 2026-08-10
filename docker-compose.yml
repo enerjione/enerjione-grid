@@ -551,6 +551,11 @@ services:
       # (Onceki 7 GUNluk deger tabloyu ~180M satira cikariyordu.)
       PROCESSED_MESSAGES_RETENTION_HOURS: ${PROCESSED_MESSAGES_RETENTION_HOURS:-2}
       PROCESSED_MESSAGES_INTERVAL_SEC: ${PROCESSED_MESSAGES_INTERVAL_SEC:-60}
+      # Bekleyen HAT ARIZASI bildirimlerinin tarama araligi. Ariza motoru
+      # kaydi acar ama gonderim yapmaz; hizli yol notification-worker'in
+      # alarm dispatch'idir, burasi son savunma hattidir (bkz.
+      # app/services/fault_notify_sweeper.py). Alt sinir kodda 15 sn.
+      FAULT_NOTIFY_SWEEP_SEC: ${FAULT_NOTIFY_SWEEP_SEC:-60}
       # system_events: denetim/olay kaydi. 2 yil (730 gun) + FIFO adet tavani.
       # Tavan, olay firtinasinda 2 yil dolmadan da devreye giren emniyet subabi.
       SYSTEM_EVENTS_RETENTION_DAYS: ${SYSTEM_EVENTS_RETENTION_DAYS:-730}

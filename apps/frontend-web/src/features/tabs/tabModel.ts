@@ -42,7 +42,12 @@ export type EngineeringPage =
   | "firewall"
   | "offline-map"
   | "active-sessions"
-  | "field-tools";
+  | "field-tools"
+  // Kullanicinin kendi profili. Muhendislik menusunde GORUNMEZ (bkz.
+  // ENGINEERING_NAV_GROUPS) — ust sagdaki kullanici menusunden acilir.
+  // Yine de bir sekme rotasi: eskiden modaldi ve modal sekme sisteminde
+  // yer almadigi icin sayfa yenilenince kayboluyor, geri tusu calismiyordu.
+  | "profile";
 
 export type TabRoute =
   // Ust menu sayfalari (engineering HARIC — o kendi alt sayfasiyla acilir)
@@ -122,6 +127,7 @@ export function tabLabel(
         "offline-map": "engineering.nav.offlineMap",
         "active-sessions": "engineering.nav.activeSessions",
         "field-tools": "engineering.nav.fieldTools",
+        profile: "userSettings.title",
       };
       return t(map[route.page]);
     }
@@ -200,6 +206,10 @@ export function canAccessRoute(route: TabRoute, role: UserRole): boolean {
     case "page":
       return true; // home/alarms/faults/events herkes
     case "engineering": {
+      // Profil HERKESIN kendi sayfasi — muhendislik rol kapisinin DISINDA.
+      // Operator de adini/e-postasini duzenleyebilmeli ve sifresini
+      // degistirebilmeli; aksi halde sifre degistirmenin tek yolu kalmaz.
+      if (route.page === "profile") return true;
       const canEngineering =
         role === "installer" || role === "engineer" || role === "ops_manager";
       if (!canEngineering) return false;

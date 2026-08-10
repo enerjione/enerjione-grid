@@ -1244,6 +1244,18 @@ from app.services import ftp_poll_worker  # noqa: E402
 
 leader.register("ftp_config_poll", ftp_poll_worker.start, ftp_poll_worker.stop)
 
+# Bekleyen HAT ARIZASI bildirimleri. Ariza motoru kaydi acar ama gonderim
+# yapmaz; gonderimi tetikleyen tek yer notification-worker'in ALARM yoluydu.
+# Ariza kaydi debounce yuzunden o dispatch'ten SONRA olusabildigi icin tekil
+# arizalarda bildirim hic gitmiyordu (bkz. fault_notify_sweeper docstring'i).
+# Tek surecte kosmali: iki sureduren ayni arizayi ayni anda gonderebilirdi
+# (`notified_at` damgasi yazilmadan once ikisi de "bekliyor" gorur).
+from app.services import fault_notify_sweeper  # noqa: E402
+
+leader.register(
+    "fault_notify_sweeper", fault_notify_sweeper.start, fault_notify_sweeper.stop
+)
+
 
 @app.on_event("startup")
 def start_background_jobs():
