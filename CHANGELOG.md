@@ -14,6 +14,69 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.56.0] — 2026-08-10
+
+Arıza analiz katmanının **veri temeli**. Bu sürümden sonra açılan her arıza,
+kendi kanıtıyla birlikte kaydedilir — ileride kurulacak analiz ekranı ve
+çıkarım katmanı bu birikimin üzerine oturacak.
+
+> **Veri toplama bu sürümle başlıyor.** Sebep girişi ve faz eşleme formu bir
+> sonraki sürümde gelecek; ama alarm imzası, faz, kural önerisi ve ölçüm
+> anlık görüntüsü **şimdiden otomatik** kaydediliyor. Bugün başlamazsa geçen
+> süre kalıcı olarak kayıptır: veri o an yazılmadıysa bir daha üretilemez.
+
+### Eklendi
+
+- **Arıza kaydına yapılandırılmış sebep alanı.** Katalogdan seçilir (19 kod,
+  5 aile: dış etken / ekipman / hava / işletme / bilinmiyor). Serbest metin
+  `note` ve yorumlar aynen kalıyor — bu alan onların *yanına* geliyor.
+  Serbest metinden istatistik çıkmıyordu: aynı olay "ağaç değdi", "dal
+  teması", "ağaçtan kaynaklı" diye on farklı yazılıyor.
+- **Cihazın alarm imzası arıza kaydına yazılıyor.** Sebep çıkarımının asıl
+  kaynağı bu: saha ekibinin yazdığı metin gecikmeli ve öznel, cihazın arıza
+  anında hangi bayrakları kaldırdığı ise ölçülmüş veri.
+- **Kural tabanlı sebep önerisi** (dil modeli gerektirmez):
+  akım kaybı + aşırı akım yok → iletken kopması · sıcaklık alarmı + aşırı
+  akım yok → aşırı yük · kurcalama → üçüncü şahıs · dI/dt + aşırı akım yok →
+  yüksek empedans (tipik ağaç teması). Aşırı akımda sebep **üretilmiyor**:
+  yıldırım, hayvan, izolatör, üçüncü şahıs hepsi aynı sonucu verir, birini
+  seçmek analiz katmanını yanlış eğitirdi. Her öneri gerekçesini ve
+  katkıda bulunan sinyalleri taşır.
+- **Arıza kalıcılığı artık sahaya sorulmuyor** — cihaz zaten söylüyor
+  (`permanent_fault` / `momentary_fault`).
+- **Faz çıkarımı.** `master` / `sat01` / `sat02` üç ayrı faza kelepçelenir,
+  yani kaynak öneki "hangi ünite" değil **hangi faz** demek. Tek ünite
+  gördüyse tek faz-toprak (çoğunlukla dış etken), üçü birden gördüyse üç faz
+  (ekipman ya da aşırı yük). Bu ayrım sebep çıkarımının belirleyici girdisi.
+- **Ünite → faz eşlemesi hem cihaz hem proje düzeyinde ayarlanabiliyor.**
+  Çözüm zinciri: cihaz → proje → kod varsayılanı (`a`/`b`/`c`). Kelepçeyi
+  hangi faza takacağına sahadaki kişi karar verir ve bu cihazdan cihaza
+  değişebilir; proje katmanı kurulumun genel konvansiyonunu, cihaz katmanı
+  istisnaları taşır. Kısmi doldurma destekli.
+- **Ölçüm anlık görüntüsü.** Arıza akımı (üç fazın en büyüğü), yük akımı,
+  iletken sıcaklığı ve arıza sayaçları kaydın kendisine yazılıyor. Bilinçli
+  denormalizasyon: ham telemetri 90 günde düşüyor, saatlik özetten belirli
+  bir arızanın tepe akımını geri çıkarmak kayıplı.
+- **Arızayı doğuran alarmlar arayüzde** — "bu arıza neden açıldı"
+  sorusunun cevabı arıza kartından görülebiliyor.
+- Bildirim metinleri faz ve hat bağlamını içeriyor.
+
+### Değişti
+
+- Arıza bölgesi çizimi hangi fazın arızalı olduğunu gösteriyor.
+
+### Not
+
+Kural çıktısı (`auto_cause_code`) ile insanın gireceği etiket (`cause_code`)
+**ayrı** tutuluyor. İkisini karşılaştırmak kuralların isabetini ölçer; bir
+öğrenme katmanı eklemeden önce bilinmesi gereken şey tam olarak budur.
+
+Faz eşlemesi varsayılandan farklı kurulmuş bir sahada geçmişe dönük
+düzeltilebilir: `trigger_signals` ham sinyal anahtarlarını (kaynak öneki
+dahil) sakladığı için faz, eşleme düzeltildikten sonra yeniden hesaplanabilir.
+
+---
+
 ## [2.55.0] — 2026-08-10
 
 > ### ⚠️ Yükseltmeden önce: SCADA'sı Modbus'tan besleniyorsa okuyun
